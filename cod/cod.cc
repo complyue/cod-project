@@ -47,7 +47,7 @@ static llvm::cl::opt<bool> OptHostSupportsJit("host-supports-jit",
 static llvm::cl::list<std::string> OptInputs(llvm::cl::Positional,
                                              llvm::cl::desc("[code to run]"));
 
-static void LLVMErrorHandler(void *UserData, const char *Message,
+static void llvmErrorHandler(void *UserData, const char *Message,
                              bool GenCrashDiag) {
   auto &Diags = *static_cast<clang::DiagnosticsEngine *>(UserData);
 
@@ -191,7 +191,7 @@ int main(int argc, const char **argv) {
 
   // Set an error handler, so that any LLVM backend diagnostics go through our
   // error handler.
-  llvm::install_fatal_error_handler(LLVMErrorHandler,
+  llvm::install_fatal_error_handler(llvmErrorHandler,
                                     static_cast<void *>(&CI->getDiagnostics()));
 
   // Load any requested plugins.
