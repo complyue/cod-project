@@ -1,5 +1,31 @@
 #!/usr/bin/env bash
 
+if [ "$(uname)" == "Darwin" ]; then
+    # macOS
+    NUM_JOBS=$(sysctl -n hw.ncpu)
+
+    OS_SPEC_FLAGS="\
+-DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/ \
+-DCOMPILER_RT_ENABLE_IOS=OFF \
+-DCOMPILER_RT_ENABLE_WATCHOS=OFF \
+-DCOMPILER_RT_ENABLE_TVOS=OFF \
+-DLLVM_CREATE_XCODE_TOOLCHAIN=OFF \
+	"
+
+else
+    # Linux (assuming Ubuntu)
+    NUM_JOBS=$(nproc)
+
+	OS_SPEC_FLAGS=""
+
+fi
+
+# spare 2 out of all available hardware threads
+NUM_JOBS=$((NUM_JOBS - 2))
+if [ "$NUM_JOBS" -lt 1 ]; then
+    NUM_JOBS=1
+fi
+
 
 # pull llvm-project repo aside us
 if [ -d "../llvm-project/.git" ]; then
@@ -33,11 +59,7 @@ cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 	-DLLVM_INSTALL_UTILS=OFF \
 	-DLLVM_OPTIMIZED_TABLEGEN=ON \
 	-DCLANG_FORCE_MATCHING_LIBCLANG_SOVERSION=OFF \
-	-DDEFAULT_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/" \
-	-DCOMPILER_RT_ENABLE_IOS=OFF \
-	-DCOMPILER_RT_ENABLE_WATCHOS=OFF \
-	-DCOMPILER_RT_ENABLE_TVOS=OFF \
-	-DLLVM_CREATE_XCODE_TOOLCHAIN=OFF \
+	$OS_SPEC_FLAGS \
 	-DLLVM_TARGETS_TO_BUILD="Native" \
 	-DCMAKE_BUILD_TYPE=Release -G Ninja \
 	-S "../llvm-project/llvm" -B build
@@ -45,4 +67,4 @@ cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 
 # do build
 cd build
-ninja -j10
+ninja -j${NUM_JOBS}
