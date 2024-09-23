@@ -1,3 +1,4 @@
+
 set( LLVM_LINK_COMPONENTS
   Native CACHE STRING
   Core
@@ -7,12 +8,13 @@ set( LLVM_LINK_COMPONENTS
   Support
   )
 
-add_clang_tool( cod
-    cod.cc
-  DEPENDS
-    clang-headers
+include_directories(
+  "${CLANG_BINARY_DIR}/include"
+  "${CLANG_SOURCE_DIR}/include"
   )
-
+add_clang_tool( cod
+  cod.cc
+  )
 clang_target_link_libraries( cod PRIVATE
   clangAST
   clangBasic
