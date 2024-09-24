@@ -60,6 +60,8 @@ fi
 BUILD_DIR="build-$(uname -m)-$(uname -s)"
 # (re)start with a fresh build dir
 rm -rf $BUILD_DIR; mkdir -p $BUILD_DIR
+# vscode-clangd is finding build/compile_commands.json
+rm build && ln -s "$BUILD_DIR" build
 # do favor to vscode-clangd by `-DCMAKE_EXPORT_COMPILE_COMMANDS=1`
 cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 	-DLLVM_ENABLE_IDE=ON \
