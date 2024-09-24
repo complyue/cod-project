@@ -13,7 +13,7 @@ if [ "$(uname)" == "Darwin" ]; then
     HOST_NTHREADS=$(sysctl -n hw.ncpu)
 
     OS_SPEC_FLAGS="\
--DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/ \
+-DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
 -DCOMPILER_RT_ENABLE_IOS=OFF \
 -DCOMPILER_RT_ENABLE_WATCHOS=OFF \
 -DCOMPILER_RT_ENABLE_TVOS=OFF \
@@ -59,7 +59,7 @@ fi
 # so Docker and native build dirs can coexist on macOS
 BUILD_DIR="build-$(uname -m)-$(uname -s)"
 # (re)start with a fresh build dir
-rm -rf $BUILD_DIR; mkdir -p $BUILD_DIR
+rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
 # vscode-clangd is finding build/compile_commands.json
 rm build && ln -s "$BUILD_DIR" build
 # do favor to vscode-clangd by `-DCMAKE_EXPORT_COMPILE_COMMANDS=1`
@@ -88,11 +88,11 @@ cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 	$OS_SPEC_FLAGS \
 	-DLLVM_TARGETS_TO_BUILD="Native" \
 	-DCMAKE_BUILD_TYPE=Release -G Ninja \
-	-S "./llvm-project/llvm" -B $BUILD_DIR
+	-S "./llvm-project/llvm" -B "$BUILD_DIR"
 
 
 # do build
-cd $BUILD_DIR
+cd "$BUILD_DIR"
 # spare 2 out of all available hardware threads
 NJOBS=$(( HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2) ))
 ninja -j${NJOBS}
