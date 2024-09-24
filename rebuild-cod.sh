@@ -2,7 +2,7 @@
 
 if [ "$(uname)" == "Darwin" ]; then
     # macOS
-    NUM_JOBS=$(sysctl -n hw.ncpu)
+    HOST_THREADS=$(sysctl -n hw.ncpu)
 
     OS_SPEC_FLAGS="\
 -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/ \
@@ -14,30 +14,25 @@ if [ "$(uname)" == "Darwin" ]; then
 
 else
     # Linux (assuming Ubuntu)
-    NUM_JOBS=$(nproc)
+    HOST_THREADS=$(nproc)
 
 	OS_SPEC_FLAGS=""
 
 fi
 
-# spare 2 out of all available hardware threads
-NUM_JOBS=$((NUM_JOBS - 2))
-if [ "$NUM_JOBS" -lt 1 ]; then
-    NUM_JOBS=1
-fi
-
 
 # pull llvm-project repo aside us
-if [ -d "../llvm-project/.git" ]; then
-	git -C "../llvm-project" pull
+if [ -d "./llvm-project/.git" ]; then
+	git -C "./llvm-project" pull
 else
-	git clone --depth 1 -b release/18.x https://github.com/llvm/llvm-project.git "../llvm-project"
+	git clone --depth 1 -b release/18.x https://github.com/llvm/llvm-project.git "./llvm-project"
 fi
 
 
 # generate build tree
 #   do favor to vscode-clangd by `-DCMAKE_EXPORT_COMPILE_COMMANDS=1``
-rm -rf build; mkdir -p build
+BUILD_DIR="build-$(uname -m)-$(uname -s)"
+rm -rf $BUILD_DIR; mkdir -p $BUILD_DIR
 # cf.
 #  https://github.com/Homebrew/homebrew-core/blob/da26dd20d93fea974312a0177989178f0a28d211/Formula/l/llvm.rb#L107-L160
 #
@@ -62,9 +57,11 @@ cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 	$OS_SPEC_FLAGS \
 	-DLLVM_TARGETS_TO_BUILD="Native" \
 	-DCMAKE_BUILD_TYPE=Release -G Ninja \
-	-S "../llvm-project/llvm" -B build
+	-S "./llvm-project/llvm" -B $BUILD_DIR
 
 
 # do build
-cd build
+cd $BUILD_DIR
+# spare 2 out of all available hardware threads
+NUM_JOBS=$(( HOST_THREADS <= 3 ? 1 : (HOST_THREADS - 2) ))
 ninja -j${NUM_JOBS}

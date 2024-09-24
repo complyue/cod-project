@@ -6,6 +6,12 @@
 # as most of those are useless.
 #==============================================================================#
 
+# Nested build directory
+/build*
+
+# llvm repo checkout as a build-time dependency
+/llvm-project
+
 #==============================================================================#
 # File extensions to be ignored anywhere in the tree.
 #==============================================================================#
@@ -20,9 +26,6 @@
 .sw?
 #OS X specific files.
 .DS_Store
-
-# Nested build directory
-/build*
 
 #==============================================================================#
 # Explicit files to ignore (only matches one).

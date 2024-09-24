@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 
-sudo apt update
-sudo apt install -y build-essential cmake ninja-build git libffi-dev libxml2-dev zlib1g-dev
+apt-get update
+apt-get install -y git build-essential cmake ninja-build jq wget curl
+apt-get install -y zlib1g-dev libtinfo-dev libz-dev libzstd-dev libssl-dev
