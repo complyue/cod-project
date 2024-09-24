@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 
+# This script does checkout the corresponding llvm-project branch,
+# build cod as an external project of LLVM, together with clang bundled with
+# libcxx and etc.
+#
+# for LLVM tweaks, cf.
+#  https://github.com/Homebrew/homebrew-core/blob/da26dd20d93fea974312a0177989178f0a28d211/Formula/l/llvm.rb
+#
+
 if [ "$(uname)" == "Darwin" ]; then
     # macOS
-    HOST_THREADS=$(sysctl -n hw.ncpu)
+    HOST_NTHREADS=$(sysctl -n hw.ncpu)
 
     OS_SPEC_FLAGS="\
 -DDEFAULT_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/ \
@@ -12,11 +20,29 @@ if [ "$(uname)" == "Darwin" ]; then
 -DLLVM_CREATE_XCODE_TOOLCHAIN=OFF \
 	"
 
+# TODO: support more OSes
 else
-    # Linux (assuming Ubuntu)
-    HOST_THREADS=$(nproc)
+    # assuming Ubuntu
+    HOST_NTHREADS=$(nproc)
 
-	OS_SPEC_FLAGS=""
+	OS_SPEC_FLAGS="\
+-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF \
+-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+-DLIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON \
+-DLIBCXX_STATICALLY_LINK_ABI_IN_SHARED_LIBRARY=OFF \
+-DLIBCXX_STATICALLY_LINK_ABI_IN_STATIC_LIBRARY=ON \
+-DLIBCXX_USE_COMPILER_RT=ON \
+-DLIBCXX_HAS_ATOMIC_LIB=OFF \
+-DLIBCXXABI_ENABLE_STATIC_UNWINDER=ON \
+-DLIBCXXABI_STATICALLY_LINK_UNWINDER_IN_SHARED_LIBRARY=OFF \
+-DLIBCXXABI_STATICALLY_LINK_UNWINDER_IN_STATIC_LIBRARY=ON \
+-DLIBCXXABI_USE_COMPILER_RT=ON \
+-DLIBCXXABI_USE_LLVM_UNWINDER=ON \
+-DLIBUNWIND_USE_COMPILER_RT=ON \
+-DCOMPILER_RT_USE_BUILTINS_LIBRARY=ON \
+-DCOMPILER_RT_USE_LLVM_UNWINDER=ON \
+-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
+	"
 
 fi
 
@@ -33,19 +59,20 @@ fi
 #   do favor to vscode-clangd by `-DCMAKE_EXPORT_COMPILE_COMMANDS=1``
 BUILD_DIR="build-$(uname -m)-$(uname -s)"
 rm -rf $BUILD_DIR; mkdir -p $BUILD_DIR
-# cf.
-#  https://github.com/Homebrew/homebrew-core/blob/da26dd20d93fea974312a0177989178f0a28d211/Formula/l/llvm.rb#L107-L160
-#
 cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 	-DLLVM_ENABLE_IDE=ON \
 	-DLLVM_EXTERNAL_PROJECTS="cod" \
  	-DLLVM_EXTERNAL_COD_SOURCE_DIR="../cod-project" \
 	-DLLVM_ENABLE_PROJECTS="clang" \
 	-DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind" \
-	-DLLVM_LINK_LLVM_DYLIB=ON \
 	-DLLVM_BUILD_EXTERNAL_COMPILER_RT=ON \
-	-DLLVM_ENABLE_LIBCXX=ON \
+	-DCLANG_DEFAULT_CXX_STDLIB=libc++ \
+	-DLIBCXX_ENABLE_SHARED=ON \
+	-DLIBCXX_ENABLE_STATIC=ON \
+	-DLIBCXX_INSTALL_SUPPORT_HEADERS=ON \
 	-DLIBCXX_INSTALL_MODULES=ON \
+	-DLLVM_ENABLE_LIBCXX=ON \
+	-DLLVM_LINK_LLVM_DYLIB=ON \
 	-DLLVM_ENABLE_EH=ON \
 	-DLLVM_ENABLE_FFI=ON \
 	-DLLVM_ENABLE_RTTI=ON \
@@ -63,5 +90,5 @@ cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 # do build
 cd $BUILD_DIR
 # spare 2 out of all available hardware threads
-NUM_JOBS=$(( HOST_THREADS <= 3 ? 1 : (HOST_THREADS - 2) ))
-ninja -j${NUM_JOBS}
+NJOBS=$(( HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2) ))
+ninja -j${NJOBS}
