@@ -56,9 +56,11 @@ fi
 
 
 # generate build tree
-#   do favor to vscode-clangd by `-DCMAKE_EXPORT_COMPILE_COMMANDS=1``
+# so Docker and native build dirs can coexist on macOS
 BUILD_DIR="build-$(uname -m)-$(uname -s)"
+# (re)start with a fresh build dir
 rm -rf $BUILD_DIR; mkdir -p $BUILD_DIR
+# do favor to vscode-clangd by `-DCMAKE_EXPORT_COMPILE_COMMANDS=1`
 cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 	-DLLVM_ENABLE_IDE=ON \
 	-DLLVM_EXTERNAL_PROJECTS="cod" \
