@@ -9,12 +9,6 @@
 #
 
 #
-# compile us (cod) with the fresh built clang, rather than the system compiler
-#
-set(CMAKE_C_COMPILER "${CMAKE_BINARY_DIR}/bin/clang")
-set(CMAKE_CXX_COMPILER "${CMAKE_BINARY_DIR}/bin/clang++")
-
-#
 # we depends on clang within the llvm-project repo checked out, not system one
 #
 include_directories(

@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 
-# This script does checkout the corresponding llvm-project branch,
-# build cod as an external project of LLVM, together with clang bundled with
-# libcxx and etc.
 #
-# for LLVM tweaks, cf.
+# This script does checkout the corresponding llvm-project branch, 2-stage
+# build cod as an external project of LLVM, together with a toolset bundled,
+# including clang, lld, libcxx and etc.
+#
+# for LLVM cmake config tweaks, cf.
 #  https://github.com/Homebrew/homebrew-core/blob/da26dd20d93fea974312a0177989178f0a28d211/Formula/l/llvm.rb
 #
+
+LLVM_BRANCH=release/18.x
 
 if [ "$(uname)" == "Darwin" ]; then
     # macOS
@@ -47,33 +50,40 @@ else
 fi
 
 
-# pull llvm-project repo aside us
+# pull llvm-project repo here
+# not to put it in ../ so we work in a single host dir, in case of devcontainers
 if [ -d "./llvm-project/.git" ]; then
 	git -C "./llvm-project" pull
 else
-	git clone --depth 1 -b release/18.x https://github.com/llvm/llvm-project.git "./llvm-project"
+	git clone --depth 1 -b "$LLVM_BRANCH" https://github.com/llvm/llvm-project.git "./llvm-project"
 fi
 
 
-# generate build tree
-# so Docker and native build dirs can coexist on macOS
+# spare 2 out of all available hardware threads
+NJOBS=$(( HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2) ))
+
+# suffix the build dir, so devcontainers/Docker and native build dirs can
+# coexist on macOS
 BUILD_DIR="build-$(uname -m)-$(uname -s)"
 # (re)start with a fresh build dir
 rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
-# vscode-clangd is finding build/compile_commands.json
+# vscode-clangd expects build/compile_commands.json
 rm build; ln -s "$BUILD_DIR" build
-# do favor to vscode-clangd by `-DCMAKE_EXPORT_COMPILE_COMMANDS=1`
-cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
+# do build in build dir
+cd "$BUILD_DIR"
+
+# 2-stage build for cod with clang/lld bundled
+cmake -DCLANG_ENABLE_BOOTSTRAP=ON \
+	-DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 	-DLLVM_ENABLE_IDE=ON \
-	-DLLVM_EXTERNAL_PROJECTS="cod" \
- 	-DLLVM_EXTERNAL_COD_SOURCE_DIR="../cod-project" \
+	-DBOOTSTRAP_LLVM_EXTERNAL_PROJECTS="cod" \
+ 	-DBOOTSTRAP_LLVM_EXTERNAL_COD_SOURCE_DIR=".." \
 	-DLLVM_ENABLE_PROJECTS="clang;lld" \
 	-DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind" \
 	-DLLVM_BUILD_EXTERNAL_COMPILER_RT=ON \
 	-DCLANG_DEFAULT_CXX_STDLIB=libc++ \
 	-DLIBCXX_ENABLE_SHARED=ON \
 	-DLIBCXX_ENABLE_STATIC=OFF \
-	-DLIBCXX_INSTALL_SUPPORT_HEADERS=ON \
 	-DLIBCXX_INSTALL_MODULES=ON \
 	-DLLVM_LINK_LLVM_DYLIB=ON \
 	-DLLVM_ENABLE_EH=ON \
@@ -87,11 +97,6 @@ cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
 	$OS_SPEC_FLAGS \
 	-DLLVM_TARGETS_TO_BUILD="Native" \
 	-DCMAKE_BUILD_TYPE=Release -G Ninja \
-	-S "./llvm-project/llvm" -B "$BUILD_DIR"
+	-S "../llvm-project/llvm"
 
-
-# do build
-cd "$BUILD_DIR"
-# spare 2 out of all available hardware threads
-NJOBS=$(( HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2) ))
-ninja -j${NJOBS}
+ninja -j${NJOBS} stage2
