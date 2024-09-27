@@ -1,4 +1,8 @@
 
+set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_CXX_EXTENSIONS NO)
+
 #
 # Note:
 #   we (cod) are being built as an external project of llvm, so:
@@ -7,13 +11,16 @@
 #   clang is to be built before us, and its intermediate artifacts (.inc e.g.)
 #   will be built under ${CMAKE_BINARY_DIR}/tools/clang/
 #
-
+# we depends on clang/libcxx/compiler-rt etc. from our local checkout of
+# llvm-project repo, not from system installation
 #
-# we depends on clang within the llvm-project repo checked out, not system one
-#
-include_directories(
+include_directories( BEFORE
   "${CMAKE_BINARY_DIR}/tools/clang/include"
   "${CMAKE_SOURCE_DIR}/../clang/include"
   )
+# libcxx etc. should have been built there
+link_directories( BEFORE
+  "${CMAKE_BINARY_DIR}/lib"
+)
 
 add_subdirectory(cod)

@@ -1,6 +1,6 @@
 
 set( LLVM_LINK_COMPONENTS
-  Native CACHE STRING
+  Native
   Core
   LineEditor
   Option
