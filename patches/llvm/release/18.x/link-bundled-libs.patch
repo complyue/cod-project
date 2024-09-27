@@ -1,0 +1,46 @@
+diff --git a/clang/lib/Driver/ToolChains/Darwin.cpp b/clang/lib/Driver/ToolChains/Darwin.cpp
+index fae8ad1a958a..9320e290581e 100644
+--- a/clang/lib/Driver/ToolChains/Darwin.cpp
++++ b/clang/lib/Driver/ToolChains/Darwin.cpp
+@@ -661,6 +661,18 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+ 
+   Args.AddAllArgs(CmdArgs, options::OPT_L);
+ 
++  // link with bundled libs in case not installed by other means
++  if(isa<LinkJobAction>(JA) || isa<LinkerWrapperJobAction>(JA)) {
++    const char *Exec = getToolChain().getDriver().getClangProgramPath();
++    SmallString<256> LibArg("-L");
++    auto InstallDir = llvm::sys::path::parent_path(
++                      llvm::sys::path::parent_path(Exec));
++    LibArg += InstallDir;
++    LibArg += "/";
++    LibArg += CLANG_INSTALL_LIBDIR_BASENAME;
++    CmdArgs.push_back(Args.MakeArgStringRef(LibArg));
++  }
++
+   AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs, JA);
+   // Build the input file for -filelist (list of linker input files) in case we
+   // need it later
+diff --git a/clang/lib/Driver/ToolChains/Gnu.cpp b/clang/lib/Driver/ToolChains/Gnu.cpp
+index e5e1b1d77269..c87c947f52f2 100644
+--- a/clang/lib/Driver/ToolChains/Gnu.cpp
++++ b/clang/lib/Driver/ToolChains/Gnu.cpp
+@@ -517,6 +517,18 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+ 
+   Args.addAllArgs(CmdArgs, {options::OPT_L, options::OPT_u});
+ 
++  // link with bundled libs in case not installed by other means
++  if(isa<LinkJobAction>(JA) || isa<LinkerWrapperJobAction>(JA)) {
++    const char *Exec = D.getClangProgramPath();
++    SmallString<256> LibArg("-L");
++    auto InstallDir = llvm::sys::path::parent_path(
++                      llvm::sys::path::parent_path(Exec));
++    LibArg += InstallDir;
++    LibArg += "/";
++    LibArg += CLANG_INSTALL_LIBDIR_BASENAME;
++    CmdArgs.push_back(Args.MakeArgStringRef(LibArg));
++  }
++
+   ToolChain.AddFilePathLibArgs(Args, CmdArgs);
+ 
+   if (D.isUsingLTO()) {

@@ -11,6 +11,10 @@
 
 LLVM_BRANCH=release/18.x
 
+
+set -e
+
+
 if [ "$(uname)" == "Darwin" ]; then
     # macOS
     HOST_NTHREADS=$(sysctl -n hw.ncpu)
@@ -55,7 +59,12 @@ fi
 if [ -d "./llvm-project/.git" ]; then
 	git -C "./llvm-project" pull
 else
-	git clone --depth 1 -b "$LLVM_BRANCH" https://github.com/llvm/llvm-project.git "./llvm-project"
+	git clone --depth 1 -b "$LLVM_BRANCH" https://github.com/llvm/llvm-project.git "./llvm-project" && (
+		cd llvm-project
+		for p in "../patches/llvm/$LLVM_BRANCH/*.patch"; do
+			git apply "$p"
+		done
+	)
 fi
 
 
@@ -68,23 +77,54 @@ BUILD_DIR="build-$(uname -m)-$(uname -s)"
 # (re)start with a fresh build dir
 rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
 # vscode-clangd expects build/compile_commands.json
-test -e build || ln -s "$BUILD_DIR" build
-# do build in build dir
-cd "$BUILD_DIR"
+test -L build || ln -s "$BUILD_DIR/cod" build
+# use full path for build dir
+BUILD_DIR="$(pwd)/$BUILD_DIR"
 
-# 2-stage build for cod with clang/lld bundled
-cmake -DCLANG_ENABLE_BOOTSTRAP=ON \
-	-DBOOTSTRAP_LLVM_EXTERNAL_PROJECTS="cod" \
- 	-DBOOTSTRAP_LLVM_EXTERNAL_COD_SOURCE_DIR=".." \
+
+# stage-1: build clang with system compiler toolchain, bundling lld, libcxx etc. with it
+test -x "$BUILD_DIR/stage1/bin/clang++" || (
+	mkdir -p "$BUILD_DIR/stage1"
+	cd "$BUILD_DIR/stage1"
+	cmake -DLLVM_ENABLE_PROJECTS="clang;lld" \
+		-DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind" \
+		-DLLVM_BUILD_EXTERNAL_COMPILER_RT=ON \
+		-DLIBCXX_ENABLE_SHARED=ON \
+		-DLIBCXX_ENABLE_STATIC=OFF \
+		-DLIBCXX_INSTALL_MODULES=ON \
+		-DLLVM_LINK_LLVM_DYLIB=ON \
+		-DLLVM_ENABLE_IDE=ON \
+		-DLLVM_ENABLE_EH=ON \
+		-DLLVM_ENABLE_FFI=ON \
+		-DLLVM_ENABLE_RTTI=ON \
+		-DLLVM_INCLUDE_DOCS=OFF \
+		-DLLVM_INCLUDE_TESTS=OFF \
+		-DLLVM_INSTALL_UTILS=OFF \
+		-DLLVM_OPTIMIZED_TABLEGEN=ON \
+		-DCLANG_FORCE_MATCHING_LIBCLANG_SOVERSION=OFF \
+		$OS_SPEC_FLAGS \
+		-DLLVM_TARGETS_TO_BUILD="Native" \
+		-DCMAKE_BUILD_TYPE=Release -G Ninja \
+		-S "../../llvm-project/llvm"
+	ninja -j${NJOBS}
+)
+
+
+# stage-2: build cod with stage1 clang, bundling clang, lld, libcxx etc. with it
+mkdir -p "$BUILD_DIR/cod"
+cd "$BUILD_DIR/cod"
+cmake -DCMAKE_C_COMPILER="$BUILD_DIR/stage1/bin/clang" \
+	-DCMAKE_CXX_COMPILER="$BUILD_DIR/stage1/bin/clang++" \
+	-DCMAKE_CXX_LINKER="$BUILD_DIR/stage1/bin/ld.lld" \
+	-DCMAKE_CXX_FLAGS="-fuse-ld=lld -L$BUILD_DIR/stage1/lib" \
+	-DLLVM_EXTERNAL_PROJECTS="cod" \
+ 	-DLLVM_EXTERNAL_COD_SOURCE_DIR=".." \
 	-DLLVM_ENABLE_PROJECTS="clang;lld" \
 	-DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind" \
 	-DLLVM_BUILD_EXTERNAL_COMPILER_RT=ON \
-	-DCMAKE_EXPORT_COMPILE_COMMANDS=0 \
-	-DBOOTSTRAP_CMAKE_EXPORT_COMPILE_COMMANDS=1 \
-	-DBOOTSTRAP_LLVM_ENABLE_LLD=ON \
+	-DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
+	-DLLVM_ENABLE_LLD=ON \
 	-DCLANG_DEFAULT_CXX_STDLIB=libc++ \
-	-DBOOTSTRAP_CMAKE_C_FLAGS="-fuse-ld=lld" \
-	-DBOOTSTRAP_CMAKE_CXX_FLAGS="-fuse-ld=lld" \
 	-DLIBCXX_ENABLE_SHARED=ON \
 	-DLIBCXX_ENABLE_STATIC=OFF \
 	-DLIBCXX_INSTALL_MODULES=ON \
@@ -101,6 +141,6 @@ cmake -DCLANG_ENABLE_BOOTSTRAP=ON \
 	$OS_SPEC_FLAGS \
 	-DLLVM_TARGETS_TO_BUILD="Native" \
 	-DCMAKE_BUILD_TYPE=Release -G Ninja \
-	-S "../llvm-project/llvm"
+	-S "../../llvm-project/llvm"
 
-ninja -j${NJOBS} stage2
+ninja -j${NJOBS}
