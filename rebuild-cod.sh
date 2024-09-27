@@ -68,7 +68,7 @@ BUILD_DIR="build-$(uname -m)-$(uname -s)"
 # (re)start with a fresh build dir
 rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
 # vscode-clangd expects build/compile_commands.json
-rm build; ln -s "$BUILD_DIR" build
+test -e build || ln -s "$BUILD_DIR" build
 # do build in build dir
 cd "$BUILD_DIR"
 
