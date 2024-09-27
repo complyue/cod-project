@@ -38,8 +38,12 @@ if [ "$(uname)" == "Darwin" ]; then
 -DCOMPILER_RT_ENABLE_TVOS=OFF
 -DLLVM_CREATE_XCODE_TOOLCHAIN=OFF
 	)
-	OS_SPEC_EXE_LINKER_FLAGS="-Wl,-rpath,@loader_path/../lib"
-	OS_SPEC_SHARED_LINKER_FLAGS="-Wl,-rpath,@loader_path"
+	OS_SPEC_EXE_LINKER_FLAGS=(
+-Wl,-rpath,'@loader_path/../lib'
+	)
+	OS_SPEC_SHARED_LINKER_FLAGS=(
+-Wl,-rpath,'@loader_path'
+	)
 
 	# some early stage2 tools (e.g. llvm-min-tblgen) need libc++ from stage1,
 	# as they have to run before stage2 libc++ is built.
@@ -68,8 +72,12 @@ else
 -DCOMPILER_RT_USE_LLVM_UNWINDER=ON
 -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
 	)
-	OS_SPEC_EXE_LINKER_FLAGS="-Wl,-rpath,\$ORIGIN/../lib"
-	OS_SPEC_SHARED_LINKER_FLAGS="-Wl,-rpath,\$ORIGIN"
+	OS_SPEC_EXE_LINKER_FLAGS=(
+-Wl,-rpath,'$ORIGIN/../lib'
+	)
+	OS_SPEC_SHARED_LINKER_FLAGS=(
+-Wl,-rpath,'$ORIGIN'
+	)
 
 	# some early stage2 tools (e.g. llvm-min-tblgen) need libc++ from stage1,
 	# as they have to run before stage2 libc++ is built.
@@ -132,8 +140,8 @@ test -x "$BUILD_DIR/cod/bin/cod" || (
 	cmake -DCMAKE_C_COMPILER="$BUILD_DIR/stage1/bin/clang" \
 		-DCMAKE_CXX_COMPILER="$BUILD_DIR/stage1/bin/clang++" \
 		-DCMAKE_CXX_FLAGS="-stdlib=libc++" \
-		-DCMAKE_EXE_LINKER_FLAGS="-L$BUILD_DIR/stage1/lib $OS_SPEC_EXE_LINKER_FLAGS" \
-		-DCMAKE_SHARED_LINKER_FLAGS="-L$BUILD_DIR/stage1/lib $OS_SPEC_SHARED_LINKER_FLAGS" \
+		-DCMAKE_EXE_LINKER_FLAGS="-L$BUILD_DIR/stage1/lib ${OS_SPEC_EXE_LINKER_FLAGS[@]}" \
+		-DCMAKE_SHARED_LINKER_FLAGS="-L$BUILD_DIR/stage1/lib ${OS_SPEC_SHARED_LINKER_FLAGS[@]}" \
 		-DCLANG_DEFAULT_CXX_STDLIB="libc++" \
 		-DLLVM_ENABLE_LLD=ON \
 		-DLLVM_EXTERNAL_PROJECTS="cod" \
