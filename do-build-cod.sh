@@ -38,6 +38,7 @@ if [ "$(uname)" == "Darwin" ]; then
 -DCOMPILER_RT_ENABLE_TVOS=OFF
 -DLLVM_CREATE_XCODE_TOOLCHAIN=OFF
 	)
+	# llvm-project repo seems to have configured this, not really used
 	OS_SPEC_EXE_LINKER_FLAGS=(
 -Wl,-rpath,'@loader_path/../lib'
 	)
@@ -72,6 +73,7 @@ else
 -DCOMPILER_RT_USE_LLVM_UNWINDER=ON
 -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
 	)
+	# llvm-project repo seems to have configured this, not really used
 	OS_SPEC_EXE_LINKER_FLAGS=(
 -Wl,-rpath,'$ORIGIN/../lib'
 	)
@@ -92,19 +94,16 @@ if [ -d "./llvm-project/.git" ]; then
 else
 	git clone --depth 1 -b "$LLVM_BRANCH" https://github.com/llvm/llvm-project.git "./llvm-project" && (
 		cd llvm-project
-		for p in "../patches/llvm/$LLVM_BRANCH/*.patch"; do
-			git apply "$p"
-		done
+		find "../patches/llvm/$LLVM_BRANCH" -type f -name "*.patch" -print0 \
+		| sort -z | xargs -0 -I{} git apply "{}"
 	)
 fi
 
 
 STAGE_COMMON_CMAKE_OPTS=(
 	-DLLVM_ENABLE_PROJECTS="clang;lld"
-	-DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind"
-	-DLLVM_BUILD_EXTERNAL_COMPILER_RT=ON
-	-DLIBCXX_ENABLE_SHARED=ON
-	-DLIBCXX_ENABLE_STATIC=OFF
+	-DLLVM_ENABLE_RUNTIMES="libunwind;libcxxabi;libcxx;compiler-rt"
+	-DCLANG_DEFAULT_CXX_STDLIB="libc++"
 	-DLIBCXX_INSTALL_MODULES=ON
 	-DLLVM_LINK_LLVM_DYLIB=ON
 	-DLLVM_ENABLE_EH=ON
@@ -139,13 +138,12 @@ test -x "$BUILD_DIR/cod/bin/cod" || (
 	cd "$BUILD_DIR/cod"
 	cmake -DCMAKE_C_COMPILER="$BUILD_DIR/stage1/bin/clang" \
 		-DCMAKE_CXX_COMPILER="$BUILD_DIR/stage1/bin/clang++" \
-		-DCMAKE_CXX_FLAGS="-stdlib=libc++" \
-		-DCMAKE_EXE_LINKER_FLAGS="-L$BUILD_DIR/stage1/lib ${OS_SPEC_EXE_LINKER_FLAGS[@]}" \
-		-DCMAKE_SHARED_LINKER_FLAGS="-L$BUILD_DIR/stage1/lib ${OS_SPEC_SHARED_LINKER_FLAGS[@]}" \
-		-DCLANG_DEFAULT_CXX_STDLIB="libc++" \
+		-DCMAKE_EXE_LINKER_FLAGS="-L$BUILD_DIR/stage1/lib" \
+		-DCMAKE_SHARED_LINKER_FLAGS="-L$BUILD_DIR/stage1/lib" \
 		-DLLVM_ENABLE_LLD=ON \
 		-DLLVM_EXTERNAL_PROJECTS="cod" \
 		-DLLVM_EXTERNAL_COD_SOURCE_DIR="$COD_SOURCE_DIR" \
+		-DLIBCXX_ENABLE_STATIC=OFF \
 		"${STAGE_COMMON_CMAKE_OPTS[@]}"
 	ninja -j${NJOBS}
 )
