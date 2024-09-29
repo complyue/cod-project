@@ -30,19 +30,14 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 		# macOS
 		HOST_NTHREADS=$(sysctl -n hw.ncpu)
 
+		# use system's libc++ on macOS
+		COD_RT_LIBS="compiler-rt"
 		OS_SPEC_CMAKE_OPTS=(
 			-DDEFAULT_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
 			-DCOMPILER_RT_ENABLE_IOS=OFF
 			-DCOMPILER_RT_ENABLE_WATCHOS=OFF
 			-DCOMPILER_RT_ENABLE_TVOS=OFF
 			-DLLVM_CREATE_XCODE_TOOLCHAIN=OFF
-		)
-		# llvm-project repo seems to have configured this, not really used
-		OS_SPEC_EXE_LINKER_FLAGS=(
-			-Wl,-rpath,'@loader_path/../lib'
-		)
-		OS_SPEC_SHARED_LINKER_FLAGS=(
-			-Wl,-rpath,'@loader_path'
 		)
 
 		# at stage2, some tools built and used early (i.e. before stage2 rt libs)
@@ -54,6 +49,8 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 		# assuming Ubuntu
 		HOST_NTHREADS=$(nproc)
 
+		# build and bundle our own libc++ and etc.
+		COD_RT_LIBS="libunwind;libcxxabi;libcxx;compiler-rt"
 		OS_SPEC_CMAKE_OPTS=(
 			-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF
 			-DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -68,13 +65,6 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 			-DCOMPILER_RT_USE_BUILTINS_LIBRARY=ON
 			-DCOMPILER_RT_USE_LLVM_UNWINDER=ON
 			-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
-		)
-		# llvm-project repo seems to have configured this, not really used
-		OS_SPEC_EXE_LINKER_FLAGS=(
-			-Wl,-rpath,'$ORIGIN/../lib'
-		)
-		OS_SPEC_SHARED_LINKER_FLAGS=(
-			-Wl,-rpath,'$ORIGIN'
 		)
 
 		# at stage2, some tools built and used early (i.e. before stage2 rt libs)
@@ -101,12 +91,10 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 		# compiler, either GCC or (Apple)Clang, as part of the OS rather than
 		# part of a toolset
 		-DLLVM_ENABLE_PROJECTS="clang;lld"
-		-DLLVM_ENABLE_RUNTIMES="libunwind;libcxxabi;libcxx;compiler-rt"
+		-DLLVM_ENABLE_RUNTIMES="$COD_RT_LIBS"
 
-		# should always use bundled libc++
+		# prefer libc++
 		-DCLANG_DEFAULT_CXX_STDLIB="libc++"
-		# avoid ODR issues with system-installed libc++ (esp. on macOS)
-		-DLIBCXX_ABI_VERSION="cod0"
 		# embrace c++20 modules
 		-DLIBCXX_INSTALL_MODULES=ON
 
