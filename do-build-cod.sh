@@ -46,10 +46,6 @@ if [ "$(uname)" == "Darwin" ]; then
 -Wl,-rpath,'@loader_path'
 	)
 
-	# some early stage2 tools (e.g. llvm-min-tblgen) need libc++ from stage1,
-	# as they have to run before stage2 libc++ is built.
-	export DYLD_LIBRARY_PATH="$BUILD_DIR/stage1/lib"
-
 # TODO: support more OSes
 else
     # assuming Ubuntu
@@ -81,9 +77,6 @@ else
 -Wl,-rpath,'$ORIGIN'
 	)
 
-	# some early stage2 tools (e.g. llvm-min-tblgen) need libc++ from stage1,
-	# as they have to run before stage2 libc++ is built.
-	export LD_LIBRARY_PATH="$BUILD_DIR/stage1/lib"
 fi
 
 
@@ -143,7 +136,6 @@ test -x "$BUILD_DIR/cod/bin/cod" || (
 		-DLLVM_ENABLE_LLD=ON \
 		-DLLVM_EXTERNAL_PROJECTS="cod" \
 		-DLLVM_EXTERNAL_COD_SOURCE_DIR="$COD_SOURCE_DIR" \
-		-DLIBCXX_ENABLE_STATIC=OFF \
 		"${STAGE_COMMON_CMAKE_OPTS[@]}"
 	ninja -j${NJOBS}
 )
