@@ -150,6 +150,9 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 	# stage-2: build CoD toolset with stage1 clang,
 	#          bundling clang, lld, libc++ etc. with it
 	#
+	#   we do HAVE_UNW_ADD_DYNAMIC_FDE=1 per:
+	#     https://github.com/llvm/llvm-project/issues/43419
+	#
 	test -x "$BUILD_DIR/cod/bin/cod" || (
 		mkdir -p "$BUILD_DIR/cod"
 		cd "$BUILD_DIR/cod"
@@ -157,6 +160,7 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 			-DCMAKE_C_COMPILER="clang" \
 			-DCMAKE_CXX_COMPILER="clang++" \
 			-DLLVM_USE_LINKER=lld \
+			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 			-DLLVM_EXTERNAL_PROJECTS="cod" \
 			-DLLVM_EXTERNAL_COD_SOURCE_DIR="$COD_SOURCE_DIR" \
 			-DCMAKE_BUILD_TYPE="$COD_BUILD_TYPE" \
