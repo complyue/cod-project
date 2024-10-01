@@ -22,7 +22,7 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 	# coexist on macOS
 	BUILD_DIR="build-$(uname -m)-$(uname -s)"
 	# vscode-clangd expects build/compile_commands.json
-	test -L build || ln -s "$BUILD_DIR/cod" build
+	test -L build || ln -s "$BUILD_DIR/stage2" build
 	# use full path for build dir
 	BUILD_DIR="$COD_SOURCE_DIR/$BUILD_DIR"
 
@@ -155,8 +155,10 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 	#
 	test -x "$BUILD_DIR/cod/bin/cod" || (
 		mkdir -p "$BUILD_DIR/cod"
-		cd "$BUILD_DIR/cod"
-		cmake -DCMAKE_PREFIX_PATH="$BUILD_DIR/stage1rt;$BUILD_DIR/stage1" \
+		mkdir -p "$BUILD_DIR/stage2"
+		cd "$BUILD_DIR/stage2"
+		cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
+			-DCMAKE_PREFIX_PATH="$BUILD_DIR/stage1rt;$BUILD_DIR/stage1" \
 			-DCMAKE_C_COMPILER="clang" \
 			-DCMAKE_CXX_COMPILER="clang++" \
 			-DLLVM_USE_LINKER=lld \
@@ -166,6 +168,7 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 			-DCMAKE_BUILD_TYPE="$COD_BUILD_TYPE" \
 			"${STAGE_COMMON_CMAKE_OPTS[@]}"
 		ninja -j${NJOBS}
+		ninja -j${NJOBS} install
 	)
 
 	exit
