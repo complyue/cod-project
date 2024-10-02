@@ -1,4 +1,6 @@
 CompileFlags:
+  Add:
+    - -stdlib=libc++
   Remove:
     - -forward-unknown-to-host-compiler
     - --generate-code*
