@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-# This script does checkout the corresponding llvm-project branch, 2-stage
+# This script does checkout the corresponding llvm-project branch, 3-stage
 # build CoD as an external project of LLVM, to form a toolset bundled with
 # llvm, clang, lld, libc++ and etc.
 #
@@ -21,8 +21,9 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 	# suffix the build dir, so devcontainers/Docker and native build dirs can
 	# coexist on macOS
 	BUILD_DIR="build-$(uname -m)-$(uname -s)"
-	# vscode-clangd expects build/compile_commands.json
-	test -L build || ln -s "$BUILD_DIR/stage2" build
+	# vscode-clangd expects build/compile_commands.json, and stage3 build tree
+	# is the final env for CoD development
+	test -L build || ln -s "$BUILD_DIR/stage3" build
 	# use full path for build dir
 	BUILD_DIR="$COD_SOURCE_DIR/$BUILD_DIR"
 
@@ -39,10 +40,6 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 			-DCOMPILER_RT_ENABLE_TVOS=OFF
 			-DLLVM_CREATE_XCODE_TOOLCHAIN=OFF
 		)
-
-		# at stage2, some tools built and used early (i.e. before stage2 rt libs)
-		# need this, or they may fail to run due to broken rt linkage
-		export DYLD_LIBRARY_PATH="$BUILD_DIR/stage1rt/lib"
 
 	# TODO: support more OSes
 	else
@@ -66,10 +63,6 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 			-DCOMPILER_RT_USE_LLVM_UNWINDER=ON
 			-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
 		)
-
-		# at stage2, some tools built and used early (i.e. before stage2 rt libs)
-		# need this, or they may fail to run due to broken rt linkage
-		export LD_LIBRARY_PATH="$BUILD_DIR/stage1rt/lib"
 
 	fi
 
@@ -124,17 +117,17 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 	# spare 2 out of all available hardware threads
 	NJOBS=$((HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2)))
 
-	# stage-1: build clang with system compiler toolchain,
+	# stage-1: build clang with system compiler (no clang assumed) toolchain,
 	#          bundling lld, libc++ etc. with it
 	#
-	#   we install stage1 built rt libs into stage1rt, so stage2 tools can
+	#   we install just rt libs into stage1rt, at stage1 so stage2 tools can
 	#   dynamically link with them, this is crucial for llvm-min-tblgen and
 	#   some others tools, those built and used before rt libs (e.g. libc++)
 	#   are built at stage2
 	#
-	#   but we don't install libLLVM.so and other libs, they'd possibly expose
-	#   libstdc++ based APIs (in case stage1 used g++/libstdc++), thus stage2
-	#   tools won't rt link properly
+	#   we don't install all stuff (which'll include libLLVM.so and etc.), for
+	#   they'd possibly expose libstdc++ based APIs (in case stage1 used
+	#   g++/libstdc++), rendering stage2 tools unable to rt link properly
 	#
 	test -x "$BUILD_DIR/stage1/bin/clang++" || (
 		mkdir -p "$BUILD_DIR/stage1rt"
@@ -147,20 +140,27 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 		ninja -j${NJOBS} install-runtimes
 	)
 
-	# stage-2: build CoD toolset with stage1 clang,
-	#          bundling clang, lld, libc++ etc. with it
+	# stage-2: build CoD toolset with stage1 clang and install it
 	#
 	#   we do HAVE_UNW_ADD_DYNAMIC_FDE=1 per:
 	#     https://github.com/llvm/llvm-project/issues/43419
 	#
 	test -x "$BUILD_DIR/cod/bin/cod" || (
-		mkdir -p "$BUILD_DIR/cod"
+		# to be able to rt link with depended runtime libs built & installed
+		# from llvm source, at the previous stage. we'll build these rt libs
+		# at this stage again, but some tools are built and used even earlier
+		if [ "$(uname)" == "Darwin" ]; then
+			export DYLD_LIBRARY_PATH="$BUILD_DIR/stage1rt/lib"
+		else # assuming Ubuntu
+			export LD_LIBRARY_PATH="$BUILD_DIR/stage1rt/lib"
+		fi
+
 		mkdir -p "$BUILD_DIR/stage2"
 		cd "$BUILD_DIR/stage2"
 		cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
 			-DCMAKE_PREFIX_PATH="$BUILD_DIR/stage1rt;$BUILD_DIR/stage1" \
-			-DCMAKE_C_COMPILER="clang" \
-			-DCMAKE_CXX_COMPILER="clang++" \
+			-DCMAKE_C_COMPILER="$BUILD_DIR/stage1/bin/clang" \
+			-DCMAKE_CXX_COMPILER="$BUILD_DIR/stage1/bin/clang++" \
 			-DLLVM_USE_LINKER=lld \
 			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 			-DLLVM_EXTERNAL_PROJECTS="cod" \
@@ -170,6 +170,43 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 		ninja -j${NJOBS}
 		ninja -j${NJOBS} install
 	)
+
+	# stage-3: build CoD toolset again, with itself built & installed at
+	#          stage2, replace its previous installation by stage2
+	#
+	#   we do HAVE_UNW_ADD_DYNAMIC_FDE=1 per:
+	#     https://github.com/llvm/llvm-project/issues/43419
+	#
+	test -x "$BUILD_DIR/stage3/bin/cod" || (
+		# to be able to rt link with depended runtime libs built & installed
+		# from llvm source, at the previous stage. we'll build these rt libs
+		# at this stage again, but some tools are built and used even earlier
+		#
+		# note all libs (including libLLVM.so and etc.) are eligible to rt link
+		# by stage3 tools, as they are built with clang++/libc++ at stage2
+		if [ "$(uname)" == "Darwin" ]; then
+			export DYLD_LIBRARY_PATH="$BUILD_DIR/cod/lib"
+		else # assuming Ubuntu
+			export LD_LIBRARY_PATH="$BUILD_DIR/cod/lib"
+		fi
+
+		mkdir -p "$BUILD_DIR/stage3"
+		cd "$BUILD_DIR/stage3"
+		cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
+			-DCMAKE_PREFIX_PATH="$BUILD_DIR/cod" \
+			-DCMAKE_C_COMPILER="$BUILD_DIR/cod/bin/clang" \
+			-DCMAKE_CXX_COMPILER="$BUILD_DIR/cod/bin/clang++" \
+			-DLLVM_USE_LINKER=lld \
+			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
+			-DLLVM_EXTERNAL_PROJECTS="cod" \
+			-DLLVM_EXTERNAL_COD_SOURCE_DIR="$COD_SOURCE_DIR" \
+			-DCMAKE_BUILD_TYPE="$COD_BUILD_TYPE" \
+			"${STAGE_COMMON_CMAKE_OPTS[@]}"
+		ninja -j${NJOBS}
+		ninja -j${NJOBS} install
+	)
+
+	# now clangd can properly index CoD toolset stuff, in building itself
 
 	exit
 } # unreachable here and after
