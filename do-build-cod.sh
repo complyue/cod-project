@@ -9,6 +9,11 @@
 # certain CoD branch should persist to a specific LLVM branche
 LLVM_BRANCH=release/18.x
 
+# LLVM targets to be supported by CoD
+COD_TARGETS_TO_BUILD="Native"
+# on Cuda ready OSes, include NVPTX target for Cuda support
+# COD_TARGETS_TO_BUILD="Native;NVPTX"
+
 # build type for CoD
 COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 
@@ -107,7 +112,6 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 
 		-DLLVM_ENABLE_IDE=ON
 		-DCMAKE_EXPORT_COMPILE_COMMANDS=1
-		-DLLVM_TARGETS_TO_BUILD="Native"
 		-G
 		Ninja
 		-S
@@ -134,6 +138,7 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 		mkdir -p "$BUILD_DIR/stage1"
 		cd "$BUILD_DIR/stage1"
 		cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/stage1rt" \
+			-DLLVM_TARGETS_TO_BUILD=Native \
 			-DCMAKE_BUILD_TYPE=Release \
 			"${STAGE_COMMON_CMAKE_OPTS[@]}"
 		ninja -j${NJOBS}
@@ -166,7 +171,8 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 			-DLLVM_EXTERNAL_PROJECTS="cod" \
 			-DLLVM_EXTERNAL_COD_SOURCE_DIR="$COD_SOURCE_DIR" \
-			-DCMAKE_BUILD_TYPE="$COD_BUILD_TYPE" \
+			-DLLVM_TARGETS_TO_BUILD=Native \
+			-DCMAKE_BUILD_TYPE=Release \
 			"${STAGE_COMMON_CMAKE_OPTS[@]}"
 		ninja -j${NJOBS}
 		ninja -j${NJOBS} install
@@ -202,6 +208,7 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 			-DLLVM_EXTERNAL_PROJECTS="cod" \
 			-DLLVM_EXTERNAL_COD_SOURCE_DIR="$COD_SOURCE_DIR" \
+			-DLLVM_TARGETS_TO_BUILD="$COD_TARGETS_TO_BUILD" \
 			-DCMAKE_BUILD_TYPE="$COD_BUILD_TYPE" \
 			"${STAGE_COMMON_CMAKE_OPTS[@]}"
 		ninja -j${NJOBS}
