@@ -1,0 +1,35 @@
+diff --git a/compiler-rt/cmake/Modules/AllSupportedArchDefs.cmake b/compiler-rt/cmake/Modules/AllSupportedArchDefs.cmake
+index 416777171d2c..292ee7ce44de 100644
+--- a/compiler-rt/cmake/Modules/AllSupportedArchDefs.cmake
++++ b/compiler-rt/cmake/Modules/AllSupportedArchDefs.cmake
+@@ -20,7 +20,7 @@ set(VE ve)
+ if(APPLE)
+   set(ARM64 arm64)
+   set(ARM32 armv7 armv7s armv7k)
+-  set(X86_64 x86_64 x86_64h)
++  set(X86_64 x86_64)  # cf. https://github.com/llvm/llvm-project/issues/63085
+ endif()
+ 
+ set(ALL_SANITIZER_COMMON_SUPPORTED_ARCH ${X86} ${X86_64} ${PPC64} ${RISCV64}
+diff --git a/compiler-rt/cmake/builtin-config-ix.cmake b/compiler-rt/cmake/builtin-config-ix.cmake
+index b17c43bf6a68..5665e742c906 100644
+--- a/compiler-rt/cmake/builtin-config-ix.cmake
++++ b/compiler-rt/cmake/builtin-config-ix.cmake
+@@ -71,7 +71,7 @@ set(VE ve)
+ if(APPLE)
+   set(ARM64 arm64 arm64e)
+   set(ARM32 armv7 armv7k armv7s)
+-  set(X86_64 x86_64 x86_64h)
++  set(X86_64 x86_64)  # cf. https://github.com/llvm/llvm-project/issues/63085
+ endif()
+ 
+ set(ALL_BUILTIN_SUPPORTED_ARCH
+@@ -114,7 +114,7 @@ if(APPLE)
+   set(DARWIN_osx_BUILTIN_MIN_VER 10.7)
+   set(DARWIN_osx_BUILTIN_MIN_VER_FLAG
+       -mmacosx-version-min=${DARWIN_osx_BUILTIN_MIN_VER})
+-  set(DARWIN_osx_BUILTIN_ALL_POSSIBLE_ARCHS ${X86} ${X86_64})
++  set(DARWIN_osx_BUILTIN_ALL_POSSIBLE_ARCHS ${X86_64})  # let's unsupport 32 bit on Macs
+   # Add support for arm64 macOS if available in SDK.
+   foreach(arch ${ARM64})
+     sdk_has_arch_support(${DARWIN_osx_SYSROOT} macosx ${arch} MACOS_ARM_SUPPORT)
