@@ -1,0 +1,33 @@
+diff --git a/clang/lib/Driver/ToolChains/Darwin.cpp b/clang/lib/Driver/ToolChains/Darwin.cpp
+index fae8ad1a958a..5e4872598307 100644
+--- a/clang/lib/Driver/ToolChains/Darwin.cpp
++++ b/clang/lib/Driver/ToolChains/Darwin.cpp
+@@ -661,6 +661,18 @@ void darwin::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+ 
+   Args.AddAllArgs(CmdArgs, options::OPT_L);
+ 
++  // prefer bundled libs over those from other sources
++  if(isa<LinkJobAction>(JA) || isa<LinkerWrapperJobAction>(JA)) {
++    const char *Exec = getToolChain().getDriver().getClangProgramPath();
++    SmallString<256> LibArg("-L");
++    auto InstallDir = llvm::sys::path::parent_path(
++                      llvm::sys::path::parent_path(Exec));
++    LibArg += InstallDir;
++    LibArg += "/";
++    LibArg += CLANG_INSTALL_LIBDIR_BASENAME;
++    CmdArgs.push_back(Args.MakeArgStringRef(LibArg));
++  }
++
+   AddLinkerInputs(getToolChain(), Inputs, Args, CmdArgs, JA);
+   // Build the input file for -filelist (list of linker input files) in case we
+   // need it later
+@@ -2626,6 +2638,9 @@ void DarwinClang::AddCXXStdlibLibArgs(const ArgList &Args,
+   switch (Type) {
+   case ToolChain::CST_Libcxx:
+     CmdArgs.push_back("-lc++");
++    // CoD build and vending its own (newer than the implicitly linked AppleClang/macOS)
++    // libc++abi, as well as newer libc++, need explicitly listed to link on cmdl
++    CmdArgs.push_back("-lc++abi");
+     if (Args.hasArg(options::OPT_fexperimental_library))
+       CmdArgs.push_back("-lc++experimental");
+     break;
