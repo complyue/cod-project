@@ -34,6 +34,8 @@
 LLVM_ATTRIBUTE_USED int __lsan_is_turned_off() { return 1; }
 #endif
 
+namespace repl {
+
 static llvm::cl::opt<bool> CudaEnabled("cuda", llvm::cl::Hidden);
 static llvm::cl::opt<std::string> CudaPath("cuda-path", llvm::cl::Hidden);
 static llvm::cl::opt<std::string> OffloadArch("offload-arch", llvm::cl::Hidden);
@@ -266,3 +268,5 @@ int main(int argc, const char **argv) {
 
   return checkDiagErrors(Interp->getCompilerInstance(), HasError);
 }
+
+} // namespace repl

@@ -9,7 +9,8 @@ set( LLVM_LINK_COMPONENTS
   )
 
 add_clang_tool( cod
-  cod.cc
+  main.cc
+  clang-repl.cc
   )
 
 clang_target_link_libraries( cod PRIVATE
