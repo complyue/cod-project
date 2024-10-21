@@ -221,27 +221,27 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 	#   we always (even on Linux) do HAVE_UNW_ADD_DYNAMIC_FDE=1 per:
 	#     https://github.com/llvm/llvm-project/issues/43419
 	#
-	test -x "$BUILD_DIR/stage3/bin/cod" || (
-		cd "$BUILD_DIR/stage3"
-		cp -rf ../cod-rt/lib ./
-		cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
-			-DCMAKE_PREFIX_PATH="$BUILD_DIR/cod" \
-			-DCMAKE_C_COMPILER="$BUILD_DIR/cod/bin/clang" \
-			-DCMAKE_CXX_COMPILER="$BUILD_DIR/cod/bin/clang++" \
-			-DCMAKE_LINKER="$BUILD_DIR/cod/bin/ld.lld" \
-			-DLLVM_ENABLE_LIBCXX=ON \
-			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
-			-DLLVM_EXTERNAL_PROJECTS="cod" \
-			-DLLVM_EXTERNAL_COD_SOURCE_DIR="$COD_SOURCE_DIR" \
-			-DLLVM_TARGETS_TO_BUILD="$COD_TARGETS_TO_BUILD" \
-			-DCMAKE_BUILD_TYPE="$COD_BUILD_TYPE" \
-			"${STAGE_COMMON_CMAKE_OPTS[@]}" \
-			-DLLVM_ENABLE_PROJECTS="clang;lld;lldb"
-		ninja -j${NJOBS}
-		ninja -j${NJOBS} install
-	)
-
-	# now clangd can properly index CoD toolset stuff, in building itself
+	#   this script also does incremental build after CoD cmake cfg changed:
+	#     unconditionally update the final build tree to reflect the changes,
+	#     then build & install again
+	#
+	cd "$BUILD_DIR/stage3"
+	test -d ./lib || cp -rf ../cod-rt/lib ./
+	cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
+		-DCMAKE_PREFIX_PATH="$BUILD_DIR/cod" \
+		-DCMAKE_C_COMPILER="$BUILD_DIR/cod/bin/clang" \
+		-DCMAKE_CXX_COMPILER="$BUILD_DIR/cod/bin/clang++" \
+		-DCMAKE_LINKER="$BUILD_DIR/cod/bin/ld.lld" \
+		-DLLVM_ENABLE_LIBCXX=ON \
+		-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
+		-DLLVM_EXTERNAL_PROJECTS="cod" \
+		-DLLVM_EXTERNAL_COD_SOURCE_DIR="$COD_SOURCE_DIR" \
+		-DLLVM_TARGETS_TO_BUILD="$COD_TARGETS_TO_BUILD" \
+		-DCMAKE_BUILD_TYPE="$COD_BUILD_TYPE" \
+		"${STAGE_COMMON_CMAKE_OPTS[@]}" \
+		-DLLVM_ENABLE_PROJECTS="clang;lld;lldb"
+	ninja -j${NJOBS}
+	ninja -j${NJOBS} install
 
 	exit
 } # unreachable here and after
