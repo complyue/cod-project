@@ -161,32 +161,6 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 	# spare 2 out of all available hardware threads
 	NJOBS=$((HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2)))
 
-	# prepare stage dirs
-	mkdir -p "$BUILD_DIR/stage"{1..3}
-
-	#
-	# stage-1: build clang with system compiler (gcc or older clang) toolchain,
-	#          bundling lld, libc++ etc. with it
-	#
-	#   we collect rt libs into cod-rt, and start out later stages with them,
-	#   so intermediate tools can dynamically link with them, this is crucial
-	#   for llvm-min-tblgen and some others tools, those built and used before
-	#   rt libs (e.g. libc++) are built at its own stage
-	#
-	#   these libs (e.g. libc++) are preferably selected via relative (../lib/)
-	#   rpath, this is crucial in case system installed (older) versions lack
-	#   symbols from our built libs from llvm-project
-	#
-	test -x "$BUILD_DIR/stage1/bin/clang++" || (
-		cd "$BUILD_DIR/stage1"
-		cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod-rt" \
-			-DLLVM_TARGETS_TO_BUILD=Native \
-			-DCMAKE_BUILD_TYPE=Release \
-			"${STAGE_COMMON_CMAKE_OPTS[@]}"
-		ninja -j${NJOBS}
-		ninja -j${NJOBS} install-runtimes
-	)
-
 	#
 	# stage-2: build CoD toolset with stage1 clang then install it
 	#
@@ -194,7 +168,30 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 	#     https://github.com/llvm/llvm-project/issues/43419
 	#
 	test -x "$BUILD_DIR/cod/bin/cod" || (
-		cd "$BUILD_DIR/stage2"
+		#
+		# stage-1: build clang with system compiler (gcc or older clang) toolchain,
+		#          bundling lld, libc++ etc. with it
+		#
+		#   we collect rt libs into cod-rt, and start out later stages with them,
+		#   so intermediate tools can dynamically link with them, this is crucial
+		#   for llvm-min-tblgen and some others tools, those built and used before
+		#   rt libs (e.g. libc++) are built at its own stage
+		#
+		#   these libs (e.g. libc++) are preferably selected via relative (../lib/)
+		#   rpath, this is crucial in case system installed (older) versions lack
+		#   symbols from our built libs from llvm-project
+		#
+		test -x "$BUILD_DIR/stage1/bin/clang++" || (
+			mkdir -p "$BUILD_DIR/stage1" && cd "$BUILD_DIR/stage1"
+			cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod-rt" \
+				-DLLVM_TARGETS_TO_BUILD=Native \
+				-DCMAKE_BUILD_TYPE=Release \
+				"${STAGE_COMMON_CMAKE_OPTS[@]}"
+			ninja -j${NJOBS}
+			ninja -j${NJOBS} install-runtimes
+		)
+
+		mkdir -p "$BUILD_DIR/stage2" && cd "$BUILD_DIR/stage2"
 		cp -rf ../cod-rt/lib ./
 		cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
 			-DCMAKE_PREFIX_PATH="$BUILD_DIR/stage1" \
@@ -225,7 +222,7 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 	#     unconditionally update the final build tree to reflect the changes,
 	#     then build & install again
 	#
-	cd "$BUILD_DIR/stage3"
+	mkdir -p "$BUILD_DIR/stage3" && cd "$BUILD_DIR/stage3"
 	test -d ./lib || cp -rf ../cod-rt/lib ./
 	cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
 		-DCMAKE_PREFIX_PATH="$BUILD_DIR/cod" \
@@ -242,6 +239,9 @@ COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
 		-DLLVM_ENABLE_PROJECTS="clang;lld;lldb"
 	ninja -j${NJOBS}
 	ninja -j${NJOBS} install
+
+	# cleanup artifacts not needed anymore
+	rm -rf "$BUILD_DIR"/{cod-rt,stage1,stage2} || true
 
 	exit
 } # unreachable here and after
