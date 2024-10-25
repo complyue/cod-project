@@ -23,4 +23,9 @@ link_directories( BEFORE
   "${CMAKE_BINARY_DIR}/lib"
 )
 
+include_directories( BEFORE
+  include
+  )
+
 add_subdirectory(cod)
+add_subdirectory(codp)
