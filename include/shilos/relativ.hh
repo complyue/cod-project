@@ -9,12 +9,15 @@ namespace shilos {
 
 using std::intptr_t;
 
-template <typename T> class relativ_ptr {
+template <typename _Tp> class relativ_ptr {
+public:
+  typedef _Tp element_type;
+
 private:
   intptr_t distance;
 
-  static intptr_t compute_distance(const relativ_ptr<T> *base,
-                                   const T *target) noexcept {
+  static intptr_t relativ_distance(const relativ_ptr<_Tp> *base,
+                                   const _Tp *target) noexcept {
     if (!target)
       return 0;
     return reinterpret_cast<intptr_t>(target) -
@@ -22,19 +25,26 @@ private:
   }
 
 public:
-  constexpr relativ_ptr() noexcept : distance(0) {}
+  relativ_ptr() noexcept : distance(0) {}
 
-  constexpr relativ_ptr(T *ptr) noexcept
-      : distance(compute_distance(this, ptr)) {}
+  relativ_ptr(const _Tp *ptr) noexcept
+      : distance(relativ_distance(this, ptr)) {}
 
-  constexpr relativ_ptr(const relativ_ptr &other) noexcept
-      : distance(compute_distance(this, other.get())) {}
+  relativ_ptr(const relativ_ptr &other) noexcept
+      : distance(relativ_distance(this, other.get())) {}
 
-  constexpr relativ_ptr(relativ_ptr &&other) = delete;
+  relativ_ptr(relativ_ptr &&other) = delete;
+
+  relativ_ptr &operator=(const _Tp *other) noexcept {
+    if (this->get() != other) {
+      distance = relativ_distance(this, other);
+    }
+    return *this;
+  }
 
   relativ_ptr &operator=(const relativ_ptr &other) noexcept {
     if (this != &other) {
-      distance = compute_distance(this, other.get());
+      distance = relativ_distance(this, other.get());
     }
     return *this;
   }
@@ -43,25 +53,38 @@ public:
 
   ~relativ_ptr() = default;
 
-  relativ_ptr &operator=(T *ptr) noexcept {
-    distance = compute_distance(this, ptr);
+  relativ_ptr &operator=(_Tp *ptr) & noexcept {
+    distance = relativ_distance(this, ptr);
     return *this;
   }
 
-  T *get() const noexcept {
+  // only works for lvalues
+  _Tp *get() & noexcept {
     if (distance == 0)
       return nullptr;
-    return reinterpret_cast<T *>(reinterpret_cast<const intptr_t>(this) +
-                                 distance);
+    return reinterpret_cast<_Tp *>(reinterpret_cast<const intptr_t>(this) +
+                                   distance);
+  }
+
+  // only works for lvalues
+  const _Tp *get() const & noexcept {
+    if (distance == 0)
+      return nullptr;
+    return reinterpret_cast<const _Tp *>(
+        reinterpret_cast<const intptr_t>(this) + distance);
   }
 
   // welcome dereference from an lvalue of relative ptrs
-  T &operator*() & noexcept { return *get(); }
-  T *operator->() & noexcept { return get(); }
+  _Tp &operator*() & noexcept { return *get(); }
+  _Tp *operator->() & noexcept { return get(); }
+  const _Tp &operator*() const & noexcept { return *get(); }
+  const _Tp *operator->() const & noexcept { return get(); }
 
-  // no dereference from an rvalue of relative ptrs
-  T &operator*() && = delete;
-  T *operator->() && = delete;
+  // forbid dereference from an rvalue of relative ptrs
+  _Tp &operator*() && = delete;
+  _Tp *operator->() && = delete;
+  const _Tp &operator*() const && = delete;
+  const _Tp *operator->() const && = delete;
 
   explicit operator bool() const noexcept { return get() != nullptr; }
 
