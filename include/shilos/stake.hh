@@ -23,8 +23,7 @@ public:
   // allocate a memory block within this stake's interesting address range
   virtual void *allocate(size_t size, size_t align = 128) = 0;
 
-  template <typename _Tp, typename... Args>
-  _Tp &new_held(relativ_ptr<_Tp> *holder, Args &&...args) {
+  template <typename _Tp, typename... Args> _Tp &new_held(relativ_ptr<_Tp> *holder, Args &&...args) {
 #ifndef NDEBUG
     {
       const auto holder_ptr = reinterpret_cast<intptr_t>(holder);
@@ -65,15 +64,10 @@ private:
   const intptr_t offset;
 
 public:
-  held_ptr(const stake_type *stake_a, intptr_t offset_a)
-      : stake(stake_a), offset(offset_a) {}
+  held_ptr(const stake_type *stake_a, intptr_t offset_a) : stake(stake_a), offset(offset_a) {}
 
-  _Tp *get() noexcept {
-    return reinterpret_cast<_Tp *>(stake->base_ptr() + offset);
-  }
-  const _Tp *get() const noexcept {
-    return reinterpret_cast<_Tp *>(stake->base_ptr() + offset);
-  }
+  _Tp *get() noexcept { return reinterpret_cast<_Tp *>(stake->base_ptr() + offset); }
+  const _Tp *get() const noexcept { return reinterpret_cast<_Tp *>(stake->base_ptr() + offset); }
 
   _Tp &operator*() noexcept { return *get(); }
   const _Tp &operator*() const noexcept { return *get(); }

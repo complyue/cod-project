@@ -40,17 +40,12 @@ static llvm::cl::opt<bool> CudaEnabled("cuda", llvm::cl::Hidden);
 static llvm::cl::opt<std::string> CudaPath("cuda-path", llvm::cl::Hidden);
 static llvm::cl::opt<std::string> OffloadArch("offload-arch", llvm::cl::Hidden);
 
-static llvm::cl::list<std::string>
-    ClangArgs("Xcc",
-              llvm::cl::desc("Argument to pass to the CompilerInvocation"),
-              llvm::cl::CommaSeparated);
-static llvm::cl::opt<bool> OptHostSupportsJit("host-supports-jit",
-                                              llvm::cl::Hidden);
-static llvm::cl::list<std::string> OptInputs(llvm::cl::Positional,
-                                             llvm::cl::desc("[code to run]"));
+static llvm::cl::list<std::string> ClangArgs("Xcc", llvm::cl::desc("Argument to pass to the CompilerInvocation"),
+                                             llvm::cl::CommaSeparated);
+static llvm::cl::opt<bool> OptHostSupportsJit("host-supports-jit", llvm::cl::Hidden);
+static llvm::cl::list<std::string> OptInputs(llvm::cl::Positional, llvm::cl::desc("[code to run]"));
 
-static void llvmErrorHandler(void *UserData, const char *Message,
-                             bool GenCrashDiag) {
+static void llvmErrorHandler(void *UserData, const char *Message, bool GenCrashDiag) {
   auto &Diags = *static_cast<clang::DiagnosticsEngine *>(UserData);
 
   Diags.Report(clang::diag::err_fe_error_backend) << Message;
@@ -86,18 +81,13 @@ static int checkDiagErrors(const clang::CompilerInstance *CI, bool HasError) {
 struct ReplListCompleter {
   clang::IncrementalCompilerBuilder &CB;
   clang::Interpreter &MainInterp;
-  ReplListCompleter(clang::IncrementalCompilerBuilder &CB,
-                    clang::Interpreter &Interp)
-      : CB(CB), MainInterp(Interp){};
+  ReplListCompleter(clang::IncrementalCompilerBuilder &CB, clang::Interpreter &Interp) : CB(CB), MainInterp(Interp){};
 
-  std::vector<llvm::LineEditor::Completion> operator()(llvm::StringRef Buffer,
-                                                       size_t Pos) const;
-  std::vector<llvm::LineEditor::Completion>
-  operator()(llvm::StringRef Buffer, size_t Pos, llvm::Error &ErrRes) const;
+  std::vector<llvm::LineEditor::Completion> operator()(llvm::StringRef Buffer, size_t Pos) const;
+  std::vector<llvm::LineEditor::Completion> operator()(llvm::StringRef Buffer, size_t Pos, llvm::Error &ErrRes) const;
 };
 
-std::vector<llvm::LineEditor::Completion>
-ReplListCompleter::operator()(llvm::StringRef Buffer, size_t Pos) const {
+std::vector<llvm::LineEditor::Completion> ReplListCompleter::operator()(llvm::StringRef Buffer, size_t Pos) const {
   auto Err = llvm::Error::success();
   auto res = (*this)(Buffer, Pos, Err);
   if (Err)
@@ -105,9 +95,8 @@ ReplListCompleter::operator()(llvm::StringRef Buffer, size_t Pos) const {
   return res;
 }
 
-std::vector<llvm::LineEditor::Completion>
-ReplListCompleter::operator()(llvm::StringRef Buffer, size_t Pos,
-                              llvm::Error &ErrRes) const {
+std::vector<llvm::LineEditor::Completion> ReplListCompleter::operator()(llvm::StringRef Buffer, size_t Pos,
+                                                                        llvm::Error &ErrRes) const {
   std::vector<llvm::LineEditor::Completion> Comps;
   std::vector<std::string> Results;
 
@@ -117,8 +106,7 @@ ReplListCompleter::operator()(llvm::StringRef Buffer, size_t Pos,
     return {};
   }
 
-  size_t Lines =
-      std::count(Buffer.begin(), std::next(Buffer.begin(), Pos), '\n') + 1;
+  size_t Lines = std::count(Buffer.begin(), std::next(Buffer.begin(), Pos), '\n') + 1;
   auto Interp = clang::Interpreter::create(std::move(*CI));
 
   if (auto Err = Interp.takeError()) {
@@ -129,12 +117,10 @@ ReplListCompleter::operator()(llvm::StringRef Buffer, size_t Pos,
   }
   auto *MainCI = (*Interp)->getCompilerInstance();
   auto CC = clang::ReplCodeCompleter();
-  CC.codeComplete(MainCI, Buffer, Lines, Pos + 1,
-                  MainInterp.getCompilerInstance(), Results);
+  CC.codeComplete(MainCI, Buffer, Lines, Pos + 1, MainInterp.getCompilerInstance(), Results);
   for (auto c : Results) {
     if (c.find(CC.Prefix) == 0)
-      Comps.push_back(
-          llvm::LineEditor::Completion(c.substr(CC.Prefix.size()), c));
+      Comps.push_back(llvm::LineEditor::Completion(c.substr(CC.Prefix.size()), c));
   }
   return Comps;
 }
@@ -193,8 +179,7 @@ int main(int argc, const char **argv) {
 
   // Set an error handler, so that any LLVM backend diagnostics go through our
   // error handler.
-  llvm::install_fatal_error_handler(llvmErrorHandler,
-                                    static_cast<void *>(&CI->getDiagnostics()));
+  llvm::install_fatal_error_handler(llvmErrorHandler, static_cast<void *>(&CI->getDiagnostics()));
 
   // Load any requested plugins.
   CI->LoadRequestedPlugins();
@@ -204,8 +189,7 @@ int main(int argc, const char **argv) {
   std::unique_ptr<clang::Interpreter> Interp;
 
   if (CudaEnabled) {
-    Interp = ExitOnErr(
-        clang::Interpreter::createWithCUDA(std::move(CI), std::move(DeviceCI)));
+    Interp = ExitOnErr(clang::Interpreter::createWithCUDA(std::move(CI), std::move(DeviceCI)));
 
     if (CudaPath.empty()) {
       ExitOnErr(Interp->LoadDynamicLibrary("libcudart.so"));

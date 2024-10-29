@@ -16,22 +16,18 @@ public:
 private:
   intptr_t distance;
 
-  static intptr_t relativ_distance(const relativ_ptr<_Tp> *base,
-                                   const _Tp *target) noexcept {
+  static intptr_t relativ_distance(const relativ_ptr<_Tp> *base, const _Tp *target) noexcept {
     if (!target)
       return 0;
-    return reinterpret_cast<intptr_t>(target) -
-           reinterpret_cast<intptr_t>(base);
+    return reinterpret_cast<intptr_t>(target) - reinterpret_cast<intptr_t>(base);
   }
 
 public:
   relativ_ptr() noexcept : distance(0) {}
 
-  relativ_ptr(const _Tp *ptr) noexcept
-      : distance(relativ_distance(this, ptr)) {}
+  relativ_ptr(const _Tp *ptr) noexcept : distance(relativ_distance(this, ptr)) {}
 
-  relativ_ptr(const relativ_ptr &other) noexcept
-      : distance(relativ_distance(this, other.get())) {}
+  relativ_ptr(const relativ_ptr &other) noexcept : distance(relativ_distance(this, other.get())) {}
 
   relativ_ptr(relativ_ptr &&other) = delete;
 
@@ -62,16 +58,14 @@ public:
   _Tp *get() & noexcept {
     if (distance == 0)
       return nullptr;
-    return reinterpret_cast<_Tp *>(reinterpret_cast<const intptr_t>(this) +
-                                   distance);
+    return reinterpret_cast<_Tp *>(reinterpret_cast<intptr_t>(this) + distance);
   }
 
   // only works for lvalues
   const _Tp *get() const & noexcept {
     if (distance == 0)
       return nullptr;
-    return reinterpret_cast<const _Tp *>(
-        reinterpret_cast<const intptr_t>(this) + distance);
+    return reinterpret_cast<const _Tp *>(reinterpret_cast<intptr_t>(this) + distance);
   }
 
   // welcome dereference from an lvalue of relative ptrs
@@ -88,13 +82,9 @@ public:
 
   explicit operator bool() const noexcept { return get() != nullptr; }
 
-  bool operator==(const relativ_ptr &other) const noexcept {
-    return get() == other.get();
-  }
+  bool operator==(const relativ_ptr &other) const noexcept { return get() == other.get(); }
 
-  bool operator!=(const relativ_ptr &other) const noexcept {
-    return !(*this == other);
-  }
+  bool operator!=(const relativ_ptr &other) const noexcept { return !(*this == other); }
 };
 
 } // namespace shilos
