@@ -14,7 +14,7 @@ public:
   typedef _Tp element_type;
 
 private:
-  intptr_t distance;
+  intptr_t distance_;
 
   static intptr_t relativ_distance(const relativ_ptr<_Tp> *base, const _Tp *target) noexcept {
     if (!target)
@@ -23,24 +23,24 @@ private:
   }
 
 public:
-  relativ_ptr() noexcept : distance(0) {}
+  relativ_ptr() noexcept : distance_(0) {}
 
-  relativ_ptr(const _Tp *ptr) noexcept : distance(relativ_distance(this, ptr)) {}
+  relativ_ptr(const _Tp *ptr) noexcept : distance_(relativ_distance(this, ptr)) {}
 
-  relativ_ptr(const relativ_ptr &other) noexcept : distance(relativ_distance(this, other.get())) {}
+  relativ_ptr(const relativ_ptr &other) noexcept : distance_(relativ_distance(this, other.get())) {}
 
   relativ_ptr(relativ_ptr &&other) = delete;
 
   relativ_ptr &operator=(const _Tp *other) noexcept {
     if (this->get() != other) {
-      distance = relativ_distance(this, other);
+      distance_ = relativ_distance(this, other);
     }
     return *this;
   }
 
   relativ_ptr &operator=(const relativ_ptr &other) noexcept {
     if (this != &other) {
-      distance = relativ_distance(this, other.get());
+      distance_ = relativ_distance(this, other.get());
     }
     return *this;
   }
@@ -50,22 +50,22 @@ public:
   ~relativ_ptr() = default;
 
   relativ_ptr &operator=(_Tp *ptr) & noexcept {
-    distance = relativ_distance(this, ptr);
+    distance_ = relativ_distance(this, ptr);
     return *this;
   }
 
   // only works for lvalues
   _Tp *get() & noexcept {
-    if (distance == 0)
+    if (distance_ == 0)
       return nullptr;
-    return reinterpret_cast<_Tp *>(reinterpret_cast<intptr_t>(this) + distance);
+    return reinterpret_cast<_Tp *>(reinterpret_cast<intptr_t>(this) + distance_);
   }
 
   // only works for lvalues
   const _Tp *get() const & noexcept {
-    if (distance == 0)
+    if (distance_ == 0)
       return nullptr;
-    return reinterpret_cast<const _Tp *>(reinterpret_cast<intptr_t>(this) + distance);
+    return reinterpret_cast<const _Tp *>(reinterpret_cast<intptr_t>(this) + distance_);
   }
 
   // welcome dereference from an lvalue of relative ptrs

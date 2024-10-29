@@ -5,7 +5,6 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-
 #include <stdexcept>
 
 #include "./relativ.hh"
@@ -17,7 +16,7 @@ using std::ptrdiff_t;
 
 class memory_stake {
 public:
-  virtual intptr_t base_ptr() { return this->_base_ptr; }
+  virtual intptr_t base_ptr() { return this->base_ptr_; }
   virtual ptrdiff_t capacity() { return 0; }
 
   // allocate a memory block within this stake's interesting address range
@@ -48,7 +47,7 @@ public:
   virtual ~memory_stake(){};
 
 protected:
-  intptr_t _base_ptr;
+  intptr_t base_ptr_;
 };
 
 //
@@ -60,14 +59,14 @@ public:
   typedef _MsTp stake_type;
 
 private:
-  const stake_type *stake;
-  const intptr_t offset;
+  const stake_type *stake_;
+  const intptr_t offset_;
 
 public:
-  held_ptr(const stake_type *stake_a, intptr_t offset_a) : stake(stake_a), offset(offset_a) {}
+  held_ptr(const stake_type *stake, intptr_t offset) : stake_(stake), offset_(offset) {}
 
-  _Tp *get() noexcept { return reinterpret_cast<_Tp *>(stake->base_ptr() + offset); }
-  const _Tp *get() const noexcept { return reinterpret_cast<_Tp *>(stake->base_ptr() + offset); }
+  _Tp *get() noexcept { return reinterpret_cast<_Tp *>(stake_->base_ptr() + offset_); }
+  const _Tp *get() const noexcept { return reinterpret_cast<_Tp *>(stake_->base_ptr() + offset_); }
 
   _Tp &operator*() noexcept { return *get(); }
   const _Tp &operator*() const noexcept { return *get(); }
