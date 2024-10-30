@@ -1,4 +1,4 @@
 
-add_clang_library( shilos
+add_clang_library( shilos SHARED
   shilos.cc
   )
