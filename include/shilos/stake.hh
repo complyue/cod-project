@@ -7,16 +7,104 @@
 #include <cstdint>
 #include <stdexcept>
 
-#include "./relativ.hh"
-
 namespace shilos {
 
 using std::intptr_t;
 using std::ptrdiff_t;
 
-class memory_stake {
+template <typename T> class relativ_ptr {
 public:
-  virtual intptr_t base_ptr() { return base_ptr_; }
+  typedef T element_type;
+
+private:
+  ptrdiff_t distance_;
+
+  static ptrdiff_t relativ_distance(const relativ_ptr<T> *rp, const T *tgt) noexcept {
+    if (!tgt)
+      return 0;
+    return reinterpret_cast<intptr_t>(tgt) - reinterpret_cast<intptr_t>(rp);
+  }
+
+public:
+  relativ_ptr() noexcept : distance_(0) {}
+
+  relativ_ptr(const T *ptr) noexcept : distance_(relativ_distance(this, ptr)) {}
+
+  relativ_ptr(const relativ_ptr &other) noexcept : distance_(relativ_distance(this, other.get())) {}
+
+  relativ_ptr(relativ_ptr &&other) = delete;
+
+  relativ_ptr &operator=(const T *other) noexcept {
+    if (this->get() != other) {
+      distance_ = relativ_distance(this, other);
+    }
+    return *this;
+  }
+
+  relativ_ptr &operator=(const relativ_ptr &other) noexcept {
+    if (this != &other) {
+      distance_ = relativ_distance(this, other.get());
+    }
+    return *this;
+  }
+
+  relativ_ptr &operator=(relativ_ptr &&other) = delete;
+
+  ~relativ_ptr() = default;
+
+  relativ_ptr &operator=(T *ptr) & noexcept {
+    distance_ = relativ_distance(this, ptr);
+    return *this;
+  }
+
+  // only works for lvalues
+  T *get() & noexcept {
+    if (distance_ == 0)
+      return nullptr;
+    return reinterpret_cast<T *>(reinterpret_cast<intptr_t>(this) + distance_);
+  }
+
+  // only works for lvalues
+  const T *get() const & noexcept {
+    if (distance_ == 0)
+      return nullptr;
+    return reinterpret_cast<const T *>(reinterpret_cast<intptr_t>(this) + distance_);
+  }
+
+  // welcome dereference from an lvalue of relative ptrs
+  T &operator*() & noexcept { return *get(); }
+  T *operator->() & noexcept { return get(); }
+  const T &operator*() const & noexcept { return *get(); }
+  const T *operator->() const & noexcept { return get(); }
+
+  // forbid dereference from an rvalue of relative ptrs
+  T &operator*() && = delete;
+  T *operator->() && = delete;
+  const T &operator*() const && = delete;
+  const T *operator->() const && = delete;
+
+  explicit operator bool() const noexcept { return get() != nullptr; }
+
+  bool operator==(const relativ_ptr &other) const noexcept { return get() == other.get(); }
+
+  bool operator!=(const relativ_ptr &other) const noexcept { return !(*this == other); }
+};
+
+template <typename RT> class stake_header {
+  std::uint16_t magic;
+  struct {
+    std::int16_t major;
+    std::int16_t minor;
+  } version;
+  std::int16_t flags;
+  relativ_ptr<RT> root;
+};
+
+template <typename RT> class memory_stake {
+public:
+  virtual ~memory_stake(){};
+
+  virtual stake_header<RT> *header() = 0;
   virtual ptrdiff_t capacity() { return 0; }
 
   // allocate a memory block within this stake's interesting address range
@@ -24,73 +112,40 @@ public:
 
   // all assignment (including clearing with nullptr) to (relative) ptrs inside this stake
   // should go through this method, to facilitate correct reference counting
-  template <typename _Tp> _Tp &assign_ptr(relativ_ptr<_Tp> *holder, const _Tp *target) {
-    const _Tp *curr = holder->get();
-    if (curr != target) {
-      if (target)
-        increase_ref(reinterpret_cast<intptr_t>(target));
-      *holder = target;
+  template <typename T> T &assign_ptr(relativ_ptr<T> *holder, const T *addr) {
+#ifndef NDEBUG
+    {
+      const auto holder_ptr = reinterpret_cast<intptr_t>(holder);
+      if (this->capacity() <= 0)
+        throw std::logic_error("!?new object in empty stake?!");
+      const auto base_ptr = reinterpret_cast<intptr_t>(this->header());
+      const auto end_ptr = base_ptr + this->capacity();
+      if (holder_ptr < base_ptr || holder_ptr >= end_ptr)
+        throw std::out_of_range("!?holder out of stake interests?!");
+    }
+#endif
+    const T *curr = holder->get();
+    if (curr != addr) {
+      if (addr)
+        increase_ref(reinterpret_cast<intptr_t>(addr));
+      *holder = addr;
       if (curr)
         decrease_ref(reinterpret_cast<intptr_t>(curr));
     }
     return *holder;
   }
 
-  template <typename _Tp, typename... Args> _Tp &new_held(relativ_ptr<_Tp> *holder, Args &&...args) {
-#ifndef NDEBUG
-    {
-      const auto holder_ptr = reinterpret_cast<intptr_t>(holder);
-      if (capacity() <= 0)
-        throw std::logic_error("!?new object in empty stake?!");
-      const auto base_ptr = this->base_ptr();
-      const auto end_ptr = base_ptr + this->capacity();
-      if (holder_ptr < base_ptr || holder_ptr >= end_ptr)
-        throw std::out_of_range("!?holder out of stake interests?!");
-    }
-#endif
-    // alloc mem block within
-    _Tp *target = static_cast<_Tp *>(this->allocate(sizeof(_Tp), alignof(_Tp)));
-    // placement new with args
-    new (target) _Tp(std::forward<Args>(args)...);
-    // assign the ptr to target holder
-    assign_ptr(holder, target);
-    // return the instance reference
+  template <typename T, typename... Args> T &new_held(relativ_ptr<T> *holder, Args &&...args) {
+    T *addr = static_cast<T *>(this->allocate(sizeof(T), alignof(T)));
+    new (addr) T(std::forward<Args>(args)...);
+    assign_ptr(holder, addr);
     return *holder;
   }
-
-  virtual ~memory_stake(){};
 
 protected:
   // stake-wide reference counting callbacks
   virtual void increase_ref(intptr_t ptr) {}
   virtual void decrease_ref(intptr_t ptr) {}
-
-  intptr_t base_ptr_;
-};
-
-//
-// absolute ptr to some instance held by a \c memory_stake
-//
-template <typename _Tp, std::derived_from<memory_stake> _MsTp> class held_ptr {
-public:
-  typedef _Tp element_type;
-  typedef _MsTp stake_type;
-
-private:
-  const stake_type *stake_;
-  const intptr_t offset_;
-
-public:
-  held_ptr(const stake_type *stake, intptr_t offset) : stake_(stake), offset_(offset) {}
-
-  _Tp *get() noexcept { return reinterpret_cast<_Tp *>(stake_->base_ptr() + offset_); }
-  const _Tp *get() const noexcept { return reinterpret_cast<_Tp *>(stake_->base_ptr() + offset_); }
-
-  _Tp &operator*() noexcept { return *get(); }
-  const _Tp &operator*() const noexcept { return *get(); }
-
-  _Tp *operator->() noexcept { return get(); }
-  const _Tp *operator->() const noexcept { return get(); }
 };
 
 } // namespace shilos

@@ -14,6 +14,8 @@ add_clang_tool( cod
   )
 
 clang_target_link_libraries( cod PRIVATE
+  shilos
+
   clangAST
   clangBasic
   clangFrontend

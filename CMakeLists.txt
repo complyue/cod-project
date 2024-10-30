@@ -27,5 +27,6 @@ include_directories( BEFORE
   include
   )
 
+add_subdirectory(shilos)
 add_subdirectory(cod)
 add_subdirectory(codp)
