@@ -16,11 +16,25 @@ using std::ptrdiff_t;
 
 class memory_stake {
 public:
-  virtual intptr_t base_ptr() { return this->base_ptr_; }
+  virtual intptr_t base_ptr() { return base_ptr_; }
   virtual ptrdiff_t capacity() { return 0; }
 
   // allocate a memory block within this stake's interesting address range
-  virtual void *allocate(size_t size, size_t align = 128) = 0;
+  virtual void *allocate(size_t bytes, size_t align = 128) = 0;
+
+  // all assignment (including clearing with nullptr) to (relative) ptrs inside this stake
+  // should go through this method, to facilitate correct reference counting
+  template <typename _Tp> _Tp &assign_ptr(relativ_ptr<_Tp> *holder, const _Tp *target) {
+    const _Tp *curr = holder->get();
+    if (curr != target) {
+      if (target)
+        increase_ref(reinterpret_cast<intptr_t>(target));
+      *holder = target;
+      if (curr)
+        decrease_ref(reinterpret_cast<intptr_t>(curr));
+    }
+    return *holder;
+  }
 
   template <typename _Tp, typename... Args> _Tp &new_held(relativ_ptr<_Tp> *holder, Args &&...args) {
 #ifndef NDEBUG
@@ -35,11 +49,11 @@ public:
     }
 #endif
     // alloc mem block within
-    void *held_block = this->allocate(sizeof(_Tp), alignof(_Tp));
+    _Tp *target = static_cast<_Tp *>(this->allocate(sizeof(_Tp), alignof(_Tp)));
     // placement new with args
-    new (held_block) _Tp(std::forward<Args>(args)...);
+    new (target) _Tp(std::forward<Args>(args)...);
     // assign the ptr to target holder
-    *holder = static_cast<_Tp *>(held_block);
+    assign_ptr(holder, target);
     // return the instance reference
     return *holder;
   }
@@ -47,6 +61,10 @@ public:
   virtual ~memory_stake(){};
 
 protected:
+  // stake-wide reference counting callbacks
+  virtual void increase_ref(intptr_t ptr) {}
+  virtual void decrease_ref(intptr_t ptr) {}
+
   intptr_t base_ptr_;
 };
 
