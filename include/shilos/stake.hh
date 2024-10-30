@@ -90,21 +90,21 @@ public:
   bool operator!=(const relativ_ptr &other) const noexcept { return !(*this == other); }
 };
 
-template <typename RT> class stake_header {
+struct stake_header {
   std::uint16_t magic;
   struct {
     std::int16_t major;
     std::int16_t minor;
   } version;
   std::int16_t flags;
-  relativ_ptr<RT> root;
+  relativ_ptr<std::byte> root; // subject to reinterpretation after sufficient type checks
 };
 
-template <typename RT> class memory_stake {
+class memory_stake {
 public:
   virtual ~memory_stake(){};
 
-  virtual stake_header<RT> *header() = 0;
+  virtual stake_header *header() = 0;
   virtual ptrdiff_t capacity() { return 0; }
 
   // allocate a memory block within this stake's interesting address range
