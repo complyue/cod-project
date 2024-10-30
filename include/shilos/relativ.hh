@@ -8,18 +8,19 @@
 namespace shilos {
 
 using std::intptr_t;
+using std::ptrdiff_t;
 
 template <typename _Tp> class relativ_ptr {
 public:
   typedef _Tp element_type;
 
 private:
-  intptr_t distance_;
+  ptrdiff_t distance_;
 
-  static intptr_t relativ_distance(const relativ_ptr<_Tp> *base, const _Tp *target) noexcept {
-    if (!target)
+  static ptrdiff_t relativ_distance(const relativ_ptr<_Tp> *rp, const _Tp *tgt) noexcept {
+    if (!tgt)
       return 0;
-    return reinterpret_cast<intptr_t>(target) - reinterpret_cast<intptr_t>(base);
+    return reinterpret_cast<intptr_t>(tgt) - reinterpret_cast<intptr_t>(rp);
   }
 
 public:
