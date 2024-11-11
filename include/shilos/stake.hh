@@ -10,16 +10,67 @@
 namespace shilos {
 
 using std::intptr_t;
-using std::ptrdiff_t;
+
+struct memory_region {
+  intptr_t baseaddr;
+  intptr_t capacity;
+  memory_region *prev;
+};
+
+class memory_stake {
+
+private:
+  // CAVEATS: this field must be updated only via assume_region()
+  const memory_region *live_region_;
+
+protected:
+  void assume_region(const intptr_t baseaddr, const intptr_t capacity);
+
+public:
+  memory_stake() : live_region_(nullptr) {}
+
+  ~memory_stake();
+
+  const memory_region *live_region() { return live_region_; }
+  inline intptr_t baseaddr() { return live_region_ ? live_region_->baseaddr : 0; }
+  inline intptr_t capacity() { return live_region_ ? live_region_->capacity : 0; }
+};
+
+extern "C" {
+
+//
+const memory_region *_region_of(const void *ptr);
+
+//
+const memory_stake *_stake_of(const void *ptr);
+
+//
+inline intptr_t _stake_base_of(const void *const ptr) {
+  const memory_region *region = _region_of(ptr);
+  if (region)
+    return region->baseaddr;
+  return 0;
+}
+
+//
+inline intptr_t _stake_offset_of(const void *const ptr) {
+  const memory_region *region = _region_of(ptr);
+  if (region)
+    return reinterpret_cast<intptr_t>(ptr) - region->baseaddr;
+  return reinterpret_cast<intptr_t>(ptr);
+}
+
+//
+} // extern "C"
 
 template <typename T> class relativ_ptr {
 public:
   typedef T element_type;
 
 private:
-  ptrdiff_t distance_;
+  intptr_t distance_;
 
-  static ptrdiff_t relativ_distance(const relativ_ptr<T> *rp, const T *tgt) noexcept {
+  static intptr_t relativ_distance(const relativ_ptr<T> *rp, const T *tgt) noexcept {
     if (!tgt)
       return 0;
     return reinterpret_cast<intptr_t>(tgt) - reinterpret_cast<intptr_t>(rp);
@@ -88,64 +139,6 @@ public:
   bool operator==(const relativ_ptr &other) const noexcept { return get() == other.get(); }
 
   bool operator!=(const relativ_ptr &other) const noexcept { return !(*this == other); }
-};
-
-struct stake_header {
-  std::uint16_t magic;
-  struct {
-    std::int16_t major;
-    std::int16_t minor;
-  } version;
-  std::int16_t flags;
-  relativ_ptr<std::byte> root; // subject to reinterpretation after sufficient type checks
-};
-
-class memory_stake {
-public:
-  virtual ~memory_stake(){};
-
-  virtual stake_header *header() = 0;
-  virtual ptrdiff_t capacity() { return 0; }
-
-  // allocate a memory block within this stake's interesting address range
-  virtual void *allocate(size_t bytes, size_t align = 128) = 0;
-
-  // all assignment (including clearing with nullptr) to (relative) ptrs inside this stake
-  // should go through this method, to facilitate correct reference counting
-  template <typename T> T &assign_ptr(relativ_ptr<T> *holder, const T *addr) {
-#ifndef NDEBUG
-    {
-      const auto holder_ptr = reinterpret_cast<intptr_t>(holder);
-      if (this->capacity() <= 0)
-        throw std::logic_error("!?new object in empty stake?!");
-      const auto base_ptr = reinterpret_cast<intptr_t>(this->header());
-      const auto end_ptr = base_ptr + this->capacity();
-      if (holder_ptr < base_ptr || holder_ptr >= end_ptr)
-        throw std::out_of_range("!?holder out of stake interests?!");
-    }
-#endif
-    const T *curr = holder->get();
-    if (curr != addr) {
-      if (addr)
-        increase_ref(reinterpret_cast<intptr_t>(addr));
-      *holder = addr;
-      if (curr)
-        decrease_ref(reinterpret_cast<intptr_t>(curr));
-    }
-    return *holder;
-  }
-
-  template <typename T, typename... Args> T &new_held(relativ_ptr<T> *holder, Args &&...args) {
-    T *addr = static_cast<T *>(this->allocate(sizeof(T), alignof(T)));
-    new (addr) T(std::forward<Args>(args)...);
-    assign_ptr(holder, addr);
-    return *holder;
-  }
-
-protected:
-  // stake-wide reference counting callbacks
-  virtual void increase_ref(intptr_t ptr) {}
-  virtual void decrease_ref(intptr_t ptr) {}
 };
 
 } // namespace shilos
