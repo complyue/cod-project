@@ -5,27 +5,64 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <stdexcept>
 
 namespace shilos {
 
 using std::intptr_t;
 
+struct memory_region {
+  intptr_t baseaddr;
+  intptr_t capacity;
+  memory_region *prev;
+};
+
+class memory_stake {
+
+private:
+  // CAVEATS: this field must be updated only via assume_region()
+  const memory_region *live_region_;
+
+protected:
+  void assume_region(const intptr_t baseaddr, const intptr_t capacity);
+
+public:
+  memory_stake() : live_region_(nullptr) {}
+
+  ~memory_stake();
+
+  const memory_region *live_region() { return live_region_; }
+  inline intptr_t baseaddr() { return live_region_ ? live_region_->baseaddr : 0; }
+  inline intptr_t capacity() { return live_region_ ? live_region_->capacity : 0; }
+};
+
 extern "C" {
 
 //
-intptr_t _stake_base_of(const void *ptr);
+const memory_region *_region_of(const void *ptr);
+
+//
+const memory_stake *_stake_of(const void *ptr);
+
+//
+inline intptr_t _stake_base_of(const void *const ptr) {
+  const memory_region *region = _region_of(ptr);
+  if (region)
+    return region->baseaddr;
+  return 0;
+}
 
 //
 inline intptr_t _stake_offset_of(const void *const ptr) {
-  return reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(_stake_base_of(ptr));
+  const memory_region *region = _region_of(ptr);
+  if (region)
+    return reinterpret_cast<intptr_t>(ptr) - region->baseaddr;
+  return reinterpret_cast<intptr_t>(ptr);
 }
-
-void register_memory_region(intptr_t baseaddr, intptr_t capacity);
-void unregister_memory_region(intptr_t baseaddr);
 
 //
-}
+} // extern "C"
 
 template <typename T> class intern_ptr {
 public:
@@ -94,14 +131,6 @@ public:
   bool operator!=(const intern_ptr<T> &other) const {
     return _stake_base_of(this) != _stake_base_of(&other) || offset_ != other.offset_;
   }
-};
-
-class memory_stake {
-public:
-  virtual ~memory_stake() = default;
-
-  virtual intptr_t baseaddr() = 0;
-  virtual intptr_t capacity() = 0;
 };
 
 } // namespace shilos
