@@ -91,7 +91,8 @@ public:
     return region;
   }
 
-  void unregister_regions(const memory_region *const live_region) {
+  void unregister_regions(memory_stake *const stake) {
+    const memory_region *const live_region = stake->live_region();
     size_t cnt2rm = 0;
     for (const memory_region *rp = live_region; rp; rp = rp->prev)
       cnt2rm++;
@@ -111,6 +112,7 @@ public:
         // `memory_stake`s should always have their `live_region` history made by `assume_region()`,
         // i.e. getting ptrs to our `regions_`
         assert(regions_ <= rp && rp < end_pos);
+        assert(static_cast<managed_region *>(rp)->stake == stake);
         *p = rp;
       }
     }
@@ -148,7 +150,10 @@ void memory_stake::assume_region(const intptr_t baseaddr, const intptr_t capacit
   live_region_ = managed_regions.register_region(baseaddr, capacity, this);
 }
 
-memory_stake::~memory_stake() { managed_regions.unregister_regions(live_region_); }
+memory_stake::~memory_stake() {
+  //
+  managed_regions.unregister_regions(this);
+}
 
 extern "C" {
 
