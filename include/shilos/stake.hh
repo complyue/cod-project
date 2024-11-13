@@ -27,11 +27,13 @@ private:
   const memory_region *live_region_;
 
 protected:
+  // register the specified region as new live_region_ of this stake, to the tls stake registry
   void assume_region(const intptr_t baseaddr, const intptr_t capacity);
 
 public:
   memory_stake() : live_region_(nullptr) {}
 
+  // unregister from the tls stake registry, wrt live and historic regions ever registered
   ~memory_stake();
 
   const memory_region *live_region() { return live_region_; }
@@ -61,6 +63,38 @@ private:
   }
 
 public:
+  void validate() {
+    const memory_region *const region = _region_of(this);
+    if (!region)
+      throw std::logic_error("!?relativ_ptr out-lives its stake?!");
+
+    assert(region->baseaddr <= reinterpret_cast<intptr_t>(this));
+    if (reinterpret_cast<intptr_t>(this) >= region->baseaddr + region->capacity)
+      throw std::logic_error("!?relativ_ptr self out-of stake capacity, or lack of canonicalization?!");
+
+    if (distance_) {
+      T *const tgt = get();
+      assert(region->baseaddr <= reinterpret_cast<intptr_t>(tgt));
+      if (reinterpret_cast<intptr_t>(tgt) >= region->baseaddr + region->capacity)
+        throw std::logic_error("!?relativ_ptr target out-of stake capacity, or lack of canonicalization?!");
+    }
+  }
+
+  relativ_ptr<T> *canonicalize() {
+    //
+    return const_cast<relativ_ptr<T> *>(this->canonicalize());
+  }
+
+  const relativ_ptr<T> *canonicalize() const {
+    const memory_region *const region = _region_of(this);
+    assert(region);
+    if (region == region->stake->live_region()) [[likely]] {
+      return this;
+    }
+    const intptr_t self_offset = reinterpret_cast<intptr_t>(this) - region->baseaddr;
+    return reinterpret_cast<relativ_ptr<T> *>(region->stake->live_region()->baseaddr + self_offset);
+  }
+
   relativ_ptr() noexcept : distance_(0) {}
 
   relativ_ptr(const T *ptr) noexcept : distance_(relativ_distance(this, ptr)) {}
