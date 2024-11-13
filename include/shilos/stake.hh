@@ -11,10 +11,13 @@ namespace shilos {
 
 using std::intptr_t;
 
+class memory_stake;
+
 struct memory_region {
   intptr_t baseaddr;
   intptr_t capacity;
   memory_region *prev;
+  memory_stake *stake;
 };
 
 class memory_stake {
@@ -40,25 +43,6 @@ extern "C" {
 
 //
 const memory_region *_region_of(const void *ptr);
-
-//
-const memory_stake *_stake_of(const void *ptr);
-
-//
-inline intptr_t _stake_base_of(const void *const ptr) {
-  const memory_region *region = _region_of(ptr);
-  if (region)
-    return region->baseaddr;
-  return 0;
-}
-
-//
-inline intptr_t _stake_offset_of(const void *const ptr) {
-  const memory_region *region = _region_of(ptr);
-  if (region)
-    return reinterpret_cast<intptr_t>(ptr) - region->baseaddr;
-  return reinterpret_cast<intptr_t>(ptr);
-}
 
 //
 } // extern "C"
