@@ -81,8 +81,7 @@ public:
   }
 
   relativ_ptr<T> *canonicalize() {
-    //
-    return const_cast<relativ_ptr<T> *>(this->canonicalize());
+    return const_cast<relativ_ptr<T> *>(static_cast<const relativ_ptr<T> *>(this)->canonicalize());
   }
 
   const relativ_ptr<T> *canonicalize() const {
