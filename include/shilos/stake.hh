@@ -39,7 +39,7 @@ public:
   memory_stake(const memory_stake &) = delete;
   memory_stake &operator=(const memory_stake &) = delete;
 
-  // moving is allowed
+  // moving is allowed (welcomed)
   memory_stake(memory_stake &&other);
   memory_stake &operator=(memory_stake &&other);
 
