@@ -4,7 +4,7 @@
 #include <memory>
 #include <new>
 
-#include "shilos.hh"
+#include "shilos/stake.hh"
 
 namespace shilos {
 
@@ -149,6 +149,21 @@ void memory_stake::assume_region(const intptr_t baseaddr, const intptr_t capacit
 memory_stake::~memory_stake() {
   //
   memory_regions.unregister_regions(this);
+}
+
+memory_stake::memory_stake(memory_stake &&other) : live_region_(other.live_region_) {
+  other.live_region_ = nullptr;
+  for (memory_region *mr = const_cast<memory_region *>(live_region_); mr; mr = mr->prev) {
+    mr->stake = this;
+  }
+}
+
+memory_stake &memory_stake::operator=(memory_stake &&other) {
+  other.live_region_ = nullptr;
+  for (memory_region *mr = const_cast<memory_region *>(live_region_); mr; mr = mr->prev) {
+    mr->stake = this;
+  }
+  return *this;
 }
 
 extern "C" {

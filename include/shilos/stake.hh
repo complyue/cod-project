@@ -2,7 +2,6 @@
 #pragma once
 
 #include <cassert>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
@@ -35,6 +34,14 @@ public:
 
   // unregister from the tls stake registry, wrt live and historic regions ever registered
   ~memory_stake();
+
+  // copying is prohibited
+  memory_stake(const memory_stake &) = delete;
+  memory_stake &operator=(const memory_stake &) = delete;
+
+  // moving is allowed
+  memory_stake(memory_stake &&other);
+  memory_stake &operator=(memory_stake &&other);
 
   const memory_region *live_region() { return live_region_; }
   inline intptr_t baseaddr() { return live_region_ ? live_region_->baseaddr : 0; }
@@ -96,20 +103,18 @@ public:
 
   relativ_ptr() noexcept : distance_(0) {}
 
-  relativ_ptr(const T *ptr) noexcept : distance_(relativ_distance(this, ptr)) {}
+  relativ_ptr(T *ptr) noexcept : distance_(relativ_distance(this, ptr)) {
+    // TODO: this ctor should always be called inplace within some region, how to ensure that?
+    assert(_region_of(this) == _region_of(ptr));
+  }
 
-  relativ_ptr(const relativ_ptr &other) noexcept : distance_(relativ_distance(this, other.get())) {}
+  relativ_ptr(const relativ_ptr &other) noexcept : distance_(relativ_distance(this, other.get())) {
+    assert(_region_of(this) == _region_of(&other));
+  }
 
   relativ_ptr(relativ_ptr &&other) = delete;
 
-  relativ_ptr &operator=(const T *other) noexcept {
-    if (this->get() != other) {
-      distance_ = relativ_distance(this, other);
-    }
-    return *this;
-  }
-
-  relativ_ptr &operator=(const relativ_ptr &other) noexcept {
+  relativ_ptr &operator=(const relativ_ptr &other) & noexcept {
     if (this != &other) {
       distance_ = relativ_distance(this, other.get());
     }
@@ -120,8 +125,11 @@ public:
 
   ~relativ_ptr() = default;
 
-  relativ_ptr &operator=(T *ptr) & noexcept {
-    distance_ = relativ_distance(this, ptr);
+  relativ_ptr &operator=(T *other) & noexcept {
+    assert(_region_of(this) == _region_of(other));
+    if (this->get() != other) {
+      distance_ = relativ_distance(this, other);
+    }
     return *this;
   }
 
