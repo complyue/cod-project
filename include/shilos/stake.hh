@@ -4,11 +4,13 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <new>
 #include <stdexcept>
 
 namespace shilos {
 
 using std::intptr_t;
+using std::size_t;
 
 class memory_stake;
 
@@ -164,6 +166,25 @@ public:
   bool operator==(const relativ_ptr &other) const noexcept { return get() == other.get(); }
 
   bool operator!=(const relativ_ptr &other) const noexcept { return !(*this == other); }
+};
+
+class live_stake : public memory_stake {
+protected:
+  virtual void *allocate(size_t size, size_t align) = 0;
+
+public:
+  virtual ~live_stake() = default;
+
+  template <typename T, typename... Args> T &intern(Args &&...args) {
+    void *ptr = this->allocate(sizeof(T), alignof(T));
+    if (!ptr)
+      throw std::bad_alloc();
+    return *new (ptr) T(std::forward<Args>(args)...);
+  }
+
+  template <typename T, typename... Args> void assign(relativ_ptr<T> &ptr, Args &&...args) {
+    ptr = intern<T>(std::forward(args)...);
+  }
 };
 
 } // namespace shilos

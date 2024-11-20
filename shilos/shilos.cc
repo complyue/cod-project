@@ -3,6 +3,7 @@
 #include <cstring>
 #include <memory>
 #include <new>
+#include <stdexcept>
 
 #include "shilos/stake.hh"
 
@@ -159,6 +160,11 @@ memory_stake::memory_stake(memory_stake &&other) : live_region_(other.live_regio
 }
 
 memory_stake &memory_stake::operator=(memory_stake &&other) {
+  if (live_region_) {
+    // TODO: prevent this statically at compile time?
+    throw std::logic_error("!?overwriting an allocated memory_stake?!");
+  }
+  live_region_ = other.live_region_;
   other.live_region_ = nullptr;
   for (memory_region *mr = const_cast<memory_region *>(live_region_); mr; mr = mr->prev) {
     mr->stake = this;

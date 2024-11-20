@@ -4,6 +4,8 @@
 
 #include <cassert>
 #include <fcntl.h>
+#include <new>
+#include <stdexcept>
 #include <string>
 #include <sys/fcntl.h>
 #include <sys/mman.h>
@@ -20,17 +22,20 @@ template <typename T> struct stake_header {
     std::int16_t minor;
   } version;
   std::int16_t flags;
+  size_t occupation;
   relativ_ptr<T> root;
 };
 
 template <typename T>
 constexpr stake_header<T> stake_header_v1 = {
-    0x3721, // magic
-    {1, 0}, // version
-    0,      // flags
-    nullptr // root
+    0x3721,                  // magic
+    {1, 0},                  // version
+    0,                       // flags
+    sizeof(stake_header<T>), // occupation
+    nullptr                  // root
 };
 
+// a readonly memory_stake viewing a backing file
 template <typename T> class file_stake : public memory_stake {
 protected:
   std::string file_name_;
@@ -71,16 +76,20 @@ public:
   const relativ_ptr<T> &root() const { return header_->root; }
 };
 
-template <typename T> class file_stake_builder : public memory_stake {
+// a writable live_stake backed by the specified file
+template <typename T> class file_stake_builder : public live_stake {
 protected:
   std::string file_name_;
+
+private:
+  bool constrict_on_close_;
   int fd_;
   stake_header<T> *header_;
 
 public:
-  explicit file_stake_builder(const std::string &file_name, size_t min_capacity = sizeof(stake_header_v1<T>))
-      : file_name_(file_name), fd_(-1), header_(nullptr) {
-    assert(min_capacity >= sizeof(stake_header_v1<T>));
+  explicit file_stake_builder(const std::string &file_name, size_t min_capacity, bool constrict_on_close = true)
+      : file_name_(file_name), constrict_on_close_(constrict_on_close), fd_(-1), header_(nullptr) {
+    assert(min_capacity >= sizeof(stake_header<T>));
 
     size_t file_size = 0;
 
@@ -113,14 +122,38 @@ public:
     fd_ = fd;
     header_ = static_cast<stake_header<T> *>(mapped_addr);
 
-    if (statbuf.st_size < sizeof(stake_header_v1<T>)) {
+    if (statbuf.st_size <= 0) { // a fresh new file
       *header_ = stake_header_v1<T>;
       msync(mapped_addr, sizeof(stake_header_v1<T>), MS_SYNC);
+    } else { // an existing file
+      assert(header_->magic == stake_header_v1<T>.magic);
+      // TODO support more versions
+      assert(header_->version == stake_header_v1<T>.version);
+      //
+      assert(header_->occupation >= sizeof(stake_header<T>));
+      if (header_->occupation > file_size) { // this is insane
+        close(fd);
+        throw std::logic_error("!?file_stake occupied more than the file size?!");
+      }
     }
 
     assume_region(reinterpret_cast<intptr_t>(mapped_addr), file_size);
   }
 
+  virtual void *allocate(const size_t size, const size_t align) {
+    const memory_region *const region = live_region();
+    size_t free_spc = region->capacity - header_->occupation;
+    void *ptr = static_cast<void *>(region->baseaddr + header_->occupation);
+    if (!std::align(align, size, ptr, free_spc)) {
+      throw std::bad_alloc();
+    }
+    header_->occupation = reinterpret_cast<intptr_t>(ptr) + size - region->baseaddr;
+    return ptr;
+  }
+
+  size_t free_capacity() { return live_region()->capacity - header_->occupation; }
+
+  // TODO: should do this automatically on `allocate`?
   void expand(size_t new_capacity) {
     if (live_region()->capacity >= new_capacity)
       return;
@@ -139,11 +172,20 @@ public:
     assume_region(reinterpret_cast<intptr_t>(mapped_addr), new_capacity);
   }
 
-  ~file_stake_builder() {
-    if (fd_ != -1)
-      close(fd_);
+  virtual ~file_stake_builder() {
     for (const memory_region *mr = live_region(); mr; mr = mr->prev) {
+      // TODO: should check errors from munmap?
       munmap(reinterpret_cast<void *>(mr->baseaddr), mr->capacity);
+    }
+    if (fd_ != -1) {
+      if (constrict_on_close_) {
+        assert(header_->occupation <= live_region()->capacity);
+        if (ftruncate(fd_, header_->occupation) == -1) {
+          close(fd_);
+          throw std::system_error(errno, std::system_category(), "Failed to truncate file: " + file_name_);
+        }
+      }
+      close(fd_);
     }
   }
 
