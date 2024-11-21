@@ -211,14 +211,15 @@ public:
   }
 
   virtual ~file_stake_builder() {
+    const size_t occupation = header_->occupation; // header_ will be non-readable after munmap
     for (const memory_region *mr = live_region(); mr; mr = mr->prev) {
       // TODO: should check errors from munmap?
       munmap(reinterpret_cast<void *>(mr->baseaddr), mr->capacity);
     }
     if (fd_ != -1) {
       if (constrict_on_close_) {
-        assert(header_->occupation <= capacity());
-        if (ftruncate(fd_, header_->occupation) == -1) {
+        assert(occupation <= capacity());
+        if (ftruncate(fd_, occupation) == -1) {
           close(fd_);
           throw std::system_error(errno, std::system_category(), "Failed to truncate file: " + file_name_);
         }
