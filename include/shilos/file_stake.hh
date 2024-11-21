@@ -190,10 +190,10 @@ public:
     return ptr;
   }
 
-  size_t free_capacity() { return live_region()->capacity - header_->occupation; }
+  size_t free_capacity() { return capacity() - header_->occupation; }
 
   void reserve_capacity(size_t new_capacity) {
-    if (live_region()->capacity >= new_capacity)
+    if (capacity() >= new_capacity)
       return;
 
     if (ftruncate(fd_, new_capacity) == -1) {
@@ -217,7 +217,7 @@ public:
     }
     if (fd_ != -1) {
       if (constrict_on_close_) {
-        assert(header_->occupation <= live_region()->capacity);
+        assert(header_->occupation <= capacity());
         if (ftruncate(fd_, header_->occupation) == -1) {
           close(fd_);
           throw std::system_error(errno, std::system_category(), "Failed to truncate file: " + file_name_);
