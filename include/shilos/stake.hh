@@ -183,6 +183,12 @@ public:
   }
 
   template <typename T, typename... Args> void assign(relativ_ptr<T> &ptr, Args &&...args) {
+    // TODO canonical relativ_ptr assumed here,
+    //      should we allow assigning to ptrs within historical regions too?
+    //      have to be in cherrypicked circumstances?
+    assert(live_region());
+    assert(&ptr > baseaddr());
+    assert(&ptr < baseaddr() + capacity());
     ptr = intern<T>(std::forward(args)...);
   }
 };

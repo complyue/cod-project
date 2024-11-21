@@ -127,7 +127,7 @@ public:
       msync(mapped_addr, sizeof(stake_header_v1<T>), MS_SYNC);
     } else { // an existing file
       assert(header_->magic == stake_header_v1<T>.magic);
-      // TODO support more versions
+      // more versions in the future
       assert(header_->version == stake_header_v1<T>.version);
       //
       assert(header_->occupation >= sizeof(stake_header<T>));
@@ -141,20 +141,58 @@ public:
   }
 
   virtual void *allocate(const size_t size, const size_t align) {
-    const memory_region *const region = live_region();
+    const size_t spc_demanded = align + size; // assume conservative capacity that demanded
+    // calculate current free space from latest mmap-ed region
+    const memory_region *region = live_region();
     size_t free_spc = region->capacity - header_->occupation;
+
+    // ensure sufficient free capacity is reserved on the backing file
+    if (free_spc < spc_demanded) {
+      constexpr size_t SZ1GB = 1024 * 1024 * 1024;
+      size_t new_capacity;
+      if (region->capacity < SZ1GB) {
+        // for small (within 1GB) stake files, double its capacity on each expansion
+        for (new_capacity = region->capacity * 2; new_capacity - header_->occupation < spc_demanded;
+             new_capacity *= 2) {
+          if (new_capacity > SZ1GB) { // crossed GB boundary, switch to large file scenario
+            new_capacity = 2 * SZ1GB;
+            break; // later it'll be expaned GB after GB until large enough
+          }
+        }
+      } else {
+        // for large (beyond 1GB) stake files, expand 1GB a time
+        new_capacity = region->capacity + SZ1GB;
+        if (new_capacity % SZ1GB != 0) { // align to GB boundary
+          new_capacity = SZ1GB * (new_capacity / SZ1GB);
+        }
+      }
+      // grow GB-wise till the allocation demand fulfilled
+      while (new_capacity - header_->occupation < spc_demanded) {
+        new_capacity += SZ1GB;
+      }
+      // do file size expansion
+      reserve_capacity(new_capacity);
+      // update the latest region info, as well as new free space after expansion
+      region = live_region();
+      free_spc = region->capacity - header_->occupation;
+    }
+    assert(free_spc >= align + size);
+
+    // use current occupation mark as the allocated ptr, do proper alignment
     void *ptr = static_cast<void *>(region->baseaddr + header_->occupation);
     if (!std::align(align, size, ptr, free_spc)) {
       throw std::bad_alloc();
     }
+
+    // move the occupation mark
     header_->occupation = reinterpret_cast<intptr_t>(ptr) + size - region->baseaddr;
+
     return ptr;
   }
 
   size_t free_capacity() { return live_region()->capacity - header_->occupation; }
 
-  // TODO: should do this automatically on `allocate`?
-  void expand(size_t new_capacity) {
+  void reserve_capacity(size_t new_capacity) {
     if (live_region()->capacity >= new_capacity)
       return;
 
