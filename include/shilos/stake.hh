@@ -16,7 +16,7 @@ using std::size_t;
 template <typename T> class intern_ptr;
 
 class memory_stake {
-  template <typename T1> friend class intern_ptr;
+  template <typename T> friend class intern_ptr;
 
 protected:
   size_t capacity_;
@@ -56,8 +56,8 @@ public:
   }
 };
 
-template <typename T> class sibling_ptr final {
-  template <typename T1> friend class intern_ptr;
+template <typename T> class domestic_ptr final {
+  template <typename O> friend class intern_ptr;
 
 public:
   typedef T target_type;
@@ -65,14 +65,14 @@ public:
 private:
   size_t offset_;
 
-  sibling_ptr(size_t offset) : offset_(offset) {}
+  domestic_ptr(size_t offset) : offset_(offset) {}
 
 public:
-  ~sibling_ptr() = default;
-  sibling_ptr(const sibling_ptr<T> &) = delete;
-  sibling_ptr(sibling_ptr<T> &&) = delete;
-  sibling_ptr &operator=(const sibling_ptr<T> &) = delete;
-  sibling_ptr &operator=(sibling_ptr<T> &&) = delete;
+  ~domestic_ptr() = default;
+  domestic_ptr(const domestic_ptr<T> &) = delete;
+  domestic_ptr(domestic_ptr<T> &&) = delete;
+  domestic_ptr &operator=(const domestic_ptr<T> &) = delete;
+  domestic_ptr &operator=(domestic_ptr<T> &&) = delete;
 
   explicit operator bool() const noexcept { return offset_ != 0; }
 };
@@ -90,15 +90,16 @@ private:
 public:
   intern_ptr(memory_stake *stake) noexcept : stake_(stake), offset_(stake->root_offset_) {}
 
-  template <typename T1> intern_ptr<T1> &&deref(const sibling_ptr<T1> &p) {
-    return std::move(intern_ptr<T1>(stake_, p.offset_));
-  }
-
   ~intern_ptr() = default;
   intern_ptr(const intern_ptr<T> &) = default;
   intern_ptr(intern_ptr<T> &&) = default;
   intern_ptr &operator=(const intern_ptr<T> &) = default;
   intern_ptr &operator=(intern_ptr<T> &&) = default;
+
+  template <typename F> //
+  intern_ptr<F> &&get(domestic_ptr<F> T::*dpField) {
+    return std::move(intern_ptr<F>(stake_, this->*dpField.offset_));
+  }
 
   T *get() {
     if (offset_ == 0)

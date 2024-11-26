@@ -12,7 +12,7 @@ struct stake_header {
     std::int16_t minor;
   } version;
   std::int16_t flags;
-  intern_ptr<std::byte> root; // subject to reinterpretation after sufficient type checks
+  domestic_ptr<std::byte> root; // subject to reinterpretation after sufficient type checks
 };
 
 class file_stake : public memory_stake {
