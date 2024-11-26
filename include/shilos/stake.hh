@@ -2,135 +2,126 @@
 #pragma once
 
 #include <cassert>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <span>
-#include <stdexcept>
+#include <memory>
+#include <new>
+#include <utility>
 
 namespace shilos {
 
 using std::intptr_t;
+using std::size_t;
 
-struct memory_region {
-  intptr_t baseaddr;
-  intptr_t capacity;
-  memory_region *prev;
-};
+template <typename T> class intern_ptr;
 
 class memory_stake {
-
-private:
-  // CAVEATS: this field must be updated only via assume_region()
-  const memory_region *live_region_;
+  template <typename T1> friend class intern_ptr;
 
 protected:
-  void assume_region(const intptr_t baseaddr, const intptr_t capacity);
+  size_t capacity_;
+  size_t root_offset_;
+  size_t occupation_;
 
 public:
-  memory_stake() : live_region_(nullptr) {}
+  memory_stake(size_t capacity, size_t root_offset = 0, size_t occupation = sizeof(memory_stake))
+      : capacity_(capacity), root_offset_(root_offset), occupation_(occupation) {}
 
-  ~memory_stake();
+  ~memory_stake() = default;
+  memory_stake(const memory_stake &) = delete;            // no copying
+  memory_stake(memory_stake &&) = delete;                 // no moving
+  memory_stake &operator=(const memory_stake &) = delete; // no copying by assignment
+  memory_stake &operator=(memory_stake &&) = delete;      // no moving by assignment
 
-  const memory_region *live_region() { return live_region_; }
-  inline intptr_t baseaddr() { return live_region_ ? live_region_->baseaddr : 0; }
-  inline intptr_t capacity() { return live_region_ ? live_region_->capacity : 0; }
+  size_t free_capacity() { return capacity_ - occupation_; }
+
+  void *allocate(const size_t size, const size_t align) {
+    // use current occupation mark as the allocated ptr, do proper alignment
+    size_t free_spc = free_capacity();
+    void *ptr = reinterpret_cast<void *>(reinterpret_cast<intptr_t>(this) + occupation_);
+    if (!std::align(align, size, ptr, free_spc)) {
+      throw std::bad_alloc();
+    }
+    // move the occupation mark
+    occupation_ = reinterpret_cast<intptr_t>(ptr) + size - reinterpret_cast<intptr_t>(this);
+    return ptr;
+  }
+
+  template <typename T, typename... Args> intern_ptr<T> &&create(Args &&...args) {
+    void *ptr = this->allocate(sizeof(T), alignof(T));
+    if (!ptr)
+      throw std::bad_alloc();
+    new (ptr) T(std::forward<Args>(args)...);
+    return std::move(intern_ptr<T>(this), reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
+  }
 };
 
-extern "C" {
+template <typename T> class sibling_ptr final {
+  template <typename T1> friend class intern_ptr;
 
-//
-const memory_region *_region_of(const void *ptr);
-
-//
-const memory_stake *_stake_of(const void *ptr);
-
-//
-inline intptr_t _stake_base_of(const void *const ptr) {
-  const memory_region *region = _region_of(ptr);
-  if (region)
-    return region->baseaddr;
-  return 0;
-}
-
-//
-inline intptr_t _stake_offset_of(const void *const ptr) {
-  const memory_region *region = _region_of(ptr);
-  if (region)
-    return reinterpret_cast<intptr_t>(ptr) - region->baseaddr;
-  return reinterpret_cast<intptr_t>(ptr);
-}
-
-//
-} // extern "C"
-
-template <typename T> class intern_ptr {
 public:
-  typedef T element_type;
+  typedef T target_type;
 
 private:
-  intptr_t offset_;
+  size_t offset_;
+
+  sibling_ptr(size_t offset) : offset_(offset) {}
 
 public:
-  intern_ptr() noexcept : offset_(0) {}
+  ~sibling_ptr() = default;
+  sibling_ptr(const sibling_ptr<T> &) = delete;
+  sibling_ptr(sibling_ptr<T> &&) = delete;
+  sibling_ptr &operator=(const sibling_ptr<T> &) = delete;
+  sibling_ptr &operator=(sibling_ptr<T> &&) = delete;
 
-  intern_ptr(T *ptr) : offset_(_stake_offset_of(static_cast<void *>(ptr))) {}
+  explicit operator bool() const noexcept { return offset_ != 0; }
+};
 
-  intern_ptr(intern_ptr<T> &other) : offset_(other.offset_) { assert(_stake_base_of(this) == _stake_base_of(&other)); }
+template <typename T> class intern_ptr final {
+public:
+  typedef T target_type;
 
-  intern_ptr(intern_ptr<T> &&other) = delete;
+private:
+  memory_stake *stake_;
+  size_t offset_;
 
-  intern_ptr &operator=(T *other) {
-    assert(_stake_base_of(this) == _stake_base_of(other));
-    offset_ = _stake_offset_of(other);
-    return *this;
+  intern_ptr(memory_stake *stake, size_t offset) : stake_(stake), offset_(offset) {}
+
+public:
+  intern_ptr(memory_stake *stake) noexcept : stake_(stake), offset_(stake->root_offset_) {}
+
+  template <typename T1> intern_ptr<T1> &&deref(const sibling_ptr<T1> &p) {
+    return std::move(intern_ptr<T1>(stake_, p.offset_));
   }
-
-  intern_ptr &operator=(intern_ptr<T> &other) {
-    assert(_stake_base_of(this) == _stake_base_of(&other));
-    offset_ = _stake_offset_of(&other);
-    return *this;
-  }
-
-  intern_ptr &operator=(intern_ptr<T> &&other) = delete;
 
   ~intern_ptr() = default;
+  intern_ptr(const intern_ptr<T> &) = default;
+  intern_ptr(intern_ptr<T> &&) = default;
+  intern_ptr &operator=(const intern_ptr<T> &) = default;
+  intern_ptr &operator=(intern_ptr<T> &&) = default;
 
-  // only works for lvalues
-  T *get() & {
+  T *get() {
     if (offset_ == 0)
       return nullptr;
-    return reinterpret_cast<T *>(reinterpret_cast<intptr_t>(this) + offset_);
+    return reinterpret_cast<T *>(reinterpret_cast<intptr_t>(stake_) + offset_);
   }
 
-  // only works for lvalues
-  const T *get() const & {
+  const T *get() const {
     if (offset_ == 0)
       return nullptr;
-    return reinterpret_cast<const T *>(reinterpret_cast<intptr_t>(this) + offset_);
+    return reinterpret_cast<const T *>(reinterpret_cast<intptr_t>(stake_) + offset_);
   }
 
-  // welcome dereference from an lvalue of interned ptrs
-  T &operator*() & { return *get(); }
-  T *operator->() & { return get(); }
-  const T &operator*() const & { return *get(); }
-  const T *operator->() const & { return get(); }
-
-  // forbid dereference from an rvalue of interned ptrs
-  T &operator*() && = delete;
-  T *operator->() && = delete;
-  const T &operator*() const && = delete;
-  const T *operator->() const && = delete;
+  T &operator*() { return *get(); }
+  T *operator->() { return get(); }
+  const T &operator*() const { return *get(); }
+  const T *operator->() const { return get(); }
 
   explicit operator bool() const noexcept { return offset_ != 0; }
 
-  bool operator==(const intern_ptr<T> &other) const {
-    return _stake_base_of(this) == _stake_base_of(&other) && offset_ == other.offset_;
-  }
+  bool operator==(const intern_ptr<T> &other) const { return other.stake_ == stake_ && other.offset_ == offset_; }
 
-  bool operator!=(const intern_ptr<T> &other) const {
-    return _stake_base_of(this) != _stake_base_of(&other) || offset_ != other.offset_;
-  }
+  bool operator!=(const intern_ptr<T> &other) const { return other.stake_ != stake_ || other.offset_ != offset_; }
 };
 
 } // namespace shilos

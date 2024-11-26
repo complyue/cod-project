@@ -54,6 +54,8 @@ public:
     return *holder;
   }
 
+  virtual ~file_stake() = default;
+
 protected:
   // stake-wide reference counting callbacks
   virtual void increase_ref(intptr_t ptr) {}
