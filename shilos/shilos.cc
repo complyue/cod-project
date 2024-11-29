@@ -4,7 +4,7 @@
 #include <memory>
 #include <new>
 
-#include "shilos/stake.hh"
+#include "shilos/region.hh"
 
 namespace shilos {
 

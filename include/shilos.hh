@@ -1,6 +1,6 @@
 
 #pragma once
 
-#include "shilos/stake.hh" // IWYU pragma: keep
+#include "shilos/region.hh" // IWYU pragma: keep
 
-#include "shilos/file_stake.hh" // IWYU pragma: keep
+#include "shilos/dbmem.hh" // IWYU pragma: keep
