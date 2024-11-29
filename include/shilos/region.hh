@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <new>
+#include <stdexcept>
 #include <utility>
 
 namespace shilos {
@@ -52,7 +53,7 @@ public:
     if (!ptr)
       throw std::bad_alloc();
     new (ptr) T(std::forward<Args>(args)...);
-    return std::move(global_ptr<T>(this), reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
+    return std::move(global_ptr<T>(this, reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this)));
   }
 };
 
@@ -97,8 +98,17 @@ public:
   global_ptr &operator=(global_ptr<T> &&) = default;
 
   template <typename F> //
-  global_ptr<F> &&get(regional_ptr<F> T::*dpField) {
-    return std::move(global_ptr<F>(region_, this->*dpField.offset_));
+  const global_ptr<F> &set(regional_ptr<F> T::*ptrField, const global_ptr<F> &tgt) {
+    if (tgt.region_ != region_) {
+      throw std::logic_error("!?cross region ptr assignment?!");
+    }
+    this->*ptrField.offset_ = tgt.offset_;
+    return tgt;
+  }
+
+  template <typename F> //
+  global_ptr<F> &&get(regional_ptr<F> T::*ptrField) {
+    return std::move(global_ptr<F>(region_, this->*ptrField.offset_));
   }
 
   T *get() {
