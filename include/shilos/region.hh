@@ -78,7 +78,17 @@ private:
   regional_ptr(size_t offset) : offset_(offset) {}
 
 public:
+  regional_ptr() : offset_(0) {}
+
   ~regional_ptr() = default;
+
+  // prohibit direct copying and assignment,
+  // regional_ptr fields can only be updated via a global_ptr to its parent record:
+  //
+  //   const global_ptr<F>& global_ptr<T>::set(
+  //     regional_ptr<F> T::*ptrField, const global_ptr<F> &tgt
+  //   );
+  //
   regional_ptr(const regional_ptr<T> &) = delete;
   regional_ptr(regional_ptr<T> &&) = delete;
   regional_ptr &operator=(const regional_ptr<T> &) = delete;
@@ -91,6 +101,14 @@ template <typename T> class global_ptr final {
 public:
   typedef T target_type;
 
+  static global_ptr<T> &&null_of(memory_region *region) { //
+    return std::move(global_ptr<T>(region, 0));
+  }
+  static global_ptr<T> &&root_of(memory_region *region) {
+    // TODO: how to verify root type is really T, but without dynamic_cast<>()?
+    return std::move(global_ptr<T>(region, region->root_offset_));
+  }
+
 private:
   memory_region *region_;
   size_t offset_;
@@ -98,13 +116,18 @@ private:
   global_ptr(memory_region *region, size_t offset) : region_(region), offset_(offset) {}
 
 public:
-  global_ptr(memory_region *region) noexcept : region_(region), offset_(region->root_offset_) {}
-
   ~global_ptr() = default;
   global_ptr(const global_ptr<T> &) = default;
   global_ptr(global_ptr<T> &&) = default;
   global_ptr &operator=(const global_ptr<T> &) = default;
   global_ptr &operator=(global_ptr<T> &&) = default;
+
+  void set_as_root() { region_->root_offset_ = offset_; }
+
+  template <typename F> //
+  void clear(regional_ptr<F> T::*ptrField) {
+    this->*ptrField.offset_ = 0;
+  }
 
   template <typename F> //
   const global_ptr<F> &set(regional_ptr<F> T::*ptrField, const global_ptr<F> &tgt) {
@@ -118,6 +141,11 @@ public:
   template <typename F> //
   global_ptr<F> &&get(regional_ptr<F> T::*ptrField) {
     return std::move(global_ptr<F>(region_, this->*ptrField.offset_));
+  }
+
+  template <typename F> //
+  const global_ptr<F> &get(regional_ptr<F> T::*ptrField) const {
+    return global_ptr<F>(region_, this->*ptrField.offset_);
   }
 
   T *get() {
