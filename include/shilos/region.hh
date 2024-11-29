@@ -19,15 +19,24 @@ template <typename T> class global_ptr;
 class memory_region {
   template <typename T> friend class global_ptr;
 
+public:
+  static memory_region *alloc_region(const size_t payload_capacity,
+                                     std::allocator<std::byte> allocator = std::allocator<std::byte>()) {
+    const size_t capacity = sizeof(memory_region) + payload_capacity;
+    void *ptr = allocator.allocate(capacity);
+    new (ptr) memory_region(capacity);
+    return reinterpret_cast<memory_region *>(ptr);
+  }
+
 protected:
   size_t capacity_;
   size_t root_offset_;
   size_t occupation_;
 
-public:
   memory_region(size_t capacity, size_t root_offset = 0, size_t occupation = sizeof(memory_region))
       : capacity_(capacity), root_offset_(root_offset), occupation_(occupation) {}
 
+public:
   ~memory_region() = default;
   memory_region(const memory_region &) = delete;            // no copying
   memory_region(memory_region &&) = delete;                 // no moving
