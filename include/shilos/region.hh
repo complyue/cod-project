@@ -16,6 +16,50 @@ using std::size_t;
 
 template <typename T> class global_ptr;
 
+//
+// region-internal pointer fields should be declared as this type,
+// for data structures meant to live in shilos
+//
+// users would always obtain the corresponding global_ptr<F> from a regional_ptr<F> field of a record object of type T,
+// via a global_ptr<T> to the outer record object, and likely update a regional_ptr<F> field to point to other object
+// via the global_ptr<T>
+//
+// actually, you can do virtually nothing with a regional_ptr<F> alone, and this is by design
+//
+template <typename T> class regional_ptr final {
+  template <typename O> friend class global_ptr;
+
+public:
+  typedef T target_type;
+
+private:
+  size_t offset_;
+
+  regional_ptr(size_t offset) : offset_(offset) {}
+
+public:
+  regional_ptr() : offset_(0) {}
+
+  ~regional_ptr() = default;
+
+  //
+  // TODO: this overly restrictive?
+  //
+  // prohibit direct copying and assignment,
+  // regional_ptr fields can only be updated via a global_ptr to its parent record:
+  //
+  //   const global_ptr<F>& global_ptr<T>::set(
+  //     regional_ptr<F> T::*ptrField, const global_ptr<F> &tgt
+  //   );
+  //
+  regional_ptr(const regional_ptr<T> &) = delete;
+  regional_ptr(regional_ptr<T> &&) = delete;
+  regional_ptr &operator=(const regional_ptr<T> &) = delete;
+  regional_ptr &operator=(regional_ptr<T> &&) = delete;
+
+  explicit operator bool() const noexcept { return offset_ != 0; }
+};
+
 class memory_region {
   template <typename T> friend class global_ptr;
 
@@ -29,20 +73,25 @@ public:
   }
 
 protected:
+  size_t magic_;
   size_t capacity_;
-  size_t root_offset_;
   size_t occupation_;
+  size_t root_offset_;
 
-  memory_region(size_t capacity, size_t root_offset = 0, size_t occupation = sizeof(memory_region))
-      : capacity_(capacity), root_offset_(root_offset), occupation_(occupation) {}
+  memory_region(size_t capacity, size_t magic = 0xCAFEFEEDFACE0101, size_t occupation = sizeof(memory_region),
+                size_t root_offset = 0)
+      : magic_(magic), capacity_(capacity), occupation_(occupation), root_offset_(root_offset) {}
 
 public:
   ~memory_region() = default;
+  // a region is a block of memory, meant to be referenced by ptr anyway, so no rvalue semantcis
   memory_region(const memory_region &) = delete;            // no copying
   memory_region(memory_region &&) = delete;                 // no moving
   memory_region &operator=(const memory_region &) = delete; // no copying by assignment
   memory_region &operator=(memory_region &&) = delete;      // no moving by assignment
 
+  size_t capacity() { return capacity_; }
+  size_t occupation() { return occupation_; }
   size_t free_capacity() { return capacity_ - occupation_; }
 
   void *allocate(const size_t size, const size_t align) {
@@ -66,37 +115,6 @@ public:
   }
 };
 
-template <typename T> class regional_ptr final {
-  template <typename O> friend class global_ptr;
-
-public:
-  typedef T target_type;
-
-private:
-  size_t offset_;
-
-  regional_ptr(size_t offset) : offset_(offset) {}
-
-public:
-  regional_ptr() : offset_(0) {}
-
-  ~regional_ptr() = default;
-
-  // prohibit direct copying and assignment,
-  // regional_ptr fields can only be updated via a global_ptr to its parent record:
-  //
-  //   const global_ptr<F>& global_ptr<T>::set(
-  //     regional_ptr<F> T::*ptrField, const global_ptr<F> &tgt
-  //   );
-  //
-  regional_ptr(const regional_ptr<T> &) = delete;
-  regional_ptr(regional_ptr<T> &&) = delete;
-  regional_ptr &operator=(const regional_ptr<T> &) = delete;
-  regional_ptr &operator=(regional_ptr<T> &&) = delete;
-
-  explicit operator bool() const noexcept { return offset_ != 0; }
-};
-
 template <typename T> class global_ptr final {
 public:
   typedef T target_type;
@@ -106,6 +124,8 @@ public:
   }
   static global_ptr<T> &&root_of(memory_region *region) {
     // TODO: how to verify root type is really T, but without dynamic_cast<>()?
+    //       rtti is not trivially relocatable across processes, as to be mmap-ped at different addresses,
+    //       we don't store rtti in data files accessed via mmap
     return std::move(global_ptr<T>(region, region->root_offset_));
   }
 
@@ -117,12 +137,17 @@ private:
 
 public:
   ~global_ptr() = default;
+  // global_ptr can be freely used as both lvalue and rvalue
   global_ptr(const global_ptr<T> &) = default;
   global_ptr(global_ptr<T> &&) = default;
   global_ptr &operator=(const global_ptr<T> &) = default;
   global_ptr &operator=(global_ptr<T> &&) = default;
 
-  void set_as_root() { region_->root_offset_ = offset_; }
+  void set_as_root() {
+    // TODO: verify the type is suitable as root object of the region?
+    //       possibly by magic of the region?
+    region_->root_offset_ = offset_;
+  }
 
   template <typename F> //
   void clear(regional_ptr<F> T::*ptrField) {
@@ -144,7 +169,7 @@ public:
   }
 
   template <typename F> //
-  const global_ptr<F> &get(regional_ptr<F> T::*ptrField) const {
+  const global_ptr<F> get(regional_ptr<F> T::*ptrField) const {
     return global_ptr<F>(region_, this->*ptrField.offset_);
   }
 
