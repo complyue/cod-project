@@ -1,3 +1,4 @@
+#include <iostream>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -10,7 +11,7 @@ private:
   uint8_t data_[16];
 
   constexpr static void byte_to_hex(std::uint8_t byte, char *output) {
-    constexpr std::string_view hex_chars = "0123456789abcdef";
+    constexpr std::string_view hex_chars = "0123456789ABCDEF";
     output[0] = hex_chars[byte >> 4];
     output[1] = hex_chars[byte & 0x0F];
   }
@@ -75,3 +76,5 @@ public:
 };
 
 } // namespace shilos
+
+inline std::ostream &operator<<(std::ostream &os, const shilos::UUID &uuid) { return os << uuid.to_string(); }
