@@ -3,6 +3,8 @@
 #include <string>
 #include <string_view>
 
+namespace shilos {
+
 class UUID {
 private:
   uint8_t data_[16];
@@ -71,3 +73,5 @@ public:
 
   auto operator<=>(const UUID &other) const = default;
 };
+
+} // namespace shilos
