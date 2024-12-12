@@ -30,7 +30,7 @@ public:
   // Generate a random UUID
   UUID() {
     std::random_device rd;
-    std::mt19937 gen(rd());
+    std::mt19937_64 gen(rd());
     std::uniform_int_distribution<uint8_t> dist(0, 255);
     for (auto &byte : data_) {
       byte = dist(gen);
