@@ -61,7 +61,7 @@ public:
 
 template <typename RT>
 concept ValidMemRegionRootType = requires {
-  { RT::TYPE_UUID } -> std::same_as<UUID>;
+  { RT::TYPE_UUID } -> std::same_as<const UUID &>;
 };
 
 template <typename RT>
