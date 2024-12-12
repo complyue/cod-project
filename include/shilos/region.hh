@@ -68,6 +68,7 @@ template <typename RT>
   requires ValidMemRegionRootType<RT>
 class memory_region {
   template <typename VT, RT> friend class global_ptr;
+  template <RT> friend class DBMR;
 
 public:
   template <typename... Args>
@@ -103,9 +104,10 @@ public:
   memory_region &operator=(const memory_region &) = delete; // no copying by assignment
   memory_region &operator=(memory_region &&) = delete;      // no moving by assignment
 
-  size_t capacity() { return capacity_; }
-  size_t occupation() { return occupation_; }
-  size_t free_capacity() { return capacity_ - occupation_; }
+  const UUID &root_type_uuid() const { return rt_uuid_; }
+  size_t capacity() const { return capacity_; }
+  size_t occupation() const { return occupation_; }
+  size_t free_capacity() const { return capacity_ - occupation_; }
 
   void *allocate(const size_t size, const size_t align) {
     // use current occupation mark as the allocated ptr, do proper alignment
@@ -129,19 +131,17 @@ public:
         reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
 
-  global_ptr<RT, RT> root() { //
-    return std::move(global_ptr<RT, RT>(this, ro_offset_));
-  }
+  global_ptr<RT, RT> root() { return global_ptr<RT, RT>(this, ro_offset_); }
+  const global_ptr<RT, RT> root() const { return global_ptr<RT, RT>(this, ro_offset_); }
 
-  template <typename VT> //
-  global_ptr<VT, RT> null() {
-    return std::move(global_ptr<VT, RT>(this, 0));
-  }
+  template <typename VT> global_ptr<VT, RT> null() { return global_ptr<VT, RT>(this, 0); }
+  template <typename VT> const global_ptr<VT, RT> null() const { return global_ptr<VT, RT>(this, 0); }
 };
 
 template <typename VT, typename RT> class global_ptr final {
 public:
   typedef VT target_type;
+  typedef RT root_type;
 
 private:
   memory_region<RT> *region_;
@@ -200,13 +200,7 @@ public:
 
   explicit operator bool() const noexcept { return offset_ != 0; }
 
-  bool operator==(const global_ptr<VT, RT> &other) const {
-    return other.region_ == region_ && other.offset_ == offset_;
-  }
-
-  bool operator!=(const global_ptr<VT, RT> &other) const {
-    return other.region_ != region_ || other.offset_ != offset_;
-  }
+  auto operator<=>(const global_ptr<VT, RT> &other) const = default;
 };
 
 } // namespace shilos

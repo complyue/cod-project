@@ -5,4 +5,4 @@
 
 #include "shilos/region.hh" // IWYU pragma: keep
 
-#include "shilos/dbmem.hh" // IWYU pragma: keep
+#include "shilos/dbmr.hh" // IWYU pragma: keep
