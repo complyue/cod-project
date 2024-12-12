@@ -67,8 +67,10 @@ concept ValidMemRegionRootType = requires {
 template <typename RT>
   requires ValidMemRegionRootType<RT>
 class memory_region {
-  template <typename VT, RT> friend class global_ptr;
-  template <RT> friend class DBMR;
+  template <typename VT, typename RT1> friend class global_ptr;
+  template <typename RT1>
+    requires ValidMemRegionRootType<RT1>
+  friend class DBMR;
 
 public:
   template <typename... Args>

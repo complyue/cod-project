@@ -34,7 +34,7 @@ private:
 public:
   // writable ctor
   DBMR(const std::string &file_name, size_t reserve_free_capacity)
-      : file_name_(file_name), constrict_on_close_(false), fd_(-1), region_(nullptr) {
+      : file_name_(file_name), fd_(-1), region_(nullptr), constrict_on_close_(false) {
     size_t file_size = 0;
 
     int fd_ = open(file_name.c_str(), O_RDWR);
@@ -98,8 +98,8 @@ public:
       munmap(reinterpret_cast<void *>(region_), capacity);
       if (constrict_on_close_ && occupation < capacity) {
         if (ftruncate(fd_, occupation) == -1) {
-          close(fd_);
-          throw std::system_error(errno, std::system_category(), "Failed to truncate file: " + file_name_);
+          // TODO: log errors properly
+          "Failed to truncate file: " + file_name_;
         }
       }
     }
