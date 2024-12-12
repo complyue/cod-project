@@ -60,12 +60,12 @@ public:
 };
 
 template <typename RT>
-concept ValidRegionRootType = requires {
+concept ValidMemRegionRootType = requires {
   { RT::TYPE_UUID } -> std::same_as<UUID>;
 };
 
 template <typename RT>
-  requires ValidRegionRootType<RT>
+  requires ValidMemRegionRootType<RT>
 class memory_region {
   template <typename VT, RT> friend class global_ptr;
 
