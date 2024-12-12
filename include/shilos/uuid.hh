@@ -53,7 +53,8 @@ public:
           throw std::invalid_argument("Invalid UUID format");
         i++;
       } else {
-        data_[ui++] = (hex_to_byte(str[i++]) << 4) | hex_to_byte(str[i++]);
+        data_[ui++] = (hex_to_byte(str[i]) << 4) | hex_to_byte(str[i + 1]);
+        i += 2;
       }
     }
   }
