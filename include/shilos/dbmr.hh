@@ -29,7 +29,7 @@ private:
 
   // internal ctor to be used by other (mostly static) ctors
   DBMR(const std::string &file_name, int fd, memory_region<RT> *region)
-      : file_name_(file_name), constrict_on_close_(false), fd_(fd), region_(region) {}
+      : file_name_(file_name), fd_(fd), region_(region), constrict_on_close_(false) {}
 
 public:
   // writable ctor
@@ -98,8 +98,7 @@ public:
       munmap(reinterpret_cast<void *>(region_), capacity);
       if (constrict_on_close_ && occupation < capacity) {
         if (ftruncate(fd_, occupation) == -1) {
-          // TODO: log errors properly
-          "Failed to truncate file: " + file_name_;
+          std::cerr << "*** Failed to truncate file: " << file_name_ << std::endl;
         }
       }
     }
