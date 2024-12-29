@@ -20,43 +20,55 @@ using std::size_t;
 template <typename VT, typename RT> class global_ptr;
 
 //
-// region-internal pointer fields should be declared as this type,
-// for data structures meant to live in shilos
+// users should always update a relativ_ptr<F> field of a record object of type T,
+// via a global_ptr<T> to the outer record object
 //
-// users would always obtain the corresponding global_ptr<F> from a regional_ptr<F> field of a record object of type T,
-// via a global_ptr<T> to the outer record object, and likely update a regional_ptr<F> field to point to other object
-// via the global_ptr<T>
-//
-// actually, you can do virtually nothing with a regional_ptr<F> alone, and this is by design
-//
-template <typename VT> class regional_ptr final {
+template <typename VT> class relativ_ptr final {
   template <typename OT, typename RT> friend class global_ptr;
 
 public:
   typedef VT target_type;
 
 private:
-  size_t offset_;
+  intptr_t offset_;
 
-  regional_ptr(size_t offset) : offset_(offset) {}
+  relativ_ptr(intptr_t offset) : offset_(offset) {}
 
 public:
-  regional_ptr() : offset_(0) {}
+  relativ_ptr() : offset_(0) {}
 
-  ~regional_ptr() = default;
+  ~relativ_ptr() = default;
 
   //
-  // TODO: this overly restrictive?
+  // prohibit direct copying and assignment
   //
-  // prohibit direct copying and assignment,
-  // regional_ptr fields can only be updated via a global_ptr to its parent record:
+  // relativ_ptr fields can only be updated via a global_ptr to its parent record
   //
-  regional_ptr(const regional_ptr<VT> &) = delete;
-  regional_ptr(regional_ptr<VT> &&) = delete;
-  regional_ptr &operator=(const regional_ptr<VT> &) = delete;
-  regional_ptr &operator=(regional_ptr<VT> &&) = delete;
+  relativ_ptr(const relativ_ptr<VT> &) = delete;
+  relativ_ptr(relativ_ptr<VT> &&) = delete;
+  relativ_ptr &operator=(const relativ_ptr<VT> &) = delete;
+  relativ_ptr &operator=(relativ_ptr<VT> &&) = delete;
 
   explicit operator bool() const noexcept { return offset_ != 0; }
+
+  VT *get() {
+    if (offset_ == 0)
+      return nullptr;
+    return reinterpret_cast<VT *>(reinterpret_cast<intptr_t>(this) + offset_);
+  }
+
+  const VT *get() const {
+    if (offset_ == 0)
+      return nullptr;
+    return reinterpret_cast<const VT *>(reinterpret_cast<intptr_t>(this) + offset_);
+  }
+
+  VT &operator*() { return *get(); }
+  VT *operator->() { return get(); }
+  const VT &operator*() const { return *get(); }
+  const VT *operator->() const { return get(); }
+
+  auto operator<=>(const relativ_ptr<VT> &other) const { return this->get() <=> other.get(); }
 };
 
 template <typename RT>
@@ -160,27 +172,45 @@ public:
   global_ptr &operator=(global_ptr<VT, RT> &&) = default;
 
   template <typename F> //
-  void clear(regional_ptr<F> VT::*ptrField) {
+  void clear(relativ_ptr<F> VT::*ptrField) {
     this->*ptrField.offset_ = 0;
   }
 
   template <typename F> //
-  const global_ptr<F, RT> &set(regional_ptr<F> VT::*ptrField, const global_ptr<F, RT> &tgt) {
+  const global_ptr<F, RT> &set(relativ_ptr<F> VT::*ptrField, const global_ptr<F, RT> &tgt) {
     if (tgt.region_ != region_) {
       throw std::logic_error("!?cross region ptr assignment?!");
     }
-    this->*ptrField.offset_ = tgt.offset_;
+    relativ_ptr<F> &fp = this->*ptrField;
+    VT *vp = tgt.get();
+    if (!vp) {
+      fp.offset_ = 0;
+    } else {
+      fp.offset_ = reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(&fp);
+    }
     return tgt;
   }
 
   template <typename F> //
-  global_ptr<F, RT> get(regional_ptr<F> VT::*ptrField) {
-    return global_ptr<F, RT>(region_, this->*ptrField.offset_);
+  global_ptr<F, RT> get(relativ_ptr<F> VT::*ptrField) {
+    relativ_ptr<F> &fp = this->*ptrField;
+    VT *vp = fp.get();
+    if (!vp) {
+      return global_ptr<F, RT>(region_, 0);
+    } else {
+      return global_ptr<F, RT>(region_, reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(region_));
+    }
   }
 
   template <typename F> //
-  const global_ptr<F, RT> get(regional_ptr<F> VT::*ptrField) const {
-    return global_ptr<F, RT>(region_, this->*ptrField.offset_);
+  const global_ptr<F, RT> get(relativ_ptr<F> VT::*ptrField) const {
+    const relativ_ptr<F> &fp = this->*ptrField;
+    const VT *vp = fp.get();
+    if (!vp) {
+      return global_ptr<F, RT>(region_, 0);
+    } else {
+      return global_ptr<F, RT>(region_, reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(region_));
+    }
   }
 
   VT *get() {
