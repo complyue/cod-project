@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include "./region.hh"
@@ -107,6 +106,21 @@ public:
     }
   }
 
+  // delete copy operations, enables moves
+  DBMR(const DBMR &) = delete;
+  DBMR &operator=(const DBMR &) = delete;
+  DBMR(DBMR &&) noexcept = default;
+  DBMR &operator=(DBMR &&) noexcept = default;
+
+  // must zero members after move
+  friend void swap(DBMR &a, DBMR &b) noexcept {
+    using std::swap;
+    swap(a.file_name_, b.file_name_);
+    swap(a.fd_, b.fd_);
+    swap(a.region_, b.region_);
+    swap(a.constrict_on_close_, b.constrict_on_close_);
+  }
+
   // readonly ctor
   static const DBMR<RT> read(const std::string &file_name) {
     int fd = open(file_name.c_str(), O_RDONLY);
@@ -150,7 +164,7 @@ public:
   // creation ctor
   template <typename... Args>
   static DBMR<RT> create(const std::string &file_name, size_t free_capacity, Args &&...args) {
-    int fd = open(file_name.c_str(), O_CREAT | O_RDWR);
+    int fd = open(file_name.c_str(), O_CREAT | O_RDWR, 0644);
     if (fd == -1) {
       throw std::system_error(errno, std::system_category(), "Failed to create file: " + file_name);
     }
@@ -174,7 +188,12 @@ public:
   }
 
   // usually used immediately upon construction
-  DBMR<RT> &constrict_on_close(bool constrict_on_close = true) {
+  DBMR<RT> constrict_on_close(bool constrict_on_close = true) && {
+    constrict_on_close_ = constrict_on_close;
+    return *this;
+  }
+
+  DBMR<RT> &constrict_on_close(bool constrict_on_close = true) & {
     constrict_on_close_ = constrict_on_close;
     return *this;
   }
