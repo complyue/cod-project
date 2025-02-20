@@ -15,7 +15,7 @@ COD_TARGETS_TO_BUILD="Native"
 # COD_TARGETS_TO_BUILD="Native;NVPTX"
 
 # build type for CoD
-COD_BUILD_TYPE=Release # or RelWithDebInfo, or Debug
+: ${COD_BUILD_TYPE:=Release} # or RelWithDebInfo, or Debug
 
 { # keep body of cmds in this single command group, so they execute as a whole
 	# thus edit-during-(long)-execution and partial downloads are not problems
