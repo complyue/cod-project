@@ -223,7 +223,7 @@ COD_TARGETS_TO_BUILD="Native"
 	#     then build & install again
 	#
 	mkdir -p "$BUILD_DIR/stage3" && cd "$BUILD_DIR/stage3"
-	test -d ./lib || cp -rf ../cod-rt/lib ./
+	test -d ./lib || cp -rf ../cod/lib ./
 	cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
 		-DCMAKE_PREFIX_PATH="$BUILD_DIR/cod" \
 		-DCMAKE_C_COMPILER="$BUILD_DIR/cod/bin/clang" \

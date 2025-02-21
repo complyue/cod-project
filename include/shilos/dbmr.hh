@@ -188,9 +188,9 @@ public:
   }
 
   // usually used immediately upon construction
-  DBMR<RT> constrict_on_close(bool constrict_on_close = true) && {
+  DBMR<RT> &&constrict_on_close(bool constrict_on_close = true) && {
     constrict_on_close_ = constrict_on_close;
-    return *this;
+    return std::move(*this);
   }
 
   DBMR<RT> &constrict_on_close(bool constrict_on_close = true) & {
