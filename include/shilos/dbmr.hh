@@ -106,10 +106,9 @@ public:
     }
   }
 
-  // only move construction, i.e. adhoc initialization by assignment
-  DBMR(DBMR &&other) noexcept = default;
-  // neither copy, nor assignment
+  // neither copy/move construction, nor assignment
   DBMR(const DBMR &) = delete;
+  DBMR(DBMR &&) = delete;
   DBMR &operator=(const DBMR &) = delete;
   DBMR &operator=(DBMR &&) = delete;
 
