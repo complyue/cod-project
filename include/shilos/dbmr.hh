@@ -106,20 +106,14 @@ public:
     }
   }
 
-  // delete copy operations, enables moves
+  // only move construction, i.e. adhoc initialization by assignment
+  DBMR(DBMR &&other)
+      : file_name_(other.file_name_), fd_(other.fd_), region_(other.region_),
+        constrict_on_close_((other.constrict_on_close_)){};
+  // neither copy, nor assignment
   DBMR(const DBMR &) = delete;
   DBMR &operator=(const DBMR &) = delete;
-  DBMR(DBMR &&) noexcept = default;
-  DBMR &operator=(DBMR &&) noexcept = default;
-
-  // must zero members after move
-  friend void swap(DBMR &a, DBMR &b) noexcept {
-    using std::swap;
-    swap(a.file_name_, b.file_name_);
-    swap(a.fd_, b.fd_);
-    swap(a.region_, b.region_);
-    swap(a.constrict_on_close_, b.constrict_on_close_);
-  }
+  DBMR &operator=(DBMR &&) = delete;
 
   // readonly ctor
   static const DBMR<RT> read(const std::string &file_name) {
@@ -187,16 +181,7 @@ public:
     return DBMR<RT>(file_name, fd, region);
   }
 
-  // usually used immediately upon construction
-  DBMR<RT> &&constrict_on_close(bool constrict_on_close = true) && {
-    constrict_on_close_ = constrict_on_close;
-    return std::move(*this);
-  }
-
-  DBMR<RT> &constrict_on_close(bool constrict_on_close = true) & {
-    constrict_on_close_ = constrict_on_close;
-    return *this;
-  }
+  void constrict_on_close(bool constrict_on_close = true) & { constrict_on_close_ = constrict_on_close; }
 
   memory_region<RT> *region() { return region_; }
   const memory_region<RT> *region() const { return region_; }

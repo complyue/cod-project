@@ -16,12 +16,14 @@ int main(int argc, char **argv) {
     std::cout << mr->free_capacity() << std::endl;
   } else if (argc > 1) {
 
-    DBMR<CodProject> prj = DBMR<CodProject>("cod.project", 10 * 1024 * 1024).constrict_on_close();
+    DBMR<CodProject> prj = DBMR<CodProject>("cod.project", 10 * 1024 * 1024);
+    prj.constrict_on_close();
     memory_region<CodProject> *mr = prj.region();
     std::cout << mr->free_capacity() << std::endl;
   } else {
 
-    DBMR<CodProject> prj = DBMR<CodProject>::create("cod.project", 10 * 1024 * 1024).constrict_on_close();
+    DBMR<CodProject> prj = DBMR<CodProject>::create("cod.project", 10 * 1024 * 1024);
+    prj.constrict_on_close();
     memory_region<CodProject> *mr = prj.region();
     std::cout << mr->free_capacity() << std::endl;
   }
