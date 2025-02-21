@@ -107,9 +107,7 @@ public:
   }
 
   // only move construction, i.e. adhoc initialization by assignment
-  DBMR(DBMR &&other)
-      : file_name_(other.file_name_), fd_(other.fd_), region_(other.region_),
-        constrict_on_close_((other.constrict_on_close_)){};
+  DBMR(DBMR &&other) noexcept = default;
   // neither copy, nor assignment
   DBMR(const DBMR &) = delete;
   DBMR &operator=(const DBMR &) = delete;
