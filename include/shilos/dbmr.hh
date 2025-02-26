@@ -36,7 +36,7 @@ public:
       : file_name_(file_name), fd_(-1), region_(nullptr), constrict_on_close_(false) {
     size_t file_size = 0;
 
-    int fd_ = open(file_name.c_str(), O_RDWR);
+    fd_ = open(file_name.c_str(), O_RDWR);
     if (fd_ == -1) {
       throw std::system_error(errno, std::system_category(), "Failed to open file: " + file_name);
     }
@@ -76,7 +76,6 @@ public:
         close(fd_);
         throw std::system_error(errno, std::system_category(), "Failed to resize file: " + file_name);
       }
-      region_->capacity_ = file_size = new_file_size;
 
       mapped_addr = mmap(nullptr, file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
       if (mapped_addr == MAP_FAILED) {
@@ -85,15 +84,21 @@ public:
       }
 
       region_ = static_cast<memory_region<RT> *>(mapped_addr);
+      region_->capacity_ = file_size = new_file_size;
     }
   }
 
   ~DBMR() {
     if (region_) {
       assert(fd_ != -1);
-      const size_t occupation = region_->occupation(),
-                   capacity = region_->capacity(); // region_ will be non-readable after munmap
+      // region_ will be non-readable after munmap
+      const size_t occupation = region_->occupation();
+      const size_t capacity = region_->capacity();
       assert(occupation <= capacity);
+      if (constrict_on_close_ && occupation < capacity) {
+        region_->capacity_ = occupation; // to be truncated right below
+      }
+      msync(reinterpret_cast<void *>(region_), capacity, MS_SYNC);
       munmap(reinterpret_cast<void *>(region_), capacity);
       if (constrict_on_close_ && occupation < capacity) {
         if (ftruncate(fd_, occupation) == -1) {
@@ -125,7 +130,9 @@ public:
       throw std::system_error(errno, std::system_category(), "Failed to stat file: " + file_name);
     }
     const size_t file_size = statbuf.st_size;
-    assert(file_size >= sizeof(memory_region<RT>));
+    if (file_size < sizeof(memory_region<RT>)) {
+      throw std::runtime_error("Too small for a memory region: " + file_name);
+    }
 
     void *mapped_addr = mmap(nullptr, file_size, PROT_READ, MAP_SHARED, fd, 0);
     if (mapped_addr == MAP_FAILED) {

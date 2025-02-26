@@ -56,7 +56,6 @@ public:
   }
 
   ~relativ_ptr() = default;
-
   //
   // prohibit direct copying and assignment
   //
@@ -105,6 +104,7 @@ public:
   std::byte *data() { return data_.get(); }
   const std::byte *data() const { return data_.get(); }
 
+  ~relativ_str() = default;
   relativ_str(const relativ_str &) = delete;
   relativ_str(relativ_str &&) = delete;
   relativ_str &operator=(const relativ_str &) = delete;
