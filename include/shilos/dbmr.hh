@@ -77,7 +77,7 @@ public:
         throw std::system_error(errno, std::system_category(), "Failed to resize file: " + file_name);
       }
 
-      mapped_addr = mmap(nullptr, file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+      mapped_addr = mmap(nullptr, new_file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
       if (mapped_addr == MAP_FAILED) {
         close(fd_);
         throw std::system_error(errno, std::system_category(), "Failed to mmap file: " + file_name);
@@ -98,7 +98,7 @@ public:
       if (constrict_on_close_ && occupation < capacity) {
         region_->capacity_ = occupation; // to be truncated right below
       }
-      msync(reinterpret_cast<void *>(region_), capacity, MS_SYNC);
+      msync(reinterpret_cast<void *>(region_), occupation, MS_SYNC);
       munmap(reinterpret_cast<void *>(region_), capacity);
       if (constrict_on_close_ && occupation < capacity) {
         if (ftruncate(fd_, occupation) == -1) {
