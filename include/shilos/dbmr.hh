@@ -77,14 +77,16 @@ public:
         throw std::system_error(errno, std::system_category(), "Failed to resize file: " + file_name);
       }
 
-      mapped_addr = mmap(nullptr, new_file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+      file_size = new_file_size;
+      mapped_addr = mmap(nullptr, file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
       if (mapped_addr == MAP_FAILED) {
         close(fd_);
         throw std::system_error(errno, std::system_category(), "Failed to mmap file: " + file_name);
       }
 
       region_ = static_cast<memory_region<RT> *>(mapped_addr);
-      region_->capacity_ = file_size = new_file_size;
+      region_->capacity_ = file_size;
+      msync(reinterpret_cast<void *>(region_), sizeof(memory_region<RT>), MS_SYNC);
     }
   }
 
