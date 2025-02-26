@@ -14,18 +14,21 @@ int main(int argc, char **argv) {
     const DBMR<CodProject> prj = DBMR<CodProject>::read("cod.project");
     const memory_region<CodProject> *mr = prj.region();
     std::cout << mr->free_capacity() << std::endl;
+    std::cout << (std::string_view)mr->root()->name() << std::endl;
   } else if (argc > 1) {
 
     DBMR<CodProject> prj = DBMR<CodProject>("cod.project", 10 * 1024 * 1024);
     prj.constrict_on_close();
     memory_region<CodProject> *mr = prj.region();
     std::cout << mr->free_capacity() << std::endl;
+    std::cout << (std::string_view)mr->root()->name() << std::endl;
   } else {
 
-    DBMR<CodProject> prj = DBMR<CodProject>::create("cod.project", 10 * 1024 * 1024);
+    DBMR<CodProject> prj = DBMR<CodProject>::create("cod.project", 10 * 1024 * 1024, "some cool project name");
     prj.constrict_on_close();
     memory_region<CodProject> *mr = prj.region();
     std::cout << mr->free_capacity() << std::endl;
+    std::cout << (std::string_view)mr->root()->name() << std::endl;
   }
 
   return 0;

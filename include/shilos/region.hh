@@ -17,6 +17,11 @@ namespace shilos {
 using std::intptr_t;
 using std::size_t;
 
+template <typename RT>
+concept ValidMemRegionRootType = requires {
+  { RT::TYPE_UUID } -> std::same_as<const UUID &>;
+};
+
 template <typename VT, typename RT> class global_ptr;
 
 //
@@ -24,6 +29,9 @@ template <typename VT, typename RT> class global_ptr;
 // via a global_ptr<T> to the outer record object
 //
 template <typename VT> class relativ_ptr final {
+  template <typename RT>
+    requires ValidMemRegionRootType<RT>
+  friend class memory_region;
   template <typename OT, typename RT> friend class global_ptr;
 
 public:
@@ -36,6 +44,16 @@ private:
 
 public:
   relativ_ptr() : offset_(0) {}
+
+  template <typename RT>
+  relativ_ptr(global_ptr<VT, RT> gp)
+      : offset_(reinterpret_cast<intptr_t>(gp.get()) - reinterpret_cast<intptr_t>(this)) {
+#ifndef NDEBUG
+    const intptr_t p_this = reinterpret_cast<intptr_t>(this);
+    assert(p_this > reinterpret_cast<intptr_t>(gp.region()));
+    assert(p_this < reinterpret_cast<intptr_t>(gp.region()) + gp.region()->capacity());
+#endif
+  }
 
   ~relativ_ptr() = default;
 
@@ -71,9 +89,33 @@ public:
   auto operator<=>(const relativ_ptr<VT> &other) const { return this->get() <=> other.get(); }
 };
 
-template <typename RT>
-concept ValidMemRegionRootType = requires {
-  { RT::TYPE_UUID } -> std::same_as<const UUID &>;
+class relativ_str {
+  template <typename RT>
+    requires ValidMemRegionRootType<RT>
+  friend class memory_region;
+
+protected:
+  size_t utf8len_;
+  relativ_ptr<std::byte> data_;
+
+  relativ_str(size_t utf8len) : utf8len_(utf8len), data_() {}
+
+public:
+  size_t utf8len() const { return utf8len_; }
+  std::byte *data() { return data_.get(); }
+  const std::byte *data() const { return data_.get(); }
+
+  relativ_str(const relativ_str &) = delete;
+  relativ_str(relativ_str &&) = delete;
+  relativ_str &operator=(const relativ_str &) = delete;
+  relativ_str &operator=(relativ_str &&) = delete;
+
+  // TODO: this locks rt env to be in utf-8 locale, justify this
+  operator std::string_view() const { return std::string_view(reinterpret_cast<const char *>(data()), utf8len()); }
+
+  operator std::u8string_view() const {
+    return std::u8string_view(reinterpret_cast<const char8_t *>(data()), utf8len());
+  }
 };
 
 template <typename RT>
@@ -106,7 +148,7 @@ protected:
     void *ptr = allocate(sizeof(RT), alignof(RT));
     if (!ptr)
       throw std::bad_alloc();
-    new (ptr) RT(std::forward<Args>(args)...);
+    new (ptr) RT(this, std::forward<Args>(args)...);
     ro_offset_ = reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this);
   }
 
@@ -123,6 +165,10 @@ public:
   size_t occupation() const { return occupation_; }
   size_t free_capacity() const { return capacity_ - occupation_; }
 
+  template <typename T> T *allocate(const size_t n = 1) {
+    return reinterpret_cast<T *>(allocate(n * sizeof(T), alignof(T)));
+  }
+
   void *allocate(const size_t size, const size_t align) {
     // use current occupation mark as the allocated ptr, do proper alignment
     size_t free_spc = free_capacity();
@@ -136,7 +182,7 @@ public:
   }
 
   template <typename VT, typename... Args> global_ptr<VT, RT> create(Args &&...args) {
-    void *ptr = this->allocate(sizeof(VT), alignof(VT));
+    void *ptr = this->allocate<VT>();
     if (!ptr)
       throw std::bad_alloc();
     new (ptr) VT(std::forward<Args>(args)...);
@@ -145,14 +191,45 @@ public:
         reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
 
+  // TODO: this locks rt env to be in utf-8 locale, justify this
+  global_ptr<relativ_str, RT> intern(std::string_view &str) {
+    return intern(str.size(), reinterpret_cast<const std::byte *>(str.data()));
+  }
+
+  global_ptr<relativ_str, RT> intern(std::u8string_view &str) {
+    return intern(str.size(), reinterpret_cast<const std::byte *>(str.data()));
+  }
+
+  global_ptr<relativ_str, RT> intern(const size_t utf8len, const std::byte *data) {
+    std::byte *p_data = this->allocate<std::byte>(utf8len);
+    if (!p_data)
+      throw std::bad_alloc();
+    std::memcpy(p_data, data, utf8len);
+    relativ_str *p_str = this->allocate<relativ_str>();
+    if (!p_str)
+      throw std::bad_alloc();
+    new (p_str) relativ_str(utf8len);
+    p_str->data_.offset_ = reinterpret_cast<intptr_t>(p_data) - //
+                           reinterpret_cast<intptr_t>(&(p_str->data_.offset_));
+    return global_ptr<relativ_str, RT>(this,
+                                       reinterpret_cast<intptr_t>(p_str) - //
+                                           reinterpret_cast<intptr_t>(this));
+  }
+
   global_ptr<RT, RT> root() { return global_ptr<RT, RT>(this, ro_offset_); }
-  const global_ptr<RT, RT> root() const { return global_ptr<RT, RT>(this, ro_offset_); }
+  const global_ptr<RT, RT> root() const {
+    return global_ptr<RT, RT>(const_cast<memory_region<RT> *>(this), ro_offset_);
+  }
 
   template <typename VT> global_ptr<VT, RT> null() { return global_ptr<VT, RT>(this, 0); }
-  template <typename VT> const global_ptr<VT, RT> null() const { return global_ptr<VT, RT>(this, 0); }
+  template <typename VT> const global_ptr<VT, RT> null() const {
+    return global_ptr<VT, RT>(const_cast<memory_region<RT> *>(this), 0);
+  }
 };
 
 template <typename VT, typename RT> class global_ptr final {
+  friend class memory_region<RT>;
+
 public:
   typedef VT target_type;
   typedef RT root_type;
