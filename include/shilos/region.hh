@@ -25,10 +25,10 @@ concept ValidMemRegionRootType = requires {
 template <typename VT, typename RT> class global_ptr;
 
 //
-// users should always update a relativ_ptr<F> field of a record object of type T,
+// users should always update a regional_ptr<F> field of a record object of type T,
 // via a global_ptr<T> to the outer record object
 //
-template <typename VT> class relativ_ptr final {
+template <typename VT> class regional_ptr final {
   template <typename RT>
     requires ValidMemRegionRootType<RT>
   friend class memory_region;
@@ -40,13 +40,13 @@ public:
 private:
   intptr_t offset_;
 
-  relativ_ptr(intptr_t offset) : offset_(offset) {}
+  regional_ptr(intptr_t offset) : offset_(offset) {}
 
 public:
-  relativ_ptr() : offset_(0) {}
+  regional_ptr() : offset_(0) {}
 
   template <typename RT>
-  relativ_ptr(global_ptr<VT, RT> gp)
+  regional_ptr(global_ptr<VT, RT> gp)
       : offset_(reinterpret_cast<intptr_t>(gp.get()) - reinterpret_cast<intptr_t>(this)) {
 #ifndef NDEBUG
     const intptr_t p_this = reinterpret_cast<intptr_t>(this);
@@ -55,16 +55,16 @@ public:
 #endif
   }
 
-  ~relativ_ptr() = default;
+  ~regional_ptr() = default;
   //
   // prohibit direct copying and assignment
   //
-  // relativ_ptr fields can only be updated via a global_ptr to its parent record
+  // regional_ptr fields can only be updated via a global_ptr to its parent record
   //
-  relativ_ptr(const relativ_ptr<VT> &) = delete;
-  relativ_ptr(relativ_ptr<VT> &&) = delete;
-  relativ_ptr &operator=(const relativ_ptr<VT> &) = delete;
-  relativ_ptr &operator=(relativ_ptr<VT> &&) = delete;
+  regional_ptr(const regional_ptr<VT> &) = delete;
+  regional_ptr(regional_ptr<VT> &&) = delete;
+  regional_ptr &operator=(const regional_ptr<VT> &) = delete;
+  regional_ptr &operator=(regional_ptr<VT> &&) = delete;
 
   explicit operator bool() const noexcept { return offset_ != 0; }
 
@@ -85,30 +85,30 @@ public:
   const VT &operator*() const { return *get(); }
   const VT *operator->() const { return get(); }
 
-  auto operator<=>(const relativ_ptr<VT> &other) const { return this->get() <=> other.get(); }
+  auto operator<=>(const regional_ptr<VT> &other) const { return this->get() <=> other.get(); }
 };
 
-class relativ_str {
+class regional_str {
   template <typename RT>
     requires ValidMemRegionRootType<RT>
   friend class memory_region;
 
 protected:
   size_t utf8len_;
-  relativ_ptr<std::byte> data_;
+  regional_ptr<std::byte> data_;
 
-  relativ_str(size_t utf8len) : utf8len_(utf8len), data_() {}
+  regional_str(size_t utf8len) : utf8len_(utf8len), data_() {}
 
 public:
   size_t utf8len() const { return utf8len_; }
   std::byte *data() { return data_.get(); }
   const std::byte *data() const { return data_.get(); }
 
-  ~relativ_str() = default;
-  relativ_str(const relativ_str &) = delete;
-  relativ_str(relativ_str &&) = delete;
-  relativ_str &operator=(const relativ_str &) = delete;
-  relativ_str &operator=(relativ_str &&) = delete;
+  ~regional_str() = default;
+  regional_str(const regional_str &) = delete;
+  regional_str(regional_str &&) = delete;
+  regional_str &operator=(const regional_str &) = delete;
+  regional_str &operator=(regional_str &&) = delete;
 
   // TODO: this locks rt env to be in utf-8 locale, justify this
   operator std::string_view() const { return std::string_view(reinterpret_cast<const char *>(data()), utf8len()); }
@@ -192,28 +192,28 @@ public:
   }
 
   // TODO: this locks rt env to be in utf-8 locale, justify this
-  global_ptr<relativ_str, RT> intern(std::string_view &str) {
-    return intern(str.size(), reinterpret_cast<const std::byte *>(str.data()));
+  global_ptr<regional_str, RT> afford(std::string_view &str) {
+    return afford(str.size(), reinterpret_cast<const std::byte *>(str.data()));
   }
 
-  global_ptr<relativ_str, RT> intern(std::u8string_view &str) {
-    return intern(str.size(), reinterpret_cast<const std::byte *>(str.data()));
+  global_ptr<regional_str, RT> afford(std::u8string_view &str) {
+    return afford(str.size(), reinterpret_cast<const std::byte *>(str.data()));
   }
 
-  global_ptr<relativ_str, RT> intern(const size_t utf8len, const std::byte *data) {
+  global_ptr<regional_str, RT> afford(const size_t utf8len, const std::byte *data) {
     std::byte *p_data = this->allocate<std::byte>(utf8len);
     if (!p_data)
       throw std::bad_alloc();
     std::memcpy(p_data, data, utf8len);
-    relativ_str *p_str = this->allocate<relativ_str>();
+    regional_str *p_str = this->allocate<regional_str>();
     if (!p_str)
       throw std::bad_alloc();
-    new (p_str) relativ_str(utf8len);
+    new (p_str) regional_str(utf8len);
     p_str->data_.offset_ = reinterpret_cast<intptr_t>(p_data) - //
                            reinterpret_cast<intptr_t>(&(p_str->data_.offset_));
-    return global_ptr<relativ_str, RT>(this,
-                                       reinterpret_cast<intptr_t>(p_str) - //
-                                           reinterpret_cast<intptr_t>(this));
+    return global_ptr<regional_str, RT>(this,
+                                        reinterpret_cast<intptr_t>(p_str) - //
+                                            reinterpret_cast<intptr_t>(this));
   }
 
   global_ptr<RT, RT> root() { return global_ptr<RT, RT>(this, ro_offset_); }
@@ -249,16 +249,16 @@ public:
   global_ptr &operator=(global_ptr<VT, RT> &&) = default;
 
   template <typename F> //
-  void clear(relativ_ptr<F> VT::*ptrField) {
+  void clear(regional_ptr<F> VT::*ptrField) {
     this->*ptrField.offset_ = 0;
   }
 
   template <typename F> //
-  const global_ptr<F, RT> &set(relativ_ptr<F> VT::*ptrField, const global_ptr<F, RT> &tgt) {
+  const global_ptr<F, RT> &set(regional_ptr<F> VT::*ptrField, const global_ptr<F, RT> &tgt) {
     if (tgt.region_ != region_) {
       throw std::logic_error("!?cross region ptr assignment?!");
     }
-    relativ_ptr<F> &fp = this->*ptrField;
+    regional_ptr<F> &fp = this->*ptrField;
     VT *vp = tgt.get();
     if (!vp) {
       fp.offset_ = 0;
@@ -269,8 +269,8 @@ public:
   }
 
   template <typename F> //
-  global_ptr<F, RT> get(relativ_ptr<F> VT::*ptrField) {
-    relativ_ptr<F> &fp = this->*ptrField;
+  global_ptr<F, RT> get(regional_ptr<F> VT::*ptrField) {
+    regional_ptr<F> &fp = this->*ptrField;
     VT *vp = fp.get();
     if (!vp) {
       return global_ptr<F, RT>(region_, 0);
@@ -280,8 +280,8 @@ public:
   }
 
   template <typename F> //
-  const global_ptr<F, RT> get(relativ_ptr<F> VT::*ptrField) const {
-    const relativ_ptr<F> &fp = this->*ptrField;
+  const global_ptr<F, RT> get(regional_ptr<F> VT::*ptrField) const {
+    const regional_ptr<F> &fp = this->*ptrField;
     const VT *vp = fp.get();
     if (!vp) {
       return global_ptr<F, RT>(region_, 0);
