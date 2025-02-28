@@ -89,12 +89,12 @@ public:
   bool operator==(const regional_ptr<VT> &other) const noexcept { return get() == other.get(); }
 };
 
-class regional_str {
+class regional_str final {
   template <typename RT>
     requires ValidMemRegionRootType<RT>
   friend class memory_region;
 
-protected:
+private:
   size_t length_;
   regional_ptr<std::byte> data_;
 
@@ -150,11 +150,13 @@ inline std::ostream &operator<<(std::ostream &os, const regional_str &str) {
 
 template <typename RT>
   requires ValidMemRegionRootType<RT>
+class DBMR;
+
+template <typename RT>
+  requires ValidMemRegionRootType<RT>
 class memory_region {
   template <typename VT, typename RT1> friend class global_ptr;
-  template <typename RT1>
-    requires ValidMemRegionRootType<RT1>
-  friend class DBMR;
+  friend class DBMR<RT>;
 
 public:
   template <typename... Args>
