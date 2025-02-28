@@ -12,7 +12,48 @@
 
 namespace shilos {
 
-template <typename T> class regional_cons;
+template <typename T> class regional_list;
+
+template <typename T>
+auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
+  requires std::three_way_comparable<T>;
+
+template <typename T> class regional_cons {
+protected:
+  T head_;
+  regional_list<T> tail_;
+
+public:
+  template <typename RT, typename... Args>
+  regional_cons(global_ptr<RT, regional_list<T>> tail, Args &&...args) : tail_(tail) {
+    new (&head_) T(std::forward<Args>(args)...);
+  }
+
+  T &head() { return head_; }
+  const T &head() const { return head_; }
+
+  regional_list<T> &tail() { return tail_; }
+  const regional_list<T> &tail() const { return tail_; }
+};
+
+template <typename T>
+auto operator<=>(const regional_cons<T> &lhs, const regional_cons<T> &rhs)
+  requires std::three_way_comparable<T>
+{
+  if (auto cmp = lhs.head() <=> rhs.head(); cmp != 0)
+    return cmp;
+  const regional_list<T> &lhs_tail = lhs.tail();
+  const regional_list<T> &rhs_tail = rhs.tail();
+  if (!lhs_tail) {
+    if (!rhs_tail)
+      return std::strong_ordering::equal;
+    else
+      return std::strong_ordering::less;
+  } else if (!rhs_tail) {
+    return std::strong_ordering::greater;
+  }
+  return lhs_tail <=> rhs_tail;
+}
 
 template <typename T> class regional_list {
   friend class regional_cons<T>;
@@ -20,7 +61,8 @@ template <typename T> class regional_list {
 protected:
   regional_ptr<regional_cons<T>> list_head_;
 
-  template <typename RT> regional_list(global_ptr<RT, regional_cons<T>> list_head) : list_head_(list_head) {}
+  template <typename RT>
+  regional_list(global_ptr<RT, regional_list<T>> list_head) : list_head_(list_head->list_head_.get()) {}
 
 public:
   regional_list() : list_head_() {}
@@ -56,55 +98,79 @@ public:
       count++;
     return count;
   }
+
+  class iterator {
+  private:
+    regional_cons<T> *current_;
+
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T *;
+    using reference = T &;
+
+    iterator() : current_() {}
+    explicit iterator(regional_cons<T> *node) : current_(node) {}
+
+    reference operator*() { return current_->head(); }
+    pointer operator->() { return &(current_->head()); }
+
+    iterator &operator++() {
+      current_ = current_->tail().list_head_.get();
+      return *this;
+    }
+
+    iterator operator++(int) {
+      iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator==(const iterator &other) const { return current_ == other.current_; }
+  };
+
+  class const_iterator {
+  private:
+    const regional_cons<T> *current_;
+
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const T *;
+    using reference = const T &;
+
+    const_iterator() : current_() {}
+    explicit const_iterator(regional_cons<T> *node) : current_(node) {}
+
+    reference operator*() const { return current_->head(); }
+    pointer operator->() const { return &(current_->head()); }
+
+    const_iterator &operator++() {
+      current_ = current_->tail().list_head_.get();
+      return *this;
+    }
+
+    const_iterator operator++(int) {
+      const_iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator==(const const_iterator &other) const { return current_ == other.current_; }
+    bool operator!=(const const_iterator &other) const { return current_ != other.current_; }
+  };
+
+  iterator begin() { return iterator(list_head_.get()); }
+  iterator end() { return iterator(); }
+
+  const_iterator begin() const { return const_iterator(list_head_.get()); }
+  const_iterator end() const { return const_iterator(); }
+
+  const_iterator cbegin() const { return const_iterator(list_head_.get()); }
+  const_iterator cend() const { return const_iterator(); }
 };
-
-template <typename T, typename RT, typename... Args>
-global_ptr<regional_list<T>, RT> operator>>(global_ptr<regional_list<T>, RT> list, Args &&...args) {
-  list->prepand(list.region(), std::forward<Args>(args)...);
-  return list;
-}
-
-template <typename T>
-auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
-  requires std::three_way_comparable<T>;
-
-template <typename T> class regional_cons {
-protected:
-  T head_;
-  regional_list<T> tail_;
-
-public:
-  template <typename RT, typename... Args>
-  regional_cons(global_ptr<RT, regional_list<T>> tail, Args &&...args)
-      : tail_(static_cast<global_ptr<RT, regional_cons<T>>>(tail)) {
-    new (&head_) T(std::forward<Args>(args)...);
-  }
-
-  T &head() { return head_; }
-  const T &head() const { return head_; }
-
-  regional_list<T> &tail() { return tail_; }
-  const regional_list<T> &tail() const { return tail_; }
-};
-
-template <typename T>
-auto operator<=>(const regional_cons<T> &lhs, const regional_cons<T> &rhs)
-  requires std::three_way_comparable<T>
-{
-  if (auto cmp = lhs.head() <=> rhs.head(); cmp != 0)
-    return cmp;
-  const regional_list<T> &lhs_tail = lhs.tail();
-  const regional_list<T> &rhs_tail = rhs.tail();
-  if (!lhs_tail) {
-    if (!rhs_tail)
-      return std::strong_ordering::equal;
-    else
-      return std::strong_ordering::less;
-  } else if (!rhs_tail) {
-    return std::strong_ordering::greater;
-  }
-  return lhs_tail <=> rhs_tail;
-}
 
 template <typename T>
 auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
@@ -121,6 +187,15 @@ auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
     return std::strong_ordering::greater;
   }
   return *lhs_cons <=> *rhs_cons;
+}
+
+//
+// operator >> version of prepand for regional_list
+//
+template <typename T, typename RT, typename... Args>
+global_ptr<regional_list<T>, RT> operator>>(global_ptr<regional_list<T>, RT> list, Args &&...args) {
+  list->prepand(list.region(), std::forward<Args>(args)...);
+  return list;
 }
 
 } // namespace shilos
