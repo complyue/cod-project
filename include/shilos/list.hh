@@ -29,8 +29,19 @@ public:
     list_head_ = mr->create(std::forward<Args>(args)...);
   }
 
-  regional_ptr<regional_cons<T>> &list_head() { return list_head_; }
-  const regional_ptr<regional_cons<T>> &list_head() const { return list_head_; }
+  T *head() { return !list_head_ ? nullptr : &list_head_->head(); }
+  const T *head() const { return !list_head_ ? nullptr : &list_head_->head(); }
+
+  regional_list<T> *tail() {
+    if (!list_head_)
+      return nullptr;
+    return list_head_->tail();
+  }
+  const regional_list<T> *tail() const {
+    if (!list_head_)
+      return nullptr;
+    return list_head_->tail();
+  }
 
   explicit operator bool() { return (bool)list_head_; }
 
