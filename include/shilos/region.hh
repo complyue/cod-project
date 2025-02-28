@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <cassert>
@@ -85,7 +84,8 @@ public:
   const VT &operator*() const { return *get(); }
   const VT *operator->() const { return get(); }
 
-  auto operator<=>(const regional_ptr<VT> &other) const { return this->get() <=> other.get(); }
+  std::strong_ordering operator<=>(const regional_ptr<VT> &other) const noexcept { return get() <=> other.get(); }
+  bool operator==(const regional_ptr<VT> &other) const noexcept { return get() == other.get(); }
 };
 
 class regional_str {
@@ -94,13 +94,13 @@ class regional_str {
   friend class memory_region;
 
 protected:
-  size_t utf8len_;
+  size_t length_;
   regional_ptr<std::byte> data_;
 
-  regional_str(size_t utf8len) : utf8len_(utf8len), data_() {}
+  regional_str(size_t length) : length_(length), data_() {}
 
 public:
-  size_t utf8len() const { return utf8len_; }
+  size_t length() const { return length_; }
   std::byte *data() { return data_.get(); }
   const std::byte *data() const { return data_.get(); }
 
@@ -110,11 +110,35 @@ public:
   regional_str &operator=(const regional_str &) = delete;
   regional_str &operator=(regional_str &&) = delete;
 
-  // TODO: this locks rt env to be in utf-8 locale, justify this
-  operator std::string_view() const { return std::string_view(reinterpret_cast<const char *>(data()), utf8len()); }
+  operator std::string_view() const { return std::string_view(reinterpret_cast<const char *>(data()), length()); }
 
-  operator std::u8string_view() const {
-    return std::u8string_view(reinterpret_cast<const char8_t *>(data()), utf8len());
+  std::strong_ordering operator<=>(const regional_str &other) const noexcept {
+    if (auto cmp = length_ <=> other.length_; cmp != 0) {
+      return cmp;
+    }
+    if (!data_ || !other.data_) {
+      if (data_ == other.data_) {
+        return std::strong_ordering::equal;
+      }
+      return !data_ ? std::strong_ordering::less : std::strong_ordering::greater;
+    }
+    const int result = std::memcmp(data_.get(), other.data_.get(), length_);
+    if (result < 0)
+      return std::strong_ordering::less;
+    if (result > 0)
+      return std::strong_ordering::greater;
+    return std::strong_ordering::equal;
+  }
+  bool operator==(const regional_str &other) const noexcept {
+    if (length_ != other.length_) {
+      return false;
+    }
+    if (data_.get() == other.data_.get())
+      return true;
+    if (!data_ || !other.data_) {
+      return false;
+    }
+    return 0 == std::memcmp(data_.get(), other.data_.get(), length_);
   }
 };
 
@@ -191,24 +215,19 @@ public:
         reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
 
-  // TODO: this locks rt env to be in utf-8 locale, justify this
   global_ptr<regional_str, RT> afford(std::string_view &str) {
     return afford(str.size(), reinterpret_cast<const std::byte *>(str.data()));
   }
 
-  global_ptr<regional_str, RT> afford(std::u8string_view &str) {
-    return afford(str.size(), reinterpret_cast<const std::byte *>(str.data()));
-  }
-
-  global_ptr<regional_str, RT> afford(const size_t utf8len, const std::byte *data) {
-    std::byte *p_data = this->allocate<std::byte>(utf8len);
+  global_ptr<regional_str, RT> afford(const size_t length, const std::byte *data) {
+    std::byte *p_data = this->allocate<std::byte>(length);
     if (!p_data)
       throw std::bad_alloc();
-    std::memcpy(p_data, data, utf8len);
+    std::memcpy(p_data, data, length);
     regional_str *p_str = this->allocate<regional_str>();
     if (!p_str)
       throw std::bad_alloc();
-    new (p_str) regional_str(utf8len);
+    new (p_str) regional_str(length);
     p_str->data_.offset_ = reinterpret_cast<intptr_t>(p_data) - //
                            reinterpret_cast<intptr_t>(&(p_str->data_.offset_));
     return global_ptr<regional_str, RT>(this,
@@ -310,6 +329,7 @@ public:
   explicit operator bool() const noexcept { return offset_ != 0; }
 
   auto operator<=>(const global_ptr<VT, RT> &other) const = default;
+  bool operator==(const global_ptr<VT, RT> &other) const = default;
 };
 
 } // namespace shilos
