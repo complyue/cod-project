@@ -47,12 +47,34 @@ public:
 
   template <typename RT>
   regional_ptr(global_ptr<VT, RT> gp)
-      : offset_(reinterpret_cast<intptr_t>(gp.get()) - reinterpret_cast<intptr_t>(this)) {
-#ifndef NDEBUG
-    const intptr_t p_this = reinterpret_cast<intptr_t>(this);
-    assert(p_this > reinterpret_cast<intptr_t>(gp.region()));
-    assert(p_this < reinterpret_cast<intptr_t>(gp.region()) + gp.region()->capacity());
-#endif
+      : offset_(!gp ? 0 : reinterpret_cast<intptr_t>(gp.get()) - reinterpret_cast<intptr_t>(this)) {
+    // TODO: less severe checks here?
+    assert(reinterpret_cast<intptr_t>(this) > reinterpret_cast<intptr_t>(&gp.region()) &&
+           reinterpret_cast<intptr_t>(this) < reinterpret_cast<intptr_t>(&gp.region()) + gp.region().capacity());
+  }
+
+  template <typename RT> global_ptr<VT, RT> operator=(global_ptr<VT, RT> gp) {
+    // TODO: less severe checks here?
+    assert(reinterpret_cast<intptr_t>(this) > reinterpret_cast<intptr_t>(&gp.region()) &&
+           reinterpret_cast<intptr_t>(this) < reinterpret_cast<intptr_t>(&gp.region()) + gp.region().capacity());
+    if (!gp) {
+      offset_ = 0;
+    } else {
+      offset_ = reinterpret_cast<intptr_t>(gp.get()) - reinterpret_cast<intptr_t>(this);
+    }
+    return gp;
+  }
+
+  //
+  // support ctor & assignment from raw pointers, tho inherently unsafe
+  //
+  regional_ptr(VT *ptr) : offset_(!ptr ? 0 : reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this)) {
+    // TODO: this can be quite unsafe, log warning here?
+  }
+  VT *operator=(VT *ptr) {
+    // TODO: this can be quite unsafe, log warning here?
+    offset_ = !ptr ? 0 : reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this);
+    return ptr;
   }
 
   ~regional_ptr() = default;
@@ -197,6 +219,22 @@ public:
   size_t occupation() const { return occupation_; }
   size_t free_capacity() const { return capacity_ - occupation_; }
 
+  template <typename VT> global_ptr<VT, RT> cast_ptr(const regional_ptr<VT> &rp) { return cast_ptr(rp.get()); }
+  template <typename VT> global_ptr<VT, RT> cast_ptr(const VT *ptr) {
+    assert(reinterpret_cast<intptr_t>(ptr) > reinterpret_cast<intptr_t>(this) &&
+           reinterpret_cast<intptr_t>(ptr) < reinterpret_cast<intptr_t>(this) + capacity_);
+    return global_ptr<VT, RT>(*this, ptr);
+  }
+
+  template <typename VT> const global_ptr<VT, RT> cast_ptr(const regional_ptr<VT> &rp) const {
+    return cast_ptr(rp.get());
+  }
+  template <typename VT> const global_ptr<VT, RT> cast_ptr(const VT *ptr) const {
+    assert(reinterpret_cast<intptr_t>(ptr) > reinterpret_cast<intptr_t>(this) &&
+           reinterpret_cast<intptr_t>(ptr) < reinterpret_cast<intptr_t>(this) + capacity_);
+    return global_ptr<VT, RT>(*this, ptr);
+  }
+
   template <typename T> T *allocate(const size_t n = 1) {
     return reinterpret_cast<T *>(allocate(n * sizeof(T), alignof(T)));
   }
@@ -238,19 +276,19 @@ public:
     new (p_str) regional_str(length);
     p_str->data_.offset_ = reinterpret_cast<intptr_t>(p_data) - //
                            reinterpret_cast<intptr_t>(&(p_str->data_.offset_));
-    return global_ptr<regional_str, RT>(this,
+    return global_ptr<regional_str, RT>(*this,
                                         reinterpret_cast<intptr_t>(p_str) - //
                                             reinterpret_cast<intptr_t>(this));
   }
 
-  global_ptr<RT, RT> root() { return global_ptr<RT, RT>(this, ro_offset_); }
+  global_ptr<RT, RT> root() { return global_ptr<RT, RT>(*this, ro_offset_); }
   const global_ptr<RT, RT> root() const {
-    return global_ptr<RT, RT>(const_cast<memory_region<RT> *>(this), ro_offset_);
+    return global_ptr<RT, RT>(const_cast<memory_region<RT> &>(*this), ro_offset_);
   }
 
   template <typename VT> global_ptr<VT, RT> null() { return global_ptr<VT, RT>(this, 0); }
   template <typename VT> const global_ptr<VT, RT> null() const {
-    return global_ptr<VT, RT>(const_cast<memory_region<RT> *>(this), 0);
+    return global_ptr<VT, RT>(const_cast<memory_region<RT> &>(*this), 0);
   }
 };
 
@@ -262,10 +300,10 @@ public:
   typedef RT root_type;
 
 private:
-  memory_region<RT> *region_;
+  memory_region<RT> &region_;
   size_t offset_;
 
-  global_ptr(memory_region<RT> *region, size_t offset) : region_(region), offset_(offset) {}
+  global_ptr(memory_region<RT> &region, size_t offset) : region_(region), offset_(offset) {}
 
 public:
   ~global_ptr() = default;
@@ -282,7 +320,7 @@ public:
 
   template <typename F> //
   const global_ptr<F, RT> &set(regional_ptr<F> VT::*ptrField, const global_ptr<F, RT> &tgt) {
-    if (tgt.region_ != region_) {
+    if (&tgt.region_ != &region_) {
       throw std::logic_error("!?cross region ptr assignment?!");
     }
     regional_ptr<F> &fp = this->*ptrField;
@@ -302,7 +340,7 @@ public:
     if (!vp) {
       return global_ptr<F, RT>(region_, 0);
     } else {
-      return global_ptr<F, RT>(region_, reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(region_));
+      return global_ptr<F, RT>(region_, reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(&region_));
     }
   }
 
@@ -313,20 +351,20 @@ public:
     if (!vp) {
       return global_ptr<F, RT>(region_, 0);
     } else {
-      return global_ptr<F, RT>(region_, reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(region_));
+      return global_ptr<F, RT>(region_, reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(&region_));
     }
   }
 
   VT *get() {
     if (offset_ == 0)
       return nullptr;
-    return reinterpret_cast<VT *>(reinterpret_cast<intptr_t>(region_) + offset_);
+    return reinterpret_cast<VT *>(reinterpret_cast<intptr_t>(&region_) + offset_);
   }
 
   const VT *get() const {
     if (offset_ == 0)
       return nullptr;
-    return reinterpret_cast<const VT *>(reinterpret_cast<intptr_t>(region_) + offset_);
+    return reinterpret_cast<const VT *>(reinterpret_cast<intptr_t>(&region_) + offset_);
   }
 
   VT &operator*() { return *get(); }
