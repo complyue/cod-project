@@ -77,6 +77,7 @@ public:
   }
 
   auto operator<=>(const UUID &other) const = default;
+  bool operator==(const UUID &other) const = default;
 };
 
 } // namespace shilos
