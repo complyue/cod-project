@@ -5,13 +5,9 @@
 #include <cassert>
 #include <compare>
 #include <fcntl.h>
-#include <iterator>
-#include <stdexcept>
-#include <string>
 #include <sys/fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <system_error>
 #include <unistd.h>
 
 namespace shilos {
