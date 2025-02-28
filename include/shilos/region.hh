@@ -4,6 +4,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -141,6 +142,11 @@ public:
     return 0 == std::memcmp(data_.get(), other.data_.get(), length_);
   }
 };
+
+inline std::ostream &operator<<(std::ostream &os, const regional_str &str) {
+  os << static_cast<std::string_view>(str);
+  return os;
+}
 
 template <typename RT>
   requires ValidMemRegionRootType<RT>
