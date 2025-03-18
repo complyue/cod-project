@@ -251,7 +251,9 @@ public:
     return ptr;
   }
 
-  template <typename VT, typename... Args> global_ptr<VT, RT> create(Args &&...args) {
+  template <typename VT, typename... Args>
+    requires std::constructible_from<VT, Args...>
+  global_ptr<VT, RT> create(Args &&...args) {
     void *ptr = this->allocate<VT>();
     if (!ptr)
       throw std::bad_alloc();
