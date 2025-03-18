@@ -67,7 +67,7 @@ protected:
 public:
   regional_list() : list_head_() {}
 
-  template <typename RT, typename... Args> void prepand(memory_region<RT> &mr, Args &&...args) {
+  template <typename RT, typename... Args> void prepend(memory_region<RT> &mr, Args &&...args) {
     list_head_ = mr->create(std::forward<Args>(args)...);
   }
 
@@ -190,11 +190,11 @@ auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
 }
 
 //
-// operator >> version of prepand for regional_list
+// operator >> version of prepend for regional_list
 //
 template <typename T, typename RT, typename... Args>
 global_ptr<regional_list<T>, RT> operator>>(global_ptr<regional_list<T>, RT> list, Args &&...args) {
-  list->prepand(list.region(), std::forward<Args>(args)...);
+  list->prepend(list.region(), std::forward<Args>(args)...);
   return list;
 }
 

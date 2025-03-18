@@ -257,7 +257,7 @@ public:
       throw std::bad_alloc();
     new (ptr) VT(std::forward<Args>(args)...);
     return global_ptr<VT, RT>( //
-        this,                  //
+        *this,                 //
         reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
 
