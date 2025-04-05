@@ -85,7 +85,7 @@ public:
     return list_head_->tail();
   }
 
-  explicit operator bool() { return (bool)list_head_; }
+  explicit operator bool() const { return (bool)list_head_; }
 
   bool empty() const { return !list_head_; }
 
