@@ -26,7 +26,7 @@ protected:
 public:
   template <typename RT, typename... Args>
   regional_cons(global_ptr<RT, regional_list<T>> tail, Args &&...args) : tail_(tail) {
-    new (&head_) T(std::forward<Args>(args)...);
+    std::construct_at(&head_, std::forward<Args>(args)...);
   }
 
   T &head() { return head_; }

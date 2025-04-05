@@ -182,7 +182,7 @@ public:
     }
 
     auto *region = static_cast<memory_region<RT> *>(mapped_addr);
-    new (region) memory_region<RT>(file_size, std::forward<Args>(args)...);
+    std::construct_at(region, file_size, std::forward<Args>(args)...);
 
     return DBMR<RT>(file_name, fd, region);
   }

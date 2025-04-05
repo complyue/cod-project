@@ -186,7 +186,7 @@ public:
                                          std::allocator<std::byte> allocator = std::allocator<std::byte>()) {
     const size_t capacity = sizeof(memory_region) + payload_capacity;
     void *ptr = allocator.allocate(capacity);
-    new (ptr) memory_region(capacity, std::forward<Args>(args)...);
+    std::construct_at(ptr, capacity, std::forward<Args>(args)...);
     return reinterpret_cast<memory_region<RT> *>(ptr);
   }
 
@@ -202,7 +202,7 @@ protected:
     void *ptr = allocate(sizeof(RT), alignof(RT));
     if (!ptr)
       throw std::bad_alloc();
-    new (ptr) RT(this, std::forward<Args>(args)...);
+    std::construct_at(ptr, this, std::forward<Args>(args)...);
     ro_offset_ = reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this);
   }
 
@@ -257,7 +257,7 @@ public:
     void *ptr = this->allocate<VT>();
     if (!ptr)
       throw std::bad_alloc();
-    new (ptr) VT(std::forward<Args>(args)...);
+    std::construct_at(ptr, std::forward<Args>(args)...);
     return global_ptr<VT, RT>( //
         *this,                 //
         reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
