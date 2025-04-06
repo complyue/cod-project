@@ -190,8 +190,8 @@ public:
 
   void constrict_on_close(bool constrict_on_close = true) & { constrict_on_close_ = constrict_on_close; }
 
-  memory_region<RT> *region() { return region_; }
-  const memory_region<RT> *region() const { return region_; }
+  memory_region<RT> &region() { return *region_; }
+  const memory_region<RT> &region() const { return *region_; }
 };
 
 } // namespace shilos
