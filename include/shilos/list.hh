@@ -19,16 +19,19 @@ auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
   requires std::three_way_comparable<T>;
 
 template <typename T> class regional_cons {
-protected:
+  friend class regional_list<T>;
+
+private:
   T head_;
   regional_list<T> tail_;
 
-public:
   template <typename RT, typename... Args>
-  regional_cons(global_ptr<RT, regional_list<T>> tail, Args &&...args) : tail_(tail) {
-    std::construct_at(&head_, std::forward<Args>(args)...);
+    requires std::constructible_from<T, memory_region<RT> &, Args...>
+  regional_cons(memory_region<RT> &mr, regional_list<T> &tail, Args &&...args) : tail_(mr, tail) {
+    std::construct_at(&head_, mr, std::forward<Args>(args)...);
   }
 
+public:
   T &head() { return head_; }
   const T &head() const { return head_; }
 
@@ -58,17 +61,25 @@ auto operator<=>(const regional_cons<T> &lhs, const regional_cons<T> &rhs)
 template <typename T> class regional_list {
   friend class regional_cons<T>;
 
-protected:
+private:
   regional_ptr<regional_cons<T>> list_head_;
 
   template <typename RT>
-  regional_list(global_ptr<RT, regional_list<T>> list_head) : list_head_(list_head->list_head_.get()) {}
+  regional_list(memory_region<RT> &mr, regional_list<T> &list_head) : list_head_(list_head.list_head_.get()) {}
 
 public:
-  regional_list() : list_head_() {}
+  template <typename RT> regional_list(memory_region<RT> &mr) : list_head_() {}
 
-  template <typename RT, typename... Args> void prepend(memory_region<RT> &mr, Args &&...args) {
-    list_head_ = mr->create(std::forward<Args>(args)...);
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, memory_region<RT> &, Args...>
+  regional_list(memory_region<RT> &mr, Args &&...args) : list_head_() {
+    this->prepend(mr, std::forward<Args>(args)...);
+  }
+
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, memory_region<RT> &, Args...>
+  void prepend(memory_region<RT> &mr, Args &&...args) {
+    mr.create_at(list_head_, *this, std::forward<Args>(args)...);
   }
 
   T *head() { return !list_head_ ? nullptr : &list_head_->head(); }

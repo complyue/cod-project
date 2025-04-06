@@ -123,6 +123,8 @@ private:
   regional_str(size_t length) : length_(length), data_() {}
 
 public:
+  regional_str() : length_(0), data_() {}
+
   size_t length() const { return length_; }
   std::byte *data() { return data_.get(); }
   const std::byte *data() const { return data_.get(); }
@@ -197,12 +199,13 @@ protected:
   size_t ro_offset_;
 
   template <typename... Args>
+    requires std::constructible_from<RT, memory_region<RT> &, Args...>
   memory_region(size_t capacity, Args &&...args)
       : rt_uuid_(RT::TYPE_UUID), capacity_(capacity), occupation_(sizeof(memory_region<RT>)) {
-    void *ptr = allocate(sizeof(RT), alignof(RT));
+    RT *ptr = allocate<RT>();
     if (!ptr)
       throw std::bad_alloc();
-    std::construct_at(ptr, this, std::forward<Args>(args)...);
+    std::construct_at(ptr, *this, std::forward<Args>(args)...);
     ro_offset_ = reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this);
   }
 
@@ -252,21 +255,45 @@ public:
   }
 
   template <typename VT, typename... Args>
-    requires std::constructible_from<VT, Args...>
-  global_ptr<VT, RT> create(Args &&...args) {
-    void *ptr = this->allocate<VT>();
+    requires std::constructible_from<VT, memory_region<RT> &, Args...>
+  void create_at(regional_ptr<VT> &rp, Args &&...args) {
+    assert(reinterpret_cast<intptr_t(&rp)> reinterpret_cast<intptr_t>(this) &&
+           reinterpret_cast < intptr_t(&rp) < reinterpret_cast<intptr_t>(this) + capacity_);
+    VT *ptr = this->allocate<VT>();
     if (!ptr)
       throw std::bad_alloc();
-    std::construct_at(ptr, std::forward<Args>(args)...);
+    std::construct_at(ptr, *this, std::forward<Args>(args)...);
+    rp.offset_ = reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(&rp);
+  }
+
+  template <typename VT, typename... Args>
+    requires std::constructible_from<VT, RT, Args...>
+  global_ptr<VT, RT> create(Args &&...args) {
+    VT *ptr = this->allocate<VT>();
+    if (!ptr)
+      throw std::bad_alloc();
+    std::construct_at(ptr, *this, std::forward<Args>(args)...);
     return global_ptr<VT, RT>( //
         *this,                 //
         reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
 
+  void afford_at(regional_str &rs, std::string_view &str) {
+    afford_at(rs, str.size(), reinterpret_cast<const std::byte *>(str.data()));
+  }
+  void afford_at(regional_str &rs, const size_t length, const std::byte *data) {
+    std::byte *p_data = this->allocate<std::byte>(length);
+    if (!p_data)
+      throw std::bad_alloc();
+    std::memcpy(p_data, data, length);
+    new (&rs) regional_str(length);
+    rs.data_.offset_ = reinterpret_cast<intptr_t>(p_data) - //
+                       reinterpret_cast<intptr_t>(&(rs.data_.offset_));
+  }
+
   global_ptr<regional_str, RT> afford(std::string_view &str) {
     return afford(str.size(), reinterpret_cast<const std::byte *>(str.data()));
   }
-
   global_ptr<regional_str, RT> afford(const size_t length, const std::byte *data) {
     std::byte *p_data = this->allocate<std::byte>(length);
     if (!p_data)

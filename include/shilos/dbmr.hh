@@ -163,6 +163,7 @@ public:
 
   // creation ctor
   template <typename... Args>
+    requires std::constructible_from<RT, memory_region<RT> &, Args...>
   static DBMR<RT> create(const std::string &file_name, size_t free_capacity, Args &&...args) {
     int fd = open(file_name.c_str(), O_CREAT | O_RDWR, 0644);
     if (fd == -1) {
@@ -182,7 +183,7 @@ public:
     }
 
     auto *region = static_cast<memory_region<RT> *>(mapped_addr);
-    std::construct_at(region, file_size, std::forward<Args>(args)...);
+    new (region) memory_region<RT>(file_size, std::forward<Args>(args)...);
 
     return DBMR<RT>(file_name, fd, region);
   }

@@ -6,18 +6,22 @@ namespace cod::project {
 
 using namespace shilos;
 
+struct Version {
+  int16_t major, minor, patch;
+};
+
 class VersionConstraint {
 public:
   enum class Type { Exact, Least, Below };
 
   Type type_;
-  int16_t version_[3];
+  Version version_;
 };
 
 class CodDep {
 public:
-  regional_ptr<UUID> uuid_;
-  regional_ptr<regional_str> name_;
+  UUID uuid_;
+  regional_str name_;
   regional_list<VersionConstraint> constraints_;
 };
 
@@ -27,29 +31,42 @@ public:
 
 protected:
   UUID uuid_;
-  regional_ptr<regional_str> name_;
-  int16_t version_[3];
+  regional_str name_;
+  Version version_;
 
-  regional_ptr<regional_list<CodDep>> deps_;
+  regional_list<CodDep> deps_;
 
 public:
-  template <typename RT>                                     //
-  CodProject(memory_region<RT> *mr, std::string_view name)   //
-      : uuid_(), name_(mr->afford(name)), version_{1, 0, 0}, //
-        deps_(mr->template create<regional_list<CodDep>>()){};
+  template <typename RT>                                   //
+  CodProject(memory_region<RT> &mr, std::string_view name) //
+      : uuid_(), version_{1, 0, 0}, deps_(mr) {
+    mr.afford_at(name_, name);
+  };
 
   template <typename RT, typename... Args>
     requires(std::is_constructible_v<VersionConstraint, Args> && ...)        //
-  CodProject(memory_region<RT> *mr, const UUID &uuid, std::string_view name, //
-             const int16_t version[3], Args &&...deps)
-      : uuid_(uuid), name_(mr->afford(name)),         //
-        version_{version[0], version[1], version[2]}, //
-        deps_(mr->template create<regional_list<CodDep>>()) {
-    (..., deps_->prepend(mr, std::forward<Args>(deps)));
+  CodProject(memory_region<RT> &mr, const UUID &uuid, std::string_view name, //
+             const Version version, Args &&...deps)
+      : uuid_(uuid), version_(version), deps_(mr) {
+    mr.afford_at(name_, name);
+    (..., deps_.prepend(mr, std::forward<Args>(deps)));
   };
 
-  regional_str &name() { return *name_; }
-  const regional_str &name() const { return *name_; }
+  UUID uuid() const { return uuid_; }
+  Version version() const { return version_; }
+
+  regional_str &name() { return name_; }
+  const regional_str &name() const { return name_; }
+
+  regional_list<CodDep> &deps() { return deps_; }
+  const regional_list<CodDep> &deps() const { return deps_; }
+
+  template <typename RT, typename... Args> void addDep(memory_region<RT> &mr, CodDep dep) {
+    //
+    deps_.prepend(mr, dep);
+  }
+
+  //
 };
 
 } // namespace cod::project
