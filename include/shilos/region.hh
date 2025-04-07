@@ -256,7 +256,7 @@ public:
 
   template <typename VT, typename... Args>
     requires std::constructible_from<VT, memory_region<RT> &, Args...>
-  void create_at(regional_ptr<VT> &rp, Args &&...args) {
+  void create_to(regional_ptr<VT> &rp, Args &&...args) {
     assert(reinterpret_cast<intptr_t(&rp)> reinterpret_cast<intptr_t>(this) &&
            reinterpret_cast < intptr_t(&rp) < reinterpret_cast<intptr_t>(this) + capacity_);
     VT *ptr = this->allocate<VT>();
@@ -278,10 +278,10 @@ public:
         reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
 
-  void afford_at(regional_str &rs, std::string_view &str) {
-    afford_at(rs, str.size(), reinterpret_cast<const std::byte *>(str.data()));
+  void afford_to(regional_str &rs, std::string_view &str) {
+    afford_to(rs, str.size(), reinterpret_cast<const std::byte *>(str.data()));
   }
-  void afford_at(regional_str &rs, const size_t length, const std::byte *data) {
+  void afford_to(regional_str &rs, const size_t length, const std::byte *data) {
     std::byte *p_data = this->allocate<std::byte>(length);
     if (!p_data)
       throw std::bad_alloc();
