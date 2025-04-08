@@ -62,8 +62,7 @@ public:
   const regional_ptr<regional_list<CodDep>> &deps() const { return deps_; }
 
   template <typename RT, typename... Args> void addDep(memory_region<RT> &mr, CodDep dep) {
-    //
-    append_to(deps_, mr, dep);
+    append_to(deps_, mr, dep); //
   }
 
   //
