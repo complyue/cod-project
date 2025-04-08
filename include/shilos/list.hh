@@ -66,6 +66,11 @@ public:
   }
 };
 
+// Forward declaration of the pointer version of <=> operator
+template <typename T>
+auto operator<=>(const regional_ptr<regional_list<T>> &lhs, const regional_ptr<regional_list<T>> &rhs)
+  requires std::three_way_comparable<T>;
+
 template <typename T>
 auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
   requires std::three_way_comparable<T>
@@ -73,8 +78,10 @@ auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
   const std::strong_ordering r = lhs.head() <=> rhs.head();
   if (r != std::strong_ordering::equal)
     return r;
-  const regional_list<T> *lhs_next = lhs.next().get();
-  const regional_list<T> *rhs_next = rhs.next().get();
+
+  const regional_ptr<regional_list<T>> &lhs_next = lhs.next();
+  const regional_ptr<regional_list<T>> &rhs_next = rhs.next();
+
   if (!lhs_next) {
     if (!rhs_next)
       return std::strong_ordering::equal;
@@ -83,7 +90,31 @@ auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
   } else if (!rhs_next) {
     return std::strong_ordering::greater;
   }
-  return *lhs_next <=> *rhs_next;
+
+  return lhs_next <=> rhs_next;
+}
+
+template <typename T>
+auto operator<=>(const regional_ptr<regional_list<T>> &lhs, const regional_ptr<regional_list<T>> &rhs)
+  requires std::three_way_comparable<T>
+{
+  if (!lhs) {
+    if (!rhs)
+      return std::strong_ordering::equal;
+    else
+      return std::strong_ordering::less;
+  } else if (!rhs) {
+    return std::strong_ordering::greater;
+  }
+
+  const std::strong_ordering r = lhs->head() <=> rhs->head();
+  if (r != std::strong_ordering::equal)
+    return r;
+
+  const regional_ptr<regional_list<T>> &lhs_next = lhs->next();
+  const regional_ptr<regional_list<T>> &rhs_next = rhs->next();
+
+  return lhs_next <=> rhs_next;
 }
 
 template <typename RT, typename T, typename... Args>
