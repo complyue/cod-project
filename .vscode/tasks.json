@@ -9,10 +9,10 @@
             "command": "cmake",
             "args": [
                 "--build",
-                "."
+                "./build"
             ],
             "options": {
-                "cwd": "${workspaceFolder}/build"
+                "cwd": "${workspaceFolder}"
             },
             "group": {
                 "kind": "build",
