@@ -110,10 +110,19 @@ private:
   size_t length_;
   regional_ptr<std::byte> data_;
 
+  // internal ctor to be used by arbitrary memory_region<RT>
   regional_str(size_t length) : length_(length), data_() {}
 
 public:
   regional_str() : length_(0), data_() {}
+
+  template <typename RT>
+  regional_str(memory_region<RT> &mr, const std::string &str) : regional_str(mr, std::string_view(str)) {}
+  template <typename RT> regional_str(memory_region<RT> &mr, std::string_view str) : length_(str.length()), data_() {
+    std::byte *p_data = mr.template allocate<std::byte>(str.length());
+    std::memcpy(p_data, str.data(), str.length());
+    this->data_ = p_data;
+  }
 
   size_t length() const { return length_; }
   std::byte *data() { return data_.get(); }
