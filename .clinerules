@@ -1,1 +1,3 @@
 This workspace is an external project of llvm-project, the full llvm-project codebase lives at `/llvm-project/` folder, you would call tools to have vscode show relevant code locations to the user, when that could help the user to understand precise details wrt LLVM's internal functionalities, mind to verify file content at the shown location is really the stuff you think.
+
+This project is configured for C++20 standard, prefer c++20 specific language features over older approaches for any coding goal.
