@@ -135,6 +135,60 @@ public:
   regional_ptr<regional_cons<T>> &head() { return head_; }
 
   size_t size() const { return head_ ? head_->size() : 0; }
+
+  class iterator {
+    regional_cons<T> *current_;
+
+  public:
+    iterator(regional_cons<T> *current) : current_(current) {}
+
+    T &operator*() { return current_->value(); }
+    T *operator->() { return &current_->value(); }
+
+    iterator &operator++() {
+      current_ = current_->next().get();
+      return *this;
+    }
+
+    iterator operator++(int) {
+      iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator==(const iterator &other) const { return current_ == other.current_; }
+    bool operator!=(const iterator &other) const { return current_ != other.current_; }
+  };
+
+  class const_iterator {
+    const regional_cons<T> *current_;
+
+  public:
+    const_iterator(const regional_cons<T> *current) : current_(current) {}
+
+    const T &operator*() const { return current_->value(); }
+    const T *operator->() const { return &current_->value(); }
+
+    const_iterator &operator++() {
+      current_ = current_->next().get();
+      return *this;
+    }
+
+    const_iterator operator++(int) {
+      const_iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator==(const const_iterator &other) const { return current_ == other.current_; }
+    bool operator!=(const const_iterator &other) const { return current_ != other.current_; }
+  };
+
+  iterator begin() { return iterator(head_.get()); }
+  iterator end() { return iterator(nullptr); }
+
+  const_iterator begin() const { return const_iterator(head_.get()); }
+  const_iterator end() const { return const_iterator(nullptr); }
 };
 
 template <typename T>
