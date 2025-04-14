@@ -45,8 +45,8 @@ public:
     data_[8] = (data_[8] & 0x3F) | 0x80;
   }
 
-  // Construct from string
-  constexpr UUID(const std::string &str) {
+  // Construct from string_view
+  explicit constexpr UUID(std::string_view str) {
     if (str.size() != 36)
       throw std::invalid_argument("Invalid UUID string size");
     size_t ui = 0;
@@ -78,6 +78,11 @@ public:
 
   auto operator<=>(const UUID &other) const = default;
   bool operator==(const UUID &other) const = default;
+
+  friend std::ostream &operator<<(std::ostream &os, const UUID &uuid) { return os << uuid.to_string(); }
+
+  static UUID parse(const std::string &str) { return UUID(std::string_view(str)); }
+  static UUID parse(std::string_view str) { return UUID(str); }
 };
 
 } // namespace shilos
