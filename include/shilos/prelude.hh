@@ -5,6 +5,7 @@
 #include <concepts>
 #include <cstring>
 #include <map>
+#include <stdexcept>
 #include <string_view>
 #include <variant>
 #include <vector>
@@ -25,6 +26,32 @@ template <typename RT>
 class memory_region;
 
 namespace yaml {
+
+// YAML exception hierarchy
+class Exception : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
+
+class ParseError : public Exception {
+public:
+  using Exception::Exception;
+};
+
+class TypeError : public Exception {
+public:
+  using Exception::Exception;
+};
+
+class MissingFieldError : public Exception {
+public:
+  using Exception::Exception;
+};
+
+class RangeError : public Exception {
+public:
+  using Exception::Exception;
+};
 
 struct Node;
 
@@ -61,9 +88,25 @@ std::string format_yaml(const Node &node);
 
 template <typename T, typename RT>
 concept YamlConvertible = requires(T t, const yaml::Node &node, memory_region<RT> &mr, regional_ptr<T> &to_ptr) {
-  { t.to_yaml() } -> std::same_as<yaml::Node>;
+  { t.to_yaml() } noexcept -> std::same_as<yaml::Node>;
   { T::from_yaml(mr, node) } -> std::same_as<global_ptr<T, RT>>;
   { T::from_yaml(mr, node, to_ptr) } -> std::same_as<void>;
+
+  requires requires {
+    []() {
+      try {
+        memory_region<RT> mr;
+        yaml::Node node;
+        regional_ptr<T> to_ptr;
+        auto ptr = T::from_yaml(mr, node);
+        T::from_yaml(mr, node, to_ptr);
+      } catch (const yaml::Exception &) {
+        // Expected
+      } catch (...) {
+        static_assert(false, "Both from_yaml() overloads must only throw yaml::Exception or derived types");
+      }
+    };
+  };
 };
 
 } // namespace yaml
