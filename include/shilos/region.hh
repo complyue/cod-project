@@ -1,28 +1,18 @@
 #pragma once
 
+#include "./prelude.hh"
+
 #include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
-#include <memory>
-#include <new>
 #include <stdexcept>
-#include <utility>
-
-#include "./uuid.hh"
 
 namespace shilos {
 
 using std::intptr_t;
 using std::size_t;
-
-template <typename RT>
-concept ValidMemRegionRootType = requires {
-  { RT::TYPE_UUID } -> std::same_as<const UUID &>;
-};
-
-template <typename VT, typename RT> class global_ptr;
 
 //
 // users should always update a regional_ptr<F> field of a record object of type T,
