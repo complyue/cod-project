@@ -33,7 +33,7 @@ class memory_region {
 3. Field Type Considerations
 
    - Members without internal pointers are considerted "bits types", they should be treated like plain C++ types
-   - Members with internal pointers must be of regional types themselves
+   - Members with internal pointers must be of regional types themselves, or the owning regional type is considered ill-formed, so forth for any outer regional type
 
 4. YAML Integration:
 
