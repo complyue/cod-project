@@ -34,7 +34,7 @@ protected:
   regional_str name_;
   Version version_;
 
-  regional_ptr<regional_list<CodDep>> deps_;
+  regional_list<CodDep> deps_;
 
 public:
   template <typename RT>                                   //
@@ -58,8 +58,8 @@ public:
   regional_str &name() { return name_; }
   const regional_str &name() const { return name_; }
 
-  regional_ptr<regional_list<CodDep>> &deps() { return deps_; }
-  const regional_ptr<regional_list<CodDep>> &deps() const { return deps_; }
+  regional_list<CodDep> &deps() { return deps_; }
+  const regional_list<CodDep> &deps() const { return deps_; }
 
   template <typename RT, typename... Args> void addDep(memory_region<RT> &mr, CodDep dep) {
     append_to(deps_, mr, dep); //

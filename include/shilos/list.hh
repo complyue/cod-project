@@ -12,25 +12,25 @@
 
 namespace shilos {
 
-template <typename T> class regional_list {
+template <typename T> class regional_cons {
 private:
-  T head_;
-  regional_ptr<regional_list<T>> next_, tail_;
+  T value_;
+  regional_ptr<regional_cons<T>> next_, tail_;
 
 public:
   template <typename RT, typename... Args>
-  friend void append_to(regional_ptr<regional_list<T>> &rp, memory_region<RT> &mr, Args &&...args);
+  friend void append_to(regional_ptr<regional_cons<T>> &rp, memory_region<RT> &mr, Args &&...args);
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
-  regional_list(memory_region<RT> &mr, Args &&...args) : head_(std::forward<Args>(args)...) {
+  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(std::forward<Args>(args)...) {
     tail_ = this;
   }
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
-  global_ptr<regional_list<T>, RT> prepend(memory_region<RT> &mr, Args &&...args) {
-    auto gp = mr.template create<regional_list<T>>(std::forward(args)...);
+  global_ptr<regional_cons<T>, RT> prepend(memory_region<RT> &mr, Args &&...args) {
+    auto gp = mr.template create<regional_cons<T>>(std::forward(args)...);
     gp->next_ = this;
     gp->tail_ = tail().get();
     return gp;
@@ -44,23 +44,23 @@ public:
     tail_ = tail_->next_.get();
   }
 
-  T &head() { return head_; }
-  const T &head() const { return head_; }
+  T &value() { return value_; }
+  const T &value() const { return value_; }
 
-  regional_ptr<regional_list<T>> &next() { return next_; }
-  const regional_ptr<regional_list<T>> &next() const { return next_; }
+  regional_ptr<regional_cons<T>> &next() { return next_; }
+  const regional_ptr<regional_cons<T>> &next() const { return next_; }
 
-  regional_ptr<regional_list<T>> &tail() {
+  regional_ptr<regional_cons<T>> &tail() {
     assert(tail_); // tail should at least point to self, never null
     while (tail_->next_)
       tail_ = tail_->next_.get();
     return tail_;
   }
-  const regional_ptr<regional_list<T>> &tail() const { return const_cast<regional_list<T>>(this)->tail(); }
+  const regional_ptr<regional_cons<T>> &tail() const { return const_cast<regional_cons<T>>(this)->tail(); }
 
   size_t size() const {
     size_t count = 1;
-    for (regional_list<T> *l = this; l; l = l->next_.get())
+    for (regional_cons<T> *l = this; l; l = l->next_.get())
       count++;
     return count;
   }
@@ -68,19 +68,19 @@ public:
 
 // Forward declaration of the pointer version of <=> operator
 template <typename T>
-auto operator<=>(const regional_ptr<regional_list<T>> &lhs, const regional_ptr<regional_list<T>> &rhs)
+auto operator<=>(const regional_ptr<regional_cons<T>> &lhs, const regional_ptr<regional_cons<T>> &rhs)
   requires std::three_way_comparable<T>;
 
 template <typename T>
-auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
+auto operator<=>(const regional_cons<T> &lhs, const regional_cons<T> &rhs)
   requires std::three_way_comparable<T>
 {
-  const std::strong_ordering r = lhs.head() <=> rhs.head();
+  const std::strong_ordering r = lhs.value() <=> rhs.value();
   if (r != std::strong_ordering::equal)
     return r;
 
-  const regional_ptr<regional_list<T>> &lhs_next = lhs.next();
-  const regional_ptr<regional_list<T>> &rhs_next = rhs.next();
+  const regional_ptr<regional_cons<T>> &lhs_next = lhs.next();
+  const regional_ptr<regional_cons<T>> &rhs_next = rhs.next();
 
   if (!lhs_next) {
     if (!rhs_next)
@@ -95,7 +95,7 @@ auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
 }
 
 template <typename T>
-auto operator<=>(const regional_ptr<regional_list<T>> &lhs, const regional_ptr<regional_list<T>> &rhs)
+auto operator<=>(const regional_ptr<regional_cons<T>> &lhs, const regional_ptr<regional_cons<T>> &rhs)
   requires std::three_way_comparable<T>
 {
   if (!lhs) {
@@ -107,24 +107,51 @@ auto operator<=>(const regional_ptr<regional_list<T>> &lhs, const regional_ptr<r
     return std::strong_ordering::greater;
   }
 
-  const std::strong_ordering r = lhs->head() <=> rhs->head();
+  const std::strong_ordering r = lhs->value() <=> rhs->value();
   if (r != std::strong_ordering::equal)
     return r;
 
-  const regional_ptr<regional_list<T>> &lhs_next = lhs->next();
-  const regional_ptr<regional_list<T>> &rhs_next = rhs->next();
+  const regional_ptr<regional_cons<T>> &lhs_next = lhs->next();
+  const regional_ptr<regional_cons<T>> &rhs_next = rhs->next();
 
   return lhs_next <=> rhs_next;
 }
 
+template <typename T> class regional_list {
+private:
+  regional_ptr<regional_cons<T>> head_;
+
+public:
+  regional_list() : head_() {}
+
+  template <typename RT> regional_list(memory_region<RT> &mr) : head_() {}
+
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, memory_region<RT> &, Args...>
+  regional_list(memory_region<RT> &mr, Args &&...args) : head_() {
+    mr.create_to(head_, std::forward<Args>(args)...);
+  }
+
+  regional_ptr<regional_cons<T>> &head() { return head_; }
+
+  size_t size() const { return head_ ? head_->size() : 0; }
+};
+
+template <typename T>
+auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
+  requires std::three_way_comparable<T>
+{
+  return lhs.head() <=> rhs.head();
+}
+
 template <typename RT, typename T, typename... Args>
   requires std::constructible_from<T, memory_region<RT> &, Args...>
-void append_to(regional_ptr<regional_list<T>> &rp, memory_region<RT> &mr, Args &&...args) {
-  regional_list<T> *const p = rp.get();
+void append_to(regional_list<T> &rp, memory_region<RT> &mr, Args &&...args) {
+  regional_cons<T> *const p = rp.get();
   if (!p) {
-    mr.template create_to<regional_list<T>>(rp, std::forward(args)...);
+    mr.template create_to<regional_cons<T>>(rp, std::forward(args)...);
   } else {
-    mr.template create_to<regional_list<T>>(&(p->tail()->next_), std::forward(args)...);
+    mr.template create_to<regional_cons<T>>(&(p->tail()->next_), std::forward(args)...);
     rp->next_ = p;
     rp->tail_ = p->tail().get();
   }
@@ -132,9 +159,9 @@ void append_to(regional_ptr<regional_list<T>> &rp, memory_region<RT> &mr, Args &
 
 template <typename RT, typename T, typename... Args>
   requires std::constructible_from<T, memory_region<RT> &, Args...>
-void prepend_to(regional_ptr<regional_list<T>> &rp, memory_region<RT> &mr, Args &&...args) {
-  regional_list<T> *const p = rp.get();
-  mr.template create_to<regional_list<T>>(rp, std::forward(args)...);
+void prepend_to(regional_list<T> &rp, memory_region<RT> &mr, Args &&...args) {
+  regional_cons<T> *const p = rp.get();
+  mr.template create_to<regional_cons<T>>(rp, std::forward(args)...);
   if (p) {
     rp->next_ = p;
     rp->tail_ = p->tail().get();
