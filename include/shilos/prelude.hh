@@ -147,6 +147,13 @@ concept YamlConvertible = requires(T t, const yaml::Node &node, memory_region<RT
   };
 };
 
+// Default implementation of the second from_yaml in terms of the first
+template <typename T, typename RT>
+  requires YamlConvertible<T, RT>
+void from_yaml(memory_region<RT>& mr, const yaml::Node& node, regional_ptr<T>& to_ptr) {
+  to_ptr = T::from_yaml(mr, node);
+}
+
 } // namespace yaml
 
 } // namespace shilos

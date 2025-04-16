@@ -1,0 +1,1 @@
+When handling `global_ptr` or `regional_ptr`, immediately reference `design/MemoryRegionAndRegionalTypes.md` and adhere precisely to all specified protocols, constraints, and best practices outlined in the document. Ensure full compliance with memory management guidelines, type safety rules, and region-specific access patterns without deviation.

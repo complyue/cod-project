@@ -83,12 +83,6 @@ public:
 
     return dep;
   }
-
-  template <typename RT>
-  static void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodDep> &to_ptr) {
-    auto dep = from_yaml(mr, node);
-    to_ptr = dep;
-  }
 };
 
 class CodPackage {
@@ -262,12 +256,6 @@ public:
     }
 
     return project;
-  }
-
-  template <typename RT>
-  static void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodPackage> &to_ptr) {
-    auto project = from_yaml(mr, node);
-    to_ptr = project;
   }
 };
 

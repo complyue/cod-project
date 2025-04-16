@@ -177,31 +177,14 @@ public:
       if (!std::holds_alternative<yaml::Sequence>(node.value)) {
         throw yaml::TypeError("Expected Sequence for regional_list");
       }
-
       auto list = mr.template create<regional_list<T>>();
       const auto &seq = std::get<yaml::Sequence>(node.value);
+      regional_ptr<regional_cons<T>> *tail = list->head_.get();
       for (const auto &item : seq) {
-        append_to(*list, mr, T::from_yaml(mr, item));
+        T::from_yaml(mr, item, *tail);
+        tail = tail->next_.get();
       }
       return list;
-    }
-
-    template <typename RT>
-      requires yaml::YamlConvertible<T, RT>
-    static void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<regional_list<T>> &to_ptr) {
-      if (!std::holds_alternative<yaml::Sequence>(node.value)) {
-        throw yaml::TypeError("Expected Sequence for regional_list");
-      }
-
-      mr.template create_to<regional_list<T>>(to_ptr);
-      const auto &seq = std::get<yaml::Sequence>(node.value);
-      for (const auto &item : seq) {
-        if constexpr (yaml::YamlConvertible<T, RT>) {
-          append_to(*to_ptr, mr, T::from_yaml(mr, item));
-        } else {
-          throw yaml::TypeError("List element type is not YamlConvertible");
-        }
-      }
     }
   };
 
