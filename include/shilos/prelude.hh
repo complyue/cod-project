@@ -80,6 +80,44 @@ struct Node {
   explicit Node(const char *s) : value(std::string(s)) {}
   explicit Node(const Sequence &seq) : value(seq) {}
   explicit Node(const Map &map) : value(map) {}
+
+  template<typename T>
+  T as() const {
+    if constexpr (std::is_same_v<T, std::string>) {
+      if (auto s = std::get_if<std::string>(&value)) {
+        return *s;
+      }
+      throw TypeError("Expected string value");
+    }
+    else if constexpr (std::is_same_v<T, int64_t>) {
+      if (auto i = std::get_if<int64_t>(&value)) {
+        return *i;
+      }
+      throw TypeError("Expected integer value");
+    }
+    throw TypeError("Unsupported type conversion");
+  }
+
+  const Node& operator[](const std::string& key) const {
+    if (auto map = std::get_if<Map>(&value)) {
+      return map->at(key);
+    }
+    throw TypeError("Expected map value");
+  }
+
+  Map::const_iterator find(const std::string& key) const {
+    if (auto map = std::get_if<Map>(&value)) {
+      return map->find(key);
+    }
+    throw TypeError("Expected map value");
+  }
+
+  Map::const_iterator end() const {
+    if (auto map = std::get_if<Map>(&value)) {
+      return map->end();
+    }
+    throw TypeError("Expected map value");
+  }
 };
 
 void format_yaml(std::ostream &os, const Node &node, int indent = 0);
