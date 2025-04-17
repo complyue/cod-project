@@ -1,80 +1,119 @@
-# Memory Region and Regional Types Design
+# Memory Region and Regional Types Specification
 
-## Core Design Principles
+## Core Requirements
 
-### Memory Region Abstraction
+### Memory Region Interface
 
 ```cpp
 template <typename RT>
 class memory_region {
-  // Core responsibilities:
-  // - Type-aware allocation and construction services
-  // - Atomic resource management (no individual object destruction)
-  // - Pointer conversion utilities between regional and global references
-  // - Ensures all contained objects follow regional type constraints
+  // Core functionality:
+  // - Type-aware allocation and construction
+  // - Atomic resource management (objects cannot be individually destroyed)
+  // - Conversion between regional_ptr and global_ptr
+  // - Enforcement of regional type constraints
 };
 ```
 
-### Regional Type Requirements
+### Regional Type Constraints
 
-1. Construction Semantics:
-   - Mandatory constructor parameter: `memory_region&` reference
-   - Nullary constructors are explicitly prohibited
-   - All construction must occur within a memory_region context
+All regional types must satisfy these constraints. Specialized types (regional_str, regional_list) implement additional container functionality while maintaining compliance.
 
-2. Lifetime Management:
-   - Copy and move operations are strictly forbidden
-   - Destruction follows region-wide atomic pattern:
-     * No individual object destruction allowed
-     * Complete object graph released when region is destroyed
-     * Root value initiates cascading resource release
-   - External resource ownership should be minimized
-   - Object lifetime is exactly scoped to containing memory_region
+1. Field Type Constraints:
 
-3. Field Type Constraints:
-   - "Bits types" (members without internal pointers):
-     * Treated as plain C++ types
-     * No special regional constraints apply
-   - Members with internal pointers must:
-     * Be regional types themselves
-     * Violation makes containing type ill-formed
-     * Propagates to any outer regional types
+   - Bits types (member types with neither dtor nor internal pointers):
+     - Follow standard C++ type rules
+     - No additional constraints
+   - Members cannot contain external pointers of any kind
+   - Members containing internal pointers must:
+     - Use only `regional_ptr` (raw pointers including `global_ptr` are prohibited)
+     - Point only to bits types or compliant regional types
 
-4. YAML Serialization Protocol:
-   - Required implementations:
-     * `to_yaml()` for serialization
-     * Two `from_yaml` variants:
-       1. (Mandatory) Returns `global_ptr`
-       2. (Optional) Assigns to given `regional_ptr` (default provided by `YamlConvertible`)
-   - Strict type safety enforced during conversions
+2. Construction Rules:
 
-5. Pointer Semantics and Safety:
-   - `regional_ptr` (intra-region references):
-     * Optimized for temporary usage (rvalue semantics)
-     * Persistent storage prohibited (lvalue usage invalid)
-     * Violations trigger immediate memory access faults
-   - `global_ptr` (cross-region references):
-     * Safe but with 2x space overhead
-     * Preferred for persistent references
+   - Must implement at least one constructor taking `memory_region&`
+   - When arguments exist, `memory_region&` must be first parameter
+   - Default constructors are allowed only when it:
+     - Initialize all `regional_ptr` members to null
+     - Does no allocation
+   - Non-default construction:
+     - Must use region-aware constructor with `memory_region&` passed as first parameter
+     - All allocations must go through provided `memory_region&`
+
+3. Lifetime Rules:
+
+   - Copy and move construction and assignment are prohibited for regional types (though allowed for bits types)
+   - Individual destruction is prohibited for both bits types and regional types
+     - Individual objects cannot be destroyed
+   - Destruction occurs atomically at region level:
+     - Entire object graph released with region
+     - The root type (`RT`) of `memory_region<RT>` is responsible for resource acquisition and release
+   - Non-root bits types and regional types should avoid owning external resources
+
+4. YAML Serialization:
+
+   - Required:
+     - `to_yaml()` serialization method
+     - Two `from_yaml` forms:
+       1. Returns `global_ptr` (required)
+       2. Assigns to `regional_ptr` (optional, default from `YamlConvertible`)
+   - Type safety strictly enforced
+
+5. Pointer Rules:
+   - `regional_ptr` (intra-region):
+     - Designed for region-local storage (lvalue)
+     - Relative to its own memory address - rvalue semantics is illegal
+   - `global_ptr` (cross-region):
+     - Safe but with 2x space cost
+     - Lifetime bound to the referenced `memory_region`
    - Raw pointers:
-     * Permitted but bypass safety mechanisms
-     * Risks include:
-       - Dangling references
-       - Type safety violations
-       - Memory access faults
+     - Raw pointers to regional memory can be passed around in the program, but not allowed to be stored in region memory
+   - Soundness:
+     - The root type (`RT`) of `memory_region<RT>` should decide and define memory and type safety semantics
+     - The simplest strategy is to not support reuse of region memory, thus regional objects will never be deallocated nor change type
+     - If the root type does support memory reuse, e.g. support garbage collection, it should clearly define lifetime rules of the object graph it would manage, and type-safety strategies to follow by the memory_region user, in separate specifications.
 
-## Design Architecture
+## Implementation Details
 
-### YAML Integration Specification
+### Specialized Types
+
+The system implements two specialized types providing common data structures while satisfying all constraints:
+
+1. **regional_str** - String type that:
+
+   - Stores string data in region
+   - Satisfies all constraints:
+     - Constructed via memory_region
+     - No copying/moving
+     - Correct YAML serialization
+   - Efficient operations:
+     - Length/data access
+     - Comparison (<=>, ==)
+     - std::string_view conversion
+
+2. **regional_list** - Linked list that:
+   - Implements linked list with both ends tracked
+   - Satisfies all constraints:
+     - Constructed via memory_region
+     - No copying/moving
+     - Correct YAML serialization
+   - Complete container interface:
+     - Iteration (begin()/end())
+     - Size tracking
+     - Comparison (<=>)
+   - Efficient operations:
+     - prepend_to/append_to
+
+### YAML Integration
 
 ```cpp
 template <typename T, typename RT>
-concept YamlConvertible = requires(T t, const yaml::Node &node, 
-                                 memory_region<RT> &mr, 
+concept YamlConvertible = requires(T t, const yaml::Node &node,
+                                 memory_region<RT> &mr,
                                  regional_ptr<T> &to_ptr) {
   // Serialization requirement
   { t.to_yaml() } noexcept -> std::same_as<yaml::Node>;
-  
+
   // Deserialization variants
   { T::from_yaml(mr, node) } -> std::same_as<global_ptr<T, RT>>;
   { T::from_yaml(mr, node, to_ptr) } -> std::same_as<void>;
@@ -91,7 +130,7 @@ concept YamlConvertible = requires(T t, const yaml::Node &node,
       } catch (const yaml::Exception &) {
         // Expected behavior
       } catch (...) {
-        static_assert(false, 
+        static_assert(false,
           "from_yaml() must only throw yaml::Exception or derived types");
       }
     };
