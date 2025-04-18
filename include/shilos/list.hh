@@ -233,9 +233,9 @@ void append_to(regional_list<T> &rp, memory_region<RT> &mr, Args &&...args) {
   if (!p) {
     mr.template create_to<regional_cons<T>>(rp, std::forward(args)...);
   } else {
-    mr.template create_to<regional_cons<T>>(&(p->tail()->next_), std::forward(args)...);
-    rp->next_ = p;
-    rp->tail_ = p->tail().get();
+    auto &old_tail = p->tail().next_;
+    mr.template create_to<regional_cons<T>>(&old_tail, std::forward(args)...);
+    rp->tail_ = old_tail->tail().get();
   }
 }
 
