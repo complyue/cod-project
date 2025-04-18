@@ -118,6 +118,7 @@ public:
 
   template <typename RT>
   regional_str(memory_region<RT> &mr, const std::string &str) : regional_str(mr, std::string_view(str)) {}
+
   template <typename RT> regional_str(memory_region<RT> &mr, std::string_view str) : length_(str.length()), data_() {
     std::byte *p_data = mr.template allocate<std::byte>(str.length());
     std::memcpy(p_data, str.data(), str.length());

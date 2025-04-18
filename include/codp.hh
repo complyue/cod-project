@@ -74,9 +74,7 @@ public:
     if (branches_it != map.end() && std::holds_alternative<yaml::Sequence>(branches_it->second.value)) {
       for (const auto &branch_node : std::get<yaml::Sequence>(branches_it->second.value)) {
         if (std::holds_alternative<std::string>(branch_node.value)) {
-          regional_str branch(mr);
-          mr.afford_to(branch, std::get<std::string>(branch_node.value));
-          append_to(dep->branches_, mr, branch);
+          append_to(dep->branches_, mr, std::get<std::string>(branch_node.value));
         }
       }
     }
