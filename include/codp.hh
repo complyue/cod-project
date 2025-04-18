@@ -93,9 +93,7 @@ protected:
   regional_list<CodDep> deps_;
 
 public:
-  template <typename RT> CodPackage(memory_region<RT> &mr, std::string_view name) : uuid_(), deps_() {
-    mr.afford_to(name_, name);
-  };
+  template <typename RT> CodPackage(memory_region<RT> &mr, std::string_view name) : uuid_(), name_(mr, name), deps_(){};
 
   template <typename RT>
   CodPackage(memory_region<RT> &mr, const UUID &uuid, std::string_view name) : uuid_(uuid), name_(mr, name), deps_(){};
