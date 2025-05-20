@@ -83,7 +83,7 @@ public:
   }
 };
 
-class CodPackage {
+class CodProject {
 public:
   static constexpr UUID TYPE_UUID = UUID("9B27863B-8997-4158-AC34-38512484EDFB");
 
@@ -93,16 +93,16 @@ protected:
   regional_list<CodDep> deps_;
 
 public:
-  template <typename RT> CodPackage(memory_region<RT> &mr, std::string_view name) : uuid_(), name_(mr, name), deps_(){};
+  template <typename RT> CodProject(memory_region<RT> &mr, std::string_view name) : uuid_(), name_(mr, name), deps_(){};
 
   template <typename RT>
-  CodPackage(memory_region<RT> &mr, const UUID &uuid, std::string_view name) : uuid_(uuid), name_(mr, name), deps_(){};
+  CodProject(memory_region<RT> &mr, const UUID &uuid, std::string_view name) : uuid_(uuid), name_(mr, name), deps_(){};
 
   // Deleted special members
-  CodPackage(const CodPackage &) = delete;
-  CodPackage(CodPackage &&) = delete;
-  CodPackage &operator=(const CodPackage &) = delete;
-  CodPackage &operator=(CodPackage &&) = delete;
+  CodProject(const CodProject &) = delete;
+  CodProject(CodProject &&) = delete;
+  CodProject &operator=(const CodProject &) = delete;
+  CodProject &operator=(CodProject &&) = delete;
 
   UUID uuid() const { return uuid_; }
 
@@ -149,9 +149,9 @@ public:
     return node;
   }
 
-  template <typename RT> static global_ptr<CodPackage, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
+  template <typename RT> static global_ptr<CodProject, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
     if (!std::holds_alternative<yaml::Map>(node.value)) {
-      throw yaml::TypeError("Expected mapping for CodPackage");
+      throw yaml::TypeError("Expected mapping for CodProject");
     }
 
     const auto &map = std::get<yaml::Map>(node.value);
@@ -168,7 +168,7 @@ public:
     }
     std::string_view name = std::get<std::string>(name_it->second.value);
 
-    auto project = mr.template create<CodPackage>(uuid, name);
+    auto project = mr.template create<CodProject>(uuid, name);
 
     auto deps_it = map.find("dependencies");
     // several formats for dependencies:
@@ -248,133 +248,6 @@ public:
         }
       } else {
         throw std::runtime_error("Invalid dependencies format - must be sequence or map");
-      }
-    }
-
-    return project;
-  }
-};
-
-class LocalPackage {
-private:
-  UUID uuid_;
-  regional_str name_;
-  regional_str local_path_;
-
-public:
-  template <typename RT>
-  LocalPackage(memory_region<RT> &mr, const UUID &uuid, std::string_view path)
-      : uuid_(uuid), name_(mr), local_path_(mr, path) {}
-
-  template <typename RT>
-  LocalPackage(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view path)
-      : uuid_(uuid), name_(mr, name), local_path_(mr, path) {}
-
-  // Deleted special members
-  LocalPackage(const LocalPackage &) = delete;
-  LocalPackage(LocalPackage &&) = delete;
-  LocalPackage &operator=(const LocalPackage &) = delete;
-  LocalPackage &operator=(LocalPackage &&) = delete;
-
-  const UUID &uuid() const { return uuid_; }
-
-  regional_str &name() { return name_; }
-  const regional_str &name() const { return name_; }
-
-  regional_str &local_path() { return local_path_; }
-  const regional_str &local_path() const { return local_path_; }
-
-  yaml::Node to_yaml() const noexcept {
-    yaml::Node node;
-    auto &map = std::get<yaml::Map>(node.value = yaml::Map{});
-
-    map.emplace("uuid", uuid_.to_string());
-    if (name_.length() > 0) {
-      map.emplace("name", std::string(static_cast<std::string_view>(name_)));
-    }
-    map.emplace("path", std::string(static_cast<std::string_view>(local_path_)));
-
-    return node;
-  }
-
-  template <typename RT> static global_ptr<LocalPackage, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
-    if (!std::holds_alternative<yaml::Map>(node.value)) {
-      throw yaml::TypeError("Expected mapping for LocalPackage");
-    }
-
-    const auto &map = std::get<yaml::Map>(node.value);
-
-    auto uuid_it = map.find("uuid");
-    if (uuid_it == map.end()) {
-      throw yaml::MissingFieldError("Missing 'uuid' field");
-    }
-    UUID uuid(std::get<std::string>(uuid_it->second.value));
-
-    auto path_it = map.find("path");
-    if (path_it == map.end()) {
-      throw yaml::MissingFieldError("Missing 'path' field");
-    }
-    std::string_view path = std::get<std::string>(path_it->second.value);
-
-    auto name_it = map.find("name");
-    if (name_it != map.end()) {
-      std::string_view name = std::get<std::string>(name_it->second.value);
-      return mr.template create<LocalPackage>(uuid, name, path);
-    }
-
-    return mr.template create<LocalPackage>(uuid, path);
-  }
-};
-
-class CodProject {
-private:
-  regional_list<LocalPackage> packages_;
-
-public:
-  template <typename RT> CodProject(memory_region<RT> &mr) : packages_(mr) {}
-
-  // Deleted special members
-  CodProject(const CodProject &) = delete;
-  CodProject(CodProject &&) = delete;
-  CodProject &operator=(const CodProject &) = delete;
-  CodProject &operator=(CodProject &&) = delete;
-
-  template <typename RT> void add_package(memory_region<RT> &mr, const UUID &pkg_id, std::string_view path) {
-    append_to(packages_, mr, pkg_id, path);
-  }
-
-  template <typename RT>
-  void add_package(memory_region<RT> &mr, const UUID &pkg_id, std::string_view name, std::string_view path) {
-    append_to(packages_, mr, pkg_id, name, path);
-  }
-
-  yaml::Node to_yaml() const noexcept {
-    yaml::Node node;
-    auto &map = std::get<yaml::Map>(node.value = yaml::Map{});
-
-    yaml::Node packages_node;
-    auto &packages_seq = std::get<yaml::Sequence>(packages_node.value = yaml::Sequence{});
-    for (const auto &pkg : packages_) {
-      packages_seq.push_back(pkg.to_yaml());
-    }
-    map.emplace("packages", packages_node);
-
-    return node;
-  }
-
-  template <typename RT> static global_ptr<CodProject, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
-    if (!std::holds_alternative<yaml::Map>(node.value)) {
-      throw yaml::TypeError("Expected mapping for CodProject");
-    }
-
-    const auto &map = std::get<yaml::Map>(node.value);
-    auto project = mr.template create<CodProject>();
-
-    auto pkgs_it = map.find("packages");
-    if (pkgs_it != map.end() && std::holds_alternative<yaml::Sequence>(pkgs_it->second.value)) {
-      for (const auto &pkg_node : std::get<yaml::Sequence>(pkgs_it->second.value)) {
-        auto pkg = LocalPackage::from_yaml(mr, pkg_node);
-        append_to(project->packages_, mr, pkg);
       }
     }
 
