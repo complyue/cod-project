@@ -29,7 +29,9 @@ public:
 
     map.emplace("uuid", uuid_.to_string());
     map.emplace("name", std::string(static_cast<std::string_view>(name_)));
-    map.emplace("repo_url", std::string(static_cast<std::string_view>(repo_url_)));
+    if (!repo_url_.empty()) {
+      map.emplace("repo_url", std::string(static_cast<std::string_view>(repo_url_)));
+    }
 
     yaml::Node branches_node;
     auto &branches_seq = std::get<yaml::Sequence>(branches_node.value = yaml::Sequence{});
@@ -62,11 +64,10 @@ public:
     }
     std::string_view name = std::get<std::string>(name_it->second.value);
 
-    auto repo_url_it = map.find("repo_url");
-    if (repo_url_it == map.end()) {
-      throw yaml::MissingFieldError("Missing 'repo_url' field");
+    std::string_view repo_url;
+    if (auto repo_url_it = map.find("repo_url"); repo_url_it != map.end()) {
+      repo_url = std::get<std::string>(repo_url_it->second.value);
     }
-    std::string_view repo_url = std::get<std::string>(repo_url_it->second.value);
 
     auto dep = mr.template create<CodDep>(uuid, name, repo_url);
 

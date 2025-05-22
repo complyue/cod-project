@@ -33,6 +33,7 @@ public:
     this->data_ = p_data;
   }
 
+  bool empty() const { return length_ <= 0; }
   size_t length() const { return length_; }
   std::byte *data() { return data_.get(); }
   const std::byte *data() const { return data_.get(); }
