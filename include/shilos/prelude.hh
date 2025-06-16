@@ -201,9 +201,9 @@ std::string format_yaml(const Node &node);
 
 template <typename T, typename RT>
 concept YamlConvertible = requires(T t, const yaml::Node &node, memory_region<RT> &mr, regional_ptr<T> &to_ptr) {
-  { t.to_yaml() } noexcept -> std::same_as<yaml::Node>;
-  { T::from_yaml(mr, node) } -> std::same_as<global_ptr<T, RT>>;
-  { T::from_yaml(mr, node, to_ptr) } -> std::same_as<void>;
+  { to_yaml(t) } noexcept -> std::same_as<yaml::Node>;
+  { from_yaml<T>(mr, node) } -> std::same_as<global_ptr<T, RT>>;
+  { from_yaml<T>(mr, node, to_ptr) } -> std::same_as<void>;
 
   requires requires {
     []() {
@@ -211,8 +211,8 @@ concept YamlConvertible = requires(T t, const yaml::Node &node, memory_region<RT
         memory_region<RT> mr;
         yaml::Node node;
         regional_ptr<T> to_ptr;
-        auto ptr = T::from_yaml(mr, node);
-        T::from_yaml(mr, node, to_ptr);
+        auto ptr = from_yaml<T>(mr, node);
+        from_yaml<T>(mr, node, to_ptr);
       } catch (const yaml::Exception &) {
         // Expected
       } catch (...) {
@@ -226,7 +226,7 @@ concept YamlConvertible = requires(T t, const yaml::Node &node, memory_region<RT
 template <typename T, typename RT>
   requires YamlConvertible<T, RT>
 void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<T> &to_ptr) {
-  to_ptr = T::from_yaml(mr, node);
+  to_ptr = from_yaml<T>(mr, node);
 }
 
 } // namespace yaml

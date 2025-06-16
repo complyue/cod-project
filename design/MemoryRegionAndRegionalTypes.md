@@ -58,16 +58,14 @@ Regional types have strict lifetime management requirements:
      - The root type (`RT`) of `memory_region<RT>` is responsible for resource acquisition and release
    - Non-root bits types and regional types should avoid owning external resources
 
-### 4. YAML Serialization
+### 4. YAML Serialization (Optional)
 
-All regional types must support YAML serialization with these requirements:
+YAML serialization support is optional and modular for regional types:
 
-   - Required implementations:
-     - `to_yaml()` serialization method
-     - Two `from_yaml` forms:
-       1. Returns `global_ptr` (required)
-       2. Assigns to `regional_ptr` (optional, default from `YamlConvertible`)
-   - Type safety strictly enforced
+   - **Opt-in Design**: Regional types do not require built-in YAML methods
+   - **Standalone Functions**: YAML support provided via standalone template functions in separate headers
+   - **Modular Inclusion**: Users include specific `*_yaml.hh` headers to enable YAML for desired types
+   - **Concept Compliance**: When YAML support is included, types must satisfy `YamlConvertible` concept
 
 ### 5. Pointer Rules
 
@@ -131,21 +129,32 @@ The system provides optimized implementations of common data structures that sat
    - Efficient operations:
      - prepend_to/append_to
 
-### YAML Integration
+### YAML Integration (Optional)
 
-The YAML integration is enforced via the `YamlConvertible` concept:
+YAML integration is provided through a modular system using standalone functions and the `YamlConvertible` concept:
+
+#### Design Principles
+
+- **Separation of Concerns**: Core regional types contain no YAML-specific code
+- **Modular Headers**: YAML functionality provided in separate `*_yaml.hh` headers
+- **Standalone Functions**: YAML operations implemented as free functions, not member methods
+- **Concept-Based**: Type safety enforced through C++20 concepts
+
+#### YamlConvertible Concept
+
+The `YamlConvertible` concept works with standalone functions:
 
 ```cpp
 template <typename T, typename RT>
 concept YamlConvertible = requires(T t, const yaml::Node &node,
                                  memory_region<RT> &mr,
                                  regional_ptr<T> &to_ptr) {
-  // Required serialization method
-  { t.to_yaml() } noexcept -> std::same_as<yaml::Node>;
+  // Standalone serialization function
+  { to_yaml(t) } noexcept -> std::same_as<yaml::Node>;
 
-  // Required deserialization forms
-  { T::from_yaml(mr, node) } -> std::same_as<global_ptr<T, RT>>;
-  { T::from_yaml(mr, node, to_ptr) } -> std::same_as<void>;
+  // Standalone deserialization forms
+  { from_yaml<T>(mr, node) } -> std::same_as<global_ptr<T, RT>>;
+  { from_yaml<T>(mr, node, to_ptr) } -> std::same_as<void>;
 
   // Exception safety guarantees
   requires requires {
@@ -154,8 +163,8 @@ concept YamlConvertible = requires(T t, const yaml::Node &node,
         memory_region<RT> mr;
         yaml::Node node;
         regional_ptr<T> to_ptr;
-        auto ptr = T::from_yaml(mr, node);
-        T::from_yaml(mr, node, to_ptr);
+        auto ptr = from_yaml<T>(mr, node);
+        from_yaml<T>(mr, node, to_ptr);
       } catch (const yaml::Exception &) {
         // Expected behavior
       } catch (...) {
@@ -170,6 +179,91 @@ concept YamlConvertible = requires(T t, const yaml::Node &node,
 template <typename T, typename RT>
   requires YamlConvertible<T, RT>
 void from_yaml(memory_region<RT>& mr, const yaml::Node& node, regional_ptr<T>& to_ptr) {
-  to_ptr = T::from_yaml(mr, node);
+  to_ptr = from_yaml<T>(mr, node);
 }
 ```
+
+#### Usage Pattern
+
+```cpp
+// Core type definition (no YAML dependencies)
+#include "my_regional_type.hh"
+
+// Optional YAML support
+#include "my_regional_type_yaml.hh"  // Enables YAML for MyRegionalType
+
+// Usage
+MyRegionalType obj = ...;
+yaml::Node node = to_yaml(obj);                    // Standalone function
+auto restored = from_yaml<MyRegionalType>(mr, node); // Template function
+```
+
+#### Implementation Structure
+
+YAML support headers typically contain:
+
+1. **Inline Functions**: All YAML logic implemented inline in headers
+2. **Template Functions**: Generic `from_yaml<T>()` functions for any memory region type
+3. **Concept Verification**: Static assertions to ensure `YamlConvertible` compliance
+4. **Complete Functionality**: Full serialization/deserialization with error handling
+
+This modular approach allows users to:
+- Use regional types without YAML overhead when not needed
+- Selectively enable YAML for specific types
+- Maintain clean separation between core functionality and serialization
+- Benefit from compile-time optimization of inline implementations
+
+#### Example Implementation
+
+The `CodDep` and `CodProject` types demonstrate this pattern:
+
+**Core Types** (`codp.hh`):
+```cpp
+class CodDep {
+  // Core functionality only - no YAML methods
+  UUID uuid_;
+  regional_str name_;
+  regional_str repo_url_;
+  regional_list<regional_str> branches_;
+  // ... constructors and accessors only
+};
+
+class CodProject {
+  // Core functionality only - no YAML methods  
+  UUID uuid_;
+  regional_str name_;
+  regional_list<CodDep> deps_;
+  // ... constructors and accessors only
+};
+```
+
+**Optional YAML Support** (`codp_yaml.hh`):
+```cpp
+// Standalone serialization functions
+inline yaml::Node to_yaml(const CodDep& dep) noexcept { /* ... */ }
+inline yaml::Node to_yaml(const CodProject& project) noexcept { /* ... */ }
+
+// Template deserialization functions
+template <typename RT>
+global_ptr<CodDep, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) { /* ... */ }
+
+template <typename RT>
+global_ptr<CodProject, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) { /* ... */ }
+
+// Regional pointer overloads
+template <typename RT>
+void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodDep> &to_ptr) { /* ... */ }
+
+template <typename RT>
+void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodProject> &to_ptr) { /* ... */ }
+
+// Concept verification
+static_assert(yaml::YamlConvertible<CodDep, void>);
+static_assert(yaml::YamlConvertible<CodProject, void>);
+```
+
+This design ensures that:
+- Core types remain focused on their primary responsibilities
+- YAML functionality is completely optional and modular
+- All YAML logic is implemented inline for optimal performance
+- The `YamlConvertible` concept provides compile-time type safety
