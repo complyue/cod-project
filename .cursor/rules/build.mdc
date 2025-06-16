@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Roo must exclusively use `cmake --build ./build` (with the current working directory set to the project root) to compile the project after any code modifications. Bash scripts in the project directory are strictly reserved for human developers and must never be executed by Roo under any circumstances. Adhere to this directive without exception to maintain build consistency and avoid unintended side effects.

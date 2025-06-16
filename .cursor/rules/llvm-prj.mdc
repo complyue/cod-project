@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+This workspace is an external project of the LLVM ecosystem. The complete llvm-project source code resides in the `/llvm-project/` directory. When assisting users with LLVM's internal functionalities, proactively leverage the codebase to pinpoint precise locations by invoking appropriate tools to display relevant code segments in VSCode. Always verify the accuracy of the referenced files and their contents to ensure they directly address the user's query before presenting them. Prioritize clarity and relevance when guiding users through LLVM's implementation details.
