@@ -158,34 +158,6 @@ public:
 
     bool operator==(const iterator &other) const { return current_ == other.current_; }
     bool operator!=(const iterator &other) const { return current_ != other.current_; }
-
-    yaml::Node to_yaml() const {
-      yaml::Sequence seq;
-      for (const auto &item : *this) {
-        if constexpr (yaml::YamlConvertible<T, void>) {
-          seq.emplace_back(item.to_yaml());
-        } else {
-          throw yaml::TypeError("List element type is not YamlConvertible");
-        }
-      }
-      return yaml::Node(seq);
-    }
-
-    template <typename RT>
-      requires yaml::YamlConvertible<T, RT>
-    static global_ptr<regional_list<T>, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
-      if (!std::holds_alternative<yaml::Sequence>(node.value)) {
-        throw yaml::TypeError("Expected Sequence for regional_list");
-      }
-      auto list = mr.template create<regional_list<T>>();
-      const auto &seq = std::get<yaml::Sequence>(node.value);
-      regional_ptr<regional_cons<T>> *tail = list->head_.get();
-      for (const auto &item : seq) {
-        T::from_yaml(mr, item, *tail);
-        tail = tail->next_.get();
-      }
-      return list;
-    }
   };
 
   class const_iterator {
