@@ -82,8 +82,4 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<regio
   to_ptr = from_yaml<regional_lifo<T>>(mr, node);
 }
 
-// Concept verification
-static_assert(yaml::YamlConvertible<regional_fifo<int>, void>);
-static_assert(yaml::YamlConvertible<regional_lifo<int>, void>);
-
 } // namespace shilos

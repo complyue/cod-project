@@ -46,27 +46,6 @@ public:
 
   operator std::string_view() const { return std::string_view(reinterpret_cast<const char *>(data()), length()); }
 
-  yaml::Node to_yaml() const { return yaml::Node(static_cast<std::string_view>(*this)); }
-
-  template <typename RT>
-    requires ValidMemRegionRootType<RT>
-  static global_ptr<regional_str, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
-    if (auto str = std::get_if<std::string>(&node.value)) {
-      return mr.template create<regional_str>(*str);
-    }
-    throw yaml::TypeError("Invalid YAML node type for regional_str");
-  }
-
-  template <typename RT>
-    requires ValidMemRegionRootType<RT>
-  static void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<regional_str> &to_ptr) {
-    if (auto str = std::get_if<std::string>(&node.value)) {
-      mr.template create_to<regional_ptr>(to_ptr, *str);
-    } else {
-      throw yaml::TypeError("Invalid YAML node type for regional_str");
-    }
-  }
-
   std::strong_ordering operator<=>(const regional_str &other) const noexcept {
     if (auto cmp = length_ <=> other.length_; cmp != 0) {
       return cmp;
