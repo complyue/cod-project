@@ -1,6 +1,15 @@
 #pragma once
 
-#include "shilos.hh"
+#include "shilos.hh" // IWYU pragma: keep
+
+#include "shilos/list.hh"      // IWYU pragma: keep
+#include "shilos/list_yaml.hh" // IWYU pragma: keep
+
+#include "shilos/vector.hh"      // IWYU pragma: keep
+#include "shilos/vector_yaml.hh" // IWYU pragma: keep
+
+#include "shilos/dict.hh"      // IWYU pragma: keep
+#include "shilos/dict_yaml.hh" // IWYU pragma: keep
 
 namespace cod::project {
 
