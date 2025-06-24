@@ -97,7 +97,8 @@ concept ValidMemRegionRootType = requires {
 template <typename VT, typename RT> class global_ptr;
 template <typename VT> class regional_ptr;
 class regional_str;
-template <typename VT> class regional_list;
+template <typename VT> class regional_fifo;
+template <typename VT> class regional_lifo;
 template <typename RT>
   requires ValidMemRegionRootType<RT>
 class memory_region;

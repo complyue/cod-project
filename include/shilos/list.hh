@@ -5,6 +5,7 @@
 #include <cassert>
 #include <compare>
 #include <fcntl.h>
+#include <optional>
 #include <sys/fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -19,10 +20,13 @@ private:
 
 public:
   template <typename RT, typename... Args>
-  friend void append_to(regional_ptr<regional_cons<T>> &rp, memory_region<RT> &mr, Args &&...args);
+    requires std::constructible_from<T, memory_region<RT> &, Args...>
+  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(mr, std::forward<Args>(args)...) {
+    tail_ = this;
+  }
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
+    requires std::constructible_from<T, Args...>
   regional_cons(memory_region<RT> &mr, Args &&...args) : value_(std::forward<Args>(args)...) {
     tail_ = this;
   }
@@ -30,7 +34,7 @@ public:
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
   global_ptr<regional_cons<T>, RT> prepend(memory_region<RT> &mr, Args &&...args) {
-    auto gp = mr.template create<regional_cons<T>>(std::forward(args)...);
+    auto gp = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
     gp->next_ = this;
     gp->tail_ = tail().get();
     return gp;
@@ -39,7 +43,7 @@ public:
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
   void append(memory_region<RT> &mr, Args &&...args) {
-    mr.create_to(&(tail()->next_), std::forward(args)...);
+    mr.create_to(&(tail()->next_), mr, std::forward<Args>(args)...);
     assert(tail_->next_); // or construction failed yet not throwing ?!
     tail_ = tail_->next_.get();
   }
@@ -56,11 +60,11 @@ public:
       tail_ = tail_->next_.get();
     return tail_;
   }
-  const regional_ptr<regional_cons<T>> &tail() const { return const_cast<regional_cons<T>>(this)->tail(); }
+  const regional_ptr<regional_cons<T>> &tail() const { return const_cast<regional_cons<T> *>(this)->tail(); }
 
   size_t size() const {
     size_t count = 1;
-    for (regional_cons<T> *l = this; l; l = l->next_.get())
+    for (const regional_cons<T> *l = next_.get(); l; l = l->next_.get())
       count++;
     return count;
   }
@@ -117,24 +121,70 @@ auto operator<=>(const regional_ptr<regional_cons<T>> &lhs, const regional_ptr<r
   return lhs_next <=> rhs_next;
 }
 
-template <typename T> class regional_list {
+// FIFO (First In, First Out) - Queue semantics
+template <typename T> class regional_fifo {
 private:
   regional_ptr<regional_cons<T>> head_;
 
 public:
-  regional_list() : head_() {}
+  regional_fifo() : head_() {}
 
-  template <typename RT> regional_list(memory_region<RT> &mr) : head_() {}
+  template <typename RT> regional_fifo(memory_region<RT> &mr) : head_() {}
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
-  regional_list(memory_region<RT> &mr, Args &&...args) : head_() {
-    mr.create_to(head_, std::forward<Args>(args)...);
+  regional_fifo(memory_region<RT> &mr, Args &&...args) : head_() {
+    mr.create_to(&head_, mr, std::forward<Args>(args)...);
   }
 
-  regional_ptr<regional_cons<T>> &head() { return head_; }
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, Args...>
+  regional_fifo(memory_region<RT> &mr, Args &&...args) : head_() {
+    mr.create_to(&head_, mr, std::forward<Args>(args)...);
+  }
 
+  // Add element to back of queue
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, memory_region<RT> &, Args...>
+  void push(memory_region<RT> &mr, Args &&...args) {
+    if (!head_) {
+      mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    } else {
+      head_->append(mr, std::forward<Args>(args)...);
+    }
+  }
+
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, Args...>
+  void push(memory_region<RT> &mr, Args &&...args) {
+    if (!head_) {
+      mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    } else {
+      head_->append(mr, std::forward<Args>(args)...);
+    }
+  }
+
+  // Remove and return element from front of queue
+  std::optional<T> pop() {
+    if (!head_) {
+      return std::nullopt;
+    }
+
+    T result = std::move(head_->value());
+    head_ = head_->next().get();
+    return result;
+  }
+
+  // Access front element without removing
+  T *front() { return head_ ? &head_->value() : nullptr; }
+
+  const T *front() const { return head_ ? &head_->value() : nullptr; }
+
+  bool empty() const { return !head_; }
   size_t size() const { return head_ ? head_->size() : 0; }
+
+  regional_ptr<regional_cons<T>> &head() { return head_; }
+  const regional_ptr<regional_cons<T>> &head() const { return head_; }
 
   class iterator {
     regional_cons<T> *current_;
@@ -191,35 +241,140 @@ public:
   const_iterator end() const { return const_iterator(nullptr); }
 };
 
+// LIFO (Last In, First Out) - Stack semantics
+template <typename T> class regional_lifo {
+private:
+  regional_ptr<regional_cons<T>> head_;
+
+public:
+  regional_lifo() : head_() {}
+
+  template <typename RT> regional_lifo(memory_region<RT> &mr) : head_() {}
+
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, memory_region<RT> &, Args...>
+  regional_lifo(memory_region<RT> &mr, Args &&...args) : head_() {
+    mr.create_to(&head_, mr, std::forward<Args>(args)...);
+  }
+
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, Args...>
+  regional_lifo(memory_region<RT> &mr, Args &&...args) : head_() {
+    mr.create_to(&head_, mr, std::forward<Args>(args)...);
+  }
+
+  // Add element to top of stack
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, memory_region<RT> &, Args...>
+  void push(memory_region<RT> &mr, Args &&...args) {
+    auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    new_head->next() = head_.get();
+    head_ = new_head.get();
+  }
+
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, Args...>
+  void push(memory_region<RT> &mr, Args &&...args) {
+    auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    new_head->next() = head_.get();
+    head_ = new_head.get();
+  }
+
+  // Remove and return element from top of stack
+  std::optional<T> pop() {
+    if (!head_) {
+      return std::nullopt;
+    }
+
+    T result = std::move(head_->value());
+    head_ = head_->next().get();
+    return result;
+  }
+
+  // Access top element without removing (same as front for stack)
+  T *top() { return head_ ? &head_->value() : nullptr; }
+
+  const T *top() const { return head_ ? &head_->value() : nullptr; }
+
+  // Alias for consistency with FIFO interface
+  T *front() { return top(); }
+  const T *front() const { return top(); }
+
+  bool empty() const { return !head_; }
+  size_t size() const { return head_ ? head_->size() : 0; }
+
+  regional_ptr<regional_cons<T>> &head() { return head_; }
+  const regional_ptr<regional_cons<T>> &head() const { return head_; }
+
+  class iterator {
+    regional_cons<T> *current_;
+
+  public:
+    iterator(regional_cons<T> *current) : current_(current) {}
+
+    T &operator*() { return current_->value(); }
+    T *operator->() { return &current_->value(); }
+
+    iterator &operator++() {
+      current_ = current_->next().get();
+      return *this;
+    }
+
+    iterator operator++(int) {
+      iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator==(const iterator &other) const { return current_ == other.current_; }
+    bool operator!=(const iterator &other) const { return current_ != other.current_; }
+  };
+
+  class const_iterator {
+    const regional_cons<T> *current_;
+
+  public:
+    const_iterator(const regional_cons<T> *current) : current_(current) {}
+
+    const T &operator*() const { return current_->value(); }
+    const T *operator->() const { return &current_->value(); }
+
+    const_iterator &operator++() {
+      current_ = current_->next().get();
+      return *this;
+    }
+
+    const_iterator operator++(int) {
+      const_iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+
+    bool operator==(const const_iterator &other) const { return current_ == other.current_; }
+    bool operator!=(const const_iterator &other) const { return current_ != other.current_; }
+  };
+
+  iterator begin() { return iterator(head_.get()); }
+  iterator end() { return iterator(nullptr); }
+
+  const_iterator begin() const { return const_iterator(head_.get()); }
+  const_iterator end() const { return const_iterator(nullptr); }
+};
+
+// Comparison operators for FIFO
 template <typename T>
-auto operator<=>(const regional_list<T> &lhs, const regional_list<T> &rhs)
+auto operator<=>(const regional_fifo<T> &lhs, const regional_fifo<T> &rhs)
   requires std::three_way_comparable<T>
 {
   return lhs.head() <=> rhs.head();
 }
 
-template <typename RT, typename T, typename... Args>
-  requires std::constructible_from<T, memory_region<RT> &, Args...>
-void append_to(regional_list<T> &rp, memory_region<RT> &mr, Args &&...args) {
-  regional_cons<T> *const p = rp.get();
-  if (!p) {
-    mr.template create_to<regional_cons<T>>(rp, std::forward(args)...);
-  } else {
-    auto &old_tail = p->tail().next_;
-    mr.template create_to<regional_cons<T>>(&old_tail, std::forward(args)...);
-    rp->tail_ = old_tail->tail().get();
-  }
-}
-
-template <typename RT, typename T, typename... Args>
-  requires std::constructible_from<T, memory_region<RT> &, Args...>
-void prepend_to(regional_list<T> &rp, memory_region<RT> &mr, Args &&...args) {
-  regional_cons<T> *const p = rp.get();
-  mr.template create_to<regional_cons<T>>(rp, std::forward(args)...);
-  if (p) {
-    rp->next_ = p;
-    rp->tail_ = p->tail().get();
-  }
+// Comparison operators for LIFO
+template <typename T>
+auto operator<=>(const regional_lifo<T> &lhs, const regional_lifo<T> &rhs)
+  requires std::three_way_comparable<T>
+{
+  return lhs.head() <=> rhs.head();
 }
 
 } // namespace shilos

@@ -5,187 +5,184 @@
 namespace cod::project {
 
 // Standalone YAML functions for CodDep
-inline yaml::Node to_yaml(const CodDep& dep) noexcept {
-    yaml::Node node;
-    auto &map = std::get<yaml::Map>(node.value = yaml::Map{});
+inline yaml::Node to_yaml(const CodDep &dep) noexcept {
+  yaml::Node node;
+  auto &map = std::get<yaml::Map>(node.value = yaml::Map{});
 
-    map.emplace("uuid", dep.uuid_.to_string());
-    map.emplace("name", std::string(static_cast<std::string_view>(dep.name_)));
-    if (!dep.repo_url_.empty()) {
-        map.emplace("repo_url", std::string(static_cast<std::string_view>(dep.repo_url_)));
-    }
+  map.emplace("uuid", dep.uuid().to_string());
+  map.emplace("name", std::string(static_cast<std::string_view>(dep.name())));
+  if (!dep.repo_url().empty()) {
+    map.emplace("repo_url", std::string(static_cast<std::string_view>(dep.repo_url())));
+  }
 
-    yaml::Node branches_node;
-    auto &branches_seq = std::get<yaml::Sequence>(branches_node.value = yaml::Sequence{});
-    for (const auto &branch : dep.branches_) {
-        yaml::Node branch_node;
-        branch_node.value = std::string(static_cast<std::string_view>(branch));
-        branches_seq.push_back(branch_node);
-    }
-    map.emplace("branches", branches_node);
+  yaml::Node branches_node;
+  auto &branches_seq = std::get<yaml::Sequence>(branches_node.value = yaml::Sequence{});
+  for (const auto &branch : dep.branches()) {
+    yaml::Node branch_node;
+    branch_node.value = std::string(static_cast<std::string_view>(branch));
+    branches_seq.push_back(branch_node);
+  }
+  map.emplace("branches", branches_node);
 
-    return node;
+  return node;
 }
 
-template <typename RT>
-global_ptr<CodDep, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
-    if (!std::holds_alternative<yaml::Map>(node.value)) {
-        throw yaml::TypeError("Expected mapping for CodDep");
+template <typename RT> global_ptr<CodDep, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
+  if (!std::holds_alternative<yaml::Map>(node.value)) {
+    throw yaml::TypeError("Expected mapping for CodDep");
+  }
+
+  const auto &map = std::get<yaml::Map>(node.value);
+
+  auto uuid_it = map.find("uuid");
+  if (uuid_it == map.end()) {
+    throw yaml::MissingFieldError("Missing 'uuid' field");
+  }
+  UUID uuid(std::get<std::string>(uuid_it->second.value));
+
+  auto name_it = map.find("name");
+  if (name_it == map.end()) {
+    throw yaml::MissingFieldError("Missing 'name' field");
+  }
+  std::string_view name = std::get<std::string>(name_it->second.value);
+
+  std::string_view repo_url;
+  if (auto repo_url_it = map.find("repo_url"); repo_url_it != map.end()) {
+    repo_url = std::get<std::string>(repo_url_it->second.value);
+  }
+
+  auto dep = mr.template create<CodDep>(uuid, name, repo_url);
+
+  auto branches_it = map.find("branches");
+  if (branches_it != map.end() && std::holds_alternative<yaml::Sequence>(branches_it->second.value)) {
+    for (const auto &branch_node : std::get<yaml::Sequence>(branches_it->second.value)) {
+      if (std::holds_alternative<std::string>(branch_node.value)) {
+        dep->branches().push(mr, std::get<std::string>(branch_node.value));
+      }
     }
+  }
 
-    const auto &map = std::get<yaml::Map>(node.value);
+  return dep;
+}
 
-    auto uuid_it = map.find("uuid");
-    if (uuid_it == map.end()) {
-        throw yaml::MissingFieldError("Missing 'uuid' field");
-    }
-    UUID uuid(std::get<std::string>(uuid_it->second.value));
+template <typename RT> void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodDep> &to_ptr) {
+  to_ptr = from_yaml<CodDep>(mr, node);
+}
 
-    auto name_it = map.find("name");
-    if (name_it == map.end()) {
-        throw yaml::MissingFieldError("Missing 'name' field");
-    }
-    std::string_view name = std::get<std::string>(name_it->second.value);
+// Standalone YAML functions for CodProject
+inline yaml::Node to_yaml(const CodProject &project) noexcept {
+  yaml::Node node;
+  auto &map = std::get<yaml::Map>(node.value = yaml::Map{});
 
-    std::string_view repo_url;
-    if (auto repo_url_it = map.find("repo_url"); repo_url_it != map.end()) {
-        repo_url = std::get<std::string>(repo_url_it->second.value);
-    }
+  map.emplace("uuid", project.uuid().to_string());
+  map.emplace("name", std::string(static_cast<std::string_view>(project.name())));
 
-    auto dep = mr.template create<CodDep>(uuid, name, repo_url);
+  yaml::Node deps_node;
+  auto &deps_seq = std::get<yaml::Sequence>(deps_node.value = yaml::Sequence{});
+  for (const auto &dep : project.deps()) {
+    deps_seq.push_back(to_yaml(dep));
+  }
+  map.emplace("dependencies", deps_node);
 
-    auto branches_it = map.find("branches");
-    if (branches_it != map.end() && std::holds_alternative<yaml::Sequence>(branches_it->second.value)) {
-        for (const auto &branch_node : std::get<yaml::Sequence>(branches_it->second.value)) {
-            if (std::holds_alternative<std::string>(branch_node.value)) {
-                append_to(dep->branches_, mr, std::get<std::string>(branch_node.value));
+  return node;
+}
+
+template <typename RT> global_ptr<CodProject, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
+  if (!std::holds_alternative<yaml::Map>(node.value)) {
+    throw yaml::TypeError("Expected mapping for CodProject");
+  }
+
+  const auto &map = std::get<yaml::Map>(node.value);
+
+  auto uuid_it = map.find("uuid");
+  if (uuid_it == map.end()) {
+    throw yaml::MissingFieldError("Missing 'uuid' field");
+  }
+  UUID uuid(std::get<std::string>(uuid_it->second.value));
+
+  auto name_it = map.find("name");
+  if (name_it == map.end()) {
+    throw yaml::MissingFieldError("Missing 'name' field");
+  }
+  std::string_view name = std::get<std::string>(name_it->second.value);
+
+  auto project = mr.template create<CodProject>(uuid, name);
+
+  auto deps_it = map.find("dependencies");
+  if (deps_it != map.end()) {
+    const auto &deps_node = deps_it->second;
+
+    // Handle sequence format
+    if (std::holds_alternative<yaml::Sequence>(deps_node.value)) {
+      const auto &seq = std::get<yaml::Sequence>(deps_node.value);
+      for (const auto &dep_node : seq) {
+        // Try to deserialize as CodDep object first
+        if (std::holds_alternative<yaml::Map>(dep_node.value)) {
+          auto dep = from_yaml<CodDep>(mr, dep_node);
+          project->deps().push(mr, std::move(*dep));
+        } else {
+          // Handle string format parsing (existing logic)
+          std::string dep_str = dep_node.as<std::string>();
+
+          // Parse simple UUID format
+          if (auto eq_pos = dep_str.find('='); eq_pos == std::string_view::npos) {
+            UUID dep_uuid(dep_str);
+            project->deps().push(mr, dep_uuid, "", "");
+          }
+          // Parse name=uuid[:repo_url][#branches] format
+          else {
+            std::string name(dep_str.substr(0, eq_pos));
+            std::string rest(dep_str.substr(eq_pos + 1));
+
+            // Extract UUID (required)
+            auto colon_pos = rest.find(':');
+            auto hash_pos = rest.find('#');
+            auto uuid_end = std::min(colon_pos, hash_pos);
+            std::string uuid_str(rest.substr(0, uuid_end));
+
+            // Extract optional repo URL
+            std::string_view repo_url;
+            if (colon_pos != std::string_view::npos && colon_pos < hash_pos) {
+              repo_url = rest.substr(colon_pos + 1, hash_pos != std::string_view::npos ? hash_pos - colon_pos - 1
+                                                                                       : std::string_view::npos);
             }
-        }
-    }
 
-    return dep;
-}
+            auto dep = mr.template create<CodDep>(UUID(uuid_str), name, repo_url);
 
-template <typename RT>
-void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodDep> &to_ptr) {
-    to_ptr = from_yaml<CodDep>(mr, node);
-}
-
-// Standalone YAML functions for CodProject  
-inline yaml::Node to_yaml(const CodProject& project) noexcept {
-    yaml::Node node;
-    auto &map = std::get<yaml::Map>(node.value = yaml::Map{});
-
-    map.emplace("uuid", project.uuid().to_string());
-    map.emplace("name", std::string(static_cast<std::string_view>(project.name())));
-
-    yaml::Node deps_node;
-    auto &deps_seq = std::get<yaml::Sequence>(deps_node.value = yaml::Sequence{});
-    for (const auto &dep : project.deps()) {
-        deps_seq.push_back(to_yaml(dep));
-    }
-    map.emplace("dependencies", deps_node);
-
-    return node;
-}
-
-template <typename RT>
-global_ptr<CodProject, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
-    if (!std::holds_alternative<yaml::Map>(node.value)) {
-        throw yaml::TypeError("Expected mapping for CodProject");
-    }
-
-    const auto &map = std::get<yaml::Map>(node.value);
-
-    auto uuid_it = map.find("uuid");
-    if (uuid_it == map.end()) {
-        throw yaml::MissingFieldError("Missing 'uuid' field");
-    }
-    UUID uuid(std::get<std::string>(uuid_it->second.value));
-
-    auto name_it = map.find("name");
-    if (name_it == map.end()) {
-        throw yaml::MissingFieldError("Missing 'name' field");
-    }
-    std::string_view name = std::get<std::string>(name_it->second.value);
-
-    auto project = mr.template create<CodProject>(uuid, name);
-
-    auto deps_it = map.find("dependencies");
-    if (deps_it != map.end()) {
-        const auto &deps_node = deps_it->second;
-
-        // Handle sequence format
-        if (std::holds_alternative<yaml::Sequence>(deps_node.value)) {
-            const auto &seq = std::get<yaml::Sequence>(deps_node.value);
-            for (const auto &dep_node : seq) {
-                // Try to deserialize as CodDep object first
-                if (std::holds_alternative<yaml::Map>(dep_node.value)) {
-                    auto dep = from_yaml<CodDep>(mr, dep_node);
-                    append_to(project->deps_, mr, std::move(*dep));
-                } else {
-                    // Handle string format parsing (existing logic)
-                    std::string dep_str = dep_node.as<std::string>();
-                    
-                    // Parse simple UUID format
-                    if (auto eq_pos = dep_str.find('='); eq_pos == std::string_view::npos) {
-                        UUID dep_uuid(dep_str);
-                        append_to(project->deps_, mr, dep_uuid, "", "");
-                    }
-                    // Parse name=uuid[:repo_url][#branches] format
-                    else {
-                        std::string name(dep_str.substr(0, eq_pos));
-                        std::string rest(dep_str.substr(eq_pos + 1));
-
-                        // Extract UUID (required)
-                        auto colon_pos = rest.find(':');
-                        auto hash_pos = rest.find('#');
-                        auto uuid_end = std::min(colon_pos, hash_pos);
-                        std::string uuid_str(rest.substr(0, uuid_end));
-
-                        // Extract optional repo URL
-                        std::string_view repo_url;
-                        if (colon_pos != std::string_view::npos && colon_pos < hash_pos) {
-                            repo_url = rest.substr(colon_pos + 1, hash_pos != std::string_view::npos ? hash_pos - colon_pos - 1
-                                                                                                   : std::string_view::npos);
-                        }
-
-                        auto dep = mr.template create<CodDep>(UUID(uuid_str), name, repo_url);
-
-                        // Extract optional branches
-                        if (hash_pos != std::string_view::npos) {
-                            auto branches_str = rest.substr(hash_pos + 1);
-                            size_t start = 0;
-                            size_t end = branches_str.find(',');
-                            while (start != std::string_view::npos) {
-                                auto branch = branches_str.substr(start, end != std::string_view::npos ? end - start : std::string_view::npos);
-                                append_to(dep->branches_, mr, branch);
-                                start = end == std::string_view::npos ? end : end + 1;
-                                end = branches_str.find(',', start);
-                            }
-                        }
-
-                        append_to(project->deps_, mr, std::move(*dep));
-                    }
-                }
+            // Extract optional branches
+            if (hash_pos != std::string_view::npos) {
+              auto branches_str = rest.substr(hash_pos + 1);
+              size_t start = 0;
+              size_t end = branches_str.find(',');
+              while (start != std::string_view::npos) {
+                auto branch =
+                    branches_str.substr(start, end != std::string_view::npos ? end - start : std::string_view::npos);
+                dep->branches().push(mr, branch);
+                start = end == std::string_view::npos ? end : end + 1;
+                end = branches_str.find(',', start);
+              }
             }
+
+            project->deps().push(mr, std::move(*dep));
+          }
         }
-        // Handle map format
-        else if (std::holds_alternative<yaml::Map>(deps_node.value)) {
-            const auto &deps_map = std::get<yaml::Map>(deps_node.value);
-            for (const auto &[name, dep_node] : deps_map) {
-                auto dep = from_yaml<CodDep>(mr, dep_node);
-                append_to(project->deps_, mr, std::move(*dep));
-            }
-        }
+      }
     }
+    // Handle map format
+    else if (std::holds_alternative<yaml::Map>(deps_node.value)) {
+      const auto &deps_map = std::get<yaml::Map>(deps_node.value);
+      for (const auto &[name, dep_node] : deps_map) {
+        auto dep = from_yaml<CodDep>(mr, dep_node);
+        project->deps().push(mr, std::move(*dep));
+      }
+    }
+  }
 
-    return project;
+  return project;
 }
 
-template <typename RT>
-void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodProject> &to_ptr) {
-    to_ptr = from_yaml<CodProject>(mr, node);
+template <typename RT> void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodProject> &to_ptr) {
+  to_ptr = from_yaml<CodProject>(mr, node);
 }
 
-} // namespace cod::project 
+} // namespace cod::project
