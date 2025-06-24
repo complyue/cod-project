@@ -57,7 +57,7 @@ template <typename RT> global_ptr<CodDep, RT> from_yaml(memory_region<RT> &mr, c
   if (branches_it != map.end() && std::holds_alternative<yaml::Sequence>(branches_it->second.value)) {
     for (const auto &branch_node : std::get<yaml::Sequence>(branches_it->second.value)) {
       if (std::holds_alternative<std::string>(branch_node.value)) {
-        dep->branches().push(mr, std::get<std::string>(branch_node.value));
+        dep->branches().enque(mr, std::get<std::string>(branch_node.value));
       }
     }
   }
@@ -119,7 +119,7 @@ template <typename RT> global_ptr<CodProject, RT> from_yaml(memory_region<RT> &m
         // Try to deserialize as CodDep object first
         if (std::holds_alternative<yaml::Map>(dep_node.value)) {
           auto dep = from_yaml<CodDep>(mr, dep_node);
-          project->deps().push(mr, std::move(*dep));
+          project->deps().enque(mr, std::move(*dep));
         } else {
           // Handle string format parsing (existing logic)
           std::string dep_str = dep_node.as<std::string>();
@@ -127,7 +127,7 @@ template <typename RT> global_ptr<CodProject, RT> from_yaml(memory_region<RT> &m
           // Parse simple UUID format
           if (auto eq_pos = dep_str.find('='); eq_pos == std::string_view::npos) {
             UUID dep_uuid(dep_str);
-            project->deps().push(mr, dep_uuid, "", "");
+            project->deps().enque(mr, dep_uuid, "", "");
           }
           // Parse name=uuid[:repo_url][#branches] format
           else {
@@ -157,13 +157,13 @@ template <typename RT> global_ptr<CodProject, RT> from_yaml(memory_region<RT> &m
               while (start != std::string_view::npos) {
                 auto branch =
                     branches_str.substr(start, end != std::string_view::npos ? end - start : std::string_view::npos);
-                dep->branches().push(mr, branch);
+                dep->branches().enque(mr, branch);
                 start = end == std::string_view::npos ? end : end + 1;
                 end = branches_str.find(',', start);
               }
             }
 
-            project->deps().push(mr, std::move(*dep));
+            project->deps().enque(mr, std::move(*dep));
           }
         }
       }
@@ -173,7 +173,7 @@ template <typename RT> global_ptr<CodProject, RT> from_yaml(memory_region<RT> &m
       const auto &deps_map = std::get<yaml::Map>(deps_node.value);
       for (const auto &[name, dep_node] : deps_map) {
         auto dep = from_yaml<CodDep>(mr, dep_node);
-        project->deps().push(mr, std::move(*dep));
+        project->deps().enque(mr, std::move(*dep));
       }
     }
   }

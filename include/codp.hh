@@ -63,7 +63,7 @@ public:
 
   template <typename RT>
   void addDep(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url) {
-    deps_.push(mr, uuid, name, repo_url);
+    deps_.enque(mr, uuid, name, repo_url);
   }
 };
 
