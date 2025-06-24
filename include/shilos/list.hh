@@ -5,7 +5,6 @@
 #include <cassert>
 #include <compare>
 #include <fcntl.h>
-#include <optional>
 #include <sys/fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -16,51 +15,22 @@ namespace shilos {
 template <typename T> class regional_cons {
 private:
   T value_;
-  regional_ptr<regional_cons<T>> next_, tail_;
+  regional_ptr<regional_cons<T>> next_;
 
 public:
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
-  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(mr, std::forward<Args>(args)...) {
-    tail_ = this;
-  }
+  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(mr, std::forward<Args>(args)...) {}
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, Args...>
-  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(std::forward<Args>(args)...) {
-    tail_ = this;
-  }
-
-  template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  global_ptr<regional_cons<T>, RT> prepend(memory_region<RT> &mr, Args &&...args) {
-    auto gp = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
-    gp->next_ = this;
-    gp->tail_ = tail().get();
-    return gp;
-  }
-
-  template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  void append(memory_region<RT> &mr, Args &&...args) {
-    mr.create_to(&(tail()->next_), mr, std::forward<Args>(args)...);
-    assert(tail_->next_); // or construction failed yet not throwing ?!
-    tail_ = tail_->next_.get();
-  }
+  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(std::forward<Args>(args)...) {}
 
   T &value() { return value_; }
   const T &value() const { return value_; }
 
   regional_ptr<regional_cons<T>> &next() { return next_; }
   const regional_ptr<regional_cons<T>> &next() const { return next_; }
-
-  regional_ptr<regional_cons<T>> &tail() {
-    assert(tail_); // tail should at least point to self, never null
-    while (tail_->next_)
-      tail_ = tail_->next_.get();
-    return tail_;
-  }
-  const regional_ptr<regional_cons<T>> &tail() const { return const_cast<regional_cons<T> *>(this)->tail(); }
 
   size_t size() const {
     size_t count = 1;
@@ -135,60 +105,59 @@ auto operator<=>(const regional_ptr<regional_cons<T>> &lhs, const regional_ptr<r
 template <typename T> class regional_fifo {
 private:
   regional_ptr<regional_cons<T>> head_;
+  regional_ptr<regional_cons<T>> tail_;
 
   // Friend declarations for efficient transfer functions
-  template <typename U>
-  friend bool transfer_front_to_back(regional_fifo<U> &from, regional_fifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_back(regional_lifo<U> &from, regional_lifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_front(regional_fifo<U> &from, regional_fifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_front(regional_lifo<U> &from, regional_lifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_back(regional_fifo<U> &from, regional_lifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_back(regional_lifo<U> &from, regional_fifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_front(regional_fifo<U> &from, regional_lifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_front(regional_lifo<U> &from, regional_fifo<U> &to);
+  template <typename U> friend bool transfer_front_to_back(regional_fifo<U> &from, regional_fifo<U> &to);
+  template <typename U> friend bool transfer_front_to_back(regional_lifo<U> &from, regional_lifo<U> &to);
+  template <typename U> friend bool transfer_front_to_front(regional_fifo<U> &from, regional_fifo<U> &to);
+  template <typename U> friend bool transfer_front_to_front(regional_lifo<U> &from, regional_lifo<U> &to);
+  template <typename U> friend bool transfer_front_to_back(regional_fifo<U> &from, regional_lifo<U> &to);
+  template <typename U> friend bool transfer_front_to_back(regional_lifo<U> &from, regional_fifo<U> &to);
+  template <typename U> friend bool transfer_front_to_front(regional_fifo<U> &from, regional_lifo<U> &to);
+  template <typename U> friend bool transfer_front_to_front(regional_lifo<U> &from, regional_fifo<U> &to);
 
 public:
-  regional_fifo() : head_() {}
+  regional_fifo() : head_(), tail_() {}
 
-  template <typename RT> regional_fifo(memory_region<RT> &mr) : head_() {}
+  template <typename RT> regional_fifo(memory_region<RT> &mr) : head_(), tail_() {}
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
-  regional_fifo(memory_region<RT> &mr, Args &&...args) : head_() {
+  regional_fifo(memory_region<RT> &mr, Args &&...args) : head_(), tail_() {
     mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    tail_ = head_;
   }
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, Args...>
-  regional_fifo(memory_region<RT> &mr, Args &&...args) : head_() {
+  regional_fifo(memory_region<RT> &mr, Args &&...args) : head_(), tail_() {
     mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    tail_ = head_;
   }
 
   // Add element to back of queue
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
   void enque(memory_region<RT> &mr, Args &&...args) {
+    auto new_node = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
     if (!head_) {
-      mr.create_to(&head_, mr, std::forward<Args>(args)...);
+      head_ = tail_ = new_node.get();
     } else {
-      head_->append(mr, std::forward<Args>(args)...);
+      tail_->next() = new_node.get();
+      tail_ = new_node.get();
     }
   }
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, Args...>
   void enque(memory_region<RT> &mr, Args &&...args) {
+    auto new_node = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
     if (!head_) {
-      mr.create_to(&head_, mr, std::forward<Args>(args)...);
+      head_ = tail_ = new_node.get();
     } else {
-      head_->append(mr, std::forward<Args>(args)...);
+      tail_->next() = new_node.get();
+      tail_ = new_node.get();
     }
   }
 
@@ -196,11 +165,12 @@ public:
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
   void enque_front(memory_region<RT> &mr, Args &&...args) {
+    auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    new_head->next() = head_.get();
     if (!head_) {
-      mr.create_to(&head_, mr, std::forward<Args>(args)...);
-    } else {
-      head_ = head_->prepend(mr, std::forward<Args>(args)...).get();
+      tail_ = new_head.get();
     }
+    head_ = new_head.get();
   }
 
   template <typename RT, typename... Args>
@@ -208,8 +178,8 @@ public:
   void enque_front(memory_region<RT> &mr, Args &&...args) {
     auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
     new_head->next() = head_.get();
-    if (head_) {
-      new_head->tail() = head_->tail().get();
+    if (!head_) {
+      tail_ = new_head.get();
     }
     head_ = new_head.get();
   }
@@ -220,9 +190,9 @@ public:
   const T *front() const { return head_ ? &head_->value() : nullptr; }
 
   // Access back element without removing
-  T *back() { return head_ ? &head_->tail()->value() : nullptr; }
+  T *back() { return tail_ ? &tail_->value() : nullptr; }
 
-  const T *back() const { return head_ ? &head_->tail()->value() : nullptr; }
+  const T *back() const { return tail_ ? &tail_->value() : nullptr; }
 
   bool empty() const { return !head_; }
   size_t size() const { return head_ ? head_->size() : 0; }
@@ -289,40 +259,35 @@ public:
 template <typename T> class regional_lifo {
 private:
   regional_ptr<regional_cons<T>> head_;
+  regional_ptr<regional_cons<T>> tail_;
 
   // Friend declarations for efficient transfer functions
-  template <typename U>
-  friend bool transfer_front_to_back(regional_fifo<U> &from, regional_fifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_back(regional_lifo<U> &from, regional_lifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_front(regional_fifo<U> &from, regional_fifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_front(regional_lifo<U> &from, regional_lifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_back(regional_fifo<U> &from, regional_lifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_back(regional_lifo<U> &from, regional_fifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_front(regional_fifo<U> &from, regional_lifo<U> &to);
-  template <typename U>
-  friend bool transfer_front_to_front(regional_lifo<U> &from, regional_fifo<U> &to);
+  template <typename U> friend bool transfer_front_to_back(regional_fifo<U> &from, regional_fifo<U> &to);
+  template <typename U> friend bool transfer_front_to_back(regional_lifo<U> &from, regional_lifo<U> &to);
+  template <typename U> friend bool transfer_front_to_front(regional_fifo<U> &from, regional_fifo<U> &to);
+  template <typename U> friend bool transfer_front_to_front(regional_lifo<U> &from, regional_lifo<U> &to);
+  template <typename U> friend bool transfer_front_to_back(regional_fifo<U> &from, regional_lifo<U> &to);
+  template <typename U> friend bool transfer_front_to_back(regional_lifo<U> &from, regional_fifo<U> &to);
+  template <typename U> friend bool transfer_front_to_front(regional_fifo<U> &from, regional_lifo<U> &to);
+  template <typename U> friend bool transfer_front_to_front(regional_lifo<U> &from, regional_fifo<U> &to);
 
 public:
-  regional_lifo() : head_() {}
+  regional_lifo() : head_(), tail_() {}
 
-  template <typename RT> regional_lifo(memory_region<RT> &mr) : head_() {}
+  template <typename RT> regional_lifo(memory_region<RT> &mr) : head_(), tail_() {}
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
-  regional_lifo(memory_region<RT> &mr, Args &&...args) : head_() {
+  regional_lifo(memory_region<RT> &mr, Args &&...args) : head_(), tail_() {
     mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    tail_ = head_;
   }
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, Args...>
-  regional_lifo(memory_region<RT> &mr, Args &&...args) : head_() {
+  regional_lifo(memory_region<RT> &mr, Args &&...args) : head_(), tail_() {
     mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    tail_ = head_;
   }
 
   // Add element to top of stack
@@ -331,6 +296,9 @@ public:
   void push(memory_region<RT> &mr, Args &&...args) {
     auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
     new_head->next() = head_.get();
+    if (!head_) {
+      tail_ = new_head.get();
+    }
     head_ = new_head.get();
   }
 
@@ -339,6 +307,9 @@ public:
   void push(memory_region<RT> &mr, Args &&...args) {
     auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
     new_head->next() = head_.get();
+    if (!head_) {
+      tail_ = new_head.get();
+    }
     head_ = new_head.get();
   }
 
@@ -346,32 +317,34 @@ public:
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, Args...>
   void push_back(memory_region<RT> &mr, Args &&...args) {
+    auto new_node = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
     if (!head_) {
-      mr.create_to(&head_, mr, std::forward<Args>(args)...);
+      head_ = tail_ = new_node.get();
     } else {
-      head_->append(mr, std::forward<Args>(args)...);
+      tail_->next() = new_node.get();
+      tail_ = new_node.get();
     }
   }
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, Args...>
   void push_back(memory_region<RT> &mr, Args &&...args) {
+    auto new_node = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
     if (!head_) {
-      mr.create_to(&head_, mr, std::forward<Args>(args)...);
+      head_ = tail_ = new_node.get();
     } else {
-      head_->append(mr, std::forward<Args>(args)...);
+      tail_->next() = new_node.get();
+      tail_ = new_node.get();
     }
   }
 
   // Access top element without removing (same as front for stack)
   T *top() { return head_ ? &head_->value() : nullptr; }
-
   const T *top() const { return head_ ? &head_->value() : nullptr; }
 
   // Access bottom element without removing
-  T *back() { return head_ ? &head_->tail()->value() : nullptr; }
-
-  const T *back() const { return head_ ? &head_->tail()->value() : nullptr; }
+  T *back() { return tail_ ? &tail_->value() : nullptr; }
+  const T *back() const { return tail_ ? &tail_->value() : nullptr; }
 
   // Alias for consistency with FIFO interface
   T *front() { return top(); }
@@ -446,16 +419,18 @@ template <typename T> bool transfer_front_to_back(regional_fifo<T> &from, region
   // Remove front node from source
   regional_cons<T> *node = from.head_.get();
   from.head_ = node->next_.get();
+  if (!from.head_) {
+    from.tail_ = nullptr; // List is now empty
+  }
 
   // Add node to back of destination
   if (to.empty()) {
-    to.head_ = node;
-    node->tail_ = node;
+    to.head_ = to.tail_ = node;
   } else {
-    to.head_->tail_->next_ = node;
-    to.head_->tail_ = node;
+    to.tail_->next() = node;
+    to.tail_ = node;
   }
-  node->next_ = nullptr;
+  node->next() = nullptr;
 
   return true;
 }
@@ -467,16 +442,18 @@ template <typename T> bool transfer_front_to_back(regional_lifo<T> &from, region
   // Remove front node from source
   regional_cons<T> *node = from.head_.get();
   from.head_ = node->next_.get();
+  if (!from.head_) {
+    from.tail_ = nullptr; // List is now empty
+  }
 
   // Add node to back of destination
   if (to.empty()) {
-    to.head_ = node;
-    node->tail_ = node;
+    to.head_ = to.tail_ = node;
   } else {
-    to.head_->tail_->next_ = node;
-    to.head_->tail_ = node;
+    to.tail_->next() = node;
+    to.tail_ = node;
   }
-  node->next_ = nullptr;
+  node->next() = nullptr;
 
   return true;
 }
@@ -488,14 +465,15 @@ template <typename T> bool transfer_front_to_front(regional_fifo<T> &from, regio
   // Remove front node from source
   regional_cons<T> *node = from.head_.get();
   from.head_ = node->next_.get();
+  if (!from.head_) {
+    from.tail_ = nullptr; // List is now empty
+  }
 
   // Add node to front of destination
   if (to.empty()) {
-    to.head_ = node;
-    node->tail_ = node;
+    to.head_ = to.tail_ = node;
   } else {
-    node->tail_ = to.head_->tail_.get();
-    node->next_ = to.head_.get();
+    node->next() = to.head_.get();
     to.head_ = node;
   }
 
@@ -528,10 +506,10 @@ template <typename T> bool transfer_front_to_back(regional_fifo<T> &from, region
   // Add node to back of destination
   if (to.empty()) {
     to.head_ = node;
-    node->tail_ = node;
+    to.tail_ = node;
   } else {
-    to.head_->tail_->next_ = node;
-    to.head_->tail_ = node;
+    to.tail_->next_ = node;
+    to.tail_ = node;
   }
   node->next_ = nullptr;
 
@@ -549,10 +527,10 @@ template <typename T> bool transfer_front_to_back(regional_lifo<T> &from, region
   // Add node to back of destination
   if (to.empty()) {
     to.head_ = node;
-    node->tail_ = node;
+    to.tail_ = node;
   } else {
-    to.head_->tail_->next_ = node;
-    to.head_->tail_ = node;
+    to.tail_->next_ = node;
+    to.tail_ = node;
   }
   node->next_ = nullptr;
 
@@ -585,9 +563,9 @@ template <typename T> bool transfer_front_to_front(regional_lifo<T> &from, regio
   // Add node to front of destination
   if (to.empty()) {
     to.head_ = node;
-    node->tail_ = node;
+    to.tail_ = node;
   } else {
-    node->tail_ = to.head_->tail_.get();
+    node->tail_ = to.tail_.get();
     node->next_ = to.head_.get();
     to.head_ = node;
   }
