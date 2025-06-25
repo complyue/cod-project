@@ -20,6 +20,12 @@ private:
 public:
   template <typename RT> vector_segment(memory_region<RT> &mr) : elements_(), next_(), size_(0) {}
 
+  // Deleted special members
+  vector_segment(const vector_segment &) = delete;
+  vector_segment(vector_segment &&) = delete;
+  vector_segment &operator=(const vector_segment &) = delete;
+  vector_segment &operator=(vector_segment &&) = delete;
+
   T &operator[](size_t index) {
     assert(index < size_);
     return elements_[index];
@@ -108,6 +114,12 @@ public:
 
   template <typename RT>
   regional_vector(memory_region<RT> &mr) : first_segment_(), last_segment_(), segment_count_(0), total_size_(0) {}
+
+  // Deleted special members
+  regional_vector(const regional_vector &) = delete;
+  regional_vector(regional_vector &&) = delete;
+  regional_vector &operator=(const regional_vector &) = delete;
+  regional_vector &operator=(regional_vector &&) = delete;
 
   // Add element, growing storage as needed
   template <typename RT, typename... Args>

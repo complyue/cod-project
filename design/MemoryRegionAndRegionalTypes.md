@@ -21,7 +21,7 @@ class memory_region {
 
 ### Regional Type Constraints
 
-All regional types must satisfy the following constraints. Specialized types (regional_str, regional_list) implement additional container functionality while maintaining compliance.
+All regional types must satisfy the following constraints. Specialized types (regional_str, regional_fifo, regional_lifo) implement additional container functionality while maintaining compliance.
 
 ### 1. Field Type Constraints
 
@@ -35,16 +35,10 @@ All regional types must satisfy the following constraints. Specialized types (re
 
 ### 2. Construction Rules
 
-Regional types must adhere to strict construction requirements:
-
-   - Must implement at least one constructor taking `memory_region&`
-   - When arguments exist, `memory_region&` must be first parameter
-   - Default constructors are allowed only when it:
-     - Initialize all `regional_ptr` members to null
-     - Does no allocation
-   - Non-default construction:
-     - Must use region-aware constructor with `memory_region&` passed as first parameter
-     - All allocations must go through provided `memory_region&`
+   - Must provide at least one constructor accepting `memory_region&` as first parameter
+   - Default constructors: initialize `regional_ptr` members (direct and indirect) to null, no allocation
+   - Constructors with `memory_region&`: may allocate from the region
+   - All allocations must use the provided `memory_region&`
 
 ### 3. Lifetime Rules
 
@@ -72,17 +66,20 @@ YAML serialization support is optional and modular for regional types:
 The system supports several pointer types with specific semantics:
 
    - `regional_ptr` (intra-region):
-     - Designed for region-local storage (lvalue)
-     - Relative to its own memory address - rvalue semantics is illegal
+     - Stores references as relative offsets from its own memory address
+     - Designed for region-local storage with automatic relocation support
+     - Supports construction from raw pointers for offset calculation
+     - Cannot be used with rvalue semantics due to address-relative storage
    - `global_ptr` (cross-region):
-     - Safe but with 2x space cost
+     - Safe cross-region references with 2x space cost
      - Lifetime bound to the referenced `memory_region`
    - Raw pointers:
-     - Raw pointers to regional memory can be passed around in the program, but not allowed to be stored in region memory
-   - Soundness:
-     - The root type (`RT`) of `memory_region<RT>` should decide and define memory and type safety semantics
-     - The simplest strategy is to not support reuse of region memory, thus regional objects will never be deallocated nor change type
-     - If the root type does support memory reuse, e.g. support garbage collection, it should clearly define lifetime rules of the object graph it would manage, and type-safety strategies to follow by the memory_region user, in separate specifications.
+     - May be passed around temporarily but not stored persistently in region memory
+     - Can be used for `regional_ptr` construction/assignment to calculate offsets
+   - Memory safety:
+     - The root type (`RT`) of `memory_region<RT>` defines memory and type safety semantics
+     - The simplest strategy is to not support reclaim of region memory, thus regional objects will never be deallocated nor change type
+     - If the root type supports memory reclaim (e.g., garbage collection), it must clearly define lifetime rules of the object graph and type-safety strategies in separate specifications.
 
 ## Usage Guidelines
 
@@ -116,8 +113,8 @@ The system provides optimized implementations of common data structures that sat
      - Efficient comparison operators (<=>, ==)
      - Zero-cost `std::string_view` conversion
 
-2. **regional_list** - Linked list that:
-   - Implements linked list with both ends tracked
+2. **regional_fifo** - Queue (FIFO) container that:
+   - Implements linked list with queue semantics (first-in-first-out)
    - Satisfies all constraints:
      - Constructed via memory_region
      - No copying/moving
@@ -127,7 +124,20 @@ The system provides optimized implementations of common data structures that sat
      - Size tracking
      - Comparison (<=>)
    - Efficient operations:
-     - prepend_to/append_to
+     - enque/enque_front
+
+3. **regional_lifo** - Stack (LIFO) container that:
+   - Implements linked list with stack semantics (last-in-first-out)
+   - Satisfies all constraints:
+     - Constructed via memory_region
+     - No copying/moving
+     - Correct YAML serialization
+   - Complete container interface:
+     - Iteration (begin()/end())
+     - Size tracking
+     - Comparison (<=>)
+   - Efficient operations:
+     - push/push_back
 
 ### YAML Integration (Optional)
 
@@ -224,7 +234,7 @@ class CodDep {
   UUID uuid_;
   regional_str name_;
   regional_str repo_url_;
-  regional_list<regional_str> branches_;
+  regional_fifo<regional_str> branches_;
   // ... constructors and accessors only
 };
 
@@ -232,7 +242,7 @@ class CodProject {
   // Core functionality only - no YAML methods  
   UUID uuid_;
   regional_str name_;
-  regional_list<CodDep> deps_;
+  regional_fifo<CodDep> deps_;
   // ... constructors and accessors only
 };
 ```

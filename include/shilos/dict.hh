@@ -42,6 +42,12 @@ public:
       : key_(mr, std::forward<KeyArgs>(key_args)...), value_(std::forward<ValueArgs>(value_args)...),
         collision_next_index_(INVALID_INDEX) {}
 
+  // Deleted special members
+  dict_entry(const dict_entry &) = delete;
+  dict_entry(dict_entry &&) = delete;
+  dict_entry &operator=(const dict_entry &) = delete;
+  dict_entry &operator=(dict_entry &&) = delete;
+
   K &key() { return key_; }
   const K &key() const { return key_; }
 
@@ -123,6 +129,12 @@ public:
 
   template <typename RT>
   regional_dict(memory_region<RT> &mr, const Hash &hash) : entries_(mr), buckets_(mr), hasher_(hash) {}
+
+  // Deleted special members
+  regional_dict(const regional_dict &) = delete;
+  regional_dict(regional_dict &&) = delete;
+  regional_dict &operator=(const regional_dict &) = delete;
+  regional_dict &operator=(regional_dict &&) = delete;
 
   // Insert or update entry
   template <typename RT, typename... ValueArgs>

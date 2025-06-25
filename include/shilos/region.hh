@@ -183,8 +183,8 @@ public:
   template <typename VT, typename... Args>
     requires std::constructible_from<VT, Args...>
   void create_bits_to(regional_ptr<VT> &rp, Args &&...args) {
-    assert(reinterpret_cast<intptr_t(&rp)> reinterpret_cast<intptr_t>(this) &&
-           reinterpret_cast < intptr_t(&rp) < reinterpret_cast<intptr_t>(this) + capacity_);
+    assert(reinterpret_cast<intptr_t>(&rp) > reinterpret_cast<intptr_t>(this) &&
+           reinterpret_cast<intptr_t>(&rp) < reinterpret_cast<intptr_t>(this) + capacity_);
     VT *ptr = this->allocate<VT>();
     std::construct_at(ptr, std::forward<Args>(args)...);
     rp.offset_ = reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(&rp);
@@ -192,8 +192,8 @@ public:
   template <typename VT, typename... Args>
     requires std::constructible_from<VT, memory_region<RT> &, Args...>
   void create_to(regional_ptr<VT> &rp, Args &&...args) {
-    assert(reinterpret_cast<intptr_t(&rp)> reinterpret_cast<intptr_t>(this) &&
-           reinterpret_cast < intptr_t(&rp) < reinterpret_cast<intptr_t>(this) + capacity_);
+    assert(reinterpret_cast<intptr_t>(&rp) > reinterpret_cast<intptr_t>(this) &&
+           reinterpret_cast<intptr_t>(&rp) < reinterpret_cast<intptr_t>(this) + capacity_);
     VT *ptr = this->allocate<VT>();
     std::construct_at(ptr, *this, std::forward<Args>(args)...);
     rp.offset_ = reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(&rp);
@@ -205,6 +205,7 @@ public:
     VT *ptr = this->allocate<VT>();
     std::construct_at(ptr, std::forward<Args>(args)...);
     return global_ptr<VT, RT>( //
+        *this,                 //
         reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
   template <typename VT, typename... Args>

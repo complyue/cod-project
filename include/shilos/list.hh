@@ -26,6 +26,12 @@ public:
     requires std::constructible_from<T, Args...>
   regional_cons(memory_region<RT> &mr, Args &&...args) : value_(std::forward<Args>(args)...) {}
 
+  // Deleted special members
+  regional_cons(const regional_cons &) = delete;
+  regional_cons(regional_cons &&) = delete;
+  regional_cons &operator=(const regional_cons &) = delete;
+  regional_cons &operator=(regional_cons &&) = delete;
+
   T &value() { return value_; }
   const T &value() const { return value_; }
 
@@ -135,6 +141,12 @@ public:
     mr.create_to(&head_, mr, std::forward<Args>(args)...);
     tail_ = head_;
   }
+
+  // Deleted special members
+  regional_fifo(const regional_fifo &) = delete;
+  regional_fifo(regional_fifo &&) = delete;
+  regional_fifo &operator=(const regional_fifo &) = delete;
+  regional_fifo &operator=(regional_fifo &&) = delete;
 
   // Add element to back of queue
   template <typename RT, typename... Args>
@@ -289,6 +301,12 @@ public:
     mr.create_to(&head_, mr, std::forward<Args>(args)...);
     tail_ = head_;
   }
+
+  // Deleted special members
+  regional_lifo(const regional_lifo &) = delete;
+  regional_lifo(regional_lifo &&) = delete;
+  regional_lifo &operator=(const regional_lifo &) = delete;
+  regional_lifo &operator=(regional_lifo &&) = delete;
 
   // Add element to top of stack
   template <typename RT, typename... Args>

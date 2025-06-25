@@ -30,7 +30,7 @@ global_ptr<regional_fifo<T>, RT> from_yaml(memory_region<RT> &mr, const yaml::No
 
   for (const auto &item_node : seq) {
     auto item = from_yaml<T>(mr, item_node);
-    fifo->push(mr, std::move(*item));
+    fifo->enque(mr, std::move(*item));
   }
 
   return fifo;

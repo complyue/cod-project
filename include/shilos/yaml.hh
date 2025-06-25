@@ -20,7 +20,7 @@ template <typename RT>
   requires ValidMemRegionRootType<RT>
 void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<regional_str> &to_ptr) {
   if (auto str = std::get_if<std::string>(&node.value)) {
-    mr.template create_to<regional_ptr>(to_ptr, *str);
+    mr.template create_to<regional_str>(to_ptr, *str);
   } else {
     throw yaml::TypeError("Invalid YAML node type for regional_str");
   }
