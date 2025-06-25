@@ -35,10 +35,10 @@ All regional types must satisfy the following constraints. Specialized types (re
 
 ### 2. Construction Rules
 
-   - Must provide at least one constructor accepting `memory_region&` as first parameter
-   - Default constructors: initialize `regional_ptr` members (direct and indirect) to null, no allocation
-   - Constructors with `memory_region&`: may allocate from the region
-   - All allocations must use the provided `memory_region&`
+   - Every regional type must provide at least one constructor that accepts `memory_region&` as its first parameter
+   - Default constructors (when provided) initialize all (direct and indirect) `regional_ptr` members to null without performing any allocation
+   - Constructors that accept `memory_region&` are permitted to allocate from the provided region
+   - Any allocation performed must use the provided `memory_region&` parameter
 
 ### 3. Lifetime Rules
 
@@ -67,7 +67,7 @@ The system supports several pointer types with specific semantics:
 
    - `regional_ptr` (intra-region):
      - Stores references as relative offsets from its own memory address
-     - Designed for region-local storage with automatic relocation support
+     - Provides region-local storage with automatic relocation support
      - Supports construction from raw pointers for offset calculation
      - Cannot be used with rvalue semantics due to address-relative storage
    - `global_ptr` (cross-region):
