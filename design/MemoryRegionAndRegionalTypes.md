@@ -25,61 +25,63 @@ All regional types must satisfy the following constraints. Specialized types (re
 
 ### 1. Field Type Constraints
 
-   - **Bits types** (primitive types with neither destructor nor internal pointers):
-     - Follow standard C++ type rules
-     - No additional constraints
-   - Members cannot contain external pointers of any kind
-   - Members containing internal pointers must:
-     - Use only `regional_ptr` (raw pointers including `global_ptr` are prohibited)
-     - Point only to bits types or compliant regional types
+- **Bits types** (primitive types with neither destructor nor internal pointers):
+  - Follow standard C++ type rules
+  - No additional constraints
+- Members cannot contain external pointers of any kind
+- Members containing internal pointers must:
+  - Use only `regional_ptr` (raw pointers including `global_ptr` are prohibited)
+  - Point only to bits types or compliant regional types
 
 ### 2. Construction Rules
 
-   - Every regional type must provide at least one constructor that accepts `memory_region&` as its first parameter
-   - Default constructors (when provided) initialize all (direct and indirect) `regional_ptr` members to null without performing any allocation
-   - Constructors that accept `memory_region&` are permitted to allocate from the provided region
-   - Any allocation performed must use the provided `memory_region&` parameter
+- **Required**: Every regional type must provide at least one constructor that accepts `memory_region&` as its first parameter
+- **Optional**: Regional types may provide default constructors (constructors with no parameters)
+  - When default constructors are provided, they must initialize all (direct and indirect) `regional_ptr` members to null without performing any allocation
+  - Default constructors are not required - many regional types will only provide `memory_region&`-accepting constructors
+- Constructors that accept `memory_region&` are permitted to allocate from the provided region
+- Any allocation performed must use the provided `memory_region&` parameter
 
 ### 3. Lifetime Rules
 
 Regional types have strict lifetime management requirements:
 
-   - Copy and move construction/assignment are prohibited for regional types (allowed for bits types)
-   - Individual destruction is prohibited for both bits types and regional types
-     - Individual objects cannot be destroyed
-   - Destruction occurs atomically at region level:
-     - Entire object graph released with region
-     - The root type (`RT`) of `memory_region<RT>` is responsible for resource acquisition and release
-   - Non-root bits types and regional types should avoid owning external resources
+- Copy and move construction/assignment are prohibited for regional types (allowed for bits types)
+- Individual destruction is prohibited for both bits types and regional types
+  - Individual objects cannot be destroyed
+- Destruction occurs atomically at region level:
+  - Entire object graph released with region
+  - The root type (`RT`) of `memory_region<RT>` is responsible for resource acquisition and release
+- Non-root bits types and regional types should avoid owning external resources
 
 ### 4. YAML Serialization (Optional)
 
 YAML serialization support is optional and modular for regional types:
 
-   - **Opt-in Design**: Regional types do not require built-in YAML methods
-   - **Standalone Functions**: YAML support provided via standalone template functions in separate headers
-   - **Modular Inclusion**: Users include specific `*_yaml.hh` headers to enable YAML for desired types
-   - **Concept Compliance**: When YAML support is included, types must satisfy `YamlConvertible` concept
+- **Opt-in Design**: Regional types do not require built-in YAML methods
+- **Standalone Functions**: YAML support provided via standalone template functions in separate headers
+- **Modular Inclusion**: Users include specific `*_yaml.hh` headers to enable YAML for desired types
+- **Concept Compliance**: When YAML support is included, types must satisfy `YamlConvertible` concept
 
 ### 5. Pointer Rules
 
 The system supports several pointer types with specific semantics:
 
-   - `regional_ptr` (intra-region):
-     - Stores references as relative offsets from its own memory address
-     - Provides region-local storage with automatic relocation support
-     - Supports construction from raw pointers for offset calculation
-     - Cannot be used with rvalue semantics due to address-relative storage
-   - `global_ptr` (cross-region):
-     - Safe cross-region references with 2x space cost
-     - Lifetime bound to the referenced `memory_region`
-   - Raw pointers:
-     - May be passed around temporarily but not stored persistently in region memory
-     - Can be used for `regional_ptr` construction/assignment to calculate offsets
-   - Memory safety:
-     - The root type (`RT`) of `memory_region<RT>` defines memory and type safety semantics
-     - The simplest strategy is to not support reclaim of region memory, thus regional objects will never be deallocated nor change type
-     - If the root type supports memory reclaim (e.g., garbage collection), it must clearly define lifetime rules of the object graph and type-safety strategies in separate specifications.
+- `regional_ptr` (intra-region):
+  - Stores references as relative offsets from its own memory address
+  - Provides region-local storage with automatic relocation support
+  - Supports construction from raw pointers for offset calculation
+  - Cannot be used with rvalue semantics due to address-relative storage
+- `global_ptr` (cross-region):
+  - Safe cross-region references with 2x space cost
+  - Lifetime bound to the referenced `memory_region`
+- Raw pointers:
+  - May be passed around temporarily but not stored persistently in region memory
+  - Can be used for `regional_ptr` construction/assignment to calculate offsets
+- Memory safety:
+  - The root type (`RT`) of `memory_region<RT>` defines memory and type safety semantics
+  - The simplest strategy is to not support reclaim of region memory, thus regional objects will never be deallocated nor change type
+  - If the root type supports memory reclaim (e.g., garbage collection), it must clearly define lifetime rules of the object graph and type-safety strategies in separate specifications.
 
 ## Usage Guidelines
 
@@ -114,6 +116,7 @@ The system provides optimized implementations of common data structures that sat
      - Zero-cost `std::string_view` conversion
 
 2. **regional_fifo** - Queue (FIFO) container that:
+
    - Implements linked list with queue semantics (first-in-first-out)
    - Satisfies all constraints:
      - Constructed via memory_region
@@ -218,6 +221,7 @@ YAML support headers typically contain:
 4. **Complete Functionality**: Full serialization/deserialization with error handling
 
 This modular approach allows users to:
+
 - Use regional types without YAML overhead when not needed
 - Selectively enable YAML for specific types
 - Maintain clean separation between core functionality and serialization
@@ -228,6 +232,7 @@ This modular approach allows users to:
 The `CodDep` and `CodProject` types demonstrate this pattern:
 
 **Core Types** (`codp.hh`):
+
 ```cpp
 class CodDep {
   // Core functionality only - no YAML methods
@@ -239,7 +244,7 @@ class CodDep {
 };
 
 class CodProject {
-  // Core functionality only - no YAML methods  
+  // Core functionality only - no YAML methods
   UUID uuid_;
   regional_str name_;
   regional_fifo<CodDep> deps_;
@@ -248,6 +253,7 @@ class CodProject {
 ```
 
 **Optional YAML Support** (`codp_yaml.hh`):
+
 ```cpp
 // Standalone serialization functions
 inline yaml::Node to_yaml(const CodDep& dep) noexcept { /* ... */ }
@@ -273,6 +279,7 @@ static_assert(yaml::YamlConvertible<CodProject, void>);
 ```
 
 This design ensures that:
+
 - Core types remain focused on their primary responsibilities
 - YAML functionality is completely optional and modular
 - All YAML logic is implemented inline for optimal performance
