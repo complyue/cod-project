@@ -82,3 +82,13 @@ inline std::ostream &operator<<(std::ostream &os, const regional_str &str) {
 }
 
 } // namespace shilos
+
+// Specialize std::hash for regional_str
+namespace std {
+template <> struct hash<shilos::regional_str> {
+  size_t operator()(const shilos::regional_str &str) const noexcept {
+    // Use std::hash<std::string_view> for consistent hashing
+    return std::hash<std::string_view>{}(static_cast<std::string_view>(str));
+  }
+};
+} // namespace std
