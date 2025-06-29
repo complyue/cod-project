@@ -26,4 +26,14 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<regio
   }
 }
 
+template <typename RT>
+  requires ValidMemRegionRootType<RT>
+void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_str *raw_ptr) {
+  if (auto str = std::get_if<std::string>(&node.value)) {
+    new (raw_ptr) regional_str(mr, *str);
+  } else {
+    throw yaml::TypeError("Invalid YAML node type for regional_str");
+  }
+}
+
 } // namespace shilos

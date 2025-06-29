@@ -28,6 +28,10 @@ All regional types must satisfy the following constraints. Specialized types (re
 - **Bits types** (primitive types with neither destructor nor internal pointers):
   - Follow standard C++ type rules
   - No additional constraints
+- **Regional types** must satisfy additional structural constraints:
+  - **Fixed storage size**: Compile-time deterministic memory layout with no dynamic allocation
+  - **RTTI-free**: No virtual functions, virtual destructors, or dynamic dispatch mechanisms
+  - **Plain data semantics**: Memory layout must be predictable for safe uninitialized allocation
 - Members cannot contain external pointers of any kind
 - Members containing internal pointers must:
   - Use only `regional_ptr` (raw pointers including `global_ptr` are prohibited)
@@ -46,15 +50,24 @@ All regional types must satisfy the following constraints. Specialized types (re
 
 Regional types have strict lifetime management requirements:
 
-- Copy and move construction/assignment are prohibited for regional types (allowed for bits types)
-- Individual destruction is prohibited for both bits types and regional types
-  - Individual objects cannot be destroyed
-- Destruction occurs atomically at region level:
-  - Entire object graph released with region
-  - The root type (`RT`) of `memory_region<RT>` is responsible for resource acquisition and release
-- Non-root bits types and regional types should avoid owning external resources
+   - Copy and move construction/assignment are prohibited for regional types (allowed for bits types)
+   - Individual destruction is prohibited for both bits types and regional types
+     - Individual objects cannot be destroyed
+   - Destruction occurs atomically at region level:
+     - Entire object graph released with region
+     - The root type (`RT`) of `memory_region<RT>` is responsible for resource acquisition and release
+   - Non-root bits types and regional types should avoid owning external resources
 
-### 4. YAML Serialization (Optional)
+### 4. Container Element Rules
+
+Regional container types (like `regional_vector`, `regional_fifo`, `regional_lifo`, `regional_dict`) have additional constraints:
+
+   - **No copy/move insertion**: Container methods must never accept elements via copy or move construction
+   - **In-place construction only**: Elements must be constructed in-place using `emplace_*` methods that forward construction arguments
+   - **Template forwarding**: Use perfect forwarding to pass construction arguments directly to element constructors
+   - **Memory region threading**: Always pass the `memory_region&` to element constructors when required
+
+### 5. YAML Serialization (Optional)
 
 YAML serialization support is optional and modular for regional types:
 
@@ -63,7 +76,7 @@ YAML serialization support is optional and modular for regional types:
 - **Modular Inclusion**: Users include specific `*_yaml.hh` headers to enable YAML for desired types
 - **Concept Compliance**: When YAML support is included, types must satisfy `YamlConvertible` concept
 
-### 5. Pointer Rules
+### 6. Pointer Rules
 
 The system supports several pointer types with specific semantics:
 
@@ -168,6 +181,7 @@ concept YamlConvertible = requires(T t, const yaml::Node &node,
   // Standalone deserialization forms
   { from_yaml<T>(mr, node) } -> std::same_as<global_ptr<T, RT>>;
   { from_yaml<T>(mr, node, to_ptr) } -> std::same_as<void>;
+  { from_yaml<T>(mr, node, raw_ptr) } -> std::same_as<void>;
 
   // Exception safety guarantees
   requires requires {
@@ -226,6 +240,14 @@ This modular approach allows users to:
 - Selectively enable YAML for specific types
 - Maintain clean separation between core functionality and serialization
 - Benefit from compile-time optimization of inline implementations
+
+**YAML Container Support**: YAML deserialization supports containers holding both bits types and regional types. The implementation leverages the fixed-size and RTTI-free constraints of regional types to:
+
+- Allocate uninitialized memory at final container locations
+- Use the raw pointer version `from_yaml(mr, node, T* raw_ptr)` for direct in-place construction  
+- Avoid copy/move operations that would violate regional type constraints
+
+The raw pointer approach works for simple container scenarios. Complex nested cases (like containers of regional types within other regional types) may still require refinement to achieve full compliance with regional type constraints.
 
 #### Example Implementation
 

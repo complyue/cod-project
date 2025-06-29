@@ -8,7 +8,14 @@
 
 namespace shilos {
 
+// Forward declaration
+template <typename T> class regional_vector;
+
 template <typename T> class vector_segment {
+  // Friend declaration for raw pointer YAML functions
+  template <typename U, typename RT>
+  friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_vector<U> *raw_ptr);
+
 public:
   static constexpr size_t SEGMENT_SIZE = 64;
 
@@ -68,6 +75,12 @@ public:
 };
 
 template <typename T> class regional_vector {
+  // Friend declarations for YAML functions
+  template <typename U, typename RT>
+  friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_vector<U> *raw_ptr);
+  template <typename U, typename RT>
+  friend global_ptr<regional_vector<U>, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node);
+
 private:
   regional_ptr<vector_segment<T>> first_segment_;
   regional_ptr<vector_segment<T>> last_segment_;
@@ -160,35 +173,6 @@ public:
 
     last_segment_->emplace_back(mr, std::forward<Args>(args)...);
     total_size_++;
-  }
-
-  // Convenience push_back methods
-  template <typename RT>
-  void push_back(memory_region<RT> &mr, const T &value)
-    requires std::copy_constructible<T> && (!std::constructible_from<T, memory_region<RT> &, const T &>)
-  {
-    emplace_back(mr, value);
-  }
-
-  template <typename RT>
-  void push_back(memory_region<RT> &mr, const T &value)
-    requires std::constructible_from<T, memory_region<RT> &, const T &>
-  {
-    emplace_back(mr, mr, value);
-  }
-
-  template <typename RT>
-  void push_back(memory_region<RT> &mr, T &&value)
-    requires std::move_constructible<T> && (!std::constructible_from<T, memory_region<RT> &, T &&>)
-  {
-    emplace_back(mr, std::move(value));
-  }
-
-  template <typename RT>
-  void push_back(memory_region<RT> &mr, T &&value)
-    requires std::constructible_from<T, memory_region<RT> &, T &&>
-  {
-    emplace_back(mr, mr, std::move(value));
   }
 
   // Element access
