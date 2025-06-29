@@ -577,14 +577,16 @@ template <typename T> bool transfer_front_to_front(regional_lifo<T> &from, regio
   // Remove front node from source
   regional_cons<T> *node = from.head_.get();
   from.head_ = node->next_.get();
+  if (!from.head_) {
+    from.tail_ = nullptr; // List is now empty
+  }
 
   // Add node to front of destination
   if (to.empty()) {
-    to.head_ = node;
-    to.tail_ = node;
+    to.head_ = to.tail_ = node;
+    node->next() = nullptr;
   } else {
-    node->tail_ = to.tail_.get();
-    node->next_ = to.head_.get();
+    node->next() = to.head_.get();
     to.head_ = node;
   }
 

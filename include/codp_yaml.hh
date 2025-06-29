@@ -123,10 +123,14 @@ template <typename RT> global_ptr<CodProject, RT> from_yaml(memory_region<RT> &m
           // Add the dependency with constructor arguments
           project->deps().enque(mr, parsed_dep->uuid(), static_cast<std::string_view>(parsed_dep->name()),
                                 static_cast<std::string_view>(parsed_dep->repo_url()));
-          // The branches need to be added to the newly created CodDep - we need access to it
-          // Since regional_fifo doesn't give us a mutable back(), we need a different approach
-          // We'll need to modify the CodDep constructor or use a helper method
-          // For now, this is a known limitation that branches won't be copied in this path
+          // Access the newly created CodDep and copy branches
+          CodDep *new_dep = project->deps().back();
+          if (new_dep) {
+            // Copy branches from parsed_dep to new_dep
+            for (const auto &branch : parsed_dep->branches()) {
+              new_dep->branches().enque(mr, static_cast<std::string_view>(branch));
+            }
+          }
         } else {
           // Handle string format parsing (existing logic)
           std::string dep_str = dep_node.as<std::string>();
@@ -176,7 +180,14 @@ template <typename RT> global_ptr<CodProject, RT> from_yaml(memory_region<RT> &m
         // Create CodDep directly in the project's deps container with parsed data
         project->deps().enque(mr, dep->uuid(), static_cast<std::string_view>(dep->name()),
                               static_cast<std::string_view>(dep->repo_url()));
-        // Note: branches won't be copied due to design limitations
+        // Access the newly created CodDep and copy branches
+        CodDep *new_dep = project->deps().back();
+        if (new_dep) {
+          // Copy branches from parsed dep to new_dep
+          for (const auto &branch : dep->branches()) {
+            new_dep->branches().enque(mr, static_cast<std::string_view>(branch));
+          }
+        }
       }
     }
   }
