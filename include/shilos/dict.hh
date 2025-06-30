@@ -4,12 +4,26 @@
 #include "./vector.hh"
 
 #include <cassert>
+#include <concepts>
 #include <functional>
 
 namespace shilos {
 
 // Forward declaration
 template <typename K, typename V, typename Hash> class regional_dict;
+
+// Concepts for heterogeneous key operations
+template <typename KeyType, typename K, typename Hash, typename RT>
+concept CompatibleKey = requires(const KeyType &key_type, const K &k, const Hash &hasher, memory_region<RT> &mr) {
+  // Must be able to hash both types consistently
+  { hasher(key_type) } -> std::convertible_to<std::size_t>;
+  { hasher(k) } -> std::convertible_to<std::size_t>;
+  // Must be able to compare KeyType with K
+  { key_type == k } -> std::convertible_to<bool>;
+  { k == key_type } -> std::convertible_to<bool>;
+  // Must be able to construct K from memory_region and KeyType for insertion
+  requires std::constructible_from<K, memory_region<RT> &, KeyType>;
+};
 
 template <typename K, typename V> class dict_entry {
   // Friend declaration for raw pointer YAML functions
@@ -81,9 +95,17 @@ private:
   static constexpr size_t INITIAL_BUCKET_COUNT = 16;
   static constexpr size_t INVALID_INDEX = SIZE_MAX;
 
-  size_t hash_key(const K &key) const { return hasher_(key); }
+  template <typename KeyType, typename RT>
+    requires CompatibleKey<KeyType, K, Hash, RT>
+  size_t hash_key(const KeyType &key) const {
+    return hasher_(key);
+  }
 
-  size_t bucket_index(const K &key) const { return hash_key(key) % buckets_.size(); }
+  template <typename KeyType, typename RT>
+    requires CompatibleKey<KeyType, K, Hash, RT>
+  size_t bucket_index(const KeyType &key) const {
+    return hash_key<KeyType, RT>(key) % buckets_.size();
+  }
 
   template <typename RT> void maybe_resize(memory_region<RT> &mr) {
     if (buckets_.empty() || static_cast<double>(entries_.size()) / buckets_.size() > MAX_LOAD_FACTOR) {
@@ -112,17 +134,37 @@ private:
       entry.set_collision_next_index(INVALID_INDEX);
 
       // Insert into appropriate bucket
-      size_t bucket_idx = bucket_index(entry.key());
+      size_t bucket_idx = (hasher_(entry.key())) % buckets_.size();
       entry.set_collision_next_index(buckets_[bucket_idx]);
       buckets_[bucket_idx] = entry_idx;
     }
   }
 
-  size_t find_entry_index(const K &key) const {
+  template <typename KeyType, typename RT>
+    requires CompatibleKey<KeyType, K, Hash, RT>
+  size_t find_entry_index(const KeyType &key) const {
     if (buckets_.empty())
       return INVALID_INDEX;
 
-    size_t bucket_idx = bucket_index(key);
+    size_t bucket_idx = bucket_index<KeyType, RT>(key);
+    size_t entry_idx = buckets_[bucket_idx];
+
+    while (entry_idx != INVALID_INDEX) {
+      if (entries_[entry_idx].key() == key) {
+        return entry_idx;
+      }
+      entry_idx = entries_[entry_idx].collision_next_index();
+    }
+
+    return INVALID_INDEX;
+  }
+
+  // Non-templated version for exact key type K (backward compatibility)
+  size_t find_entry_index_exact(const K &key) const {
+    if (buckets_.empty())
+      return INVALID_INDEX;
+
+    size_t bucket_idx = (hasher_(key)) % buckets_.size();
     size_t entry_idx = buckets_[bucket_idx];
 
     while (entry_idx != INVALID_INDEX) {
@@ -149,14 +191,14 @@ public:
   regional_dict &operator=(const regional_dict &) = delete;
   regional_dict &operator=(regional_dict &&) = delete;
 
-  // Insert or update entry
-  template <typename RT, typename... ValueArgs>
-    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
-  std::pair<V *, bool> put(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
+  // Insert or update entry - supports heterogeneous keys for insertion
+  template <typename RT, typename KeyType, typename... ValueArgs>
+    requires CompatibleKey<KeyType, K, Hash, RT> && std::constructible_from<V, memory_region<RT> &, ValueArgs...>
+  std::pair<V *, bool> put(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
     maybe_resize(mr);
 
     // Check if key already exists
-    size_t existing_idx = find_entry_index(key);
+    size_t existing_idx = find_entry_index<KeyType, RT>(key);
     if (existing_idx != INVALID_INDEX) {
       // Update existing value
       dict_entry<K, V> &existing = entries_[existing_idx];
@@ -170,20 +212,20 @@ public:
     entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
 
     // Add to hash table
-    size_t bucket_idx = bucket_index(key);
+    size_t bucket_idx = bucket_index<KeyType, RT>(key);
     entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
     buckets_[bucket_idx] = new_entry_idx;
 
     return {&entries_[new_entry_idx].value(), true};
   }
 
-  template <typename RT, typename... ValueArgs>
-    requires std::constructible_from<V, ValueArgs...>
-  std::pair<V *, bool> put(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
+  template <typename RT, typename KeyType, typename... ValueArgs>
+    requires CompatibleKey<KeyType, K, Hash, RT> && std::constructible_from<V, ValueArgs...>
+  std::pair<V *, bool> put(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
     maybe_resize(mr);
 
     // Check if key already exists
-    size_t existing_idx = find_entry_index(key);
+    size_t existing_idx = find_entry_index<KeyType, RT>(key);
     if (existing_idx != INVALID_INDEX) {
       // Update existing value
       dict_entry<K, V> &existing = entries_[existing_idx];
@@ -197,37 +239,87 @@ public:
     entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
 
     // Add to hash table
-    size_t bucket_idx = bucket_index(key);
+    size_t bucket_idx = bucket_index<KeyType, RT>(key);
     entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
     buckets_[bucket_idx] = new_entry_idx;
 
     return {&entries_[new_entry_idx].value(), true};
   }
 
-  // Lookup operations
+  // Overloads for exact key type K (backward compatibility)
+  template <typename RT, typename... ValueArgs>
+    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
+  std::pair<V *, bool> put(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
+    return put<RT, K, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+  }
+
+  template <typename RT, typename... ValueArgs>
+    requires std::constructible_from<V, ValueArgs...>
+  std::pair<V *, bool> put(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
+    return put<RT, K, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+  }
+
+  // Lookup operations - support heterogeneous keys
+  template <typename KeyType, typename RT>
+    requires CompatibleKey<KeyType, K, Hash, RT>
+  V *get(const KeyType &key) {
+    size_t entry_idx = find_entry_index<KeyType, RT>(key);
+    return entry_idx != INVALID_INDEX ? &entries_[entry_idx].value() : nullptr;
+  }
+
+  template <typename KeyType, typename RT>
+    requires CompatibleKey<KeyType, K, Hash, RT>
+  const V *get(const KeyType &key) const {
+    size_t entry_idx = find_entry_index<KeyType, RT>(key);
+    return entry_idx != INVALID_INDEX ? &entries_[entry_idx].value() : nullptr;
+  }
+
+  template <typename KeyType, typename RT>
+    requires CompatibleKey<KeyType, K, Hash, RT>
+  V &operator[](const KeyType &key) {
+    size_t entry_idx = find_entry_index<KeyType, RT>(key);
+    assert(entry_idx != INVALID_INDEX && "Key not found in dictionary");
+    return entries_[entry_idx].value();
+  }
+
+  template <typename KeyType, typename RT>
+    requires CompatibleKey<KeyType, K, Hash, RT>
+  const V &operator[](const KeyType &key) const {
+    size_t entry_idx = find_entry_index<KeyType, RT>(key);
+    assert(entry_idx != INVALID_INDEX && "Key not found in dictionary");
+    return entries_[entry_idx].value();
+  }
+
+  template <typename KeyType, typename RT>
+    requires CompatibleKey<KeyType, K, Hash, RT>
+  bool contains(const KeyType &key) const {
+    return find_entry_index<KeyType, RT>(key) != INVALID_INDEX;
+  }
+
+  // Backward compatibility overloads for exact key type K (no RT needed)
   V *get(const K &key) {
-    size_t entry_idx = find_entry_index(key);
+    size_t entry_idx = find_entry_index_exact(key);
     return entry_idx != INVALID_INDEX ? &entries_[entry_idx].value() : nullptr;
   }
 
   const V *get(const K &key) const {
-    size_t entry_idx = find_entry_index(key);
+    size_t entry_idx = find_entry_index_exact(key);
     return entry_idx != INVALID_INDEX ? &entries_[entry_idx].value() : nullptr;
   }
 
   V &operator[](const K &key) {
-    size_t entry_idx = find_entry_index(key);
+    size_t entry_idx = find_entry_index_exact(key);
     assert(entry_idx != INVALID_INDEX && "Key not found in dictionary");
     return entries_[entry_idx].value();
   }
 
   const V &operator[](const K &key) const {
-    size_t entry_idx = find_entry_index(key);
+    size_t entry_idx = find_entry_index_exact(key);
     assert(entry_idx != INVALID_INDEX && "Key not found in dictionary");
     return entries_[entry_idx].value();
   }
 
-  bool contains(const K &key) const { return find_entry_index(key) != INVALID_INDEX; }
+  bool contains(const K &key) const { return find_entry_index_exact(key) != INVALID_INDEX; }
 
   // Capacity
   bool empty() const { return entries_.empty(); }

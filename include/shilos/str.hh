@@ -33,8 +33,12 @@ public:
     this->data_ = p_data;
   }
 
+  template <typename RT>
+  regional_str(memory_region<RT> &mr, const char *str) : regional_str(mr, std::string_view(str)) {}
+
   bool empty() const { return length_ <= 0; }
   size_t length() const { return length_; }
+  size_t size() const { return length_; }
   std::byte *data() { return data_.get(); }
   const std::byte *data() const { return data_.get(); }
 
@@ -74,12 +78,34 @@ public:
     }
     return 0 == std::memcmp(data_.get(), other.data_.get(), length_);
   }
+
+  // Cross-type equality operators for heterogeneous key support
+  bool operator==(std::string_view other) const noexcept {
+    if (length_ != other.size()) {
+      return false;
+    }
+    if (length_ == 0) {
+      return true;
+    }
+    return 0 == std::memcmp(data_.get(), other.data(), length_);
+  }
+
+  bool operator==(const char *other) const noexcept { return *this == std::string_view(other); }
+
+  bool operator==(const std::string &other) const noexcept { return *this == std::string_view(other); }
 };
 
 inline std::ostream &operator<<(std::ostream &os, const regional_str &str) {
   os << static_cast<std::string_view>(str);
   return os;
 }
+
+// Cross-type equality operators (symmetric)
+inline bool operator==(std::string_view lhs, const regional_str &rhs) noexcept { return rhs == lhs; }
+
+inline bool operator==(const char *lhs, const regional_str &rhs) noexcept { return rhs == lhs; }
+
+inline bool operator==(const std::string &lhs, const regional_str &rhs) noexcept { return rhs == lhs; }
 
 } // namespace shilos
 
