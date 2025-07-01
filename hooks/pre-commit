@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Pre-commit hook to format C++ files using clang-format
+
+set -e
+
+CLANG_FORMAT="built/bin/clang-format"
+REPO_ROOT=$(git rev-parse --show-toplevel)
+CLANG_FORMAT_PATH="$REPO_ROOT/$CLANG_FORMAT"
+
+if [ ! -f "$CLANG_FORMAT_PATH" ]; then
+    echo "Error: clang-format not found at $CLANG_FORMAT_PATH"
+    echo "Please build the project first to generate the clang-format binary."
+    exit 1
+fi
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(hh|cc)$' || true)
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+echo "Formatting staged C++ files with clang-format..."
+
+FILES_MODIFIED=0
+for FILE in $STAGED_FILES; do
+    if [ -f "$FILE" ]; then
+        echo "  Formatting: $FILE"
+        
+        cp "$FILE" "$FILE.pre-format"
+        "$CLANG_FORMAT_PATH" -i "$FILE"
+        
+        if ! cmp -s "$FILE.pre-format" "$FILE"; then
+            echo "    -> File was reformatted"
+            git add "$FILE"
+            FILES_MODIFIED=1
+        fi
+        
+        rm "$FILE.pre-format"
+    fi
+done
+
+if [ $FILES_MODIFIED -eq 1 ]; then
+    echo "Some files were reformatted and re-staged."
+    echo "The commit will proceed with the formatted code."
+fi
+
+echo "Code formatting complete."
+exit 0 
