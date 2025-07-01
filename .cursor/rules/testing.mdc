@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Test Build Process:
+1. Change to tests directory: cd tests
+2. Create build directory: mkdir -p build
+3. Configure: cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build
+4. Build working test: cmake --build ./build
+5. Run test: ./build/cod_test
