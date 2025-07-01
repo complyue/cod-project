@@ -26,6 +26,10 @@ COD_TARGETS_TO_BUILD="Native"
 	# suffix the build dir, so devcontainers/Docker and native build dirs can
 	# coexist on macOS
 	BUILD_DIR="build-$(uname -m)-$(uname -s)"
+	# the final toolchain built from this project:
+	#  * standard Clang toolset built by stage2, use as toolchain of stage3
+	#  * CoD toolset added by stage3, with standard Clang toolset overwritten
+	test -L built || ln -s "$BUILD_DIR/cod" built
 	# vscode-clangd expects build/compile_commands.json, and stage3 build tree
 	# is the final env for CoD development
 	test -L build || ln -s "$BUILD_DIR/stage3" build

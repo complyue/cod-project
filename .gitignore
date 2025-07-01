@@ -6,6 +6,9 @@
 # as most of those are useless.
 #==============================================================================#
 
+# Nested built directory
+/built*
+
 # Nested build directory
 /build*
 
