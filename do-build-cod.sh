@@ -198,7 +198,7 @@ COD_TARGETS_TO_BUILD="Native"
 		mkdir -p "$BUILD_DIR/stage2" && cd "$BUILD_DIR/stage2"
 		cp -rf ../cod-rt/lib ./
 		cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
-			-DCMAKE_PREFIX_PATH="$BUILD_DIR/stage1" \
+			-DCMAKE_SYSTEM_PREFIX_PATH="$BUILD_DIR/stage1" \
 			-DCMAKE_C_COMPILER="$BUILD_DIR/stage1/bin/clang" \
 			-DCMAKE_CXX_COMPILER="$BUILD_DIR/stage1/bin/clang++" \
 			-DCMAKE_LINKER="$BUILD_DIR/stage1/bin/ld.lld" \
@@ -229,7 +229,7 @@ COD_TARGETS_TO_BUILD="Native"
 	mkdir -p "$BUILD_DIR/stage3" && cd "$BUILD_DIR/stage3"
 	test -d ./lib || cp -rf ../cod/lib ./
 	cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
-		-DCMAKE_PREFIX_PATH="$BUILD_DIR/cod" \
+		-DCMAKE_SYSTEM_PREFIX_PATH="$BUILD_DIR/cod" \
 		-DCMAKE_C_COMPILER="$BUILD_DIR/cod/bin/clang" \
 		-DCMAKE_CXX_COMPILER="$BUILD_DIR/cod/bin/clang++" \
 		-DCMAKE_LINKER="$BUILD_DIR/cod/bin/ld.lld" \
