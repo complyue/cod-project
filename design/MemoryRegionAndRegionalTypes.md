@@ -2,6 +2,41 @@
 
 This document defines the requirements and implementation details for memory regions and regional types in the system.
 
+## Current Stage Strategy and Future Plans
+
+### Current C++ Implementation Phase
+
+This specification represents the current stage of shilos development, implemented in C++20 to establish the foundational design and prove the zero-cost-relocation concept. During this phase:
+
+- **Correctness Over Ergonomics**: The current implementation prioritizes correctness and zero-cost-relocation guarantees over developer ergonomics. Certain conveniences (e.g., stack allocation of regional types, simple pointer arithmetic) are intentionally restricted to maintain the core memory safety properties.
+
+- **C++20 Constraints**: The implementation leverages modern C++20 features while working within the language's constraints. Regional types must follow strict construction rules, lifetime management, and pointer semantics that may feel restrictive compared to standard C++ patterns.
+
+- **Design Validation**: This C++ implementation serves as a proof-of-concept and design validation tool, ensuring the memory region and regional type concepts are sound before developing a dedicated programming language.
+
+### Future Programming Language Development
+
+The long-term vision includes developing a new compiled programming language specifically designed for shilos programs:
+
+- **Native Regional Types**: The new language will provide native support for regional types with improved ergonomics, eliminating many of the current C++ constraints while maintaining zero-cost-relocation guarantees.
+
+- **Simplified Syntax**: Regional type allocation, construction, and pointer usage will be significantly simplified compared to the current C++ implementation.
+
+- **Compiler Optimizations**: The dedicated compiler will be able to optimize regional type usage patterns that are currently difficult to express or optimize in C++.
+
+- **Enhanced Safety**: Language-level guarantees will provide stronger compile-time safety for regional type constraints.
+
+### Transition Strategy
+
+The current C++ implementation serves as:
+
+- A reference implementation for the memory region concept
+- A testing ground for regional type design decisions
+- A foundation for the future language specification
+- A practical tool for early adopters and experimental projects
+
+Developers working with the current C++ implementation should understand that certain ergonomic limitations are intentional design choices that prioritize the core zero-cost-relocation feature. These limitations will be addressed in the future dedicated language while maintaining the fundamental memory safety and performance guarantees.
+
 ## Core Requirements
 
 ### Memory Region Interface
@@ -58,6 +93,8 @@ Regional types have strict lifetime management requirements:
   - The root type (`RT`) of `memory_region<RT>` is responsible for resource acquisition and release
 - Non-root bits types and regional types should avoid owning external resources
 
+**Current Stage Design Rationale**: The prohibition of copy/move operations is a fundamental design choice that enables zero-cost-relocation. While this restriction may seem limiting compared to standard C++ containers, it ensures that object graphs can be relocated in memory without any pointer updates. The future dedicated programming language will provide more ergonomic patterns for object construction and manipulation while maintaining these core relocation guarantees.
+
 ### 4. Container Element Rules
 
 Regional container types (like `regional_vector`, `regional_fifo`, `regional_lifo`, `regional_dict`) have additional constraints:
@@ -66,6 +103,8 @@ Regional container types (like `regional_vector`, `regional_fifo`, `regional_lif
 - **In-place construction only**: Elements must be constructed in-place using `emplace_*` methods that forward construction arguments
 - **Template forwarding**: Use perfect forwarding to pass construction arguments directly to element constructors
 - **Memory region threading**: Always pass the `memory_region&` to element constructors when required
+
+**Current Stage Implementation Note**: The requirement for in-place construction using `emplace_*` methods is more verbose than standard C++ container insertion patterns. This design choice ensures that all regional type constraints are satisfied while maintaining zero-cost-relocation. The future dedicated programming language will provide more intuitive syntax for container operations while preserving these fundamental safety properties.
 
 ### 5. YAML Serialization (Optional)
 
@@ -126,6 +165,7 @@ Shilos programs must follow strict allocation rules based on type classification
 - **Prohibited**: Stack allocation, register allocation, static allocation
 - **Required**: Must reside in a `memory_region<RT>`
 - **Reason**: `regional_ptr` uses address-relative storage requiring stable heap addresses
+- **Current Stage Trade-off**: This restriction is a deliberate design choice in the current C++ implementation phase. While it reduces ergonomics compared to standard C++ patterns, it ensures zero-cost-relocation guarantees. The future dedicated programming language will provide more ergonomic alternatives while maintaining these core safety properties.
 - **Examples**: `regional_str`, `regional_fifo<T>`, `regional_dict<K,V>`, user-defined regional types
 
 ```cpp
@@ -502,3 +542,41 @@ This design ensures that:
 - YAML functionality is completely optional and modular
 - All YAML logic is implemented inline for optimal performance
 - The `YamlConvertible` concept provides compile-time type safety
+
+## Summary and Future Direction
+
+### Current Implementation Philosophy
+
+The shilos system, as implemented in C++20, represents a deliberate trade-off between ergonomics and correctness. The design choices made in this specification prioritize:
+
+1. **Zero-Cost Relocation**: The ability to relocate entire object graphs in memory without pointer updates
+2. **Memory Safety**: Strong compile-time guarantees about memory layout and lifetime management
+3. **Correctness**: Ensuring that the core concepts are sound and well-tested
+
+These priorities come at the cost of reduced ergonomics compared to standard C++ patterns. Developers working with the current implementation should expect:
+
+- More verbose construction patterns for regional types
+- Restrictions on stack allocation and copy/move operations
+- Explicit memory region management
+- Template-heavy interfaces for type safety
+
+### Long-Term Vision
+
+The current C++ implementation serves as a foundation for a future dedicated programming language that will:
+
+- Provide native syntax for regional types and memory regions
+- Eliminate many of the current ergonomic limitations
+- Offer stronger compile-time safety guarantees
+- Enable more sophisticated compiler optimizations
+- Maintain the core zero-cost-relocation property
+
+### Development Strategy
+
+The transition from C++ implementation to dedicated language will be guided by:
+
+- **Experience Gained**: Lessons learned from real-world usage of the C++ implementation
+- **Design Validation**: Confirmation that the memory region concept scales to complex applications
+- **Performance Verification**: Proof that zero-cost-relocation delivers the expected benefits
+- **Community Feedback**: Input from developers using the current implementation
+
+Until the dedicated language is available, the C++ implementation provides a practical tool for exploring the shilos programming model and building applications that benefit from zero-cost-relocation capabilities.
