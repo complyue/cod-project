@@ -50,22 +50,22 @@ All regional types must satisfy the following constraints. Specialized types (re
 
 Regional types have strict lifetime management requirements:
 
-   - Copy and move construction/assignment are prohibited for regional types (allowed for bits types)
-   - Individual destruction is prohibited for both bits types and regional types
-     - Individual objects cannot be destroyed
-   - Destruction occurs atomically at region level:
-     - Entire object graph released with region
-     - The root type (`RT`) of `memory_region<RT>` is responsible for resource acquisition and release
-   - Non-root bits types and regional types should avoid owning external resources
+- Copy and move construction/assignment are prohibited for regional types (allowed for bits types)
+- Individual destruction is prohibited for both bits types and regional types
+  - Individual objects cannot be destroyed
+- Destruction occurs atomically at region level:
+  - Entire object graph released with region
+  - The root type (`RT`) of `memory_region<RT>` is responsible for resource acquisition and release
+- Non-root bits types and regional types should avoid owning external resources
 
 ### 4. Container Element Rules
 
 Regional container types (like `regional_vector`, `regional_fifo`, `regional_lifo`, `regional_dict`) have additional constraints:
 
-   - **No copy/move insertion**: Container methods must never accept elements via copy or move construction
-   - **In-place construction only**: Elements must be constructed in-place using `emplace_*` methods that forward construction arguments
-   - **Template forwarding**: Use perfect forwarding to pass construction arguments directly to element constructors
-   - **Memory region threading**: Always pass the `memory_region&` to element constructors when required
+- **No copy/move insertion**: Container methods must never accept elements via copy or move construction
+- **In-place construction only**: Elements must be constructed in-place using `emplace_*` methods that forward construction arguments
+- **Template forwarding**: Use perfect forwarding to pass construction arguments directly to element constructors
+- **Memory region threading**: Always pass the `memory_region&` to element constructors when required
 
 ### 5. YAML Serialization (Optional)
 
@@ -76,39 +76,235 @@ YAML serialization support is optional and modular for regional types:
 - **Modular Inclusion**: Users include specific `*_yaml.hh` headers to enable YAML for desired types
 - **Concept Compliance**: When YAML support is included, types must satisfy `YamlConvertible` concept
 
-### 6. Pointer Rules
+### 6. Pointer Implementation Details
 
-The system supports several pointer types with specific semantics:
+The system implements three pointer types with distinct storage and relocation semantics:
 
-- `regional_ptr` (intra-region):
-  - Stores references as relative offsets from its own memory address
-  - Provides region-local storage with automatic relocation support
-  - Supports construction from raw pointers for offset calculation
-  - Cannot be used with rvalue semantics due to address-relative storage
-- `global_ptr` (cross-region):
-  - Safe cross-region references with 2x space cost
-  - Lifetime bound to the referenced `memory_region`
-- Raw pointers:
-  - May be passed around temporarily but not stored persistently in region memory
-  - Can be used for `regional_ptr` construction/assignment to calculate offsets
-- Memory safety:
-  - The root type (`RT`) of `memory_region<RT>` defines memory and type safety semantics
-  - The simplest strategy is to not support reclaim of region memory, thus regional objects will never be deallocated nor change type
-  - If the root type supports memory reclaim (e.g., garbage collection), it must clearly define lifetime rules of the object graph and type-safety strategies in separate specifications.
+#### **`regional_ptr<T>` (Offset-Based Storage)**
 
-## Usage Guidelines
+- **Storage**: Relative offset from its own memory address (8 bytes)
+- **Relocation**: Automatic - offsets remain valid when region memory is remapped
+- **Performance**: Zero-cost relocation, optimal for single-region programs
+- **Construction**: Can be constructed from raw pointers to calculate offsets
+- **Constraint**: Cannot be used with rvalue semantics due to address-relative storage
 
-### Memory Placement
+#### **`global_ptr<T,RT>` (Region-Safe Storage)**
 
-- Objects of regional types must reside in a `memory_region<RT>`
-- Stack or register allocation is prohibited due to `regional_ptr` address relativity
+- **Storage**: Region identifier + offset (16 bytes)
+- **Relocation**: Automatic - maintains region safety across memory remapping
+- **Performance**: 2x space cost, required for multi-region programs
+- **Lifetime**: Bound to the referenced `memory_region<RT>`
+- **Purpose**: Safe cross-region references with explicit region tracking
 
-### Pointer Semantics
+#### **Raw Pointers (Temporary References)**
 
-- Raw pointers/references may be used temporarily but:
+- **Storage**: Standard C++ pointer (8 bytes)
+- **Relocation**: Manual - developer responsibility to handle region remapping
+- **Usage**: Temporary parameter passing, C++ interop, offset calculation
+- **Restriction**: Must not be stored persistently in regional types
+
+#### **Memory Safety Guarantees**
+
+- **Root Type Responsibility**: The root type (`RT`) of `memory_region<RT>` defines memory and type safety semantics
+- **Simple Strategy**: No memory reclaim - regional objects never deallocated or change type
+- **Advanced Strategy**: If root type supports memory reclaim (e.g., garbage collection), it must define lifetime rules and type-safety strategies in separate specifications
+
+## Allocation and Pointer Semantics for Shilos Programs
+
+### Memory Placement Rules
+
+Shilos programs must follow strict allocation rules based on type classification:
+
+#### **Bits Types (Stack/Register Allocation)**
+
+- **Allowed**: Stack allocation, register allocation, and standard C++ placement
+- **Examples**: `int`, `float`, `bool`, `char`, `UUID`, plain structs with no pointers
+- **Usage**: Normal C++ semantics apply - can be passed by value, stored in local variables, etc.
+
+#### **Regional Types (Region-Only Allocation)**
+
+- **Prohibited**: Stack allocation, register allocation, static allocation
+- **Required**: Must reside in a `memory_region<RT>`
+- **Reason**: `regional_ptr` uses address-relative storage requiring stable heap addresses
+- **Examples**: `regional_str`, `regional_fifo<T>`, `regional_dict<K,V>`, user-defined regional types
+
+```cpp
+// ✅ CORRECT - bits type on stack
+int counter = 42;
+UUID doc_id = generate_uuid();
+
+// ❌ INCORRECT - regional type on stack
+regional_str title("example");  // COMPILATION ERROR
+
+// ✅ CORRECT - regional type in region
+auto mr = memory_region<MyRoot>::alloc_region(1024*1024);
+regional_str title(*mr, "example");  // OK
+```
+
+### Pointer Type Selection Rules
+
+Shilos programs must choose appropriate pointer types based on usage context:
+
+#### **Raw Pointers (C++ Interop Only)**
+
+- **Purpose**: Interoperability with non-shilos C++ code
+- **Restrictions**:
+  - Must not be stored in regional types
   - Must not outlive the owning `memory_region`
-  - Must account for potential garbage collection by the root type
-- `regional_ptr` provides automatic relocation when region memory is remapped
+  - Used only for temporary parameter passing and return values
+- **Examples**: FFI boundaries, C library integration, temporary references
+
+```cpp
+// ✅ CORRECT - temporary interop usage
+void print_to_c_library(const char* text) {
+    regional_str rs(*mr, "Hello");
+    print_to_c_library(rs.c_str());  // Temporary raw pointer for C interop
+}
+
+// ❌ INCORRECT - storing raw pointer in regional type
+struct BadRegionalType {
+    const char* stored_ptr;  // VIOLATES REGIONAL TYPE CONSTRAINTS
+};
+```
+
+#### **Regional Pointers (Single-Region Programming)**
+
+- **Purpose**: Intra-region references in single-region shilos code
+- **Advantages**: Zero-cost relocation, compact storage (offset-based)
+- **Context**: When all referenced objects are in the same memory region
+- **Usage**: Default choice for single-region programs
+
+```cpp
+// ✅ CORRECT - single-region code using regional_ptr
+struct DocumentNode {
+    regional_str content_;
+    regional_ptr<DocumentNode> next_;
+
+    DocumentNode(memory_region<Document>& mr, std::string_view content)
+        : content_(mr, content), next_() {}
+};
+
+// Single region context - regional_ptr is optimal
+auto mr = memory_region<Document>::alloc_region(1024*1024);
+auto node1 = mr->create<DocumentNode>(*mr, "First");
+auto node2 = mr->create<DocumentNode>(*mr, "Second");
+node1->next_ = node2.get();  // regional_ptr assignment
+```
+
+#### **Global Pointers (Multi-Region Programming)**
+
+- **Purpose**: Cross-region references in multi-region shilos code
+- **Cost**: 2x space overhead for region disambiguation
+- **Context**: When referenced objects may be in different memory regions
+- **Usage**: Required for multi-region programs to maintain correctness
+
+```cpp
+// ✅ CORRECT - multi-region code using global_ptr
+struct CrossRegionReference {
+    regional_str name_;
+    global_ptr<DocumentNode, Document> external_ref_;  // Cross-region reference
+
+    template<typename RT>
+    CrossRegionReference(memory_region<RT>& mr, std::string_view name)
+        : name_(mr, name), external_ref_() {}
+};
+
+// Multi-region context - global_ptr maintains region safety
+auto doc_mr = memory_region<Document>::alloc_region(1024*1024);
+auto ref_mr = memory_region<RefRoot>::alloc_region(1024*1024);
+
+auto node = doc_mr->create<DocumentNode>(*doc_mr, "content");
+auto ref = ref_mr->create<CrossRegionReference>(*ref_mr, "reference");
+ref->external_ref_ = doc_mr->cast_ptr(node.get());  // global_ptr assignment
+```
+
+### Programming Model Guidelines
+
+Shilos programs can contain both single-region and multi-region code blocks. Code blocks are classified based on their memory access patterns:
+
+#### **Single-Region Code Blocks (Optimal Performance)**
+
+- **Definition**: Code blocks that access only one memory region and never reference objects outside that region
+- **Benefits**: Optimal performance, simpler pointer semantics, zero-cost relocation
+- **Pointer Choice**: Use `regional_ptr` for all references within the block
+- **Pattern**: Function operates entirely within one `memory_region<RT>` context
+
+```cpp
+// ✅ Single-region code block - only accesses doc_mr
+void process_document_content(memory_region<Document>& doc_mr) {
+    auto root = doc_mr.root();
+    auto node = doc_mr.create<DocumentNode>(doc_mr, "content");
+    root->first_node_ = node.get();  // regional_ptr assignment
+
+    // All operations within doc_mr - single-region semantics
+    traverse_nodes(root->first_node_);  // regional_ptr navigation
+}
+```
+
+#### **Multi-Region Code Blocks (Cross-Region Operations)**
+
+- **Definition**: Code blocks that access multiple memory regions or reference objects across regions
+- **Requirements**: Must use `global_ptr` for cross-region references
+- **Use Cases**: Data migration, cross-system integration, composite operations
+- **Complexity**: Requires explicit region lifetime management and disambiguation
+
+```cpp
+// ✅ Multi-region code block - accesses both doc_mr and index_mr
+void index_document(memory_region<Document>& doc_mr,
+                   memory_region<Index>& index_mr) {
+    auto doc_root = doc_mr.root();
+    auto index_root = index_mr.root();
+
+    // Cross-region reference requires global_ptr
+    auto doc_ref = doc_mr.cast_ptr(doc_root.get());
+    auto index_entry = index_mr.create<IndexEntry>(index_mr, "doc_key");
+    index_entry->document_ref_ = doc_ref;  // global_ptr assignment
+
+    index_root->entries_.enque(index_mr, std::move(index_entry));
+}
+```
+
+#### **Hybrid Program Architecture**
+
+- **Reality**: Most shilos programs contain both single-region and multi-region code blocks
+- **Strategy**: Maximize single-region blocks for performance, use multi-region blocks only when necessary
+- **Optimization**: Design APIs to accept single memory regions when possible
+
+```cpp
+// ✅ Hybrid program - mix of single-region and multi-region blocks
+class DocumentProcessor {
+    // Single-region operations (optimal performance)
+    void format_document(memory_region<Document>& doc_mr) {
+        // Single-region block - all operations in doc_mr
+        auto root = doc_mr.root();
+        apply_formatting(root->content_);  // regional_ptr operations
+    }
+
+    // Multi-region operations (when cross-region access needed)
+    void backup_document(memory_region<Document>& doc_mr,
+                        memory_region<Backup>& backup_mr) {
+        // Multi-region block - references across regions
+        auto doc_ref = doc_mr.cast_ptr(doc_mr.root().get());
+        auto backup_entry = backup_mr.create<BackupEntry>(backup_mr);
+        backup_entry->source_document_ = doc_ref;  // global_ptr
+    }
+};
+```
+
+#### **Code Block Classification Guidelines**
+
+- **Single-Region Block**: Function/method parameters include only one `memory_region<RT>&`
+- **Multi-Region Block**: Function/method parameters include multiple `memory_region<RT>&` parameters
+- **Boundary Analysis**: Determine pointer requirements by analyzing memory access patterns
+- **Performance Impact**: Single-region blocks have zero-cost relocation, multi-region blocks have 2x pointer overhead
+
+### Pointer Semantics Summary
+
+| Pointer Type       | Storage Cost | Relocation | Use Case      | Restrictions                                 |
+| ------------------ | ------------ | ---------- | ------------- | -------------------------------------------- |
+| `T*` (raw)         | 8 bytes      | Manual     | C++ interop   | Temporary only, no storage in regional types |
+| `regional_ptr<T>`  | 8 bytes      | Automatic  | Single-region | Target must be in same region                |
+| `global_ptr<T,RT>` | 16 bytes     | Automatic  | Multi-region  | 2x space cost, cross-region safe             |
 
 ## Implementation Details
 
@@ -244,7 +440,7 @@ This modular approach allows users to:
 **YAML Container Support**: YAML deserialization supports containers holding both bits types and regional types. The implementation leverages the fixed-size and RTTI-free constraints of regional types to:
 
 - Allocate uninitialized memory at final container locations
-- Use the raw pointer version `from_yaml(mr, node, T* raw_ptr)` for direct in-place construction  
+- Use the raw pointer version `from_yaml(mr, node, T* raw_ptr)` for direct in-place construction
 - Avoid copy/move operations that would violate regional type constraints
 
 The raw pointer approach works for simple container scenarios. Complex nested cases (like containers of regional types within other regional types) may still require refinement to achieve full compliance with regional type constraints.
