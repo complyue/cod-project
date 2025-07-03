@@ -152,7 +152,7 @@ public:
   template <typename VT> global_ptr<VT, RT> cast_ptr(const VT *ptr) {
     assert(reinterpret_cast<intptr_t>(ptr) > reinterpret_cast<intptr_t>(this) &&
            reinterpret_cast<intptr_t>(ptr) < reinterpret_cast<intptr_t>(this) + capacity_);
-    return global_ptr<VT, RT>(*this, ptr);
+    return global_ptr<VT, RT>(*this, reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
 
   template <typename VT> const global_ptr<VT, RT> cast_ptr(const regional_ptr<VT> &rp) const {
@@ -161,7 +161,9 @@ public:
   template <typename VT> const global_ptr<VT, RT> cast_ptr(const VT *ptr) const {
     assert(reinterpret_cast<intptr_t>(ptr) > reinterpret_cast<intptr_t>(this) &&
            reinterpret_cast<intptr_t>(ptr) < reinterpret_cast<intptr_t>(this) + capacity_);
-    return global_ptr<VT, RT>(*this, ptr);
+    // const_cast is safe here: global_ptr only stores a reference, doesn't modify the region
+    return global_ptr<VT, RT>(const_cast<memory_region<RT> &>(*this),
+                              reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
 
   template <typename T> T *allocate(const size_t n = 1) {
@@ -220,11 +222,13 @@ public:
 
   global_ptr<RT, RT> root() { return global_ptr<RT, RT>(*this, ro_offset_); }
   const global_ptr<RT, RT> root() const {
+    // const_cast is safe here: global_ptr only stores a reference, doesn't modify the region
     return global_ptr<RT, RT>(const_cast<memory_region<RT> &>(*this), ro_offset_);
   }
 
   template <typename VT> global_ptr<VT, RT> null() { return global_ptr<VT, RT>(this, 0); }
   template <typename VT> const global_ptr<VT, RT> null() const {
+    // const_cast is safe here: global_ptr only stores a reference, doesn't modify the region
     return global_ptr<VT, RT>(const_cast<memory_region<RT> &>(*this), 0);
   }
 };
@@ -286,9 +290,12 @@ public:
     const regional_ptr<F> &fp = this->*ptrField;
     const VT *vp = fp.get();
     if (!vp) {
-      return global_ptr<F, RT>(region_, 0);
+      // const_cast is safe here: global_ptr only stores a reference, doesn't modify the region
+      return global_ptr<F, RT>(const_cast<memory_region<RT> &>(region_), 0);
     } else {
-      return global_ptr<F, RT>(region_, reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(&region_));
+      // const_cast is safe here: global_ptr only stores a reference, doesn't modify the region
+      return global_ptr<F, RT>(const_cast<memory_region<RT> &>(region_),
+                               reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(&region_));
     }
   }
 
@@ -313,6 +320,14 @@ public:
 
   auto operator<=>(const global_ptr<VT, RT> &other) const = default;
   bool operator==(const global_ptr<VT, RT> &other) const = default;
+
+  // Comparison with nullptr
+  bool operator==(std::nullptr_t) const noexcept { return offset_ == 0; }
+  bool operator!=(std::nullptr_t) const noexcept { return offset_ != 0; }
+
+  // Symmetric operators
+  friend bool operator==(std::nullptr_t, const global_ptr<VT, RT> &ptr) noexcept { return ptr.offset_ == 0; }
+  friend bool operator!=(std::nullptr_t, const global_ptr<VT, RT> &ptr) noexcept { return ptr.offset_ != 0; }
 };
 
 } // namespace shilos

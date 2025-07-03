@@ -19,12 +19,17 @@ private:
 
 public:
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
+    requires std::constructible_from<T, memory_region<RT> &, Args...> && (!std::constructible_from<T, Args...>)
   regional_cons(memory_region<RT> &mr, Args &&...args) : value_(mr, std::forward<Args>(args)...) {}
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...>
+    requires std::constructible_from<T, Args...> && (!std::constructible_from<T, memory_region<RT> &, Args...>)
   regional_cons(memory_region<RT> &mr, Args &&...args) : value_(std::forward<Args>(args)...) {}
+
+  // When both constructors are possible, prefer the regional version (more explicit)
+  template <typename RT, typename... Args>
+    requires std::constructible_from<T, memory_region<RT> &, Args...> && std::constructible_from<T, Args...>
+  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(mr, std::forward<Args>(args)...) {}
 
   // Deleted special members
   regional_cons(const regional_cons &) = delete;

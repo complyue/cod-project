@@ -259,6 +259,32 @@ public:
     return put<RT, K, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
   }
 
+  // Emplace methods (aliases for put methods to match expected API)
+  template <typename RT, typename KeyType, typename... ValueArgs>
+    requires CompatibleKey<KeyType, K, Hash, RT> && std::constructible_from<V, memory_region<RT> &, ValueArgs...>
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    return put<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+  }
+
+  template <typename RT, typename KeyType, typename... ValueArgs>
+    requires CompatibleKey<KeyType, K, Hash, RT> && std::constructible_from<V, ValueArgs...>
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    return put<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+  }
+
+  // Overloads for exact key type K
+  template <typename RT, typename... ValueArgs>
+    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
+    return put<RT, K, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+  }
+
+  template <typename RT, typename... ValueArgs>
+    requires std::constructible_from<V, ValueArgs...>
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
+    return put<RT, K, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+  }
+
   // Lookup operations - support heterogeneous keys
   template <typename KeyType, typename RT>
     requires CompatibleKey<KeyType, K, Hash, RT>
@@ -382,6 +408,37 @@ public:
 
   const_iterator cbegin() const { return begin(); }
   const_iterator cend() const { return end(); }
+
+  // Find method that returns iterator (standard container interface)
+  iterator find(const K &key) {
+    size_t entry_idx = find_entry_index_exact(key);
+    if (entry_idx == INVALID_INDEX) {
+      return end();
+    }
+    return iterator(entries_.begin() + entry_idx);
+  }
+
+  const_iterator find(const K &key) const {
+    size_t entry_idx = find_entry_index_exact(key);
+    if (entry_idx == INVALID_INDEX) {
+      return end();
+    }
+    return const_iterator(entries_.begin() + entry_idx);
+  }
+
+  // Simplified emplace for string literals when K=regional_str, V=regional_str
+  template <typename RT>
+    requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key, const char *value) {
+    return put(mr, key, value);
+  }
+
+  // Simplified emplace for string literals when K=regional_str
+  template <typename RT, typename... ValueArgs>
+    requires std::same_as<K, regional_str>
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key, ValueArgs &&...value_args) {
+    return put(mr, key, std::forward<ValueArgs>(value_args)...);
+  }
 };
 
 // Comparison operators

@@ -159,6 +159,77 @@ struct Node {
   explicit Node(const Sequence &seq) : value(seq) {}
   explicit Node(const Map &map) : value(map) {}
 
+  // Assignment operators for different types
+  Node &operator=(const std::string &s) {
+    value = s;
+    return *this;
+  }
+  Node &operator=(std::string_view s) {
+    value = std::string(s);
+    return *this;
+  }
+  Node &operator=(const char *s) {
+    value = std::string(s);
+    return *this;
+  }
+  Node &operator=(bool b) {
+    value = b;
+    return *this;
+  }
+  Node &operator=(int64_t i) {
+    value = i;
+    return *this;
+  }
+  Node &operator=(int i) {
+    value = static_cast<int64_t>(i);
+    return *this;
+  } // Handle plain int (potential data loss for large values)
+  Node &operator=(double d) {
+    value = d;
+    return *this;
+  }
+  Node &operator=(std::nullptr_t) {
+    value = std::monostate{};
+    return *this;
+  }
+
+  // Type checking methods
+  bool IsScalar() const {
+    return std::holds_alternative<bool>(value) || std::holds_alternative<int64_t>(value) ||
+           std::holds_alternative<double>(value) || std::holds_alternative<std::string>(value);
+  }
+
+  bool IsSequence() const { return std::holds_alternative<Sequence>(value); }
+
+  bool IsMap() const { return std::holds_alternative<Map>(value); }
+
+  bool IsNull() const { return std::holds_alternative<std::monostate>(value); }
+
+  // Size method for sequences and maps
+  size_t size() const {
+    if (auto seq = std::get_if<Sequence>(&value)) {
+      return seq->size();
+    } else if (auto map = std::get_if<Map>(&value)) {
+      return map->size();
+    }
+    return 0;
+  }
+
+  // push_back for sequences
+  void push_back(const Node &node) {
+    if (auto seq = std::get_if<Sequence>(&value)) {
+      seq->push_back(node);
+    } else {
+      // Convert to sequence if not already
+      value = Sequence{};
+      std::get<Sequence>(value).push_back(node);
+    }
+  }
+
+  void push_back(int64_t i) { push_back(Node(i)); }
+
+  void push_back(const std::string &s) { push_back(Node(s)); }
+
   template <typename T> T as() const {
     if constexpr (std::is_same_v<T, std::string>) {
       if (auto s = std::get_if<std::string>(&value)) {
@@ -170,6 +241,21 @@ struct Node {
         return *i;
       }
       throw TypeError("Expected integer value");
+    } else if constexpr (std::is_same_v<T, int>) {
+      if (auto i = std::get_if<int64_t>(&value)) {
+        return static_cast<int>(*i);
+      }
+      throw TypeError("Expected integer value");
+    } else if constexpr (std::is_same_v<T, double>) {
+      if (auto d = std::get_if<double>(&value)) {
+        return *d;
+      }
+      throw TypeError("Expected double value");
+    } else if constexpr (std::is_same_v<T, bool>) {
+      if (auto b = std::get_if<bool>(&value)) {
+        return *b;
+      }
+      throw TypeError("Expected bool value");
     }
     throw TypeError("Unsupported type conversion");
   }
@@ -179,6 +265,34 @@ struct Node {
       return map->at(key);
     }
     throw TypeError("Expected map value");
+  }
+
+  Node &operator[](const std::string &key) {
+    if (auto map = std::get_if<Map>(&value)) {
+      return (*map)[key];
+    }
+    throw TypeError("Expected map value");
+  }
+
+  // Indexing by integer for sequences
+  const Node &operator[](size_t index) const {
+    if (auto seq = std::get_if<Sequence>(&value)) {
+      if (index >= seq->size()) {
+        throw RangeError("Index out of range");
+      }
+      return (*seq)[index];
+    }
+    throw TypeError("Expected sequence value");
+  }
+
+  Node &operator[](size_t index) {
+    if (auto seq = std::get_if<Sequence>(&value)) {
+      if (index >= seq->size()) {
+        throw RangeError("Index out of range");
+      }
+      return (*seq)[index];
+    }
+    throw TypeError("Expected sequence value");
   }
 
   Map::const_iterator find(const std::string &key) const {
@@ -199,6 +313,11 @@ struct Node {
 void format_yaml(std::ostream &os, const Node &node, int indent = 0);
 std::ostream &operator<<(std::ostream &os, const Node &node);
 std::string format_yaml(const Node &node);
+
+// Standalone Load function
+inline Node Load(const std::string_view yaml_str) { return Node::Load(yaml_str); }
+
+inline Node Load(const std::string &yaml_str) { return Node::Load(yaml_str); }
 
 template <typename T, typename RT>
 concept YamlConvertible =
