@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <compare>
+#include <iterator>
 #include <stdexcept>
 
 namespace shilos {
@@ -140,7 +141,7 @@ public:
   void emplace_back(memory_region<RT> &mr, Args &&...args) {
     // If no segments or last segment is full, create new segment
     if (!last_segment_ || last_segment_->is_full()) {
-      auto new_segment = mr.template create<vector_segment<T>>(mr);
+      auto new_segment = mr.template create_bits<vector_segment<T>>(mr);
 
       if (!first_segment_) {
         first_segment_ = last_segment_ = new_segment.get();
@@ -160,7 +161,7 @@ public:
   void emplace_back(memory_region<RT> &mr, Args &&...args) {
     // If no segments or last segment is full, create new segment
     if (!last_segment_ || last_segment_->is_full()) {
-      auto new_segment = mr.template create<vector_segment<T>>(mr);
+      auto new_segment = mr.template create_bits<vector_segment<T>>(mr);
 
       if (!first_segment_) {
         first_segment_ = last_segment_ = new_segment.get();
@@ -230,7 +231,7 @@ public:
     size_t needed_segments = (min_capacity + vector_segment<T>::SEGMENT_SIZE - 1) / vector_segment<T>::SEGMENT_SIZE;
 
     while (segment_count_ < needed_segments) {
-      auto new_segment = mr.template create<vector_segment<T>>(mr);
+      auto new_segment = mr.template create_bits<vector_segment<T>>(mr);
 
       if (!first_segment_) {
         first_segment_ = last_segment_ = new_segment.get();
@@ -244,6 +245,14 @@ public:
 
   // Iterator implementation
   class iterator {
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T *;
+    using reference = T &;
+
+  private:
     vector_segment<T> *current_segment_;
     size_t local_index_;
     size_t global_index_;
@@ -280,6 +289,14 @@ public:
   };
 
   class const_iterator {
+  public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const T *;
+    using reference = const T &;
+
+  private:
     const vector_segment<T> *current_segment_;
     size_t local_index_;
     size_t global_index_;

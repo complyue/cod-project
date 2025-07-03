@@ -111,13 +111,24 @@ class memory_region {
   friend class DBMR<RT>;
 
 public:
+  // General alloc_region for root types with additional constructor arguments
   template <typename... Args>
+    requires std::constructible_from<RT, memory_region<RT> &, Args...>
   static memory_region<RT> *alloc_region(const size_t payload_capacity, Args &&...args,
                                          std::allocator<std::byte> allocator = std::allocator<std::byte>()) {
     const size_t capacity = sizeof(memory_region) + payload_capacity;
     void *ptr = allocator.allocate(capacity);
-    std::construct_at(ptr, capacity, std::forward<Args>(args)...);
-    return reinterpret_cast<memory_region<RT> *>(ptr);
+    return new (ptr) memory_region<RT>(capacity, std::forward<Args>(args)...);
+  }
+
+  // Simplified alloc_region for root types that only need memory_region& parameter
+  static memory_region<RT> *alloc_region(const size_t payload_capacity,
+                                         std::allocator<std::byte> allocator = std::allocator<std::byte>())
+    requires std::constructible_from<RT, memory_region<RT> &>
+  {
+    const size_t capacity = sizeof(memory_region) + payload_capacity;
+    void *ptr = allocator.allocate(capacity);
+    return new (ptr) memory_region<RT>(capacity);
   }
 
 protected:
@@ -226,7 +237,7 @@ public:
     return global_ptr<RT, RT>(const_cast<memory_region<RT> &>(*this), ro_offset_);
   }
 
-  template <typename VT> global_ptr<VT, RT> null() { return global_ptr<VT, RT>(this, 0); }
+  template <typename VT> global_ptr<VT, RT> null() { return global_ptr<VT, RT>(*this, 0); }
   template <typename VT> const global_ptr<VT, RT> null() const {
     // const_cast is safe here: global_ptr only stores a reference, doesn't modify the region
     return global_ptr<VT, RT>(const_cast<memory_region<RT> &>(*this), 0);
@@ -317,6 +328,10 @@ public:
   const VT *operator->() const { return get(); }
 
   explicit operator bool() const noexcept { return offset_ != 0; }
+
+  // Access to the memory region
+  memory_region<RT> &region() { return region_; }
+  const memory_region<RT> &region() const { return region_; }
 
   auto operator<=>(const global_ptr<VT, RT> &other) const = default;
   bool operator==(const global_ptr<VT, RT> &other) const = default;

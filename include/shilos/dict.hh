@@ -6,6 +6,7 @@
 #include <cassert>
 #include <concepts>
 #include <functional>
+#include <iterator>
 
 namespace shilos {
 
@@ -38,6 +39,9 @@ private:
 public:
   static constexpr size_t INVALID_INDEX = SIZE_MAX;
 
+  // Default constructor (needed for vector_segment arrays)
+  dict_entry() : key_(), value_(), collision_next_index_(INVALID_INDEX) {}
+
   template <typename RT, typename... KeyArgs, typename... ValueArgs>
     requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> &&
                  std::constructible_from<V, memory_region<RT> &, ValueArgs...>
@@ -62,6 +66,26 @@ public:
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args, ValueArgs &&...value_args)
       : key_(mr, std::forward<KeyArgs>(key_args)...), value_(std::forward<ValueArgs>(value_args)...),
         collision_next_index_(INVALID_INDEX) {}
+
+  // Constructor for key-only with default-constructed value (V needs memory_region)
+  template <typename RT, typename... KeyArgs>
+    requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> &&
+                 std::constructible_from<V, memory_region<RT> &>
+  dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args)
+      : key_(mr, std::forward<KeyArgs>(key_args)...), value_(mr), collision_next_index_(INVALID_INDEX) {}
+
+  // Constructor for key-only with default-constructed value (V doesn't need memory_region)
+  template <typename RT, typename... KeyArgs>
+    requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> && std::constructible_from<V> &&
+                 (!std::constructible_from<V, memory_region<RT> &>)
+  dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args)
+      : key_(mr, std::forward<KeyArgs>(key_args)...), value_(), collision_next_index_(INVALID_INDEX) {}
+
+  // Special constructor for K=regional_str, V=regional_str with const char* arguments
+  template <typename RT>
+    requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
+  dict_entry(memory_region<RT> &mr, const char *key_str, const char *value_str)
+      : key_(mr, key_str), value_(mr, value_str), collision_next_index_(INVALID_INDEX) {}
 
   // Deleted special members
   dict_entry(const dict_entry &) = delete;
@@ -415,7 +439,9 @@ public:
     if (entry_idx == INVALID_INDEX) {
       return end();
     }
-    return iterator(entries_.begin() + entry_idx);
+    auto it = entries_.begin();
+    std::advance(it, entry_idx);
+    return iterator(it);
   }
 
   const_iterator find(const K &key) const {
@@ -423,21 +449,83 @@ public:
     if (entry_idx == INVALID_INDEX) {
       return end();
     }
-    return const_iterator(entries_.begin() + entry_idx);
+    auto it = entries_.begin();
+    std::advance(it, entry_idx);
+    return const_iterator(it);
   }
 
   // Simplified emplace for string literals when K=regional_str, V=regional_str
   template <typename RT>
     requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
   std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key, const char *value) {
-    return put(mr, key, value);
+    maybe_resize(mr);
+
+    // Create new entry directly
+    size_t new_entry_idx = entries_.size();
+    entries_.emplace_back(mr, key, value);
+
+    // Add to hash table
+    size_t bucket_idx = (hasher_(entries_[new_entry_idx].key())) % buckets_.size();
+    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
+    buckets_[bucket_idx] = new_entry_idx;
+
+    return {&entries_[new_entry_idx].value(), true};
   }
 
-  // Simplified emplace for string literals when K=regional_str
+  // Emplace with key only (const char* key for regional_str) - value default constructed
+  template <typename RT>
+    requires std::same_as<K, regional_str> && std::constructible_from<V, memory_region<RT> &>
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key) {
+    maybe_resize(mr);
+
+    // Create the entry directly in the vector with default-constructed value
+    size_t new_entry_idx = entries_.size();
+    entries_.emplace_back(mr, key); // This will call dict_entry constructor that default-constructs V
+
+    // Add to hash table
+    size_t bucket_idx = (hasher_(entries_[new_entry_idx].key())) % buckets_.size();
+    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
+    buckets_[bucket_idx] = new_entry_idx;
+
+    return {&entries_[new_entry_idx].value(), true};
+  }
+
+  // Simplified emplace for string literals when K=regional_str and V requires memory_region
   template <typename RT, typename... ValueArgs>
-    requires std::same_as<K, regional_str>
+    requires std::same_as<K, regional_str> && std::constructible_from<V, memory_region<RT> &, ValueArgs...> &&
+             (!std::constructible_from<V, ValueArgs...>)
   std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key, ValueArgs &&...value_args) {
-    return put(mr, key, std::forward<ValueArgs>(value_args)...);
+    maybe_resize(mr);
+
+    // Create the entry directly in the vector
+    size_t new_entry_idx = entries_.size();
+    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
+
+    // Add to hash table
+    size_t bucket_idx = (hasher_(entries_[new_entry_idx].key())) % buckets_.size();
+    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
+    buckets_[bucket_idx] = new_entry_idx;
+
+    return {&entries_[new_entry_idx].value(), true};
+  }
+
+  // Additional overload for non-regional value types
+  template <typename RT, typename... ValueArgs>
+    requires std::same_as<K, regional_str> && std::constructible_from<V, ValueArgs...> &&
+             (!std::constructible_from<V, memory_region<RT> &, ValueArgs...>)
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key, ValueArgs &&...value_args) {
+    maybe_resize(mr);
+
+    // Create the entry directly in the vector
+    size_t new_entry_idx = entries_.size();
+    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
+
+    // Add to hash table
+    size_t bucket_idx = (hasher_(entries_[new_entry_idx].key())) % buckets_.size();
+    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
+    buckets_[bucket_idx] = new_entry_idx;
+
+    return {&entries_[new_entry_idx].value(), true};
   }
 };
 

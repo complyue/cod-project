@@ -107,6 +107,30 @@ inline bool operator==(const char *lhs, const regional_str &rhs) noexcept { retu
 
 inline bool operator==(const std::string &lhs, const regional_str &rhs) noexcept { return rhs == lhs; }
 
+template <typename RT> void intern_str(memory_region<RT> &mr, const std::string &external_str, regional_str &str) {
+  new (&str) regional_str(mr, external_str);
+}
+
+template <typename RT> void intern_str(memory_region<RT> &mr, std::string_view external_str, regional_str &str) {
+  new (&str) regional_str(mr, external_str);
+}
+
+template <typename RT> void intern_str(memory_region<RT> &mr, const char *external_str, regional_str &str) {
+  new (&str) regional_str(mr, external_str);
+}
+
+template <typename RT> global_ptr<regional_str, RT> intern_str(memory_region<RT> &mr, const std::string &external_str) {
+  return mr.template create<regional_str>(external_str);
+}
+
+template <typename RT> global_ptr<regional_str, RT> intern_str(memory_region<RT> &mr, std::string_view external_str) {
+  return mr.template create<regional_str>(external_str);
+}
+
+template <typename RT> global_ptr<regional_str, RT> intern_str(memory_region<RT> &mr, const char *external_str) {
+  return mr.template create<regional_str>(external_str);
+}
+
 } // namespace shilos
 
 // Specialize std::hash for regional_str
