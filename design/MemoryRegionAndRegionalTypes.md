@@ -100,8 +100,8 @@ Regional types have strict lifetime management requirements:
 Regional container types (like `regional_vector`, `regional_fifo`, `regional_lifo`, `regional_dict`) have additional constraints:
 
 - **No copy/move insertion**: Container methods must never accept elements via copy or move construction
-- **In-place construction only**: Elements must be constructed in-place using `emplace_*` methods that forward construction arguments
-- **Template forwarding**: Use perfect forwarding to pass construction arguments directly to element constructors
+- **In-place construction only**: Elements must be constructed in-place using `emplace_*` methods that accept construction arguments
+- **Const reference parameters**: Use const references (`const Args&...args`) to prevent moves from external contexts
 - **Memory region threading**: Always pass the `memory_region&` to element constructors when required
 
 **Current Stage Implementation Note**: The requirement for in-place construction using `emplace_*` methods is more verbose than standard C++ container insertion patterns. This design choice ensures that all regional type constraints are satisfied while maintaining zero-cost-relocation. The future dedicated programming language will provide more intuitive syntax for container operations while preserving these fundamental safety properties.
@@ -178,7 +178,7 @@ regional_str title("example");  // COMPILATION ERROR
 
 // ✅ CORRECT - regional type in region
 auto mr = memory_region<MyRoot>::alloc_region(1024*1024);
-regional_str title(*mr, "example");  // OK
+auto title = mr->create<regional_str>(*mr, "example");  // OK
 ```
 
 ### Pointer Type Selection Rules
@@ -197,8 +197,8 @@ Shilos programs must choose appropriate pointer types based on usage context:
 ```cpp
 // ✅ CORRECT - temporary interop usage
 void print_to_c_library(const char* text) {
-    regional_str rs(*mr, "Hello");
-    print_to_c_library(rs.c_str());  // Temporary raw pointer for C interop
+    auto rs = mr.create<regional_str>(*mr, "Hello");
+    print_to_c_library(rs->c_str());  // Temporary raw pointer for C interop
 }
 
 // ❌ INCORRECT - storing raw pointer in regional type
@@ -300,7 +300,7 @@ void index_document(memory_region<Document>& doc_mr,
     auto index_entry = index_mr.create<IndexEntry>(index_mr, "doc_key");
     index_entry->document_ref_ = doc_ref;  // global_ptr assignment
 
-    index_root->entries_.enque(index_mr, std::move(index_entry));
+    index_root->entries_.enque(index_mr, *index_entry);
 }
 ```
 
@@ -424,13 +424,13 @@ auto content = intern_str(*mr, std::string("Content text"));
 auto note = intern_str(*mr, std::string_view("Note view"));
 
 // In-place construction approach - constructs at pre-allocated location
-regional_str name_storage;  // Uninitialized storage
-intern_str(*mr, "Document Name", name_storage);  // Initialize in-place
+auto name_storage = mr->allocate<regional_str>();  // Pre-allocated storage
+intern_str(*mr, "Document Name", *name_storage);  // Initialize in-place
 ```
 
 **Design Rationale**: The `intern_str` functions bridge the gap between standard C++ string handling and regional type constraints. They provide ergonomic alternatives to direct `regional_str` constructor calls while maintaining compliance with all regional type requirements. The dual interface (in-place vs. factory) accommodates different memory management patterns common in shilos programs.
 
-**Important Usage Guidelines**: 
+**Important Usage Guidelines**:
 
 - **Never use `intern_str` for temporary purposes**: The `intern_str` functions allocate memory in the region and should only be used when you need to store the string persistently. For temporary string operations, use standard C++ string types or `std::string_view`.
 
@@ -453,8 +453,8 @@ std::string_view key_view = "temp_key";
 dict.emplace(*mr, key_view, "value");
 dict.contains(key_view);  // Reuse the same view
 
-// ✅ CORRECT - direct construction for simple cases
-dict.emplace(*mr, regional_str(*mr, "temp_key"), "value");
+// ✅ CORRECT - use string_view to avoid allocation
+dict.emplace(*mr, std::string_view("temp_key"), "value");
 
 // ✅ CORRECT - intern_str for persistent storage
 auto title = intern_str(*mr, "Document Title");  // Will be stored long-term
@@ -643,18 +643,18 @@ This design ensures that:
 ## Lvalue-Only Constraint for Regional Types
 
 - **regional_str and all regional types must only be used as lvalues.**
-- Passing, returning, or using regional types as rvalues (temporaries) is strictly forbidden.
-- The reason is that the lifetime and memory management of regional types are entirely controlled by their owning memory_region. Rvalue semantics would break the unique ownership and lifetime safety guarantees.
+- Creating temporary instances of regional types is strictly forbidden.
+- The reason is that the lifetime and memory management of regional types are entirely controlled by their owning memory_region. Temporary objects would exist outside of any region's control, breaking the unique ownership and lifetime safety guarantees.
 - Typical usage:
 
 ```cpp
-regional_str key(mr, "key1");
-dict.insert(mr, key, value); // Correct: key is an lvalue
+auto key = mr.create<regional_str>(mr, "key1");
+dict.insert(mr, *key, value); // Correct: *key is an lvalue
 
-dict.insert(mr, regional_str(mr, "key1"), value); // Incorrect: regional_str is an rvalue
+dict.insert(mr, regional_str(mr, "key1"), value); // Incorrect: attempting to create regional_str temporary
 ```
 
-**Always use regional type variables as lvalues in all APIs and tests. Avoid any rvalue usage.**
+**Always use regional type variables that are properly allocated in memory regions. Never attempt to create temporary regional type objects.**
 
 ## Summary and Future Direction
 

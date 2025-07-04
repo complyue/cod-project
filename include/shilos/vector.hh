@@ -53,18 +53,18 @@ public:
 
   // Add element to this segment (assumes not full)
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  void emplace_back(memory_region<RT> &mr, Args &&...args) {
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...>
+  void emplace_back(memory_region<RT> &mr, const Args &...args) {
     assert(!is_full());
-    new (&elements_[size_]) T(mr, std::forward<Args>(args)...);
+    new (&elements_[size_]) T(mr, args...);
     size_++;
   }
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...>
-  void emplace_back(memory_region<RT> &mr, Args &&...args) {
+    requires std::constructible_from<T, const Args &...>
+  void emplace_back(memory_region<RT> &mr, const Args &...args) {
     assert(!is_full());
-    new (&elements_[size_]) T(std::forward<Args>(args)...);
+    new (&elements_[size_]) T(args...);
     size_++;
   }
 
@@ -137,8 +137,8 @@ public:
 
   // Add element, growing storage as needed
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  void emplace_back(memory_region<RT> &mr, Args &&...args) {
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...>
+  void emplace_back(memory_region<RT> &mr, const Args &...args) {
     // If no segments or last segment is full, create new segment
     if (!last_segment_ || last_segment_->is_full()) {
       auto new_segment = mr.template create_bits<vector_segment<T>>(mr);
@@ -152,13 +152,13 @@ public:
       segment_count_++;
     }
 
-    last_segment_->emplace_back(mr, std::forward<Args>(args)...);
+    last_segment_->emplace_back(mr, args...);
     total_size_++;
   }
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...>
-  void emplace_back(memory_region<RT> &mr, Args &&...args) {
+    requires std::constructible_from<T, const Args &...>
+  void emplace_back(memory_region<RT> &mr, const Args &...args) {
     // If no segments or last segment is full, create new segment
     if (!last_segment_ || last_segment_->is_full()) {
       auto new_segment = mr.template create_bits<vector_segment<T>>(mr);
@@ -172,7 +172,7 @@ public:
       segment_count_++;
     }
 
-    last_segment_->emplace_back(mr, std::forward<Args>(args)...);
+    last_segment_->emplace_back(mr, args...);
     total_size_++;
   }
 

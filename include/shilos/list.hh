@@ -19,17 +19,20 @@ private:
 
 public:
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...> && (!std::constructible_from<T, Args...>)
-  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(mr, std::forward<Args>(args)...) {}
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...> &&
+             (!std::constructible_from<T, const Args &...>)
+  regional_cons(memory_region<RT> &mr, const Args &...args) : value_(mr, args...) {}
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...> && (!std::constructible_from<T, memory_region<RT> &, Args...>)
-  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(std::forward<Args>(args)...) {}
+    requires std::constructible_from<T, const Args &...> &&
+             (!std::constructible_from<T, memory_region<RT> &, const Args &...>)
+  regional_cons(memory_region<RT> &mr, const Args &...args) : value_(args...) {}
 
   // When both constructors are possible, prefer the regional version (more explicit)
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...> && std::constructible_from<T, Args...>
-  regional_cons(memory_region<RT> &mr, Args &&...args) : value_(mr, std::forward<Args>(args)...) {}
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...> &&
+             std::constructible_from<T, const Args &...>
+  regional_cons(memory_region<RT> &mr, const Args &...args) : value_(mr, args...) {}
 
   // Deleted special members
   regional_cons(const regional_cons &) = delete;
@@ -140,16 +143,16 @@ public:
   template <typename RT> regional_fifo(memory_region<RT> &mr) : head_(), tail_() {}
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  regional_fifo(memory_region<RT> &mr, Args &&...args) : head_(), tail_() {
-    mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...>
+  regional_fifo(memory_region<RT> &mr, const Args &...args) : head_(), tail_() {
+    mr.create_to(&head_, args...);
     tail_ = head_;
   }
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...>
-  regional_fifo(memory_region<RT> &mr, Args &&...args) : head_(), tail_() {
-    mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, const Args &...>
+  regional_fifo(memory_region<RT> &mr, const Args &...args) : head_(), tail_() {
+    mr.create_to(&head_, args...);
     tail_ = head_;
   }
 
@@ -161,9 +164,9 @@ public:
 
   // Add element to back of queue
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  void enque(memory_region<RT> &mr, Args &&...args) {
-    auto new_node = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...>
+  void enque(memory_region<RT> &mr, const Args &...args) {
+    auto new_node = mr.template create<regional_cons<T>>(args...);
     if (!head_) {
       head_ = tail_ = new_node.get();
     } else {
@@ -173,9 +176,9 @@ public:
   }
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...>
-  void enque(memory_region<RT> &mr, Args &&...args) {
-    auto new_node = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, const Args &...>
+  void enque(memory_region<RT> &mr, const Args &...args) {
+    auto new_node = mr.template create<regional_cons<T>>(args...);
     if (!head_) {
       head_ = tail_ = new_node.get();
     } else {
@@ -186,9 +189,9 @@ public:
 
   // Add element to front of queue
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  void enque_front(memory_region<RT> &mr, Args &&...args) {
-    auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...>
+  void enque_front(memory_region<RT> &mr, const Args &...args) {
+    auto new_head = mr.template create<regional_cons<T>>(args...);
     new_head->next() = head_.get();
     if (!head_) {
       tail_ = new_head.get();
@@ -197,9 +200,9 @@ public:
   }
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...>
-  void enque_front(memory_region<RT> &mr, Args &&...args) {
-    auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, const Args &...>
+  void enque_front(memory_region<RT> &mr, const Args &...args) {
+    auto new_head = mr.template create<regional_cons<T>>(args...);
     new_head->next() = head_.get();
     if (!head_) {
       tail_ = new_head.get();
@@ -306,16 +309,16 @@ public:
   template <typename RT> regional_lifo(memory_region<RT> &mr) : head_(), tail_() {}
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  regional_lifo(memory_region<RT> &mr, Args &&...args) : head_(), tail_() {
-    mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...>
+  regional_lifo(memory_region<RT> &mr, const Args &...args) : head_(), tail_() {
+    mr.create_to(&head_, args...);
     tail_ = head_;
   }
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...>
-  regional_lifo(memory_region<RT> &mr, Args &&...args) : head_(), tail_() {
-    mr.create_to(&head_, mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, const Args &...>
+  regional_lifo(memory_region<RT> &mr, const Args &...args) : head_(), tail_() {
+    mr.create_to(&head_, args...);
     tail_ = head_;
   }
 
@@ -327,9 +330,9 @@ public:
 
   // Add element to top of stack
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  void push(memory_region<RT> &mr, Args &&...args) {
-    auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...>
+  void push(memory_region<RT> &mr, const Args &...args) {
+    auto new_head = mr.template create<regional_cons<T>>(args...);
     new_head->next() = head_.get();
     if (!head_) {
       tail_ = new_head.get();
@@ -338,9 +341,9 @@ public:
   }
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...>
-  void push(memory_region<RT> &mr, Args &&...args) {
-    auto new_head = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, const Args &...>
+  void push(memory_region<RT> &mr, const Args &...args) {
+    auto new_head = mr.template create<regional_cons<T>>(args...);
     new_head->next() = head_.get();
     if (!head_) {
       tail_ = new_head.get();
@@ -350,9 +353,9 @@ public:
 
   // Add element to bottom of stack
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, memory_region<RT> &, Args...>
-  void push_back(memory_region<RT> &mr, Args &&...args) {
-    auto new_node = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, memory_region<RT> &, const Args &...>
+  void push_back(memory_region<RT> &mr, const Args &...args) {
+    auto new_node = mr.template create<regional_cons<T>>(args...);
     if (!head_) {
       head_ = tail_ = new_node.get();
     } else {
@@ -362,9 +365,9 @@ public:
   }
 
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, Args...>
-  void push_back(memory_region<RT> &mr, Args &&...args) {
-    auto new_node = mr.template create<regional_cons<T>>(mr, std::forward<Args>(args)...);
+    requires std::constructible_from<T, const Args &...>
+  void push_back(memory_region<RT> &mr, const Args &...args) {
+    auto new_node = mr.template create<regional_cons<T>>(args...);
     if (!head_) {
       head_ = tail_ = new_node.get();
     } else {

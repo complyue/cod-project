@@ -81,32 +81,39 @@ public:
 
   // Constructor for single key argument and value arguments
   template <typename RT, typename KeyArg, typename... ValueArgs>
-    requires std::constructible_from<K, memory_region<RT> &, KeyArg> && std::constructible_from<V, ValueArgs...> &&
+    requires std::constructible_from<K, memory_region<RT> &, const KeyArg &> &&
+                 std::constructible_from<V, const ValueArgs &...> &&
                  (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
-  dict_entry(memory_region<RT> &mr, KeyArg &&key_arg, ValueArgs &&...value_args)
-      : key_(mr, std::forward<KeyArg>(key_arg)), value_(std::forward<ValueArgs>(value_args)...),
-        collision_next_index_(INVALID_INDEX) {}
+  dict_entry(memory_region<RT> &mr, const KeyArg &key_arg, const ValueArgs &...value_args)
+      : key_(mr, key_arg), value_(value_args...), collision_next_index_(INVALID_INDEX) {}
 
   template <typename RT, typename KeyArg, typename... ValueArgs>
-    requires std::constructible_from<K, KeyArg> && std::constructible_from<V, ValueArgs...> &&
+    requires std::constructible_from<K, const KeyArg &> && std::constructible_from<V, const ValueArgs &...> &&
                  (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
-  dict_entry(memory_region<RT> &mr, KeyArg &&key_arg, ValueArgs &&...value_args)
-      : key_(std::forward<KeyArg>(key_arg)), value_(std::forward<ValueArgs>(value_args)...),
-        collision_next_index_(INVALID_INDEX) {}
+  dict_entry(memory_region<RT> &mr, const KeyArg &key_arg, const ValueArgs &...value_args)
+      : key_(key_arg), value_(value_args...), collision_next_index_(INVALID_INDEX) {}
+
+  // Constructor for when both key and value need memory region
+  template <typename RT, typename KeyArg, typename... ValueArgs>
+    requires std::constructible_from<K, memory_region<RT> &, const KeyArg &> &&
+                 std::constructible_from<V, memory_region<RT> &, const ValueArgs &...> &&
+                 (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
+  dict_entry(memory_region<RT> &mr, const KeyArg &key_arg, const ValueArgs &...value_args)
+      : key_(mr, key_arg), value_(mr, value_args...), collision_next_index_(INVALID_INDEX) {}
 
   // Constructor for key-only with default-constructed value (V needs memory_region)
   template <typename RT, typename... KeyArgs>
-    requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> &&
+    requires std::constructible_from<K, memory_region<RT> &, const KeyArgs &...> &&
                  std::constructible_from<V, memory_region<RT> &>
-  dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args)
-      : key_(mr, std::forward<KeyArgs>(key_args)...), value_(mr), collision_next_index_(INVALID_INDEX) {}
+  dict_entry(memory_region<RT> &mr, const KeyArgs &...key_args)
+      : key_(mr, key_args...), value_(mr), collision_next_index_(INVALID_INDEX) {}
 
   // Constructor for key-only with default-constructed value (V doesn't need memory_region)
   template <typename RT, typename... KeyArgs>
-    requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> && std::constructible_from<V> &&
+    requires std::constructible_from<K, memory_region<RT> &, const KeyArgs &...> && std::constructible_from<V> &&
                  (!std::constructible_from<V, memory_region<RT> &>)
-  dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args)
-      : key_(mr, std::forward<KeyArgs>(key_args)...), value_(), collision_next_index_(INVALID_INDEX) {}
+  dict_entry(memory_region<RT> &mr, const KeyArgs &...key_args)
+      : key_(mr, key_args...), value_(), collision_next_index_(INVALID_INDEX) {}
 
   // Deleted special members
   dict_entry(const dict_entry &) = delete;
@@ -250,8 +257,8 @@ public:
    * Standard semantics: Does NOT update existing values. If key exists, no insertion occurs.
    */
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
-  std::pair<V *, bool> insert(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    requires std::constructible_from<V, memory_region<RT> &, const ValueArgs &...>
+  std::pair<V *, bool> insert(memory_region<RT> &mr, const KeyType &key, const ValueArgs &...value_args) {
     maybe_resize(mr);
 
     // Check if key already exists
@@ -263,7 +270,7 @@ public:
 
     // Insert new entry
     size_t new_entry_idx = entries_.size();
-    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
+    entries_.emplace_back(mr, key, value_args...);
 
     // Add to hash table
     size_t bucket_idx = bucket_index(key);
@@ -274,8 +281,8 @@ public:
   }
 
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires std::constructible_from<V, ValueArgs...>
-  std::pair<V *, bool> insert(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    requires std::constructible_from<V, const ValueArgs &...>
+  std::pair<V *, bool> insert(memory_region<RT> &mr, const KeyType &key, const ValueArgs &...value_args) {
     maybe_resize(mr);
 
     // Check if key already exists
@@ -287,7 +294,7 @@ public:
 
     // Insert new entry
     size_t new_entry_idx = entries_.size();
-    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
+    entries_.emplace_back(mr, key, value_args...);
 
     // Add to hash table
     size_t bucket_idx = bucket_index(key);
@@ -307,8 +314,8 @@ public:
    * Standard semantics: Like insert(), does NOT update existing values.
    */
   template <typename RT, typename KeyType, typename... ValueArgs>
-  std::pair<V *, bool> emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
-    return insert<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const KeyType &key, const ValueArgs &...value_args) {
+    return insert<RT, KeyType, ValueArgs...>(mr, key, value_args...);
   }
 
   /**
@@ -321,8 +328,8 @@ public:
    * Standard semantics: Always succeeds. Updates existing values.
    */
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
-  std::pair<V *, bool> insert_or_assign(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    requires std::constructible_from<V, memory_region<RT> &, const ValueArgs &...>
+  std::pair<V *, bool> insert_or_assign(memory_region<RT> &mr, const KeyType &key, const ValueArgs &...value_args) {
     maybe_resize(mr);
 
     // Check if key already exists
@@ -331,14 +338,14 @@ public:
       // Update existing value
       dict_entry<K, V> &existing = entries_[existing_idx];
       existing.value().~V();
-      new (&existing.value()) V(mr, std::forward<ValueArgs>(value_args)...);
+      new (&existing.value()) V(mr, value_args...);
 
       return {&existing.value(), false};
     }
 
     // Insert new entry
     size_t new_entry_idx = entries_.size();
-    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
+    entries_.emplace_back(mr, key, value_args...);
 
     // Add to hash table
     size_t bucket_idx = bucket_index(key);
@@ -349,8 +356,8 @@ public:
   }
 
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires std::constructible_from<V, ValueArgs...>
-  std::pair<V *, bool> insert_or_assign(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    requires std::constructible_from<V, const ValueArgs &...>
+  std::pair<V *, bool> insert_or_assign(memory_region<RT> &mr, const KeyType &key, const ValueArgs &...value_args) {
     maybe_resize(mr);
 
     // Check if key already exists
@@ -359,14 +366,14 @@ public:
       // Update existing value
       dict_entry<K, V> &existing = entries_[existing_idx];
       existing.value().~V();
-      new (&existing.value()) V(std::forward<ValueArgs>(value_args)...);
+      new (&existing.value()) V(value_args...);
 
       return {&existing.value(), false};
     }
 
     // Insert new entry
     size_t new_entry_idx = entries_.size();
-    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
+    entries_.emplace_back(mr, key, value_args...);
 
     // Add to hash table
     size_t bucket_idx = bucket_index(key);
@@ -386,15 +393,15 @@ public:
    * Standard semantics: Like emplace(), but more explicit about not updating existing values.
    */
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
-  std::pair<V *, bool> try_emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
-    return insert<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+    requires std::constructible_from<V, memory_region<RT> &, const ValueArgs &...>
+  std::pair<V *, bool> try_emplace(memory_region<RT> &mr, const KeyType &key, const ValueArgs &...value_args) {
+    return insert<RT, KeyType, ValueArgs...>(mr, key, value_args...);
   }
 
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires std::constructible_from<V, ValueArgs...>
-  std::pair<V *, bool> try_emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
-    return insert<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+    requires std::constructible_from<V, const ValueArgs &...>
+  std::pair<V *, bool> try_emplace(memory_region<RT> &mr, const KeyType &key, const ValueArgs &...value_args) {
+    return insert<RT, KeyType, ValueArgs...>(mr, key, value_args...);
   }
 
   // === LOOKUP AND ACCESS METHODS ===

@@ -81,8 +81,10 @@ endfunction()
 
 # Create and configure all test executables
 
-configure_cod_target(simple_test src/simple_test.cc)
-
-configure_cod_target(simple_api_test src/simple_api_test.cc) 
-
 configure_cod_target(showcase_basic_usage src/showcase_basic_usage.cc)
+
+configure_cod_target(test_memory_regions src/test_memory_regions.cc)
+
+configure_cod_target(test_regional_types src/test_regional_types.cc)
+
+# configure_cod_target(test_yaml_serialization src/test_yaml_serialization.cc)
