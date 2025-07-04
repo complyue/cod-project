@@ -79,29 +79,20 @@ public:
       : key_(mr, std::forward<KeyArgs>(key_args)...), value_(std::forward<ValueArgs>(value_args)...),
         collision_next_index_(INVALID_INDEX) {}
 
-  // New constructors for copying an existing key and constructing value from arguments
-  template <typename RT, typename... ValueArgs>
-    requires std::copy_constructible<K> && std::constructible_from<V, memory_region<RT> &, ValueArgs...>
-  dict_entry(memory_region<RT> &mr, const K &existing_key, ValueArgs &&...value_args)
-      : key_(existing_key), value_(mr, std::forward<ValueArgs>(value_args)...), collision_next_index_(INVALID_INDEX) {}
+  // Constructor for single key argument and value arguments
+  template <typename RT, typename KeyArg, typename... ValueArgs>
+    requires std::constructible_from<K, memory_region<RT> &, KeyArg> && std::constructible_from<V, ValueArgs...> &&
+                 (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
+  dict_entry(memory_region<RT> &mr, KeyArg &&key_arg, ValueArgs &&...value_args)
+      : key_(mr, std::forward<KeyArg>(key_arg)), value_(std::forward<ValueArgs>(value_args)...),
+        collision_next_index_(INVALID_INDEX) {}
 
-  template <typename RT, typename... ValueArgs>
-    requires std::copy_constructible<K> && std::constructible_from<V, ValueArgs...>
-  dict_entry(memory_region<RT> &mr, const K &existing_key, ValueArgs &&...value_args)
-      : key_(existing_key), value_(std::forward<ValueArgs>(value_args)...), collision_next_index_(INVALID_INDEX) {}
-
-  // Constructor for copying existing key with default-constructed value (V needs memory_region)
-  template <typename RT>
-    requires std::copy_constructible<K> && std::constructible_from<V, memory_region<RT> &>
-  dict_entry(memory_region<RT> &mr, const K &existing_key)
-      : key_(existing_key), value_(mr), collision_next_index_(INVALID_INDEX) {}
-
-  // Constructor for copying existing key with default-constructed value (V doesn't need memory_region)
-  template <typename RT>
-    requires std::copy_constructible<K> && std::constructible_from<V> &&
-                 (!std::constructible_from<V, memory_region<RT> &>)
-  dict_entry(memory_region<RT> &mr, const K &existing_key)
-      : key_(existing_key), value_(), collision_next_index_(INVALID_INDEX) {}
+  template <typename RT, typename KeyArg, typename... ValueArgs>
+    requires std::constructible_from<K, KeyArg> && std::constructible_from<V, ValueArgs...> &&
+                 (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
+  dict_entry(memory_region<RT> &mr, KeyArg &&key_arg, ValueArgs &&...value_args)
+      : key_(std::forward<KeyArg>(key_arg)), value_(std::forward<ValueArgs>(value_args)...),
+        collision_next_index_(INVALID_INDEX) {}
 
   // Constructor for key-only with default-constructed value (V needs memory_region)
   template <typename RT, typename... KeyArgs>
@@ -116,30 +107,6 @@ public:
                  (!std::constructible_from<V, memory_region<RT> &>)
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args)
       : key_(mr, std::forward<KeyArgs>(key_args)...), value_(), collision_next_index_(INVALID_INDEX) {}
-
-  // Special constructor for existing regional_str key with string_view value construction
-  template <typename RT>
-    requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
-  dict_entry(memory_region<RT> &mr, const regional_str &existing_key, std::string_view value_str)
-      : key_(existing_key), value_(mr, value_str), collision_next_index_(INVALID_INDEX) {}
-
-  // Special constructor for existing regional_str key with string value construction
-  template <typename RT>
-    requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
-  dict_entry(memory_region<RT> &mr, const regional_str &existing_key, const std::string &value_str)
-      : key_(existing_key), value_(mr, value_str), collision_next_index_(INVALID_INDEX) {}
-
-  // Special constructor for existing regional_str key with int value (for mixed dict)
-  template <typename RT>
-    requires std::same_as<K, regional_str> && std::same_as<V, int>
-  dict_entry(memory_region<RT> &mr, const regional_str &existing_key, int value)
-      : key_(existing_key), value_(value), collision_next_index_(INVALID_INDEX) {}
-
-  // Special constructor for constructing both regional_str key and value from string_view
-  template <typename RT>
-    requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
-  dict_entry(memory_region<RT> &mr, std::string_view key_str, std::string_view value_str)
-      : key_(mr, key_str), value_(mr, value_str), collision_next_index_(INVALID_INDEX) {}
 
   // Deleted special members
   dict_entry(const dict_entry &) = delete;

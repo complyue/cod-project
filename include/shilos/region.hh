@@ -114,16 +114,25 @@ public:
   // General alloc_region for root types with additional constructor arguments
   template <typename... Args>
     requires std::constructible_from<RT, memory_region<RT> &, Args...>
-  static memory_region<RT> *alloc_region(const size_t payload_capacity, Args &&...args,
-                                         std::allocator<std::byte> allocator = std::allocator<std::byte>()) {
+  static memory_region<RT> *alloc_region(const size_t payload_capacity, Args &&...args) {
+    return alloc_region_from(std::allocator<std::byte>(), payload_capacity, std::forward<Args>(args)...);
+  }
+  template <typename... Args>
+    requires std::constructible_from<RT, memory_region<RT> &, Args...>
+  static memory_region<RT> *alloc_region_from(std::allocator<std::byte> allocator, const size_t payload_capacity,
+                                              Args &&...args) {
     const size_t capacity = sizeof(memory_region) + payload_capacity;
     void *ptr = allocator.allocate(capacity);
     return new (ptr) memory_region<RT>(capacity, std::forward<Args>(args)...);
   }
 
   // Simplified alloc_region for root types that only need memory_region& parameter
-  static memory_region<RT> *alloc_region(const size_t payload_capacity,
-                                         std::allocator<std::byte> allocator = std::allocator<std::byte>())
+  static memory_region<RT> *alloc_region(const size_t payload_capacity)
+    requires std::constructible_from<RT, memory_region<RT> &>
+  {
+    return alloc_region_from(std::allocator<std::byte>(), payload_capacity);
+  }
+  static memory_region<RT> *alloc_region_from(std::allocator<std::byte> allocator, const size_t payload_capacity)
     requires std::constructible_from<RT, memory_region<RT> &>
   {
     const size_t capacity = sizeof(memory_region) + payload_capacity;

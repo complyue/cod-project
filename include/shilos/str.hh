@@ -22,6 +22,9 @@ public:
   regional_str() : length_(0), data_() {}
 
   template <typename RT>
+  regional_str(memory_region<RT> &mr, const char *str) : regional_str(mr, std::string_view(str)) {}
+
+  template <typename RT>
   regional_str(memory_region<RT> &mr, const std::string &str) : regional_str(mr, std::string_view(str)) {}
 
   template <typename RT> regional_str(memory_region<RT> &mr, std::string_view str) : length_(str.length()), data_() {
@@ -84,6 +87,8 @@ public:
     }
     return 0 == std::memcmp(data_.get(), other.data(), length_);
   }
+
+  bool operator==(const char *other) const noexcept { return *this == std::string_view(other); }
 
   bool operator==(const std::string &other) const noexcept { return *this == std::string_view(other); }
 
