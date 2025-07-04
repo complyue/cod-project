@@ -33,9 +33,6 @@ public:
     this->data_ = p_data;
   }
 
-  template <typename RT>
-  regional_str(memory_region<RT> &mr, const char *str) : regional_str(mr, std::string_view(str)) {}
-
   bool empty() const { return length_ <= 0; }
   size_t length() const { return length_; }
   size_t size() const { return length_; }
@@ -47,8 +44,6 @@ public:
   regional_str(regional_str &&) = delete;
   regional_str &operator=(const regional_str &) = delete;
   regional_str &operator=(regional_str &&) = delete;
-
-  operator std::string_view() const { return std::string_view(reinterpret_cast<const char *>(data()), length()); }
 
   std::strong_ordering operator<=>(const regional_str &other) const noexcept {
     if (auto cmp = length_ <=> other.length_; cmp != 0) {
@@ -90,20 +85,21 @@ public:
     return 0 == std::memcmp(data_.get(), other.data(), length_);
   }
 
-  bool operator==(const char *other) const noexcept { return *this == std::string_view(other); }
-
   bool operator==(const std::string &other) const noexcept { return *this == std::string_view(other); }
+
+  // Conversion operator to std::string_view
+  operator std::string_view() const noexcept {
+    return std::string_view(reinterpret_cast<const char *>(data_.get()), length_);
+  }
 };
 
 inline std::ostream &operator<<(std::ostream &os, const regional_str &str) {
-  os << static_cast<std::string_view>(str);
+  os << std::string_view(str);
   return os;
 }
 
 // Cross-type equality operators (symmetric)
 inline bool operator==(std::string_view lhs, const regional_str &rhs) noexcept { return rhs == lhs; }
-
-inline bool operator==(const char *lhs, const regional_str &rhs) noexcept { return rhs == lhs; }
 
 inline bool operator==(const std::string &lhs, const regional_str &rhs) noexcept { return rhs == lhs; }
 
@@ -115,19 +111,11 @@ template <typename RT> void intern_str(memory_region<RT> &mr, std::string_view e
   new (&str) regional_str(mr, external_str);
 }
 
-template <typename RT> void intern_str(memory_region<RT> &mr, const char *external_str, regional_str &str) {
-  new (&str) regional_str(mr, external_str);
-}
-
 template <typename RT> global_ptr<regional_str, RT> intern_str(memory_region<RT> &mr, const std::string &external_str) {
   return mr.template create<regional_str>(external_str);
 }
 
 template <typename RT> global_ptr<regional_str, RT> intern_str(memory_region<RT> &mr, std::string_view external_str) {
-  return mr.template create<regional_str>(external_str);
-}
-
-template <typename RT> global_ptr<regional_str, RT> intern_str(memory_region<RT> &mr, const char *external_str) {
   return mr.template create<regional_str>(external_str);
 }
 
@@ -138,7 +126,15 @@ namespace std {
 template <> struct hash<shilos::regional_str> {
   size_t operator()(const shilos::regional_str &str) const noexcept {
     // Use std::hash<std::string_view> for consistent hashing
-    return std::hash<std::string_view>{}(static_cast<std::string_view>(str));
+    return std::hash<std::string_view>{}(std::string_view(str));
+  }
+
+  // Overload to support std::string_view for heterogeneous key operations
+  size_t operator()(std::string_view str) const noexcept { return std::hash<std::string_view>{}(str); }
+
+  // Overload to support std::string for heterogeneous key operations
+  size_t operator()(const std::string &str) const noexcept {
+    return std::hash<std::string_view>{}(std::string_view(str));
   }
 };
 } // namespace std

@@ -430,6 +430,37 @@ intern_str(*mr, "Document Name", name_storage);  // Initialize in-place
 
 **Design Rationale**: The `intern_str` functions bridge the gap between standard C++ string handling and regional type constraints. They provide ergonomic alternatives to direct `regional_str` constructor calls while maintaining compliance with all regional type requirements. The dual interface (in-place vs. factory) accommodates different memory management patterns common in shilos programs.
 
+**Important Usage Guidelines**: 
+
+- **Never use `intern_str` for temporary purposes**: The `intern_str` functions allocate memory in the region and should only be used when you need to store the string persistently. For temporary string operations, use standard C++ string types or `std::string_view`.
+
+- **Use for persistent storage only**: `intern_str` is designed for creating `regional_str` objects that will be stored in regional data structures, not for temporary string manipulation.
+
+- **Prefer direct construction for simple cases**: When you have a simple string literal or known string value, prefer direct `regional_str` construction over `intern_str` for better performance and clarity.
+
+- **Use `std::string_view` for C string conversion**: Avoid direct `const char*` usage in regional type APIs. Convert C strings to `std::string_view` once and reuse the view for multiple operations. This provides better performance and clearer intent.
+
+```cpp
+// ❌ INCORRECT - using intern_str for temporary purposes
+auto key = intern_str(*mr, "temp_key");  // Unnecessary allocation
+dict.emplace(*mr, key, "value");
+
+// ❌ INCORRECT - direct const char* usage
+dict.emplace(*mr, "temp_key", "value");  // May cause multiple conversions
+
+// ✅ CORRECT - convert once and reuse std::string_view
+std::string_view key_view = "temp_key";
+dict.emplace(*mr, key_view, "value");
+dict.contains(key_view);  // Reuse the same view
+
+// ✅ CORRECT - direct construction for simple cases
+dict.emplace(*mr, regional_str(*mr, "temp_key"), "value");
+
+// ✅ CORRECT - intern_str for persistent storage
+auto title = intern_str(*mr, "Document Title");  // Will be stored long-term
+document->title_ = title;
+```
+
 2. **regional_fifo** - Queue (FIFO) container that:
 
    - Implements linked list with queue semantics (first-in-first-out)
@@ -608,6 +639,22 @@ This design ensures that:
 - YAML functionality is completely optional and modular
 - All YAML logic is implemented inline for optimal performance
 - The `YamlConvertible` concept provides compile-time type safety
+
+## Lvalue-Only Constraint for Regional Types
+
+- **regional_str and all regional types must only be used as lvalues.**
+- Passing, returning, or using regional types as rvalues (temporaries) is strictly forbidden.
+- The reason is that the lifetime and memory management of regional types are entirely controlled by their owning memory_region. Rvalue semantics would break the unique ownership and lifetime safety guarantees.
+- Typical usage:
+
+```cpp
+regional_str key(mr, "key1");
+dict.insert(mr, key, value); // Correct: key is an lvalue
+
+dict.insert(mr, regional_str(mr, "key1"), value); // Incorrect: regional_str is an rvalue
+```
+
+**Always use regional type variables as lvalues in all APIs and tests. Avoid any rvalue usage.**
 
 ## Summary and Future Direction
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "./region.hh"
+#include "./str.hh"
 #include "./vector.hh"
 
 #include <cassert>
@@ -13,18 +14,28 @@ namespace shilos {
 // Forward declaration
 template <typename K, typename V, typename Hash> class regional_dict;
 
-// Concepts for heterogeneous key operations
-template <typename KeyType, typename K, typename Hash, typename RT>
-concept CompatibleKey = requires(const KeyType &key_type, const K &k, const Hash &hasher, memory_region<RT> &mr) {
-  // Must be able to hash both types consistently
-  { hasher(key_type) } -> std::convertible_to<std::size_t>;
-  { hasher(k) } -> std::convertible_to<std::size_t>;
-  // Must be able to compare KeyType with K
-  { key_type == k } -> std::convertible_to<bool>;
-  { k == key_type } -> std::convertible_to<bool>;
-  // Must be able to construct K from memory_region and KeyType for insertion
-  requires std::constructible_from<K, memory_region<RT> &, KeyType>;
+// Simple trait to determine the common rvalue key type
+template <typename K> struct common_key_type {
+  using type = K; // Default: use the key type itself
 };
+
+// Specialization for regional_str: use std::string_view as common key type
+template <> struct common_key_type<regional_str> {
+  using type = std::string_view;
+};
+
+template <typename K> using common_key_type_t = typename common_key_type<K>::type;
+
+// Converter functions to get common key type
+template <typename K> const K &to_common_key(const K &key) { return key; }
+
+// Specialization for regional_str -> std::string_view
+inline std::string_view to_common_key(const regional_str &key) { return key; }
+
+// Overloads for lookup key types that convert to common key type
+inline std::string_view to_common_key(std::string_view key) { return key; }
+
+inline std::string_view to_common_key(const std::string &key) { return std::string_view(key); }
 
 template <typename K, typename V> class dict_entry {
   // Friend declaration for raw pointer YAML functions
@@ -42,6 +53,7 @@ public:
   // Default constructor (needed for vector_segment arrays)
   dict_entry() : key_(), value_(), collision_next_index_(INVALID_INDEX) {}
 
+  // Standard constructors for constructing both key and value from arguments
   template <typename RT, typename... KeyArgs, typename... ValueArgs>
     requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> &&
                  std::constructible_from<V, memory_region<RT> &, ValueArgs...>
@@ -67,6 +79,30 @@ public:
       : key_(mr, std::forward<KeyArgs>(key_args)...), value_(std::forward<ValueArgs>(value_args)...),
         collision_next_index_(INVALID_INDEX) {}
 
+  // New constructors for copying an existing key and constructing value from arguments
+  template <typename RT, typename... ValueArgs>
+    requires std::copy_constructible<K> && std::constructible_from<V, memory_region<RT> &, ValueArgs...>
+  dict_entry(memory_region<RT> &mr, const K &existing_key, ValueArgs &&...value_args)
+      : key_(existing_key), value_(mr, std::forward<ValueArgs>(value_args)...), collision_next_index_(INVALID_INDEX) {}
+
+  template <typename RT, typename... ValueArgs>
+    requires std::copy_constructible<K> && std::constructible_from<V, ValueArgs...>
+  dict_entry(memory_region<RT> &mr, const K &existing_key, ValueArgs &&...value_args)
+      : key_(existing_key), value_(std::forward<ValueArgs>(value_args)...), collision_next_index_(INVALID_INDEX) {}
+
+  // Constructor for copying existing key with default-constructed value (V needs memory_region)
+  template <typename RT>
+    requires std::copy_constructible<K> && std::constructible_from<V, memory_region<RT> &>
+  dict_entry(memory_region<RT> &mr, const K &existing_key)
+      : key_(existing_key), value_(mr), collision_next_index_(INVALID_INDEX) {}
+
+  // Constructor for copying existing key with default-constructed value (V doesn't need memory_region)
+  template <typename RT>
+    requires std::copy_constructible<K> && std::constructible_from<V> &&
+                 (!std::constructible_from<V, memory_region<RT> &>)
+  dict_entry(memory_region<RT> &mr, const K &existing_key)
+      : key_(existing_key), value_(), collision_next_index_(INVALID_INDEX) {}
+
   // Constructor for key-only with default-constructed value (V needs memory_region)
   template <typename RT, typename... KeyArgs>
     requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> &&
@@ -81,10 +117,28 @@ public:
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args)
       : key_(mr, std::forward<KeyArgs>(key_args)...), value_(), collision_next_index_(INVALID_INDEX) {}
 
-  // Special constructor for K=regional_str, V=regional_str with const char* arguments
+  // Special constructor for existing regional_str key with string_view value construction
   template <typename RT>
     requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
-  dict_entry(memory_region<RT> &mr, const char *key_str, const char *value_str)
+  dict_entry(memory_region<RT> &mr, const regional_str &existing_key, std::string_view value_str)
+      : key_(existing_key), value_(mr, value_str), collision_next_index_(INVALID_INDEX) {}
+
+  // Special constructor for existing regional_str key with string value construction
+  template <typename RT>
+    requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
+  dict_entry(memory_region<RT> &mr, const regional_str &existing_key, const std::string &value_str)
+      : key_(existing_key), value_(mr, value_str), collision_next_index_(INVALID_INDEX) {}
+
+  // Special constructor for existing regional_str key with int value (for mixed dict)
+  template <typename RT>
+    requires std::same_as<K, regional_str> && std::same_as<V, int>
+  dict_entry(memory_region<RT> &mr, const regional_str &existing_key, int value)
+      : key_(existing_key), value_(value), collision_next_index_(INVALID_INDEX) {}
+
+  // Special constructor for constructing both regional_str key and value from string_view
+  template <typename RT>
+    requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
+  dict_entry(memory_region<RT> &mr, std::string_view key_str, std::string_view value_str)
       : key_(mr, key_str), value_(mr, value_str), collision_next_index_(INVALID_INDEX) {}
 
   // Deleted special members
@@ -103,6 +157,23 @@ public:
   void set_collision_next_index(size_t index) { collision_next_index_ = index; }
 };
 
+/**
+ * @brief Regional dictionary container with C++ standard container semantics
+ *
+ * This dictionary implementation follows C++ standard container conventions:
+ * - insert(): Inserts only if key doesn't exist, returns iterator and bool indicating insertion
+ * - emplace(): Constructs in-place only if key doesn't exist
+ * - insert_or_assign(): Inserts new entry or updates existing value
+ * - try_emplace(): Constructs only if key doesn't exist (no update if key exists)
+ * - operator[]: Inserts with default value if key doesn't exist, always returns reference
+ * - at(): Throws if key doesn't exist, never inserts
+ *
+ * All insertion methods maintain consistent semantics:
+ * - Return std::pair<iterator, bool> where bool indicates whether insertion occurred
+ * - Support heterogeneous key types for lookup and insertion via common key conversion
+ * - Preserve insertion order during iteration
+ * - Handle memory region allocation requirements automatically
+ */
 template <typename K, typename V, typename Hash = std::hash<K>> class regional_dict {
   // Friend declarations for YAML functions
   template <typename K1, typename V1, typename H1, typename RT>
@@ -119,17 +190,18 @@ private:
   static constexpr size_t INITIAL_BUCKET_COUNT = 16;
   static constexpr size_t INVALID_INDEX = SIZE_MAX;
 
-  template <typename KeyType, typename RT>
-    requires CompatibleKey<KeyType, K, Hash, RT>
-  size_t hash_key(const KeyType &key) const {
-    return hasher_(key);
+  // Hash using common key type
+  template <typename KeyType> size_t hash_key(const KeyType &key) const {
+    auto common_key = to_common_key(key);
+    if constexpr (std::same_as<K, regional_str> && std::same_as<common_key_type_t<K>, std::string_view>) {
+      // Use std::hash<std::string_view> for regional_str keys
+      return std::hash<std::string_view>{}(common_key);
+    } else {
+      return hasher_(common_key);
+    }
   }
 
-  template <typename KeyType, typename RT>
-    requires CompatibleKey<KeyType, K, Hash, RT>
-  size_t bucket_index(const KeyType &key) const {
-    return hash_key<KeyType, RT>(key) % buckets_.size();
-  }
+  template <typename KeyType> size_t bucket_index(const KeyType &key) const { return hash_key(key) % buckets_.size(); }
 
   template <typename RT> void maybe_resize(memory_region<RT> &mr) {
     if (buckets_.empty() || static_cast<double>(entries_.size()) / buckets_.size() > MAX_LOAD_FACTOR) {
@@ -158,41 +230,25 @@ private:
       entry.set_collision_next_index(INVALID_INDEX);
 
       // Insert into appropriate bucket
-      size_t bucket_idx = (hasher_(entry.key())) % buckets_.size();
+      size_t bucket_idx = hash_key(entry.key()) % buckets_.size();
       entry.set_collision_next_index(buckets_[bucket_idx]);
       buckets_[bucket_idx] = entry_idx;
     }
   }
 
-  template <typename KeyType, typename RT>
-    requires CompatibleKey<KeyType, K, Hash, RT>
-  size_t find_entry_index(const KeyType &key) const {
+  // Find entry using common key comparison
+  template <typename KeyType> size_t find_entry_index(const KeyType &lookup_key) const {
     if (buckets_.empty())
       return INVALID_INDEX;
 
-    size_t bucket_idx = bucket_index<KeyType, RT>(key);
+    size_t bucket_idx = bucket_index(lookup_key);
     size_t entry_idx = buckets_[bucket_idx];
 
-    while (entry_idx != INVALID_INDEX) {
-      if (entries_[entry_idx].key() == key) {
-        return entry_idx;
-      }
-      entry_idx = entries_[entry_idx].collision_next_index();
-    }
-
-    return INVALID_INDEX;
-  }
-
-  // Non-templated version for exact key type K (backward compatibility)
-  size_t find_entry_index_exact(const K &key) const {
-    if (buckets_.empty())
-      return INVALID_INDEX;
-
-    size_t bucket_idx = (hasher_(key)) % buckets_.size();
-    size_t entry_idx = buckets_[bucket_idx];
+    auto common_lookup_key = to_common_key(lookup_key);
 
     while (entry_idx != INVALID_INDEX) {
-      if (entries_[entry_idx].key() == key) {
+      auto common_stored_key = to_common_key(entries_[entry_idx].key());
+      if (common_stored_key == common_lookup_key) {
         return entry_idx;
       }
       entry_idx = entries_[entry_idx].collision_next_index();
@@ -215,28 +271,110 @@ public:
   regional_dict &operator=(const regional_dict &) = delete;
   regional_dict &operator=(regional_dict &&) = delete;
 
-  // Insert or update entry - supports heterogeneous keys for insertion
+  // === STANDARD C++ CONTAINER INSERTION METHODS ===
+
+  /**
+   * @brief Inserts new key-value pair only if key doesn't exist
+   * @param mr Memory region for allocation
+   * @param key Key to insert (can be any type convertible to common key type)
+   * @param value_args Arguments for constructing the value
+   * @return std::pair<V*, bool> where bool indicates if insertion occurred, V* points to the value
+   *
+   * Standard semantics: Does NOT update existing values. If key exists, no insertion occurs.
+   */
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires CompatibleKey<KeyType, K, Hash, RT> && std::constructible_from<V, memory_region<RT> &, ValueArgs...>
-  std::pair<V *, bool> put(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
+  std::pair<V *, bool> insert(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
     maybe_resize(mr);
 
     // Check if key already exists
-    size_t existing_idx = find_entry_index<KeyType, RT>(key);
+    size_t existing_idx = find_entry_index(key);
+    if (existing_idx != INVALID_INDEX) {
+      // Key exists - no insertion, return existing value pointer and false
+      return {&entries_[existing_idx].value(), false};
+    }
+
+    // Insert new entry
+    size_t new_entry_idx = entries_.size();
+    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
+
+    // Add to hash table
+    size_t bucket_idx = bucket_index(key);
+    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
+    buckets_[bucket_idx] = new_entry_idx;
+
+    return {&entries_[new_entry_idx].value(), true};
+  }
+
+  template <typename RT, typename KeyType, typename... ValueArgs>
+    requires std::constructible_from<V, ValueArgs...>
+  std::pair<V *, bool> insert(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    maybe_resize(mr);
+
+    // Check if key already exists
+    size_t existing_idx = find_entry_index(key);
+    if (existing_idx != INVALID_INDEX) {
+      // Key exists - no insertion, return existing value pointer and false
+      return {&entries_[existing_idx].value(), false};
+    }
+
+    // Insert new entry
+    size_t new_entry_idx = entries_.size();
+    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
+
+    // Add to hash table
+    size_t bucket_idx = bucket_index(key);
+    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
+    buckets_[bucket_idx] = new_entry_idx;
+
+    return {&entries_[new_entry_idx].value(), true};
+  }
+
+  /**
+   * @brief Constructs value in-place only if key doesn't exist
+   * @param mr Memory region for allocation
+   * @param key Key to emplace
+   * @param value_args Arguments for constructing the value
+   * @return std::pair<V*, bool> where bool indicates if construction occurred, V* points to the value
+   *
+   * Standard semantics: Like insert(), does NOT update existing values.
+   */
+  template <typename RT, typename KeyType, typename... ValueArgs>
+  std::pair<V *, bool> emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    return insert<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+  }
+
+  /**
+   * @brief Inserts new entry or assigns to existing entry
+   * @param mr Memory region for allocation
+   * @param key Key to insert or assign
+   * @param value_args Arguments for constructing/assigning the value
+   * @return std::pair<V*, bool> where bool indicates if insertion (not assignment) occurred, V* points to the value
+   *
+   * Standard semantics: Always succeeds. Updates existing values.
+   */
+  template <typename RT, typename KeyType, typename... ValueArgs>
+    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
+  std::pair<V *, bool> insert_or_assign(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    maybe_resize(mr);
+
+    // Check if key already exists
+    size_t existing_idx = find_entry_index(key);
     if (existing_idx != INVALID_INDEX) {
       // Update existing value
       dict_entry<K, V> &existing = entries_[existing_idx];
       existing.value().~V();
       new (&existing.value()) V(mr, std::forward<ValueArgs>(value_args)...);
+
       return {&existing.value(), false};
     }
 
-    // Create new entry at end of entries vector (insertion order preserved)
+    // Insert new entry
     size_t new_entry_idx = entries_.size();
     entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
 
     // Add to hash table
-    size_t bucket_idx = bucket_index<KeyType, RT>(key);
+    size_t bucket_idx = bucket_index(key);
     entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
     buckets_[bucket_idx] = new_entry_idx;
 
@@ -244,134 +382,122 @@ public:
   }
 
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires CompatibleKey<KeyType, K, Hash, RT> && std::constructible_from<V, ValueArgs...>
-  std::pair<V *, bool> put(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    requires std::constructible_from<V, ValueArgs...>
+  std::pair<V *, bool> insert_or_assign(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
     maybe_resize(mr);
 
     // Check if key already exists
-    size_t existing_idx = find_entry_index<KeyType, RT>(key);
+    size_t existing_idx = find_entry_index(key);
     if (existing_idx != INVALID_INDEX) {
       // Update existing value
       dict_entry<K, V> &existing = entries_[existing_idx];
       existing.value().~V();
       new (&existing.value()) V(std::forward<ValueArgs>(value_args)...);
+
       return {&existing.value(), false};
     }
 
-    // Create new entry at end of entries vector (insertion order preserved)
+    // Insert new entry
     size_t new_entry_idx = entries_.size();
     entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
 
     // Add to hash table
-    size_t bucket_idx = bucket_index<KeyType, RT>(key);
+    size_t bucket_idx = bucket_index(key);
     entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
     buckets_[bucket_idx] = new_entry_idx;
 
     return {&entries_[new_entry_idx].value(), true};
   }
 
-  // Overloads for exact key type K (backward compatibility)
-  template <typename RT, typename... ValueArgs>
-    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
-  std::pair<V *, bool> put(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
-    return put<RT, K, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
-  }
-
-  template <typename RT, typename... ValueArgs>
-    requires std::constructible_from<V, ValueArgs...>
-  std::pair<V *, bool> put(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
-    return put<RT, K, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
-  }
-
-  // Emplace methods (aliases for put methods to match expected API)
+  /**
+   * @brief Constructs value in-place only if key doesn't exist, never updates
+   * @param mr Memory region for allocation
+   * @param key Key to try emplacing
+   * @param value_args Arguments for constructing the value
+   * @return std::pair<V*, bool> where bool indicates if construction occurred, V* points to the value
+   *
+   * Standard semantics: Like emplace(), but more explicit about not updating existing values.
+   */
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires CompatibleKey<KeyType, K, Hash, RT> && std::constructible_from<V, memory_region<RT> &, ValueArgs...>
-  std::pair<V *, bool> emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
-    return put<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
+  std::pair<V *, bool> try_emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    return insert<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
   }
 
   template <typename RT, typename KeyType, typename... ValueArgs>
-    requires CompatibleKey<KeyType, K, Hash, RT> && std::constructible_from<V, ValueArgs...>
-  std::pair<V *, bool> emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
-    return put<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
-  }
-
-  // Overloads for exact key type K
-  template <typename RT, typename... ValueArgs>
-    requires std::constructible_from<V, memory_region<RT> &, ValueArgs...>
-  std::pair<V *, bool> emplace(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
-    return put<RT, K, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
-  }
-
-  template <typename RT, typename... ValueArgs>
     requires std::constructible_from<V, ValueArgs...>
-  std::pair<V *, bool> emplace(memory_region<RT> &mr, const K &key, ValueArgs &&...value_args) {
-    return put<RT, K, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
+  std::pair<V *, bool> try_emplace(memory_region<RT> &mr, const KeyType &key, ValueArgs &&...value_args) {
+    return insert<RT, KeyType, ValueArgs...>(mr, key, std::forward<ValueArgs>(value_args)...);
   }
 
-  // Lookup operations - support heterogeneous keys
-  template <typename KeyType, typename RT>
-    requires CompatibleKey<KeyType, K, Hash, RT>
-  V *get(const KeyType &key) {
-    size_t entry_idx = find_entry_index<KeyType, RT>(key);
-    return entry_idx != INVALID_INDEX ? &entries_[entry_idx].value() : nullptr;
-  }
+  // === LOOKUP AND ACCESS METHODS ===
 
-  template <typename KeyType, typename RT>
-    requires CompatibleKey<KeyType, K, Hash, RT>
-  const V *get(const KeyType &key) const {
-    size_t entry_idx = find_entry_index<KeyType, RT>(key);
-    return entry_idx != INVALID_INDEX ? &entries_[entry_idx].value() : nullptr;
-  }
-
-  template <typename KeyType, typename RT>
-    requires CompatibleKey<KeyType, K, Hash, RT>
-  V &operator[](const KeyType &key) {
-    size_t entry_idx = find_entry_index<KeyType, RT>(key);
-    assert(entry_idx != INVALID_INDEX && "Key not found in dictionary");
+  /**
+   * @brief Access element with bounds checking
+   * @param key Key to look up (can be any type convertible to common key type)
+   * @return Reference to the value
+   * @throws std::out_of_range if key doesn't exist
+   */
+  template <typename KeyType> V &at(const KeyType &key) {
+    size_t entry_idx = find_entry_index(key);
+    if (entry_idx == INVALID_INDEX) {
+      throw std::out_of_range("Key not found in regional_dict");
+    }
     return entries_[entry_idx].value();
   }
 
-  template <typename KeyType, typename RT>
-    requires CompatibleKey<KeyType, K, Hash, RT>
-  const V &operator[](const KeyType &key) const {
-    size_t entry_idx = find_entry_index<KeyType, RT>(key);
-    assert(entry_idx != INVALID_INDEX && "Key not found in dictionary");
+  template <typename KeyType> const V &at(const KeyType &key) const {
+    size_t entry_idx = find_entry_index(key);
+    if (entry_idx == INVALID_INDEX) {
+      throw std::out_of_range("Key not found in regional_dict");
+    }
     return entries_[entry_idx].value();
   }
 
+  /**
+   * @brief Access element, inserting with default value if key doesn't exist
+   * @param mr Memory region for potential allocation
+   * @param key Key to access
+   * @return Reference to the value (existing or newly created)
+   */
   template <typename KeyType, typename RT>
-    requires CompatibleKey<KeyType, K, Hash, RT>
-  bool contains(const KeyType &key) const {
-    return find_entry_index<KeyType, RT>(key) != INVALID_INDEX;
+    requires std::constructible_from<V, memory_region<RT> &>
+  V &at_or_create(memory_region<RT> &mr, const KeyType &key) {
+    auto [value_ptr, inserted] = try_emplace<RT, KeyType>(mr, key);
+    return *value_ptr;
   }
 
-  // Backward compatibility overloads for exact key type K (no RT needed)
-  V *get(const K &key) {
-    size_t entry_idx = find_entry_index_exact(key);
+  template <typename KeyType, typename RT>
+    requires std::constructible_from<V> && (!std::constructible_from<V, memory_region<RT> &>)
+  V &at_or_create(memory_region<RT> &mr, const KeyType &key) {
+    auto [value_ptr, inserted] = try_emplace<RT, KeyType>(mr, key);
+    return *value_ptr;
+  }
+
+  /**
+   * @brief Find element by key
+   * @param key Key to search for (can be any type convertible to common key type)
+   * @return Pointer to value if found, nullptr otherwise
+   */
+  template <typename KeyType> V *find_value(const KeyType &key) {
+    size_t entry_idx = find_entry_index(key);
     return entry_idx != INVALID_INDEX ? &entries_[entry_idx].value() : nullptr;
   }
 
-  const V *get(const K &key) const {
-    size_t entry_idx = find_entry_index_exact(key);
+  template <typename KeyType> const V *find_value(const KeyType &key) const {
+    size_t entry_idx = find_entry_index(key);
     return entry_idx != INVALID_INDEX ? &entries_[entry_idx].value() : nullptr;
   }
 
-  V &operator[](const K &key) {
-    size_t entry_idx = find_entry_index_exact(key);
-    assert(entry_idx != INVALID_INDEX && "Key not found in dictionary");
-    return entries_[entry_idx].value();
-  }
+  template <typename KeyType> bool contains(const KeyType &key) const { return find_entry_index(key) != INVALID_INDEX; }
 
-  const V &operator[](const K &key) const {
-    size_t entry_idx = find_entry_index_exact(key);
-    assert(entry_idx != INVALID_INDEX && "Key not found in dictionary");
-    return entries_[entry_idx].value();
-  }
+  // Legacy method names for backward compatibility (deprecated)
+  template <typename KeyType> V *get(const KeyType &key) { return find_value(key); }
 
-  bool contains(const K &key) const { return find_entry_index_exact(key) != INVALID_INDEX; }
+  template <typename KeyType> const V *get(const KeyType &key) const { return find_value(key); }
 
-  // Capacity
+  // === CAPACITY AND ITERATION ===
+
   bool empty() const { return entries_.empty(); }
   size_t size() const { return entries_.size(); }
   size_t bucket_count() const { return buckets_.size(); }
@@ -434,8 +560,8 @@ public:
   const_iterator cend() const { return end(); }
 
   // Find method that returns iterator (standard container interface)
-  iterator find(const K &key) {
-    size_t entry_idx = find_entry_index_exact(key);
+  template <typename KeyType> iterator find(const KeyType &key) {
+    size_t entry_idx = find_entry_index(key);
     if (entry_idx == INVALID_INDEX) {
       return end();
     }
@@ -444,88 +570,14 @@ public:
     return iterator(it);
   }
 
-  const_iterator find(const K &key) const {
-    size_t entry_idx = find_entry_index_exact(key);
+  template <typename KeyType> const_iterator find(const KeyType &key) const {
+    size_t entry_idx = find_entry_index(key);
     if (entry_idx == INVALID_INDEX) {
       return end();
     }
     auto it = entries_.begin();
     std::advance(it, entry_idx);
     return const_iterator(it);
-  }
-
-  // Simplified emplace for string literals when K=regional_str, V=regional_str
-  template <typename RT>
-    requires std::same_as<K, regional_str> && std::same_as<V, regional_str>
-  std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key, const char *value) {
-    maybe_resize(mr);
-
-    // Create new entry directly
-    size_t new_entry_idx = entries_.size();
-    entries_.emplace_back(mr, key, value);
-
-    // Add to hash table
-    size_t bucket_idx = (hasher_(entries_[new_entry_idx].key())) % buckets_.size();
-    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
-    buckets_[bucket_idx] = new_entry_idx;
-
-    return {&entries_[new_entry_idx].value(), true};
-  }
-
-  // Emplace with key only (const char* key for regional_str) - value default constructed
-  template <typename RT>
-    requires std::same_as<K, regional_str> && std::constructible_from<V, memory_region<RT> &>
-  std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key) {
-    maybe_resize(mr);
-
-    // Create the entry directly in the vector with default-constructed value
-    size_t new_entry_idx = entries_.size();
-    entries_.emplace_back(mr, key); // This will call dict_entry constructor that default-constructs V
-
-    // Add to hash table
-    size_t bucket_idx = (hasher_(entries_[new_entry_idx].key())) % buckets_.size();
-    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
-    buckets_[bucket_idx] = new_entry_idx;
-
-    return {&entries_[new_entry_idx].value(), true};
-  }
-
-  // Simplified emplace for string literals when K=regional_str and V requires memory_region
-  template <typename RT, typename... ValueArgs>
-    requires std::same_as<K, regional_str> && std::constructible_from<V, memory_region<RT> &, ValueArgs...> &&
-             (!std::constructible_from<V, ValueArgs...>)
-  std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key, ValueArgs &&...value_args) {
-    maybe_resize(mr);
-
-    // Create the entry directly in the vector
-    size_t new_entry_idx = entries_.size();
-    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
-
-    // Add to hash table
-    size_t bucket_idx = (hasher_(entries_[new_entry_idx].key())) % buckets_.size();
-    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
-    buckets_[bucket_idx] = new_entry_idx;
-
-    return {&entries_[new_entry_idx].value(), true};
-  }
-
-  // Additional overload for non-regional value types
-  template <typename RT, typename... ValueArgs>
-    requires std::same_as<K, regional_str> && std::constructible_from<V, ValueArgs...> &&
-             (!std::constructible_from<V, memory_region<RT> &, ValueArgs...>)
-  std::pair<V *, bool> emplace(memory_region<RT> &mr, const char *key, ValueArgs &&...value_args) {
-    maybe_resize(mr);
-
-    // Create the entry directly in the vector
-    size_t new_entry_idx = entries_.size();
-    entries_.emplace_back(mr, key, std::forward<ValueArgs>(value_args)...);
-
-    // Add to hash table
-    size_t bucket_idx = (hasher_(entries_[new_entry_idx].key())) % buckets_.size();
-    entries_[new_entry_idx].set_collision_next_index(buckets_[bucket_idx]);
-    buckets_[bucket_idx] = new_entry_idx;
-
-    return {&entries_[new_entry_idx].value(), true};
   }
 };
 
@@ -538,7 +590,7 @@ bool operator==(const regional_dict<K, V, Hash> &lhs, const regional_dict<K, V, 
     return false;
 
   for (const auto &[key, value] : lhs) {
-    const V *rhs_value = rhs.get(key);
+    const V *rhs_value = rhs.find_value(key);
     if (!rhs_value || !(*rhs_value == value)) {
       return false;
     }
