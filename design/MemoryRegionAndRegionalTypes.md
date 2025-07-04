@@ -54,6 +54,127 @@ class memory_region {
 };
 ```
 
+### Memory Allocation and Management
+
+The system provides two approaches for memory region allocation and management, with RAII being the recommended approach:
+
+#### **1. RAII Management with auto_region (Recommended)**
+
+The `auto_region<RT>` template provides automatic memory management with zero-cost resource cleanup:
+
+```cpp
+template <typename RT>
+class auto_region final {
+  // RAII wrapper around memory_region<RT>
+  // - Movable but not copyable
+  // - Automatic deallocation using correct allocator
+  // - Convenient access via operator* and operator->
+};
+```
+
+**Usage Examples:**
+
+```cpp
+// Basic construction with default allocator
+auto_region<DocumentStore> region(1024 * 1024);  // 1MB
+auto store = region->root();
+
+// With constructor arguments
+auto_region<DocumentStore> region_with_args(1024 * 1024, "Document Title");
+
+// With custom allocator (allocator as first parameter)
+std::pmr::monotonic_buffer_resource pool;
+std::pmr::polymorphic_allocator<std::byte> allocator(&pool);
+auto_region<DocumentStore> custom_region(allocator, 1024 * 1024);
+auto_region<DocumentStore> custom_with_args(allocator, 1024 * 1024, "Title");
+
+// Access the memory region
+(*region).create<regional_str>("example");  // operator*
+region->create<regional_str>("example");    // operator->
+
+// Move semantics (but no copying)
+auto moved_region = std::move(region);  // OK
+// auto copied_region = region;         // Compilation error
+```
+
+**Benefits:**
+
+- **Automatic cleanup**: No manual memory management required
+- **Exception safety**: Resources cleaned up even if exceptions occur
+- **Type safety**: Allocator captured in deleter, ensures correct deallocation
+- **Ergonomic**: Natural C++ constructor syntax instead of factory methods
+
+#### **2. Manual Management with free_region Methods**
+
+For cases where RAII is not suitable, manual allocation and deallocation methods are provided:
+
+```cpp
+// Allocation methods (existing)
+template <typename... Args>
+static memory_region<RT>* alloc_region(size_t payload_capacity, Args&&... args);
+
+template <typename Allocator, typename... Args>
+static memory_region<RT>* alloc_region_with(Allocator allocator, size_t payload_capacity, Args&&... args);
+
+// Deallocation methods (new)
+static void free_region(memory_region<RT>* region);
+
+template <typename Allocator>
+static void free_region_with(Allocator allocator, memory_region<RT>* region);
+```
+
+**Usage Examples:**
+
+```cpp
+// Manual management with default allocator
+auto* region = memory_region<DocumentStore>::alloc_region(1024 * 1024);
+auto store = region->root();
+// ... use region ...
+memory_region<DocumentStore>::free_region(region);
+
+// Manual management with custom allocator
+std::pmr::monotonic_buffer_resource pool;
+std::pmr::polymorphic_allocator<std::byte> alloc(&pool);
+auto* region = memory_region<DocumentStore>::alloc_region_with(alloc, 1024 * 1024);
+auto store = region->root();
+// ... use region ...
+memory_region<DocumentStore>::free_region_with(alloc, region);
+```
+
+**Important Notes:**
+
+- **Allocator matching**: The same allocator instance used for allocation must be used for deallocation
+- **Null safety**: Both `free_region` methods safely handle null pointers
+- **Manual responsibility**: Developer must ensure proper cleanup to avoid memory leaks
+
+#### **⚠️ Important: Raw `delete` is Forbidden**
+
+Using raw `delete` on memory regions is **forbidden** and will cause assertion failures:
+
+```cpp
+// ❌ FORBIDDEN - triggers assertion failure
+auto* region = memory_region<DocumentStore>::alloc_region_with(custom_allocator, 1024 * 1024);
+delete region;  // ASSERTION FAILURE - prevents undefined behavior from delete on allocator memory
+```
+
+**Runtime Protection**: The `memory_region` destructor contains an assertion that prevents direct `delete` usage, ensuring undefined behavior is caught during development. Using `delete` on memory allocated with custom allocators is undefined behavior, not just a memory leak.
+
+#### **Memory Management Best Practices**
+
+1. **Prefer auto_region**: Use `auto_region<RT>` for new code unless there are specific requirements for manual management
+2. **Match allocators**: When using manual management, ensure the same allocator is used for allocation and deallocation
+3. **Exception safety**: `auto_region` provides automatic cleanup even when exceptions occur
+4. **Custom allocators**: Both RAII and manual approaches support custom allocators with proper cleanup
+5. **Move semantics**: `auto_region` supports move construction/assignment but prohibits copying
+
+**Allocation Method Comparison:**
+
+| Method                | Cleanup          | Exception Safety | Custom Allocator | Ergonomics       | Status             |
+| --------------------- | ---------------- | ---------------- | ---------------- | ---------------- | ------------------ |
+| `auto_region<RT>`     | Automatic        | ✅ Yes           | ✅ Yes           | ✅ High          | ✅ **Recommended** |
+| Manual `free_region*` | Manual           | ❌ No            | ✅ Yes           | ⚠️ Medium        | ⚠️ Special cases   |
+| Raw `delete`          | ❌ **Assertion** | ❌ No            | ❌ **UB**        | ❌ **Forbidden** | ❌ **Forbidden**   |
+
 ### Regional Type Constraints
 
 All regional types must satisfy the following constraints. Specialized types (regional_str, regional_fifo, regional_lifo) implement additional container functionality while maintaining compliance.
@@ -176,9 +297,14 @@ UUID doc_id = generate_uuid();
 // ❌ INCORRECT - regional type on stack
 regional_str title("example");  // COMPILATION ERROR
 
-// ✅ CORRECT - regional type in region
+// ✅ CORRECT - regional type in region using auto_region (recommended)
+auto_region<MyRoot> region(1024*1024);
+auto title = region->create<regional_str>(*region, "example");  // OK
+
+// ✅ CORRECT - regional type in region using manual management
 auto mr = memory_region<MyRoot>::alloc_region(1024*1024);
 auto title = mr->create<regional_str>(*mr, "example");  // OK
+memory_region<MyRoot>::free_region(mr);  // Manual cleanup required
 ```
 
 ### Pointer Type Selection Rules
@@ -224,10 +350,10 @@ struct DocumentNode {
         : content_(mr, content), next_() {}
 };
 
-// Single region context - regional_ptr is optimal
-auto mr = memory_region<Document>::alloc_region(1024*1024);
-auto node1 = mr->create<DocumentNode>(*mr, "First");
-auto node2 = mr->create<DocumentNode>(*mr, "Second");
+// Single region context - regional_ptr is optimal (auto_region recommended)
+auto_region<Document> region(1024*1024);
+auto node1 = region->create<DocumentNode>(*region, "First");
+auto node2 = region->create<DocumentNode>(*region, "Second");
 node1->next_ = node2.get();  // regional_ptr assignment
 ```
 
@@ -249,13 +375,13 @@ struct CrossRegionReference {
         : name_(mr, name), external_ref_() {}
 };
 
-// Multi-region context - global_ptr maintains region safety
-auto doc_mr = memory_region<Document>::alloc_region(1024*1024);
-auto ref_mr = memory_region<RefRoot>::alloc_region(1024*1024);
+// Multi-region context - global_ptr maintains region safety (auto_region recommended)
+auto_region<Document> doc_region(1024*1024);
+auto_region<RefRoot> ref_region(1024*1024);
 
-auto node = doc_mr->create<DocumentNode>(*doc_mr, "content");
-auto ref = ref_mr->create<CrossRegionReference>(*ref_mr, "reference");
-ref->external_ref_ = doc_mr->cast_ptr(node.get());  // global_ptr assignment
+auto node = doc_region->create<DocumentNode>(*doc_region, "content");
+auto ref = ref_region->create<CrossRegionReference>(*ref_region, "reference");
+ref->external_ref_ = doc_region->cast_ptr(node.get());  // global_ptr assignment
 ```
 
 ### Programming Model Guidelines
@@ -416,16 +542,16 @@ global_ptr<regional_str, RT> intern_str(memory_region<RT> &mr, const char *exter
 **Usage Examples**:
 
 ```cpp
-auto mr = memory_region<Document>::alloc_region(1024*1024);
+auto_region<Document> region(1024*1024);
 
 // Factory function approach - creates new regional_str
-auto title = intern_str(*mr, "Document Title");
-auto content = intern_str(*mr, std::string("Content text"));
-auto note = intern_str(*mr, std::string_view("Note view"));
+auto title = intern_str(*region, "Document Title");
+auto content = intern_str(*region, std::string("Content text"));
+auto note = intern_str(*region, std::string_view("Note view"));
 
 // In-place construction approach - constructs at pre-allocated location
-auto name_storage = mr->allocate<regional_str>();  // Pre-allocated storage
-intern_str(*mr, "Document Name", *name_storage);  // Initialize in-place
+auto name_storage = region->allocate<regional_str>();  // Pre-allocated storage
+intern_str(*region, "Document Name", *name_storage);  // Initialize in-place
 ```
 
 **Design Rationale**: The `intern_str` functions bridge the gap between standard C++ string handling and regional type constraints. They provide ergonomic alternatives to direct `regional_str` constructor calls while maintaining compliance with all regional type requirements. The dual interface (in-place vs. factory) accommodates different memory management patterns common in shilos programs.

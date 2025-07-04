@@ -23,14 +23,13 @@ const UUID TestRoot::TYPE_UUID = UUID("cccccccc-dddd-eeee-ffff-333333333333");
 void test_regional_str() {
   std::cout << "=== Testing regional_str ===" << std::endl;
 
-  // Create memory region with capacity - using alloc_region static method
-  auto mr_ptr = memory_region<TestRoot>::alloc_region(1024 * 1024); // 1MB capacity
-  memory_region<TestRoot> &mr = *mr_ptr;
+  // Create memory region with capacity - using auto_region RAII wrapper
+  auto_region<TestRoot> region(1024 * 1024); // 1MB capacity
 
   // Test construction using intern_str factory functions that return global_ptr
-  auto str1 = intern_str(mr, std::string_view("Hello, World!"));
-  auto str2 = intern_str(mr, std::string_view("Regional String"));
-  auto str3 = intern_str(mr, std::string_view("")); // Empty string
+  auto str1 = intern_str(*region, std::string_view("Hello, World!"));
+  auto str2 = intern_str(*region, std::string_view("Regional String"));
+  auto str3 = intern_str(*region, std::string_view("")); // Empty string
 
   // Test basic operations
   assert(str1->size() == 13);
@@ -44,7 +43,7 @@ void test_regional_str() {
   assert(std::string_view(*str1) == "Hello, World!");
 
   // Test comparison
-  auto str4 = intern_str(mr, std::string_view("Hello, World!"));
+  auto str4 = intern_str(*region, std::string_view("Hello, World!"));
   assert(*str1 == *str4);
   assert(*str1 != *str2);
 
@@ -54,26 +53,24 @@ void test_regional_str() {
 
   std::cout << "regional_str tests passed!" << std::endl;
 
-  // Clean up
-  delete mr_ptr;
+  // Automatic cleanup via RAII
 }
 
 void test_regional_fifo() {
   std::cout << "=== Testing regional_fifo ===" << std::endl;
 
   // Create memory region with capacity
-  auto mr_ptr = memory_region<TestRoot>::alloc_region(1024 * 1024); // 1MB capacity
-  memory_region<TestRoot> &mr = *mr_ptr;
+  auto_region<TestRoot> region(1024 * 1024); // 1MB capacity
 
   // Test with int (bits type) - use create to get global_ptr
-  auto int_fifo = mr.create<regional_fifo<int>>();
+  auto int_fifo = region->create<regional_fifo<int>>();
   assert(int_fifo->empty());
   assert(int_fifo->size() == 0);
 
   // Test enque operations
-  int_fifo->enque(mr, 1);
-  int_fifo->enque(mr, 2);
-  int_fifo->enque(mr, 3);
+  int_fifo->enque(*region, 1);
+  int_fifo->enque(*region, 2);
+  int_fifo->enque(*region, 3);
 
   assert(int_fifo->size() == 3);
   assert(!int_fifo->empty());
@@ -85,10 +82,10 @@ void test_regional_fifo() {
   }
 
   // Test with regional_str
-  auto str_fifo = mr.create<regional_fifo<regional_str>>();
-  str_fifo->enque(mr, std::string_view("first"));
-  str_fifo->enque(mr, std::string_view("second"));
-  str_fifo->enque(mr, std::string_view("third"));
+  auto str_fifo = region->create<regional_fifo<regional_str>>();
+  str_fifo->enque(*region, std::string_view("first"));
+  str_fifo->enque(*region, std::string_view("second"));
+  str_fifo->enque(*region, std::string_view("third"));
 
   assert(str_fifo->size() == 3);
 
@@ -102,26 +99,24 @@ void test_regional_fifo() {
 
   std::cout << "regional_fifo tests passed!" << std::endl;
 
-  // Clean up
-  delete mr_ptr;
+  // Automatic cleanup via RAII
 }
 
 void test_regional_lifo() {
   std::cout << "=== Testing regional_lifo ===" << std::endl;
 
   // Create memory region with capacity
-  auto mr_ptr = memory_region<TestRoot>::alloc_region(1024 * 1024); // 1MB capacity
-  memory_region<TestRoot> &mr = *mr_ptr;
+  auto_region<TestRoot> region(1024 * 1024); // 1MB capacity
 
   // Test with int (bits type) - use create to get global_ptr
-  auto lifo = mr.create<regional_lifo<int>>();
+  auto lifo = region->create<regional_lifo<int>>();
   assert(lifo->empty());
   assert(lifo->size() == 0);
 
   // Test push operations
-  lifo->push(mr, 1);
-  lifo->push(mr, 2);
-  lifo->push(mr, 3);
+  lifo->push(*region, 1);
+  lifo->push(*region, 2);
+  lifo->push(*region, 3);
 
   assert(lifo->size() == 3);
   assert(!lifo->empty());
@@ -133,10 +128,10 @@ void test_regional_lifo() {
   }
 
   // Test with regional_str
-  auto str_lifo = mr.create<regional_lifo<regional_str>>();
-  str_lifo->push(mr, std::string_view("first"));
-  str_lifo->push(mr, std::string_view("second"));
-  str_lifo->push(mr, std::string_view("third"));
+  auto str_lifo = region->create<regional_lifo<regional_str>>();
+  str_lifo->push(*region, std::string_view("first"));
+  str_lifo->push(*region, std::string_view("second"));
+  str_lifo->push(*region, std::string_view("third"));
 
   assert(str_lifo->size() == 3);
 
@@ -150,26 +145,24 @@ void test_regional_lifo() {
 
   std::cout << "regional_lifo tests passed!" << std::endl;
 
-  // Clean up
-  delete mr_ptr;
+  // Automatic cleanup via RAII
 }
 
 void test_regional_vector() {
   std::cout << "=== Testing regional_vector ===" << std::endl;
 
   // Create memory region with capacity
-  auto mr_ptr = memory_region<TestRoot>::alloc_region(1024 * 1024); // 1MB capacity
-  memory_region<TestRoot> &mr = *mr_ptr;
+  auto_region<TestRoot> region(1024 * 1024); // 1MB capacity
 
   // Test with int (bits type) - use create to get global_ptr
-  auto vec = mr.create<regional_vector<int>>();
+  auto vec = region->create<regional_vector<int>>();
   assert(vec->empty());
   assert(vec->size() == 0);
 
   // Test emplace_back operations
-  vec->emplace_back(mr, 10);
-  vec->emplace_back(mr, 20);
-  vec->emplace_back(mr, 30);
+  vec->emplace_back(*region, 10);
+  vec->emplace_back(*region, 20);
+  vec->emplace_back(*region, 30);
 
   assert(vec->size() == 3);
   assert(!vec->empty());
@@ -187,10 +180,10 @@ void test_regional_vector() {
   }
 
   // Test with regional_str
-  auto str_vec = mr.create<regional_vector<regional_str>>();
-  str_vec->emplace_back(mr, std::string_view("apple"));
-  str_vec->emplace_back(mr, std::string_view("banana"));
-  str_vec->emplace_back(mr, std::string_view("cherry"));
+  auto str_vec = region->create<regional_vector<regional_str>>();
+  str_vec->emplace_back(*region, std::string_view("apple"));
+  str_vec->emplace_back(*region, std::string_view("banana"));
+  str_vec->emplace_back(*region, std::string_view("cherry"));
 
   assert(str_vec->size() == 3);
   assert(std::string_view((*str_vec)[0]) == "apple");
@@ -199,26 +192,24 @@ void test_regional_vector() {
 
   std::cout << "regional_vector tests passed!" << std::endl;
 
-  // Clean up
-  delete mr_ptr;
+  // Automatic cleanup via RAII
 }
 
 void test_regional_dict() {
   std::cout << "=== Testing regional_dict ===" << std::endl;
 
   // Create memory region with capacity
-  auto mr_ptr = memory_region<TestRoot>::alloc_region(1024 * 1024); // 1MB capacity
-  memory_region<TestRoot> &mr = *mr_ptr;
+  auto_region<TestRoot> region(1024 * 1024); // 1MB capacity
 
   // Test with string keys and int values - use create to get global_ptr
-  auto dict = mr.create<regional_dict<regional_str, int>>();
+  auto dict = region->create<regional_dict<regional_str, int>>();
   assert(dict->empty());
   assert(dict->size() == 0);
 
   // Test insertion using insert_or_assign
-  dict->insert_or_assign(mr, std::string_view("one"), 1);
-  dict->insert_or_assign(mr, std::string_view("two"), 2);
-  dict->insert_or_assign(mr, std::string_view("three"), 3);
+  dict->insert_or_assign(*region, std::string_view("one"), 1);
+  dict->insert_or_assign(*region, std::string_view("two"), 2);
+  dict->insert_or_assign(*region, std::string_view("three"), 3);
 
   assert(dict->size() == 3);
   assert(!dict->empty());
@@ -242,19 +233,17 @@ void test_regional_dict() {
 
   std::cout << "regional_dict tests passed!" << std::endl;
 
-  // Clean up
-  delete mr_ptr;
+  // Automatic cleanup via RAII
 }
 
 void test_pointer_semantics() {
   std::cout << "=== Testing pointer semantics ===" << std::endl;
 
   // Create memory region with capacity
-  auto mr_ptr = memory_region<TestRoot>::alloc_region(1024 * 1024); // 1MB capacity
-  memory_region<TestRoot> &mr = *mr_ptr;
+  auto_region<TestRoot> region(1024 * 1024); // 1MB capacity
 
   // Test regional_ptr with intern_str factory function
-  auto str_obj = intern_str(mr, std::string_view("test string"));
+  auto str_obj = intern_str(*region, std::string_view("test string"));
   regional_ptr<regional_str> rptr;
   rptr = str_obj.get(); // Assign raw pointer to regional_ptr
 
@@ -263,15 +252,14 @@ void test_pointer_semantics() {
   assert(std::string_view(*rptr) == "test string");
 
   // Test global_ptr - use cast_ptr method to create from regional_ptr
-  auto gptr = mr.cast_ptr(rptr);
+  auto gptr = region->cast_ptr(rptr);
   assert(gptr != nullptr);
   assert(gptr->size() == 11);
   assert(std::string_view(*gptr) == "test string");
 
   std::cout << "pointer semantics tests passed!" << std::endl;
 
-  // Clean up
-  delete mr_ptr;
+  // Automatic cleanup via RAII
 }
 
 int main() {

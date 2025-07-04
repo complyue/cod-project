@@ -6,6 +6,8 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <stdexcept>
 
 namespace shilos {
@@ -115,11 +117,11 @@ public:
   template <typename... Args>
     requires std::constructible_from<RT, memory_region<RT> &, Args...>
   static memory_region<RT> *alloc_region(const size_t payload_capacity, Args &&...args) {
-    return alloc_region_from(std::allocator<std::byte>(), payload_capacity, std::forward<Args>(args)...);
+    return alloc_region_with(std::allocator<std::byte>(), payload_capacity, std::forward<Args>(args)...);
   }
   template <typename... Args>
     requires std::constructible_from<RT, memory_region<RT> &, Args...>
-  static memory_region<RT> *alloc_region_from(std::allocator<std::byte> allocator, const size_t payload_capacity,
+  static memory_region<RT> *alloc_region_with(std::allocator<std::byte> allocator, const size_t payload_capacity,
                                               Args &&...args) {
     const size_t capacity = sizeof(memory_region) + payload_capacity;
     void *ptr = allocator.allocate(capacity);
@@ -130,14 +132,30 @@ public:
   static memory_region<RT> *alloc_region(const size_t payload_capacity)
     requires std::constructible_from<RT, memory_region<RT> &>
   {
-    return alloc_region_from(std::allocator<std::byte>(), payload_capacity);
+    return alloc_region_with(std::allocator<std::byte>(), payload_capacity);
   }
-  static memory_region<RT> *alloc_region_from(std::allocator<std::byte> allocator, const size_t payload_capacity)
+  static memory_region<RT> *alloc_region_with(std::allocator<std::byte> allocator, const size_t payload_capacity)
     requires std::constructible_from<RT, memory_region<RT> &>
   {
     const size_t capacity = sizeof(memory_region) + payload_capacity;
     void *ptr = allocator.allocate(capacity);
     return new (ptr) memory_region<RT>(capacity);
+  }
+
+  // Manual deallocation methods
+  static void free_region(memory_region<RT> *region) {
+    if (!region)
+      return;
+    std::allocator<std::byte> allocator;
+    free_region_with(allocator, region);
+  }
+
+  template <typename Allocator> static void free_region_with(Allocator allocator, memory_region<RT> *region) {
+    if (!region)
+      return;
+    size_t capacity = region->capacity_;
+    // Skip destructor call - memory_region doesn't need cleanup, just deallocate the memory
+    allocator.deallocate(static_cast<std::byte *>(static_cast<void *>(region)), capacity);
   }
 
 protected:
@@ -156,7 +174,12 @@ protected:
   }
 
 public:
-  ~memory_region() = default;
+  ~memory_region() {
+    // This destructor should NEVER be called directly via delete!
+    // Use auto_region<RT> for RAII or memory_region<RT>::free_region() for manual management.
+    // Direct delete on allocator-allocated memory is undefined behavior.
+    assert(false && "memory_region destructor called directly - use auto_region or free_region instead");
+  }
   // a region is a block of memory, meant to be referenced by ptr anyway, so no rvalue semantcis
   memory_region(const memory_region &) = delete;            // no copying
   memory_region(memory_region &&) = delete;                 // no moving
@@ -352,6 +375,134 @@ public:
   // Symmetric operators
   friend bool operator==(std::nullptr_t, const global_ptr<VT, RT> &ptr) noexcept { return ptr.offset_ == 0; }
   friend bool operator!=(std::nullptr_t, const global_ptr<VT, RT> &ptr) noexcept { return ptr.offset_ != 0; }
+};
+
+template <typename RT>
+  requires ValidMemRegionRootType<RT>
+class auto_region final {
+private:
+  memory_region<RT> *region_;
+  std::function<void(memory_region<RT> *)> deleter_;
+
+public:
+  // Constructor with default allocator
+  template <typename... Args>
+    requires std::constructible_from<RT, memory_region<RT> &, Args...>
+  explicit auto_region(const size_t payload_capacity, Args &&...args) {
+    region_ = memory_region<RT>::alloc_region(payload_capacity, std::forward<Args>(args)...);
+    deleter_ = [](memory_region<RT> *r) {
+      if (r) {
+        std::allocator<std::byte> allocator;
+        // Skip destructor call - memory_region doesn't need cleanup, just deallocate
+        allocator.deallocate(static_cast<std::byte *>(static_cast<void *>(r)), r->capacity());
+      }
+    };
+  }
+
+  // Simplified constructor for root types that only need memory_region& parameter
+  explicit auto_region(const size_t payload_capacity)
+    requires std::constructible_from<RT, memory_region<RT> &>
+  {
+    region_ = memory_region<RT>::alloc_region(payload_capacity);
+    deleter_ = [](memory_region<RT> *r) {
+      if (r) {
+        std::allocator<std::byte> allocator;
+        // Skip destructor call - memory_region doesn't need cleanup, just deallocate
+        allocator.deallocate(static_cast<std::byte *>(static_cast<void *>(r)), r->capacity());
+      }
+    };
+  }
+
+  // Constructor with custom allocator
+  template <typename Allocator, typename... Args>
+    requires std::constructible_from<RT, memory_region<RT> &, Args...>
+  auto_region(Allocator allocator, const size_t payload_capacity, Args &&...args) {
+    region_ = memory_region<RT>::alloc_region_with(allocator, payload_capacity, std::forward<Args>(args)...);
+    size_t capacity = region_->capacity();
+    deleter_ = [allocator, capacity](memory_region<RT> *r) mutable {
+      if (r) {
+        // Skip destructor call - memory_region doesn't need cleanup, just deallocate
+        allocator.deallocate(static_cast<std::byte *>(static_cast<void *>(r)), capacity);
+      }
+    };
+  }
+
+  // Simplified constructor for custom allocator with root types that only need memory_region& parameter
+  template <typename Allocator>
+  auto_region(Allocator allocator, const size_t payload_capacity)
+    requires std::constructible_from<RT, memory_region<RT> &>
+  {
+    region_ = memory_region<RT>::alloc_region_with(allocator, payload_capacity);
+    size_t capacity = region_->capacity();
+    deleter_ = [allocator, capacity](memory_region<RT> *r) mutable {
+      if (r) {
+        // Skip destructor call - memory_region doesn't need cleanup, just deallocate
+        allocator.deallocate(static_cast<std::byte *>(static_cast<void *>(r)), capacity);
+      }
+    };
+  }
+
+  // Destructor
+  ~auto_region() {
+    if (deleter_) {
+      deleter_(region_);
+    }
+  }
+
+  // Movable but not copyable
+  auto_region(const auto_region &) = delete;
+  auto_region &operator=(const auto_region &) = delete;
+
+  auto_region(auto_region &&other) noexcept : region_(other.region_), deleter_(std::move(other.deleter_)) {
+    other.region_ = nullptr;
+    other.deleter_ = nullptr;
+  }
+
+  auto_region &operator=(auto_region &&other) noexcept {
+    if (this != &other) {
+      // Clean up current resource
+      if (deleter_) {
+        deleter_(region_);
+      }
+
+      // Take ownership of other's resource
+      region_ = other.region_;
+      deleter_ = std::move(other.deleter_);
+
+      // Clear other
+      other.region_ = nullptr;
+      other.deleter_ = nullptr;
+    }
+    return *this;
+  }
+
+  // Access operators
+  memory_region<RT> &operator*() {
+    assert(region_ != nullptr);
+    return *region_;
+  }
+
+  const memory_region<RT> &operator*() const {
+    assert(region_ != nullptr);
+    return *region_;
+  }
+
+  memory_region<RT> *operator->() {
+    assert(region_ != nullptr);
+    return region_;
+  }
+
+  const memory_region<RT> *operator->() const {
+    assert(region_ != nullptr);
+    return region_;
+  }
+
+  // Check if valid
+  explicit operator bool() const noexcept { return region_ != nullptr; }
+
+  // Get raw pointer (use with caution)
+  memory_region<RT> *get() { return region_; }
+  const memory_region<RT> *get() const { return region_; }
 };
 
 } // namespace shilos

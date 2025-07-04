@@ -35,57 +35,73 @@ const UUID ComplexRoot::TYPE_UUID = UUID("bbbbbbbb-cccc-dddd-eeee-222222222222")
 void test_basic_region_creation() {
   std::cout << "=== Testing basic region creation ===" << std::endl;
 
-  // Test basic region creation using alloc_region
-  // TestRoot constructor takes (memory_region&, string_view) where string_view has default value "test"
-  auto mr1 = memory_region<TestRoot>::alloc_region(1024 * 1024);
-  auto mr2 = memory_region<TestRoot>::alloc_region(1024 * 1024, "custom_name");
+  // Test RAII approach with auto_region (recommended)
+  {
+    auto_region<TestRoot> region1(1024 * 1024);
+    auto_region<TestRoot> region2(1024 * 1024, "custom_name");
 
-  // Access the root objects via global_ptr
-  auto root1 = mr1->root();
-  auto root2 = mr2->root();
+    auto root1 = region1->root();
+    auto root2 = region2->root();
 
-  // Test that roots are properly initialized
-  assert(root1->data_ == std::string_view("test"));
-  assert(root2->data_ == std::string_view("custom_name"));
+    // Test that roots are properly initialized
+    assert(root1->data_ == std::string_view("test"));
+    assert(root2->data_ == std::string_view("custom_name"));
+
+    std::cout << "RAII region creation tests passed!" << std::endl;
+  } // Automatic cleanup via RAII
+
+  // Test manual memory management (for comparison)
+  {
+    auto mr1 = memory_region<TestRoot>::alloc_region(1024 * 1024);
+    auto mr2 = memory_region<TestRoot>::alloc_region(1024 * 1024, "custom_name");
+
+    auto root1 = mr1->root();
+    auto root2 = mr2->root();
+
+    // Test that roots are properly initialized
+    assert(root1->data_ == std::string_view("test"));
+    assert(root2->data_ == std::string_view("custom_name"));
+
+    std::cout << "Manual region creation tests passed!" << std::endl;
+
+    // Manual cleanup
+    memory_region<TestRoot>::free_region(mr1);
+    memory_region<TestRoot>::free_region(mr2);
+  }
 
   std::cout << "Basic region creation tests passed!" << std::endl;
-
-  // Clean up
-  delete mr1;
-  delete mr2;
 }
 
 void test_region_allocation() {
   std::cout << "=== Testing region allocation ===" << std::endl;
 
-  auto mr = memory_region<TestRoot>::alloc_region(1024 * 1024);
+  auto_region<TestRoot> region(1024 * 1024);
 
   // Test allocation and construction
-  auto root = mr->root();
+  auto root = region->root();
 
   // Test that we can access the root data
   assert(root->data_ == std::string_view("test"));
 
   // Test creating additional objects in the region
-  auto str_obj = mr->create<regional_str>("allocated string");
+  auto str_obj = region->create<regional_str>("allocated string");
   assert(*str_obj == std::string_view("allocated string"));
 
   std::cout << "Region allocation tests passed!" << std::endl;
 
-  // Clean up
-  delete mr;
+  // Automatic cleanup via RAII
 }
 
 void test_pointer_conversions() {
   std::cout << "=== Testing pointer conversions ===" << std::endl;
 
-  auto mr = memory_region<ComplexRoot>::alloc_region(1024 * 1024);
-  auto root = mr->root();
+  auto_region<ComplexRoot> region(1024 * 1024);
+  auto root = region->root();
 
   // Add some items to the fifo
-  root->items_.enque(*mr, "item1");
-  root->items_.enque(*mr, "item2");
-  root->items_.enque(*mr, "item3");
+  root->items_.enque(*region, "item1");
+  root->items_.enque(*region, "item2");
+  root->items_.enque(*region, "item3");
 
   // Test regional_ptr assignment via global_ptr
   auto it = root->items_.begin();
@@ -98,46 +114,44 @@ void test_pointer_conversions() {
   assert(*root->selected_ == std::string_view("item2"));
 
   // Test global_ptr creation from regional_ptr
-  auto gptr = mr->cast_ptr(root->selected_);
+  auto gptr = region->cast_ptr(root->selected_);
   assert(gptr);
   assert(*gptr == std::string_view("item2"));
 
   std::cout << "Pointer conversions tests passed!" << std::endl;
 
-  // Clean up
-  delete mr;
+  // Automatic cleanup via RAII
 }
 
 void test_region_constraints() {
   std::cout << "=== Testing region constraints ===" << std::endl;
 
-  auto mr = memory_region<TestRoot>::alloc_region(1024 * 1024);
-  auto root = mr->root();
+  auto_region<TestRoot> region(1024 * 1024);
+  auto root = region->root();
 
   // Test that we can access regional types properly
   assert(root->data_ == std::string_view("test"));
 
   // Test that containers require memory_region for element construction
-  auto str_fifo = mr->create<regional_fifo<regional_str>>();
-  str_fifo->enque(*mr, "element1");
-  str_fifo->enque(*mr, "element2");
+  auto str_fifo = region->create<regional_fifo<regional_str>>();
+  str_fifo->enque(*region, "element1");
+  str_fifo->enque(*region, "element2");
 
   assert(str_fifo->size() == 2);
 
   std::cout << "Region constraints tests passed!" << std::endl;
 
-  // Clean up
-  delete mr;
+  // Automatic cleanup via RAII
 }
 
 void test_multiple_regions() {
   std::cout << "=== Testing multiple regions ===" << std::endl;
 
-  auto mr1 = memory_region<TestRoot>::alloc_region(1024 * 1024, "region1");
-  auto mr2 = memory_region<TestRoot>::alloc_region(1024 * 1024, "region2");
+  auto_region<TestRoot> region1(1024 * 1024, "region1");
+  auto_region<TestRoot> region2(1024 * 1024, "region2");
 
-  auto root1 = mr1->root();
-  auto root2 = mr2->root();
+  auto root1 = region1->root();
+  auto root2 = region2->root();
 
   // Test that regions are independent
   assert(root1->data_ == std::string_view("region1"));
@@ -153,21 +167,19 @@ void test_multiple_regions() {
 
   std::cout << "Multiple regions tests passed!" << std::endl;
 
-  // Clean up
-  delete mr1;
-  delete mr2;
+  // Automatic cleanup via RAII - both regions destroyed automatically
 }
 
 void test_region_lifetime() {
   std::cout << "=== Testing region lifetime ===" << std::endl;
 
-  std::unique_ptr<memory_region<TestRoot>> mr_ptr;
+  std::unique_ptr<auto_region<TestRoot>> region_ptr;
   std::optional<global_ptr<TestRoot, TestRoot>> gptr;
 
   // Test 1: Create region and verify access within scope
   {
-    auto mr = memory_region<TestRoot>::alloc_region(1024 * 1024, "scoped");
-    auto root = mr->root();
+    auto region = std::make_unique<auto_region<TestRoot>>(1024 * 1024, "scoped");
+    auto root = (*region)->root();
 
     // Test that we can access the object
     assert(root->data_ == std::string_view("scoped"));
@@ -179,7 +191,7 @@ void test_region_lifetime() {
     std::cout << "Root data in scope: " << root->data_ << std::endl;
 
     // Transfer ownership to extend region lifetime
-    mr_ptr.reset(mr);
+    region_ptr = std::move(region);
     gptr.emplace(std::move(root)); // Use emplace to construct in place
   }
 
@@ -191,8 +203,20 @@ void test_region_lifetime() {
   std::cout << "Root data after scope: " << (**gptr).data_ << std::endl;
 
   // Test 3: Test region destruction and cleanup
-  gptr.reset();   // Clear the global_ptr first
-  mr_ptr.reset(); // Then destroy the region
+  gptr.reset();       // Clear the global_ptr first
+  region_ptr.reset(); // Then destroy the region
+
+  // Test manual memory management lifetime for comparison
+  {
+    auto *mr = memory_region<TestRoot>::alloc_region(1024 * 1024, "manual");
+    auto root = mr->root();
+
+    assert(root->data_ == std::string_view("manual"));
+    std::cout << "Manual region root data: " << root->data_ << std::endl;
+
+    // Manual cleanup
+    memory_region<TestRoot>::free_region(mr);
+  }
 
   std::cout << "Region lifetime tests passed!" << std::endl;
 }
@@ -200,13 +224,13 @@ void test_region_lifetime() {
 void test_nested_regional_types() {
   std::cout << "=== Testing nested regional types ===" << std::endl;
 
-  auto mr = memory_region<ComplexRoot>::alloc_region(1024 * 1024, "nested");
-  auto root = mr->root();
+  auto_region<ComplexRoot> region(1024 * 1024, "nested");
+  auto root = region->root();
 
   // Create nested structure
-  root->items_.enque(*mr, "first");
-  root->items_.enque(*mr, "second");
-  root->items_.enque(*mr, "third");
+  root->items_.enque(*region, "first");
+  root->items_.enque(*region, "second");
+  root->items_.enque(*region, "third");
 
   // Test that nested allocations work
   assert(root->items_.size() == 3);
@@ -225,8 +249,8 @@ void test_nested_regional_types() {
   assert(*root->selected_ == std::string_view("first"));
 
   // Test dictionary operations using the current API
-  root->counters_.insert_or_assign(*mr, std::string_view("first"), 1);
-  root->counters_.insert_or_assign(*mr, std::string_view("second"), 2);
+  root->counters_.insert_or_assign(*region, std::string_view("first"), 1);
+  root->counters_.insert_or_assign(*region, std::string_view("second"), 2);
 
   assert(root->counters_.size() == 2);
   assert(*root->counters_.find_value("first") == 1);
@@ -234,8 +258,7 @@ void test_nested_regional_types() {
 
   std::cout << "Nested regional types tests passed!" << std::endl;
 
-  // Clean up
-  delete mr;
+  // Automatic cleanup via RAII
 }
 
 int main() {
