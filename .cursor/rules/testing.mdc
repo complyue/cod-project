@@ -6,8 +6,6 @@ alwaysApply: true
 To build and run the tests with latest source code:
 0. In case cod-project main src changed: `cmake --build ./build && ninja -C ./build install` (from root dir of cod-project)
 1. `cd tests` (the subdir of cod-project)
-2. `mkdir -p build` (in `cod-project/tests/`)
-3. `cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build`
-4. `cmake --build ./build`
-5. `./build/simple_test`
-6. and run other test executables
+2. `mkdir -p build && cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build` (in `cod-project/tests/`)
+3. `cmake --build ./build`
+4. run the test executables

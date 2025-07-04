@@ -465,11 +465,6 @@ public:
 
   template <typename KeyType> bool contains(const KeyType &key) const { return find_entry_index(key) != INVALID_INDEX; }
 
-  // Legacy method names for backward compatibility (deprecated)
-  template <typename KeyType> V *get(const KeyType &key) { return find_value(key); }
-
-  template <typename KeyType> const V *get(const KeyType &key) const { return find_value(key); }
-
   // === CAPACITY AND ITERATION ===
 
   bool empty() const { return entries_.empty(); }
