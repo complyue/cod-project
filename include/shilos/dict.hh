@@ -46,12 +46,13 @@ private:
   K key_;
   V value_;
   size_t collision_next_index_; // Index of next entry in collision chain (or INVALID_INDEX)
+  bool is_deleted_;             // Tombstone flag for deleted entries
 
 public:
   static constexpr size_t INVALID_INDEX = SIZE_MAX;
 
   // Default constructor (needed for vector_segment arrays)
-  dict_entry() : key_(), value_(), collision_next_index_(INVALID_INDEX) {}
+  dict_entry() : key_(), value_(), collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   // Standard constructors for constructing both key and value from arguments
   template <typename RT, typename... KeyArgs, typename... ValueArgs>
@@ -59,25 +60,25 @@ public:
                  std::constructible_from<V, memory_region<RT> &, ValueArgs...>
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args, ValueArgs &&...value_args)
       : key_(mr, std::forward<KeyArgs>(key_args)...), value_(mr, std::forward<ValueArgs>(value_args)...),
-        collision_next_index_(INVALID_INDEX) {}
+        collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   template <typename RT, typename... KeyArgs, typename... ValueArgs>
     requires std::constructible_from<K, KeyArgs...> && std::constructible_from<V, ValueArgs...>
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args, ValueArgs &&...value_args)
       : key_(std::forward<KeyArgs>(key_args)...), value_(std::forward<ValueArgs>(value_args)...),
-        collision_next_index_(INVALID_INDEX) {}
+        collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   template <typename RT, typename... KeyArgs, typename... ValueArgs>
     requires std::constructible_from<K, KeyArgs...> && std::constructible_from<V, memory_region<RT> &, ValueArgs...>
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args, ValueArgs &&...value_args)
       : key_(std::forward<KeyArgs>(key_args)...), value_(mr, std::forward<ValueArgs>(value_args)...),
-        collision_next_index_(INVALID_INDEX) {}
+        collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   template <typename RT, typename... KeyArgs, typename... ValueArgs>
     requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> && std::constructible_from<V, ValueArgs...>
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args, ValueArgs &&...value_args)
       : key_(mr, std::forward<KeyArgs>(key_args)...), value_(std::forward<ValueArgs>(value_args)...),
-        collision_next_index_(INVALID_INDEX) {}
+        collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   // Constructor for single key argument and value arguments
   template <typename RT, typename KeyArg, typename... ValueArgs>
@@ -85,13 +86,13 @@ public:
                  std::constructible_from<V, const ValueArgs &...> &&
                  (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
   dict_entry(memory_region<RT> &mr, const KeyArg &key_arg, const ValueArgs &...value_args)
-      : key_(mr, key_arg), value_(value_args...), collision_next_index_(INVALID_INDEX) {}
+      : key_(mr, key_arg), value_(value_args...), collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   template <typename RT, typename KeyArg, typename... ValueArgs>
     requires std::constructible_from<K, const KeyArg &> && std::constructible_from<V, const ValueArgs &...> &&
                  (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
   dict_entry(memory_region<RT> &mr, const KeyArg &key_arg, const ValueArgs &...value_args)
-      : key_(key_arg), value_(value_args...), collision_next_index_(INVALID_INDEX) {}
+      : key_(key_arg), value_(value_args...), collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   // Constructor for when both key and value need memory region
   template <typename RT, typename KeyArg, typename... ValueArgs>
@@ -99,21 +100,21 @@ public:
                  std::constructible_from<V, memory_region<RT> &, const ValueArgs &...> &&
                  (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
   dict_entry(memory_region<RT> &mr, const KeyArg &key_arg, const ValueArgs &...value_args)
-      : key_(mr, key_arg), value_(mr, value_args...), collision_next_index_(INVALID_INDEX) {}
+      : key_(mr, key_arg), value_(mr, value_args...), collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   // Constructor for key-only with default-constructed value (V needs memory_region)
   template <typename RT, typename... KeyArgs>
     requires std::constructible_from<K, memory_region<RT> &, const KeyArgs &...> &&
                  std::constructible_from<V, memory_region<RT> &>
   dict_entry(memory_region<RT> &mr, const KeyArgs &...key_args)
-      : key_(mr, key_args...), value_(mr), collision_next_index_(INVALID_INDEX) {}
+      : key_(mr, key_args...), value_(mr), collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   // Constructor for key-only with default-constructed value (V doesn't need memory_region)
   template <typename RT, typename... KeyArgs>
     requires std::constructible_from<K, memory_region<RT> &, const KeyArgs &...> && std::constructible_from<V> &&
                  (!std::constructible_from<V, memory_region<RT> &>)
   dict_entry(memory_region<RT> &mr, const KeyArgs &...key_args)
-      : key_(mr, key_args...), value_(), collision_next_index_(INVALID_INDEX) {}
+      : key_(mr, key_args...), value_(), collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   // Deleted special members
   dict_entry(const dict_entry &) = delete;
@@ -129,6 +130,10 @@ public:
 
   size_t collision_next_index() const { return collision_next_index_; }
   void set_collision_next_index(size_t index) { collision_next_index_ = index; }
+
+  bool is_deleted() const { return is_deleted_; }
+  void mark_deleted() { is_deleted_ = true; }
+  void mark_active() { is_deleted_ = false; }
 };
 
 /**
@@ -178,7 +183,7 @@ private:
   template <typename KeyType> size_t bucket_index(const KeyType &key) const { return hash_key(key) % buckets_.size(); }
 
   template <typename RT> void maybe_resize(memory_region<RT> &mr) {
-    if (buckets_.empty() || static_cast<double>(entries_.size()) / buckets_.size() > MAX_LOAD_FACTOR) {
+    if (buckets_.empty() || static_cast<double>(size()) / buckets_.size() > MAX_LOAD_FACTOR) {
       resize_hash_table(mr);
     }
   }
@@ -210,7 +215,7 @@ private:
     }
   }
 
-  // Find entry using common key comparison
+  // Find entry using common key comparison (skips deleted entries)
   template <typename KeyType> size_t find_entry_index(const KeyType &lookup_key) const {
     if (buckets_.empty())
       return INVALID_INDEX;
@@ -221,11 +226,14 @@ private:
     auto common_lookup_key = to_common_key(lookup_key);
 
     while (entry_idx != INVALID_INDEX) {
-      auto common_stored_key = to_common_key(entries_[entry_idx].key());
-      if (common_stored_key == common_lookup_key) {
-        return entry_idx;
+      const dict_entry<K, V> &entry = entries_[entry_idx];
+      if (!entry.is_deleted()) {
+        auto common_stored_key = to_common_key(entry.key());
+        if (common_stored_key == common_lookup_key) {
+          return entry_idx;
+        }
       }
-      entry_idx = entries_[entry_idx].collision_next_index();
+      entry_idx = entry.collision_next_index();
     }
 
     return INVALID_INDEX;
@@ -467,22 +475,54 @@ public:
 
   // === CAPACITY AND ITERATION ===
 
-  bool empty() const { return entries_.empty(); }
-  size_t size() const { return entries_.size(); }
+  bool empty() const {
+    // Check if all entries are deleted
+    for (const auto &entry : entries_) {
+      if (!entry.is_deleted()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  size_t size() const {
+    // Count only non-deleted entries
+    size_t count = 0;
+    for (const auto &entry : entries_) {
+      if (!entry.is_deleted()) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   size_t bucket_count() const { return buckets_.size(); }
-  double load_factor() const { return buckets_.empty() ? 0.0 : static_cast<double>(entries_.size()) / buckets_.size(); }
+  double load_factor() const { return buckets_.empty() ? 0.0 : static_cast<double>(size()) / buckets_.size(); }
 
   // Insertion order iteration - just iterate over entries vector!
   class iterator {
+    // Friend declaration to allow regional_dict to access private members
+    friend class regional_dict;
+
     typename regional_vector<dict_entry<K, V>>::iterator it_;
+    typename regional_vector<dict_entry<K, V>>::iterator end_it_;
 
   public:
-    iterator(typename regional_vector<dict_entry<K, V>>::iterator it) : it_(it) {}
+    iterator(typename regional_vector<dict_entry<K, V>>::iterator it,
+             typename regional_vector<dict_entry<K, V>>::iterator end_it)
+        : it_(it), end_it_(end_it) {
+      // Skip initial deleted entries
+      while (it_ != end_it_ && it_->is_deleted()) {
+        ++it_;
+      }
+    }
 
     std::pair<const K &, V &> operator*() { return {it_->key(), it_->value()}; }
 
     iterator &operator++() {
-      ++it_;
+      do {
+        ++it_;
+      } while (it_ != end_it_ && it_->is_deleted());
       return *this;
     }
 
@@ -497,15 +537,28 @@ public:
   };
 
   class const_iterator {
+    // Friend declaration to allow regional_dict to access private members
+    friend class regional_dict;
+
     typename regional_vector<dict_entry<K, V>>::const_iterator it_;
+    typename regional_vector<dict_entry<K, V>>::const_iterator end_it_;
 
   public:
-    const_iterator(typename regional_vector<dict_entry<K, V>>::const_iterator it) : it_(it) {}
+    const_iterator(typename regional_vector<dict_entry<K, V>>::const_iterator it,
+                   typename regional_vector<dict_entry<K, V>>::const_iterator end_it)
+        : it_(it), end_it_(end_it) {
+      // Skip initial deleted entries
+      while (it_ != end_it_ && it_->is_deleted()) {
+        ++it_;
+      }
+    }
 
     std::pair<const K &, const V &> operator*() const { return {it_->key(), it_->value()}; }
 
     const_iterator &operator++() {
-      ++it_;
+      do {
+        ++it_;
+      } while (it_ != end_it_ && it_->is_deleted());
       return *this;
     }
 
@@ -519,11 +572,11 @@ public:
     bool operator!=(const const_iterator &other) const { return it_ != other.it_; }
   };
 
-  iterator begin() { return iterator(entries_.begin()); }
-  iterator end() { return iterator(entries_.end()); }
+  iterator begin() { return iterator(entries_.begin(), entries_.end()); }
+  iterator end() { return iterator(entries_.end(), entries_.end()); }
 
-  const_iterator begin() const { return const_iterator(entries_.begin()); }
-  const_iterator end() const { return const_iterator(entries_.end()); }
+  const_iterator begin() const { return const_iterator(entries_.begin(), entries_.end()); }
+  const_iterator end() const { return const_iterator(entries_.end(), entries_.end()); }
 
   const_iterator cbegin() const { return begin(); }
   const_iterator cend() const { return end(); }
@@ -536,7 +589,7 @@ public:
     }
     auto it = entries_.begin();
     std::advance(it, entry_idx);
-    return iterator(it);
+    return iterator(it, entries_.end());
   }
 
   template <typename KeyType> const_iterator find(const KeyType &key) const {
@@ -546,7 +599,138 @@ public:
     }
     auto it = entries_.begin();
     std::advance(it, entry_idx);
-    return const_iterator(it);
+    return const_iterator(it, entries_.end());
+  }
+
+  // === DELETION METHODS ===
+
+  /**
+   * @brief Remove element by key
+   * @param key Key to remove (can be any type convertible to common key type)
+   * @return Number of elements removed (0 or 1)
+   */
+  template <typename KeyType> size_t erase(const KeyType &key) {
+    size_t entry_idx = find_entry_index(key);
+    if (entry_idx == INVALID_INDEX) {
+      return 0; // Key not found
+    }
+
+    erase_entry_at_index(entry_idx);
+    return 1;
+  }
+
+  /**
+   * @brief Remove element by iterator
+   * @param it Iterator pointing to element to erase
+   * @return Iterator to the element that followed the erased element
+   */
+  iterator erase(iterator it) {
+    if (it == end()) {
+      throw std::out_of_range("Cannot erase end iterator");
+    }
+
+    // Calculate the entry index from iterator position
+    auto vector_it = it.it_;
+    size_t entry_idx = std::distance(entries_.begin(), vector_it);
+
+    erase_entry_at_index(entry_idx);
+
+    // Return iterator starting from current position, which will skip deleted entries
+    return iterator(vector_it, entries_.end());
+  }
+
+  /**
+   * @brief Remove range of elements [first, last)
+   * @param first Iterator to first element to erase
+   * @param last Iterator to one past last element to erase
+   * @return Iterator to the element that followed the last erased element
+   */
+  iterator erase(iterator first, iterator last) {
+    if (first == last) {
+      return last; // Empty range
+    }
+
+    // Mark all elements in the range as deleted
+    auto current = first;
+    while (current != last) {
+      auto vector_it = current.it_;
+      size_t entry_idx = std::distance(entries_.begin(), vector_it);
+      erase_entry_at_index(entry_idx);
+      ++current;
+    }
+
+    // Return iterator starting from the last position, which will skip deleted entries
+    return iterator(last.it_, entries_.end());
+  }
+
+  /**
+   * @brief Remove all elements using tombstone approach
+   */
+  void clear() {
+    // Mark all entries as deleted
+    for (auto &entry : entries_) {
+      entry.mark_deleted();
+    }
+
+    // Clear all bucket entries
+    for (size_t i = 0; i < buckets_.size(); ++i) {
+      buckets_[i] = INVALID_INDEX;
+    }
+  }
+
+private:
+  /**
+   * @brief Internal method to erase entry at specific index using tombstone approach
+   * @param entry_idx Index of entry to mark as deleted
+   *
+   * This method handles:
+   * 1. Removing entry from hash table collision chain
+   * 2. Marking entry as deleted (tombstone approach)
+   * No need to move elements, which avoids issues with regional types
+   */
+  void erase_entry_at_index(size_t entry_idx) {
+    if (entry_idx >= entries_.size()) {
+      throw std::out_of_range("Invalid entry index");
+    }
+
+    dict_entry<K, V> &entry_to_remove = entries_[entry_idx];
+
+    if (entry_to_remove.is_deleted()) {
+      return; // Already deleted
+    }
+
+    // Step 1: Remove from hash table collision chain
+    if (!buckets_.empty()) {
+      size_t bucket_idx = hash_key(entry_to_remove.key()) % buckets_.size();
+
+      if (buckets_[bucket_idx] == entry_idx) {
+        // Entry is first in collision chain - find next non-deleted entry
+        size_t next_idx = entry_to_remove.collision_next_index();
+        while (next_idx != INVALID_INDEX && entries_[next_idx].is_deleted()) {
+          next_idx = entries_[next_idx].collision_next_index();
+        }
+        buckets_[bucket_idx] = next_idx;
+      } else {
+        // Find and unlink from collision chain
+        size_t current_idx = buckets_[bucket_idx];
+        while (current_idx != INVALID_INDEX) {
+          dict_entry<K, V> &current_entry = entries_[current_idx];
+          if (!current_entry.is_deleted() && current_entry.collision_next_index() == entry_idx) {
+            // Skip over the deleted entry in the chain
+            size_t next_idx = entry_to_remove.collision_next_index();
+            while (next_idx != INVALID_INDEX && entries_[next_idx].is_deleted()) {
+              next_idx = entries_[next_idx].collision_next_index();
+            }
+            current_entry.set_collision_next_index(next_idx);
+            break;
+          }
+          current_idx = current_entry.collision_next_index();
+        }
+      }
+    }
+
+    // Step 2: Mark entry as deleted (tombstone approach)
+    entry_to_remove.mark_deleted();
   }
 };
 

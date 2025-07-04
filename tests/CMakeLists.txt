@@ -87,4 +87,6 @@ configure_cod_target(test_memory_regions src/test_memory_regions.cc)
 
 configure_cod_target(test_regional_types src/test_regional_types.cc)
 
+configure_cod_target(test_deletion_methods src/test_deletion_methods.cc)
+
 # configure_cod_target(test_yaml_serialization src/test_yaml_serialization.cc)

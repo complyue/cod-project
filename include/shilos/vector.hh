@@ -17,6 +17,9 @@ template <typename T> class vector_segment {
   template <typename U, typename RT>
   friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_vector<U> *raw_ptr);
 
+  // Friend declaration for regional_vector to access private members
+  template <typename U> friend class regional_vector;
+
 public:
   static constexpr size_t SEGMENT_SIZE = 64;
 
@@ -178,47 +181,113 @@ public:
 
   // Element access
   T &operator[](size_t index) {
-    auto [segment, local_index] = locate_element(index);
-    return (*segment)[local_index];
+    auto [segment, local_idx] = locate_element(index);
+    return (*segment)[local_idx];
   }
 
   const T &operator[](size_t index) const {
-    auto [segment, local_index] = locate_element(index);
-    return (*segment)[local_index];
+    auto [segment, local_idx] = locate_element(index);
+    return (*segment)[local_idx];
   }
 
   T &at(size_t index) {
-    if (index >= total_size_) {
+    if (index >= total_size_)
       throw std::out_of_range("Vector index out of range");
-    }
-    return (*this)[index];
+    auto [segment, local_idx] = locate_element(index);
+    return (*segment)[local_idx];
   }
 
   const T &at(size_t index) const {
-    if (index >= total_size_) {
+    if (index >= total_size_)
       throw std::out_of_range("Vector index out of range");
-    }
-    return (*this)[index];
+    auto [segment, local_idx] = locate_element(index);
+    return (*segment)[local_idx];
   }
 
   T &front() {
-    assert(!empty());
-    return first_segment_->operator[](0);
+    if (empty())
+      throw std::out_of_range("Vector is empty");
+    return (*first_segment_)[0];
   }
 
   const T &front() const {
-    assert(!empty());
-    return first_segment_->operator[](0);
+    if (empty())
+      throw std::out_of_range("Vector is empty");
+    return (*first_segment_)[0];
   }
 
   T &back() {
-    assert(!empty());
-    return last_segment_->operator[](last_segment_->size() - 1);
+    if (empty())
+      throw std::out_of_range("Vector is empty");
+    return (*last_segment_)[last_segment_->size() - 1];
   }
 
   const T &back() const {
-    assert(!empty());
-    return last_segment_->operator[](last_segment_->size() - 1);
+    if (empty())
+      throw std::out_of_range("Vector is empty");
+    return (*last_segment_)[last_segment_->size() - 1];
+  }
+
+  // === DELETION METHODS ===
+
+  /**
+   * @brief Remove the last element
+   * Does not call destructors (regional types don't have individual destruction)
+   */
+  void pop_back() {
+    if (empty())
+      throw std::out_of_range("Cannot pop from empty vector");
+
+    // Simply decrease the size - no destructor call needed for regional types
+    last_segment_->size_--;
+    total_size_--;
+  }
+
+  /**
+   * @brief Remove element at specified index using swap-with-last strategy
+   * @param index Index of element to remove
+   * @throws std::out_of_range if index is invalid
+   *
+   * Uses memory-level copy to avoid invoking copy/move semantics.
+   * Maintains vector compactness by moving last element to deleted position.
+   */
+  void erase_at(size_t index) {
+    if (index >= total_size_)
+      throw std::out_of_range("Vector index out of range");
+
+    if (total_size_ == 1) {
+      // Removing the only element
+      pop_back();
+      return;
+    }
+
+    // Get the element to remove and the last element
+    auto [target_segment, target_local] = locate_element(index);
+    T &target_element = (*target_segment)[target_local];
+    T &last_element = back();
+
+    // If not removing the last element, copy last element to target position
+    if (index != total_size_ - 1) {
+      // Use memory-level copy to avoid copy/move constructors
+      std::memcpy(&target_element, &last_element, sizeof(T));
+    }
+
+    // Remove the last element
+    pop_back();
+  }
+
+  /**
+   * @brief Remove all elements
+   * Regional types don't need destructor calls - just reset sizes
+   */
+  void clear() {
+    // Reset all segment sizes
+    vector_segment<T> *current = first_segment_.get();
+    while (current) {
+      current->size_ = 0;
+      current = current->next().get();
+    }
+    total_size_ = 0;
   }
 
   // Capacity
@@ -342,6 +411,68 @@ public:
 
   const_iterator cbegin() const { return begin(); }
   const_iterator cend() const { return end(); }
+
+  // === ITERATOR-BASED DELETION METHODS ===
+
+  /**
+   * @brief Erase element by iterator
+   * @param it Iterator pointing to element to erase
+   * @return Iterator to the element that followed the erased element
+   */
+  iterator erase(iterator it) {
+    if (it == end()) {
+      throw std::out_of_range("Cannot erase end iterator");
+    }
+
+    size_t index = it.index();
+    erase_at(index);
+
+    // Return iterator to same position (which now contains different element or is end)
+    if (index >= total_size_) {
+      return end();
+    } else {
+      // Return iterator to the same index position
+      auto result_it = begin();
+      std::advance(result_it, index);
+      return result_it;
+    }
+  }
+
+  /**
+   * @brief Erase range of elements [first, last)
+   * @param first Iterator to first element to erase
+   * @param last Iterator to one past last element to erase
+   * @return Iterator to the element that followed the last erased element
+   */
+  iterator erase(iterator first, iterator last) {
+    if (first == last) {
+      return last; // Empty range
+    }
+
+    size_t first_index = first.index();
+    size_t last_index = last.index();
+
+    if (first_index >= total_size_ || last_index > total_size_ || first_index > last_index) {
+      throw std::out_of_range("Invalid iterator range");
+    }
+
+    size_t elements_to_erase = last_index - first_index;
+
+    // Handle the range by repeatedly erasing from the first position
+    // This maintains the swap-with-last strategy
+    for (size_t i = 0; i < elements_to_erase; ++i) {
+      erase_at(first_index);
+    }
+
+    // Return iterator to position where first element was
+    if (first_index >= total_size_) {
+      return end();
+    } else {
+      auto result_it = begin();
+      std::advance(result_it, first_index);
+      return result_it;
+    }
+  }
 };
 
 // Comparison operators
