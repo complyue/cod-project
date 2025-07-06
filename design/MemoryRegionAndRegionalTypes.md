@@ -614,6 +614,15 @@ document->title_ = title;
    - Efficient operations:
      - push/push_back
 
+4. **iopd<K,V>** – Insertion-order preserving dictionary designed for YAML mappings:
+
+   - **Purpose**: Represents a YAML mapping (`yaml::Map`) while retaining the *original key order* exactly as it appears in the source document.  This is important for human-friendly configuration files where the order of entries conveys meaning or readability.
+   - **Internal structure**: Implements a compact two-layer design
+     1. `std::vector<entry>` stores `(key,value)` pairs sequentially – this naturally preserves order for iteration and `to_yaml` serialisation.
+     2. `std::unordered_map<std::string, size_t>` maps each key to its index inside the vector, giving **O(1)** average-time lookup, insertion, and update without disturbing the insertion order.
+   - **YAML support**: `to_yaml(const iopd<V>&)` serialises the container back into a `yaml::Map` with the preserved order, and `from_yaml()` reconstructs the dictionary while respecting regional memory rules.
+   - **Use cases**: Configuration files, metadata sections, and any YAML documents where key order must remain stable across parse ⇄ serialise cycles.
+
 ### YAML Integration (Optional)
 
 YAML integration is provided through a modular system using standalone functions and the `YamlConvertible` concept:
@@ -705,7 +714,9 @@ This modular approach allows users to:
 - Maintain clean separation between core functionality and serialization
 - Benefit from compile-time optimization of inline implementations
 
-**YAML Container Support**: YAML deserialization supports containers holding both bits types and regional types. The implementation leverages the fixed-size and RTTI-free constraints of regional types to:
+**YAML Container Support**: YAML deserialization supports containers holding both bits types and regional types.  **Mapping nodes** are deserialised into `iopd<V>` instances, guaranteeing that the *user-defined order of keys* is preserved on round-trip serialisation.  Internally the container combines a vector (for order) with a hash index (for O(1) look-ups), so there is no performance trade-off when accessing elements programmatically.
+
+The implementation leverages the fixed-size and RTTI-free constraints of regional types to:
 
 - Allocate uninitialized memory at final container locations
 - Use the raw pointer version `from_yaml(mr, node, T* raw_ptr)` for direct in-place construction

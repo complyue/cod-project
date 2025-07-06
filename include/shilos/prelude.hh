@@ -3,13 +3,14 @@
 #include <concepts>
 #include <cstring>
 #include <iostream>
-#include <map>
 #include <random>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
+
+#include <shilos/iopd.hh>
 
 namespace shilos {
 
@@ -133,7 +134,7 @@ public:
 
 struct Node;
 
-using Map = std::map<std::string, Node>;
+using Map = iopd<Node>;
 using Sequence = std::vector<Node>;
 
 // Complete YAML node type definition
