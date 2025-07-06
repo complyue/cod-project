@@ -159,13 +159,13 @@ public:
     total_size_++;
   }
 
+  // Second emplace_back overload: element type does NOT expect memory_region
   template <typename RT, typename... Args>
-    requires std::constructible_from<T, const Args &...>
+    requires (!std::constructible_from<T, memory_region<RT> &, const Args &...> &&
+               std::constructible_from<T, const Args &...>)
   void emplace_back(memory_region<RT> &mr, const Args &...args) {
-    // If no segments or last segment is full, create new segment
     if (!last_segment_ || last_segment_->is_full()) {
       auto new_segment = mr.template create_bits<vector_segment<T>>(mr);
-
       if (!first_segment_) {
         first_segment_ = last_segment_ = new_segment.get();
       } else {
@@ -176,6 +176,30 @@ public:
     }
 
     last_segment_->emplace_back(mr, args...);
+    total_size_++;
+  }
+
+  // Callback-based initialisation (formerly emplace_uninit)
+  template <typename RT, typename InitFn>
+    requires std::invocable<InitFn, T *>
+  void emplace_init(memory_region<RT> &mr, InitFn &&init_fn) {
+    if (!last_segment_ || last_segment_->is_full()) {
+      auto new_segment = mr.template create_bits<vector_segment<T>>(mr);
+      if (!first_segment_) {
+        first_segment_ = last_segment_ = new_segment.get();
+      } else {
+        last_segment_->next() = new_segment.get();
+        last_segment_ = new_segment.get();
+      }
+      segment_count_++;
+    }
+
+    vector_segment<T> *seg = last_segment_.get();
+    T *dest_ptr = &seg->elements_[seg->size_];
+
+    std::forward<InitFn>(init_fn)(dest_ptr);
+
+    seg->size_++;
     total_size_++;
   }
 

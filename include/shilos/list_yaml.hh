@@ -1,183 +1,110 @@
 #pragma once
 
+#include <type_traits>
 #include "./list.hh"
+#include "./prelude.hh"
 
 namespace shilos {
 
-// YAML support for regional_fifo
-template <typename T>
-  requires yaml::YamlConvertible<T, void>
-inline yaml::Node to_yaml(const regional_fifo<T> &fifo) noexcept {
-  yaml::Node node;
-  auto &seq = std::get<yaml::Sequence>(node.value = yaml::Sequence{});
+// ============================================================================
+// YAML SERIALISATION SUPPORT FOR regional_fifo<T> / regional_lifo<T>
+// ----------------------------------------------------------------------------
+//  Representation: YAML sequence in the natural iteration order.
+//
+//  Deserialisation strategy mirrors vector_yaml.hh:
+//    • Fast-path for bits / arithmetic / bool element types (direct scalar).
+//    • Generic path creates default element (via container API) then delegates
+//      to element's own from_yaml for regional types or nested containers.
+//
+//  NOTE: Both containers share identical semantics; implementation is factored
+//  through an internal helper to avoid duplication.
+// ============================================================================
 
-  for (const auto &item : fifo) {
-    seq.emplace_back(to_yaml(item));
-  }
-
-  return node;
-}
-
-template <typename T, typename RT>
-  requires yaml::YamlConvertible<T, RT>
-global_ptr<regional_fifo<T>, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
-  if (!std::holds_alternative<yaml::Sequence>(node.value)) {
-    throw yaml::TypeError("Expected Sequence for regional_fifo");
-  }
-
-  auto fifo = mr.template create<regional_fifo<T>>(mr);
-  const auto &seq = std::get<yaml::Sequence>(node.value);
-
-  for (const auto &item_node : seq) {
-    // Allocate uninitialized space for the cons node
-    auto node_ptr = mr.template allocate<regional_cons<T>>();
-
-    // Initialize the next pointer to null
-    new (&node_ptr->next()) regional_ptr<regional_cons<T>>();
-
-    // Construct the value directly using raw pointer version of from_yaml
-    from_yaml(mr, item_node, &node_ptr->value());
-
-    // Link into the fifo
-    if (!fifo->head_) {
-      fifo->head_ = fifo->tail_ = node_ptr;
+template <template <typename> class ListC, typename T>
+inline yaml::Node list_to_yaml(const ListC<T> &lst) noexcept {
+  yaml::Node seq(yaml::Sequence{});
+  for (const auto &elem : lst) {
+    if constexpr (requires { to_yaml(elem); }) {
+      seq.push_back(to_yaml(elem));
+    } else if constexpr (std::is_same_v<T, bool>) {
+      seq.push_back(yaml::Node(elem));
+    } else if constexpr (std::is_integral_v<T>) {
+      seq.push_back(yaml::Node(static_cast<int64_t>(elem)));
+    } else if constexpr (std::is_floating_point_v<T>) {
+      seq.push_back(yaml::Node(static_cast<double>(elem)));
     } else {
-      fifo->tail_->next() = node_ptr;
-      fifo->tail_ = node_ptr;
+      static_assert(sizeof(T) == 0, "Element type of regional list does not support YAML serialisation");
     }
   }
-
-  return fifo;
+  return seq;
 }
 
-template <typename T, typename RT>
-  requires yaml::YamlConvertible<T, RT>
-void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<regional_fifo<T>> &to_ptr) {
-  // Allocate uninitialized fifo
-  auto fifo_ptr = mr.template allocate<regional_fifo<T>>();
-  // Use raw pointer version to construct directly
-  from_yaml(mr, node, fifo_ptr.get());
-  // Assign the raw pointer to the regional_ptr (assumes to_ptr is in memory region)
-  to_ptr = fifo_ptr.get();
+template <typename T>
+inline yaml::Node to_yaml(const regional_fifo<T> &lst) noexcept {
+  return list_to_yaml<regional_fifo>(lst);
 }
 
+template <typename T>
+inline yaml::Node to_yaml(const regional_lifo<T> &lst) noexcept {
+  return list_to_yaml<regional_lifo>(lst);
+}
+
+// ---------------------------------------------------------------------------
+// Deserialisation helpers
+// ---------------------------------------------------------------------------
+
+template <template <typename> class ListC, typename T, typename RT>
+static void list_from_yaml_impl(memory_region<RT> &mr,
+                                const yaml::Node &node,
+                                ListC<T> *raw_ptr) {
+  if (!node.IsSequence())
+    throw yaml::TypeError("YAML node for regional list must be a sequence");
+
+  new (raw_ptr) ListC<T>(mr);
+  auto &lst = *raw_ptr;
+
+  const auto &seq = std::get<yaml::Sequence>(node.value);
+  for (const auto &elem_node : seq) {
+    if constexpr (std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
+      if (!elem_node.IsScalar())
+        throw yaml::TypeError("Expected scalar for bits element in regional list");
+      lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.as<T>()); });
+    } else {
+      lst.emplace_init(mr, [&](T *dst) { from_yaml(mr, elem_node, dst); });
+    }
+  }
+}
+
+// Primary deserialisers ------------------------------------------------------
+
 template <typename T, typename RT>
-  requires yaml::YamlConvertible<T, RT>
+  requires ValidMemRegionRootType<RT>
 void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_fifo<T> *raw_ptr) {
-  if (!std::holds_alternative<yaml::Sequence>(node.value)) {
-    throw yaml::TypeError("Expected Sequence for regional_fifo");
-  }
-
-  new (raw_ptr) regional_fifo<T>(mr);
-  const auto &seq = std::get<yaml::Sequence>(node.value);
-
-  for (const auto &item_node : seq) {
-    // Allocate uninitialized space for the cons node
-    auto node_ptr = mr.template allocate<regional_cons<T>>();
-
-    // Initialize the next pointer to null
-    new (&node_ptr->next()) regional_ptr<regional_cons<T>>();
-
-    // Construct the value directly using raw pointer version of from_yaml
-    from_yaml<T>(mr, item_node, &node_ptr->value());
-
-    // Link into the fifo
-    if (!raw_ptr->head_) {
-      raw_ptr->head_ = raw_ptr->tail_ = node_ptr;
-    } else {
-      raw_ptr->tail_->next() = node_ptr;
-      raw_ptr->tail_ = node_ptr;
-    }
-  }
-}
-
-// YAML support for regional_lifo
-template <typename T>
-  requires yaml::YamlConvertible<T, void>
-inline yaml::Node to_yaml(const regional_lifo<T> &lifo) noexcept {
-  yaml::Node node;
-  auto &seq = std::get<yaml::Sequence>(node.value = yaml::Sequence{});
-
-  for (const auto &item : lifo) {
-    seq.emplace_back(to_yaml(item));
-  }
-
-  return node;
+  list_from_yaml_impl<regional_fifo>(mr, node, raw_ptr);
 }
 
 template <typename T, typename RT>
-  requires yaml::YamlConvertible<T, RT>
-global_ptr<regional_lifo<T>, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
-  if (!std::holds_alternative<yaml::Sequence>(node.value)) {
-    throw yaml::TypeError("Expected Sequence for regional_lifo");
-  }
-
-  auto lifo = mr.template create<regional_lifo<T>>(mr);
-  const auto &seq = std::get<yaml::Sequence>(node.value);
-
-  // For LIFO, we want to preserve order when deserializing
-  // Push items in reverse order so first item in YAML becomes top of stack
-  for (auto it = seq.rbegin(); it != seq.rend(); ++it) {
-    // Allocate uninitialized space for the cons node
-    auto node_ptr = mr.template allocate<regional_cons<T>>();
-
-    // Initialize the next pointer to null
-    new (&node_ptr->next()) regional_ptr<regional_cons<T>>();
-
-    // Construct the value directly using raw pointer version of from_yaml
-    from_yaml(mr, *it, &node_ptr->value());
-
-    // Link into the lifo (add to front/top)
-    node_ptr->next() = lifo->head_.get();
-    if (!lifo->head_) {
-      lifo->tail_ = node_ptr;
-    }
-    lifo->head_ = node_ptr;
-  }
-
-  return lifo;
-}
-
-template <typename T, typename RT>
-  requires yaml::YamlConvertible<T, RT>
-void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<regional_lifo<T>> &to_ptr) {
-  // Allocate uninitialized lifo
-  auto lifo_ptr = mr.template allocate<regional_lifo<T>>();
-  // Use raw pointer version to construct directly
-  from_yaml(mr, node, lifo_ptr.get());
-  // Assign the raw pointer to the regional_ptr (assumes to_ptr is in memory region)
-  to_ptr = lifo_ptr.get();
-}
-
-template <typename T, typename RT>
-  requires yaml::YamlConvertible<T, RT>
+  requires ValidMemRegionRootType<RT>
 void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_lifo<T> *raw_ptr) {
-  if (!std::holds_alternative<yaml::Sequence>(node.value)) {
-    throw yaml::TypeError("Expected Sequence for regional_lifo");
-  }
-
-  new (raw_ptr) regional_lifo<T>(mr);
-  const auto &seq = std::get<yaml::Sequence>(node.value);
-
-  // For LIFO, we want to preserve order when deserializing
-  // Push items in reverse order so first item in YAML becomes top of stack
-  for (auto it = seq.rbegin(); it != seq.rend(); ++it) {
-    // Allocate uninitialized space for the cons node
-    auto node_ptr = mr.template allocate<regional_cons<T>>();
-
-    // Initialize the next pointer to null
-    new (&node_ptr->next()) regional_ptr<regional_cons<T>>();
-
-    // Construct the value directly using raw pointer version of from_yaml
-    from_yaml<T>(mr, *it, &node_ptr->value());
-
-    // Link into the lifo (add to front/top)
-    node_ptr->next() = raw_ptr->head_.get();
-    if (!raw_ptr->head_) {
-      raw_ptr->tail_ = node_ptr;
-    }
-    raw_ptr->head_ = node_ptr;
-  }
+  list_from_yaml_impl<regional_lifo>(mr, node, raw_ptr);
 }
 
-} // namespace shilos
+// Helper allocators ----------------------------------------------------------
+
+template <typename T, typename RT>
+  requires ValidMemRegionRootType<RT>
+global_ptr<regional_fifo<T>, RT> fifo_from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
+  auto raw_ptr = mr.template allocate<regional_fifo<T>>();
+  from_yaml<T>(mr, node, raw_ptr);
+  return mr.cast_ptr(raw_ptr);
+}
+
+template <typename T, typename RT>
+  requires ValidMemRegionRootType<RT>
+global_ptr<regional_lifo<T>, RT> lifo_from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
+  auto raw_ptr = mr.template allocate<regional_lifo<T>>();
+  from_yaml<T>(mr, node, raw_ptr);
+  return mr.cast_ptr(raw_ptr);
+}
+
+} // namespace shilos 

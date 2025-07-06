@@ -1,149 +1,152 @@
 #pragma once
 
+#include <type_traits>
 #include "./dict.hh"
+#include "./prelude.hh"
 
 namespace shilos {
 
-// YAML support for regional_dict
+// ============================================================================
+// YAML SERIALISATION SUPPORT FOR regional_dict<K,V,Hash>
+// ----------------------------------------------------------------------------
+//  Representation: YAML mapping where each key is serialized using the same
+//  logic as standalone `to_yaml(key)` (or scalar fallback) and each value via
+//  `to_yaml(value)`.
+//
+//  Deserialisation strategy:
+//    • Build an empty dict in-place.
+//    • Iterate over YAML map entries.
+//    • For each entry
+//        – Insert key (using try_emplace) to obtain value pointer
+//        – For *bits* / arithmetic / bool value types assign directly
+//        – Otherwise destroy default-constructed placeholder and call
+//          element’s `from_yaml` for in-place construction.
+//
+//  Keys:
+//    • When `K` is `regional_str` the lookup/insert helpers accept
+//      `std::string_view`, so we parse scalar string and pass view.
+//    • For arithmetic & bool key types we parse scalar directly.
+// ============================================================================
+
 template <typename K, typename V, typename Hash>
-  requires yaml::YamlConvertible<K, void> && yaml::YamlConvertible<V, void>
-inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &dict) noexcept {
-  yaml::Node node;
-  auto &map = std::get<yaml::Map>(node.value = yaml::Map{});
-
-  for (const auto &[key, value] : dict) {
-    // Convert key to YAML and then to string for the map key
-    auto key_node = to_yaml(key);
-    std::string key_str;
-
-    if (auto str_ptr = std::get_if<std::string>(&key_node.value)) {
-      key_str = *str_ptr;
+inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d) noexcept {
+  yaml::Node m(yaml::Map{});
+  for (const auto &[k, v] : d) {
+    yaml::Node key_node;
+    if constexpr (requires { to_yaml(k); }) {
+      key_node = to_yaml(k);
+    } else if constexpr (std::is_same_v<K, bool>) {
+      key_node = yaml::Node(k);
+    } else if constexpr (std::is_integral_v<K>) {
+      key_node = yaml::Node(static_cast<int64_t>(k));
+    } else if constexpr (std::is_floating_point_v<K>) {
+      key_node = yaml::Node(static_cast<double>(k));
+    } else if constexpr (std::is_same_v<K, regional_str>) {
+      key_node = yaml::Node(std::string_view(k));
     } else {
-      // For non-string keys, we'll format them as YAML and use that as the key
-      key_str = yaml::format_yaml(key_node);
+      static_assert(sizeof(K) == 0, "Key type of regional_dict is not serialisable to YAML");
     }
 
-    map[key_str] = to_yaml(value);
-  }
-
-  return node;
-}
-
-template <typename K, typename V, typename Hash, typename RT>
-  requires yaml::YamlConvertible<K, RT> && yaml::YamlConvertible<V, RT>
-global_ptr<regional_dict<K, V, Hash>, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
-  if (!std::holds_alternative<yaml::Map>(node.value)) {
-    throw yaml::TypeError("Expected Map for regional_dict");
-  }
-
-  auto dict = mr.template create<regional_dict<K, V, Hash>>(mr);
-  const auto &map = std::get<yaml::Map>(node.value);
-
-  for (const auto &[key_str, value_node] : map) {
-    // Parse the key string back to the key type
-    yaml::Node key_node(key_str);
-
-    // Manually ensure vector space and dict resize
-    dict->maybe_resize(mr);
-
-    // Ensure entries vector has space
-    if (!dict->entries_.last_segment_ || dict->entries_.last_segment_->is_full()) {
-      auto new_segment = mr.template create<vector_segment<dict_entry<K, V>>>(mr);
-      if (!dict->entries_.first_segment_) {
-        dict->entries_.first_segment_ = dict->entries_.last_segment_ = new_segment.get();
-      } else {
-        dict->entries_.last_segment_->next() = new_segment.get();
-        dict->entries_.last_segment_ = new_segment.get();
-      }
-      dict->entries_.segment_count_++;
+    // Value node
+    yaml::Node value_node;
+    if constexpr (requires { to_yaml(v); }) {
+      value_node = to_yaml(v);
+    } else if constexpr (std::is_same_v<V, bool>) {
+      value_node = yaml::Node(v);
+    } else if constexpr (std::is_integral_v<V>) {
+      value_node = yaml::Node(static_cast<int64_t>(v));
+    } else if constexpr (std::is_floating_point_v<V>) {
+      value_node = yaml::Node(static_cast<double>(v));
+    } else {
+      static_assert(sizeof(V) == 0, "Value type of regional_dict is not serialisable to YAML");
     }
 
-    // Get insertion location for new dict_entry
-    size_t insert_index = dict->entries_.last_segment_->size();
-    dict_entry<K, V> *entry_location = &dict->entries_.last_segment_->elements_[insert_index];
-
-    // Initialize dict_entry structure
-    entry_location->collision_next_index_ = dict_entry<K, V>::INVALID_INDEX;
-
-    // Construct key and value directly in the dict_entry
-    from_yaml(mr, key_node, &entry_location->key_);
-    from_yaml(mr, value_node, &entry_location->value_);
-
-    // Update vector bookkeeping
-    dict->entries_.last_segment_->size_++;
-    dict->entries_.total_size_++;
-
-    // Update hash table
-    size_t new_entry_idx = dict->entries_.size() - 1;
-    size_t bucket_idx = dict->bucket_index(entry_location->key_);
-    entry_location->set_collision_next_index(dict->buckets_[bucket_idx]);
-    dict->buckets_[bucket_idx] = new_entry_idx;
+    // Insert into map – we must convert key_node to string/int key for YAML library.
+    if (auto str = std::get_if<std::string>(&key_node.value)) {
+      m[*str] = value_node;
+    } else if (auto i = std::get_if<int64_t>(&key_node.value)) {
+      m[std::to_string(*i)] = value_node; // YAML keys must be strings
+    } else {
+      // Fallback: stringify YAML node
+      m[yaml::format_yaml(key_node)] = value_node;
+    }
   }
-
-  return dict;
+  return m;
 }
 
-template <typename K, typename V, typename Hash, typename RT>
-  requires yaml::YamlConvertible<K, RT> && yaml::YamlConvertible<V, RT>
-void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<regional_dict<K, V, Hash>> &to_ptr) {
-  // Allocate uninitialized dict
-  auto dict_ptr = mr.template allocate<regional_dict<K, V, Hash>>();
-  // Use raw pointer version to construct directly
-  from_yaml(mr, node, dict_ptr.get());
-  // Assign the raw pointer to the regional_ptr (assumes to_ptr is in memory region)
-  to_ptr = dict_ptr.get();
-}
+// ---------------------------------------------------------------------------
+// Deserialisation
+// ---------------------------------------------------------------------------
 
 template <typename K, typename V, typename Hash, typename RT>
-  requires yaml::YamlConvertible<K, RT> && yaml::YamlConvertible<V, RT>
-void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_dict<K, V, Hash> *raw_ptr) {
-  if (!std::holds_alternative<yaml::Map>(node.value)) {
-    throw yaml::TypeError("Expected Map for regional_dict");
-  }
+  requires ValidMemRegionRootType<RT>
+void from_yaml(memory_region<RT> &mr,
+               const yaml::Node &node,
+               regional_dict<K, V, Hash> *raw_ptr) {
+  if (!node.IsMap())
+    throw yaml::TypeError("YAML node for regional_dict must be a mapping");
 
   new (raw_ptr) regional_dict<K, V, Hash>(mr);
+  auto &dict = *raw_ptr;
+
   const auto &map = std::get<yaml::Map>(node.value);
 
-  for (const auto &[key_str, value_node] : map) {
-    // Parse the key string back to the key type
-    yaml::Node key_node(key_str);
+  for (const auto &[k_node_str, v_node] : map) {
+    // --- Parse key ---------------------------------------------------------
+    std::remove_cv_t<K> key_storage{};
+    auto make_key_callable = [&](auto &&key_arg, auto &&init_fn) {
+      dict.emplace_init(mr, std::forward<decltype(key_arg)>(key_arg), std::forward<decltype(init_fn)>(init_fn));
+    };
 
-    // Manually ensure vector space and construct dict_entry directly
-    raw_ptr->maybe_resize(mr);
-
-    // Ensure entries vector has space
-    if (!raw_ptr->entries_.last_segment_ || raw_ptr->entries_.last_segment_->is_full()) {
-      auto new_segment = mr.template create<vector_segment<dict_entry<K, V>>>(mr);
-      if (!raw_ptr->entries_.first_segment_) {
-        raw_ptr->entries_.first_segment_ = raw_ptr->entries_.last_segment_ = new_segment.get();
+    if constexpr (std::is_same_v<K, regional_str>) {
+      auto key_view = std::string_view(k_node_str);
+      if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
+        make_key_callable(key_view, [&](V *dst) { new (dst) V(v_node.as<V>()); });
       } else {
-        raw_ptr->entries_.last_segment_->next() = new_segment.get();
-        raw_ptr->entries_.last_segment_ = new_segment.get();
+        make_key_callable(key_view, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }
-      raw_ptr->entries_.segment_count_++;
+    } else if constexpr (std::is_same_v<K, bool>) {
+      bool key_bool = (k_node_str == "true" || k_node_str == "1");
+      if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
+        make_key_callable(key_bool, [&](V *dst) { new (dst) V(v_node.as<V>()); });
+      } else {
+        make_key_callable(key_bool, [&](V *dst) { from_yaml(mr, v_node, dst); });
+      }
+    } else if constexpr (std::is_integral_v<K>) {
+      K key_int = static_cast<K>(std::stoll(k_node_str));
+      if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
+        make_key_callable(key_int, [&](V *dst) { new (dst) V(v_node.as<V>()); });
+      } else {
+        make_key_callable(key_int, [&](V *dst) { from_yaml(mr, v_node, dst); });
+      }
+    } else if constexpr (std::is_floating_point_v<K>) {
+      K key_fp = static_cast<K>(std::stod(k_node_str));
+      if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
+        make_key_callable(key_fp, [&](V *dst) { new (dst) V(v_node.as<V>()); });
+      } else {
+        make_key_callable(key_fp, [&](V *dst) { from_yaml(mr, v_node, dst); });
+      }
+    } else {
+      yaml::Node key_scalar(k_node_str);
+      from_yaml(mr, key_scalar, &key_storage);
+      if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
+        make_key_callable(key_storage, [&](V *dst) { new (dst) V(v_node.as<V>()); });
+      } else {
+        make_key_callable(key_storage, [&](V *dst) { from_yaml(mr, v_node, dst); });
+      }
     }
-
-    // Get insertion location for new dict_entry
-    size_t insert_index = raw_ptr->entries_.last_segment_->size();
-    dict_entry<K, V> *entry_location = &raw_ptr->entries_.last_segment_->elements_[insert_index];
-
-    // Initialize dict_entry structure
-    entry_location->collision_next_index_ = dict_entry<K, V>::INVALID_INDEX;
-
-    // Construct key and value directly in the dict_entry
-    from_yaml<K>(mr, key_node, &entry_location->key_);
-    from_yaml<V>(mr, value_node, &entry_location->value_);
-
-    // Update vector bookkeeping
-    raw_ptr->entries_.last_segment_->size_++;
-    raw_ptr->entries_.total_size_++;
-
-    // Update hash table
-    size_t new_entry_idx = raw_ptr->entries_.size() - 1;
-    size_t bucket_idx = raw_ptr->bucket_index(entry_location->key_);
-    entry_location->set_collision_next_index(raw_ptr->buckets_[bucket_idx]);
-    raw_ptr->buckets_[bucket_idx] = new_entry_idx;
   }
 }
 
-} // namespace shilos
+// Helper allocator -----------------------------------------------------------
+
+template <typename K, typename V, typename Hash, typename RT>
+  requires ValidMemRegionRootType<RT>
+global_ptr<regional_dict<K, V, Hash>, RT>
+  dict_from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
+  auto raw_ptr = mr.template allocate<regional_dict<K, V, Hash>>();
+  from_yaml<K, V, Hash>(mr, node, raw_ptr);
+  return mr.cast_ptr(raw_ptr);
+}
+
+} // namespace shilos 

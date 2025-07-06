@@ -16,10 +16,6 @@ set(CMAKE_CXX_EXTENSIONS NO)
 
 # Configure build to use the built toolchain
 
-# Set the CXX flags to use the built libc++
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -nostdinc++")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${COD_TOOLCHAIN_DIR}/include/c++/v1")
-
 # Include directories for project headers
 include_directories(BEFORE "${COD_TOOLCHAIN_DIR}/include")
 
@@ -52,17 +48,11 @@ function(configure_cod_target target_name)
     # Create the executable
     add_executable(${target_name} ${source_files})
     
-    # Include directories
-    target_include_directories(${target_name} PRIVATE "${COD_TOOLCHAIN_DIR}/include")
-    
     # Link with shilos library
     target_link_libraries(${target_name} PRIVATE ${SHILOS_LIBRARY})
     
     # Link with C++ runtime
     target_link_libraries(${target_name} PRIVATE c++ c++abi)
-    
-    # Set library search paths
-    target_link_directories(${target_name} PRIVATE "${COD_TOOLCHAIN_DIR}/lib")
     
     # Set rpath to find shared libraries at runtime
     set_target_properties(${target_name} PROPERTIES
@@ -89,4 +79,6 @@ configure_cod_target(test_regional_types src/test_regional_types.cc)
 
 configure_cod_target(test_deletion_methods src/test_deletion_methods.cc)
 
-# configure_cod_target(test_yaml_serialization src/test_yaml_serialization.cc)
+configure_cod_target(test_yaml_serialization src/test_yaml_serialization.cc)
+
+configure_cod_target(test_yaml_containers src/test_yaml_containers.cc)

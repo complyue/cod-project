@@ -14,25 +14,34 @@ namespace shilos {
 
 template <typename T> class regional_cons {
 private:
-  T value_;
+  typename std::aligned_storage<sizeof(T), alignof(T)>::type storage_;
   regional_ptr<regional_cons<T>> next_;
 
 public:
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, const Args &...> &&
              (!std::constructible_from<T, const Args &...>)
-  regional_cons(memory_region<RT> &mr, const Args &...args) : value_(mr, args...) {}
+  regional_cons(memory_region<RT> &mr, const Args &...args) {
+    new (&storage_) T(mr, args...);
+  }
 
   template <typename RT, typename... Args>
     requires std::constructible_from<T, const Args &...> &&
              (!std::constructible_from<T, memory_region<RT> &, const Args &...>)
-  regional_cons(memory_region<RT> &mr, const Args &...args) : value_(args...) {}
+  regional_cons(memory_region<RT> &mr, const Args &...args) {
+    new (&storage_) T(args...);
+  }
 
   // When both constructors are possible, prefer the regional version (more explicit)
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, const Args &...> &&
              std::constructible_from<T, const Args &...>
-  regional_cons(memory_region<RT> &mr, const Args &...args) : value_(mr, args...) {}
+  regional_cons(memory_region<RT> &mr, const Args &...args) {
+    new (&storage_) T(mr, args...);
+  }
+
+  // Internal ctor that leaves value uninitialised (used by emplace_init)
+  regional_cons(std::in_place_t) {}
 
   // Deleted special members
   regional_cons(const regional_cons &) = delete;
@@ -40,8 +49,12 @@ public:
   regional_cons &operator=(const regional_cons &) = delete;
   regional_cons &operator=(regional_cons &&) = delete;
 
-  T &value() { return value_; }
-  const T &value() const { return value_; }
+  T &value() { return *reinterpret_cast<T *>(&storage_); }
+  const T &value() const { return *reinterpret_cast<const T *>(&storage_); }
+
+  T *raw_value_ptr() { return reinterpret_cast<T *>(&storage_); }
+
+  // no mark_value_constructed needed
 
   regional_ptr<regional_cons<T>> &next() { return next_; }
   const regional_ptr<regional_cons<T>> &next() const { return next_; }
@@ -173,6 +186,28 @@ public:
       tail_->next() = new_node.get();
       tail_ = new_node.get();
     }
+  }
+
+  // Callback-based insertion that allows constructing value in-place without
+  // requiring default-constructibility.
+  template <typename RT, typename InitFn>
+    requires std::invocable<InitFn, T *>
+  void emplace_init(memory_region<RT> &mr, InitFn &&init_fn) {
+    auto new_node_gp = mr.template create_bits<regional_cons<T>>(std::in_place);
+    regional_cons<T> *node = new_node_gp.get();
+
+    // Link into list (same as enque)
+    if (!head_) {
+      head_ = tail_ = node;
+    } else {
+      tail_->next() = node;
+      tail_ = node;
+    }
+
+    // Construct element value via callback
+    T *dst = node->raw_value_ptr();
+    std::forward<InitFn>(init_fn)(dst);
+    // node->mark_value_constructed(); // Removed
   }
 
   template <typename RT, typename... Args>
@@ -374,6 +409,25 @@ public:
       tail_->next() = new_node.get();
       tail_ = new_node.get();
     }
+  }
+
+  // Callback-based insertion at back (same as push_back) for in-place construction.
+  template <typename RT, typename InitFn>
+    requires std::invocable<InitFn, T *>
+  void emplace_init(memory_region<RT> &mr, InitFn &&init_fn) {
+    auto new_node_gp = mr.template create_bits<regional_cons<T>>(std::in_place);
+    regional_cons<T> *node = new_node_gp.get();
+
+    if (!head_) {
+      head_ = tail_ = node;
+    } else {
+      tail_->next() = node;
+      tail_ = node;
+    }
+
+    T *dst = node->raw_value_ptr();
+    std::forward<InitFn>(init_fn)(dst);
+    // node->mark_value_constructed(); // Removed
   }
 
   // Access top element without removing (same as front for stack)

@@ -274,6 +274,23 @@ public:
     // const_cast is safe here: global_ptr only stores a reference, doesn't modify the region
     return global_ptr<VT, RT>(const_cast<memory_region<RT> &>(*this), 0);
   }
+
+  template <typename T>
+    requires yaml::YamlConvertible<T, RT>
+  global_ptr<T, RT> create_from_yaml(const yaml::Node &node) {
+    auto raw_ptr = this->template allocate<T>();
+    from_yaml<T>(*this, node, raw_ptr);
+    return this->cast_ptr(raw_ptr);
+  }
+
+  // Allocate an object of type T from YAML and assign it to an existing regional_ptr.
+  template <typename T>
+    requires yaml::YamlConvertible<T, RT>
+  void create_from_yaml_at(const yaml::Node &node, regional_ptr<T> &to_ptr) {
+    auto ptr = this->template allocate<T>();
+    from_yaml<T>(*this, node, ptr);
+    to_ptr = ptr;
+  }
 };
 
 template <typename VT, typename RT> class global_ptr final {

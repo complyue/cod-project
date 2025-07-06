@@ -320,38 +320,10 @@ inline Node Load(const std::string_view yaml_str) { return Node::Load(yaml_str);
 inline Node Load(const std::string &yaml_str) { return Node::Load(yaml_str); }
 
 template <typename T, typename RT>
-concept YamlConvertible =
-    requires(T t, const yaml::Node &node, memory_region<RT> &mr, regional_ptr<T> &to_ptr, T *raw_ptr) {
-      { to_yaml(t) } noexcept -> std::same_as<yaml::Node>;
-      { from_yaml<T>(mr, node) } -> std::same_as<global_ptr<T, RT>>;
-      { from_yaml<T>(mr, node, to_ptr) } -> std::same_as<void>;
-      { from_yaml<T>(mr, node, raw_ptr) } -> std::same_as<void>;
-
-      requires requires {
-        []() {
-          try {
-            memory_region<RT> mr;
-            yaml::Node node;
-            regional_ptr<T> to_ptr;
-            T *raw_ptr = nullptr;
-            auto ptr = from_yaml<T>(mr, node);
-            from_yaml<T>(mr, node, to_ptr);
-            from_yaml<T>(mr, node, raw_ptr);
-          } catch (const yaml::Exception &) {
-            // Expected
-          } catch (...) {
-            static_assert(false, "All from_yaml() overloads must only throw yaml::Exception or derived types");
-          }
-        };
-      };
-    };
-
-// Default implementation of the second from_yaml in terms of the first
-template <typename T, typename RT>
-  requires YamlConvertible<T, RT>
-void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<T> &to_ptr) {
-  to_ptr = from_yaml<T>(mr, node);
-}
+concept YamlConvertible = requires(T t, const yaml::Node &node, memory_region<RT> &mr, T *raw_ptr) {
+  { to_yaml(t) } noexcept -> std::same_as<yaml::Node>;
+  { from_yaml<T>(mr, node, raw_ptr) } -> std::same_as<void>;
+};
 
 } // namespace yaml
 

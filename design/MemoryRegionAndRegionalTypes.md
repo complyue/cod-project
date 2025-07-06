@@ -627,62 +627,68 @@ YAML integration is provided through a modular system using standalone functions
 
 #### YamlConvertible Concept
 
-The `YamlConvertible` concept works with standalone functions:
+The `YamlConvertible` concept defines the minimal API a type **T** must expose to participate in the YAML serialization subsystem.  
+A type that satisfies the concept can be **both** converted **to** a `yaml::Node` _and_ reconstructed **from** a `yaml::Node` inside any `memory_region<RT>`:
 
 ```cpp
 template <typename T, typename RT>
-concept YamlConvertible = requires(T t, const yaml::Node &node,
-                                 memory_region<RT> &mr,
-                                 regional_ptr<T> &to_ptr) {
-  // Standalone serialization function
+concept YamlConvertible = requires(T t,
+                                   const yaml::Node &node,
+                                   memory_region<RT> &mr,
+                                   T *raw_ptr) {
+  // Serialization – pure function, must not throw
   { to_yaml(t) } noexcept -> std::same_as<yaml::Node>;
 
-  // Standalone deserialization forms
-  { from_yaml<T>(mr, node) } -> std::same_as<global_ptr<T, RT>>;
-  { from_yaml<T>(mr, node, to_ptr) } -> std::same_as<void>;
+  // Deserialization – in-place construction at *raw_ptr
   { from_yaml<T>(mr, node, raw_ptr) } -> std::same_as<void>;
-
-  // Exception safety guarantees
-  requires requires {
-    []() {
-      try {
-        memory_region<RT> mr;
-        yaml::Node node;
-        regional_ptr<T> to_ptr;
-        auto ptr = from_yaml<T>(mr, node);
-        from_yaml<T>(mr, node, to_ptr);
-      } catch (const yaml::Exception &) {
-        // Expected behavior
-      } catch (...) {
-        static_assert(false,
-          "from_yaml() must only throw yaml::Exception or derived types");
-      }
-    };
-  };
 };
-
-// Default implementation of the second from_yaml in terms of the first
-template <typename T, typename RT>
-  requires YamlConvertible<T, RT>
-void from_yaml(memory_region<RT>& mr, const yaml::Node& node, regional_ptr<T>& to_ptr) {
-  to_ptr = from_yaml<T>(mr, node);
-}
 ```
 
-#### Usage Pattern
+Key points:
+- `to_yaml` must be a **noexcept** free function that returns a fully-formed `yaml::Node`.
+- `from_yaml` is a free function template that performs **in-place** deserialization at the uninitialised memory pointed to by `raw_ptr`.  
+  This design avoids copy / move operations that regional types forbid.
+
+#### Region Instance Methods: `create_from_yaml` & `create_from_yaml_at`
+
+`memory_region<RT>` now provides two **instance methods** that make it trivial to allocate and initialise regional objects directly from YAML data:
 
 ```cpp
-// Core type definition (no YAML dependencies)
-#include "my_regional_type.hh"
+template <typename T>
+  requires YamlConvertible<T, RT>
+global_ptr<T, RT> memory_region<RT>::create_from_yaml(const yaml::Node &node);
 
-// Optional YAML support
-#include "my_regional_type_yaml.hh"  // Enables YAML for MyRegionalType
-
-// Usage
-MyRegionalType obj = ...;
-yaml::Node node = to_yaml(obj);                    // Standalone function
-auto restored = from_yaml<MyRegionalType>(mr, node); // Template function
+template <typename T>
+  requires YamlConvertible<T, RT>
+void memory_region<RT>::create_from_yaml_at(const yaml::Node &node,
+                                            regional_ptr<T> &target);
 ```
+
+Usage guidelines:
+
+1. **create_from_yaml**  
+   - Allocates a **new** object of type `T` inside the region (`*this`).  
+   - Deserialises the object from `node` using the `from_yaml` free-function.  
+   - Returns a `global_ptr<T,RT>` so the caller can store or pass the reference immediately.
+
+   ```cpp
+   yaml::Node doc = yaml::LoadFile("invoice.yaml");
+   auto invoice = region->create_from_yaml<Invoice>(doc);
+   ledger->entries_.push_back(invoice);
+   ```
+
+2. **create_from_yaml_at**  
+   - Intended for **pre-allocated storage** (e.g. container slot or struct field).  
+   - Performs allocation and in-place deserialization, then assigns the resulting pointer to the supplied `regional_ptr`.
+
+   ```cpp
+   regional_ptr<Invoice> slot;
+   region->create_from_yaml_at<Invoice>(doc, slot);  // slot now references the deserialised Invoice
+   ```
+
+Both methods rely on the lower-level `from_yaml` free function, guaranteeing that all allocations happen inside the correct `memory_region` and that no forbidden copy / move operations occur.
+
+These instance helpers, combined with the `YamlConvertible` concept, provide an ergonomic yet fully region-safe bridge between YAML documents and regional object graphs.
 
 #### Implementation Structure
 
@@ -690,8 +696,7 @@ YAML support headers typically contain:
 
 1. **Inline Functions**: All YAML logic implemented inline in headers
 2. **Template Functions**: Generic `from_yaml<T>()` functions for any memory region type
-3. **Concept Verification**: Static assertions to ensure `YamlConvertible` compliance
-4. **Complete Functionality**: Full serialization/deserialization with error handling
+3. **Complete Functionality**: Full serialization/deserialization with error handling
 
 This modular approach allows users to:
 
@@ -706,65 +711,127 @@ This modular approach allows users to:
 - Use the raw pointer version `from_yaml(mr, node, T* raw_ptr)` for direct in-place construction
 - Avoid copy/move operations that would violate regional type constraints
 
-The raw pointer approach works for simple container scenarios. Complex nested cases (like containers of regional types within other regional types) may still require refinement to achieve full compliance with regional type constraints.
+#### Example Implementation – Step-by-Step Guide
 
-#### Example Implementation
-
-The `CodDep` and `CodProject` types demonstrate this pattern:
-
-**Core Types** (`codp.hh`):
-
-```cpp
-class CodDep {
-  // Core functionality only - no YAML methods
-  UUID uuid_;
-  regional_str name_;
-  regional_str repo_url_;
-  regional_fifo<regional_str> branches_;
-  // ... constructors and accessors only
-};
-
-class CodProject {
-  // Core functionality only - no YAML methods
-  UUID uuid_;
-  regional_str name_;
-  regional_fifo<CodDep> deps_;
-  // ... constructors and accessors only
-};
-```
-
-**Optional YAML Support** (`codp_yaml.hh`):
+The following walk-through demonstrates how to add YAML support for a **custom regional
+struct** as well as a **regional_vector** container that stores both *bits* types and
+other regional types.  The pattern is universally applicable – simply swap field
+definitions or container choices to match your own data model.
 
 ```cpp
-// Standalone serialization functions
-inline yaml::Node to_yaml(const CodDep& dep) noexcept { /* ... */ }
-inline yaml::Node to_yaml(const CodProject& project) noexcept { /* ... */ }
+// Example domain object – a simple “Book”
+struct Book {
+  static const UUID TYPE_UUID;              // ← mandatory root identifier
 
-// Template deserialization functions
-template <typename RT>
-global_ptr<CodDep, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) { /* ... */ }
+  regional_str               title_;
+  regional_vector<int>       ratings_;      // bits-type elements (1-5)
+  regional_vector<regional_str> authors_;   // nested regional types
 
-template <typename RT>
-global_ptr<CodProject, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node) { /* ... */ }
+  // NOTE: construction *must* take a memory_region reference.
+  template <typename RT>
+  Book(memory_region<RT> &mr,
+       std::string_view t = {})
+      : title_(mr, t), ratings_(mr), authors_(mr) {}
+};
 
-// Regional pointer overloads
-template <typename RT>
-void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodDep> &to_ptr) { /* ... */ }
-
-template <typename RT>
-void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_ptr<CodProject> &to_ptr) { /* ... */ }
-
-// Concept verification
-static_assert(yaml::YamlConvertible<CodDep, void>);
-static_assert(yaml::YamlConvertible<CodProject, void>);
+const UUID Book::TYPE_UUID = UUID("12345678-9abc-def0-1234-56789abcdef0");
 ```
 
-This design ensures that:
+### 1.  Implement `to_yaml(const Book&) noexcept`
 
-- Core types remain focused on their primary responsibilities
-- YAML functionality is completely optional and modular
-- All YAML logic is implemented inline for optimal performance
-- The `YamlConvertible` concept provides compile-time type safety
+```cpp
+inline yaml::Node to_yaml(const Book &b) noexcept {
+  yaml::Node n(yaml::Map{});
+  n["title"]   = std::string_view(b.title_);
+  n["ratings"] = to_yaml(b.ratings_);   // vector<int> → sequence
+  n["authors"] = to_yaml(b.authors_);   // vector<regional_str> → recursive call
+  return n;
+}
+```
+
+Key points:
+* Prefer **composition** – delegate to `to_yaml` of sub-objects / containers.
+* When a field is a *bits* scalar (e.g. `int`, `bool`) no special code is needed –
+  the `yaml::Node` constructor handles it.
+
+### 2.  Implement `from_yaml<Book>()`
+
+```cpp
+template <typename RT>
+  requires ValidMemRegionRootType<RT>
+void from_yaml(memory_region<RT> &mr,
+               const yaml::Node &node,
+               Book *raw_ptr) {
+
+  // Basic validation (defensive programming encouraged)
+  if (!node.IsMap())
+    throw yaml::TypeError("Book YAML must be a map");
+
+  // 1️⃣  Construct the outer object *first* (in-place)
+  new (raw_ptr) Book(mr);
+  Book &b = *raw_ptr;
+
+  // 2️⃣  Load simple scalar field
+  b.title_ = intern_str(mr, node["title"].as<std::string_view>());
+
+  // 3️⃣  Use helper for the container with *bits* elements
+  b.ratings_.clear();
+  from_yaml(mr, node["ratings"], &b.ratings_);    // resolved by ADL to vector_yaml.hh
+
+  // 4️⃣  Use helper for the container with *regional* elements
+  b.authors_.clear();
+  from_yaml(mr, node["authors"], &b.authors_);    // works recursively
+}
+```
+
+Implementation hints:
+1. **Always construct the outer object before touching its fields** – this guarantees
+   valid lifetimes when sub-objects reference `*this`.
+2. Reuse the **generic container deserialisers** (`vector_yaml.hh`, etc.).  They
+   automatically handle:
+   • bits elements (`int`, `double`, `bool`, …)
+   • nested regional elements (inc. other containers)
+   • recursive graphs (vector<vector<…>>)
+3. For bits fields you may directly assign the result of `node.as<T>()` or rely on
+   the container helper as shown.
+
+### 3.  Register convenience wrappers (optional)
+
+Nothing extra is required: because `Book` now satisfies `YamlConvertible` the
+following helpers work out-of-the-box:
+
+```cpp
+auto my_book = region->create_from_yaml<Book>(yaml::Load(file_text));
+
+regional_ptr<Book> slot;
+region->create_from_yaml_at<Book>(node, slot);
+```
+
+### 4.  Container Authoring Checklist
+
+When building **your own regional container** (queue, map, graph, …) that should
+participate in YAML:
+
+1. **Expose a callback-based insertion API** similar to
+   `regional_vector::emplace_init(memory_region<RT>&, Fn&&)`.  This enables
+   deserialisers to construct elements *in-place* without temporary objects.
+2. **For bits element types** provide a fast-path that accepts a scalar `yaml::Node`
+   and calls the plain `elem_node.as<T>()` conversion.
+3. **For regional element types** delegate to their own `from_yaml` inside the
+   `emplace_init` callback.
+4. **Avoid private-member access in deserialisers** – use the public insertion
+   API you exposed.
+
+Following these guidelines guarantees that the container remains free of
+copy/move operations and can happily nest within itself (`vector<vector<…>>`) or
+other regional structures.
+
+---
+
+With these patterns in place you can equip any regional type – from simple
+value objects to arbitrarily deep container graphs – with safe, zero-copy YAML
+serialisation while preserving the fundamental invariants of the shilos memory
+model.
 
 ## Lvalue-Only Constraint for Regional Types
 
