@@ -1,8 +1,8 @@
 #pragma once
 
-#include <type_traits>
-#include "./vector.hh"
 #include "./prelude.hh"
+#include "./vector.hh"
+#include <type_traits>
 
 namespace shilos {
 
@@ -29,8 +29,7 @@ namespace shilos {
 //  constraint of regional types.
 // ============================================================================
 
-template <typename T>
-inline yaml::Node to_yaml(const regional_vector<T> &vec) noexcept {
+template <typename T> inline yaml::Node to_yaml(const regional_vector<T> &vec) noexcept {
   yaml::Node seq(yaml::Sequence{});
   for (const auto &elem : vec) {
     // If ADL finds a dedicated to_yaml overload for T, use it.
@@ -95,4 +94,4 @@ global_ptr<regional_vector<T>, RT> vector_from_yaml(memory_region<RT> &mr, const
   return mr.cast_ptr(raw_ptr);
 }
 
-} // namespace shilos 
+} // namespace shilos

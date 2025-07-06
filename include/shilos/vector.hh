@@ -161,8 +161,8 @@ public:
 
   // Second emplace_back overload: element type does NOT expect memory_region
   template <typename RT, typename... Args>
-    requires (!std::constructible_from<T, memory_region<RT> &, const Args &...> &&
-               std::constructible_from<T, const Args &...>)
+    requires(!std::constructible_from<T, memory_region<RT> &, const Args &...> &&
+             std::constructible_from<T, const Args &...>)
   void emplace_back(memory_region<RT> &mr, const Args &...args) {
     if (!last_segment_ || last_segment_->is_full()) {
       auto new_segment = mr.template create_bits<vector_segment<T>>(mr);

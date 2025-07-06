@@ -1,6 +1,6 @@
 #include "shilos.hh"
-#include "shilos/list_yaml.hh"
 #include "shilos/dict_yaml.hh"
+#include "shilos/list_yaml.hh"
 #include "shilos/str_yaml.hh"
 #include "shilos/vector_yaml.hh"
 
@@ -18,9 +18,7 @@ struct ND {
 };
 
 // YAML support for ND (local to test)
-inline yaml::Node to_yaml(const ND &obj) noexcept {
-  return yaml::Node(static_cast<int64_t>(obj.v));
-}
+inline yaml::Node to_yaml(const ND &obj) noexcept { return yaml::Node(static_cast<int64_t>(obj.v)); }
 
 template <typename RT>
   requires ValidMemRegionRootType<RT>
@@ -92,7 +90,7 @@ int main() {
     // ======================= Dict<regional_str,int> =========================
     yaml::Node map_node(yaml::Map{});
     map_node["alice"] = 1;
-    map_node["bob"]   = 2;
+    map_node["bob"] = 2;
 
     auto_region<DictRoot> dict_region(1024 * 1024);
     auto dict_gp = dict_from_yaml<regional_str, int, std::hash<regional_str>>(*dict_region, map_node);
@@ -113,20 +111,20 @@ int main() {
     nd_seq.push_back(7);
     nd_seq.push_back(9);
 
-    auto_region<NDRoot> nd_region(1024*1024);
+    auto_region<NDRoot> nd_region(1024 * 1024);
     auto nd_fifo_gp = fifo_from_yaml<ND>(*nd_region, nd_seq);
-    assert(nd_fifo_gp->size()==2);
+    assert(nd_fifo_gp->size() == 2);
     {
       auto it = nd_fifo_gp->begin();
-      assert(it->v==7);
+      assert(it->v == 7);
       ++it;
-      assert(it->v==9);
+      assert(it->v == 9);
     }
 
     yaml::Node nd_fifo_out = to_yaml(*nd_fifo_gp);
-    assert(nd_fifo_out.IsSequence() && nd_fifo_out.size()==2);
-    assert(nd_fifo_out[0].as<int>()==7);
-    assert(nd_fifo_out[1].as<int>()==9);
+    assert(nd_fifo_out.IsSequence() && nd_fifo_out.size() == 2);
+    assert(nd_fifo_out[0].as<int>() == 7);
+    assert(nd_fifo_out[1].as<int>() == 9);
 
     // ===================== Dict<regional_str,ND> =====================
     yaml::Node nd_map(yaml::Map{});
@@ -134,14 +132,14 @@ int main() {
     nd_map["y"] = 8;
 
     auto nd_dict_gp = dict_from_yaml<regional_str, ND, std::hash<regional_str>>(*nd_region, nd_map);
-    assert(nd_dict_gp->size()==2);
-    assert(nd_dict_gp->at("x").v==5);
-    assert(nd_dict_gp->at("y").v==8);
+    assert(nd_dict_gp->size() == 2);
+    assert(nd_dict_gp->at("x").v == 5);
+    assert(nd_dict_gp->at("y").v == 8);
 
     yaml::Node nd_dict_out = to_yaml(*nd_dict_gp);
     assert(nd_dict_out.IsMap());
-    assert(nd_dict_out["x"].as<int>()==5);
-    assert(nd_dict_out["y"].as<int>()==8);
+    assert(nd_dict_out["x"].as<int>() == 5);
+    assert(nd_dict_out["y"].as<int>() == 8);
 
     std::cout << "Non-default-constructible ND YAML tests passed!" << std::endl;
 
@@ -154,4 +152,4 @@ int main() {
     std::cerr << "❌ Test failed with unknown exception" << std::endl;
     return 1;
   }
-} 
+}

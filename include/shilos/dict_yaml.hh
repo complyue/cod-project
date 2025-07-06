@@ -1,8 +1,8 @@
 #pragma once
 
-#include <type_traits>
 #include "./dict.hh"
 #include "./prelude.hh"
+#include <type_traits>
 
 namespace shilos {
 
@@ -80,9 +80,7 @@ inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d) noexcept {
 
 template <typename K, typename V, typename Hash, typename RT>
   requires ValidMemRegionRootType<RT>
-void from_yaml(memory_region<RT> &mr,
-               const yaml::Node &node,
-               regional_dict<K, V, Hash> *raw_ptr) {
+void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_dict<K, V, Hash> *raw_ptr) {
   if (!node.IsMap())
     throw yaml::TypeError("YAML node for regional_dict must be a mapping");
 
@@ -142,11 +140,10 @@ void from_yaml(memory_region<RT> &mr,
 
 template <typename K, typename V, typename Hash, typename RT>
   requires ValidMemRegionRootType<RT>
-global_ptr<regional_dict<K, V, Hash>, RT>
-  dict_from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
+global_ptr<regional_dict<K, V, Hash>, RT> dict_from_yaml(memory_region<RT> &mr, const yaml::Node &node) {
   auto raw_ptr = mr.template allocate<regional_dict<K, V, Hash>>();
   from_yaml<K, V, Hash>(mr, node, raw_ptr);
   return mr.cast_ptr(raw_ptr);
 }
 
-} // namespace shilos 
+} // namespace shilos

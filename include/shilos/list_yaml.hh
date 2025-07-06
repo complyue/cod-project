@@ -1,8 +1,8 @@
 #pragma once
 
-#include <type_traits>
 #include "./list.hh"
 #include "./prelude.hh"
+#include <type_traits>
 
 namespace shilos {
 
@@ -20,8 +20,7 @@ namespace shilos {
 //  through an internal helper to avoid duplication.
 // ============================================================================
 
-template <template <typename> class ListC, typename T>
-inline yaml::Node list_to_yaml(const ListC<T> &lst) noexcept {
+template <template <typename> class ListC, typename T> inline yaml::Node list_to_yaml(const ListC<T> &lst) noexcept {
   yaml::Node seq(yaml::Sequence{});
   for (const auto &elem : lst) {
     if constexpr (requires { to_yaml(elem); }) {
@@ -39,13 +38,11 @@ inline yaml::Node list_to_yaml(const ListC<T> &lst) noexcept {
   return seq;
 }
 
-template <typename T>
-inline yaml::Node to_yaml(const regional_fifo<T> &lst) noexcept {
+template <typename T> inline yaml::Node to_yaml(const regional_fifo<T> &lst) noexcept {
   return list_to_yaml<regional_fifo>(lst);
 }
 
-template <typename T>
-inline yaml::Node to_yaml(const regional_lifo<T> &lst) noexcept {
+template <typename T> inline yaml::Node to_yaml(const regional_lifo<T> &lst) noexcept {
   return list_to_yaml<regional_lifo>(lst);
 }
 
@@ -54,9 +51,7 @@ inline yaml::Node to_yaml(const regional_lifo<T> &lst) noexcept {
 // ---------------------------------------------------------------------------
 
 template <template <typename> class ListC, typename T, typename RT>
-static void list_from_yaml_impl(memory_region<RT> &mr,
-                                const yaml::Node &node,
-                                ListC<T> *raw_ptr) {
+static void list_from_yaml_impl(memory_region<RT> &mr, const yaml::Node &node, ListC<T> *raw_ptr) {
   if (!node.IsSequence())
     throw yaml::TypeError("YAML node for regional list must be a sequence");
 
@@ -107,4 +102,4 @@ global_ptr<regional_lifo<T>, RT> lifo_from_yaml(memory_region<RT> &mr, const yam
   return mr.cast_ptr(raw_ptr);
 }
 
-} // namespace shilos 
+} // namespace shilos

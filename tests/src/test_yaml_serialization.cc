@@ -1,6 +1,6 @@
 #include "shilos.hh"
-#include "shilos/vector_yaml.hh"
 #include "shilos/str_yaml.hh"
+#include "shilos/vector_yaml.hh"
 
 #include <cassert>
 #include <iostream>
@@ -150,4 +150,4 @@ int main() {
     std::cerr << "❌ Test failed with unknown exception" << std::endl;
     return 1;
   }
-} 
+}

@@ -60,32 +60,28 @@ public:
     requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> &&
                  std::constructible_from<V, memory_region<RT> &, ValueArgs...>
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args, ValueArgs &&...value_args)
-      : key_(mr, std::forward<KeyArgs>(key_args)...),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {
+      : key_(mr, std::forward<KeyArgs>(key_args)...), collision_next_index_(INVALID_INDEX), is_deleted_(false) {
     new (&value_storage_) V(mr, std::forward<ValueArgs>(value_args)...);
   }
 
   template <typename RT, typename... KeyArgs, typename... ValueArgs>
     requires std::constructible_from<K, KeyArgs...> && std::constructible_from<V, ValueArgs...>
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args, ValueArgs &&...value_args)
-      : key_(std::forward<KeyArgs>(key_args)...),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {
+      : key_(std::forward<KeyArgs>(key_args)...), collision_next_index_(INVALID_INDEX), is_deleted_(false) {
     new (&value_storage_) V(mr, std::forward<ValueArgs>(value_args)...);
   }
 
   template <typename RT, typename... KeyArgs, typename... ValueArgs>
     requires std::constructible_from<K, KeyArgs...> && std::constructible_from<V, memory_region<RT> &, ValueArgs...>
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args, ValueArgs &&...value_args)
-      : key_(std::forward<KeyArgs>(key_args)...),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {
+      : key_(std::forward<KeyArgs>(key_args)...), collision_next_index_(INVALID_INDEX), is_deleted_(false) {
     new (&value_storage_) V(mr, std::forward<ValueArgs>(value_args)...);
   }
 
   template <typename RT, typename... KeyArgs, typename... ValueArgs>
     requires std::constructible_from<K, memory_region<RT> &, KeyArgs...> && std::constructible_from<V, ValueArgs...>
   dict_entry(memory_region<RT> &mr, KeyArgs &&...key_args, ValueArgs &&...value_args)
-      : key_(mr, std::forward<KeyArgs>(key_args)...),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {
+      : key_(mr, std::forward<KeyArgs>(key_args)...), collision_next_index_(INVALID_INDEX), is_deleted_(false) {
     new (&value_storage_) V(std::forward<ValueArgs>(value_args)...);
   }
 
@@ -95,8 +91,7 @@ public:
                  std::constructible_from<V, const ValueArgs &...> &&
                  (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
   dict_entry(memory_region<RT> &mr, const KeyArg &key_arg, const ValueArgs &...value_args)
-      : key_(mr, key_arg),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {
+      : key_(mr, key_arg), collision_next_index_(INVALID_INDEX), is_deleted_(false) {
     new (&value_storage_) V(value_args...);
   }
 
@@ -104,8 +99,7 @@ public:
     requires std::constructible_from<K, const KeyArg &> && std::constructible_from<V, const ValueArgs &...> &&
                  (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
   dict_entry(memory_region<RT> &mr, const KeyArg &key_arg, const ValueArgs &...value_args)
-      : key_(key_arg),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {
+      : key_(key_arg), collision_next_index_(INVALID_INDEX), is_deleted_(false) {
     new (&value_storage_) V(value_args...);
   }
 
@@ -115,8 +109,7 @@ public:
                  std::constructible_from<V, memory_region<RT> &, const ValueArgs &...> &&
                  (!std::same_as<std::remove_cvref_t<KeyArg>, memory_region<RT>>)
   dict_entry(memory_region<RT> &mr, const KeyArg &key_arg, const ValueArgs &...value_args)
-      : key_(mr, key_arg),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {
+      : key_(mr, key_arg), collision_next_index_(INVALID_INDEX), is_deleted_(false) {
     new (&value_storage_) V(mr, value_args...);
   }
 
@@ -125,8 +118,7 @@ public:
     requires std::constructible_from<K, memory_region<RT> &, const KeyArgs &...> &&
                  std::constructible_from<V, memory_region<RT> &>
   dict_entry(memory_region<RT> &mr, const KeyArgs &...key_args)
-      : key_(mr, key_args...),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {
+      : key_(mr, key_args...), collision_next_index_(INVALID_INDEX), is_deleted_(false) {
     new (&value_storage_) V(mr);
   }
 
@@ -135,8 +127,7 @@ public:
     requires std::constructible_from<K, memory_region<RT> &, const KeyArgs &...> && std::constructible_from<V> &&
                  (!std::constructible_from<V, memory_region<RT> &>)
   dict_entry(memory_region<RT> &mr, const KeyArgs &...key_args)
-      : key_(mr, key_args...),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
+      : key_(mr, key_args...), collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   // Deleted special members
   dict_entry(const dict_entry &) = delete;
@@ -156,8 +147,7 @@ public:
   // Internal ctor for emplace_init: constructs key, leaves value uninitialised
   template <typename RT, typename KeyArg>
   dict_entry(std::in_place_t, memory_region<RT> &mr, const KeyArg &key_arg)
-      : key_(mr, key_arg),
-        collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
+      : key_(mr, key_arg), collision_next_index_(INVALID_INDEX), is_deleted_(false) {}
 
   size_t collision_next_index() const { return collision_next_index_; }
   void set_collision_next_index(size_t index) { collision_next_index_ = index; }
@@ -459,9 +449,8 @@ public:
     }
 
     size_t new_idx_placeholder = entries_.size();
-    entries_.emplace_init(mr, [&](dict_entry<K, V> *dst_entry) {
-      new (dst_entry) dict_entry<K, V>(std::in_place, mr, key);
-    });
+    entries_.emplace_init(
+        mr, [&](dict_entry<K, V> *dst_entry) { new (dst_entry) dict_entry<K, V>(std::in_place, mr, key); });
 
     // Hash table link - new entry is at previous size position
     size_t bucket_idx = bucket_index(key);
