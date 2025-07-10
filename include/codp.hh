@@ -71,9 +71,37 @@ public:
   const regional_fifo<CodDep> &deps() const { return deps_; }
 
   template <typename RT>
-  void addDep(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url) {
+  CodDep &addDep(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url) {
     deps_.enque(mr, uuid, name, repo_url);
+    return *deps_.back();
   }
+
+  // Convenience: fetch last dependency added (unsafe if none present)
+  CodDep &lastDep() { return *deps_.back(); }
+  const CodDep &lastDep() const { return *deps_.back(); }
 };
+
+// ---------------------------------------------------------------------------
+// Helper utilities (non-member)
+// ---------------------------------------------------------------------------
+
+inline std::string repo_url_to_key(std::string_view url) {
+  std::string key;
+  key.reserve(url.size());
+  for (char c : url) {
+    switch (c) {
+    case ':':
+    case '/':
+    case '\\':
+    case '.':
+    case '@':
+      key += '_';
+      break;
+    default:
+      key += c;
+    }
+  }
+  return key;
+}
 
 } // namespace cod::project
