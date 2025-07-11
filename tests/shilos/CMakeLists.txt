@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Canonicalize the project root directory
+set(COD_PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+
 # Set path to the built toolchain
-set(COD_TOOLCHAIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../built")
+set(COD_TOOLCHAIN_DIR "${COD_PROJECT_SOURCE_DIR}/built")
 
 # Set the compilers to use the built toolchain
 set(CMAKE_C_COMPILER "${COD_TOOLCHAIN_DIR}/bin/clang")
@@ -71,14 +74,14 @@ endfunction()
 
 # Create and configure all test executables
 
-configure_cod_target(showcase_basic_usage src/showcase_basic_usage.cc)
+configure_cod_target(showcase_basic_usage ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/showcase_basic_usage.cc)
 
-configure_cod_target(test_memory_regions src/test_memory_regions.cc)
+configure_cod_target(test_memory_regions ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/test_memory_regions.cc)
 
-configure_cod_target(test_regional_types src/test_regional_types.cc)
+configure_cod_target(test_regional_types ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/test_regional_types.cc)
 
-configure_cod_target(test_deletion_methods src/test_deletion_methods.cc)
+configure_cod_target(test_deletion_methods ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/test_deletion_methods.cc)
 
-configure_cod_target(test_yaml_serialization src/test_yaml_serialization.cc)
+configure_cod_target(test_yaml_serialization ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/test_yaml_serialization.cc)
 
-configure_cod_target(test_yaml_containers src/test_yaml_containers.cc)
+configure_cod_target(test_yaml_containers ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/test_yaml_containers.cc)

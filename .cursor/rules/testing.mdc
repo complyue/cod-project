@@ -1,11 +1,24 @@
 ---
-description: 
-globs: 
-alwaysApply: true
+globs: tests/**/*
+alwaysApply: false
 ---
+
 To build and run the tests with latest source code:
+
+## Test Organization
+
+Tests are organized by component under the `tests/` directory:
+
+- `tests/shilos/` - shilos memory region tests
+- `tests/codp/` - CoD package manager tests
+- (more component folders will be added later)
+
+## Build Steps
+
 0. In case cod-project main src changed: `cmake --build ./build && ninja -C ./build install` (from root dir of cod-project)
-1. `cd tests` (the subdir of cod-project)
-2. `mkdir -p build && cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build` (in `cod-project/tests/`)
+1. `cd tests/<component>` (e.g., `cd tests/shilos` for shilos tests)
+2. `mkdir -p build && cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build` (in the component's test directory)
 3. `cmake --build ./build`
 4. run the test executables
+
+All component test folders use the same cmake build approach for consistency.
