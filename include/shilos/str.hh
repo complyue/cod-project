@@ -21,6 +21,8 @@ private:
 public:
   regional_str() : length_(0), data_() {}
 
+  template <typename RT> regional_str(memory_region<RT> &) : length_(0), data_() {}
+
   template <typename RT>
   regional_str(memory_region<RT> &mr, const char *str) : regional_str(mr, std::string_view(str)) {}
 

@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <string_view>
 
 #include "codp.hh"
 
@@ -131,36 +132,13 @@ int main(int argc, char **argv) {
       return 0;
     }
 
-    auto yaml_text = slurp_file(project_yaml);
+    std::string yaml_text = slurp_file(project_yaml);
     yaml::Node root = yaml::Load(yaml_text);
 
-    UUID proj_uuid(root["uuid"].as<std::string>());
-    std::string proj_name = root["name"].as<std::string>();
-    std::string proj_repo_url = root["repo_url"].as<std::string>();
-
-    // Allocate region for project representation (1 MB initial)
-    auto_region<CodProject> region(1024 * 1024, proj_uuid, proj_name);
-    auto project_gp = region->root();
-    CodProject *project = project_gp.get();
-
-    // Parse dependencies if any
-    if (root.find("deps") != root.end() && root["deps"].IsSequence()) {
-      for (const auto &dep_node : std::get<yaml::Sequence>(root["deps"].value)) {
-        UUID dep_uuid(dep_node["uuid"].as<std::string>());
-        std::string dep_name = dep_node["name"].as<std::string>();
-        std::string dep_repo_url = dep_node["repo_url"].as<std::string>();
-
-        CodDep &dep = project->addDep(*region, dep_uuid, dep_name, dep_repo_url);
-
-        // branches
-        if (dep_node.find("branches") != dep_node.end() && dep_node["branches"].IsSequence()) {
-          for (const auto &br_node : std::get<yaml::Sequence>(dep_node["branches"].value)) {
-            std::string br = br_node.as<std::string>();
-            dep.branches().enque(*region, br);
-          }
-        }
-      }
-    }
+    // Allocate region (1 MB) and construct project from YAML
+    auto_region<CodProject> region(1024 * 1024);
+    CodProject *project = region->root().get();
+    project->reload_from_yaml(*region, root);
 
     // Prepare git cache directories
     fs::path repos_root = home_dir() / ".cod" / "pkgs" / "repos";
@@ -172,7 +150,7 @@ int main(int argc, char **argv) {
       ensure_bare_repo(url, bare);
     };
 
-    process_repo(proj_repo_url);
+    process_repo(std::string(std::string_view(project->repo_url())));
     for (const CodDep &dep : project->deps()) {
       process_repo(std::string(dep.repo_url()));
     }

@@ -57,6 +57,30 @@ deps: # direct dependencies, order = preference
   - …
 ```
 
+### Implementation note – YAML ↔️ In-memory conversion
+
+At implementation level **all** parsing / serialisation of `CodProject.yaml` is handled via the generic
+`YamlConvertible` concept defined in `shilos/prelude.hh`.
+
+Concrete data types (`cod::project::CodProject`, `cod::project::CodDep`, *etc.*) provide ADL-visible
+free functions:
+
+```
+yaml::Node to_yaml(const CodProject &);
+template<typename RT> void from_yaml(shilos::memory_region<RT>&, const yaml::Node&, CodProject*);
+```
+
+This separation guarantees that **no component outside the model classes touches raw YAML nodes** – the
+CLI tool (`codp`) or future REPL simply loads a YAML document, hands the root node to
+`from_yaml`, and all further mutations happen through the typed C++ API on the in-memory graph.
+
+Benefits:
+
+1. Strong data ownership – the YAML layer becomes a pure I/O concern.
+2. Centralised validation logic – any structural check lives inside `from_yaml` of the relevant type.
+3. Future alternative front-ends (binary format, DB, …) can reuse the exact same data model by
+   plugging in a different converter set.
+
 Notes:
 
 - **No versions:** a dependency is a `(uuid, repo_url | path, branch-list)` triple.
