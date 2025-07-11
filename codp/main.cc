@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "codp.hh"
+#include "codp_yaml.hh"
 
 using namespace shilos;
 using namespace cod::project;
@@ -138,7 +139,7 @@ int main(int argc, char **argv) {
     // Allocate region (1 MB) and construct project from YAML
     auto_region<CodProject> region(1024 * 1024);
     CodProject *project = region->root().get();
-    project->reload_from_yaml(*region, root);
+    from_yaml(*region, root, project);
 
     // Prepare git cache directories
     fs::path repos_root = home_dir() / ".cod" / "pkgs" / "repos";
