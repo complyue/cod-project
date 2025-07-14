@@ -1,6 +1,8 @@
 
 #include "shilos.hh"
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <map>
 #include <optional>
@@ -19,269 +21,580 @@ struct ParseState {
   size_t column = 1;
 
   explicit ParseState(std::string_view str) : input(str) {}
+
+  char current() const { return (pos < input.size()) ? input[pos] : '\0'; }
+
+  char peek(size_t offset = 1) const { return (pos + offset < input.size()) ? input[pos + offset] : '\0'; }
+
+  void advance() {
+    if (pos < input.size()) {
+      if (input[pos] == '\n') {
+        line++;
+        column = 1;
+      } else {
+        column++;
+      }
+      pos++;
+    }
+  }
+
+  void skip_whitespace_inline() {
+    while (pos < input.size() && (input[pos] == ' ' || input[pos] == '\t')) {
+      advance();
+    }
+  }
+
+  void skip_whitespace_and_newlines() {
+    while (pos < input.size() &&
+           (input[pos] == ' ' || input[pos] == '\t' || input[pos] == '\n' || input[pos] == '\r')) {
+      advance();
+    }
+  }
+
+  void skip_to_end_of_line() {
+    while (pos < input.size() && input[pos] != '\n') {
+      advance();
+    }
+  }
+
+  size_t get_indentation() {
+    size_t indent = 0;
+    size_t temp_pos = pos;
+    while (temp_pos < input.size() && input[temp_pos] == ' ') {
+      indent++;
+      temp_pos++;
+    }
+    return indent;
+  }
+
+  bool at_end() const { return pos >= input.size(); }
 };
 
-std::optional<Node> parse_value(ParseState &state) {
-  // Skip whitespace
-  while (state.pos < state.input.size() && (state.input[state.pos] == ' ' || state.input[state.pos] == '\t' ||
-                                            state.input[state.pos] == '\n' || state.input[state.pos] == '\r')) {
-    if (state.input[state.pos] == '\n') {
-      state.line++;
-      state.column = 1;
-    } else {
-      state.column++;
-    }
-    state.pos++;
-  }
+// Forward declarations
+Node parse_document(ParseState &state);
+Node parse_value(ParseState &state, size_t min_indent = 0);
+Node parse_mapping(ParseState &state, size_t base_indent);
+Node parse_sequence(ParseState &state, size_t base_indent);
+Node parse_json_mapping(ParseState &state);
+Node parse_json_sequence(ParseState &state);
+Node parse_json_value(ParseState &state);
+std::string parse_scalar(ParseState &state);
 
-  if (state.pos >= state.input.size())
-    return std::nullopt;
-
-  // Check for start of mapping
-  if (state.input[state.pos] == '{') {
-    return Node::Load(state.input.substr(state.pos));
-  }
-  // Check for start of sequence
-  else if (state.input[state.pos] == '[') {
-    return Node::Load(state.input.substr(state.pos));
-  }
-  // Parse string value
-  else if (state.input[state.pos] == '"') {
-    state.pos++;
-    state.column++;
-    std::string str;
-
-    while (state.pos < state.input.size() && state.input[state.pos] != '"') {
-      if (state.input[state.pos] == '\\') {
-        state.pos++;
-        state.column++;
-        if (state.pos >= state.input.size())
-          break;
+void skip_comments_and_empty_lines(ParseState &state) {
+  while (!state.at_end()) {
+    state.skip_whitespace_inline();
+    if (state.current() == '#') {
+      state.skip_to_end_of_line();
+      if (state.current() == '\n') {
+        state.advance();
       }
-      str += state.input[state.pos];
-      state.pos++;
-      state.column++;
+    } else if (state.current() == '\n' || state.current() == '\r') {
+      state.advance();
+    } else {
+      break;
+    }
+  }
+}
+
+bool is_yaml_special_char(char c) {
+  return c == ':' || c == '-' || c == '?' || c == '|' || c == '>' || c == '[' || c == ']' || c == '{' || c == '}' ||
+         c == '#' || c == '&' || c == '*' || c == '!' || c == '\'' || c == '"';
+}
+
+std::string parse_quoted_string(ParseState &state) {
+  char quote_char = state.current();
+  state.advance(); // Skip opening quote
+
+  std::string result;
+  while (!state.at_end() && state.current() != quote_char) {
+    if (state.current() == '\\') {
+      state.advance();
+      if (state.at_end())
+        break;
+
+      char escaped = state.current();
+      switch (escaped) {
+      case 'n':
+        result += '\n';
+        break;
+      case 't':
+        result += '\t';
+        break;
+      case 'r':
+        result += '\r';
+        break;
+      case '\\':
+        result += '\\';
+        break;
+      case '"':
+        result += '"';
+        break;
+      case '\'':
+        result += '\'';
+        break;
+      default:
+        result += escaped;
+        break;
+      }
+    } else {
+      result += state.current();
+    }
+    state.advance();
+  }
+
+  if (state.current() == quote_char) {
+    state.advance(); // Skip closing quote
+  }
+
+  return result;
+}
+
+std::string parse_unquoted_scalar(ParseState &state) {
+  std::string result;
+
+  while (!state.at_end()) {
+    char c = state.current();
+
+    // Stop at newline, comment, or special YAML characters that end a scalar
+    if (c == '\n' || c == '\r' || c == '#') {
+      break;
     }
 
-    if (state.pos < state.input.size() && state.input[state.pos] == '"') {
-      state.pos++;
-      state.column++;
+    // Stop at colon followed by space (indicates mapping) - but only if we're not empty
+    // This prevents stopping on the first character if it's a colon
+    if (!result.empty() && c == ':' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+      break;
     }
 
+    result += c;
+    state.advance();
+  }
+
+  // Trim trailing whitespace
+  while (!result.empty() && (result.back() == ' ' || result.back() == '\t')) {
+    result.pop_back();
+  }
+
+  return result;
+}
+
+Node parse_scalar_value(const std::string &scalar_text) {
+  if (scalar_text.empty() || scalar_text == "null" || scalar_text == "~") {
+    return Node(std::monostate{});
+  }
+
+  if (scalar_text == "true" || scalar_text == "yes" || scalar_text == "on") {
+    return Node(true);
+  }
+
+  if (scalar_text == "false" || scalar_text == "no" || scalar_text == "off") {
+    return Node(false);
+  }
+
+  // Try to parse as number (only if it looks numeric)
+  if (!scalar_text.empty() && (std::isdigit(scalar_text[0]) ||
+                               (scalar_text[0] == '-' && scalar_text.size() > 1 && std::isdigit(scalar_text[1])))) {
+    bool is_number = true;
+    bool has_dot = false;
+
+    for (size_t i = 0; i < scalar_text.size(); ++i) {
+      char c = scalar_text[i];
+      if (i == 0 && c == '-') {
+        continue; // Allow leading minus
+      } else if (c == '.' && !has_dot) {
+        has_dot = true;
+      } else if (!std::isdigit(c)) {
+        is_number = false;
+        break;
+      }
+    }
+
+    if (is_number && scalar_text != "-") { // Don't parse standalone "-" as number
+      try {
+        if (has_dot) {
+          return Node(std::stod(scalar_text));
+        } else {
+          return Node(static_cast<int64_t>(std::stoll(scalar_text)));
+        }
+      } catch (...) {
+        // Fall through to string
+      }
+    }
+  }
+
+  // Default to string for any unrecognized scalar
+  return Node(scalar_text);
+}
+
+std::string parse_scalar(ParseState &state) {
+  if (state.current() == '"' || state.current() == '\'') {
+    return parse_quoted_string(state);
+  } else {
+    return parse_unquoted_scalar(state);
+  }
+}
+
+Node parse_sequence(ParseState &state, size_t base_indent) {
+  Node node;
+  node.value = Sequence{};
+  auto &seq = std::get<Sequence>(node.value);
+
+  while (!state.at_end()) {
+    skip_comments_and_empty_lines(state);
+    if (state.at_end())
+      break;
+
+    size_t current_indent = state.get_indentation();
+
+    // If indentation decreased, we're done with this sequence
+    if (current_indent < base_indent) {
+      break;
+    }
+
+    // If indentation is at base level, check for list item
+    if (current_indent == base_indent) {
+      if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+
+        state.advance(); // Skip '-'
+        state.skip_whitespace_inline();
+
+        if (state.current() == '\n' || state.at_end()) {
+          // Empty list item
+          seq.push_back(Node(std::monostate{}));
+          if (state.current() == '\n')
+            state.advance();
+        } else {
+          // Parse the list item value
+          Node item = parse_value(state, current_indent + 2);
+          seq.push_back(item);
+        }
+      } else {
+        // Not a list item at this level, we're done
+        break;
+      }
+    } else {
+      // Wrong indentation, we're done
+      break;
+    }
+  }
+
+  return node;
+}
+
+Node parse_mapping(ParseState &state, size_t base_indent) {
+  Node node;
+  node.value = Map{};
+  auto &map = std::get<Map>(node.value);
+
+  while (!state.at_end()) {
+    skip_comments_and_empty_lines(state);
+    if (state.at_end())
+      break;
+
+    size_t current_indent = state.get_indentation();
+
+    // If indentation decreased, we're done with this mapping
+    if (current_indent < base_indent) {
+      break;
+    }
+
+    // If indentation is at base level, parse key-value pair
+    if (current_indent == base_indent) {
+      state.skip_whitespace_inline();
+
+      // Check if this is actually a sequence item (starts with -)
+      if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+        // This is a sequence, not a mapping, so we're done with this mapping
+        break;
+      }
+
+      // Parse key
+      std::string key = parse_scalar(state);
+      if (key.empty())
+        break;
+
+      state.skip_whitespace_inline();
+
+      // Expect colon
+      if (state.current() != ':') {
+        throw ParseError("Expected ':' after key '" + key + "' at line " + std::to_string(state.line));
+      }
+
+      state.advance(); // Skip ':'
+      state.skip_whitespace_inline();
+
+      // Parse value
+      Node value;
+      if (state.current() == '\n' || state.at_end()) {
+        // Value is on next line(s) or null
+        if (state.current() == '\n')
+          state.advance();
+        skip_comments_and_empty_lines(state);
+
+        if (state.at_end() || state.get_indentation() <= current_indent) {
+          // No value or value at same/lower indentation = null
+          value = Node(std::monostate{});
+        } else {
+          // Value on next line with higher indentation
+          value = parse_value(state, current_indent + 1);
+        }
+      } else {
+        // Value on same line
+        if (state.current() == '"' || state.current() == '\'') {
+          // Quoted strings should be treated as strings directly (even if empty)
+          std::string str = parse_quoted_string(state);
+          value = Node(str);
+        } else {
+          value = parse_value(state, current_indent);
+        }
+
+        // Skip to end of line
+        state.skip_whitespace_inline();
+        if (state.current() == '\n')
+          state.advance();
+      }
+
+      map.emplace(key, value);
+    } else {
+      // Wrong indentation, we're done
+      break;
+    }
+  }
+
+  return node;
+}
+
+Node parse_value(ParseState &state, size_t min_indent) {
+  skip_comments_and_empty_lines(state);
+  if (state.at_end()) {
+    return Node(std::monostate{});
+  }
+
+  size_t current_indent = state.get_indentation();
+
+  // Check for sequence (list starting with -) BEFORE skipping whitespace
+  if (current_indent >= min_indent) {
+    // Temporarily advance to check for sequence marker
+    size_t saved_pos = state.pos;
+    state.skip_whitespace_inline();
+
+    if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+      // Restore position and parse as sequence
+      state.pos = saved_pos;
+      return parse_sequence(state, current_indent);
+    }
+
+    // Restore position for other parsing
+    state.pos = saved_pos;
+  }
+
+  state.skip_whitespace_inline();
+
+  // Check for inline JSON-style structures
+  if (state.current() == '{') {
+    return parse_json_mapping(state);
+  }
+
+  if (state.current() == '[') {
+    return parse_json_sequence(state);
+  }
+
+  // Check if this looks like a mapping (contains key: value pairs)
+  // Save current position to restore if it's not a mapping
+  size_t saved_pos = state.pos;
+  size_t saved_line = state.line;
+  size_t saved_column = state.column;
+
+  bool looks_like_mapping = false;
+  bool in_quotes = false;
+  char quote_char = '\0';
+
+  // Look for ':' followed by space/newline to determine if it's a mapping
+  // But respect quote boundaries - don't look for colons inside quoted strings
+  while (!state.at_end()) {
+    char c = state.current();
+
+    if (c == '\n' || c == '\r' || c == '#') {
+      break;
+    }
+
+    // Handle quotes
+    if (!in_quotes && (c == '"' || c == '\'')) {
+      in_quotes = true;
+      quote_char = c;
+    } else if (in_quotes && c == quote_char) {
+      in_quotes = false;
+      quote_char = '\0';
+    } else if (!in_quotes && c == ':') {
+      char next = state.peek();
+      if (next == ' ' || next == '\n' || next == '\r' || next == '\0') {
+        looks_like_mapping = true;
+        break;
+      }
+    }
+    state.advance();
+  }
+
+  // Restore position
+  state.pos = saved_pos;
+  state.line = saved_line;
+  state.column = saved_column;
+
+  if (looks_like_mapping) {
+    return parse_mapping(state, current_indent);
+  }
+
+  // Otherwise, parse as scalar
+  if (state.current() == '"' || state.current() == '\'') {
+    // Quoted strings should be treated as strings directly (even if empty)
+    std::string str = parse_quoted_string(state);
+    return Node(str);
+  } else {
+    // Unquoted scalars go through scalar value parsing
+    std::string scalar_text = parse_unquoted_scalar(state);
+    return parse_scalar_value(scalar_text);
+  }
+}
+
+// JSON value parsing that stops at commas and closing brackets
+Node parse_json_value(ParseState &state) {
+  state.skip_whitespace_and_newlines();
+
+  // Handle JSON arrays
+  if (state.current() == '[') {
+    return parse_json_sequence(state);
+  }
+
+  // Handle JSON objects
+  if (state.current() == '{') {
+    return parse_json_mapping(state);
+  }
+
+  // Handle quoted strings
+  if (state.current() == '"' || state.current() == '\'') {
+    std::string str = parse_quoted_string(state);
     return Node(str);
   }
-  // Parse number
-  else if (isdigit(state.input[state.pos]) || state.input[state.pos] == '-') {
-    std::string num_str;
-    bool is_float = false;
 
-    while (state.pos < state.input.size() &&
-           (isdigit(state.input[state.pos]) || state.input[state.pos] == '.' || state.input[state.pos] == '-')) {
-      if (state.input[state.pos] == '.')
-        is_float = true;
-      num_str += state.input[state.pos];
-      state.pos++;
-      state.column++;
+  // Handle other values (numbers, booleans, null)
+  std::string value_str;
+  while (!state.at_end()) {
+    char c = state.current();
+    // Stop at JSON delimiters
+    if (c == ',' || c == '}' || c == ']' || c == '\n' || c == '\r' || c == ' ' || c == '\t') {
+      break;
     }
+    value_str += c;
+    state.advance();
+  }
 
-    if (is_float) {
-      try {
-        return Node(std::stod(num_str));
-      } catch (...) {
-        return std::nullopt;
-      }
+  return parse_scalar_value(value_str);
+}
+
+// JSON-style parsing for backward compatibility
+Node parse_json_mapping(ParseState &state) {
+  state.advance(); // Skip '{'
+
+  Node node;
+  node.value = Map{};
+  auto &map = std::get<Map>(node.value);
+
+  while (!state.at_end() && state.current() != '}') {
+    state.skip_whitespace_and_newlines();
+    if (state.current() == '}')
+      break;
+
+    // Parse key
+    std::string key;
+    if (state.current() == '"' || state.current() == '\'') {
+      key = parse_quoted_string(state);
     } else {
-      try {
-        return Node(static_cast<int64_t>(std::stoll(num_str)));
-      } catch (...) {
-        return std::nullopt;
+      // For JSON, unquoted keys should be parsed more carefully
+      std::string unquoted_key;
+      while (!state.at_end() && state.current() != ':' && state.current() != ' ' && state.current() != '\t' &&
+             state.current() != '\n') {
+        unquoted_key += state.current();
+        state.advance();
       }
-    }
-  }
-  // Parse boolean/null
-  else {
-    std::string ident;
-    while (state.pos < state.input.size() && isalpha(state.input[state.pos])) {
-      ident += state.input[state.pos];
-      state.pos++;
-      state.column++;
+      key = unquoted_key;
     }
 
-    if (ident == "true")
-      return Node(true);
-    if (ident == "false")
-      return Node(false);
-    if (ident == "null")
-      return Node(std::monostate{});
+    state.skip_whitespace_and_newlines();
 
-    return std::nullopt;
+    // Expect colon
+    if (state.current() != ':') {
+      throw ParseError("Expected ':' in JSON mapping");
+    }
+    state.advance();
+
+    state.skip_whitespace_and_newlines();
+
+    // Parse value - need to parse JSON values specially to avoid comma issues
+    Node value = parse_json_value(state);
+    map.emplace(key, value);
+
+    state.skip_whitespace_and_newlines();
+
+    // Skip comma if present
+    if (state.current() == ',') {
+      state.advance();
+    }
   }
+
+  if (state.current() == '}') {
+    state.advance();
+  }
+
+  return node;
+}
+
+Node parse_json_sequence(ParseState &state) {
+  state.advance(); // Skip '['
+
+  Node node;
+  node.value = Sequence{};
+  auto &seq = std::get<Sequence>(node.value);
+
+  while (!state.at_end() && state.current() != ']') {
+    state.skip_whitespace_and_newlines();
+    if (state.current() == ']')
+      break;
+
+    Node item = parse_json_value(state);
+    seq.push_back(item);
+
+    state.skip_whitespace_and_newlines();
+
+    // Skip comma if present
+    if (state.current() == ',') {
+      state.advance();
+    }
+  }
+
+  if (state.current() == ']') {
+    state.advance();
+  }
+
+  return node;
+}
+
+Node parse_document(ParseState &state) {
+  skip_comments_and_empty_lines(state);
+  if (state.at_end()) {
+    return Node(std::monostate{});
+  }
+
+  return parse_value(state, 0);
 }
 
 Node Node::Load(std::string_view yaml_str) {
   ParseState state{yaml_str};
-  while (state.pos < state.input.size()) {
-    // Skip whitespace
-    while (state.pos < state.input.size() && (state.input[state.pos] == ' ' || state.input[state.pos] == '\t' ||
-                                              state.input[state.pos] == '\n' || state.input[state.pos] == '\r')) {
-      if (state.input[state.pos] == '\n') {
-        state.line++;
-        state.column = 1;
-      } else {
-        state.column++;
-      }
-      state.pos++;
-    }
-
-    if (state.pos >= state.input.size())
-      break;
-
-    // Check for start of mapping
-    if (state.input[state.pos] == '{') {
-      state.pos++;
-      state.column++;
-      Node node;
-      node.value = Map{};
-      auto &map = std::get<Map>(node.value);
-
-      while (state.pos < state.input.size() && state.input[state.pos] != '}') {
-        // Parse key
-        auto key_node = parse_value(state);
-        if (!key_node || !std::holds_alternative<std::string>(key_node->value)) {
-          throw std::runtime_error("Expected string key in mapping");
-        }
-        std::string key = std::get<std::string>(key_node->value);
-
-        // Skip colon
-        while (state.pos < state.input.size() && (state.input[state.pos] == ':' || state.input[state.pos] == ' ')) {
-          state.pos++;
-          state.column++;
-        }
-
-        // Parse value
-        auto value_node = parse_value(state);
-        if (!value_node) {
-          throw std::runtime_error("Expected value in mapping");
-        }
-
-        map.emplace(key, *value_node);
-
-        // Skip comma
-        while (state.pos < state.input.size() && (state.input[state.pos] == ',' || state.input[state.pos] == ' ')) {
-          state.pos++;
-          state.column++;
-        }
-      }
-
-      if (state.pos < state.input.size() && state.input[state.pos] == '}') {
-        state.pos++;
-        state.column++;
-      }
-
-      return node;
-    }
-    // Check for start of sequence
-    else if (state.input[state.pos] == '[') {
-      state.pos++;
-      state.column++;
-      Node node;
-      node.value = Sequence{};
-      auto &seq = std::get<Sequence>(node.value);
-
-      while (state.pos < state.input.size() && state.input[state.pos] != ']') {
-        auto item_node = parse_value(state);
-        if (item_node) {
-          seq.push_back(*item_node);
-        }
-
-        // Skip comma
-        while (state.pos < state.input.size() && (state.input[state.pos] == ',' || state.input[state.pos] == ' ')) {
-          state.pos++;
-          state.column++;
-        }
-      }
-
-      if (state.pos < state.input.size() && state.input[state.pos] == ']') {
-        state.pos++;
-        state.column++;
-      }
-
-      return node;
-    }
-    // Parse string value
-    else if (state.input[state.pos] == '"') {
-      state.pos++;
-      state.column++;
-      std::string str;
-
-      while (state.pos < state.input.size() && state.input[state.pos] != '"') {
-        if (state.input[state.pos] == '\\') {
-          state.pos++;
-          state.column++;
-          if (state.pos >= state.input.size())
-            break;
-        }
-        str += state.input[state.pos];
-        state.pos++;
-        state.column++;
-      }
-
-      if (state.pos < state.input.size() && state.input[state.pos] == '"') {
-        state.pos++;
-        state.column++;
-      }
-
-      return Node(str);
-    }
-    // Parse number
-    else if (isdigit(state.input[state.pos]) || state.input[state.pos] == '-') {
-      std::string num_str;
-      bool is_float = false;
-
-      while (state.pos < state.input.size() &&
-             (isdigit(state.input[state.pos]) || state.input[state.pos] == '.' || state.input[state.pos] == '-')) {
-        if (state.input[state.pos] == '.')
-          is_float = true;
-        num_str += state.input[state.pos];
-        state.pos++;
-        state.column++;
-      }
-
-      if (is_float) {
-        try {
-          return Node(std::stod(num_str));
-        } catch (...) {
-          throw std::runtime_error("Invalid float number");
-        }
-      } else {
-        try {
-          return Node(static_cast<int64_t>(std::stoll(num_str)));
-        } catch (...) {
-          throw std::runtime_error("Invalid integer number");
-        }
-      }
-    }
-    // Parse boolean/null
-    else {
-      std::string ident;
-      while (state.pos < state.input.size() && isalpha(state.input[state.pos])) {
-        ident += state.input[state.pos];
-        state.pos++;
-        state.column++;
-      }
-
-      if (ident == "true")
-        return Node(true);
-      if (ident == "false")
-        return Node(false);
-      if (ident == "null")
-        return Node(std::monostate{});
-
-      throw std::runtime_error("Unexpected token: " + ident);
-    }
+  try {
+    return parse_document(state);
+  } catch (const std::exception &e) {
+    throw ParseError("YAML parse error at line " + std::to_string(state.line) + ", column " +
+                     std::to_string(state.column) + ": " + e.what());
   }
-
-  return Node(std::monostate{});
 }
 
 void format_yaml(std::ostream &os, const Node &node, int indent) {
@@ -289,36 +602,76 @@ void format_yaml(std::ostream &os, const Node &node, int indent) {
       [&os, indent](auto &&arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, std::monostate>) {
-          os << std::string(indent, ' ') << "null";
+          os << "null";
         } else if constexpr (std::is_same_v<T, bool>) {
-          os << std::string(indent, ' ') << (arg ? "true" : "false");
+          os << (arg ? "true" : "false");
         } else if constexpr (std::is_same_v<T, int64_t>) {
-          os << std::string(indent, ' ') << arg;
+          os << arg;
         } else if constexpr (std::is_same_v<T, double>) {
-          os << std::string(indent, ' ') << arg;
+          os << arg;
         } else if constexpr (std::is_same_v<T, std::string>) {
-          os << std::string(indent, ' ') << "\"" << arg << "\"";
+          // Quote string if it contains special characters or looks like other types
+          bool needs_quotes = arg.empty() || arg == "true" || arg == "false" || arg == "null" ||
+                              arg.find(':') != std::string::npos || arg.find('#') != std::string::npos ||
+                              arg.find('\n') != std::string::npos || arg.find('"') != std::string::npos ||
+                              (std::isdigit(arg[0]) || arg[0] == '-');
+
+          if (needs_quotes) {
+            os << "\"";
+            for (char c : arg) {
+              if (c == '"')
+                os << "\\\"";
+              else if (c == '\\')
+                os << "\\\\";
+              else if (c == '\n')
+                os << "\\n";
+              else if (c == '\t')
+                os << "\\t";
+              else if (c == '\r')
+                os << "\\r";
+              else
+                os << c;
+            }
+            os << "\"";
+          } else {
+            os << arg;
+          }
         } else if constexpr (std::is_same_v<T, Sequence>) {
-          os << std::string(indent, ' ') << "[\n";
-          for (const auto &item : arg) {
-            format_yaml(os, item, indent + 2);
-            os << ",\n";
+          if (indent == 0) {
+            // Root level sequence
+            for (size_t i = 0; i < arg.size(); ++i) {
+              if (i > 0)
+                os << "\n";
+              os << "- ";
+              format_yaml(os, arg[i], 2);
+            }
+          } else {
+            // Nested sequence - use standard YAML list format
+            for (size_t i = 0; i < arg.size(); ++i) {
+              if (i > 0)
+                os << "\n" << std::string(indent, ' ');
+              os << "- ";
+              format_yaml(os, arg[i], indent + 2);
+            }
           }
-          if (!arg.empty()) {
-            os.seekp(-2, std::ios_base::cur); // Remove last comma
-          }
-          os << "\n" << std::string(indent, ' ') << "]";
         } else if constexpr (std::is_same_v<T, Map>) {
-          os << std::string(indent, ' ') << "{\n";
+          bool first = true;
           for (const auto &[key, value] : arg) {
-            os << std::string(indent + 2, ' ') << "\"" << key << "\": ";
-            format_yaml(os, value, 0);
-            os << ",\n";
+            if (!first) {
+              os << "\n" << std::string(indent, ' ');
+            }
+            first = false;
+
+            os << key << ": ";
+
+            // Check if value should be on next line
+            if (std::holds_alternative<Map>(value.value) || std::holds_alternative<Sequence>(value.value)) {
+              os << "\n" << std::string(indent + 2, ' ');
+              format_yaml(os, value, indent + 2);
+            } else {
+              format_yaml(os, value, 0);
+            }
           }
-          if (!arg.empty()) {
-            os.seekp(-2, std::ios_base::cur); // Remove last comma
-          }
-          os << "\n" << std::string(indent, ' ') << "}";
         }
       },
       node.value);

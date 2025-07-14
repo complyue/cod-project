@@ -1,0 +1,11 @@
+empty_map: {}
+empty_list: []
+empty_string: ""
+colon_in_string: "key: value"
+dash_in_string: "- not a list"
+number_as_string: "123"
+boolean_as_string: "true"
+null_as_string: "null"
+special_chars: "!@#$%^&*()"
+quotes_in_string: "He said \"hello\""
+newline_in_string: "line1\nline2" 

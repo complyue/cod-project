@@ -1,0 +1,15 @@
+# This is a comment at the start
+name: "John" # inline comment
+age: 30
+
+# Comment between entries
+address:
+  # Comment in nested structure
+  street: "123 Main St"
+  city: "Boston" # another inline comment
+
+# List with comments
+hobbies:
+  # Comment before list item
+  - "reading"
+  - "writing" # comment after list item 
