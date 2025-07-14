@@ -5,7 +5,21 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-export PATH="$PROJECT_ROOT/built/bin:$PATH"
+
+# Determine toolchain directory based on COD_TEST_TOOLCHAIN environment variable
+# Default to "build" for development workflow, can be set to "built" for pre-release testing
+COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
+
+if [[ "$COD_TEST_TOOLCHAIN" == "build" ]]; then
+    TOOLCHAIN_DIR="$PROJECT_ROOT/build"
+elif [[ "$COD_TEST_TOOLCHAIN" == "built" ]]; then
+    TOOLCHAIN_DIR="$PROJECT_ROOT/built"
+else
+    echo "COD_TEST_TOOLCHAIN must be 'build' or 'built', got: $COD_TEST_TOOLCHAIN" >&2
+    exit 1
+fi
+
+export PATH="$TOOLCHAIN_DIR/bin:$PATH"
 
 CODP_BIN="$(command -v codp)"
 if [[ -z "$CODP_BIN" ]]; then

@@ -3,10 +3,29 @@ cmake_minimum_required(VERSION 3.20)
 # Canonicalize the project root directory
 set(COD_PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 
-# Set path to the built toolchain
-set(COD_TOOLCHAIN_DIR "${COD_PROJECT_SOURCE_DIR}/built")
+# Determine toolchain directory based on COD_TEST_TOOLCHAIN environment variable
+# Default to "build" for development workflow, can be set to "built" for pre-release testing
+if(DEFINED ENV{COD_TEST_TOOLCHAIN})
+    set(COD_TEST_TOOLCHAIN $ENV{COD_TEST_TOOLCHAIN})
+else()
+    set(COD_TEST_TOOLCHAIN "build")
+endif()
 
-# Set the compilers to use the built toolchain
+if(COD_TEST_TOOLCHAIN STREQUAL "build")
+    set(COD_TOOLCHAIN_DIR "${COD_PROJECT_SOURCE_DIR}/build")
+    set(COD_INCLUDE_DIR "${COD_PROJECT_SOURCE_DIR}/include")
+    message(STATUS "Using development toolchain from build/ directory")
+    message(STATUS "Using source headers from include/ directory")
+elseif(COD_TEST_TOOLCHAIN STREQUAL "built")
+    set(COD_TOOLCHAIN_DIR "${COD_PROJECT_SOURCE_DIR}/built")
+    set(COD_INCLUDE_DIR "${COD_TOOLCHAIN_DIR}/include")
+    message(STATUS "Using installed toolchain from built/ directory")
+    message(STATUS "Using installed headers from built/include/ directory")
+else()
+    message(FATAL_ERROR "COD_TEST_TOOLCHAIN must be 'build' or 'built', got: ${COD_TEST_TOOLCHAIN}")
+endif()
+
+# Set the compilers to use the chosen toolchain
 set(CMAKE_C_COMPILER "${COD_TOOLCHAIN_DIR}/bin/clang")
 set(CMAKE_CXX_COMPILER "${COD_TOOLCHAIN_DIR}/bin/clang++")
 
@@ -17,10 +36,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
-# Configure build to use the built toolchain
+# Configure build to use the chosen toolchain
 
 # Include directories for project headers
-include_directories(BEFORE "${COD_TOOLCHAIN_DIR}/include")
+include_directories(BEFORE "${COD_INCLUDE_DIR}")
 
 # Add library search paths
 link_directories(BEFORE "${COD_TOOLCHAIN_DIR}/lib")

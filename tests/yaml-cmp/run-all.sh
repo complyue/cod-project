@@ -6,6 +6,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 TEST_DATA_DIR="$SCRIPT_DIR/test-data"
 
+# Set default COD_TEST_TOOLCHAIN if not already set
+export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -16,6 +19,8 @@ NC='\033[0m' # No Color
 TESTS_RUN=0
 TESTS_PASSED=0
 TESTS_FAILED=0
+
+echo "🔧 Using toolchain mode: $COD_TEST_TOOLCHAIN"
 
 # Configure build directory if first run
 if [[ ! -f "$BUILD_DIR/Build.ninja" && ! -f "$BUILD_DIR/Makefile" ]]; then

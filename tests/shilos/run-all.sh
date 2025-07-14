@@ -5,6 +5,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 
+# Set default COD_TEST_TOOLCHAIN if not already set
+export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
+
+echo "🔧 Using toolchain mode: $COD_TEST_TOOLCHAIN"
+
 # Configure (only once)
 if [[ ! -f "$BUILD_DIR/Build.ninja" && ! -f "$BUILD_DIR/Makefile" ]]; then
   mkdir -p "$BUILD_DIR"

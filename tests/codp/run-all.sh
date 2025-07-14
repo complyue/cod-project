@@ -5,6 +5,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Set default COD_TEST_TOOLCHAIN if not already set
+export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
+
+echo "🔧 Using toolchain mode: $COD_TEST_TOOLCHAIN"
+
 # 1. Ensure yaml-cmp is built and passing its self test
 "$PROJECT_ROOT/tests/yaml-cmp/run-all.sh"
 
