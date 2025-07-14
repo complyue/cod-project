@@ -1,24 +1,97 @@
+
+## Unified Test Entry-Point (`run-all.sh`)
+
+Each component directory under `tests/` contains a `run-all.sh` script that
+• builds its test artefacts (if needed) and
+• executes every test case for that component.
+
+### Quick examples
+
+```bash
+# Build and run shilos C++ tests
+./tests/shilos/run-all.sh
+
+# Build yaml-cmp tool and run its self-check
+./tests/yaml-cmp/run-all.sh
+
+# Run CoDP shell tests (automatically builds yaml-cmp first)
+./tests/codp/run-all.sh
+```
+
+`run-all.sh` scripts automatically:
+
+* create a local `build/` directory and configure CMake (first invocation only);
+* perform incremental builds (`cmake --build ./build`);
+* prepend any required tool-chain paths (e.g. `<project>/built/bin`) to `PATH` so
+  that tools such as `codp`, `shilos` and `yaml-cmp` are resolved;
+* forward the exit status of each individual test, failing fast on error **so the script's own exit code accurately reflects pass/fail status**.
+
+> **Tip** – execute the entire test suite in one go from the project root:
+>
+> ```bash
+> ./tests/shilos/run-all.sh && ./tests/codp/run-all.sh
+> ```
+
+All test folders **must** include a `run-all.sh` script to preserve this uniform
+interface.
+
 ---
-globs: tests/**/*
-alwaysApply: false
+
+## Running Tests After Code Changes
+
+1. Re-build & install the main sources **once** from the project root:
+   ```bash
+   cmake --build ./build && ninja -C ./build install
+   ```
+2. Execute the component-specific `run-all.sh` relevant to the area you
+   modified (or chain them as shown above).
+
+The installation step ensures that test builds link against the latest shilos
+shared library and any new binaries you added.
+
 ---
 
-To build and run the tests with latest source code:
+## Authoring New Tests
 
-## Test Organization
+Follow the patterns below when adding functionality:
 
-Tests are organized by component under the `tests/` directory:
+### 1. C++ / CMake-based tests
 
-- `tests/shilos/` - shilos memory region tests
-- `tests/codp/` - CoD package manager tests
-- (more component folders will be added later)
+* Create `tests/<component>/` (or add to an existing one).
+* Provide source files and a `CMakeLists.txt` that links against the installed
+  shilos library located in `<project>/built/`.
+* Mirror the `tests/shilos` build helper if you need multiple executables.
+* Ensure your new directory contains a `run-all.sh` script that
+  – configures `build/` on first run,
+  – builds with `cmake --build`, and
+  – executes **all** produced executables.
+  – terminates immediately on the first failure (use `set -euo pipefail`).
 
-## Build Steps
+### 2. Shell / CLI-driven tests
 
-0. In case cod-project main src changed: `cmake --build ./build && ninja -C ./build install` (from root dir of cod-project)
-1. `cd tests/<component>` (e.g., `cd tests/shilos` for shilos tests)
-2. `mkdir -p build && cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build` (in the component's test directory)
-3. `cmake --build ./build`
-4. run the test executables
+* Place scripts inside `tests/<component>/<scenario>/`.
+* The scenario directory **must** expose a `run.sh` entry point executed by the
+  parent component’s `run-all.sh`.
+* Scripts should exit non-zero on failure and print minimal diagnostic output.
+* Use the `yaml-cmp` utility (built in `tests/yaml-cmp`) for YAML comparisons
+  instead of ad-hoc `grep`/`sed` logic.
 
-All component test folders use the same cmake build approach for consistency.
+### 3. Cross-component dependencies
+
+If your tests depend on another component’s artifacts (e.g. CoDP tests requiring
+`yaml-cmp`), invoke the other component’s `run-all.sh` first **and rely on
+`set -e` to abort if it fails**, then add its `build/` folder to `PATH` – see
+`tests/codp/run-all.sh` for reference.
+
+---
+
+Following these conventions keeps the developer experience predictable and
+ensures CI can run the full suite with a single command.
+
+Following these conventions keeps the developer experience predictable and
+ensures CI can run the full suite with a single command.
+
+ensures CI can run the full suite with a single command.
+
+Following these conventions keeps the developer experience predictable and
+ensures CI can run the full suite with a single command.

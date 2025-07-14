@@ -16,11 +16,13 @@ private:
   regional_str name_;
   regional_str repo_url_;
   regional_fifo<regional_str> branches_;
+  regional_str path_; // NEW: optional local path for dependency
 
 public:
   template <typename RT>
-  CodDep(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url)
-      : uuid_(uuid), name_(mr, name), repo_url_(mr, repo_url), branches_(mr) {}
+  CodDep(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url,
+         std::string_view path = "")
+      : uuid_(uuid), name_(mr, name), repo_url_(mr, repo_url), branches_(mr), path_(mr, path) {}
 
   // Deleted special members
   CodDep(const CodDep &) = delete;
@@ -33,6 +35,8 @@ public:
   const regional_str &repo_url() const { return repo_url_; }
   const regional_fifo<regional_str> &branches() const { return branches_; }
   regional_fifo<regional_str> &branches() { return branches_; }
+  const regional_str &path() const { return path_; }
+  bool has_path() const { return !path_.empty(); }
 };
 
 class CodProject {

@@ -18,6 +18,9 @@ inline yaml::Node to_yaml(const CodDep &dep) noexcept {
   m["uuid"] = dep.uuid().to_string();
   m["name"] = std::string_view(dep.name());
   m["repo_url"] = std::string_view(dep.repo_url());
+  if (!dep.path().empty()) {
+    m["path"] = std::string_view(dep.path());
+  }
 
   if (!dep.branches().empty()) {
     yaml::Node seq(yaml::Sequence{});
@@ -72,8 +75,18 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr
   std::string name = fetch_scalar("name");
   std::string repo_url = fetch_scalar("repo_url");
 
+  // Optional path
+  std::string path;
+  auto it_path = map.find("path");
+  if (it_path != map.end()) {
+    if (!it_path->value.IsScalar()) {
+      throw yaml::TypeError("'path' must be a scalar");
+    }
+    path = it_path->value.as<std::string>();
+  }
+
   // Construct in-place.
-  new (raw_ptr) T(mr, uuid, name, repo_url);
+  new (raw_ptr) T(mr, uuid, name, repo_url, path);
 
   // Optional branches.
   auto it_br = map.find("branches");

@@ -1,0 +1,8 @@
+uuid: "33333333-3333-3333-3333-333333333333"
+name: "depb"
+repo_url: "/depB/url"
+deps:
+  - uuid: "44444444-4444-4444-4444-444444444444"
+    name: "depc"
+    repo_url: "/depC/url"
+    path: "../depC" 

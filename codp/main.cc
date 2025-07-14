@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "codp.hh"
+#include "codp_manifest.hh"
 #include "codp_yaml.hh"
 
 using namespace shilos;
@@ -82,6 +83,11 @@ static void ensure_bare_repo(const std::string &url, const fs::path &bare_path) 
   }
 }
 
+static bool is_remote_repo_url(std::string_view url) {
+  return url.starts_with("http://") || url.starts_with("https://") || url.starts_with("ssh://") ||
+         url.starts_with("git@") || url.starts_with("ssh:");
+}
+
 int main(int argc, char **argv) {
   std::string_view cmd = "solve";
   int argi = 1;
@@ -133,7 +139,7 @@ int main(int argc, char **argv) {
       return 0;
     }
 
-    std::string yaml_text = slurp_file(project_yaml);
+    std::string yaml_text = ::slurp_file(project_yaml);
     yaml::Node root = yaml::Load(yaml_text);
 
     // Allocate region (1 MB) and construct project from YAML
@@ -146,6 +152,8 @@ int main(int argc, char **argv) {
 
     // Iterate over deps + self repo
     auto process_repo = [&](const std::string &url) {
+      if (!is_remote_repo_url(url))
+        return; // skip local/dummy urls for test scenarios
       std::string key = repo_url_to_key(url);
       fs::path bare = repos_root / (key + ".git");
       ensure_bare_repo(url, bare);
@@ -153,12 +161,27 @@ int main(int argc, char **argv) {
 
     process_repo(std::string(std::string_view(project->repo_url())));
     for (const CodDep &dep : project->deps()) {
-      process_repo(std::string(dep.repo_url()));
+      if (dep.path().empty()) {
+        process_repo(std::string(std::string_view(dep.repo_url())));
+      }
     }
 
     std::cout << "✔ Repositories synchronised." << std::endl;
 
-    // TODO: Resolve branches & commit hashes, generate CodManifest.yaml
+    // -----------------------------------------------------------------
+    // Generate CodManifest.yaml (local deps only stage)
+    // -----------------------------------------------------------------
+
+    yaml::Node manifest_node = generate_manifest(project_path);
+
+    fs::path manifest_path = project_path / "CodManifest.yaml";
+    std::ofstream ofs(manifest_path);
+    if (!ofs) {
+      throw std::runtime_error("Cannot write CodManifest.yaml at " + manifest_path.string());
+    }
+    ofs << yaml::format_yaml(manifest_node) << std::endl;
+
+    std::cout << "✔ CodManifest.yaml generated at " << manifest_path << std::endl;
 
   } catch (const std::exception &e) {
     std::cerr << "Error: " << e.what() << std::endl;
