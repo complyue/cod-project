@@ -66,6 +66,9 @@ Follow the patterns below when adding functionality:
   – builds with `cmake --build`, and
   – executes **all** produced executables.
   – terminates immediately on the first failure (use `set -euo pipefail`).
+  – keeps test sources in a dedicated `src/` folder and lists them from `CMakeLists.txt`.
+
+*Add a proper `.gitignore` inside each test component dir, e.g. ignore `build*/` directory*
 
 ### 2. Shell / CLI-driven tests
 
@@ -75,6 +78,7 @@ Follow the patterns below when adding functionality:
 * Scripts should exit non-zero on failure and print minimal diagnostic output.
 * Use the `yaml-cmp` utility (built in `tests/yaml-cmp`) for YAML comparisons
   instead of ad-hoc `grep`/`sed` logic.
+* Scripts must be committed with the executable bit set (`chmod +x`) so they can be invoked directly by CI and other `run-all.sh` wrappers.
 
 ### 3. Cross-component dependencies
 

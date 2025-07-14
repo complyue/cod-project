@@ -39,7 +39,7 @@ find_library(LIBCXXABI_LIBRARY c++abi PATHS "${COD_TOOLCHAIN_DIR}/lib")
 # ---------------------------------------------------------------------------
 # Build yaml-cmp executable
 # ---------------------------------------------------------------------------
-add_executable(yaml-cmp yaml_cmp.cc)
+add_executable(yaml-cmp src/yaml_cmp.cc)
 
 target_link_libraries(yaml-cmp PRIVATE ${SHILOS_LIBRARY})
 # Link C++ runtime explicitly when found
