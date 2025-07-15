@@ -1,14 +1,11 @@
 
 #include "shilos.hh"
+#include "shilos/iops.hh"
 
-#include <algorithm>
 #include <cctype>
 #include <cstring>
-#include <map>
-#include <optional>
 #include <sstream>
 #include <string>
-#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -25,7 +22,7 @@ struct ParseState {
   size_t pos = 0;
   size_t line = 1;
   size_t column = 1;
-  std::unordered_set<std::string> owned_strings; // Storage for strings that need escaping (deduplicated)
+  iops owned_strings; // Storage for strings that need escaping (deduplicated)
 
   explicit ParseState(std::string_view str) : input(str) {}
 
@@ -80,10 +77,7 @@ struct ParseState {
   }
 
   // Store an owned string and return a view to it (for escaped strings)
-  std::string_view store_owned_string(std::string str) {
-    auto [iter, inserted] = owned_strings.insert(std::move(str));
-    return std::string_view(*iter);
-  }
+  std::string_view store_owned_string(std::string str) { return owned_strings.insert(std::move(str)); }
 };
 
 // Compare two indentations to determine their relationship
@@ -626,17 +620,6 @@ Node parse_document(ParseState &state) {
   }
 
   return parse_value(state);
-}
-
-// Deprecated Node::Load implementation for backward compatibility
-Node Node::Load(std::string_view yaml_str) {
-  ParseState state{yaml_str};
-  try {
-    return parse_document(state);
-  } catch (const std::exception &e) {
-    throw ParseError("YAML parse error at line " + std::to_string(state.line) + ", column " +
-                     std::to_string(state.column) + ": " + e.what());
-  }
 }
 
 // YamlDocument implementation

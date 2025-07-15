@@ -7,11 +7,11 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <variant>
 #include <vector>
 
 #include <shilos/iopd.hh>
+#include <shilos/iops.hh>
 
 namespace shilos {
 
@@ -149,11 +149,6 @@ struct Node {
 
   Node() = default;
   explicit Node(Value v) : value(std::move(v)) {}
-
-  // NOTE: Node::Load is deprecated - use YamlDocument::Parse instead
-  // This is kept for backward compatibility but will be removed
-  [[deprecated("Use YamlDocument::Parse instead")]]
-  static Node Load(const std::string_view yaml_str);
 
   // Helper constructors
   Node(std::nullptr_t) : value(std::monostate{}) {}
@@ -321,9 +316,9 @@ struct Node {
 // All yaml nodes must not outlive the document that created them
 class YamlDocument {
 private:
-  std::string source_;                            // Owns the original YAML string for string_view lifetime
-  Node root_;                                     // Root node of the parsed document
-  std::unordered_set<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference (deduplicated)
+  std::string source_; // Owns the original YAML string for string_view lifetime
+  Node root_;          // Root node of the parsed document
+  iops owned_strings_; // Owns escaped strings and keys that nodes reference (deduplicated)
 
 public:
   explicit YamlDocument(std::string source);
@@ -346,17 +341,6 @@ public:
 void format_yaml(std::ostream &os, const Node &node, int indent = 0);
 std::ostream &operator<<(std::ostream &os, const Node &node);
 std::string format_yaml(const Node &node);
-
-// Deprecated standalone Load functions - use YamlDocument::Parse instead
-[[deprecated("Use YamlDocument::Parse instead")]]
-inline Node Load(const std::string_view yaml_str) {
-  return Node::Load(yaml_str);
-}
-
-[[deprecated("Use YamlDocument::Parse instead")]]
-inline Node Load(const std::string &yaml_str) {
-  return Node::Load(yaml_str);
-}
 
 template <typename T, typename RT>
 concept YamlConvertible = requires(T t, const yaml::Node &node, memory_region<RT> &mr, T *raw_ptr) {
