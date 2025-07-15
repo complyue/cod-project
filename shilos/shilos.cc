@@ -633,6 +633,12 @@ YamlDocument::YamlDocument(std::string source) : source_(std::move(source)) {
 
 YamlDocument YamlDocument::Parse(std::string source) { return YamlDocument(std::move(source)); }
 
+std::string YamlDocument::format_exact() const {
+  // For exact formatting, return the original source
+  // This preserves all comments, whitespace, and formatting exactly as it was
+  return source_;
+}
+
 void format_yaml(std::ostream &os, const Node &node, int indent) {
   std::visit(
       [&os, indent](auto &&arg) {

@@ -339,6 +339,9 @@ public:
   // Access to the underlying source (for debugging/logging)
   std::string_view source() const noexcept { return source_; }
 
+  // Format the document exactly as it was parsed (preserving comments and whitespace)
+  std::string format_exact() const;
+
   // Static factory function - the primary way to parse YAML
   static YamlDocument Parse(std::string source);
   static YamlDocument Parse(std::string_view source) { return Parse(std::string(source)); }

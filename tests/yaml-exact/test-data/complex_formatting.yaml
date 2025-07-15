@@ -1,0 +1,21 @@
+# Top level comment
+project:
+  name: complex-project
+  # Inline map
+  metadata: {author: "dev", year: 2024}
+  
+  # Array with mixed formatting
+  items:
+    - simple
+    - {key: value, num: 42}
+    - 
+      name: multiline
+      description: >
+        This is a folded
+        multiline string
+  
+# Trailing comment with empty lines
+
+
+# More comments
+final: true 
