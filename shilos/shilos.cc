@@ -23,7 +23,7 @@ struct ParseState {
   size_t pos = 0;
   size_t line = 1;
   size_t column = 1;
-  iops owned_strings; // Storage for strings that need escaping (deduplicated)
+  iops<std::string> owned_strings; // Storage for strings that need escaping (deduplicated)
 
   explicit ParseState(std::string_view str) : input(str) {}
 
