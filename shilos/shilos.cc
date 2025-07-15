@@ -125,6 +125,7 @@ Node parse_json_mapping(ParseState &state);
 Node parse_json_sequence(ParseState &state);
 Node parse_json_value(ParseState &state);
 std::string_view parse_scalar(ParseState &state);
+bool looks_like_mapping_efficient(const ParseState &state);
 
 void advance_to_next_content(ParseState &state) {
   while (!state.at_end()) {
@@ -185,8 +186,16 @@ std::string_view parse_quoted_string(ParseState &state) {
       case '\'':
         result += '\'';
         break;
+      case 'u': {
+        // Unicode escape sequence - simplified handling for common cases
+        // TODO: Full Unicode escape support for production use
+        result += escaped; // For now, just include the character
+        break;
+      }
       default:
-        result += escaped;
+        // Invalid escape sequence
+        throw ParseError("Invalid escape sequence '\\" + std::string(1, escaped) + "' at line " +
+                         std::to_string(state.line) + ", column " + std::to_string(state.column));
         break;
       }
     } else {
@@ -197,6 +206,11 @@ std::string_view parse_quoted_string(ParseState &state) {
 
   if (state.current() == quote_char) {
     state.advance(); // Skip closing quote
+  } else {
+    // Reached end of input without finding closing quote
+    throw ParseError("Unclosed quoted string starting at line " +
+                     std::to_string(state.line - std::count(result.begin(), result.end(), '\n')) +
+                     " - missing closing " + std::string(1, quote_char) + " quote");
   }
 
   // If no escaping was needed, we could potentially return a view to the original
@@ -361,8 +375,9 @@ Node parse_mapping(ParseState &state) {
 
     // Parse key
     std::string_view key = parse_scalar(state);
-    if (key.empty())
-      break;
+    if (key.empty()) {
+      throw ParseError("Empty or missing key in YAML mapping at line " + std::to_string(state.line));
+    }
 
     state.skip_whitespace_inline();
 
@@ -413,6 +428,50 @@ Node parse_mapping(ParseState &state) {
   return node;
 }
 
+// Efficient mapping detection using limited lookahead to avoid O(n²) performance
+// Only looks ahead a reasonable distance to find mapping indicators
+bool looks_like_mapping_efficient(const ParseState &state) {
+  static constexpr size_t MAX_LOOKAHEAD = 200; // Reasonable limit for key length
+
+  size_t pos = state.pos;
+  bool in_quotes = false;
+  char quote_char = '\0';
+  size_t chars_scanned = 0;
+
+  // Scan ahead looking for key: value pattern within reasonable limits
+  while (pos < state.input.size() && chars_scanned < MAX_LOOKAHEAD) {
+    char c = state.input[pos];
+
+    // Stop at line boundaries or comments - these end potential mappings
+    if (c == '\n' || c == '\r' || c == '#') {
+      break;
+    }
+
+    // Handle quoted strings - don't look for colons inside quotes
+    if (!in_quotes && (c == '"' || c == '\'')) {
+      in_quotes = true;
+      quote_char = c;
+    } else if (in_quotes && c == quote_char) {
+      // Check for escape sequences
+      if (pos > 0 && state.input[pos - 1] != '\\') {
+        in_quotes = false;
+        quote_char = '\0';
+      }
+    } else if (!in_quotes && c == ':') {
+      // Found colon outside quotes - check if it's followed by whitespace
+      char next = (pos + 1 < state.input.size()) ? state.input[pos + 1] : '\0';
+      if (next == ' ' || next == '\t' || next == '\n' || next == '\r' || next == '\0') {
+        return true; // This looks like a mapping
+      }
+    }
+
+    pos++;
+    chars_scanned++;
+  }
+
+  return false; // No mapping pattern found within reasonable distance
+}
+
 Node parse_value(ParseState &state) {
   advance_to_next_content(state);
   if (state.at_end()) {
@@ -436,48 +495,8 @@ Node parse_value(ParseState &state) {
     return parse_json_sequence(state);
   }
 
-  // Check if this looks like a mapping (contains key: value pairs)
-  // Save current position to restore if it's not a mapping
-  size_t saved_pos = state.pos;
-  size_t saved_line = state.line;
-  size_t saved_column = state.column;
-
-  bool looks_like_mapping = false;
-  bool in_quotes = false;
-  char quote_char = '\0';
-
-  // Look for ':' followed by space/newline to determine if it's a mapping
-  // But respect quote boundaries - don't look for colons inside quoted strings
-  while (!state.at_end()) {
-    char c = state.current();
-
-    if (c == '\n' || c == '\r' || c == '#') {
-      break;
-    }
-
-    // Handle quotes
-    if (!in_quotes && (c == '"' || c == '\'')) {
-      in_quotes = true;
-      quote_char = c;
-    } else if (in_quotes && c == quote_char) {
-      in_quotes = false;
-      quote_char = '\0';
-    } else if (!in_quotes && c == ':') {
-      char next = state.peek();
-      if (next == ' ' || next == '\n' || next == '\r' || next == '\0') {
-        looks_like_mapping = true;
-        break;
-      }
-    }
-    state.advance();
-  }
-
-  // Restore position
-  state.pos = saved_pos;
-  state.line = saved_line;
-  state.column = saved_column;
-
-  if (looks_like_mapping) {
+  // Check if this looks like a mapping using efficient limited lookahead
+  if (looks_like_mapping_efficient(state)) {
     return parse_mapping(state);
   }
 
@@ -558,7 +577,8 @@ Node parse_json_mapping(ParseState &state) {
 
     // Expect colon
     if (state.current() != ':') {
-      throw ParseError("Expected ':' in JSON mapping");
+      throw ParseError("Expected ':' after key '" + key + "' in JSON mapping at line " + std::to_string(state.line) +
+                       ", column " + std::to_string(state.column));
     }
     state.advance();
 
@@ -578,6 +598,9 @@ Node parse_json_mapping(ParseState &state) {
 
   if (state.current() == '}') {
     state.advance();
+  } else {
+    throw ParseError("Unterminated JSON object - missing closing '}' at line " + std::to_string(state.line) +
+                     ", column " + std::to_string(state.column));
   }
 
   return node;
@@ -608,6 +631,9 @@ Node parse_json_sequence(ParseState &state) {
 
   if (state.current() == ']') {
     state.advance();
+  } else {
+    throw ParseError("Unterminated JSON array - missing closing ']' at line " + std::to_string(state.line) +
+                     ", column " + std::to_string(state.column));
   }
 
   return node;
