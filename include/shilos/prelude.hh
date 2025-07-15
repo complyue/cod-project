@@ -320,7 +320,7 @@ struct Node {
 // All yaml nodes must not outlive the document that created them
 class YamlDocument {
 private:
-  std::string source_;                     // Owns the original YAML string
+  std::string source_;                     // Owns the original YAML string for string_view lifetime
   Node root_;                              // Root node of the parsed document
   std::vector<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference
 
@@ -336,12 +336,6 @@ public:
   // Access to the root node
   const Node &root() const noexcept { return root_; }
   Node &root() noexcept { return root_; }
-
-  // Access to the underlying source (for debugging/logging)
-  std::string_view source() const noexcept { return source_; }
-
-  // Format the document exactly as it was parsed (preserving comments and whitespace)
-  std::string format_exact() const;
 
   // Static factory function - the primary way to parse YAML
   static YamlDocument Parse(std::string source);

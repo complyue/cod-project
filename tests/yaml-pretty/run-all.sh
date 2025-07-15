@@ -159,17 +159,6 @@ for test_file in "$TEST_DATA_DIR"/*.yaml; do
   fi
 done
 
-# Test yaml-exact test files if available
-YAML_EXACT_TEST_DIR="$SCRIPT_DIR/../yaml-exact/test-data"
-if [[ -d "$YAML_EXACT_TEST_DIR" ]]; then
-  for test_file in "$YAML_EXACT_TEST_DIR"/*.yaml; do
-    if [[ -f "$test_file" ]]; then
-      basename_file=$(basename "$test_file")
-      test_parsing_only "Parse check (yaml-exact): $basename_file" "$test_file"
-    fi
-  done
-fi
-
 echo
 echo "=== Test Results ==="
 echo "Tests run: $TESTS_RUN"

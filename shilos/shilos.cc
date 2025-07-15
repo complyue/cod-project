@@ -130,11 +130,9 @@ std::string_view parse_quoted_string(ParseState &state) {
   state.advance(); // Skip opening quote
 
   std::string result;
-  bool needs_escaping = false;
 
   while (!state.at_end() && state.current() != quote_char) {
     if (state.current() == '\\') {
-      needs_escaping = true;
       state.advance();
       if (state.at_end())
         break;
@@ -643,12 +641,6 @@ YamlDocument::YamlDocument(std::string source) : source_(std::move(source)) {
 }
 
 YamlDocument YamlDocument::Parse(std::string source) { return YamlDocument(std::move(source)); }
-
-std::string YamlDocument::format_exact() const {
-  // For exact formatting, return the original source
-  // This preserves all comments, whitespace, and formatting exactly as it was
-  return source_;
-}
 
 void format_yaml(std::ostream &os, const Node &node, int indent) {
   std::visit(
