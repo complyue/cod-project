@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -320,9 +321,9 @@ struct Node {
 // All yaml nodes must not outlive the document that created them
 class YamlDocument {
 private:
-  std::string source_;                     // Owns the original YAML string for string_view lifetime
-  Node root_;                              // Root node of the parsed document
-  std::vector<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference
+  std::string source_;                            // Owns the original YAML string for string_view lifetime
+  Node root_;                                     // Root node of the parsed document
+  std::unordered_set<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference (deduplicated)
 
 public:
   explicit YamlDocument(std::string source);

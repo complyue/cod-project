@@ -8,6 +8,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -24,7 +25,7 @@ struct ParseState {
   size_t pos = 0;
   size_t line = 1;
   size_t column = 1;
-  std::vector<std::string> owned_strings; // Storage for strings that need escaping
+  std::unordered_set<std::string> owned_strings; // Storage for strings that need escaping (deduplicated)
 
   explicit ParseState(std::string_view str) : input(str) {}
 
@@ -80,16 +81,8 @@ struct ParseState {
 
   // Store an owned string and return a view to it (for escaped strings)
   std::string_view store_owned_string(std::string str) {
-    owned_strings.push_back(std::move(str));
-    return std::string_view(owned_strings.back());
-  }
-
-  // Store a key (as string) and return a view to it (for map keys)
-  std::string_view store_owned_key(std::string_view key) {
-    // Always store keys as owned strings to avoid any lifetime issues
-    // This ensures all map keys remain valid for the document's lifetime
-    owned_strings.push_back(std::string(key));
-    return std::string_view(owned_strings.back());
+    auto [iter, inserted] = owned_strings.insert(std::move(str));
+    return std::string_view(*iter);
   }
 };
 
@@ -420,7 +413,7 @@ Node parse_mapping(ParseState &state) {
         state.advance();
     }
 
-    map.emplace(state.store_owned_key(key), value);
+    map.emplace(key, value);
   }
 
   return node;
@@ -579,7 +572,7 @@ Node parse_json_mapping(ParseState &state) {
 
     // Parse value - need to parse JSON values specially to avoid comma issues
     Node value = parse_json_value(state);
-    map.emplace(state.store_owned_key(key), value);
+    map.emplace(state.store_owned_string(std::move(key)), value);
 
     state.skip_whitespace_and_newlines();
 
@@ -649,8 +642,7 @@ Node Node::Load(std::string_view yaml_str) {
 // YamlDocument implementation
 YamlDocument::YamlDocument(std::string source) : source_(std::move(source)) {
   ParseState state{source_};
-  // Reserve capacity to prevent reallocation during parsing which would invalidate string_views
-  state.owned_strings.reserve(100); // Reserve space for typical number of escaped strings/keys
+  // Note: unordered_set automatically deduplicates strings and maintains stable references
 
   try {
     root_ = parse_document(state);
