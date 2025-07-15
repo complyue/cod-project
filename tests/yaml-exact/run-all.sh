@@ -55,10 +55,11 @@ test_exact_printing() {
     echo -e "${GREEN}PASS${NC}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
   else
+    local exit_code=$?
     echo -e "${RED}FAIL${NC}"
     TESTS_FAILED=$((TESTS_FAILED + 1))
     echo "  File: $yaml_file"
-    echo "  Test failed with exit code $?"
+    echo "  Test failed with exit code $exit_code"
   fi
 }
 
@@ -76,10 +77,11 @@ test_parsing() {
     echo -e "${GREEN}PASS${NC}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
   else
+    local exit_code=$?
     echo -e "${RED}FAIL${NC} (parse error)"
     TESTS_FAILED=$((TESTS_FAILED + 1))
     echo "  File: $file"
-    echo "  Parser failed with exit code $?"
+    echo "  Parser failed with exit code $exit_code"
   fi
 }
 

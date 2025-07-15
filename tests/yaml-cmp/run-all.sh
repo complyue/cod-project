@@ -62,6 +62,7 @@ run_test() {
       TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
   else
+    local exit_code=$?
     if [[ "$should_pass" == "fail" ]]; then
       echo -e "${GREEN}PASS${NC} (expected failure)"
       TESTS_PASSED=$((TESTS_PASSED + 1))
@@ -69,7 +70,7 @@ run_test() {
       echo -e "${RED}FAIL${NC}"
       TESTS_FAILED=$((TESTS_FAILED + 1))
       echo "  Command: $YAMLCMP_BIN $extra_args $file1 $file2"
-      echo "  Failed with exit code $?"
+      echo "  Failed with exit code $exit_code"
     fi
   fi
 }
@@ -88,10 +89,11 @@ test_parsing() {
     echo -e "${GREEN}PASS${NC}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
   else
+    local exit_code=$?
     echo -e "${RED}FAIL${NC} (parse error)"
     TESTS_FAILED=$((TESTS_FAILED + 1))
     echo "  File: $file"
-    echo "  Parser failed with exit code $?"
+    echo "  Parser failed with exit code $exit_code"
   fi
 }
 

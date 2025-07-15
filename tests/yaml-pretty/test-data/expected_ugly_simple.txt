@@ -1,0 +1,4 @@
+ROOT: MAP (3 entries)
+  KEY: "name" -> STRING: "John Doe"
+  KEY: "age" -> INT: 30
+  KEY: "active" -> BOOL: true 

@@ -1,0 +1,15 @@
+ROOT: MAP (1 entries)
+  KEY: "person" -> MAP (4 entries)
+    KEY: "name" -> STRING: "Alice"
+    KEY: "age" -> INT: 25
+    KEY: "address" -> MAP (3 entries)
+      KEY: "street" -> STRING: "123 Main St"
+      KEY: "city" -> STRING: "Boston"
+      KEY: "zipcode" -> INT: 12345
+    KEY: "hobbies" -> SEQUENCE (3 items)
+      [0]:
+        ITEM: STRING: "reading"
+      [1]:
+        ITEM: STRING: "swimming"
+      [2]:
+        ITEM: STRING: "coding" 
