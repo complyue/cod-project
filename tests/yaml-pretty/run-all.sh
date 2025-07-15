@@ -148,6 +148,7 @@ echo "--- Comparison Tests (ugly vs expected) ---"
 test_comparison "Ugly simple YAML format" "$TEST_DATA_DIR/ugly_simple.yaml" "$TEST_DATA_DIR/expected_ugly_simple.txt"
 test_comparison "Ugly nested YAML format" "$TEST_DATA_DIR/ugly_nested.yaml" "$TEST_DATA_DIR/expected_ugly_nested.txt"
 test_comparison "Ugly mixed types YAML format" "$TEST_DATA_DIR/ugly_mixed.yaml" "$TEST_DATA_DIR/expected_ugly_mixed.txt"
+test_comparison "Ugly mixed spaces/tabs indentation" "$TEST_DATA_DIR/ugly_mixed_indent.yaml" "$TEST_DATA_DIR/expected_ugly_mixed_indent.txt"
 
 echo "--- Quick Parse Tests (silent) ---"
 
