@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstring>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <variant>
 #include <vector>
@@ -247,6 +248,80 @@ std::string_view parse_unquoted_scalar(ParseState &state) {
   return state.make_view(start_pos, end_pos);
 }
 
+// Validate if a string represents a valid number according to YAML/JSON standards
+bool is_valid_number(std::string_view text) {
+  if (text.empty())
+    return false;
+
+  size_t i = 0;
+
+  // Handle optional sign
+  if (text[i] == '+' || text[i] == '-') {
+    i++;
+    if (i >= text.size())
+      return false; // Just a sign is not a number
+  }
+
+  // Must have at least one digit
+  if (i >= text.size() || !std::isdigit(text[i])) {
+    return false;
+  }
+
+  // Parse integer part
+  if (text[i] == '0') {
+    // Leading zero only allowed for 0, 0.xxx, or 0e/E
+    i++;
+    if (i < text.size() && std::isdigit(text[i])) {
+      return false; // Invalid: 01, 02, etc.
+    }
+  } else {
+    // Non-zero digit followed by more digits
+    while (i < text.size() && std::isdigit(text[i])) {
+      i++;
+    }
+  }
+
+  // Optional decimal part
+  if (i < text.size() && text[i] == '.') {
+    i++;
+    if (i >= text.size() || !std::isdigit(text[i])) {
+      return false; // Dot must be followed by digits
+    }
+    while (i < text.size() && std::isdigit(text[i])) {
+      i++;
+    }
+  }
+
+  // Optional exponent part
+  if (i < text.size() && (text[i] == 'e' || text[i] == 'E')) {
+    i++;
+    if (i >= text.size())
+      return false; // 'e' must be followed by something
+
+    // Optional sign in exponent
+    if (text[i] == '+' || text[i] == '-') {
+      i++;
+    }
+
+    if (i >= text.size() || !std::isdigit(text[i])) {
+      return false; // Exponent must have digits
+    }
+
+    while (i < text.size() && std::isdigit(text[i])) {
+      i++;
+    }
+  }
+
+  // Must have consumed entire string
+  return i == text.size();
+}
+
+// Check if number contains decimal point or scientific notation
+bool contains_decimal_or_scientific(std::string_view text) {
+  return text.find('.') != std::string_view::npos || text.find('e') != std::string_view::npos ||
+         text.find('E') != std::string_view::npos;
+}
+
 Node parse_scalar_value(std::string_view scalar_text) {
   if (scalar_text.empty() || scalar_text == "null" || scalar_text == "~") {
     return Node(std::monostate{});
@@ -260,34 +335,32 @@ Node parse_scalar_value(std::string_view scalar_text) {
     return Node(false);
   }
 
-  // Try to parse as number (only if it looks numeric)
-  if (!scalar_text.empty() && (std::isdigit(scalar_text[0]) ||
-                               (scalar_text[0] == '-' && scalar_text.size() > 1 && std::isdigit(scalar_text[1])))) {
-    bool is_number = true;
-    bool has_dot = false;
-
-    for (size_t i = 0; i < scalar_text.size(); ++i) {
-      char c = scalar_text[i];
-      if (i == 0 && c == '-') {
-        continue; // Allow leading minus
-      } else if (c == '.' && !has_dot) {
-        has_dot = true;
-      } else if (!std::isdigit(c)) {
-        is_number = false;
-        break;
-      }
-    }
-
-    if (is_number && scalar_text != "-") { // Don't parse standalone "-" as number
-      try {
-        if (has_dot) {
-          return Node(std::stod(std::string(scalar_text)));
-        } else {
-          return Node(static_cast<int64_t>(std::stoll(std::string(scalar_text))));
+  // Try to parse as number with comprehensive validation
+  if (!scalar_text.empty() && is_valid_number(scalar_text)) {
+    try {
+      if (contains_decimal_or_scientific(scalar_text)) {
+        double value = std::stod(std::string(scalar_text));
+        // Check for overflow/underflow
+        if (std::isfinite(value)) {
+          return Node(value);
         }
-      } catch (...) {
-        // Fall through to string
+      } else {
+        // Integer parsing with overflow checking
+        try {
+          int64_t value = std::stoll(std::string(scalar_text));
+          return Node(value);
+        } catch (const std::out_of_range &) {
+          // Try as double if integer overflows
+          double value = std::stod(std::string(scalar_text));
+          if (std::isfinite(value)) {
+            return Node(value);
+          }
+        }
       }
+    } catch (const std::invalid_argument &) {
+      // Not a valid number, fall through to string
+    } catch (const std::out_of_range &) {
+      // Number too large, fall through to string
     }
   }
 
