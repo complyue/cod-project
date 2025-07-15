@@ -84,6 +84,14 @@ struct ParseState {
     owned_strings.push_back(std::move(str));
     return std::string_view(owned_strings.back());
   }
+
+  // Store a key (as string) and return a view to it (for map keys)
+  std::string_view store_owned_key(std::string_view key) {
+    // Always store keys as owned strings to avoid any lifetime issues
+    // This ensures all map keys remain valid for the document's lifetime
+    owned_strings.push_back(std::string(key));
+    return std::string_view(owned_strings.back());
+  }
 };
 
 // Forward declarations
@@ -375,7 +383,7 @@ Node parse_mapping(ParseState &state, size_t base_indent) {
           state.advance();
       }
 
-      map.emplace(std::string(key), value);
+      map.emplace(state.store_owned_key(key), value);
     } else {
       // Wrong indentation, we're done
       break;
@@ -550,7 +558,7 @@ Node parse_json_mapping(ParseState &state) {
 
     // Parse value - need to parse JSON values specially to avoid comma issues
     Node value = parse_json_value(state);
-    map.emplace(key, value);
+    map.emplace(state.store_owned_key(key), value);
 
     state.skip_whitespace_and_newlines();
 
@@ -620,11 +628,14 @@ Node Node::Load(std::string_view yaml_str) {
 // YamlDocument implementation
 YamlDocument::YamlDocument(std::string source) : source_(std::move(source)) {
   ParseState state{source_};
+  // Reserve capacity to prevent reallocation during parsing which would invalidate string_views
+  state.owned_strings.reserve(100); // Reserve space for typical number of escaped strings/keys
+
   try {
     root_ = parse_document(state);
     // Transfer ownership of escaped strings from ParseState to this document
-    // The owned_strings from the parse state become part of the document's lifetime
-    // Since we're using string_view into source_, this ensures all views remain valid
+    // This ensures all string_views in nodes remain valid for the document's lifetime
+    owned_strings_ = std::move(state.owned_strings);
   } catch (const std::exception &e) {
     throw ParseError("YAML parse error at line " + std::to_string(state.line) + ", column " +
                      std::to_string(state.column) + ": " + e.what());

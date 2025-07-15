@@ -320,8 +320,9 @@ struct Node {
 // All yaml nodes must not outlive the document that created them
 class YamlDocument {
 private:
-  std::string source_; // Owns the original YAML string
-  Node root_;          // Root node of the parsed document
+  std::string source_;                     // Owns the original YAML string
+  Node root_;                              // Root node of the parsed document
+  std::vector<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference
 
 public:
   explicit YamlDocument(std::string source);

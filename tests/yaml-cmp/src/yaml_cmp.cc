@@ -54,7 +54,7 @@ static bool yaml_subset(const Node &expected, const Node &actual) {
     const auto &e_map = std::get<Map>(expected.value);
     const auto &a_map = std::get<Map>(actual.value);
     for (const auto &e_entry : e_map) {
-      const std::string &key = e_entry.key;
+      const auto &key = e_entry.key; // Keep as string_view - caller must keep YamlDocument alive
       auto it = a_map.find(key);
       if (it == a_map.end() || !yaml_subset(e_entry.value, it->value))
         return false;
@@ -80,8 +80,10 @@ int main(int argc, char **argv) {
   fs::path expected_path = argv[argi];
   fs::path actual_path = argv[argi + 1];
   try {
-    Node expected_node = Node::Load(read_file(expected_path));
-    Node actual_node = Node::Load(read_file(actual_path));
+    auto expected_doc = shilos::yaml::YamlDocument::Parse(read_file(expected_path));
+    auto actual_doc = shilos::yaml::YamlDocument::Parse(read_file(actual_path));
+    const Node &expected_node = expected_doc.root();
+    const Node &actual_node = actual_doc.root();
     bool ok = subset_mode ? yaml_subset(expected_node, actual_node)
                           : (yaml_subset(expected_node, actual_node) && yaml_subset(actual_node, expected_node));
     if (!ok) {
@@ -97,4 +99,4 @@ int main(int argc, char **argv) {
     return 1;
   }
   return 0;
-} 
+}
