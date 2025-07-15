@@ -20,6 +20,7 @@ enum class IndentRelation { Less, Equal, Greater, Incompatible };
 // Parser state that tracks the source string for creating string_views
 struct ParseState {
   std::string_view input;
+  size_t line_begin_pos = 0;
   size_t pos = 0;
   size_t line = 1;
   size_t column = 1;
@@ -36,10 +37,12 @@ struct ParseState {
       if (input[pos] == '\n') {
         line++;
         column = 1;
+        pos++;
+        line_begin_pos = pos; // Update line_begin_pos to start of new line
       } else {
         column++;
+        pos++;
       }
-      pos++;
     }
   }
 
@@ -62,24 +65,8 @@ struct ParseState {
     }
   }
 
-  // New indentation API - consumes and returns the indentation as string_view
-  std::string_view consume_indentation() {
-    size_t start_pos = pos;
-    while (pos < input.size() && (input[pos] == ' ' || input[pos] == '\t')) {
-      advance();
-    }
-    return make_view(start_pos, pos);
-  }
-
-  // Peek at indentation without consuming
-  std::string_view peek_indentation() const {
-    size_t start_pos = pos;
-    size_t temp_pos = pos;
-    while (temp_pos < input.size() && (input[temp_pos] == ' ' || input[temp_pos] == '\t')) {
-      temp_pos++;
-    }
-    return make_view(start_pos, temp_pos);
-  }
+  // Get current line's indentation (from line_begin_pos to current non-whitespace pos)
+  std::string_view current_line_indentation() const { return make_view(line_begin_pos, pos); }
 
   bool at_end() const { return pos >= input.size(); }
 
@@ -144,25 +131,31 @@ bool is_indentation_greater(std::string_view current, std::string_view base) {
 
 // Forward declarations
 Node parse_document(ParseState &state);
-Node parse_value(ParseState &state, std::string_view min_indent = {});
-Node parse_mapping(ParseState &state, std::string_view base_indent);
-Node parse_sequence(ParseState &state, std::string_view base_indent);
+Node parse_value(ParseState &state);
+Node parse_mapping(ParseState &state);
+Node parse_sequence(ParseState &state);
 Node parse_json_mapping(ParseState &state);
 Node parse_json_sequence(ParseState &state);
 Node parse_json_value(ParseState &state);
 std::string_view parse_scalar(ParseState &state);
 
-void skip_comments_and_empty_lines(ParseState &state) {
+void advance_to_next_content(ParseState &state) {
   while (!state.at_end()) {
+    // Skip whitespace at start of line
     state.skip_whitespace_inline();
+
     if (state.current() == '#') {
+      // Skip comment line
       state.skip_to_end_of_line();
       if (state.current() == '\n') {
-        state.advance();
+        state.advance(); // This will update line_begin_pos
       }
     } else if (state.current() == '\n' || state.current() == '\r') {
-      state.advance();
+      // Skip empty line
+      state.advance(); // This will update line_begin_pos
     } else {
+      // Found content - pos is now at first non-whitespace char
+      // line_begin_pos to pos represents the indentation
       break;
     }
   }
@@ -309,48 +302,35 @@ std::string_view parse_scalar(ParseState &state) {
   }
 }
 
-Node parse_sequence(ParseState &state, std::string_view base_indent) {
+Node parse_sequence(ParseState &state) {
   Node node;
   node.value = Sequence{};
   auto &seq = std::get<Sequence>(node.value);
 
   while (!state.at_end()) {
-    skip_comments_and_empty_lines(state);
+    advance_to_next_content(state);
     if (state.at_end())
       break;
 
-    std::string_view current_indent = state.consume_indentation();
+    // Check for list item marker
+    if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+      // This is a list item, parse it as part of this sequence
 
-    // If indentation decreased, we're done with this sequence
-    auto relation = compare_indentation(current_indent, base_indent);
-    if (relation == IndentRelation::Less || relation == IndentRelation::Incompatible) {
-      break;
-    }
+      state.advance(); // Skip '-'
+      state.skip_whitespace_inline();
 
-    // If indentation is at base level, check for list item
-    if (relation == IndentRelation::Equal) {
-      if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
-
-        state.advance(); // Skip '-'
-        state.skip_whitespace_inline();
-
-        if (state.current() == '\n' || state.at_end()) {
-          // Empty list item
-          seq.push_back(Node(std::monostate{}));
-          if (state.current() == '\n')
-            state.advance();
-        } else {
-          // Parse the list item value - create indentation for nested content
-          std::string nested_indent = std::string(current_indent) + "  ";
-          Node item = parse_value(state, nested_indent);
-          seq.push_back(item);
-        }
+      if (state.current() == '\n' || state.at_end()) {
+        // Empty list item
+        seq.push_back(Node(std::monostate{}));
+        if (state.current() == '\n')
+          state.advance();
       } else {
-        // Not a list item at this level, we're done
-        break;
+        // Parse the list item value - let parse_value detect natural indentation
+        Node item = parse_value(state);
+        seq.push_back(item);
       }
     } else {
-      // Wrong indentation, we're done
+      // Not a list item, we're done with this sequence
       break;
     }
   }
@@ -358,116 +338,104 @@ Node parse_sequence(ParseState &state, std::string_view base_indent) {
   return node;
 }
 
-Node parse_mapping(ParseState &state, std::string_view base_indent) {
+Node parse_mapping(ParseState &state) {
   Node node;
   node.value = Map{};
   auto &map = std::get<Map>(node.value);
 
+  // Track the minimum indentation required for keys in this mapping
+  std::string_view min_key_indent;
+
   while (!state.at_end()) {
-    skip_comments_and_empty_lines(state);
+    advance_to_next_content(state);
     if (state.at_end())
       break;
 
-    std::string_view current_indent = state.consume_indentation();
+    std::string_view current_indent = state.current_line_indentation();
 
-    // If indentation decreased, we're done with this mapping
-    auto relation = compare_indentation(current_indent, base_indent);
-    if (relation == IndentRelation::Less || relation == IndentRelation::Incompatible) {
+    // Check if this is actually a sequence item (starts with -)
+    if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+      // This is a sequence, not a mapping, so we're done with this mapping
       break;
     }
 
-    // If indentation is at base level, parse key-value pair
-    if (relation == IndentRelation::Equal) {
-      state.skip_whitespace_inline();
-
-      // Check if this is actually a sequence item (starts with -)
-      if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
-        // This is a sequence, not a mapping, so we're done with this mapping
-        break;
-      }
-
-      // Parse key
-      std::string_view key = parse_scalar(state);
-      if (key.empty())
-        break;
-
-      state.skip_whitespace_inline();
-
-      // Expect colon
-      if (state.current() != ':') {
-        throw ParseError("Expected ':' after key '" + std::string(key) + "' at line " + std::to_string(state.line));
-      }
-
-      state.advance(); // Skip ':'
-      state.skip_whitespace_inline();
-
-      // Parse value
-      Node value;
-      if (state.current() == '\n' || state.at_end()) {
-        // Value is on next line(s) or null
-        if (state.current() == '\n')
-          state.advance();
-        skip_comments_and_empty_lines(state);
-
-        std::string_view next_indent = state.peek_indentation();
-        auto next_relation = compare_indentation(next_indent, current_indent);
-        if (state.at_end() || next_relation != IndentRelation::Greater) {
-          // No value or value at same/lower indentation = null
-          value = Node(std::monostate{});
-        } else {
-          // Value on next line with higher indentation
-          std::string nested_indent = std::string(current_indent) + "  ";
-          value = parse_value(state, nested_indent);
-        }
-      } else {
-        // Value on same line
-        if (state.current() == '"' || state.current() == '\'') {
-          // Quoted strings should be treated as strings directly (even if empty)
-          std::string_view str = parse_quoted_string(state);
-          value = Node(std::string_view(str));
-        } else {
-          value = parse_value(state, current_indent);
-        }
-
-        // Skip to end of line
-        state.skip_whitespace_inline();
-        if (state.current() == '\n')
-          state.advance();
-      }
-
-      map.emplace(state.store_owned_key(key), value);
+    // Set minimum key indentation from first key
+    if (min_key_indent.empty()) {
+      min_key_indent = current_indent;
     } else {
-      // Wrong indentation, we're done
-      break;
+      // Check if this key meets the minimum indentation requirement
+      auto relation = compare_indentation(current_indent, min_key_indent);
+      if (relation == IndentRelation::Less || relation == IndentRelation::Incompatible) {
+        // Indentation is less than minimum, this key belongs to a parent level
+        break;
+      }
+      // Keys can have equal or greater indentation than the minimum and still be siblings
     }
+
+    // Parse key
+    std::string_view key = parse_scalar(state);
+    if (key.empty())
+      break;
+
+    state.skip_whitespace_inline();
+
+    // Expect colon
+    if (state.current() != ':') {
+      throw ParseError("Expected ':' after key '" + std::string(key) + "' at line " + std::to_string(state.line));
+    }
+
+    state.advance(); // Skip ':'
+    state.skip_whitespace_inline();
+
+    // Parse value
+    Node value;
+    if (state.current() == '\n' || state.at_end()) {
+      // Value is on next line(s) or null
+      if (state.current() == '\n')
+        state.advance();
+      advance_to_next_content(state);
+
+      std::string_view next_indent = state.current_line_indentation();
+      auto next_relation = compare_indentation(next_indent, current_indent);
+      if (state.at_end() || next_relation != IndentRelation::Greater) {
+        // No value or value at same/lower indentation = null
+        value = Node(std::monostate{});
+      } else {
+        // Value on next line with higher indentation - let parse_value detect natural indentation
+        value = parse_value(state);
+      }
+    } else {
+      // Value on same line
+      if (state.current() == '"' || state.current() == '\'') {
+        // Quoted strings should be treated as strings directly (even if empty)
+        std::string_view str = parse_quoted_string(state);
+        value = Node(std::string_view(str));
+      } else {
+        value = parse_value(state);
+      }
+
+      // Skip to end of line
+      state.skip_whitespace_inline();
+      if (state.current() == '\n')
+        state.advance();
+    }
+
+    map.emplace(state.store_owned_key(key), value);
   }
 
   return node;
 }
 
-Node parse_value(ParseState &state, std::string_view min_indent) {
-  skip_comments_and_empty_lines(state);
+Node parse_value(ParseState &state) {
+  advance_to_next_content(state);
   if (state.at_end()) {
     return Node(std::monostate{});
   }
 
-  std::string_view current_indent = state.consume_indentation();
-
-  // Check for sequence (list starting with -) BEFORE skipping whitespace
-  auto relation = compare_indentation(current_indent, min_indent);
-  if (relation == IndentRelation::Equal || relation == IndentRelation::Greater) {
-    // Temporarily advance to check for sequence marker
-    size_t saved_pos = state.pos;
-    state.skip_whitespace_inline();
-
-    if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
-      // Restore position and parse as sequence
-      state.pos = saved_pos;
-      return parse_sequence(state, current_indent);
-    }
-
-    // Restore position for other parsing
-    state.pos = saved_pos;
+  // Check for sequence (list starting with -)
+  if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+    // Parse as sequence
+    return parse_sequence(state);
   }
 
   state.skip_whitespace_inline();
@@ -523,7 +491,7 @@ Node parse_value(ParseState &state, std::string_view min_indent) {
   state.column = saved_column;
 
   if (looks_like_mapping) {
-    return parse_mapping(state, current_indent);
+    return parse_mapping(state);
   }
 
   // Otherwise, parse as scalar
@@ -659,12 +627,12 @@ Node parse_json_sequence(ParseState &state) {
 }
 
 Node parse_document(ParseState &state) {
-  skip_comments_and_empty_lines(state);
+  advance_to_next_content(state);
   if (state.at_end()) {
     return Node(std::monostate{});
   }
 
-  return parse_value(state, {});
+  return parse_value(state);
 }
 
 // Deprecated Node::Load implementation for backward compatibility

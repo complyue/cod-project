@@ -1,14 +1,11 @@
-person:
-  name: "Alice"
+person: 
+  name: Alice
   age: 25
-  address:
+  address: 
     street: "123 Main St"
-    city: "Boston"
+    city: Boston
     zipcode: 12345
-  hobbies:
-    - "reading"
-    - "swimming"
-    - "coding"
-  contact:
-    email: "alice@example.com"
-    phone: null 
+  hobbies: 
+    - reading
+    - swimming
+    - coding

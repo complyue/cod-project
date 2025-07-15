@@ -111,12 +111,15 @@ test_ugly_to_pretty() {
     TESTS_FAILED=$((TESTS_FAILED + 1))
     echo "  Expected: $pretty_file"
     echo "  Actual output differs"
+    echo "  --- DIFF (expected vs actual) ---"
+    diff -u "$pretty_file" "$temp_output" || true
+    echo "  --- END DIFF ---"
     if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
-      echo "  --- EXPECTED ---"
+      echo "  --- EXPECTED CONTENT ---"
       cat "$pretty_file"
-      echo "  --- ACTUAL ---"
+      echo "  --- ACTUAL CONTENT ---"
       cat "$temp_output"
-      echo "  --- END DIFF ---"
+      echo "  --- END CONTENT ---"
     fi
     local result=1
   fi
@@ -153,12 +156,15 @@ test_pretty_idempotency() {
     TESTS_FAILED=$((TESTS_FAILED + 1))
     echo "  Input: $pretty_file"
     echo "  Output differs from input - not idempotent!"
+    echo "  --- DIFF (original vs after pretty-print) ---"
+    diff -u "$pretty_file" "$temp_output" || true
+    echo "  --- END DIFF ---"
     if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
-      echo "  --- ORIGINAL ---"
+      echo "  --- ORIGINAL CONTENT ---"
       cat "$pretty_file"
-      echo "  --- AFTER PRETTY-PRINT ---"
+      echo "  --- AFTER PRETTY-PRINT CONTENT ---"
       cat "$temp_output"
-      echo "  --- END DIFF ---"
+      echo "  --- END CONTENT ---"
     fi
     local result=1
   fi

@@ -1,20 +1,3 @@
-server:
+server: 
   name: web-server
-  port: 8080
-  ssl:
-    enabled: true
-    certificate: "/path/to/cert.pem"
-    key: "/path/to/key.pem"
-  database:
-    host: localhost
-    port: 5432
-    credentials:
-      username: admin
-      password: secret123
-  logging:
-    level: info
-    format: json
-    handlers:
-      - console
-      - file
-      - syslog 
+port: 8080
