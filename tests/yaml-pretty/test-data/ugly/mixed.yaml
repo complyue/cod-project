@@ -1,0 +1,10 @@
+config:
+  version:    1.2
+  enabled: true
+  tags:   [ "production" ,  "web", "api"  ] 
+  limits:
+    memory:    512
+    cpu:   2.5  
+  metadata:
+    created:   "2023-01-01"
+    owner:  null 

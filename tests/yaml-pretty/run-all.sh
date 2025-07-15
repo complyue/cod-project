@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# run-all.sh – YAML pretty print debug test suite
+# run-all.sh – YAML pretty print test suite
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 TEST_DATA_DIR="$SCRIPT_DIR/test-data"
+UGLY_DIR="$TEST_DATA_DIR/ugly"
+PRETTY_DIR="$TEST_DATA_DIR/pretty"
 
 # Set default COD_TEST_TOOLCHAIN if not already set
 export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
@@ -21,7 +23,45 @@ TESTS_RUN=0
 TESTS_PASSED=0
 TESTS_FAILED=0
 
+# Diagnostic mode flag
+DIAGNOSTIC_MODE=false
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --diagnostic|-d)
+      DIAGNOSTIC_MODE=true
+      shift
+      ;;
+    --help|-h)
+      cat << EOF
+Usage: $0 [OPTIONS]
+
+YAML Pretty Print Test Suite
+
+This test suite verifies the YAML pretty printer by:
+1. Converting ugly YAML files to pretty format and comparing with expected output
+2. Testing idempotency by pretty-printing already pretty files
+
+OPTIONS:
+  --diagnostic, -d    Enable diagnostic output showing structural tree dumps
+  --help, -h         Show this help message
+
+EOF
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Use --help for usage information"
+      exit 1
+      ;;
+  esac
+done
+
 echo "🔧 Using toolchain mode: $COD_TEST_TOOLCHAIN"
+if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
+  echo "🔍 Diagnostic mode enabled - will show structural tree dumps"
+fi
 
 # Configure build directory if first run
 if [[ ! -f "$BUILD_DIR/Build.ninja" && ! -f "$BUILD_DIR/Makefile" ]]; then
@@ -42,121 +82,140 @@ fi
 echo -e "${GREEN}✓ yaml-pretty built successfully${NC}"
 echo
 
-# Test function for parsing and debug output
-test_debug_parsing() {
+# Test function for ugly->pretty transformation
+test_ugly_to_pretty() {
   local test_name="$1"
-  local yaml_file="$2"
+  local ugly_file="$2"
+  local pretty_file="$3"
   
   TESTS_RUN=$((TESTS_RUN + 1))
   
-  echo -e "${BLUE}=== Test $TESTS_RUN: $test_name ===${NC}"
-  echo "File: $yaml_file"
+  echo -n "Test $TESTS_RUN: $test_name (ugly→pretty)... "
   
-  # Always show the debug output, even if it fails
-  if $YAML_PRETTY_BIN "$yaml_file" 2>&1; then
-    echo -e "${GREEN}✓ $test_name completed successfully${NC}"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-  else
-    local exit_code=$?
-    echo -e "${RED}✗ $test_name failed with exit code $exit_code${NC}"
-    TESTS_FAILED=$((TESTS_FAILED + 1))
-  fi
-  echo
-}
-
-# Test function for basic parsing (should not crash)
-test_parsing_only() {
-  local test_name="$1"
-  local file="$2"
-  
-  TESTS_RUN=$((TESTS_RUN + 1))
-  
-  echo -n "Parse test $TESTS_RUN: $test_name... "
-  
-  # Try to parse the file silently
-  if $YAML_PRETTY_BIN "$file" >/dev/null 2>&1; then
-    echo -e "${GREEN}PASS${NC}"
-    TESTS_PASSED=$((TESTS_PASSED + 1))
-  else
-    local exit_code=$?
+  # Generate pretty output from ugly file
+  local temp_output=$(mktemp)
+  if ! $YAML_PRETTY_BIN "$ugly_file" 2>/dev/null > "$temp_output"; then
     echo -e "${RED}FAIL${NC} (parse error)"
     TESTS_FAILED=$((TESTS_FAILED + 1))
-    echo "  File: $file"
-    echo "  Parser failed with exit code $exit_code"
+    rm -f "$temp_output"
+    return 1
   fi
+  
+  # Compare with expected pretty file
+  if cmp -s "$temp_output" "$pretty_file"; then
+    echo -e "${GREEN}PASS${NC}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+    local result=0
+  else
+    echo -e "${RED}FAIL${NC} (output mismatch)"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+    echo "  Expected: $pretty_file"
+    echo "  Actual output differs"
+    if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
+      echo "  --- EXPECTED ---"
+      cat "$pretty_file"
+      echo "  --- ACTUAL ---"
+      cat "$temp_output"
+      echo "  --- END DIFF ---"
+    fi
+    local result=1
+  fi
+  
+  rm -f "$temp_output"
+  return $result
 }
 
-# Test function for comparing parsed output against expected output
-test_comparison() {
+# Test function for pretty->pretty idempotency
+test_pretty_idempotency() {
   local test_name="$1"
-  local yaml_file="$2"
-  local expected_file="$3"
+  local pretty_file="$2"
   
   TESTS_RUN=$((TESTS_RUN + 1))
   
-  echo -n "Comparison test $TESTS_RUN: $test_name... "
+  echo -n "Test $TESTS_RUN: $test_name (pretty→pretty idempotency)... "
   
-  # Run comparison test
-  if $YAML_PRETTY_BIN --compare "$yaml_file" "$expected_file" >/dev/null 2>&1; then
+  # Generate pretty output from already pretty file
+  local temp_output=$(mktemp)
+  if ! $YAML_PRETTY_BIN "$pretty_file" 2>/dev/null > "$temp_output"; then
+    echo -e "${RED}FAIL${NC} (parse error)"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+    rm -f "$temp_output"
+    return 1
+  fi
+  
+  # Compare with original pretty file - should be identical
+  if cmp -s "$temp_output" "$pretty_file"; then
     echo -e "${GREEN}PASS${NC}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
+    local result=0
   else
-    local exit_code=$?
-    echo -e "${RED}FAIL${NC} (comparison mismatch)"
+    echo -e "${RED}FAIL${NC} (idempotency violation)"
     TESTS_FAILED=$((TESTS_FAILED + 1))
-    echo "  YAML file: $yaml_file"
-    echo "  Expected file: $expected_file"
-    echo "  Comparison failed with exit code $exit_code"
-    echo "  Run manually: $YAML_PRETTY_BIN --compare \"$yaml_file\" \"$expected_file\""
+    echo "  Input: $pretty_file"
+    echo "  Output differs from input - not idempotent!"
+    if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
+      echo "  --- ORIGINAL ---"
+      cat "$pretty_file"
+      echo "  --- AFTER PRETTY-PRINT ---"
+      cat "$temp_output"
+      echo "  --- END DIFF ---"
+    fi
+    local result=1
+  fi
+  
+  rm -f "$temp_output"
+  return $result
+}
+
+# Show diagnostic tree dump if requested
+show_diagnostic_tree() {
+  local file="$1"
+  local label="$2"
+  
+  if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
+    echo -e "${BLUE}=== $label: Structural Tree Dump ===${NC}"
+    $YAML_PRETTY_BIN --verbose "$file" 2>/dev/null | sed -n '/=== PARSED TREE ===/,/=== FORMAT_YAML OUTPUT ===/p' | head -n -1
+    echo
   fi
 }
 
-echo "=== YAML Pretty Print Debug Suite ==="
+echo "=== YAML Pretty Print Test Suite ==="
 echo
 
-# Test 1: Built-in test suite
-echo "--- Built-in Test Suite ---"
-echo "Running yaml-pretty --test-all..."
-if $YAML_PRETTY_BIN --test-all; then
-  echo -e "${GREEN}✓ Built-in tests completed${NC}"
-else
-  echo -e "${YELLOW}⚠ Built-in tests had issues (continuing with file tests)${NC}"
-fi
-echo
-
-# Test 2: Debug parsing with detailed output
-echo "--- Debug Parsing Tests (with full output) ---"
-
-# Test our created test files
-test_debug_parsing "Simple YAML structure" "$TEST_DATA_DIR/simple.yaml"
-test_debug_parsing "Nested YAML structure" "$TEST_DATA_DIR/nested.yaml"
-test_debug_parsing "Mixed types YAML" "$TEST_DATA_DIR/mixed.yaml"
-
-# Test the problematic file from yaml-cmp
-YAML_CMP_TEST_DIR="$SCRIPT_DIR/../yaml-cmp/test-data"
-if [[ -f "$YAML_CMP_TEST_DIR/nested_yaml.yaml" ]]; then
-  test_debug_parsing "Problematic nested YAML (from yaml-cmp)" "$YAML_CMP_TEST_DIR/nested_yaml.yaml"
+# Find all test files in ugly/ directory
+if [[ ! -d "$UGLY_DIR" ]]; then
+  echo -e "${RED}✗ Test data directory not found: $UGLY_DIR${NC}"
+  exit 1
 fi
 
-if [[ -f "$YAML_CMP_TEST_DIR/nested_json.yaml" ]]; then
-  test_debug_parsing "JSON-style nested YAML (from yaml-cmp)" "$YAML_CMP_TEST_DIR/nested_json.yaml"
+if [[ ! -d "$PRETTY_DIR" ]]; then
+  echo -e "${RED}✗ Test data directory not found: $PRETTY_DIR${NC}"
+  exit 1
 fi
 
-echo "--- Comparison Tests (ugly vs expected) ---"
+# Run tests for each file pair
+echo "--- Pretty Print Transformation Tests ---"
 
-# Test our ugly files against expected outputs
-test_comparison "Ugly simple YAML format" "$TEST_DATA_DIR/ugly_simple.yaml" "$TEST_DATA_DIR/expected_ugly_simple.txt"
-test_comparison "Ugly nested YAML format" "$TEST_DATA_DIR/ugly_nested.yaml" "$TEST_DATA_DIR/expected_ugly_nested.txt"
-test_comparison "Ugly mixed types YAML format" "$TEST_DATA_DIR/ugly_mixed.yaml" "$TEST_DATA_DIR/expected_ugly_mixed.txt"
-test_comparison "Ugly mixed spaces/tabs indentation" "$TEST_DATA_DIR/ugly_mixed_indent.yaml" "$TEST_DATA_DIR/expected_ugly_mixed_indent.txt"
-
-echo "--- Quick Parse Tests (silent) ---"
-
-# Quick parsing tests for any other test files we can find
-for test_file in "$TEST_DATA_DIR"/*.yaml; do
-  if [[ -f "$test_file" ]]; then
-    basename_file=$(basename "$test_file")
-    test_parsing_only "Parse check: $basename_file" "$test_file"
+for ugly_file in "$UGLY_DIR"/*.yaml; do
+  if [[ -f "$ugly_file" ]]; then
+    basename_file=$(basename "$ugly_file")
+    pretty_file="$PRETTY_DIR/$basename_file"
+    test_name=$(basename "$basename_file" .yaml)
+    
+    if [[ -f "$pretty_file" ]]; then
+      # Show diagnostic output if requested
+      show_diagnostic_tree "$ugly_file" "UGLY $test_name"
+      show_diagnostic_tree "$pretty_file" "PRETTY $test_name"
+      
+      # Test ugly->pretty transformation
+      test_ugly_to_pretty "$test_name" "$ugly_file" "$pretty_file"
+      
+      # Test pretty->pretty idempotency
+      test_pretty_idempotency "$test_name" "$pretty_file"
+      
+    else
+      echo -e "${YELLOW}⚠ Missing pretty file for $basename_file (skipping)${NC}"
+    fi
   fi
 done
 
@@ -167,11 +226,13 @@ echo -e "Tests passed: ${GREEN}$TESTS_PASSED${NC}"
 echo -e "Tests failed: ${RED}$TESTS_FAILED${NC}"
 
 if [[ $TESTS_FAILED -eq 0 ]]; then
-  echo -e "${GREEN}✓ All tests completed successfully!${NC}"
-  echo "✔ yaml-pretty debug test suite finished"
+  echo -e "${GREEN}✓ All tests passed!${NC}"
+  echo "✔ YAML pretty print functionality is working correctly"
   exit 0
 else
-  echo -e "${YELLOW}⚠ Some tests failed - check debug output above${NC}"
-  echo "The failed tests may help identify YAML parsing issues."
+  echo -e "${RED}✗ Some tests failed${NC}"
+  if [[ "$DIAGNOSTIC_MODE" != "true" ]]; then
+    echo "💡 Run with --diagnostic flag to see detailed output for debugging"
+  fi
   exit 1
 fi 
