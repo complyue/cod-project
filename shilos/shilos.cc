@@ -14,11 +14,13 @@
 namespace shilos {
 namespace yaml {
 
+// Parser state that tracks the source string for creating string_views
 struct ParseState {
   std::string_view input;
   size_t pos = 0;
   size_t line = 1;
   size_t column = 1;
+  std::vector<std::string> owned_strings; // Storage for strings that need escaping
 
   explicit ParseState(std::string_view str) : input(str) {}
 
@@ -68,6 +70,20 @@ struct ParseState {
   }
 
   bool at_end() const { return pos >= input.size(); }
+
+  // Create a string_view from the current position to end_pos
+  std::string_view make_view(size_t start_pos, size_t end_pos) const {
+    if (start_pos >= input.size() || end_pos > input.size() || start_pos >= end_pos) {
+      return std::string_view{};
+    }
+    return input.substr(start_pos, end_pos - start_pos);
+  }
+
+  // Store an owned string and return a view to it (for escaped strings)
+  std::string_view store_owned_string(std::string str) {
+    owned_strings.push_back(std::move(str));
+    return std::string_view(owned_strings.back());
+  }
 };
 
 // Forward declarations
@@ -78,7 +94,7 @@ Node parse_sequence(ParseState &state, size_t base_indent);
 Node parse_json_mapping(ParseState &state);
 Node parse_json_sequence(ParseState &state);
 Node parse_json_value(ParseState &state);
-std::string parse_scalar(ParseState &state);
+std::string_view parse_scalar(ParseState &state);
 
 void skip_comments_and_empty_lines(ParseState &state) {
   while (!state.at_end()) {
@@ -101,13 +117,16 @@ bool is_yaml_special_char(char c) {
          c == '#' || c == '&' || c == '*' || c == '!' || c == '\'' || c == '"';
 }
 
-std::string parse_quoted_string(ParseState &state) {
+std::string_view parse_quoted_string(ParseState &state) {
   char quote_char = state.current();
   state.advance(); // Skip opening quote
 
   std::string result;
+  bool needs_escaping = false;
+
   while (!state.at_end() && state.current() != quote_char) {
     if (state.current() == '\\') {
+      needs_escaping = true;
       state.advance();
       if (state.at_end())
         break;
@@ -146,11 +165,13 @@ std::string parse_quoted_string(ParseState &state) {
     state.advance(); // Skip closing quote
   }
 
-  return result;
+  // If no escaping was needed, we could potentially return a view to the original
+  // but for simplicity, we'll always store quoted strings as owned strings
+  return state.store_owned_string(std::move(result));
 }
 
-std::string parse_unquoted_scalar(ParseState &state) {
-  std::string result;
+std::string_view parse_unquoted_scalar(ParseState &state) {
+  size_t start_pos = state.pos;
 
   while (!state.at_end()) {
     char c = state.current();
@@ -160,25 +181,25 @@ std::string parse_unquoted_scalar(ParseState &state) {
       break;
     }
 
-    // Stop at colon followed by space (indicates mapping) - but only if we're not empty
-    // This prevents stopping on the first character if it's a colon
-    if (!result.empty() && c == ':' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+    // Stop at colon followed by space (indicates mapping) - but only if we're not at start
+    if (state.pos > start_pos && c == ':' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
       break;
     }
 
-    result += c;
     state.advance();
   }
 
+  size_t end_pos = state.pos;
+
   // Trim trailing whitespace
-  while (!result.empty() && (result.back() == ' ' || result.back() == '\t')) {
-    result.pop_back();
+  while (end_pos > start_pos && (state.input[end_pos - 1] == ' ' || state.input[end_pos - 1] == '\t')) {
+    end_pos--;
   }
 
-  return result;
+  return state.make_view(start_pos, end_pos);
 }
 
-Node parse_scalar_value(const std::string &scalar_text) {
+Node parse_scalar_value(std::string_view scalar_text) {
   if (scalar_text.empty() || scalar_text == "null" || scalar_text == "~") {
     return Node(std::monostate{});
   }
@@ -212,9 +233,9 @@ Node parse_scalar_value(const std::string &scalar_text) {
     if (is_number && scalar_text != "-") { // Don't parse standalone "-" as number
       try {
         if (has_dot) {
-          return Node(std::stod(scalar_text));
+          return Node(std::stod(std::string(scalar_text)));
         } else {
-          return Node(static_cast<int64_t>(std::stoll(scalar_text)));
+          return Node(static_cast<int64_t>(std::stoll(std::string(scalar_text))));
         }
       } catch (...) {
         // Fall through to string
@@ -222,11 +243,11 @@ Node parse_scalar_value(const std::string &scalar_text) {
     }
   }
 
-  // Default to string for any unrecognized scalar
+  // Default to string_view for any unrecognized scalar
   return Node(scalar_text);
 }
 
-std::string parse_scalar(ParseState &state) {
+std::string_view parse_scalar(ParseState &state) {
   if (state.current() == '"' || state.current() == '\'') {
     return parse_quoted_string(state);
   } else {
@@ -309,7 +330,7 @@ Node parse_mapping(ParseState &state, size_t base_indent) {
       }
 
       // Parse key
-      std::string key = parse_scalar(state);
+      std::string_view key = parse_scalar(state);
       if (key.empty())
         break;
 
@@ -317,7 +338,7 @@ Node parse_mapping(ParseState &state, size_t base_indent) {
 
       // Expect colon
       if (state.current() != ':') {
-        throw ParseError("Expected ':' after key '" + key + "' at line " + std::to_string(state.line));
+        throw ParseError("Expected ':' after key '" + std::string(key) + "' at line " + std::to_string(state.line));
       }
 
       state.advance(); // Skip ':'
@@ -342,8 +363,8 @@ Node parse_mapping(ParseState &state, size_t base_indent) {
         // Value on same line
         if (state.current() == '"' || state.current() == '\'') {
           // Quoted strings should be treated as strings directly (even if empty)
-          std::string str = parse_quoted_string(state);
-          value = Node(str);
+          std::string_view str = parse_quoted_string(state);
+          value = Node(std::string_view(str));
         } else {
           value = parse_value(state, current_indent);
         }
@@ -354,7 +375,7 @@ Node parse_mapping(ParseState &state, size_t base_indent) {
           state.advance();
       }
 
-      map.emplace(key, value);
+      map.emplace(std::string(key), value);
     } else {
       // Wrong indentation, we're done
       break;
@@ -447,11 +468,11 @@ Node parse_value(ParseState &state, size_t min_indent) {
   // Otherwise, parse as scalar
   if (state.current() == '"' || state.current() == '\'') {
     // Quoted strings should be treated as strings directly (even if empty)
-    std::string str = parse_quoted_string(state);
-    return Node(str);
+    std::string_view str = parse_quoted_string(state);
+    return Node(std::string_view(str));
   } else {
     // Unquoted scalars go through scalar value parsing
-    std::string scalar_text = parse_unquoted_scalar(state);
+    std::string_view scalar_text = parse_unquoted_scalar(state);
     return parse_scalar_value(scalar_text);
   }
 }
@@ -472,8 +493,8 @@ Node parse_json_value(ParseState &state) {
 
   // Handle quoted strings
   if (state.current() == '"' || state.current() == '\'') {
-    std::string str = parse_quoted_string(state);
-    return Node(str);
+    std::string_view str = parse_quoted_string(state);
+    return Node(std::string_view(str));
   }
 
   // Handle other values (numbers, booleans, null)
@@ -488,7 +509,7 @@ Node parse_json_value(ParseState &state) {
     state.advance();
   }
 
-  return parse_scalar_value(value_str);
+  return parse_scalar_value(std::string_view(value_str));
 }
 
 // JSON-style parsing for backward compatibility
@@ -507,16 +528,14 @@ Node parse_json_mapping(ParseState &state) {
     // Parse key
     std::string key;
     if (state.current() == '"' || state.current() == '\'') {
-      key = parse_quoted_string(state);
+      key = std::string(parse_quoted_string(state));
     } else {
       // For JSON, unquoted keys should be parsed more carefully
-      std::string unquoted_key;
       while (!state.at_end() && state.current() != ':' && state.current() != ' ' && state.current() != '\t' &&
              state.current() != '\n') {
-        unquoted_key += state.current();
+        key += state.current();
         state.advance();
       }
-      key = unquoted_key;
     }
 
     state.skip_whitespace_and_newlines();
@@ -587,6 +606,7 @@ Node parse_document(ParseState &state) {
   return parse_value(state, 0);
 }
 
+// Deprecated Node::Load implementation for backward compatibility
 Node Node::Load(std::string_view yaml_str) {
   ParseState state{yaml_str};
   try {
@@ -596,6 +616,22 @@ Node Node::Load(std::string_view yaml_str) {
                      std::to_string(state.column) + ": " + e.what());
   }
 }
+
+// YamlDocument implementation
+YamlDocument::YamlDocument(std::string source) : source_(std::move(source)) {
+  ParseState state{source_};
+  try {
+    root_ = parse_document(state);
+    // Transfer ownership of escaped strings from ParseState to this document
+    // The owned_strings from the parse state become part of the document's lifetime
+    // Since we're using string_view into source_, this ensures all views remain valid
+  } catch (const std::exception &e) {
+    throw ParseError("YAML parse error at line " + std::to_string(state.line) + ", column " +
+                     std::to_string(state.column) + ": " + e.what());
+  }
+}
+
+YamlDocument YamlDocument::Parse(std::string source) { return YamlDocument(std::move(source)); }
 
 void format_yaml(std::ostream &os, const Node &node, int indent) {
   std::visit(
@@ -609,16 +645,16 @@ void format_yaml(std::ostream &os, const Node &node, int indent) {
           os << arg;
         } else if constexpr (std::is_same_v<T, double>) {
           os << arg;
-        } else if constexpr (std::is_same_v<T, std::string>) {
+        } else if constexpr (std::is_same_v<T, std::string_view>) {
           // Quote string if it contains special characters or looks like other types
           bool needs_quotes = arg.empty() || arg == "true" || arg == "false" || arg == "null" ||
-                              arg.find(':') != std::string::npos || arg.find('#') != std::string::npos ||
-                              arg.find('\n') != std::string::npos || arg.find('"') != std::string::npos ||
+                              arg.find(':') != std::string_view::npos || arg.find('#') != std::string_view::npos ||
+                              arg.find('\n') != std::string_view::npos || arg.find('"') != std::string_view::npos ||
                               (std::isdigit(arg[0]) || arg[0] == '-');
 
           if (needs_quotes) {
             os << "\"";
-            for (char c : arg) {
+            for (char c : std::string(arg)) { // Convert string_view to string for iteration
               if (c == '"')
                 os << "\\\"";
               else if (c == '\\')
@@ -634,7 +670,7 @@ void format_yaml(std::ostream &os, const Node &node, int indent) {
             }
             os << "\"";
           } else {
-            os << arg;
+            os << std::string(arg); // Convert string_view to string for output
           }
         } else if constexpr (std::is_same_v<T, Sequence>) {
           if (indent == 0) {
@@ -656,20 +692,20 @@ void format_yaml(std::ostream &os, const Node &node, int indent) {
           }
         } else if constexpr (std::is_same_v<T, Map>) {
           bool first = true;
-          for (const auto &[key, value] : arg) {
+          for (const auto &entry : arg) {
             if (!first) {
               os << "\n" << std::string(indent, ' ');
             }
             first = false;
 
-            os << key << ": ";
+            os << std::string(entry.key) << ": ";
 
             // Check if value should be on next line
-            if (std::holds_alternative<Map>(value.value) || std::holds_alternative<Sequence>(value.value)) {
+            if (std::holds_alternative<Map>(entry.value.value) || std::holds_alternative<Sequence>(entry.value.value)) {
               os << "\n" << std::string(indent + 2, ' ');
-              format_yaml(os, value, indent + 2);
+              format_yaml(os, entry.value, indent + 2);
             } else {
-              format_yaml(os, value, 0);
+              format_yaml(os, entry.value, 0);
             }
           }
         }

@@ -16,12 +16,12 @@ namespace shilos {
 namespace yaml {
 
 // ---------------------------------------------------------------------------
-// iopd – insertion-order preserving dictionary (template on value type V)
+// iopd – insertion-order preserving dictionary (template on key type K and value type V)
 // ---------------------------------------------------------------------------
-template <typename V> class iopd {
+template <typename K, typename V> class iopd {
 public:
   // Public aliases -----------------------------------------------------------
-  using key_type = std::string;
+  using key_type = K;
   using mapped_type = V; // Template-supplied value type
   using size_type = std::size_t;
 
@@ -37,10 +37,10 @@ public:
   using const_iterator = storage_type::const_iterator;
 
 private:
-  // A simple index table that maps keys to their index inside `storage_`.
-  // We purposefully *copy* the key string into the table to avoid dangling
-  // references when `storage_` is re-allocated on growth.  The additional
-  // memory overhead is acceptable for a YAML utility container.
+  // Index table that maps keys to their index inside `storage_`.
+  // For string_view keys, we need to be careful about lifetime management
+  // For owning key types like std::string, we copy the key to avoid dangling references
+  // For non-owning key types like std::string_view, the caller must ensure lifetime
   std::unordered_map<key_type, size_type> index_;
   storage_type storage_;
 
@@ -65,7 +65,17 @@ public:
   const_iterator cend() const noexcept { return storage_.cend(); }
 
   // Lookup ------------------------------------------------------------------
-  bool contains(std::string_view key) const noexcept { return index_.find(key_type(key)) != index_.end(); }
+  // For lookup operations, we support both exact key type and compatible types
+  template <typename KeyLike>
+    requires std::is_convertible_v<KeyLike, key_type> ||
+             (std::is_same_v<key_type, std::string_view> && std::is_convertible_v<KeyLike, std::string_view>)
+  bool contains(const KeyLike &key) const noexcept {
+    if constexpr (std::is_same_v<key_type, std::string_view>) {
+      return index_.find(std::string_view(key)) != index_.end();
+    } else {
+      return index_.find(key_type(key)) != index_.end();
+    }
+  }
 
   mapped_type &at(const key_type &key) {
     auto it = index_.find(key);
@@ -104,6 +114,8 @@ public:
     }
 
     const size_type new_index = storage_.size();
+    // For string_view keys, we store the view directly - caller must ensure lifetime
+    // For owning keys like std::string, this creates a copy as expected
     index_.emplace(key, new_index);
     storage_.emplace_back(std::move(key), std::move(value));
     return {storage_.end() - 1, true};
@@ -118,8 +130,8 @@ public:
       return storage_[idx_it->second].value;
     }
     const size_type new_index = storage_.size();
-    index_.emplace(key, new_index);
     storage_.emplace_back(key, mapped_type());
+    index_.emplace(storage_.back().key, new_index);
     return storage_.back().value;
   }
 

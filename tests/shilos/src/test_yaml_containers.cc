@@ -89,8 +89,8 @@ int main() {
 
     // ======================= Dict<regional_str,int> =========================
     yaml::Node map_node(yaml::Map{});
-    map_node["alice"] = 1;
-    map_node["bob"] = 2;
+    map_node[std::string_view("alice")] = 1;
+    map_node[std::string_view("bob")] = 2;
 
     auto_region<DictRoot> dict_region(1024 * 1024);
     auto dict_gp = dict_from_yaml<regional_str, int, std::hash<regional_str>>(*dict_region, map_node);

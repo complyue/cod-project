@@ -51,7 +51,8 @@ inline void collect_deps(const fs::path &proj_dir, const CodProject *proj, Manif
       // Load dep project YAML and recurse
       fs::path dep_yaml_path = dep_path / "CodProject.yaml";
       std::string yaml_text = slurp_file(dep_yaml_path);
-      yaml::Node dep_root = yaml::Load(yaml_text);
+      auto dep_doc = yaml::YamlDocument::Parse(std::string(yaml_text));
+      const yaml::Node &dep_root = dep_doc.root();
       auto_region<CodProject> dep_region(1024 * 1024);
       CodProject *dep_proj = dep_region->root().get();
       from_yaml(*dep_region, dep_root, dep_proj);
@@ -67,7 +68,8 @@ inline void collect_deps(const fs::path &proj_dir, const CodProject *proj, Manif
 
 inline yaml::Node generate_manifest(const fs::path &project_dir) {
   std::string yaml_text = slurp_file(project_dir / "CodProject.yaml");
-  yaml::Node root_node = yaml::Load(yaml_text);
+  auto root_doc = yaml::YamlDocument::Parse(std::string(yaml_text));
+  const yaml::Node &root_node = root_doc.root();
   auto_region<CodProject> region(1024 * 1024);
   CodProject *project = region->root().get();
   from_yaml(*region, root_node, project);

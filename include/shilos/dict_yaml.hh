@@ -62,7 +62,7 @@ inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d) noexcept {
     }
 
     // Insert into map – we must convert key_node to string/int key for YAML library.
-    if (auto str = std::get_if<std::string>(&key_node.value)) {
+    if (auto str = std::get_if<std::string_view>(&key_node.value)) {
       m[*str] = value_node;
     } else if (auto i = std::get_if<int64_t>(&key_node.value)) {
       m[std::to_string(*i)] = value_node; // YAML keys must be strings
@@ -89,7 +89,10 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_dict<K, V
 
   const auto &map = std::get<yaml::Map>(node.value);
 
-  for (const auto &[k_node_str, v_node] : map) {
+  for (const auto &entry : map) {
+    const auto &k_node_str = entry.key;
+    const auto &v_node = entry.value;
+
     // --- Parse key ---------------------------------------------------------
     std::remove_cv_t<K> key_storage{};
     auto make_key_callable = [&](auto &&key_arg, auto &&init_fn) {
@@ -111,14 +114,14 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_dict<K, V
         make_key_callable(key_bool, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }
     } else if constexpr (std::is_integral_v<K>) {
-      K key_int = static_cast<K>(std::stoll(k_node_str));
+      K key_int = static_cast<K>(std::stoll(std::string(k_node_str)));
       if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
         make_key_callable(key_int, [&](V *dst) { new (dst) V(v_node.as<V>()); });
       } else {
         make_key_callable(key_int, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }
     } else if constexpr (std::is_floating_point_v<K>) {
-      K key_fp = static_cast<K>(std::stod(k_node_str));
+      K key_fp = static_cast<K>(std::stod(std::string(k_node_str)));
       if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
         make_key_callable(key_fp, [&](V *dst) { new (dst) V(v_node.as<V>()); });
       } else {

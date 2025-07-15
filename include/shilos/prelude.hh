@@ -132,21 +132,26 @@ public:
   using Exception::Exception;
 };
 
+// Forward declarations
 struct Node;
+class YamlDocument;
 
-using Map = iopd<Node>;
+using Map = iopd<std::string_view, Node>;
 using Sequence = std::vector<Node>;
 
 // Complete YAML node type definition
 struct Node {
   using Value = std::variant<std::monostate, // null
-                             bool, int64_t, double, std::string, Sequence, Map>;
+                             bool, int64_t, double, std::string_view, Sequence, Map>;
 
   Value value;
 
   Node() = default;
   explicit Node(Value v) : value(std::move(v)) {}
 
+  // NOTE: Node::Load is deprecated - use YamlDocument::Parse instead
+  // This is kept for backward compatibility but will be removed
+  [[deprecated("Use YamlDocument::Parse instead")]]
   static Node Load(const std::string_view yaml_str);
 
   // Helper constructors
@@ -154,23 +159,18 @@ struct Node {
   explicit Node(bool b) : value(b) {}
   explicit Node(int64_t i) : value(i) {}
   explicit Node(double d) : value(d) {}
-  explicit Node(const std::string s) : value(s) {}
-  explicit Node(const std::string_view s) : value(std::string(s)) {}
-  explicit Node(const char *s) : value(std::string(s)) {}
+  explicit Node(const std::string_view s) : value(s) {}
+  explicit Node(const char *s) : value(std::string_view(s)) {}
   explicit Node(const Sequence &seq) : value(seq) {}
   explicit Node(const Map &map) : value(map) {}
 
   // Assignment operators for different types
-  Node &operator=(const std::string &s) {
+  Node &operator=(std::string_view s) {
     value = s;
     return *this;
   }
-  Node &operator=(std::string_view s) {
-    value = std::string(s);
-    return *this;
-  }
   Node &operator=(const char *s) {
-    value = std::string(s);
+    value = std::string_view(s);
     return *this;
   }
   Node &operator=(bool b) {
@@ -197,7 +197,7 @@ struct Node {
   // Type checking methods
   bool IsScalar() const {
     return std::holds_alternative<bool>(value) || std::holds_alternative<int64_t>(value) ||
-           std::holds_alternative<double>(value) || std::holds_alternative<std::string>(value);
+           std::holds_alternative<double>(value) || std::holds_alternative<std::string_view>(value);
   }
 
   bool IsSequence() const { return std::holds_alternative<Sequence>(value); }
@@ -229,11 +229,16 @@ struct Node {
 
   void push_back(int64_t i) { push_back(Node(i)); }
 
-  void push_back(const std::string &s) { push_back(Node(s)); }
+  void push_back(std::string_view s) { push_back(Node(s)); }
 
   template <typename T> T as() const {
     if constexpr (std::is_same_v<T, std::string>) {
-      if (auto s = std::get_if<std::string>(&value)) {
+      if (auto s = std::get_if<std::string_view>(&value)) {
+        return std::string(*s);
+      }
+      throw TypeError("Expected string value");
+    } else if constexpr (std::is_same_v<T, std::string_view>) {
+      if (auto s = std::get_if<std::string_view>(&value)) {
         return *s;
       }
       throw TypeError("Expected string value");
@@ -261,14 +266,14 @@ struct Node {
     throw TypeError("Unsupported type conversion");
   }
 
-  const Node &operator[](const std::string &key) const {
+  const Node &operator[](std::string_view key) const {
     if (auto map = std::get_if<Map>(&value)) {
       return map->at(key);
     }
     throw TypeError("Expected map value");
   }
 
-  Node &operator[](const std::string &key) {
+  Node &operator[](std::string_view key) {
     if (auto map = std::get_if<Map>(&value)) {
       return (*map)[key];
     }
@@ -296,7 +301,7 @@ struct Node {
     throw TypeError("Expected sequence value");
   }
 
-  Map::const_iterator find(const std::string &key) const {
+  Map::const_iterator find(std::string_view key) const {
     if (auto map = std::get_if<Map>(&value)) {
       return map->find(key);
     }
@@ -311,14 +316,48 @@ struct Node {
   }
 };
 
+// YAML document that owns the underlying string payload
+// All yaml nodes must not outlive the document that created them
+class YamlDocument {
+private:
+  std::string source_; // Owns the original YAML string
+  Node root_;          // Root node of the parsed document
+
+public:
+  explicit YamlDocument(std::string source);
+
+  // Non-copyable but movable to ensure unique ownership
+  YamlDocument(const YamlDocument &) = delete;
+  YamlDocument &operator=(const YamlDocument &) = delete;
+  YamlDocument(YamlDocument &&) = default;
+  YamlDocument &operator=(YamlDocument &&) = default;
+
+  // Access to the root node
+  const Node &root() const noexcept { return root_; }
+  Node &root() noexcept { return root_; }
+
+  // Access to the underlying source (for debugging/logging)
+  std::string_view source() const noexcept { return source_; }
+
+  // Static factory function - the primary way to parse YAML
+  static YamlDocument Parse(std::string source);
+  static YamlDocument Parse(std::string_view source) { return Parse(std::string(source)); }
+};
+
 void format_yaml(std::ostream &os, const Node &node, int indent = 0);
 std::ostream &operator<<(std::ostream &os, const Node &node);
 std::string format_yaml(const Node &node);
 
-// Standalone Load function
-inline Node Load(const std::string_view yaml_str) { return Node::Load(yaml_str); }
+// Deprecated standalone Load functions - use YamlDocument::Parse instead
+[[deprecated("Use YamlDocument::Parse instead")]]
+inline Node Load(const std::string_view yaml_str) {
+  return Node::Load(yaml_str);
+}
 
-inline Node Load(const std::string &yaml_str) { return Node::Load(yaml_str); }
+[[deprecated("Use YamlDocument::Parse instead")]]
+inline Node Load(const std::string &yaml_str) {
+  return Node::Load(yaml_str);
+}
 
 template <typename T, typename RT>
 concept YamlConvertible = requires(T t, const yaml::Node &node, memory_region<RT> &mr, T *raw_ptr) {

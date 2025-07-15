@@ -140,7 +140,8 @@ int main(int argc, char **argv) {
     }
 
     std::string yaml_text = ::slurp_file(project_yaml);
-    yaml::Node root = yaml::Load(yaml_text);
+    auto doc = yaml::YamlDocument::Parse(std::string(yaml_text));
+    const yaml::Node &root = doc.root();
 
     // Allocate region (1 MB) and construct project from YAML
     auto_region<CodProject> region(1024 * 1024);
