@@ -69,7 +69,7 @@ public:
     }
   }
 
-  constexpr std::string to_string() const {
+  std::string to_string() const {
     char result[36];
     size_t idx = 0;
     for (size_t i = 0; i < 16; ++i) {
@@ -122,8 +122,34 @@ public:
 };
 
 class ParseError : public Exception {
+private:
+  std::string filename_;
+  size_t line_;
+  size_t column_;
+  std::string message_;
+
 public:
-  using Exception::Exception;
+  ParseError(std::string filename, size_t line, size_t column, std::string message)
+      : Exception(format_error_message(filename, line, column, message)), filename_(std::move(filename)), line_(line),
+        column_(column), message_(std::move(message)) {}
+
+  // Legacy constructor for backward compatibility during transition
+  explicit ParseError(std::string message)
+      : Exception(message), filename_(""), line_(0), column_(0), message_(std::move(message)) {}
+
+  const std::string &filename() const noexcept { return filename_; }
+  size_t line() const noexcept { return line_; }
+  size_t column() const noexcept { return column_; }
+  const std::string &message() const noexcept { return message_; }
+
+private:
+  static std::string format_error_message(const std::string &filename, size_t line, size_t column,
+                                          const std::string &message) {
+    if (filename.empty()) {
+      return message;
+    }
+    return filename + ":" + std::to_string(line) + ":" + std::to_string(column) + ": " + message;
+  }
 };
 
 class TypeError : public Exception {
@@ -333,7 +359,7 @@ private:
   iops<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference (deduplicated)
 
 public:
-  explicit YamlDocument(std::string source);
+  YamlDocument(std::string filename, std::string source);
 
   // Non-copyable and non-movable to ensure string_view stability
   YamlDocument(const YamlDocument &) = delete;
@@ -362,8 +388,10 @@ public:
   size_t document_count() const noexcept { return documents_.size(); }
 
   // Static factory function - the primary way to parse YAML
-  static YamlResult Parse(std::string source) noexcept;
-  static YamlResult Parse(std::string_view source) noexcept { return Parse(std::string(source)); }
+  static YamlResult Parse(std::string filename, std::string source) noexcept;
+  static YamlResult Parse(std::string filename, std::string_view source) noexcept {
+    return Parse(std::move(filename), std::string(source));
+  }
 };
 
 void format_yaml(std::ostream &os, const Node &node, int indent = 0);

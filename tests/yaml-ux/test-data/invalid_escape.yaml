@@ -1,0 +1,4 @@
+message: "Hello \x world"
+warning: "Invalid escape sequence \z here"
+path: "C:\new\folder"  # This should work (valid escape)
+broken: "This has \q invalid escape" 

@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
     std::cout << content << std::endl;
 
     std::cout << "=== PARSED TREE ===" << std::endl;
-    auto result = YamlDocument::Parse(content);
+    auto result = YamlDocument::Parse(yaml_file, content);
     shilos::vswitch(
         result,
         [](const shilos::yaml::ParseError &err) {
@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
   if (arg == "--basic-test") {
     std::cout << "=== YAML Basic Pretty Print Tests ===" << std::endl;
     std::string simple_yaml = "key: value\n";
-    auto simple_result = YamlDocument::Parse(simple_yaml);
+    auto simple_result = YamlDocument::Parse("<basic-test>", simple_yaml);
     return shilos::vswitch(
         simple_result,
         [](const shilos::yaml::ParseError &err) {
@@ -139,7 +139,7 @@ int main(int argc, char *argv[]) {
 
     try {
       std::string content = read_file(file_path);
-      auto doc_result = YamlDocument::Parse(content);
+      auto doc_result = YamlDocument::Parse(file_path, content);
       shilos::vswitch(
           doc_result,
           [](const shilos::yaml::ParseError &err) {

@@ -1,0 +1,7 @@
+server:
+  name: web-server
+  port: 8080
+  ssl:
+    enabled: true
+	cert: /path/to/cert  # This line has tab instead of spaces
+    key: /path/to/key 

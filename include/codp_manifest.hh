@@ -51,7 +51,7 @@ inline void collect_deps(const fs::path &proj_dir, const CodProject *proj, Manif
       // Load dep project YAML and recurse
       fs::path dep_yaml_path = dep_path / "CodProject.yaml";
       std::string yaml_text = slurp_file(dep_yaml_path);
-      auto dep_result = yaml::YamlDocument::Parse(std::string(yaml_text));
+      auto dep_result = yaml::YamlDocument::Parse(dep_yaml_path.string(), std::string(yaml_text));
       shilos::vswitch(
           dep_result,
           [&](const yaml::ParseError &err) {
@@ -75,7 +75,7 @@ inline void collect_deps(const fs::path &proj_dir, const CodProject *proj, Manif
 
 inline yaml::Node generate_manifest(const fs::path &project_dir) {
   std::string yaml_text = slurp_file(project_dir / "CodProject.yaml");
-  auto root_result = yaml::YamlDocument::Parse(std::string(yaml_text));
+  auto root_result = yaml::YamlDocument::Parse((project_dir / "CodProject.yaml").string(), std::string(yaml_text));
   return shilos::vswitch(
       root_result,
       [&](const yaml::ParseError &err) -> yaml::Node {

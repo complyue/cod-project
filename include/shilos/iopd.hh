@@ -33,8 +33,8 @@ public:
   };
 
   using storage_type = std::vector<entry>;
-  using iterator = storage_type::iterator;
-  using const_iterator = storage_type::const_iterator;
+  using iterator = typename storage_type::iterator;
+  using const_iterator = typename storage_type::const_iterator;
 
 private:
   // Index table that maps keys to their index inside `storage_`.

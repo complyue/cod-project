@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
     }
 
     std::string yaml_text = ::slurp_file(project_yaml);
-    auto result = yaml::YamlDocument::Parse(std::string(yaml_text));
+    auto result = yaml::YamlDocument::Parse(project_yaml.string(), std::string(yaml_text));
     shilos::vswitch(
         result,
         [&](const yaml::ParseError &err) {

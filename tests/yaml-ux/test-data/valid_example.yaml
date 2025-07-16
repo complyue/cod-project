@@ -1,0 +1,36 @@
+application:
+  name: "My Application"
+  version: "1.0.0"
+  
+server:
+  host: "localhost"
+  port: 8080
+  ssl:
+    enabled: true
+    cert_path: "/etc/ssl/certs/app.crt"
+    key_path: "/etc/ssl/private/app.key"
+
+database:
+  host: "db.example.com"
+  port: 5432
+  username: "app_user"
+  password: "secure_password"
+  database_name: "app_db"
+  connection_pool:
+    min_connections: 5
+    max_connections: 20
+
+features:
+  - authentication
+  - logging
+  - metrics
+  - caching
+
+logging:
+  level: "INFO"
+  format: "json"
+  destinations:
+    - type: "console"
+    - type: "file"
+      path: "/var/log/app.log"
+      rotation: "daily" 

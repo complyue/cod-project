@@ -1,0 +1,5 @@
+user:
+  name: "John Doe
+  age: 30
+  description: "This string is never closed
+  active: true 

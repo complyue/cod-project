@@ -1,0 +1,15 @@
+defaults: &default_config
+  timeout: 30
+  retries: 3
+
+service_a:
+  <<: *default_config
+  name: "Service A"
+
+service_b:
+  <<: *undefined_alias  # This alias doesn't exist
+  name: "Service B"
+
+service_c:
+  <<: *  # Empty alias name
+  name: "Service C" 
