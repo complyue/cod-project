@@ -80,20 +80,38 @@ int main(int argc, char **argv) {
   fs::path expected_path = argv[argi];
   fs::path actual_path = argv[argi + 1];
   try {
-    auto expected_doc = shilos::yaml::YamlDocument::Parse(read_file(expected_path));
-    auto actual_doc = shilos::yaml::YamlDocument::Parse(read_file(actual_path));
-    const Node &expected_node = expected_doc.root();
-    const Node &actual_node = actual_doc.root();
-    bool ok = subset_mode ? yaml_subset(expected_node, actual_node)
-                          : (yaml_subset(expected_node, actual_node) && yaml_subset(actual_node, expected_node));
-    if (!ok) {
-      std::cerr << "yaml-cmp: comparison FAILED\n";
-      std::cerr << "--- expected (subset=" << (subset_mode ? "yes" : "no") << ") ---\n";
-      std::cerr << shilos::yaml::format_yaml(expected_node) << "\n";
-      std::cerr << "--- actual ---\n";
-      std::cerr << shilos::yaml::format_yaml(actual_node) << "\n";
-      return 1;
-    }
+    auto expected_result = shilos::yaml::YamlDocument::Parse(read_file(expected_path));
+    auto actual_result = shilos::yaml::YamlDocument::Parse(read_file(actual_path));
+
+    shilos::vswitch(
+        expected_result,
+        [&](const shilos::yaml::ParseError &expected_err) {
+          std::cerr << "yaml-cmp error parsing expected file: " << expected_err.what() << "\n";
+          std::exit(1);
+        },
+        [&](const shilos::yaml::YamlDocument &expected_doc) {
+          shilos::vswitch(
+              actual_result,
+              [&](const shilos::yaml::ParseError &actual_err) {
+                std::cerr << "yaml-cmp error parsing actual file: " << actual_err.what() << "\n";
+                std::exit(1);
+              },
+              [&](const shilos::yaml::YamlDocument &actual_doc) {
+                const Node &expected_node = expected_doc.root();
+                const Node &actual_node = actual_doc.root();
+                bool ok = subset_mode
+                              ? yaml_subset(expected_node, actual_node)
+                              : (yaml_subset(expected_node, actual_node) && yaml_subset(actual_node, expected_node));
+                if (!ok) {
+                  std::cerr << "yaml-cmp: comparison FAILED\n";
+                  std::cerr << "--- expected (subset=" << (subset_mode ? "yes" : "no") << ") ---\n";
+                  std::cerr << shilos::yaml::format_yaml(expected_node) << "\n";
+                  std::cerr << "--- actual ---\n";
+                  std::cerr << shilos::yaml::format_yaml(actual_node) << "\n";
+                  std::exit(1);
+                }
+              });
+        });
   } catch (const std::exception &e) {
     std::cerr << "yaml-cmp error: " << e.what() << "\n";
     return 1;

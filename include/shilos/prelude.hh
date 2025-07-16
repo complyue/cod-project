@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -105,6 +106,13 @@ template <typename RT>
   requires ValidMemRegionRootType<RT>
 class memory_region;
 
+template <class Variant, class... Fs> decltype(auto) vswitch(Variant &&v, Fs &&...fs) {
+  struct visitor : Fs... {
+    using Fs::operator()...;
+  };
+  return std::visit(visitor{std::forward<Fs>(fs)...}, std::forward<Variant>(v));
+}
+
 namespace yaml {
 
 // YAML exception hierarchy
@@ -136,6 +144,9 @@ public:
 // Forward declarations
 struct Node;
 class YamlDocument;
+
+// Result type for noexcept YAML parsing
+using YamlResult = std::variant<YamlDocument, ParseError>;
 
 using Map = iopd<std::string_view, Node>;
 using Sequence = std::vector<Node>;
@@ -324,11 +335,11 @@ private:
 public:
   explicit YamlDocument(std::string source);
 
-  // Non-copyable but movable to ensure unique ownership
+  // Non-copyable and non-movable to ensure string_view stability
   YamlDocument(const YamlDocument &) = delete;
   YamlDocument &operator=(const YamlDocument &) = delete;
-  YamlDocument(YamlDocument &&) = default;
-  YamlDocument &operator=(YamlDocument &&) = default;
+  YamlDocument(YamlDocument &&) = delete;
+  YamlDocument &operator=(YamlDocument &&) = delete;
 
   // Access to documents
   const std::vector<Node> &documents() const noexcept { return documents_; }
@@ -351,8 +362,8 @@ public:
   size_t document_count() const noexcept { return documents_.size(); }
 
   // Static factory function - the primary way to parse YAML
-  static YamlDocument Parse(std::string source);
-  static YamlDocument Parse(std::string_view source) { return Parse(std::string(source)); }
+  static YamlResult Parse(std::string source) noexcept;
+  static YamlResult Parse(std::string_view source) noexcept { return Parse(std::string(source)); }
 };
 
 void format_yaml(std::ostream &os, const Node &node, int indent = 0);

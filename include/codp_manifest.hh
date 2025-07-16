@@ -51,13 +51,20 @@ inline void collect_deps(const fs::path &proj_dir, const CodProject *proj, Manif
       // Load dep project YAML and recurse
       fs::path dep_yaml_path = dep_path / "CodProject.yaml";
       std::string yaml_text = slurp_file(dep_yaml_path);
-      auto dep_doc = yaml::YamlDocument::Parse(std::string(yaml_text));
-      const yaml::Node &dep_root = dep_doc.root();
-      auto_region<CodProject> dep_region(1024 * 1024);
-      CodProject *dep_proj = dep_region->root().get();
-      from_yaml(*dep_region, dep_root, dep_proj);
+      auto dep_result = yaml::YamlDocument::Parse(std::string(yaml_text));
+      shilos::vswitch(
+          dep_result,
+          [&](const yaml::ParseError &err) {
+            throw std::runtime_error("Failed to parse " + dep_yaml_path.string() + ": " + err.what());
+          },
+          [&](const yaml::YamlDocument &doc) {
+            const yaml::Node &dep_root = doc.root();
+            auto_region<CodProject> dep_region(1024 * 1024);
+            CodProject *dep_proj = dep_region->root().get();
+            from_yaml(*dep_region, dep_root, dep_proj);
 
-      collect_deps(dep_path, dep_proj, out, visited);
+            collect_deps(dep_path, dep_proj, out, visited);
+          });
     } else {
       // Remote dependency – record minimal information (branch/commit TBD)
       ManifestEntry me{dep.uuid(), std::string(std::string_view(dep.repo_url())), "", ""};
@@ -68,43 +75,50 @@ inline void collect_deps(const fs::path &proj_dir, const CodProject *proj, Manif
 
 inline yaml::Node generate_manifest(const fs::path &project_dir) {
   std::string yaml_text = slurp_file(project_dir / "CodProject.yaml");
-  auto root_doc = yaml::YamlDocument::Parse(std::string(yaml_text));
-  const yaml::Node &root_node = root_doc.root();
-  auto_region<CodProject> region(1024 * 1024);
-  CodProject *project = region->root().get();
-  from_yaml(*region, root_node, project);
+  auto root_result = yaml::YamlDocument::Parse(std::string(yaml_text));
+  return shilos::vswitch(
+      root_result,
+      [&](const yaml::ParseError &err) -> yaml::Node {
+        throw std::runtime_error("Failed to parse " + (project_dir / "CodProject.yaml").string() + ": " + err.what());
+      },
+      [&](const yaml::YamlDocument &doc) -> yaml::Node {
+        const yaml::Node &root_node = doc.root();
+        auto_region<CodProject> region(1024 * 1024);
+        CodProject *project = region->root().get();
+        from_yaml(*region, root_node, project);
 
-  ManifestData data;
-  std::unordered_set<std::string> visited;
-  collect_deps(project_dir, project, data, visited);
+        ManifestData data;
+        std::unordered_set<std::string> visited;
+        collect_deps(project_dir, project, data, visited);
 
-  yaml::Node manifest(yaml::Map{});
-  yaml::Node root_map(yaml::Map{});
-  root_map["uuid"] = project->uuid().to_string();
-  root_map["repo_url"] = std::string_view(project->repo_url());
-  manifest["root"] = root_map;
+        yaml::Node manifest(yaml::Map{});
+        yaml::Node root_map(yaml::Map{});
+        root_map["uuid"] = project->uuid().to_string();
+        root_map["repo_url"] = std::string_view(project->repo_url());
+        manifest["root"] = root_map;
 
-  if (!data.locals.empty()) {
-    yaml::Node locals_map(yaml::Map{});
-    for (const auto &kv : data.locals) {
-      locals_map[kv.first] = kv.second;
-    }
-    manifest["locals"] = locals_map;
-  }
+        if (!data.locals.empty()) {
+          yaml::Node locals_map(yaml::Map{});
+          for (const auto &kv : data.locals) {
+            locals_map[kv.first] = kv.second;
+          }
+          manifest["locals"] = locals_map;
+        }
 
-  yaml::Node resolved_seq(yaml::Sequence{});
-  for (const auto &entry : data.resolved) {
-    yaml::Node m(yaml::Map{});
-    m["uuid"] = entry.uuid.to_string();
-    m["repo_url"] = entry.repo_url;
-    if (!entry.branch.empty())
-      m["branch"] = entry.branch;
-    if (!entry.commit.empty())
-      m["commit"] = entry.commit;
-    resolved_seq.push_back(m);
-  }
-  manifest["resolved"] = resolved_seq;
-  return manifest;
+        yaml::Node resolved_seq(yaml::Sequence{});
+        for (const auto &entry : data.resolved) {
+          yaml::Node m(yaml::Map{});
+          m["uuid"] = entry.uuid.to_string();
+          m["repo_url"] = entry.repo_url;
+          if (!entry.branch.empty())
+            m["branch"] = entry.branch;
+          if (!entry.commit.empty())
+            m["commit"] = entry.commit;
+          resolved_seq.push_back(m);
+        }
+        manifest["resolved"] = resolved_seq;
+        return manifest;
+      });
 }
 
 } // namespace cod::project

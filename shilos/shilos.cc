@@ -92,6 +92,31 @@ struct ParseState {
   std::string_view store_owned_string(std::string str) { return owned_strings.insert(std::move(str)); }
 
   // Validate indentation compatibility - only throws on truly incompatible indentation
+  //
+  // FLEXIBLE INDENTATION SUPPORT:
+  // This implementation allows mixed tabs and spaces in YAML indentation, which is more
+  // flexible than the strict YAML 1.2 specification. The key rule is that all indentation
+  // must follow a PREFIX RELATIONSHIP:
+  //
+  // - Inner indentation must have the outer indentation as a prefix
+  // - For example: if base indentation is "  " (2 spaces), then valid deeper indentations
+  //   include "  \t" (2 spaces + tab), "  \t  " (2 spaces + tab + 2 spaces), etc.
+  // - This allows consistent hierarchical nesting even when mixing indentation styles
+  //
+  // Example of valid mixed indentation:
+  //   server:
+  //     name: web-server    # 2 spaces
+  //     ssl:                # 2 spaces
+  //   	enabled: true      # 2 spaces + 1 tab (valid: "  " is prefix of "  \t")
+  //   	  key: value       # 2 spaces + 1 tab + 2 spaces (valid: "  \t" is prefix)
+  //
+  // Invalid example (would fail):
+  //   server:
+  //     name: web-server    # 2 spaces
+  //   	port: 8080          # 1 tab (invalid: neither "  " nor "\t" is prefix of other)
+  //
+  // This flexibility enables more natural mixed indentation patterns while maintaining
+  // the hierarchical structure that YAML requires.
   void validate_indentation(std::string_view current_indent) {
     if (current_indent.empty())
       return;
@@ -1173,7 +1198,7 @@ std::vector<Node> parse_document_stream(ParseState &state) {
 }
 
 // YamlDocument implementation - now supports multiple documents
-YamlDocument::YamlDocument(std::string source) : source_(std::move(source)) {
+YamlDocument::YamlDocument(std::string source) : source_(source) {
   ParseState state{source_};
 
   try {
@@ -1187,7 +1212,15 @@ YamlDocument::YamlDocument(std::string source) : source_(std::move(source)) {
   }
 }
 
-YamlDocument YamlDocument::Parse(std::string source) { return YamlDocument(std::move(source)); }
+YamlResult YamlDocument::Parse(std::string source) noexcept {
+  try {
+    return YamlResult{std::in_place_type<YamlDocument>, source};
+  } catch (const ParseError &e) {
+    return e;
+  } catch (const std::exception &e) {
+    return ParseError("YAML parse error: " + std::string(e.what()));
+  }
+}
 
 // Forward declarations for formatting functions
 void format_scalar(std::ostream &os, const std::string_view &str);

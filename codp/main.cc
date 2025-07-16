@@ -140,49 +140,56 @@ int main(int argc, char **argv) {
     }
 
     std::string yaml_text = ::slurp_file(project_yaml);
-    auto doc = yaml::YamlDocument::Parse(std::string(yaml_text));
-    const yaml::Node &root = doc.root();
+    auto result = yaml::YamlDocument::Parse(std::string(yaml_text));
+    shilos::vswitch(
+        result,
+        [&](const yaml::ParseError &err) {
+          throw std::runtime_error("Failed to parse " + project_yaml.string() + ": " + err.what());
+        },
+        [&](const yaml::YamlDocument &doc) {
+          const yaml::Node &root = doc.root();
 
-    // Allocate region (1 MB) and construct project from YAML
-    auto_region<CodProject> region(1024 * 1024);
-    CodProject *project = region->root().get();
-    from_yaml(*region, root, project);
+          // Allocate region (1 MB) and construct project from YAML
+          auto_region<CodProject> region(1024 * 1024);
+          CodProject *project = region->root().get();
+          from_yaml(*region, root, project);
 
-    // Prepare git cache directories
-    fs::path repos_root = home_dir() / ".cod" / "pkgs" / "repos";
+          // Prepare git cache directories
+          fs::path repos_root = home_dir() / ".cod" / "pkgs" / "repos";
 
-    // Iterate over deps + self repo
-    auto process_repo = [&](const std::string &url) {
-      if (!is_remote_repo_url(url))
-        return; // skip local/dummy urls for test scenarios
-      std::string key = repo_url_to_key(url);
-      fs::path bare = repos_root / (key + ".git");
-      ensure_bare_repo(url, bare);
-    };
+          // Iterate over deps + self repo
+          auto process_repo = [&](const std::string &url) {
+            if (!is_remote_repo_url(url))
+              return; // skip local/dummy urls for test scenarios
+            std::string key = repo_url_to_key(url);
+            fs::path bare = repos_root / (key + ".git");
+            ensure_bare_repo(url, bare);
+          };
 
-    process_repo(std::string(std::string_view(project->repo_url())));
-    for (const CodDep &dep : project->deps()) {
-      if (dep.path().empty()) {
-        process_repo(std::string(std::string_view(dep.repo_url())));
-      }
-    }
+          process_repo(std::string(std::string_view(project->repo_url())));
+          for (const CodDep &dep : project->deps()) {
+            if (dep.path().empty()) {
+              process_repo(std::string(std::string_view(dep.repo_url())));
+            }
+          }
 
-    std::cout << "✔ Repositories synchronised." << std::endl;
+          std::cout << "✔ Repositories synchronised." << std::endl;
 
-    // -----------------------------------------------------------------
-    // Generate CodManifest.yaml (local deps only stage)
-    // -----------------------------------------------------------------
+          // -----------------------------------------------------------------
+          // Generate CodManifest.yaml (local deps only stage)
+          // -----------------------------------------------------------------
 
-    yaml::Node manifest_node = generate_manifest(project_path);
+          yaml::Node manifest_node = generate_manifest(project_path);
 
-    fs::path manifest_path = project_path / "CodManifest.yaml";
-    std::ofstream ofs(manifest_path);
-    if (!ofs) {
-      throw std::runtime_error("Cannot write CodManifest.yaml at " + manifest_path.string());
-    }
-    ofs << yaml::format_yaml(manifest_node) << std::endl;
+          fs::path manifest_path = project_path / "CodManifest.yaml";
+          std::ofstream ofs(manifest_path);
+          if (!ofs) {
+            throw std::runtime_error("Cannot write CodManifest.yaml at " + manifest_path.string());
+          }
+          ofs << yaml::format_yaml(manifest_node) << std::endl;
 
-    std::cout << "✔ CodManifest.yaml generated at " << manifest_path << std::endl;
+          std::cout << "✔ CodManifest.yaml generated at " << manifest_path << std::endl;
+        });
 
   } catch (const std::exception &e) {
     std::cerr << "Error: " << e.what() << std::endl;
