@@ -16,9 +16,7 @@ namespace shilos {
 namespace yaml {
 
 // Constants for magic numbers
-constexpr size_t MAX_LOOKAHEAD = 200;        // Maximum lookahead for efficient mapping detection
-constexpr size_t MAX_URL_SCHEME_LENGTH = 10; // Maximum length for URL scheme detection
-constexpr size_t MAX_TIME_FORMAT_LENGTH = 2; // Maximum length for time format detection
+constexpr size_t MAX_LOOKAHEAD = 200; // Maximum lookahead for efficient mapping detection
 
 // Indentation comparison result
 enum class IndentRelation { Less, Equal, Greater, Incompatible };
