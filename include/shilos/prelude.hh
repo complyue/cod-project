@@ -312,12 +312,13 @@ struct Node {
   }
 };
 
-// YAML document that owns the underlying string payload
+// YAML document stream that owns the underlying string payload
+// Supports multiple documents separated by --- or ...
 // All yaml nodes must not outlive the document that created them
 class YamlDocument {
 private:
   std::string source_;              // Owns the original YAML string for string_view lifetime
-  Node root_;                       // Root node of the parsed document
+  std::vector<Node> documents_;     // Multiple documents in the stream
   iops<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference (deduplicated)
 
 public:
@@ -329,9 +330,25 @@ public:
   YamlDocument(YamlDocument &&) = default;
   YamlDocument &operator=(YamlDocument &&) = default;
 
-  // Access to the root node
-  const Node &root() const noexcept { return root_; }
-  Node &root() noexcept { return root_; }
+  // Access to documents
+  const std::vector<Node> &documents() const noexcept { return documents_; }
+  std::vector<Node> &documents() noexcept { return documents_; }
+
+  // Convenience methods for single-document use
+  const Node &root() const {
+    if (documents_.empty())
+      throw std::runtime_error("No documents in YAML stream");
+    return documents_[0];
+  }
+  Node &root() {
+    if (documents_.empty())
+      throw std::runtime_error("No documents in YAML stream");
+    return documents_[0];
+  }
+
+  // Check if this is a multi-document stream
+  bool is_multi_document() const noexcept { return documents_.size() > 1; }
+  size_t document_count() const noexcept { return documents_.size(); }
 
   // Static factory function - the primary way to parse YAML
   static YamlDocument Parse(std::string source);

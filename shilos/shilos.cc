@@ -3,10 +3,12 @@
 #include "shilos/iops.hh"
 
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -24,6 +26,12 @@ struct ParseState {
   size_t line = 1;
   size_t column = 1;
   iops<std::string> owned_strings; // Storage for strings that need escaping (deduplicated)
+
+  // Track indentation for basic compatibility checking
+  std::string_view last_indent; // Last indentation seen for basic validation
+
+  // Anchor/alias tracking
+  std::unordered_map<std::string_view, Node> anchors; // Maps anchor names to their nodes
 
   explicit ParseState(std::string_view str) : input(str) {}
 
@@ -79,6 +87,34 @@ struct ParseState {
 
   // Store an owned string and return a view to it (for escaped strings)
   std::string_view store_owned_string(std::string str) { return owned_strings.insert(std::move(str)); }
+
+  // Validate indentation compatibility - only throws on truly incompatible indentation
+  void validate_indentation(std::string_view current_indent) {
+    if (current_indent.empty())
+      return;
+
+    // Simple compatibility check with the last indentation seen
+    // We allow mixed tabs/spaces as long as they form valid prefix relationships
+    if (!last_indent.empty() && current_indent != last_indent) {
+      // Check if either is a prefix of the other
+      bool is_compatible = false;
+
+      if (current_indent.size() >= last_indent.size()) {
+        // Check if last is a prefix of current
+        is_compatible = current_indent.substr(0, last_indent.size()) == last_indent;
+      } else {
+        // Check if current is a prefix of last
+        is_compatible = last_indent.substr(0, current_indent.size()) == current_indent;
+      }
+
+      if (!is_compatible) {
+        throw ParseError("Incompatible indentation at line " + std::to_string(line) +
+                         " - indentation cannot be consistently compared with previous levels");
+      }
+    }
+
+    last_indent = current_indent;
+  }
 };
 
 // Compare two indentations to determine their relationship
@@ -127,6 +163,10 @@ Node parse_json_sequence(ParseState &state);
 Node parse_json_value(ParseState &state);
 std::string_view parse_scalar(ParseState &state);
 bool looks_like_mapping_efficient(const ParseState &state);
+Node parse_multiline_scalar(ParseState &state);
+Node parse_alias(ParseState &state);
+Node parse_anchored_value(ParseState &state);
+Node parse_tagged_value(ParseState &state);
 
 void advance_to_next_content(ParseState &state) {
   while (!state.at_end()) {
@@ -157,7 +197,8 @@ bool is_yaml_special_char(char c) {
 
 std::string_view parse_quoted_string(ParseState &state) {
   char quote_char = state.current();
-  state.advance(); // Skip opening quote
+  size_t start_line = state.line; // Store the starting line for accurate error reporting
+  state.advance();                // Skip opening quote
 
   std::string result;
 
@@ -209,14 +250,47 @@ std::string_view parse_quoted_string(ParseState &state) {
     state.advance(); // Skip closing quote
   } else {
     // Reached end of input without finding closing quote
-    throw ParseError("Unclosed quoted string starting at line " +
-                     std::to_string(state.line - std::count(result.begin(), result.end(), '\n')) +
-                     " - missing closing " + std::string(1, quote_char) + " quote");
+    throw ParseError("Unclosed quoted string starting at line " + std::to_string(start_line) + " - missing closing " +
+                     std::string(1, quote_char) + " quote");
   }
 
   // If no escaping was needed, we could potentially return a view to the original
   // but for simplicity, we'll always store quoted strings as owned strings
   return state.store_owned_string(std::move(result));
+}
+
+// Check if a string looks like a URL scheme (http, https, ftp, etc.)
+bool is_likely_url_scheme(std::string_view text) {
+  if (text.empty())
+    return false;
+
+  // Common URL schemes
+  return text == "http" || text == "https" || text == "ftp" || text == "ftps" || text == "file" || text == "mailto" ||
+         text == "tel" || text == "ssh" || text == "git" || text == "ws" || text == "wss";
+}
+
+// Check if the current position looks like it's part of a time format (12:30, 14:45:30)
+bool is_likely_time_format(const ParseState &state, size_t start_pos) {
+  std::string_view text = state.make_view(start_pos, state.pos);
+
+  // Simple heuristic: if it's 1-2 digits, it might be hours in a time format
+  if (text.size() >= 1 && text.size() <= 2) {
+    bool all_digits = true;
+    for (char c : text) {
+      if (!std::isdigit(c)) {
+        all_digits = false;
+        break;
+      }
+    }
+
+    if (all_digits) {
+      int value = std::stoi(std::string(text));
+      // Hours are typically 0-23, minutes/seconds are 0-59
+      return value >= 0 && value <= 59;
+    }
+  }
+
+  return false;
 }
 
 std::string_view parse_unquoted_scalar(ParseState &state) {
@@ -231,8 +305,16 @@ std::string_view parse_unquoted_scalar(ParseState &state) {
     }
 
     // Stop at colon followed by space (indicates mapping) - but only if we're not at start
+    // and it's not part of a URL scheme or time format
     if (state.pos > start_pos && c == ':' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
-      break;
+      // Check if this might be a URL scheme (like http:, https:, ftp:)
+      std::string_view potential_key = state.make_view(start_pos, state.pos);
+      if (is_likely_url_scheme(potential_key) || is_likely_time_format(state, start_pos)) {
+        // Continue parsing - this colon is part of the scalar value
+      } else {
+        // This looks like a mapping key - stop here
+        break;
+      }
     }
 
     state.advance();
@@ -427,6 +509,9 @@ Node parse_mapping(ParseState &state) {
 
     std::string_view current_indent = state.current_line_indentation();
 
+    // Validate indentation consistency
+    state.validate_indentation(current_indent);
+
     // Check if this is actually a sequence item (starts with -)
     if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
       // This is a sequence, not a mapping, so we're done with this mapping
@@ -471,6 +556,10 @@ Node parse_mapping(ParseState &state) {
       advance_to_next_content(state);
 
       std::string_view next_indent = state.current_line_indentation();
+
+      // Validate indentation consistency for the value
+      state.validate_indentation(next_indent);
+
       auto next_relation = compare_indentation(next_indent, current_indent);
       if (state.at_end() || next_relation != IndentRelation::Greater) {
         // No value or value at same/lower indentation = null
@@ -545,10 +634,275 @@ bool looks_like_mapping_efficient(const ParseState &state) {
   return false; // No mapping pattern found within reasonable distance
 }
 
+// Parse YAML multi-line scalars (literal | and folded >)
+Node parse_multiline_scalar(ParseState &state) {
+  char indicator = state.current();
+  state.advance(); // Skip '|' or '>'
+
+  // Parse optional style indicators (+, -, or digit for explicit indentation)
+  bool strip_final_newlines = false;
+  bool keep_final_newlines = false;
+
+  while (!state.at_end() && state.current() != '\n') {
+    if (state.current() == '+') {
+      keep_final_newlines = true;
+      state.advance();
+    } else if (state.current() == '-') {
+      strip_final_newlines = true;
+      state.advance();
+    } else if (std::isdigit(state.current())) {
+      // Explicit indentation indicator - just skip for now
+      state.advance();
+    } else if (state.current() == ' ' || state.current() == '\t') {
+      state.advance();
+    } else {
+      break;
+    }
+  }
+
+  // Skip to end of indicator line
+  state.skip_to_end_of_line();
+  if (state.current() == '\n') {
+    state.advance();
+  }
+
+  // Get the base indentation (indentation of the first content line)
+  advance_to_next_content(state);
+  if (state.at_end()) {
+    return Node(std::string_view(""));
+  }
+
+  std::string_view base_indent = state.current_line_indentation();
+  std::string result;
+
+  // Parse multi-line content
+  while (!state.at_end()) {
+    std::string_view line_indent = state.current_line_indentation();
+
+    // Check if this line belongs to the multi-line scalar
+    if (!line_indent.empty() && !is_indentation_greater(line_indent, base_indent)) {
+      // This line has less indentation, so it's not part of the scalar
+      break;
+    }
+
+    // Extract content line (removing base indentation)
+    std::string line_content;
+    if (line_indent.size() >= base_indent.size()) {
+      // Skip the base indentation
+      state.pos += base_indent.size();
+    }
+
+    // Read the rest of the line
+    size_t line_start = state.pos;
+    while (!state.at_end() && state.current() != '\n') {
+      state.advance();
+    }
+
+    std::string_view line_text = state.make_view(line_start, state.pos);
+
+    if (indicator == '|') {
+      // Literal scalar - preserve newlines and spaces
+      if (!result.empty()) {
+        result += '\n';
+      }
+      result += std::string(line_text);
+    } else {
+      // Folded scalar - fold newlines into spaces, preserve blank lines
+      if (line_text.empty()) {
+        // Empty line - preserve as paragraph break
+        if (!result.empty()) {
+          result += '\n';
+        }
+      } else {
+        // Non-empty line - fold with previous
+        if (!result.empty() && result.back() != '\n') {
+          result += ' ';
+        }
+        result += std::string(line_text);
+      }
+    }
+
+    // Move to next line
+    if (state.current() == '\n') {
+      state.advance();
+    }
+
+    advance_to_next_content(state);
+  }
+
+  // Apply final newline handling
+  if (strip_final_newlines) {
+    while (!result.empty() && result.back() == '\n') {
+      result.pop_back();
+    }
+  } else if (!keep_final_newlines && !result.empty() && result.back() == '\n') {
+    // Default behavior: single final newline
+    while (result.size() > 1 && result[result.size() - 2] == '\n') {
+      result.pop_back();
+    }
+  }
+
+  return Node(state.store_owned_string(std::move(result)));
+}
+
+// Parse YAML alias (*alias)
+Node parse_alias(ParseState &state) {
+  state.advance(); // Skip '*'
+
+  // Parse alias name
+  std::string alias_name;
+  while (!state.at_end() && !std::isspace(state.current()) && state.current() != ',' && state.current() != '}' &&
+         state.current() != ']' && state.current() != ':' && state.current() != '#') {
+    alias_name += state.current();
+    state.advance();
+  }
+
+  if (alias_name.empty()) {
+    throw ParseError("Empty alias name at line " + std::to_string(state.line));
+  }
+
+  // Look up the anchor
+  std::string_view alias_key = state.store_owned_string(std::move(alias_name));
+  auto it = state.anchors.find(alias_key);
+  if (it == state.anchors.end()) {
+    throw ParseError("Undefined alias '" + std::string(alias_key) + "' at line " + std::to_string(state.line));
+  }
+
+  return it->second; // Return copy of the anchored node
+}
+
+// Parse YAML anchored value (&anchor value)
+Node parse_anchored_value(ParseState &state) {
+  state.advance(); // Skip '&'
+
+  // Parse anchor name
+  std::string anchor_name;
+  while (!state.at_end() && !std::isspace(state.current()) && state.current() != ',' && state.current() != '}' &&
+         state.current() != ']' && state.current() != ':' && state.current() != '#') {
+    anchor_name += state.current();
+    state.advance();
+  }
+
+  if (anchor_name.empty()) {
+    throw ParseError("Empty anchor name at line " + std::to_string(state.line));
+  }
+
+  // Skip whitespace before value
+  state.skip_whitespace_inline();
+
+  // Parse the anchored value
+  Node value;
+  if (state.current() == '\n' || state.at_end()) {
+    // Anchor with null value
+    value = Node(std::monostate{});
+  } else {
+    // Parse the actual value
+    value = parse_value(state);
+  }
+
+  // Store the anchor
+  std::string_view anchor_key = state.store_owned_string(std::move(anchor_name));
+  state.anchors[anchor_key] = value;
+
+  return value;
+}
+
+// Parse YAML explicit type tag (!!type value)
+Node parse_tagged_value(ParseState &state) {
+  state.advance(); // Skip first '!'
+  state.advance(); // Skip second '!'
+
+  // Parse tag name
+  std::string tag_name;
+  while (!state.at_end() && !std::isspace(state.current()) && state.current() != ',' && state.current() != '}' &&
+         state.current() != ']') {
+    tag_name += state.current();
+    state.advance();
+  }
+
+  if (tag_name.empty()) {
+    throw ParseError("Empty tag name at line " + std::to_string(state.line));
+  }
+
+  // Skip whitespace before value
+  state.skip_whitespace_inline();
+
+  // Parse the tagged value
+  Node value = parse_value(state);
+
+  // Apply type conversion based on tag
+  if (tag_name == "str") {
+    // Force string type
+    if (auto scalar = std::get_if<std::string_view>(&value.value)) {
+      return Node(*scalar);
+    } else {
+      throw ParseError("!!str tag applied to non-scalar value at line " + std::to_string(state.line));
+    }
+  } else if (tag_name == "int") {
+    // Force integer type
+    if (auto scalar = std::get_if<std::string_view>(&value.value)) {
+      try {
+        int64_t int_value = std::stoll(std::string(*scalar));
+        return Node(int_value);
+      } catch (...) {
+        throw ParseError("!!int tag applied to non-integer value '" + std::string(*scalar) + "' at line " +
+                         std::to_string(state.line));
+      }
+    } else {
+      throw ParseError("!!int tag applied to non-scalar value at line " + std::to_string(state.line));
+    }
+  } else if (tag_name == "float") {
+    // Force float type
+    if (auto scalar = std::get_if<std::string_view>(&value.value)) {
+      try {
+        double float_value = std::stod(std::string(*scalar));
+        return Node(float_value);
+      } catch (...) {
+        throw ParseError("!!float tag applied to non-float value '" + std::string(*scalar) + "' at line " +
+                         std::to_string(state.line));
+      }
+    } else {
+      throw ParseError("!!float tag applied to non-scalar value at line " + std::to_string(state.line));
+    }
+  } else if (tag_name == "bool") {
+    // Force boolean type
+    if (auto scalar = std::get_if<std::string_view>(&value.value)) {
+      std::string str_value = std::string(*scalar);
+      if (str_value == "true" || str_value == "yes" || str_value == "on" || str_value == "1") {
+        return Node(true);
+      } else if (str_value == "false" || str_value == "no" || str_value == "off" || str_value == "0") {
+        return Node(false);
+      } else {
+        throw ParseError("!!bool tag applied to non-boolean value '" + str_value + "' at line " +
+                         std::to_string(state.line));
+      }
+    } else {
+      throw ParseError("!!bool tag applied to non-scalar value at line " + std::to_string(state.line));
+    }
+  } else if (tag_name == "null") {
+    // Force null type
+    return Node(std::monostate{});
+  } else {
+    // Unknown tag - keep original value but warn
+    // For now, just return the original value
+    return value;
+  }
+}
+
 Node parse_value(ParseState &state) {
   advance_to_next_content(state);
   if (state.at_end()) {
     return Node(std::monostate{});
+  }
+
+  // Check for alias (*alias)
+  if (state.current() == '*') {
+    return parse_alias(state);
+  }
+
+  // Check for explicit type tag (!!type)
+  if (state.current() == '!' && state.peek() == '!') {
+    return parse_tagged_value(state);
   }
 
   // Check for sequence (list starting with -)
@@ -558,6 +912,11 @@ Node parse_value(ParseState &state) {
   }
 
   state.skip_whitespace_inline();
+
+  // Check for anchor (&anchor)
+  if (state.current() == '&') {
+    return parse_anchored_value(state);
+  }
 
   // Check for inline JSON-style structures
   if (state.current() == '{') {
@@ -571,6 +930,11 @@ Node parse_value(ParseState &state) {
   // Check if this looks like a mapping using efficient limited lookahead
   if (looks_like_mapping_efficient(state)) {
     return parse_mapping(state);
+  }
+
+  // Check for multi-line scalars (literal | and folded >)
+  if (state.current() == '|' || state.current() == '>') {
+    return parse_multiline_scalar(state);
   }
 
   // Otherwise, parse as scalar
@@ -712,8 +1076,49 @@ Node parse_json_sequence(ParseState &state) {
   return node;
 }
 
+// Check if current position is at a document separator (--- or ...)
+bool is_document_separator(ParseState &state) {
+  if (state.pos + 2 >= state.input.size())
+    return false;
+
+  // Check for "---" or "..."
+  if ((state.input[state.pos] == '-' && state.input[state.pos + 1] == '-' && state.input[state.pos + 2] == '-') ||
+      (state.input[state.pos] == '.' && state.input[state.pos + 1] == '.' && state.input[state.pos + 2] == '.')) {
+
+    // Must be followed by whitespace, newline, or end of input
+    if (state.pos + 3 >= state.input.size())
+      return true;
+    char next = state.input[state.pos + 3];
+    return next == ' ' || next == '\t' || next == '\n' || next == '\r';
+  }
+
+  return false;
+}
+
+// Skip document separator and any following content on the same line
+void skip_document_separator(ParseState &state) {
+  if (is_document_separator(state)) {
+    state.advance(); // Skip first character
+    state.advance(); // Skip second character
+    state.advance(); // Skip third character
+
+    // Skip rest of line
+    state.skip_to_end_of_line();
+    if (state.current() == '\n') {
+      state.advance();
+    }
+  }
+}
+
 Node parse_document(ParseState &state) {
   advance_to_next_content(state);
+
+  // Skip document start separator if present
+  if (is_document_separator(state)) {
+    skip_document_separator(state);
+    advance_to_next_content(state);
+  }
+
   if (state.at_end()) {
     return Node(std::monostate{});
   }
@@ -721,13 +1126,38 @@ Node parse_document(ParseState &state) {
   return parse_value(state);
 }
 
-// YamlDocument implementation
+// Parse multiple documents from a YAML stream
+std::vector<Node> parse_document_stream(ParseState &state) {
+  std::vector<Node> documents;
+
+  while (!state.at_end()) {
+    advance_to_next_content(state);
+    if (state.at_end())
+      break;
+
+    // Parse a single document
+    Node doc = parse_document(state);
+    documents.push_back(std::move(doc));
+
+    // Skip to next document or end
+    advance_to_next_content(state);
+
+    // Check for document end separator
+    if (is_document_separator(state)) {
+      skip_document_separator(state);
+      advance_to_next_content(state);
+    }
+  }
+
+  return documents;
+}
+
+// YamlDocument implementation - now supports multiple documents
 YamlDocument::YamlDocument(std::string source) : source_(std::move(source)) {
   ParseState state{source_};
-  // Note: unordered_set automatically deduplicates strings and maintains stable references
 
   try {
-    root_ = parse_document(state);
+    documents_ = parse_document_stream(state);
     // Transfer ownership of escaped strings from ParseState to this document
     // This ensures all string_views in nodes remain valid for the document's lifetime
     owned_strings_ = std::move(state.owned_strings);
@@ -755,12 +1185,16 @@ void format_yaml(std::ostream &os, const Node &node, int indent) {
           // Quote string if it contains special characters or looks like other types
           bool needs_quotes = arg.empty() || arg == "true" || arg == "false" || arg == "null" ||
                               arg.find(':') != std::string_view::npos || arg.find('#') != std::string_view::npos ||
-                              arg.find('\n') != std::string_view::npos || arg.find('"') != std::string_view::npos ||
-                              (std::isdigit(arg[0]) || arg[0] == '-');
+                              arg.find('\n') != std::string_view::npos || arg.find('"') != std::string_view::npos;
+
+          // Quote strings that look numeric but aren't valid numbers
+          if (!needs_quotes && !arg.empty() && (std::isdigit(arg[0]) || arg[0] == '-' || arg[0] == '+')) {
+            needs_quotes = !is_valid_number(arg);
+          }
 
           if (needs_quotes) {
             os << "\"";
-            for (char c : std::string(arg)) { // Convert string_view to string for iteration
+            for (char c : arg) { // Iterate directly over string_view
               if (c == '"')
                 os << "\\\"";
               else if (c == '\\')
@@ -776,7 +1210,7 @@ void format_yaml(std::ostream &os, const Node &node, int indent) {
             }
             os << "\"";
           } else {
-            os << std::string(arg); // Convert string_view to string for output
+            os << arg; // Output string_view directly
           }
         } else if constexpr (std::is_same_v<T, Sequence>) {
           if (indent == 0) {
