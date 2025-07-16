@@ -15,6 +15,11 @@
 namespace shilos {
 namespace yaml {
 
+// Constants for magic numbers
+constexpr size_t MAX_LOOKAHEAD = 200;        // Maximum lookahead for efficient mapping detection
+constexpr size_t MAX_URL_SCHEME_LENGTH = 10; // Maximum length for URL scheme detection
+constexpr size_t MAX_TIME_FORMAT_LENGTH = 2; // Maximum length for time format detection
+
 // Indentation comparison result
 enum class IndentRelation { Less, Equal, Greater, Incompatible };
 
@@ -405,15 +410,29 @@ bool contains_decimal_or_scientific(std::string_view text) {
 }
 
 Node parse_scalar_value(std::string_view scalar_text) {
-  if (scalar_text.empty() || scalar_text == "null" || scalar_text == "~") {
+  // YAML 1.2 spec-compliant boolean/null detection with case-insensitive matching
+  if (scalar_text.empty()) {
     return Node(std::monostate{});
   }
 
-  if (scalar_text == "true" || scalar_text == "yes" || scalar_text == "on") {
+  // Convert to lowercase for case-insensitive comparison
+  std::string lower_text;
+  lower_text.reserve(scalar_text.size());
+  for (char c : scalar_text) {
+    lower_text += std::tolower(c);
+  }
+
+  // YAML 1.2 null values (case-insensitive)
+  if (lower_text == "null" || lower_text == "~" || lower_text == "null") {
+    return Node(std::monostate{});
+  }
+
+  // YAML 1.2 boolean values (case-insensitive)
+  if (lower_text == "true" || lower_text == "yes" || lower_text == "on" || lower_text == "y") {
     return Node(true);
   }
 
-  if (scalar_text == "false" || scalar_text == "no" || scalar_text == "off") {
+  if (lower_text == "false" || lower_text == "no" || lower_text == "off" || lower_text == "n") {
     return Node(false);
   }
 
@@ -534,14 +553,16 @@ Node parse_mapping(ParseState &state) {
     // Parse key
     std::string_view key = parse_scalar(state);
     if (key.empty()) {
-      throw ParseError("Empty or missing key in YAML mapping at line " + std::to_string(state.line));
+      throw ParseError("Empty or missing key in YAML mapping at line " + std::to_string(state.line) + ", column " +
+                       std::to_string(state.column));
     }
 
     state.skip_whitespace_inline();
 
     // Expect colon
     if (state.current() != ':') {
-      throw ParseError("Expected ':' after key '" + std::string(key) + "' at line " + std::to_string(state.line));
+      throw ParseError("Expected ':' after key '" + std::string(key) + "' at line " + std::to_string(state.line) +
+                       ", column " + std::to_string(state.column));
     }
 
     state.advance(); // Skip ':'
@@ -593,8 +614,6 @@ Node parse_mapping(ParseState &state) {
 // Efficient mapping detection using limited lookahead to avoid O(n²) performance
 // Only looks ahead a reasonable distance to find mapping indicators
 bool looks_like_mapping_efficient(const ParseState &state) {
-  static constexpr size_t MAX_LOOKAHEAD = 200; // Reasonable limit for key length
-
   size_t pos = state.pos;
   bool in_quotes = false;
   char quote_char = '\0';
@@ -758,7 +777,8 @@ Node parse_alias(ParseState &state) {
   }
 
   if (alias_name.empty()) {
-    throw ParseError("Empty alias name at line " + std::to_string(state.line));
+    throw ParseError("Empty alias name at line " + std::to_string(state.line) + ", column " +
+                     std::to_string(state.column));
   }
 
   // Look up the anchor
@@ -784,7 +804,8 @@ Node parse_anchored_value(ParseState &state) {
   }
 
   if (anchor_name.empty()) {
-    throw ParseError("Empty anchor name at line " + std::to_string(state.line));
+    throw ParseError("Empty anchor name at line " + std::to_string(state.line) + ", column " +
+                     std::to_string(state.column));
   }
 
   // Skip whitespace before value
@@ -821,7 +842,8 @@ Node parse_tagged_value(ParseState &state) {
   }
 
   if (tag_name.empty()) {
-    throw ParseError("Empty tag name at line " + std::to_string(state.line));
+    throw ParseError("Empty tag name at line " + std::to_string(state.line) + ", column " +
+                     std::to_string(state.column));
   }
 
   // Skip whitespace before value
@@ -1169,6 +1191,84 @@ YamlDocument::YamlDocument(std::string source) : source_(std::move(source)) {
 
 YamlDocument YamlDocument::Parse(std::string source) { return YamlDocument(std::move(source)); }
 
+// Forward declarations for formatting functions
+void format_scalar(std::ostream &os, const std::string_view &str);
+void format_sequence(std::ostream &os, const Sequence &seq, int indent);
+void format_mapping(std::ostream &os, const Map &map, int indent);
+
+void format_scalar(std::ostream &os, const std::string_view &str) {
+  // Quote string if it contains special characters or looks like other types
+  bool needs_quotes = str.empty() || str == "true" || str == "false" || str == "null" ||
+                      str.find(':') != std::string_view::npos || str.find('#') != std::string_view::npos ||
+                      str.find('\n') != std::string_view::npos || str.find('"') != std::string_view::npos;
+
+  // Quote strings that look numeric but aren't valid numbers
+  if (!needs_quotes && !str.empty() && (std::isdigit(str[0]) || str[0] == '-' || str[0] == '+')) {
+    needs_quotes = !is_valid_number(str);
+  }
+
+  if (needs_quotes) {
+    os << "\"";
+    for (char c : str) {
+      if (c == '"')
+        os << "\\\"";
+      else if (c == '\\')
+        os << "\\\\";
+      else if (c == '\n')
+        os << "\\n";
+      else if (c == '\t')
+        os << "\\t";
+      else if (c == '\r')
+        os << "\\r";
+      else
+        os << c;
+    }
+    os << "\"";
+  } else {
+    os << str;
+  }
+}
+
+void format_sequence(std::ostream &os, const Sequence &seq, int indent) {
+  if (indent == 0) {
+    // Root level sequence
+    for (size_t i = 0; i < seq.size(); ++i) {
+      if (i > 0)
+        os << "\n";
+      os << "- ";
+      format_yaml(os, seq[i], 2);
+    }
+  } else {
+    // Nested sequence - use standard YAML list format
+    for (size_t i = 0; i < seq.size(); ++i) {
+      if (i > 0)
+        os << "\n" << std::string(indent, ' ');
+      os << "- ";
+      format_yaml(os, seq[i], indent + 2);
+    }
+  }
+}
+
+void format_mapping(std::ostream &os, const Map &map, int indent) {
+  bool first = true;
+  for (const auto &entry : map) {
+    if (!first) {
+      os << "\n" << std::string(indent, ' ');
+    }
+    first = false;
+
+    os << std::string(entry.key) << ": ";
+
+    // Check if value should be on next line
+    if (std::holds_alternative<Map>(entry.value.value) || std::holds_alternative<Sequence>(entry.value.value)) {
+      os << "\n" << std::string(indent + 2, ' ');
+      format_yaml(os, entry.value, indent + 2);
+    } else {
+      format_yaml(os, entry.value, 0);
+    }
+  }
+}
+
 void format_yaml(std::ostream &os, const Node &node, int indent) {
   std::visit(
       [&os, indent](auto &&arg) {
@@ -1182,72 +1282,11 @@ void format_yaml(std::ostream &os, const Node &node, int indent) {
         } else if constexpr (std::is_same_v<T, double>) {
           os << arg;
         } else if constexpr (std::is_same_v<T, std::string_view>) {
-          // Quote string if it contains special characters or looks like other types
-          bool needs_quotes = arg.empty() || arg == "true" || arg == "false" || arg == "null" ||
-                              arg.find(':') != std::string_view::npos || arg.find('#') != std::string_view::npos ||
-                              arg.find('\n') != std::string_view::npos || arg.find('"') != std::string_view::npos;
-
-          // Quote strings that look numeric but aren't valid numbers
-          if (!needs_quotes && !arg.empty() && (std::isdigit(arg[0]) || arg[0] == '-' || arg[0] == '+')) {
-            needs_quotes = !is_valid_number(arg);
-          }
-
-          if (needs_quotes) {
-            os << "\"";
-            for (char c : arg) { // Iterate directly over string_view
-              if (c == '"')
-                os << "\\\"";
-              else if (c == '\\')
-                os << "\\\\";
-              else if (c == '\n')
-                os << "\\n";
-              else if (c == '\t')
-                os << "\\t";
-              else if (c == '\r')
-                os << "\\r";
-              else
-                os << c;
-            }
-            os << "\"";
-          } else {
-            os << arg; // Output string_view directly
-          }
+          format_scalar(os, arg);
         } else if constexpr (std::is_same_v<T, Sequence>) {
-          if (indent == 0) {
-            // Root level sequence
-            for (size_t i = 0; i < arg.size(); ++i) {
-              if (i > 0)
-                os << "\n";
-              os << "- ";
-              format_yaml(os, arg[i], 2);
-            }
-          } else {
-            // Nested sequence - use standard YAML list format
-            for (size_t i = 0; i < arg.size(); ++i) {
-              if (i > 0)
-                os << "\n" << std::string(indent, ' ');
-              os << "- ";
-              format_yaml(os, arg[i], indent + 2);
-            }
-          }
+          format_sequence(os, arg, indent);
         } else if constexpr (std::is_same_v<T, Map>) {
-          bool first = true;
-          for (const auto &entry : arg) {
-            if (!first) {
-              os << "\n" << std::string(indent, ' ');
-            }
-            first = false;
-
-            os << std::string(entry.key) << ": ";
-
-            // Check if value should be on next line
-            if (std::holds_alternative<Map>(entry.value.value) || std::holds_alternative<Sequence>(entry.value.value)) {
-              os << "\n" << std::string(indent + 2, ' ');
-              format_yaml(os, entry.value, indent + 2);
-            } else {
-              format_yaml(os, entry.value, 0);
-            }
-          }
+          format_mapping(os, arg, indent);
         }
       },
       node.value);
