@@ -12,11 +12,6 @@ echo ""
 echo ""
 echo "🏃  Running codp shell tests..."
 
-# Set default COD_TEST_TOOLCHAIN if not already set
-export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
-
-echo "🔧 Using toolchain mode: $COD_TEST_TOOLCHAIN"
-
 # Add yaml-cmp build dir to PATH so sub-tests can find it
 export PATH="$PROJECT_ROOT/tests/yaml-cmp/build:$PATH"
 

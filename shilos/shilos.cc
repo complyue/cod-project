@@ -79,6 +79,15 @@ struct ParseState {
   // Get current line's indentation (from line_begin_pos to current non-whitespace pos)
   std::string_view current_line_indentation() const { return make_view(line_begin_pos, pos); }
 
+  // Get only the whitespace indentation for validation purposes
+  std::string_view current_line_whitespace_indentation() const {
+    size_t whitespace_end = line_begin_pos;
+    while (whitespace_end < input.size() && (input[whitespace_end] == ' ' || input[whitespace_end] == '\t')) {
+      whitespace_end++;
+    }
+    return make_view(line_begin_pos, whitespace_end);
+  }
+
   bool at_end() const { return pos >= input.size(); }
 
   // Create a string_view from the current position to end_pos
@@ -124,6 +133,7 @@ struct ParseState {
 
     // Simple compatibility check with the last indentation seen
     // We allow mixed tabs/spaces as long as they form valid prefix relationships
+    // However, we're more lenient about "outdenting" back to sequence levels
     if (!last_indent.empty() && current_indent != last_indent) {
       // Check if either is a prefix of the other
       bool is_compatible = false;
@@ -134,6 +144,29 @@ struct ParseState {
       } else {
         // Check if current is a prefix of last
         is_compatible = last_indent.substr(0, current_indent.size()) == current_indent;
+      }
+
+      // Additional check: Allow "outdenting" if the current indentation is consistent
+      // with a potential sequence structure (like going from 4 spaces back to 2 spaces)
+      if (!is_compatible) {
+        // Check if we're dealing with a sequence outdent pattern
+        // This happens when we go from item content (deeper) back to sequence level (shallower)
+        // We allow this as long as both indentations use the same whitespace pattern
+        if (current_indent.size() < last_indent.size()) {
+          // Check if both indentations use the same whitespace character pattern
+          bool same_pattern = true;
+          for (size_t i = 0; i < current_indent.size(); ++i) {
+            if (current_indent[i] != last_indent[i]) {
+              same_pattern = false;
+              break;
+            }
+          }
+
+          // If the pattern is consistent and we're outdenting, allow it
+          if (same_pattern) {
+            is_compatible = true;
+          }
+        }
       }
 
       if (!is_compatible) {
@@ -552,8 +585,8 @@ Node parse_mapping(ParseState &state) {
 
     std::string_view current_indent = state.current_line_indentation();
 
-    // Validate indentation consistency
-    state.validate_indentation(current_indent);
+    // Validate indentation consistency using whitespace-only indentation
+    state.validate_indentation(state.current_line_whitespace_indentation());
 
     // Check if this is actually a sequence item (starts with -)
     if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
@@ -562,11 +595,13 @@ Node parse_mapping(ParseState &state) {
     }
 
     // Set minimum key indentation from first key
+    // Use whitespace-only indentation for proper comparison in sequence contexts
+    std::string_view current_whitespace_indent = state.current_line_whitespace_indentation();
     if (min_key_indent.empty()) {
-      min_key_indent = current_indent;
+      min_key_indent = current_whitespace_indent;
     } else {
       // Check if this key meets the minimum indentation requirement
-      auto relation = compare_indentation(current_indent, min_key_indent);
+      auto relation = compare_indentation(current_whitespace_indent, min_key_indent);
       if (relation == IndentRelation::Less || relation == IndentRelation::Incompatible) {
         // Indentation is less than minimum, this key belongs to a parent level
         break;
@@ -600,8 +635,8 @@ Node parse_mapping(ParseState &state) {
 
       std::string_view next_indent = state.current_line_indentation();
 
-      // Validate indentation consistency for the value
-      state.validate_indentation(next_indent);
+      // Validate indentation consistency for the value using whitespace-only indentation
+      state.validate_indentation(state.current_line_whitespace_indentation());
 
       auto next_relation = compare_indentation(next_indent, current_indent);
       if (state.at_end() || next_relation != IndentRelation::Greater) {
