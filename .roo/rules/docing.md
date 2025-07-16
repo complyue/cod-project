@@ -1,0 +1,4 @@
+Write dedicated documents (e.g., .md files) and source-code comments to present the final state of affairs. Avoid describing what changed, previous efforts, or comparisons with earlier versions. Two exceptions apply:
+
+1. Dedicated change-log files (e.g., CHANGELOG.md)
+2. Source code where both the old and new designs remain operational in parallel
