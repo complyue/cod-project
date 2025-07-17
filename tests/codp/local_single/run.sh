@@ -52,18 +52,10 @@ fi
 
 # ---------------------------------------------------------------------------
 # Compare YAML manifest content using yaml-cmp (subset comparison).
-# We dynamically generate the *expected* YAML that only contains the `locals`
-# section so the comparison is robust against unrelated manifest fields.
+# Use static expected manifest file with relative paths.
 # ---------------------------------------------------------------------------
 
-EXPECTED_YAML="$(mktemp)"
-cat > "$EXPECTED_YAML" <<EOF
-{
-  "locals": {
-    "22222222-2222-2222-2222-222222222222": "$(realpath "$ROOT_DIR/dev/depA")"
-  }
-}
-EOF
+EXPECTED_YAML="$SCRIPT_DIR/expected_manifest.yaml"
 
 # Use yaml-cmp in subset mode – expected YAML must be contained in actual.
 "$YAMLCMP_BIN" --subset "$EXPECTED_YAML" "$MANIFEST"

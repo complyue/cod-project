@@ -34,19 +34,23 @@ struct ManifestData {
   std::vector<ManifestEntry> resolved;
 };
 
-inline void collect_deps(const fs::path &proj_dir, const CodProject *proj, ManifestData &out,
+inline void collect_deps(const fs::path &proj_dir, const fs::path &root_dir, const CodProject *proj, ManifestData &out,
                          std::unordered_set<std::string> &visited) {
   for (const CodDep &dep : proj->deps()) {
-    if (visited.contains(dep.uuid().to_string()))
+    std::string uuid_str = dep.uuid().to_string();
+    if (visited.contains(uuid_str))
       continue;
-    visited.insert(dep.uuid().to_string());
+    visited.insert(uuid_str);
 
     if (!dep.path().empty()) {
       fs::path dep_path = std::string(std::string_view(dep.path()));
       if (dep_path.is_relative())
         dep_path = fs::absolute(proj_dir / dep_path);
       dep_path = fs::weakly_canonical(dep_path);
-      out.locals[dep.uuid().to_string()] = dep_path.string();
+
+      // Store relative path from project root instead of absolute path
+      fs::path relative_path = fs::relative(dep_path, root_dir);
+      out.locals[uuid_str] = relative_path.string();
 
       // Load dep project YAML and recurse
       fs::path dep_yaml_path = dep_path / "CodProject.yaml";
@@ -63,7 +67,7 @@ inline void collect_deps(const fs::path &proj_dir, const CodProject *proj, Manif
             CodProject *dep_proj = dep_region->root().get();
             from_yaml(*dep_region, dep_root, dep_proj);
 
-            collect_deps(dep_path, dep_proj, out, visited);
+            collect_deps(dep_path, root_dir, dep_proj, out, visited);
           });
     } else {
       // Remote dependency – record minimal information (branch/commit TBD)
@@ -89,7 +93,7 @@ inline yaml::Node generate_manifest(const fs::path &project_dir) {
 
         ManifestData data;
         std::unordered_set<std::string> visited;
-        collect_deps(project_dir, project, data, visited);
+        collect_deps(project_dir, project_dir, project, data, visited);
 
         yaml::Node manifest(yaml::Map{});
         yaml::Node root_map(yaml::Map{});
@@ -100,7 +104,9 @@ inline yaml::Node generate_manifest(const fs::path &project_dir) {
         if (!data.locals.empty()) {
           yaml::Node locals_map(yaml::Map{});
           for (const auto &kv : data.locals) {
-            locals_map[kv.first] = kv.second;
+            std::string key_str = kv.first;
+            std::string value_str = kv.second;
+            locals_map[key_str] = value_str;
           }
           manifest["locals"] = locals_map;
         }
