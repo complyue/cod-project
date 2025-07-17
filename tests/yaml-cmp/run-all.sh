@@ -141,6 +141,10 @@ test_parsing "Scalar types JSON" "$TEST_DATA_DIR/scalars_json.yaml"
 test_parsing "Comments in YAML" "$TEST_DATA_DIR/comments_yaml.yaml"
 test_parsing "Mixed formats" "$TEST_DATA_DIR/mixed_formats.yaml"
 test_parsing "Edge cases" "$TEST_DATA_DIR/edge_cases.yaml"
+test_parsing "Map order original" "$TEST_DATA_DIR/map_order_original.yaml"
+test_parsing "Map order reordered" "$TEST_DATA_DIR/map_order_reordered.yaml"
+test_parsing "Nested map order original" "$TEST_DATA_DIR/nested_map_order_original.yaml"
+test_parsing "Nested map order reordered" "$TEST_DATA_DIR/nested_map_order_reordered.yaml"
 
 echo
 echo "--- Subset Tests ---"
@@ -168,6 +172,15 @@ run_test "Subset comparison (should pass)" "$TMP_SUBSET" "$TMP_FULL" "pass" "--s
 run_test "Reverse subset (should fail)" "$TMP_FULL" "$TMP_SUBSET" "fail" "--subset"
 
 rm -f "$TMP_SUBSET" "$TMP_FULL"
+
+echo
+echo "--- Map Key Order Tests ---"
+# Test that maps with different key orders are considered equal
+run_test "Simple map key order insensitive" "$TEST_DATA_DIR/map_order_original.yaml" "$TEST_DATA_DIR/map_order_reordered.yaml" "pass"
+run_test "Nested map key order insensitive" "$TEST_DATA_DIR/nested_map_order_original.yaml" "$TEST_DATA_DIR/nested_map_order_reordered.yaml" "pass"
+
+# Test subset mode with different key orders
+run_test "Map key order insensitive subset" "$TEST_DATA_DIR/map_order_original.yaml" "$TEST_DATA_DIR/map_order_reordered.yaml" "pass" "--subset"
 
 echo
 echo "--- Difference Tests ---"

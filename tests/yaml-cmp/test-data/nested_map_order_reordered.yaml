@@ -1,0 +1,10 @@
+person:
+  contact:
+    phone: null
+    email: "alice@example.com"
+  age: 25
+  address:
+    zipcode: 12345
+    city: "Boston"
+    street: "123 Main St"
+  name: "Alice"
