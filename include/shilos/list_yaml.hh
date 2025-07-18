@@ -21,7 +21,7 @@ namespace shilos {
 // ============================================================================
 
 template <template <typename> class ListC, typename T>
-inline yaml::Node list_to_yaml(const ListC<T> &lst, yaml::YamlAuthor &author) noexcept {
+inline yaml::Node list_to_yaml(const ListC<T> &lst, yaml::YamlAuthor &author) {
   auto seq = author.createSequence();
   for (const auto &elem : lst) {
     if constexpr (requires { to_yaml(elem, author); }) {
@@ -39,11 +39,11 @@ inline yaml::Node list_to_yaml(const ListC<T> &lst, yaml::YamlAuthor &author) no
   return seq;
 }
 
-template <typename T> inline yaml::Node to_yaml(const regional_fifo<T> &lst, yaml::YamlAuthor &author) noexcept {
+template <typename T> inline yaml::Node to_yaml(const regional_fifo<T> &lst, yaml::YamlAuthor &author) {
   return list_to_yaml<regional_fifo>(lst, author);
 }
 
-template <typename T> inline yaml::Node to_yaml(const regional_lifo<T> &lst, yaml::YamlAuthor &author) noexcept {
+template <typename T> inline yaml::Node to_yaml(const regional_lifo<T> &lst, yaml::YamlAuthor &author) {
   return list_to_yaml<regional_lifo>(lst, author);
 }
 

@@ -13,7 +13,7 @@ namespace cod::project {
 // YAML SERIALISATION IMPLEMENTATION FOR CodDep & CodProject
 // --------------------------------------------------------------------------
 
-inline yaml::Node to_yaml(const CodDep &dep, yaml::YamlAuthor &author) noexcept {
+inline yaml::Node to_yaml(const CodDep &dep, yaml::YamlAuthor &author) {
   auto m = author.createMap();
   author.setMapValue(m, "uuid", author.createString(dep.uuid().to_string()));
   author.setMapValue(m, "name", author.createString(std::string_view(dep.name())));
@@ -32,7 +32,7 @@ inline yaml::Node to_yaml(const CodDep &dep, yaml::YamlAuthor &author) noexcept 
   return m;
 }
 
-inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) noexcept {
+inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) {
   auto m = author.createMap();
   author.setMapValue(m, "uuid", author.createString(proj.uuid().to_string()));
   author.setMapValue(m, "name", author.createString(std::string_view(proj.name())));
@@ -52,9 +52,9 @@ inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) noex
 // Deserialisation – free functions picked up by ADL.
 // --------------------------------------------------------------------------
 
-template <typename T, typename RT>
-  requires(std::same_as<T, CodDep> && shilos::ValidMemRegionRootType<RT>)
-void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr) {
+template <typename RT>
+  requires(shilos::ValidMemRegionRootType<RT>)
+void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodDep *raw_ptr) {
   if (!node.IsMap()) {
     throw yaml::TypeError("CodDep YAML node must be a mapping");
   }
@@ -86,7 +86,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr
   }
 
   // Construct in-place.
-  new (raw_ptr) T(mr, uuid, name, repo_url, path);
+  new (raw_ptr) CodDep(mr, uuid, name, repo_url, path);
 
   // Optional branches.
   auto it_br = map.find("branches");
@@ -100,9 +100,9 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr
   }
 }
 
-template <typename T, typename RT>
-  requires(std::same_as<T, CodProject> && shilos::ValidMemRegionRootType<RT>)
-void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr) {
+template <typename RT>
+  requires(shilos::ValidMemRegionRootType<RT>)
+void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodProject *raw_ptr) {
   if (!node.IsMap()) {
     throw yaml::TypeError("CodProject YAML root must be a mapping");
   }
@@ -124,7 +124,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr
   std::string repo_url = fetch_scalar("repo_url");
 
   // Construct CodProject in-place.
-  new (raw_ptr) T(mr, uuid, name, repo_url);
+  new (raw_ptr) CodProject(mr, uuid, name, repo_url);
 
   // deps sequence (optional)
   auto it_deps = map.find("deps");
@@ -134,7 +134,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr
     }
     for (const auto &dep_node : std::get<yaml::Sequence>(it_deps->value.value)) {
       // Allocate CodDep via from_yaml helper.
-      raw_ptr->deps().emplace_init(mr, [&](CodDep *dst) { from_yaml<CodDep>(mr, dep_node, dst); });
+      raw_ptr->deps().emplace_init(mr, [&](CodDep *dst) { from_yaml(mr, dep_node, dst); });
     }
   }
 }
@@ -166,7 +166,7 @@ inline std::string repo_url_to_key(std::string_view url) {
 // YAML SERIALISATION FOR MANIFEST CLASSES
 // --------------------------------------------------------------------------
 
-inline yaml::Node to_yaml(const CodManifestEntry &entry, yaml::YamlAuthor &author) noexcept {
+inline yaml::Node to_yaml(const CodManifestEntry &entry, yaml::YamlAuthor &author) {
   auto m = author.createMap();
   author.setMapValue(m, "uuid", author.createString(entry.uuid().to_string()));
   author.setMapValue(m, "repo_url", author.createString(std::string_view(entry.repo_url())));
@@ -179,7 +179,7 @@ inline yaml::Node to_yaml(const CodManifestEntry &entry, yaml::YamlAuthor &autho
   return m;
 }
 
-inline yaml::Node to_yaml(const CodManifest &manifest, yaml::YamlAuthor &author) noexcept {
+inline yaml::Node to_yaml(const CodManifest &manifest, yaml::YamlAuthor &author) {
   auto m = author.createMap();
 
   // Root section
@@ -213,9 +213,9 @@ inline yaml::Node to_yaml(const CodManifest &manifest, yaml::YamlAuthor &author)
 // Deserialisation for manifest classes
 // --------------------------------------------------------------------------
 
-template <typename T, typename RT>
-  requires(std::same_as<T, CodManifestEntry> && shilos::ValidMemRegionRootType<RT>)
-void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr) {
+template <typename RT>
+  requires(shilos::ValidMemRegionRootType<RT>)
+void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifestEntry *raw_ptr) {
   if (!node.IsMap()) {
     throw yaml::TypeError("CodManifestEntry YAML node must be a mapping");
   }
@@ -249,12 +249,12 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr
   std::string commit = fetch_optional_scalar("commit");
 
   // Construct in-place
-  new (raw_ptr) T(mr, uuid, repo_url, branch, commit);
+  new (raw_ptr) CodManifestEntry(mr, uuid, repo_url, branch, commit);
 }
 
-template <typename T, typename RT>
-  requires(std::same_as<T, CodManifest> && shilos::ValidMemRegionRootType<RT>)
-void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr) {
+template <typename RT>
+  requires(shilos::ValidMemRegionRootType<RT>)
+void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifest *raw_ptr) {
   if (!node.IsMap()) {
     throw yaml::TypeError("CodManifest YAML root must be a mapping");
   }
@@ -285,7 +285,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr
   std::string root_repo_url = fetch_scalar_from_map(root_map, "repo_url");
 
   // Construct CodManifest in-place
-  new (raw_ptr) T(mr, root_uuid, root_repo_url);
+  new (raw_ptr) CodManifest(mr, root_uuid, root_repo_url);
 
   // Parse locals section (optional)
   auto it_locals = map.find("locals");
@@ -312,8 +312,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr
     }
     for (const auto &entry_node : std::get<yaml::Sequence>(it_resolved->value.value)) {
       // Allocate CodManifestEntry via from_yaml helper
-      raw_ptr->resolved().emplace_back_init(
-          mr, [&](CodManifestEntry *dst) { from_yaml<CodManifestEntry>(mr, entry_node, dst); });
+      raw_ptr->resolved().emplace_init(mr, [&](CodManifestEntry *dst) { from_yaml(mr, entry_node, dst); });
     }
   }
 }

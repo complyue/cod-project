@@ -29,7 +29,7 @@ namespace shilos {
 // ============================================================================
 
 template <typename K, typename V, typename Hash>
-inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d, yaml::YamlAuthor &author) noexcept {
+inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d, yaml::YamlAuthor &author) {
   yaml::Node m(yaml::Map{});
   for (const auto &[k, v] : d) {
     yaml::Node key_node;

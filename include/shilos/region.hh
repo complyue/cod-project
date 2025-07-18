@@ -9,11 +9,27 @@
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 
 namespace shilos {
 
 using std::intptr_t;
 using std::size_t;
+
+// Concept to validate that a type is suitable for use as a regional type
+template <typename T>
+concept RegionalType = std::is_trivially_destructible_v<T> || std::is_destructible_v<T>;
+
+// Concept to validate that a type can be constructed with memory_region& as first parameter
+template <typename T, typename RT>
+concept RegionalConstructibleWithRegion = requires {
+  requires ValidMemRegionRootType<RT>;
+  requires std::constructible_from<T, memory_region<RT> &>;
+};
+
+// Concept to validate that a type can be constructed without memory_region&
+template <typename T>
+concept RegionalConstructibleBits = std::constructible_from<T>;
 
 //
 // users should always update a regional_ptr<F> field of a record object of type T,
@@ -116,13 +132,13 @@ public:
   // General alloc_region for root types with additional constructor arguments
   template <typename... Args>
     requires std::constructible_from<RT, memory_region<RT> &, Args...>
-  static memory_region<RT> *alloc_region(const size_t payload_capacity, Args &&...args) {
+  static memory_region<RT> *alloc_region(const size_t payload_capacity, Args &&...args) noexcept(false) {
     return alloc_region_with(std::allocator<std::byte>(), payload_capacity, std::forward<Args>(args)...);
   }
   template <typename... Args>
     requires std::constructible_from<RT, memory_region<RT> &, Args...>
   static memory_region<RT> *alloc_region_with(std::allocator<std::byte> allocator, const size_t payload_capacity,
-                                              Args &&...args) {
+                                              Args &&...args) noexcept(false) {
     const size_t capacity = sizeof(memory_region) + payload_capacity;
     void *ptr = allocator.allocate(capacity);
     return new (ptr) memory_region<RT>(capacity, std::forward<Args>(args)...);
@@ -143,14 +159,14 @@ public:
   }
 
   // Manual deallocation methods
-  static void free_region(memory_region<RT> *region) {
+  static void free_region(memory_region<RT> *region) noexcept {
     if (!region)
       return;
     std::allocator<std::byte> allocator;
     free_region_with(allocator, region);
   }
 
-  template <typename Allocator> static void free_region_with(Allocator allocator, memory_region<RT> *region) {
+  template <typename Allocator> static void free_region_with(Allocator allocator, memory_region<RT> *region) noexcept {
     if (!region)
       return;
     size_t capacity = region->capacity_;
@@ -209,25 +225,30 @@ public:
                               reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
 
-  template <typename T> T *allocate(const size_t n = 1) {
+  template <typename T> T *allocate(const size_t n = 1) noexcept(false) {
+    static_assert(RegionalType<T>, "Type must be a valid regional type");
     return reinterpret_cast<T *>(allocate(n * sizeof(T), alignof(T)));
   }
 
-  void *allocate(const size_t size, const size_t align) {
+  void *allocate(const size_t size, const size_t align) noexcept(false) {
     // use current occupation mark as the allocated ptr, do proper alignment
     size_t free_spc = free_capacity();
     void *ptr = reinterpret_cast<void *>(reinterpret_cast<intptr_t>(this) + occupation_);
+
     if (!std::align(align, size, ptr, free_spc)) {
       throw std::bad_alloc();
     }
-    // move the occupation mark
+
+    // Calculate the actual aligned address and update occupation
+    // The new occupation is the aligned address + size, relative to region start
     occupation_ = reinterpret_cast<intptr_t>(ptr) + size - reinterpret_cast<intptr_t>(this);
     return ptr;
   }
 
   template <typename VT, typename... Args>
-    requires std::constructible_from<VT, Args...>
-  void create_bits_to(regional_ptr<VT> &rp, Args &&...args) {
+    requires RegionalConstructibleBits<VT> && std::constructible_from<VT, Args...>
+  void create_bits_to(regional_ptr<VT> &rp, Args &&...args) noexcept(false) {
+    static_assert(RegionalType<VT>, "Type must be a valid regional type");
     assert(reinterpret_cast<intptr_t>(&rp) > reinterpret_cast<intptr_t>(this) &&
            reinterpret_cast<intptr_t>(&rp) < reinterpret_cast<intptr_t>(this) + capacity_);
     VT *ptr = this->allocate<VT>();
@@ -235,8 +256,9 @@ public:
     rp.offset_ = reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(&rp);
   }
   template <typename VT, typename... Args>
-    requires std::constructible_from<VT, memory_region<RT> &, Args...>
-  void create_to(regional_ptr<VT> &rp, Args &&...args) {
+    requires RegionalConstructibleWithRegion<VT, RT> && std::constructible_from<VT, memory_region<RT> &, Args...>
+  void create_to(regional_ptr<VT> &rp, Args &&...args) noexcept(false) {
+    static_assert(RegionalType<VT>, "Type must be a valid regional type");
     assert(reinterpret_cast<intptr_t>(&rp) > reinterpret_cast<intptr_t>(this) &&
            reinterpret_cast<intptr_t>(&rp) < reinterpret_cast<intptr_t>(this) + capacity_);
     VT *ptr = this->allocate<VT>();
@@ -245,8 +267,9 @@ public:
   }
 
   template <typename VT, typename... Args>
-    requires std::constructible_from<VT, Args...>
-  global_ptr<VT, RT> create_bits(Args &&...args) {
+    requires RegionalConstructibleBits<VT> && std::constructible_from<VT, Args...>
+  global_ptr<VT, RT> create_bits(Args &&...args) noexcept(false) {
+    static_assert(RegionalType<VT>, "Type must be a valid regional type");
     VT *ptr = this->allocate<VT>();
     std::construct_at(ptr, std::forward<Args>(args)...);
     return global_ptr<VT, RT>( //
@@ -254,8 +277,9 @@ public:
         reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(this));
   }
   template <typename VT, typename... Args>
-    requires std::constructible_from<VT, memory_region<RT> &, Args...>
-  global_ptr<VT, RT> create(Args &&...args) {
+    requires RegionalConstructibleWithRegion<VT, RT> && std::constructible_from<VT, memory_region<RT> &, Args...>
+  global_ptr<VT, RT> create(Args &&...args) noexcept(false) {
+    static_assert(RegionalType<VT>, "Type must be a valid regional type");
     VT *ptr = this->allocate<VT>();
     std::construct_at(ptr, *this, std::forward<Args>(args)...);
     return global_ptr<VT, RT>( //
@@ -277,7 +301,8 @@ public:
 
   template <typename T>
     requires yaml::YamlConvertible<T, RT>
-  global_ptr<T, RT> create_from_yaml(const yaml::Node &node) {
+  global_ptr<T, RT> create_from_yaml(const yaml::Node &node) noexcept(false) {
+    static_assert(RegionalType<T>, "Type must be a valid regional type");
     auto raw_ptr = this->template allocate<T>();
     from_yaml<T>(*this, node, raw_ptr);
     return this->cast_ptr(raw_ptr);
@@ -286,7 +311,8 @@ public:
   // Allocate an object of type T from YAML and assign it to an existing regional_ptr.
   template <typename T>
     requires yaml::YamlConvertible<T, RT>
-  void create_from_yaml_at(const yaml::Node &node, regional_ptr<T> &to_ptr) {
+  void create_from_yaml_at(const yaml::Node &node, regional_ptr<T> &to_ptr) noexcept(false) {
+    static_assert(RegionalType<T>, "Type must be a valid regional type");
     auto ptr = this->template allocate<T>();
     from_yaml<T>(*this, node, ptr);
     to_ptr = ptr;
@@ -322,7 +348,9 @@ public:
   template <typename F> //
   const global_ptr<F, RT> &set(regional_ptr<F> VT::*ptrField, const global_ptr<F, RT> &tgt) {
     if (&tgt.region_ != &region_) {
-      throw std::logic_error("!?cross region ptr assignment?!");
+      throw std::invalid_argument("Cross-region pointer assignment is not allowed. "
+                                  "Attempted to assign a pointer from a different memory region. "
+                                  "Both the source and target pointers must belong to the same memory region.");
     }
     regional_ptr<F> &fp = this->*ptrField;
     VT *vp = tgt.get();

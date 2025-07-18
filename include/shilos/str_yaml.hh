@@ -6,7 +6,7 @@ namespace shilos {
 
 // YAML support for regional_str
 
-inline yaml::Node to_yaml(const regional_str &str, yaml::YamlAuthor &author) noexcept {
+inline yaml::Node to_yaml(const regional_str &str, yaml::YamlAuthor &author) {
   return author.createString(std::string_view(str));
 }
 

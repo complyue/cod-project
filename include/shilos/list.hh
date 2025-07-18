@@ -18,6 +18,8 @@ private:
   regional_ptr<regional_cons<T>> next_;
 
 public:
+  regional_cons() = default;
+
   template <typename RT, typename... Args>
     requires std::constructible_from<T, memory_region<RT> &, const Args &...> &&
              (!std::constructible_from<T, const Args &...>)

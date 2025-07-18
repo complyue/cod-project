@@ -29,6 +29,8 @@ private:
   size_t size_; // Number of elements used in this segment
 
 public:
+  vector_segment() : elements_(), next_(), size_(0) {}
+
   template <typename RT> vector_segment(memory_region<RT> &mr) : elements_(), next_(), size_(0) {}
 
   // Deleted special members
@@ -442,6 +444,10 @@ public:
    * @brief Erase element by iterator
    * @param it Iterator pointing to element to erase
    * @return Iterator to the element that followed the erased element
+   *
+   * @note This method uses a stable erasure strategy that shifts all subsequent
+   *       elements forward, maintaining iterator validity for remaining elements.
+   *       This is different from erase_at() which uses swap-with-last.
    */
   iterator erase(iterator it) {
     if (it == end()) {
@@ -449,17 +455,33 @@ public:
     }
 
     size_t index = it.index();
-    erase_at(index);
-
-    // Return iterator to same position (which now contains different element or is end)
     if (index >= total_size_) {
-      return end();
-    } else {
-      // Return iterator to the same index position
-      auto result_it = begin();
-      std::advance(result_it, index);
-      return result_it;
+      throw std::out_of_range("Iterator index out of range");
     }
+
+    // Special case: erasing last element
+    if (index == total_size_ - 1) {
+      pop_back();
+      return end();
+    }
+
+    // Shift all elements after the erased element forward by one position
+    for (size_t i = index + 1; i < total_size_; ++i) {
+      auto [src_segment, src_local] = locate_element(i);
+      auto [dst_segment, dst_local] = locate_element(i - 1);
+
+      // Use memory-level copy to avoid copy/move constructors
+      std::memcpy(&(*dst_segment)[dst_local], &(*src_segment)[src_local], sizeof(T));
+    }
+
+    // Remove the last element (which is now a duplicate)
+    pop_back();
+
+    // Return iterator to the element that followed the erased element
+    // (which is now at the erased position)
+    auto result_it = begin();
+    std::advance(result_it, index);
+    return result_it;
   }
 
   /**
@@ -467,6 +489,10 @@ public:
    * @param first Iterator to first element to erase
    * @param last Iterator to one past last element to erase
    * @return Iterator to the element that followed the last erased element
+   *
+   * @note This method uses a stable erasure strategy that shifts all subsequent
+   *       elements forward, maintaining iterator validity for remaining elements.
+   *       This is different from erase_at() which uses swap-with-last.
    */
   iterator erase(iterator first, iterator last) {
     if (first == last) {
@@ -482,20 +508,35 @@ public:
 
     size_t elements_to_erase = last_index - first_index;
 
-    // Handle the range by repeatedly erasing from the first position
-    // This maintains the swap-with-last strategy
-    for (size_t i = 0; i < elements_to_erase; ++i) {
-      erase_at(first_index);
+    // Special case: erasing at the end
+    if (last_index == total_size_) {
+      // Just truncate the vector
+      for (size_t i = 0; i < elements_to_erase; ++i) {
+        pop_back();
+      }
+      return end();
     }
 
-    // Return iterator to position where first element was
-    if (first_index >= total_size_) {
-      return end();
-    } else {
-      auto result_it = begin();
-      std::advance(result_it, first_index);
-      return result_it;
+    // Shift all elements after the erased range forward
+    size_t elements_to_shift = total_size_ - last_index;
+    for (size_t i = 0; i < elements_to_shift; ++i) {
+      auto [src_segment, src_local] = locate_element(last_index + i);
+      auto [dst_segment, dst_local] = locate_element(first_index + i);
+
+      // Use memory-level copy to avoid copy/move constructors
+      std::memcpy(&(*dst_segment)[dst_local], &(*src_segment)[src_local], sizeof(T));
     }
+
+    // Remove the trailing elements (which are now duplicates)
+    for (size_t i = 0; i < elements_to_erase; ++i) {
+      pop_back();
+    }
+
+    // Return iterator to the element that followed the last erased element
+    // (which is now at the first erased position)
+    auto result_it = begin();
+    std::advance(result_it, first_index);
+    return result_it;
   }
 };
 
