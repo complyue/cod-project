@@ -72,20 +72,6 @@ public:
 
   regional_str &repo_url() { return repo_url_; }
   const regional_str &repo_url() const { return repo_url_; }
-
-  // ---------------------------------------------------------------------
-  // Convenience helpers to add & access dependencies ---------------------
-  // ---------------------------------------------------------------------
-
-  template <typename RT>
-  CodDep &addDep(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url) {
-    deps_.enque(mr, uuid, name, repo_url);
-    return *deps_.back();
-  }
-
-  // Unsafe if list empty – caller responsibility
-  CodDep &lastDep() { return *deps_.back(); }
-  const CodDep &lastDep() const { return *deps_.back(); }
 };
 
 // ==========================================================================
