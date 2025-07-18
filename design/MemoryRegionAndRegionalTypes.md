@@ -629,33 +629,60 @@ YAML integration is provided through a modular system using standalone functions
 
 #### YamlDocument API
 
-The `YamlDocument` class provides two complementary approaches for working with YAML content:
+The `YamlDocument` class provides a **dual API pattern** with two consistent approaches for different error handling preferences:
 
-**1. Parsing API**
+**Constructor-based APIs (Exception-throwing)**
+- Throw exceptions directly (`ParseError`, `AuthorError`)
+- Use when you prefer exception-based error handling
+- More concise for simple error propagation
 
-The parsing API creates documents from YAML text:
+**Static method-based APIs (noexcept)**
+- Return `Result` variants (`ParseResult`, `AuthorResult`)
+- Use when you prefer explicit error handling via Result types
+- Better for functional programming patterns and error composition
+
+### Parsing API
+
+**1. Constructor-based (throws exceptions)**
 
 ```cpp
-// Parse YAML from string
-ParseResult<YamlDocument> doc = YamlDocument::Parse("config.yaml", yaml_content);
-if (doc.is_error()) {
-    // Handle parsing error
-    return;
-}
+// Parse from string - throws ParseError on failure
+YamlDocument doc("config.yaml", yaml_content);
 
-// Access parsed nodes
-auto root = doc.value().root();
-// ... use parsed document
+// Parse from file path - throws ParseError on failure
+YamlDocument doc("config.yaml", std::ifstream("config.yaml"));
 ```
 
-**2. Authoring API**
-
-The authoring API creates documents programmatically through a callback interface. The callback must be invocable with a `YamlAuthor&` parameter:
+**2. Static method-based (noexcept)**
 
 ```cpp
+// Parse from string - returns ParseResult
+ParseResult result = YamlDocument::Parse("config.yaml", yaml_content);
+
+// Parse from file path - returns ParseResult
+ParseResult result = YamlDocument::Read("config.yaml");
+```
+
+### Authoring API
+
+**1. Constructor-based (throws exceptions)**
+
+```cpp
+// Create document with callback - throws AuthorError on failure
+YamlDocument doc("output.yaml", [](YamlAuthor& author) {
+    auto root = author.create_map();
+    author.set_map_value(root, "key", author.create_string("value"));
+    author.add_root(root);
+}, true, true); // write=true, overwrite=true
+```
+
+**2. Static method-based (noexcept)**
+
+```cpp
+// Create document with callback - returns AuthorResult
 template<typename AuthorCallback>
   requires std::invocable<AuthorCallback, YamlAuthor&>
-static AuthorResult Author(std::string filename, AuthorCallback&& callback, bool write = true, bool overwrite = true) noexcept;
+static AuthorResult Write(std::string filename, AuthorCallback&& callback, bool write = true, bool overwrite = true) noexcept;
 ```
 
 **Callback Interface:**
@@ -666,9 +693,12 @@ The callback parameter must be invocable with a `YamlAuthor&` reference. This in
 - Function objects with `operator()(YamlAuthor&)`
 - Member functions (with appropriate binding)
 
+### Usage Examples
+
+**Create single-document YAML using static method (noexcept)**
+
 ```cpp
-// Create single-document YAML
-AuthorResult doc = YamlDocument::Author("generated.yaml", [](YamlAuthor& author) {
+AuthorResult doc = YamlDocument::Write("generated.yaml", [](YamlAuthor& author) {
     // Create root map
     auto root = author.create_map();
     
@@ -691,36 +721,45 @@ AuthorResult doc = YamlDocument::Author("generated.yaml", [](YamlAuthor& author)
     // Add the root to the document
     author.add_root(root);
 });
+
+// Handle result
+if (std::holds_alternative<yaml::YamlDocument>(doc)) {
+    auto& yaml_doc = std::get<yaml::YamlDocument>(doc);
+    std::cout << "Generated YAML successfully" << std::endl;
+} else {
+    auto& error = std::get<yaml::AuthorError>(doc);
+    std::cerr << "Error: " << error.what() << std::endl;
+}
 ```
 
-**Multi-Document Support**
-
-The authoring API supports creating multi-document YAML streams:
+**Create multi-document YAML using constructor (throws)**
 
 ```cpp
-// Create multi-document YAML
-AuthorResult doc = YamlDocument::Author("multi.yaml", [](YamlAuthor& author) {
-    // First document
-    auto doc1 = author.create_map();
-    author.set_map_value(doc1, "type", author.create_string("config"));
-    author.set_map_value(doc1, "version", author.create_scalar(1));
-    author.add_root(doc1);
+try {
+    YamlDocument doc("multi.yaml", [](YamlAuthor& author) {
+        // First document
+        auto doc1 = author.create_map();
+        author.set_map_value(doc1, "type", author.create_string("config"));
+        author.set_map_value(doc1, "version", author.create_scalar(1));
+        author.add_root(doc1);
+        
+        // Second document
+        auto doc2 = author.create_map();
+        author.set_map_value(doc2, "type", author.create_string("data"));
+        author.set_map_value(doc2, "items", author.create_sequence());
+        author.add_root(doc2);
+    });
     
-    // Second document
-    auto doc2 = author.create_map();
-    author.set_map_value(doc2, "type", author.create_string("data"));
-    author.set_map_value(doc2, "items", author.create_sequence());
-    author.add_root(doc2);
-});
-
-// Access multiple documents
-if (!doc.is_error()) {
-    auto& yaml_doc = doc.value();
-    bool multi = yaml_doc.is_multi_document();  // true
-    size_t count = yaml_doc.document_count();   // 2
+    // Access multiple documents
+    bool multi = doc.is_multi_document();  // true
+    size_t count = doc.document_count();   // 2
     
-    auto& first_doc = yaml_doc.root(0);
-    auto& second_doc = yaml_doc.root(1);
+    auto& first_doc = doc.root(0);
+    auto& second_doc = doc.root(1);
+    
+    std::cout << "Created multi-document YAML" << std::endl;
+} catch (const yaml::AuthorError& e) {
+    std::cerr << "Failed to create YAML: " << e.what() << std::endl;
 }
 ```
 
@@ -735,7 +774,7 @@ The authoring API provides automatic string tracking to ensure all string conten
 - **No Manual Management**: Users don't need to manage string lifetimes manually
 
 ```cpp
-AuthorResult doc = YamlDocument::Author("config.yaml", [](YamlAuthor& author) {
+AuthorResult doc = YamlDocument::Write("config.yaml", [](YamlAuthor& author) {
     auto root = author.create_map();
     
     // These strings are automatically tracked and owned by the document
@@ -822,29 +861,47 @@ std::vector<Node>& mutable_docs = doc.documents();
 
 **Error Handling**
 
-Both APIs use consistent error handling patterns:
+The API provides comprehensive error handling through both exception and Result patterns:
 
 ```cpp
-// Parsing errors
+// Static method approach (noexcept)
 ParseResult parse_result = YamlDocument::Parse("config.yaml", yaml_content);
-if (parse_result.is_error()) {
-    std::cerr << "Parse error: " << parse_result.error().what() << std::endl;
+if (std::holds_alternative<yaml::ParseError>(parse_result)) {
+    auto& error = std::get<yaml::ParseError>(parse_result);
+    std::cerr << "Parse error: " << error.what() << std::endl;
     return;
 }
 
-// Authoring errors
-AuthorResult author_result = YamlDocument::Author("output.yaml", [](YamlAuthor& author) {
-    // Errors thrown here will be captured and returned as AuthorError
+// Constructor approach (throws)
+try {
+    YamlDocument doc("config.yaml", yaml_content);
+    // Use document...
+} catch (const yaml::ParseError& e) {
+    std::cerr << "Parse error: " << e.what() << std::endl;
+}
+
+// Authoring with static method (noexcept)
+AuthorResult author_result = YamlDocument::Write("output.yaml", [](YamlAuthor& author) {
     auto root = author.create_map();
     author.add_root(root);
 });
 
-if (author_result.is_error()) {
-    std::cerr << "Authoring error: " << author_result.error().what() << std::endl;
+if (std::holds_alternative<yaml::AuthorError>(author_result)) {
+    auto& error = std::get<yaml::AuthorError>(author_result);
+    std::cerr << "Authoring error: " << error.what() << std::endl;
     return;
 }
 
-YamlDocument doc = std::move(author_result.value());
+// Authoring with constructor (throws)
+try {
+    YamlDocument doc("output.yaml", [](YamlAuthor& author) {
+        auto root = author.create_map();
+        author.add_root(root);
+    });
+    // Use document...
+} catch (const yaml::AuthorError& e) {
+    std::cerr << "Authoring error: " << e.what() << std::endl;
+}
 ```
 
 **File I/O Integration**
@@ -853,14 +910,14 @@ The authoring API supports automatic file writing:
 
 ```cpp
 // Write to file automatically (default behavior)
-AuthorResult doc = YamlDocument::Author("output.yaml", [](YamlAuthor& author) {
+AuthorResult doc = YamlDocument::Write("output.yaml", [](YamlAuthor& author) {
     auto root = author.create_map();
     author.set_map_value(root, "generated", author.create_scalar(true));
     author.add_root(root);
 });
 
 // Control file writing behavior
-AuthorResult doc_no_write = YamlDocument::Author(
+AuthorResult doc_no_write = YamlDocument::Write(
     "output.yaml",
     [](YamlAuthor& author) {
         auto root = author.create_map();
@@ -870,7 +927,7 @@ AuthorResult doc_no_write = YamlDocument::Author(
 );
 
 // Control overwrite behavior
-AuthorResult doc_no_overwrite = YamlDocument::Author(
+AuthorResult doc_no_overwrite = YamlDocument::Write(
     "output.yaml",
     [](YamlAuthor& author) {
         auto root = author.create_map();
@@ -883,16 +940,31 @@ AuthorResult doc_no_overwrite = YamlDocument::Author(
 
 **API Comparison**
 
-| Feature | Parsing API | Authoring API |
-|---------|-------------|---------------|
-| **Input** | YAML text string | Callback function |
-| **Output** | Parsed document | Programmatically created document |
-| **String Management** | Automatic (from source) | Automatic (tracked creation) |
-| **Error Handling** | Parse errors | Callback exceptions |
+| Feature | Exception-throwing flavor | noexcept flavor |
+|---------|--------------------------|-----------------|
+| **Error Handling** | Throws exceptions | Returns Result types |
+| **Error Expectation** | Errors are unusual/unexpected | Errors are expected/common |
+| **Use Cases** | Trusted input, config files | User input, validation, data processing |
+| **Performance** | Slightly faster | Slightly slower |
+| **Safety** | Exception-safe | noexcept safe |
+| **Parsing** | `YamlDocument(filename, source)` | `YamlDocument::Parse(filename, source)` |
+| **File Reading** | Manual file I/O + constructor | `YamlDocument::Read(filepath)` |
+| **Authoring** | `YamlDocument(filename, callback, ...)` | `YamlDocument::Write(filename, callback, ...)` |
 | **Multi-Document** | ✅ Supported | ✅ Supported |
-| **File I/O** | Manual | Automatic (optional) |
-| **Use Cases** | Configuration files, data import | Code generation, template creation |
-| **Performance** | Parse overhead | Direct creation |
+| **String Lifetime** | Managed by document | Managed by document |
+
+**Exception-throwing flavor scenarios:**
+- Loading application configuration files (malformed config is a bug)
+- Processing internal data structures (errors indicate programming issues)
+- Trusted input where validation has already occurred
+- Performance-critical paths where exceptions are truly exceptional
+
+**noexcept flavor scenarios:**
+- Processing user-provided YAML files (malformed input is expected)
+- Data validation and sanitization workflows
+- Batch processing where some files may be invalid
+- Interactive tools where graceful error reporting is important
+- Integration with Result-based error handling patterns
 
 #### Design Principles
 

@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
     std::cout << content << std::endl;
 
     std::cout << "=== PARSED TREE ===" << std::endl;
-    auto result = YamlDocument::Parse(yaml_file, content);
+    auto result = YamlDocument::Read(yaml_file);
     shilos::vswitch(
         result,
         [](const shilos::yaml::ParseError &err) {
@@ -138,8 +138,7 @@ int main(int argc, char *argv[]) {
     std::string file_path = arg;
 
     try {
-      std::string content = read_file(file_path);
-      auto doc_result = YamlDocument::Parse(file_path, content);
+      auto doc_result = YamlDocument::Read(file_path);
       shilos::vswitch(
           doc_result,
           [](const shilos::yaml::ParseError &err) {

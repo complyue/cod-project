@@ -132,13 +132,9 @@ private:
   std::string message_;
 
 public:
-  ParseError(std::string filename, size_t line, size_t column, std::string message)
+  ParseError(std::string message, std::string filename = "", size_t line = 0, size_t column = 0)
       : Exception(format_error_message(filename, line, column, message)), filename_(std::move(filename)), line_(line),
         column_(column), message_(std::move(message)) {}
-
-  // Legacy constructor for backward compatibility during transition
-  explicit ParseError(std::string message)
-      : Exception(message), filename_(""), line_(0), column_(0), message_(std::move(message)) {}
 
   const std::string &filename() const noexcept { return filename_; }
   size_t line() const noexcept { return line_; }
@@ -613,21 +609,30 @@ public:
 // YAML document stream that owns the underlying string payload
 // Supports multiple documents separated by --- or ...
 // All yaml nodes must not outlive the document that created them
+//
+// YAML API Design Pattern - Two flavors for different error scenarios:
+// - Exception-throwing flavor (Constructor-based): Throws exceptions directly when YAML formatting errors are
+// unusual/unexpected
+// - noexcept flavor (Static method-based): Returns Result variants when YAML formatting errors are expected/common
+//
+// This dual API pattern provides both fail-fast behavior (exception-throwing) and graceful degradation (noexcept)
+// for different scenarios where formatting errors are either exceptional or routine.
 class YamlDocument {
 private:
   std::string source_;              // Owns the original YAML string for string_view lifetime
   std::vector<Node> documents_;     // Multiple documents in the stream
   iops<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference (deduplicated)
 
-public:
   // Internal constructor for authoring - transfers ownership from YamlAuthor
-  // NOTE: This constructor is for internal use only by YamlDocument::Author()
+  // Private - accessed by static methods (which are class members)
   YamlDocument(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings);
 
-  // Constructor for parsing from source
+public:
+  // Constructor for parsing from source - THROWS ParseError on failure
   YamlDocument(std::string filename, std::string source);
 
-  // Constructor for authoring with callback - at par with parsing API
+  // Constructor for authoring with callback - THROWS AuthorError on failure
+  // This is the throwing version of the authoring API
   template <typename AuthorCallback>
     requires std::invocable<AuthorCallback, YamlAuthor &>
   YamlDocument(std::string filename, AuthorCallback &&callback, bool write = true, bool overwrite = true) {
@@ -731,17 +736,19 @@ public:
   bool is_multi_document() const noexcept { return documents_.size() > 1; }
   size_t document_count() const noexcept { return documents_.size(); }
 
-  // Static factory function - the primary way to parse YAML
+  // Static parsing function - noexcept version that returns ParseResult
+  // Use this when you prefer error handling via Result types instead of exceptions
   static ParseResult Parse(std::string filename, std::string source) noexcept;
   static ParseResult Parse(std::string filename, std::string_view source) noexcept {
     return Parse(std::move(filename), std::string(source));
   }
 
-  // Static authoring function - programmatic document creation
+  // Static authoring function - noexcept version that returns AuthorResult
+  // Use this when you prefer error handling via Result types instead of exceptions
   template <typename AuthorCallback>
     requires std::invocable<AuthorCallback, YamlAuthor &>
-  static AuthorResult Author(std::string filename, AuthorCallback &&callback, bool write = true,
-                             bool overwrite = true) noexcept {
+  static AuthorResult Write(std::string filename, AuthorCallback &&callback, bool write = true,
+                            bool overwrite = true) noexcept {
     try {
       // Delegate to authoring constructor
       YamlDocument doc(filename, std::forward<AuthorCallback>(callback), write, overwrite);
@@ -750,6 +757,22 @@ public:
       return AuthorError(e.filename(), e.message());
     } catch (const std::exception &e) {
       return AuthorError(filename, "YAML authoring error: " + std::string(e.what()));
+    }
+  }
+
+  // Static read function - noexcept version that returns ParseResult
+  // Use this when you prefer error handling via Result types instead of exceptions
+  static ParseResult Read(const std::string &filepath) noexcept {
+    try {
+      std::ifstream file(filepath);
+      if (!file) {
+        return ParseError("Failed to open file for reading", filepath);
+      }
+
+      std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+      return Parse(filepath, content);
+    } catch (const std::exception &e) {
+      return ParseError("Error reading file: " + std::string(e.what()), filepath);
     }
   }
 };

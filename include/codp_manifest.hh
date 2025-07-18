@@ -96,7 +96,7 @@ inline yaml::YamlDocument generate_manifest(const fs::path &project_dir) {
         collect_deps(project_dir, project_dir, project, data, visited);
 
         // Use YamlAuthor to create the manifest document
-        auto author_result = yaml::YamlDocument::Author("manifest.yaml", [&](yaml::YamlAuthor &author) -> yaml::Node {
+        auto author_result = yaml::YamlDocument::Write("manifest.yaml", [&](yaml::YamlAuthor &author) -> yaml::Node {
           yaml::Node manifest = author.create_map();
           yaml::Node root_map = author.create_map();
 
@@ -130,7 +130,7 @@ inline yaml::YamlDocument generate_manifest(const fs::path &project_dir) {
           return manifest;
         });
 
-        // Handle the AuthorResult from Author() and return the document
+        // Handle the AuthorResult from Write() and return the document
         return shilos::vswitch(
             author_result,
             [&](const yaml::ParseError &err) -> yaml::YamlDocument {

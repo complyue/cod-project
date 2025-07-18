@@ -170,8 +170,8 @@ struct ParseState {
       }
 
       if (!is_compatible) {
-        throw ParseError(filename, line, 0,
-                         "Incompatible indentation - indentation cannot be consistently compared with previous levels");
+        throw ParseError("Incompatible indentation - indentation cannot be consistently compared with previous levels",
+                         filename, line, 0);
       }
     }
 
@@ -298,8 +298,8 @@ std::string_view parse_quoted_string(ParseState &state) {
       }
       default:
         // Invalid escape sequence
-        throw ParseError(state.filename, state.line, state.column,
-                         "Invalid escape sequence '\\" + std::string(1, escaped) + "'");
+        throw ParseError("Invalid escape sequence '\\" + std::string(1, escaped) + "'", state.filename, state.line,
+                         state.column);
         break;
       }
     } else {
@@ -312,8 +312,8 @@ std::string_view parse_quoted_string(ParseState &state) {
     state.advance(); // Skip closing quote
   } else {
     // Reached end of input without finding closing quote
-    throw ParseError(state.filename, start_line, 0,
-                     "Unclosed quoted string - missing closing " + std::string(1, quote_char) + " quote");
+    throw ParseError("Unclosed quoted string - missing closing " + std::string(1, quote_char) + " quote",
+                     state.filename, start_line, 0);
   }
 
   // If no escaping was needed, we could potentially return a view to the original
@@ -612,14 +612,14 @@ Node parse_mapping(ParseState &state) {
     // Parse key
     std::string_view key = parse_scalar(state);
     if (key.empty()) {
-      throw ParseError(state.filename, state.line, state.column, "Empty or missing key in YAML mapping");
+      throw ParseError("Empty or missing key in YAML mapping", state.filename, state.line, state.column);
     }
 
     state.skip_whitespace_inline();
 
     // Expect colon
     if (state.current() != ':') {
-      throw ParseError(state.filename, state.line, state.column, "Expected ':' after key '" + std::string(key) + "'");
+      throw ParseError("Expected ':' after key '" + std::string(key) + "'", state.filename, state.line, state.column);
     }
 
     state.advance(); // Skip ':'
@@ -834,14 +834,14 @@ Node parse_alias(ParseState &state) {
   }
 
   if (alias_name.empty()) {
-    throw ParseError(state.filename, state.line, state.column, "Empty alias name");
+    throw ParseError("Empty alias name", state.filename, state.line, state.column);
   }
 
   // Look up the anchor
   std::string_view alias_key = state.store_owned_string(std::move(alias_name));
   auto it = state.anchors.find(alias_key);
   if (it == state.anchors.end()) {
-    throw ParseError(state.filename, state.line, state.column, "Undefined alias '" + std::string(alias_key) + "'");
+    throw ParseError("Undefined alias '" + std::string(alias_key) + "'", state.filename, state.line, state.column);
   }
 
   return it->second; // Return copy of the anchored node
@@ -860,7 +860,7 @@ Node parse_anchored_value(ParseState &state) {
   }
 
   if (anchor_name.empty()) {
-    throw ParseError(state.filename, state.line, state.column, "Empty anchor name");
+    throw ParseError("Empty anchor name", state.filename, state.line, state.column);
   }
 
   // Skip whitespace before value
@@ -897,7 +897,7 @@ Node parse_tagged_value(ParseState &state) {
   }
 
   if (tag_name.empty()) {
-    throw ParseError(state.filename, state.line, state.column, "Empty tag name");
+    throw ParseError("Empty tag name", state.filename, state.line, state.column);
   }
 
   // Skip whitespace before value
@@ -912,7 +912,7 @@ Node parse_tagged_value(ParseState &state) {
     if (auto scalar = std::get_if<std::string_view>(&value.value)) {
       return Node(*scalar);
     } else {
-      throw ParseError(state.filename, state.line, state.column, "!!str tag applied to non-scalar value");
+      throw ParseError("!!str tag applied to non-scalar value", state.filename, state.line, state.column);
     }
   } else if (tag_name == "int") {
     // Force integer type
@@ -921,11 +921,11 @@ Node parse_tagged_value(ParseState &state) {
         int64_t int_value = std::stoll(std::string(*scalar));
         return Node(int_value);
       } catch (...) {
-        throw ParseError(state.filename, state.line, state.column,
-                         "!!int tag applied to non-integer value '" + std::string(*scalar) + "'");
+        throw ParseError("!!int tag applied to non-integer value '" + std::string(*scalar) + "'", state.filename,
+                         state.line, state.column);
       }
     } else {
-      throw ParseError(state.filename, state.line, state.column, "!!int tag applied to non-scalar value");
+      throw ParseError("!!int tag applied to non-scalar value", state.filename, state.line, state.column);
     }
   } else if (tag_name == "float") {
     // Force float type
@@ -934,11 +934,11 @@ Node parse_tagged_value(ParseState &state) {
         double float_value = std::stod(std::string(*scalar));
         return Node(float_value);
       } catch (...) {
-        throw ParseError(state.filename, state.line, state.column,
-                         "!!float tag applied to non-float value '" + std::string(*scalar) + "'");
+        throw ParseError("!!float tag applied to non-float value '" + std::string(*scalar) + "'", state.filename,
+                         state.line, state.column);
       }
     } else {
-      throw ParseError(state.filename, state.line, state.column, "!!float tag applied to non-scalar value");
+      throw ParseError("!!float tag applied to non-scalar value", state.filename, state.line, state.column);
     }
   } else if (tag_name == "bool") {
     // Force boolean type
@@ -949,11 +949,11 @@ Node parse_tagged_value(ParseState &state) {
       } else if (str_value == "false" || str_value == "no" || str_value == "off" || str_value == "0") {
         return Node(false);
       } else {
-        throw ParseError(state.filename, state.line, state.column,
-                         "!!bool tag applied to non-boolean value '" + str_value + "'");
+        throw ParseError("!!bool tag applied to non-boolean value '" + str_value + "'", state.filename, state.line,
+                         state.column);
       }
     } else {
-      throw ParseError(state.filename, state.line, state.column, "!!bool tag applied to non-scalar value");
+      throw ParseError("!!bool tag applied to non-scalar value", state.filename, state.line, state.column);
     }
   } else if (tag_name == "null") {
     // Force null type
@@ -1090,8 +1090,8 @@ Node parse_json_mapping(ParseState &state) {
 
     // Expect colon
     if (state.current() != ':') {
-      throw ParseError(state.filename, state.line, state.column,
-                       "Expected ':' after key '" + key + "' in JSON mapping");
+      throw ParseError("Expected ':' after key '" + key + "' in JSON mapping", state.filename, state.line,
+                       state.column);
     }
     state.advance();
 
@@ -1112,7 +1112,7 @@ Node parse_json_mapping(ParseState &state) {
   if (state.current() == '}') {
     state.advance();
   } else {
-    throw ParseError(state.filename, state.line, state.column, "Unterminated JSON object - missing closing '}'");
+    throw ParseError("Unterminated JSON object - missing closing '}'", state.filename, state.line, state.column);
   }
 
   return node;
@@ -1144,7 +1144,7 @@ Node parse_json_sequence(ParseState &state) {
   if (state.current() == ']') {
     state.advance();
   } else {
-    throw ParseError(state.filename, state.line, state.column, "Unterminated JSON array - missing closing ']'");
+    throw ParseError("Unterminated JSON array - missing closing ']'", state.filename, state.line, state.column);
   }
 
   return node;
@@ -1236,7 +1236,7 @@ YamlDocument::YamlDocument(std::string filename, std::string source) : source_(s
     // This ensures all string_views in nodes remain valid for the document's lifetime
     owned_strings_ = std::move(state.owned_strings);
   } catch (const std::exception &e) {
-    throw ParseError(state.filename, state.line, state.column, e.what());
+    throw ParseError(e.what(), state.filename, state.line, state.column);
   }
 }
 
@@ -1253,7 +1253,7 @@ ParseResult YamlDocument::Parse(std::string filename, std::string source) noexce
   } catch (const ParseError &e) {
     return e;
   } catch (const std::exception &e) {
-    return ParseError(filename, 0, 0, "YAML parse error: " + std::string(e.what()));
+    return ParseError("YAML parse error: " + std::string(e.what()), filename, 0, 0);
   }
 }
 

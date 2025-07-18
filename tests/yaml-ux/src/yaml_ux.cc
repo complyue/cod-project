@@ -64,12 +64,11 @@ void run_file_test(const fs::path &test_file, bool verbose) {
   }
 
   try {
-    std::string content = read_file(test_file);
+    auto result = YamlDocument::Read(test_file.string());
     if (verbose) {
+      std::string content = read_file(test_file);
       std::cout << "Content:\n" << content << std::endl;
     }
-
-    auto result = YamlDocument::Parse(test_file.string(), content);
 
     shilos::vswitch(
         result,

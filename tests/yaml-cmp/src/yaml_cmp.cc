@@ -35,8 +35,8 @@ int main(int argc, char **argv) {
   fs::path expected_path = argv[argi];
   fs::path actual_path = argv[argi + 1];
   try {
-    auto expected_result = shilos::yaml::YamlDocument::Parse(expected_path.string(), read_file(expected_path));
-    auto actual_result = shilos::yaml::YamlDocument::Parse(actual_path.string(), read_file(actual_path));
+    auto expected_result = shilos::yaml::YamlDocument::Read(expected_path.string());
+    auto actual_result = shilos::yaml::YamlDocument::Read(actual_path.string());
 
     shilos::vswitch(
         expected_result,
