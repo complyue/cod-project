@@ -197,7 +197,7 @@ All regional types must satisfy the following constraints. Specialized types (re
 
 - **Required**: Every regional type must provide at least one constructor that accepts `memory_region&` as its first parameter
 - **Optional**: Regional types may provide default constructors (constructors with no parameters)
-  - When default constructors are provided, they must initialize all (direct and indirect) `regional_ptr` members to null without performing any allocation
+  - When default constructors are provided, they must initialize all (direct and indirect) `regional_ptr` members to null without performing any allocation. a type can rely on its data member's type to do default construction to achieve this, notebly `regional_ptr()` just default constructs to null
   - Default constructors are not required - many regional types will only provide `memory_region&`-accepting constructors
 - Constructors that accept `memory_region&` are permitted to allocate from the provided region
 - Any allocation performed must use the provided `memory_region&` parameter
