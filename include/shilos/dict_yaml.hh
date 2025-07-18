@@ -42,7 +42,7 @@ inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d, yaml::YamlAuthor &
     } else if constexpr (std::is_floating_point_v<K>) {
       key_node = yaml::Node(static_cast<double>(k));
     } else if constexpr (std::is_same_v<K, regional_str>) {
-      key_node = author.create_string(k);
+      key_node = author.createString(k);
     } else {
       static_assert(sizeof(K) == 0, "Key type of regional_dict is not serialisable to YAML");
     }
@@ -65,10 +65,10 @@ inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d, yaml::YamlAuthor &
     if (auto str = std::get_if<std::string_view>(&key_node.value)) {
       m[*str] = value_node;
     } else if (auto i = std::get_if<int64_t>(&key_node.value)) {
-      m[author.create_string_view(std::to_string(*i))] = value_node; // YAML keys must be strings
+      m[author.createStringView(std::to_string(*i))] = value_node; // YAML keys must be strings
     } else {
       // Fallback: stringify YAML node
-      m[author.create_string_view(yaml::format_yaml(key_node))] = value_node;
+      m[author.createStringView(yaml::format_yaml(key_node))] = value_node;
     }
   }
   return m;

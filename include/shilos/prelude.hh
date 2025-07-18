@@ -133,7 +133,7 @@ private:
 
 public:
   ParseError(std::string message, std::string filename = "", size_t line = 0, size_t column = 0)
-      : Exception(format_error_message(filename, line, column, message)), filename_(std::move(filename)), line_(line),
+      : Exception(FormatErrorMessage(filename, line, column, message)), filename_(std::move(filename)), line_(line),
         column_(column), message_(std::move(message)) {}
 
   const std::string &filename() const noexcept { return filename_; }
@@ -142,8 +142,8 @@ public:
   const std::string &message() const noexcept { return message_; }
 
 private:
-  static std::string format_error_message(const std::string &filename, size_t line, size_t column,
-                                          const std::string &message) {
+  static std::string FormatErrorMessage(const std::string &filename, size_t line, size_t column,
+                                        const std::string &message) {
     if (filename.empty()) {
       return message;
     }
@@ -173,8 +173,8 @@ private:
 
 public:
   AuthorError(std::string filename, std::string message)
-      : Exception(format_error_message(filename, message)), filename_(std::move(filename)),
-        message_(std::move(message)) {}
+      : Exception(FormatErrorMessage(filename, message)), filename_(std::move(filename)), message_(std::move(message)) {
+  }
 
   // Legacy constructor for backward compatibility during transition
   explicit AuthorError(std::string message) : Exception(message), filename_(""), message_(std::move(message)) {}
@@ -183,7 +183,7 @@ public:
   const std::string &message() const noexcept { return message_; }
 
 private:
-  static std::string format_error_message(const std::string &filename, const std::string &message) {
+  static std::string FormatErrorMessage(const std::string &filename, const std::string &message) {
     if (filename.empty()) {
       return message;
     }
@@ -195,9 +195,7 @@ private:
 struct Node;
 class YamlDocument;
 class YamlAuthor;
-class CodDep;
-class CodProject;
-class CodManifest;
+
 std::string format_yaml(const Node &node);
 
 // Result type for noexcept YAML parsing
@@ -329,14 +327,6 @@ public:
 
   bool IsNull() const { return std::holds_alternative<std::monostate>(value); }
 
-  // Type checking methods
-  bool is_map() const { return std::holds_alternative<Map>(value); }
-  bool is_sequence() const { return std::holds_alternative<Sequence>(value); }
-  bool is_string() const { return std::holds_alternative<std::string_view>(value); }
-  bool is_int() const { return std::holds_alternative<int64_t>(value); }
-  bool is_double() const { return std::holds_alternative<double>(value); }
-  bool is_bool() const { return std::holds_alternative<bool>(value); }
-
   // Size method for sequences and maps
   size_t size() const {
     if (auto seq = std::get_if<Sequence>(&value)) {
@@ -345,20 +335,6 @@ public:
       return map->size();
     }
     return 0;
-  }
-
-  void push_back(const Node &node) {
-    if (!std::holds_alternative<Sequence>(value)) {
-      value = Sequence{};
-    }
-    std::get<Sequence>(value).push_back(node);
-  }
-
-  void push_back(Node &&node) {
-    if (!std::holds_alternative<Sequence>(value)) {
-      value = Sequence{};
-    }
-    std::get<Sequence>(value).push_back(std::move(node));
   }
 
   template <typename T> T as() const {
@@ -397,70 +373,56 @@ public:
   }
 
   // Convenience methods for common type conversions
-  const Map &as_map() const {
+  const Map &asMap() const {
     if (auto map = std::get_if<Map>(&value)) {
       return *map;
     }
     throw TypeError("Expected map value");
   }
 
-  Map &as_map() {
-    if (auto map = std::get_if<Map>(&value)) {
-      return *map;
-    }
-    throw TypeError("Expected map value");
-  }
-
-  const Sequence &as_sequence() const {
+  const Sequence &asSequence() const {
     if (auto seq = std::get_if<Sequence>(&value)) {
       return *seq;
     }
     throw TypeError("Expected sequence value");
   }
 
-  Sequence &as_sequence() {
-    if (auto seq = std::get_if<Sequence>(&value)) {
-      return *seq;
-    }
-    throw TypeError("Expected sequence value");
-  }
-
-  std::string as_string() const {
+  std::string asString() const {
     if (auto s = std::get_if<std::string_view>(&value)) {
       return std::string(*s);
     }
     throw TypeError("Expected string value");
   }
 
-  bool as_bool() const {
+  bool asBool() const {
     if (auto b = std::get_if<bool>(&value)) {
       return *b;
     }
     throw TypeError("Expected bool value");
   }
 
-  int as_int() const {
+  int asInt() const {
     if (auto i = std::get_if<int64_t>(&value)) {
       return static_cast<int>(*i);
     }
     throw TypeError("Expected integer value");
   }
 
-  int64_t as_int64() const {
+  int64_t asInt64() const {
     if (auto i = std::get_if<int64_t>(&value)) {
       return *i;
     }
     throw TypeError("Expected integer value");
   }
 
-  double as_double() const {
+  double asDouble() const {
     if (auto d = std::get_if<double>(&value)) {
       return *d;
     }
     throw TypeError("Expected double value");
   }
 
-  float as_float() const {
+  float asFloat() const {
     if (auto d = std::get_if<double>(&value)) {
       return static_cast<float>(*d);
     }
@@ -474,14 +436,6 @@ public:
     throw TypeError("Expected map value");
   }
 
-  Node &operator[](std::string_view key) {
-    if (!std::holds_alternative<Map>(value)) {
-      value = Map{};
-    }
-    auto &map = std::get<Map>(value);
-    return map[key];
-  }
-
   // Indexing by integer for sequences
   const Node &operator[](size_t index) const {
     if (auto seq = std::get_if<Sequence>(&value)) {
@@ -491,17 +445,6 @@ public:
       return (*seq)[index];
     }
     throw TypeError("Expected sequence value");
-  }
-
-  Node &operator[](size_t index) {
-    if (!std::holds_alternative<Sequence>(value)) {
-      value = Sequence{};
-    }
-    auto &seq = std::get<Sequence>(value);
-    if (index >= seq.size()) {
-      seq.resize(index + 1);
-    }
-    return seq[index];
   }
 
   Map::const_iterator find(std::string_view key) const {
@@ -549,37 +492,37 @@ public:
   YamlAuthor &operator=(YamlAuthor &&) = delete;
 
   // String creation methods that return string_views backed by this author
-  std::string_view create_string_view(std::string str) { return owned_strings_.insert(std::move(str)); }
+  std::string_view createStringView(std::string str) { return owned_strings_.insert(std::move(str)); }
 
-  std::string_view create_string_view(std::string_view str) { return owned_strings_.insert(std::string(str)); }
+  std::string_view createStringView(std::string_view str) { return owned_strings_.insert(std::string(str)); }
 
-  std::string_view create_string_view(const char *str) { return owned_strings_.insert(std::string(str)); }
+  std::string_view createStringView(const char *str) { return owned_strings_.insert(std::string(str)); }
 
   // Node creation methods
-  Node create_string(std::string str) { return Node(owned_strings_.insert(std::move(str))); }
+  Node createString(std::string str) { return Node(owned_strings_.insert(std::move(str))); }
 
-  Node create_string(std::string_view str) { return Node(owned_strings_.insert(std::string(str))); }
+  Node createString(std::string_view str) { return Node(owned_strings_.insert(std::string(str))); }
 
-  Node create_string(const char *str) { return Node(owned_strings_.insert(std::string(str))); }
+  Node createString(const char *str) { return Node(owned_strings_.insert(std::string(str))); }
 
   // Scalar creation methods
-  Node create_scalar(bool value) { return Node(value); }
+  Node createScalar(bool value) { return Node(value); }
 
-  Node create_scalar(int value) { return Node(static_cast<int64_t>(value)); }
+  Node createScalar(int value) { return Node(static_cast<int64_t>(value)); }
 
-  Node create_scalar(int64_t value) { return Node(value); }
+  Node createScalar(int64_t value) { return Node(value); }
 
-  Node create_scalar(double value) { return Node(value); }
+  Node createScalar(double value) { return Node(value); }
 
-  Node create_scalar(float value) { return Node(static_cast<double>(value)); }
+  Node createScalar(float value) { return Node(static_cast<double>(value)); }
 
   // Container creation methods
-  Node create_map() { return Node(Map{}); }
+  Node createMap() { return Node(Map{}); }
 
-  Node create_sequence() { return Node(Sequence{}); }
+  Node createSequence() { return Node(Sequence{}); }
 
   // Node modification methods (only available during authoring)
-  void set_map_value(Node &map_node, std::string_view key, const Node &value) {
+  void setMapValue(Node &map_node, std::string_view key, const Node &value) {
     if (auto map = std::get_if<Map>(&map_node.value)) {
       (*map)[key] = value;
     } else {
@@ -587,7 +530,7 @@ public:
     }
   }
 
-  void push_to_sequence(Node &seq_node, const Node &value) {
+  void pushToSequence(Node &seq_node, const Node &value) {
     if (auto seq = std::get_if<Sequence>(&seq_node.value)) {
       seq->push_back(value);
     } else {
@@ -595,12 +538,12 @@ public:
     }
   }
 
-  void assign_node(Node &target, const Node &source) { target.value = source.value; }
+  void assignNode(Node &target, const Node &source) { target.value = source.value; }
 
   // Add root document to the multi-document stream
-  void add_root(const Node &root) { roots_.push_back(root); }
+  void addRoot(const Node &root) { roots_.push_back(root); }
 
-  void add_root(Node &&root) { roots_.push_back(std::move(root)); }
+  void addRoot(Node &&root) { roots_.push_back(std::move(root)); }
 
   // Access to filename for error reporting
   const std::string &filename() const noexcept { return filename_; }
@@ -733,8 +676,8 @@ public:
   }
 
   // Check if this is a multi-document stream
-  bool is_multi_document() const noexcept { return documents_.size() > 1; }
-  size_t document_count() const noexcept { return documents_.size(); }
+  bool isMultiDocument() const noexcept { return documents_.size() > 1; }
+  size_t documentCount() const noexcept { return documents_.size(); }
 
   // Static parsing function - noexcept version that returns ParseResult
   // Use this when you prefer error handling via Result types instead of exceptions

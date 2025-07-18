@@ -670,9 +670,9 @@ ParseResult result = YamlDocument::Read("config.yaml");
 ```cpp
 // Create document with callback - throws AuthorError on failure
 YamlDocument doc("output.yaml", [](YamlAuthor& author) {
-    auto root = author.create_map();
-    author.set_map_value(root, "key", author.create_string("value"));
-    author.add_root(root);
+    auto root = author.createMap();
+    author.setMapValue(root, "key", author.createString("value"));
+    author.addRoot(root);
 }, true, true); // write=true, overwrite=true
 ```
 
@@ -700,26 +700,26 @@ The callback parameter must be invocable with a `YamlAuthor&` reference. This in
 ```cpp
 AuthorResult doc = YamlDocument::Write("generated.yaml", [](YamlAuthor& author) {
     // Create root map
-    auto root = author.create_map();
+    auto root = author.createMap();
     
     // Add string values (automatically tracked)
-    author.set_map_value(root, "name", author.create_string("MyApplication"));
-    author.set_map_value(root, "version", author.create_string("1.0.0"));
+    author.setMapValue(root, "name", author.createString("MyApplication"));
+    author.setMapValue(root, "version", author.createString("1.0.0"));
     
     // Add nested structures
-    auto config = author.create_map();
-    author.set_map_value(config, "port", author.create_scalar(8080));
-    author.set_map_value(config, "debug", author.create_scalar(true));
-    author.set_map_value(root, "config", config);
+    auto config = author.createMap();
+    author.setMapValue(config, "port", author.createScalar(8080));
+    author.setMapValue(config, "debug", author.createScalar(true));
+    author.setMapValue(root, "config", config);
     
     // Add sequences
-    auto features = author.create_sequence();
-    author.push_to_sequence(features, author.create_string("authentication"));
-    author.push_to_sequence(features, author.create_string("logging"));
-    author.set_map_value(root, "features", features);
+    auto features = author.createSequence();
+    author.pushToSequence(features, author.createString("authentication"));
+    author.pushToSequence(features, author.createString("logging"));
+    author.setMapValue(root, "features", features);
     
     // Add the root to the document
-    author.add_root(root);
+    author.addRoot(root);
 });
 
 // Handle result
@@ -738,21 +738,21 @@ if (std::holds_alternative<yaml::YamlDocument>(doc)) {
 try {
     YamlDocument doc("multi.yaml", [](YamlAuthor& author) {
         // First document
-        auto doc1 = author.create_map();
-        author.set_map_value(doc1, "type", author.create_string("config"));
-        author.set_map_value(doc1, "version", author.create_scalar(1));
-        author.add_root(doc1);
+        auto doc1 = author.createMap();
+        author.setMapValue(doc1, "type", author.createString("config"));
+        author.setMapValue(doc1, "version", author.createScalar(1));
+        author.addRoot(doc1);
         
         // Second document
-        auto doc2 = author.create_map();
-        author.set_map_value(doc2, "type", author.create_string("data"));
-        author.set_map_value(doc2, "items", author.create_sequence());
-        author.add_root(doc2);
+        auto doc2 = author.createMap();
+        author.setMapValue(doc2, "type", author.createString("data"));
+        author.setMapValue(doc2, "items", author.createSequence());
+        author.addRoot(doc2);
     });
     
     // Access multiple documents
-    bool multi = doc.is_multi_document();  // true
-    size_t count = doc.document_count();   // 2
+    bool multi = doc.isMultiDocument();  // true
+    size_t count = doc.documentCount();   // 2
     
     auto& first_doc = doc.root(0);
     auto& second_doc = doc.root(1);
@@ -767,30 +767,30 @@ try {
 
 The authoring API provides automatic string tracking to ensure all string content remains valid:
 
-- **String Creation**: Use `author.create_string()` to create strings that will be owned by the document
-- **String Views**: Use `author.create_string_view()` to create tracked string views
+- **String Creation**: Use `author.createString()` to create strings that will be owned by the document
+- **String Views**: Use `author.createStringView()` to create tracked string views
 - **Automatic Tracking**: All strings created through the author are automatically tracked
 - **Lifetime Guarantee**: Strings remain valid for the lifetime of the returned `YamlDocument`
 - **No Manual Management**: Users don't need to manage string lifetimes manually
 
 ```cpp
 AuthorResult doc = YamlDocument::Write("config.yaml", [](YamlAuthor& author) {
-    auto root = author.create_map();
+    auto root = author.createMap();
     
     // These strings are automatically tracked and owned by the document
-    author.set_map_value(root, "database_url", author.create_string("postgresql://localhost:5432/mydb"));
-    author.set_map_value(root, "api_key", author.create_string("secret-key-12345"));
+    author.setMapValue(root, "database_url", author.createString("postgresql://localhost:5432/mydb"));
+    author.setMapValue(root, "api_key", author.createString("secret-key-12345"));
     
     // String views are also tracked
-    std::string_view key_view = author.create_string_view("connection_pool");
-    author.set_map_value(root, key_view, author.create_scalar(10));
+    std::string_view key_view = author.createStringView("connection_pool");
+    author.setMapValue(root, key_view, author.createScalar(10));
     
-    author.add_root(root);
+    author.addRoot(root);
 });
 
 // All strings remain valid as long as 'doc' exists
 auto root = doc.value().root();
-std::string_view db_url = root["database_url"].as_string();  // Safe to use
+std::string_view db_url = root["database_url"].asString();  // Safe to use
 ```
 
 **Node Creation Methods**
@@ -799,24 +799,24 @@ The `YamlAuthor` class provides methods for creating different node types:
 
 ```cpp
 // String creation methods
-auto str_node = author.create_string("text value");
-auto str_from_view = author.create_string(std::string_view("view"));
-auto str_from_cstr = author.create_string("c-string");
+auto str_node = author.createString("text value");
+auto str_from_view = author.createString(std::string_view("view"));
+auto str_from_cstr = author.createString("c-string");
 
 // String view creation methods (tracked by author)
-std::string_view tracked_view = author.create_string_view("tracked text");
-std::string_view view_from_str = author.create_string_view(std::string("from string"));
+std::string_view tracked_view = author.createStringView("tracked text");
+std::string_view view_from_str = author.createStringView(std::string("from string"));
 
 // Scalar creation methods
-auto bool_node = author.create_scalar(true);
-auto int_node = author.create_scalar(42);
-auto int64_node = author.create_scalar(int64_t(1000000));
-auto float_node = author.create_scalar(3.14f);
-auto double_node = author.create_scalar(3.14159);
+auto bool_node = author.createScalar(true);
+auto int_node = author.createScalar(42);
+auto int64_node = author.createScalar(int64_t(1000000));
+auto float_node = author.createScalar(3.14f);
+auto double_node = author.createScalar(3.14159);
 
 // Container creation methods
-auto map_node = author.create_map();
-auto sequence_node = author.create_sequence();
+auto map_node = author.createMap();
+auto sequence_node = author.createSequence();
 ```
 
 **Node Manipulation Methods**
@@ -825,17 +825,17 @@ The `YamlAuthor` provides methods for modifying nodes during authoring:
 
 ```cpp
 // Map manipulation
-auto map = author.create_map();
-author.set_map_value(map, "key", author.create_string("value"));
+auto map = author.createMap();
+author.setMapValue(map, "key", author.createString("value"));
 
 // Sequence manipulation
-auto sequence = author.create_sequence();
-author.push_to_sequence(sequence, author.create_string("item1"));
-author.push_to_sequence(sequence, author.create_string("item2"));
+auto sequence = author.createSequence();
+author.pushToSequence(sequence, author.createString("item1"));
+author.pushToSequence(sequence, author.createString("item2"));
 
 // Node assignment
-auto target = author.create_map();
-auto source = author.create_string("copied value");
+auto target = author.createMap();
+auto source = author.createString("copied value");
 author.assign_node(target, source);  // target now contains the string value
 ```
 
@@ -851,8 +851,8 @@ Node& mutable_root = doc.root();             // Mutable access
 // Multi-document access
 const Node& first = doc.root(0);             // Access by index
 const Node& second = doc.root(1);            // Access second document
-bool is_multi = doc.is_multi_document();     // Check if multi-document
-size_t count = doc.document_count();         // Get document count
+bool is_multi = doc.isMultiDocument();       // Check if multi-document
+size_t count = doc.documentCount();          // Get document count
 
 // Access all documents
 const std::vector<Node>& all_docs = doc.documents();
@@ -882,8 +882,8 @@ try {
 
 // Authoring with static method (noexcept)
 AuthorResult author_result = YamlDocument::Write("output.yaml", [](YamlAuthor& author) {
-    auto root = author.create_map();
-    author.add_root(root);
+    auto root = author.createMap();
+    author.addRoot(root);
 });
 
 if (std::holds_alternative<yaml::AuthorError>(author_result)) {
@@ -895,8 +895,8 @@ if (std::holds_alternative<yaml::AuthorError>(author_result)) {
 // Authoring with constructor (throws)
 try {
     YamlDocument doc("output.yaml", [](YamlAuthor& author) {
-        auto root = author.create_map();
-        author.add_root(root);
+        auto root = author.createMap();
+        author.addRoot(root);
     });
     // Use document...
 } catch (const yaml::AuthorError& e) {
@@ -911,17 +911,17 @@ The authoring API supports automatic file writing:
 ```cpp
 // Write to file automatically (default behavior)
 AuthorResult doc = YamlDocument::Write("output.yaml", [](YamlAuthor& author) {
-    auto root = author.create_map();
-    author.set_map_value(root, "generated", author.create_scalar(true));
-    author.add_root(root);
+    auto root = author.createMap();
+    author.setMapValue(root, "generated", author.createScalar(true));
+    author.addRoot(root);
 });
 
 // Control file writing behavior
 AuthorResult doc_no_write = YamlDocument::Write(
     "output.yaml",
     [](YamlAuthor& author) {
-        auto root = author.create_map();
-        author.add_root(root);
+        auto root = author.createMap();
+        author.addRoot(root);
     },
     false  // write = false, don't write to file
 );
@@ -930,8 +930,8 @@ AuthorResult doc_no_write = YamlDocument::Write(
 AuthorResult doc_no_overwrite = YamlDocument::Write(
     "output.yaml",
     [](YamlAuthor& author) {
-        auto root = author.create_map();
-        author.add_root(root);
+        auto root = author.createMap();
+        author.addRoot(root);
     },
     true,   // write = true
     false   // overwrite = false, fail if file exists

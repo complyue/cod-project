@@ -16,12 +16,12 @@ void test_basic_authoring() {
   auto result = yaml::YamlDocument::Write(
       "test.yaml",
       [](yaml::YamlAuthor &author) {
-        auto root = author.create_map();
-        author.set_map_value(root, "name", author.create_string("TestApplication"));
-        author.set_map_value(root, "version", author.create_string("1.0.0"));
-        author.set_map_value(root, "enabled", author.create_scalar(true));
-        author.set_map_value(root, "port", author.create_scalar(8080));
-        author.add_root(root);
+        auto root = author.createMap();
+        author.setMapValue(root, "name", author.createString("TestApplication"));
+        author.setMapValue(root, "version", author.createString("1.0.0"));
+        author.setMapValue(root, "enabled", author.createScalar(true));
+        author.setMapValue(root, "port", author.createScalar(8080));
+        author.addRoot(root);
       },
       false, false); // Don't write to disk
 
@@ -49,10 +49,10 @@ void test_document_constructor() {
     yaml::YamlDocument doc(
         "constructor_test.yaml",
         [](yaml::YamlAuthor &author) {
-          auto root = author.create_map();
-          author.set_map_value(root, "app", author.create_string("ConstructorTest"));
-          author.set_map_value(root, "debug", author.create_scalar(false));
-          author.add_root(root);
+          auto root = author.createMap();
+          author.setMapValue(root, "app", author.createString("ConstructorTest"));
+          author.setMapValue(root, "debug", author.createScalar(false));
+          author.addRoot(root);
         },
         false, false); // write=false, overwrite=false
 
@@ -76,10 +76,10 @@ void test_write_method() {
   auto result1 = yaml::YamlDocument::Write(
       "/tmp/output_test.yaml",
       [](yaml::YamlAuthor &author) {
-        auto root = author.create_map();
-        author.set_map_value(root, "test", author.create_string("write_functionality"));
-        author.set_map_value(root, "timestamp", author.create_scalar(1234567890));
-        author.add_root(root);
+        auto root = author.createMap();
+        author.setMapValue(root, "test", author.createString("write_functionality"));
+        author.setMapValue(root, "timestamp", author.createScalar(1234567890));
+        author.addRoot(root);
       },
       true, true); // write=true, overwrite=true
 
@@ -92,9 +92,9 @@ void test_write_method() {
   auto result2 = yaml::YamlDocument::Write(
       "/tmp/output_test.yaml",
       [](yaml::YamlAuthor &author) {
-        auto root = author.create_map();
-        author.set_map_value(root, "test", author.create_string("second_attempt"));
-        author.add_root(root);
+        auto root = author.createMap();
+        author.setMapValue(root, "test", author.createString("second_attempt"));
+        author.addRoot(root);
       },
       true, false); // write=true, overwrite=false
 
@@ -113,43 +113,43 @@ void test_nested_structures() {
   auto result = yaml::YamlDocument::Write(
       "nested_test.yaml",
       [](yaml::YamlAuthor &author) {
-        auto root = author.create_map();
+        auto root = author.createMap();
 
         // Create nested configuration
-        auto config = author.create_map();
-        author.set_map_value(config, "host", author.create_string("localhost"));
-        author.set_map_value(config, "port", author.create_scalar(5432));
-        author.set_map_value(config, "ssl", author.create_scalar(true));
+        auto config = author.createMap();
+        author.setMapValue(config, "host", author.createString("localhost"));
+        author.setMapValue(config, "port", author.createScalar(5432));
+        author.setMapValue(config, "ssl", author.createScalar(true));
 
-        auto pool = author.create_map();
-        author.set_map_value(pool, "min_connections", author.create_scalar(5));
-        author.set_map_value(pool, "max_connections", author.create_scalar(20));
-        author.set_map_value(config, "pool", pool);
+        auto pool = author.createMap();
+        author.setMapValue(pool, "min_connections", author.createScalar(5));
+        author.setMapValue(pool, "max_connections", author.createScalar(20));
+        author.setMapValue(config, "pool", pool);
 
-        author.set_map_value(root, "database", config);
+        author.setMapValue(root, "database", config);
 
         // Create sequence of features
-        auto features = author.create_sequence();
-        author.push_to_sequence(features, author.create_string("authentication"));
-        author.push_to_sequence(features, author.create_string("logging"));
-        author.push_to_sequence(features, author.create_string("monitoring"));
-        author.set_map_value(root, "features", features);
+        auto features = author.createSequence();
+        author.pushToSequence(features, author.createString("authentication"));
+        author.pushToSequence(features, author.createString("logging"));
+        author.pushToSequence(features, author.createString("monitoring"));
+        author.setMapValue(root, "features", features);
 
         // Create sequence of service configurations
-        auto services = author.create_sequence();
+        auto services = author.createSequence();
         std::vector<std::string> service_names = {"api", "worker", "scheduler"};
         std::vector<int> service_ports = {8001, 8002, 8003};
 
         for (size_t i = 0; i < service_names.size(); ++i) {
-          auto service = author.create_map();
-          author.set_map_value(service, "name", author.create_string(service_names[i]));
-          author.set_map_value(service, "port", author.create_scalar(service_ports[i]));
-          author.set_map_value(service, "enabled", author.create_scalar(true));
-          author.push_to_sequence(services, service);
+          auto service = author.createMap();
+          author.setMapValue(service, "name", author.createString(service_names[i]));
+          author.setMapValue(service, "port", author.createScalar(service_ports[i]));
+          author.setMapValue(service, "enabled", author.createScalar(true));
+          author.pushToSequence(services, service);
         }
-        author.set_map_value(root, "services", services);
+        author.setMapValue(root, "services", services);
 
-        author.add_root(root);
+        author.addRoot(root);
       },
       false, false); // Don't write to disk
 
@@ -177,16 +177,16 @@ void test_string_lifetime() {
   auto result = yaml::YamlDocument::Write(
       "lifetime_test.yaml",
       [&](yaml::YamlAuthor &author) {
-        auto root = author.create_map();
+        auto root = author.createMap();
 
         // Test various string creation methods
-        author.set_map_value(root, "literal", author.create_string("literal_string"));
-        author.set_map_value(root, "external", author.create_string(external_string));
-        author.set_map_value(root, "temp", author.create_string(std::move(temp_string)));
-        author.set_map_value(root, "view", author.create_string(std::string_view("view_string")));
-        author.set_map_value(root, "cstr", author.create_string("cstring_literal"));
+        author.setMapValue(root, "literal", author.createString("literal_string"));
+        author.setMapValue(root, "external", author.createString(external_string));
+        author.setMapValue(root, "temp", author.createString(std::move(temp_string)));
+        author.setMapValue(root, "view", author.createString(std::string_view("view_string")));
+        author.setMapValue(root, "cstr", author.createString("cstring_literal"));
 
-        author.add_root(root);
+        author.addRoot(root);
       },
       false, false); // Don't write to disk
 
@@ -215,15 +215,15 @@ void test_scalar_types() {
   auto result = yaml::YamlDocument::Write(
       "scalars_test.yaml",
       [](yaml::YamlAuthor &author) {
-        auto root = author.create_map();
+        auto root = author.createMap();
 
         // Test basic scalar types (simplified for comparison)
-        author.set_map_value(root, "string", author.create_string("hello"));
-        author.set_map_value(root, "int", author.create_scalar(42));
-        author.set_map_value(root, "double", author.create_scalar(3.14));
-        author.set_map_value(root, "bool", author.create_scalar(true));
+        author.setMapValue(root, "string", author.createString("hello"));
+        author.setMapValue(root, "int", author.createScalar(42));
+        author.setMapValue(root, "double", author.createScalar(3.14));
+        author.setMapValue(root, "bool", author.createScalar(true));
 
-        author.add_root(root);
+        author.addRoot(root);
       },
       false, false); // Don't write to disk
 
@@ -285,35 +285,35 @@ void test_empty_containers() {
   auto result = yaml::YamlDocument::Write(
       "empty_test.yaml",
       [](yaml::YamlAuthor &author) {
-        auto root = author.create_map();
+        auto root = author.createMap();
 
-        author.set_map_value(root, "empty_map", author.create_map());
-        author.set_map_value(root, "empty_sequence", author.create_sequence());
+        author.setMapValue(root, "empty_map", author.createMap());
+        author.setMapValue(root, "empty_sequence", author.createSequence());
 
         // Test that we can still add to containers after creation
-        auto populated_map = author.create_map();
-        author.set_map_value(populated_map, "key", author.create_string("value"));
-        author.set_map_value(root, "populated_map", populated_map);
+        auto populated_map = author.createMap();
+        author.setMapValue(populated_map, "key", author.createString("value"));
+        author.setMapValue(root, "populated_map", populated_map);
 
-        auto populated_seq = author.create_sequence();
-        author.push_to_sequence(populated_seq, author.create_string("item"));
-        author.set_map_value(root, "populated_sequence", populated_seq);
+        auto populated_seq = author.createSequence();
+        author.pushToSequence(populated_seq, author.createString("item"));
+        author.setMapValue(root, "populated_sequence", populated_seq);
 
-        author.add_root(root);
+        author.addRoot(root);
       },
       false, false); // Don't write to disk
 
   if (std::holds_alternative<yaml::YamlDocument>(result)) {
     auto doc = std::get<yaml::YamlDocument>(std::move(result));
     auto root = doc.root();
-    auto map = root.as_map();
+    auto map = root.asMap();
 
     // Test empty containers
-    if (map["empty_map"].is_map() && map["empty_map"].as_map().empty() && map["empty_sequence"].is_sequence() &&
-        map["empty_sequence"].as_sequence().empty() && map["populated_map"].is_map() &&
-        map["populated_map"].as_map().size() == 1 && map["populated_map"].as_map()["key"].as_string() == "value" &&
-        map["populated_sequence"].is_sequence() && map["populated_sequence"].as_sequence().size() == 1 &&
-        map["populated_sequence"].as_sequence()[0].as_string() == "item") {
+    if (map["empty_map"].IsMap() && map["empty_map"].asMap().empty() && map["empty_sequence"].IsSequence() &&
+        map["empty_sequence"].asSequence().empty() && map["populated_map"].IsMap() &&
+        map["populated_map"].asMap().size() == 1 && map["populated_map"].asMap().at("key").asString() == "value" &&
+        map["populated_sequence"].IsSequence() && map["populated_sequence"].asSequence().size() == 1 &&
+        map["populated_sequence"].asSequence()[0].asString() == "item") {
       std::cout << "✓ Empty containers test passed" << std::endl;
     } else {
       std::cerr << "❌ Empty containers test failed - structure validation failed" << std::endl;
@@ -333,22 +333,22 @@ void test_authoring_vs_parsing() {
   auto authored_result = yaml::YamlDocument::Write(
       "comparison_test.yaml",
       [](yaml::YamlAuthor &author) {
-        auto root = author.create_map();
-        author.set_map_value(root, "name", author.create_string("TestApp"));
-        author.set_map_value(root, "version", author.create_string("2.0.0"));
+        auto root = author.createMap();
+        author.setMapValue(root, "name", author.createString("TestApp"));
+        author.setMapValue(root, "version", author.createString("2.0.0"));
 
-        auto config = author.create_map();
-        author.set_map_value(config, "debug", author.create_scalar(true));
-        author.set_map_value(config, "port", author.create_scalar(9000));
-        author.set_map_value(config, "timeout", author.create_scalar(30.5));
-        author.set_map_value(root, "config", config);
+        auto config = author.createMap();
+        author.setMapValue(config, "debug", author.createScalar(true));
+        author.setMapValue(config, "port", author.createScalar(9000));
+        author.setMapValue(config, "timeout", author.createScalar(30.5));
+        author.setMapValue(root, "config", config);
 
-        auto tags = author.create_sequence();
-        author.push_to_sequence(tags, author.create_string("production"));
-        author.push_to_sequence(tags, author.create_string("stable"));
-        author.set_map_value(root, "tags", tags);
+        auto tags = author.createSequence();
+        author.pushToSequence(tags, author.createString("production"));
+        author.pushToSequence(tags, author.createString("stable"));
+        author.setMapValue(root, "tags", tags);
 
-        author.add_root(root);
+        author.addRoot(root);
       },
       false, false); // Don't write to disk
 
@@ -395,33 +395,33 @@ void test_complex_document() {
   auto result = yaml::YamlDocument::Write(
       "complex_test.yaml",
       [](yaml::YamlAuthor &author) {
-        auto root = author.create_map();
+        auto root = author.createMap();
 
         // Simplified complex document for comparison
-        auto metadata = author.create_map();
-        author.set_map_value(metadata, "version", author.create_string("1.0"));
-        author.set_map_value(metadata, "author", author.create_string("Test Author"));
-        author.set_map_value(root, "metadata", metadata);
+        auto metadata = author.createMap();
+        author.setMapValue(metadata, "version", author.createString("1.0"));
+        author.setMapValue(metadata, "author", author.createString("Test Author"));
+        author.setMapValue(root, "metadata", metadata);
 
-        auto data = author.create_sequence();
-        auto item1 = author.create_map();
-        author.set_map_value(item1, "name", author.create_string("item1"));
-        author.set_map_value(item1, "value", author.create_scalar(100));
-        author.push_to_sequence(data, item1);
+        auto data = author.createSequence();
+        auto item1 = author.createMap();
+        author.setMapValue(item1, "name", author.createString("item1"));
+        author.setMapValue(item1, "value", author.createScalar(100));
+        author.pushToSequence(data, item1);
 
-        auto item2 = author.create_map();
-        author.set_map_value(item2, "name", author.create_string("item2"));
-        author.set_map_value(item2, "value", author.create_scalar(200));
-        author.push_to_sequence(data, item2);
+        auto item2 = author.createMap();
+        author.setMapValue(item2, "name", author.createString("item2"));
+        author.setMapValue(item2, "value", author.createScalar(200));
+        author.pushToSequence(data, item2);
 
-        author.set_map_value(root, "data", data);
+        author.setMapValue(root, "data", data);
 
-        auto config = author.create_map();
-        author.set_map_value(config, "debug", author.create_scalar(true));
-        author.set_map_value(config, "timeout", author.create_scalar(30));
-        author.set_map_value(root, "config", config);
+        auto config = author.createMap();
+        author.setMapValue(config, "debug", author.createScalar(true));
+        author.setMapValue(config, "timeout", author.createScalar(30));
+        author.setMapValue(root, "config", config);
 
-        author.add_root(root);
+        author.addRoot(root);
       },
       false, false); // Don't write to disk
 
@@ -446,19 +446,19 @@ void test_multi_root() {
       "multi_root_test.yaml",
       [](yaml::YamlAuthor &author) {
         // First document
-        auto doc1 = author.create_map();
-        author.set_map_value(doc1, "count", author.create_scalar(1));
-        author.add_root(doc1);
+        auto doc1 = author.createMap();
+        author.setMapValue(doc1, "count", author.createScalar(1));
+        author.addRoot(doc1);
 
         // Second document
-        auto doc2 = author.create_map();
-        author.set_map_value(doc2, "count", author.create_scalar(2));
-        author.add_root(doc2);
+        auto doc2 = author.createMap();
+        author.setMapValue(doc2, "count", author.createScalar(2));
+        author.addRoot(doc2);
 
         // Third document
-        auto doc3 = author.create_map();
-        author.set_map_value(doc3, "count", author.create_scalar(3));
-        author.add_root(doc3);
+        auto doc3 = author.createMap();
+        author.setMapValue(doc3, "count", author.createScalar(3));
+        author.addRoot(doc3);
       },
       false, false); // Don't write to disk
 
@@ -466,8 +466,8 @@ void test_multi_root() {
     auto doc = std::get<yaml::YamlDocument>(std::move(result));
 
     // Verify document count
-    if (doc.document_count() != 3) {
-      std::cerr << "❌ Multi-root test failed - expected 3 documents, got " << doc.document_count() << std::endl;
+    if (doc.documentCount() != 3) {
+      std::cerr << "❌ Multi-root test failed - expected 3 documents, got " << doc.documentCount() << std::endl;
       throw std::runtime_error("Multi-root test failed");
     }
 
@@ -479,7 +479,7 @@ void test_multi_root() {
         throw std::runtime_error("Multi-root test failed");
       }
 
-      const auto &map = root.as_map();
+      const auto &map = root.asMap();
       if (map.size() != 1 || map.find("count") == map.end()) {
         std::cerr << "❌ Multi-root test failed - document " << i << " doesn't have count key" << std::endl;
         throw std::runtime_error("Multi-root test failed");

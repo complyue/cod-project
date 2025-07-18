@@ -70,11 +70,11 @@ inline bool compare_authored_with_expected(const shilos::yaml::YamlDocument &aut
 inline bool compare_multi_document(const shilos::yaml::YamlDocument &authored_doc,
                                    const std::vector<shilos::yaml::YamlDocument> &expected_docs,
                                    bool subset_mode = false) {
-  if (authored_doc.document_count() != expected_docs.size()) {
+  if (authored_doc.documentCount() != expected_docs.size()) {
     return false;
   }
 
-  for (size_t i = 0; i < authored_doc.document_count(); ++i) {
+  for (size_t i = 0; i < authored_doc.documentCount(); ++i) {
     const Node &authored_node = authored_doc.root(i);
     const Node &expected_node = expected_docs[i].root();
 
@@ -132,11 +132,11 @@ inline bool compare_multi_document(const shilos::yaml::YamlDocument &authored_do
 
   auto expected_doc = std::get<shilos::yaml::YamlDocument>(std::move(expected_result));
 
-  if (authored_doc.document_count() != expected_doc.document_count()) {
+  if (authored_doc.documentCount() != expected_doc.documentCount()) {
     return false;
   }
 
-  for (size_t i = 0; i < authored_doc.document_count(); ++i) {
+  for (size_t i = 0; i < authored_doc.documentCount(); ++i) {
     const Node &authored_node = authored_doc.root(i);
     const Node &expected_node = expected_doc.root(i);
 
