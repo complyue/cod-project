@@ -14,36 +14,36 @@ namespace cod::project {
 // --------------------------------------------------------------------------
 
 inline yaml::Node to_yaml(const CodDep &dep, yaml::YamlAuthor &author) noexcept {
-  yaml::Node m(yaml::Map{});
-  m["uuid"] = author.create_string(dep.uuid().to_string());
-  m["name"] = author.create_string(std::string_view(dep.name()));
-  m["repo_url"] = author.create_string(std::string_view(dep.repo_url()));
+  auto m = author.createMap();
+  author.setMapValue(m, "uuid", author.createString(dep.uuid().to_string()));
+  author.setMapValue(m, "name", author.createString(std::string_view(dep.name())));
+  author.setMapValue(m, "repo_url", author.createString(std::string_view(dep.repo_url())));
   if (!dep.path().empty()) {
-    m["path"] = author.create_string(std::string_view(dep.path()));
+    author.setMapValue(m, "path", author.createString(std::string_view(dep.path())));
   }
 
   if (!dep.branches().empty()) {
-    yaml::Node seq(yaml::Sequence{});
+    auto seq = author.createSequence();
     for (const auto &br : dep.branches()) {
-      seq.push_back(author.create_string(std::string_view(br)));
+      author.pushToSequence(seq, author.createString(std::string_view(br)));
     }
-    m["branches"] = seq;
+    author.setMapValue(m, "branches", seq);
   }
   return m;
 }
 
 inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) noexcept {
-  yaml::Node m(yaml::Map{});
-  m["uuid"] = author.create_string(proj.uuid().to_string());
-  m["name"] = author.create_string(std::string_view(proj.name()));
-  m["repo_url"] = author.create_string(std::string_view(proj.repo_url()));
+  auto m = author.createMap();
+  author.setMapValue(m, "uuid", author.createString(proj.uuid().to_string()));
+  author.setMapValue(m, "name", author.createString(std::string_view(proj.name())));
+  author.setMapValue(m, "repo_url", author.createString(std::string_view(proj.repo_url())));
 
   if (!proj.deps().empty()) {
-    yaml::Node seq(yaml::Sequence{});
+    auto seq = author.createSequence();
     for (const CodDep &d : proj.deps()) {
-      seq.push_back(to_yaml(d, author));
+      author.pushToSequence(seq, to_yaml(d, author));
     }
-    m["deps"] = seq;
+    author.setMapValue(m, "deps", seq);
   }
   return m;
 }
@@ -160,6 +160,162 @@ inline std::string repo_url_to_key(std::string_view url) {
     }
   }
   return key;
+}
+
+// ==========================================================================
+// YAML SERIALISATION FOR MANIFEST CLASSES
+// --------------------------------------------------------------------------
+
+inline yaml::Node to_yaml(const CodManifestEntry &entry, yaml::YamlAuthor &author) noexcept {
+  auto m = author.createMap();
+  author.setMapValue(m, "uuid", author.createString(entry.uuid().to_string()));
+  author.setMapValue(m, "repo_url", author.createString(std::string_view(entry.repo_url())));
+  if (!entry.branch().empty()) {
+    author.setMapValue(m, "branch", author.createString(std::string_view(entry.branch())));
+  }
+  if (!entry.commit().empty()) {
+    author.setMapValue(m, "commit", author.createString(std::string_view(entry.commit())));
+  }
+  return m;
+}
+
+inline yaml::Node to_yaml(const CodManifest &manifest, yaml::YamlAuthor &author) noexcept {
+  auto m = author.createMap();
+
+  // Root section
+  auto root_map = author.createMap();
+  author.setMapValue(root_map, "uuid", author.createString(manifest.root_uuid().to_string()));
+  author.setMapValue(root_map, "repo_url", author.createString(std::string_view(manifest.root_repo_url())));
+  author.setMapValue(m, "root", root_map);
+
+  // Locals section
+  if (!manifest.locals().empty()) {
+    auto locals_map = author.createMap();
+    for (const auto &[uuid_str, path_str] : manifest.locals()) {
+      author.setMapValue(locals_map, std::string_view(uuid_str), author.createString(std::string_view(path_str)));
+    }
+    author.setMapValue(m, "locals", locals_map);
+  }
+
+  // Resolved section
+  if (!manifest.resolved().empty()) {
+    auto resolved_seq = author.createSequence();
+    for (const CodManifestEntry &entry : manifest.resolved()) {
+      author.pushToSequence(resolved_seq, to_yaml(entry, author));
+    }
+    author.setMapValue(m, "resolved", resolved_seq);
+  }
+
+  return m;
+}
+
+// --------------------------------------------------------------------------
+// Deserialisation for manifest classes
+// --------------------------------------------------------------------------
+
+template <typename T, typename RT>
+  requires(std::same_as<T, CodManifestEntry> && shilos::ValidMemRegionRootType<RT>)
+void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr) {
+  if (!node.IsMap()) {
+    throw yaml::TypeError("CodManifestEntry YAML node must be a mapping");
+  }
+  const auto &map = std::get<yaml::Map>(node.value);
+
+  auto fetch_scalar = [&](const std::string &key) -> std::string {
+    auto it = map.find(key);
+    if (it == map.end()) {
+      throw yaml::MissingFieldError("Missing key '" + key + "' in CodManifestEntry");
+    }
+    if (!it->value.IsScalar()) {
+      throw yaml::TypeError("Expected scalar for key '" + key + "'");
+    }
+    return it->value.as<std::string>();
+  };
+
+  auto fetch_optional_scalar = [&](const std::string &key) -> std::string {
+    auto it = map.find(key);
+    if (it == map.end()) {
+      return "";
+    }
+    if (!it->value.IsScalar()) {
+      throw yaml::TypeError("Expected scalar for key '" + key + "'");
+    }
+    return it->value.as<std::string>();
+  };
+
+  UUID uuid(fetch_scalar("uuid"));
+  std::string repo_url = fetch_scalar("repo_url");
+  std::string branch = fetch_optional_scalar("branch");
+  std::string commit = fetch_optional_scalar("commit");
+
+  // Construct in-place
+  new (raw_ptr) T(mr, uuid, repo_url, branch, commit);
+}
+
+template <typename T, typename RT>
+  requires(std::same_as<T, CodManifest> && shilos::ValidMemRegionRootType<RT>)
+void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr) {
+  if (!node.IsMap()) {
+    throw yaml::TypeError("CodManifest YAML root must be a mapping");
+  }
+  const auto &map = std::get<yaml::Map>(node.value);
+
+  // Parse root section
+  auto it_root = map.find("root");
+  if (it_root == map.end()) {
+    throw yaml::MissingFieldError("Missing 'root' section in CodManifest");
+  }
+  if (!it_root->value.IsMap()) {
+    throw yaml::TypeError("'root' must be a mapping");
+  }
+  const auto &root_map = std::get<yaml::Map>(it_root->value.value);
+
+  auto fetch_scalar_from_map = [&](const yaml::Map &m, const std::string &key) -> std::string {
+    auto it = m.find(key);
+    if (it == m.end()) {
+      throw yaml::MissingFieldError("Missing key '" + key + "' in root section");
+    }
+    if (!it->value.IsScalar()) {
+      throw yaml::TypeError("Expected scalar for key '" + key + "'");
+    }
+    return it->value.as<std::string>();
+  };
+
+  UUID root_uuid(fetch_scalar_from_map(root_map, "uuid"));
+  std::string root_repo_url = fetch_scalar_from_map(root_map, "repo_url");
+
+  // Construct CodManifest in-place
+  new (raw_ptr) T(mr, root_uuid, root_repo_url);
+
+  // Parse locals section (optional)
+  auto it_locals = map.find("locals");
+  if (it_locals != map.end()) {
+    if (!it_locals->value.IsMap()) {
+      throw yaml::TypeError("'locals' must be a mapping");
+    }
+    const auto &locals_map = std::get<yaml::Map>(it_locals->value.value);
+    for (const auto &[uuid_str, path_node] : locals_map) {
+      if (!path_node.IsScalar()) {
+        throw yaml::TypeError("local path must be a scalar");
+      }
+      std::string path_str = path_node.as<std::string>();
+      UUID uuid(uuid_str);
+      raw_ptr->addLocal(mr, uuid, path_str);
+    }
+  }
+
+  // Parse resolved section (optional)
+  auto it_resolved = map.find("resolved");
+  if (it_resolved != map.end()) {
+    if (!it_resolved->value.IsSequence()) {
+      throw yaml::TypeError("'resolved' must be a sequence");
+    }
+    for (const auto &entry_node : std::get<yaml::Sequence>(it_resolved->value.value)) {
+      // Allocate CodManifestEntry via from_yaml helper
+      raw_ptr->resolved().emplace_back_init(
+          mr, [&](CodManifestEntry *dst) { from_yaml<CodManifestEntry>(mr, entry_node, dst); });
+    }
+  }
 }
 
 } // namespace cod::project

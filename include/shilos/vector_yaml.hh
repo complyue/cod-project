@@ -30,17 +30,17 @@ namespace shilos {
 // ============================================================================
 
 template <typename T> inline yaml::Node to_yaml(const regional_vector<T> &vec, yaml::YamlAuthor &author) noexcept {
-  yaml::Node seq(yaml::Sequence{});
+  auto seq = author.createSequence();
   for (const auto &elem : vec) {
     // If ADL finds a dedicated to_yaml overload for T, use it.
     if constexpr (requires(const T &e, yaml::YamlAuthor &a) { to_yaml(e, a); }) {
-      seq.push_back(to_yaml(elem, author));
+      author.pushToSequence(seq, to_yaml(elem, author));
     } else if constexpr (std::is_same_v<T, bool>) {
-      seq.push_back(yaml::Node(elem));
+      author.pushToSequence(seq, yaml::Node(elem));
     } else if constexpr (std::is_integral_v<T>) {
-      seq.push_back(yaml::Node(static_cast<int64_t>(elem)));
+      author.pushToSequence(seq, yaml::Node(static_cast<int64_t>(elem)));
     } else if constexpr (std::is_floating_point_v<T>) {
-      seq.push_back(yaml::Node(static_cast<double>(elem)));
+      author.pushToSequence(seq, yaml::Node(static_cast<double>(elem)));
     } else {
       static_assert(sizeof(T) == 0, "Element type of regional_vector does not support YAML serialisation");
     }

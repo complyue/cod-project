@@ -2,12 +2,13 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <sstream>
 #include <string_view>
+#include <unordered_set>
 
 #include "codp.hh"
-#include "codp_manifest.hh"
 #include "codp_yaml.hh"
 
 using namespace shilos;
@@ -152,7 +153,7 @@ int main(int argc, char **argv) {
           // Allocate region (1 MB) and construct project from YAML
           auto_region<CodProject> region(1024 * 1024);
           CodProject *project = region->root().get();
-          from_yaml(*region, root, project);
+          cod::project::from_yaml<CodProject>(*region, root, project);
 
           // Prepare git cache directories
           fs::path repos_root = home_dir() / ".cod" / "pkgs" / "repos";
@@ -176,19 +177,102 @@ int main(int argc, char **argv) {
           std::cout << "✔ Repositories synchronised." << std::endl;
 
           // -----------------------------------------------------------------
-          // Generate CodManifest.yaml (local deps only stage)
+          // Generate CodManifest.yaml using regional CodManifest class
           // -----------------------------------------------------------------
 
-          yaml::Node manifest_node = generate_manifest(project_path);
+          // Create manifest region and populate it
+          auto_region<CodManifest> manifest_region(1024 * 1024);
+          CodManifest *manifest = manifest_region->root().get();
+          new (manifest) CodManifest(*manifest_region, project->uuid(), std::string_view(project->repo_url()));
 
-          fs::path manifest_path = project_path / "CodManifest.yaml";
-          std::ofstream ofs(manifest_path);
-          if (!ofs) {
-            throw std::runtime_error("Cannot write CodManifest.yaml at " + manifest_path.string());
+          // Collect dependencies recursively using temporary data structures
+          std::unordered_set<std::string> visited;
+          std::unordered_map<std::string, std::string> locals; // uuid -> path
+          std::vector<std::tuple<UUID, std::string, std::string, std::string>>
+              resolved; // uuid, repo_url, branch, commit
+
+          std::function<void(const fs::path &, const CodProject *)> collect_deps = [&](const fs::path &proj_dir,
+                                                                                       const CodProject *proj) {
+            for (const CodDep &dep : proj->deps()) {
+              std::string uuid_str = dep.uuid().to_string();
+              if (visited.contains(uuid_str))
+                continue;
+              visited.insert(uuid_str);
+
+              if (!dep.path().empty()) {
+                // Local dependency
+                fs::path dep_path = std::string(std::string_view(dep.path()));
+                if (dep_path.is_relative())
+                  dep_path = fs::absolute(proj_dir / dep_path);
+                dep_path = fs::weakly_canonical(dep_path);
+
+                // Store relative path from project root
+                fs::path relative_path = fs::relative(dep_path, project_path);
+                locals[uuid_str] = relative_path.string();
+
+                // Load and recurse into dep project
+                fs::path dep_yaml_path = dep_path / "CodProject.yaml";
+                try {
+                  std::string dep_yaml_text = slurp_file(dep_yaml_path);
+                  auto dep_result = yaml::YamlDocument::Parse(dep_yaml_path.string(), std::string(dep_yaml_text));
+                  shilos::vswitch(
+                      dep_result,
+                      [&](const yaml::ParseError &err) {
+                        throw std::runtime_error("Failed to parse " + dep_yaml_path.string() + ": " + err.what());
+                      },
+                      [&](const yaml::YamlDocument &doc) {
+                        const yaml::Node &dep_root = doc.root();
+                        auto_region<CodProject> dep_region(1024 * 1024);
+                        CodProject *dep_proj = dep_region->root().get();
+                        cod::project::from_yaml<CodProject>(*dep_region, dep_root, dep_proj);
+                        collect_deps(dep_path, dep_proj);
+                      });
+                } catch (const std::exception &e) {
+                  // Skip deps that can't be loaded
+                  std::cerr << "Warning: Failed to load dependency " << dep_yaml_path << ": " << e.what() << std::endl;
+                }
+              } else {
+                // Remote dependency
+                resolved.emplace_back(dep.uuid(), std::string(std::string_view(dep.repo_url())), "", "");
+              }
+            }
+          };
+
+          collect_deps(project_path, project);
+
+          // Now populate the manifest with collected data
+          for (const auto &[uuid_str, path] : locals) {
+            UUID uuid(uuid_str);
+            manifest->addLocal(*manifest_region, uuid, path);
           }
-          ofs << yaml::format_yaml(manifest_node) << std::endl;
 
-          std::cout << "✔ CodManifest.yaml generated at " << manifest_path << std::endl;
+          for (const auto &[uuid, repo_url, branch, commit] : resolved) {
+            manifest->addResolved(*manifest_region, uuid, repo_url, branch, commit);
+          }
+
+          // Generate YAML using the new to_yaml function
+          auto yaml_result = yaml::YamlDocument::Write("CodManifest.yaml", [&](yaml::YamlAuthor &author) {
+            auto root = to_yaml(*manifest, author);
+            author.addRoot(root);
+          });
+
+          shilos::vswitch(
+              yaml_result,
+              [&](const yaml::ParseError &err) {
+                throw std::runtime_error("Failed to generate manifest YAML: " + std::string(err.what()));
+              },
+              [&](const yaml::AuthorError &err) {
+                throw std::runtime_error("Failed to author manifest YAML: " + std::string(err.what()));
+              },
+              [&](const yaml::YamlDocument &manifest_doc) {
+                fs::path manifest_path = project_path / "CodManifest.yaml";
+                std::ofstream ofs(manifest_path);
+                if (!ofs) {
+                  throw std::runtime_error("Cannot write CodManifest.yaml at " + manifest_path.string());
+                }
+                ofs << yaml::format_yaml(manifest_doc.root()) << std::endl;
+                std::cout << "✔ CodManifest.yaml generated at " << manifest_path << std::endl;
+              });
         });
 
   } catch (const std::exception &e) {

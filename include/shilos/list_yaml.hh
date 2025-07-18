@@ -22,16 +22,16 @@ namespace shilos {
 
 template <template <typename> class ListC, typename T>
 inline yaml::Node list_to_yaml(const ListC<T> &lst, yaml::YamlAuthor &author) noexcept {
-  yaml::Node seq(yaml::Sequence{});
+  auto seq = author.createSequence();
   for (const auto &elem : lst) {
     if constexpr (requires { to_yaml(elem, author); }) {
-      seq.push_back(to_yaml(elem, author));
+      author.pushToSequence(seq, to_yaml(elem, author));
     } else if constexpr (std::is_same_v<T, bool>) {
-      seq.push_back(yaml::Node(elem));
+      author.pushToSequence(seq, yaml::Node(elem));
     } else if constexpr (std::is_integral_v<T>) {
-      seq.push_back(yaml::Node(static_cast<int64_t>(elem)));
+      author.pushToSequence(seq, yaml::Node(static_cast<int64_t>(elem)));
     } else if constexpr (std::is_floating_point_v<T>) {
-      seq.push_back(yaml::Node(static_cast<double>(elem)));
+      author.pushToSequence(seq, yaml::Node(static_cast<double>(elem)));
     } else {
       static_assert(sizeof(T) == 0, "Element type of regional list does not support YAML serialisation");
     }

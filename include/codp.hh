@@ -88,4 +88,90 @@ public:
   const CodDep &lastDep() const { return *deps_.back(); }
 };
 
+// ==========================================================================
+// MANIFEST-RELATED CLASSES
+// --------------------------------------------------------------------------
+
+class CodManifestEntry {
+public:
+  static constexpr UUID TYPE_UUID = UUID("F1E2D3C4-B5A6-7890-FEDC-BA0987654321");
+
+private:
+  UUID uuid_;
+  regional_str repo_url_;
+  regional_str branch_;
+  regional_str commit_;
+
+public:
+  // Default constructor for vector storage
+  CodManifestEntry() = default;
+
+  template <typename RT>
+  CodManifestEntry(memory_region<RT> &mr, const UUID &uuid, std::string_view repo_url, std::string_view branch = "",
+                   std::string_view commit = "")
+      : uuid_(uuid), repo_url_(mr, repo_url), branch_(mr, branch), commit_(mr, commit) {}
+
+  // Deleted special members
+  CodManifestEntry(const CodManifestEntry &) = delete;
+  CodManifestEntry(CodManifestEntry &&) = delete;
+  CodManifestEntry &operator=(const CodManifestEntry &) = delete;
+  CodManifestEntry &operator=(CodManifestEntry &&) = delete;
+
+  UUID uuid() const { return uuid_; }
+  const regional_str &repo_url() const { return repo_url_; }
+  const regional_str &branch() const { return branch_; }
+  const regional_str &commit() const { return commit_; }
+  regional_str &branch() { return branch_; }
+  regional_str &commit() { return commit_; }
+};
+
+class CodManifest {
+public:
+  static constexpr UUID TYPE_UUID = UUID("A1B2C3D4-E5F6-7890-ABCD-EF0123456789");
+
+private:
+  UUID root_uuid_;
+  regional_str root_repo_url_;
+  regional_dict<regional_str, regional_str> locals_; // uuid -> path
+  regional_vector<CodManifestEntry> resolved_;
+
+public:
+  template <typename RT>
+  CodManifest(memory_region<RT> &mr, const UUID &root_uuid, std::string_view root_repo_url)
+      : root_uuid_(root_uuid), root_repo_url_(mr, root_repo_url), locals_(mr), resolved_(mr) {}
+
+  template <typename RT>
+  CodManifest(memory_region<RT> &mr) : root_uuid_(), root_repo_url_(mr), locals_(mr), resolved_(mr) {}
+
+  // Deleted special members
+  CodManifest(const CodManifest &) = delete;
+  CodManifest(CodManifest &&) = delete;
+  CodManifest &operator=(const CodManifest &) = delete;
+  CodManifest &operator=(CodManifest &&) = delete;
+
+  UUID root_uuid() const { return root_uuid_; }
+  const regional_str &root_repo_url() const { return root_repo_url_; }
+  const regional_dict<regional_str, regional_str> &locals() const { return locals_; }
+  const regional_vector<CodManifestEntry> &resolved() const { return resolved_; }
+  regional_dict<regional_str, regional_str> &locals() { return locals_; }
+  regional_vector<CodManifestEntry> &resolved() { return resolved_; }
+
+  // ---------------------------------------------------------------------
+  // Convenience helpers to add & access manifest entries ----------------
+  // ---------------------------------------------------------------------
+
+  template <typename RT> void addLocal(memory_region<RT> &mr, const UUID &uuid, std::string_view path) {
+    regional_str uuid_str(mr, uuid.to_string());
+    regional_str path_str(mr, path);
+    locals_.insert(mr, std::move(uuid_str), std::move(path_str));
+  }
+
+  template <typename RT>
+  CodManifestEntry &addResolved(memory_region<RT> &mr, const UUID &uuid, std::string_view repo_url,
+                                std::string_view branch = "", std::string_view commit = "") {
+    resolved_.emplace_back(mr, uuid, repo_url, branch, commit);
+    return resolved_.back();
+  }
+};
+
 } // namespace cod::project

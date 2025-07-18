@@ -63,12 +63,12 @@ inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d, yaml::YamlAuthor &
 
     // Insert into map – we must convert key_node to string/int key for YAML library.
     if (auto str = std::get_if<std::string_view>(&key_node.value)) {
-      m[*str] = value_node;
+      author.setMapValue(m, *str, value_node);
     } else if (auto i = std::get_if<int64_t>(&key_node.value)) {
-      m[author.createStringView(std::to_string(*i))] = value_node; // YAML keys must be strings
+      author.setMapValue(m, author.createStringView(std::to_string(*i)), value_node); // YAML keys must be strings
     } else {
       // Fallback: stringify YAML node
-      m[author.createStringView(yaml::format_yaml(key_node))] = value_node;
+      author.setMapValue(m, author.createStringView(yaml::format_yaml(key_node)), value_node);
     }
   }
   return m;
@@ -128,7 +128,8 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_dict<K, V
         make_key_callable(key_fp, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }
     } else {
-      yaml::Node key_scalar = yaml::Node(std::string_view(k_node_str));
+      yaml::YamlAuthor temp_author;
+      yaml::Node key_scalar = temp_author.createString(k_node_str);
       from_yaml(mr, key_scalar, &key_storage);
       if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
         make_key_callable(key_storage, [&](V *dst) { new (dst) V(v_node.as<V>()); });
