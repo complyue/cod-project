@@ -149,8 +149,6 @@ private:
   // Friend declarations for YAML functions
   template <typename U, typename RT>
   friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_fifo<U> *raw_ptr);
-  template <typename U, typename RT>
-  friend global_ptr<regional_fifo<U>, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node);
 
 public:
   regional_fifo() : head_(), tail_() {}
@@ -337,8 +335,6 @@ private:
   // Friend declarations for YAML functions
   template <typename U, typename RT>
   friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_lifo<U> *raw_ptr);
-  template <typename U, typename RT>
-  friend global_ptr<regional_lifo<U>, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node);
 
 public:
   regional_lifo() : head_(), tail_() {}

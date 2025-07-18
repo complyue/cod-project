@@ -84,8 +84,6 @@ template <typename T> class regional_vector {
   // Friend declarations for YAML functions
   template <typename U, typename RT>
   friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_vector<U> *raw_ptr);
-  template <typename U, typename RT>
-  friend global_ptr<regional_vector<U>, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node);
 
 private:
   regional_ptr<vector_segment<T>> first_segment_;

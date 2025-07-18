@@ -178,8 +178,6 @@ template <typename K, typename V, typename Hash = std::hash<K>> class regional_d
   // Friend declarations for YAML functions
   template <typename K1, typename V1, typename H1, typename RT>
   friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_dict<K1, V1, H1> *raw_ptr);
-  template <typename K1, typename V1, typename H1, typename RT>
-  friend global_ptr<regional_dict<K1, V1, H1>, RT> from_yaml(memory_region<RT> &mr, const yaml::Node &node);
 
 private:
   regional_vector<dict_entry<K, V>> entries_; // All entries in insertion order
