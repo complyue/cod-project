@@ -1,0 +1,11 @@
+metadata:
+  version: "1.0"
+  author: "Test Author"
+data:
+  - name: "item1"
+    value: 100
+  - name: "item2"
+    value: 200
+config:
+  debug: true
+  timeout: 30

@@ -13,35 +13,35 @@ namespace cod::project {
 // YAML SERIALISATION IMPLEMENTATION FOR CodDep & CodProject
 // --------------------------------------------------------------------------
 
-inline yaml::Node to_yaml(const CodDep &dep) noexcept {
+inline yaml::Node to_yaml(const CodDep &dep, yaml::YamlAuthor &author) noexcept {
   yaml::Node m(yaml::Map{});
-  m["uuid"] = dep.uuid().to_string();
-  m["name"] = std::string_view(dep.name());
-  m["repo_url"] = std::string_view(dep.repo_url());
+  m["uuid"] = author.create_string(dep.uuid().to_string());
+  m["name"] = author.create_string(std::string_view(dep.name()));
+  m["repo_url"] = author.create_string(std::string_view(dep.repo_url()));
   if (!dep.path().empty()) {
-    m["path"] = std::string_view(dep.path());
+    m["path"] = author.create_string(std::string_view(dep.path()));
   }
 
   if (!dep.branches().empty()) {
     yaml::Node seq(yaml::Sequence{});
     for (const auto &br : dep.branches()) {
-      seq.push_back(std::string(std::string_view(br)));
+      seq.push_back(author.create_string(std::string_view(br)));
     }
     m["branches"] = seq;
   }
   return m;
 }
 
-inline yaml::Node to_yaml(const CodProject &proj) noexcept {
+inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) noexcept {
   yaml::Node m(yaml::Map{});
-  m["uuid"] = proj.uuid().to_string();
-  m["name"] = std::string_view(proj.name());
-  m["repo_url"] = std::string_view(proj.repo_url());
+  m["uuid"] = author.create_string(proj.uuid().to_string());
+  m["name"] = author.create_string(std::string_view(proj.name()));
+  m["repo_url"] = author.create_string(std::string_view(proj.repo_url()));
 
   if (!proj.deps().empty()) {
     yaml::Node seq(yaml::Sequence{});
     for (const CodDep &d : proj.deps()) {
-      seq.push_back(to_yaml(d));
+      seq.push_back(to_yaml(d, author));
     }
     m["deps"] = seq;
   }

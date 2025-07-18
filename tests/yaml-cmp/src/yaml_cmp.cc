@@ -1,4 +1,5 @@
 #include "shilos/prelude.hh"
+#include "yaml_comparison.hh"
 
 #include <filesystem>
 #include <fstream>
@@ -16,52 +17,6 @@ static std::string read_file(const fs::path &p) {
   std::stringstream ss;
   ss << ifs.rdbuf();
   return ss.str();
-}
-
-static bool yaml_subset(const Node &expected, const Node &actual);
-
-static bool scalar_equal(const Node &a, const Node &b) {
-  return shilos::yaml::format_yaml(a) == shilos::yaml::format_yaml(b);
-}
-
-static bool yaml_subset(const Node &expected, const Node &actual) {
-  using shilos::yaml::Map;
-  using shilos::yaml::Sequence;
-
-  if (expected.IsNull())
-    return actual.IsNull();
-
-  if (expected.IsScalar()) {
-    return actual.IsScalar() && scalar_equal(expected, actual);
-  }
-
-  if (expected.IsSequence()) {
-    if (!actual.IsSequence())
-      return false;
-    const auto &e_seq = std::get<Sequence>(expected.value);
-    const auto &a_seq = std::get<Sequence>(actual.value);
-    if (e_seq.size() > a_seq.size())
-      return false;
-    for (size_t i = 0; i < e_seq.size(); ++i)
-      if (!yaml_subset(e_seq[i], a_seq[i]))
-        return false;
-    return true;
-  }
-
-  if (expected.IsMap()) {
-    if (!actual.IsMap())
-      return false;
-    const auto &e_map = std::get<Map>(expected.value);
-    const auto &a_map = std::get<Map>(actual.value);
-    for (const auto &e_entry : e_map) {
-      const auto &key = e_entry.key; // Keep as string_view - caller must keep YamlDocument alive
-      auto it = a_map.find(key);
-      if (it == a_map.end() || !yaml_subset(e_entry.value, it->value))
-        return false;
-    }
-    return true;
-  }
-  return false;
 }
 
 static void usage() { std::cerr << "Usage: yaml-cmp [--subset] <expected.yaml> <actual.yaml>\n"; }
@@ -99,9 +54,8 @@ int main(int argc, char **argv) {
               [&](const shilos::yaml::YamlDocument &actual_doc) {
                 const Node &expected_node = expected_doc.root();
                 const Node &actual_node = actual_doc.root();
-                bool ok = subset_mode
-                              ? yaml_subset(expected_node, actual_node)
-                              : (yaml_subset(expected_node, actual_node) && yaml_subset(actual_node, expected_node));
+                bool ok = subset_mode ? yaml_cmp::yaml_subset(expected_node, actual_node)
+                                      : yaml_cmp::yaml_equal(expected_node, actual_node);
                 if (!ok) {
                   std::cerr << "yaml-cmp: comparison FAILED\n";
                   std::cerr << "--- expected (subset=" << (subset_mode ? "yes" : "no") << ") ---\n";

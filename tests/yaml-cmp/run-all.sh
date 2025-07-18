@@ -28,17 +28,23 @@ if [[ ! -f "$BUILD_DIR/Build.ninja" && ! -f "$BUILD_DIR/Makefile" ]]; then
   cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B "$BUILD_DIR" "$SCRIPT_DIR"
 fi
 
-# Build yaml-cmp
-echo "Building yaml-cmp..."
+# Build yaml-cmp and authoring tests
+echo "Building yaml-cmp and authoring tests..."
 cmake --build "$BUILD_DIR"
 YAMLCMP_BIN="$BUILD_DIR/yaml-cmp"
+AUTHORING_TEST_BIN="$BUILD_DIR/test_yaml_authoring"
 
 if [[ ! -x "$YAMLCMP_BIN" ]]; then
   echo -e "${RED}✗ Failed to build yaml-cmp${NC}"
   exit 1
 fi
 
-echo -e "${GREEN}✓ yaml-cmp built successfully${NC}"
+if [[ ! -x "$AUTHORING_TEST_BIN" ]]; then
+  echo -e "${RED}✗ Failed to build test_yaml_authoring${NC}"
+  exit 1
+fi
+
+echo -e "${GREEN}✓ yaml-cmp and authoring tests built successfully${NC}"
 echo
 
 # Test function
@@ -209,6 +215,26 @@ run_test "Basic mapping self-consistency" "$TEST_DATA_DIR/basic_mapping.yaml" "$
 run_test "Sequence self-consistency" "$TEST_DATA_DIR/sequence_yaml.yaml" "$TEST_DATA_DIR/sequence_yaml.yaml" "pass"
 run_test "Nested structure self-consistency" "$TEST_DATA_DIR/nested_yaml.yaml" "$TEST_DATA_DIR/nested_yaml.yaml" "pass"
 run_test "Mixed formats self-consistency" "$TEST_DATA_DIR/mixed_formats.yaml" "$TEST_DATA_DIR/mixed_formats.yaml" "pass"
+
+echo
+echo "--- YAML Authoring API Tests ---"
+# Run the authoring API tests
+TESTS_RUN=$((TESTS_RUN + 1))
+echo -n "Authoring API Test Suite... "
+
+# Change to the yaml-cmp directory to run the test (so it can find test-data/)
+if (cd "$SCRIPT_DIR" && "$AUTHORING_TEST_BIN" >/dev/null 2>&1); then
+  echo -e "${GREEN}PASS${NC}"
+  TESTS_PASSED=$((TESTS_PASSED + 1))
+else
+  exit_code=$?
+  echo -e "${RED}FAIL${NC}"
+  TESTS_FAILED=$((TESTS_FAILED + 1))
+  echo "  Command: $AUTHORING_TEST_BIN"
+  echo "  Failed with exit code $exit_code"
+  echo "  Running with output to show details:"
+  (cd "$SCRIPT_DIR" && "$AUTHORING_TEST_BIN") || true
+fi
 
 echo
 echo "=== Test Results ==="

@@ -1,0 +1,4 @@
+name: TestApplication
+version: "1.0.0"
+enabled: true
+port: 8080

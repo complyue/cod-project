@@ -100,7 +100,3 @@ configure_cod_target(test_memory_regions ${COD_PROJECT_SOURCE_DIR}/tests/shilos/
 configure_cod_target(test_regional_types ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/test_regional_types.cc)
 
 configure_cod_target(test_deletion_methods ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/test_deletion_methods.cc)
-
-configure_cod_target(test_yaml_serialization ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/test_yaml_serialization.cc)
-
-configure_cod_target(test_yaml_containers ${COD_PROJECT_SOURCE_DIR}/tests/shilos/src/test_yaml_containers.cc)

@@ -6,7 +6,9 @@ namespace shilos {
 
 // YAML support for regional_str
 
-inline yaml::Node to_yaml(const regional_str &str) noexcept { return yaml::Node(std::string_view(str)); }
+inline yaml::Node to_yaml(const regional_str &str, yaml::YamlAuthor &author) noexcept {
+  return author.create_string(std::string_view(str));
+}
 
 template <typename RT>
   requires ValidMemRegionRootType<RT>

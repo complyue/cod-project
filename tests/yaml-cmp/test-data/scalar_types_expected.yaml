@@ -1,0 +1,4 @@
+string: "hello"
+int: 42
+double: 3.14
+bool: true

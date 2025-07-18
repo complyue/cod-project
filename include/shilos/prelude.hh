@@ -2,8 +2,11 @@
 
 #include <concepts>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -167,15 +170,49 @@ public:
   using Exception::Exception;
 };
 
+class AuthorError : public Exception {
+private:
+  std::string filename_;
+  std::string message_;
+
+public:
+  AuthorError(std::string filename, std::string message)
+      : Exception(format_error_message(filename, message)), filename_(std::move(filename)),
+        message_(std::move(message)) {}
+
+  // Legacy constructor for backward compatibility during transition
+  explicit AuthorError(std::string message) : Exception(message), filename_(""), message_(std::move(message)) {}
+
+  const std::string &filename() const noexcept { return filename_; }
+  const std::string &message() const noexcept { return message_; }
+
+private:
+  static std::string format_error_message(const std::string &filename, const std::string &message) {
+    if (filename.empty()) {
+      return message;
+    }
+    return filename + ": " + message;
+  }
+};
+
 // Forward declarations
 struct Node;
 class YamlDocument;
+class YamlAuthor;
+class CodDep;
+class CodProject;
+class CodManifest;
+std::string format_yaml(const Node &node);
 
 // Result type for noexcept YAML parsing
-using YamlResult = std::variant<YamlDocument, ParseError>;
+using ParseResult = std::variant<YamlDocument, ParseError>;
+using AuthorResult = std::variant<YamlDocument, AuthorError>;
 
 using Map = iopd<std::string_view, Node>;
 using Sequence = std::vector<Node>;
+
+// Forward declaration for parsing functions
+struct ParseState;
 
 // Complete YAML node type definition
 struct Node {
@@ -184,49 +221,106 @@ struct Node {
 
   Value value;
 
+  // Allow YamlAuthor and YamlDocument to access private members for modification during authoring
+  friend class YamlAuthor;
+  friend class YamlDocument;
+
+  // Allow parsing functions to access private string constructors
+  friend Node parse_document(ParseState &state);
+  friend Node parse_value(ParseState &state);
+  friend Node parse_mapping(ParseState &state);
+  friend Node parse_sequence(ParseState &state);
+  friend Node parse_json_mapping(ParseState &state);
+  friend Node parse_json_sequence(ParseState &state);
+  friend Node parse_json_value(ParseState &state);
+  friend Node parse_multiline_scalar(ParseState &state);
+  friend Node parse_alias(ParseState &state);
+  friend Node parse_anchored_value(ParseState &state);
+  friend Node parse_tagged_value(ParseState &state);
+  friend Node parse_scalar_value(std::string_view scalar_text);
+
+  // Allow YAML parsing functions to access private constructors and assignment operators
+  template <typename RT, typename K, typename V>
+  friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, iopd<K, V> *raw_ptr);
+
+  // Allow YamlAuthor to access private constructors and assignment operators
+  friend class YamlAuthor;
+
+  // Allow YamlDocument and parsing functions to access private constructors
+  friend class YamlDocument;
+
+  // Allow template functions in header files to access private members (parsing only)
+  template <typename RT, typename K, typename V, typename F>
+  friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, iopd<K, V> *raw_ptr, F make_key_callable);
+  template <typename RT, typename K, typename V>
+  friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, iopd<K, V> *raw_ptr);
+
+  // Allow all from_yaml template functions to access private constructors
+  template <typename RT, typename T> friend void from_yaml(memory_region<RT> &mr, const yaml::Node &node, T *raw_ptr);
+
+public:
   Node() = default;
+  Node(const Node &other) = default;
+  Node(Node &&other) = default;
   explicit Node(Value v) : value(std::move(v)) {}
 
-  // Helper constructors
+  // Helper constructors (non-string types)
   Node(std::nullptr_t) : value(std::monostate{}) {}
   explicit Node(bool b) : value(b) {}
   explicit Node(int64_t i) : value(i) {}
   explicit Node(double d) : value(d) {}
-  explicit Node(const std::string_view s) : value(s) {}
-  explicit Node(const char *s) : value(std::string_view(s)) {}
   explicit Node(const Sequence &seq) : value(seq) {}
   explicit Node(const Map &map) : value(map) {}
 
-  // Assignment operators for different types
-  Node &operator=(std::string_view s) {
-    value = s;
-    return *this;
-  }
-  Node &operator=(const char *s) {
-    value = std::string_view(s);
-    return *this;
-  }
+  // Assignment operators (default and non-string types) - public for internal use
+  Node &operator=(const Node &other) = default;
+  Node &operator=(Node &&other) = default;
   Node &operator=(bool b) {
     value = b;
+    return *this;
+  }
+  Node &operator=(int i) {
+    value = static_cast<int64_t>(i);
     return *this;
   }
   Node &operator=(int64_t i) {
     value = i;
     return *this;
   }
-  Node &operator=(int i) {
-    value = static_cast<int64_t>(i);
-    return *this;
-  } // Handle plain int (potential data loss for large values)
   Node &operator=(double d) {
     value = d;
     return *this;
   }
-  Node &operator=(std::nullptr_t) {
-    value = std::monostate{};
+  Node &operator=(const Sequence &seq) {
+    value = seq;
+    return *this;
+  }
+  Node &operator=(const Map &map) {
+    value = map;
     return *this;
   }
 
+private:
+  // Private string constructors - only accessible through YamlAuthor and parsing functions
+  explicit Node(const std::string_view s) : value(s) {}
+  Node(const std::string &s) : value(std::string_view(s)) {}
+  explicit Node(const char *s) : value(std::string_view(s)) {}
+
+  // Private string assignment operators - only accessible through YamlAuthor and parsing functions
+  Node &operator=(std::string_view s) {
+    value = s;
+    return *this;
+  }
+  Node &operator=(const std::string &s) {
+    value = std::string_view(s);
+    return *this;
+  }
+  Node &operator=(const char *s) {
+    value = std::string_view(s);
+    return *this;
+  }
+
+public:
   // Type checking methods
   bool IsScalar() const {
     return std::holds_alternative<bool>(value) || std::holds_alternative<int64_t>(value) ||
@@ -239,6 +333,14 @@ struct Node {
 
   bool IsNull() const { return std::holds_alternative<std::monostate>(value); }
 
+  // Type checking methods
+  bool is_map() const { return std::holds_alternative<Map>(value); }
+  bool is_sequence() const { return std::holds_alternative<Sequence>(value); }
+  bool is_string() const { return std::holds_alternative<std::string_view>(value); }
+  bool is_int() const { return std::holds_alternative<int64_t>(value); }
+  bool is_double() const { return std::holds_alternative<double>(value); }
+  bool is_bool() const { return std::holds_alternative<bool>(value); }
+
   // Size method for sequences and maps
   size_t size() const {
     if (auto seq = std::get_if<Sequence>(&value)) {
@@ -249,20 +351,19 @@ struct Node {
     return 0;
   }
 
-  // push_back for sequences
   void push_back(const Node &node) {
-    if (auto seq = std::get_if<Sequence>(&value)) {
-      seq->push_back(node);
-    } else {
-      // Convert to sequence if not already
+    if (!std::holds_alternative<Sequence>(value)) {
       value = Sequence{};
-      std::get<Sequence>(value).push_back(node);
     }
+    std::get<Sequence>(value).push_back(node);
   }
 
-  void push_back(int64_t i) { push_back(Node(i)); }
-
-  void push_back(std::string_view s) { push_back(Node(s)); }
+  void push_back(Node &&node) {
+    if (!std::holds_alternative<Sequence>(value)) {
+      value = Sequence{};
+    }
+    std::get<Sequence>(value).push_back(std::move(node));
+  }
 
   template <typename T> T as() const {
     if constexpr (std::is_same_v<T, std::string>) {
@@ -299,6 +400,77 @@ struct Node {
     throw TypeError("Unsupported type conversion");
   }
 
+  // Convenience methods for common type conversions
+  const Map &as_map() const {
+    if (auto map = std::get_if<Map>(&value)) {
+      return *map;
+    }
+    throw TypeError("Expected map value");
+  }
+
+  Map &as_map() {
+    if (auto map = std::get_if<Map>(&value)) {
+      return *map;
+    }
+    throw TypeError("Expected map value");
+  }
+
+  const Sequence &as_sequence() const {
+    if (auto seq = std::get_if<Sequence>(&value)) {
+      return *seq;
+    }
+    throw TypeError("Expected sequence value");
+  }
+
+  Sequence &as_sequence() {
+    if (auto seq = std::get_if<Sequence>(&value)) {
+      return *seq;
+    }
+    throw TypeError("Expected sequence value");
+  }
+
+  std::string as_string() const {
+    if (auto s = std::get_if<std::string_view>(&value)) {
+      return std::string(*s);
+    }
+    throw TypeError("Expected string value");
+  }
+
+  bool as_bool() const {
+    if (auto b = std::get_if<bool>(&value)) {
+      return *b;
+    }
+    throw TypeError("Expected bool value");
+  }
+
+  int as_int() const {
+    if (auto i = std::get_if<int64_t>(&value)) {
+      return static_cast<int>(*i);
+    }
+    throw TypeError("Expected integer value");
+  }
+
+  int64_t as_int64() const {
+    if (auto i = std::get_if<int64_t>(&value)) {
+      return *i;
+    }
+    throw TypeError("Expected integer value");
+  }
+
+  double as_double() const {
+    if (auto d = std::get_if<double>(&value)) {
+      return *d;
+    }
+    throw TypeError("Expected double value");
+  }
+
+  float as_float() const {
+    if (auto d = std::get_if<double>(&value)) {
+      return static_cast<float>(*d);
+    }
+    throw TypeError("Expected double value");
+  }
+
   const Node &operator[](std::string_view key) const {
     if (auto map = std::get_if<Map>(&value)) {
       return map->at(key);
@@ -307,10 +479,11 @@ struct Node {
   }
 
   Node &operator[](std::string_view key) {
-    if (auto map = std::get_if<Map>(&value)) {
-      return (*map)[key];
+    if (!std::holds_alternative<Map>(value)) {
+      value = Map{};
     }
-    throw TypeError("Expected map value");
+    auto &map = std::get<Map>(value);
+    return map[key];
   }
 
   // Indexing by integer for sequences
@@ -325,13 +498,14 @@ struct Node {
   }
 
   Node &operator[](size_t index) {
-    if (auto seq = std::get_if<Sequence>(&value)) {
-      if (index >= seq->size()) {
-        throw RangeError("Index out of range");
-      }
-      return (*seq)[index];
+    if (!std::holds_alternative<Sequence>(value)) {
+      value = Sequence{};
     }
-    throw TypeError("Expected sequence value");
+    auto &seq = std::get<Sequence>(value);
+    if (index >= seq.size()) {
+      seq.resize(index + 1);
+    }
+    return seq[index];
   }
 
   Map::const_iterator find(std::string_view key) const {
@@ -347,6 +521,93 @@ struct Node {
     }
     throw TypeError("Expected map value");
   }
+
+  bool contains(std::string_view key) const {
+    if (auto map = std::get_if<Map>(&value)) {
+      return map->find(key) != map->end();
+    }
+    throw TypeError("Expected map value");
+  }
+};
+
+// YAML authoring interface for programmatic document creation
+// Provides string tracking and node manipulation within a callback context
+class YamlAuthor {
+private:
+  std::string filename_;
+  iops<std::string> owned_strings_; // Tracks strings created during authoring
+  std::vector<Node> roots_;         // Multiple root nodes for multi-document support
+
+  friend class YamlDocument;
+
+  explicit YamlAuthor(std::string filename) : filename_(std::move(filename)) {}
+
+public:
+  // Public constructor for testing purposes
+  YamlAuthor() : filename_("test") {}
+
+  // Non-copyable and non-movable to ensure string_view stability
+  YamlAuthor(const YamlAuthor &) = delete;
+  YamlAuthor &operator=(const YamlAuthor &) = delete;
+  YamlAuthor(YamlAuthor &&) = delete;
+  YamlAuthor &operator=(YamlAuthor &&) = delete;
+
+  // String creation methods that return string_views backed by this author
+  std::string_view create_string_view(std::string str) { return owned_strings_.insert(std::move(str)); }
+
+  std::string_view create_string_view(std::string_view str) { return owned_strings_.insert(std::string(str)); }
+
+  std::string_view create_string_view(const char *str) { return owned_strings_.insert(std::string(str)); }
+
+  // Node creation methods
+  Node create_string(std::string str) { return Node(owned_strings_.insert(std::move(str))); }
+
+  Node create_string(std::string_view str) { return Node(owned_strings_.insert(std::string(str))); }
+
+  Node create_string(const char *str) { return Node(owned_strings_.insert(std::string(str))); }
+
+  // Scalar creation methods
+  Node create_scalar(bool value) { return Node(value); }
+
+  Node create_scalar(int value) { return Node(static_cast<int64_t>(value)); }
+
+  Node create_scalar(int64_t value) { return Node(value); }
+
+  Node create_scalar(double value) { return Node(value); }
+
+  Node create_scalar(float value) { return Node(static_cast<double>(value)); }
+
+  // Container creation methods
+  Node create_map() { return Node(Map{}); }
+
+  Node create_sequence() { return Node(Sequence{}); }
+
+  // Node modification methods (only available during authoring)
+  void set_map_value(Node &map_node, std::string_view key, const Node &value) {
+    if (auto map = std::get_if<Map>(&map_node.value)) {
+      (*map)[key] = value;
+    } else {
+      throw TypeError("Expected map value");
+    }
+  }
+
+  void push_to_sequence(Node &seq_node, const Node &value) {
+    if (auto seq = std::get_if<Sequence>(&seq_node.value)) {
+      seq->push_back(value);
+    } else {
+      throw TypeError("Expected sequence value");
+    }
+  }
+
+  void assign_node(Node &target, const Node &source) { target.value = source.value; }
+
+  // Add root document to the multi-document stream
+  void add_root(const Node &root) { roots_.push_back(root); }
+
+  void add_root(Node &&root) { roots_.push_back(std::move(root)); }
+
+  // Access to filename for error reporting
+  const std::string &filename() const noexcept { return filename_; }
 };
 
 // YAML document stream that owns the underlying string payload
@@ -359,12 +620,83 @@ private:
   iops<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference (deduplicated)
 
 public:
+  // Internal constructor for authoring - transfers ownership from YamlAuthor
+  // NOTE: This constructor is for internal use only by YamlDocument::Author()
+  YamlDocument(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings);
+
+  // Constructor for parsing from source
   YamlDocument(std::string filename, std::string source);
 
-  // Non-copyable and non-movable to ensure string_view stability
+  // Constructor for authoring with callback - at par with parsing API
+  template <typename AuthorCallback>
+    requires std::invocable<AuthorCallback, YamlAuthor &>
+  YamlDocument(std::string filename, AuthorCallback &&callback, bool write = true, bool overwrite = true) {
+    try {
+      YamlAuthor author(filename);
+
+      // Call the user callback to create/manipulate nodes (void return)
+      callback(author);
+
+      // Transfer roots from author
+      documents_ = std::move(author.roots_);
+
+      // Ensure at least one document exists
+      if (documents_.empty()) {
+        throw AuthorError(filename, "No root documents created by callback");
+      }
+
+      // Transfer string ownership from author
+      owned_strings_ = std::move(author.owned_strings_);
+
+      // Generate YAML source from authored content
+      std::ostringstream oss;
+      for (size_t i = 0; i < documents_.size(); ++i) {
+        if (i > 0) {
+          oss << "---\n";
+        }
+        oss << format_yaml(documents_[i]);
+      }
+      source_ = oss.str();
+
+      // Write to file if requested
+      if (write) {
+        // Check if file exists and overwrite is false
+        if (!overwrite && std::filesystem::exists(filename)) {
+          throw AuthorError(filename, "File already exists and overwrite is false");
+        }
+
+        // Create directory if it doesn't exist
+        if (auto parent = std::filesystem::path(filename).parent_path(); !parent.empty()) {
+          std::filesystem::create_directories(parent);
+        }
+
+        // Write YAML content to file
+        std::ofstream ofs(filename);
+        if (!ofs) {
+          throw AuthorError(filename, "Failed to open file for writing");
+        }
+
+        // Write all documents
+        for (size_t i = 0; i < documents_.size(); ++i) {
+          if (i > 0) {
+            ofs << "---\n";
+          }
+          ofs << format_yaml(documents_[i]);
+        }
+
+        if (!ofs) {
+          throw AuthorError(filename, "Failed to write to file");
+        }
+      }
+    } catch (const std::exception &e) {
+      throw AuthorError(filename, "YAML authoring error: " + std::string(e.what()));
+    }
+  }
+
+  // Non-copyable to ensure string_view stability - move allowed for variant usage
   YamlDocument(const YamlDocument &) = delete;
   YamlDocument &operator=(const YamlDocument &) = delete;
-  YamlDocument(YamlDocument &&) = delete;
+  YamlDocument(YamlDocument &&) = default;
   YamlDocument &operator=(YamlDocument &&) = delete;
 
   // Access to documents
@@ -383,14 +715,42 @@ public:
     return documents_[0];
   }
 
+  // Multi-document support - access root by index
+  const Node &root(size_t index) const {
+    if (index >= documents_.size())
+      throw std::runtime_error("Document index out of range");
+    return documents_[index];
+  }
+  Node &root(size_t index) {
+    if (index >= documents_.size())
+      throw std::runtime_error("Document index out of range");
+    return documents_[index];
+  }
+
   // Check if this is a multi-document stream
   bool is_multi_document() const noexcept { return documents_.size() > 1; }
   size_t document_count() const noexcept { return documents_.size(); }
 
   // Static factory function - the primary way to parse YAML
-  static YamlResult Parse(std::string filename, std::string source) noexcept;
-  static YamlResult Parse(std::string filename, std::string_view source) noexcept {
+  static ParseResult Parse(std::string filename, std::string source) noexcept;
+  static ParseResult Parse(std::string filename, std::string_view source) noexcept {
     return Parse(std::move(filename), std::string(source));
+  }
+
+  // Static authoring function - programmatic document creation
+  template <typename AuthorCallback>
+    requires std::invocable<AuthorCallback, YamlAuthor &>
+  static AuthorResult Author(std::string filename, AuthorCallback &&callback, bool write = true,
+                             bool overwrite = true) noexcept {
+    try {
+      // Delegate to authoring constructor
+      YamlDocument doc(filename, std::forward<AuthorCallback>(callback), write, overwrite);
+      return AuthorResult{std::in_place_type<YamlDocument>, std::move(doc)};
+    } catch (const AuthorError &e) {
+      return AuthorError(e.filename(), e.message());
+    } catch (const std::exception &e) {
+      return AuthorError(filename, "YAML authoring error: " + std::string(e.what()));
+    }
   }
 };
 
@@ -399,10 +759,11 @@ std::ostream &operator<<(std::ostream &os, const Node &node);
 std::string format_yaml(const Node &node);
 
 template <typename T, typename RT>
-concept YamlConvertible = requires(T t, const yaml::Node &node, memory_region<RT> &mr, T *raw_ptr) {
-  { to_yaml(t) } noexcept -> std::same_as<yaml::Node>;
-  { from_yaml<T>(mr, node, raw_ptr) } -> std::same_as<void>;
-};
+concept YamlConvertible =
+    requires(T t, const yaml::Node &node, memory_region<RT> &mr, T *raw_ptr, yaml::YamlAuthor &author) {
+      { to_yaml(t, author) } noexcept -> std::same_as<yaml::Node>;
+      { from_yaml<T>(mr, node, raw_ptr) } -> std::same_as<void>;
+    };
 
 } // namespace yaml
 

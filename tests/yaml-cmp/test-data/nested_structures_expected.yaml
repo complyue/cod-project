@@ -1,0 +1,21 @@
+database:
+  host: localhost
+  port: 5432
+  ssl: true
+  pool:
+    min_connections: 5
+    max_connections: 20
+features:
+  - authentication
+  - logging
+  - monitoring
+services:
+  - name: api
+    port: 8001
+    enabled: true
+  - name: worker
+    port: 8002
+    enabled: true
+  - name: scheduler
+    port: 8003
+    enabled: true

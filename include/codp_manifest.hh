@@ -77,15 +77,15 @@ inline void collect_deps(const fs::path &proj_dir, const fs::path &root_dir, con
   }
 }
 
-inline yaml::Node generate_manifest(const fs::path &project_dir) {
+inline yaml::YamlDocument generate_manifest(const fs::path &project_dir) {
   std::string yaml_text = slurp_file(project_dir / "CodProject.yaml");
   auto root_result = yaml::YamlDocument::Parse((project_dir / "CodProject.yaml").string(), std::string(yaml_text));
   return shilos::vswitch(
       root_result,
-      [&](const yaml::ParseError &err) -> yaml::Node {
+      [&](const yaml::ParseError &err) -> yaml::YamlDocument {
         throw std::runtime_error("Failed to parse " + (project_dir / "CodProject.yaml").string() + ": " + err.what());
       },
-      [&](const yaml::YamlDocument &doc) -> yaml::Node {
+      [&](const yaml::YamlDocument &doc) -> yaml::YamlDocument {
         const yaml::Node &root_node = doc.root();
         auto_region<CodProject> region(1024 * 1024);
         CodProject *project = region->root().get();
@@ -95,35 +95,48 @@ inline yaml::Node generate_manifest(const fs::path &project_dir) {
         std::unordered_set<std::string> visited;
         collect_deps(project_dir, project_dir, project, data, visited);
 
-        yaml::Node manifest(yaml::Map{});
-        yaml::Node root_map(yaml::Map{});
-        root_map["uuid"] = project->uuid().to_string();
-        root_map["repo_url"] = std::string_view(project->repo_url());
-        manifest["root"] = root_map;
+        // Use YamlAuthor to create the manifest document
+        auto author_result = yaml::YamlDocument::Author("manifest.yaml", [&](yaml::YamlAuthor &author) -> yaml::Node {
+          yaml::Node manifest = author.create_map();
+          yaml::Node root_map = author.create_map();
 
-        if (!data.locals.empty()) {
-          yaml::Node locals_map(yaml::Map{});
-          for (const auto &kv : data.locals) {
-            std::string key_str = kv.first;
-            std::string value_str = kv.second;
-            locals_map[key_str] = value_str;
+          // Use YamlAuthor to create string nodes
+          root_map["uuid"] = author.create_string(project->uuid().to_string());
+          root_map["repo_url"] = author.create_string(std::string_view(project->repo_url()));
+          manifest["root"] = root_map;
+
+          if (!data.locals.empty()) {
+            yaml::Node locals_map = author.create_map();
+            for (const auto &kv : data.locals) {
+              std::string key_str = kv.first;
+              std::string value_str = kv.second;
+              locals_map[key_str] = author.create_string(value_str);
+            }
+            manifest["locals"] = locals_map;
           }
-          manifest["locals"] = locals_map;
-        }
 
-        yaml::Node resolved_seq(yaml::Sequence{});
-        for (const auto &entry : data.resolved) {
-          yaml::Node m(yaml::Map{});
-          m["uuid"] = entry.uuid.to_string();
-          m["repo_url"] = entry.repo_url;
-          if (!entry.branch.empty())
-            m["branch"] = entry.branch;
-          if (!entry.commit.empty())
-            m["commit"] = entry.commit;
-          resolved_seq.push_back(m);
-        }
-        manifest["resolved"] = resolved_seq;
-        return manifest;
+          yaml::Node resolved_seq = author.create_sequence();
+          for (const auto &entry : data.resolved) {
+            yaml::Node m = author.create_map();
+            m["uuid"] = author.create_string(entry.uuid.to_string());
+            m["repo_url"] = author.create_string(entry.repo_url);
+            if (!entry.branch.empty())
+              m["branch"] = author.create_string(entry.branch);
+            if (!entry.commit.empty())
+              m["commit"] = author.create_string(entry.commit);
+            resolved_seq.push_back(m);
+          }
+          manifest["resolved"] = resolved_seq;
+          return manifest;
+        });
+
+        // Handle the AuthorResult from Author() and return the document
+        return shilos::vswitch(
+            author_result,
+            [&](const yaml::ParseError &err) -> yaml::YamlDocument {
+              throw std::runtime_error(std::string("Failed to create manifest: ") + err.what());
+            },
+            [&](yaml::YamlDocument &authored_doc) -> yaml::YamlDocument { return std::move(authored_doc); });
       });
 }
 

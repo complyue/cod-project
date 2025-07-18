@@ -29,12 +29,12 @@ namespace shilos {
 // ============================================================================
 
 template <typename K, typename V, typename Hash>
-inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d) noexcept {
+inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d, yaml::YamlAuthor &author) noexcept {
   yaml::Node m(yaml::Map{});
   for (const auto &[k, v] : d) {
     yaml::Node key_node;
-    if constexpr (requires { to_yaml(k); }) {
-      key_node = to_yaml(k);
+    if constexpr (requires { to_yaml(k, author); }) {
+      key_node = to_yaml(k, author);
     } else if constexpr (std::is_same_v<K, bool>) {
       key_node = yaml::Node(k);
     } else if constexpr (std::is_integral_v<K>) {
@@ -42,15 +42,15 @@ inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d) noexcept {
     } else if constexpr (std::is_floating_point_v<K>) {
       key_node = yaml::Node(static_cast<double>(k));
     } else if constexpr (std::is_same_v<K, regional_str>) {
-      key_node = yaml::Node(std::string_view(k));
+      key_node = author.create_string(k);
     } else {
       static_assert(sizeof(K) == 0, "Key type of regional_dict is not serialisable to YAML");
     }
 
     // Value node
     yaml::Node value_node;
-    if constexpr (requires { to_yaml(v); }) {
-      value_node = to_yaml(v);
+    if constexpr (requires { to_yaml(v, author); }) {
+      value_node = to_yaml(v, author);
     } else if constexpr (std::is_same_v<V, bool>) {
       value_node = yaml::Node(v);
     } else if constexpr (std::is_integral_v<V>) {
@@ -65,10 +65,10 @@ inline yaml::Node to_yaml(const regional_dict<K, V, Hash> &d) noexcept {
     if (auto str = std::get_if<std::string_view>(&key_node.value)) {
       m[*str] = value_node;
     } else if (auto i = std::get_if<int64_t>(&key_node.value)) {
-      m[std::to_string(*i)] = value_node; // YAML keys must be strings
+      m[author.create_string_view(std::to_string(*i))] = value_node; // YAML keys must be strings
     } else {
       // Fallback: stringify YAML node
-      m[yaml::format_yaml(key_node)] = value_node;
+      m[author.create_string_view(yaml::format_yaml(key_node))] = value_node;
     }
   }
   return m;
@@ -128,7 +128,7 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_dict<K, V
         make_key_callable(key_fp, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }
     } else {
-      yaml::Node key_scalar(k_node_str);
+      yaml::Node key_scalar = yaml::Node(std::string_view(k_node_str));
       from_yaml(mr, key_scalar, &key_storage);
       if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
         make_key_callable(key_storage, [&](V *dst) { new (dst) V(v_node.as<V>()); });

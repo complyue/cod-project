@@ -1,0 +1,5 @@
+literal: literal_string
+external: external_value
+temp: temporary_value
+view: view_string
+cstr: cstring_literal

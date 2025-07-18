@@ -82,4 +82,31 @@ if(APPLE)
     BUILD_RPATH "${COD_TOOLCHAIN_DIR}/lib"
     INSTALL_NAME_DIR "@rpath"
   )
-endif() 
+endif()
+
+# ---------------------------------------------------------------------------
+# Build yaml authoring test executable
+# ---------------------------------------------------------------------------
+add_executable(test_yaml_authoring src/test_yaml_authoring.cc)
+
+target_link_libraries(test_yaml_authoring PRIVATE ${SHILOS_LIBRARY})
+# Link C++ runtime explicitly when found
+if(LIBCXX_LIBRARY)
+  target_link_libraries(test_yaml_authoring PRIVATE ${LIBCXX_LIBRARY})
+endif()
+if(LIBCXXABI_LIBRARY)
+  target_link_libraries(test_yaml_authoring PRIVATE ${LIBCXXABI_LIBRARY})
+endif()
+
+# Ensure the loader can locate shared libs at runtime
+set_target_properties(test_yaml_authoring PROPERTIES
+  INSTALL_RPATH "${COD_TOOLCHAIN_DIR}/lib"
+  BUILD_WITH_INSTALL_RPATH TRUE
+)
+
+if(APPLE)
+  set_target_properties(test_yaml_authoring PROPERTIES
+    BUILD_RPATH "${COD_TOOLCHAIN_DIR}/lib"
+    INSTALL_NAME_DIR "@rpath"
+  )
+endif()

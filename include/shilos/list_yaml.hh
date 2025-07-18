@@ -20,11 +20,12 @@ namespace shilos {
 //  through an internal helper to avoid duplication.
 // ============================================================================
 
-template <template <typename> class ListC, typename T> inline yaml::Node list_to_yaml(const ListC<T> &lst) noexcept {
+template <template <typename> class ListC, typename T>
+inline yaml::Node list_to_yaml(const ListC<T> &lst, yaml::YamlAuthor &author) noexcept {
   yaml::Node seq(yaml::Sequence{});
   for (const auto &elem : lst) {
-    if constexpr (requires { to_yaml(elem); }) {
-      seq.push_back(to_yaml(elem));
+    if constexpr (requires { to_yaml(elem, author); }) {
+      seq.push_back(to_yaml(elem, author));
     } else if constexpr (std::is_same_v<T, bool>) {
       seq.push_back(yaml::Node(elem));
     } else if constexpr (std::is_integral_v<T>) {
@@ -38,12 +39,12 @@ template <template <typename> class ListC, typename T> inline yaml::Node list_to
   return seq;
 }
 
-template <typename T> inline yaml::Node to_yaml(const regional_fifo<T> &lst) noexcept {
-  return list_to_yaml<regional_fifo>(lst);
+template <typename T> inline yaml::Node to_yaml(const regional_fifo<T> &lst, yaml::YamlAuthor &author) noexcept {
+  return list_to_yaml<regional_fifo>(lst, author);
 }
 
-template <typename T> inline yaml::Node to_yaml(const regional_lifo<T> &lst) noexcept {
-  return list_to_yaml<regional_lifo>(lst);
+template <typename T> inline yaml::Node to_yaml(const regional_lifo<T> &lst, yaml::YamlAuthor &author) noexcept {
+  return list_to_yaml<regional_lifo>(lst, author);
 }
 
 // ---------------------------------------------------------------------------

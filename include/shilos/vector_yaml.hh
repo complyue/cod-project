@@ -29,12 +29,12 @@ namespace shilos {
 //  constraint of regional types.
 // ============================================================================
 
-template <typename T> inline yaml::Node to_yaml(const regional_vector<T> &vec) noexcept {
+template <typename T> inline yaml::Node to_yaml(const regional_vector<T> &vec, yaml::YamlAuthor &author) noexcept {
   yaml::Node seq(yaml::Sequence{});
   for (const auto &elem : vec) {
     // If ADL finds a dedicated to_yaml overload for T, use it.
-    if constexpr (requires(const T &e) { to_yaml(e); }) {
-      seq.push_back(to_yaml(elem));
+    if constexpr (requires(const T &e, yaml::YamlAuthor &a) { to_yaml(e, a); }) {
+      seq.push_back(to_yaml(elem, author));
     } else if constexpr (std::is_same_v<T, bool>) {
       seq.push_back(yaml::Node(elem));
     } else if constexpr (std::is_integral_v<T>) {
