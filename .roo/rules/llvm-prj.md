@@ -5,7 +5,6 @@ This workspace is an external project of the LLVM ecosystem. The complete llvm-p
 - **include/** - Public API headers
   - [`shilos.hh`](include/shilos.hh) - Core memory region system
   - [`shilos/`](include/shilos/) - Regional type headers (vector, dict, str, etc.)
-  - [`codp.hh`](include/codp.hh) - CoD package manager interface
 
 - **shilos/** - Core memory region and YAML support implementation
   - [`shilos.cc`](shilos/shilos.cc) - Memory region and YAML runtime lib
@@ -16,6 +15,7 @@ This workspace is an external project of the LLVM ecosystem. The complete llvm-p
 
 - **codp/** - CoD package manager
   - [`main.cc`](codp/main.cc) - CLI entry point
+  - [`<prj>/include/codp.hh`](<prj>/include/codp.hh) - CoD package manager interface & implementation (inline part)
 
 - **tests/** - Test suites
   - **shilos/** - Memory region and regional type test suite
