@@ -4,7 +4,6 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
-#include <sstream>
 #include <string_view>
 #include <unordered_set>
 
@@ -23,16 +22,6 @@ static void usage() {
   std::cerr << "codp solve [--project <path>] (default)\n"
                "codp update [--project <path>]"
             << std::endl;
-}
-
-static std::string slurp_file(const fs::path &p) {
-  std::ifstream ifs(p);
-  if (!ifs) {
-    throw std::runtime_error("Failed to open file: " + p.string());
-  }
-  std::stringstream ss;
-  ss << ifs.rdbuf();
-  return ss.str();
 }
 
 static fs::path home_dir() {
@@ -140,9 +129,8 @@ int main(int argc, char **argv) {
       return 0;
     }
 
-    std::string yaml_text = ::slurp_file(project_yaml);
-    auto result = yaml::YamlDocument::Parse(project_yaml.string(), std::string(yaml_text));
-    shilos::vswitch(
+    auto result = yaml::YamlDocument::Read(project_yaml.string());
+    vswitch(
         result,
         [&](const yaml::ParseError &err) {
           throw std::runtime_error("Failed to parse " + project_yaml.string() + ": " + err.what());
@@ -213,9 +201,8 @@ int main(int argc, char **argv) {
                 // Load and recurse into dep project
                 fs::path dep_yaml_path = dep_path / "CodProject.yaml";
                 try {
-                  std::string dep_yaml_text = slurp_file(dep_yaml_path);
-                  auto dep_result = yaml::YamlDocument::Parse(dep_yaml_path.string(), std::string(dep_yaml_text));
-                  shilos::vswitch(
+                  auto dep_result = yaml::YamlDocument::Read(dep_yaml_path.string());
+                  vswitch(
                       dep_result,
                       [&](const yaml::ParseError &err) {
                         throw std::runtime_error("Failed to parse " + dep_yaml_path.string() + ": " + err.what());
@@ -256,7 +243,7 @@ int main(int argc, char **argv) {
             author.addRoot(root);
           });
 
-          shilos::vswitch(
+          vswitch(
               yaml_result,
               [&](const yaml::ParseError &err) {
                 throw std::runtime_error("Failed to generate manifest YAML: " + std::string(err.what()));
