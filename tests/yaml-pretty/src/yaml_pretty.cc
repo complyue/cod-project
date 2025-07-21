@@ -1,11 +1,8 @@
-#include "shilos.hh"
-#include <filesystem>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <string>
+#include <shilos.hh>
 
-using namespace shilos::yaml;
+#include <iostream>
+
+using namespace shilos;
 
 std::string read_file(const std::string &path) {
   std::ifstream file(path);
@@ -15,7 +12,7 @@ std::string read_file(const std::string &path) {
   return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 }
 
-void print_node_tree(const Node &node, int depth = 0, const std::string &key = "") {
+void print_node_tree(const yaml::Node &node, int depth = 0, const std::string &key = "") {
   std::string indent(depth * 2, ' ');
 
   if (!key.empty()) {
@@ -39,14 +36,14 @@ void print_node_tree(const Node &node, int depth = 0, const std::string &key = "
       std::cout << "STRING: \"" << *s << "\"" << std::endl;
     }
   } else if (node.IsSequence()) {
-    const auto &seq = std::get<Sequence>(node.value);
+    const auto &seq = std::get<yaml::Sequence>(node.value);
     std::cout << "SEQUENCE (" << seq.size() << " items)" << std::endl;
     for (size_t i = 0; i < seq.size(); ++i) {
       std::cout << indent << "  [" << i << "]:" << std::endl;
       print_node_tree(seq[i], depth + 2);
     }
   } else if (node.IsMap()) {
-    const auto &map = std::get<Map>(node.value);
+    const auto &map = std::get<yaml::Map>(node.value);
     std::cout << "MAP (" << map.size() << " entries)" << std::endl;
     for (const auto &entry : map) {
       print_node_tree(entry.value, depth + 1, std::string(entry.key));
@@ -97,14 +94,14 @@ int main(int argc, char *argv[]) {
     std::cout << content << std::endl;
 
     std::cout << "=== PARSED TREE ===" << std::endl;
-    auto result = YamlDocument::Read(yaml_file);
-    shilos::vswitch(
+    auto result = yaml::YamlDocument::Read(yaml_file);
+    vswitch(
         result,
-        [](const shilos::yaml::ParseError &err) {
+        [](const yaml::ParseError &err) {
           std::cerr << "Error: " << err.what() << std::endl;
           std::exit(1);
         },
-        [](const YamlDocument &doc) {
+        [](const yaml::YamlDocument &doc) {
           print_node_tree(doc.root());
 
           std::cout << "=== FORMAT_YAML OUTPUT ===" << std::endl;
@@ -117,15 +114,15 @@ int main(int argc, char *argv[]) {
   if (arg == "--basic-test") {
     std::cout << "=== YAML Basic Pretty Print Tests ===" << std::endl;
     std::string simple_yaml = "key: value\n";
-    auto simple_result = YamlDocument::Parse("<basic-test>", simple_yaml);
-    return shilos::vswitch(
+    auto simple_result = yaml::YamlDocument::Parse("<basic-test>", simple_yaml);
+    return vswitch(
         simple_result,
-        [](const shilos::yaml::ParseError &err) {
+        [](const yaml::ParseError &err) {
           std::cerr << "Failed to parse simple YAML: " + std::string(err.what()) << std::endl;
           return 1;
         },
-        [](const YamlDocument &doc) {
-          const Node &root = doc.root();
+        [](const yaml::YamlDocument &doc) {
+          const yaml::Node &root = doc.root();
           if (!root.IsMap()) {
             std::cerr << "Failed to parse simple YAML as map" << std::endl;
             return 2;
@@ -138,14 +135,14 @@ int main(int argc, char *argv[]) {
     std::string file_path = arg;
 
     try {
-      auto doc_result = YamlDocument::Read(file_path);
-      shilos::vswitch(
+      auto doc_result = yaml::YamlDocument::Read(file_path);
+      vswitch(
           doc_result,
-          [](const shilos::yaml::ParseError &err) {
+          [](const yaml::ParseError &err) {
             std::cerr << "Error: " << err.what() << std::endl;
             std::exit(1);
           },
-          [](const YamlDocument &doc) { std::cout << format_yaml(doc.root()) << std::endl; });
+          [](const yaml::YamlDocument &doc) { std::cout << format_yaml(doc.root()) << std::endl; });
       return 0;
     } catch (const std::exception &e) {
       std::cerr << "Error: " << e.what() << std::endl;

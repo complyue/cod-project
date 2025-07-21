@@ -1,13 +1,13 @@
+#include <shilos.hh>
+
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "shilos.hh"
-
 namespace fs = std::filesystem;
-using namespace shilos::yaml;
+using namespace shilos;
 
 std::string read_file(const fs::path &path) {
   std::ifstream file(path);
@@ -31,11 +31,11 @@ void run_error_test(const ErrorTest &test, bool verbose) {
     std::cout << "Content:\n" << test.content << std::endl;
   }
 
-  auto result = YamlDocument::Parse(test.filename, test.content);
+  auto result = yaml::YamlDocument::Parse(test.filename, test.content);
 
-  shilos::vswitch(
+  vswitch(
       result,
-      [&](const ParseError &err) {
+      [&](const yaml::ParseError &err) {
         if (verbose) {
           std::cout << "✓ Parse error caught (as expected):" << std::endl;
           std::cout << "  Error message: " << err.what() << std::endl;
@@ -48,7 +48,7 @@ void run_error_test(const ErrorTest &test, bool verbose) {
           std::cout << "\033[0;32m✓\033[0m " << test.name << " - " << err.what() << std::endl;
         }
       },
-      [&](const YamlDocument &doc) {
+      [&](const yaml::YamlDocument &doc) {
         if (verbose) {
           std::cout << "✗ Unexpected success - expected parsing error!" << std::endl;
         } else {
@@ -64,15 +64,15 @@ void run_file_test(const fs::path &test_file, bool verbose) {
   }
 
   try {
-    auto result = YamlDocument::Read(test_file.string());
+    auto result = yaml::YamlDocument::Read(test_file.string());
     if (verbose) {
       std::string content = read_file(test_file);
       std::cout << "Content:\n" << content << std::endl;
     }
 
-    shilos::vswitch(
+    vswitch(
         result,
-        [&](const ParseError &err) {
+        [&](const yaml::ParseError &err) {
           if (verbose) {
             std::cout << "✓ Parse error caught:" << std::endl;
             std::cout << "  VS Code clickable format: " << err.what() << std::endl;
@@ -85,7 +85,7 @@ void run_file_test(const fs::path &test_file, bool verbose) {
             std::cout << "\033[0;32m✓\033[0m " << test_file.filename().string() << " - " << err.what() << std::endl;
           }
         },
-        [&](const YamlDocument &doc) {
+        [&](const yaml::YamlDocument &doc) {
           if (verbose) {
             std::cout << "✓ Parse successful - showing formatted output:" << std::endl;
             std::cout << format_yaml(doc.root()) << std::endl;

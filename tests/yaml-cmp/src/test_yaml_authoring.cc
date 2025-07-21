@@ -1,4 +1,3 @@
-#include "shilos.hh"
 #include "yaml_comparison.hh"
 
 #include <iostream>

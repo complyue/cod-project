@@ -1,6 +1,7 @@
 #pragma once
 
-#include "shilos/prelude.hh"
+#include <shilos.hh>
+
 #include <fstream>
 #include <iostream>
 

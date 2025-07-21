@@ -68,13 +68,6 @@ echo "✓ All error message formats are VS Code compatible"
 echo "✓ Click on filename:line:column links in VS Code terminal to navigate"
 echo "✓ Error reporting improvements successfully demonstrated"
 
-echo ""
-echo "Usage examples:"
-echo "  ./run-all.sh                       # Run test suite (concise)"
-echo "  ./run-all.sh --verbose             # Run test suite (detailed)"
-echo "  ./build/yaml-ux file.yaml          # Test specific file"
-echo "  ./build/yaml-ux -v file.yaml       # Test specific file (verbose)"
-echo ""
 if [[ -z "$VERBOSE_FLAG" ]]; then
     echo "To see detailed output, run: ./run-all.sh --verbose"
     echo ""
