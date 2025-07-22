@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-all.sh – CoDP shell integration tests
+# run-all.sh – CoD Package Manager shell integration tests
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,7 +7,6 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Source test utilities and setup toolchain
 source "$SCRIPT_DIR/../test-utils.sh"
-setup_toolchain
 
 # Colors for output
 RED='\033[0;31m'
@@ -30,7 +29,7 @@ echo -e "${GREEN}✓ yaml-cmp built successfully${NC}"
 echo
 
 # Run sub-tests
-echo -e "${GREEN}=== CoDP Shell Integration Tests ===${NC}"
+echo -e "${GREEN}=== CoD Package Manager Shell Integration Tests ===${NC}"
 for td in "$SCRIPT_DIR"/*/; do
   if [[ -f "$td/run.sh" ]]; then
     echo -e "${GREEN}→ $(basename "$td")${NC}"
@@ -39,5 +38,5 @@ for td in "$SCRIPT_DIR"/*/; do
 done
 
 echo
-echo -e "${GREEN}✓ All CoDP tests passed successfully${NC}"
+echo -e "${GREEN}✓ All CoD Package Manager tests passed successfully${NC}"
 exit 0

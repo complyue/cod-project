@@ -14,7 +14,7 @@ Each component directory under `tests/` contains a `run-all.sh` script that
 # Build yaml-cmp tool and run its self-check
 ./tests/yaml-cmp/run-all.sh
 
-# Run CoDP shell tests (automatically builds yaml-cmp first)
+# Run CoD Package Manager shell tests (automatically builds yaml-cmp first)
 ./tests/codp/run-all.sh
 
 # Use pre-release toolchain from built/ directory
@@ -113,12 +113,13 @@ Follow the patterns below when adding functionality:
 
 ### 3. Cross-component dependencies
 
-If your tests depend on another component's artifacts (e.g. CoDP tests requiring
+If your tests depend on another component's artifacts (e.g. CoD Package Manager tests requiring
 `yaml-cmp`), invoke the other component's `run-all.sh` first **and rely on
 `set -e` to abort if it fails**, then add its `build/` folder to `PATH` – see
 `tests/codp/run-all.sh` for reference.
 
 ---
 
-Following these conventions keeps the developer experience predictable and
-ensures CI can run the full suite with a single command.
+## Manual/AI Ad-hoc Testing
+
+To interactively run test steps in a terminal session, source the `tests/test-utils.sh` script once, then cmdl tools built from this project will be available on PATH

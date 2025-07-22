@@ -1,0 +1,12 @@
+uuid: "11111111-1111-1111-1111-111111111111"
+name: testpkg
+repo_url: "https://github.com/test/testpkg.git"
+branches:
+  - main
+  - dev
+deps:
+  - uuid: "33333333-3333-3333-3333-333333333333"
+    name: localdep
+    repo_url: local_dep
+    branches:
+      - main

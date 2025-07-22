@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 
-# Function to set up COD_TEST_TOOLCHAIN with default if not set
-setup_toolchain() {
-  export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
-}
+# Setup COD_TEST_TOOLCHAIN with default if not set
+export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
 
-# Function to configure build directory if first run
+# Setup PATH for project utilities
+COD_PROJECT_SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Prepend both build/ and built/ bin directories to PATH
+export PATH="${COD_PROJECT_SRC_ROOT}/build/bin:${COD_PROJECT_SRC_ROOT}/built/bin:${PATH}"
+
+
+# Function to configure build directory for components to be built with CMake
 setup_build_dir() {
   local build_dir="$1"
   local script_dir="$2"
   
-  if [[ ! -f "$build_dir/Build.ninja" && ! -f "$build_dir/Makefile" ]]; then
+  if [[ ! -f "$build_dir/Build.ninja" ]]; then
     mkdir -p "$build_dir"
     cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B "$build_dir" "$script_dir"
   fi

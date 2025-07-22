@@ -8,7 +8,6 @@ TEST_DATA_DIR="$SCRIPT_DIR/test-data"
 
 # Source test utilities and setup toolchain
 source "$SCRIPT_DIR/../test-utils.sh"
-setup_toolchain
 
 # Colors for output
 RED='\033[0;31m'

@@ -38,6 +38,14 @@ inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) {
   author.setMapValue(m, "name", author.createString(std::string_view(proj.name())));
   author.setMapValue(m, "repo_url", author.createString(std::string_view(proj.repo_url())));
 
+  if (!proj.branches().empty()) {
+    auto seq = author.createSequence();
+    for (const auto &br : proj.branches()) {
+      author.pushToSequence(seq, author.createString(std::string_view(br)));
+    }
+    author.setMapValue(m, "branches", seq);
+  }
+
   if (!proj.deps().empty()) {
     auto seq = author.createSequence();
     for (const CodDep &d : proj.deps()) {
@@ -66,9 +74,17 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodDep *ra
       throw yaml::MissingFieldError("Missing key '" + key + "' in CodDep");
     }
     if (!it->value.IsScalar()) {
-      throw yaml::TypeError("Expected scalar for key '" + key + "'");
+      std::string actual_type =
+          (it->value.IsNull() ? "null"
+                              : (it->value.IsMap() ? "map" : (it->value.IsSequence() ? "sequence" : "non-scalar")));
+      throw yaml::TypeError("Expected scalar for key '" + key + "' in CodDep, got " + actual_type +
+                            " with value: " + yaml::format_yaml(it->value));
     }
-    return it->value.as<std::string>();
+    try {
+      return it->value.asString();
+    } catch (const std::exception &e) {
+      throw yaml::TypeError("Failed to parse string value for key '" + key + "' in CodDep: " + e.what());
+    }
   };
 
   UUID uuid(fetch_scalar("uuid"));
@@ -82,7 +98,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodDep *ra
     if (!it_path->value.IsScalar()) {
       throw yaml::TypeError("'path' must be a scalar");
     }
-    path = it_path->value.as<std::string>();
+    path = it_path->value.asString();
   }
 
   // Construct in-place.
@@ -95,7 +111,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodDep *ra
       throw yaml::TypeError("'branches' must be a sequence");
     }
     for (const auto &br_node : std::get<yaml::Sequence>(it_br->value.value)) {
-      raw_ptr->branches().enque(mr, br_node.as<std::string>());
+      raw_ptr->branches().enque(mr, br_node.asString());
     }
   }
 }
@@ -114,9 +130,17 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodProject
       throw yaml::MissingFieldError("Missing key '" + key + "' in CodProject");
     }
     if (!it->value.IsScalar()) {
-      throw yaml::TypeError("Expected scalar for key '" + key + "'");
+      std::string actual_type =
+          (it->value.IsNull() ? "null"
+                              : (it->value.IsMap() ? "map" : (it->value.IsSequence() ? "sequence" : "non-scalar")));
+      throw yaml::TypeError("Expected scalar for key '" + key + "' in CodProject, got " + actual_type +
+                            " with value: " + yaml::format_yaml(it->value));
     }
-    return it->value.as<std::string>();
+    try {
+      return it->value.asString();
+    } catch (const std::exception &e) {
+      throw yaml::TypeError("Failed to parse string value for key '" + key + "' in CodProject: " + e.what());
+    }
   };
 
   UUID uuid(fetch_scalar("uuid"));
@@ -125,6 +149,17 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodProject
 
   // Construct CodProject in-place.
   new (raw_ptr) CodProject(mr, uuid, name, repo_url);
+
+  // branches sequence (optional)
+  auto it_branches = map.find("branches");
+  if (it_branches != map.end()) {
+    if (!it_branches->value.IsSequence()) {
+      throw yaml::TypeError("'branches' must be a sequence");
+    }
+    for (const auto &br_node : std::get<yaml::Sequence>(it_branches->value.value)) {
+      raw_ptr->branches().enque(mr, br_node.asString());
+    }
+  }
 
   // deps sequence (optional)
   auto it_deps = map.find("deps");
@@ -229,7 +264,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
     if (!it->value.IsScalar()) {
       throw yaml::TypeError("Expected scalar for key '" + key + "'");
     }
-    return it->value.as<std::string>();
+    return it->value.asString();
   };
 
   auto fetch_optional_scalar = [&](const std::string &key) -> std::string {
@@ -240,7 +275,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
     if (!it->value.IsScalar()) {
       throw yaml::TypeError("Expected scalar for key '" + key + "'");
     }
-    return it->value.as<std::string>();
+    return it->value.asString();
   };
 
   UUID uuid(fetch_scalar("uuid"));
@@ -276,9 +311,17 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
       throw yaml::MissingFieldError("Missing key '" + key + "' in root section");
     }
     if (!it->value.IsScalar()) {
-      throw yaml::TypeError("Expected scalar for key '" + key + "'");
+      std::string actual_type =
+          (it->value.IsNull() ? "null"
+                              : (it->value.IsMap() ? "map" : (it->value.IsSequence() ? "sequence" : "non-scalar")));
+      throw yaml::TypeError("Expected scalar for key '" + key + "' in root section, got " + actual_type +
+                            " with value: " + yaml::format_yaml(it->value));
     }
-    return it->value.as<std::string>();
+    try {
+      return it->value.asString();
+    } catch (const std::exception &e) {
+      throw yaml::TypeError("Failed to parse string value for key '" + key + "' in root section: " + e.what());
+    }
   };
 
   UUID root_uuid(fetch_scalar_from_map(root_map, "uuid"));
@@ -298,7 +341,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
       if (!path_node.IsScalar()) {
         throw yaml::TypeError("local path must be a scalar");
       }
-      std::string path_str = path_node.as<std::string>();
+      std::string path_str = path_node.asString();
       UUID uuid(uuid_str);
       raw_ptr->addLocal(mr, uuid, path_str);
     }

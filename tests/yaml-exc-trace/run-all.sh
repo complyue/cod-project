@@ -7,7 +7,6 @@ BUILD_DIR="$SCRIPT_DIR/build"
 
 # Source test utilities and setup toolchain
 source "$SCRIPT_DIR/../test-utils.sh"
-setup_toolchain
 
 # Colors for output
 RED='\033[0;31m'

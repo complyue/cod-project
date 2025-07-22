@@ -10,7 +10,6 @@ PRETTY_DIR="$TEST_DATA_DIR/pretty"
 
 # Source test utilities and setup toolchain
 source "$SCRIPT_DIR/../test-utils.sh"
-setup_toolchain
 
 # Colors for output
 RED='\033[0;31m'

@@ -47,14 +47,15 @@ private:
   UUID uuid_;
   regional_str name_;
   regional_str repo_url_;
+  regional_fifo<regional_str> branches_;
   regional_fifo<CodDep> deps_;
 
 public:
   template <typename RT>
   CodProject(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url)
-      : uuid_(uuid), name_(mr, name), repo_url_(mr, repo_url), deps_(mr) {}
+      : uuid_(uuid), name_(mr, name), repo_url_(mr, repo_url), branches_(mr), deps_(mr) {}
 
-  template <typename RT> CodProject(memory_region<RT> &mr) : uuid_(), name_(), repo_url_(), deps_(mr) {}
+  template <typename RT> CodProject(memory_region<RT> &mr) : uuid_(), name_(), repo_url_(), branches_(mr), deps_(mr) {}
 
   // Deleted special members
   CodProject(const CodProject &) = delete;
@@ -72,6 +73,9 @@ public:
 
   regional_str &repo_url() { return repo_url_; }
   const regional_str &repo_url() const { return repo_url_; }
+
+  regional_fifo<regional_str> &branches() { return branches_; }
+  const regional_fifo<regional_str> &branches() const { return branches_; }
 };
 
 // ==========================================================================
