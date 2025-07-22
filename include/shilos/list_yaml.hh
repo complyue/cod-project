@@ -64,7 +64,20 @@ static void list_from_yaml_impl(memory_region<RT> &mr, const yaml::Node &node, L
     if constexpr (std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
       if (!elem_node.IsScalar())
         throw yaml::TypeError("Expected scalar for bits element in regional list");
-      lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.as<T>()); });
+
+      if constexpr (std::is_same_v<T, bool>) {
+        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asBool()); });
+      } else if constexpr (std::is_same_v<T, int>) {
+        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asInt()); });
+      } else if constexpr (std::is_same_v<T, int64_t>) {
+        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asInt64()); });
+      } else if constexpr (std::is_same_v<T, float>) {
+        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asFloat()); });
+      } else if constexpr (std::is_same_v<T, double>) {
+        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asDouble()); });
+      } else {
+        static_assert(sizeof(T) == 0, "Unsupported scalar type for regional list");
+      }
     } else {
       lst.emplace_init(mr, [&](T *dst) { from_yaml(mr, elem_node, dst); });
     }

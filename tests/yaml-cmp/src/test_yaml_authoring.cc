@@ -485,7 +485,7 @@ void test_multi_root() {
       }
 
       const auto &count_node = map.find("count")->value;
-      if (!count_node.IsScalar() || count_node.as<int>() != static_cast<int>(i + 1)) {
+      if (!count_node.IsScalar() || count_node.asInt() != static_cast<int>(i + 1)) {
         std::cerr << "❌ Multi-root test failed - document " << i << " has wrong count value" << std::endl;
         throw std::runtime_error("Multi-root test failed");
       }

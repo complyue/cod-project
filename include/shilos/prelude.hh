@@ -120,8 +120,14 @@ namespace yaml {
 
 // YAML exception hierarchy
 class Exception : public std::runtime_error {
+private:
+  std::string stack_trace_;
+
 public:
-  using std::runtime_error::runtime_error;
+  // Explicit constructors that capture stack trace immediately
+  explicit Exception(const std::string &message);
+
+  const std::string &stack_trace() const;
 };
 
 class ParseError : public Exception {
@@ -337,41 +343,26 @@ public:
     return 0;
   }
 
-  template <typename T> T as() const {
-    if constexpr (std::is_same_v<T, std::string>) {
-      if (auto s = std::get_if<std::string_view>(&value)) {
-        return std::string(*s);
-      }
-      throw TypeError("Expected string value");
-    } else if constexpr (std::is_same_v<T, std::string_view>) {
-      if (auto s = std::get_if<std::string_view>(&value)) {
-        return *s;
-      }
-      throw TypeError("Expected string value");
-    } else if constexpr (std::is_same_v<T, int64_t>) {
-      if (auto i = std::get_if<int64_t>(&value)) {
-        return *i;
-      }
-      throw TypeError("Expected integer value");
-    } else if constexpr (std::is_same_v<T, int>) {
-      if (auto i = std::get_if<int64_t>(&value)) {
-        return static_cast<int>(*i);
-      }
-      throw TypeError("Expected integer value");
-    } else if constexpr (std::is_same_v<T, double>) {
-      if (auto d = std::get_if<double>(&value)) {
-        return *d;
-      }
-      throw TypeError("Expected double value");
-    } else if constexpr (std::is_same_v<T, bool>) {
-      if (auto b = std::get_if<bool>(&value)) {
-        return *b;
-      }
-      throw TypeError("Expected bool value");
-    }
-    throw TypeError("Unsupported type conversion");
+private:
+  std::string describe_actual_type() const {
+    if (std::holds_alternative<std::monostate>(value))
+      return "null";
+    if (std::holds_alternative<bool>(value))
+      return "bool";
+    if (std::holds_alternative<int64_t>(value))
+      return "integer";
+    if (std::holds_alternative<double>(value))
+      return "double";
+    if (std::holds_alternative<std::string_view>(value))
+      return "string";
+    if (std::holds_alternative<yaml::Sequence>(value))
+      return "sequence";
+    if (std::holds_alternative<yaml::Map>(value))
+      return "map";
+    return "unknown";
   }
 
+public:
   // Convenience methods for common type conversions
   const Map &asMap() const {
     if (auto map = std::get_if<Map>(&value)) {
@@ -391,42 +382,42 @@ public:
     if (auto s = std::get_if<std::string_view>(&value)) {
       return std::string(*s);
     }
-    throw TypeError("Expected string value");
+    throw TypeError("Expected string value, got " + describe_actual_type());
   }
 
   bool asBool() const {
     if (auto b = std::get_if<bool>(&value)) {
       return *b;
     }
-    throw TypeError("Expected bool value");
+    throw TypeError("Expected bool value, got " + describe_actual_type());
   }
 
   int asInt() const {
     if (auto i = std::get_if<int64_t>(&value)) {
       return static_cast<int>(*i);
     }
-    throw TypeError("Expected integer value");
+    throw TypeError("Expected integer value, got " + describe_actual_type());
   }
 
   int64_t asInt64() const {
     if (auto i = std::get_if<int64_t>(&value)) {
       return *i;
     }
-    throw TypeError("Expected integer value");
+    throw TypeError("Expected integer value, got " + describe_actual_type());
   }
 
   double asDouble() const {
     if (auto d = std::get_if<double>(&value)) {
       return *d;
     }
-    throw TypeError("Expected double value");
+    throw TypeError("Expected double value, got " + describe_actual_type());
   }
 
   float asFloat() const {
     if (auto d = std::get_if<double>(&value)) {
       return static_cast<float>(*d);
     }
-    throw TypeError("Expected double value");
+    throw TypeError("Expected double value, got " + describe_actual_type());
   }
 
   const Node &operator[](std::string_view key) const {
@@ -570,9 +561,21 @@ private:
   // Private - accessed by static methods (which are class members)
   YamlDocument(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings);
 
+  // Helper function to read file content for filename-only constructor
+  static std::string read_file(const std::string &filename) {
+    std::ifstream file(filename);
+    if (!file) {
+      throw ParseError("Failed to open file for reading", filename);
+    }
+    return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+  }
+
 public:
   // Constructor for parsing from source - THROWS ParseError on failure
   YamlDocument(std::string filename, std::string source);
+
+  // Constructor for parsing from file - THROWS ParseError on failure
+  YamlDocument(std::string filename) : YamlDocument(filename, read_file(filename)) {}
 
   // Constructor for authoring with callback - THROWS AuthorError on failure
   // This is the throwing version of the authoring API
@@ -707,13 +710,7 @@ public:
   // Use this when you prefer error handling via Result types instead of exceptions
   static ParseResult Read(const std::string &filepath) noexcept {
     try {
-      std::ifstream file(filepath);
-      if (!file) {
-        return ParseError("Failed to open file for reading", filepath);
-      }
-
-      std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-      return Parse(filepath, content);
+      return Parse(filepath, read_file(filepath));
     } catch (const std::exception &e) {
       return ParseError("Error reading file: " + std::string(e.what()), filepath);
     }

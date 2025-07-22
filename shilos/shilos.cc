@@ -1,6 +1,5 @@
 
 #include "shilos.hh"
-#include "shilos/iops.hh"
 
 #include <cctype>
 #include <cmath>
@@ -12,8 +11,227 @@
 #include <variant>
 #include <vector>
 
+// Platform-specific stack trace support
+#if defined(__APPLE__) || defined(__linux__)
+#include <cxxabi.h>
+#include <dlfcn.h>
+#include <execinfo.h>
+
+// LLVM DWARF debug info for enhanced stack traces
+#include "llvm/DebugInfo/DIContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFContext.h"
+#include "llvm/Object/ObjectFile.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/TargetSelect.h"
+#include <mutex>
+#endif
+
 namespace shilos {
 namespace yaml {
+
+#if defined(__APPLE__) || defined(__linux__)
+// DWARF debug info management for enhanced stack traces
+class DwarfDebugManager {
+private:
+  struct BinaryDebugInfo {
+    std::unique_ptr<llvm::DWARFContext> dwarf_ctx;
+    std::string binary_path;
+    bool has_debug_info = false;
+  };
+
+  std::unordered_map<std::string, BinaryDebugInfo> binary_cache_;
+  std::mutex cache_mutex_;
+
+public:
+  static DwarfDebugManager &instance() {
+    static DwarfDebugManager mgr;
+    return mgr;
+  }
+
+  std::string getSourceLocation(void *address) {
+    Dl_info info;
+    if (!dladdr(address, &info) || !info.dli_fname) {
+      return "";
+    }
+
+    std::string binary_path = info.dli_fname;
+    uintptr_t offset = reinterpret_cast<uintptr_t>(address) - reinterpret_cast<uintptr_t>(info.dli_fbase);
+
+    // Check cache first
+    {
+      std::lock_guard<std::mutex> lock(cache_mutex_);
+      auto it = binary_cache_.find(binary_path);
+      if (it != binary_cache_.end()) {
+        if (it->second.has_debug_info) {
+          return lookupLocation(it->second.dwarf_ctx.get(), offset, binary_path);
+        }
+        return "";
+      }
+    }
+
+    // Load new binary
+    return loadAndGetLocation(binary_path, offset);
+  }
+
+private:
+  DwarfDebugManager() {
+    // Initialize all required LLVM components for proper DWARF debug info handling
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllDisassemblers();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
+  }
+
+  std::string loadAndGetLocation(const std::string &binary_path, uintptr_t offset) {
+    // Try to load debug info from dSYM bundle on macOS
+    std::string debug_path = binary_path;
+
+#ifdef __APPLE__
+    // Check for dSYM bundle
+    std::string dsym_path =
+        binary_path + ".dSYM/Contents/Resources/DWARF/" + llvm::sys::path::filename(binary_path).str();
+    auto dsym_buffer = llvm::MemoryBuffer::getFile(dsym_path);
+    if (dsym_buffer) {
+      debug_path = dsym_path;
+    }
+#endif
+
+    auto buffer = llvm::MemoryBuffer::getFile(debug_path);
+    if (!buffer) {
+      markAsNoDebug(binary_path);
+      return "";
+    }
+
+    auto obj_file = llvm::object::ObjectFile::createObjectFile(buffer.get()->getMemBufferRef());
+    if (!obj_file) {
+      markAsNoDebug(binary_path);
+      return "";
+    }
+
+    auto dwarf_ctx = llvm::DWARFContext::create(**obj_file);
+    if (!dwarf_ctx) {
+      markAsNoDebug(binary_path);
+      return "";
+    }
+
+    std::string location = lookupLocation(dwarf_ctx.get(), offset, binary_path);
+
+    // Cache the result
+    {
+      std::lock_guard<std::mutex> lock(cache_mutex_);
+      auto &entry = binary_cache_[binary_path];
+      entry.dwarf_ctx = std::move(dwarf_ctx);
+      entry.binary_path = binary_path;
+      entry.has_debug_info = !location.empty();
+    }
+
+    return location;
+  }
+
+  std::string lookupLocation(llvm::DWARFContext *dwarf_ctx, uintptr_t offset, const std::string &binary_path) {
+    llvm::object::SectionedAddress addr;
+    addr.Address = offset;
+    // SectionIndex is initialized to 0 by default, which is appropriate
+
+    llvm::DILineInfoSpecifier spec;
+    spec.FLIKind = llvm::DILineInfoSpecifier::FileLineInfoKind::RelativeFilePath;
+    spec.FNKind = llvm::DINameKind::ShortName;
+
+    // Try to get line info for the address
+    llvm::DILineInfo line_info = dwarf_ctx->getLineInfoForAddress(addr, spec);
+
+    if (line_info.FileName.empty() || line_info.FileName == llvm::DILineInfo::BadString) {
+      // Try to get function name as fallback
+      llvm::DILineInfoSpecifier func_spec;
+      func_spec.FLIKind = llvm::DILineInfoSpecifier::FileLineInfoKind::None;
+      func_spec.FNKind = llvm::DINameKind::ShortName;
+
+      llvm::DILineInfo func_info = dwarf_ctx->getLineInfoForAddress(addr, func_spec);
+      if (!func_info.FunctionName.empty() && func_info.FunctionName != llvm::DILineInfo::BadString) {
+        return " in " + func_info.FunctionName;
+      }
+      return "";
+    }
+
+    // Extract just the filename from the path
+    std::string filename = llvm::sys::path::filename(line_info.FileName).str();
+
+    std::string result = " at " + filename;
+    if (line_info.Line > 0) {
+      result += ":" + std::to_string(line_info.Line);
+      if (line_info.Column > 0) {
+        result += ":" + std::to_string(line_info.Column);
+      }
+    }
+    return result;
+  }
+
+  void markAsNoDebug(const std::string &binary_path) {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    binary_cache_[binary_path].has_debug_info = false;
+  }
+};
+#endif
+
+// Exception implementations
+Exception::Exception(const std::string &message) : std::runtime_error(message) {
+
+#if defined(__APPLE__) || defined(__linux__)
+  void *callstack[128];
+  int frames = backtrace(callstack, sizeof(callstack) / sizeof(callstack[0]));
+  char **symbols = backtrace_symbols(callstack, frames);
+
+  std::ostringstream oss;
+  for (int i = 1; i < frames; ++i) {
+    oss << "#" << i << " 0x" << std::hex << reinterpret_cast<uintptr_t>(callstack[i]) << std::dec;
+
+    // Parse symbol information
+    Dl_info info;
+    if (dladdr(callstack[i], &info)) {
+      // Try to demangle the symbol name
+      if (info.dli_sname) {
+        int status;
+        char *demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status);
+        if (status == 0) {
+          oss << " in " << demangled;
+          free(demangled);
+        } else {
+          oss << " in " << info.dli_sname;
+        }
+      } else {
+        oss << " in <unknown>";
+      }
+
+      // Get source location using DWARF debug info
+      std::string source_loc = DwarfDebugManager::instance().getSourceLocation(callstack[i]);
+      if (!source_loc.empty()) {
+        oss << source_loc;
+      }
+
+      // Show the binary/library path
+      if (info.dli_fname) {
+        oss << " (" << info.dli_fname << ")";
+      }
+    } else if (symbols && symbols[i]) {
+      oss << " " << symbols[i];
+    }
+    oss << "\n";
+  }
+
+  if (symbols) {
+    free(symbols);
+  }
+
+  stack_trace_ = oss.str();
+#else
+  stack_trace_ = "Stack trace not available on this platform\n";
+#endif
+}
+
+const std::string &Exception::stack_trace() const { return stack_trace_; }
 
 // Constants for magic numbers
 constexpr size_t MAX_LOOKAHEAD = 200; // Maximum lookahead for efficient mapping detection

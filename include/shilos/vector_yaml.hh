@@ -73,7 +73,20 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_vector<T>
       if (!elem_node.IsScalar()) {
         throw yaml::TypeError("Expected scalar value for bits element in regional_vector");
       }
-      vec.emplace_back(mr, elem_node.as<T>());
+
+      if constexpr (std::is_same_v<T, bool>) {
+        vec.emplace_back(mr, elem_node.asBool());
+      } else if constexpr (std::is_same_v<T, int>) {
+        vec.emplace_back(mr, elem_node.asInt());
+      } else if constexpr (std::is_same_v<T, int64_t>) {
+        vec.emplace_back(mr, elem_node.asInt64());
+      } else if constexpr (std::is_same_v<T, float>) {
+        vec.emplace_back(mr, elem_node.asFloat());
+      } else if constexpr (std::is_same_v<T, double>) {
+        vec.emplace_back(mr, elem_node.asDouble());
+      } else {
+        static_assert(sizeof(T) == 0, "Unsupported scalar type for regional_vector");
+      }
     } else {
       // Generic path: delegate to element's own from_yaml.
       vec.emplace_init(mr, [&](T *dst) { from_yaml(mr, elem_node, dst); });

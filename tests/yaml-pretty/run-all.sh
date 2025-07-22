@@ -8,8 +8,9 @@ TEST_DATA_DIR="$SCRIPT_DIR/test-data"
 UGLY_DIR="$TEST_DATA_DIR/ugly"
 PRETTY_DIR="$TEST_DATA_DIR/pretty"
 
-# Set default COD_TEST_TOOLCHAIN if not already set
-export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
+# Source test utilities and setup toolchain
+source "$SCRIPT_DIR/../test-utils.sh"
+setup_toolchain
 
 # Colors for output
 RED='\033[0;31m'
@@ -63,11 +64,8 @@ if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
   echo "🔍 Diagnostic mode enabled - will show structural tree dumps"
 fi
 
-# Configure build directory if first run
-if [[ ! -f "$BUILD_DIR/Build.ninja" && ! -f "$BUILD_DIR/Makefile" ]]; then
-  mkdir -p "$BUILD_DIR"
-  cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B "$BUILD_DIR" "$SCRIPT_DIR"
-fi
+# Configure build directory using utility function
+setup_build_dir "$BUILD_DIR" "$SCRIPT_DIR"
 
 # Build yaml-pretty
 echo "Building yaml-pretty..."

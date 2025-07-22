@@ -102,28 +102,60 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_dict<K, V
     if constexpr (std::is_same_v<K, regional_str>) {
       auto key_view = std::string_view(k_node_str);
       if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
-        make_key_callable(key_view, [&](V *dst) { new (dst) V(v_node.as<V>()); });
+        make_key_callable(key_view, [&](V *dst) {
+          if constexpr (std::is_same_v<V, bool>) {
+            new (dst) V(v_node.asBool());
+          } else if constexpr (std::is_integral_v<V>) {
+            new (dst) V(v_node.asInt64());
+          } else if constexpr (std::is_floating_point_v<V>) {
+            new (dst) V(v_node.asDouble());
+          }
+        });
       } else {
         make_key_callable(key_view, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }
     } else if constexpr (std::is_same_v<K, bool>) {
       bool key_bool = (k_node_str == "true" || k_node_str == "1");
       if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
-        make_key_callable(key_bool, [&](V *dst) { new (dst) V(v_node.as<V>()); });
+        make_key_callable(key_bool, [&](V *dst) {
+          if constexpr (std::is_same_v<V, bool>) {
+            new (dst) V(v_node.asBool());
+          } else if constexpr (std::is_integral_v<V>) {
+            new (dst) V(v_node.asInt64());
+          } else if constexpr (std::is_floating_point_v<V>) {
+            new (dst) V(v_node.asDouble());
+          }
+        });
       } else {
         make_key_callable(key_bool, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }
     } else if constexpr (std::is_integral_v<K>) {
       K key_int = static_cast<K>(std::stoll(std::string(k_node_str)));
       if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
-        make_key_callable(key_int, [&](V *dst) { new (dst) V(v_node.as<V>()); });
+        make_key_callable(key_int, [&](V *dst) {
+          if constexpr (std::is_same_v<V, bool>) {
+            new (dst) V(v_node.asBool());
+          } else if constexpr (std::is_integral_v<V>) {
+            new (dst) V(v_node.asInt64());
+          } else if constexpr (std::is_floating_point_v<V>) {
+            new (dst) V(v_node.asDouble());
+          }
+        });
       } else {
         make_key_callable(key_int, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }
     } else if constexpr (std::is_floating_point_v<K>) {
       K key_fp = static_cast<K>(std::stod(std::string(k_node_str)));
       if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
-        make_key_callable(key_fp, [&](V *dst) { new (dst) V(v_node.as<V>()); });
+        make_key_callable(key_fp, [&](V *dst) {
+          if constexpr (std::is_same_v<V, bool>) {
+            new (dst) V(v_node.asBool());
+          } else if constexpr (std::is_integral_v<V>) {
+            new (dst) V(v_node.asInt64());
+          } else if constexpr (std::is_floating_point_v<V>) {
+            new (dst) V(v_node.asDouble());
+          }
+        });
       } else {
         make_key_callable(key_fp, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }
@@ -132,7 +164,15 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_dict<K, V
       yaml::Node key_scalar = temp_author.createString(k_node_str);
       from_yaml(mr, key_scalar, &key_storage);
       if constexpr (std::is_same_v<V, bool> || std::is_integral_v<V> || std::is_floating_point_v<V>) {
-        make_key_callable(key_storage, [&](V *dst) { new (dst) V(v_node.as<V>()); });
+        make_key_callable(key_storage, [&](V *dst) {
+          if constexpr (std::is_same_v<V, bool>) {
+            new (dst) V(v_node.asBool());
+          } else if constexpr (std::is_integral_v<V>) {
+            new (dst) V(v_node.asInt64());
+          } else if constexpr (std::is_floating_point_v<V>) {
+            new (dst) V(v_node.asDouble());
+          }
+        });
       } else {
         make_key_callable(key_storage, [&](V *dst) { from_yaml(mr, v_node, dst); });
       }

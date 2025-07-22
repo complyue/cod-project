@@ -1,12 +1,19 @@
-#!/bin/bash
-
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "${SCRIPT_DIR}"
+BUILD_DIR="$SCRIPT_DIR/build"
 
-# Set default COD_TEST_TOOLCHAIN if not already set
-export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
+# Source test utilities and setup toolchain
+source "$SCRIPT_DIR/../test-utils.sh"
+setup_toolchain
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+echo "🔧 Using toolchain mode: $COD_TEST_TOOLCHAIN"
 
 # Parse command line arguments
 VERBOSE_FLAG=""
@@ -25,22 +32,24 @@ echo "🔧 Using toolchain mode: ${COD_TEST_TOOLCHAIN}"
 echo "-- Using development toolchain from ${COD_TEST_TOOLCHAIN}/ directory"
 echo "-- Using source headers from include/ directory"
 
-# Build the yaml-ux test executable
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+# Configure build directory using utility function
+setup_build_dir "$BUILD_DIR" "$SCRIPT_DIR"
 
+# Build the test
 echo "Building yaml-ux..."
-cmake --build build
+cmake --build "$BUILD_DIR"
 
-if [ $? -eq 0 ]; then
-    echo "✓ yaml-ux built successfully"
-else
-    echo "✗ yaml-ux build failed"
-    exit 1
+# Verify test executable exists
+TEST_BIN="$BUILD_DIR/yaml-ux"
+if [[ ! -x "$TEST_BIN" ]]; then
+  echo -e "${RED}✗ Failed to build yaml-ux${NC}"
+  exit 1
 fi
 
-echo ""
-echo "=== YAML UX Error Reporting Test Suite ==="
-echo ""
+echo -e "${GREEN}✓ yaml-ux built successfully${NC}"
+echo
+echo -e "${GREEN}=== YAML UX Error Reporting Test Suite ===${NC}"
+echo
 
 # Run tests
 if [[ -n "$VERBOSE_FLAG" ]]; then
@@ -62,14 +71,16 @@ for yaml_file in test-data/*.yaml; do
     fi
 done
 
-echo ""
-echo "=== Test Results ==="
-echo "✓ All error message formats are VS Code compatible"
-echo "✓ Click on filename:line:column links in VS Code terminal to navigate"
-echo "✓ Error reporting improvements successfully demonstrated"
+echo
+echo -e "${GREEN}=== Test Results ===${NC}"
+echo -e "${GREEN}✓ All error message formats are VS Code compatible${NC}"
+echo -e "${GREEN}✓ Click on filename:line:column links in VS Code terminal to navigate${NC}"
+echo -e "${GREEN}✓ Error reporting improvements successfully demonstrated${NC}"
 
 if [[ -z "$VERBOSE_FLAG" ]]; then
     echo "To see detailed output, run: ./run-all.sh --verbose"
     echo ""
 fi
-echo "✔ YAML UX error reporting test suite completed" 
+echo
+echo -e "${GREEN}✓ YAML UX error reporting test suite completed${NC}"
+exit 0
