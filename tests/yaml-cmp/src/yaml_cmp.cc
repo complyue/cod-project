@@ -34,8 +34,8 @@ int main(int argc, char **argv) {
   fs::path expected_path = argv[argi];
   fs::path actual_path = argv[argi + 1];
   try {
-    auto expected_result = shilos::yaml::YamlDocument::Read(expected_path.string());
-    auto actual_result = shilos::yaml::YamlDocument::Read(actual_path.string());
+    auto expected_result = shilos::yaml::Document::Read(expected_path.string());
+    auto actual_result = shilos::yaml::Document::Read(actual_path.string());
 
     shilos::vswitch(
         expected_result,
@@ -43,14 +43,14 @@ int main(int argc, char **argv) {
           std::cerr << "yaml-cmp error parsing expected file: " << expected_err.what() << "\n";
           std::exit(1);
         },
-        [&](const shilos::yaml::YamlDocument &expected_doc) {
+        [&](const shilos::yaml::Document &expected_doc) {
           shilos::vswitch(
               actual_result,
               [&](const shilos::yaml::ParseError &actual_err) {
                 std::cerr << "yaml-cmp error parsing actual file: " << actual_err.what() << "\n";
                 std::exit(1);
               },
-              [&](const shilos::yaml::YamlDocument &actual_doc) {
+              [&](const shilos::yaml::Document &actual_doc) {
                 const Node &expected_node = expected_doc.root();
                 const Node &actual_node = actual_doc.root();
                 bool ok = subset_mode ? yaml_cmp::yaml_subset(expected_node, actual_node)

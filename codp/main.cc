@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
 
       // Save the project
       try {
-        yaml::YamlDocument doc("CodProject.yaml", [&](yaml::YamlAuthor &author) {
+        yaml::Document doc("CodProject.yaml", [&](yaml::YamlAuthor &author) {
           auto root = to_yaml(*project, author);
           author.addRoot(root);
         });
@@ -263,7 +263,7 @@ int main(int argc, char **argv) {
 
       // Load existing project
       try {
-        yaml::YamlDocument doc((project_path / "CodProject.yaml").string());
+        yaml::Document doc((project_path / "CodProject.yaml").string());
 
         auto_region<CodProject> region(1024 * 1024);
         CodProject *project = region->root().get();
@@ -286,7 +286,7 @@ int main(int argc, char **argv) {
           }
 
           try {
-            yaml::YamlDocument dep_doc(dep_yaml.string());
+            yaml::Document dep_doc(dep_yaml.string());
 
             auto_region<CodProject> dep_region(1024 * 1024);
             CodProject *dep_project = dep_region->root().get();
@@ -347,7 +347,7 @@ int main(int argc, char **argv) {
 
         // Save the project
         try {
-          yaml::YamlDocument doc("CodProject.yaml", [&](yaml::YamlAuthor &author) {
+          yaml::Document doc("CodProject.yaml", [&](yaml::YamlAuthor &author) {
             auto root = to_yaml(*project, author);
             author.addRoot(root);
           });
@@ -388,7 +388,7 @@ int main(int argc, char **argv) {
 
       // Load existing project
       try {
-        yaml::YamlDocument doc((project_path / "CodProject.yaml").string());
+        yaml::Document doc((project_path / "CodProject.yaml").string());
 
         auto_region<CodProject> region(1024 * 1024);
         CodProject *project = region->root().get();
@@ -431,7 +431,7 @@ int main(int argc, char **argv) {
 
         // Save the project
         try {
-          yaml::YamlDocument doc("CodProject.yaml", [&](yaml::YamlAuthor &author) {
+          yaml::Document doc("CodProject.yaml", [&](yaml::YamlAuthor &author) {
             auto root = to_yaml(*new_project, author);
             author.addRoot(root);
           });
@@ -467,7 +467,7 @@ int main(int argc, char **argv) {
     }
 
     try {
-      yaml::YamlDocument doc(project_yaml.string());
+      yaml::Document doc(project_yaml.string());
 
       const yaml::Node &root = doc.root();
 
@@ -539,7 +539,7 @@ int main(int argc, char **argv) {
             // Load and recurse into dep project
             fs::path dep_yaml_path = dep_path / "CodProject.yaml";
             try {
-              yaml::YamlDocument dep_doc(dep_yaml_path.string());
+              yaml::Document dep_doc(dep_yaml_path.string());
 
               const yaml::Node &dep_root = dep_doc.root();
               auto_region<CodProject> dep_region(1024 * 1024);
@@ -579,7 +579,7 @@ int main(int argc, char **argv) {
 
       // Generate YAML using the new to_yaml function
       try {
-        yaml::YamlDocument doc("CodManifest.yaml", [&](yaml::YamlAuthor &author) {
+        yaml::Document doc("CodManifest.yaml", [&](yaml::YamlAuthor &author) {
           auto root = to_yaml(*manifest, author);
           author.addRoot(root);
         });

@@ -31,7 +31,7 @@ void run_error_test(const ErrorTest &test, bool verbose) {
     std::cout << "Content:\n" << test.content << std::endl;
   }
 
-  auto result = yaml::YamlDocument::Parse(test.filename, test.content);
+  auto result = yaml::Document::Parse(test.filename, test.content);
 
   vswitch(
       result,
@@ -48,7 +48,7 @@ void run_error_test(const ErrorTest &test, bool verbose) {
           std::cout << "\033[0;32m✓\033[0m " << test.name << " - " << err.what() << std::endl;
         }
       },
-      [&](const yaml::YamlDocument &doc) {
+      [&](const yaml::Document &doc) {
         if (verbose) {
           std::cout << "✗ Unexpected success - expected parsing error!" << std::endl;
         } else {
@@ -64,7 +64,7 @@ void run_file_test(const fs::path &test_file, bool verbose) {
   }
 
   try {
-    auto result = yaml::YamlDocument::Read(test_file.string());
+    auto result = yaml::Document::Read(test_file.string());
     if (verbose) {
       std::string content = read_file(test_file);
       std::cout << "Content:\n" << content << std::endl;
@@ -85,7 +85,7 @@ void run_file_test(const fs::path &test_file, bool verbose) {
             std::cout << "\033[0;32m✓\033[0m " << test_file.filename().string() << " - " << err.what() << std::endl;
           }
         },
-        [&](const yaml::YamlDocument &doc) {
+        [&](const yaml::Document &doc) {
           if (verbose) {
             std::cout << "✓ Parse successful - showing formatted output:" << std::endl;
             std::cout << format_yaml(doc.root()) << std::endl;

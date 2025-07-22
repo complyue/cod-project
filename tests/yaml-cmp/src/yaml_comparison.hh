@@ -45,7 +45,7 @@ inline bool yaml_subset(const Node &expected, const Node &actual) {
     const auto &e_map = std::get<Map>(expected.value);
     const auto &a_map = std::get<Map>(actual.value);
     for (const auto &e_entry : e_map) {
-      const auto &key = e_entry.key; // Keep as string_view - caller must keep YamlDocument alive
+      const auto &key = e_entry.key; // Keep as string_view - caller must keep Document alive
       auto it = a_map.find(key);
       if (it == a_map.end() || !yaml_subset(e_entry.value, it->value))
         return false;
@@ -59,8 +59,8 @@ inline bool yaml_subset(const Node &expected, const Node &actual) {
 inline bool yaml_equal(const Node &a, const Node &b) { return yaml_subset(a, b) && yaml_subset(b, a); }
 
 // Compare authored document with expected structure
-inline bool compare_authored_with_expected(const shilos::yaml::YamlDocument &authored_doc,
-                                           const shilos::yaml::YamlDocument &expected_doc, bool subset_mode = false) {
+inline bool compare_authored_with_expected(const shilos::yaml::Document &authored_doc,
+                                           const shilos::yaml::Document &expected_doc, bool subset_mode = false) {
   const Node &authored_node = authored_doc.root();
   const Node &expected_node = expected_doc.root();
 
@@ -68,9 +68,8 @@ inline bool compare_authored_with_expected(const shilos::yaml::YamlDocument &aut
 }
 
 // Compare multi-document authored document with expected structures
-inline bool compare_multi_document(const shilos::yaml::YamlDocument &authored_doc,
-                                   const std::vector<shilos::yaml::YamlDocument> &expected_docs,
-                                   bool subset_mode = false) {
+inline bool compare_multi_document(const shilos::yaml::Document &authored_doc,
+                                   const std::vector<shilos::yaml::Document> &expected_docs, bool subset_mode = false) {
   if (authored_doc.documentCount() != expected_docs.size()) {
     return false;
   }
@@ -88,8 +87,8 @@ inline bool compare_multi_document(const shilos::yaml::YamlDocument &authored_do
 }
 
 // Compare authored document with expected document from file
-inline bool compare_authored_with_expected(const shilos::yaml::YamlDocument &authored_doc,
-                                           const std::string &expected_file, bool subset_mode = false) {
+inline bool compare_authored_with_expected(const shilos::yaml::Document &authored_doc, const std::string &expected_file,
+                                           bool subset_mode = false) {
   // Read file content
   std::ifstream file(expected_file);
   if (!file.is_open()) {
@@ -101,18 +100,18 @@ inline bool compare_authored_with_expected(const shilos::yaml::YamlDocument &aut
   file.close();
 
   // Load expected document from file content
-  auto expected_result = shilos::yaml::YamlDocument::Parse(expected_file, content);
+  auto expected_result = shilos::yaml::Document::Parse(expected_file, content);
   if (std::holds_alternative<shilos::yaml::ParseError>(expected_result)) {
     std::cerr << "Failed to parse expected file: " << expected_file << std::endl;
     return false;
   }
 
-  auto expected_doc = std::get<shilos::yaml::YamlDocument>(std::move(expected_result));
+  auto expected_doc = std::get<shilos::yaml::Document>(std::move(expected_result));
   return compare_authored_with_expected(authored_doc, expected_doc, subset_mode);
 }
 
 // Compare multi-document authored with expected documents from file
-inline bool compare_multi_document(const shilos::yaml::YamlDocument &authored_doc, const std::string &expected_file,
+inline bool compare_multi_document(const shilos::yaml::Document &authored_doc, const std::string &expected_file,
                                    bool subset_mode = false) {
   // Read file content
   std::ifstream file(expected_file);
@@ -125,13 +124,13 @@ inline bool compare_multi_document(const shilos::yaml::YamlDocument &authored_do
   file.close();
 
   // Load expected documents from file content
-  auto expected_result = shilos::yaml::YamlDocument::Parse(expected_file, content);
+  auto expected_result = shilos::yaml::Document::Parse(expected_file, content);
   if (std::holds_alternative<shilos::yaml::ParseError>(expected_result)) {
     std::cerr << "Failed to parse expected file: " << expected_file << std::endl;
     return false;
   }
 
-  auto expected_doc = std::get<shilos::yaml::YamlDocument>(std::move(expected_result));
+  auto expected_doc = std::get<shilos::yaml::Document>(std::move(expected_result));
 
   if (authored_doc.documentCount() != expected_doc.documentCount()) {
     return false;

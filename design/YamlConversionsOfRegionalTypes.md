@@ -35,9 +35,9 @@ Key points:
 - `to_yaml` is a free function that returns a fully-formed `yaml::Node`. It may throw `yaml::AuthorError` as YamlAuthor object API can throw them, and implementations are not mandated to catch them.
 - `from_yaml` is a free function template that performs **in-place** deserialization at the uninitialised memory pointed to by `raw_ptr`. This design avoids copy / move operations that regional types forbid.
 
-## YamlDocument API
+## yaml::Document API
 
-The `YamlDocument` class provides a **dual API pattern** with two consistent approaches for different error handling preferences:
+The `yaml::Document` class provides a **dual API pattern** with two consistent approaches for different error handling preferences:
 
 ### Constructor-based APIs (Exception-throwing)
 - Throw exceptions directly (`ParseError`, `AuthorError`)
@@ -55,20 +55,20 @@ The `YamlDocument` class provides a **dual API pattern** with two consistent app
 
 ```cpp
 // Parse from string - throws ParseError on failure
-YamlDocument doc("config.yaml", yaml_content);
+yaml::Document doc("config.yaml", yaml_content);
 
 // Parse from file path - throws ParseError on failure
-YamlDocument doc("config.yaml", std::ifstream("config.yaml"));
+yaml::Document doc("config.yaml", std::ifstream("config.yaml"));
 ```
 
 **2. Static method-based (noexcept)**
 
 ```cpp
 // Parse from string - returns ParseResult
-ParseResult result = YamlDocument::Parse("config.yaml", yaml_content);
+ParseResult result = yaml::Document::Parse("config.yaml", yaml_content);
 
 // Parse from file path - returns ParseResult
-ParseResult result = YamlDocument::Read("config.yaml");
+ParseResult result = yaml::Document::Read("config.yaml");
 ```
 
 ### Authoring API
@@ -77,7 +77,7 @@ ParseResult result = YamlDocument::Read("config.yaml");
 
 ```cpp
 // Create document with callback - throws AuthorError on failure
-YamlDocument doc("output.yaml", [](YamlAuthor& author) {
+yaml::Document doc("output.yaml", [](YamlAuthor& author) {
     auto root = author.createMap();
     author.setMapValue(root, "key", author.createString("value"));
     author.addRoot(root);
@@ -98,7 +98,7 @@ static AuthorResult Write(std::string filename, AuthorCallback&& callback, bool 
 **Create single-document YAML using static method (noexcept)**
 
 ```cpp
-AuthorResult doc = YamlDocument::Write("generated.yaml", [](YamlAuthor& author) {
+AuthorResult doc = yaml::Document::Write("generated.yaml", [](YamlAuthor& author) {
     // Create root map
     auto root = author.createMap();
     
@@ -123,8 +123,8 @@ AuthorResult doc = YamlDocument::Write("generated.yaml", [](YamlAuthor& author) 
 });
 
 // Handle result
-if (std::holds_alternative<yaml::YamlDocument>(doc)) {
-    auto& yaml_doc = std::get<yaml::YamlDocument>(doc);
+if (std::holds_alternative<yaml::Document>(doc)) {
+    auto& yaml_doc = std::get<yaml::Document>(doc);
     std::cout << "Generated YAML successfully" << std::endl;
 } else {
     auto& error = std::get<yaml::AuthorError>(doc);
@@ -136,7 +136,7 @@ if (std::holds_alternative<yaml::YamlDocument>(doc)) {
 
 ```cpp
 try {
-    YamlDocument doc("multi.yaml", [](YamlAuthor& author) {
+    yaml::Document doc("multi.yaml", [](YamlAuthor& author) {
         // First document
         auto doc1 = author.createMap();
         author.setMapValue(doc1, "type", author.createString("config"));

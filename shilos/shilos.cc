@@ -1445,7 +1445,7 @@ std::vector<Node> parse_document_stream(ParseState &state) {
 }
 
 // YamlDocument implementation - now supports multiple documents
-YamlDocument::YamlDocument(std::string filename, std::string source) : source_(source) {
+Document::Document(std::string filename, std::string source) : source_(source) {
   ParseState state{filename, source_};
 
   try {
@@ -1459,15 +1459,15 @@ YamlDocument::YamlDocument(std::string filename, std::string source) : source_(s
 }
 
 // Private constructor for authoring - transfers ownership from YamlAuthor
-YamlDocument::YamlDocument(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings)
+Document::Document(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings)
     : source_(), documents_(std::move(documents)), owned_strings_(std::move(owned_strings)) {
   // For authored documents, we don't have a source_ string since content was created programmatically
   // The filename is stored in the owned_strings_ for error reporting contexts
 }
 
-ParseResult YamlDocument::Parse(std::string filename, std::string source) noexcept {
+ParseResult Document::Parse(std::string filename, std::string source) noexcept {
   try {
-    return ParseResult{std::in_place_type<YamlDocument>, std::move(filename), std::move(source)};
+    return ParseResult{std::in_place_type<yaml::Document>, std::move(filename), std::move(source)};
   } catch (const ParseError &e) {
     return e;
   } catch (const std::exception &e) {

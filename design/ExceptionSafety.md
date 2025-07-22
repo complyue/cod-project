@@ -119,7 +119,7 @@ void* allocate(size_t size, size_t align) noexcept(false);  // May throw std::ba
 ```cpp
 // Guaranteed cleanup even if exceptions occur
 auto_region<DocumentStore> region(1024 * 1024);
-auto doc = region->create<Document>(...);
+auto doc = region->create<yaml::Document>(...);
 // If any operation throws, region is automatically cleaned up
 ```
 
@@ -128,7 +128,7 @@ auto doc = region->create<Document>(...);
 // Must use try-catch for proper cleanup
 auto* region = memory_region<DocumentStore>::alloc_region(1024 * 1024);
 try {
-    auto doc = region->create<Document>(...);
+    auto doc = region->create<yaml::Document>(...);
     // ... use region ...
     memory_region<DocumentStore>::free_region(region);
 } catch (...) {
@@ -175,15 +175,15 @@ try {
 ### Parsing Operations
 
 **Strong guarantee:**
-- `YamlDocument` construction: Either succeeds completely or throws
-- `YamlDocument::Parse`: Returns `ParseResult` variant (no-throw)
-- `YamlDocument::Read`: Returns `ParseResult` variant (no-throw)
+- `yaml::Document` construction: Either succeeds completely or throws
+- `yaml::Document::Parse`: Returns `ParseResult` variant (no-throw)
+- `yaml::Document::Read`: Returns `ParseResult` variant (no-throw)
 
 ### Authoring Operations
 
 **Strong guarantee:**
-- `YamlDocument` authoring construction: Either succeeds or throws
-- `YamlDocument::Write`: Returns `AuthorResult` variant (no-throw)
+- `yaml::Document` authoring construction: Either succeeds or throws
+- `yaml::Document::Write`: Returns `AuthorResult` variant (no-throw)
 
 ### Serialization Operations
 
@@ -213,7 +213,7 @@ regional_ptr<MyType> ptr;
 // ptr operations are noexcept
 
 // ✅ Use Result types for expected failures
-auto result = YamlDocument::Parse("config.yaml", content);
+auto result = yaml::Document::Parse("config.yaml", content);
 if (result.has_value()) {
     // Success path
 } else {
@@ -240,7 +240,7 @@ public:
 ```cpp
 // Use exception-throwing for trusted input
 try {
-    YamlDocument config("app.yaml", std::ifstream("app.yaml"));
+    yaml::Document config("app.yaml", std::ifstream("app.yaml"));
     // Process configuration
 } catch (const yaml::ParseError& e) {
     // Handle parse error
@@ -250,7 +250,7 @@ try {
 **For user input:**
 ```cpp
 // Use Result types for untrusted input
-auto result = YamlDocument::Read(user_file);
+auto result = yaml::Document::Read(user_file);
 if (!result) {
     // Handle error gracefully
     return;

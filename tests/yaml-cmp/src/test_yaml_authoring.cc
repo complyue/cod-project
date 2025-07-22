@@ -7,12 +7,12 @@
 
 using namespace shilos;
 
-// Test basic YamlDocument authoring with the new API
+// Test basic Document authoring with the new API
 void test_basic_authoring() {
-  std::cout << "Testing basic YamlDocument authoring..." << std::endl;
+  std::cout << "Testing basic Document authoring..." << std::endl;
 
   // Author document without writing to disk
-  auto result = yaml::YamlDocument::Write(
+  auto result = yaml::Document::Write(
       "test.yaml",
       [](yaml::YamlAuthor &author) {
         auto root = author.createMap();
@@ -25,8 +25,8 @@ void test_basic_authoring() {
       false, false); // Don't write to disk
 
   // Verify successful creation and compare with expected data
-  if (std::holds_alternative<yaml::YamlDocument>(result)) {
-    auto doc = std::get<yaml::YamlDocument>(std::move(result));
+  if (std::holds_alternative<yaml::Document>(result)) {
+    auto doc = std::get<yaml::Document>(std::move(result));
     if (yaml_cmp::compare_authored_with_expected(doc, "test-data/basic_authoring_expected.yaml")) {
       std::cout << "✓ Basic authoring test passed" << std::endl;
     } else {
@@ -39,13 +39,13 @@ void test_basic_authoring() {
   }
 }
 
-// Test YamlDocument constructor with authoring callback
+// Test Document constructor with authoring callback
 void test_document_constructor() {
-  std::cout << "Testing YamlDocument constructor with authoring..." << std::endl;
+  std::cout << "Testing Document constructor with authoring..." << std::endl;
 
   try {
     // Create document directly with constructor (write=false)
-    yaml::YamlDocument doc(
+    yaml::Document doc(
         "constructor_test.yaml",
         [](yaml::YamlAuthor &author) {
           auto root = author.createMap();
@@ -72,7 +72,7 @@ void test_write_method() {
   std::cout << "Testing Write() method with write/overwrite..." << std::endl;
 
   // Test successful write with overwrite=true
-  auto result1 = yaml::YamlDocument::Write(
+  auto result1 = yaml::Document::Write(
       "/tmp/output_test.yaml",
       [](yaml::YamlAuthor &author) {
         auto root = author.createMap();
@@ -82,13 +82,13 @@ void test_write_method() {
       },
       true, true); // write=true, overwrite=true
 
-  if (!std::holds_alternative<yaml::YamlDocument>(result1)) {
-    std::cerr << "❌ Write test failed - expected YamlDocument but got AuthorError" << std::endl;
+  if (!std::holds_alternative<yaml::Document>(result1)) {
+    std::cerr << "❌ Write test failed - expected Document but got AuthorError" << std::endl;
     throw std::runtime_error("Write test failed");
   }
 
   // Test write without overwrite to existing file (should fail)
-  auto result2 = yaml::YamlDocument::Write(
+  auto result2 = yaml::Document::Write(
       "/tmp/output_test.yaml",
       [](yaml::YamlAuthor &author) {
         auto root = author.createMap();
@@ -98,7 +98,7 @@ void test_write_method() {
       true, false); // write=true, overwrite=false
 
   if (!std::holds_alternative<yaml::AuthorError>(result2)) {
-    std::cerr << "❌ Write overwrite test failed - expected AuthorError but got YamlDocument" << std::endl;
+    std::cerr << "❌ Write overwrite test failed - expected AuthorError but got Document" << std::endl;
     throw std::runtime_error("Write overwrite test failed");
   }
 
@@ -109,7 +109,7 @@ void test_write_method() {
 void test_nested_structures() {
   std::cout << "Testing nested structures..." << std::endl;
 
-  auto result = yaml::YamlDocument::Write(
+  auto result = yaml::Document::Write(
       "nested_test.yaml",
       [](yaml::YamlAuthor &author) {
         auto root = author.createMap();
@@ -152,8 +152,8 @@ void test_nested_structures() {
       },
       false, false); // Don't write to disk
 
-  if (std::holds_alternative<yaml::YamlDocument>(result)) {
-    auto doc = std::get<yaml::YamlDocument>(std::move(result));
+  if (std::holds_alternative<yaml::Document>(result)) {
+    auto doc = std::get<yaml::Document>(std::move(result));
     if (yaml_cmp::compare_authored_with_expected(doc, "test-data/nested_structures_expected.yaml")) {
       std::cout << "✓ Nested structures test passed" << std::endl;
     } else {
@@ -173,7 +173,7 @@ void test_string_lifetime() {
   std::string external_string = "external_value";
   std::string temp_string = "temporary_value";
 
-  auto result = yaml::YamlDocument::Write(
+  auto result = yaml::Document::Write(
       "lifetime_test.yaml",
       [&](yaml::YamlAuthor &author) {
         auto root = author.createMap();
@@ -193,8 +193,8 @@ void test_string_lifetime() {
   external_string = "modified_external";
   temp_string = "modified_temp";
 
-  if (std::holds_alternative<yaml::YamlDocument>(result)) {
-    auto doc = std::get<yaml::YamlDocument>(std::move(result));
+  if (std::holds_alternative<yaml::Document>(result)) {
+    auto doc = std::get<yaml::Document>(std::move(result));
     if (yaml_cmp::compare_authored_with_expected(doc, "test-data/string_lifetime_expected.yaml")) {
       std::cout << "✓ String lifetime test passed" << std::endl;
     } else {
@@ -211,7 +211,7 @@ void test_string_lifetime() {
 void test_scalar_types() {
   std::cout << "Testing scalar type creation..." << std::endl;
 
-  auto result = yaml::YamlDocument::Write(
+  auto result = yaml::Document::Write(
       "scalars_test.yaml",
       [](yaml::YamlAuthor &author) {
         auto root = author.createMap();
@@ -226,8 +226,8 @@ void test_scalar_types() {
       },
       false, false); // Don't write to disk
 
-  if (std::holds_alternative<yaml::YamlDocument>(result)) {
-    auto doc = std::get<yaml::YamlDocument>(std::move(result));
+  if (std::holds_alternative<yaml::Document>(result)) {
+    auto doc = std::get<yaml::Document>(std::move(result));
     if (yaml_cmp::compare_authored_with_expected(doc, "test-data/scalar_types_expected.yaml")) {
       std::cout << "✓ Scalar types test passed" << std::endl;
     } else {
@@ -245,12 +245,12 @@ void test_error_handling() {
   std::cout << "Testing error handling..." << std::endl;
 
   // Test callback that throws exception
-  auto result = yaml::YamlDocument::Write(
+  auto result = yaml::Document::Write(
       "error_test.yaml", [](yaml::YamlAuthor &author) { throw std::runtime_error("Intentional test error"); });
 
   // Should return AuthorError, not throw
   if (!std::holds_alternative<yaml::AuthorError>(result)) {
-    std::cerr << "❌ Error handling test failed - expected AuthorError but got YamlDocument" << std::endl;
+    std::cerr << "❌ Error handling test failed - expected AuthorError but got Document" << std::endl;
     throw std::runtime_error("Error handling test failed");
   }
 
@@ -262,7 +262,7 @@ void test_error_handling() {
 
   // Test AuthorError from constructor
   try {
-    yaml::YamlDocument bad_doc(
+    yaml::Document bad_doc(
         "bad_test.yaml", [](yaml::YamlAuthor &author) { throw std::runtime_error("Constructor error"); }, true, true);
     std::cerr << "❌ Error handling test failed - constructor should have thrown AuthorError" << std::endl;
     throw std::runtime_error("Error handling test failed");
@@ -281,7 +281,7 @@ void test_error_handling() {
 void test_empty_containers() {
   std::cout << "Testing empty containers..." << std::endl;
 
-  auto result = yaml::YamlDocument::Write(
+  auto result = yaml::Document::Write(
       "empty_test.yaml",
       [](yaml::YamlAuthor &author) {
         auto root = author.createMap();
@@ -302,8 +302,8 @@ void test_empty_containers() {
       },
       false, false); // Don't write to disk
 
-  if (std::holds_alternative<yaml::YamlDocument>(result)) {
-    auto doc = std::get<yaml::YamlDocument>(std::move(result));
+  if (std::holds_alternative<yaml::Document>(result)) {
+    auto doc = std::get<yaml::Document>(std::move(result));
     auto root = doc.root();
     auto map = root.asMap();
 
@@ -329,7 +329,7 @@ void test_authoring_vs_parsing() {
   std::cout << "Testing authoring vs parsing consistency..." << std::endl;
 
   // Create document using authoring API
-  auto authored_result = yaml::YamlDocument::Write(
+  auto authored_result = yaml::Document::Write(
       "comparison_test.yaml",
       [](yaml::YamlAuthor &author) {
         auto root = author.createMap();
@@ -351,7 +351,7 @@ void test_authoring_vs_parsing() {
       },
       false, false); // Don't write to disk
 
-  if (!std::holds_alternative<yaml::YamlDocument>(authored_result)) {
+  if (!std::holds_alternative<yaml::Document>(authored_result)) {
     std::cerr << "❌ Authoring vs parsing test failed - AuthorError occurred" << std::endl;
     throw std::runtime_error("Authoring vs parsing test failed");
   }
@@ -369,15 +369,15 @@ tags:
 )";
 
   // Parse the equivalent content
-  auto parsed_result = yaml::YamlDocument::Parse("comparison_parsed.yaml", yaml_content);
-  if (!std::holds_alternative<yaml::YamlDocument>(parsed_result)) {
+  auto parsed_result = yaml::Document::Parse("comparison_parsed.yaml", yaml_content);
+  if (!std::holds_alternative<yaml::Document>(parsed_result)) {
     std::cerr << "❌ Authoring vs parsing test failed - Parse error occurred" << std::endl;
     throw std::runtime_error("Authoring vs parsing test failed");
   }
 
   // Compare the two documents
-  auto authored_doc = std::get<yaml::YamlDocument>(std::move(authored_result));
-  auto parsed_doc = std::get<yaml::YamlDocument>(std::move(parsed_result));
+  auto authored_doc = std::get<yaml::Document>(std::move(authored_result));
+  auto parsed_doc = std::get<yaml::Document>(std::move(parsed_result));
 
   if (yaml_cmp::yaml_equal(authored_doc.root(), parsed_doc.root())) {
     std::cout << "✓ Authoring vs parsing consistency test passed" << std::endl;
@@ -391,7 +391,7 @@ tags:
 void test_complex_document() {
   std::cout << "Testing complex document creation..." << std::endl;
 
-  auto result = yaml::YamlDocument::Write(
+  auto result = yaml::Document::Write(
       "complex_test.yaml",
       [](yaml::YamlAuthor &author) {
         auto root = author.createMap();
@@ -424,8 +424,8 @@ void test_complex_document() {
       },
       false, false); // Don't write to disk
 
-  if (std::holds_alternative<yaml::YamlDocument>(result)) {
-    auto doc = std::get<yaml::YamlDocument>(std::move(result));
+  if (std::holds_alternative<yaml::Document>(result)) {
+    auto doc = std::get<yaml::Document>(std::move(result));
     if (yaml_cmp::compare_authored_with_expected(doc, "test-data/complex_document_expected.yaml")) {
       std::cout << "✓ Complex document test passed" << std::endl;
     } else {
@@ -441,7 +441,7 @@ void test_complex_document() {
 void test_multi_root() {
   std::cout << "Testing multi-root functionality..." << std::endl;
 
-  auto result = yaml::YamlDocument::Write(
+  auto result = yaml::Document::Write(
       "multi_root_test.yaml",
       [](yaml::YamlAuthor &author) {
         // First document
@@ -461,8 +461,8 @@ void test_multi_root() {
       },
       false, false); // Don't write to disk
 
-  if (std::holds_alternative<yaml::YamlDocument>(result)) {
-    auto doc = std::get<yaml::YamlDocument>(std::move(result));
+  if (std::holds_alternative<yaml::Document>(result)) {
+    auto doc = std::get<yaml::Document>(std::move(result));
 
     // Verify document count
     if (doc.documentCount() != 3) {
@@ -499,8 +499,8 @@ void test_multi_root() {
 }
 
 int main() {
-  std::cout << "=== YamlDocument Authoring API Test Suite ===" << std::endl;
-  std::cout << "Testing YamlDocument authoring API with yaml-cmp comparison..." << std::endl;
+  std::cout << "=== Document Authoring API Test Suite ===" << std::endl;
+  std::cout << "Testing Document authoring API with yaml-cmp comparison..." << std::endl;
 
   try {
     test_basic_authoring();
@@ -515,7 +515,7 @@ int main() {
     test_complex_document();
     test_multi_root();
 
-    std::cout << "\n🎉 All YamlDocument authoring API tests passed!" << std::endl;
+    std::cout << "\n🎉 All Document authoring API tests passed!" << std::endl;
     std::cout << "The authoring API with yaml-cmp comparison is working correctly." << std::endl;
     return 0;
   } catch (const std::exception &e) {

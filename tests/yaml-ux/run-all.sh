@@ -56,7 +56,7 @@ if [[ -n "$VERBOSE_FLAG" ]]; then
 else
     echo "--- Running tests ---"
 fi
-./build/yaml-ux $VERBOSE_FLAG
+"$TEST_BIN" $VERBOSE_FLAG
 
 echo ""
 echo "--- Running individual file tests ---"
@@ -66,7 +66,7 @@ for yaml_file in test-data/*.yaml; do
     if [ -f "$yaml_file" ]; then
         echo ""
         echo "Testing file: $yaml_file"
-        ./build/yaml-ux $VERBOSE_FLAG "$yaml_file"
+        "$TEST_BIN" $VERBOSE_FLAG "$yaml_file"
     fi
 done
 

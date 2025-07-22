@@ -199,14 +199,14 @@ private:
 
 // Forward declarations
 struct Node;
-class YamlDocument;
+class Document;
 class YamlAuthor;
 
 std::string format_yaml(const Node &node);
 
 // Result type for noexcept YAML parsing
-using ParseResult = std::variant<YamlDocument, ParseError>;
-using AuthorResult = std::variant<YamlDocument, AuthorError>;
+using ParseResult = std::variant<Document, ParseError>;
+using AuthorResult = std::variant<Document, AuthorError>;
 
 using Map = iopd<std::string_view, Node>;
 using Sequence = std::vector<Node>;
@@ -222,8 +222,8 @@ struct Node {
   Value value;
 
   // Allow YamlAuthor and YamlDocument to access private members for modification during authoring
-  friend class YamlAuthor;
-  friend class YamlDocument;
+  friend class Author;
+  friend class Document;
 
   // Allow parsing functions to access private string constructors
   friend Node parse_document(ParseState &state);
@@ -247,7 +247,7 @@ struct Node {
   friend class YamlAuthor;
 
   // Allow YamlDocument and parsing functions to access private constructors
-  friend class YamlDocument;
+  friend class Document;
 
   // Allow template functions in header files to access private members (parsing only)
   template <typename RT, typename K, typename V, typename F>
@@ -468,7 +468,7 @@ private:
   iops<std::string> owned_strings_; // Tracks strings created during authoring
   std::vector<Node> roots_;         // Multiple root nodes for multi-document support
 
-  friend class YamlDocument;
+  friend class Document;
 
   explicit YamlAuthor(std::string filename) : filename_(std::move(filename)) {}
 
@@ -551,7 +551,7 @@ public:
 //
 // This dual API pattern provides both fail-fast behavior (exception-throwing) and graceful degradation (noexcept)
 // for different scenarios where formatting errors are either exceptional or routine.
-class YamlDocument {
+class Document {
 private:
   std::string source_;              // Owns the original YAML string for string_view lifetime
   std::vector<Node> documents_;     // Multiple documents in the stream
@@ -559,7 +559,7 @@ private:
 
   // Internal constructor for authoring - transfers ownership from YamlAuthor
   // Private - accessed by static methods (which are class members)
-  YamlDocument(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings);
+  Document(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings);
 
   // Helper function to read file content for filename-only constructor
   static std::string read_file(const std::string &filename) {
@@ -572,16 +572,16 @@ private:
 
 public:
   // Constructor for parsing from source - THROWS ParseError on failure
-  YamlDocument(std::string filename, std::string source);
+  Document(std::string filename, std::string source);
 
   // Constructor for parsing from file - THROWS ParseError on failure
-  YamlDocument(std::string filename) : YamlDocument(filename, read_file(filename)) {}
+  Document(std::string filename) : Document(filename, read_file(filename)) {}
 
   // Constructor for authoring with callback - THROWS AuthorError on failure
   // This is the throwing version of the authoring API
   template <typename AuthorCallback>
     requires std::invocable<AuthorCallback, YamlAuthor &>
-  YamlDocument(std::string filename, AuthorCallback &&callback, bool write = true, bool overwrite = true) {
+  Document(std::string filename, AuthorCallback &&callback, bool write = true, bool overwrite = true) {
     try {
       YamlAuthor author(filename);
 
@@ -645,10 +645,10 @@ public:
   }
 
   // Non-copyable to ensure string_view stability - move allowed for variant usage
-  YamlDocument(const YamlDocument &) = delete;
-  YamlDocument &operator=(const YamlDocument &) = delete;
-  YamlDocument(YamlDocument &&) = default;
-  YamlDocument &operator=(YamlDocument &&) = delete;
+  Document(const Document &) = delete;
+  Document &operator=(const Document &) = delete;
+  Document(Document &&) = default;
+  Document &operator=(Document &&) = delete;
 
   // Access to documents
   const std::vector<Node> &documents() const noexcept { return documents_; }
@@ -697,8 +697,8 @@ public:
                             bool overwrite = true) noexcept {
     try {
       // Delegate to authoring constructor
-      YamlDocument doc(filename, std::forward<AuthorCallback>(callback), write, overwrite);
-      return AuthorResult{std::in_place_type<YamlDocument>, std::move(doc)};
+      Document doc(filename, std::forward<AuthorCallback>(callback), write, overwrite);
+      return AuthorResult{std::in_place_type<Document>, std::move(doc)};
     } catch (const AuthorError &e) {
       return AuthorError(e.filename(), e.message());
     } catch (const std::exception &e) {
