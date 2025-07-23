@@ -1,19 +1,16 @@
 #include <shilos.hh>
+#include <shilos/di.hh>
 
 #include <cassert>
 #include <cxxabi.h>
-#include <filesystem>
-#include <fstream>
 #include <functional>
 #include <iostream>
-#include <memory>
 #include <sstream>
 #include <string>
 #include <typeinfo>
 #include <unistd.h>
 #include <vector>
 
-namespace fs = std::filesystem;
 using namespace shilos;
 
 // Helper functions to trigger exceptions at different stack levels
@@ -145,7 +142,7 @@ int main(int argc, char *argv[]) {
   // Initialize LLVM components required for DWARF debug info handling
   // This must be called before any exception throwing to ensure proper
   // stack trace capture with source-level information
-  shilos::yaml::initialize_llvm_components();
+  shilos::initialize_llvm_components();
 
   bool verbose = false;
 

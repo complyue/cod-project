@@ -31,6 +31,16 @@ fi
 
 echo -e "${GREEN}✓ yaml-exc-trace-test built successfully${NC}"
 echo
+# Run get_source_location_test
+echo "Running get_source_location_test..."
+if "$BUILD_DIR/get_source_location_test" "$@"; then
+  echo
+  echo -e "${GREEN}✓ get_source_location_test passed!${NC}"
+else
+  echo
+  echo -e "${RED}✗ get_source_location_test failed!${NC}"
+  exit 1
+fi
 
 # Run the test
 echo "=== YAML Exception Trace Test Suite ==="

@@ -1,6 +1,7 @@
 add_clang_library( shilos SHARED
   shilos.cc
-  )
+  di.cc
+)
 
 # LLVM DebugInfo dependencies for enhanced stack traces
 llvm_map_components_to_libnames(llvm_debuginfo_libs
@@ -9,7 +10,7 @@ llvm_map_components_to_libnames(llvm_debuginfo_libs
   Support
   )
 
-target_link_libraries(shilos PRIVATE ${llvm_debuginfo_libs})
+target_link_libraries(shilos PUBLIC ${llvm_debuginfo_libs})
 
 # Install shilos headers into the toolchain
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../include/shilos"
