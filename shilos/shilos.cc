@@ -19,7 +19,9 @@
 
 // LLVM DWARF debug info for enhanced stack traces
 #include "llvm/DebugInfo/DIContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFCompileUnit.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFUnit.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -30,162 +32,83 @@
 namespace shilos {
 namespace yaml {
 
-#if defined(__APPLE__) || defined(__linux__)
-// DWARF debug info management for enhanced stack traces
-class DwarfDebugManager {
-private:
-  struct BinaryDebugInfo {
-    std::unique_ptr<llvm::DWARFContext> dwarf_ctx;
-    std::string binary_path;
-    bool has_debug_info = false;
-  };
-
-  std::unordered_map<std::string, BinaryDebugInfo> binary_cache_;
-  std::mutex cache_mutex_;
-
-public:
-  static DwarfDebugManager &instance() {
-    static DwarfDebugManager mgr;
-    return mgr;
-  }
-
-  std::string getSourceLocation(void *address) {
-    Dl_info info;
-    if (!dladdr(address, &info) || !info.dli_fname) {
-      return "";
-    }
-
-    std::string binary_path = info.dli_fname;
-    uintptr_t offset = reinterpret_cast<uintptr_t>(address) - reinterpret_cast<uintptr_t>(info.dli_fbase);
-
-    // Check cache first
-    {
-      std::lock_guard<std::mutex> lock(cache_mutex_);
-      auto it = binary_cache_.find(binary_path);
-      if (it != binary_cache_.end()) {
-        if (it->second.has_debug_info) {
-          return lookupLocation(it->second.dwarf_ctx.get(), offset, binary_path);
-        }
-        return "";
-      }
-    }
-
-    // Load new binary
-    return loadAndGetLocation(binary_path, offset);
-  }
-
-private:
-  DwarfDebugManager() = default;
-
-public:
-  // Initialize LLVM components required for DWARF debug info handling
-  // This function should be called once before any exception throwing
-  // to ensure proper stack trace capture with source-level information
-  void initialize_llvm_components() {
-    static bool initialized = false;
-    if (!initialized) {
-      llvm::InitializeAllTargetInfos();
-      llvm::InitializeAllTargetMCs();
-      llvm::InitializeAllDisassemblers();
-      llvm::InitializeAllTargets();
-      llvm::InitializeAllAsmParsers();
-      llvm::InitializeAllAsmPrinters();
-      initialized = true;
-    }
-  }
-
-  std::string loadAndGetLocation(const std::string &binary_path, uintptr_t offset) {
-    // Try to load debug info from dSYM bundle on macOS
-    std::string debug_path = binary_path;
-
-#ifdef __APPLE__
-    // Check for dSYM bundle
-    std::string dsym_path =
-        binary_path + ".dSYM/Contents/Resources/DWARF/" + llvm::sys::path::filename(binary_path).str();
-    auto dsym_buffer = llvm::MemoryBuffer::getFile(dsym_path);
-    if (dsym_buffer) {
-      debug_path = dsym_path;
-    }
-#endif
-
-    auto buffer = llvm::MemoryBuffer::getFile(debug_path);
-    if (!buffer) {
-      markAsNoDebug(binary_path);
-      return "";
-    }
-
-    auto obj_file = llvm::object::ObjectFile::createObjectFile(buffer.get()->getMemBufferRef());
-    if (!obj_file) {
-      markAsNoDebug(binary_path);
-      return "";
-    }
-
-    auto dwarf_ctx = llvm::DWARFContext::create(**obj_file);
-    if (!dwarf_ctx) {
-      markAsNoDebug(binary_path);
-      return "";
-    }
-
-    std::string location = lookupLocation(dwarf_ctx.get(), offset, binary_path);
-
-    // Cache the result
-    {
-      std::lock_guard<std::mutex> lock(cache_mutex_);
-      auto &entry = binary_cache_[binary_path];
-      entry.dwarf_ctx = std::move(dwarf_ctx);
-      entry.binary_path = binary_path;
-      entry.has_debug_info = !location.empty();
-    }
-
-    return location;
-  }
-
-  std::string lookupLocation(llvm::DWARFContext *dwarf_ctx, uintptr_t offset, const std::string &binary_path) {
-    llvm::object::SectionedAddress addr;
-    addr.Address = offset;
-    // SectionIndex is initialized to 0 by default, which is appropriate
-
-    llvm::DILineInfoSpecifier spec;
-    spec.FLIKind = llvm::DILineInfoSpecifier::FileLineInfoKind::RelativeFilePath;
-    spec.FNKind = llvm::DINameKind::ShortName;
-
-    // Try to get line info for the address
-    llvm::DILineInfo line_info = dwarf_ctx->getLineInfoForAddress(addr, spec);
-
-    if (line_info.FileName.empty() || line_info.FileName == llvm::DILineInfo::BadString) {
-      // Try to get function name as fallback
-      llvm::DILineInfoSpecifier func_spec;
-      func_spec.FLIKind = llvm::DILineInfoSpecifier::FileLineInfoKind::None;
-      func_spec.FNKind = llvm::DINameKind::ShortName;
-
-      llvm::DILineInfo func_info = dwarf_ctx->getLineInfoForAddress(addr, func_spec);
-      if (!func_info.FunctionName.empty() && func_info.FunctionName != llvm::DILineInfo::BadString) {
-        return " in " + func_info.FunctionName;
-      }
-      return "";
-    }
-
-    // Extract just the filename from the path
-    std::string filename = llvm::sys::path::filename(line_info.FileName).str();
-
-    std::string result = " at " + filename;
-    if (line_info.Line > 0) {
-      result += ":" + std::to_string(line_info.Line);
-      if (line_info.Column > 0) {
-        result += ":" + std::to_string(line_info.Column);
-      }
-    }
-    return result;
-  }
-
-  void markAsNoDebug(const std::string &binary_path) {
-    std::lock_guard<std::mutex> lock(cache_mutex_);
-    binary_cache_[binary_path].has_debug_info = false;
-  }
-};
-#endif
-
 // Exception implementations
+// Helper function to get source location from address using DWARF debug info
+std::string getSourceLocation(void *address) {
+  std::cerr << "getSourceLocation: entered with address " << address << std::endl;
+
+  // Get the base address and path of the module containing the address
+  Dl_info info;
+  if (!dladdr(address, &info) || !info.dli_fname) {
+    std::cerr << "getSourceLocation: dladdr failed or no filename" << std::endl;
+    return "";
+  }
+  std::cerr << "getSourceLocation: found module " << info.dli_fname << std::endl;
+
+  // Create a memory buffer from the binary file
+  auto buffer_or = llvm::MemoryBuffer::getFile(info.dli_fname, -1, false);
+  if (!buffer_or) {
+    std::cerr << "getSourceLocation: failed to create memory buffer for " << info.dli_fname << std::endl;
+    return "";
+  }
+  std::unique_ptr<llvm::MemoryBuffer> buffer = std::move(buffer_or.get());
+  std::cerr << "getSourceLocation: created memory buffer" << std::endl;
+
+  // Create an object file from the buffer
+  auto object_or = llvm::object::ObjectFile::createObjectFile(buffer->getMemBufferRef());
+  if (!object_or) {
+    std::cerr << "getSourceLocation: failed to create object file" << std::endl;
+    return "";
+  }
+  std::unique_ptr<llvm::object::ObjectFile> object = std::move(object_or.get());
+  std::cerr << "getSourceLocation: created object file" << std::endl;
+
+  // Create DWARF context
+  auto context = llvm::DWARFContext::create(*object);
+  if (!context) {
+    std::cerr << "getSourceLocation: failed to create DWARF context" << std::endl;
+    return "";
+  }
+  std::cerr << "getSourceLocation: created DWARF context" << std::endl;
+
+  // Get the section contribution for the address
+  uint64_t section_offset = (uintptr_t)(address) - (uintptr_t)(info.dli_fbase);
+  std::cerr << "getSourceLocation: section_offset = 0x" << std::hex << section_offset << std::dec << std::endl;
+
+  // Find the compile unit that contains this address
+  auto cu = context->getCompileUnitForCodeAddress(section_offset);
+  if (!cu) {
+    std::cerr << "getSourceLocation: failed to find compile unit for address" << std::endl;
+    return "";
+  }
+  std::cerr << "getSourceLocation: found compile unit" << std::endl;
+
+  // Get the line table for the compile unit
+  auto line_table = context->getLineTableForUnit(static_cast<llvm::DWARFUnit *>(cu));
+  if (!line_table) {
+    std::cerr << "getSourceLocation: failed to get line table for unit" << std::endl;
+    return "";
+  }
+  std::cerr << "getSourceLocation: got line table" << std::endl;
+
+  // Find the row in the line table for this address
+  llvm::DILineInfo row;
+  if (!line_table->getFileLineInfoForAddress({section_offset, (uint64_t)-1LL}, info.dli_fname,
+                                             llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath, row)) {
+    std::cerr << "getSourceLocation: failed to get file line info for address" << std::endl;
+    return "";
+  }
+  std::cerr << "getSourceLocation: got file line info" << std::endl;
+
+  if (!row.FileName.empty()) {
+    std::ostringstream oss;
+    oss << " at " << row.FileName << ":" << row.Line;
+    std::cerr << "getSourceLocation: returning location " << oss.str() << std::endl;
+    return oss.str();
+  }
+  std::cerr << "getSourceLocation: empty filename, returning empty string" << std::endl;
+  return "";
+}
 Exception::Exception(const std::string &message) : std::runtime_error(message) {
 
 #if defined(__APPLE__) || defined(__linux__)
@@ -215,7 +138,7 @@ Exception::Exception(const std::string &message) : std::runtime_error(message) {
       }
 
       // Get source location using DWARF debug info
-      std::string source_loc = DwarfDebugManager::instance().getSourceLocation(callstack[i]);
+      std::string source_loc = getSourceLocation(callstack[i]);
       if (!source_loc.empty()) {
         oss << source_loc;
       }
@@ -1599,6 +1522,17 @@ std::string format_yaml(const Node &node) {
 // Initialize LLVM components required for DWARF debug info handling
 // This function should be called once before any exception throwing
 // to ensure proper stack trace capture with source-level information
-void initialize_llvm_components() { yaml::DwarfDebugManager::instance().initialize_llvm_components(); }
+void initialize_llvm_components() {
+  static bool initialized = false;
+  if (!initialized) {
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllDisassemblers();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
+    initialized = true;
+  }
+}
 } // namespace yaml
 } // namespace shilos
