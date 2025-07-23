@@ -23,7 +23,7 @@ int main() {
   std::cout << "Obtained address of testFunction: " << func_addr << std::endl;
 
   // Call getSourceLocation with the function address
-  std::string location = shilos::yaml::getSourceLocation(func_addr);
+  std::string location = shilos::getSourceLocation(func_addr);
 
   std::cout << "getSourceLocation result: '" << location << "'" << std::endl;
 

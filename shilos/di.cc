@@ -21,7 +21,6 @@
 #include "llvm/Support/TargetSelect.h"
 
 namespace shilos {
-namespace yaml {
 
 std::string getSourceLocation(void *address) {
   std::cerr << "getSourceLocation: entered with address " << address << std::endl;
@@ -98,8 +97,6 @@ std::string getSourceLocation(void *address) {
   std::cerr << "getSourceLocation: empty filename, returning empty string" << std::endl;
   return "";
 }
-
-} // namespace yaml
 
 // Initialize LLVM components required for DWARF debug info handling
 // This function should be called once before any exception throwing
