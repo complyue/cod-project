@@ -14,6 +14,7 @@
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFCompileUnit.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFDie.h"
 #include "llvm/DebugInfo/DWARF/DWARFUnit.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -165,17 +166,55 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   }
   os << "Got file line info" << std::endl;
 
-  // Extract function information
-  // Extract function information
-  llvm::DILineInfoSpecifier specifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath);
-  auto inline_info = context->getInliningInfoForAddress({section_offset, (uint64_t)-1LL}, specifier);
+  // Extract function information using the compile unit's DIE
+  bool found_function = false;
+  auto unit_die = cu->getUnitDIE();
 
-  // Display function name if available
-  if (inline_info.getNumberOfFrames() > 0) {
-    auto frame = inline_info.getFrame(0);
-    if (!frame.FunctionName.empty()) {
-      os << "Function: " << frame.FunctionName << std::endl;
+  // First try: direct subprogram lookup
+  for (auto &die : unit_die) {
+    if (die.getTag() == llvm::dwarf::DW_TAG_subprogram) {
+      uint64_t low_pc = 0, high_pc = 0;
+      uint64_t section_index = 0;
+      if (die.getLowAndHighPC(low_pc, high_pc, section_index)) {
+        if (section_offset >= low_pc && section_offset < high_pc) {
+          // First try: linkage name (mangled) which is more reliable
+          if (auto linkage_attr = die.find(llvm::dwarf::DW_AT_linkage_name)) {
+            if (auto linkage_name = linkage_attr->getAsCString()) {
+              os << "Function: " << *linkage_name << std::endl;
+              found_function = true;
+              break;
+            }
+          }
+          // Fall back to DW_AT_name if linkage name not available
+          else if (auto name_attr = die.find(llvm::dwarf::DW_AT_name)) {
+            if (auto name = name_attr->getAsCString()) {
+              os << "Function: " << *name << std::endl;
+              found_function = true;
+              break;
+            }
+          }
+        }
+      }
     }
+  }
+
+  // Second try: inlined function lookup if not found
+  if (!found_function) {
+    llvm::DILineInfoSpecifier specifier(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath);
+    auto inline_info = context->getInliningInfoForAddress({section_offset, (uint64_t)-1LL}, specifier);
+
+    if (inline_info.getNumberOfFrames() > 0) {
+      auto frame = inline_info.getFrame(0);
+      if (!frame.FunctionName.empty()) {
+        os << "Function: " << frame.FunctionName << std::endl;
+        found_function = true;
+      }
+    }
+  }
+
+  // If still no function found, indicate this
+  if (!found_function) {
+    os << "Function: <unknown>" << std::endl;
   }
 
   // Display source location
@@ -192,10 +231,10 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   // Display compile unit information
   os << "Compile unit:" << std::endl;
   // Extract compile unit DIE for attribute access
-  auto unit_die = cu->getUnitDIE();
+  auto cu_die = cu->getUnitDIE();
 
   // Display language information
-  if (auto lang_attr = unit_die.find(llvm::dwarf::DW_AT_language)) {
+  if (auto lang_attr = cu_die.find(llvm::dwarf::DW_AT_language)) {
     if (auto lang_value = lang_attr->getAsUnsignedConstant()) {
       llvm::StringRef lang_str_ref = llvm::dwarf::LanguageString(*lang_value);
       os << "  Language: " << lang_str_ref.str() << std::endl;
@@ -203,14 +242,14 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   }
 
   // Display compilation directory if available
-  if (auto comp_dir_attr = unit_die.find(llvm::dwarf::DW_AT_comp_dir)) {
+  if (auto comp_dir_attr = cu_die.find(llvm::dwarf::DW_AT_comp_dir)) {
     if (auto comp_dir = comp_dir_attr->getAsCString()) {
       os << "  Compilation directory: " << *comp_dir << std::endl;
     }
   }
 
   // Display producer information if available
-  if (auto producer_attr = unit_die.find(llvm::dwarf::DW_AT_producer)) {
+  if (auto producer_attr = cu_die.find(llvm::dwarf::DW_AT_producer)) {
     if (auto producer = producer_attr->getAsCString()) {
       os << "  Producer: " << *producer << std::endl;
     }
@@ -218,13 +257,6 @@ void dumpDebugInfo(void *address, std::ostream &os) {
 
   // Display additional debug info
   os << "Additional debug information:" << std::endl;
-  uint64_t low_pc = 0, high_pc = 0;
-  uint64_t section_index = 0;
-  if (unit_die.getLowAndHighPC(low_pc, high_pc, section_index)) {
-    os << "  Address range: 0x" << std::hex << low_pc << " - 0x" << high_pc << std::dec << std::endl;
-  } else {
-    os << "  Address range: <unknown>" << std::endl;
-  }
 
   os << "=== End Debug Info Dump ===" << std::endl;
 }
