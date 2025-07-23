@@ -16,9 +16,9 @@ else()
 endif()
 
 if(COD_TEST_TOOLCHAIN STREQUAL "build")
-    set(COD_TOOLCHAIN_DIR "${COD_PROJECT_SOURCE_DIR}/build-x86_64-Darwin/stage3")
+    set(COD_TOOLCHAIN_DIR "${COD_PROJECT_SOURCE_DIR}/build")
     set(COD_INCLUDE_DIR "${COD_PROJECT_SOURCE_DIR}/include")
-    message(STATUS "Using development toolchain from build-x86_64-Darwin/stage3/ directory")
+    message(STATUS "Using development toolchain from build/ directory")
     message(STATUS "Using source headers from include/ directory")
 elseif(COD_TEST_TOOLCHAIN STREQUAL "built")
     set(COD_TOOLCHAIN_DIR "${COD_PROJECT_SOURCE_DIR}/built")
@@ -67,12 +67,14 @@ set(CMAKE_BUILD_TYPE Debug)
 add_executable(yaml-exc-trace-test src/yaml_exc_trace_test.cc)
 target_compile_options(yaml-exc-trace-test PRIVATE -g -O0)
 
-# Ensure LLVM dsymutil is used via proper PATH setup
-add_custom_command(TARGET yaml-exc-trace-test POST_BUILD
-    COMMAND ${COD_TOOLCHAIN_DIR}/bin/dsymutil $<TARGET_FILE:yaml-exc-trace-test>
-    COMMENT "Generating dSYM file for yaml-exc-trace-test"
-    VERBATIM
-)
+# Ensure LLVM dsymutil is used via proper PATH setup (only on APPLE platforms)
+if(APPLE)
+    add_custom_command(TARGET yaml-exc-trace-test POST_BUILD
+        COMMAND ${COD_TOOLCHAIN_DIR}/bin/dsymutil $<TARGET_FILE:yaml-exc-trace-test>
+        COMMENT "Generating dSYM file for yaml-exc-trace-test"
+        VERBATIM
+    )
+endif()
 
 target_link_libraries(yaml-exc-trace-test PRIVATE ${SHILOS_LIBRARY})
 # Link C++ runtime explicitly when found
