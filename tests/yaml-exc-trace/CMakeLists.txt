@@ -91,32 +91,32 @@ set_target_properties(yaml-exc-trace-test PROPERTIES
   BUILD_WITH_INSTALL_RPATH TRUE
 )
 # ---------------------------------------------------------------------------
-# Build get_source_location_test executable with Debug info for source location testing
+# Build dump_debug_info_test executable with Debug info for comprehensive debug info testing
 # ---------------------------------------------------------------------------
-add_executable(get_source_location_test src/get_source_location_test.cc)
-target_compile_options(get_source_location_test PRIVATE -g -O0)
-target_link_libraries(get_source_location_test PRIVATE ${SHILOS_LIBRARY})
+add_executable(dump_debug_info_test src/dump_debug_info_test.cc)
+target_compile_options(dump_debug_info_test PRIVATE -g -O0)
+target_link_libraries(dump_debug_info_test PRIVATE ${SHILOS_LIBRARY})
 if(LIBCXX_LIBRARY)
-  target_link_libraries(get_source_location_test PRIVATE ${LIBCXX_LIBRARY})
+  target_link_libraries(dump_debug_info_test PRIVATE ${LIBCXX_LIBRARY})
 endif()
 if(LIBCXXABI_LIBRARY)
-  target_link_libraries(get_source_location_test PRIVATE ${LIBCXXABI_LIBRARY})
+  target_link_libraries(dump_debug_info_test PRIVATE ${LIBCXXABI_LIBRARY})
 endif()
 
 # Ensure the loader can locate shared libs at runtime
-set_target_properties(get_source_location_test PROPERTIES
+set_target_properties(dump_debug_info_test PROPERTIES
   INSTALL_RPATH "${COD_TOOLCHAIN_DIR}/lib"
   BUILD_WITH_INSTALL_RPATH TRUE
 )
 
 if(APPLE)
-  set_target_properties(get_source_location_test PROPERTIES
+  set_target_properties(dump_debug_info_test PROPERTIES
     BUILD_RPATH "${COD_TOOLCHAIN_DIR}/lib"
     INSTALL_NAME_DIR "@rpath"
   )
-  add_custom_command(TARGET get_source_location_test POST_BUILD
-    COMMAND ${COD_TOOLCHAIN_DIR}/bin/dsymutil $<TARGET_FILE:get_source_location_test>
-    COMMENT "Generating dSYM file for get_source_location_test"
+  add_custom_command(TARGET dump_debug_info_test POST_BUILD
+    COMMAND ${COD_TOOLCHAIN_DIR}/bin/dsymutil $<TARGET_FILE:dump_debug_info_test>
+    COMMENT "Generating dSYM file for dump_debug_info_test"
     VERBATIM
   )
 endif()

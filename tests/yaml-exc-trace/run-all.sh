@@ -31,14 +31,15 @@ fi
 
 echo -e "${GREEN}✓ yaml-exc-trace-test built successfully${NC}"
 echo
-# Run get_source_location_test
-echo "Running get_source_location_test..."
-if "$BUILD_DIR/get_source_location_test" "$@"; then
+
+# Run the test
+echo "Running dump_debug_info_test..."
+if "$BUILD_DIR/dump_debug_info_test" "$@"; then
   echo
-  echo -e "${GREEN}✓ get_source_location_test passed!${NC}"
+  echo -e "${GREEN}✓ dump_debug_info_test passed!${NC}"
 else
   echo
-  echo -e "${RED}✗ get_source_location_test failed!${NC}"
+  echo -e "${RED}✗ dump_debug_info_test failed!${NC}"
   exit 1
 fi
 
