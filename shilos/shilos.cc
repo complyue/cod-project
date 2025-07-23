@@ -75,14 +75,23 @@ public:
   }
 
 private:
-  DwarfDebugManager() {
-    // Initialize all required LLVM components for proper DWARF debug info handling
-    llvm::InitializeAllTargetInfos();
-    llvm::InitializeAllTargetMCs();
-    llvm::InitializeAllDisassemblers();
-    llvm::InitializeAllTargets();
-    llvm::InitializeAllAsmParsers();
-    llvm::InitializeAllAsmPrinters();
+  DwarfDebugManager() = default;
+
+public:
+  // Initialize LLVM components required for DWARF debug info handling
+  // This function should be called once before any exception throwing
+  // to ensure proper stack trace capture with source-level information
+  void initialize_llvm_components() {
+    static bool initialized = false;
+    if (!initialized) {
+      llvm::InitializeAllTargetInfos();
+      llvm::InitializeAllTargetMCs();
+      llvm::InitializeAllDisassemblers();
+      llvm::InitializeAllTargets();
+      llvm::InitializeAllAsmParsers();
+      llvm::InitializeAllAsmPrinters();
+      initialized = true;
+    }
   }
 
   std::string loadAndGetLocation(const std::string &binary_path, uintptr_t offset) {
@@ -1587,5 +1596,9 @@ std::string format_yaml(const Node &node) {
   return oss.str();
 }
 
+// Initialize LLVM components required for DWARF debug info handling
+// This function should be called once before any exception throwing
+// to ensure proper stack trace capture with source-level information
+void initialize_llvm_components() { yaml::DwarfDebugManager::instance().initialize_llvm_components(); }
 } // namespace yaml
 } // namespace shilos
