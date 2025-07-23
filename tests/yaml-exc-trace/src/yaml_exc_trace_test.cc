@@ -139,11 +139,6 @@ void dump_debug_info() {
 }
 
 int main(int argc, char *argv[]) {
-  // Initialize LLVM components required for DWARF debug info handling
-  // This must be called before any exception throwing to ensure proper
-  // stack trace capture with source-level information
-  shilos::initialize_llvm_components();
-
   bool verbose = false;
 
   // Parse command line arguments

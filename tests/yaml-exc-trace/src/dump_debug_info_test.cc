@@ -16,9 +16,6 @@ __attribute__((noinline)) void testFunction() {
 int main() {
   std::cout << "Testing dumpDebugInfo function from shilos/di.hh" << std::endl;
 
-  // Initialize LLVM components required for DWARF debug info handling
-  shilos::initialize_llvm_components();
-
   // Get address of test function
   void *func_addr = (void *)(uintptr_t)&testFunction;
   std::cout << "Obtained address of testFunction: " << func_addr << std::endl;

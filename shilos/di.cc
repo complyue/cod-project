@@ -229,20 +229,4 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   os << "=== End Debug Info Dump ===" << std::endl;
 }
 
-// Initialize LLVM components required for DWARF debug info handling
-// This function should be called once before any exception throwing
-// to ensure proper stack trace capture with source-level information
-void initialize_llvm_components() {
-  static bool initialized = false;
-  if (!initialized) {
-    llvm::InitializeAllTargetInfos();
-    llvm::InitializeAllTargetMCs();
-    llvm::InitializeAllDisassemblers();
-    llvm::InitializeAllTargets();
-    llvm::InitializeAllAsmParsers();
-    llvm::InitializeAllAsmPrinters();
-    initialized = true;
-  }
-}
-
 } // namespace shilos
