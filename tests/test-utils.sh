@@ -5,7 +5,16 @@ export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
 
 # Setup PATH for project utilities
 # Use POSIX-compliant method to get script's directory
-COD_PROJECT_SRC_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Get absolute path to project root using a subshell to avoid directory changes
+# Reliable method to get script's directory that works when sourced
+# Uses BASH_SOURCE if available, otherwise falls back to $0
+SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(dirname -- "$SCRIPT_PATH")"
+
+# Get absolute path to project root (parent of tests directory)
+COD_PROJECT_SRC_ROOT="$(
+  cd "$SCRIPT_DIR/.." && pwd -P
+)"
 
 # Prepend both build/ and built/ bin directories to PATH
 export PATH="${COD_PROJECT_SRC_ROOT}/build/bin:${COD_PROJECT_SRC_ROOT}/built/bin:${PATH}"
