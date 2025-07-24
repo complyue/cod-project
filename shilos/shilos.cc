@@ -30,8 +30,8 @@ Exception::Exception(const std::string &message) : std::runtime_error(message) {
   char **symbols = backtrace_symbols(callstack, frames);
 
   std::ostringstream oss;
-  for (int i = 1; i < frames; ++i) {
-    oss << "#" << i << " 0x" << std::hex << reinterpret_cast<uintptr_t>(callstack[i]) << std::dec;
+  for (int i = 1; i < frames - 1; ++i) {
+    oss << "#" << i;
 
     // Parse symbol information
     Dl_info info;
@@ -53,7 +53,7 @@ Exception::Exception(const std::string &message) : std::runtime_error(message) {
       // Get source location using DWARF debug info
       std::string source_loc = getSourceLocation(callstack[i]);
       if (!source_loc.empty()) {
-        oss << source_loc;
+        oss << " " << source_loc;
       }
 
       // Show the binary/library path
