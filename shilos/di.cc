@@ -55,7 +55,7 @@ std::string getSourceLocation(void *address) {
   // Get the base address and path of the module containing the address
   Dl_info info;
   if (!dladdr(address, &info) || !info.dli_fname) {
-    return "<unknown>";
+    return "";
   }
 
   // On macOS, debug info is stored in a separate dSYM bundle
@@ -80,49 +80,49 @@ std::string getSourceLocation(void *address) {
   // Create a memory buffer from the binary file or dSYM
   auto buffer_or = llvm::MemoryBuffer::getFile(debug_file_path, -1, false);
   if (!buffer_or) {
-    return "<unknown>";
+    return "";
   }
   std::unique_ptr<llvm::MemoryBuffer> buffer = std::move(buffer_or.get());
 
   // Create an object file from the buffer
   auto object_or = llvm::object::ObjectFile::createObjectFile(buffer->getMemBufferRef());
   if (!object_or) {
-    return "<unknown>";
+    return "";
   }
   std::unique_ptr<llvm::object::ObjectFile> object = std::move(object_or.get());
 
   // Create DWARF context
   auto context = llvm::DWARFContext::create(*object);
   if (!context) {
-    return "<unknown>";
+    return "";
   }
 
   // Get the section contribution for the address
   uint64_t section_offset = (uintptr_t)(address) - (uintptr_t)(info.dli_fbase);
 
-  // The dSYM file would contain addresses with an assumed 0x100000000 base
   uint64_t debug_address = section_offset;
-  if (debug_file_path != info.dli_fname) {
-    debug_address += 0x100000000;
-  }
+#ifdef __APPLE__
+  // The dSYM file would contain addresses with an assumed 0x100000000 base
+  debug_address += 0x100000000;
+#endif
 
   // Find the compile unit that contains this address
   auto cu = context->getCompileUnitForCodeAddress(debug_address);
   if (!cu) {
-    return "<unknown>";
+    return "";
   }
 
   // Get the line table for the compile unit
   auto line_table = context->getLineTableForUnit(static_cast<llvm::DWARFUnit *>(cu));
   if (!line_table) {
-    return "<unknown>";
+    return "";
   }
 
   // Find the row in the line table for this address
   llvm::DILineInfo row;
   if (!line_table->getFileLineInfoForAddress({debug_address, (uint64_t)-1LL}, info.dli_fname,
                                              llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath, row)) {
-    return "<unknown>";
+    return "";
   }
 
   // Return formatted source location
@@ -135,7 +135,7 @@ std::string getSourceLocation(void *address) {
     return oss.str();
   }
 
-  return "<unknown>";
+  return "";
 }
 
 void dumpDebugInfo(void *address, std::ostream &os) {
@@ -596,16 +596,6 @@ void dumpDebugInfo(void *address, std::ostream &os) {
       os << std::endl;
     }
   }
-
-  // Dump line table information
-  // os << "--- Line Table Information ---" << std::endl;
-  // if (line_table) {
-  //   os << "Line table entries:" << std::endl;
-  //   for (const auto &row : line_table->Rows) {
-  //     os << "  0x" << std::hex << row.Address.Address << std::dec << ": " << "??:" << row.Line << " (column "
-  //        << row.Column << ")" << std::endl;
-  //   }
-  // }
 
   // Dump other debug sections
   os << "--- Other Debug Sections ---" << std::endl;
