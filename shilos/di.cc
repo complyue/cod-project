@@ -4,11 +4,9 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
-#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 
 // LLVM DWARF debug info for enhanced stack traces
@@ -495,7 +493,7 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   }
 
   // Get the line table for the compile unit
-  auto line_table = context->getLineTableForUnit(static_cast<llvm::DWARFUnit *>(cu));
+  auto line_table = context->getLineTableForUnit(cu);
   if (!line_table) {
     os << "Error: failed to get line table for unit" << std::endl;
     return;
@@ -572,87 +570,6 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   } else {
     os << "Source location: <unknown>" << std::endl;
   }
-
-  // Display compile unit information
-  os << "Compile unit:" << std::endl;
-  // Extract compile unit DIE for attribute access
-  // cu_die already defined earlier
-
-  // Display language information
-  if (auto lang_attr = cu_die.find(llvm::dwarf::DW_AT_language)) {
-    if (auto lang_value = lang_attr->getAsUnsignedConstant()) {
-      llvm::StringRef lang_str_ref = llvm::dwarf::LanguageString(*lang_value);
-      os << "  Language: " << lang_str_ref.str() << std::endl;
-    }
-  }
-
-  // Display compilation directory if available
-  if (auto comp_dir_attr = cu_die.find(llvm::dwarf::DW_AT_comp_dir)) {
-    if (auto comp_dir = comp_dir_attr->getAsCString()) {
-      os << "  Compilation directory: " << *comp_dir << std::endl;
-    }
-  }
-
-  // Display producer information if available
-  if (auto producer_attr = cu_die.find(llvm::dwarf::DW_AT_producer)) {
-    if (auto producer = producer_attr->getAsCString()) {
-      os << "  Producer: " << *producer << std::endl;
-    }
-  }
-
-  // Display additional debug info
-  os << "Additional debug information:" << std::endl;
-
-  // Dump DIE information
-  os << "--- DIE Information ---" << std::endl;
-  if (cu_die.isValid()) {
-    os << "DIE Tag: " << llvm::dwarf::TagString(cu_die.getTag()).str() << std::endl;
-
-    // Dump all attributes of the compile unit DIE
-    os << "Attributes:" << std::endl;
-    for (auto &attr : cu_die.attributes()) {
-      auto attr_name = llvm::dwarf::AttributeString(attr.Attr);
-      os << "  " << attr_name.str() << " (0x" << std::hex << attr.Attr << std::dec << "): ";
-
-      switch (attr.Value.getForm()) {
-      case llvm::dwarf::DW_FORM_string:
-      case llvm::dwarf::DW_FORM_strp:
-        if (auto str = attr.Value.getAsCString()) {
-          os << "\"" << *str << "\"";
-        }
-        break;
-      case llvm::dwarf::DW_FORM_udata:
-        if (auto val = attr.Value.getAsUnsignedConstant()) {
-          os << *val;
-        } else {
-          os << "(invalid)";
-        }
-        break;
-      case llvm::dwarf::DW_FORM_sdata:
-        if (auto val = attr.Value.getAsSignedConstant()) {
-          os << *val;
-        } else {
-          os << "(invalid)";
-        }
-        break;
-      case llvm::dwarf::DW_FORM_addr:
-        if (auto val = attr.Value.getAsAddress()) {
-          os << "0x" << std::hex << *val << std::dec;
-        } else {
-          os << "(invalid)";
-        }
-        break;
-      default:
-        os << "(value type not handled)";
-        break;
-      }
-      os << std::endl;
-    }
-  }
-
-  // Dump other debug sections
-  os << "--- Other Debug Sections ---" << std::endl;
-  // Omit debug sections presence check as we can't access the API
 
   os << "=== End Debug Info Dump ===" << std::endl;
 }
