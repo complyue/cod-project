@@ -4,6 +4,7 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <sstream>
@@ -11,9 +12,11 @@
 #include <string>
 
 // LLVM DWARF debug info for enhanced stack traces
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFCompileUnit.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
+#include "llvm/DebugInfo/DWARF/DWARFDebugAranges.h"
 #include "llvm/DebugInfo/DWARF/DWARFDie.h"
 #include "llvm/DebugInfo/DWARF/DWARFUnit.h"
 #include "llvm/Object/ObjectFile.h"
@@ -21,82 +24,118 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TargetSelect.h"
 
+// Shadow class to access private members of DWARFDebugAranges
+// This mirrors the structure in llvm-project/llvm/include/llvm/DebugInfo/DWARF/DWARFDebugAranges.h
+class DWARFDebugArangesShadow {
+public:
+  struct Range {
+    uint64_t LowPC;    /// Start of address range.
+    uint64_t Length;   /// End of address range (not including this address).
+    uint64_t CUOffset; /// Offset of the compile unit or die.
+  };
+
+  struct RangeEndpoint {
+    uint64_t Address;
+    uint64_t CUOffset;
+    bool IsRangeStart;
+  };
+
+  using RangeColl = std::vector<Range>;
+  using RangeCollIterator = RangeColl::const_iterator;
+
+  // This mirrors the private members of DWARFDebugAranges
+  std::vector<RangeEndpoint> Endpoints;
+  RangeColl Aranges;
+  llvm::DenseSet<uint64_t> ParsedCUOffsets;
+};
+
 namespace shilos {
 
 std::string getSourceLocation(void *address) {
-  std::cerr << "getSourceLocation: entered with address " << address << std::endl;
-
   // Get the base address and path of the module containing the address
   Dl_info info;
   if (!dladdr(address, &info) || !info.dli_fname) {
-    std::cerr << "getSourceLocation: dladdr failed or no filename" << std::endl;
-    return "";
+    return "<unknown>";
   }
-  std::cerr << "getSourceLocation: found module " << info.dli_fname << std::endl;
 
-  // Create a memory buffer from the binary file
-  auto buffer_or = llvm::MemoryBuffer::getFile(info.dli_fname, -1, false);
+  // On macOS, debug info is stored in a separate dSYM bundle
+  std::string debug_file_path = info.dli_fname;
+
+#ifdef __APPLE__
+  // Construct the dSYM path
+  // Extract just the filename from the full path
+  std::string filename = info.dli_fname;
+  auto last_slash = filename.find_last_of("/");
+  if (last_slash != std::string::npos) {
+    filename = filename.substr(last_slash + 1);
+  }
+
+  std::string dsym_path = debug_file_path + ".dSYM/Contents/Resources/DWARF/" + filename;
+  std::ifstream dsym_test(dsym_path);
+  if (dsym_test.good()) {
+    debug_file_path = dsym_path;
+  }
+#endif
+
+  // Create a memory buffer from the binary file or dSYM
+  auto buffer_or = llvm::MemoryBuffer::getFile(debug_file_path, -1, false);
   if (!buffer_or) {
-    std::cerr << "getSourceLocation: failed to create memory buffer for " << info.dli_fname << std::endl;
-    return "";
+    return "<unknown>";
   }
   std::unique_ptr<llvm::MemoryBuffer> buffer = std::move(buffer_or.get());
-  std::cerr << "getSourceLocation: created memory buffer" << std::endl;
 
   // Create an object file from the buffer
   auto object_or = llvm::object::ObjectFile::createObjectFile(buffer->getMemBufferRef());
   if (!object_or) {
-    std::cerr << "getSourceLocation: failed to create object file" << std::endl;
-    return "";
+    return "<unknown>";
   }
   std::unique_ptr<llvm::object::ObjectFile> object = std::move(object_or.get());
-  std::cerr << "getSourceLocation: created object file" << std::endl;
 
   // Create DWARF context
   auto context = llvm::DWARFContext::create(*object);
   if (!context) {
-    std::cerr << "getSourceLocation: failed to create DWARF context" << std::endl;
-    return "";
+    return "<unknown>";
   }
-  std::cerr << "getSourceLocation: created DWARF context" << std::endl;
 
   // Get the section contribution for the address
   uint64_t section_offset = (uintptr_t)(address) - (uintptr_t)(info.dli_fbase);
-  std::cerr << "getSourceLocation: section_offset = 0x" << std::hex << section_offset << std::dec << std::endl;
+
+  // The dSYM file would contain addresses with an assumed 0x100000000 base
+  uint64_t debug_address = section_offset;
+  if (debug_file_path != info.dli_fname) {
+    debug_address += 0x100000000;
+  }
 
   // Find the compile unit that contains this address
-  auto cu = context->getCompileUnitForCodeAddress(section_offset);
+  auto cu = context->getCompileUnitForCodeAddress(debug_address);
   if (!cu) {
-    std::cerr << "getSourceLocation: failed to find compile unit for address" << std::endl;
-    return "";
+    return "<unknown>";
   }
-  std::cerr << "getSourceLocation: found compile unit" << std::endl;
 
   // Get the line table for the compile unit
   auto line_table = context->getLineTableForUnit(static_cast<llvm::DWARFUnit *>(cu));
   if (!line_table) {
-    std::cerr << "getSourceLocation: failed to get line table for unit" << std::endl;
-    return "";
+    return "<unknown>";
   }
-  std::cerr << "getSourceLocation: got line table" << std::endl;
 
   // Find the row in the line table for this address
   llvm::DILineInfo row;
-  if (!line_table->getFileLineInfoForAddress({section_offset, (uint64_t)-1LL}, info.dli_fname,
+  if (!line_table->getFileLineInfoForAddress({debug_address, (uint64_t)-1LL}, info.dli_fname,
                                              llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath, row)) {
-    std::cerr << "getSourceLocation: failed to get file line info for address" << std::endl;
-    return "";
+    return "<unknown>";
   }
-  std::cerr << "getSourceLocation: got file line info" << std::endl;
 
+  // Return formatted source location
   if (!row.FileName.empty()) {
     std::ostringstream oss;
-    oss << " at " << row.FileName << ":" << row.Line;
-    std::cerr << "getSourceLocation: returning location " << oss.str() << std::endl;
+    oss << row.FileName << ":" << row.Line;
+    if (row.Column > 0) {
+      oss << ":" << row.Column;
+    }
     return oss.str();
   }
-  std::cerr << "getSourceLocation: empty filename, returning empty string" << std::endl;
-  return "";
+
+  return "<unknown>";
 }
 
 void dumpDebugInfo(void *address, std::ostream &os) {
@@ -111,10 +150,32 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   os << "Module: " << info.dli_fname << std::endl;
   os << "Base address: " << info.dli_fbase << std::endl;
 
-  // Create a memory buffer from the binary file
-  auto buffer_or = llvm::MemoryBuffer::getFile(info.dli_fname, -1, false);
+  // On macOS, debug info is stored in a separate dSYM bundle
+  std::string debug_file_path = info.dli_fname;
+
+#ifdef __APPLE__
+  // Construct the dSYM path
+  // Extract just the filename from the full path
+  std::string filename = info.dli_fname;
+  auto last_slash = filename.find_last_of("/");
+  if (last_slash != std::string::npos) {
+    filename = filename.substr(last_slash + 1);
+  }
+
+  std::string dsym_path = debug_file_path + ".dSYM/Contents/Resources/DWARF/" + filename;
+  std::ifstream dsym_test(dsym_path);
+  if (dsym_test.good()) {
+    debug_file_path = dsym_path;
+    os << "Using dSYM debug info from: " << debug_file_path << std::endl;
+  } else {
+    os << "dSYM not found at: " << dsym_path << std::endl;
+  }
+#endif
+
+  // Create a memory buffer from the binary file or dSYM
+  auto buffer_or = llvm::MemoryBuffer::getFile(debug_file_path, -1, false);
   if (!buffer_or) {
-    os << "Error: failed to create memory buffer for " << info.dli_fname << std::endl;
+    os << "Error: failed to create memory buffer for " << debug_file_path << std::endl;
     return;
   }
   std::unique_ptr<llvm::MemoryBuffer> buffer = std::move(buffer_or.get());
@@ -137,17 +198,248 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   }
   os << "DWARF context created successfully" << std::endl;
 
+  // Dump comprehensive information about the DWARF context
+  os << "--- DWARF Context Information ---" << std::endl;
+  // Dump debug ranges information using shadow class to access private members
+  os << "Debug Aranges:" << std::endl;
+  auto debugAranges = context->getDebugAranges();
+  if (debugAranges) {
+    // Cast to our shadow class to access private members
+    const DWARFDebugArangesShadow *shadow = reinterpret_cast<const DWARFDebugArangesShadow *>(debugAranges);
+
+    if (!shadow->Aranges.empty()) {
+      for (size_t i = 0; i < shadow->Aranges.size(); ++i) {
+        const auto &range = shadow->Aranges[i];
+        os << "  Range[" << i << "]: 0x" << std::hex << range.LowPC << " - 0x" << (range.LowPC + range.Length)
+           << std::dec << " (CU offset: 0x" << std::hex << range.CUOffset << std::dec << ")" << std::endl;
+      }
+    } else {
+      os << "  No address ranges found" << std::endl;
+    }
+  } else {
+    os << "  No debug aranges available" << std::endl;
+  }
+
+  os << "Number of compile units: " << context->getNumCompileUnits() << std::endl;
+
+  // Dump information about all sections in the object file
+  os << "--- Object File Sections ---" << std::endl;
+  auto obj_sections = object->sections();
+  for (auto &section : obj_sections) {
+    auto sec_name = section.getName();
+    if (sec_name) {
+      os << "Section: " << sec_name->str() << ", Address: 0x" << std::hex << section.getAddress() << ", Size: 0x"
+         << section.getSize() << ", Index: " << section.getIndex() << std::dec << std::endl;
+    }
+  }
+
+  // List all compile units and their address ranges
+  os << "Compile Units:" << std::endl;
+  for (size_t i = 0; i < context->getNumCompileUnits(); ++i) {
+    auto cu = context->getCompileUnitForOffset(i);
+    if (cu) {
+      os << "  CU[" << i << "]: " << std::hex << "0x" << cu->getOffset() << " - 0x"
+         << (cu->getOffset() + cu->getLength()) << std::dec << ", Address Range: ";
+
+      // Get the first DIE of the compile unit to get address ranges
+      auto unit_die = cu->getUnitDIE();
+      if (unit_die.isValid()) {
+        // Dump information about the compile unit DIE
+        os << "  DIE Tag: " << llvm::dwarf::TagString(unit_die.getTag()).str() << std::endl;
+
+        // Dump all attributes of the compile unit DIE
+        os << "  Attributes:" << std::endl;
+        for (auto &attr : unit_die.attributes()) {
+          auto attr_name = llvm::dwarf::AttributeString(attr.Attr);
+          os << "    " << attr_name.str() << " (0x" << std::hex << attr.Attr << std::dec << "): ";
+
+          switch (attr.Value.getForm()) {
+          case llvm::dwarf::DW_FORM_string:
+          case llvm::dwarf::DW_FORM_strp:
+            if (auto str = attr.Value.getAsCString()) {
+              os << "\"" << *str << "\"";
+            }
+            break;
+          case llvm::dwarf::DW_FORM_udata:
+            if (auto val = attr.Value.getAsUnsignedConstant()) {
+              // Handle DW_AT_language attribute specifically
+              if (attr.Attr == llvm::dwarf::DW_AT_language) {
+                llvm::StringRef lang_str_ref = llvm::dwarf::LanguageString(*val);
+                os << lang_str_ref.str() << " (" << *val << ")";
+              } else {
+                os << *val;
+              }
+            } else {
+              os << "(invalid)";
+            }
+            break;
+          case llvm::dwarf::DW_FORM_sdata:
+            if (auto val = attr.Value.getAsSignedConstant()) {
+              os << *val;
+            } else {
+              os << "(invalid)";
+            }
+            break;
+          case llvm::dwarf::DW_FORM_data1:
+          case llvm::dwarf::DW_FORM_data2:
+          case llvm::dwarf::DW_FORM_data4:
+          case llvm::dwarf::DW_FORM_data8:
+            if (auto val = attr.Value.getAsUnsignedConstant()) {
+              os << "0x" << std::hex << *val << std::dec;
+            } else {
+              os << "(invalid)";
+            }
+            break;
+            if (auto val = attr.Value.getAsSignedConstant()) {
+              os << *val;
+            } else {
+              os << "(invalid)";
+            }
+            break;
+          case llvm::dwarf::DW_FORM_addr:
+            if (auto val = attr.Value.getAsAddress()) {
+              os << "0x" << std::hex << *val << std::dec;
+            } else {
+              os << "(invalid)";
+            }
+            break;
+          default:
+            os << "(value type not handled)";
+            break;
+          }
+          os << std::endl;
+        }
+
+        // Get address ranges
+        uint64_t low_pc = 0, high_pc = 0;
+        uint64_t section_index = 0;
+        if (unit_die.getLowAndHighPC(low_pc, high_pc, section_index)) {
+          os << std::hex << "0x" << low_pc << " - 0x" << high_pc << std::dec;
+        } else {
+          // Check for ranges attribute
+          auto ranges_attr = unit_die.find(llvm::dwarf::DW_AT_ranges);
+          if (ranges_attr) {
+            os << "(ranges table)";
+          }
+        }
+
+        // Extract compile unit name
+        auto name_attr = unit_die.find(llvm::dwarf::DW_AT_name);
+        if (name_attr) {
+          if (auto name = name_attr->getAsCString()) {
+            os << ", File: " << *name;
+          }
+        }
+      }
+      os << std::endl;
+    }
+  }
+
   // Get the section contribution for the address
   uint64_t section_offset = (uintptr_t)(address) - (uintptr_t)(info.dli_fbase);
   os << "Section offset: 0x" << std::hex << section_offset << std::dec << std::endl;
 
+  // The dSYM file would contain addresses with an assumed 0x100000000 base
+  uint64_t debug_address = section_offset;
+  if (debug_file_path != info.dli_fname) {
+    debug_address += 0x100000000;
+  }
+
+  os << "Using effective debug_address: 0x" << std::hex << debug_address << std::dec << std::endl;
+
   // Find the compile unit that contains this address
-  auto cu = context->getCompileUnitForCodeAddress(section_offset);
+  auto cu = context->getCompileUnitForCodeAddress(debug_address);
   if (!cu) {
     os << "Error: failed to find compile unit for address" << std::endl;
+
+    // Additional diagnostic: check if address falls within any known section
+    bool in_text_section = false;
+    auto sections = object->sections();
+    for (auto &section : sections) {
+      auto sec_name = section.getName();
+      if (sec_name && *sec_name == "__text") {
+        uint64_t sec_addr = section.getAddress();
+        uint64_t sec_size = section.getSize();
+        if (section_offset >= sec_addr && section_offset < sec_addr + sec_size) {
+          in_text_section = true;
+          break;
+        }
+      }
+    }
+
+    if (in_text_section) {
+      os << "Note: Address is within __text section but no debug info found" << std::endl;
+    } else {
+      os << "Note: Address is not within __text section" << std::endl;
+    }
+
     return;
   }
   os << "Found compile unit" << std::endl;
+
+  // Dump detailed compile unit information
+  os << "--- Compile Unit Details ---" << std::endl;
+  auto cu_die = cu->getUnitDIE();
+  if (cu_die.isValid()) {
+    // Extract and display all relevant attributes from the compile unit DIE
+    os << "Compile Unit DIE:" << std::endl;
+
+    // Language
+    if (auto lang_attr = cu_die.find(llvm::dwarf::DW_AT_language)) {
+      if (auto lang_value = lang_attr->getAsUnsignedConstant()) {
+        llvm::StringRef lang_str_ref = llvm::dwarf::LanguageString(*lang_value);
+        os << "  Language: " << lang_str_ref.str() << " (" << *lang_value << ")" << std::endl;
+      }
+    }
+
+    // Producer (compiler)
+    if (auto producer_attr = cu_die.find(llvm::dwarf::DW_AT_producer)) {
+      if (auto producer = producer_attr->getAsCString()) {
+        os << "  Producer: " << *producer << std::endl;
+      }
+    }
+
+    // Compilation directory
+    if (auto comp_dir_attr = cu_die.find(llvm::dwarf::DW_AT_comp_dir)) {
+      if (auto comp_dir = comp_dir_attr->getAsCString()) {
+        os << "  Compilation Directory: " << *comp_dir << std::endl;
+      }
+    }
+
+    // Source file name
+    if (auto name_attr = cu_die.find(llvm::dwarf::DW_AT_name)) {
+      if (auto name = name_attr->getAsCString()) {
+        os << "  Source File: " << *name << std::endl;
+      }
+    }
+
+    // Include directory
+    if (auto include_dir_attr = cu_die.find(llvm::dwarf::DW_AT_comp_dir)) {
+      if (auto include_dir = include_dir_attr->getAsCString()) {
+        os << "  Include Directory: " << *include_dir << std::endl;
+      }
+    }
+
+    // DWARF version
+    os << "  DWARF Version: " << cu->getVersion() << std::endl;
+
+    // Address size
+    // Cannot access address size directly, omit this information
+
+    // Offset size
+    os << "  Offset Size: " << cu->getLength() << " bytes" << std::endl;
+  }
+
+  // Dump section information
+  os << "--- Section Information ---" << std::endl;
+  auto sections = object->sections();
+  for (auto &section : sections) {
+    auto sec_name = section.getName();
+    if (sec_name) {
+      os << "Section: " << sec_name->str() << ", Address: 0x" << std::hex << section.getAddress() << ", Size: 0x"
+         << section.getSize() << std::dec << std::endl;
+    }
+  }
 
   // Get the line table for the compile unit
   auto line_table = context->getLineTableForUnit(static_cast<llvm::DWARFUnit *>(cu));
@@ -159,7 +451,7 @@ void dumpDebugInfo(void *address, std::ostream &os) {
 
   // Find the row in the line table for this address
   llvm::DILineInfo row;
-  if (!line_table->getFileLineInfoForAddress({section_offset, (uint64_t)-1LL}, info.dli_fname,
+  if (!line_table->getFileLineInfoForAddress({debug_address, (uint64_t)-1LL}, info.dli_fname,
                                              llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath, row)) {
     os << "Error: failed to get file line info for address" << std::endl;
     return;
@@ -231,7 +523,7 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   // Display compile unit information
   os << "Compile unit:" << std::endl;
   // Extract compile unit DIE for attribute access
-  auto cu_die = cu->getUnitDIE();
+  // cu_die already defined earlier
 
   // Display language information
   if (auto lang_attr = cu_die.find(llvm::dwarf::DW_AT_language)) {
@@ -257,6 +549,67 @@ void dumpDebugInfo(void *address, std::ostream &os) {
 
   // Display additional debug info
   os << "Additional debug information:" << std::endl;
+
+  // Dump DIE information
+  os << "--- DIE Information ---" << std::endl;
+  if (cu_die.isValid()) {
+    os << "DIE Tag: " << llvm::dwarf::TagString(cu_die.getTag()).str() << std::endl;
+
+    // Dump all attributes of the compile unit DIE
+    os << "Attributes:" << std::endl;
+    for (auto &attr : cu_die.attributes()) {
+      auto attr_name = llvm::dwarf::AttributeString(attr.Attr);
+      os << "  " << attr_name.str() << " (0x" << std::hex << attr.Attr << std::dec << "): ";
+
+      switch (attr.Value.getForm()) {
+      case llvm::dwarf::DW_FORM_string:
+      case llvm::dwarf::DW_FORM_strp:
+        if (auto str = attr.Value.getAsCString()) {
+          os << "\"" << *str << "\"";
+        }
+        break;
+      case llvm::dwarf::DW_FORM_udata:
+        if (auto val = attr.Value.getAsUnsignedConstant()) {
+          os << *val;
+        } else {
+          os << "(invalid)";
+        }
+        break;
+      case llvm::dwarf::DW_FORM_sdata:
+        if (auto val = attr.Value.getAsSignedConstant()) {
+          os << *val;
+        } else {
+          os << "(invalid)";
+        }
+        break;
+      case llvm::dwarf::DW_FORM_addr:
+        if (auto val = attr.Value.getAsAddress()) {
+          os << "0x" << std::hex << *val << std::dec;
+        } else {
+          os << "(invalid)";
+        }
+        break;
+      default:
+        os << "(value type not handled)";
+        break;
+      }
+      os << std::endl;
+    }
+  }
+
+  // Dump line table information
+  // os << "--- Line Table Information ---" << std::endl;
+  // if (line_table) {
+  //   os << "Line table entries:" << std::endl;
+  //   for (const auto &row : line_table->Rows) {
+  //     os << "  0x" << std::hex << row.Address.Address << std::dec << ": " << "??:" << row.Line << " (column "
+  //        << row.Column << ")" << std::endl;
+  //   }
+  // }
+
+  // Dump other debug sections
+  os << "--- Other Debug Sections ---" << std::endl;
+  // Omit debug sections presence check as we can't access the API
 
   os << "=== End Debug Info Dump ===" << std::endl;
 }
