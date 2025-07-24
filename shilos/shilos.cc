@@ -60,8 +60,13 @@ Exception::Exception(const std::string &message) : std::runtime_error(message) {
       if (info.dli_fname) {
         oss << " (" << info.dli_fname << ")";
       }
-    } else if (symbols && symbols[i]) {
-      oss << " " << symbols[i];
+    } else {
+      // When dladdr fails, fall back to backtrace_symbols output if available
+      if (symbols && symbols[i]) {
+        oss << " " << symbols[i];
+      } else {
+        oss << " <unknown>";
+      }
     }
     oss << "\n";
   }

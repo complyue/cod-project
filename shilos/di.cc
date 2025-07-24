@@ -24,38 +24,41 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/TargetSelect.h"
 
-// Shadow class to access private members of DWARFDebugAranges
-// This mirrors the structure in llvm-project/llvm/include/llvm/DebugInfo/DWARF/DWARFDebugAranges.h
-class DWARFDebugArangesShadow {
-public:
-  struct Range {
-    uint64_t LowPC;    /// Start of address range.
-    uint64_t Length;   /// End of address range (not including this address).
-    uint64_t CUOffset; /// Offset of the compile unit or die.
-  };
-
-  struct RangeEndpoint {
-    uint64_t Address;
-    uint64_t CUOffset;
-    bool IsRangeStart;
-  };
-
-  using RangeColl = std::vector<Range>;
-  using RangeCollIterator = RangeColl::const_iterator;
-
-  // This mirrors the private members of DWARFDebugAranges
-  std::vector<RangeEndpoint> Endpoints;
-  RangeColl Aranges;
-  llvm::DenseSet<uint64_t> ParsedCUOffsets;
-};
-
 namespace shilos {
 
-std::string getSourceLocation(void *address) {
-  // Get the base address and path of the module containing the address
+// Structure to hold cached debug information for a module
+struct ModuleDebugInfo {
   Dl_info info;
-  if (!dladdr(address, &info) || !info.dli_fname) {
-    return "";
+  std::unique_ptr<llvm::MemoryBuffer> buffer;
+  std::unique_ptr<llvm::object::ObjectFile> object;
+  std::unique_ptr<llvm::DWARFContext> context;
+
+  // Default constructor
+  ModuleDebugInfo() = default;
+
+  ModuleDebugInfo(const Dl_info &module_info, std::unique_ptr<llvm::MemoryBuffer> buf,
+                  std::unique_ptr<llvm::object::ObjectFile> obj, std::unique_ptr<llvm::DWARFContext> ctx)
+      : info(module_info), buffer(std::move(buf)), object(std::move(obj)), context(std::move(ctx)) {}
+};
+
+// Cache for module debug information, keyed by the module's file path
+static std::unordered_map<std::string, ModuleDebugInfo> debug_info_cache;
+static std::mutex cache_mutex;
+
+// Function to clear the debug info cache (useful for testing or when binaries are reloaded)
+void clearDebugInfoCache() {
+  std::lock_guard<std::mutex> lock(cache_mutex);
+  debug_info_cache.clear();
+}
+
+llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
+  // Check if debug info is already cached
+  {
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    auto it = debug_info_cache.find(info.dli_fname);
+    if (it != debug_info_cache.end()) {
+      return it->second.context.get();
+    }
   }
 
   // On macOS, debug info is stored in a separate dSYM bundle
@@ -80,19 +83,44 @@ std::string getSourceLocation(void *address) {
   // Create a memory buffer from the binary file or dSYM
   auto buffer_or = llvm::MemoryBuffer::getFile(debug_file_path, -1, false);
   if (!buffer_or) {
-    return "";
+    return nullptr;
   }
   std::unique_ptr<llvm::MemoryBuffer> buffer = std::move(buffer_or.get());
 
   // Create an object file from the buffer
   auto object_or = llvm::object::ObjectFile::createObjectFile(buffer->getMemBufferRef());
   if (!object_or) {
-    return "";
+    return nullptr;
   }
   std::unique_ptr<llvm::object::ObjectFile> object = std::move(object_or.get());
 
   // Create DWARF context
   auto context = llvm::DWARFContext::create(*object);
+  if (!context) {
+    return nullptr;
+  }
+
+  // Cache the debug info
+  {
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    // Check again for race condition
+    auto it = debug_info_cache.find(info.dli_fname);
+    if (it == debug_info_cache.end()) {
+      debug_info_cache.emplace(info.dli_fname,
+                               ModuleDebugInfo(info, std::move(buffer), std::move(object), std::move(context)));
+    }
+    return debug_info_cache[info.dli_fname].context.get();
+  }
+}
+
+std::string getSourceLocation(void *address) {
+  // Get the base address and path of the module containing the address
+  Dl_info info;
+  if (!dladdr(address, &info) || !info.dli_fname) {
+    return "";
+  }
+
+  auto *context = getModuleDebugInfo(info);
   if (!context) {
     return "";
   }
@@ -137,6 +165,31 @@ std::string getSourceLocation(void *address) {
 
   return "";
 }
+
+// Shadow class to access private members of DWARFDebugAranges
+// This mirrors the structure in llvm-project/llvm/include/llvm/DebugInfo/DWARF/DWARFDebugAranges.h
+class DWARFDebugArangesShadow {
+public:
+  struct Range {
+    uint64_t LowPC;    /// Start of address range.
+    uint64_t Length;   /// End of address range (not including this address).
+    uint64_t CUOffset; /// Offset of the compile unit or die.
+  };
+
+  struct RangeEndpoint {
+    uint64_t Address;
+    uint64_t CUOffset;
+    bool IsRangeStart;
+  };
+
+  using RangeColl = std::vector<Range>;
+  using RangeCollIterator = RangeColl::const_iterator;
+
+  // This mirrors the private members of DWARFDebugAranges
+  std::vector<RangeEndpoint> Endpoints;
+  RangeColl Aranges;
+  llvm::DenseSet<uint64_t> ParsedCUOffsets;
+};
 
 void dumpDebugInfo(void *address, std::ostream &os) {
   os << "=== Debug Info Dump for address " << address << " ===" << std::endl;
@@ -603,5 +656,9 @@ void dumpDebugInfo(void *address, std::ostream &os) {
 
   os << "=== End Debug Info Dump ===" << std::endl;
 }
+
+// Add the function declaration to the header
+// This will need to be added to shilos/di.hh:
+// void clearDebugInfoCache();
 
 } // namespace shilos
