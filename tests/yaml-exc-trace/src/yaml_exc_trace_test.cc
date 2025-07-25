@@ -23,7 +23,7 @@ __attribute__((noinline)) void deep_program_function_level3() {
   std::cout << "  -> Entering deep_program_function_level3 (depth=" << stack_depth_counter << ")" << std::endl;
 
   // Directly throw a ParseError to test stack trace capture at throw point
-  throw yaml::ParseError("Program call stack test error", "test_file.cpp", 123, 45);
+  throw yaml::ParseError("Program call stack test error", "test_file.yaml", 123, 45);
 }
 
 __attribute__((noinline)) void deep_program_function_level2() {
