@@ -19,8 +19,6 @@
 #include "llvm/DebugInfo/DWARF/DWARFUnit.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/Path.h"
-#include "llvm/Support/TargetSelect.h"
 
 namespace shilos {
 
@@ -120,7 +118,21 @@ std::string getSourceLocation(void *address) {
 
   std::ostringstream oss;
 
-  oss << "in " << (info.dli_sname ? info.dli_sname : "<unknown-function>");
+  // If we have a symbol name, demangle it for better readability
+  std::string function_name = "<unknown-function>";
+  if (info.dli_sname) {
+    // Demangle the symbol name
+    int status;
+    char *demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status);
+    if (status == 0 && demangled) {
+      function_name = demangled;
+      free(demangled);
+    } else {
+      function_name = info.dli_sname;
+    }
+  }
+
+  oss << "in " << function_name;
 
   auto *context = getModuleDebugInfo(info);
   if (!context) {
