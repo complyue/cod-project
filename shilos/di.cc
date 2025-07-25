@@ -115,12 +115,17 @@ std::string getSourceLocation(void *address) {
   // Get the base address and path of the module containing the address
   Dl_info info;
   if (!dladdr(address, &info) || !info.dli_fname) {
-    return "";
+    return "<unknown-src-location>";
   }
+
+  std::ostringstream oss;
+
+  oss << "in " << (info.dli_sname ? info.dli_sname : "<unknown-function>");
 
   auto *context = getModuleDebugInfo(info);
   if (!context) {
-    return "";
+    oss << " (" << info.dli_fname << ")";
+    return oss.str();
   }
 
   // Get the section contribution for the address
@@ -135,33 +140,37 @@ std::string getSourceLocation(void *address) {
   // Find the compile unit that contains this address
   auto cu = context->getCompileUnitForCodeAddress(debug_address);
   if (!cu) {
-    return "";
+    oss << " (" << info.dli_fname << ")";
+    return oss.str();
   }
 
   // Get the line table for the compile unit
   auto line_table = context->getLineTableForUnit(static_cast<llvm::DWARFUnit *>(cu));
   if (!line_table) {
-    return "";
+    oss << " (" << info.dli_fname << ")";
+    return oss.str();
   }
 
   // Find the row in the line table for this address
   llvm::DILineInfo row;
   if (!line_table->getFileLineInfoForAddress({debug_address, (uint64_t)-1LL}, info.dli_fname,
                                              llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath, row)) {
-    return "";
-  }
-
-  // Return formatted source location
-  if (!row.FileName.empty()) {
-    std::ostringstream oss;
-    oss << row.FileName << ":" << row.Line;
-    if (row.Column > 0) {
-      oss << ":" << row.Column;
-    }
+    oss << " (" << info.dli_fname << ")";
     return oss.str();
   }
 
-  return "";
+  // vscode-clickable source location
+  if (row.FileName.empty()) {
+    oss << " at " << "<unknown-src-file>";
+  } else {
+    oss << " at " << row.FileName << ":" << row.Line;
+    if (row.Column > 0) {
+      oss << ":" << row.Column;
+    }
+  }
+
+  oss << " (" << info.dli_fname << ")";
+  return oss.str();
 }
 
 // Shadow class to access private members of DWARFDebugAranges

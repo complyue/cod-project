@@ -31,44 +31,8 @@ Exception::Exception(const std::string &message) : std::runtime_error(message) {
 
   std::ostringstream oss;
   for (int i = 1; i < frames - 1; ++i) {
-    oss << "#" << i;
-
-    // Parse symbol information
-    Dl_info info;
-    if (dladdr(callstack[i], &info)) {
-      // Try to demangle the symbol name
-      if (info.dli_sname) {
-        int status;
-        char *demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status);
-        if (status == 0) {
-          oss << " in " << demangled;
-          free(demangled);
-        } else {
-          oss << " in " << info.dli_sname;
-        }
-      } else {
-        oss << " in <unknown>";
-      }
-
-      // Get source location using DWARF debug info
-      std::string source_loc = getSourceLocation(callstack[i]);
-      if (!source_loc.empty()) {
-        oss << " " << source_loc;
-      }
-
-      // Show the binary/library path
-      if (info.dli_fname) {
-        oss << " (" << info.dli_fname << ")";
-      }
-    } else {
-      // When dladdr fails, fall back to backtrace_symbols output if available
-      if (symbols && symbols[i]) {
-        oss << " " << symbols[i];
-      } else {
-        oss << " <unknown>";
-      }
-    }
-    oss << "\n";
+    std::string source_loc = getSourceLocation(callstack[i]);
+    oss << "#" << i << " " << source_loc << "\n";
   }
 
   if (symbols) {
