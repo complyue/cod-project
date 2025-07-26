@@ -4,6 +4,7 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
+#include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <sstream>
@@ -108,20 +109,32 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
 }
 
 void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
-  oss << "#" << btDepth << " "; // TODO: 3 digits with left padding with space
+  oss << "#" << std::setw(2) << std::setfill(' ') << btDepth << " ";
 
   // Get the base address and path of the module containing the address
   Dl_info info;
   if (!dladdr(address, &info) || !info.dli_fname) {
-    oss << "<unknown-src-location>";
+    oss << "📍 <unknown-src-location>";
+    return;
+  }
+
+  // Check if this is an invalid frame (both function name and source location are <invalid> esque)
+  bool is_invalid_function =
+      (!info.dli_sname || std::string(info.dli_sname) == "<invalid>" || std::string(info.dli_sname).empty());
+  bool is_invalid_source =
+      (!info.dli_fname || std::string(info.dli_fname) == "<invalid>" || std::string(info.dli_fname).empty());
+
+  if (is_invalid_function && is_invalid_source) {
+    // Output shorter single line when both function name and src location are <invalid> esque
+    oss << "📍 <unknown-frame>";
     return;
   }
 
   auto *context = getModuleDebugInfo(info);
   if (!context) {
     // If no debug context, fall back to dladdr symbol name
-    std::string function_name = "<unknown-function>";
-    if (info.dli_sname) {
+    std::string function_name;
+    if (info.dli_sname && std::string(info.dli_sname) != "<invalid>") {
       // Demangle the symbol name
       int status;
       char *demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status);
@@ -132,8 +145,15 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
         function_name = info.dli_sname;
       }
     }
-    oss << "in " << function_name;
-    oss << " (" << info.dli_fname << ")";
+
+    // Output lines with emojis when we have partial information
+    if (!function_name.empty()) {
+      oss << "🏷️  " << function_name << "\n";
+    }
+
+    if (info.dli_fname) {
+      oss << "📦 " << info.dli_fname;
+    }
     return;
   }
 
@@ -153,8 +173,8 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
   llvm::DILineInfo lineInfo = context->getLineInfoForAddress(sectionedAddr, spec);
 
   // Prefer DWARF function name, demangled if possible
-  std::string function_name = "<unknown-function>";
-  if (!lineInfo.FunctionName.empty()) {
+  std::string function_name;
+  if (!lineInfo.FunctionName.empty() && lineInfo.FunctionName != "<invalid>") {
     // Demangle the DWARF function name
     int status;
     char *demangled = abi::__cxa_demangle(lineInfo.FunctionName.c_str(), nullptr, nullptr, &status);
@@ -164,7 +184,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
     } else {
       function_name = lineInfo.FunctionName;
     }
-  } else if (info.dli_sname) {
+  } else if (info.dli_sname && std::string(info.dli_sname) != "<invalid>") {
     // Fallback to dladdr symbol name
     int status;
     char *demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status);
@@ -176,20 +196,23 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
     }
   }
 
-  oss << "in " << function_name;
+  // Output lines each starting with a proper emoji and appropriate indentation
+  if (!function_name.empty()) {
+    oss << "🌀  " << function_name << "\n";
+  }
 
   // vscode-clickable source location
-  if (lineInfo.FileName.empty()) {
-    oss << " at " << "<unknown-src-file>";
-  } else {
-    oss << " at " << lineInfo.FileName << ":" << lineInfo.Line;
+  if (!lineInfo.FileName.empty() && lineInfo.FileName != "<invalid>") {
+    oss << " 👉 " << lineInfo.FileName << ":" << lineInfo.Line;
     if (lineInfo.Column > 0) {
       oss << ":" << lineInfo.Column;
     }
+    oss << "\n";
   }
 
-  oss << " (" << info.dli_fname << ")";
-  return;
+  if (info.dli_fname) {
+    oss << " 📦 " << info.dli_fname;
+  }
 }
 
 void dumpDebugInfo(void *address, std::ostream &os) {
