@@ -17,6 +17,48 @@ using namespace shilos;
 // Using volatile to prevent inlining and ensure visibility in stack traces
 volatile int stack_depth_counter = 0;
 
+// Test inline functions to verify they appear in backtrace with precise source location
+inline void inline_function_level3() {
+  stack_depth_counter += 3;
+  std::cout << "  -> Entering inline_function_level3 (depth=" << stack_depth_counter << ")" << std::endl;
+  // Directly throw a ParseError to test stack trace capture at throw point
+  throw yaml::ParseError("Inline function test error", "test_file.yaml", 123, 45);
+}
+
+inline void inline_function_level2() {
+  stack_depth_counter += 2;
+  std::cout << "  -> Entering inline_function_level2 (depth=" << stack_depth_counter << ")" << std::endl;
+  inline_function_level3();
+}
+
+inline void inline_function_level1() {
+  stack_depth_counter += 1;
+  std::cout << "  -> Entering inline_function_level1 (depth=" << stack_depth_counter << ")" << std::endl;
+  inline_function_level2();
+}
+
+// Template function to test template instantiation in backtrace
+template <typename T> void template_function_level3() {
+  stack_depth_counter += 3;
+  std::cout << "  -> Entering template_function_level3<" << typeid(T).name() << "> (depth=" << stack_depth_counter
+            << ")" << std::endl;
+  throw yaml::ParseError("Template function test error", "test_file.yaml", 123, 45);
+}
+
+template <typename T> void template_function_level2() {
+  stack_depth_counter += 2;
+  std::cout << "  -> Entering template_function_level2<" << typeid(T).name() << "> (depth=" << stack_depth_counter
+            << ")" << std::endl;
+  template_function_level3<T>();
+}
+
+template <typename T> void template_function_level1() {
+  stack_depth_counter += 1;
+  std::cout << "  -> Entering template_function_level1<" << typeid(T).name() << "> (depth=" << stack_depth_counter
+            << ")" << std::endl;
+  template_function_level2<T>();
+}
+
 __attribute__((noinline)) void deep_program_function_level3() {
   // Add some work to prevent optimization/inlining
   stack_depth_counter += 3;
@@ -37,10 +79,22 @@ __attribute__((noinline)) void deep_program_function_level1() {
   std::cout << "  -> Entering deep_program_function_level1 (depth=" << stack_depth_counter << ")" << std::endl;
   deep_program_function_level2();
 }
+// Trigger exceptions through inline function calls
+__attribute__((noinline)) void trigger_inline_exception_with_stack() {
+  std::cout << "Triggering inline function exception through nested calls..." << std::endl;
+  inline_function_level1();
+}
 
+// Trigger the original program exception with stack
 __attribute__((noinline)) void trigger_program_exception_with_stack() {
   std::cout << "Triggering program exception through nested calls..." << std::endl;
   deep_program_function_level1();
+}
+
+// Trigger exceptions through template function calls
+__attribute__((noinline)) void trigger_template_exception_with_stack() {
+  std::cout << "Triggering template function exception through nested calls..." << std::endl;
+  template_function_level1<int>();
 }
 
 __attribute__((noinline)) void deep_author_function_level3() {
@@ -168,7 +222,9 @@ int main(int argc, char *argv[]) {
 
   std::vector<StackTraceTest> tests = {{"Program Call Stack - ParseError", trigger_program_exception_with_stack},
                                        {"Program Call Stack - AuthorError", trigger_author_exception_with_stack},
-                                       {"Program Call Stack - TypeError", trigger_conversion_exception_with_stack}};
+                                       {"Program Call Stack - TypeError", trigger_conversion_exception_with_stack},
+                                       {"Inline Function Stack - ParseError", trigger_inline_exception_with_stack},
+                                       {"Template Function Stack - ParseError", trigger_template_exception_with_stack}};
 
   std::cout << "\n--- Running Stack Trace Tests ---" << std::endl;
 
