@@ -1,12 +1,12 @@
 #include "codp.hh"
 #include "codp_yaml.hh"
+#include "shilos/di.hh"
+#include "shilos/prelude.hh"
 
 #include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <functional>
 #include <iostream>
-#include <random>
 #include <string_view>
 #include <unordered_set>
 
@@ -101,6 +101,26 @@ static const CodDep *find_dependency(const CodProject *project, const std::strin
   return nullptr;
 }
 
+// Test function with known location for address capture
+__attribute__((noinline)) std::string testFunction() {
+  // Place volatile marker to help identify this function in stack
+  volatile int marker = 42;
+  std::cerr << "Inside testFunction with marker: " << marker << std::endl;
+  shilos::yaml::TypeError exc("Test error from testFunction");
+  return exc.stack_trace();
+}
+
+// Dump debug info for the test function
+__attribute__((noinline)) void dumpTestDebugInfo(std::ostream &os) {
+  void *func_addr = (void *)testFunction;
+  os << "Obtained address of testFunction: " << func_addr << std::endl;
+  shilos::dumpDebugInfo(func_addr, os);
+  os << std::endl;
+  os << "Test stack trace:\n";
+  auto bt = testFunction();
+  os << bt;
+}
+
 int main(int argc, char **argv) {
   std::string_view cmd = "solve";
   int argi = 1;
@@ -109,7 +129,7 @@ int main(int argc, char **argv) {
     ++argi;
   }
 
-  if (cmd != "solve" && cmd != "update" && cmd != "init" && cmd != "add" && cmd != "rm") {
+  if (cmd != "solve" && cmd != "update" && cmd != "init" && cmd != "add" && cmd != "rm" && cmd != "debug") {
     usage();
     return 1;
   }
@@ -129,6 +149,11 @@ int main(int argc, char **argv) {
   }
 
   try {
+    if (cmd == "debug") {
+      dumpTestDebugInfo(std::cerr);
+      return 0;
+    }
+
     if (cmd == "init") {
       // codp init [--uuid <uuid>] <name> <repo_url> <branch>...
       std::string uuid_str;

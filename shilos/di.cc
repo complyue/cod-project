@@ -108,25 +108,25 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
   }
 }
 
-void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
-  oss << "#" << std::setw(2) << std::setfill(' ') << btDepth << " ";
+void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
+  os << "#" << std::setw(2) << std::setfill(' ') << btDepth << " ";
 
   // Get the base address and path of the module containing the address
   Dl_info info;
   if (!dladdr(address, &info) || !info.dli_fname) {
-    oss << "📍 <unknown-src-location>";
+    os << "📍 <unknown-src-location>";
     return;
   }
 
   // Check if this is an invalid frame (both function name and source location are <invalid> esque)
   bool is_invalid_function =
       (!info.dli_sname || std::string(info.dli_sname) == "<invalid>" || std::string(info.dli_sname).empty());
-  bool is_invalid_source =
+  bool is_invalid_module =
       (!info.dli_fname || std::string(info.dli_fname) == "<invalid>" || std::string(info.dli_fname).empty());
 
-  if (is_invalid_function && is_invalid_source) {
+  if (is_invalid_function && is_invalid_module) {
     // Output shorter single line when both function name and src location are <invalid> esque
-    oss << "📍 <unknown-frame>";
+    os << "📍 <unknown-frame>";
     return;
   }
 
@@ -148,11 +148,11 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
 
     // Output lines with emojis when we have partial information
     if (!function_name.empty()) {
-      oss << "🏷️  " << function_name << "\n";
+      os << "🌀  " << function_name << "\n";
     }
 
     if (info.dli_fname) {
-      oss << "📦 " << info.dli_fname;
+      os << "📦 " << info.dli_fname;
     }
     return;
   }
@@ -198,20 +198,20 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
 
   // Output lines each starting with a proper emoji and appropriate indentation
   if (!function_name.empty()) {
-    oss << "🌀  " << function_name << "\n";
+    os << "🌀  " << function_name << "\n";
   }
 
   // vscode-clickable source location
   if (!lineInfo.FileName.empty() && lineInfo.FileName != "<invalid>") {
-    oss << "   👉 " << lineInfo.FileName << ":" << lineInfo.Line;
+    os << "   👉 " << lineInfo.FileName << ":" << lineInfo.Line;
     if (lineInfo.Column > 0) {
-      oss << ":" << lineInfo.Column;
+      os << ":" << lineInfo.Column;
     }
-    oss << "\n";
+    os << "\n";
   }
 
   if (info.dli_fname) {
-    oss << "📦 " << info.dli_fname;
+    os << "📦 " << info.dli_fname;
   }
 }
 
