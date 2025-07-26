@@ -31,8 +31,8 @@ Exception::Exception(const std::string &message) : std::runtime_error(message) {
 
   std::ostringstream oss;
   for (int i = 1; i < frames - 1; ++i) {
-    std::string source_loc = getSourceLocation(callstack[i]);
-    oss << "#" << i << " " << source_loc << "\n";
+    formatBacktraceFrame(i, callstack[i], oss);
+    oss << "\n";
   }
 
   if (symbols) {

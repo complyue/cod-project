@@ -10,12 +10,10 @@
 #include <string>
 
 // LLVM DWARF debug info for enhanced stack traces
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFCompileUnit.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFDebugAranges.h"
-#include "llvm/DebugInfo/DWARF/DWARFDie.h"
 #include "llvm/DebugInfo/DWARF/DWARFUnit.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -109,14 +107,15 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
   }
 }
 
-std::string getSourceLocation(void *address) {
+void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
+  oss << "#" << btDepth << " "; // TODO: 3 digits with left padding with space
+
   // Get the base address and path of the module containing the address
   Dl_info info;
   if (!dladdr(address, &info) || !info.dli_fname) {
-    return "<unknown-src-location>";
+    oss << "<unknown-src-location>";
+    return;
   }
-
-  std::ostringstream oss;
 
   auto *context = getModuleDebugInfo(info);
   if (!context) {
@@ -135,7 +134,7 @@ std::string getSourceLocation(void *address) {
     }
     oss << "in " << function_name;
     oss << " (" << info.dli_fname << ")";
-    return oss.str();
+    return;
   }
 
   // Get the section contribution for the address
@@ -190,7 +189,7 @@ std::string getSourceLocation(void *address) {
   }
 
   oss << " (" << info.dli_fname << ")";
-  return oss.str();
+  return;
 }
 
 void dumpDebugInfo(void *address, std::ostream &os) {
