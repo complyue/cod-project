@@ -102,23 +102,19 @@ static const CodDep *find_dependency(const CodProject *project, const std::strin
 }
 
 // Test function with known location for address capture
-__attribute__((noinline)) std::string testFunction() {
-  // Place volatile marker to help identify this function in stack
-  volatile int marker = 42;
-  std::cerr << "Inside testFunction with marker: " << marker << std::endl;
-  shilos::yaml::TypeError exc("Test error from testFunction");
-  return exc.stack_trace();
+void errThrowingFunction() { //
+  throw shilos::yaml::TypeError("Test error from errThrowingFunction");
 }
 
 // Dump debug info for the test function
-__attribute__((noinline)) void dumpTestDebugInfo(std::ostream &os) {
-  void *func_addr = (void *)testFunction;
-  os << "Obtained address of testFunction: " << func_addr << std::endl;
+void dumpTestDebugInfo(std::ostream &os) {
+  void *func_addr = (void *)errThrowingFunction;
+  os << "Obtained address of errThrowingFunction: " << func_addr << std::endl;
   shilos::dumpDebugInfo(func_addr, os);
   os << std::endl;
-  os << "Test stack trace:\n";
-  auto bt = testFunction();
-  os << bt;
+
+  os << "Test errThrowingFunction() call...\n";
+  errThrowingFunction();
 }
 
 int main(int argc, char **argv) {

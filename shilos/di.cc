@@ -166,6 +166,13 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
   debug_address += 0x100000000;
 #endif
 
+  // Adjust address for better debug info lookup
+  // Return addresses from backtrace() are typically one instruction past the call,
+  // so subtract 1 to get back to the call instruction which has better line info
+  if (debug_address > 0) {
+    debug_address -= 1;
+  }
+
   // Get line info from DWARF debug information
   llvm::DILineInfoSpecifier spec(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
                                  llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName);
