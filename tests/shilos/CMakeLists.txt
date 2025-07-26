@@ -76,6 +76,9 @@ function(configure_cod_target target_name)
     # Link with C++ runtime
     target_link_libraries(${target_name} PRIVATE c++ c++abi)
     
+    # Compile with debug information
+    target_compile_options(${target_name} PRIVATE -g)
+    
     # Set rpath to find shared libraries at runtime
     set_target_properties(${target_name} PROPERTIES
         INSTALL_RPATH "${COD_TOOLCHAIN_DIR}/lib"
