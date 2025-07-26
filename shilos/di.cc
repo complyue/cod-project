@@ -203,7 +203,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
 
   // vscode-clickable source location
   if (!lineInfo.FileName.empty() && lineInfo.FileName != "<invalid>") {
-    oss << " 👉 " << lineInfo.FileName << ":" << lineInfo.Line;
+    oss << "   👉 " << lineInfo.FileName << ":" << lineInfo.Line;
     if (lineInfo.Column > 0) {
       oss << ":" << lineInfo.Column;
     }
@@ -211,7 +211,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &oss) {
   }
 
   if (info.dli_fname) {
-    oss << " 📦 " << info.dli_fname;
+    oss << "📦 " << info.dli_fname;
   }
 }
 
