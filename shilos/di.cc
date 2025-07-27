@@ -48,6 +48,9 @@ void clearDebugInfoCache() {
 }
 
 llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
+  // Convert char* to std::string_view for reuse
+  std::string_view dli_fname(info.dli_fname ? info.dli_fname : "");
+
   // Check if debug info is already cached
   {
     std::lock_guard<std::mutex> lock(cache_mutex);
@@ -58,18 +61,16 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
   }
 
   // On macOS, debug info is stored in a separate dSYM bundle
-  std::string debug_file_path = info.dli_fname;
+  std::string debug_file_path(dli_fname);
 
 #ifdef __APPLE__
   // Construct the dSYM path
   // Extract just the filename from the full path
-  std::string filename = info.dli_fname;
-  auto last_slash = filename.find_last_of("/");
-  if (last_slash != std::string::npos) {
-    filename = filename.substr(last_slash + 1);
-  }
+  auto last_slash = dli_fname.find_last_of("/");
+  std::string_view filename_view =
+      (last_slash != std::string_view::npos) ? dli_fname.substr(last_slash + 1) : dli_fname;
 
-  std::string dsym_path = debug_file_path + ".dSYM/Contents/Resources/DWARF/" + filename;
+  std::string dsym_path = debug_file_path + ".dSYM/Contents/Resources/DWARF/" + std::string(filename_view);
   std::ifstream dsym_test(dsym_path);
   if (dsym_test.good()) {
     debug_file_path = dsym_path;
@@ -84,9 +85,7 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
   } else {
 // On Linux, try to use /proc/self/exe for the main executable
 #ifdef __linux__
-    // Check if it's a dynamic library (ends with .so)
-    std::string fname(info.dli_fname);
-    if (fname.ends_with(".so")) {
+    if (dli_fname.ends_with(".so")) {
       // If it's a shared object, we can't use /proc/self/exe
       return nullptr;
     }
@@ -145,11 +144,13 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
     return;
   }
 
+  // Convert char* to std::string_view for reuse
+  std::string_view dli_fname(info.dli_fname ? info.dli_fname : "");
+  std::string_view dli_sname(info.dli_sname ? info.dli_sname : "");
+
   // Check if this is an invalid frame (both function name and source location are <invalid> esque)
-  bool is_invalid_function =
-      (!info.dli_sname || std::string(info.dli_sname) == "<invalid>" || std::string(info.dli_sname).empty());
-  bool is_invalid_module =
-      (!info.dli_fname || std::string(info.dli_fname) == "<invalid>" || std::string(info.dli_fname).empty());
+  bool is_invalid_function = dli_sname == "<invalid>" || dli_sname.empty();
+  bool is_invalid_module = dli_fname == "<invalid>" || dli_fname.empty();
 
   if (is_invalid_function && is_invalid_module) {
     // Output shorter single line when both function name and src location are <invalid> esque
@@ -218,7 +219,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
     } else {
       function_name = lineInfo.FunctionName;
     }
-  } else if (info.dli_sname && std::string(info.dli_sname) != "<invalid>") {
+  } else if (!dli_sname.empty() && dli_sname != "<invalid>") {
     // Fallback to dladdr symbol name
     int status;
     char *demangled = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &status);
@@ -226,7 +227,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
       function_name = demangled;
       free(demangled);
     } else {
-      function_name = info.dli_sname;
+      function_name = dli_sname;
     }
   }
 
@@ -245,7 +246,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
   }
 
   if (info.dli_fname) {
-    os << "📦 " << info.dli_fname;
+    os << "📦 " << dli_fname;
   }
 }
 
