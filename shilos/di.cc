@@ -9,6 +9,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <unistd.h>
 
 // LLVM DWARF debug info for enhanced stack traces
 #include "llvm/DebugInfo/DIContext.h"
@@ -77,10 +78,36 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
 
   // Create a memory buffer from the binary file or dSYM
   auto buffer_or = llvm::MemoryBuffer::getFile(debug_file_path, -1, false);
-  if (!buffer_or) {
+  std::unique_ptr<llvm::MemoryBuffer> buffer;
+  if (buffer_or) {
+    buffer = std::move(buffer_or.get());
+  } else {
+// On Linux, try to use /proc/self/exe for the main executable
+#ifdef __linux__
+    // Check if it's a dynamic library (ends with .so)
+    std::string fname(info.dli_fname);
+    if (fname.ends_with(".so")) {
+      // If it's a shared object, we can't use /proc/self/exe
+      return nullptr;
+    }
+    char buf[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len != -1) {
+      buf[len] = '\0';
+      std::string main_exe_path(buf);
+      auto buffer_or2 = llvm::MemoryBuffer::getFile(main_exe_path, -1, false);
+      if (buffer_or2) {
+        buffer = std::move(buffer_or2.get());
+      } else {
+        return nullptr;
+      }
+    } else {
+      return nullptr;
+    }
+#else
     return nullptr;
+#endif
   }
-  std::unique_ptr<llvm::MemoryBuffer> buffer = std::move(buffer_or.get());
 
   // Create an object file from the buffer
   auto object_or = llvm::object::ObjectFile::createObjectFile(buffer->getMemBufferRef());
