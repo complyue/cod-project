@@ -4,6 +4,7 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
