@@ -199,10 +199,18 @@ void formatBacktraceFrame(int btDepth, void *address, std::string &last_debug_fi
 #endif
 
   // Adjust address for better debug info lookup
-  // Return addresses from backtrace() are typically one instruction past the call,
-  // so subtract 1 to get back to the call instruction which has better line info
+  // Return addresses from backtrace() are typically one instruction past the call
   if (debug_address > 0) {
+#if defined(__arm__) || defined(__aarch64__)
+    // ARM instructions are aligned, but subtracting 1 still works for line info lookup
     debug_address -= 1;
+#elif defined(__riscv)
+    // RISC-V instructions are 4-byte aligned, but -1 works for debug info
+    debug_address -= 1;
+#else
+    // x86, x64, and other architectures
+    debug_address -= 1;
+#endif
   }
 
   // Get line info from DWARF debug information
