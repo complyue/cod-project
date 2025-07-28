@@ -4,7 +4,6 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
@@ -87,7 +86,8 @@ ModuleDebugInfo *getModuleDebugInfo(const Dl_info &info) {
   } else {
 #ifdef __linux__
     // On Linux, try to use /proc/self/exe for the main executable
-    if (dli_fname.ends_with(".so")) {
+    // Check for both plain .so files and versioned .so.n files (e.g., .so.6)
+    if (dli_fname.find(".so.") != std::string_view::npos || dli_fname.ends_with(".so")) {
       // If it's a shared object, we can't use /proc/self/exe
       return nullptr;
     }
