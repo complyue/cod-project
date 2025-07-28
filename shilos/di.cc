@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <iostream>
 #include <mutex>
+#include <ostream>
 #include <sstream>
 #include <string>
 #include <unistd.h>
@@ -136,7 +137,7 @@ ModuleDebugInfo *getModuleDebugInfo(const Dl_info &info) {
   }
 }
 
-void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
+void formatBacktraceFrame(int btDepth, void *address, std::string &last_debug_file_path, std::ostringstream &os) {
   os << "#" << std::setw(2) << std::setfill(' ') << btDepth << " ";
 
   // Get the base address and path of the module containing the address
@@ -181,7 +182,10 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
       os << "🌀  " << function_name << "\n";
     }
 
-    os << "📦 " << module_info->debug_file_path;
+    if (last_debug_file_path != module_info->debug_file_path) {
+      os << "📦 " << module_info->debug_file_path << std::endl;
+      last_debug_file_path = module_info->debug_file_path;
+    }
     return;
   }
 
@@ -245,7 +249,10 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
     os << "\n";
   }
 
-  os << "📦 " << module_info->debug_file_path;
+  if (last_debug_file_path != module_info->debug_file_path) {
+    os << "📦 " << module_info->debug_file_path << std::endl;
+    last_debug_file_path = module_info->debug_file_path;
+  }
 }
 
 void dumpDebugInfo(void *address, std::ostream &os) {

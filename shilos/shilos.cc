@@ -30,9 +30,9 @@ Exception::Exception(const std::string &message) : std::runtime_error(message) {
   char **symbols = backtrace_symbols(callstack, frames);
 
   std::ostringstream oss;
+  std::string last_debug_file_path;
   for (int i = 1; i < frames - 1; ++i) {
-    formatBacktraceFrame(i, callstack[i], oss);
-    oss << "\n";
+    formatBacktraceFrame(i, callstack[i], last_debug_file_path, oss);
   }
 
   if (symbols) {
