@@ -25,7 +25,7 @@ namespace shilos {
 
 // Structure to hold cached debug information for a module
 struct ModuleDebugInfo {
-  Dl_info info;
+  std::string debug_file_path;
   std::unique_ptr<llvm::MemoryBuffer> buffer;
   std::unique_ptr<llvm::object::ObjectFile> object;
   std::unique_ptr<llvm::DWARFContext> context;
@@ -33,9 +33,9 @@ struct ModuleDebugInfo {
   // Default constructor
   ModuleDebugInfo() = default;
 
-  ModuleDebugInfo(const Dl_info &module_info, std::unique_ptr<llvm::MemoryBuffer> buf,
+  ModuleDebugInfo(const std::string &path, std::unique_ptr<llvm::MemoryBuffer> buf,
                   std::unique_ptr<llvm::object::ObjectFile> obj, std::unique_ptr<llvm::DWARFContext> ctx)
-      : info(module_info), buffer(std::move(buf)), object(std::move(obj)), context(std::move(ctx)) {}
+      : debug_file_path(path), buffer(std::move(buf)), object(std::move(obj)), context(std::move(ctx)) {}
 };
 
 // Cache for module debug information, keyed by the module's file path
@@ -48,7 +48,7 @@ void clearDebugInfoCache() {
   debug_info_cache.clear();
 }
 
-llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
+ModuleDebugInfo *getModuleDebugInfo(const Dl_info &info) {
   // Convert char* to std::string_view for reuse
   std::string_view dli_fname(info.dli_fname ? info.dli_fname : "");
 
@@ -57,14 +57,14 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
     std::lock_guard<std::mutex> lock(cache_mutex);
     auto it = debug_info_cache.find(info.dli_fname);
     if (it != debug_info_cache.end()) {
-      return it->second.context.get();
+      return &it->second;
     }
   }
 
-  // On macOS, debug info is stored in a separate dSYM bundle
   std::string debug_file_path(dli_fname);
 
 #ifdef __APPLE__
+  // On macOS, debug info is stored in a separate dSYM bundle
   // Construct the dSYM path
   // Extract just the filename from the full path
   auto last_slash = dli_fname.find_last_of("/");
@@ -84,8 +84,8 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
   if (buffer_or) {
     buffer = std::move(buffer_or.get());
   } else {
-// On Linux, try to use /proc/self/exe for the main executable
 #ifdef __linux__
+    // On Linux, try to use /proc/self/exe for the main executable
     if (dli_fname.ends_with(".so")) {
       // If it's a shared object, we can't use /proc/self/exe
       return nullptr;
@@ -105,6 +105,7 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
       return nullptr;
     }
 #else
+    // fail on other platforms
     return nullptr;
 #endif
   }
@@ -128,10 +129,10 @@ llvm::DWARFContext *getModuleDebugInfo(const Dl_info &info) {
     // Check again for race condition
     auto it = debug_info_cache.find(info.dli_fname);
     if (it == debug_info_cache.end()) {
-      debug_info_cache.emplace(info.dli_fname,
-                               ModuleDebugInfo(info, std::move(buffer), std::move(object), std::move(context)));
+      debug_info_cache.emplace(info.dli_fname, ModuleDebugInfo(std::move(debug_file_path), std::move(buffer),
+                                                               std::move(object), std::move(context)));
     }
-    return debug_info_cache[info.dli_fname].context.get();
+    return &debug_info_cache[info.dli_fname];
   }
 }
 
@@ -159,8 +160,8 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
     return;
   }
 
-  auto *context = getModuleDebugInfo(info);
-  if (!context) {
+  auto *module_info = getModuleDebugInfo(info);
+  if (!module_info) {
     // If no debug context, fall back to dladdr symbol name
     std::string function_name;
     if (info.dli_sname && std::string(info.dli_sname) != "<invalid>") {
@@ -180,9 +181,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
       os << "🌀  " << function_name << "\n";
     }
 
-    if (info.dli_fname) {
-      os << "📦 " << info.dli_fname;
-    }
+    os << "📦 " << module_info->debug_file_path;
     return;
   }
 
@@ -206,7 +205,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
   llvm::DILineInfoSpecifier spec(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
                                  llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName);
   llvm::object::SectionedAddress sectionedAddr = {debug_address, (uint64_t)-1LL};
-  llvm::DILineInfo lineInfo = context->getLineInfoForAddress(sectionedAddr, spec);
+  llvm::DILineInfo lineInfo = module_info->context->getLineInfoForAddress(sectionedAddr, spec);
 
   // Prefer DWARF function name, demangled if possible
   std::string function_name;
@@ -246,9 +245,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::ostringstream &os) {
     os << "\n";
   }
 
-  if (info.dli_fname) {
-    os << "📦 " << dli_fname;
-  }
+  os << "📦 " << module_info->debug_file_path;
 }
 
 void dumpDebugInfo(void *address, std::ostream &os) {
@@ -263,8 +260,8 @@ void dumpDebugInfo(void *address, std::ostream &os) {
   }
 
   // Get debug context for the module
-  auto *context = getModuleDebugInfo(info);
-  if (!context) {
+  auto *module_info = getModuleDebugInfo(info);
+  if (!module_info) {
     os << "  No debug context available for module" << std::endl;
     os << "=== End Debug Info Dump ===" << std::endl;
     return;
@@ -285,7 +282,7 @@ void dumpDebugInfo(void *address, std::ostream &os) {
 
   // Get line info for the address
   llvm::object::SectionedAddress sectionedAddr = {debug_address, (uint64_t)-1LL};
-  llvm::DILineInfo lineInfo = context->getLineInfoForAddress(sectionedAddr, spec);
+  llvm::DILineInfo lineInfo = module_info->context->getLineInfoForAddress(sectionedAddr, spec);
 
   // Dump the comprehensive debug information
   os << "  Function: " << (lineInfo.FunctionName.empty() ? "<unknown>" : lineInfo.FunctionName) << std::endl;
@@ -308,8 +305,9 @@ void dumpDebugInfo(void *address, std::ostream &os) {
     }
   }
 
-  os << "  Symbol (dladdr): " << function_name << std::endl;
-  os << "  Module: " << info.dli_fname << std::endl;
+  os << "  Symbol     (dladdr): " << function_name << std::endl;
+  os << "  Module     (dladdr): " << info.dli_fname << std::endl;
+  os << "  Module (debug info): " << module_info->debug_file_path << std::endl;
 
   os << "=== End Debug Info Dump ===" << std::endl;
 }
