@@ -12,7 +12,7 @@ deps:
       - main
       - feature
   - uuid: "33333333-3333-3333-3333-333333333333"
-    name: local_dep
+    name: local-dep
     repo_url: local_dep
     branches:
       - main

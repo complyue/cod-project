@@ -290,6 +290,8 @@ int main(int argc, char **argv) {
         CodProject *project = region->root().get();
         cod::project::from_yaml<CodProject>(*region, doc.root(), project);
 
+        std::string dep_name;
+
         // If UUID not provided, check if repo_url is a local path
         if (uuid_str.empty()) {
           if (is_remote_repo_url(repo_url)) {
@@ -313,6 +315,7 @@ int main(int argc, char **argv) {
             CodProject *dep_project = dep_region->root().get();
             cod::project::from_yaml<CodProject>(*dep_region, dep_doc.root(), dep_project);
             uuid_str = dep_project->uuid().to_string();
+            dep_name = std::string(dep_project->name()); // Use name from local CodProject.yaml
           } catch (const yaml::Exception &err) {
             std::cerr << "YAML Error: " << err.what() << std::endl;
             std::cerr << "Stack trace:\n" << err.stack_trace() << std::endl;
@@ -329,21 +332,22 @@ int main(int argc, char **argv) {
           }
         }
 
-        // Create new dependency with a default name based on repo URL
-        std::string dep_name;
-        if (is_remote_repo_url(repo_url)) {
-          // Extract repo name from URL
-          fs::path repo_path(repo_url);
-          dep_name = repo_path.stem().string();
-          if (dep_name.empty()) {
-            dep_name = "dep-" + uuid_str.substr(0, 8);
-          }
-        } else {
-          // For local dependencies, use directory name
-          fs::path local_path(repo_url);
-          dep_name = local_path.filename().string();
-          if (dep_name.empty()) {
-            dep_name = "local-dep";
+        // If dep_name is still empty (remote repo or local without name), generate one
+        if (dep_name.empty()) {
+          if (is_remote_repo_url(repo_url)) {
+            // Extract repo name from URL
+            fs::path repo_path(repo_url);
+            dep_name = repo_path.stem().string();
+            if (dep_name.empty()) {
+              dep_name = "dep-" + uuid_str.substr(0, 8);
+            }
+          } else {
+            // For local dependencies, use directory name as fallback
+            fs::path local_path(repo_url);
+            dep_name = local_path.filename().string();
+            if (dep_name.empty()) {
+              dep_name = "local-dep";
+            }
           }
         }
         CodDep *new_dep = new (region->allocate<CodDep>()) CodDep(*region, new_uuid, dep_name, repo_url, "");
@@ -421,33 +425,60 @@ int main(int argc, char **argv) {
           throw std::runtime_error("dependency with identifier '" + identifier + "' not found");
         }
 
-        // Create new project with updated deps
-        CodProject *new_project = region->root().get();
-        new (new_project) CodProject(*region, project->uuid(), std::string_view(project->name()),
-                                     std::string_view(project->repo_url()));
+        // Save data from original project before overwriting
+        UUID orig_uuid = project->uuid();
+        std::string orig_name(project->name());
+        std::string orig_repo_url(project->repo_url());
 
-        // Copy branches
+        // Save branches
+        std::vector<std::string> orig_branches;
         for (const regional_str &branch : project->branches()) {
-          new_project->branches().enque(*region, std::string_view(branch));
+          orig_branches.emplace_back(branch);
         }
 
-        // Copy deps except the target
+        // Save deps (except the target)
+        struct SavedDep {
+          UUID uuid;
+          std::string name;
+          std::string repo_url;
+          std::string path;
+          std::vector<std::string> branches;
+        };
+
+        std::vector<SavedDep> saved_deps;
         for (const CodDep &dep : project->deps()) {
           if (dep.uuid() != target_dep->uuid()) {
-            CodDep *new_dep =
-                new (region->allocate<CodDep>()) CodDep(*region, dep.uuid(), std::string_view(dep.name()),
-                                                        std::string_view(dep.repo_url()), std::string_view(dep.path()));
+            SavedDep saved;
+            saved.uuid = dep.uuid();
+            saved.name = std::string(dep.name());
+            saved.repo_url = std::string(dep.repo_url());
+            saved.path = std::string(dep.path());
+            for (const regional_str &branch : dep.branches()) {
+              saved.branches.emplace_back(branch);
+            }
+            saved_deps.push_back(std::move(saved));
+          }
+        }
+
+        // Create new project at root location
+        CodProject *new_project = region->root().get();
+        new (new_project) CodProject(*region, orig_uuid, orig_name, orig_repo_url);
+
+        // Copy branches
+        for (const std::string &branch : orig_branches) {
+          new_project->branches().enque(*region, branch);
+        }
+
+        // Copy saved deps
+        for (const SavedDep &saved : saved_deps) {
+          new_project->deps().emplace_init(*region, [&](CodDep *new_dep) {
+            new (new_dep) CodDep(*region, saved.uuid, saved.name, saved.repo_url, saved.path);
 
             // Copy branches
-            for (const regional_str &branch : dep.branches()) {
-              new_dep->branches().enque(*region, std::string_view(branch));
+            for (const std::string &branch : saved.branches) {
+              new_dep->branches().enque(*region, branch);
             }
-
-            new_project->deps().emplace_init(*region, [&](CodDep *dep) {
-              new (dep) CodDep(*region, new_dep->uuid(), std::string_view(new_dep->name()),
-                               std::string_view(new_dep->repo_url()), std::string_view(new_dep->path()));
-            });
-          }
+          });
         }
 
         // Save the project

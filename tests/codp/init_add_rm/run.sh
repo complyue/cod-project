@@ -96,7 +96,7 @@ echo "  ✓ add with UUID test passed"
 # Test 3: add command with local path
 echo "  Testing add with local path..."
 mkdir -p local_dep
-printf 'uuid: "33333333-3333-3333-3333-333333333333"\nname: localdep\nrepo_url: https://github.com/local/dep.git\nbranches:\n  - main\n' > local_dep/CodProject.yaml
+printf 'uuid: "33333333-3333-3333-3333-333333333333"\nname: local-dep\nrepo_url: https://github.com/local/dep.git\nbranches:\n  - main\n' > local_dep/CodProject.yaml
 
 codp add "local_dep" main
 
@@ -132,6 +132,7 @@ echo "  ✓ rm by UUID test passed"
 echo "  Testing rm by name..."
 
 # Add a named dependency first
+mkdir -p local_dep2
 printf 'uuid: "44444444-4444-4444-4444-444444444444"\nname: testdep\nrepo_url: https://github.com/test/dep2.git\nbranches:\n  - main\n' > local_dep2/CodProject.yaml
 
 codp add "local_dep2" main

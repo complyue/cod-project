@@ -6,7 +6,7 @@ branches:
   - dev
 deps:
   - uuid: "33333333-3333-3333-3333-333333333333"
-    name: localdep
+    name: local-dep
     repo_url: local_dep
     branches:
       - main

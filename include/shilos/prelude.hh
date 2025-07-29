@@ -605,7 +605,7 @@ public:
         if (i > 0) {
           oss << "---\n";
         }
-        oss << format_yaml(documents_[i]);
+        oss << format_yaml(documents_[i]) << std::endl;
       }
       source_ = oss.str();
 
@@ -632,7 +632,7 @@ public:
           if (i > 0) {
             ofs << "---\n";
           }
-          ofs << format_yaml(documents_[i]);
+          ofs << format_yaml(documents_[i]) << std::endl;
         }
 
         if (!ofs) {

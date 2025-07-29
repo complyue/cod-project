@@ -1398,26 +1398,12 @@ void format_mapping(std::ostream &os, const Map &map, int indent) {
 }
 
 void format_yaml(std::ostream &os, const Node &node, int indent) {
-  std::visit(
-      [&os, indent](auto &&arg) {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, std::monostate>) {
-          os << "null";
-        } else if constexpr (std::is_same_v<T, bool>) {
-          os << (arg ? "true" : "false");
-        } else if constexpr (std::is_same_v<T, int64_t>) {
-          os << arg;
-        } else if constexpr (std::is_same_v<T, double>) {
-          os << arg;
-        } else if constexpr (std::is_same_v<T, std::string_view>) {
-          format_scalar(os, arg);
-        } else if constexpr (std::is_same_v<T, Sequence>) {
-          format_sequence(os, arg, indent);
-        } else if constexpr (std::is_same_v<T, Map>) {
-          format_mapping(os, arg, indent);
-        }
-      },
-      node.value);
+  vswitch(
+      node.value, [&os](std::monostate) { os << "null"; }, [&os](bool arg) { os << (arg ? "true" : "false"); },
+      [&os](int64_t arg) { os << arg; }, [&os](double arg) { os << arg; },
+      [&os](const std::string_view &arg) { format_scalar(os, arg); },
+      [&os, indent](const Sequence &arg) { format_sequence(os, arg, indent); },
+      [&os, indent](const Map &arg) { format_mapping(os, arg, indent); });
 }
 
 std::ostream &operator<<(std::ostream &os, const Node &node) {

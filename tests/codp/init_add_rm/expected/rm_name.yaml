@@ -4,3 +4,9 @@ repo_url: "https://github.com/test/testpkg.git"
 branches:
   - main
   - dev
+deps:
+  - uuid: "33333333-3333-3333-3333-333333333333"
+    name: local-dep
+    repo_url: local_dep
+    branches:
+      - main
