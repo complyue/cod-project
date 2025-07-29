@@ -571,15 +571,37 @@ Node parse_sequence(ParseState &state) {
   node.value = Sequence{};
   auto &seq = std::get<Sequence>(node.value);
 
+  // Track the minimum indentation for items in this sequence
+  std::string_view min_item_indent;
+
   while (!state.at_end()) {
     advance_to_next_content(state);
     if (state.at_end())
       break;
 
-    // Check for list item marker
-    if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
-      // This is a list item, parse it as part of this sequence
+    std::string_view current_indent = state.current_line_indentation();
+    std::string_view current_whitespace_indent = state.current_line_whitespace_indentation();
 
+    // Validate indentation consistency
+    state.validate_indentation(current_whitespace_indent);
+
+    // Check if this is a list item marker
+    if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+      // Check indentation level
+      if (!min_item_indent.empty()) {
+        auto relation = compare_indentation(current_whitespace_indent, min_item_indent);
+        if (relation == IndentRelation::Less || relation == IndentRelation::Incompatible) {
+          // Indentation is less than minimum, this item belongs to a parent level
+          break;
+        }
+      }
+
+      // Set minimum item indentation from first item
+      if (min_item_indent.empty()) {
+        min_item_indent = current_whitespace_indent;
+      }
+
+      // This is a list item, parse it as part of this sequence
       state.advance(); // Skip '-'
       state.skip_whitespace_inline();
 
