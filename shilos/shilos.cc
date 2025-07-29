@@ -251,7 +251,7 @@ bool is_indentation_greater(std::string_view current, std::string_view base) {
 Node parse_document(ParseState &state);
 Node parse_value(ParseState &state);
 Node parse_mapping(ParseState &state);
-Node parse_sequence(ParseState &state);
+Node parse_sequence(ParseState &state, std::string_view parent_container_indent = {});
 Node parse_json_mapping(ParseState &state);
 Node parse_json_sequence(ParseState &state);
 Node parse_json_value(ParseState &state);
@@ -566,20 +566,24 @@ std::string_view parse_scalar(ParseState &state) {
   }
 }
 
-Node parse_sequence(ParseState &state) {
+Node parse_sequence(ParseState &state, std::string_view parent_container_indent) {
   Node node;
   node.value = Sequence{};
   auto &seq = std::get<Sequence>(node.value);
 
-  // Track the minimum indentation for items in this sequence
-  std::string_view min_item_indent;
+  // Track the parent container's indentation as reference
+  std::string_view parent_indent = parent_container_indent;
+
+  // If no parent container indent was provided, use the current line's indent
+  if (parent_indent.empty() && !state.current_line_whitespace_indentation().empty()) {
+    parent_indent = state.current_line_whitespace_indentation();
+  }
 
   while (!state.at_end()) {
     advance_to_next_content(state);
     if (state.at_end())
       break;
 
-    std::string_view current_indent = state.current_line_indentation();
     std::string_view current_whitespace_indent = state.current_line_whitespace_indentation();
 
     // Validate indentation consistency
@@ -587,18 +591,14 @@ Node parse_sequence(ParseState &state) {
 
     // Check if this is a list item marker
     if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
-      // Check indentation level
-      if (!min_item_indent.empty()) {
-        auto relation = compare_indentation(current_whitespace_indent, min_item_indent);
+      // Check if this item belongs to this sequence
+      // All sequence items must be at the same level or deeper than the parent
+      if (!parent_indent.empty()) {
+        auto relation = compare_indentation(current_whitespace_indent, parent_indent);
         if (relation == IndentRelation::Less || relation == IndentRelation::Incompatible) {
-          // Indentation is less than minimum, this item belongs to a parent level
+          // This item is at a shallower level than the parent, belongs to parent
           break;
         }
-      }
-
-      // Set minimum item indentation from first item
-      if (min_item_indent.empty()) {
-        min_item_indent = current_whitespace_indent;
       }
 
       // This is a list item, parse it as part of this sequence
@@ -697,8 +697,13 @@ Node parse_mapping(ParseState &state) {
         // No value or value at same/lower indentation = null
         value = Node(std::monostate{});
       } else {
-        // Value on next line with higher indentation - let parse_value detect natural indentation
-        value = parse_value(state);
+        // Value on next line with higher indentation - use current_indent as parent for sequences
+        // Check if this is a sequence starting with -
+        if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+          value = parse_sequence(state, current_indent);
+        } else {
+          value = parse_value(state);
+        }
       }
     } else {
       // Value on same line
@@ -706,6 +711,9 @@ Node parse_mapping(ParseState &state) {
         // Quoted strings should be treated as strings directly (even if empty)
         std::string_view str = parse_quoted_string(state);
         value = Node(std::string_view(str));
+      } else if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+        // Sequence on same line - use current_indent as parent
+        value = parse_sequence(state, current_indent);
       } else {
         value = parse_value(state);
       }
@@ -1038,7 +1046,7 @@ Node parse_value(ParseState &state) {
   // Check for sequence (list starting with -)
   if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
     // Parse as sequence
-    return parse_sequence(state);
+    return parse_sequence(state, {});
   }
 
   state.skip_whitespace_inline();
