@@ -1,3 +1,9 @@
+# Test case: CoD project structure with formatting issues
+# This tests the formatter's ability to handle:
+# - Extra spaces around colons in key-value pairs
+# - Inconsistent quote usage (some values quoted, some not)
+# - Varying amounts of space before and after colons
+# - Mixed indentation and trailing whitespace
 uuid: "11111111-1111-1111-1111-111111111111"
 name: rootpkg
 repo_url: /root/pkg/url

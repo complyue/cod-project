@@ -1,3 +1,10 @@
+# Test case: Mixed indentation with formatting issues
+# This tests the formatter's ability to handle:
+# - Mixed use of tabs and spaces for indentation
+# - Inconsistent indentation levels (some lines over-indented)
+# - Extra spaces in various places (before colons, within values)
+# - Mixed quote styles and trailing whitespace
+# - Inconsistent array item indentation
 server: 
   name: web-server
   port: 8080

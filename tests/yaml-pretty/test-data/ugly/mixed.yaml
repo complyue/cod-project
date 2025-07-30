@@ -1,10 +1,17 @@
+# Test case: Mixed data types with formatting issues
+# This tests the formatter's ability to handle:
+# - Extra spaces around numeric values (version, memory, cpu fields)
+# - Inconsistent array formatting (brackets vs no brackets)
+# - Extra spaces within array elements and commas
+# - Inconsistent spacing around colons and values
+# - Mixed quote styles and trailing whitespace
 config:
   version:    1.2
   enabled: true
-  tags:   [ "production" ,  "web", "api"  ] 
+  tags:   [ "production" ,  "web", "api"  ]
   limits:
     memory:    512
-    cpu:   2.5  
+    cpu:   2.5
   metadata:
     created:   "2023-01-01"
-    owner:  null 
+    owner:  null

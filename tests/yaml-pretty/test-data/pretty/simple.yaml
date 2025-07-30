@@ -1,1 +1,7 @@
+# Test case: Simple key-value pairs with formatting issues
+# This tests the formatter's ability to handle:
+# - Inconsistent indentation (leading spaces)
+# - Extra spaces around colons and values
+# - Inconsistent quote usage (some values quoted, some not)
+# - Trailing whitespace
 name: John Doe

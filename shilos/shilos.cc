@@ -709,6 +709,13 @@ Node parse_mapping(ParseState &state) {
   // Track the minimum indentation required for keys in this mapping
   std::string_view min_key_indent;
 
+  // Store any pending comments that were collected before this mapping started
+  // These should be assigned to the mapping itself, not to individual key-value pairs
+  std::vector<std::string_view> mapping_leading_comments;
+  if (!state.pending_comments.empty()) {
+    mapping_leading_comments = std::move(state.pending_comments);
+  }
+
   while (!state.at_end()) {
     advance_to_next_content(state);
     if (state.at_end())
@@ -755,6 +762,16 @@ Node parse_mapping(ParseState &state) {
 
     state.advance(); // Skip ':'
     state.skip_whitespace_inline();
+
+    // Check for and handle trailing comment on the same line as the key
+    std::string_view trailing_comment = state.get_trailing_comment();
+    if (!trailing_comment.empty()) {
+      // Skip the comment content since it's already captured
+      state.skip_to_end_of_line();
+      if (state.current() == '\n') {
+        state.advance();
+      }
+    }
 
     // Parse value
     Node value;
@@ -804,6 +821,11 @@ Node parse_mapping(ParseState &state) {
     map.emplace(key, value);
   }
 
+  // Assign the leading comments to the mapping node itself
+  node.leading_comments = std::move(mapping_leading_comments);
+
+  // Assign any remaining pending comments to the mapping node itself
+  state.assign_pending_comments(node);
   return node;
 }
 
@@ -1333,10 +1355,17 @@ Node parse_document(ParseState &state) {
   }
 
   if (state.at_end()) {
-    return Node(std::monostate{});
+    Node node(std::monostate{});
+    state.assign_pending_comments(node);
+    return node;
   }
 
-  return parse_value(state);
+  Node root = parse_value(state);
+
+  // Any remaining pending comments should be assigned to the root node
+  state.assign_pending_comments(root);
+
+  return root;
 }
 
 // Parse multiple documents from a YAML stream

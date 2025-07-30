@@ -23,33 +23,58 @@ void print_node_tree(const yaml::Node &node, int depth = 0, const std::string &k
     std::cout << "ROOT: ";
   }
 
+  // Print leading comments if any
+  if (!node.leading_comments.empty()) {
+    std::cout << "LEADING_COMMENT: [";
+    for (size_t i = 0; i < node.leading_comments.size(); ++i) {
+      if (i > 0)
+        std::cout << ", ";
+      std::cout << "\"" << node.leading_comments[i] << "\"";
+    }
+    std::cout << "] ";
+  }
+
   if (node.IsNull()) {
-    std::cout << "NULL" << std::endl;
+    std::cout << "NULL";
   } else if (node.IsScalar()) {
     if (auto b = std::get_if<bool>(&node.value)) {
-      std::cout << "BOOL: " << (*b ? "true" : "false") << std::endl;
+      std::cout << "BOOL: " << (*b ? "true" : "false");
     } else if (auto i = std::get_if<int64_t>(&node.value)) {
-      std::cout << "INT: " << *i << std::endl;
+      std::cout << "INT: " << *i;
     } else if (auto d = std::get_if<double>(&node.value)) {
-      std::cout << "DOUBLE: " << *d << std::endl;
+      std::cout << "DOUBLE: " << *d;
     } else if (auto s = std::get_if<std::string_view>(&node.value)) {
-      std::cout << "STRING: \"" << *s << "\"" << std::endl;
+      std::cout << "STRING: \"" << *s << "\"";
     }
   } else if (node.IsSequence()) {
     const auto &seq = std::get<yaml::Sequence>(node.value);
-    std::cout << "SEQUENCE (" << seq.size() << " items)" << std::endl;
+    std::cout << "SEQUENCE (" << seq.size() << " items)";
+  } else if (node.IsMap()) {
+    const auto &map = std::get<yaml::Map>(node.value);
+    std::cout << "MAP (" << map.size() << " entries)";
+  } else {
+    std::cout << "UNKNOWN TYPE";
+  }
+
+  // Print trailing comment if any
+  if (!node.trailing_comment.empty()) {
+    std::cout << " TRAILING_COMMENT: \"" << node.trailing_comment << "\"";
+  }
+
+  std::cout << std::endl;
+
+  // Recursively print children
+  if (node.IsSequence()) {
+    const auto &seq = std::get<yaml::Sequence>(node.value);
     for (size_t i = 0; i < seq.size(); ++i) {
       std::cout << indent << "  [" << i << "]:" << std::endl;
       print_node_tree(seq[i], depth + 2);
     }
   } else if (node.IsMap()) {
     const auto &map = std::get<yaml::Map>(node.value);
-    std::cout << "MAP (" << map.size() << " entries)" << std::endl;
     for (const auto &entry : map) {
       print_node_tree(entry.value, depth + 1, std::string(entry.key));
     }
-  } else {
-    std::cout << "UNKNOWN TYPE" << std::endl;
   }
 }
 

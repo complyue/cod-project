@@ -1,3 +1,10 @@
+# Test case: Nested objects with arrays and formatting issues
+# This tests the formatter's ability to handle:
+# - Inconsistent spacing around colons (extra spaces before/after)
+# - Varying indentation levels (inconsistent depth)
+# - Extra spaces around values and quotes
+# - Inconsistent array item indentation
+# - Mixed quote styles and trailing whitespace
 person: 
   name: Alice
   age: 25
