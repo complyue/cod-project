@@ -210,9 +210,8 @@ int main(int argc, char **argv) {
       }
 
       // Create new project
-      auto_region<CodProject> region(1024 * 1024);
+      auto_region<CodProject> region(1024 * 1024, UUID(uuid_str), name, repo_url);
       CodProject *project = region->root().get();
-      new (project) CodProject(*region, UUID(uuid_str), name, repo_url);
 
       // Add branches
       for (const std::string &branch : branches) {
@@ -560,9 +559,8 @@ int main(int argc, char **argv) {
       // -----------------------------------------------------------------
 
       // Create manifest region and populate it
-      auto_region<CodManifest> manifest_region(1024 * 1024);
+      auto_region<CodManifest> manifest_region(1024 * 1024, project->uuid(), std::string_view(project->repo_url()));
       CodManifest *manifest = manifest_region->root().get();
-      new (manifest) CodManifest(*manifest_region, project->uuid(), std::string_view(project->repo_url()));
 
       // Collect dependencies recursively using temporary data structures
       std::unordered_set<std::string> visited;
