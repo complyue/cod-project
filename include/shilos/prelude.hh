@@ -221,6 +221,10 @@ struct Node {
 
   Value value;
 
+  // Comment preservation - stored as string_view for efficiency
+  std::vector<std::string_view> leading_comments; // Comments before this node
+  std::string_view trailing_comment;              // Comment on same line after node
+
   // Allow YamlAuthor and YamlDocument to access private members for modification during authoring
   friend class Author;
   friend class Document;

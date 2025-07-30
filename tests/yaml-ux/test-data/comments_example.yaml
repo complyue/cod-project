@@ -1,0 +1,42 @@
+# Configuration file with comments
+# This demonstrates comment preservation
+
+application:  # Main application settings
+  name: "My Application"  # The application name
+  version: "1.0.0"
+  
+  # Server configuration section
+  server:
+    host: "localhost"  # Development host
+    port: 8080
+    # SSL settings
+    ssl:
+      enabled: true  # Enable SSL in production
+      cert_path: "/etc/ssl/certs/app.crt"
+
+# Database configuration
+database:
+  host: "db.example.com"
+  port: 5432
+  # Connection settings
+  connection_pool:
+    min_connections: 5  # Minimum pool size
+    max_connections: 20
+
+# Feature list with comments
+features:
+  # Core features
+  - authentication  # User authentication
+  - logging
+  # Optional features  
+  - metrics  # Performance metrics
+  - caching
+
+# Logging configuration
+logging:
+  level: "INFO"  # Log level
+  # Output destinations
+  destinations:
+    - type: "console"  # Console output
+    - type: "file"
+      path: "/var/log/app.log"  # Log file path

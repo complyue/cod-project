@@ -1,0 +1,5 @@
+# This is a top comment
+name: "test"  # This is a trailing comment
+
+# Another comment
+value: 42

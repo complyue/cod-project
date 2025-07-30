@@ -69,6 +69,9 @@ struct ParseState {
   // Anchor/alias tracking
   std::unordered_map<std::string_view, Node> anchors; // Maps anchor names to their nodes
 
+  // Comment preservation
+  std::vector<std::string_view> pending_comments; // Comments collected but not yet associated with a node
+
   explicit ParseState(std::string filename, std::string_view str) : filename(std::move(filename)), input(str) {}
 
   char current() const { return (pos < input.size()) ? input[pos] : '\0'; }
@@ -132,6 +135,73 @@ struct ParseState {
 
   // Store an owned string and return a view to it (for escaped strings)
   std::string_view store_owned_string(std::string str) { return owned_strings.insert(std::move(str)); }
+
+  // Comment parsing helpers
+  std::string_view parse_comment() {
+    if (current() != '#')
+      return std::string_view{};
+
+    size_t start_pos = pos;
+    advance(); // Skip '#'
+
+    // Skip leading whitespace after #
+    while (!at_end() && current() == ' ') {
+      advance();
+    }
+
+    size_t content_start = pos;
+
+    // Read until end of line
+    while (!at_end() && current() != '\n' && current() != '\r') {
+      advance();
+    }
+
+    size_t content_end = pos;
+
+    // Trim trailing whitespace from comment content
+    while (content_end > content_start && (input[content_end - 1] == ' ' || input[content_end - 1] == '\t')) {
+      content_end--;
+    }
+
+    // Return the entire comment including # symbol for formatting consistency
+    return make_view(start_pos, content_end);
+  }
+
+  // Check if there's a comment on the current line after the current position
+  std::string_view get_trailing_comment() {
+    size_t saved_pos = pos;
+    size_t saved_line = line;
+    size_t saved_column = column;
+
+    // Skip whitespace on current line
+    while (!at_end() && (current() == ' ' || current() == '\t')) {
+      advance();
+    }
+
+    std::string_view comment;
+    if (current() == '#') {
+      comment = parse_comment();
+    }
+
+    // Restore position
+    pos = saved_pos;
+    line = saved_line;
+    column = saved_column;
+
+    return comment;
+  }
+
+  // Collect pending comments and assign them to a node
+  void assign_pending_comments(Node &node) {
+    // Only assign pending comments if they exist
+    if (!pending_comments.empty()) {
+      node.leading_comments = std::move(pending_comments);
+      pending_comments.clear();
+    }
+
+    // Check for trailing comment on same line
+    node.trailing_comment = get_trailing_comment();
+  }
 
   // Validate indentation compatibility - only throws on truly incompatible indentation
   //
@@ -268,8 +338,11 @@ void advance_to_next_content(ParseState &state) {
     state.skip_whitespace_inline();
 
     if (state.current() == '#') {
-      // Skip comment line
-      state.skip_to_end_of_line();
+      // Collect comment instead of skipping it
+      std::string_view comment = state.parse_comment();
+      if (!comment.empty()) {
+        state.pending_comments.push_back(comment);
+      }
       if (state.current() == '\n') {
         state.advance(); // This will update line_begin_pos
       }
@@ -607,7 +680,9 @@ Node parse_sequence(ParseState &state, std::string_view parent_container_indent)
 
       if (state.current() == '\n' || state.at_end()) {
         // Empty list item
-        seq.push_back(Node(std::monostate{}));
+        Node empty_item(std::monostate{});
+        state.assign_pending_comments(empty_item);
+        seq.push_back(empty_item);
         if (state.current() == '\n')
           state.advance();
       } else {
@@ -621,6 +696,8 @@ Node parse_sequence(ParseState &state, std::string_view parent_container_indent)
     }
   }
 
+  // Assign any remaining pending comments to the sequence node itself
+  state.assign_pending_comments(node);
   return node;
 }
 
@@ -1030,61 +1107,61 @@ Node parse_tagged_value(ParseState &state) {
 Node parse_value(ParseState &state) {
   advance_to_next_content(state);
   if (state.at_end()) {
-    return Node(std::monostate{});
+    Node node(std::monostate{});
+    state.assign_pending_comments(node);
+    return node;
   }
+
+  Node result;
 
   // Check for alias (*alias)
   if (state.current() == '*') {
-    return parse_alias(state);
+    result = parse_alias(state);
   }
-
   // Check for explicit type tag (!!type)
-  if (state.current() == '!' && state.peek() == '!') {
-    return parse_tagged_value(state);
+  else if (state.current() == '!' && state.peek() == '!') {
+    result = parse_tagged_value(state);
   }
-
   // Check for sequence (list starting with -)
-  if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+  else if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
     // Parse as sequence
-    return parse_sequence(state, {});
-  }
-
-  state.skip_whitespace_inline();
-
-  // Check for anchor (&anchor)
-  if (state.current() == '&') {
-    return parse_anchored_value(state);
-  }
-
-  // Check for inline JSON-style structures
-  if (state.current() == '{') {
-    return parse_json_mapping(state);
-  }
-
-  if (state.current() == '[') {
-    return parse_json_sequence(state);
-  }
-
-  // Check if this looks like a mapping using efficient limited lookahead
-  if (looks_like_mapping_efficient(state)) {
-    return parse_mapping(state);
-  }
-
-  // Check for multi-line scalars (literal | and folded >)
-  if (state.current() == '|' || state.current() == '>') {
-    return parse_multiline_scalar(state);
-  }
-
-  // Otherwise, parse as scalar
-  if (state.current() == '"' || state.current() == '\'') {
-    // Quoted strings should be treated as strings directly (even if empty)
-    std::string_view str = parse_quoted_string(state);
-    return Node(std::string_view(str));
+    result = parse_sequence(state, {});
   } else {
-    // Unquoted scalars go through scalar value parsing
-    std::string_view scalar_text = parse_unquoted_scalar(state);
-    return parse_scalar_value(scalar_text);
+    state.skip_whitespace_inline();
+
+    // Check for anchor (&anchor)
+    if (state.current() == '&') {
+      result = parse_anchored_value(state);
+    }
+    // Check for inline JSON-style structures
+    else if (state.current() == '{') {
+      result = parse_json_mapping(state);
+    } else if (state.current() == '[') {
+      result = parse_json_sequence(state);
+    }
+    // Check if this looks like a mapping using efficient limited lookahead
+    else if (looks_like_mapping_efficient(state)) {
+      result = parse_mapping(state);
+    }
+    // Check for multi-line scalars (literal | and folded >)
+    else if (state.current() == '|' || state.current() == '>') {
+      result = parse_multiline_scalar(state);
+    }
+    // Otherwise, parse as scalar
+    else if (state.current() == '"' || state.current() == '\'') {
+      // Quoted strings should be treated as strings directly (even if empty)
+      std::string_view str = parse_quoted_string(state);
+      result = Node(std::string_view(str));
+    } else {
+      // Unquoted scalars go through scalar value parsing
+      std::string_view scalar_text = parse_unquoted_scalar(state);
+      result = parse_scalar_value(scalar_text);
+    }
   }
+
+  // Assign pending comments to the parsed node
+  state.assign_pending_comments(result);
+  return result;
 }
 
 // JSON value parsing that stops at commas and closing brackets
@@ -1398,12 +1475,26 @@ void format_mapping(std::ostream &os, const Map &map, int indent) {
 }
 
 void format_yaml(std::ostream &os, const Node &node, int indent) {
+  // Output leading comments with proper indentation
+  for (const auto &comment : node.leading_comments) {
+    if (indent > 0) {
+      os << std::string(indent, ' ');
+    }
+    os << comment << "\n";
+  }
+
+  // Output the node value
   vswitch(
       node.value, [&os](std::monostate) { os << "null"; }, [&os](bool arg) { os << (arg ? "true" : "false"); },
       [&os](int64_t arg) { os << arg; }, [&os](double arg) { os << arg; },
       [&os](const std::string_view &arg) { format_scalar(os, arg); },
       [&os, indent](const Sequence &arg) { format_sequence(os, arg, indent); },
       [&os, indent](const Map &arg) { format_mapping(os, arg, indent); });
+
+  // Output trailing comment
+  if (!node.trailing_comment.empty()) {
+    os << "  " << node.trailing_comment;
+  }
 }
 
 std::ostream &operator<<(std::ostream &os, const Node &node) {

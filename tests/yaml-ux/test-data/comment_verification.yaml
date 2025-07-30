@@ -1,0 +1,14 @@
+# Main document comment
+# Multi-line comment
+app:
+  name: "MyApp"  # App name comment
+  # Configuration section
+  config:
+    port: 8080  # Port comment
+    # Enable SSL
+    ssl: true
+
+# List with comments  
+items:
+  - first   # First item
+  - second  # Second item
