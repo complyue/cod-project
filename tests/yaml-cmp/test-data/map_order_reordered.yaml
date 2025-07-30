@@ -1,5 +1,7 @@
-active: true
-city: "New York"
-country: "USA"
-name: "John Doe"
-age: 30
+# Map key order test - reordered keys
+# This file has the same content as map_order_original.yaml but with different key order
+active: true        # Boolean value (first position)
+city: "New York"    # String value (second position)
+country: "USA"      # String value (third position)
+name: "John Doe"    # String value (fourth position)
+age: 30             # Integer value (fifth position)

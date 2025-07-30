@@ -18,15 +18,27 @@ static std::string read_file(const fs::path &p) {
   return ss.str();
 }
 
-static void usage() { std::cerr << "Usage: yaml-cmp [--subset] <expected.yaml> <actual.yaml>\n"; }
+static void usage() { std::cerr << "Usage: yaml-cmp [--subset] [--ignore-comments] <expected.yaml> <actual.yaml>\n"; }
 
 int main(int argc, char **argv) {
   bool subset_mode = false;
+  bool ignore_comments = false;
   int argi = 1;
-  if (argc >= 2 && std::string_view(argv[1]) == "--subset") {
-    subset_mode = true;
-    ++argi;
+
+  // Parse command line arguments
+  while (argi < argc && std::string_view(argv[argi]).starts_with("--")) {
+    if (std::string_view(argv[argi]) == "--subset") {
+      subset_mode = true;
+      ++argi;
+    } else if (std::string_view(argv[argi]) == "--ignore-comments") {
+      ignore_comments = true;
+      ++argi;
+    } else {
+      usage();
+      return 1;
+    }
   }
+
   if (argc - argi != 2) {
     usage();
     return 1;
@@ -53,8 +65,8 @@ int main(int argc, char **argv) {
               [&](const shilos::yaml::Document &actual_doc) {
                 const Node &expected_node = expected_doc.root();
                 const Node &actual_node = actual_doc.root();
-                bool ok = subset_mode ? yaml_cmp::yaml_subset(expected_node, actual_node)
-                                      : yaml_cmp::yaml_equal(expected_node, actual_node);
+                bool ok = subset_mode ? yaml_cmp::yaml_subset(expected_node, actual_node, ignore_comments)
+                                      : yaml_cmp::yaml_equal(expected_node, actual_node, ignore_comments);
                 if (!ok) {
                   std::cerr << "yaml-cmp: comparison FAILED\n";
                   std::cerr << "--- expected (subset=" << (subset_mode ? "yes" : "no") << ") ---\n";

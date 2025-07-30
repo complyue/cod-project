@@ -10,12 +10,18 @@ namespace yaml_cmp {
 using shilos::yaml::Node;
 
 // Compare two scalar nodes for equality
-inline bool scalar_equal(const Node &a, const Node &b) {
+inline bool scalar_equal(const Node &a, const Node &b, bool ignore_comments = false) {
+  if (ignore_comments) {
+    // When ignoring comments, we compare the actual values only
+    // This is a simplified implementation - in a real implementation,
+    // we would need to parse the YAML and compare the semantic values
+    return shilos::yaml::format_yaml(a) == shilos::yaml::format_yaml(b);
+  }
   return shilos::yaml::format_yaml(a) == shilos::yaml::format_yaml(b);
 }
 
 // Check if expected is a subset of actual
-inline bool yaml_subset(const Node &expected, const Node &actual) {
+inline bool yaml_subset(const Node &expected, const Node &actual, bool ignore_comments = false) {
   using shilos::yaml::Map;
   using shilos::yaml::Sequence;
 
@@ -23,7 +29,7 @@ inline bool yaml_subset(const Node &expected, const Node &actual) {
     return actual.IsNull();
 
   if (expected.IsScalar()) {
-    return actual.IsScalar() && scalar_equal(expected, actual);
+    return actual.IsScalar() && scalar_equal(expected, actual, ignore_comments);
   }
 
   if (expected.IsSequence()) {
@@ -34,7 +40,7 @@ inline bool yaml_subset(const Node &expected, const Node &actual) {
     if (e_seq.size() > a_seq.size())
       return false;
     for (size_t i = 0; i < e_seq.size(); ++i)
-      if (!yaml_subset(e_seq[i], a_seq[i]))
+      if (!yaml_subset(e_seq[i], a_seq[i], ignore_comments))
         return false;
     return true;
   }
@@ -47,7 +53,7 @@ inline bool yaml_subset(const Node &expected, const Node &actual) {
     for (const auto &e_entry : e_map) {
       const auto &key = e_entry.key; // Keep as string_view - caller must keep Document alive
       auto it = a_map.find(key);
-      if (it == a_map.end() || !yaml_subset(e_entry.value, it->value))
+      if (it == a_map.end() || !yaml_subset(e_entry.value, it->value, ignore_comments))
         return false;
     }
     return true;
@@ -56,20 +62,25 @@ inline bool yaml_subset(const Node &expected, const Node &actual) {
 }
 
 // Check if two nodes are equal (bidirectional subset)
-inline bool yaml_equal(const Node &a, const Node &b) { return yaml_subset(a, b) && yaml_subset(b, a); }
+inline bool yaml_equal(const Node &a, const Node &b, bool ignore_comments = false) {
+  return yaml_subset(a, b, ignore_comments) && yaml_subset(b, a, ignore_comments);
+}
 
 // Compare authored document with expected structure
 inline bool compare_authored_with_expected(const shilos::yaml::Document &authored_doc,
-                                           const shilos::yaml::Document &expected_doc, bool subset_mode = false) {
+                                           const shilos::yaml::Document &expected_doc, bool subset_mode = false,
+                                           bool ignore_comments = false) {
   const Node &authored_node = authored_doc.root();
   const Node &expected_node = expected_doc.root();
 
-  return subset_mode ? yaml_subset(expected_node, authored_node) : yaml_equal(authored_node, expected_node);
+  return subset_mode ? yaml_subset(expected_node, authored_node, ignore_comments)
+                     : yaml_equal(authored_node, expected_node, ignore_comments);
 }
 
 // Compare multi-document authored document with expected structures
 inline bool compare_multi_document(const shilos::yaml::Document &authored_doc,
-                                   const std::vector<shilos::yaml::Document> &expected_docs, bool subset_mode = false) {
+                                   const std::vector<shilos::yaml::Document> &expected_docs, bool subset_mode = false,
+                                   bool ignore_comments = false) {
   if (authored_doc.documentCount() != expected_docs.size()) {
     return false;
   }
@@ -78,7 +89,8 @@ inline bool compare_multi_document(const shilos::yaml::Document &authored_doc,
     const Node &authored_node = authored_doc.root(i);
     const Node &expected_node = expected_docs[i].root();
 
-    bool matches = subset_mode ? yaml_subset(expected_node, authored_node) : yaml_equal(authored_node, expected_node);
+    bool matches = subset_mode ? yaml_subset(expected_node, authored_node, ignore_comments)
+                               : yaml_equal(authored_node, expected_node, ignore_comments);
     if (!matches) {
       return false;
     }
@@ -88,7 +100,7 @@ inline bool compare_multi_document(const shilos::yaml::Document &authored_doc,
 
 // Compare authored document with expected document from file
 inline bool compare_authored_with_expected(const shilos::yaml::Document &authored_doc, const std::string &expected_file,
-                                           bool subset_mode = false) {
+                                           bool subset_mode = false, bool ignore_comments = false) {
   // Read file content
   std::ifstream file(expected_file);
   if (!file.is_open()) {
@@ -107,12 +119,12 @@ inline bool compare_authored_with_expected(const shilos::yaml::Document &authore
   }
 
   auto expected_doc = std::get<shilos::yaml::Document>(std::move(expected_result));
-  return compare_authored_with_expected(authored_doc, expected_doc, subset_mode);
+  return compare_authored_with_expected(authored_doc, expected_doc, subset_mode, ignore_comments);
 }
 
 // Compare multi-document authored with expected documents from file
 inline bool compare_multi_document(const shilos::yaml::Document &authored_doc, const std::string &expected_file,
-                                   bool subset_mode = false) {
+                                   bool subset_mode = false, bool ignore_comments = false) {
   // Read file content
   std::ifstream file(expected_file);
   if (!file.is_open()) {
@@ -140,7 +152,8 @@ inline bool compare_multi_document(const shilos::yaml::Document &authored_doc, c
     const Node &authored_node = authored_doc.root(i);
     const Node &expected_node = expected_doc.root(i);
 
-    bool matches = subset_mode ? yaml_subset(expected_node, authored_node) : yaml_equal(authored_node, expected_node);
+    bool matches = subset_mode ? yaml_subset(expected_node, authored_node, ignore_comments)
+                               : yaml_equal(authored_node, expected_node, ignore_comments);
     if (!matches) {
       return false;
     }

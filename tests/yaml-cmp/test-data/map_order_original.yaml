@@ -1,5 +1,7 @@
-name: "John Doe"
-age: 30
-city: "New York"
-active: true
-country: "USA"
+# Map key order test - original order
+# This file tests that maps with different key orders are considered equal
+name: "John Doe"    # String value
+age: 30             # Integer value
+city: "New York"    # String value
+active: true        # Boolean value
+country: "USA"      # String value

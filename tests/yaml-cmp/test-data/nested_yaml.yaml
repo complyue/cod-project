@@ -1,14 +1,15 @@
+# Nested structure example demonstrating complex data organization
 person:
-  name: "Alice"
-  age: 25
-  address:
-    street: "123 Main St"
-    city: "Boston"
-    zipcode: 12345
-  hobbies:
-    - "reading"
-    - "swimming"
-    - "coding"
-  contact:
-    email: "alice@example.com"
-    phone: null 
+  name: "Alice"                    # Person's name as string
+  age: 25                         # Person's age as integer
+  address:                        # Nested map for address information
+    street: "123 Main St"         # Street address
+    city: "Boston"                # City name
+    zipcode: 12345                # ZIP code as integer
+  hobbies:                        # Sequence of hobbies
+    - "reading"                   # First hobby
+    - "swimming"                  # Second hobby
+    - "coding"                    # Third hobby
+  contact:                        # Nested map for contact information
+    email: "alice@example.com"   # Email address
+    phone: null                   # Phone number (null indicates not provided)

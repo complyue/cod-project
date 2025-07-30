@@ -1,10 +1,12 @@
+# Nested map key order test - reordered keys
+# This file has the same content as nested_map_order_original.yaml but with different key order
 person:
-  contact:
-    phone: null
-    email: "alice@example.com"
-  age: 25
-  address:
-    zipcode: 12345
-    city: "Boston"
-    street: "123 Main St"
-  name: "Alice"
+  contact:                        # Contact information (first position)
+    phone: null                   # Phone number (first in contact)
+    email: "alice@example.com"   # Email address (second in contact)
+  age: 25                         # Person's age (second position)
+  address:                        # Address information (third position)
+    zipcode: 12345                # ZIP code (first in address)
+    city: "Boston"                # City name (second in address)
+    street: "123 Main St"         # Street address (third in address)
+  name: "Alice"                    # Person's name (fourth position)

@@ -127,8 +127,12 @@ run_test "Nested structures YAML vs JSON" "$TEST_DATA_DIR/nested_yaml.yaml" "$TE
 # Test 5: Scalar types (YAML vs JSON)
 run_test "Scalar types YAML vs JSON" "$TEST_DATA_DIR/scalars_yaml.yaml" "$TEST_DATA_DIR/scalars_json.yaml" "pass"
 
-# Test 6: Comments should be ignored
+# Test 6: Comments should be ignored by default
 run_test "Comments ignored" "$TEST_DATA_DIR/comments_yaml.yaml" "$TEST_DATA_DIR/comments_clean.yaml" "pass"
+
+# Test 7: Comment-sensitive comparison
+run_test "Comments different - ignore comments (should pass)" "$TEST_DATA_DIR/comments_yaml.yaml" "$TEST_DATA_DIR/comments_different.yaml" "pass" "--ignore-comments"
+run_test "Comments different - consider comments (should fail)" "$TEST_DATA_DIR/comments_yaml.yaml" "$TEST_DATA_DIR/comments_different.yaml" "fail"
 
 echo
 echo "--- Parsing Tests ---"

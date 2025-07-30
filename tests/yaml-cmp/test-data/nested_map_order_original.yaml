@@ -1,10 +1,12 @@
+# Nested map key order test - original order
+# This file tests that nested maps with different key orders are considered equal
 person:
-  name: "Alice"
-  age: 25
-  address:
-    street: "123 Main St"
-    city: "Boston"
-    zipcode: 12345
-  contact:
-    email: "alice@example.com"
-    phone: null
+  name: "Alice"                    # Person's name
+  age: 25                         # Person's age
+  address:                        # Address information
+    street: "123 Main St"         # Street address
+    city: "Boston"                # City name
+    zipcode: 12345                # ZIP code
+  contact:                        # Contact information
+    email: "alice@example.com"   # Email address
+    phone: null                   # Phone number (null indicates not provided)

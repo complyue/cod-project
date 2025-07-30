@@ -1,15 +1,16 @@
-yaml_style:
-  name: "Alice"
-  hobbies:
-    - "reading"
-    - "coding"
+# Mixed formats example showing YAML and JSON style syntax in one file
+yaml_style:              # YAML-style formatting
+  name: "Alice"          # String value
+  hobbies:               # YAML-style list
+    - "reading"          # First hobby
+    - "coding"           # Second hobby
 
-json_style: {
-  "name": "Bob",
-  "hobbies": ["swimming", "hiking"]
+json_style: {            # JSON-style formatting
+  "name": "Bob",         # String value with quotes
+  "hobbies": ["swimming", "hiking"]  # JSON-style array
 }
 
-mixed:
-  person: {"name": "Charlie", "age": 25}
-  scores: [95, 87, 92]
-  active: true 
+mixed:                   # Mixed YAML and JSON styles
+  person: {"name": "Charlie", "age": 25}  # JSON-style object within YAML
+  scores: [95, 87, 92]  # JSON-style array within YAML
+  active: true          # YAML-style boolean

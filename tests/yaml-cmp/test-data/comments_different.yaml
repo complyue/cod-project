@@ -1,0 +1,16 @@
+# File with different comments than comments_yaml.yaml but same data
+# This is a different comment at the start
+name: "John" # different inline comment
+age: 30
+
+# Different comment between entries
+address:
+  # Different comment in nested structure
+  street: "123 Main St"
+  city: "Boston" # another different inline comment
+
+# Different list comment
+hobbies:
+  # Different comment before list item
+  - "reading"
+  - "writing" # different comment after list item

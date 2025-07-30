@@ -1,11 +1,12 @@
-empty_map: {}
-empty_list: []
-empty_string: ""
-colon_in_string: "key: value"
-dash_in_string: "- not a list"
-number_as_string: "123"
-boolean_as_string: "true"
-null_as_string: "null"
-special_chars: "!@#$%^&*()"
-quotes_in_string: "He said \"hello\""
-newline_in_string: "line1\nline2" 
+# Edge cases example testing various special scenarios
+empty_map: {}                    # Empty map
+empty_list: []                   # Empty list
+empty_string: ""                 # Empty string
+colon_in_string: "key: value"    # String containing colon character
+dash_in_string: "- not a list"   # String starting with dash (not a list item)
+number_as_string: "123"          # Number represented as string
+boolean_as_string: "true"        # Boolean represented as string
+null_as_string: "null"           # Null represented as string
+special_chars: "!@#$%^&*()"      # String with special characters
+quotes_in_string: "He said \"hello\""  # String containing quotes
+newline_in_string: "line1\nline2"     # String with newline character
