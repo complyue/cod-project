@@ -195,6 +195,7 @@ struct ParseState {
   void assign_pending_comments(Node &node) {
     // Only assign pending comments if they exist
     if (!pending_comments.empty()) {
+      // Assign pending comments as leading comments
       node.leading_comments = std::move(pending_comments);
       pending_comments.clear();
     }
@@ -202,6 +203,9 @@ struct ParseState {
     // Check for trailing comment on same line
     node.trailing_comment = get_trailing_comment();
   }
+
+  // Clear pending comments without assigning them (for cases where they should be discarded)
+  void clear_pending_comments() { pending_comments.clear(); }
 
   // Validate indentation compatibility - only throws on truly incompatible indentation
   //
@@ -347,11 +351,39 @@ void advance_to_next_content(ParseState &state) {
         state.advance(); // This will update line_begin_pos
       }
     } else if (state.current() == '\n' || state.current() == '\r') {
-      // Skip empty line
+      // Skip empty line but don't clear pending comments
       state.advance(); // This will update line_begin_pos
     } else {
       // Found content - pos is now at first non-whitespace char
       // line_begin_pos to pos represents the indentation
+      break;
+    }
+  }
+}
+
+// Helper function to collect comments that directly precede content at the same structural level
+void collect_leading_comments_for_content(ParseState &state, std::vector<std::string_view> &leading_comments) {
+  // Only assign comments that are actually leading comments for this specific content
+  if (!state.pending_comments.empty()) {
+    leading_comments = std::move(state.pending_comments);
+    state.pending_comments.clear();
+  }
+}
+
+// Skip whitespace and comments without collecting them (for cases where we want to ignore comments)
+void skip_whitespace_and_comments(ParseState &state) {
+  while (!state.at_end()) {
+    state.skip_whitespace_inline();
+
+    if (state.current() == '#') {
+      // Skip comment entirely
+      state.skip_to_end_of_line();
+      if (state.current() == '\n') {
+        state.advance();
+      }
+    } else if (state.current() == '\n' || state.current() == '\r') {
+      state.advance();
+    } else {
       break;
     }
   }
@@ -674,6 +706,10 @@ Node parse_sequence(ParseState &state, std::string_view parent_container_indent)
         }
       }
 
+      // Collect comments that belong to this specific item
+      std::vector<std::string_view> item_leading_comments;
+      collect_leading_comments_for_content(state, item_leading_comments);
+
       // This is a list item, parse it as part of this sequence
       state.advance(); // Skip '-'
       state.skip_whitespace_inline();
@@ -681,13 +717,18 @@ Node parse_sequence(ParseState &state, std::string_view parent_container_indent)
       if (state.current() == '\n' || state.at_end()) {
         // Empty list item
         Node empty_item(std::monostate{});
-        state.assign_pending_comments(empty_item);
+        empty_item.leading_comments = std::move(item_leading_comments);
+        empty_item.trailing_comment = state.get_trailing_comment();
         seq.push_back(empty_item);
         if (state.current() == '\n')
           state.advance();
       } else {
         // Parse the list item value - let parse_value detect natural indentation
         Node item = parse_value(state);
+        // Assign the collected comments to this item if it doesn't have any
+        if (!item_leading_comments.empty() && item.leading_comments.empty()) {
+          item.leading_comments = std::move(item_leading_comments);
+        }
         seq.push_back(item);
       }
     } else {
@@ -696,8 +737,6 @@ Node parse_sequence(ParseState &state, std::string_view parent_container_indent)
     }
   }
 
-  // Assign any remaining pending comments to the sequence node itself
-  state.assign_pending_comments(node);
   return node;
 }
 
@@ -708,13 +747,6 @@ Node parse_mapping(ParseState &state) {
 
   // Track the minimum indentation required for keys in this mapping
   std::string_view min_key_indent;
-
-  // Store any pending comments that were collected before this mapping started
-  // These should be assigned to the mapping itself, not to individual key-value pairs
-  std::vector<std::string_view> mapping_leading_comments;
-  if (!state.pending_comments.empty()) {
-    mapping_leading_comments = std::move(state.pending_comments);
-  }
 
   while (!state.at_end()) {
     advance_to_next_content(state);
@@ -747,6 +779,13 @@ Node parse_mapping(ParseState &state) {
       // Keys can have equal or greater indentation than the minimum and still be siblings
     }
 
+    // Collect leading comments for this key-value pair
+    std::vector<std::string_view> key_leading_comments;
+    if (!state.pending_comments.empty()) {
+      key_leading_comments = std::move(state.pending_comments);
+      state.pending_comments.clear();
+    }
+
     // Parse key
     std::string_view key = parse_scalar(state);
     if (key.empty()) {
@@ -764,14 +803,7 @@ Node parse_mapping(ParseState &state) {
     state.skip_whitespace_inline();
 
     // Check for and handle trailing comment on the same line as the key
-    std::string_view trailing_comment = state.get_trailing_comment();
-    if (!trailing_comment.empty()) {
-      // Skip the comment content since it's already captured
-      state.skip_to_end_of_line();
-      if (state.current() == '\n') {
-        state.advance();
-      }
-    }
+    std::string_view key_trailing_comment = state.get_trailing_comment();
 
     // Parse value
     Node value;
@@ -805,11 +837,14 @@ Node parse_mapping(ParseState &state) {
         // Quoted strings should be treated as strings directly (even if empty)
         std::string_view str = parse_quoted_string(state);
         value = Node(std::string_view(str));
+        value.trailing_comment = state.get_trailing_comment();
       } else if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
         // Sequence on same line - use current_indent as parent
         value = parse_sequence(state, current_indent);
       } else {
         value = parse_value(state);
+        // Get trailing comment after parsing the value
+        value.trailing_comment = state.get_trailing_comment();
       }
 
       // Skip to end of line
@@ -818,14 +853,19 @@ Node parse_mapping(ParseState &state) {
         state.advance();
     }
 
+    // If there was a trailing comment on the key line, use it instead
+    if (!key_trailing_comment.empty()) {
+      value.trailing_comment = key_trailing_comment;
+    }
+
+    // Assign leading comments to the value
+    if (!key_leading_comments.empty()) {
+      value.leading_comments = std::move(key_leading_comments);
+    }
+
     map.emplace(key, value);
   }
 
-  // Assign the leading comments to the mapping node itself
-  node.leading_comments = std::move(mapping_leading_comments);
-
-  // Assign any remaining pending comments to the mapping node itself
-  state.assign_pending_comments(node);
   return node;
 }
 
@@ -1429,6 +1469,7 @@ ParseResult Document::Parse(std::string filename, std::string source) noexcept {
 void format_scalar(std::ostream &os, const std::string_view &str);
 void format_sequence(std::ostream &os, const Sequence &seq, int indent);
 void format_mapping(std::ostream &os, const Map &map, int indent);
+void format_yaml_value_only(std::ostream &os, const Node &node, int indent);
 
 void format_scalar(std::ostream &os, const std::string_view &str) {
   // Quote string if it contains special characters or looks like other types
@@ -1464,21 +1505,35 @@ void format_scalar(std::ostream &os, const std::string_view &str) {
 }
 
 void format_sequence(std::ostream &os, const Sequence &seq, int indent) {
-  if (indent == 0) {
-    // Root level sequence
-    for (size_t i = 0; i < seq.size(); ++i) {
-      if (i > 0)
-        os << "\n";
-      os << "- ";
-      format_yaml(os, seq[i], 2);
+  for (size_t i = 0; i < seq.size(); ++i) {
+    if (i > 0) {
+      os << "\n";
     }
-  } else {
-    // Nested sequence - use standard YAML list format
-    for (size_t i = 0; i < seq.size(); ++i) {
-      if (i > 0)
-        os << "\n" << std::string(indent, ' ');
-      os << "- ";
-      format_yaml(os, seq[i], indent + 2);
+
+    // Output leading comments for this item with proper indentation
+    for (const auto &comment : seq[i].leading_comments) {
+      os << std::string(indent, ' ') << comment << "\n";
+    }
+
+    // Output the list marker with proper indentation
+    os << std::string(indent, ' ') << "- ";
+
+    // Format the item value
+    if (seq[i].IsScalar()) {
+      format_yaml_value_only(os, seq[i], 0);
+    } else if (seq[i].IsSequence()) {
+      os << "\n";
+      format_yaml_value_only(os, seq[i], indent + 2);
+    } else if (seq[i].IsMap()) {
+      os << "\n";
+      format_yaml_value_only(os, seq[i], indent + 2);
+    } else {
+      format_yaml_value_only(os, seq[i], 0);
+    }
+
+    // Output trailing comment if present
+    if (!seq[i].trailing_comment.empty()) {
+      os << "  " << seq[i].trailing_comment;
     }
   }
 }
@@ -1487,18 +1542,30 @@ void format_mapping(std::ostream &os, const Map &map, int indent) {
   bool first = true;
   for (const auto &entry : map) {
     if (!first) {
-      os << "\n" << std::string(indent, ' ');
+      os << "\n";
     }
     first = false;
 
-    os << std::string(entry.key) << ": ";
+    // Output leading comments for the value with proper indentation
+    for (const auto &comment : entry.value.leading_comments) {
+      os << std::string(indent, ' ') << comment << "\n";
+    }
+
+    // Output the key with proper indentation
+    os << std::string(indent, ' ') << std::string(entry.key) << ":";
 
     // Check if value should be on next line
     if (std::holds_alternative<Map>(entry.value.value) || std::holds_alternative<Sequence>(entry.value.value)) {
-      os << "\n" << std::string(indent + 2, ' ');
-      format_yaml(os, entry.value, indent + 2);
+      os << "\n";
+      format_yaml_value_only(os, entry.value, indent + 2);
     } else {
-      format_yaml(os, entry.value, 0);
+      os << " ";
+      format_yaml_value_only(os, entry.value, 0);
+    }
+
+    // Output trailing comment if present
+    if (!entry.value.trailing_comment.empty()) {
+      os << "  " << entry.value.trailing_comment;
     }
   }
 }
@@ -1512,18 +1579,28 @@ void format_yaml(std::ostream &os, const Node &node, int indent) {
     os << comment << "\n";
   }
 
-  // Output the node value
+  // Output the node value with proper indentation
+  if (indent > 0 && !node.leading_comments.empty()) {
+    // If we had leading comments, we need to add indentation for the value
+    os << std::string(indent, ' ');
+  }
+
+  format_yaml_value_only(os, node, indent);
+
+  // Output trailing comment
+  if (!node.trailing_comment.empty()) {
+    os << "  " << node.trailing_comment;
+  }
+}
+
+// Helper function to format just the value part without leading comments
+void format_yaml_value_only(std::ostream &os, const Node &node, int indent) {
   vswitch(
       node.value, [&os](std::monostate) { os << "null"; }, [&os](bool arg) { os << (arg ? "true" : "false"); },
       [&os](int64_t arg) { os << arg; }, [&os](double arg) { os << arg; },
       [&os](const std::string_view &arg) { format_scalar(os, arg); },
       [&os, indent](const Sequence &arg) { format_sequence(os, arg, indent); },
       [&os, indent](const Map &arg) { format_mapping(os, arg, indent); });
-
-  // Output trailing comment
-  if (!node.trailing_comment.empty()) {
-    os << "  " << node.trailing_comment;
-  }
 }
 
 std::ostream &operator<<(std::ostream &os, const Node &node) {

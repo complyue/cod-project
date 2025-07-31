@@ -4,7 +4,7 @@
 # - Dependency-level comments (general, repo_url before/after, branches before)
 # - Branch-level comments (before/after each branch)
 # - Mixed comment placement and formatting
-
+#
 # Main project comment describing the overall purpose
 uuid:     11111111-1111-1111-1111-111111111111
 name:     example-project
@@ -29,7 +29,6 @@ deps:
       -     main    # Comment after main branch
       # Comment before stable branch
       -     stable    # Comment after stable branch
-  
   # Second dependency - utility package
   # This is a multi-line comment for the second dependency
   # It provides additional context about why this dependency is needed
@@ -45,7 +44,6 @@ deps:
       # Comment before feature branches
       -     feature/new-api    
       -     feature/refactor    
-  
   # Third dependency - external service client
   # Comment before repo_url of third dependency
   -     uuid:     44444444-4444-4444-4444-444444444444    
