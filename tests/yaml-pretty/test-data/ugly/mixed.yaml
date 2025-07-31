@@ -5,6 +5,7 @@
 # - Extra spaces within array elements and commas
 # - Inconsistent spacing around colons and values
 # - Mixed quote styles and trailing whitespace
+
 config:
   version:    1.2
   enabled: true

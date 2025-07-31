@@ -4,21 +4,24 @@
 # - Inconsistent spacing in dependency objects
 # - Varying amounts of space before UUID and name fields
 # - Mixed indentation consistency in dependency arrays
+
 uuid: "11111111-1111-1111-1111-111111111111"
 name: testpkg
 repo_url: "https://github.com/test/testpkg.git"
-branches: 
+branches:
   - main
   - dev
-deps: 
-  - uuid: "22222222-2222-2222-2222-222222222222"
+deps:
+  -
+    uuid: "22222222-2222-2222-2222-222222222222"
     name: dep
     repo_url: "https://github.com/test/dep.git"
-    branches: 
+    branches:
       - main
       - feature
-  - uuid: "33333333-3333-3333-3333-333333333333"
+  -
+    uuid: "33333333-3333-3333-3333-333333333333"
     name: local_dep
     repo_url: local_dep
-    branches: 
+    branches:
       - main

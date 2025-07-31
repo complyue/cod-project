@@ -23,7 +23,7 @@ inline yaml::Node to_yaml(const CodDep &dep, yaml::YamlAuthor &author) {
   }
 
   if (!dep.branches().empty()) {
-    auto seq = author.createSequence();
+    auto seq = author.createDashSequence();
     for (const auto &br : dep.branches()) {
       author.pushToSequence(seq, author.createString(std::string_view(br)));
     }
@@ -39,7 +39,7 @@ inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) {
   author.setMapValue(m, "repo_url", author.createString(std::string_view(proj.repo_url())));
 
   if (!proj.branches().empty()) {
-    auto seq = author.createSequence();
+    auto seq = author.createDashSequence();
     for (const auto &br : proj.branches()) {
       author.pushToSequence(seq, author.createString(std::string_view(br)));
     }
@@ -47,7 +47,7 @@ inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) {
   }
 
   if (!proj.deps().empty()) {
-    auto seq = author.createSequence();
+    auto seq = author.createDashSequence();
     for (const CodDep &d : proj.deps()) {
       author.pushToSequence(seq, to_yaml(d, author));
     }
@@ -69,7 +69,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodDep *ra
   const auto &map = std::get<yaml::Map>(node.value);
 
   auto fetch_scalar = [&](const std::string &key) -> std::string {
-    auto it = map.find(key);
+    auto it = std::find_if(map.begin(), map.end(), [&](const auto &entry) { return entry.key == key; });
     if (it == map.end()) {
       throw yaml::MissingFieldError("Missing key '" + key + "' in CodDep");
     }
@@ -93,7 +93,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodDep *ra
 
   // Optional path
   std::string path;
-  auto it_path = map.find("path");
+  auto it_path = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "path"; });
   if (it_path != map.end()) {
     if (!it_path->value.IsScalar()) {
       throw yaml::TypeError("'path' must be a scalar");
@@ -105,12 +105,13 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodDep *ra
   new (raw_ptr) CodDep(mr, uuid, name, repo_url, path);
 
   // Optional branches.
-  auto it_br = map.find("branches");
+  auto it_br = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "branches"; });
   if (it_br != map.end()) {
     if (!it_br->value.IsSequence()) {
       throw yaml::TypeError("'branches' must be a sequence");
     }
-    for (const auto &br_node : std::get<yaml::Sequence>(it_br->value.value)) {
+    for (const auto &seq_item : std::get<yaml::DashSequence>(it_br->value.value)) {
+      const auto &br_node = seq_item.value;
       raw_ptr->branches().enque(mr, br_node.asString());
     }
   }
@@ -125,7 +126,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodProject
   const auto &map = std::get<yaml::Map>(node.value);
 
   auto fetch_scalar = [&](const std::string &key) -> std::string {
-    auto it = map.find(key);
+    auto it = std::find_if(map.begin(), map.end(), [&](const auto &entry) { return entry.key == key; });
     if (it == map.end()) {
       throw yaml::MissingFieldError("Missing key '" + key + "' in CodProject");
     }
@@ -151,23 +152,25 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodProject
   new (raw_ptr) CodProject(mr, uuid, name, repo_url);
 
   // branches sequence (optional)
-  auto it_branches = map.find("branches");
+  auto it_branches = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "branches"; });
   if (it_branches != map.end()) {
     if (!it_branches->value.IsSequence()) {
       throw yaml::TypeError("'branches' must be a sequence");
     }
-    for (const auto &br_node : std::get<yaml::Sequence>(it_branches->value.value)) {
+    for (const auto &seq_item : std::get<yaml::DashSequence>(it_branches->value.value)) {
+      const auto &br_node = seq_item.value;
       raw_ptr->branches().enque(mr, br_node.asString());
     }
   }
 
   // deps sequence (optional)
-  auto it_deps = map.find("deps");
+  auto it_deps = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "deps"; });
   if (it_deps != map.end()) {
     if (!it_deps->value.IsSequence()) {
       throw yaml::TypeError("'deps' must be a sequence");
     }
-    for (const auto &dep_node : std::get<yaml::Sequence>(it_deps->value.value)) {
+    for (const auto &seq_item : std::get<yaml::DashSequence>(it_deps->value.value)) {
+      const auto &dep_node = seq_item.value;
       // Allocate CodDep via from_yaml helper.
       raw_ptr->deps().emplace_init(mr, [&](CodDep *dst) { from_yaml(mr, dep_node, dst); });
     }
@@ -234,7 +237,7 @@ inline yaml::Node to_yaml(const CodManifest &manifest, yaml::YamlAuthor &author)
 
   // Resolved section
   if (!manifest.resolved().empty()) {
-    auto resolved_seq = author.createSequence();
+    auto resolved_seq = author.createDashSequence();
     for (const CodManifestEntry &entry : manifest.resolved()) {
       author.pushToSequence(resolved_seq, to_yaml(entry, author));
     }
@@ -257,7 +260,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
   const auto &map = std::get<yaml::Map>(node.value);
 
   auto fetch_scalar = [&](const std::string &key) -> std::string {
-    auto it = map.find(key);
+    auto it = std::find_if(map.begin(), map.end(), [&](const auto &entry) { return entry.key == key; });
     if (it == map.end()) {
       throw yaml::MissingFieldError("Missing key '" + key + "' in CodManifestEntry");
     }
@@ -268,7 +271,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
   };
 
   auto fetch_optional_scalar = [&](const std::string &key) -> std::string {
-    auto it = map.find(key);
+    auto it = std::find_if(map.begin(), map.end(), [&](const auto &entry) { return entry.key == key; });
     if (it == map.end()) {
       return "";
     }
@@ -296,7 +299,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
   const auto &map = std::get<yaml::Map>(node.value);
 
   // Parse root section
-  auto it_root = map.find("root");
+  auto it_root = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "root"; });
   if (it_root == map.end()) {
     throw yaml::MissingFieldError("Missing 'root' section in CodManifest");
   }
@@ -306,7 +309,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
   const auto &root_map = std::get<yaml::Map>(it_root->value.value);
 
   auto fetch_scalar_from_map = [&](const yaml::Map &m, const std::string &key) -> std::string {
-    auto it = m.find(key);
+    auto it = std::find_if(m.begin(), m.end(), [&](const auto &entry) { return entry.key == key; });
     if (it == m.end()) {
       throw yaml::MissingFieldError("Missing key '" + key + "' in root section");
     }
@@ -331,7 +334,7 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
   new (raw_ptr) CodManifest(mr, root_uuid, root_repo_url);
 
   // Parse locals section (optional)
-  auto it_locals = map.find("locals");
+  auto it_locals = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "locals"; });
   if (it_locals != map.end()) {
     if (!it_locals->value.IsMap()) {
       throw yaml::TypeError("'locals' must be a mapping");
@@ -348,12 +351,13 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
   }
 
   // Parse resolved section (optional)
-  auto it_resolved = map.find("resolved");
+  auto it_resolved = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "resolved"; });
   if (it_resolved != map.end()) {
     if (!it_resolved->value.IsSequence()) {
       throw yaml::TypeError("'resolved' must be a sequence");
     }
-    for (const auto &entry_node : std::get<yaml::Sequence>(it_resolved->value.value)) {
+    for (const auto &seq_item : std::get<yaml::DashSequence>(it_resolved->value.value)) {
+      const auto &entry_node = seq_item.value;
       // Allocate CodManifestEntry via from_yaml helper
       raw_ptr->resolved().emplace_init(mr, [&](CodManifestEntry *dst) { from_yaml(mr, entry_node, dst); });
     }

@@ -1,58 +1,59 @@
 # Comprehensive test case: CoD project with full comment support
 # This tests the formatter's ability to handle:
-# - Project-level comments (general, repo_url before/after, branches before)
-# - Dependency-level comments (general, repo_url before/after, branches before)
-# - Branch-level comments (before/after each branch)
-# - Mixed comment placement and formatting
-#
-# Main project comment describing the overall purpose
-uuid:     11111111-1111-1111-1111-111111111111
-name:     example-project
-repo_url:    # Comment before the repo_url value
-     https://github.com/example/project.git    # Comment after the repo_url value
-branches:    
-  # Comment before main branch
-  -     main    # Comment after main branch
-  # Comment before develop branch
-  -     develop    # Comment after develop branch
-  # Comment before feature branches
-  -     feature/x    
-  -     feature/y    
-deps:    
+# - Document-level header comments (separated by blank line)
+# - Map entry comments (leading and trailing)
+# - Dash sequence item comments (leading and trailing)
+# - Clean formatting without unsupported patterns
+
+uuid:  "11111111-1111-1111-1111-111111111111"
+name: example-project
+# Main repository URL
+repo_url: "https://github.com/example/project.git"  # Official project repository
+branches:
+  # Primary development branch
+  - main   # Stable releases
+  # Active development branch
+  - develop    # Feature integration
+  # Feature branches for experimental work
+  - "feature/x"
+  - "feature/y"
+deps:
   # First dependency - core library
-  -     uuid:     22222222-2222-2222-2222-222222222222    
-    name:     core-lib    
-    repo_url:    # Comment before repo_url of first dependency
-         https://github.com/example/core-lib.git    # Comment after repo_url
-    branches:    
-      # Comment before main branch of core-lib
-      -     main    # Comment after main branch
-      # Comment before stable branch
-      -     stable    # Comment after stable branch
+  - 
+    uuid: "22222222-2222-2222-2222-222222222222"
+    name: core-lib
+    # Core library repository
+    repo_url: "https://github.com/example/core-lib.git"   # Essential dependency
+    branches:
+      # Production branch for core library
+      - main  # Stable core features
+      # Long-term support branch
+      - stable   # LTS version
   # Second dependency - utility package
   # This is a multi-line comment for the second dependency
   # It provides additional context about why this dependency is needed
-  -     uuid:     33333333-3333-3333-3333-333333333333    
-    name:     util-pkg    
-    repo_url:    # Comment before repo_url of util-pkg
-         https://github.com/example/util-pkg.git    # Comment after repo_url
-    path:    # Comment before local development path
-         dev/util-pkg    # Comment after local development path
-    branches:    
-      # Comment before master branch
-      -     master    # Comment after master branch
-      # Comment before feature branches
-      -     feature/new-api    
-      -     feature/refactor    
+  - 
+    uuid: "33333333-3333-3333-3333-333333333333"
+    name: util-pkg
+    # Utility package repository
+    repo_url: "https://github.com/example/util-pkg.git"  # Helper functions
+    # Local development path for testing
+    path: "dev/util-pkg"  # Development override
+    branches:
+      # Main development branch
+      - master  # Primary branch
+      # New feature branches
+      - "feature/new-api"
+      - "feature/refactor"
   # Third dependency - external service client
-  # Comment before repo_url of third dependency
-  -     uuid:     44444444-4444-4444-4444-444444444444    
-    name:     service-client    
-    repo_url:     https://github.com/thirdparty/service-client.git    # Comment after repo_url
-    branches:    
-      # Comment before v1 branch
-      -     v1.0    # Comment after v1 branch
-      # Comment before v2 branch
-      -     v2.0    # Comment after v2 branch
+  - 
+    uuid: "44444444-4444-4444-4444-444444444444"
+    name: service-client
+    repo_url: "https://github.com/thirdparty/service-client.git"  # Third-party client
+    branches:
+      # Version 1.0 release branch
+      - "v1.0"  # Legacy version
+      # Version 2.0 release branch
+      - "v2.0"  # Current version
       # Latest stable version
-      -     latest
+      - latest

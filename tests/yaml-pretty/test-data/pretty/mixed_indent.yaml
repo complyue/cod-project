@@ -5,23 +5,24 @@
 # - Extra spaces in various places (before colons, within values)
 # - Mixed quote styles and trailing whitespace
 # - Inconsistent array item indentation
-server: 
+
+server:
   name: web-server
   port: 8080
-  ssl: 
+  ssl:
     enabled: true
-    certificate: /path/to/cert.pem
-    key: /path/to/key.pem
-  database: 
+    certificate: "/path/to/cert.pem"
+    key: "/path/to/key.pem"
+  database:
     host: localhost
     port: 5432
-    credentials: 
+    credentials:
       username: admin
       password: secret123
-  logging: 
+  logging:
     level: info
     format: json
-    handlers: 
+    handlers:
       - console
       - file
       - syslog

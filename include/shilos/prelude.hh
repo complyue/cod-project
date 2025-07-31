@@ -208,22 +208,25 @@ std::string format_yaml(const Node &node);
 using ParseResult = std::variant<Document, ParseError>;
 using AuthorResult = std::variant<Document, AuthorError>;
 
-using Map = iopd<std::string_view, Node>;
-using Sequence = std::vector<Node>;
-
 // Forward declaration for parsing functions
 struct ParseState;
 
-// Complete YAML node type definition
+// Forward declarations for structural types
+struct Node;
+struct MapEntry;
+struct SeqItem;
+
+// Sequence types - forward declarations
+using SimpleSequence = std::vector<Node>;  // For JSON-style sequences [a, b, c]
+using DashSequence = std::vector<SeqItem>; // For YAML dash sequences - a \n - b
+using Map = std::vector<MapEntry>;         // Map entries with comment support
+
+// Complete YAML node type definition - no comments on nodes themselves
 struct Node {
   using Value = std::variant<std::monostate, // null
-                             bool, int64_t, double, std::string_view, Sequence, Map>;
+                             bool, int64_t, double, std::string_view, SimpleSequence, DashSequence, Map>;
 
   Value value;
-
-  // Comment preservation - stored as string_view for efficiency
-  std::vector<std::string_view> leading_comments; // Comments before this node
-  std::string_view trailing_comment;              // Comment on same line after node
 
   // Allow YamlAuthor and YamlDocument to access private members for modification during authoring
   friend class Author;
@@ -273,8 +276,9 @@ public:
   explicit Node(bool b) : value(b) {}
   explicit Node(int64_t i) : value(i) {}
   explicit Node(double d) : value(d) {}
-  explicit Node(const Sequence &seq) : value(seq) {}
-  explicit Node(const Map &map) : value(map) {}
+  explicit Node(const SimpleSequence &seq);
+  explicit Node(const DashSequence &seq);
+  explicit Node(const Map &map);
 
   // Assignment operators (default and non-string types) - public for internal use
   Node &operator=(const Node &other) = default;
@@ -295,7 +299,11 @@ public:
     value = d;
     return *this;
   }
-  Node &operator=(const Sequence &seq) {
+  Node &operator=(const SimpleSequence &seq) {
+    value = seq;
+    return *this;
+  }
+  Node &operator=(const DashSequence &seq) {
     value = seq;
     return *this;
   }
@@ -331,21 +339,16 @@ public:
            std::holds_alternative<double>(value) || std::holds_alternative<std::string_view>(value);
   }
 
-  bool IsSequence() const { return std::holds_alternative<Sequence>(value); }
+  bool IsSequence() const {
+    return std::holds_alternative<SimpleSequence>(value) || std::holds_alternative<DashSequence>(value);
+  }
 
   bool IsMap() const { return std::holds_alternative<Map>(value); }
 
   bool IsNull() const { return std::holds_alternative<std::monostate>(value); }
 
   // Size method for sequences and maps
-  size_t size() const {
-    if (auto seq = std::get_if<Sequence>(&value)) {
-      return seq->size();
-    } else if (auto map = std::get_if<Map>(&value)) {
-      return map->size();
-    }
-    return 0;
-  }
+  size_t size() const;
 
 private:
   std::string describe_actual_type() const {
@@ -359,8 +362,6 @@ private:
       return "double";
     if (std::holds_alternative<std::string_view>(value))
       return "string";
-    if (std::holds_alternative<yaml::Sequence>(value))
-      return "sequence";
     if (std::holds_alternative<yaml::Map>(value))
       return "map";
     return "unknown";
@@ -375,11 +376,18 @@ public:
     throw TypeError("Expected map value");
   }
 
-  const Sequence &asSequence() const {
-    if (auto seq = std::get_if<Sequence>(&value)) {
+  const SimpleSequence &asSimpleSequence() const {
+    if (auto seq = std::get_if<SimpleSequence>(&value)) {
       return *seq;
     }
-    throw TypeError("Expected sequence value");
+    throw TypeError("Expected simple sequence value");
+  }
+
+  const DashSequence &asDashSequence() const {
+    if (auto seq = std::get_if<DashSequence>(&value)) {
+      return *seq;
+    }
+    throw TypeError("Expected dash sequence value");
   }
 
   std::string asString() const {
@@ -424,45 +432,124 @@ public:
     throw TypeError("Expected double value, got " + describe_actual_type());
   }
 
-  const Node &operator[](std::string_view key) const {
-    if (auto map = std::get_if<Map>(&value)) {
-      return map->at(key);
-    }
-    throw TypeError("Expected map value");
-  }
+  const Node &operator[](std::string_view key) const;
+  const Node &operator[](size_t index) const;
 
-  // Indexing by integer for sequences
-  const Node &operator[](size_t index) const {
-    if (auto seq = std::get_if<Sequence>(&value)) {
-      if (index >= seq->size()) {
-        throw RangeError("Index out of range");
+  Node at(std::string_view key) const;
+  Node at(size_t index) const;
+  bool contains(std::string_view key) const;
+
+  // Note: find and end methods removed since Map is now vector-based
+};
+
+// MapEntry with comment support
+struct MapEntry {
+  std::string_view key;
+  Node value;
+  std::vector<std::string_view> leading_comments; // Comments before this entry
+  std::string_view trailing_comment;              // Comment on same line after value
+
+  MapEntry() = default;
+  MapEntry(std::string_view k, Node v) : key(k), value(std::move(v)) {}
+  MapEntry(std::string_view k, Node v, std::vector<std::string_view> leading, std::string_view trailing)
+      : key(k), value(std::move(v)), leading_comments(std::move(leading)), trailing_comment(trailing) {}
+};
+
+// SeqItem with comment support
+struct SeqItem {
+  Node value;
+  std::vector<std::string_view> leading_comments; // Comments before this item
+  std::string_view trailing_comment;              // Comment on same line after value
+
+  SeqItem() = default;
+  SeqItem(Node v) : value(std::move(v)) {}
+  SeqItem(Node v, std::vector<std::string_view> leading, std::string_view trailing)
+      : value(std::move(v)), leading_comments(std::move(leading)), trailing_comment(trailing) {}
+};
+
+// Inline definitions for Node constructors and methods now that types are complete
+inline Node::Node(const SimpleSequence &seq) : value(seq) {}
+inline Node::Node(const DashSequence &seq) : value(seq) {}
+inline Node::Node(const Map &map) : value(map) {}
+
+inline size_t Node::size() const {
+  if (auto seq = std::get_if<SimpleSequence>(&value)) {
+    return seq->size();
+  } else if (auto seq = std::get_if<DashSequence>(&value)) {
+    return seq->size();
+  } else if (auto map = std::get_if<Map>(&value)) {
+    return map->size();
+  }
+  return 0;
+}
+
+inline Node Node::at(std::string_view key) const {
+  if (auto map = std::get_if<Map>(&value)) {
+    for (const auto &entry : *map) {
+      if (entry.key == key) {
+        return entry.value;
       }
+    }
+    throw std::out_of_range("Key not found");
+  }
+  throw TypeError("Expected map value");
+}
+
+inline Node Node::at(size_t index) const {
+  if (auto seq = std::get_if<SimpleSequence>(&value)) {
+    if (index < seq->size()) {
       return (*seq)[index];
     }
-    throw TypeError("Expected sequence value");
+    throw std::out_of_range("Sequence index out of range");
   }
-
-  Map::const_iterator find(std::string_view key) const {
-    if (auto map = std::get_if<Map>(&value)) {
-      return map->find(key);
+  if (auto seq = std::get_if<DashSequence>(&value)) {
+    if (index < seq->size()) {
+      return (*seq)[index].value;
     }
-    throw TypeError("Expected map value");
+    throw std::out_of_range("Sequence index out of range");
   }
+  throw TypeError("Expected sequence value");
+}
 
-  Map::const_iterator end() const {
-    if (auto map = std::get_if<Map>(&value)) {
-      return map->end();
+inline const Node &Node::operator[](std::string_view key) const {
+  if (auto map = std::get_if<Map>(&value)) {
+    for (const auto &entry : *map) {
+      if (entry.key == key) {
+        return entry.value;
+      }
     }
-    throw TypeError("Expected map value");
+    throw std::out_of_range("Key not found");
   }
+  throw TypeError("Expected map value");
+}
 
-  bool contains(std::string_view key) const {
-    if (auto map = std::get_if<Map>(&value)) {
-      return map->find(key) != map->end();
+inline const Node &Node::operator[](size_t index) const {
+  if (auto seq = std::get_if<SimpleSequence>(&value)) {
+    if (index >= seq->size()) {
+      throw RangeError("Index out of range");
     }
-    throw TypeError("Expected map value");
+    return (*seq)[index];
   }
-};
+  if (auto seq = std::get_if<DashSequence>(&value)) {
+    if (index >= seq->size()) {
+      throw RangeError("Index out of range");
+    }
+    return (*seq)[index].value;
+  }
+  throw TypeError("Expected sequence value");
+}
+
+inline bool Node::contains(std::string_view key) const {
+  if (auto map = std::get_if<Map>(&value)) {
+    for (const auto &entry : *map) {
+      if (entry.key == key) {
+        return true;
+      }
+    }
+    return false;
+  }
+  throw TypeError("Expected map value");
+}
 
 // YAML authoring interface for programmatic document creation
 // Provides string tracking and node manipulation within a callback context
@@ -514,20 +601,30 @@ public:
   // Container creation methods
   Node createMap() { return Node(Map{}); }
 
-  Node createSequence() { return Node(Sequence{}); }
+  Node createSimpleSequence() { return Node(SimpleSequence{}); }
+  Node createDashSequence() { return Node(DashSequence{}); }
 
   // Node modification methods (only available during authoring)
   void setMapValue(Node &map_node, std::string_view key, const Node &value) {
     if (auto map = std::get_if<Map>(&map_node.value)) {
-      (*map)[key] = value;
+      for (auto &entry : *map) {
+        if (entry.key == key) {
+          entry.value = value;
+          return;
+        }
+      }
+      // Key not found, add new entry
+      map->emplace_back(key, value);
     } else {
       throw TypeError("Expected map value");
     }
   }
 
   void pushToSequence(Node &seq_node, const Node &value) {
-    if (auto seq = std::get_if<Sequence>(&seq_node.value)) {
+    if (auto seq = std::get_if<SimpleSequence>(&seq_node.value)) {
       seq->push_back(value);
+    } else if (auto seq = std::get_if<DashSequence>(&seq_node.value)) {
+      seq->emplace_back(value);
     } else {
       throw TypeError("Expected sequence value");
     }
@@ -557,9 +654,10 @@ public:
 // for different scenarios where formatting errors are either exceptional or routine.
 class Document {
 private:
-  std::string source_;              // Owns the original YAML string for string_view lifetime
-  std::vector<Node> documents_;     // Multiple documents in the stream
-  iops<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference (deduplicated)
+  std::string source_;                             // Owns the original YAML string for string_view lifetime
+  std::vector<Node> documents_;                    // Multiple documents in the stream
+  iops<std::string> owned_strings_;                // Owns escaped strings and keys that nodes reference (deduplicated)
+  std::vector<std::string_view> leading_comments_; // Document-level leading comments
 
   // Internal constructor for authoring - transfers ownership from YamlAuthor
   // Private - accessed by static methods (which are class members)
@@ -686,6 +784,9 @@ public:
   bool isMultiDocument() const noexcept { return documents_.size() > 1; }
   size_t documentCount() const noexcept { return documents_.size(); }
 
+  // Access document-level comments
+  const std::vector<std::string_view> &leadingComments() const noexcept { return leading_comments_; }
+
   // Static parsing function - noexcept version that returns ParseResult
   // Use this when you prefer error handling via Result types instead of exceptions
   static ParseResult Parse(std::string filename, std::string source) noexcept;
@@ -724,6 +825,10 @@ public:
 void format_yaml(std::ostream &os, const Node &node, int indent = 0);
 std::ostream &operator<<(std::ostream &os, const Node &node);
 std::string format_yaml(const Node &node);
+
+// Document formatting with document-level comments
+void format_yaml(std::ostream &os, const Document &doc);
+std::string format_yaml(const Document &doc);
 
 template <typename T, typename RT>
 concept YamlConvertible =

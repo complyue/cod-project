@@ -5,6 +5,7 @@
 # - Extra spaces around values and quotes
 # - Inconsistent array item indentation
 # - Mixed quote styles and trailing whitespace
+
 person   :
   name: "Alice"
      age:  25

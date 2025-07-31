@@ -30,7 +30,7 @@ namespace shilos {
 // ============================================================================
 
 template <typename T> inline yaml::Node to_yaml(const regional_vector<T> &vec, yaml::YamlAuthor &author) {
-  auto seq = author.createSequence();
+  auto seq = author.createDashSequence();
   for (const auto &elem : vec) {
     // If ADL finds a dedicated to_yaml overload for T, use it.
     if constexpr (requires(const T &e, yaml::YamlAuthor &a) { to_yaml(e, a); }) {
@@ -64,33 +64,63 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_vector<T>
   new (raw_ptr) regional_vector<T>(mr);
   auto &vec = *raw_ptr;
 
-  const auto &seq = std::get<yaml::Sequence>(node.value);
+  if (auto dash_seq = std::get_if<yaml::DashSequence>(&node.value)) {
+    // Handle dash sequence: - item1 \n - item2
+    for (const auto &seq_item : *dash_seq) {
+      const auto &elem_node = seq_item.value;
+      if constexpr (std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
+        // Parse scalar directly for trivially-copyable "bits" element types.
+        if (!elem_node.IsScalar()) {
+          throw yaml::TypeError("Expected scalar value for bits element in regional_vector");
+        }
 
-  // Iterate and append.
-  for (const auto &elem_node : seq) {
-    if constexpr (std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
-      // Parse scalar directly for trivially-copyable "bits" element types.
-      if (!elem_node.IsScalar()) {
-        throw yaml::TypeError("Expected scalar value for bits element in regional_vector");
-      }
-
-      if constexpr (std::is_same_v<T, bool>) {
-        vec.emplace_back(mr, elem_node.asBool());
-      } else if constexpr (std::is_same_v<T, int>) {
-        vec.emplace_back(mr, elem_node.asInt());
-      } else if constexpr (std::is_same_v<T, int64_t>) {
-        vec.emplace_back(mr, elem_node.asInt64());
-      } else if constexpr (std::is_same_v<T, float>) {
-        vec.emplace_back(mr, elem_node.asFloat());
-      } else if constexpr (std::is_same_v<T, double>) {
-        vec.emplace_back(mr, elem_node.asDouble());
+        if constexpr (std::is_same_v<T, bool>) {
+          vec.emplace_back(mr, elem_node.asBool());
+        } else if constexpr (std::is_same_v<T, int>) {
+          vec.emplace_back(mr, elem_node.asInt());
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+          vec.emplace_back(mr, elem_node.asInt64());
+        } else if constexpr (std::is_same_v<T, float>) {
+          vec.emplace_back(mr, elem_node.asFloat());
+        } else if constexpr (std::is_same_v<T, double>) {
+          vec.emplace_back(mr, elem_node.asDouble());
+        } else {
+          static_assert(sizeof(T) == 0, "Unsupported scalar type for regional_vector");
+        }
       } else {
-        static_assert(sizeof(T) == 0, "Unsupported scalar type for regional_vector");
+        // Generic path: delegate to element's own from_yaml.
+        vec.emplace_init(mr, [&](T *dst) { from_yaml(mr, elem_node, dst); });
       }
-    } else {
-      // Generic path: delegate to element's own from_yaml.
-      vec.emplace_init(mr, [&](T *dst) { from_yaml(mr, elem_node, dst); });
     }
+  } else if (auto simple_seq = std::get_if<yaml::SimpleSequence>(&node.value)) {
+    // Handle simple sequence: [item1, item2]
+    for (const auto &elem_node : *simple_seq) {
+      if constexpr (std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
+        // Parse scalar directly for trivially-copyable "bits" element types.
+        if (!elem_node.IsScalar()) {
+          throw yaml::TypeError("Expected scalar value for bits element in regional_vector");
+        }
+
+        if constexpr (std::is_same_v<T, bool>) {
+          vec.emplace_back(mr, elem_node.asBool());
+        } else if constexpr (std::is_same_v<T, int>) {
+          vec.emplace_back(mr, elem_node.asInt());
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+          vec.emplace_back(mr, elem_node.asInt64());
+        } else if constexpr (std::is_same_v<T, float>) {
+          vec.emplace_back(mr, elem_node.asFloat());
+        } else if constexpr (std::is_same_v<T, double>) {
+          vec.emplace_back(mr, elem_node.asDouble());
+        } else {
+          static_assert(sizeof(T) == 0, "Unsupported scalar type for regional_vector");
+        }
+      } else {
+        // Generic path: delegate to element's own from_yaml.
+        vec.emplace_init(mr, [&](T *dst) { from_yaml(mr, elem_node, dst); });
+      }
+    }
+  } else {
+    throw yaml::TypeError("YAML node for regional_vector must be a sequence");
   }
 }
 

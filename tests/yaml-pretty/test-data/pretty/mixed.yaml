@@ -5,16 +5,17 @@
 # - Extra spaces within array elements and commas
 # - Inconsistent spacing around colons and values
 # - Mixed quote styles and trailing whitespace
-config: 
+
+config:
   version: 1.2
   enabled: true
-  tags: 
+  tags:
     - production
     - web
     - api
-  limits: 
+  limits:
     memory: 512
     cpu: 2.5
-  metadata: 
+  metadata:
     created: "2023-01-01"
     owner: null

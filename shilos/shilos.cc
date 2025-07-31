@@ -167,7 +167,7 @@ struct ParseState {
     return make_view(start_pos, content_end);
   }
 
-  // Check if there's a comment on the current line after the current position
+  // Check if there's a trailing comment on the current line after the current position
   std::string_view get_trailing_comment() {
     size_t saved_pos = pos;
     size_t saved_line = line;
@@ -191,17 +191,26 @@ struct ParseState {
     return comment;
   }
 
-  // Collect pending comments and assign them to a node
-  void assign_pending_comments(Node &node) {
-    // Only assign pending comments if they exist
+  // Helper to create SeqItem with comments
+  SeqItem create_seq_item(Node value) {
+    SeqItem item(std::move(value));
     if (!pending_comments.empty()) {
-      // Assign pending comments as leading comments
-      node.leading_comments = std::move(pending_comments);
+      item.leading_comments = std::move(pending_comments);
       pending_comments.clear();
     }
+    item.trailing_comment = get_trailing_comment();
+    return item;
+  }
 
-    // Check for trailing comment on same line
-    node.trailing_comment = get_trailing_comment();
+  // Helper to create MapEntry with comments
+  MapEntry create_map_entry(std::string_view key, Node value) {
+    MapEntry entry(key, std::move(value));
+    if (!pending_comments.empty()) {
+      entry.leading_comments = std::move(pending_comments);
+      pending_comments.clear();
+    }
+    entry.trailing_comment = get_trailing_comment();
+    return entry;
   }
 
   // Clear pending comments without assigning them (for cases where they should be discarded)
@@ -342,7 +351,8 @@ void advance_to_next_content(ParseState &state) {
     state.skip_whitespace_inline();
 
     if (state.current() == '#') {
-      // Collect comment instead of skipping it
+      // Collect all comments that appear on their own line (with or without indentation)
+      // These are potentially leading comments for following items
       std::string_view comment = state.parse_comment();
       if (!comment.empty()) {
         state.pending_comments.push_back(comment);
@@ -673,8 +683,8 @@ std::string_view parse_scalar(ParseState &state) {
 
 Node parse_sequence(ParseState &state, std::string_view parent_container_indent) {
   Node node;
-  node.value = Sequence{};
-  auto &seq = std::get<Sequence>(node.value);
+  node.value = DashSequence{};
+  auto &seq = std::get<DashSequence>(node.value);
 
   // Track the parent container's indentation as reference
   std::string_view parent_indent = parent_container_indent;
@@ -684,18 +694,35 @@ Node parse_sequence(ParseState &state, std::string_view parent_container_indent)
     parent_indent = state.current_line_whitespace_indentation();
   }
 
+  // Collect comments and find next dash
   while (!state.at_end()) {
-    advance_to_next_content(state);
-    if (state.at_end())
-      break;
+    // Skip whitespace at start of line
+    state.skip_whitespace_inline();
 
-    std::string_view current_whitespace_indent = state.current_line_whitespace_indentation();
+    if (state.current() == '#') {
+      // This is a leading comment for the next sequence item, collect it
+      std::string_view comment = state.parse_comment();
+      if (!comment.empty()) {
+        state.pending_comments.push_back(comment);
+      }
+      if (state.current() == '\n') {
+        state.advance(); // This will update line_begin_pos
+      }
+    } else if (state.current() == '\n' || state.current() == '\r') {
+      // Skip empty line but don't clear pending comments
+      state.advance(); // This will update line_begin_pos
+    } else {
+      // Found content - check if it's a dash
+      bool found_dash =
+          (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0'));
+      if (!found_dash)
+        break;
 
-    // Validate indentation consistency
-    state.validate_indentation(current_whitespace_indent);
+      std::string_view current_whitespace_indent = state.current_line_whitespace_indentation();
 
-    // Check if this is a list item marker
-    if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
+      // Validate indentation consistency
+      state.validate_indentation(current_whitespace_indent);
+
       // Check if this item belongs to this sequence
       // All sequence items must be at the same level or deeper than the parent
       if (!parent_indent.empty()) {
@@ -706,34 +733,85 @@ Node parse_sequence(ParseState &state, std::string_view parent_container_indent)
         }
       }
 
-      // Collect comments that belong to this specific item
-      std::vector<std::string_view> item_leading_comments;
-      collect_leading_comments_for_content(state, item_leading_comments);
-
-      // This is a list item, parse it as part of this sequence
+      // Skip the dash
       state.advance(); // Skip '-'
+
+      // Skip whitespace after dash
       state.skip_whitespace_inline();
 
+      // Collect any comments that come after the dash but before content
+      std::vector<std::string_view> item_inline_comments;
+      while (!state.at_end() && state.current() == '#') {
+        std::string_view comment = state.parse_comment();
+        if (!comment.empty()) {
+          item_inline_comments.push_back(comment);
+        }
+        state.skip_whitespace_inline();
+      }
+
+      // Prepare leading comments for this item
+      std::vector<std::string_view> all_leading_comments;
+
+      // First, collect any pending comments from before the dash
+      if (!state.pending_comments.empty()) {
+        all_leading_comments = std::move(state.pending_comments);
+        state.pending_comments.clear();
+      }
+
+      // Add inline comments (after dash) to leading comments
+      if (!item_inline_comments.empty()) {
+        all_leading_comments.insert(all_leading_comments.end(), std::make_move_iterator(item_inline_comments.begin()),
+                                    std::make_move_iterator(item_inline_comments.end()));
+      }
+
+      Node item_value;
       if (state.current() == '\n' || state.at_end()) {
-        // Empty list item
-        Node empty_item(std::monostate{});
-        empty_item.leading_comments = std::move(item_leading_comments);
-        empty_item.trailing_comment = state.get_trailing_comment();
-        seq.push_back(empty_item);
+        // Content is on next line(s) or this is an empty item
         if (state.current() == '\n')
           state.advance();
-      } else {
-        // Parse the list item value - let parse_value detect natural indentation
-        Node item = parse_value(state);
-        // Assign the collected comments to this item if it doesn't have any
-        if (!item_leading_comments.empty() && item.leading_comments.empty()) {
-          item.leading_comments = std::move(item_leading_comments);
+
+        advance_to_next_content(state);
+
+        if (state.at_end()) {
+          // Truly empty item
+          item_value = Node(std::monostate{});
+        } else {
+          // Check if next content is indented relative to the dash
+          std::string_view next_indent = state.current_line_indentation();
+          std::string_view dash_indent = current_whitespace_indent;
+
+          if (is_indentation_greater(next_indent, dash_indent)) {
+            // Content on next line(s) belongs to this sequence item
+            item_value = parse_value(state);
+          } else {
+            // No content for this item - it's truly empty
+            item_value = Node(std::monostate{});
+          }
         }
-        seq.push_back(item);
+      } else {
+        // Parse the list item value on the same line
+        item_value = parse_value(state);
       }
-    } else {
-      // Not a list item, we're done with this sequence
-      break;
+
+      // Create SeqItem with collected comments and trailing comment
+      SeqItem seq_item(std::move(item_value));
+      if (!all_leading_comments.empty()) {
+        seq_item.leading_comments = std::move(all_leading_comments);
+      }
+      seq_item.trailing_comment = state.get_trailing_comment();
+      seq.emplace_back(std::move(seq_item));
+
+      // After creating the SeqItem, we need to skip any trailing comment on the same line
+      // to prevent it from being picked up as a leading comment for the next item
+      if (!seq_item.trailing_comment.empty()) {
+        // Skip to end of line to avoid processing the trailing comment again
+        state.skip_to_end_of_line();
+        if (state.current() == '\n') {
+          state.advance();
+        }
+      }
+
+      // Note: Don't clear pending_comments here - they may be leading comments for the next item
     }
   }
 
@@ -802,16 +880,18 @@ Node parse_mapping(ParseState &state) {
     state.advance(); // Skip ':'
     state.skip_whitespace_inline();
 
-    // Check for and handle trailing comment on the same line as the key
-    std::string_view key_trailing_comment = state.get_trailing_comment();
-
-    // Parse value
+    // Parse value - simplified logic without complex comment handling after colon
     Node value;
+    std::string_view trailing_comment; // Declare in outer scope
+
     if (state.current() == '\n' || state.at_end()) {
       // Value is on next line(s) or null
       if (state.current() == '\n')
         state.advance();
       advance_to_next_content(state);
+
+      // Initialize trailing_comment as empty for values on next line
+      trailing_comment = "";
 
       std::string_view next_indent = state.current_line_indentation();
 
@@ -837,33 +917,44 @@ Node parse_mapping(ParseState &state) {
         // Quoted strings should be treated as strings directly (even if empty)
         std::string_view str = parse_quoted_string(state);
         value = Node(std::string_view(str));
-        value.trailing_comment = state.get_trailing_comment();
       } else if (state.current() == '-' && (state.peek() == ' ' || state.peek() == '\n' || state.peek() == '\0')) {
         // Sequence on same line - use current_indent as parent
         value = parse_sequence(state, current_indent);
       } else {
         value = parse_value(state);
-        // Get trailing comment after parsing the value
-        value.trailing_comment = state.get_trailing_comment();
       }
+
+      // Get trailing comment after the value (only if still on same line)
+      // Trailing comments are handled by MapEntry structure
+      trailing_comment = state.get_trailing_comment();
 
       // Skip to end of line
       state.skip_whitespace_inline();
-      if (state.current() == '\n')
+      if (state.current() == '\n') {
         state.advance();
+        // If we advanced to next line, clear trailing comment
+        // to avoid picking up standalone comments as trailing comments
+        trailing_comment = "";
+      }
     }
 
-    // If there was a trailing comment on the key line, use it instead
-    if (!key_trailing_comment.empty()) {
-      value.trailing_comment = key_trailing_comment;
-    }
-
-    // Assign leading comments to the value
+    // Assign key leading comments to the value
     if (!key_leading_comments.empty()) {
-      value.leading_comments = std::move(key_leading_comments);
+      // Leading comments are handled by MapEntry structure
+    }
+    map.emplace_back(key, value, std::move(key_leading_comments), trailing_comment);
+
+    // After creating the MapEntry, we need to skip any trailing comment on the same line
+    // to prevent it from being picked up as a leading comment for the next item
+    if (!trailing_comment.empty()) {
+      // Skip to end of line to avoid processing the trailing comment again
+      state.skip_to_end_of_line();
+      if (state.current() == '\n') {
+        state.advance();
+      }
     }
 
-    map.emplace(key, value);
+    // Note: Don't clear pending_comments here - they may be leading comments for the next mapping entry
   }
 
   return node;
@@ -1170,7 +1261,7 @@ Node parse_value(ParseState &state) {
   advance_to_next_content(state);
   if (state.at_end()) {
     Node node(std::monostate{});
-    state.assign_pending_comments(node);
+    state.clear_pending_comments();
     return node;
   }
 
@@ -1221,8 +1312,8 @@ Node parse_value(ParseState &state) {
     }
   }
 
-  // Assign pending comments to the parsed node
-  state.assign_pending_comments(result);
+  // Note: Don't clear pending_comments here - let parent parsers handle comment lifecycle
+  // Parent parsers (sequence/mapping) are responsible for assigning or clearing comments
   return result;
 }
 
@@ -1300,7 +1391,7 @@ Node parse_json_mapping(ParseState &state) {
 
     // Parse value - need to parse JSON values specially to avoid comma issues
     Node value = parse_json_value(state);
-    map.emplace(state.store_owned_string(std::move(key)), value);
+    map.emplace_back(state.store_owned_string(std::move(key)), value);
 
     state.skip_whitespace_and_newlines();
 
@@ -1323,8 +1414,8 @@ Node parse_json_sequence(ParseState &state) {
   state.advance(); // Skip '['
 
   Node node;
-  node.value = Sequence{};
-  auto &seq = std::get<Sequence>(node.value);
+  node.value = DashSequence{};
+  auto &seq = std::get<DashSequence>(node.value);
 
   while (!state.at_end() && state.current() != ']') {
     state.skip_whitespace_and_newlines();
@@ -1396,21 +1487,53 @@ Node parse_document(ParseState &state) {
 
   if (state.at_end()) {
     Node node(std::monostate{});
-    state.assign_pending_comments(node);
+    state.clear_pending_comments();
     return node;
   }
 
   Node root = parse_value(state);
 
-  // Any remaining pending comments should be assigned to the root node
-  state.assign_pending_comments(root);
+  // Clear any remaining pending comments
+  state.clear_pending_comments();
 
   return root;
 }
 
 // Parse multiple documents from a YAML stream
-std::vector<Node> parse_document_stream(ParseState &state) {
+std::pair<std::vector<Node>, std::vector<std::string_view>> parse_document_stream(ParseState &state) {
   std::vector<Node> documents;
+  std::vector<std::string_view> document_leading_comments;
+
+  // First, collect any comments at the very beginning of the document
+  // We need to scan through whitespace and comments until we reach actual content
+  while (!state.at_end()) {
+    state.skip_whitespace_inline(); // Skip spaces and tabs on current line
+
+    if (state.current() == '#') {
+      // Collect comment line
+      std::string_view comment = state.parse_comment();
+      if (!comment.empty()) {
+        state.pending_comments.push_back(comment);
+      }
+      // parse_comment() should have advanced past the comment, continue to next line
+    } else if (state.current() == '\n') {
+      // Skip newline and continue to next line
+      state.advance();
+    } else if (state.current() == '\r') {
+      // Handle Windows-style line endings
+      state.advance();
+      if (state.current() == '\n') {
+        state.advance();
+      }
+    } else {
+      // We've reached actual content, stop collecting document-level comments
+      break;
+    }
+  }
+
+  // Move collected comments to document-level storage
+  document_leading_comments = std::move(state.pending_comments);
+  state.pending_comments.clear();
 
   while (!state.at_end()) {
     advance_to_next_content(state);
@@ -1431,7 +1554,7 @@ std::vector<Node> parse_document_stream(ParseState &state) {
     }
   }
 
-  return documents;
+  return {documents, document_leading_comments};
 }
 
 // YamlDocument implementation - now supports multiple documents
@@ -1439,7 +1562,9 @@ Document::Document(std::string filename, std::string source) : source_(source) {
   ParseState state{filename, source_};
 
   try {
-    documents_ = parse_document_stream(state);
+    auto [docs, comments] = parse_document_stream(state);
+    documents_ = std::move(docs);
+    leading_comments_ = std::move(comments);
     // Transfer ownership of escaped strings from ParseState to this document
     // This ensures all string_views in nodes remain valid for the document's lifetime
     owned_strings_ = std::move(state.owned_strings);
@@ -1467,19 +1592,35 @@ ParseResult Document::Parse(std::string filename, std::string source) noexcept {
 
 // Forward declarations for formatting functions
 void format_scalar(std::ostream &os, const std::string_view &str);
-void format_sequence(std::ostream &os, const Sequence &seq, int indent);
+void format_sequence(std::ostream &os, const DashSequence &seq, int indent);
 void format_mapping(std::ostream &os, const Map &map, int indent);
 void format_yaml_value_only(std::ostream &os, const Node &node, int indent);
 
 void format_scalar(std::ostream &os, const std::string_view &str) {
-  // Quote string if it contains special characters or looks like other types
-  bool needs_quotes = str.empty() || str == "true" || str == "false" || str == "null" ||
-                      str.find(':') != std::string_view::npos || str.find('#') != std::string_view::npos ||
-                      str.find('\n') != std::string_view::npos || str.find('"') != std::string_view::npos;
+  // Conservative approach: always quote strings to preserve idempotency
+  // This ensures that the original formatting is maintained
+  bool needs_quotes = true;
 
-  // Quote strings that look numeric but aren't valid numbers
-  if (!needs_quotes && !str.empty() && (std::isdigit(str[0]) || str[0] == '-' || str[0] == '+')) {
-    needs_quotes = !is_valid_number(str);
+  // Only skip quotes for very simple cases
+  if (!str.empty() && str.find(':') == std::string_view::npos && str.find('#') == std::string_view::npos &&
+      str.find('\n') == std::string_view::npos && str.find('"') == std::string_view::npos &&
+      str.find('\'') == std::string_view::npos && str != "true" && str != "false" && str != "null" &&
+      str.find("://") == std::string_view::npos &&
+      !(str.size() == 36 && str[8] == '-' && str[13] == '-' && str[18] == '-' && str[23] == '-')) {
+    // Check if it looks like a number
+    if (std::isdigit(str[0]) || str[0] == '-' || str[0] == '+') {
+      needs_quotes = !is_valid_number(str);
+    } else {
+      // Simple non-numeric strings without special characters can be unquoted
+      bool has_special = false;
+      for (char c : str) {
+        if (!std::isalnum(c) && c != '_' && c != '-') {
+          has_special = true;
+          break;
+        }
+      }
+      needs_quotes = has_special;
+    }
   }
 
   if (needs_quotes) {
@@ -1504,7 +1645,7 @@ void format_scalar(std::ostream &os, const std::string_view &str) {
   }
 }
 
-void format_sequence(std::ostream &os, const Sequence &seq, int indent) {
+void format_sequence(std::ostream &os, const DashSequence &seq, int indent) {
   for (size_t i = 0; i < seq.size(); ++i) {
     if (i > 0) {
       os << "\n";
@@ -1516,24 +1657,26 @@ void format_sequence(std::ostream &os, const Sequence &seq, int indent) {
     }
 
     // Output the list marker with proper indentation
-    os << std::string(indent, ' ') << "- ";
+    os << std::string(indent, ' ') << "-";
 
     // Format the item value
-    if (seq[i].IsScalar()) {
-      format_yaml_value_only(os, seq[i], 0);
-    } else if (seq[i].IsSequence()) {
-      os << "\n";
-      format_yaml_value_only(os, seq[i], indent + 2);
-    } else if (seq[i].IsMap()) {
-      os << "\n";
-      format_yaml_value_only(os, seq[i], indent + 2);
+    if (seq[i].value.IsScalar()) {
+      // Put simple values on the same line
+      os << " ";
+      format_yaml_value_only(os, seq[i].value, 0);
+      // Output trailing comment if present (single space for VSCode alignment)
+      if (!seq[i].trailing_comment.empty()) {
+        os << " " << seq[i].trailing_comment;
+      }
     } else {
-      format_yaml_value_only(os, seq[i], 0);
-    }
+      // For complex values (maps, sequences), always put on next line with proper indentation
+      os << "\n";
+      format_yaml_value_only(os, seq[i].value, indent + 2);
 
-    // Output trailing comment if present
-    if (!seq[i].trailing_comment.empty()) {
-      os << "  " << seq[i].trailing_comment;
+      // Output trailing comment on a separate line with proper indentation if present
+      if (!seq[i].trailing_comment.empty()) {
+        os << "\n" << std::string(indent + 2, ' ') << seq[i].trailing_comment;
+      }
     }
   }
 }
@@ -1546,60 +1689,97 @@ void format_mapping(std::ostream &os, const Map &map, int indent) {
     }
     first = false;
 
-    // Output leading comments for the value with proper indentation
-    for (const auto &comment : entry.value.leading_comments) {
+    // Output leading comments for this map entry with proper indentation
+    for (const auto &comment : entry.leading_comments) {
       os << std::string(indent, ' ') << comment << "\n";
     }
-
     // Output the key with proper indentation
     os << std::string(indent, ' ') << std::string(entry.key) << ":";
 
     // Check if value should be on next line
-    if (std::holds_alternative<Map>(entry.value.value) || std::holds_alternative<Sequence>(entry.value.value)) {
+    if (std::holds_alternative<Map>(entry.value.value) || std::holds_alternative<DashSequence>(entry.value.value) ||
+        std::holds_alternative<SimpleSequence>(entry.value.value)) {
       os << "\n";
       format_yaml_value_only(os, entry.value, indent + 2);
+
+      // Output trailing comment on a separate line with proper indentation if present
+      if (!entry.trailing_comment.empty()) {
+        os << "\n" << std::string(indent + 2, ' ') << entry.trailing_comment;
+      }
     } else {
       os << " ";
       format_yaml_value_only(os, entry.value, 0);
-    }
 
-    // Output trailing comment if present
-    if (!entry.value.trailing_comment.empty()) {
-      os << "  " << entry.value.trailing_comment;
+      // Output trailing comment if present (single space for VSCode alignment)
+      if (!entry.trailing_comment.empty()) {
+        os << " " << entry.trailing_comment;
+      }
     }
   }
 }
+} // namespace yaml
+
+// Helper function to format just the value part without leading comments
+// This is a local helper function, not the one declared in the header
+static void format_yaml_value_only_local(std::ostream &os, const yaml::Node &node, int indent) {
+  vswitch(
+      node.value, [&os](std::monostate) { os << "null"; }, [&os](bool arg) { os << (arg ? "true" : "false"); },
+      [&os](int64_t arg) { os << arg; }, [&os](double arg) { os << arg; },
+      [&os](const std::string_view &arg) { yaml::format_scalar(os, arg); },
+      [&os, indent](const yaml::DashSequence &arg) { format_sequence(os, arg, indent); },
+      [&os](const yaml::SimpleSequence &arg) {
+        // Format SimpleSequence as JSON-style array
+        os << "[";
+        for (size_t i = 0; i < arg.size(); ++i) {
+          if (i > 0)
+            os << ", ";
+          format_yaml_value_only_local(os, arg[i], 0);
+        }
+        os << "]";
+      },
+      [&os, indent](const yaml::Map &arg) { format_mapping(os, arg, indent); });
+}
+
+} // namespace shilos
+
+// Implement the functions declared in the header file
+// Implement the functions declared in the header file
+namespace shilos::yaml {
 
 void format_yaml(std::ostream &os, const Node &node, int indent) {
-  // Output leading comments with proper indentation
-  for (const auto &comment : node.leading_comments) {
-    if (indent > 0) {
-      os << std::string(indent, ' ');
-    }
-    os << comment << "\n";
-  }
-
-  // Output the node value with proper indentation
-  if (indent > 0 && !node.leading_comments.empty()) {
-    // If we had leading comments, we need to add indentation for the value
-    os << std::string(indent, ' ');
+  // For root level documents, handle document header comments
+  if (indent == 0) {
+    // Output document header comments (if any) followed by blank line
+    // Document-level comments are handled by Document structure, not Node
+    // This formatting is for Node values only
+  } else {
+    // Output leading comments with proper indentation
+    // Leading comments are handled by MapEntry/SeqItem structures, not Node
+    // Output the node value with proper indentation
+    // Indentation is handled by the calling formatting function
   }
 
   format_yaml_value_only(os, node, indent);
 
-  // Output trailing comment
-  if (!node.trailing_comment.empty()) {
-    os << "  " << node.trailing_comment;
-  }
+  // Output trailing comment (single space for VSCode alignment)
+  // Trailing comments are handled by MapEntry/SeqItem structures, not Node
 }
-
-// Helper function to format just the value part without leading comments
 void format_yaml_value_only(std::ostream &os, const Node &node, int indent) {
   vswitch(
       node.value, [&os](std::monostate) { os << "null"; }, [&os](bool arg) { os << (arg ? "true" : "false"); },
       [&os](int64_t arg) { os << arg; }, [&os](double arg) { os << arg; },
       [&os](const std::string_view &arg) { format_scalar(os, arg); },
-      [&os, indent](const Sequence &arg) { format_sequence(os, arg, indent); },
+      [&os, indent](const DashSequence &arg) { format_sequence(os, arg, indent); },
+      [&os](const SimpleSequence &arg) {
+        // Format SimpleSequence as JSON-style array
+        os << "[";
+        for (size_t i = 0; i < arg.size(); ++i) {
+          if (i > 0)
+            os << ", ";
+          format_yaml_value_only(os, arg[i], 0);
+        }
+        os << "]";
+      },
       [&os, indent](const Map &arg) { format_mapping(os, arg, indent); });
 }
 
@@ -1611,8 +1791,37 @@ std::ostream &operator<<(std::ostream &os, const Node &node) {
 std::string format_yaml(const Node &node) {
   std::ostringstream oss;
   format_yaml(oss, node, 0);
+
+  // Ensure document ends with final newline
+  std::string result = oss.str();
+  if (!result.empty() && result.back() != '\n') {
+    result += '\n';
+  }
+
+  return result;
+}
+
+// Document formatting with document-level comments
+void format_yaml(std::ostream &os, const Document &doc) {
+  // Output document-level leading comments first
+  for (const auto &comment : doc.leadingComments()) {
+    os << comment << "\n";
+  }
+
+  // Add blank line after document comments if they exist
+  if (!doc.leadingComments().empty()) {
+    os << "\n";
+  }
+
+  // Format the root node
+  format_yaml(os, doc.root(), 0);
+}
+
+std::string format_yaml(const Document &doc) {
+  std::ostringstream oss;
+  format_yaml(oss, doc);
   return oss.str();
 }
 
-} // namespace yaml
-} // namespace shilos
+} // namespace shilos::yaml
+using shilos::yaml::format_yaml_value_only;

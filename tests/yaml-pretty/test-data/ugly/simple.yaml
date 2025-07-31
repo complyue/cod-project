@@ -4,6 +4,7 @@
 # - Extra spaces around colons and values
 # - Inconsistent quote usage (some values quoted, some not)
 # - Trailing whitespace
+
     name:    "John Doe"
 age: 30
    active: true

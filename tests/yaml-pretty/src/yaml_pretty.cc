@@ -23,17 +23,6 @@ void print_node_tree(const yaml::Node &node, int depth = 0, const std::string &k
     std::cout << "ROOT: ";
   }
 
-  // Print leading comments if any
-  if (!node.leading_comments.empty()) {
-    std::cout << "LEADING_COMMENT: [";
-    for (size_t i = 0; i < node.leading_comments.size(); ++i) {
-      if (i > 0)
-        std::cout << ", ";
-      std::cout << "\"" << node.leading_comments[i] << "\"";
-    }
-    std::cout << "] ";
-  }
-
   if (node.IsNull()) {
     std::cout << "NULL";
   } else if (node.IsScalar()) {
@@ -47,8 +36,11 @@ void print_node_tree(const yaml::Node &node, int depth = 0, const std::string &k
       std::cout << "STRING: \"" << *s << "\"";
     }
   } else if (node.IsSequence()) {
-    const auto &seq = std::get<yaml::Sequence>(node.value);
-    std::cout << "SEQUENCE (" << seq.size() << " items)";
+    if (auto seq = std::get_if<yaml::DashSequence>(&node.value)) {
+      std::cout << "DASH_SEQUENCE (" << seq->size() << " items)";
+    } else if (auto seq = std::get_if<yaml::SimpleSequence>(&node.value)) {
+      std::cout << "SIMPLE_SEQUENCE (" << seq->size() << " items)";
+    }
   } else if (node.IsMap()) {
     const auto &map = std::get<yaml::Map>(node.value);
     std::cout << "MAP (" << map.size() << " entries)";
@@ -56,24 +48,63 @@ void print_node_tree(const yaml::Node &node, int depth = 0, const std::string &k
     std::cout << "UNKNOWN TYPE";
   }
 
-  // Print trailing comment if any
-  if (!node.trailing_comment.empty()) {
-    std::cout << " TRAILING_COMMENT: \"" << node.trailing_comment << "\"";
-  }
-
   std::cout << std::endl;
 
   // Recursively print children
   if (node.IsSequence()) {
-    const auto &seq = std::get<yaml::Sequence>(node.value);
-    for (size_t i = 0; i < seq.size(); ++i) {
-      std::cout << indent << "  [" << i << "]:" << std::endl;
-      print_node_tree(seq[i], depth + 2);
+    if (auto seq = std::get_if<yaml::DashSequence>(&node.value)) {
+      for (size_t i = 0; i < seq->size(); ++i) {
+        const auto &seq_item = (*seq)[i];
+        std::cout << indent << "  [" << i << "]:";
+
+        // Print item's leading comments
+        if (!seq_item.leading_comments.empty()) {
+          std::cout << " LEADING_COMMENT: [";
+          for (size_t j = 0; j < seq_item.leading_comments.size(); ++j) {
+            if (j > 0)
+              std::cout << ", ";
+            std::cout << "\"" << seq_item.leading_comments[j] << "\"";
+          }
+          std::cout << "]";
+        }
+
+        // Print item's trailing comment
+        if (!seq_item.trailing_comment.empty()) {
+          std::cout << " TRAILING_COMMENT: \"" << seq_item.trailing_comment << "\"";
+        }
+
+        std::cout << std::endl;
+        print_node_tree(seq_item.value, depth + 2);
+      }
+    } else if (auto seq = std::get_if<yaml::SimpleSequence>(&node.value)) {
+      for (size_t i = 0; i < seq->size(); ++i) {
+        std::cout << indent << "  [" << i << "]:" << std::endl;
+        print_node_tree((*seq)[i], depth + 2);
+      }
     }
   } else if (node.IsMap()) {
     const auto &map = std::get<yaml::Map>(node.value);
     for (const auto &entry : map) {
-      print_node_tree(entry.value, depth + 1, std::string(entry.key));
+      std::cout << indent << "  \"" << entry.key << "\":";
+
+      // Print entry's leading comments
+      if (!entry.leading_comments.empty()) {
+        std::cout << " LEADING_COMMENT: [";
+        for (size_t j = 0; j < entry.leading_comments.size(); ++j) {
+          if (j > 0)
+            std::cout << ", ";
+          std::cout << "\"" << entry.leading_comments[j] << "\"";
+        }
+        std::cout << "]";
+      }
+
+      // Print entry's trailing comment
+      if (!entry.trailing_comment.empty()) {
+        std::cout << " TRAILING_COMMENT: \"" << entry.trailing_comment << "\"";
+      }
+
+      std::cout << std::endl;
+      print_node_tree(entry.value, depth + 2);
     }
   }
 }
@@ -130,7 +161,7 @@ int main(int argc, char *argv[]) {
           print_node_tree(doc.root());
 
           std::cout << "=== FORMAT_YAML OUTPUT ===" << std::endl;
-          std::cout << format_yaml(doc.root()) << std::endl;
+          std::cout << format_yaml(doc) << std::endl;
         });
 
     return 0;
@@ -167,7 +198,7 @@ int main(int argc, char *argv[]) {
             std::cerr << "Error: " << err.what() << std::endl;
             std::exit(1);
           },
-          [](const yaml::Document &doc) { std::cout << format_yaml(doc.root()) << std::endl; });
+          [](const yaml::Document &doc) { std::cout << format_yaml(doc) << std::endl; });
       return 0;
     } catch (const std::exception &e) {
       std::cerr << "Error: " << e.what() << std::endl;

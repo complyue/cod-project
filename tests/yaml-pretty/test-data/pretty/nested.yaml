@@ -5,14 +5,15 @@
 # - Extra spaces around values and quotes
 # - Inconsistent array item indentation
 # - Mixed quote styles and trailing whitespace
-person: 
+
+person:
   name: Alice
   age: 25
-  address: 
+  address:
     street: "123 Main St"
     city: Boston
     zipcode: 12345
-  hobbies: 
+  hobbies:
     - reading
     - swimming
     - coding

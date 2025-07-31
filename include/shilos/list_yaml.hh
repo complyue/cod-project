@@ -22,7 +22,7 @@ namespace shilos {
 
 template <template <typename> class ListC, typename T>
 inline yaml::Node list_to_yaml(const ListC<T> &lst, yaml::YamlAuthor &author) {
-  auto seq = author.createSequence();
+  auto seq = author.createDashSequence();
   for (const auto &elem : lst) {
     if constexpr (requires { to_yaml(elem, author); }) {
       author.pushToSequence(seq, to_yaml(elem, author));
@@ -59,28 +59,57 @@ static void list_from_yaml_impl(memory_region<RT> &mr, const yaml::Node &node, L
   new (raw_ptr) ListC<T>(mr);
   auto &lst = *raw_ptr;
 
-  const auto &seq = std::get<yaml::Sequence>(node.value);
-  for (const auto &elem_node : seq) {
-    if constexpr (std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
-      if (!elem_node.IsScalar())
-        throw yaml::TypeError("Expected scalar for bits element in regional list");
+  if (auto dash_seq = std::get_if<yaml::DashSequence>(&node.value)) {
+    // Handle dash sequence: - item1 \n - item2
+    for (const auto &seq_item : *dash_seq) {
+      const auto &elem_node = seq_item.value;
+      if constexpr (std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
+        if (!elem_node.IsScalar())
+          throw yaml::TypeError("Expected scalar for bits element in regional list");
 
-      if constexpr (std::is_same_v<T, bool>) {
-        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asBool()); });
-      } else if constexpr (std::is_same_v<T, int>) {
-        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asInt()); });
-      } else if constexpr (std::is_same_v<T, int64_t>) {
-        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asInt64()); });
-      } else if constexpr (std::is_same_v<T, float>) {
-        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asFloat()); });
-      } else if constexpr (std::is_same_v<T, double>) {
-        lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asDouble()); });
+        if constexpr (std::is_same_v<T, bool>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asBool()); });
+        } else if constexpr (std::is_same_v<T, int>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asInt()); });
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asInt64()); });
+        } else if constexpr (std::is_same_v<T, float>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asFloat()); });
+        } else if constexpr (std::is_same_v<T, double>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asDouble()); });
+        } else {
+          static_assert(sizeof(T) == 0, "Unsupported scalar type for regional list");
+        }
       } else {
-        static_assert(sizeof(T) == 0, "Unsupported scalar type for regional list");
+        lst.emplace_init(mr, [&](T *dst) { from_yaml(mr, elem_node, dst); });
       }
-    } else {
-      lst.emplace_init(mr, [&](T *dst) { from_yaml(mr, elem_node, dst); });
     }
+  } else if (auto simple_seq = std::get_if<yaml::SimpleSequence>(&node.value)) {
+    // Handle simple sequence: [item1, item2]
+    for (const auto &elem_node : *simple_seq) {
+      if constexpr (std::is_same_v<T, bool> || std::is_integral_v<T> || std::is_floating_point_v<T>) {
+        if (!elem_node.IsScalar())
+          throw yaml::TypeError("Expected scalar for bits element in regional list");
+
+        if constexpr (std::is_same_v<T, bool>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asBool()); });
+        } else if constexpr (std::is_same_v<T, int>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asInt()); });
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asInt64()); });
+        } else if constexpr (std::is_same_v<T, float>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asFloat()); });
+        } else if constexpr (std::is_same_v<T, double>) {
+          lst.emplace_init(mr, [&](T *dst) { new (dst) T(elem_node.asDouble()); });
+        } else {
+          static_assert(sizeof(T) == 0, "Unsupported scalar type for regional list");
+        }
+      } else {
+        lst.emplace_init(mr, [&](T *dst) { from_yaml(mr, elem_node, dst); });
+      }
+    }
+  } else {
+    throw yaml::TypeError("YAML node for regional list must be a sequence");
   }
 }
 
