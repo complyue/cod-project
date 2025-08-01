@@ -361,7 +361,9 @@ int main(int argc, char **argv) {
         // Add to project
         project->deps().emplace_init(*region, [&](CodDep *dep) {
           new (dep) CodDep(*region, new_dep->uuid(), std::string_view(new_dep->name()),
-                           std::string_view(new_dep->repo_url()), std::string_view(new_dep->path()));
+                           std::string_view(new_dep->repo_url()), std::string_view(new_dep->path()),
+                           std::string_view(new_dep->description()), std::string_view(new_dep->name_comment()),
+                           std::string_view(new_dep->repo_url_comment()), std::string_view(new_dep->path_comment()));
 
           // Copy branches
           for (const regional_str &branch : new_dep->branches()) {

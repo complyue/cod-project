@@ -1,12 +1,20 @@
+# This is a test project
+# Multi-line comment supported
+
 uuid: "11111111-1111-1111-1111-111111111111"
-name: testpkg
-repo_url: "https://github.com/test/testpkg.git"
+name: testpkg  # Project name
+repo_url: "https://github.com/test/testpkg.git"  # Repository URL
 branches:
-  - main
-  - dev
+  # Main branch
+  - main  # Production branch
+  # Development branch
+  - dev  # Development work
 deps:
-  - uuid: "33333333-3333-3333-3333-333333333333"
-    name: local-dep
-    repo_url: local_dep
+  -
+    # This is a local dependency
+    uuid: "33333333-3333-3333-3333-333333333333"
+    name: local-dep  # Local dependency name
+    repo_url: local_dep  # Local dependency path
     branches:
-      - main
+      # Main branch
+      - main  # Main branch

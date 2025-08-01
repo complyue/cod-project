@@ -182,9 +182,6 @@ public:
       : Exception(FormatErrorMessage(filename, message)), filename_(std::move(filename)), message_(std::move(message)) {
   }
 
-  // Legacy constructor for backward compatibility during transition
-  explicit AuthorError(std::string message) : Exception(message), filename_(""), message_(std::move(message)) {}
-
   const std::string &filename() const noexcept { return filename_; }
   const std::string &message() const noexcept { return message_; }
 
@@ -556,8 +553,9 @@ inline bool Node::contains(std::string_view key) const {
 class YamlAuthor {
 private:
   std::string filename_;
-  iops<std::string> owned_strings_; // Tracks strings created during authoring
-  std::vector<Node> roots_;         // Multiple root nodes for multi-document support
+  iops<std::string> owned_strings_;                        // Tracks strings created during authoring
+  std::vector<Node> roots_;                                // Multiple root nodes for multi-document support
+  std::vector<std::string_view> document_header_comments_; // Document-level header comments
 
   friend class Document;
 
@@ -604,30 +602,69 @@ public:
   Node createSimpleSequence() { return Node(SimpleSequence{}); }
   Node createDashSequence() { return Node(DashSequence{}); }
 
-  // Node modification methods (only available during authoring)
-  void setMapValue(Node &map_node, std::string_view key, const Node &value) {
+  // Document-level comment management
+  void addDocumentHeaderComment(std::string_view comment) {
+    document_header_comments_.push_back(createStringView(comment));
+  }
+
+  void addDocumentHeaderComment(std::string comment) {
+    document_header_comments_.push_back(createStringView(std::move(comment)));
+  }
+
+  const std::vector<std::string_view> &documentHeaderComments() const noexcept { return document_header_comments_; }
+
+  // Enhanced node modification methods with comment support
+  void setMapValue(Node &map_node, std::string_view key, const Node &value,
+                   std::vector<std::string_view> field_description = {}, std::string_view field_remark = "") {
     if (auto map = std::get_if<Map>(&map_node.value)) {
       for (auto &entry : *map) {
         if (entry.key == key) {
           entry.value = value;
+          // Update comments if provided
+          if (!field_description.empty()) {
+            entry.leading_comments = std::move(field_description);
+          }
+          if (!field_remark.empty()) {
+            entry.trailing_comment = field_remark;
+          }
           return;
         }
       }
-      // Key not found, add new entry
-      map->emplace_back(key, value);
+      // Key not found, add new entry with comments
+      map->emplace_back(key, value, std::move(field_description), field_remark);
     } else {
       throw TypeError("Expected map value");
     }
   }
 
-  void pushToSequence(Node &seq_node, const Node &value) {
+  void setMapValueWithSingleComment(Node &map_node, std::string_view key, const Node &value,
+                                    std::string_view field_description, std::string_view field_remark = "") {
+    std::vector<std::string_view> desc;
+    if (!field_description.empty()) {
+      desc.push_back(field_description);
+    }
+    setMapValue(map_node, key, value, std::move(desc), field_remark);
+  }
+
+  // Enhanced sequence methods with comment support
+  void pushToSequence(Node &seq_node, const Node &value, std::vector<std::string_view> item_description = {},
+                      std::string_view item_remark = "") {
     if (auto seq = std::get_if<SimpleSequence>(&seq_node.value)) {
       seq->push_back(value);
     } else if (auto seq = std::get_if<DashSequence>(&seq_node.value)) {
-      seq->emplace_back(value);
+      seq->emplace_back(value, std::move(item_description), item_remark);
     } else {
       throw TypeError("Expected sequence value");
     }
+  }
+
+  void pushToSequenceWithSingleComment(Node &seq_node, const Node &value, std::string_view item_description,
+                                       std::string_view item_remark = "") {
+    std::vector<std::string_view> desc;
+    if (!item_description.empty()) {
+      desc.push_back(item_description);
+    }
+    pushToSequence(seq_node, value, std::move(desc), item_remark);
   }
 
   void assignNode(Node &target, const Node &source) { target.value = source.value; }
@@ -654,14 +691,15 @@ public:
 // for different scenarios where formatting errors are either exceptional or routine.
 class Document {
 private:
-  std::string source_;                             // Owns the original YAML string for string_view lifetime
-  std::vector<Node> documents_;                    // Multiple documents in the stream
-  iops<std::string> owned_strings_;                // Owns escaped strings and keys that nodes reference (deduplicated)
-  std::vector<std::string_view> leading_comments_; // Document-level leading comments
+  std::string source_;              // Owns the original YAML string for string_view lifetime
+  std::vector<Node> documents_;     // Multiple documents in the stream
+  iops<std::string> owned_strings_; // Owns escaped strings and keys that nodes reference (deduplicated)
+  std::vector<std::string_view> document_header_comments_; // Document-level header comments
 
   // Internal constructor for authoring - transfers ownership from YamlAuthor
   // Private - accessed by static methods (which are class members)
-  Document(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings);
+  Document(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings,
+           std::vector<std::string_view> doc_header_comments = {});
 
   // Helper function to read file content for filename-only constructor
   static std::string read_file(const std::string &filename) {
@@ -700,6 +738,9 @@ public:
 
       // Transfer string ownership from author
       owned_strings_ = std::move(author.owned_strings_);
+
+      // Transfer document header comments from author
+      document_header_comments_ = std::move(author.document_header_comments_);
 
       // Generate YAML source from authored content
       std::ostringstream oss;
@@ -785,7 +826,7 @@ public:
   size_t documentCount() const noexcept { return documents_.size(); }
 
   // Access document-level comments
-  const std::vector<std::string_view> &leadingComments() const noexcept { return leading_comments_; }
+  const std::vector<std::string_view> &documentHeaderComments() const noexcept { return document_header_comments_; }
 
   // Static parsing function - noexcept version that returns ParseResult
   // Use this when you prefer error handling via Result types instead of exceptions

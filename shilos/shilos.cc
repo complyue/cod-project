@@ -1352,7 +1352,7 @@ Node parse_json_value(ParseState &state) {
   return parse_scalar_value(std::string_view(value_str));
 }
 
-// JSON-style parsing for backward compatibility
+// JSON-style parsing
 Node parse_json_mapping(ParseState &state) {
   state.advance(); // Skip '{'
 
@@ -1564,7 +1564,7 @@ Document::Document(std::string filename, std::string source) : source_(source) {
   try {
     auto [docs, comments] = parse_document_stream(state);
     documents_ = std::move(docs);
-    leading_comments_ = std::move(comments);
+    document_header_comments_ = std::move(comments);
     // Transfer ownership of escaped strings from ParseState to this document
     // This ensures all string_views in nodes remain valid for the document's lifetime
     owned_strings_ = std::move(state.owned_strings);
@@ -1574,8 +1574,10 @@ Document::Document(std::string filename, std::string source) : source_(source) {
 }
 
 // Private constructor for authoring - transfers ownership from YamlAuthor
-Document::Document(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings)
-    : source_(), documents_(std::move(documents)), owned_strings_(std::move(owned_strings)) {
+Document::Document(std::string filename, std::vector<Node> documents, iops<std::string> owned_strings,
+                   std::vector<std::string_view> doc_header_comments)
+    : source_(), documents_(std::move(documents)), owned_strings_(std::move(owned_strings)),
+      document_header_comments_(std::move(doc_header_comments)) {
   // For authored documents, we don't have a source_ string since content was created programmatically
   // The filename is stored in the owned_strings_ for error reporting contexts
 }
@@ -1803,13 +1805,13 @@ std::string format_yaml(const Node &node) {
 
 // Document formatting with document-level comments
 void format_yaml(std::ostream &os, const Document &doc) {
-  // Output document-level leading comments first
-  for (const auto &comment : doc.leadingComments()) {
+  // Output document-level header comments first
+  for (const auto &comment : doc.documentHeaderComments()) {
     os << comment << "\n";
   }
 
   // Add blank line after document comments if they exist
-  if (!doc.leadingComments().empty()) {
+  if (!doc.documentHeaderComments().empty()) {
     os << "\n";
   }
 

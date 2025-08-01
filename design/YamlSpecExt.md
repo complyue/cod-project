@@ -35,7 +35,7 @@ struct SeqItem {  // For dash sequences only
 
 struct Document {
     Node root;
-    std::vector<std::string_view> leading_comments;  // Document header
+    std::vector<std::string_view> leading_comments;  // Document header only (no footer comments)
 };
 ```
 
@@ -64,6 +64,20 @@ repo_url: "https://example.com/repo.git"  # Trailing comment
 
 ## Comment Types and Placement
 
+### Document Header Comments
+Comments at the beginning of a document, separated from content by blank lines:
+
+```yaml
+# This is a document header comment
+# It describes the entire YAML document
+# Blank line separation is required
+
+uuid: "123-456"
+name: project
+```
+
+**Important**: YAML documents can only have header comments. Footer comments at the end of documents are not supported.
+
 ### Leading Comments
 Comments that appear before structural elements, separated by the element they describe:
 
@@ -76,6 +90,8 @@ dependencies:
   - name: example
 ```
 
+**Important**: Leading comments can only be associated with map entries or dash-sequence items. They cannot be associated with simple values or other structural elements.
+
 ### Trailing Comments
 Comments that appear on the same line as the value:
 
@@ -84,17 +100,7 @@ key: value # This is a trailing comment
 - item # This is a trailing comment on sequence item
 ```
 
-### Document Header Comments
-Comments at the beginning of a document, separated from content by blank lines:
-
-```yaml
-# This is a document header comment
-# It describes the entire YAML document
-# Blank line separation is required
-
-uuid: "123-456"
-name: project
-```
+**Important**: Trailing comments can only be associated with simply-valued entries (scalars) or dash-sequence items. They cannot be associated with complex structures like nested maps.
 
 ## Formatting Rules
 
@@ -147,12 +153,16 @@ The empty line after the dash and before the mapping is the idiomatic pattern th
   key: # This pattern is not supported
     value
   ```
+- Document footer comments (comments at the end of a YAML document)
+- Leading comments on simple scalar values (only map entries and dash-sequence items)
+- Trailing comments on complex structures like nested maps (only simple values and dash-sequence items)
 
 ### Supported Patterns
 - Block-style mappings with comments
 - Block-style sequences (dash format) with comments
-- Document-level header comments
-- Trailing comments on same line as values
+- Document-level header comments only (no footer comments)
+- Trailing comments on same line as simple values and dash-sequence items
+- Leading comments on map entries and dash-sequence items only
 
 ## Implementation Benefits
 

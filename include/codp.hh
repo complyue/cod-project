@@ -14,15 +14,22 @@ class CodDep {
 private:
   UUID uuid_;
   regional_str name_;
+  regional_str name_comment_; // Trailing comment for name field
   regional_str repo_url_;
+  regional_str repo_url_comment_; // Trailing comment for repo_url field
   regional_fifo<regional_str> branches_;
-  regional_str path_; // NEW: optional local path for dependency
+  regional_str path_;         // Optional local path for dependency
+  regional_str path_comment_; // Trailing comment for path field
+  regional_str description_;  // Description comments before this dependency
 
 public:
   template <typename RT>
   CodDep(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url,
-         std::string_view path = "")
-      : uuid_(uuid), name_(mr, name), repo_url_(mr, repo_url), branches_(mr), path_(mr, path) {}
+         std::string_view path = "", std::string_view description = "", std::string_view name_comment = "",
+         std::string_view repo_url_comment = "", std::string_view path_comment = "")
+      : uuid_(uuid), name_(mr, name), name_comment_(mr, name_comment), repo_url_(mr, repo_url),
+        repo_url_comment_(mr, repo_url_comment), branches_(mr), path_(mr, path), path_comment_(mr, path_comment),
+        description_(mr, description) {}
 
   // Deleted special members
   CodDep(const CodDep &) = delete;
@@ -37,6 +44,14 @@ public:
   regional_fifo<regional_str> &branches() { return branches_; }
   const regional_str &path() const { return path_; }
   bool has_path() const { return !path_.empty(); }
+  const regional_str &description() const { return description_; }
+  regional_str &description() { return description_; }
+  const regional_str &name_comment() const { return name_comment_; }
+  regional_str &name_comment() { return name_comment_; }
+  const regional_str &repo_url_comment() const { return repo_url_comment_; }
+  regional_str &repo_url_comment() { return repo_url_comment_; }
+  const regional_str &path_comment() const { return path_comment_; }
+  regional_str &path_comment() { return path_comment_; }
 };
 
 class CodProject {
@@ -46,16 +61,25 @@ public:
 private:
   UUID uuid_;
   regional_str name_;
+  regional_str name_comment_; // Trailing comment for name field
   regional_str repo_url_;
+  regional_str repo_url_comment_; // Trailing comment for repo_url field
   regional_fifo<regional_str> branches_;
   regional_fifo<CodDep> deps_;
+  regional_str header_; // Header comments at the beginning of the file
 
 public:
   template <typename RT>
-  CodProject(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url)
-      : uuid_(uuid), name_(mr, name), repo_url_(mr, repo_url), branches_(mr), deps_(mr) {}
+  CodProject(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url,
+             std::string_view header = "", std::string_view name_comment = "", std::string_view repo_url_comment = "")
+      : uuid_(uuid), name_(mr, name), name_comment_(mr, name_comment), repo_url_(mr, repo_url),
+        repo_url_comment_(mr, repo_url_comment), branches_(mr), deps_(mr), header_(mr, header) {}
 
-  template <typename RT> CodProject(memory_region<RT> &mr) : uuid_(), name_(), repo_url_(), branches_(mr), deps_(mr) {}
+  template <typename RT>
+  CodProject(memory_region<RT> &mr, std::string_view header = "", std::string_view name_comment = "",
+             std::string_view repo_url_comment = "")
+      : uuid_(), name_(), name_comment_(mr, name_comment), repo_url_(), repo_url_comment_(mr, repo_url_comment),
+        branches_(mr), deps_(mr), header_(mr, header) {}
 
   // Deleted special members
   CodProject(const CodProject &) = delete;
@@ -67,15 +91,22 @@ public:
 
   regional_str &name() { return name_; }
   const regional_str &name() const { return name_; }
+  regional_str &name_comment() { return name_comment_; }
+  const regional_str &name_comment() const { return name_comment_; }
 
   regional_fifo<CodDep> &deps() { return deps_; }
   const regional_fifo<CodDep> &deps() const { return deps_; }
 
   regional_str &repo_url() { return repo_url_; }
   const regional_str &repo_url() const { return repo_url_; }
+  regional_str &repo_url_comment() { return repo_url_comment_; }
+  const regional_str &repo_url_comment() const { return repo_url_comment_; }
 
   regional_fifo<regional_str> &branches() { return branches_; }
   const regional_fifo<regional_str> &branches() const { return branches_; }
+
+  const regional_str &header() const { return header_; }
+  regional_str &header() { return header_; }
 };
 
 // ==========================================================================

@@ -15,13 +15,62 @@ namespace cod::project {
 
 inline yaml::Node to_yaml(const CodDep &dep, yaml::YamlAuthor &author) {
   auto m = author.createMap();
-  author.setMapValue(m, "uuid", author.createString(dep.uuid().to_string()));
-  author.setMapValue(m, "name", author.createString(std::string_view(dep.name())));
-  author.setMapValue(m, "repo_url", author.createString(std::string_view(dep.repo_url())));
-  if (!dep.path().empty()) {
-    author.setMapValue(m, "path", author.createString(std::string_view(dep.path())));
+
+  // Parse description comments into individual lines
+  std::vector<std::string_view> description_lines;
+  std::string desc_str = std::string(dep.description());
+  if (!desc_str.empty()) {
+    size_t start = 0;
+    size_t end = desc_str.find('\n');
+    while (end != std::string::npos) {
+      std::string line = desc_str.substr(start, end - start);
+      if (!line.empty()) {
+        description_lines.push_back(author.createStringView("# " + line));
+      }
+      start = end + 1;
+      end = desc_str.find('\n', start);
+    }
+    // Add last line
+    std::string last_line = desc_str.substr(start);
+    if (!last_line.empty()) {
+      description_lines.push_back(author.createStringView("# " + last_line));
+    }
   }
 
+  // Parse field-specific trailing comments
+  std::string_view name_comment;
+  std::string name_comment_str = std::string(dep.name_comment());
+  if (!name_comment_str.empty()) {
+    name_comment = author.createStringView("# " + name_comment_str);
+  }
+
+  std::string_view repo_url_comment;
+  std::string repo_url_comment_str = std::string(dep.repo_url_comment());
+  if (!repo_url_comment_str.empty()) {
+    repo_url_comment = author.createStringView("# " + repo_url_comment_str);
+  }
+
+  std::string_view path_comment;
+  std::string path_comment_str = std::string(dep.path_comment());
+  if (!path_comment_str.empty()) {
+    path_comment = author.createStringView("# " + path_comment_str);
+  }
+
+  // Add UUID field with description
+  author.setMapValue(m, "uuid", author.createString(dep.uuid().to_string()), description_lines, "");
+
+  // Add name field with trailing comment if present
+  author.setMapValue(m, "name", author.createString(std::string_view(dep.name())), {}, name_comment);
+
+  // Add repo_url field with trailing comment if present
+  author.setMapValue(m, "repo_url", author.createString(std::string_view(dep.repo_url())), {}, repo_url_comment);
+
+  // Add path field if present with trailing comment
+  if (!dep.path().empty()) {
+    author.setMapValue(m, "path", author.createString(std::string_view(dep.path())), {}, path_comment);
+  }
+
+  // Add branches sequence if present
   if (!dep.branches().empty()) {
     auto seq = author.createDashSequence();
     for (const auto &br : dep.branches()) {
@@ -29,15 +78,56 @@ inline yaml::Node to_yaml(const CodDep &dep, yaml::YamlAuthor &author) {
     }
     author.setMapValue(m, "branches", seq);
   }
+
   return m;
 }
 
 inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) {
-  auto m = author.createMap();
-  author.setMapValue(m, "uuid", author.createString(proj.uuid().to_string()));
-  author.setMapValue(m, "name", author.createString(std::string_view(proj.name())));
-  author.setMapValue(m, "repo_url", author.createString(std::string_view(proj.repo_url())));
+  // Add document header comments
+  std::string header_str = std::string(proj.header());
+  if (!header_str.empty()) {
+    size_t start = 0;
+    size_t end = header_str.find('\n');
+    while (end != std::string::npos) {
+      std::string line = header_str.substr(start, end - start);
+      if (!line.empty()) {
+        author.addDocumentHeaderComment("# " + line);
+      }
+      start = end + 1;
+      end = header_str.find('\n', start);
+    }
+    // Add last line
+    std::string last_line = header_str.substr(start);
+    if (!last_line.empty()) {
+      author.addDocumentHeaderComment("# " + last_line);
+    }
+  }
 
+  auto m = author.createMap();
+
+  // Parse field-specific trailing comments
+  std::string_view name_comment;
+  std::string name_comment_str = std::string(proj.name_comment());
+  if (!name_comment_str.empty()) {
+    name_comment = author.createStringView("# " + name_comment_str);
+  }
+
+  std::string_view repo_url_comment;
+  std::string repo_url_comment_str = std::string(proj.repo_url_comment());
+  if (!repo_url_comment_str.empty()) {
+    repo_url_comment = author.createStringView("# " + repo_url_comment_str);
+  }
+
+  // Add UUID field
+  author.setMapValue(m, "uuid", author.createString(proj.uuid().to_string()));
+
+  // Add name field with trailing comment if present
+  author.setMapValue(m, "name", author.createString(std::string_view(proj.name())), {}, name_comment);
+
+  // Add repo_url field with trailing comment if present
+  author.setMapValue(m, "repo_url", author.createString(std::string_view(proj.repo_url())), {}, repo_url_comment);
+
+  // Add branches sequence if present
   if (!proj.branches().empty()) {
     auto seq = author.createDashSequence();
     for (const auto &br : proj.branches()) {
@@ -46,6 +136,7 @@ inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) {
     author.setMapValue(m, "branches", seq);
   }
 
+  // Add dependencies sequence if present
   if (!proj.deps().empty()) {
     auto seq = author.createDashSequence();
     for (const CodDep &d : proj.deps()) {
@@ -53,6 +144,7 @@ inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) {
     }
     author.setMapValue(m, "deps", seq);
   }
+
   return m;
 }
 
@@ -101,8 +193,60 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodDep *ra
     path = it_path->value.asString();
   }
 
-  // Construct in-place.
-  new (raw_ptr) CodDep(mr, uuid, name, repo_url, path);
+  // Extract comments from the map if available
+  std::string description;
+  std::string name_comment;
+  std::string repo_url_comment;
+  std::string path_comment;
+
+  // Extract field-specific comments
+  for (const auto &entry : map) {
+    if (entry.key == "name") {
+      // Extract trailing comment from name field
+      if (!entry.trailing_comment.empty()) {
+        name_comment = std::string(entry.trailing_comment);
+        // Remove the "# " prefix if present
+        if (name_comment.size() > 2 && name_comment.substr(0, 2) == "# ") {
+          name_comment = name_comment.substr(2);
+        }
+      }
+    } else if (entry.key == "repo_url") {
+      // Extract trailing comment from repo_url field
+      if (!entry.trailing_comment.empty()) {
+        repo_url_comment = std::string(entry.trailing_comment);
+        // Remove the "# " prefix if present
+        if (repo_url_comment.size() > 2 && repo_url_comment.substr(0, 2) == "# ") {
+          repo_url_comment = repo_url_comment.substr(2);
+        }
+      }
+    } else if (entry.key == "path") {
+      // Extract trailing comment from path field
+      if (!entry.trailing_comment.empty()) {
+        path_comment = std::string(entry.trailing_comment);
+        // Remove the "# " prefix if present
+        if (path_comment.size() > 2 && path_comment.substr(0, 2) == "# ") {
+          path_comment = path_comment.substr(2);
+        }
+      }
+    } else if (entry.key == "uuid") {
+      // Extract leading comments from uuid field as description
+      for (const auto &comment : entry.leading_comments) {
+        if (!description.empty()) {
+          description += "\n";
+        }
+        std::string comment_str = std::string(comment);
+        // Remove the "# " prefix if present
+        if (comment_str.size() > 2 && comment_str.substr(0, 2) == "# ") {
+          description += comment_str.substr(2);
+        } else {
+          description += comment_str;
+        }
+      }
+    }
+  }
+
+  // Construct in-place with field-specific comments
+  new (raw_ptr) CodDep(mr, uuid, name, repo_url, path, description, name_comment, repo_url_comment, path_comment);
 
   // Optional branches.
   auto it_br = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "branches"; });
@@ -148,8 +292,36 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodProject
   std::string name = fetch_scalar("name");
   std::string repo_url = fetch_scalar("repo_url");
 
-  // Construct CodProject in-place.
-  new (raw_ptr) CodProject(mr, uuid, name, repo_url);
+  // Extract document-level comments if available
+  std::string header;
+  std::string name_comment;
+  std::string repo_url_comment;
+
+  // Extract field-specific comments
+  for (const auto &entry : map) {
+    if (entry.key == "name") {
+      // Extract trailing comment from name field
+      if (!entry.trailing_comment.empty()) {
+        name_comment = std::string(entry.trailing_comment);
+        // Remove the "# " prefix if present
+        if (name_comment.size() > 2 && name_comment.substr(0, 2) == "# ") {
+          name_comment = name_comment.substr(2);
+        }
+      }
+    } else if (entry.key == "repo_url") {
+      // Extract trailing comment from repo_url field
+      if (!entry.trailing_comment.empty()) {
+        repo_url_comment = std::string(entry.trailing_comment);
+        // Remove the "# " prefix if present
+        if (repo_url_comment.size() > 2 && repo_url_comment.substr(0, 2) == "# ") {
+          repo_url_comment = repo_url_comment.substr(2);
+        }
+      }
+    }
+  }
+
+  // Construct CodProject in-place with field-specific comments
+  new (raw_ptr) CodProject(mr, uuid, name, repo_url, header, name_comment, repo_url_comment);
 
   // branches sequence (optional)
   auto it_branches = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "branches"; });

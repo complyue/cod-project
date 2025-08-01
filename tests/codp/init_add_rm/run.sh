@@ -65,6 +65,21 @@ cd "$TMP_DIR"
 # Run init with fixed UUID for testing
 codp init --uuid "11111111-1111-1111-1111-111111111111" testpkg "https://github.com/test/testpkg.git" main dev
 
+# Manually add comments to test comment preservation
+cat > CodProject.yaml << 'EOF'
+# This is a test project
+# Multi-line comment supported
+
+uuid: "11111111-1111-1111-1111-111111111111"
+name: testpkg  # Project name
+repo_url: "https://github.com/test/testpkg.git"  # Repository URL
+branches:
+  # Main branch
+  - main  # Production branch
+  # Development branch
+  - dev  # Development work
+EOF
+
 # Validate with yaml-cmp using static expected file
 yaml-cmp "$TEST_DIR/expected/init.yaml" CodProject.yaml || {
     echo "ERROR: init test failed - YAML mismatch"
@@ -96,7 +111,16 @@ echo "  ✓ add with UUID test passed"
 # Test 3: add command with local path
 echo "  Testing add with local path..."
 mkdir -p local_dep
-printf 'uuid: "33333333-3333-3333-3333-333333333333"\nname: local-dep\nrepo_url: https://github.com/local/dep.git\nbranches:\n  - main\n' > local_dep/CodProject.yaml
+cat > local_dep/CodProject.yaml << 'EOF'
+# This is a local dependency
+
+uuid: "33333333-3333-3333-3333-333333333333"
+name: local-dep  # Local dependency name
+repo_url: https://github.com/local/dep.git  # Repository URL
+branches:
+  # Main branch
+  - main  # Main branch
+EOF
 
 codp add "local_dep" main
 
@@ -133,7 +157,16 @@ echo "  Testing rm by name..."
 
 # Add a named dependency first
 mkdir -p local_dep2
-printf 'uuid: "44444444-4444-4444-4444-444444444444"\nname: testdep\nrepo_url: https://github.com/test/dep2.git\nbranches:\n  - main\n' > local_dep2/CodProject.yaml
+cat > local_dep2/CodProject.yaml << 'EOF'
+# This is a test dependency
+
+uuid: "44444444-4444-4444-4444-444444444444"
+name: testdep  # Test dependency name
+repo_url: https://github.com/test/dep2.git  # Repository URL
+branches:
+  # Main branch
+  - main  # Main branch
+EOF
 
 codp add "local_dep2" main
 
