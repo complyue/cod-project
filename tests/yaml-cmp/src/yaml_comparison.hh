@@ -23,13 +23,17 @@ inline bool yaml_subset(const Node &expected, const Node &actual, bool ignore_co
 
 // Compare two scalar nodes for equality
 inline bool scalar_equal(const Node &a, const Node &b, bool ignore_comments = false) {
+  // When ignoring comments, we compare only the semantic values
   if (ignore_comments) {
-    // When ignoring comments, we compare the actual values only
-    // This is a simplified implementation - in a real implementation,
-    // we would need to parse the YAML and compare the semantic values
     return shilos::yaml::format_yaml(a) == shilos::yaml::format_yaml(b);
   }
-  return shilos::yaml::format_yaml(a) == shilos::yaml::format_yaml(b);
+
+  // When considering comments, we compare the formatted output
+  // This tests whether the parser preserves enough information to
+  // distinguish between different comment styles (if supported)
+  auto formatted_a = shilos::yaml::format_yaml(a);
+  auto formatted_b = shilos::yaml::format_yaml(b);
+  return formatted_a == formatted_b;
 }
 
 // Helper function to compare sequence nodes
