@@ -2,12 +2,24 @@
 
 #include <shilos.hh>
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 
 namespace yaml_cmp {
 
+using shilos::yaml::DashSequence;
+using shilos::yaml::Map;
 using shilos::yaml::Node;
+using shilos::yaml::SimpleSequence;
+
+// Helper function to find a key in a vector-based map
+inline auto find_in_map(const Map &map, std::string_view key) {
+  return std::find_if(map.begin(), map.end(), [key](const auto &entry) { return entry.key == key; });
+}
+
+// Forward declaration
+inline bool yaml_subset(const Node &expected, const Node &actual, bool ignore_comments);
 
 // Compare two scalar nodes for equality
 inline bool scalar_equal(const Node &a, const Node &b, bool ignore_comments = false) {
@@ -20,11 +32,65 @@ inline bool scalar_equal(const Node &a, const Node &b, bool ignore_comments = fa
   return shilos::yaml::format_yaml(a) == shilos::yaml::format_yaml(b);
 }
 
+// Helper function to compare sequence nodes
+inline bool compare_sequence_nodes(const Node &a, const Node &b, bool ignore_comments = false) {
+  // Handle SimpleSequence vs SimpleSequence
+  if (const auto *a_simple = std::get_if<SimpleSequence>(&a.value)) {
+    if (const auto *b_simple = std::get_if<SimpleSequence>(&b.value)) {
+      if (a_simple->size() != b_simple->size())
+        return false;
+      for (size_t i = 0; i < a_simple->size(); ++i) {
+        if (!yaml_subset((*a_simple)[i], (*b_simple)[i], ignore_comments))
+          return false;
+      }
+      return true;
+    }
+  }
+
+  // Handle DashSequence vs DashSequence
+  if (const auto *a_dash = std::get_if<DashSequence>(&a.value)) {
+    if (const auto *b_dash = std::get_if<DashSequence>(&b.value)) {
+      if (a_dash->size() != b_dash->size())
+        return false;
+      for (size_t i = 0; i < a_dash->size(); ++i) {
+        if (!yaml_subset((*a_dash)[i].value, (*b_dash)[i].value, ignore_comments))
+          return false;
+      }
+      return true;
+    }
+  }
+
+  // Handle SimpleSequence vs DashSequence (compare as if both were SimpleSequence)
+  if (const auto *a_simple = std::get_if<SimpleSequence>(&a.value)) {
+    if (const auto *b_dash = std::get_if<DashSequence>(&b.value)) {
+      if (a_simple->size() != b_dash->size())
+        return false;
+      for (size_t i = 0; i < a_simple->size(); ++i) {
+        if (!yaml_subset((*a_simple)[i], (*b_dash)[i].value, ignore_comments))
+          return false;
+      }
+      return true;
+    }
+  }
+
+  // Handle DashSequence vs SimpleSequence (compare as if both were SimpleSequence)
+  if (const auto *a_dash = std::get_if<DashSequence>(&a.value)) {
+    if (const auto *b_simple = std::get_if<SimpleSequence>(&b.value)) {
+      if (a_dash->size() != b_simple->size())
+        return false;
+      for (size_t i = 0; i < a_dash->size(); ++i) {
+        if (!yaml_subset((*a_dash)[i].value, (*b_simple)[i], ignore_comments))
+          return false;
+      }
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Check if expected is a subset of actual
 inline bool yaml_subset(const Node &expected, const Node &actual, bool ignore_comments = false) {
-  using shilos::yaml::Map;
-  using shilos::yaml::Sequence;
-
   if (expected.IsNull())
     return actual.IsNull();
 
@@ -35,14 +101,7 @@ inline bool yaml_subset(const Node &expected, const Node &actual, bool ignore_co
   if (expected.IsSequence()) {
     if (!actual.IsSequence())
       return false;
-    const auto &e_seq = std::get<Sequence>(expected.value);
-    const auto &a_seq = std::get<Sequence>(actual.value);
-    if (e_seq.size() > a_seq.size())
-      return false;
-    for (size_t i = 0; i < e_seq.size(); ++i)
-      if (!yaml_subset(e_seq[i], a_seq[i], ignore_comments))
-        return false;
-    return true;
+    return compare_sequence_nodes(expected, actual, ignore_comments);
   }
 
   if (expected.IsMap()) {
@@ -52,7 +111,7 @@ inline bool yaml_subset(const Node &expected, const Node &actual, bool ignore_co
     const auto &a_map = std::get<Map>(actual.value);
     for (const auto &e_entry : e_map) {
       const auto &key = e_entry.key; // Keep as string_view - caller must keep Document alive
-      auto it = a_map.find(key);
+      auto it = find_in_map(a_map, key);
       if (it == a_map.end() || !yaml_subset(e_entry.value, it->value, ignore_comments))
         return false;
     }

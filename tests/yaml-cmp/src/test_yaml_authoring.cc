@@ -128,14 +128,14 @@ void test_nested_structures() {
         author.setMapValue(root, "database", config);
 
         // Create sequence of features
-        auto features = author.createSequence();
+        auto features = author.createDashSequence();
         author.pushToSequence(features, author.createString("authentication"));
         author.pushToSequence(features, author.createString("logging"));
         author.pushToSequence(features, author.createString("monitoring"));
         author.setMapValue(root, "features", features);
 
         // Create sequence of service configurations
-        auto services = author.createSequence();
+        auto services = author.createDashSequence();
         std::vector<std::string> service_names = {"api", "worker", "scheduler"};
         std::vector<int> service_ports = {8001, 8002, 8003};
 
@@ -287,14 +287,14 @@ void test_empty_containers() {
         auto root = author.createMap();
 
         author.setMapValue(root, "empty_map", author.createMap());
-        author.setMapValue(root, "empty_sequence", author.createSequence());
+        author.setMapValue(root, "empty_sequence", author.createDashSequence());
 
         // Test that we can still add to containers after creation
         auto populated_map = author.createMap();
         author.setMapValue(populated_map, "key", author.createString("value"));
         author.setMapValue(root, "populated_map", populated_map);
 
-        auto populated_seq = author.createSequence();
+        auto populated_seq = author.createDashSequence();
         author.pushToSequence(populated_seq, author.createString("item"));
         author.setMapValue(root, "populated_sequence", populated_seq);
 
@@ -307,12 +307,24 @@ void test_empty_containers() {
     auto root = doc.root();
     auto map = root.asMap();
 
+    // Helper function to find a key in a map
+    auto find_map_value = [](const yaml_cmp::Map &map, std::string_view key) -> const yaml_cmp::Node * {
+      auto it = std::find_if(map.begin(), map.end(), [key](const auto &entry) { return entry.key == key; });
+      return it != map.end() ? &it->value : nullptr;
+    };
+
     // Test empty containers
-    if (map["empty_map"].IsMap() && map["empty_map"].asMap().empty() && map["empty_sequence"].IsSequence() &&
-        map["empty_sequence"].asSequence().empty() && map["populated_map"].IsMap() &&
-        map["populated_map"].asMap().size() == 1 && map["populated_map"].asMap().at("key").asString() == "value" &&
-        map["populated_sequence"].IsSequence() && map["populated_sequence"].asSequence().size() == 1 &&
-        map["populated_sequence"].asSequence()[0].asString() == "item") {
+    auto empty_map_node = find_map_value(map, "empty_map");
+    auto empty_seq_node = find_map_value(map, "empty_sequence");
+    auto populated_map_node = find_map_value(map, "populated_map");
+    auto populated_seq_node = find_map_value(map, "populated_sequence");
+
+    if (empty_map_node && empty_map_node->IsMap() && empty_map_node->asMap().empty() && empty_seq_node &&
+        empty_seq_node->IsSequence() && empty_seq_node->asDashSequence().empty() && populated_map_node &&
+        populated_map_node->IsMap() && populated_map_node->asMap().size() == 1 &&
+        find_map_value(populated_map_node->asMap(), "key")->asString() == "value" && populated_seq_node &&
+        populated_seq_node->IsSequence() && populated_seq_node->asDashSequence().size() == 1 &&
+        populated_seq_node->asDashSequence()[0].value.asString() == "item") {
       std::cout << "✓ Empty containers test passed" << std::endl;
     } else {
       std::cerr << "❌ Empty containers test failed - structure validation failed" << std::endl;
@@ -342,7 +354,7 @@ void test_authoring_vs_parsing() {
         author.setMapValue(config, "timeout", author.createScalar(30.5));
         author.setMapValue(root, "config", config);
 
-        auto tags = author.createSequence();
+        auto tags = author.createDashSequence();
         author.pushToSequence(tags, author.createString("production"));
         author.pushToSequence(tags, author.createString("stable"));
         author.setMapValue(root, "tags", tags);
@@ -402,7 +414,7 @@ void test_complex_document() {
         author.setMapValue(metadata, "author", author.createString("Test Author"));
         author.setMapValue(root, "metadata", metadata);
 
-        auto data = author.createSequence();
+        auto data = author.createDashSequence();
         auto item1 = author.createMap();
         author.setMapValue(item1, "name", author.createString("item1"));
         author.setMapValue(item1, "value", author.createScalar(100));
@@ -479,12 +491,13 @@ void test_multi_root() {
       }
 
       const auto &map = root.asMap();
-      if (map.size() != 1 || map.find("count") == map.end()) {
+      auto count_it = yaml_cmp::find_in_map(map, "count");
+      if (map.size() != 1 || count_it == map.end()) {
         std::cerr << "❌ Multi-root test failed - document " << i << " doesn't have count key" << std::endl;
         throw std::runtime_error("Multi-root test failed");
       }
 
-      const auto &count_node = map.find("count")->value;
+      const auto &count_node = count_it->value;
       if (!count_node.IsScalar() || count_node.asInt() != static_cast<int>(i + 1)) {
         std::cerr << "❌ Multi-root test failed - document " << i << " has wrong count value" << std::endl;
         throw std::runtime_error("Multi-root test failed");

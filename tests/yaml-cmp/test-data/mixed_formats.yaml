@@ -5,9 +5,10 @@ yaml_style:              # YAML-style formatting
     - "reading"          # First hobby
     - "coding"           # Second hobby
 
-json_style: {            # JSON-style formatting
-  "name": "Bob",         # String value with quotes
-  "hobbies": ["swimming", "hiking"]  # JSON-style array
+# JSON-style formatting
+json_style: {
+  "name": "Bob",
+  "hobbies": ["swimming", "hiking"]
 }
 
 mixed:                   # Mixed YAML and JSON styles
