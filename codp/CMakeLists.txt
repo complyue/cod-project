@@ -1,6 +1,11 @@
 
 add_clang_tool( codp
   main.cc
+  codp_utils.cc
+  codp_init.cc
+  codp_add.cc
+  codp_rm.cc
+  codp_solve.cc
   )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
