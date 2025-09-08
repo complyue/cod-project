@@ -141,7 +141,93 @@ int cmd_solve(int argc, char **argv, int argi, const fs::path &project_path) {
 }
 
 int cmd_update(int argc, char **argv, int argi, const fs::path &project_path) {
-  std::cerr << "update command is not yet implemented." << std::endl;
+  fs::path manifest_yaml = project_path / "CodManifest.yaml";
+
+  // Check if CodManifest.yaml exists
+  if (!fs::exists(manifest_yaml)) {
+    std::cerr << "Error: CodManifest.yaml not found. Run 'codp solve' first." << std::endl;
+    return 1;
+  }
+
+  try {
+    // Load existing manifest
+    yaml::Document manifest_doc(manifest_yaml);
+    auto_region<CodManifest> manifest_region(1024 * 1024);
+    CodManifest *manifest = manifest_region->root().get();
+    from_yaml(*manifest_region, manifest_doc.root(), manifest);
+
+    std::cout << "Updating dependencies..." << std::endl;
+
+    // Update each resolved dependency
+    for (CodManifestEntry &entry : manifest->resolved()) {
+      std::string repo_url = std::string(std::string_view(entry.repo_url()));
+      std::string branch = std::string(std::string_view(entry.branch()));
+
+      if (branch.empty()) {
+        std::cout << "Skipping " << repo_url << " (no branch specified)" << std::endl;
+        continue;
+      }
+
+      std::cout << "Updating " << repo_url << " (" << branch << ")..." << std::endl;
+
+      // Ensure bare repo exists and is up to date
+      std::string repo_key = repo_url_to_key(repo_url);
+      fs::path bare_repo_path = home_dir() / ".cod" / "pkgs" / "repos" / repo_key;
+
+      try {
+        ensure_bare_repo(repo_url, bare_repo_path);
+      } catch (const std::exception &e) {
+        std::cerr << "Warning: Failed to update " << repo_url << ": " << e.what() << std::endl;
+        continue;
+      }
+
+      // Get latest commit hash for the branch
+      std::string git_cmd = "git --git-dir=" + bare_repo_path.string() + " rev-parse " + branch;
+      FILE *pipe = popen(git_cmd.c_str(), "r");
+      if (!pipe) {
+        std::cerr << "Warning: Failed to get commit hash for " << repo_url << " (" << branch << ")" << std::endl;
+        continue;
+      }
+
+      char commit_hash[41];
+      if (fgets(commit_hash, sizeof(commit_hash), pipe) != nullptr) {
+        // Remove newline
+        size_t len = strlen(commit_hash);
+        if (len > 0 && commit_hash[len - 1] == '\n') {
+          commit_hash[len - 1] = '\0';
+        }
+
+        // Update the commit hash in the manifest entry
+        new (&entry.commit()) regional_str(*manifest_region, commit_hash);
+        std::cout << "  Updated to commit " << commit_hash << std::endl;
+      } else {
+        std::cerr << "Warning: Failed to read commit hash for " << repo_url << " (" << branch << ")" << std::endl;
+      }
+      pclose(pipe);
+    }
+
+    // Write updated manifest back to file
+    try {
+      yaml::Document doc("CodManifest.yaml", [&](yaml::YamlAuthor &author) {
+        auto root = to_yaml(*manifest, author);
+        author.addRoot(root);
+      });
+      std::cout << "✔ Updated CodManifest.yaml" << std::endl;
+    } catch (const yaml::AuthorError &err) {
+      std::cerr << "YAML Author Error: " << err.what() << std::endl;
+      std::cerr << "Stack trace:\n" << err.stack_trace() << std::endl;
+      throw std::runtime_error(std::string("Failed to author manifest YAML: ") + err.what());
+    }
+
+  } catch (const yaml::ParseError &err) {
+    std::cerr << "YAML Parse Error: " << err.what() << std::endl;
+    std::cerr << "Stack trace:\n" << err.stack_trace() << std::endl;
+    return 1;
+  } catch (const std::exception &err) {
+    std::cerr << "Error: " << err.what() << std::endl;
+    return 1;
+  }
+
   return 0;
 }
 

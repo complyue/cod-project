@@ -512,7 +512,9 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodManifes
       throw yaml::TypeError("'locals' must be a mapping");
     }
     const auto &locals_map = std::get<yaml::Map>(it_locals->value.value);
-    for (const auto &[uuid_str, path_node] : locals_map) {
+    for (const auto &entry : locals_map) {
+      const auto &uuid_str = entry.key;
+      const auto &path_node = entry.value;
       if (!path_node.IsScalar()) {
         throw yaml::TypeError("local path must be a scalar");
       }
