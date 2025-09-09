@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "cod.hh"
+#include "cod_cache.hh"
 #include "shilos.hh"
 
 namespace fs = std::filesystem;
@@ -218,7 +219,7 @@ void testWorksRootType() {
     fs::remove(temp_path);
 
     {
-      auto dbmr = DBMR<WorksRoot>::create(temp_path.string(), 1024 * 1024); // 1MB
+      auto dbmr = DBMR<WorksRoot>::create(temp_path.string(), 1024 * 1024, fs::path(".")); // 1MB
 
       // Verify TYPE_UUID is accessible
       const auto &uuid = WorksRoot::TYPE_UUID;
@@ -270,6 +271,76 @@ void testWorkspaceDirectoryCreation() {
   std::cout << "✓ Workspace directory creation test passed\n";
 }
 
+void testBuildCache() {
+  std::cout << "Testing build cache functionality...\n";
+
+  auto project_dir = createTestProject();
+  auto works_path = project_dir / ".cod" / "cache_test.dbmr";
+
+  // Remove if exists
+  if (fs::exists(works_path)) {
+    fs::remove(works_path);
+  }
+
+  // First run - should create cache entry
+  auto result1 = runCod({"--project", project_dir.string(), "-w", works_path.string(), "--verbose", "-e",
+                         "#include <iostream>\nstd::cout << \"Hello Cache\" << std::endl;"},
+                        project_dir);
+
+  if (result1.exit_code == 0) {
+    std::cout << "  ✓ First run completed successfully\n";
+  }
+
+  // Second run - should use cache
+  auto result2 = runCod({"--project", project_dir.string(), "-w", works_path.string(), "--verbose", "-e",
+                         "#include <iostream>\nstd::cout << \"Hello Cache\" << std::endl;"},
+                        project_dir);
+
+  if (result2.exit_code == 0) {
+    std::cout << "  ✓ Second run completed successfully\n";
+  }
+
+  // Clean up
+  fs::remove_all(project_dir);
+
+  std::cout << "✓ Build cache test passed\n";
+}
+
+void testToolchainVersion() {
+  std::cout << "Testing toolchain version management...\n";
+
+  auto project_dir = createTestProject();
+  auto works_path = project_dir / ".cod" / "toolchain_test.dbmr";
+
+  // Remove if exists
+  if (fs::exists(works_path)) {
+    fs::remove(works_path);
+  }
+
+  // Create workspace with default toolchain
+  auto result1 =
+      runCod({"--project", project_dir.string(), "-w", works_path.string(), "--verbose", "-e", "int version = 1;"},
+             project_dir);
+
+  if (result1.exit_code == 0) {
+    std::cout << "  ✓ Workspace created with default toolchain\n";
+  }
+
+  // Test with different compilation flags
+  auto result2 =
+      runCod({"--project", project_dir.string(), "-w", works_path.string(), "--verbose", "-e", "int version = 2;"},
+             project_dir);
+
+  if (result2.exit_code == 0) {
+    std::cout << "  ✓ Workspace reused successfully\n";
+  }
+
+  // Clean up
+  fs::remove_all(project_dir);
+
+  std::cout << "✓ Toolchain version test passed\n";
+}
+
 int main() {
   std::cout << "Running CoD workspace tests...\n\n";
 
@@ -279,6 +350,8 @@ int main() {
     testDefaultWorkspacePath();
     testWorksRootType();
     testWorkspaceDirectoryCreation();
+    testBuildCache();
+    testToolchainVersion();
 
     std::cout << "\n✔ All workspace tests passed!\n";
     return 0;

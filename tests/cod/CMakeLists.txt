@@ -39,8 +39,15 @@ set(CMAKE_CXX_EXTENSIONS NO)
 # Include directories for project headers
 include_directories(BEFORE "${COD_INCLUDE_DIR}")
 
+# Include Clang headers for cache functionality
+include_directories(BEFORE "/usr/local/include")
+include_directories(BEFORE "/usr/local/Cellar/llvm/18.1.8/include")
+include_directories(BEFORE "${COD_TOOLCHAIN_DIR}/include")
+
 # Add library search paths
 link_directories(BEFORE "${COD_TOOLCHAIN_DIR}/lib")
+link_directories(BEFORE "/usr/local/lib")
+link_directories(BEFORE "/usr/local/Cellar/llvm/18.1.8/lib")
 
 # Find the shilos library
 find_library(SHILOS_LIBRARY 
@@ -74,8 +81,17 @@ function(configure_cod_target target_name)
     # Link with C++ runtime
     target_link_libraries(${target_name} PRIVATE c++ c++abi)
     
+    # Link with Clang libraries for cache functionality
+    target_link_libraries(${target_name} PRIVATE 
+        clangAST clangBasic clangDriver clangFrontend 
+        clangLex clangParse clangSema clangSerialization
+        clangAnalysis clangStaticAnalyzerCore clangStaticAnalyzerFrontend
+        clangSupport clangEdit clangRewrite clangCodeGen
+        clangASTMatchers clangAPINotes
+        LLVM-18)
+    
     # Compile flags
-    target_compile_options(${target_name} PRIVATE -Wall -Wextra -Werror -g)
+    target_compile_options(${target_name} PRIVATE -Wall -Wextra -Werror -g -Wno-unused-parameter)
     
     # Set rpath to find shared libraries at runtime
     set_target_properties(${target_name} PROPERTIES
@@ -96,4 +112,5 @@ endfunction()
 configure_cod_target(test_cod_cli src/test_cod_cli.cc)
 configure_cod_target(test_cod_eval src/test_cod_eval.cc)
 configure_cod_target(test_cod_repl src/test_cod_repl.cc)
-configure_cod_target(test_cod_workspace src/test_cod_workspace.cc)
+configure_cod_target(test_cod_workspace src/test_cod_workspace.cc ${COD_PROJECT_SOURCE_DIR}/cod/cod_workspace.cc ${COD_PROJECT_SOURCE_DIR}/cod/cod_cache.cc)
+configure_cod_target(test_cod_cache src/test_cod_cache.cc ${COD_PROJECT_SOURCE_DIR}/cod/cod_cache.cc ${COD_PROJECT_SOURCE_DIR}/cod/cod_workspace.cc)

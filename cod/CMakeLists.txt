@@ -10,6 +10,8 @@ set( LLVM_LINK_COMPONENTS
 
 add_clang_tool( cod
   main.cc
+  cod_cache.cc
+  cod_workspace.cc
   )
 
 target_link_libraries( cod PRIVATE
@@ -21,4 +23,8 @@ clang_target_link_libraries( cod PRIVATE
   clangBasic
   clangFrontend
   clangInterpreter
+  clangLex
+  clangParse
+  clangSema
+  clangSerialization
   )

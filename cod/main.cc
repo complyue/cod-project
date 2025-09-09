@@ -5,10 +5,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -18,6 +20,7 @@
 #include <vector>
 
 #include "cod.hh"
+#include "cod_cache.hh"
 #include "codp.hh"
 #include "codp_yaml.hh"
 #include "shilos.hh"
@@ -35,6 +38,10 @@ struct CodReplConfig {
   std::string works_root_type_header = "cod.hh";
   size_t dbmr_capacity = 64 * 1024 * 1024;    // 64MB default
   std::optional<std::string> eval_expression; // For -e/--eval mode
+  bool enable_cache = true;
+  bool force_rebuild = false;
+  std::chrono::hours cache_max_age = std::chrono::hours(24 * 7); // 1 week
+  std::string toolchain_version;
 };
 
 static void printUsage(const char *prog_name) {
@@ -47,6 +54,10 @@ static void printUsage(const char *prog_name) {
             << "  --project PATH      Project root directory (default: auto-detect)\n"
             << "  -e, --eval EXPR     Evaluate expression/statement and exit\n"
             << "  -h, --help          Show this help message\n"
+            << "  --no-cache          Disable build cache\n"
+            << "  -f, --force-rebuild Force rebuild (ignore cache)\n"
+            << "  --toolchain=VERSION Set toolchain version (e.g., clang-18)\n"
+            << "  --cache-max-age=HOURS Set cache expiration time in hours\n"
             << "\n"
             << "If no -e/--eval is specified, starts interactive REPL mode.\n"
             << "\n"
@@ -107,7 +118,7 @@ static std::optional<CodReplConfig> loadConfig(const fs::path &project_root) {
     auto &doc = std::get<yaml::Document>(doc_result);
     CodProject *project_ptr = region->root().get();
     cod::project::from_yaml<CodProject>(*region, doc.root(), project_ptr);
-    auto &project = *project_ptr;
+    // Project root extracted from project_ptr
 
     // Use project configuration if available
     // For now, use defaults
@@ -118,19 +129,45 @@ static std::optional<CodReplConfig> loadConfig(const fs::path &project_root) {
   }
 }
 
-static bool ensureDbmrExists(const fs::path &works_path, size_t capacity) {
-  if (fs::exists(works_path)) {
-    return true;
+static bool ensureDbmrExists(const CodReplConfig &config) {
+  if (fs::exists(config.works_path)) {
+    // Load existing workspace and update configuration if needed
+    try {
+      auto dbmr = DBMR<WorksRoot>(config.works_path.string(), 0);
+      auto root = dbmr.region().root();
+
+      // Update toolchain version if specified
+      if (!config.toolchain_version.empty() && root->get_toolchain_version() != config.toolchain_version) {
+        root->set_toolchain_version(config.toolchain_version);
+        std::cout << "Updated toolchain version to: " << config.toolchain_version << "\n";
+      }
+
+      std::cout << "Using existing workspace: " << config.works_path << "\n";
+      std::cout << "Project root: " << root->get_project_root() << "\n";
+      std::cout << "Toolchain: " << root->get_toolchain_version() << "\n";
+      return true;
+    } catch (const std::exception &e) {
+      std::cerr << "Error opening existing workspace: " << e.what() << "\n";
+      return false;
+    }
   }
 
   try {
     // Create parent directories
-    fs::create_directories(works_path.parent_path());
+    fs::create_directories(config.works_path.parent_path());
 
     // Create DBMR with WorksRoot
-    auto dbmr = DBMR<WorksRoot>::create(works_path.string(), capacity);
+    auto dbmr = DBMR<WorksRoot>::create(config.works_path.string(), config.dbmr_capacity, fs::path("."));
 
-    std::cout << "Created new workspace: " << works_path << " (" << capacity / (1024 * 1024) << "MB)\n";
+    // Initialize WorksRoot in the region with project root
+    auto root = dbmr.region().root();
+    root->set_project_root(config.project_root.string());
+    root->set_toolchain_version(config.toolchain_version.empty() ? std::string("clang-17") : config.toolchain_version);
+
+    std::cout << "Created new workspace: " << config.works_path << " (" << config.dbmr_capacity / (1024 * 1024)
+              << "MB)\n";
+    std::cout << "Project root: " << root->get_project_root() << "\n";
+    std::cout << "Toolchain: " << root->get_toolchain_version() << "\n";
     return true;
   } catch (const std::exception &e) {
     std::cerr << "Error creating workspace: " << e.what() << "\n";
@@ -211,65 +248,86 @@ static bool compileAndRun(const CodReplConfig &config, const std::string &submis
     source_file << generateRunnerSource(config, submission);
     source_file.close();
 
-    // Build compiler command
+    bool success = false;
+
+    // Open workspace and get build cache
+    auto dbmr = DBMR<WorksRoot>(config.works_path.string(), 0);
+    auto root = dbmr.region().root();
+    auto &cache = root->get_build_cache();
+
+    // Build compiler arguments
     auto compiler_args = buildCompilerArgs(config);
-    compiler_args.push_back(source_path.string());
-    compiler_args.push_back("-o");
-    compiler_args.push_back(binary_path.string());
+    std::string toolchain_version = root->get_toolchain_version();
+    std::string project_snapshot = "temp"; // For temp files, use simple snapshot
 
-    // Convert to char* array for execvp
-    std::vector<char *> argv;
-    for (auto &arg : compiler_args) {
-      argv.push_back(const_cast<char *>(arg.c_str()));
+    std::optional<fs::path> cached_bitcode;
+
+    // Try cache lookup if enabled and not forcing rebuild
+    if (config.enable_cache && !config.force_rebuild) {
+      cached_bitcode = cache.lookup(source_path.string(), compiler_args, toolchain_version, project_snapshot);
     }
-    argv.push_back(nullptr);
 
-    // Fork and compile
-    pid_t compile_pid = fork();
-    if (compile_pid == 0) {
-      // Child process - execute compiler
-      execvp(argv[0], argv.data());
-      std::cerr << "Error: Failed to execute compiler\n";
-      exit(1);
-    } else if (compile_pid > 0) {
-      // Parent process - wait for compilation
-      int status;
-      waitpid(compile_pid, &status, 0);
+    // Generate bitcode if not cached
+    if (!cached_bitcode) {
+      cached_bitcode = cache.generate_bitcode(source_path.string(), compiler_args);
 
-      if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-        // Compilation successful, now run the binary
-        // Set environment for runner
-        setenv("COD_WORKS_PATH", config.works_path.c_str(), 1);
-
-        pid_t run_pid = fork();
-        if (run_pid == 0) {
-          // Child process - execute binary
-          execl(binary_path.c_str(), binary_path.c_str(), nullptr);
-          std::cerr << "Error: Failed to execute binary\n";
-          exit(1);
-        } else if (run_pid > 0) {
-          // Parent process - wait for execution
-          int run_status;
-          waitpid(run_pid, &run_status, 0);
-
-          if (WIFEXITED(run_status)) {
-            if (WEXITSTATUS(run_status) != 0) {
-              std::cerr << "Program exited with code " << WEXITSTATUS(run_status) << "\n";
-            }
-          } else {
-            std::cerr << "Program terminated abnormally\n";
-          }
-        } else {
-          std::cerr << "Error: Failed to fork for execution\n";
-          return false;
-        }
-      } else {
-        std::cerr << "Compilation failed\n";
+      if (!cached_bitcode) {
+        std::cerr << "Error: Failed to generate bitcode\n";
+        fs::remove(source_path);
         return false;
       }
-    } else {
-      std::cerr << "Error: Failed to fork for compilation\n";
+
+      // Store in cache for future use
+      if (config.enable_cache) {
+        cache.store(source_path.string(), *cached_bitcode, compiler_args, toolchain_version, project_snapshot);
+      }
+    }
+
+    // Link bitcode to executable
+    cod::cache::BitcodeCompiler compiler;
+    std::vector<fs::path> bitcode_files = {*cached_bitcode};
+    std::vector<std::string> linker_args;
+
+    // Add library paths and libraries to linker args
+    auto lib_path = config.project_root / "build" / "lib";
+    if (fs::exists(lib_path)) {
+      linker_args.push_back("-L" + lib_path.string());
+      linker_args.push_back("-lshilos");
+    }
+
+    if (!compiler.link_bitcode(bitcode_files, binary_path.string(), linker_args)) {
+      std::cerr << "Error: Failed to link bitcode\n";
+      fs::remove(source_path);
       return false;
+    }
+
+    // Set environment for runner
+    setenv("COD_WORKS_PATH", config.works_path.c_str(), 1);
+
+    // Execute the compiled program
+    pid_t run_pid = fork();
+    if (run_pid == 0) {
+      // Child process - execute binary
+      execl(binary_path.c_str(), binary_path.c_str(), nullptr);
+      std::cerr << "Error: Failed to execute binary\n";
+      exit(1);
+    } else if (run_pid > 0) {
+      // Parent process - wait for execution
+      int run_status;
+      waitpid(run_pid, &run_status, 0);
+
+      if (WIFEXITED(run_status)) {
+        if (WEXITSTATUS(run_status) != 0) {
+          std::cerr << "Program exited with code " << WEXITSTATUS(run_status) << "\n";
+        }
+        success = (WEXITSTATUS(run_status) == 0);
+      } else {
+        std::cerr << "Program terminated abnormally\n";
+        success = false;
+      }
+    } else {
+      std::cerr << "Error: Failed to fork for execution\n";
+      success = false;
     }
 
     // Clean up temporary files
@@ -277,7 +335,7 @@ static bool compileAndRun(const CodReplConfig &config, const std::string &submis
     fs::remove(source_path, ec);
     fs::remove(binary_path, ec);
 
-    return true;
+    return success;
   } catch (const std::exception &e) {
     std::cerr << "Error during compile and run: " << e.what() << "\n";
     return false;
@@ -368,6 +426,15 @@ int main(int argc, const char **argv) {
         return 1;
       }
       config.eval_expression = argv[++i];
+    } else if (arg == "--no-cache") {
+      config.enable_cache = false;
+    } else if (arg == "--force-rebuild" || arg == "-f") {
+      config.force_rebuild = true;
+    } else if (arg.starts_with("--toolchain=")) {
+      config.toolchain_version = arg.substr(12);
+    } else if (arg.starts_with("--cache-max-age=")) {
+      int hours = std::stoi(arg.substr(16));
+      config.cache_max_age = std::chrono::hours(hours);
     } else {
       std::cerr << "Error: Unknown argument " << arg << "\n";
       printUsage(argv[0]);
@@ -395,7 +462,7 @@ int main(int argc, const char **argv) {
   config = *loaded_config;
 
   // Ensure DBMR workspace exists
-  if (!ensureDbmrExists(config.works_path, config.dbmr_capacity)) {
+  if (!ensureDbmrExists(config)) {
     std::cerr << "Error: Failed to initialize workspace\n";
     return 1;
   }

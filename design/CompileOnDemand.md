@@ -66,7 +66,7 @@ This document specifies the design of the `cod` driver that provides a REPL-like
 
 - Accepts plain C++20 statements and expressions, not custom directives.
 - The visible lexical scope of each submission is determined by the scope header(s) specified by the project in CodProject.yaml (see "repl.scope").
-- There is no facility to define new functions or types from submissions; users are expected to edit project sources and rebuild. Submissions should call into functions/classes exposed by the scope header(s).
+- There is no facility to define new functions or types from submissions; users are expected to edit project sources and have `cod` rebuild affected modules on demand. Submissions should call into functions/classes exposed by the scope header(s).
 - Each submission is compiled and linked into a temporary executable; there is no JIT.
 
 ### Usage Examples
@@ -96,7 +96,7 @@ cod -e "return validateData();" && echo "Validation passed"
 
 ## WorksRoot Model (default workspace root)
 
-Header: `include/cod.hh` (to be implemented).
+Header: `include/cod.hh`
 
 The default root type must satisfy `ValidMemRegionRootType`. It provides:
 
@@ -169,11 +169,41 @@ int main(int argc, const char** argv) {
   - C++20 standard, warnings matching repo defaults, and feature macros consistent with the main build.
   - Link against the project’s build outputs as needed to resolve symbols referenced by the submission (preferred: static libraries or objects produced by the project build configured for the current manifest).
 - Build cache:
-  - The REPL uses a per-workspace temporary directory (e.g., `./.cod/works/<hash>/`) for objects and executables.
-  - Cache key includes: toolchain version, flags, project snapshot identifiers, and the submission content hash. Any mismatch invalidates the cache.
+  - **Local project and dependencies**: The REPL uses a per-workspace temporary directory (e.g., `./.cod/works/<hash>/`) for build artifacts from the current project and local dependencies (those specified with `path:` in CodProject.yaml).
+  - **Repository dependencies**: Build artifacts for remote repository dependencies are cached globally under `~/.cod/cache/` to enable sharing across multiple projects that depend on the same snapshots.
+  - **Cache structure**:
+    - Local cache: `./.cod/works/<cache_key>/` contains bitcode files (`.bc`) for both `.cc` and `.hh` files from the current project and local deps.
+    - Global cache: `~/.cod/cache/<repo_url_key>/<commit_hash>/` contains bitcode files for repository dependencies.
+  - **Bitcode generation**: Instead of storing executables (which would be submission-specific), we generate and cache LLVM bitcode:
+    - `.cc` files → `.bc` bitcode modules for faster linking in subsequent REPL evaluations.
+    - `.hh` files → `.bc` bitcode for precompiled headers when they contain significant template instantiations or constexpr computations.
+  - **Cache key** includes: toolchain version, compiler flags, project snapshot identifiers, and content hash of the source file. Any mismatch invalidates the cache entry.
+  - **Future stage**: Repository dependency caching under `~/.cod/cache/` will be implemented in a later stage; initially all artifacts go to local `./.cod/works/` directories.
 - Execution:
   - After link, run the produced executable; capture stdout/stderr and exit code.
   - Timeouts and signal handling will be plumbed through and reported.
+
+### Cache Schema Design Considerations
+
+**Bitcode vs. Object Files:**
+- LLVM bitcode (`.bc`) provides better optimization opportunities during final linking compared to pre-compiled object files.
+- Bitcode is more portable across different optimization levels and can be re-optimized based on the specific REPL submission context.
+- Smaller storage footprint compared to debug-enabled object files.
+
+**Header File Caching:**
+- **Pros**: Headers with heavy template instantiations, constexpr computations, or large inline functions benefit significantly from pre-compilation.
+- **Cons**: Most headers are lightweight and caching may not provide meaningful speedup while consuming additional storage.
+- **Strategy**: Initially cache all headers as bitcode; add heuristics in later stages to skip caching for headers below a complexity threshold.
+
+**Cache Locality Trade-offs:**
+- **Local cache** (`./.cod/works/`): Fast access, project-specific, but no sharing across projects.
+- **Global cache** (`~/.cod/cache/`): Enables sharing of repository dependencies across projects, but requires careful cache key design to avoid conflicts.
+- **Hybrid approach**: Local cache for current project + local deps ensures fast iteration; global cache for repo deps maximizes reuse.
+
+**Cache Invalidation:**
+- **Semantic hashing**: Use Clang's AST parsing capabilities to generate hashes based on semantic structure rather than textual content, enabling cache hits for semantically equivalent code (e.g., whitespace-only changes, comment modifications).
+- **Efficiency optimization**: Perform file modification timestamp comparison first; only parse AST and compute semantic hash if the file has been modified since last cache entry.
+- **Toolchain changes**: Toolchain version changes require full cache invalidation to prevent ABI mismatches.
 
 ---
 
