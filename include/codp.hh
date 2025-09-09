@@ -67,19 +67,28 @@ private:
   regional_fifo<regional_str> branches_;
   regional_fifo<CodDep> deps_;
   regional_str header_; // Header comments at the beginning of the file
+  // Compile-on-Demand extension fields
+  regional_str repl_scope_;                // repl.scope
+  regional_str works_root_type_qualified_; // works.root_type.qualified
+  regional_str works_root_type_header_;    // works.root_type.header
 
 public:
   template <typename RT>
   CodProject(memory_region<RT> &mr, const UUID &uuid, std::string_view name, std::string_view repo_url,
-             std::string_view header = "", std::string_view name_comment = "", std::string_view repo_url_comment = "")
+             std::string_view header = "", std::string_view name_comment = "", std::string_view repo_url_comment = "",
+             std::string_view repl_scope = "", std::string_view works_root_type_qualified = "",
+             std::string_view works_root_type_header = "")
       : uuid_(uuid), name_(mr, name), name_comment_(mr, name_comment), repo_url_(mr, repo_url),
-        repo_url_comment_(mr, repo_url_comment), branches_(mr), deps_(mr), header_(mr, header) {}
+        repo_url_comment_(mr, repo_url_comment), branches_(mr), deps_(mr), header_(mr, header),
+        repl_scope_(mr, repl_scope), works_root_type_qualified_(mr, works_root_type_qualified),
+        works_root_type_header_(mr, works_root_type_header) {}
 
   template <typename RT>
   CodProject(memory_region<RT> &mr, std::string_view header = "", std::string_view name_comment = "",
              std::string_view repo_url_comment = "")
       : uuid_(), name_(), name_comment_(mr, name_comment), repo_url_(), repo_url_comment_(mr, repo_url_comment),
-        branches_(mr), deps_(mr), header_(mr, header) {}
+        branches_(mr), deps_(mr), header_(mr, header), repl_scope_(mr), works_root_type_qualified_(mr),
+        works_root_type_header_(mr) {}
 
   // Deleted special members
   CodProject(const CodProject &) = delete;
@@ -107,6 +116,14 @@ public:
 
   const regional_str &header() const { return header_; }
   regional_str &header() { return header_; }
+
+  // Compile-on-Demand extension accessors
+  regional_str &repl_scope() { return repl_scope_; }
+  const regional_str &repl_scope() const { return repl_scope_; }
+  regional_str &works_root_type_qualified() { return works_root_type_qualified_; }
+  const regional_str &works_root_type_qualified() const { return works_root_type_qualified_; }
+  regional_str &works_root_type_header() { return works_root_type_header_; }
+  const regional_str &works_root_type_header() const { return works_root_type_header_; }
 };
 
 // ==========================================================================

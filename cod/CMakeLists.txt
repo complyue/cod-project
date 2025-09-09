@@ -10,12 +10,13 @@ set( LLVM_LINK_COMPONENTS
 
 add_clang_tool( cod
   main.cc
-  clang-repl.cc
+  )
+
+target_link_libraries( cod PRIVATE
+  shilos
   )
 
 clang_target_link_libraries( cod PRIVATE
-  shilos
-
   clangAST
   clangBasic
   clangFrontend

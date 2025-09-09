@@ -136,6 +136,31 @@ inline yaml::Node to_yaml(const CodProject &proj, yaml::YamlAuthor &author) {
     author.setMapValue(m, "branches", seq);
   }
 
+  // Add works.root_type if provided
+  if (!proj.works_root_type_qualified().empty() || !proj.works_root_type_header().empty()) {
+    auto works_map = author.createMap();
+    auto rt_map = author.createMap();
+    if (!proj.works_root_type_qualified().empty()) {
+      author.setMapValue(rt_map, "qualified", author.createString(std::string_view(proj.works_root_type_qualified())));
+    }
+    if (!proj.works_root_type_header().empty()) {
+      author.setMapValue(rt_map, "header", author.createString(std::string_view(proj.works_root_type_header())));
+    }
+    if (!std::get<yaml::Map>(rt_map.value).empty()) {
+      author.setMapValue(works_map, "root_type", rt_map);
+    }
+    if (!std::get<yaml::Map>(works_map.value).empty()) {
+      author.setMapValue(m, "works", works_map);
+    }
+  }
+
+  // Add repl.scope if provided
+  if (!proj.repl_scope().empty()) {
+    auto repl_map = author.createMap();
+    author.setMapValue(repl_map, "scope", author.createString(std::string_view(proj.repl_scope())));
+    author.setMapValue(m, "repl", repl_map);
+  }
+
   // Add dependencies sequence if present
   if (!proj.deps().empty()) {
     auto seq = author.createDashSequence();
@@ -297,31 +322,72 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodProject
   std::string name_comment;
   std::string repo_url_comment;
 
-  // Extract field-specific comments
+  // Optional CoD fields
+  std::string repl_scope;
+  std::string works_root_type_qualified;
+  std::string works_root_type_header;
+
+  // Extract field-specific comments and optional sections
   for (const auto &entry : map) {
     if (entry.key == "name") {
-      // Extract trailing comment from name field
       if (!entry.trailing_comment.empty()) {
         name_comment = std::string(entry.trailing_comment);
-        // Remove the "# " prefix if present
         if (name_comment.size() > 2 && name_comment.substr(0, 2) == "# ") {
           name_comment = name_comment.substr(2);
         }
       }
     } else if (entry.key == "repo_url") {
-      // Extract trailing comment from repo_url field
       if (!entry.trailing_comment.empty()) {
         repo_url_comment = std::string(entry.trailing_comment);
-        // Remove the "# " prefix if present
         if (repo_url_comment.size() > 2 && repo_url_comment.substr(0, 2) == "# ") {
           repo_url_comment = repo_url_comment.substr(2);
+        }
+      }
+    } else if (entry.key == "repl") {
+      if (!entry.value.IsMap()) {
+        throw yaml::TypeError("'repl' must be a mapping");
+      }
+      const auto &repl_map = std::get<yaml::Map>(entry.value.value);
+      auto it_scope = std::find_if(repl_map.begin(), repl_map.end(), [](const auto &kv) { return kv.key == "scope"; });
+      if (it_scope != repl_map.end()) {
+        if (!it_scope->value.IsScalar()) {
+          throw yaml::TypeError("'repl.scope' must be a scalar");
+        }
+        repl_scope = it_scope->value.asString();
+      }
+    } else if (entry.key == "works") {
+      if (!entry.value.IsMap()) {
+        throw yaml::TypeError("'works' must be a mapping");
+      }
+      const auto &works_map = std::get<yaml::Map>(entry.value.value);
+      auto it_rt =
+          std::find_if(works_map.begin(), works_map.end(), [](const auto &kv) { return kv.key == "root_type"; });
+      if (it_rt != works_map.end()) {
+        if (!it_rt->value.IsMap()) {
+          throw yaml::TypeError("'works.root_type' must be a mapping");
+        }
+        const auto &rt_map = std::get<yaml::Map>(it_rt->value.value);
+        auto it_q = std::find_if(rt_map.begin(), rt_map.end(), [](const auto &kv) { return kv.key == "qualified"; });
+        if (it_q != rt_map.end()) {
+          if (!it_q->value.IsScalar()) {
+            throw yaml::TypeError("'works.root_type.qualified' must be a scalar");
+          }
+          works_root_type_qualified = it_q->value.asString();
+        }
+        auto it_h = std::find_if(rt_map.begin(), rt_map.end(), [](const auto &kv) { return kv.key == "header"; });
+        if (it_h != rt_map.end()) {
+          if (!it_h->value.IsScalar()) {
+            throw yaml::TypeError("'works.root_type.header' must be a scalar");
+          }
+          works_root_type_header = it_h->value.asString();
         }
       }
     }
   }
 
-  // Construct CodProject in-place with field-specific comments
-  new (raw_ptr) CodProject(mr, uuid, name, repo_url, header, name_comment, repo_url_comment);
+  // Construct CodProject in-place with field-specific comments and CoD fields
+  new (raw_ptr) CodProject(mr, uuid, name, repo_url, header, name_comment, repo_url_comment, repl_scope,
+                           works_root_type_qualified, works_root_type_header);
 
   // branches sequence (optional)
   auto it_branches = std::find_if(map.begin(), map.end(), [](const auto &entry) { return entry.key == "branches"; });
@@ -343,7 +409,6 @@ void from_yaml(shilos::memory_region<RT> &mr, const yaml::Node &node, CodProject
     }
     for (const auto &seq_item : std::get<yaml::DashSequence>(it_deps->value.value)) {
       const auto &dep_node = seq_item.value;
-      // Allocate CodDep via from_yaml helper.
       raw_ptr->deps().emplace_init(mr, [&](CodDep *dst) { from_yaml(mr, dep_node, dst); });
     }
   }
