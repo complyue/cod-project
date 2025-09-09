@@ -33,18 +33,22 @@ struct CodReplConfig {
   std::string repl_scope = "main.hh";
   std::string works_root_type_qualified = "cod::WorksRoot";
   std::string works_root_type_header = "cod.hh";
-  size_t dbmr_capacity = 64 * 1024 * 1024; // 64MB default
+  size_t dbmr_capacity = 64 * 1024 * 1024;    // 64MB default
+  std::optional<std::string> eval_expression; // For -e/--eval mode
 };
 
 static void printUsage(const char *prog_name) {
-  std::cout << "Usage: " << prog_name << " [OPTIONS]\n"
+  std::cout << "Usage: " << prog_name << " [OPTIONS] [EXPRESSION]\n"
             << "\n"
             << "Compile-on-Demand REPL - Build-and-run REPL without JIT\n"
             << "\n"
             << "Options:\n"
             << "  -w, --works PATH    Workspace DBMR file path (default: ./CodWorks.dbmr)\n"
             << "  --project PATH      Project root directory (default: auto-detect)\n"
+            << "  -e, --eval EXPR     Evaluate expression/statement and exit\n"
             << "  -h, --help          Show this help message\n"
+            << "\n"
+            << "If no -e/--eval is specified, starts interactive REPL mode.\n"
             << "\n"
             << "REPL Commands:\n"
             << "  %quit               Exit the REPL\n"
@@ -358,6 +362,12 @@ int main(int argc, const char **argv) {
         return 1;
       }
       config.project_root = argv[++i];
+    } else if (arg == "-e" || arg == "--eval") {
+      if (i + 1 >= argc) {
+        std::cerr << "Error: " << arg << " requires an expression argument\n";
+        return 1;
+      }
+      config.eval_expression = argv[++i];
     } else {
       std::cerr << "Error: Unknown argument " << arg << "\n";
       printUsage(argv[0]);
@@ -390,8 +400,14 @@ int main(int argc, const char **argv) {
     return 1;
   }
 
-  // Run the REPL
-  runRepl(config);
-
-  return 0;
+  // Check if we're in eval mode or REPL mode
+  if (config.eval_expression.has_value()) {
+    // Eval mode: compile and run the expression, then exit
+    bool success = compileAndRun(config, *config.eval_expression);
+    return success ? 0 : 1;
+  } else {
+    // Interactive REPL mode
+    runRepl(config);
+    return 0;
+  }
 }

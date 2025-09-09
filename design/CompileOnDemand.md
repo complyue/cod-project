@@ -43,15 +43,54 @@ This document specifies the design of the `cod` driver that provides a REPL-like
 ## Command-Line Interface (CLI)
 
 - `cod [-w|--works <PATH>] [--project <PATH>]` — start an interactive session bound to the DBMR at PATH (default `./CodWorks.dbmr`). If the DBMR file does not exist, `cod` creates it with a default capacity.
+- `cod [-w|--works <PATH>] [--project <PATH>] -e|--eval <EXPRESSION>` — evaluate a single expression or statement and exit (non-interactive mode).
 - `cod --help` — show usage.
 
-REPL input model:
-- The REPL accepts plain C++20 statements and expressions, not custom directives.
-- The visible lexical scope of each submission is determined by the scope header(s) specified by the project in CodProject.yaml (see “repl.scope”).
-- There is no facility to define new functions or types from the REPL; users are expected to edit project sources and rebuild. Submissions should call into functions/classes exposed by the scope header(s).
+### Interactive vs Non-Interactive Modes
 
-Notes:
+**Interactive REPL Mode** (default when no `-e`/`--eval` is specified):
+- Starts an interactive session with a `cod>` prompt
+- Accepts multiple submissions over the session lifetime
+- Supports REPL commands like `%quit`, `%help`
+- Supports line continuation with backslash (`\`)
+- Session persists until explicitly terminated
+
+**Non-Interactive Eval Mode** (when `-e`/`--eval` is specified):
+- Evaluates the provided expression/statement once
+- Exits immediately after evaluation
+- Returns exit code 0 on success, non-zero on failure
+- Suitable for scripting and automation
+- No REPL commands or interactive features
+
+### Input Model (Both Modes)
+
+- Accepts plain C++20 statements and expressions, not custom directives.
+- The visible lexical scope of each submission is determined by the scope header(s) specified by the project in CodProject.yaml (see "repl.scope").
+- There is no facility to define new functions or types from submissions; users are expected to edit project sources and rebuild. Submissions should call into functions/classes exposed by the scope header(s).
 - Each submission is compiled and linked into a temporary executable; there is no JIT.
+
+### Usage Examples
+
+**Interactive REPL:**
+```bash
+# Start interactive session with default workspace
+cod
+
+# Start with custom workspace and project
+cod -w /path/to/workspace --project /path/to/project
+```
+
+**Non-Interactive Evaluation:**
+```bash
+# Evaluate a simple expression
+cod -e "std::cout << 'Hello, World!' << std::endl;"
+
+# Evaluate with custom workspace
+cod -w /path/to/workspace -e "myFunction(42);"
+
+# Use in scripts (check exit code)
+cod -e "return validateData();" && echo "Validation passed"
+```
 
 ---
 
