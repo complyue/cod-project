@@ -2,10 +2,11 @@
 
 #include "cod_cache.hh"
 #include "shilos.hh" // IWYU pragma: keep
+
 #include <filesystem>
 #include <memory>
+#include <shilos/dict.hh>
 #include <string>
-#include <unordered_map>
 
 namespace cod {
 
@@ -28,9 +29,9 @@ struct WorksRoot {
   static const shilos::UUID &TYPE_UUID;         // reference, required by concept
 
   // Workspace state stored in memory region
-  regional_ptr<std::string> project_root_path;
-  regional_ptr<std::string> toolchain_version;
-  regional_ptr<std::unordered_map<std::string, std::string>> build_config;
+  regional_ptr<regional_str> project_root_path;
+  regional_ptr<regional_str> toolchain_version;
+  regional_ptr<regional_dict<regional_str, regional_str>> build_config;
 
   // Build cache (not stored in region, managed separately)
   std::unique_ptr<cache::BuildCache> build_cache;

@@ -31,6 +31,7 @@
 - No copy/move semantics for regional types.
 - Constructors that create regional objects must accept `memory_region&`.
 - Use `regional_ptr<T>` for intra-region references; use `global_ptr<T, RT>` for multi-region references.
+- `regional_ptr<T>` can only point to regional types or bits types - never standard C++ types like std::string or std::vector.
 - Prefer RAII via `auto_region<RT>`; ensure allocator symmetry; never use `delete` on memory regions.
 - Before modifying logic involving `regional_ptr`/`global_ptr` or region allocation semantics, consult `design/MemoryRegionAndRegionalTypes.md` and adhere strictly to its protocols.
 
