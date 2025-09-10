@@ -108,9 +108,16 @@ function(configure_cod_target target_name)
     endif()
 endfunction()
 
-# Create and configure all test executables
-configure_cod_target(test_cod_cli src/test_cod_cli.cc)
-configure_cod_target(test_cod_eval src/test_cod_eval.cc)
-configure_cod_target(test_cod_repl src/test_cod_repl.cc)
-configure_cod_target(test_cod_workspace src/test_cod_workspace.cc ${COD_PROJECT_SOURCE_DIR}/cod/cod_workspace.cc ${COD_PROJECT_SOURCE_DIR}/cod/cod_cache.cc)
-configure_cod_target(test_cod_cache src/test_cod_cache.cc ${COD_PROJECT_SOURCE_DIR}/cod/cod_cache.cc ${COD_PROJECT_SOURCE_DIR}/cod/cod_workspace.cc)
+# Create and configure C++ test executables
+
+configure_cod_target(test_cod_workspace
+    src/test_cod_workspace.cc
+    ${COD_PROJECT_SOURCE_DIR}/cod/cod_workspace.cc
+    ${COD_PROJECT_SOURCE_DIR}/cod/cod_cache.cc
+    )
+
+configure_cod_target(test_cod_cache
+    src/test_cod_cache.cc
+    ${COD_PROJECT_SOURCE_DIR}/cod/cod_cache.cc
+    ${COD_PROJECT_SOURCE_DIR}/cod/cod_workspace.cc
+    )

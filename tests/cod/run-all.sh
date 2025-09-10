@@ -19,12 +19,30 @@ fi
 # Build (incremental)
 cmake --build "$BUILD_DIR"
 
-echo "🏃  Running cod test executables..."
-# Execute every built executable directly under build/ (ignore directories)
+echo "🏃  Running shell-based tests..."
+# Execute shell-based tests first
+for shell_test in "$SCRIPT_DIR"/test_*.sh; do
+  if [[ -x "$shell_test" ]]; then
+    echo "→ $(basename "$shell_test")"
+    "$shell_test"
+  fi
+done
+
+echo "🏃  Running C++ test executables..."
+# Execute remaining C++ test executables (cache and workspace tests)
 for exe in "$BUILD_DIR"/*; do
   if [[ -x "$exe" && ! -d "$exe" ]]; then
-    echo "→ $(basename "$exe")"
-    "$exe"
+    exe_name=$(basename "$exe")
+    # Skip tests that have been converted to shell scripts
+    case "$exe_name" in
+      test_cod_cli|test_cod_eval|test_cod_repl)
+        echo "→ $exe_name (skipped - using shell version)"
+        ;;
+      *)
+        echo "→ $exe_name"
+        "$exe"
+        ;;
+    esac
   fi
 done
 
