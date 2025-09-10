@@ -57,21 +57,9 @@ run_test() {
     ((TEST_COUNT++))
 }
 
-# Create a test project for REPL tests
-create_test_project() {
-    TEMP_DIR=$(mktemp -d)
-    
-    # Create CodProject.yaml
-    cat > "$TEMP_DIR/CodProject.yaml" << EOF
-name: repl_test_project
-version: 1.0.0
-dependencies: {}
-EOF
-    
-    # Create .cod directory
-    mkdir -p "$TEMP_DIR/.cod"
-    
-    echo "$TEMP_DIR"
+# Get test project path for REPL tests
+get_test_project_path() {
+    echo "$SCRIPT_DIR/test-data/repl"
 }
 
 # Test REPL startup (without interactive input)
@@ -79,7 +67,7 @@ test_repl_startup() {
     log_test "REPL startup"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     
     # Test that REPL starts without arguments (should enter interactive mode)
     # We'll send EOF immediately to exit cleanly
@@ -101,8 +89,7 @@ test_repl_startup() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_repl_*
 }
 
@@ -111,7 +98,7 @@ test_repl_commands() {
     log_test "REPL basic commands"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     
     # Test REPL with simple input and exit
     # Send a simple expression followed by exit command
@@ -134,8 +121,7 @@ test_repl_commands() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_cmd_*
 }
 
@@ -144,7 +130,7 @@ test_repl_help() {
     log_test "REPL help command"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     
     # Test REPL help command
     INPUT=":help\n:exit\n"
@@ -166,8 +152,7 @@ test_repl_help() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_help_*
 }
 
@@ -176,7 +161,7 @@ test_repl_workspace_handling() {
     log_test "REPL workspace handling"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     WORKS_PATH="$PROJECT_DIR/custom_repl.dbmr"
     
     # Test REPL with custom works path
@@ -199,8 +184,7 @@ test_repl_workspace_handling() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_ws_*
 }
 
@@ -209,7 +193,7 @@ test_repl_prompt() {
     log_test "REPL prompt behavior"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     
     # Test that REPL shows some kind of prompt or interactive behavior
     # We'll just check that it doesn't immediately exit with an error
@@ -231,8 +215,7 @@ test_repl_prompt() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_prompt_*
 }
 

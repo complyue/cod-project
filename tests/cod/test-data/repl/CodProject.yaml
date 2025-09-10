@@ -1,0 +1,8 @@
+uuid: "33333333-3333-3333-3333-333333333333"
+name: repl_test_project
+repo_url: "/test/repl_test_project"
+branches: [main]
+version: 1.0.0
+repl:
+  scope: "test_scope.hh"
+dependencies: {}

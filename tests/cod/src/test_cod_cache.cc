@@ -242,7 +242,10 @@ int main() {
 
   // Link bitcode to executable
   std::vector<fs::path> bitcode_files = {bitcode_path};
-  std::vector<std::string> linker_args;
+  // Add rpath to find libc++abi.1.dylib in the toolchain directory
+  // Use relative path from current working directory to avoid hardcoding
+  std::string project_root = std::filesystem::current_path().parent_path().parent_path();
+  std::vector<std::string> linker_args = {"-Wl,-rpath," + project_root + "/build/lib"};
 
   bool linked = compiler.link_bitcode(bitcode_files, executable_path, linker_args);
   assert(linked);

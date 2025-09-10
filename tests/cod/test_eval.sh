@@ -53,21 +53,9 @@ run_test() {
     ((TEST_COUNT++))
 }
 
-# Create a test project for evaluation tests
-create_test_project() {
-    TEMP_DIR=$(mktemp -d)
-    
-    # Create CodProject.yaml
-    cat > "$TEMP_DIR/CodProject.yaml" << EOF
-name: eval_test_project
-version: 1.0.0
-dependencies: {}
-EOF
-    
-    # Create .cod directory
-    mkdir -p "$TEMP_DIR/.cod"
-    
-    echo "$TEMP_DIR"
+# Get test project path for evaluation tests
+get_test_project_path() {
+    echo "$SCRIPT_DIR/test-data/basic"
 }
 
 # Test basic evaluation with -e/--eval
@@ -75,7 +63,7 @@ test_basic_evaluation() {
     log_test "basic evaluation"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     
     # Test simple arithmetic expression
     if (cd "$PROJECT_DIR" && "$COD_EXECUTABLE" -e "1 + 1" > /tmp/cod_eval_out 2> /tmp/cod_eval_err); then
@@ -96,8 +84,7 @@ test_basic_evaluation() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_eval_*
 }
 
@@ -106,7 +93,7 @@ test_eval_with_custom_works() {
     log_test "evaluation with custom works path"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     WORKS_PATH="$PROJECT_DIR/custom.dbmr"
     
     # Test with custom works path
@@ -127,8 +114,7 @@ test_eval_with_custom_works() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_custom_*
 }
 
@@ -137,7 +123,7 @@ test_eval_long_form() {
     log_test "--eval long form"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     
     # Test --eval instead of -e
     if (cd "$PROJECT_DIR" && "$COD_EXECUTABLE" --eval "3 + 3" > /tmp/cod_long_out 2> /tmp/cod_long_err); then
@@ -157,8 +143,7 @@ test_eval_long_form() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_long_*
 }
 
@@ -167,7 +152,7 @@ test_multiline_expression() {
     log_test "multiline expression syntax"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     
     # Test multiline expression with semicolons
     MULTILINE_EXPR="int x = 5; int y = 10; x + y"
@@ -188,8 +173,7 @@ test_multiline_expression() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_multi_*
 }
 
@@ -198,7 +182,7 @@ test_eval_exit_codes() {
     log_test "evaluation exit codes"
     run_test
     
-    PROJECT_DIR=$(create_test_project)
+    PROJECT_DIR=$(get_test_project_path)
     
     # Test invalid C++ syntax - should fail but not with argument parsing error
     if (cd "$PROJECT_DIR" && "$COD_EXECUTABLE" -e "invalid syntax here" > /tmp/cod_exit_out 2> /tmp/cod_exit_err); then
@@ -214,8 +198,7 @@ test_eval_exit_codes() {
         fi
     fi
     
-    # Clean up
-    rm -rf "$PROJECT_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_exit_*
 }
 

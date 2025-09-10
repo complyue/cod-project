@@ -4,3 +4,4 @@ build/
 *.dylib
 *.exe
 compile_commands.json
+*.dbmr

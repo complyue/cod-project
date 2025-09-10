@@ -1,0 +1,6 @@
+uuid: "11111111-1111-1111-1111-111111111111"
+name: eval_test_project
+repo_url: "/test/eval_test_project"
+branches: [main]
+version: 1.0.0
+dependencies: {}

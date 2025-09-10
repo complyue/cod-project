@@ -144,18 +144,12 @@ test_argument_parsing() {
     log_test "argument parsing"
     run_test
     
-    # Create a temporary directory for testing
-    TEMP_DIR=$(mktemp -d)
-    
-    # Create a minimal CodProject.yaml
-    cat > "$TEMP_DIR/CodProject.yaml" << EOF
-name: test_project
-version: 1.0.0
-EOF
+    # Use tracked test data directory
+    PROJECT_DIR="$SCRIPT_DIR/test-data/cli"
     
     # Test with custom works path (should not fail on argument parsing)
-    WORKS_PATH="$TEMP_DIR/test.dbmr"
-    if "$COD_EXECUTABLE" --project "$TEMP_DIR" -w "$WORKS_PATH" -e "1 + 1" > /tmp/cod_args_out 2> /tmp/cod_args_err; then
+    WORKS_PATH="$PROJECT_DIR/test.dbmr"
+    if "$COD_EXECUTABLE" --project "$PROJECT_DIR" -w "$WORKS_PATH" -e "1 + 1" > /tmp/cod_args_out 2> /tmp/cod_args_err; then
         # Command might succeed or fail due to missing dependencies, but should not fail on argument parsing
         if ! grep -q "Unknown argument" /tmp/cod_args_err && \
            ! grep -q "requires a" /tmp/cod_args_err; then
@@ -173,8 +167,7 @@ EOF
         fi
     fi
     
-    # Clean up
-    rm -rf "$TEMP_DIR"
+    # Clean up temp files only
     rm -f /tmp/cod_args_*
 }
 

@@ -1,0 +1,6 @@
+uuid: "22222222-2222-2222-2222-222222222222"
+name: cli_test_project
+repo_url: "/test/cli_test_project"
+branches: [main]
+version: 1.0.0
+dependencies: {}

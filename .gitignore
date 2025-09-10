@@ -29,6 +29,8 @@
 .sw?
 #OS X specific files.
 .DS_Store
+# CoD workspace files
+*.dbmr
 
 #==============================================================================#
 # Explicit files to ignore (only matches one).
