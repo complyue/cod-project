@@ -1,4 +1,6 @@
 build/
+.cod/
+
 *.o
 *.so
 *.dylib

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run-all.sh – build and execute all cod C++ tests.
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
@@ -20,11 +20,48 @@ fi
 cmake --build "$BUILD_DIR"
 
 echo "🏃  Running shell-based tests..."
-# Execute shell-based tests first
+# Define colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Test counter
+TEST_COUNT=0
+PASS_COUNT=0
+FAIL_COUNT=0
+
+log_test() {
+    echo -e "${YELLOW}Testing $1...${NC}"
+}
+
+log_pass() {
+    echo -e "${GREEN}✓ $1${NC}"
+    ((PASS_COUNT++))
+}
+
+log_fail() {
+    echo -e "${RED}✗ $1${NC}"
+    ((FAIL_COUNT++))
+}
+
+run_test() {
+    ((TEST_COUNT++))
+}
+
 for shell_test in "$SCRIPT_DIR"/test_*.sh; do
   if [[ -x "$shell_test" ]]; then
-    echo "→ $(basename "$shell_test")"
+    log_test "$(basename "$shell_test")"
+    run_test
     "$shell_test"
+    EXIT_CODE=$?
+    if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+        log_fail "$(basename "$shell_test") failed with Segmentation Fault (exit code $EXIT_CODE)"
+    elif [[ "$EXIT_CODE" -ne 0 ]]; then
+        log_fail "$(basename "$shell_test") failed with exit code $EXIT_CODE"
+    else
+        log_pass "$(basename "$shell_test") passed"
+    fi
   fi
 done
 
@@ -36,14 +73,31 @@ for exe in "$BUILD_DIR"/*; do
     # Skip tests that have been converted to shell scripts
     case "$exe_name" in
       test_cod_cli|test_cod_eval|test_cod_repl)
-        echo "→ $exe_name (skipped - using shell version)"
+        log_test "$exe_name (skipped - using shell version)"
+        log_pass "$exe_name (skipped - using shell version)"
         ;;
       *)
-        echo "→ $exe_name"
+        log_test "$exe_name"
+        run_test
         "$exe"
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "$exe_name failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif [[ "$EXIT_CODE" -ne 0 ]]; then
+            log_fail "$exe_name failed with exit code $EXIT_CODE"
+        else
+            log_pass "$exe_name passed"
+        fi
         ;;
     esac
   fi
 done
 
-echo "✔ All cod tests passed."
+echo
+if [[ "$FAIL_COUNT" -eq 0 ]]; then
+    echo -e "${GREEN}✔ All CoD tests passed! ($PASS_COUNT/$TEST_COUNT)${NC}"
+    exit 0
+else
+    echo -e "${RED}✗ Some CoD tests failed. ($FAIL_COUNT/$TEST_COUNT failures)${NC}"
+    exit 1
+fi

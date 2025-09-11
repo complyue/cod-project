@@ -25,15 +25,16 @@ if [[ ! -x "$COD_EXECUTABLE" ]]; then
     exit 1
 fi
 
-# Colors for output
+# Define colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
 # Test counter
 TEST_COUNT=0
 PASS_COUNT=0
+FAIL_COUNT=0
 
 log_test() {
     echo -e "${YELLOW}Testing $1...${NC}"
@@ -46,7 +47,7 @@ log_pass() {
 
 log_fail() {
     echo -e "${RED}✗ $1${NC}"
-    exit 1
+    ((FAIL_COUNT++))
 }
 
 run_test() {
@@ -75,8 +76,10 @@ test_basic_evaluation() {
             log_fail "basic evaluation failed with argument parsing error"
         fi
     else
-        # Even if evaluation fails, check it's not due to argument parsing
-        if ! grep -q "Unknown argument" /tmp/cod_eval_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "basic evaluation failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_eval_err && \
            ! grep -q "requires an expression argument" /tmp/cod_eval_err; then
             log_pass "basic evaluation argument parsing works (execution may have failed for other reasons)"
         else
@@ -105,8 +108,10 @@ test_eval_with_custom_works() {
             log_fail "custom works path evaluation failed with argument parsing error"
         fi
     else
-        # Check it's not an argument parsing error
-        if ! grep -q "Unknown argument" /tmp/cod_custom_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "custom works path evaluation failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_custom_err && \
            ! grep -q "requires a" /tmp/cod_custom_err; then
             log_pass "custom works path argument parsing works (execution may have failed for other reasons)"
         else
@@ -134,8 +139,10 @@ test_eval_long_form() {
             log_fail "--eval long form failed with argument parsing error"
         fi
     else
-        # Check it's not an argument parsing error
-        if ! grep -q "Unknown argument" /tmp/cod_long_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "--eval long form failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_long_err && \
            ! grep -q "requires an expression argument" /tmp/cod_long_err; then
             log_pass "--eval long form argument parsing works (execution may have failed for other reasons)"
         else
@@ -164,8 +171,10 @@ test_multiline_expression() {
             log_fail "multiline expression failed with argument parsing error"
         fi
     else
-        # Check it's not an argument parsing error
-        if ! grep -q "Unknown argument" /tmp/cod_multi_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "multiline expression failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_multi_err && \
            ! grep -q "requires an expression argument" /tmp/cod_multi_err; then
             log_pass "multiline expression argument parsing works (execution may have failed for other reasons)"
         else
@@ -189,8 +198,10 @@ test_eval_exit_codes() {
         # If it succeeds, that's unexpected but not necessarily wrong
         log_pass "invalid expression handling works (unexpectedly succeeded)"
     else
-        # Should fail, but not due to argument parsing
-        if ! grep -q "Unknown argument" /tmp/cod_exit_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "invalid expression failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_exit_err && \
            ! grep -q "requires an expression argument" /tmp/cod_exit_err; then
             log_pass "invalid expression properly rejected"
         else
@@ -218,4 +229,44 @@ main() {
 }
 
 # Run tests
-main "$@"
+echo -e "${GREEN}=== CoD Evaluation Tests ===${NC}"
+
+run_test
+test_basic_evaluation
+
+run_test
+test_custom_works_path
+
+run_test
+test_eval_long_form
+
+run_test
+test_multiline_expression
+
+run_test
+test_invalid_syntax
+
+run_test
+test_eval_exit_codes
+
+run_test
+test_eval_exit_codes_with_custom_works_path
+
+run_test
+test_eval_exit_codes_with_long_form
+
+run_test
+test_eval_exit_codes_with_multiline_expression
+
+run_test
+test_eval_exit_codes_with_invalid_syntax
+
+
+echo
+if [[ "$FAIL_COUNT" -eq 0 ]]; then
+    echo -e "${GREEN}✔ All CoD Evaluation tests passed! ($PASS_COUNT/$TEST_COUNT)${NC}"
+    exit 0
+else
+    echo -e "${RED}✗ Some CoD Evaluation tests failed. ($FAIL_COUNT/$TEST_COUNT failures)${NC}"
+    exit 1
+fi

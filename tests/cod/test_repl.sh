@@ -29,15 +29,16 @@ if [[ ! -x "$COD_EXECUTABLE" ]]; then
     exit 1
 fi
 
-# Colors for output
+# Define colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
 # Test counter
 TEST_COUNT=0
 PASS_COUNT=0
+FAIL_COUNT=0
 
 log_test() {
     echo -e "${YELLOW}Testing $1...${NC}"
@@ -50,7 +51,7 @@ log_pass() {
 
 log_fail() {
     echo -e "${RED}✗ $1${NC}"
-    exit 1
+    ((FAIL_COUNT++))
 }
 
 run_test() {
@@ -80,8 +81,10 @@ test_repl_startup() {
             log_fail "REPL startup failed with argument parsing error"
         fi
     else
-        # Check output for signs it tried to start REPL
-        if ! grep -q "Unknown argument" /tmp/cod_repl_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "REPL startup failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_repl_err && \
            ! grep -q "requires a" /tmp/cod_repl_err; then
             log_pass "REPL startup attempted (may have failed for other reasons)"
         else
@@ -112,8 +115,10 @@ test_repl_commands() {
             log_fail "REPL commands failed with argument parsing error"
         fi
     else
-        # Even if it fails, check it's not due to argument parsing
-        if ! grep -q "Unknown argument" /tmp/cod_cmd_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "REPL basic commands failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_cmd_err && \
            ! grep -q "requires a" /tmp/cod_cmd_err; then
             log_pass "REPL command parsing works (execution may have failed for other reasons)"
         else
@@ -143,8 +148,10 @@ test_repl_help() {
             log_fail "REPL help failed with argument parsing error"
         fi
     else
-        # Even if it fails, check it's not due to argument parsing
-        if ! grep -q "Unknown argument" /tmp/cod_help_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "REPL help command failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_help_err && \
            ! grep -q "requires a" /tmp/cod_help_err; then
             log_pass "REPL help command parsing works (execution may have failed for other reasons)"
         else
@@ -175,8 +182,10 @@ test_repl_workspace_handling() {
             log_fail "REPL workspace handling failed with argument parsing error"
         fi
     else
-        # Even if it fails, check it's not due to argument parsing
-        if ! grep -q "Unknown argument" /tmp/cod_ws_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "REPL workspace handling failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_ws_err && \
            ! grep -q "requires a" /tmp/cod_ws_err; then
             log_pass "REPL workspace argument parsing works (execution may have failed for other reasons)"
         else
@@ -190,33 +199,51 @@ test_repl_workspace_handling() {
 
 # Test REPL prompt behavior (basic check)
 test_repl_prompt() {
-    log_test "REPL prompt behavior"
+    log_test "REPL prompt behavior (not implemented)"
     run_test
-    
-    PROJECT_DIR=$(get_test_project_path)
-    
-    # Test that REPL shows some kind of prompt or interactive behavior
-    # We'll just check that it doesn't immediately exit with an error
-    if (cd "$PROJECT_DIR" && echo ":exit" | shell_timeout 5 "$COD_EXECUTABLE" > /tmp/cod_prompt_out 2> /tmp/cod_prompt_err); then
-        # Check that it doesn't fail with argument parsing errors
-        if ! grep -q "Unknown argument" /tmp/cod_prompt_err && \
-           ! grep -q "requires a" /tmp/cod_prompt_err; then
-            log_pass "REPL prompt behavior works"
-        else
-            log_fail "REPL prompt failed with argument parsing error"
-        fi
-    else
-        # Even if it fails, check it's not due to argument parsing
-        if ! grep -q "Unknown argument" /tmp/cod_prompt_err && \
-           ! grep -q "requires a" /tmp/cod_prompt_err; then
-            log_pass "REPL prompt argument parsing works (execution may have failed for other reasons)"
-        else
-            log_fail "REPL prompt failed with argument parsing error"
-        fi
-    fi
-    
-    # Clean up temp files only
-    rm -f /tmp/cod_prompt_*
+    log_fail "REPL prompt test not implemented"
+}
+
+# Test REPL exit command
+test_repl_exit_command() {
+    log_test "REPL exit command (not implemented)"
+    run_test
+    log_fail "REPL exit command test not implemented"
+}
+
+# Test REPL multiline input
+test_repl_multiline_input() {
+    log_test "REPL multiline input (not implemented)"
+    run_test
+    log_fail "REPL multiline input test not implemented"
+}
+
+# Test REPL invalid input
+test_repl_invalid_input() {
+    log_test "REPL invalid input (not implemented)"
+    run_test
+    log_fail "REPL invalid input test not implemented"
+}
+
+# Test REPL history
+test_repl_history() {
+    log_test "REPL history (not implemented)"
+    run_test
+    log_fail "REPL history test not implemented"
+}
+
+# Test REPL tab completion
+test_repl_tab_completion() {
+    log_test "REPL tab completion (not implemented)"
+    run_test
+    log_fail "REPL tab completion test not implemented"
+}
+
+# Test REPL interrupt
+test_repl_interrupt() {
+    log_test "REPL interrupt (not implemented)"
+    run_test
+    log_fail "REPL interrupt test not implemented"
 }
 
 # Main test execution
@@ -229,10 +256,67 @@ main() {
     test_repl_help
     test_repl_workspace_handling
     test_repl_prompt
+    test_repl_exit_command
+    test_repl_multiline_input
+    test_repl_invalid_input
+    test_repl_history
+    test_repl_tab_completion
+    test_repl_interrupt
     
     echo
-    echo "✔ All REPL tests passed! ($PASS_COUNT/$TEST_COUNT)"
+    if [[ "$FAIL_COUNT" -eq 0 ]]; then
+        echo -e "${GREEN}✔ All CoD REPL tests passed! ($PASS_COUNT/$TEST_COUNT)${NC}"
+        exit 0
+    else
+        echo -e "${RED}✗ Some CoD REPL tests failed. ($FAIL_COUNT/$TEST_COUNT failures)${NC}"
+        exit 1
+    fi
 }
 
 # Run tests
-main "$@"
+# echo -e "${GREEN}=== CoD REPL Tests ===${NC}"
+
+# run_test
+# test_repl_startup
+
+# run_test
+# test_repl_commands
+
+# run_test
+# test_repl_help_command
+
+# run_test
+# test_repl_custom_works_path
+
+# run_test
+# test_repl_prompt
+
+# run_test
+# test_repl_exit_command
+
+# run_test
+# test_repl_multiline_input
+
+# run_test
+# test_repl_invalid_input
+
+# run_test
+# test_repl_history
+
+# run_test
+# test_repl_tab_completion
+
+# run_test
+# test_repl_interrupt
+
+
+# echo
+# if [[ "$FAIL_COUNT" -eq 0 ]]; then
+#     echo -e "${GREEN}✔ All CoD REPL tests passed! ($PASS_COUNT/$TEST_COUNT)${NC}"
+#     exit 0
+# else
+#     echo -e "${RED}✗ Some CoD REPL tests failed. ($FAIL_COUNT/$TEST_COUNT failures)${NC}"
+#     exit 1
+# fi
+
+main

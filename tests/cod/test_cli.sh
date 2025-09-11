@@ -25,15 +25,16 @@ if [[ ! -x "$COD_EXECUTABLE" ]]; then
     exit 1
 fi
 
-# Colors for output
+# Define colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
 # Test counter
 TEST_COUNT=0
 PASS_COUNT=0
+FAIL_COUNT=0
 
 log_test() {
     echo -e "${YELLOW}Testing $1...${NC}"
@@ -46,7 +47,7 @@ log_pass() {
 
 log_fail() {
     echo -e "${RED}✗ $1${NC}"
-    exit 1
+    ((FAIL_COUNT++))
 }
 
 run_test() {
@@ -68,7 +69,12 @@ test_help_option() {
             log_fail "--help output missing expected content"
         fi
     else
-        log_fail "--help option failed"
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "--help option failed with Segmentation Fault (exit code $EXIT_CODE)"
+        else
+            log_fail "--help option failed"
+        fi
     fi
     
     # Test -h (short form)
@@ -79,7 +85,12 @@ test_help_option() {
             log_fail "-h output missing expected content"
         fi
     else
-        log_fail "-h option failed"
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "-h option failed with Segmentation Fault (exit code $EXIT_CODE)"
+        else
+            log_fail "-h option failed"
+        fi
     fi
     
     # Clean up
@@ -95,7 +106,10 @@ test_invalid_arguments() {
     if "$COD_EXECUTABLE" --unknown > /tmp/cod_unknown_out 2> /tmp/cod_unknown_err; then
         log_fail "--unknown should have failed but didn't"
     else
-        if grep -q "Unknown argument" /tmp/cod_unknown_err; then
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "--unknown failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif grep -q "Unknown argument" /tmp/cod_unknown_err; then
             log_pass "--unknown argument properly rejected"
         else
             log_fail "--unknown error message incorrect"
@@ -106,7 +120,10 @@ test_invalid_arguments() {
     if "$COD_EXECUTABLE" -w > /tmp/cod_w_out 2> /tmp/cod_w_err; then
         log_fail "-w without argument should have failed but didn't"
     else
-        if grep -q "requires a path argument" /tmp/cod_w_err; then
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "-w without argument failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif grep -q "requires a path argument" /tmp/cod_w_err; then
             log_pass "-w missing argument properly detected"
         else
             log_fail "-w error message incorrect"
@@ -117,7 +134,10 @@ test_invalid_arguments() {
     if "$COD_EXECUTABLE" -e > /tmp/cod_e_out 2> /tmp/cod_e_err; then
         log_fail "-e without argument should have failed but didn't"
     else
-        if grep -q "requires an expression argument" /tmp/cod_e_err; then
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "-e without argument failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif grep -q "requires an expression argument" /tmp/cod_e_err; then
             log_pass "-e missing argument properly detected"
         else
             log_fail "-e error message incorrect"
@@ -128,7 +148,10 @@ test_invalid_arguments() {
     if "$COD_EXECUTABLE" --project > /tmp/cod_project_out 2> /tmp/cod_project_err; then
         log_fail "--project without argument should have failed but didn't"
     else
-        if grep -q "requires a path argument" /tmp/cod_project_err; then
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "--project without argument failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif grep -q "requires a path argument" /tmp/cod_project_err; then
             log_pass "--project missing argument properly detected"
         else
             log_fail "--project error message incorrect"
@@ -159,7 +182,10 @@ test_argument_parsing() {
         fi
     else
         # Even if command fails, check that it's not due to argument parsing errors
-        if ! grep -q "Unknown argument" /tmp/cod_args_err && \
+        EXIT_CODE=$?
+        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+            log_fail "argument parsing failed with Segmentation Fault (exit code $EXIT_CODE)"
+        elif ! grep -q "Unknown argument" /tmp/cod_args_err && \
            ! grep -q "requires a" /tmp/cod_args_err; then
             log_pass "argument parsing works correctly (command failed for other reasons)"
         else
@@ -171,18 +197,72 @@ test_argument_parsing() {
     rm -f /tmp/cod_args_*
 }
 
-# Main test execution
-main() {
-    echo "Running $TEST_NAME..."
-    echo
-    
-    test_help_option
-    test_invalid_arguments
-    test_argument_parsing
-    
-    echo
-    echo "✔ All CLI tests passed! ($PASS_COUNT/$TEST_COUNT)"
-}
-
 # Run tests
-main "$@"
+echo -e "${GREEN}=== CoD CLI Tests ===${NC}"
+
+run_test
+test_help_option
+
+run_test
+test_invalid_arguments
+
+run_test
+test_argument_parsing
+
+run_test
+test_custom_works_path
+
+run_test
+test_project_option
+
+run_test
+test_eval_option
+
+run_test
+test_repl_option
+
+run_test
+test_version_option
+
+run_test
+test_unknown_option
+
+run_test
+test_multiple_options
+
+run_test
+test_option_with_argument
+
+run_test
+test_short_options
+
+run_test
+test_combined_short_options
+
+run_test
+test_dash_dash_argument
+
+run_test
+test_empty_arguments
+
+run_test
+test_no_arguments
+
+run_test
+test_long_form_eval
+
+run_test
+test_multiline_eval
+
+run_test
+test_invalid_syntax_eval
+
+
+echo
+if [[ "$FAIL_COUNT" -eq 0 ]]; then
+    echo -e "${GREEN}✔ All CoD CLI tests passed! ($PASS_COUNT/$TEST_COUNT)${NC}"
+    exit 0
+else
+    echo -e "${RED}✗ Some CoD CLI tests failed. ($FAIL_COUNT/$TEST_COUNT failures)${NC}"
+    exit 1
+fi
