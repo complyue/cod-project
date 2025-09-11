@@ -190,7 +190,7 @@ void testDefaultWorkspacePath() {
   std::cout << "Testing default workspace path...\n";
 
   auto project_dir = createTestProject();
-  auto default_works_path = project_dir / "CodWorks.dbmr";
+  auto default_works_path = project_dir / ".cod/works.dbmr";
 
   // Remove default workspace if it exists
   fs::remove(default_works_path);
@@ -200,7 +200,7 @@ void testDefaultWorkspacePath() {
 
   // Should create default workspace
   if (fs::exists(default_works_path)) {
-    std::cout << "  ✓ Default workspace created at CodWorks.dbmr\n";
+    std::cout << "  ✓ Default workspace created at .cod/works.dbmr\n";
   }
 
   // Clean up

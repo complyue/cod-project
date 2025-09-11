@@ -44,7 +44,7 @@ using namespace cod;
 using namespace cod::project;
 
 struct CodReplConfig {
-  fs::path works_path = "./CodWorks.dbmr";
+  fs::path works_path = "./.cod/works.dbmr";
   fs::path project_root;
   std::string repl_scope = "main.hh";
   std::string works_root_type_qualified = "cod::WorksRoot";
@@ -63,7 +63,7 @@ static void printUsage(const char *prog_name) {
             << "Compile-on-Demand REPL - Build-and-run REPL without JIT\n"
             << "\n"
             << "Options:\n"
-            << "  -w, --works PATH    Workspace DBMR file path (default: ./CodWorks.dbmr)\n"
+            << "  -w, --works PATH    Workspace DBMR file path (default: ./.cod/works.dbmr)\n"
             << "  --project PATH      Project root directory (default: auto-detect)\n"
             << "  -e, --eval EXPR     Evaluate expression/statement and exit\n"
             << "  -h, --help          Show this help message\n"
@@ -392,19 +392,7 @@ static fs::path getTempDir(const CodReplConfig &config) { return config.project_
 static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
   std::vector<std::string> args;
 
-  // Use clang++ from the same directory as the cod executable
-  // Use LLVM's idiomatic method for getting executable path
-  void *MainAddr = (void *)(intptr_t)buildCompilerArgs; // Any function address
-  std::string exe_path = llvm::sys::fs::getMainExecutable("cod", MainAddr);
-  if (!exe_path.empty()) {
-    llvm::SmallString<256> clang_path(exe_path);
-    llvm::sys::path::remove_filename(clang_path); // Get parent directory
-    llvm::sys::path::append(clang_path, "clang++");
-    args.push_back(clang_path.str().str());
-  } else {
-    // Fallback to system clang++ if we can't determine executable path
-    args.push_back("clang++");
-  }
+  // Note: Do not include the compiler path here - it's handled by BitcodeCompiler
   args.push_back("-std=c++20");
   args.push_back("-stdlib=libc++");
 
@@ -434,10 +422,25 @@ static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
     }
   }
 
-  // Add library paths and libraries
+  // Note: Library paths and libraries are NOT included here
+  // They belong in linker arguments, not compiler arguments for bitcode generation
+
+  args.push_back("-O2");
+  args.push_back("-g");
+  return args;
+}
+
+static std::vector<std::string> buildLinkerArgs(const CodReplConfig &config) {
+  std::vector<std::string> args;
+
+  // Force use of lld from the same toolchain
+  args.push_back("-fuse-ld=lld");
+
+  // Add library paths and libraries for linking
   auto lib_path = config.project_root / "build" / "lib";
   if (fs::exists(lib_path)) {
     args.push_back("-L" + lib_path.string());
+    args.push_back("-Wl,-rpath," + lib_path.string()); // Add rpath for runtime library loading
     args.push_back("-lshilos");
   } else {
     // If local build/lib doesn't exist, try the main CoD project's build/lib
@@ -446,6 +449,7 @@ static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
       auto parent_lib = current.parent_path() / "build" / "lib";
       if (fs::exists(parent_lib)) {
         args.push_back("-L" + parent_lib.string());
+        args.push_back("-Wl,-rpath," + parent_lib.string()); // Add rpath for runtime library loading
         args.push_back("-lshilos");
         break;
       }
@@ -453,8 +457,6 @@ static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
     }
   }
 
-  args.push_back("-O2");
-  args.push_back("-g");
   return args;
 }
 
@@ -516,14 +518,7 @@ static bool compileAndRun(const CodReplConfig &config, const std::string &submis
     // Link bitcode to executable
     cod::cache::BitcodeCompiler compiler;
     std::vector<fs::path> bitcode_files = {*cached_bitcode};
-    std::vector<std::string> linker_args;
-
-    // Add library paths and libraries to linker args
-    auto lib_path = config.project_root / "build" / "lib";
-    if (fs::exists(lib_path)) {
-      linker_args.push_back("-L" + lib_path.string());
-      linker_args.push_back("-lshilos");
-    }
+    auto linker_args = buildLinkerArgs(config);
 
     if (!compiler.link_bitcode(bitcode_files, binary_path.string(), linker_args)) {
       std::cerr << "Error: Failed to link bitcode\n";
@@ -716,7 +711,7 @@ int main(int argc, const char **argv) {
 
   // Restore command-line settings
   config.eval_expression = eval_expr;
-  if (works_path != "./CodWorks.dbmr")
+  if (works_path != "./.cod/works.dbmr")
     config.works_path = works_path;
   config.enable_cache = enable_cache;
   config.force_rebuild = force_rebuild;

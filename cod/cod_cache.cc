@@ -1,5 +1,8 @@
 #include "cod_cache.hh"
 
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
+
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -106,10 +109,24 @@ std::optional<fs::path> BuildCache::generate_bitcode(const fs::path &source_path
 
   auto bitcode_path = temp_dir / (source_path.stem().string() + ".bc");
 
+  // Get toolchain compiler path
+  std::string compiler_path;
+  std::string exe_path = llvm::sys::fs::getMainExecutable("cod", nullptr);
+  if (!exe_path.empty()) {
+    llvm::SmallString<256> clang_path(exe_path);
+    llvm::sys::path::remove_filename(clang_path); // Get parent directory
+    llvm::sys::path::append(clang_path, "clang++");
+    compiler_path = clang_path.str().str();
+  } else {
+    // Fallback to system clang++ if we can't determine executable path
+    compiler_path = "clang++";
+  }
+
   // Build clang command to generate bitcode
-  std::string cmd = "clang++ -emit-llvm -c ";
+  std::string cmd = compiler_path + " -emit-llvm -c ";
   for (const auto &arg : compiler_args) {
-    if (arg != "clang++") { // Skip the compiler name
+    // Skip any clang++ paths in the arguments (they should not be there for bitcode generation)
+    if (arg.find("clang++") == std::string::npos) {
       cmd += arg + " ";
     }
   }
@@ -129,10 +146,24 @@ BitcodeCompiler::~BitcodeCompiler() = default;
 
 bool BitcodeCompiler::compile_to_bitcode(const fs::path &source_path, const fs::path &output_path,
                                          const std::vector<std::string> &compiler_args) {
+  // Get toolchain compiler path
+  std::string compiler_path;
+  std::string exe_path = llvm::sys::fs::getMainExecutable("cod", nullptr);
+  if (!exe_path.empty()) {
+    llvm::SmallString<256> clang_path(exe_path);
+    llvm::sys::path::remove_filename(clang_path); // Get parent directory
+    llvm::sys::path::append(clang_path, "clang++");
+    compiler_path = clang_path.str().str();
+  } else {
+    // Fallback to system clang++ if we can't determine executable path
+    compiler_path = "clang++";
+  }
+
   // Build clang command to generate bitcode
-  std::string cmd = "clang++ -emit-llvm -c ";
+  std::string cmd = compiler_path + " -emit-llvm -c ";
   for (const auto &arg : compiler_args) {
-    if (arg != "clang++") { // Skip the compiler name
+    // Skip any clang++ paths in the arguments (they should not be there for bitcode generation)
+    if (arg.find("clang++") == std::string::npos) {
       cmd += arg + " ";
     }
   }
@@ -145,24 +176,38 @@ bool BitcodeCompiler::compile_to_bitcode(const fs::path &source_path, const fs::
 
 bool BitcodeCompiler::link_bitcode(const std::vector<fs::path> &bitcode_files, const fs::path &output_executable,
                                    const std::vector<std::string> &linker_args) {
-  // Build clang command to link bitcode files
-  std::string cmd = "clang++ ";
+  // Get toolchain compiler path
+  std::string compiler_path;
+  // Use nullptr - getMainExecutable can work without a specific address on many systems
+  std::string exe_path = llvm::sys::fs::getMainExecutable("cod", nullptr);
+  if (!exe_path.empty()) {
+    llvm::SmallString<256> clang_path(exe_path);
+    llvm::sys::path::remove_filename(clang_path); // Get parent directory
+    llvm::sys::path::append(clang_path, "clang++");
+    compiler_path = clang_path.str().str();
+  } else {
+    // Fallback to system clang++ if we can't determine executable path
+    compiler_path = "clang++";
+  }
+
+  // Build the linking command
+  std::string command = compiler_path;
 
   // Add bitcode files
-  for (const auto &bc_file : bitcode_files) {
-    cmd += bc_file.string() + " ";
+  for (const auto &bitcode_file : bitcode_files) {
+    command += " " + bitcode_file.string();
   }
 
   // Add linker arguments
   for (const auto &arg : linker_args) {
-    cmd += arg + " ";
+    command += " " + arg;
   }
 
-  cmd += "-o " + output_executable.string();
+  // Add output executable
+  command += " -o " + output_executable.string();
 
-  // Execute the command
-  int result = std::system(cmd.c_str());
-  return result == 0 && fs::exists(output_executable);
+  // Execute the linking command
+  return std::system(command.c_str()) == 0;
 }
 
 } // namespace cod::cache

@@ -8,7 +8,7 @@ This document specifies the design of the `cod` driver that provides a REPL-like
 
 - Deterministic “compile + link + run” workflow grounded in the project manifest (see CodProjectStructureAndPkgMgmt.md) — no hidden state outside of the workspace DBMR and the project’s VCS-managed sources.
 - No JIT, no ORC, no Clang-Interpreter — all evaluation happens by compiling a tiny runner that links against project code and standard libraries, then spawning it as a separate process.
-- Persistent REPL session state stored in a DBMR file (default: `./CodWorks.dbmr`) that can be shared across processes and inspected offline.
+- Persistent REPL session state stored in a DBMR file (default: `./.cod/works.dbmr`) that can be shared across processes and inspected offline.
 - Extensible workspace root type — defaults to `cod::WorksRoot` (to be defined in `include/cod.hh`), but projects may opt into a custom root type via CodProject.yaml.
 - Zero-copy, zero-relocation memory-region invariants are respected at all times (see MemoryRegionAndRegionalTypes.md).
 - No standard REPL prelude; the project defines the visible lexical scope for REPL submissions via CodProject.yaml (see “repl.scope”).
@@ -26,7 +26,7 @@ This document specifies the design of the `cod` driver that provides a REPL-like
 - `cod` front-end (binary in `cod/`) implements the interactive loop and command parsing.
 - Workspace persistence:
   - Backed by `shilos::DBMR<Root>` where `Root` defaults to `cod::WorksRoot`.
-  - File path selectable via `--works <path>` or `-w <path>`. Default is `./CodWorks.dbmr`.
+  - File path selectable via `--works <path>` or `-w <path>`. Default is `./.cod/works.dbmr`.
   - The root object lives inside the DBMR and owns session-scoped data as defined by the project (see WorksRoot Model below).
 - Build-and-Run pipeline (per evaluation):
   1. Assemble a minimal translation unit (TU) that includes the project-provided REPL scope header(s) from CodProject.yaml (see repl.scope).
@@ -42,7 +42,7 @@ This document specifies the design of the `cod` driver that provides a REPL-like
 
 ## Command-Line Interface (CLI)
 
-- `cod [-w|--works <PATH>] [--project <PATH>]` — start an interactive session bound to the DBMR at PATH (default `./CodWorks.dbmr`). If the DBMR file does not exist, `cod` creates it with a default capacity.
+- `cod [-w|--works <PATH>] [--project <PATH>]` — start an interactive session bound to the DBMR at PATH (default `./.cod/works.dbmr`). If the DBMR file does not exist, `cod` creates it with a default capacity.
 - `cod [-w|--works <PATH>] [--project <PATH>] -e|--eval <EXPRESSION>` — evaluate a single expression or statement and exit (non-interactive mode).
 - `cod --help` — show usage.
 
@@ -114,7 +114,7 @@ Rationale:
 
 ## DBMR Lifecycle & Capacity
 
-- Default file name: `CodWorks.dbmr` in the current working directory.
+- Default file name: `.cod/works.dbmr` in the current working directory.
 - Open/creation:
   - Read-only open is used for inspection commands; read-write for interactive sessions.
   - On creation, `DBMR<WorksRoot>::create(path, free_capacity, …)` is called with a sensible default (e.g., 64–256 MiB configurable via a CLI flag in the future).
