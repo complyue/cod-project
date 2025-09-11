@@ -389,6 +389,51 @@ static std::string generateRunnerSource(const CodReplConfig &config, const std::
 
 static fs::path getTempDir(const CodReplConfig &config) { return config.project_root / ".cod/repl"; }
 
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#include <sys/utsname.h>
+
+// Get the deployment target to use - prioritize environment, then detect system version at runtime
+static std::string getMacOSDeploymentTarget() {
+  if (const char *env = std::getenv("MACOSX_DEPLOYMENT_TARGET")) {
+    if (*env)
+      return std::string(env);
+  }
+
+  // Use sysctl to get the actual running macOS version
+  char version_str[256];
+  size_t size = sizeof(version_str);
+  if (sysctlbyname("kern.osproductversion", version_str, &size, nullptr, 0) == 0) {
+    std::string full_version(version_str);
+    // Extract major.minor from version string (e.g., "14.1.2" -> "14.1")
+    size_t first_dot = full_version.find('.');
+    if (first_dot != std::string::npos) {
+      size_t second_dot = full_version.find('.', first_dot + 1);
+      if (second_dot != std::string::npos) {
+        return full_version.substr(0, second_dot);
+      }
+      return full_version; // Only major.minor format
+    }
+  }
+
+  // Fallback: try uname as secondary option
+  struct utsname sys_info;
+  if (uname(&sys_info) == 0) {
+    std::string release(sys_info.release);
+    // Darwin kernel version to macOS version mapping (approximate)
+    // Darwin 23.x.x -> macOS 14.x, Darwin 22.x.x -> macOS 13.x, etc.
+    int darwin_major = std::stoi(release.substr(0, release.find('.')));
+    if (darwin_major >= 20) {
+      int macos_major = darwin_major - 9; // Darwin 20 -> macOS 11
+      return std::to_string(macos_major) + ".0";
+    }
+  }
+
+  // Fallback to a reasonable default if all methods fail
+  return "12.0";
+}
+#endif
+
 static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
   std::vector<std::string> args;
 
@@ -422,6 +467,14 @@ static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
     }
   }
 
+#ifdef __APPLE__
+  // Set deployment target to match the built libraries (eliminates version warnings)
+  std::string min_ver = getMacOSDeploymentTarget();
+  if (!min_ver.empty()) {
+    args.push_back(std::string("-mmacosx-version-min=") + min_ver);
+  }
+#endif
+
   // Note: Library paths and libraries are NOT included here
   // They belong in linker arguments, not compiler arguments for bitcode generation
 
@@ -435,6 +488,14 @@ static std::vector<std::string> buildLinkerArgs(const CodReplConfig &config) {
 
   // Force use of lld from the same toolchain
   args.push_back("-fuse-ld=lld");
+
+#ifdef __APPLE__
+  // Set deployment target to match the built libraries (eliminates version warnings)
+  std::string min_ver = getMacOSDeploymentTarget();
+  if (!min_ver.empty()) {
+    args.push_back(std::string("-mmacosx-version-min=") + min_ver);
+  }
+#endif
 
   // Add library paths and libraries for linking
   auto lib_path = config.project_root / "build" / "lib";
