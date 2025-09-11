@@ -120,7 +120,20 @@ static std::optional<CodReplConfig> loadConfig(const fs::path &project_root) {
     // Project root extracted from project_ptr
 
     // Use project configuration if available
-    // For now, use defaults
+    // Extract configuration from the parsed project
+    if (project_ptr) {
+      // For now, we'll manually check for works_root_type_header in the YAML
+      // This is a simplified approach until full project config integration
+      auto root_node = doc.root();
+      if (root_node.IsMap()) {
+        const auto &map = std::get<yaml::Map>(root_node.value);
+        auto it = std::find_if(map.begin(), map.end(),
+                               [](const auto &entry) { return entry.key == "works_root_type_header"; });
+        if (it != map.end() && it->value.IsScalar()) {
+          config.works_root_type_header = it->value.asString();
+        }
+      }
+    }
     return config;
   } catch (const std::exception &e) {
     std::cerr << "Error loading config: " << e.what() << "\n";
@@ -193,8 +206,27 @@ static std::string generateRunnerSource(const CodReplConfig &config, const std::
   // Indent user code
   std::istringstream input(submission);
   std::string line;
+  bool is_single_line = (std::count(submission.begin(), submission.end(), '\n') == 0);
+
   while (std::getline(input, line)) {
-    oss << "    " << line << "\n";
+    // Trim whitespace
+    line.erase(0, line.find_first_not_of(" \t"));
+    line.erase(line.find_last_not_of(" \t") + 1);
+
+    if (!line.empty()) {
+      // For single-line expressions that don't end with semicolon, wrap in cout
+      if (is_single_line && !line.empty() && line.back() != ';' && line.back() != '}') {
+        // Check if it looks like a simple expression (no keywords like if, for, etc.)
+        if (line.find("if ") != 0 && line.find("for ") != 0 && line.find("while ") != 0 && line.find("return ") != 0 &&
+            line.find("#") != 0) {
+          oss << "    std::cout << (" << line << ") << std::endl;\n";
+        } else {
+          oss << "    " << line << "\n";
+        }
+      } else {
+        oss << "    " << line << "\n";
+      }
+    }
   }
 
   oss << "  }\n";
@@ -213,13 +245,50 @@ static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
   args.push_back("clang++");
   args.push_back("-std=c++20");
   args.push_back("-stdlib=libc++");
-  args.push_back("-I" + (config.project_root / "include").string());
+
+  // Add include path for current project
+  auto project_include = config.project_root / "include";
+  if (fs::exists(project_include)) {
+    args.push_back("-I" + project_include.string());
+  }
+
+  // If we're in a test directory or the current project doesn't have cod.hh,
+  // also add the main CoD project include directory
+  auto cod_header = project_include / "cod.hh";
+  if (!fs::exists(cod_header)) {
+    // Try to find the main CoD project root by looking for a parent directory
+    // that contains both include/cod.hh and build/ directories
+    auto current = config.project_root;
+    while (!current.empty() && current != current.parent_path()) {
+      auto parent_include = current.parent_path() / "include";
+      auto parent_cod_header = parent_include / "cod.hh";
+      auto parent_build = current.parent_path() / "build";
+
+      if (fs::exists(parent_cod_header) && fs::exists(parent_build)) {
+        args.push_back("-I" + parent_include.string());
+        break;
+      }
+      current = current.parent_path();
+    }
+  }
 
   // Add library paths and libraries
   auto lib_path = config.project_root / "build" / "lib";
   if (fs::exists(lib_path)) {
     args.push_back("-L" + lib_path.string());
     args.push_back("-lshilos");
+  } else {
+    // If local build/lib doesn't exist, try the main CoD project's build/lib
+    auto current = config.project_root;
+    while (!current.empty() && current != current.parent_path()) {
+      auto parent_lib = current.parent_path() / "build" / "lib";
+      if (fs::exists(parent_lib)) {
+        args.push_back("-L" + parent_lib.string());
+        args.push_back("-lshilos");
+        break;
+      }
+      current = current.parent_path();
+    }
   }
 
   args.push_back("-O2");

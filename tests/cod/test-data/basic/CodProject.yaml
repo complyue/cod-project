@@ -4,3 +4,4 @@ repo_url: "/test/eval_test_project"
 branches: [main]
 version: 1.0.0
 dependencies: {}
+works_root_type_header: "cod_minimal.hh"
