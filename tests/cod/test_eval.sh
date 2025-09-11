@@ -79,11 +79,11 @@ test_basic_evaluation() {
         EXIT_CODE=$?
         if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
             log_fail "basic evaluation failed with Segmentation Fault (exit code $EXIT_CODE)"
-        elif ! grep -q "Unknown argument" /tmp/cod_eval_err && \
-           ! grep -q "requires an expression argument" /tmp/cod_eval_err; then
-            log_pass "basic evaluation argument parsing works (execution may have failed for other reasons)"
-        else
+        elif grep -q "Unknown argument" /tmp/cod_eval_err || \
+           grep -q "requires an expression argument" /tmp/cod_eval_err; then
             log_fail "basic evaluation failed with argument parsing error"
+        else
+            log_fail "basic evaluation failed (exit code $EXIT_CODE)"
         fi
     fi
     
@@ -111,11 +111,11 @@ test_eval_with_custom_works() {
         EXIT_CODE=$?
         if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
             log_fail "custom works path evaluation failed with Segmentation Fault (exit code $EXIT_CODE)"
-        elif ! grep -q "Unknown argument" /tmp/cod_custom_err && \
-           ! grep -q "requires a" /tmp/cod_custom_err; then
-            log_pass "custom works path argument parsing works (execution may have failed for other reasons)"
-        else
+        elif grep -q "Unknown argument" /tmp/cod_custom_err || \
+           grep -q "requires a" /tmp/cod_custom_err; then
             log_fail "custom works path evaluation failed with argument parsing error"
+        else
+            log_fail "custom works path evaluation failed (exit code $EXIT_CODE)"
         fi
     fi
     
@@ -142,11 +142,11 @@ test_eval_long_form() {
         EXIT_CODE=$?
         if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
             log_fail "--eval long form failed with Segmentation Fault (exit code $EXIT_CODE)"
-        elif ! grep -q "Unknown argument" /tmp/cod_long_err && \
-           ! grep -q "requires an expression argument" /tmp/cod_long_err; then
-            log_pass "--eval long form argument parsing works (execution may have failed for other reasons)"
-        else
+        elif grep -q "Unknown argument" /tmp/cod_long_err || \
+           grep -q "requires an expression argument" /tmp/cod_long_err; then
             log_fail "--eval long form failed with argument parsing error"
+        else
+            log_fail "--eval long form failed (exit code $EXIT_CODE)"
         fi
     fi
     
@@ -174,11 +174,11 @@ test_multiline_expression() {
         EXIT_CODE=$?
         if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
             log_fail "multiline expression failed with Segmentation Fault (exit code $EXIT_CODE)"
-        elif ! grep -q "Unknown argument" /tmp/cod_multi_err && \
-           ! grep -q "requires an expression argument" /tmp/cod_multi_err; then
-            log_pass "multiline expression argument parsing works (execution may have failed for other reasons)"
-        else
+        elif grep -q "Unknown argument" /tmp/cod_multi_err || \
+           grep -q "requires an expression argument" /tmp/cod_multi_err; then
             log_fail "multiline expression failed with argument parsing error"
+        else
+            log_fail "multiline expression failed (exit code $EXIT_CODE)"
         fi
     fi
     
@@ -201,11 +201,11 @@ test_eval_exit_codes() {
         EXIT_CODE=$?
         if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
             log_fail "invalid expression failed with Segmentation Fault (exit code $EXIT_CODE)"
-        elif ! grep -q "Unknown argument" /tmp/cod_exit_err && \
-           ! grep -q "requires an expression argument" /tmp/cod_exit_err; then
-            log_pass "invalid expression properly rejected"
-        else
+        elif grep -q "Unknown argument" /tmp/cod_exit_err || \
+           grep -q "requires an expression argument" /tmp/cod_exit_err; then
             log_fail "invalid expression failed with argument parsing error instead of compilation error"
+        else
+            log_pass "invalid expression properly rejected"
         fi
     fi
     

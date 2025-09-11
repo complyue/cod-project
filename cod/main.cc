@@ -10,6 +10,20 @@
 #include "codp.hh"
 #include "codp_yaml.hh"
 
+#include "clang/AST/AST.h"
+#include "clang/AST/ASTConsumer.h"
+#include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/Frontend/ASTConsumers.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/FrontendActions.h"
+#include "clang/Lex/Preprocessor.h"
+#include "clang/Parse/ParseAST.h"
+#include "clang/Tooling/CommonOptionsParser.h"
+#include "clang/Tooling/Tooling.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/raw_ostream.h"
+
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -187,6 +201,149 @@ static bool ensureDbmrExists(const CodReplConfig &config) {
   }
 }
 
+// AST visitor to analyze submission structure
+class SubmissionAnalyzer : public clang::RecursiveASTVisitor<SubmissionAnalyzer> {
+public:
+  struct AnalysisResult {
+    std::vector<clang::Stmt *> statements;
+    clang::Expr *final_expression = nullptr;
+    bool has_final_expression = false;
+  };
+
+  AnalysisResult result;
+
+  bool VisitCompoundStmt(clang::CompoundStmt *CS) {
+    // Analyze the compound statement to find statements and final expression
+    auto children = CS->children();
+    std::vector<clang::Stmt *> stmts(children.begin(), children.end());
+
+    if (!stmts.empty()) {
+      // Check if the last statement is an expression statement
+      if (auto *ES = clang::dyn_cast<clang::Expr>(stmts.back())) {
+        // The last statement is an expression - this could be our final expression
+        result.final_expression = ES;
+        result.has_final_expression = true;
+        // Add all statements except the last one
+        result.statements.assign(stmts.begin(), stmts.end() - 1);
+      } else {
+        // No final expression, all are statements
+        result.statements = stmts;
+        result.has_final_expression = false;
+      }
+    }
+    return true;
+  }
+};
+
+// Simplified analysis result structure
+struct SubmissionAnalysis {
+  std::vector<std::string> statements;
+  std::string final_expression;
+  bool has_final_expression = false;
+};
+
+// Helper function to analyze submission structure
+static SubmissionAnalysis analyzeSubmissionStructure(const std::string &submission) {
+  SubmissionAnalysis result;
+
+  // Handle single line input differently
+  if (submission.find('\n') == std::string::npos) {
+    // Single line - split by semicolons and analyze each part
+    std::string trimmed = submission;
+    trimmed.erase(0, trimmed.find_first_not_of(" \t"));
+    trimmed.erase(trimmed.find_last_not_of(" \t") + 1);
+
+    if (trimmed.empty()) {
+      return result;
+    }
+
+    // Split by semicolons
+    std::vector<std::string> parts;
+    std::istringstream iss(trimmed);
+    std::string part;
+
+    while (std::getline(iss, part, ';')) {
+      // Trim each part
+      part.erase(0, part.find_first_not_of(" \t"));
+      part.erase(part.find_last_not_of(" \t") + 1);
+      if (!part.empty()) {
+        parts.push_back(part);
+      }
+    }
+
+    if (parts.empty()) {
+      return result;
+    }
+
+    // Check if the last part looks like a statement or expression
+    const std::string &last_part = parts.back();
+    bool last_is_statement =
+        (last_part.find("int ") == 0 || last_part.find("auto ") == 0 || last_part.find("const ") == 0 ||
+         last_part.find("if ") == 0 || last_part.find("for ") == 0 || last_part.find("while ") == 0 ||
+         last_part.find("return ") == 0 || last_part.find("std::cout") == 0);
+
+    if (parts.size() == 1) {
+      // Single part - if it's not clearly a statement, treat as expression
+      if (last_is_statement) {
+        result.statements = parts;
+        result.has_final_expression = false;
+      } else {
+        result.final_expression = last_part;
+        result.has_final_expression = true;
+      }
+    } else {
+      // Multiple parts - last part is expression if not clearly a statement
+      if (!last_is_statement) {
+        result.statements.assign(parts.begin(), parts.end() - 1);
+        result.final_expression = last_part;
+        result.has_final_expression = true;
+      } else {
+        result.statements = parts;
+        result.has_final_expression = false;
+      }
+    }
+
+    return result;
+  }
+
+  // Multi-line input - split by lines
+  std::istringstream iss(submission);
+  std::string line;
+  std::vector<std::string> lines;
+
+  while (std::getline(iss, line)) {
+    // Trim whitespace
+    line.erase(0, line.find_first_not_of(" \t"));
+    line.erase(line.find_last_not_of(" \t") + 1);
+    if (!line.empty()) {
+      lines.push_back(line);
+    }
+  }
+
+  if (lines.empty()) {
+    return result;
+  }
+
+  // Check if the last line is an expression (doesn't end with ; or })
+  const std::string &last_line = lines.back();
+  bool is_statement = (last_line.back() == ';' || last_line.back() == '}' || last_line.find("if ") == 0 ||
+                       last_line.find("for ") == 0 || last_line.find("while ") == 0 || last_line.find("return ") == 0 ||
+                       last_line.find("int ") == 0 || last_line.find("auto ") == 0 || last_line.find("const ") == 0);
+
+  if (!is_statement && lines.size() > 1) {
+    // Last line is likely an expression, previous lines are statements
+    result.statements.assign(lines.begin(), lines.end() - 1);
+    result.final_expression = last_line;
+    result.has_final_expression = true;
+  } else {
+    // All lines are statements
+    result.statements = lines;
+    result.has_final_expression = false;
+  }
+
+  return result;
+}
+
 static std::string generateRunnerSource(const CodReplConfig &config, const std::string &submission) {
   std::ostringstream oss;
 
@@ -203,30 +360,22 @@ static std::string generateRunnerSource(const CodReplConfig &config, const std::
   oss << "  // Begin user submission\n";
   oss << "  {\n";
 
-  // Indent user code
-  std::istringstream input(submission);
-  std::string line;
-  bool is_single_line = (std::count(submission.begin(), submission.end(), '\n') == 0);
+  // Use AST-based analysis to determine structure
+  auto analysis = analyzeSubmissionStructure(submission);
 
-  while (std::getline(input, line)) {
-    // Trim whitespace
-    line.erase(0, line.find_first_not_of(" \t"));
-    line.erase(line.find_last_not_of(" \t") + 1);
-
-    if (!line.empty()) {
-      // For single-line expressions that don't end with semicolon, wrap in cout
-      if (is_single_line && !line.empty() && line.back() != ';' && line.back() != '}') {
-        // Check if it looks like a simple expression (no keywords like if, for, etc.)
-        if (line.find("if ") != 0 && line.find("for ") != 0 && line.find("while ") != 0 && line.find("return ") != 0 &&
-            line.find("#") != 0) {
-          oss << "    std::cout << (" << line << ") << std::endl;\n";
-        } else {
-          oss << "    " << line << "\n";
-        }
-      } else {
-        oss << "    " << line << "\n";
-      }
+  // Add all statements first
+  for (const auto &stmt : analysis.statements) {
+    oss << "    " << stmt;
+    // Add semicolon if not already present and not ending with }
+    if (!stmt.empty() && stmt.back() != ';' && stmt.back() != '}') {
+      oss << ";";
     }
+    oss << "\n";
+  }
+
+  // Handle final expression - wrap in cout if it exists
+  if (analysis.has_final_expression && !analysis.final_expression.empty()) {
+    oss << "    std::cout << (" << analysis.final_expression << ") << std::endl;\n";
   }
 
   oss << "  }\n";
@@ -238,11 +387,24 @@ static std::string generateRunnerSource(const CodReplConfig &config, const std::
   return oss.str();
 }
 
-static fs::path getTempDir(const CodReplConfig &config) { return config.project_root / ".cod-repl-temp"; }
+static fs::path getTempDir(const CodReplConfig &config) { return config.project_root / ".cod/repl"; }
 
 static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
   std::vector<std::string> args;
-  args.push_back("clang++");
+
+  // Use clang++ from the same directory as the cod executable
+  // Use LLVM's idiomatic method for getting executable path
+  void *MainAddr = (void *)(intptr_t)buildCompilerArgs; // Any function address
+  std::string exe_path = llvm::sys::fs::getMainExecutable("cod", MainAddr);
+  if (!exe_path.empty()) {
+    llvm::SmallString<256> clang_path(exe_path);
+    llvm::sys::path::remove_filename(clang_path); // Get parent directory
+    llvm::sys::path::append(clang_path, "clang++");
+    args.push_back(clang_path.str().str());
+  } else {
+    // Fallback to system clang++ if we can't determine executable path
+    args.push_back("clang++");
+  }
   args.push_back("-std=c++20");
   args.push_back("-stdlib=libc++");
 
@@ -493,7 +655,22 @@ int main(int argc, const char **argv) {
         std::cerr << "Error: " << arg << " requires an expression argument\n";
         return 1;
       }
-      config.eval_expression = argv[++i];
+      std::string expr_arg = argv[++i];
+      if (expr_arg == "-") {
+        // Read from stdin
+        std::string line;
+        std::ostringstream oss;
+        while (std::getline(std::cin, line)) {
+          oss << line << "\n";
+        }
+        config.eval_expression = oss.str();
+        // Remove trailing newline if present
+        if (!config.eval_expression->empty() && config.eval_expression->back() == '\n') {
+          config.eval_expression->pop_back();
+        }
+      } else {
+        config.eval_expression = expr_arg;
+      }
     } else if (arg == "--no-cache") {
       config.enable_cache = false;
     } else if (arg == "--force-rebuild" || arg == "-f") {
