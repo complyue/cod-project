@@ -181,17 +181,28 @@ All regional types must satisfy the following constraints. Specialized types (re
 
 ### 1. Field Type Constraints
 
+**Regional types can ONLY contain fields of the following types:**
+
 - **Bits types** (primitive types with neither destructor nor internal pointers):
+  - Examples: `int`, `float`, `bool`, `char`, `UUID`, plain structs with no pointers
   - Follow standard C++ type rules
   - No additional constraints
-- **Regional types** must satisfy additional structural constraints:
+- **Other regional types** that satisfy all regional type constraints:
   - **Fixed storage size**: Compile-time deterministic memory layout with no dynamic allocation
   - **RTTI-free**: No virtual functions, virtual destructors, or dynamic dispatch mechanisms
   - **Plain data semantics**: Memory layout must be predictable for safe uninitialized allocation
-- Members cannot contain external pointers of any kind
-- Members containing internal pointers must:
-  - Use only `regional_ptr` (raw pointers including `global_ptr` are prohibited)
+- **Regional pointers** (`regional_ptr<T>` or `global_ptr<T,RT>`):
+  - Use only `regional_ptr` (raw pointers including `global_ptr` are prohibited for storage)
   - Point only to bits types or compliant regional types
+
+**PROHIBITED field types in regional types:**
+- Standard C++ containers (`std::vector`, `std::string`, `std::map`, etc.)
+- Smart pointers (`std::unique_ptr`, `std::shared_ptr`, etc.)
+- Raw pointers (`T*`) - use only for temporary parameter passing
+- Any type with destructors, virtual functions, or dynamic allocation
+- External resource handles or RAII wrappers
+
+**Violation Example**: A regional type containing `std::unique_ptr<cache::BuildCache>` violates these constraints because `std::unique_ptr` is not a bits type nor a regional type.
 
 ### 2. Construction Rules
 

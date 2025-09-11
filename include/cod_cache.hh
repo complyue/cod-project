@@ -10,7 +10,6 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 // Forward declarations for Clang AST types
@@ -21,6 +20,10 @@ class TranslationUnitDecl;
 } // namespace clang
 
 namespace cod {
+
+std::vector<std::string> &&CompilerArgs(std::vector<std::string> &&compiler_args);
+std::vector<std::string> &&LinkerArgs(std::vector<std::string> &&linker_args);
+
 namespace cache {
 
 namespace fs = std::filesystem;
@@ -65,6 +68,12 @@ private:
 public:
   regional_cache_key() = default;
 
+  // Constructor required for RegionalConstructibleWithRegion concept
+  template <typename RT>
+  explicit regional_cache_key(memory_region<RT> &mr)
+      : toolchain_version_(mr, ""), compiler_flags_(mr), project_snapshot_id_(mr, ""), semantic_hash_(mr, ""),
+        source_mtime_() {}
+
   template <typename RT>
   regional_cache_key(memory_region<RT> &mr, const std::string &toolchain_version,
                      const std::vector<std::string> &compiler_flags, const std::string &project_snapshot_id,
@@ -105,6 +114,11 @@ private:
 
 public:
   regional_cache_entry() = default;
+
+  // Constructor for RegionalConstructibleWithRegion concept
+  template <typename RT>
+  explicit regional_cache_entry(memory_region<RT> &mr)
+      : key_(nullptr), bitcode_path_(mr, ""), created_at_(), file_size_(0) {}
 
   template <typename RT>
   regional_cache_entry(memory_region<RT> &mr, regional_cache_key *key, const fs::path &bitcode_path,
@@ -150,7 +164,13 @@ public:
 
   template <typename RT>
   BuildCacheRoot(memory_region<RT> &mr, const fs::path &project_root)
-      : project_root_path_(mr, project_root.string()), cache_index_(mr), stats_() {}
+      : project_root_path_(mr, project_root.string()), cache_index_(mr), stats_() {
+    // Explicitly initialize stats to ensure proper memory layout
+    stats_.total_entries = 0;
+    stats_.total_size_bytes = 0;
+    stats_.hits = 0;
+    stats_.misses = 0;
+  }
 
   BuildCacheRoot(const BuildCacheRoot &) = delete;
   BuildCacheRoot(BuildCacheRoot &&) = delete;
@@ -181,16 +201,16 @@ public:
 // Build cache manager with DBMR-based storage (no load/store operations)
 class BuildCache {
 public:
-  explicit BuildCache(const fs::path &project_root);
+  explicit BuildCache(const fs::path &project_root, bool verbose = false);
   ~BuildCache();
 
   // Cache lookup with timestamp optimization
   std::optional<fs::path> lookup(const fs::path &source_path, const std::vector<std::string> &compiler_args,
-                                 const std::string &toolchain_version, const std::string &project_snapshot_id);
+                                 const std::string &project_snapshot_id);
 
   // Store bitcode in cache
   bool store(const fs::path &source_path, const fs::path &bitcode_path, const std::vector<std::string> &compiler_args,
-             const std::string &toolchain_version, const std::string &project_snapshot_id);
+             const std::string &project_snapshot_id);
 
   // Generate bitcode from source file
   std::optional<fs::path> generate_bitcode(const fs::path &source_path, const std::vector<std::string> &compiler_args);
@@ -210,13 +230,14 @@ public:
 private:
   fs::path project_root_;
   fs::path cache_dbmr_path_; // ./.cod/cache.dbmr
+  bool verbose_;
 
   SemanticHasher hasher_;
   std::unique_ptr<DBMR<BuildCacheRoot>> cache_dbmr_;
 
   // Internal helpers
   CacheKey generate_cache_key(const fs::path &source_path, const std::vector<std::string> &compiler_args,
-                              const std::string &toolchain_version, const std::string &project_snapshot_id);
+                              const std::string &project_snapshot_id);
   bool is_timestamp_newer(const fs::path &source_path, const regional_cache_entry &entry) const;
   void ensure_cache_dbmr();
 };

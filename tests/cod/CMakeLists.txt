@@ -40,14 +40,35 @@ set(CMAKE_CXX_EXTENSIONS NO)
 include_directories(BEFORE "${COD_INCLUDE_DIR}")
 
 # Include Clang headers for cache functionality
-include_directories(BEFORE "/usr/local/include")
-include_directories(BEFORE "/usr/local/Cellar/llvm/18.1.8/include")
 include_directories(BEFORE "${COD_TOOLCHAIN_DIR}/include")
+
+# Try to find LLVM installation dynamically
+find_package(LLVM QUIET)
+if(LLVM_FOUND)
+    include_directories(BEFORE ${LLVM_INCLUDE_DIRS})
+    link_directories(BEFORE ${LLVM_LIBRARY_DIRS})
+    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} at ${LLVM_INSTALL_PREFIX}")
+else()
+    # Fallback to common installation paths
+    set(LLVM_SEARCH_PATHS
+        "/usr/local"
+        "/opt/homebrew"
+        "/usr/local/Cellar/llvm/18.1.8"
+        "/usr/local/Cellar/llvm/19.1.0"
+    )
+    
+    foreach(SEARCH_PATH ${LLVM_SEARCH_PATHS})
+        if(EXISTS "${SEARCH_PATH}/include/llvm")
+            include_directories(BEFORE "${SEARCH_PATH}/include")
+            link_directories(BEFORE "${SEARCH_PATH}/lib")
+            message(STATUS "Found LLVM headers at ${SEARCH_PATH}")
+            break()
+        endif()
+    endforeach()
+endif()
 
 # Add library search paths
 link_directories(BEFORE "${COD_TOOLCHAIN_DIR}/lib")
-link_directories(BEFORE "/usr/local/lib")
-link_directories(BEFORE "/usr/local/Cellar/llvm/18.1.8/lib")
 
 # Find the shilos library
 find_library(SHILOS_LIBRARY 

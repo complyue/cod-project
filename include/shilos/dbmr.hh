@@ -120,7 +120,13 @@ public:
   DBMR &operator=(DBMR &&) = delete;
 
   // readonly ctor
-  static const DBMR<RT> read(const std::string &file_name) {
+  // WARNING: Memory region opened with readonly() is mapped with PROT_READ only.
+  // Any subsequent write operations to this memory region will trigger a bus error
+  // and crash the entire process.
+  //
+  // TODO: Future DSL work should add "readonly" flags on returned objects to
+  // semantically prevent writing on readonly DBMR objects at the language level.
+  static DBMR<RT> readonly(const std::string &file_name) {
     int fd = open(file_name.c_str(), O_RDONLY);
     if (fd == -1) {
       throw std::system_error(errno, std::system_category(), "Failed to open file: " + file_name);

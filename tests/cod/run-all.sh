@@ -70,26 +70,17 @@ echo "🏃  Running C++ test executables..."
 for exe in "$BUILD_DIR"/*; do
   if [[ -x "$exe" && ! -d "$exe" ]]; then
     exe_name=$(basename "$exe")
-    # Skip tests that have been converted to shell scripts
-    case "$exe_name" in
-      test_cod_cli|test_cod_eval|test_cod_repl)
-        log_test "$exe_name (skipped - using shell version)"
-        log_pass "$exe_name (skipped - using shell version)"
-        ;;
-      *)
-        log_test "$exe_name"
-        run_test
-        "$exe"
-        EXIT_CODE=$?
-        if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
-            log_fail "$exe_name failed with Segmentation Fault (exit code $EXIT_CODE)"
-        elif [[ "$EXIT_CODE" -ne 0 ]]; then
-            log_fail "$exe_name failed with exit code $EXIT_CODE"
-        else
-            log_pass "$exe_name passed"
-        fi
-        ;;
-    esac
+    log_test "$exe_name"
+    run_test
+    "$exe"
+    EXIT_CODE=$?
+    if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
+        log_fail "$exe_name failed with Segmentation Fault (exit code $EXIT_CODE)"
+    elif [[ "$EXIT_CODE" -ne 0 ]]; then
+        log_fail "$exe_name failed with exit code $EXIT_CODE"
+    else
+        log_pass "$exe_name passed"
+    fi
   fi
 done
 

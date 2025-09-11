@@ -7,6 +7,7 @@
 
 #include "cod.hh"
 #include "cod_cache.hh"
+
 #include "codp.hh"
 #include "codp_yaml.hh"
 
@@ -44,7 +45,7 @@ using namespace cod;
 using namespace cod::project;
 
 struct CodReplConfig {
-  fs::path works_path = "./.cod/works.dbmr";
+  fs::path works_path = ".cod/works.dbmr";
   fs::path project_root;
   std::string repl_scope = "main.hh";
   std::string works_root_type_qualified = "cod::WorksRoot";
@@ -53,8 +54,8 @@ struct CodReplConfig {
   std::optional<std::string> eval_expression; // For -e/--eval mode
   bool enable_cache = true;
   bool force_rebuild = false;
+  bool verbose = false;
   std::chrono::hours cache_max_age = std::chrono::hours(24 * 7); // 1 week
-  std::string toolchain_version;
 };
 
 static void printUsage(const char *prog_name) {
@@ -68,8 +69,8 @@ static void printUsage(const char *prog_name) {
             << "  -e, --eval EXPR     Evaluate expression/statement and exit\n"
             << "  -h, --help          Show this help message\n"
             << "  --no-cache          Disable build cache\n"
-            << "  -f, --force-rebuild Force rebuild (ignore cache)\n"
-            << "  --toolchain=VERSION Set toolchain version (e.g., clang-18)\n"
+            << "  --force-rebuild     Force rebuild (ignore cache)\n"
+            << "  -v, --verbose       Enable verbose debug output\n"
             << "  --cache-max-age=HOURS Set cache expiration time in hours\n"
             << "\n"
             << "If no -e/--eval is specified, starts interactive REPL mode.\n"
@@ -162,15 +163,8 @@ static bool ensureDbmrExists(const CodReplConfig &config) {
       auto dbmr = DBMR<WorksRoot>(config.works_path.string(), 0);
       auto root = dbmr.region().root();
 
-      // Update toolchain version if specified
-      if (!config.toolchain_version.empty() && root->get_toolchain_version() != config.toolchain_version) {
-        root->set_toolchain_version(config.toolchain_version);
-        std::cout << "Updated toolchain version to: " << config.toolchain_version << "\n";
-      }
-
       std::cout << "Using existing workspace: " << config.works_path << "\n";
       std::cout << "Project root: " << root->get_project_root() << "\n";
-      std::cout << "Toolchain: " << root->get_toolchain_version() << "\n";
       return true;
     } catch (const std::exception &e) {
       std::cerr << "Error opening existing workspace: " << e.what() << "\n";
@@ -183,17 +177,14 @@ static bool ensureDbmrExists(const CodReplConfig &config) {
     fs::create_directories(config.works_path.parent_path());
 
     // Create DBMR with WorksRoot
-    auto dbmr = DBMR<WorksRoot>::create(config.works_path.string(), config.dbmr_capacity, fs::path("."));
+    auto dbmr = DBMR<WorksRoot>::create(config.works_path.string(), config.dbmr_capacity, config.project_root);
 
-    // Initialize WorksRoot in the region with project root
+    // WorksRoot is already initialized with the correct project root
     auto root = dbmr.region().root();
-    root->set_project_root(config.project_root.string());
-    root->set_toolchain_version(config.toolchain_version.empty() ? std::string("clang-17") : config.toolchain_version);
 
     std::cout << "Created new workspace: " << config.works_path << " (" << config.dbmr_capacity / (1024 * 1024)
               << "MB)\n";
     std::cout << "Project root: " << root->get_project_root() << "\n";
-    std::cout << "Toolchain: " << root->get_toolchain_version() << "\n";
     return true;
   } catch (const std::exception &e) {
     std::cerr << "Error creating workspace: " << e.what() << "\n";
@@ -389,51 +380,6 @@ static std::string generateRunnerSource(const CodReplConfig &config, const std::
 
 static fs::path getTempDir(const CodReplConfig &config) { return config.project_root / ".cod/repl"; }
 
-#ifdef __APPLE__
-#include <sys/sysctl.h>
-#include <sys/utsname.h>
-
-// Get the deployment target to use - prioritize environment, then detect system version at runtime
-static std::string getMacOSDeploymentTarget() {
-  if (const char *env = std::getenv("MACOSX_DEPLOYMENT_TARGET")) {
-    if (*env)
-      return std::string(env);
-  }
-
-  // Use sysctl to get the actual running macOS version
-  char version_str[256];
-  size_t size = sizeof(version_str);
-  if (sysctlbyname("kern.osproductversion", version_str, &size, nullptr, 0) == 0) {
-    std::string full_version(version_str);
-    // Extract major.minor from version string (e.g., "14.1.2" -> "14.1")
-    size_t first_dot = full_version.find('.');
-    if (first_dot != std::string::npos) {
-      size_t second_dot = full_version.find('.', first_dot + 1);
-      if (second_dot != std::string::npos) {
-        return full_version.substr(0, second_dot);
-      }
-      return full_version; // Only major.minor format
-    }
-  }
-
-  // Fallback: try uname as secondary option
-  struct utsname sys_info;
-  if (uname(&sys_info) == 0) {
-    std::string release(sys_info.release);
-    // Darwin kernel version to macOS version mapping (approximate)
-    // Darwin 23.x.x -> macOS 14.x, Darwin 22.x.x -> macOS 13.x, etc.
-    int darwin_major = std::stoi(release.substr(0, release.find('.')));
-    if (darwin_major >= 20) {
-      int macos_major = darwin_major - 9; // Darwin 20 -> macOS 11
-      return std::to_string(macos_major) + ".0";
-    }
-  }
-
-  // Fallback to a reasonable default if all methods fail
-  return "12.0";
-}
-#endif
-
 static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
   std::vector<std::string> args;
 
@@ -467,14 +413,6 @@ static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
     }
   }
 
-#ifdef __APPLE__
-  // Set deployment target to match the built libraries (eliminates version warnings)
-  std::string min_ver = getMacOSDeploymentTarget();
-  if (!min_ver.empty()) {
-    args.push_back(std::string("-mmacosx-version-min=") + min_ver);
-  }
-#endif
-
   // Note: Library paths and libraries are NOT included here
   // They belong in linker arguments, not compiler arguments for bitcode generation
 
@@ -488,14 +426,6 @@ static std::vector<std::string> buildLinkerArgs(const CodReplConfig &config) {
 
   // Force use of lld from the same toolchain
   args.push_back("-fuse-ld=lld");
-
-#ifdef __APPLE__
-  // Set deployment target to match the built libraries (eliminates version warnings)
-  std::string min_ver = getMacOSDeploymentTarget();
-  if (!min_ver.empty()) {
-    args.push_back(std::string("-mmacosx-version-min=") + min_ver);
-  }
-#endif
 
   // Add library paths and libraries for linking
   auto lib_path = config.project_root / "build" / "lib";
@@ -543,21 +473,21 @@ static bool compileAndRun(const CodReplConfig &config, const std::string &submis
 
     bool success = false;
 
-    // Open workspace and get build cache
+    // Open workspace
     auto dbmr = DBMR<WorksRoot>(config.works_path.string(), 0);
-    auto root = dbmr.region().root();
-    auto &cache = root->get_build_cache();
+
+    // Create build cache separately (not part of workspace state)
+    cache::BuildCache cache(config.project_root, config.verbose);
 
     // Build compiler arguments
-    auto compiler_args = buildCompilerArgs(config);
-    std::string toolchain_version = root->get_toolchain_version();
+    auto compiler_args = cod::CompilerArgs(buildCompilerArgs(config));
     std::string project_snapshot = "temp"; // For temp files, use simple snapshot
 
     std::optional<fs::path> cached_bitcode;
 
     // Try cache lookup if enabled and not forcing rebuild
     if (config.enable_cache && !config.force_rebuild) {
-      cached_bitcode = cache.lookup(source_path.string(), compiler_args, toolchain_version, project_snapshot);
+      cached_bitcode = cache.lookup(source_path.string(), compiler_args, project_snapshot);
     }
 
     // Generate bitcode if not cached
@@ -572,14 +502,14 @@ static bool compileAndRun(const CodReplConfig &config, const std::string &submis
 
       // Store in cache for future use
       if (config.enable_cache) {
-        cache.store(source_path.string(), *cached_bitcode, compiler_args, toolchain_version, project_snapshot);
+        cache.store(source_path.string(), *cached_bitcode, compiler_args, project_snapshot);
       }
     }
 
     // Link bitcode to executable
     cod::cache::BitcodeCompiler compiler;
     std::vector<fs::path> bitcode_files = {*cached_bitcode};
-    auto linker_args = buildLinkerArgs(config);
+    auto linker_args = cod::LinkerArgs(buildLinkerArgs(config));
 
     if (!compiler.link_bitcode(bitcode_files, binary_path.string(), linker_args)) {
       std::cerr << "Error: Failed to link bitcode\n";
@@ -729,10 +659,10 @@ int main(int argc, const char **argv) {
       }
     } else if (arg == "--no-cache") {
       config.enable_cache = false;
-    } else if (arg == "--force-rebuild" || arg == "-f") {
+    } else if (arg == "--force-rebuild") {
       config.force_rebuild = true;
-    } else if (arg.starts_with("--toolchain=")) {
-      config.toolchain_version = arg.substr(12);
+    } else if (arg == "-v" || arg == "--verbose") {
+      config.verbose = true;
     } else if (arg.starts_with("--cache-max-age=")) {
       int hours = std::stoi(arg.substr(16));
       config.cache_max_age = std::chrono::hours(hours);
@@ -766,8 +696,6 @@ int main(int argc, const char **argv) {
   auto enable_cache = config.enable_cache;
   auto force_rebuild = config.force_rebuild;
   auto cache_max_age = config.cache_max_age;
-  auto toolchain_version = config.toolchain_version;
-
   config = *loaded_config;
 
   // Restore command-line settings
@@ -777,8 +705,6 @@ int main(int argc, const char **argv) {
   config.enable_cache = enable_cache;
   config.force_rebuild = force_rebuild;
   config.cache_max_age = cache_max_age;
-  if (!toolchain_version.empty())
-    config.toolchain_version = toolchain_version;
 
   // Ensure DBMR workspace exists
   if (!ensureDbmrExists(config)) {

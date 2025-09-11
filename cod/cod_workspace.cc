@@ -14,13 +14,11 @@ namespace cod {
 
 // WorksRoot implementation
 WorksRoot::WorksRoot(memory_region<WorksRoot> &mr, const fs::path &project_root)
-    : project_root_path(mr.allocate<regional_str>()), toolchain_version(mr.allocate<regional_str>()),
-      build_config(mr.allocate<regional_dict<regional_str, regional_str>>()),
-      build_cache(std::make_unique<cache::BuildCache>(project_root)) {
+    : project_root_path(mr.allocate<regional_str>()),
+      build_config(mr.allocate<regional_dict<regional_str, regional_str>>()) {
 
   // Initialize the allocated objects
   new (project_root_path.get()) regional_str(mr, project_root.string());
-  new (toolchain_version.get()) regional_str(mr, "clang-18");
   new (build_config.get()) regional_dict<regional_str, regional_str>(mr);
 
   // Initialize default build configuration
@@ -32,17 +30,11 @@ WorksRoot::WorksRoot(memory_region<WorksRoot> &mr, const fs::path &project_root)
 
 void WorksRoot::set_project_root(const fs::path &root) {
   // Note: Cannot reassign regional_str directly, would need to recreate the object
-  // For now, recreate build cache with new project root
-  build_cache = std::make_unique<cache::BuildCache>(root);
+  // Project root is immutable after WorksRoot construction
+  throw std::runtime_error("Cannot change project root after WorksRoot construction");
 }
 
 fs::path WorksRoot::get_project_root() const { return fs::path(std::string_view(*project_root_path)); }
-
-void WorksRoot::set_toolchain_version(const std::string &version) {
-  // Note: Cannot reassign regional_str directly, would need to recreate the object
-}
-
-std::string WorksRoot::get_toolchain_version() const { return std::string(std::string_view(*toolchain_version)); }
 
 void WorksRoot::set_build_config(const std::string &key, const std::string &value) {
   // Note: Cannot modify regional_dict directly without memory_region reference
