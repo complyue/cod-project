@@ -5,6 +5,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "cod.hh"
+#include "cod_cache.hh"
+#include "codp.hh"
+#include "codp_yaml.hh"
+
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -18,12 +23,6 @@
 #include <system_error>
 #include <unistd.h>
 #include <vector>
-
-#include "cod.hh"
-#include "cod_cache.hh"
-#include "codp.hh"
-#include "codp_yaml.hh"
-#include "shilos.hh"
 
 namespace fs = std::filesystem;
 using namespace shilos;
@@ -459,7 +458,25 @@ int main(int argc, const char **argv) {
     std::cerr << "Error: Failed to load project configuration\n";
     return 1;
   }
+  // Preserve command-line settings when merging with loaded config
+  auto eval_expr = config.eval_expression;
+  auto works_path = config.works_path;
+  auto enable_cache = config.enable_cache;
+  auto force_rebuild = config.force_rebuild;
+  auto cache_max_age = config.cache_max_age;
+  auto toolchain_version = config.toolchain_version;
+
   config = *loaded_config;
+
+  // Restore command-line settings
+  config.eval_expression = eval_expr;
+  if (works_path != "./CodWorks.dbmr")
+    config.works_path = works_path;
+  config.enable_cache = enable_cache;
+  config.force_rebuild = force_rebuild;
+  config.cache_max_age = cache_max_age;
+  if (!toolchain_version.empty())
+    config.toolchain_version = toolchain_version;
 
   // Ensure DBMR workspace exists
   if (!ensureDbmrExists(config)) {

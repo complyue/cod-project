@@ -231,36 +231,11 @@ main() {
 # Run tests
 echo -e "${GREEN}=== CoD Evaluation Tests ===${NC}"
 
-run_test
 test_basic_evaluation
-
-run_test
-test_custom_works_path
-
-run_test
+test_eval_with_custom_works
 test_eval_long_form
-
-run_test
 test_multiline_expression
-
-run_test
-test_invalid_syntax
-
-run_test
 test_eval_exit_codes
-
-run_test
-test_eval_exit_codes_with_custom_works_path
-
-run_test
-test_eval_exit_codes_with_long_form
-
-run_test
-test_eval_exit_codes_with_multiline_expression
-
-run_test
-test_eval_exit_codes_with_invalid_syntax
-
 
 echo
 if [[ "$FAIL_COUNT" -eq 0 ]]; then
