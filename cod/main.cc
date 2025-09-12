@@ -14,6 +14,10 @@
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/Driver/Compilation.h"
+#include "clang/Driver/Driver.h"
+#include "clang/Driver/Tool.h"
+#include "clang/Driver/ToolChain.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -21,6 +25,7 @@
 #include "clang/Parse/ParseAST.h"
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
@@ -39,11 +44,18 @@
 #include <unistd.h>
 #include <vector>
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#elif defined(__linux__)
+#include <limits.h>
+#endif
+
 namespace fs = std::filesystem;
 using namespace shilos;
 using namespace cod;
 using namespace cod::project;
 
+// Helper class to access LLVM Driver APIs for toolchain detection
 struct CodReplConfig {
   fs::path works_path = ".cod/works.dbmr";
   fs::path project_root;
@@ -56,6 +68,59 @@ struct CodReplConfig {
   bool force_rebuild = false;
   bool verbose = false;
   std::chrono::hours cache_max_age = std::chrono::hours(24 * 7); // 1 week
+};
+
+class CodTool {
+private:
+  std::string executable_path_;
+
+public:
+  CodTool(const char *executable_path) : executable_path_(executable_path) {}
+
+  const char *getClangProgramPath() const { return executable_path_.c_str(); }
+
+  std::string getResourcesPath() const { return clang::driver::Driver::GetResourcesPath(executable_path_, ""); }
+
+  std::vector<std::string> buildLinkerArgs(const CodReplConfig &config) const {
+    std::vector<std::string> args;
+
+    // Force use of lld from the same toolchain
+    args.push_back("-fuse-ld=lld");
+
+    // Add toolchain lib directory to rpath for libc++abi.1.dylib
+    // Use LLVM Driver API to get resource directory from cod's path
+    std::string ResourceDir = getResourcesPath();
+
+    if (!ResourceDir.empty()) {
+      // The lib directory is typically at the same level as the resource directory
+      fs::path toolchain_lib = fs::path(ResourceDir).parent_path() / "lib";
+      if (fs::exists(toolchain_lib)) {
+        std::string rpath_arg = "-Wl,-rpath," + fs::absolute(toolchain_lib).string();
+        args.push_back(rpath_arg);
+        if (config.verbose) {
+          std::cerr << "[DEBUG] Adding rpath: " << fs::absolute(toolchain_lib).string() << "\n";
+        }
+      }
+    }
+
+    // Add shilos library from toolchain
+    if (!ResourceDir.empty()) {
+      // The lib directory is typically at the same level as the resource directory
+      fs::path toolchain_lib = fs::path(ResourceDir).parent_path() / "lib";
+      if (fs::exists(toolchain_lib)) {
+        args.push_back("-L" + fs::absolute(toolchain_lib).string());
+        args.push_back("-lshilos");
+        if (config.verbose) {
+          std::cerr << "[DEBUG] Adding library path: " << fs::absolute(toolchain_lib).string() << "\n";
+        }
+      }
+    }
+
+    return args;
+  }
+
+  bool compileAndRun(const CodReplConfig &config, const std::string &submission) const;
+  void runRepl(const CodReplConfig &config) const;
 };
 
 static void printUsage(const char *prog_name) {
@@ -436,37 +501,8 @@ static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
   return args;
 }
 
-static std::vector<std::string> buildLinkerArgs(const CodReplConfig &config) {
-  std::vector<std::string> args;
-
-  // Force use of lld from the same toolchain
-  args.push_back("-fuse-ld=lld");
-
-  // Add library paths and libraries for linking
-  auto lib_path = config.project_root / "build" / "lib";
-  if (fs::exists(lib_path)) {
-    args.push_back("-L" + lib_path.string());
-    args.push_back("-Wl,-rpath," + lib_path.string()); // Add rpath for runtime library loading
-    args.push_back("-lshilos");
-  } else {
-    // If local build/lib doesn't exist, try the main CoD project's build/lib
-    auto current = config.project_root;
-    while (!current.empty() && current != current.parent_path()) {
-      auto parent_lib = current.parent_path() / "build" / "lib";
-      if (fs::exists(parent_lib)) {
-        args.push_back("-L" + parent_lib.string());
-        args.push_back("-Wl,-rpath," + parent_lib.string()); // Add rpath for runtime library loading
-        args.push_back("-lshilos");
-        break;
-      }
-      current = current.parent_path();
-    }
-  }
-
-  return args;
-}
-
-static bool compileAndRun(const CodReplConfig &config, const std::string &submission) {
+// CodTool method implementations
+bool CodTool::compileAndRun(const CodReplConfig &config, const std::string &submission) const {
   auto temp_dir = getTempDir(config);
 
   try {
@@ -573,7 +609,7 @@ static bool compileAndRun(const CodReplConfig &config, const std::string &submis
   }
 }
 
-static void runRepl(const CodReplConfig &config) {
+void CodTool::runRepl(const CodReplConfig &config) const {
   std::cout << "CoD REPL - Compile-on-Demand without JIT\n";
   std::cout << "Workspace: " << config.works_path << "\n";
   std::cout << "Project: " << config.project_root << "\n";
@@ -650,7 +686,7 @@ int main(int argc, const char **argv) {
         std::cerr << "Error: " << arg << " requires a path argument\n";
         return 1;
       }
-      config.project_root = argv[++i];
+      config.project_root = fs::absolute(argv[++i]);
     } else if (arg == "-e" || arg == "--eval") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires an expression argument\n";
@@ -696,7 +732,7 @@ int main(int argc, const char **argv) {
           << "Error: Could not find CodProject.yaml. Please specify --project or run from a CoD project directory.\n";
       return 1;
     }
-    config.project_root = *detected;
+    config.project_root = fs::absolute(*detected);
   }
 
   // Load project configuration
@@ -735,14 +771,17 @@ int main(int argc, const char **argv) {
     return 1;
   }
 
+  // Create cod tool
+  CodTool cod_tool(argv[0]);
+
   // Check if we're in eval mode or REPL mode
   if (config.eval_expression.has_value()) {
     // Eval mode: compile and run the expression, then exit
-    bool success = compileAndRun(config, *config.eval_expression);
+    bool success = cod_tool.compileAndRun(config, *config.eval_expression);
     return success ? 0 : 1;
   } else {
     // Interactive REPL mode
-    runRepl(config);
+    cod_tool.runRepl(config);
     return 0;
   }
 }
