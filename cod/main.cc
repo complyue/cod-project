@@ -158,14 +158,29 @@ static std::optional<CodReplConfig> loadConfig(const fs::path &project_root) {
 
 static bool ensureDbmrExists(const CodReplConfig &config) {
   if (fs::exists(config.works_path)) {
-    // Load existing workspace and update configuration if needed
+    // Load existing workspace and check if project root matches
     try {
       auto dbmr = DBMR<WorksRoot>(config.works_path.string(), 0);
       auto root = dbmr.region().root();
+      auto stored_project_root = root->get_project_root();
 
-      std::cout << "Using existing workspace: " << config.works_path << "\n";
-      std::cout << "Project root: " << root->get_project_root() << "\n";
-      return true;
+      // Convert both paths to absolute for comparison
+      auto stored_abs = fs::absolute(stored_project_root);
+      auto config_abs = fs::absolute(config.project_root);
+
+      if (stored_abs != config_abs) {
+        std::cerr << "Warning: Existing workspace has different project root\n";
+        std::cerr << "  Stored: " << stored_project_root << "\n";
+        std::cerr << "  Requested: " << config.project_root << "\n";
+        std::cerr << "  Recreating workspace with new project root...\n";
+
+        // Remove existing workspace and recreate
+        fs::remove(config.works_path);
+      } else {
+        std::cout << "Using existing workspace: " << config.works_path << "\n";
+        std::cout << "Project root: " << stored_project_root << "\n";
+        return true;
+      }
     } catch (const std::exception &e) {
       std::cerr << "Error opening existing workspace: " << e.what() << "\n";
       return false;
@@ -693,6 +708,7 @@ int main(int argc, const char **argv) {
   // Preserve command-line settings when merging with loaded config
   auto eval_expr = config.eval_expression;
   auto works_path = config.works_path;
+  auto project_root = config.project_root;
   auto enable_cache = config.enable_cache;
   auto force_rebuild = config.force_rebuild;
   auto cache_max_age = config.cache_max_age;
@@ -702,6 +718,13 @@ int main(int argc, const char **argv) {
   config.eval_expression = eval_expr;
   if (works_path != "./.cod/works.dbmr")
     config.works_path = works_path;
+  if (!project_root.empty()) {
+    config.project_root = project_root;
+    // Update works_path to be relative to the project root
+    if (config.works_path == ".cod/works.dbmr") {
+      config.works_path = fs::path(project_root) / ".cod/works.dbmr";
+    }
+  }
   config.enable_cache = enable_cache;
   config.force_rebuild = force_rebuild;
   config.cache_max_age = cache_max_age;
