@@ -28,6 +28,7 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Program.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <chrono>
@@ -75,7 +76,10 @@ private:
   std::string executable_path_;
 
 public:
-  CodTool(const char *executable_path) : executable_path_(executable_path) {}
+  CodTool() {
+    // this is often used, get it once
+    executable_path_ = llvm::sys::fs::getMainExecutable(nullptr, nullptr);
+  }
 
   const char *getClangProgramPath() const { return executable_path_.c_str(); }
 
@@ -93,7 +97,8 @@ public:
 
     if (!ResourceDir.empty()) {
       // The lib directory is typically at the same level as the resource directory
-      fs::path toolchain_lib = fs::path(ResourceDir).parent_path() / "lib";
+      // ResourceDir is like '/path/to/build/lib/clang/18', so we need to go up two levels to get '/path/to/build/lib'
+      fs::path toolchain_lib = fs::path(ResourceDir).parent_path().parent_path();
       if (fs::exists(toolchain_lib)) {
         std::string rpath_arg = "-Wl,-rpath," + fs::absolute(toolchain_lib).string();
         args.push_back(rpath_arg);
@@ -106,7 +111,8 @@ public:
     // Add shilos library from toolchain
     if (!ResourceDir.empty()) {
       // The lib directory is typically at the same level as the resource directory
-      fs::path toolchain_lib = fs::path(ResourceDir).parent_path() / "lib";
+      // ResourceDir is like '/path/to/build/lib/clang/18', so we need to go up two levels to get '/path/to/build/lib'
+      fs::path toolchain_lib = fs::path(ResourceDir).parent_path().parent_path();
       if (fs::exists(toolchain_lib)) {
         args.push_back("-L" + fs::absolute(toolchain_lib).string());
         args.push_back("-lshilos");
@@ -747,6 +753,7 @@ int main(int argc, const char **argv) {
   auto project_root = config.project_root;
   auto enable_cache = config.enable_cache;
   auto force_rebuild = config.force_rebuild;
+  auto verbose = config.verbose;
   auto cache_max_age = config.cache_max_age;
   config = *loaded_config;
 
@@ -763,6 +770,7 @@ int main(int argc, const char **argv) {
   }
   config.enable_cache = enable_cache;
   config.force_rebuild = force_rebuild;
+  config.verbose = verbose;
   config.cache_max_age = cache_max_age;
 
   // Ensure DBMR workspace exists
@@ -772,7 +780,7 @@ int main(int argc, const char **argv) {
   }
 
   // Create cod tool
-  CodTool cod_tool(argv[0]);
+  CodTool cod_tool;
 
   // Check if we're in eval mode or REPL mode
   if (config.eval_expression.has_value()) {

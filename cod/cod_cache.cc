@@ -517,36 +517,24 @@ std::optional<fs::path> BuildCache::lookup(const fs::path &source_path, const st
 bool BuildCache::store(const fs::path &source_path, const fs::path &bitcode_path,
                        const std::vector<std::string> &compiler_args, const std::string &project_snapshot_id) {
   try {
-    std::cerr << "[DEBUG] store: Starting cache store operation" << std::endl;
-    std::cerr << "[DEBUG] store: cache_dbmr_ ptr = " << static_cast<void *>(cache_dbmr_.get()) << std::endl;
 
     ensure_cache_dbmr();
     if (!cache_dbmr_) {
-      std::cerr << "[DEBUG] store: cache_dbmr_ is null" << std::endl;
       return false;
     }
 
-    std::cerr << "[DEBUG] store: Getting region from cache_dbmr_" << std::endl;
     auto &region = cache_dbmr_->region();
-    std::cerr << "[DEBUG] store: region ptr = " << static_cast<void *>(&region) << std::endl;
 
-    std::cerr << "[DEBUG] store: Getting root from region" << std::endl;
     auto root = region.root();
-    std::cerr << "[DEBUG] store: root ptr = " << static_cast<void *>(root.get()) << std::endl;
 
     if (!root) {
-      std::cerr << "[DEBUG] store: root is null" << std::endl;
       return false;
     }
 
-    std::cerr << "[DEBUG] store: Generating cache key" << std::endl;
     auto key = generate_cache_key(source_path, compiler_args, project_snapshot_id);
     std::string key_str = key.to_string();
-    std::cerr << "[DEBUG] store: cache_key = " << key_str << std::endl;
 
-    std::cerr << "[DEBUG] store: Getting cache index" << std::endl;
     auto &cache_index = root->cache_index();
-    std::cerr << "[DEBUG] store: cache_index ptr = " << static_cast<void *>(&cache_index) << std::endl;
 
     // Get file size
     std::error_code size_ec;
@@ -554,30 +542,22 @@ bool BuildCache::store(const fs::path &source_path, const fs::path &bitcode_path
     if (size_ec) {
       file_size = 0;
     }
-    std::cerr << "[DEBUG] store: file_size = " << file_size << std::endl;
 
-    std::cerr << "[DEBUG] store: Allocating regional_cache_key in region" << std::endl;
     // Create the cache key in the region
     auto *cache_key_ptr = region.allocate<regional_cache_key>();
-    std::cerr << "[DEBUG] store: cache_key_ptr = " << static_cast<void *>(cache_key_ptr) << std::endl;
 
     if (!cache_key_ptr) {
-      std::cerr << "[DEBUG] store: Failed to allocate regional_cache_key" << std::endl;
       return false;
     }
 
-    std::cerr << "[DEBUG] store: Constructing regional_cache_key" << std::endl;
     new (cache_key_ptr) regional_cache_key(region, key.toolchain_version, key.compiler_flags, key.project_snapshot_id,
                                            key.semantic_hash, key.source_mtime);
 
-    std::cerr << "[DEBUG] store: Inserting cache entry into index" << std::endl;
     // Insert the cache entry into the index
     auto [entry_ptr, inserted] =
         cache_index.insert(region, key_str, cache_key_ptr, bitcode_path, std::chrono::system_clock::now(), file_size);
-    std::cerr << "[DEBUG] store: inserted = " << inserted << std::endl;
 
     if (inserted) {
-      std::cerr << "[DEBUG] store: Updating stats" << std::endl;
       // Update stats only if insertion was successful
       auto &stats = region.root()->stats();
       stats.total_entries++;
@@ -592,7 +572,6 @@ bool BuildCache::store(const fs::path &source_path, const fs::path &bitcode_path
       }
     }
 
-    std::cerr << "[DEBUG] store: Cache store completed successfully" << std::endl;
     return true;
   } catch (const std::exception &e) {
     std::cerr << "[ERROR] store exception: " << e.what() << std::endl;
