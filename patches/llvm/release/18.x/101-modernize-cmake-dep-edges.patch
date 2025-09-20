@@ -1,70 +1,23 @@
-diff --git a/llvm-project/lldb/tools/debugserver/source/CMakeLists.txt b/llvm-project/lldb/tools/debugserver/source/CMakeLists.txt
---- a/llvm-project/lldb/tools/debugserver/source/CMakeLists.txt
-+++ b/llvm-project/lldb/tools/debugserver/source/CMakeLists.txt
-@@ -109,23 +109,51 @@
- set(generated_mach_interfaces
-   ${CMAKE_CURRENT_BINARY_DIR}/mach_exc.h
-   ${CMAKE_CURRENT_BINARY_DIR}/mach_excServer.c
-   ${CMAKE_CURRENT_BINARY_DIR}/mach_excUser.c
-   )
- 
- set(MIG_ARCH_FLAGS "")
- if (DEFINED MIG_ARCHS)
-   foreach(ARCH ${MIG_ARCHS})
-     set(MIG_ARCH_FLAGS "${MIG_ARCH_FLAGS} -arch ${ARCH}")
-   endforeach()
+diff --git a/lldb/tools/debugserver/source/CMakeLists.txt b/lldb/tools/debugserver/source/CMakeLists.txt
+index f0b9756be..c7ac38e53 100644
+--- a/lldb/tools/debugserver/source/CMakeLists.txt
++++ b/lldb/tools/debugserver/source/CMakeLists.txt
+@@ -180,10 +180,15 @@ if (DEFINED MIG_ARCHS)
  endif()
  separate_arguments(MIG_ARCH_FLAGS_SEPARTED NATIVE_COMMAND "${MIG_ARCH_FLAGS}")
  
 -add_custom_command(OUTPUT ${generated_mach_interfaces}
 -  VERBATIM COMMAND mig ${MIG_ARCH_FLAGS_SEPARTED} -isysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_CURRENT_SOURCE_DIR}/MacOSX/dbgnub-mig.defs
--  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/MacOSX/dbgnub-mig.defs
++add_custom_command(
++  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mach_exc.h
++  BYPRODUCTS
++    ${CMAKE_CURRENT_BINARY_DIR}/mach_excServer.c
++    ${CMAKE_CURRENT_BINARY_DIR}/mach_excUser.c
++  VERBATIM
++  COMMAND mig ${MIG_ARCH_FLAGS_SEPARTED} -isysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_CURRENT_SOURCE_DIR}/MacOSX/dbgnub-mig.defs
+   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/MacOSX/dbgnub-mig.defs
 -  )
-+# Robust handling for MIG multi-output generation across CMake/Ninja versions.
-+# Newer CMake/Ninja require BYPRODUCTS for side outputs; provide a fallback for very old CMake.
-+if(CMAKE_VERSION VERSION_LESS 3.2)
-+  # Generate via a primary OUTPUT (mach_exc.h); other files are produced as side effects.
-+  add_custom_command(
-+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mach_exc.h
-+    VERBATIM
-+    COMMAND mig ${MIG_ARCH_FLAGS_SEPARTED} -isysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_CURRENT_SOURCE_DIR}/MacOSX/dbgnub-mig.defs
-+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/MacOSX/dbgnub-mig.defs
-+  )
-+  # Bridge target to enforce ordering before consumers build.
-+  add_custom_target(generate_mach_interfaces
-+    DEPENDS
-+      ${CMAKE_CURRENT_BINARY_DIR}/mach_exc.h
-+      ${CMAKE_CURRENT_BINARY_DIR}/mach_excServer.c
-+      ${CMAKE_CURRENT_BINARY_DIR}/mach_excUser.c
-+  )
-+  set(_LLDB_DEBUGSERVER_NEED_MIG_DEP 1)
-+else()
-+  # Explicitly model side outputs so Ninja knows how to build them.
-+  add_custom_command(
-+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/mach_exc.h
-+    BYPRODUCTS
-+      ${CMAKE_CURRENT_BINARY_DIR}/mach_excServer.c
-+      ${CMAKE_CURRENT_BINARY_DIR}/mach_excUser.c
-+    VERBATIM
-+    COMMAND mig ${MIG_ARCH_FLAGS_SEPARTED} -isysroot ${CMAKE_OSX_SYSROOT} ${CMAKE_CURRENT_SOURCE_DIR}/MacOSX/dbgnub-mig.defs
-+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/MacOSX/dbgnub-mig.defs
-+  )
-+endif()
++)
  
  set(DEBUGSERVER_VERS_GENERATED_FILE ${CMAKE_CURRENT_BINARY_DIR}/debugserver_vers.c)
  configure_file(debugserver_vers.c.in
-                ${DEBUGSERVER_VERS_GENERATED_FILE} @ONLY)
- 
-@@ -182,6 +210,11 @@
-   debugserver.cpp)
- 
- add_lldb_library(lldbDebugserverCommon ${lldbDebugserverCommonSources})
-+# On very old CMake, ensure the MIG generation runs before the library build.
-+if(_LLDB_DEBUGSERVER_NEED_MIG_DEP)
-+  add_dependencies(lldbDebugserverCommon generate_mach_interfaces)
-+endif()
-+
- set_target_properties(lldbDebugserverCommon PROPERTIES FOLDER "lldb libraries/debugserver")
- 
- target_link_libraries(lldbDebugserverCommon
-                       INTERFACE ${COCOA_LIBRARY}
