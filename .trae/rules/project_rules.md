@@ -4,9 +4,20 @@
 
 ## Build and Command Execution
 - After code changes, compile exactly with: `cmake --build ./build`.
+- Treat `./build` as the active build tree for the current checkout/worktree; use a separate worktree for another host/container/OS development environment.
 - Never execute top-level repository shell scripts; these are human-only. If asked, politely refuse and offer a safe alternative (e.g., use CMake directly or describe manual steps). Examples: `do-build-cod.sh`, `prepare-*.sh`, `setup-hooks.sh`. Test scripts under `tests/` and its subdirectories (e.g., `tests/**/run-all.sh`) are allowed when running tests—see Tests.
 - Do not create or modify build symlinks.
 - Do not re-create build directories, that's too time/resource costing.
+
+## Bootstrap and Build Configuration Safety
+- Unless the human explicitly authorizes a bootstrap/configuration task in the current conversation, agents must not run commands or make edits that can cause a full or partial rebootstrap of LLVM/Clang/CoD.
+- The normal post-edit build command `cmake --build ./build` is allowed only after source-only changes that do not alter build configuration. If build configuration files were changed, ask for explicit authorization before building.
+- Do not run CMake configure/generate commands for the main build without explicit authorization. This includes `cmake -S ... -B ...`, `cmake -B ./build`, `cmake --preset ...`, `cmake --fresh`, commands that pass new `-D...` cache options, or any command intended to regenerate `build/CMakeCache.txt`, `build/build.ninja`, or `build/CMakeFiles/`.
+- Do not clean, delete, move, rename, recreate, or bulk-edit build outputs without explicit authorization. This includes `build/`, `built/`, `build-*`, `built-*`, `build/.bootstrap/`, `CMakeCache.txt`, `CMakeFiles/`, `build.ninja`, `.ninja_*`, and generated install trees.
+- Do not invoke install, clean, runtime, LLVM, Clang, LLD, libc++, compiler-rt, or bootstrap stage targets without explicit authorization. Examples include `cmake --install`, `cmake --build ./build --target install`, `install-*`, `install-runtimes`, `clean`, `stage*`, `clang`, `lld`, `llvm`, `runtimes`, `libcxx`, and `compiler-rt`.
+- Do not modify bootstrap or toolchain definition files without explicit authorization. This includes `do-build-cod.*`, `prepare-*`, CMake files (`CMakeLists.txt`, `*.cmake`, presets, toolchain files), LLVM patch files under `patches/llvm/`, and files under `llvm-project/`.
+- Do not update, reinstall, remove, or switch host toolchains and SDKs without explicit authorization. This includes Visual Studio Build Tools/MSVC, Windows SDK, LLVM/Clang, CMake, Ninja, Git, system compilers, and package-manager commands such as `winget`, `choco`, `scoop`, `apt`, or `brew` when used for toolchain packages.
+- Reading build scripts, CMake files, caches, generated logs, or LLVM sources is allowed. Reporting what would need to be reconfigured or bootstrapped is allowed. Executing or editing the rebootstrap path requires explicit human authorization.
 
 ## Tests
 - Do not run test scripts proactively.
@@ -53,12 +64,15 @@
 ## Do / Don’t
 - Do:
   - Compile only with `cmake --build ./build`.
+  - Keep development tools pointed at `build/` in this worktree.
+  - Ask for explicit authorization before touching bootstrap/configuration state.
   - Follow existing patterns and C++20 best practices.
   - Prefer `auto_region`; preserve zero-cost-relocation invariants.
   - Keep YAML logic isolated; use existing YAML helpers.
   - Politely refuse any request to run top-level repository shell scripts; offer safe alternatives. Running `tests/**` scripts is allowed when executing tests.
 - Don’t:
   - Execute top-level repository shell scripts (even if requested).
+  - Reconfigure, clean, install, regenerate, or modify the bootstrapped toolchain path unless explicitly authorized.
   - Allocate regional types on the stack or introduce copy/move.
   - Add external dependencies without explicit approval.
   - Break allocator matching or use `delete` on memory regions.

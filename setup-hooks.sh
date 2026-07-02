@@ -22,10 +22,12 @@ if [ -f "hooks/pre-commit" ]; then
     echo "✓ Pre-commit hook installed"
 fi
 
-if [ -f "built/bin/clang-format" ]; then
+if [ -x "build/bin/clang-format" ] || [ -x "build/bin/clang-format.exe" ]; then
     echo "✓ clang-format binary found"
+elif [ -x "built/bin/clang-format" ] || [ -x "built/bin/clang-format.exe" ]; then
+    echo "✓ clang-format binary found in built/"
 else
-    echo "⚠ Warning: clang-format binary not found at built/bin/clang-format"
+    echo "⚠ Warning: clang-format binary not found under build/bin or built/bin"
 fi
 
 echo "Git hooks setup complete." 

@@ -13,7 +13,7 @@ CoD 是一个创新的 C++20 编译工具，旨在提供"按需编译"的 REPL �
 - **构建系统**: CMake + Ninja
 - **核心库**: shilos（自主开发的内存区域库）
 - **集成**: LLVM 项目作为外部依赖
-- **平台支持**: macOS（优先）、Linux（Ubuntu）
+- **平台支持**: macOS、Linux（Ubuntu）、Windows
 
 ### 项目架构
 
@@ -49,7 +49,7 @@ CoD 是一个创新的 C++20 编译工具，旨在提供"按需编译"的 REPL �
 
 ### 系统要求
 
-- **macOS** 或 **Linux** (Ubuntu)
+- **macOS**、**Linux** (Ubuntu) 或 **Windows**
 - Git
 - CMake 3.20+
 - Ninja 构建工具
@@ -57,10 +57,15 @@ CoD 是一个创新的 C++20 编译工具，旨在提供"按需编译"的 REPL �
 
 ### 构建项目
 
-项目使用自举构建方式：
+一个 checkout/worktree 只对应一个开发环境。宿主机、WSL、Docker 容器、macOS 或 Windows
+本机开发需要同时存在时，应使用不同的 worktree/checkout 目录，不共享同一个源码目录下的
+`build/`。项目的活动开发构建树固定为 `./build`，clangd 按默认约定读取
+`build/compile_commands.json`。
+
+macOS/Linux 的人工自举构建：
 
 ```bash
-# 使用项目的构建脚本（推荐）
+# 人工使用；AI 助手不得执行顶级仓库 shell 脚本
 ./do-build-cod.sh
 
 # 设置构建类型（可选）
@@ -68,12 +73,16 @@ export COD_BUILD_TYPE=Release  # Debug, RelWithDebInfo 也支持
 export COD_TARGETS_TO_BUILD="Native;NVPTX"  # CUDA 就绪平台
 ```
 
-**注意**: 构建过程采用 CoD 项目的自举构建机制，会自动下载并编译完整的 LLVM 18.x 工具链，这是一个资源密集型操作，需要约 30-60 分钟。对于终端用户而言，无需了解内部构建细节，直接使用构建脚本即可。
+自举构建会生成三阶段工具链：临时阶段保存在 `build/.bootstrap/`，最终开发构建树保存在
+`build/`，安装后的工具链保存在 `built/`。`build/` 和 `built/` 都应是普通目录，不应是
+符号链接。
 
-### 手动构建选项
+**注意**: 构建过程会自动下载并编译完整的 LLVM 18.x 工具链，这是一个资源密集型操作，需要约 30-60 分钟。
+
+### 增量构建
 
 ```bash
-# 传统方法（如果需要）
+# AI 助手和日常增量开发使用
 cmake --build ./build
 
 # 组件特定构建
@@ -85,23 +94,26 @@ cmake --build ./build --target codp
 ### 运行 REPL
 
 ```bash
-# 启动交互式 REPL
+# 开发构建
+./build/bin/cod
+
+# 安装后的工具链
 ./built/bin/cod
 
 # 单表达式评估
-./built/bin/cod -e "std::cout << \"Hello, World!\" << std::endl;"
+./build/bin/cod -e "std::cout << \"Hello, World!\" << std::endl;"
 
 # 使用自定义工作区
-./built/bin/cod -w ./my_workspace.dbmr --project /path/to/project
+./build/bin/cod -w ./my_workspace.dbmr --project /path/to/project
 
 # 详细输出模式
-./built/bin/cod -v
+./build/bin/cod -v
 
 # 强制重建
-./built/bin/cod --force-rebuild
+./build/bin/cod --force-rebuild
 
 # 禁用缓存
-./built/bin/cod --no-cache
+./build/bin/cod --no-cache
 ```
 
 ### 包管理操作
@@ -311,6 +323,7 @@ tests/
 **构建和命令执行**:
 
 - 代码更改后精确编译：`cmake --build ./build`
+- `./build` 是当前 worktree 的活动开发构建树；其它宿主/容器/OS 环境使用其它 worktree
 - 绝不执行顶级仓库 shell 脚本；如被要求，礼貌拒绝并提供安全替代方案
 - 不要创建或修改构建符号链接
 - 不要重新创建构建目录，这会消耗过多时间/资源
@@ -332,13 +345,13 @@ tests/
 **代码格式化**:
 
 - 项目使用 `clang-format` 进行代码格式化
-- 通过 `hooks/pre-commit` 自动格式化 `.hh` 和 `.cc` 文件
+- 通过 `hooks/pre-commit` 自动格式化 `.hh` 和 `.cc` 文件，优先使用 `build/bin/clang-format`
 - 运行 `./setup-hooks.sh` 设置 Git 钩子
 
 **开发容器支持**:
 
 - 包含 `.devcontainer/` 配置用于容器化开发
-- 支持 Ubuntu 环境的开发容器设置
+- 容器开发应使用单独的 worktree/checkout 目录，避免与宿主机共享同一个 `build/`
 
 ## 调试和故障排除
 
@@ -353,13 +366,13 @@ tests/
 
 ```bash
 # 详细输出模式
-./built/bin/cod -v
+./build/bin/cod -v
 
 # 强制重建
-./built/bin/cod --force-rebuild
+./build/bin/cod --force-rebuild
 
 # 禁用缓存
-./built/bin/cod --no-cache
+./build/bin/cod --no-cache
 
 # 包管理调试
 codp debug

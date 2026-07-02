@@ -9,10 +9,11 @@ Run from project root:
 
 ## pre-commit
 
-Formats `.hh` and `.cc` files using `built/bin/clang-format`.
+Formats `.hh` and `.cc` files using `build/bin/clang-format`, falling back to
+`built/bin/clang-format` for release/pre-release installs.
 
 Requirements:
-- `built/bin/clang-format` (build project first)
+- `build/bin/clang-format` or `built/bin/clang-format` (build project first)
 
 Skip formatting:
 ```bash

@@ -6,11 +6,13 @@
 # as most of those are useless.
 #==============================================================================#
 
-# Nested built directory
-/built*
+# Installed toolchain for this worktree
+/built
+/built-*
 
-# Nested build directory
-/build*
+# Active build tree for this worktree
+/build
+/build-*
 
 # llvm repo checkout as a build-time dependency
 /llvm-project

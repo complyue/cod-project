@@ -23,16 +23,23 @@ COD_TARGETS_TO_BUILD="Native"
 	cd $(dirname "$0")
 	COD_SOURCE_DIR=$(pwd)
 
-	# suffix the build dir, so devcontainers/Docker and native build dirs can
-	# coexist on macOS
-	BUILD_DIR="build-$(uname -m)-$(uname -s)"
-	# the final toolchain built from this project
-	test -L built || ln -s "$BUILD_DIR/cod-release" built
-	# vscode-clangd expects build/compile_commands.json, and stage3 build tree
-	# is the final env for CoD development
-	test -L build || ln -s "$BUILD_DIR/stage3" build
-	# use full path for build dir
-	BUILD_DIR="$COD_SOURCE_DIR/$BUILD_DIR"
+	# One checkout/worktree owns one development environment.  Native, WSL,
+	# Docker, and macOS builds should use separate worktrees instead of sharing
+	# one source directory.  Keep the final development build tree at ./build so
+	# clangd finds build/compile_commands.json by convention.
+	if [ -L build ] || [ -L built ]; then
+		echo "Error: build/ and built/ must be real directories in this workflow." >&2
+		echo "Use a fresh worktree, or remove legacy build/built symlinks manually." >&2
+		exit 1
+	fi
+
+	BUILD_DIR="$COD_SOURCE_DIR/build"
+	BOOTSTRAP_DIR="$BUILD_DIR/.bootstrap"
+	STAGE1_DIR="$BOOTSTRAP_DIR/stage1"
+	STAGE2_DIR="$BOOTSTRAP_DIR/stage2"
+	RUNTIME_INSTALL_DIR="$BOOTSTRAP_DIR/cod-rt"
+	STAGE2_INSTALL_DIR="$BUILD_DIR/cod"
+	FINAL_INSTALL_DIR="$COD_SOURCE_DIR/built"
 
 	if [ "$(uname)" == "Darwin" ]; then
 		# macOS
@@ -169,7 +176,7 @@ COD_TARGETS_TO_BUILD="Native"
 	#   we always (even on Linux) do HAVE_UNW_ADD_DYNAMIC_FDE=1 per:
 	#     https://github.com/llvm/llvm-project/issues/43419
 	#
-	test -x "$BUILD_DIR/cod/bin/cod" || (
+	test -x "$STAGE2_INSTALL_DIR/bin/cod" || (
 		#
 		# stage-1: build clang with system compiler (gcc or older clang) toolchain,
 		#          bundling lld, libc++ etc. with it
@@ -183,9 +190,9 @@ COD_TARGETS_TO_BUILD="Native"
 		#   rpath, this is crucial in case system installed (older) versions lack
 		#   symbols from our built libs from llvm-project
 		#
-		test -x "$BUILD_DIR/stage1/bin/clang++" || (
-			mkdir -p "$BUILD_DIR/stage1" && cd "$BUILD_DIR/stage1"
-			cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod-rt" \
+		{ test -x "$STAGE1_DIR/bin/clang++" && test -d "$RUNTIME_INSTALL_DIR/lib"; } || (
+			mkdir -p "$STAGE1_DIR" && cd "$STAGE1_DIR"
+			cmake -DCMAKE_INSTALL_PREFIX="$RUNTIME_INSTALL_DIR" \
 				-DLLVM_TARGETS_TO_BUILD=Native \
 				-DCMAKE_BUILD_TYPE=Release \
 				"${STAGE_COMMON_CMAKE_OPTS[@]}"
@@ -193,13 +200,13 @@ COD_TARGETS_TO_BUILD="Native"
 			ninja -j${NJOBS} install-runtimes
 		)
 
-		mkdir -p "$BUILD_DIR/stage2" && cd "$BUILD_DIR/stage2"
-		cp -rf ../cod-rt/lib ./
-		cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod" \
-			-DCMAKE_SYSTEM_PREFIX_PATH="$BUILD_DIR/stage1" \
-			-DCMAKE_C_COMPILER="$BUILD_DIR/stage1/bin/clang" \
-			-DCMAKE_CXX_COMPILER="$BUILD_DIR/stage1/bin/clang++" \
-			-DCMAKE_LINKER="$BUILD_DIR/stage1/bin/ld.lld" \
+		mkdir -p "$STAGE2_DIR" && cd "$STAGE2_DIR"
+		cp -rf "$RUNTIME_INSTALL_DIR/lib" ./
+		cmake -DCMAKE_INSTALL_PREFIX="$STAGE2_INSTALL_DIR" \
+			-DCMAKE_SYSTEM_PREFIX_PATH="$STAGE1_DIR" \
+			-DCMAKE_C_COMPILER="$STAGE1_DIR/bin/clang" \
+			-DCMAKE_CXX_COMPILER="$STAGE1_DIR/bin/clang++" \
+			-DCMAKE_LINKER="$STAGE1_DIR/bin/ld.lld" \
 			-DLLVM_ENABLE_LIBCXX=ON \
 			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 			-DLLVM_EXTERNAL_PROJECTS="cod" \
@@ -212,8 +219,8 @@ COD_TARGETS_TO_BUILD="Native"
 	)
 
 	#
-	# stage-3: build the final CoD toolset, with itself (stage2 installation),
-	#          then overwrite the installation
+	# stage-3: build the final CoD toolset in ./build with itself (stage2
+	#          installation), then overwrite ./built
 	#
 	#          we add lldb etc. only at this final stage
 	#
@@ -224,13 +231,13 @@ COD_TARGETS_TO_BUILD="Native"
 	#     unconditionally update the final build tree to reflect the changes,
 	#     then build & install again
 	#
-	mkdir -p "$BUILD_DIR/stage3" && cd "$BUILD_DIR/stage3"
-	test -d ./lib || cp -rf ../cod/lib ./
-	cmake -DCMAKE_INSTALL_PREFIX="$BUILD_DIR/cod-release" \
-		-DCMAKE_SYSTEM_PREFIX_PATH="$BUILD_DIR/cod" \
-		-DCMAKE_C_COMPILER="$BUILD_DIR/cod/bin/clang" \
-		-DCMAKE_CXX_COMPILER="$BUILD_DIR/cod/bin/clang++" \
-		-DCMAKE_LINKER="$BUILD_DIR/cod/bin/ld.lld" \
+	mkdir -p "$BUILD_DIR" && cd "$BUILD_DIR"
+	test -d ./lib || cp -rf "$STAGE2_INSTALL_DIR/lib" ./
+	cmake -DCMAKE_INSTALL_PREFIX="$FINAL_INSTALL_DIR" \
+		-DCMAKE_SYSTEM_PREFIX_PATH="$STAGE2_INSTALL_DIR" \
+		-DCMAKE_C_COMPILER="$STAGE2_INSTALL_DIR/bin/clang" \
+		-DCMAKE_CXX_COMPILER="$STAGE2_INSTALL_DIR/bin/clang++" \
+		-DCMAKE_LINKER="$STAGE2_INSTALL_DIR/bin/ld.lld" \
 		-DLLVM_ENABLE_LIBCXX=ON \
 		-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 		-DLLVM_EXTERNAL_PROJECTS="cod" \
@@ -242,8 +249,9 @@ COD_TARGETS_TO_BUILD="Native"
 	ninja -j${NJOBS}
 	ninja -j${NJOBS} install
 
-	# cleanup artifacts not needed anymore
-	rm -rf "$BUILD_DIR"/{cod-rt,stage1,stage2} || true
+	# cleanup artifacts not needed anymore; keep the stage2 installation under
+	# build/cod because it is the compiler recorded in compile_commands.json.
+	rm -rf "$BOOTSTRAP_DIR" || true
 
 	exit
 } # unreachable here and after

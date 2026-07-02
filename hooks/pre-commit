@@ -4,12 +4,25 @@
 
 set -e
 
-CLANG_FORMAT="built/bin/clang-format"
 REPO_ROOT=$(git rev-parse --show-toplevel)
-CLANG_FORMAT_PATH="$REPO_ROOT/$CLANG_FORMAT"
 
-if [ ! -f "$CLANG_FORMAT_PATH" ]; then
-    echo "Error: clang-format not found at $CLANG_FORMAT_PATH"
+find_clang_format() {
+    for CANDIDATE in \
+        "$REPO_ROOT/build/bin/clang-format" \
+        "$REPO_ROOT/build/bin/clang-format.exe" \
+        "$REPO_ROOT/built/bin/clang-format" \
+        "$REPO_ROOT/built/bin/clang-format.exe"
+    do
+        if [ -x "$CANDIDATE" ]; then
+            printf '%s\n' "$CANDIDATE"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! CLANG_FORMAT_PATH=$(find_clang_format); then
+    echo "Error: clang-format not found under build/bin or built/bin."
     echo "Please build the project first to generate the clang-format binary."
     exit 1
 fi
