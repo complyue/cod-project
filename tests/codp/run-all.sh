@@ -31,6 +31,11 @@ cmake --build "$YAML_CMP_BUILD_DIR"
 
 # Add yaml-cmp build dir to PATH
 export PATH="$YAML_CMP_BUILD_DIR:$PATH"
+YAMLCMP_BIN="$(resolve_test_exe "$YAML_CMP_BUILD_DIR/yaml-cmp" || true)"
+if [[ -z "$YAMLCMP_BIN" || ! -x "$YAMLCMP_BIN" ]]; then
+  echo -e "${RED}✗ yaml-cmp not found after build${NC}"
+  exit 1
+fi
 
 echo -e "${GREEN}✓ yaml-cmp built successfully${NC}"
 echo
@@ -41,16 +46,16 @@ log_test() {
 
 log_pass() {
     echo -e "${GREEN}✓ $1${NC}"
-    ((PASS_COUNT++))
+    ((PASS_COUNT += 1))
 }
 
 log_fail() {
     echo -e "${RED}✗ $1${NC}"
-    ((FAIL_COUNT++))
+    ((FAIL_COUNT += 1))
 }
 
 run_test() {
-    ((TEST_COUNT++))
+    ((TEST_COUNT += 1))
 }
 
 # Run sub-tests

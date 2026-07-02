@@ -27,6 +27,9 @@ fi
 
 if ! command -v yaml-cmp >/dev/null; then
   YAMLCMP_BIN="$PROJECT_ROOT/tests/yaml-cmp/build/yaml-cmp"
+  if [[ ! -x "$YAMLCMP_BIN" && -x "$YAMLCMP_BIN.exe" ]]; then
+    YAMLCMP_BIN="$YAMLCMP_BIN.exe"
+  fi
 else
   YAMLCMP_BIN="$(command -v yaml-cmp)"
 fi

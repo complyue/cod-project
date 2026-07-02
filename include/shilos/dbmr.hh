@@ -137,7 +137,7 @@ public:
       throw_last_error("Failed to stat file: " + file_name);
     }
     if (file_size.QuadPart < 0 ||
-        static_cast<unsigned long long>(file_size.QuadPart) > std::numeric_limits<size_t>::max()) {
+        static_cast<unsigned long long>(file_size.QuadPart) > (std::numeric_limits<size_t>::max)()) {
       throw std::runtime_error("File is too large to map: " + file_name);
     }
     return static_cast<size_t>(file_size.QuadPart);
@@ -146,7 +146,8 @@ public:
     if (::fstat(fd_, &statbuf) == -1) {
       throw_last_error("Failed to stat file: " + file_name);
     }
-    if (statbuf.st_size < 0 || static_cast<unsigned long long>(statbuf.st_size) > std::numeric_limits<size_t>::max()) {
+    if (statbuf.st_size < 0 ||
+        static_cast<unsigned long long>(statbuf.st_size) > (std::numeric_limits<size_t>::max)()) {
       throw std::runtime_error("File is too large to map: " + file_name);
     }
     return static_cast<size_t>(statbuf.st_size);

@@ -4,6 +4,7 @@
 #include "llvm/Support/Path.h"
 
 #include <chrono>
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -69,13 +70,15 @@ std::chrono::system_clock::time_point to_system_clock_time(std::filesystem::file
 }
 
 fs::path clangxx_candidate_for_root(const fs::path &root) {
+  const char *test_toolchain = std::getenv("COD_TEST_TOOLCHAIN");
+  const char *toolchain_dir = (test_toolchain && std::string_view(test_toolchain) == "built") ? "built" : "build";
 #ifdef _WIN32
-  auto exe_candidate = root / "build" / "bin" / "clang++.exe";
+  auto exe_candidate = root / toolchain_dir / "bin" / "clang++.exe";
   if (fs::exists(exe_candidate)) {
     return exe_candidate;
   }
 #endif
-  return root / "build" / "bin" / "clang++";
+  return root / toolchain_dir / "bin" / "clang++";
 }
 
 std::string fallback_clangxx() {
@@ -158,7 +161,7 @@ std::string quote_shell_arg(const fs::path &path) { return quote_shell_arg(path.
 
 } // namespace
 
-std::vector<std::string> &&CompilerArgs(std::vector<std::string> &&compiler_args) {
+std::vector<std::string> CompilerArgs(std::vector<std::string> compiler_args) {
 
 #ifdef __APPLE__
   // Set deployment target to match the built libraries (eliminates version warnings)
@@ -168,10 +171,20 @@ std::vector<std::string> &&CompilerArgs(std::vector<std::string> &&compiler_args
   }
 #endif
 
-  return std::move(compiler_args);
+#ifdef _WIN32
+  const bool already_defined = std::any_of(compiler_args.begin(), compiler_args.end(), [](const std::string &arg) {
+    return arg == "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH" ||
+           arg == "/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH";
+  });
+  if (!already_defined) {
+    compiler_args.push_back("-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH");
+  }
+#endif
+
+  return compiler_args;
 }
 
-std::vector<std::string> &&LinkerArgs(std::vector<std::string> &&linker_args) {
+std::vector<std::string> LinkerArgs(std::vector<std::string> linker_args) {
 
 #ifdef __APPLE__
   // Set deployment target to match the built libraries (eliminates version warnings)
@@ -181,7 +194,7 @@ std::vector<std::string> &&LinkerArgs(std::vector<std::string> &&linker_args) {
   }
 #endif
 
-  return std::move(linker_args);
+  return linker_args;
 }
 
 } // namespace cod
@@ -313,8 +326,9 @@ std::optional<fs::path> BuildCache::generate_bitcode(const fs::path &source_path
   std::string compiler_path = find_clangxx(project_root_);
 
   // Build clang command to generate bitcode
+  auto effective_compiler_args = CompilerArgs(compiler_args);
   std::string cmd = quote_shell_arg(compiler_path) + " -emit-llvm -c ";
-  for (const auto &arg : compiler_args) {
+  for (const auto &arg : effective_compiler_args) {
     // Skip any clang++ paths in the arguments (they should not be there for bitcode generation)
     if (arg.find("clang++") == std::string::npos) {
       cmd += quote_shell_arg(arg) + " ";
@@ -340,8 +354,9 @@ bool BitcodeCompiler::compile_to_bitcode(const fs::path &source_path, const fs::
   std::string compiler_path = find_clangxx();
 
   // Build clang command to generate bitcode
+  auto effective_compiler_args = CompilerArgs(compiler_args);
   std::string cmd = quote_shell_arg(compiler_path) + " -emit-llvm -c ";
-  for (const auto &arg : compiler_args) {
+  for (const auto &arg : effective_compiler_args) {
     // Skip any clang++ paths in the arguments (they should not be there for bitcode generation)
     if (arg.find("clang++") == std::string::npos) {
       cmd += quote_shell_arg(arg) + " ";

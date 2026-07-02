@@ -39,8 +39,8 @@ echo "Building yaml-ux..."
 cmake --build "$BUILD_DIR"
 
 # Verify test executable exists
-TEST_BIN="$BUILD_DIR/yaml-ux"
-if [[ ! -x "$TEST_BIN" ]]; then
+TEST_BIN="$(resolve_test_exe "$BUILD_DIR/yaml-ux" || true)"
+if [[ -z "$TEST_BIN" || ! -x "$TEST_BIN" ]]; then
   echo -e "${RED}✗ Failed to build yaml-ux${NC}"
   exit 1
 fi

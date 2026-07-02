@@ -23,9 +23,14 @@ echo "Building yaml-exc-trace tests..."
 cmake --build "$BUILD_DIR"
 
 # Verify test executable exists
-TEST_BIN="$BUILD_DIR/yaml-exc-trace-test"
-if [[ ! -x "$TEST_BIN" ]]; then
+TEST_BIN="$(resolve_test_exe "$BUILD_DIR/yaml-exc-trace-test" || true)"
+DEBUG_TEST_BIN="$(resolve_test_exe "$BUILD_DIR/dump_debug_info_test" || true)"
+if [[ -z "$TEST_BIN" || ! -x "$TEST_BIN" ]]; then
   echo -e "${RED}✗ Failed to build yaml-exc-trace-test${NC}"
+  exit 1
+fi
+if [[ -z "$DEBUG_TEST_BIN" || ! -x "$DEBUG_TEST_BIN" ]]; then
+  echo -e "${RED}✗ Failed to build dump_debug_info_test${NC}"
   exit 1
 fi
 
@@ -34,7 +39,7 @@ echo
 
 # Run the test
 echo "Running dump_debug_info_test..."
-if "$BUILD_DIR/dump_debug_info_test" "$@"; then
+if "$DEBUG_TEST_BIN" "$@"; then
   echo
   echo -e "${GREEN}✓ dump_debug_info_test passed!${NC}"
 else

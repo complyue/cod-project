@@ -23,8 +23,8 @@ class TranslationUnitDecl;
 
 namespace cod {
 
-std::vector<std::string> &&CompilerArgs(std::vector<std::string> &&compiler_args);
-std::vector<std::string> &&LinkerArgs(std::vector<std::string> &&linker_args);
+std::vector<std::string> CompilerArgs(std::vector<std::string> compiler_args);
+std::vector<std::string> LinkerArgs(std::vector<std::string> linker_args);
 
 namespace cache {
 
@@ -58,7 +58,7 @@ struct CacheEntry {
 // Regional version of CacheKey for zero-copy storage
 class regional_cache_key final {
 public:
-  static inline const UUID TYPE_UUID = UUID("12345678-1234-5678-9abc-123456789001");
+  static inline const shilos::UUID TYPE_UUID = shilos::UUID("12345678-1234-5678-9abc-123456789001");
 
 private:
   regional_str toolchain_version_;
@@ -106,7 +106,7 @@ public:
 // Regional version of CacheEntry for zero-copy storage
 class regional_cache_entry final {
 public:
-  static inline const UUID TYPE_UUID = UUID("12345678-1234-5678-9abc-123456789002");
+  static inline const shilos::UUID TYPE_UUID = shilos::UUID("12345678-1234-5678-9abc-123456789002");
 
 private:
   regional_ptr<regional_cache_key> key_;
@@ -154,7 +154,7 @@ struct regional_cache_stats final {
 // Root type for BuildCache DBMR
 class BuildCacheRoot final {
 public:
-  static inline const UUID TYPE_UUID = UUID("12345678-1234-5678-9abc-123456789003");
+  static inline const shilos::UUID TYPE_UUID = shilos::UUID("12345678-1234-5678-9abc-123456789003");
 
 private:
   regional_str project_root_path_;

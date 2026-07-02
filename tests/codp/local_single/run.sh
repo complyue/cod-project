@@ -32,6 +32,9 @@ YAMLCMP_BIN="$(command -v yaml-cmp || true)"
 if [[ -z "$YAMLCMP_BIN" ]]; then
   # Fallback to build dir of yaml-cmp standalone test
   YAMLCMP_BIN="$PROJECT_ROOT/tests/yaml-cmp/build/yaml-cmp"
+  if [[ ! -x "$YAMLCMP_BIN" && -x "$YAMLCMP_BIN.exe" ]]; then
+    YAMLCMP_BIN="$YAMLCMP_BIN.exe"
+  fi
 fi
 if [[ ! -x "$YAMLCMP_BIN" ]]; then
   echo "yaml-cmp not found – build tests/yaml-cmp first" >&2

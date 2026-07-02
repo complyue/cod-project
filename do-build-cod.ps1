@@ -9,6 +9,7 @@ param(
     [int]$Jobs = [Math]::Max(1, [Environment]::ProcessorCount - 2),
     [switch]$NoPull,
     [switch]$EnableLLDB,
+    [switch]$VerifyStage3SelfHost,
     [switch]$KeepBootstrap
 )
 
@@ -310,6 +311,30 @@ function Repair-MsvcDepsPrefix {
     }
 }
 
+function Repair-ClangClResourceRules {
+    param([Parameter(Mandatory)] [string]$BuildDir)
+
+    $rulesPath = Join-Path $BuildDir "CMakeFiles\rules.ninja"
+    if (-not (Test-Path -LiteralPath $rulesPath -PathType Leaf)) {
+        return
+    }
+
+    $content = [System.IO.File]::ReadAllText($rulesPath)
+    $updated = $content.Replace(
+        '$FLAGS -clang:-MD -clang:-MF -clang:$DEP_FILE /fo',
+        '$FLAGS /fo'
+    )
+    $updated = $updated.Replace(
+        ' -E -- $in ++',
+        ' /EP -- $in ++'
+    )
+
+    if ($updated -ne $content) {
+        Write-Utf8NoBomFile $rulesPath $updated
+        Write-Host "Repaired clang-cl resource compiler dep flags in generated Ninja rules."
+    }
+}
+
 function Assert-CMakeCompiler {
     param(
         [Parameter(Mandatory)] [string]$BuildDir,
@@ -405,6 +430,7 @@ $BuildDir = Join-Path $script:SourceDir "build"
 $BootstrapDir = Join-Path $BuildDir ".bootstrap"
 $Stage1Dir = Join-Path $BootstrapDir "stage1"
 $Stage2Dir = Join-Path $BootstrapDir "stage2"
+$Stage3SelfHostDir = Join-Path $BootstrapDir "stage3-selfhost"
 $Stage2InstallDir = Join-Path $BuildDir "cod"
 $FinalInstallDir = Join-Path $script:SourceDir "built"
 $LlvmProjectDir = Join-Path $script:SourceDir "llvm-project"
@@ -480,10 +506,20 @@ $CommonCMakeArgs = @(
     "-DCMAKE_RC_COMPILER=rc.exe"
 )
 
-Write-Step "Stage 1: build Clang/LLD with MSVC"
 $Stage1ClangCl = Join-Path $Stage1Dir "bin\clang-cl.exe"
 $Stage1LldLink = Join-Path $Stage1Dir "bin\lld-link.exe"
-if (-not ((Test-Executable $Stage1ClangCl) -and (Test-Executable $Stage1LldLink))) {
+$Stage2Cod = Join-Path $Stage2InstallDir "bin\cod.exe"
+$Stage2ClangCl = Join-Path $Stage2InstallDir "bin\clang-cl.exe"
+$Stage2LldLink = Join-Path $Stage2InstallDir "bin\lld-link.exe"
+$Stage2Ready = (Test-Executable $Stage2Cod) -and
+    (Test-Executable $Stage2ClangCl) -and
+    (Test-Executable $Stage2LldLink)
+
+Write-Step "Stage 1: build Clang/LLD with MSVC"
+if ($Stage2Ready) {
+    Write-Host "Stage 2 install already has $Stage2Cod, $Stage2ClangCl, and $Stage2LldLink"
+    Write-Host "Skipping transient stage 1."
+} elseif (-not ((Test-Executable $Stage1ClangCl) -and (Test-Executable $Stage1LldLink))) {
     Ensure-Directory $Stage1Dir
     $stage1Args = @(
         "-B", $Stage1Dir,
@@ -497,16 +533,14 @@ if (-not ((Test-Executable $Stage1ClangCl) -and (Test-Executable $Stage1LldLink)
     ) + $CommonCMakeArgs
     Invoke-CMakeConfigure $CMake $stage1Args
     Repair-MsvcDepsPrefix $Stage1Dir
+    Repair-ClangClResourceRules $Stage1Dir
     Invoke-CMakeBuild $CMake $Stage1Dir @("clang", "lld")
 } else {
     Write-Host "Stage 1 already has $Stage1ClangCl and $Stage1LldLink"
 }
 
 Write-Step "Stage 2: build/install bootstrap CoD toolchain with stage 1 Clang"
-$Stage2Cod = Join-Path $Stage2InstallDir "bin\cod.exe"
-$Stage2ClangCl = Join-Path $Stage2InstallDir "bin\clang-cl.exe"
-$Stage2LldLink = Join-Path $Stage2InstallDir "bin\lld-link.exe"
-if (-not ((Test-Executable $Stage2Cod) -and (Test-Executable $Stage2ClangCl) -and (Test-Executable $Stage2LldLink))) {
+if (-not $Stage2Ready) {
     Ensure-Directory $Stage2Dir
     $stage2Args = @(
         "-B", $Stage2Dir,
@@ -524,8 +558,10 @@ if (-not ((Test-Executable $Stage2Cod) -and (Test-Executable $Stage2ClangCl) -an
     ) + $CommonCMakeArgs
     Invoke-CMakeConfigure $CMake $stage2Args
     Repair-MsvcDepsPrefix $Stage2Dir
+    Repair-ClangClResourceRules $Stage2Dir
     Invoke-CMakeBuild $CMake $Stage2Dir
     Invoke-CMakeBuild $CMake $Stage2Dir @("install")
+    $Stage2Ready = $true
 } else {
     Write-Host "Stage 2 install already has $Stage2Cod, $Stage2ClangCl, and $Stage2LldLink"
 }
@@ -550,8 +586,39 @@ $stage3Args = @(
 ) + $CommonCMakeArgs
 Invoke-CMakeConfigure $CMake $stage3Args
 Repair-MsvcDepsPrefix $BuildDir
+Repair-ClangClResourceRules $BuildDir
 Invoke-CMakeBuild $CMake $BuildDir
 Invoke-CMakeBuild $CMake $BuildDir @("install")
+
+if ($VerifyStage3SelfHost) {
+    Write-Step "Stage 4: verify stage 3 toolchain can self-build"
+    $Stage3ClangCl = Join-Path $FinalInstallDir "bin\clang-cl.exe"
+    $Stage3LldLink = Join-Path $FinalInstallDir "bin\lld-link.exe"
+    if (-not ((Test-Executable $Stage3ClangCl) -and (Test-Executable $Stage3LldLink))) {
+        throw "Stage 3 installed toolchain is incomplete. Expected $Stage3ClangCl and $Stage3LldLink."
+    }
+
+    Assert-CMakeCompiler $Stage3SelfHostDir $Stage3ClangCl
+    Ensure-Directory $Stage3SelfHostDir
+    $stage4Args = @(
+        "-B", $Stage3SelfHostDir,
+        "-DCMAKE_INSTALL_PREFIX=$(Join-Path $BootstrapDir 'stage3-selfhost-install')",
+        "-DCMAKE_SYSTEM_PREFIX_PATH=$FinalInstallDir",
+        "-DCMAKE_C_COMPILER=$Stage3ClangCl",
+        "-DCMAKE_CXX_COMPILER=$Stage3ClangCl",
+        "-DCMAKE_LINKER=$Stage3LldLink",
+        "-DLLVM_USE_LINKER=lld",
+        "-DLLVM_EXTERNAL_PROJECTS=cod",
+        "-DLLVM_EXTERNAL_COD_SOURCE_DIR=$script:SourceDir",
+        "-DLLVM_TARGETS_TO_BUILD=$TargetsToBuild",
+        "-DCMAKE_BUILD_TYPE=$BuildType",
+        "-DLLVM_ENABLE_PROJECTS=$finalProjects"
+    ) + $CommonCMakeArgs
+    Invoke-CMakeConfigure $CMake $stage4Args
+    Repair-MsvcDepsPrefix $Stage3SelfHostDir
+    Repair-ClangClResourceRules $Stage3SelfHostDir
+    Invoke-CMakeBuild $CMake $Stage3SelfHostDir
+}
 
 if (-not $KeepBootstrap) {
     Write-Step "Cleaning transient bootstrap build trees"
@@ -560,6 +627,9 @@ if (-not $KeepBootstrap) {
     }
     if (Test-Path -LiteralPath $Stage2Dir) {
         Remove-GeneratedTree $Stage2Dir
+    }
+    if (Test-Path -LiteralPath $Stage3SelfHostDir) {
+        Remove-GeneratedTree $Stage3SelfHostDir
     }
 }
 

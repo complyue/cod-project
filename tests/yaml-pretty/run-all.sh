@@ -69,15 +69,22 @@ setup_build_dir "$BUILD_DIR" "$SCRIPT_DIR"
 # Build yaml-pretty
 echo "Building yaml-pretty..."
 cmake --build "$BUILD_DIR"
-YAML_PRETTY_BIN="$BUILD_DIR/yaml-pretty"
+YAML_PRETTY_BIN="$(resolve_test_exe "$BUILD_DIR/yaml-pretty" || true)"
 
-if [[ ! -x "$YAML_PRETTY_BIN" ]]; then
+if [[ -z "$YAML_PRETTY_BIN" || ! -x "$YAML_PRETTY_BIN" ]]; then
   echo -e "${RED}✗ Failed to build yaml-pretty${NC}"
   exit 1
 fi
 
 echo -e "${GREEN}✓ yaml-pretty built successfully${NC}"
 echo
+
+text_files_equal() {
+  local expected="$1"
+  local actual="$2"
+
+  cmp -s "$expected" "$actual" || diff -q --strip-trailing-cr "$expected" "$actual" >/dev/null 2>&1
+}
 
 # Test function for ugly->pretty transformation
 test_ugly_to_pretty() {
@@ -99,7 +106,7 @@ test_ugly_to_pretty() {
   fi
   
   # Compare with expected pretty file
-  if cmp -s "$temp_output" "$pretty_file"; then
+  if text_files_equal "$pretty_file" "$temp_output"; then
     echo -e "${GREEN}PASS${NC}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
     local result=0
@@ -109,7 +116,7 @@ test_ugly_to_pretty() {
     echo "  Expected: $pretty_file"
     echo "  Actual output differs"
     echo "  --- DIFF (expected vs actual) ---"
-    diff -u "$pretty_file" "$temp_output" || true
+    diff -u --strip-trailing-cr "$pretty_file" "$temp_output" || true
     echo "  --- END DIFF ---"
     if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
       echo "  --- EXPECTED CONTENT ---"
@@ -144,7 +151,7 @@ test_pretty_idempotency() {
   fi
   
   # Compare with original pretty file - should be identical
-  if cmp -s "$temp_output" "$pretty_file"; then
+  if text_files_equal "$pretty_file" "$temp_output"; then
     echo -e "${GREEN}PASS${NC}"
     TESTS_PASSED=$((TESTS_PASSED + 1))
     local result=0
@@ -154,7 +161,7 @@ test_pretty_idempotency() {
     echo "  Input: $pretty_file"
     echo "  Output differs from input - not idempotent!"
     echo "  --- DIFF (original vs after pretty-print) ---"
-    diff -u "$pretty_file" "$temp_output" || true
+    diff -u --strip-trailing-cr "$pretty_file" "$temp_output" || true
     echo "  --- END DIFF ---"
     if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
       echo "  --- ORIGINAL CONTENT ---"

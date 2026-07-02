@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <map>
 
 #ifdef _WIN32
 #define COD_POPEN _popen
@@ -67,7 +68,7 @@ int cmd_solve(int argc, char **argv, int argi, const fs::path &project_path) {
 
     // Collect dependencies recursively using temporary data structures
     std::unordered_set<std::string> visited;
-    std::unordered_map<std::string, std::string> locals;                           // uuid -> path
+    std::map<std::string, std::string> locals;                                     // uuid -> path
     std::vector<std::tuple<UUID, std::string, std::string, std::string>> resolved; // uuid, repo_url, branch, commit
 
     std::function<void(const fs::path &, const CodProject *)> collect_deps = [&](const fs::path &proj_dir,
@@ -87,7 +88,7 @@ int cmd_solve(int argc, char **argv, int argi, const fs::path &project_path) {
 
           // Store relative path from project root
           fs::path relative_path = fs::relative(dep_path, project_path);
-          locals[uuid_str] = relative_path.string();
+          locals[uuid_str] = relative_path.generic_string();
 
           // Load and recurse into dep project
           fs::path dep_yaml_path = dep_path / "CodProject.yaml";

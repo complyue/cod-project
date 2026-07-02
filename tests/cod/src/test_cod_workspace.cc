@@ -7,18 +7,30 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 #include <vector>
 
 #include "cod.hh"
 #include "cod_cache.hh"
 #include "shilos.hh"
+
+#define TEST_ASSERT(condition)                                                                                        \
+  do {                                                                                                                \
+    if (!(condition)) {                                                                                               \
+      throw std::runtime_error("Assertion failed: " #condition);                                                      \
+    }                                                                                                                 \
+  } while (0)
 
 namespace fs = std::filesystem;
 using namespace shilos;
@@ -31,6 +43,104 @@ struct CodResult {
   std::string stderr_output;
 };
 
+#ifdef _WIN32
+std::wstring widenArg(const std::string &value) {
+  return std::wstring(value.begin(), value.end());
+}
+
+std::wstring quoteWindowsArg(const std::wstring &value) {
+  if (value.empty()) {
+    return L"\"\"";
+  }
+
+  bool needs_quotes = false;
+  for (wchar_t ch : value) {
+    if (ch == L' ' || ch == L'\t' || ch == L'\n' || ch == L'"') {
+      needs_quotes = true;
+      break;
+    }
+  }
+
+  if (!needs_quotes) {
+    return value;
+  }
+
+  std::wstring quoted = L"\"";
+  size_t backslashes = 0;
+  for (wchar_t ch : value) {
+    if (ch == L'\\') {
+      ++backslashes;
+    } else if (ch == L'"') {
+      quoted.append(backslashes * 2 + 1, L'\\');
+      quoted.push_back(ch);
+      backslashes = 0;
+    } else {
+      quoted.append(backslashes, L'\\');
+      backslashes = 0;
+      quoted.push_back(ch);
+    }
+  }
+  quoted.append(backslashes * 2, L'\\');
+  quoted.push_back(L'"');
+  return quoted;
+}
+
+CodResult runCod(const std::vector<std::string> &args, const fs::path &cwd = fs::current_path()) {
+  SECURITY_ATTRIBUTES security_attributes{};
+  security_attributes.nLength = sizeof(security_attributes);
+  security_attributes.bInheritHandle = TRUE;
+
+  HANDLE output_read = nullptr;
+  HANDLE output_write = nullptr;
+  if (!CreatePipe(&output_read, &output_write, &security_attributes, 0)) {
+    throw std::runtime_error("Failed to create output pipe");
+  }
+  SetHandleInformation(output_read, HANDLE_FLAG_INHERIT, 0);
+
+  std::wstring command_line = L"cod.exe";
+  for (const auto &arg : args) {
+    command_line.push_back(L' ');
+    command_line += quoteWindowsArg(widenArg(arg));
+  }
+
+  std::vector<wchar_t> command_buffer(command_line.begin(), command_line.end());
+  command_buffer.push_back(L'\0');
+
+  STARTUPINFOW startup_info{};
+  startup_info.cb = sizeof(startup_info);
+  startup_info.dwFlags = STARTF_USESTDHANDLES;
+  startup_info.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+  startup_info.hStdOutput = output_write;
+  startup_info.hStdError = output_write;
+
+  PROCESS_INFORMATION process_info{};
+  auto cwd_wide = cwd.wstring();
+  BOOL created = CreateProcessW(nullptr, command_buffer.data(), nullptr, nullptr, TRUE, 0, nullptr, cwd_wide.c_str(),
+                                &startup_info, &process_info);
+  CloseHandle(output_write);
+
+  if (!created) {
+    CloseHandle(output_read);
+    throw std::runtime_error("Failed to start cod.exe");
+  }
+
+  std::string combined_output;
+  char buffer[4096];
+  DWORD bytes_read = 0;
+  while (ReadFile(output_read, buffer, sizeof(buffer), &bytes_read, nullptr) && bytes_read > 0) {
+    combined_output.append(buffer, bytes_read);
+  }
+  CloseHandle(output_read);
+
+  WaitForSingleObject(process_info.hProcess, INFINITE);
+  DWORD exit_code = 0;
+  GetExitCodeProcess(process_info.hProcess, &exit_code);
+  CloseHandle(process_info.hThread);
+  CloseHandle(process_info.hProcess);
+
+  return {static_cast<int>(exit_code), combined_output, ""};
+}
+#else
 CodResult runCod(const std::vector<std::string> &args, const fs::path &cwd = fs::current_path()) {
   // Create pipes for stdout and stderr
   int stdout_pipe[2], stderr_pipe[2];
@@ -96,6 +206,7 @@ CodResult runCod(const std::vector<std::string> &args, const fs::path &cwd = fs:
     throw std::runtime_error("Failed to fork");
   }
 }
+#endif
 
 // Create a minimal test project setup
 fs::path createTestProject() {
@@ -134,7 +245,7 @@ void testWorkspaceCreation() {
 
   // Ensure workspace doesn't exist initially
   fs::remove(works_path);
-  assert(!fs::exists(works_path));
+  TEST_ASSERT(!fs::exists(works_path));
 
   // Run cod with eval to trigger workspace creation
   auto result = runCod({"--project", project_dir.string(), "-w", works_path.string(), "-e", "int x = 1;"}, project_dir);
@@ -145,7 +256,7 @@ void testWorkspaceCreation() {
 
     // Check file size is reasonable (should be > 0)
     auto file_size = fs::file_size(works_path);
-    assert(file_size > 0);
+    TEST_ASSERT(file_size > 0);
     std::cout << "  ✓ Workspace file has content (" << file_size << " bytes)\n";
   }
 
@@ -171,12 +282,12 @@ void testWorkspaceReuse() {
         runCod({"--project", project_dir.string(), "-w", works_path.string(), "-e", "int y = 2;"}, project_dir);
 
     // Workspace should still exist
-    assert(fs::exists(works_path));
+    TEST_ASSERT(fs::exists(works_path));
     std::cout << "  ✓ Workspace persisted across runs\n";
 
     // Size might change, but file should still be valid
     auto final_size = fs::file_size(works_path);
-    assert(final_size > 0);
+    TEST_ASSERT(final_size > 0);
     std::cout << "  ✓ Workspace remains valid after reuse\n";
   }
 
@@ -223,12 +334,12 @@ void testWorksRootType() {
 
       // Verify TYPE_UUID is accessible
       const auto &uuid = WorksRoot::TYPE_UUID;
-      assert(!uuid.to_string().empty());
+      TEST_ASSERT(!uuid.to_string().empty());
       std::cout << "  ✓ WorksRoot TYPE_UUID accessible: " << uuid.to_string() << "\n";
 
       // Verify root object exists
       auto root = dbmr.region().root();
-      assert(root.get() != nullptr);
+      TEST_ASSERT(root.get() != nullptr);
       std::cout << "  ✓ WorksRoot object created successfully\n";
     }
 
@@ -251,7 +362,7 @@ void testWorkspaceDirectoryCreation() {
 
   // Ensure nested directory doesn't exist
   fs::remove_all(nested_dir);
-  assert(!fs::exists(nested_dir));
+  TEST_ASSERT(!fs::exists(nested_dir));
 
   // Run cod with workspace in nested directory
   auto result = runCod({"--project", project_dir.string(), "-w", works_path.string(), "-e", "int x = 1;"}, project_dir);

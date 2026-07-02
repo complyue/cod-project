@@ -28,15 +28,15 @@ setup_build_dir "$BUILD_DIR" "$SCRIPT_DIR"
 # Build yaml-cmp and authoring tests
 echo "Building yaml-cmp and authoring tests..."
 cmake --build "$BUILD_DIR"
-YAMLCMP_BIN="$BUILD_DIR/yaml-cmp"
-AUTHORING_TEST_BIN="$BUILD_DIR/test_yaml_authoring"
+YAMLCMP_BIN="$(resolve_test_exe "$BUILD_DIR/yaml-cmp" || true)"
+AUTHORING_TEST_BIN="$(resolve_test_exe "$BUILD_DIR/test_yaml_authoring" || true)"
 
-if [[ ! -x "$YAMLCMP_BIN" ]]; then
+if [[ -z "$YAMLCMP_BIN" || ! -x "$YAMLCMP_BIN" ]]; then
   echo -e "${RED}✗ Failed to build yaml-cmp${NC}"
   exit 1
 fi
 
-if [[ ! -x "$AUTHORING_TEST_BIN" ]]; then
+if [[ -z "$AUTHORING_TEST_BIN" || ! -x "$AUTHORING_TEST_BIN" ]]; then
   echo -e "${RED}✗ Failed to build test_yaml_authoring${NC}"
   exit 1
 fi

@@ -410,36 +410,49 @@ int main() {
 
   auto source_path = createTestSource(temp_dir, code);
   auto bitcode_path = temp_dir / "test.bc";
+#ifdef _WIN32
+  auto executable_path = temp_dir / "test_exe.exe";
+#else
   auto executable_path = temp_dir / "test_exe";
+#endif
 
   BitcodeCompiler compiler;
   std::vector<std::string> compiler_args = cod::CompilerArgs({"-std=c++20", "-O2"});
 
   // Compile to bitcode
   bool compiled = compiler.compile_to_bitcode(source_path, bitcode_path, compiler_args);
-  assert(compiled);
-  assert(fs::exists(bitcode_path));
+  TEST_ASSERT(compiled, "Bitcode compilation should succeed");
+  TEST_ASSERT(fs::exists(bitcode_path), "Generated bitcode file should exist");
 
   // Link bitcode to executable
   std::vector<fs::path> bitcode_files = {bitcode_path};
-  // Add rpath to find libc++abi.1.dylib in the toolchain directory
-  // Use relative path from current working directory to avoid hardcoding
+#ifdef _WIN32
+  std::vector<std::string> linker_args;
+#else
+  // Add rpath to find libc++abi.1.dylib in the toolchain directory.
   std::string project_root = std::filesystem::current_path().parent_path().parent_path();
   std::vector<std::string> linker_args = cod::LinkerArgs({"-Wl,-rpath," + project_root + "/build/lib"});
+#endif
 
   bool linked = compiler.link_bitcode(bitcode_files, executable_path, linker_args);
   TEST_ASSERT(linked, "Bitcode linking should succeed");
   TEST_ASSERT(fs::exists(executable_path), "Linked executable should exist on disk");
 
   // Test execution (basic check)
-  std::string cmd = executable_path.string() + " > " + (temp_dir / "output.txt").string();
+  auto output_path = temp_dir / "output.txt";
+#ifdef _WIN32
+  std::string cmd = "cmd.exe /S /C \"\"" + executable_path.string() + "\" > \"" + output_path.string() + "\"\"";
+#else
+  std::string cmd = "\"" + executable_path.string() + "\" > \"" + output_path.string() + "\"";
+#endif
   int result = std::system(cmd.c_str());
   TEST_ASSERT(result == 0, "Executable should run successfully");
 
   // Check output
-  std::ifstream output_file(temp_dir / "output.txt");
+  std::ifstream output_file(output_path);
   std::string output;
   std::getline(output_file, output);
+  output_file.close();
   TEST_ASSERT(output.find("Hello, Bitcode!") != std::string::npos, "Executable output should contain expected text");
 
   // Cleanup
@@ -456,32 +469,34 @@ void testCacheCleanup(bool verbose) {
   auto project_root = temp_dir / "project";
   fs::create_directories(project_root);
 
-  BuildCache cache(project_root, verbose);
+  {
+    BuildCache cache(project_root, verbose);
 
-  // Create and cache multiple files
-  for (int i = 0; i < 3; ++i) {
-    std::string code =
-        "#include <iostream>\nint main() { std::cout << " + std::to_string(i) + " << std::endl; return 0; }";
-    auto source_path = createTestSource(project_root, code, "test" + std::to_string(i) + ".cc");
+    // Create and cache multiple files
+    for (int i = 0; i < 3; ++i) {
+      std::string code =
+          "#include <iostream>\nint main() { std::cout << " + std::to_string(i) + " << std::endl; return 0; }";
+      auto source_path = createTestSource(project_root, code, "test" + std::to_string(i) + ".cc");
 
-    std::vector<std::string> compiler_args = {"-std=c++20"};
-    auto bitcode_path = cache.generate_bitcode(source_path, compiler_args);
-    if (bitcode_path) {
-      cache.store(source_path, *bitcode_path, compiler_args, "cleanup_test");
+      std::vector<std::string> compiler_args = {"-std=c++20"};
+      auto bitcode_path = cache.generate_bitcode(source_path, compiler_args);
+      if (bitcode_path) {
+        cache.store(source_path, *bitcode_path, compiler_args, "cleanup_test");
+      }
     }
+
+    auto stats_before = cache.get_stats();
+    TEST_ASSERT(stats_before.total_entries > 0, "Cache should have entries before cleanup");
+
+    // Clean up with very short max age (should remove all entries)
+    cache.cleanup_expired(std::chrono::hours(0));
+
+    auto stats_after = cache.get_stats();
+    // Note: Some entries might still exist if they're valid and recently created
+
+    std::cout << "  Entries before cleanup: " << stats_before.total_entries << std::endl;
+    std::cout << "  Entries after cleanup: " << stats_after.total_entries << std::endl;
   }
-
-  auto stats_before = cache.get_stats();
-  TEST_ASSERT(stats_before.total_entries > 0, "Cache should have entries before cleanup");
-
-  // Clean up with very short max age (should remove all entries)
-  cache.cleanup_expired(std::chrono::hours(0));
-
-  auto stats_after = cache.get_stats();
-  // Note: Some entries might still exist if they're valid and recently created
-
-  std::cout << "  Entries before cleanup: " << stats_before.total_entries << std::endl;
-  std::cout << "  Entries after cleanup: " << stats_after.total_entries << std::endl;
 
   // Cleanup
   fs::remove_all(temp_dir);

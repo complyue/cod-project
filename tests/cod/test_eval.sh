@@ -19,6 +19,9 @@ else
 fi
 
 # Check if cod executable exists
+if [[ ! -x "$COD_EXECUTABLE" && -x "$COD_EXECUTABLE.exe" ]]; then
+    COD_EXECUTABLE="$COD_EXECUTABLE.exe"
+fi
 if [[ ! -x "$COD_EXECUTABLE" ]]; then
     echo "Error: cod executable not found at $COD_EXECUTABLE"
     echo "Make sure to build the project first with: cmake --build ./build"
@@ -42,16 +45,16 @@ log_test() {
 
 log_pass() {
     echo -e "${GREEN}✓ $1${NC}"
-    ((PASS_COUNT++))
+    ((PASS_COUNT += 1))
 }
 
 log_fail() {
     echo -e "${RED}✗ $1${NC}"
-    ((FAIL_COUNT++))
+    ((FAIL_COUNT += 1))
 }
 
 run_test() {
-    ((TEST_COUNT++))
+    ((TEST_COUNT += 1))
 }
 
 # Get test project path for evaluation tests

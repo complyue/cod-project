@@ -16,14 +16,25 @@ COD_PROJECT_SRC_ROOT="$(
 # Prepend both build/ and built/ bin directories to PATH
 export PATH="${COD_PROJECT_SRC_ROOT}/build/bin:${COD_PROJECT_SRC_ROOT}/built/bin:${PATH}"
 
+resolve_test_exe() {
+  if [ -x "$1" ]; then
+    printf '%s\n' "$1"
+    return 0
+  fi
+
+  if [ -x "$1.exe" ]; then
+    printf '%s\n' "$1.exe"
+    return 0
+  fi
+
+  return 1
+}
 
 # Function to configure build directory for components to be built with CMake
 setup_build_dir() {
   local build_dir="$1"
   local script_dir="$2"
   
-  if [ ! -f "$build_dir/Build.ninja" ]; then
-    mkdir -p "$build_dir"
-    cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B "$build_dir" "$script_dir"
-  fi
+  mkdir -p "$build_dir"
+  cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B "$build_dir" "$script_dir"
 }

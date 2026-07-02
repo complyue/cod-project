@@ -22,16 +22,16 @@ log_test() {
 
 log_pass() {
     echo -e "${GREEN}✓ $1${NC}"
-    ((PASS_COUNT++))
+    ((PASS_COUNT += 1))
 }
 
 log_fail() {
     echo -e "${RED}✗ $1${NC}"
-    ((FAIL_COUNT++))
+    ((FAIL_COUNT += 1))
 }
 
 run_test() {
-    ((TEST_COUNT++))
+    ((TEST_COUNT += 1))
 }
 
 # Set default COD_TEST_TOOLCHAIN if not already set
@@ -39,11 +39,9 @@ export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
 
 echo "🔧 Using toolchain mode: $COD_TEST_TOOLCHAIN"
 
-# Configure (only once)
-if [[ ! -f "$BUILD_DIR/Build.ninja" && ! -f "$BUILD_DIR/Makefile" ]]; then
-  mkdir -p "$BUILD_DIR"
-  cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B "$BUILD_DIR" "$SCRIPT_DIR"
-fi
+# Configure
+mkdir -p "$BUILD_DIR"
+cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B "$BUILD_DIR" "$SCRIPT_DIR"
 
 # Build (incremental)
 cmake --build "$BUILD_DIR"

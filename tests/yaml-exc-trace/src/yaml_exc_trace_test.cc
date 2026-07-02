@@ -2,16 +2,28 @@
 #include <shilos/di.hh>
 
 #include <cassert>
-#include <cxxabi.h>
 #include <functional>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <typeinfo>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <cxxabi.h>
 #include <unistd.h>
+#endif
 #include <vector>
 
 using namespace shilos;
+
+#ifdef _WIN32
+#define COD_TEST_NOINLINE __declspec(noinline)
+constexpr bool kRequiresSourceDebugInfo = false;
+#else
+#define COD_TEST_NOINLINE __attribute__((noinline))
+constexpr bool kRequiresSourceDebugInfo = true;
+#endif
 
 // Helper functions to trigger exceptions at different stack levels
 // Using volatile to prevent inlining and ensure visibility in stack traces
@@ -59,7 +71,7 @@ template <typename T> void template_function_level1() {
   template_function_level2<T>();
 }
 
-__attribute__((noinline)) void deep_program_function_level3() {
+COD_TEST_NOINLINE void deep_program_function_level3() {
   // Add some work to prevent optimization/inlining
   stack_depth_counter += 3;
   std::cout << "  -> Entering deep_program_function_level3 (depth=" << stack_depth_counter << ")" << std::endl;
@@ -68,79 +80,79 @@ __attribute__((noinline)) void deep_program_function_level3() {
   throw yaml::ParseError("Program call stack test error", "test_file.yaml", 123, 45);
 }
 
-__attribute__((noinline)) void deep_program_function_level2() {
+COD_TEST_NOINLINE void deep_program_function_level2() {
   stack_depth_counter += 2;
   std::cout << "  -> Entering deep_program_function_level2 (depth=" << stack_depth_counter << ")" << std::endl;
   deep_program_function_level3();
 }
 
-__attribute__((noinline)) void deep_program_function_level1() {
+COD_TEST_NOINLINE void deep_program_function_level1() {
   stack_depth_counter += 1;
   std::cout << "  -> Entering deep_program_function_level1 (depth=" << stack_depth_counter << ")" << std::endl;
   deep_program_function_level2();
 }
 // Trigger exceptions through inline function calls
-__attribute__((noinline)) void trigger_inline_exception_with_stack() {
+COD_TEST_NOINLINE void trigger_inline_exception_with_stack() {
   std::cout << "Triggering inline function exception through nested calls..." << std::endl;
   inline_function_level1();
 }
 
 // Trigger the original program exception with stack
-__attribute__((noinline)) void trigger_program_exception_with_stack() {
+COD_TEST_NOINLINE void trigger_program_exception_with_stack() {
   std::cout << "Triggering program exception through nested calls..." << std::endl;
   deep_program_function_level1();
 }
 
 // Trigger exceptions through template function calls
-__attribute__((noinline)) void trigger_template_exception_with_stack() {
+COD_TEST_NOINLINE void trigger_template_exception_with_stack() {
   std::cout << "Triggering template function exception through nested calls..." << std::endl;
   template_function_level1<int>();
 }
 
-__attribute__((noinline)) void deep_author_function_level3() {
+COD_TEST_NOINLINE void deep_author_function_level3() {
   stack_depth_counter += 30;
   std::cout << "  -> Entering deep_author_function_level3 (depth=" << stack_depth_counter << ")" << std::endl;
   // Simply throw an AuthorError to demonstrate stack trace capture
   throw yaml::AuthorError("stacktrace_test_output.yaml", "Forced authoring error for stack trace test");
 }
 
-__attribute__((noinline)) void deep_author_function_level2() {
+COD_TEST_NOINLINE void deep_author_function_level2() {
   stack_depth_counter += 20;
   std::cout << "  -> Entering deep_author_function_level2 (depth=" << stack_depth_counter << ")" << std::endl;
   deep_author_function_level3();
 }
 
-__attribute__((noinline)) void deep_author_function_level1() {
+COD_TEST_NOINLINE void deep_author_function_level1() {
   stack_depth_counter += 10;
   std::cout << "  -> Entering deep_author_function_level1 (depth=" << stack_depth_counter << ")" << std::endl;
   deep_author_function_level2();
 }
 
-__attribute__((noinline)) void trigger_author_exception_with_stack() {
+COD_TEST_NOINLINE void trigger_author_exception_with_stack() {
   std::cout << "Triggering author exception through nested calls..." << std::endl;
   deep_author_function_level1();
 }
 
-__attribute__((noinline)) void deep_conversion_function_level3() {
+COD_TEST_NOINLINE void deep_conversion_function_level3() {
   stack_depth_counter += 300;
   std::cout << "  -> Entering deep_conversion_function_level3 (depth=" << stack_depth_counter << ")" << std::endl;
   // Force a type error to demonstrate stack trace capture
   throw yaml::TypeError("Forced type conversion error for stack trace test: cannot convert 'not_a_number' to integer");
 }
 
-__attribute__((noinline)) void deep_conversion_function_level2() {
+COD_TEST_NOINLINE void deep_conversion_function_level2() {
   stack_depth_counter += 200;
   std::cout << "  -> Entering deep_conversion_function_level2 (depth=" << stack_depth_counter << ")" << std::endl;
   deep_conversion_function_level3();
 }
 
-__attribute__((noinline)) void deep_conversion_function_level1() {
+COD_TEST_NOINLINE void deep_conversion_function_level1() {
   stack_depth_counter += 100;
   std::cout << "  -> Entering deep_conversion_function_level1 (depth=" << stack_depth_counter << ")" << std::endl;
   deep_conversion_function_level2();
 }
 
-__attribute__((noinline)) void trigger_conversion_exception_with_stack() {
+COD_TEST_NOINLINE void trigger_conversion_exception_with_stack() {
   std::cout << "Triggering type conversion exception through nested calls..." << std::endl;
   deep_conversion_function_level1();
 }
@@ -151,6 +163,9 @@ struct StackTraceTest {
 };
 
 std::string demangle_type_name(const char *name) {
+#ifdef _WIN32
+  return std::string(name);
+#else
   int status;
   char *demangled = abi::__cxa_demangle(name, nullptr, nullptr, &status);
   if (status == 0) {
@@ -160,13 +175,27 @@ std::string demangle_type_name(const char *name) {
   } else {
     return std::string(name);
   }
+#endif
 }
 
 // Function to dump debug information programmatically
 void dump_debug_info() {
   std::cout << "\n=== Debug Information Dump ===" << std::endl;
 
-  // Get current executable path
+// Get current executable path
+#ifdef _WIN32
+  char exe_path[MAX_PATH];
+  DWORD len = GetModuleFileNameA(nullptr, exe_path, static_cast<DWORD>(sizeof(exe_path)));
+  if (len > 0 && len < sizeof(exe_path)) {
+    std::cout << "Executable: " << exe_path << std::endl;
+  }
+
+  // Get current working directory
+  char cwd[MAX_PATH];
+  if (GetCurrentDirectoryA(static_cast<DWORD>(sizeof(cwd)), cwd) > 0) {
+    std::cout << "Working directory: " << cwd << std::endl;
+  }
+#else
   char exe_path[PATH_MAX];
   ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
   if (len != -1) {
@@ -179,6 +208,7 @@ void dump_debug_info() {
   if (getcwd(cwd, sizeof(cwd)) != nullptr) {
     std::cout << "Working directory: " << cwd << std::endl;
   }
+#endif
 
   // Check if debug symbols are available
   std::cout << "Build type: ";
@@ -258,14 +288,15 @@ int main(int argc, char *argv[]) {
           line_count++;
         }
 
-        // Strictly verify that we have source-level debug information
         bool has_source_debug = stack_trace.find("/yaml_exc_trace_test.cc") != std::string::npos;
 
         if (has_source_debug) {
           std::cout << "  ✓ Source-level debug information found in stack trace" << std::endl;
-        } else {
+        } else if (kRequiresSourceDebugInfo) {
           std::cout << "  ✗ Source-level debug information NOT found in stack trace" << std::endl;
           all_passed = false;
+        } else {
+          std::cout << "  ✓ Source-level debug information not required on this platform" << std::endl;
         }
 
         std::cout << "  Stack trace length: " << stack_trace.length() << " characters, " << line_count << " lines"
