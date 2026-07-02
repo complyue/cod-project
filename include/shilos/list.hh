@@ -4,11 +4,7 @@
 
 #include <cassert>
 #include <compare>
-#include <fcntl.h>
-#include <sys/fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include <type_traits>
 
 namespace shilos {
 

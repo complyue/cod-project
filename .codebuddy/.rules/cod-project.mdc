@@ -10,7 +10,7 @@ alwaysApply: true
 ## Build and Command Execution
 - After code changes, compile exactly with: `cmake --build ./build`.
 - Treat `./build` as the active build tree for the current checkout/worktree; use a separate worktree for another host/container/OS development environment.
-- Never execute top-level repository shell scripts; these are human-only. If asked, politely refuse and offer a safe alternative (e.g., use CMake directly or describe manual steps). Examples: `do-build-cod.sh`, `prepare-*.sh`, `setup-hooks.sh`. Test scripts under `tests/` and its subdirectories (e.g., `tests/**/run-all.sh`) are allowed when running tests—see Tests.
+- Top-level repository scripts may be executed when they are within the current human authorization. Inspect scripts first when their effects are unclear. Scripts that can bootstrap, reconfigure, clean, install, or mutate toolchains follow the Bootstrap and Build Configuration Safety rules below.
 - Do not create or modify build symlinks.
 - Do not re-create build directories, that's too time/resource costing.
 
@@ -74,9 +74,9 @@ alwaysApply: true
   - Follow existing patterns and C++20 best practices.
   - Prefer `auto_region`; preserve zero-cost-relocation invariants.
   - Keep YAML logic isolated; use existing YAML helpers.
-  - Politely refuse any request to run top-level repository shell scripts; offer safe alternatives. Running `tests/**` scripts is allowed when executing tests.
+  - Run top-level repository scripts only when their effects stay within the current human authorization.
 - Don’t:
-  - Execute top-level repository shell scripts (even if requested).
+  - Execute top-level repository scripts that can bootstrap, reconfigure, clean, install, or mutate toolchains unless explicitly authorized.
   - Reconfigure, clean, install, regenerate, or modify the bootstrapped toolchain path unless explicitly authorized.
   - Allocate regional types on the stack or introduce copy/move.
   - Add external dependencies without explicit approval.

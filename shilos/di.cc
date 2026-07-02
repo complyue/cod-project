@@ -1,5 +1,7 @@
 #include "shilos/di.hh"
 
+#if defined(__APPLE__) || defined(__linux__)
+
 #include <cerrno>
 #include <cxxabi.h>
 #include <dlfcn.h>
@@ -7,9 +9,11 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <unistd.h>
 
 // LLVM DWARF debug info for enhanced stack traces
@@ -182,10 +186,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::string &last_debug_fi
       os << "🌀  " << function_name << "\n";
     }
 
-    if (last_debug_file_path != module_info->debug_file_path) {
-      os << "📦 " << module_info->debug_file_path << std::endl;
-      last_debug_file_path = module_info->debug_file_path;
-    }
+    os << "   👉 <source location unavailable>\n";
     return;
   }
 
@@ -328,3 +329,26 @@ void dumpDebugInfo(void *address, std::ostream &os) {
 }
 
 } // namespace shilos
+
+#else
+
+#include <iomanip>
+
+namespace shilos {
+
+void clearDebugInfoCache() {}
+
+void formatBacktraceFrame(int btDepth, void *address, std::string &, std::ostringstream &os) {
+  os << "#" << std::setw(2) << std::setfill(' ') << btDepth << " "
+     << "<source locations unavailable on this platform> " << address << "\n";
+}
+
+void dumpDebugInfo(void *address, std::ostream &os) {
+  os << "=== Debug Info Dump for address " << address << " ===" << std::endl;
+  os << "  Source locations are not available on this platform." << std::endl;
+  os << "=== End Debug Info Dump ===" << std::endl;
+}
+
+} // namespace shilos
+
+#endif

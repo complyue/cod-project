@@ -19,6 +19,8 @@ namespace fs = std::filesystem;
 // Shared utility functions
 void usage();
 fs::path home_dir();
+std::string quote_shell_arg(std::string arg);
+std::string quote_shell_arg(const fs::path &path);
 std::optional<fs::path> find_project_dir(fs::path start);
 void ensure_dir(const fs::path &p);
 void ensure_bare_repo(const std::string &url, const fs::path &bare_path);

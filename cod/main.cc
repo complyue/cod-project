@@ -31,8 +31,10 @@
 #include "llvm/Support/Program.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -40,15 +42,14 @@
 #include <optional>
 #include <sstream>
 #include <string>
-#include <sys/wait.h>
 #include <system_error>
-#include <unistd.h>
 #include <vector>
 
-#ifdef __APPLE__
-#include <mach-o/dyld.h>
-#elif defined(__linux__)
-#include <limits.h>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 namespace fs = std::filesystem;
@@ -89,12 +90,15 @@ public:
     std::vector<std::string> args;
 
     // Force use of lld from the same toolchain
+#ifndef _WIN32
     args.push_back("-fuse-ld=lld");
+#endif
 
     // Add toolchain lib directory to rpath for libc++abi.1.dylib
     // Use LLVM Driver API to get resource directory from cod's path
     std::string ResourceDir = getResourcesPath();
 
+#ifndef _WIN32
     if (!ResourceDir.empty()) {
       // The lib directory is typically at the same level as the resource directory
       // ResourceDir is like '/path/to/build/lib/clang/18', so we need to go up two levels to get '/path/to/build/lib'
@@ -107,6 +111,7 @@ public:
         }
       }
     }
+#endif
 
     // Add shilos library from toolchain
     if (!ResourceDir.empty()) {
@@ -466,12 +471,73 @@ static std::string generateRunnerSource(const CodReplConfig &config, const std::
 
 static fs::path getTempDir(const CodReplConfig &config) { return config.project_root / ".cod/repl"; }
 
+static fs::path getRunnerPath(const fs::path &temp_dir) {
+  auto runner = temp_dir / "runner";
+#ifdef _WIN32
+  runner += ".exe";
+#endif
+  return runner;
+}
+
+static bool setCodWorksPathEnv(const fs::path &works_path) {
+#ifdef _WIN32
+  if (_wputenv_s(L"COD_WORKS_PATH", works_path.wstring().c_str()) != 0) {
+    std::cerr << "Error: Failed to set COD_WORKS_PATH\n";
+    return false;
+  }
+#else
+  if (setenv("COD_WORKS_PATH", works_path.string().c_str(), 1) != 0) {
+    std::cerr << "Error: Failed to set COD_WORKS_PATH: " << std::strerror(errno) << "\n";
+    return false;
+  }
+#endif
+  return true;
+}
+
+static std::optional<int> runExecutableAndWait(const fs::path &binary_path) {
+#ifdef _WIN32
+  const std::wstring executable = binary_path.wstring();
+  const intptr_t exit_code =
+      _wspawnl(_P_WAIT, executable.c_str(), executable.c_str(), static_cast<const wchar_t *>(nullptr));
+  if (exit_code == -1) {
+    std::cerr << "Error: Failed to execute binary: " << std::strerror(errno) << "\n";
+    return std::nullopt;
+  }
+  return static_cast<int>(exit_code);
+#else
+  pid_t run_pid = fork();
+  if (run_pid == 0) {
+    // Child process - execute binary
+    execl(binary_path.c_str(), binary_path.c_str(), nullptr);
+    std::cerr << "Error: Failed to execute binary\n";
+    exit(1);
+  }
+  if (run_pid > 0) {
+    // Parent process - wait for execution
+    int run_status;
+    waitpid(run_pid, &run_status, 0);
+
+    if (WIFEXITED(run_status)) {
+      return WEXITSTATUS(run_status);
+    }
+
+    std::cerr << "Program terminated abnormally\n";
+    return std::nullopt;
+  }
+
+  std::cerr << "Error: Failed to fork for execution\n";
+  return std::nullopt;
+#endif
+}
+
 static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
   std::vector<std::string> args;
 
   // Note: Do not include the compiler path here - it's handled by BitcodeCompiler
   args.push_back("-std=c++20");
+#ifndef _WIN32
   args.push_back("-stdlib=libc++");
+#endif
 
   // Add include path for current project
   auto project_include = config.project_root / "include";
@@ -517,7 +583,7 @@ bool CodTool::compileAndRun(const CodReplConfig &config, const std::string &subm
 
     // Generate source file
     auto source_path = temp_dir / "runner.cc";
-    auto binary_path = temp_dir / "runner";
+    auto binary_path = getRunnerPath(temp_dir);
 
     std::ofstream source_file(source_path);
     if (!source_file) {
@@ -575,32 +641,19 @@ bool CodTool::compileAndRun(const CodReplConfig &config, const std::string &subm
     }
 
     // Set environment for runner
-    setenv("COD_WORKS_PATH", config.works_path.c_str(), 1);
-
-    // Execute the compiled program
-    pid_t run_pid = fork();
-    if (run_pid == 0) {
-      // Child process - execute binary
-      execl(binary_path.c_str(), binary_path.c_str(), nullptr);
-      std::cerr << "Error: Failed to execute binary\n";
-      exit(1);
-    } else if (run_pid > 0) {
-      // Parent process - wait for execution
-      int run_status;
-      waitpid(run_pid, &run_status, 0);
-
-      if (WIFEXITED(run_status)) {
-        if (WEXITSTATUS(run_status) != 0) {
-          std::cerr << "Program exited with code " << WEXITSTATUS(run_status) << "\n";
+    if (!setCodWorksPathEnv(config.works_path)) {
+      success = false;
+    } else {
+      // Execute the compiled program
+      auto exit_code = runExecutableAndWait(binary_path);
+      if (exit_code) {
+        if (*exit_code != 0) {
+          std::cerr << "Program exited with code " << *exit_code << "\n";
         }
-        success = (WEXITSTATUS(run_status) == 0);
+        success = (*exit_code == 0);
       } else {
-        std::cerr << "Program terminated abnormally\n";
         success = false;
       }
-    } else {
-      std::cerr << "Error: Failed to fork for execution\n";
-      success = false;
     }
 
     // Clean up temporary files

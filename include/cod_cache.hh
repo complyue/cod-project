@@ -8,6 +8,8 @@
 #include <chrono>
 #include <filesystem>
 #include <iomanip>
+#include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>

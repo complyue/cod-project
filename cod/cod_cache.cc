@@ -9,7 +9,8 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
-#include <sys/stat.h>
+#include <string_view>
+#include <system_error>
 
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -57,6 +58,105 @@ static std::string getMacOSDeploymentTarget() {
 #endif
 
 namespace cod {
+
+namespace {
+
+namespace fs = std::filesystem;
+
+std::chrono::system_clock::time_point to_system_clock_time(std::filesystem::file_time_type file_time) {
+  return std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+      file_time - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+}
+
+fs::path clangxx_candidate_for_root(const fs::path &root) {
+#ifdef _WIN32
+  auto exe_candidate = root / "build" / "bin" / "clang++.exe";
+  if (fs::exists(exe_candidate)) {
+    return exe_candidate;
+  }
+#endif
+  return root / "build" / "bin" / "clang++";
+}
+
+std::string fallback_clangxx() {
+#ifdef _WIN32
+  return "clang++.exe";
+#else
+  return "clang++";
+#endif
+}
+
+std::string find_clangxx(const fs::path &project_root = {}) {
+  if (!project_root.empty()) {
+    auto candidate = clangxx_candidate_for_root(project_root);
+    if (fs::exists(candidate)) {
+      return candidate.string();
+    }
+  }
+
+  fs::path current_dir = fs::current_path();
+  for (auto dir = current_dir; !dir.empty() && dir != dir.parent_path(); dir = dir.parent_path()) {
+    auto candidate = clangxx_candidate_for_root(dir);
+    if (fs::exists(candidate)) {
+      return candidate.string();
+    }
+  }
+
+  return fallback_clangxx();
+}
+
+std::string quote_shell_arg(std::string arg) {
+#ifdef _WIN32
+  if (arg.empty()) {
+    return "\"\"";
+  }
+
+  const bool needs_quotes = arg.find_first_of(" \t\n\r\"") != std::string::npos;
+  if (!needs_quotes) {
+    return arg;
+  }
+
+  std::string quoted;
+  quoted.reserve(arg.size() + 2);
+  quoted.push_back('"');
+  for (char ch : arg) {
+    if (ch == '"') {
+      quoted += "\\\"";
+    } else {
+      quoted.push_back(ch);
+    }
+  }
+  quoted.push_back('"');
+  return quoted;
+#else
+  if (arg.empty()) {
+    return "''";
+  }
+
+  constexpr std::string_view safe_chars =
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+-=.,/:@%";
+  if (arg.find_first_not_of(safe_chars) == std::string::npos) {
+    return arg;
+  }
+
+  std::string quoted;
+  quoted.reserve(arg.size() + 2);
+  quoted.push_back('\'');
+  for (char ch : arg) {
+    if (ch == '\'') {
+      quoted += "'\\''";
+    } else {
+      quoted.push_back(ch);
+    }
+  }
+  quoted.push_back('\'');
+  return quoted;
+#endif
+}
+
+std::string quote_shell_arg(const fs::path &path) { return quote_shell_arg(path.string()); }
+
+} // namespace
 
 std::vector<std::string> &&CompilerArgs(std::vector<std::string> &&compiler_args) {
 
@@ -210,41 +310,17 @@ std::optional<fs::path> BuildCache::generate_bitcode(const fs::path &source_path
   auto bitcode_path = temp_dir / (source_path.stem().string() + ".bc");
 
   // Get toolchain compiler path - use the project's build directory
-  std::string compiler_path;
-  fs::path project_build_dir = project_root_ / "build" / "bin" / "clang++";
-  if (fs::exists(project_build_dir)) {
-    compiler_path = project_build_dir.string();
-  } else {
-    // Try to find the project root by going up from current working directory
-    fs::path current_dir = fs::current_path();
-    fs::path found_clang;
-
-    // Look for build/bin/clang++ in current directory or parent directories
-    for (auto dir = current_dir; !dir.empty() && dir != dir.parent_path(); dir = dir.parent_path()) {
-      auto candidate = dir / "build" / "bin" / "clang++";
-      if (fs::exists(candidate)) {
-        found_clang = candidate;
-        break;
-      }
-    }
-
-    if (!found_clang.empty()) {
-      compiler_path = found_clang.string();
-    } else {
-      // Fallback to system clang++ if project clang++ doesn't exist
-      compiler_path = "clang++";
-    }
-  }
+  std::string compiler_path = find_clangxx(project_root_);
 
   // Build clang command to generate bitcode
-  std::string cmd = compiler_path + " -emit-llvm -c ";
+  std::string cmd = quote_shell_arg(compiler_path) + " -emit-llvm -c ";
   for (const auto &arg : compiler_args) {
     // Skip any clang++ paths in the arguments (they should not be there for bitcode generation)
     if (arg.find("clang++") == std::string::npos) {
-      cmd += arg + " ";
+      cmd += quote_shell_arg(arg) + " ";
     }
   }
-  cmd += source_path.string() + " -o " + bitcode_path.string();
+  cmd += quote_shell_arg(source_path) + " -o " + quote_shell_arg(bitcode_path);
 
   // Execute the command
   int result = std::system(cmd.c_str());
@@ -261,36 +337,17 @@ BitcodeCompiler::~BitcodeCompiler() = default;
 bool BitcodeCompiler::compile_to_bitcode(const fs::path &source_path, const fs::path &output_path,
                                          const std::vector<std::string> &compiler_args) {
   // Get toolchain compiler path - look for project build directory
-  std::string compiler_path;
-  // Try to find the project root by going up from current working directory
-  fs::path current_dir = fs::current_path();
-  fs::path project_build_dir;
-
-  // Look for build/bin/clang++ in current directory or parent directories
-  for (auto dir = current_dir; !dir.empty() && dir != dir.parent_path(); dir = dir.parent_path()) {
-    auto candidate = dir / "build" / "bin" / "clang++";
-    if (fs::exists(candidate)) {
-      project_build_dir = candidate;
-      break;
-    }
-  }
-
-  if (!project_build_dir.empty()) {
-    compiler_path = project_build_dir.string();
-  } else {
-    // Fallback to system clang++ if project clang++ doesn't exist
-    compiler_path = "clang++";
-  }
+  std::string compiler_path = find_clangxx();
 
   // Build clang command to generate bitcode
-  std::string cmd = compiler_path + " -emit-llvm -c ";
+  std::string cmd = quote_shell_arg(compiler_path) + " -emit-llvm -c ";
   for (const auto &arg : compiler_args) {
     // Skip any clang++ paths in the arguments (they should not be there for bitcode generation)
     if (arg.find("clang++") == std::string::npos) {
-      cmd += arg + " ";
+      cmd += quote_shell_arg(arg) + " ";
     }
   }
-  cmd += source_path.string() + " -o " + output_path.string();
+  cmd += quote_shell_arg(source_path) + " -o " + quote_shell_arg(output_path);
 
   // Execute the command
   int result = std::system(cmd.c_str());
@@ -300,42 +357,23 @@ bool BitcodeCompiler::compile_to_bitcode(const fs::path &source_path, const fs::
 bool BitcodeCompiler::link_bitcode(const std::vector<fs::path> &bitcode_files, const fs::path &output_executable,
                                    const std::vector<std::string> &linker_args) {
   // Get toolchain compiler path - look for project build directory
-  std::string compiler_path;
-  // Try to find the project root by going up from current working directory
-  fs::path current_dir = fs::current_path();
-  fs::path project_build_dir;
-
-  // Look for build/bin/clang++ in current directory or parent directories
-  for (auto dir = current_dir; !dir.empty() && dir != dir.parent_path(); dir = dir.parent_path()) {
-    auto candidate = dir / "build" / "bin" / "clang++";
-    if (fs::exists(candidate)) {
-      project_build_dir = candidate;
-      break;
-    }
-  }
-
-  if (!project_build_dir.empty()) {
-    compiler_path = project_build_dir.string();
-  } else {
-    // Fallback to system clang++ if project clang++ doesn't exist
-    compiler_path = "clang++";
-  }
+  std::string compiler_path = find_clangxx();
 
   // Build the linking command
-  std::string command = compiler_path;
+  std::string command = quote_shell_arg(compiler_path);
 
   // Add bitcode files
   for (const auto &bitcode_file : bitcode_files) {
-    command += " " + bitcode_file.string();
+    command += " " + quote_shell_arg(bitcode_file);
   }
 
   // Add linker arguments
   for (const auto &arg : linker_args) {
-    command += " " + arg;
+    command += " " + quote_shell_arg(arg);
   }
 
   // Add output executable
-  command += " -o " + output_executable.string();
+  command += " -o " + quote_shell_arg(output_executable);
 
   // Execute the linking command
   int result = std::system(command.c_str());
@@ -599,9 +637,10 @@ CacheKey BuildCache::generate_cache_key(const fs::path &source_path, const std::
   key.compiler_flags = compiler_args;
 
   // Get file modification time
-  struct stat file_stat;
-  if (stat(source_path.c_str(), &file_stat) == 0) {
-    key.source_mtime = std::chrono::system_clock::from_time_t(file_stat.st_mtime);
+  std::error_code ec;
+  auto source_mtime = fs::last_write_time(source_path, ec);
+  if (!ec) {
+    key.source_mtime = to_system_clock_time(source_mtime);
   }
 
   return key;

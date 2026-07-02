@@ -3,14 +3,18 @@ add_clang_library( shilos SHARED
   di.cc
 )
 
-# LLVM DebugInfo dependencies for enhanced stack traces
-llvm_map_components_to_libnames(llvm_debuginfo_libs
-  DebugInfoDWARF
-  Object
-  Support
-  )
+if(WIN32)
+  set_target_properties(shilos PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+else()
+  # LLVM DebugInfo dependencies for enhanced stack traces
+  llvm_map_components_to_libnames(llvm_debuginfo_libs
+    DebugInfoDWARF
+    Object
+    Support
+    )
 
-target_link_libraries(shilos PUBLIC ${llvm_debuginfo_libs})
+  target_link_libraries(shilos PUBLIC ${llvm_debuginfo_libs})
+endif()
 
 # Install shilos headers into the toolchain
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../include/shilos"

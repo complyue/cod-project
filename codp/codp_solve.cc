@@ -1,5 +1,16 @@
 #include "codp_commands.hh"
 
+#include <cstdio>
+#include <cstring>
+
+#ifdef _WIN32
+#define COD_POPEN _popen
+#define COD_PCLOSE _pclose
+#else
+#define COD_POPEN popen
+#define COD_PCLOSE pclose
+#endif
+
 int cmd_solve(int argc, char **argv, int argi, const fs::path &project_path) {
   // cmd == "solve" - proceed with dependency resolution
 
@@ -151,7 +162,7 @@ int cmd_update(int argc, char **argv, int argi, const fs::path &project_path) {
 
   try {
     // Load existing manifest
-    yaml::Document manifest_doc(manifest_yaml);
+    yaml::Document manifest_doc(manifest_yaml.string());
     auto_region<CodManifest> manifest_region(1024 * 1024);
     CodManifest *manifest = manifest_region->root().get();
     from_yaml(*manifest_region, manifest_doc.root(), manifest);
@@ -182,8 +193,9 @@ int cmd_update(int argc, char **argv, int argi, const fs::path &project_path) {
       }
 
       // Get latest commit hash for the branch
-      std::string git_cmd = "git --git-dir=" + bare_repo_path.string() + " rev-parse " + branch;
-      FILE *pipe = popen(git_cmd.c_str(), "r");
+      std::string git_cmd =
+          "git --git-dir=" + quote_shell_arg(bare_repo_path) + " rev-parse " + quote_shell_arg(branch);
+      FILE *pipe = COD_POPEN(git_cmd.c_str(), "r");
       if (!pipe) {
         std::cerr << "Warning: Failed to get commit hash for " << repo_url << " (" << branch << ")" << std::endl;
         continue;
@@ -203,7 +215,7 @@ int cmd_update(int argc, char **argv, int argi, const fs::path &project_path) {
       } else {
         std::cerr << "Warning: Failed to read commit hash for " << repo_url << " (" << branch << ")" << std::endl;
       }
-      pclose(pipe);
+      COD_PCLOSE(pipe);
     }
 
     // Write updated manifest back to file
@@ -235,3 +247,6 @@ int cmd_debug(int argc, char **argv, int argi, const fs::path &project_path) {
   dumpTestDebugInfo(std::cerr);
   return 0;
 }
+
+#undef COD_POPEN
+#undef COD_PCLOSE

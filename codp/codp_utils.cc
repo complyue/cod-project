@@ -1,5 +1,56 @@
 #include "codp_commands.hh"
 
+std::string quote_shell_arg(std::string arg) {
+#ifdef _WIN32
+  if (arg.empty()) {
+    return "\"\"";
+  }
+
+  const bool needs_quotes = arg.find_first_of(" \t\n\r\"") != std::string::npos;
+  if (!needs_quotes) {
+    return arg;
+  }
+
+  std::string quoted;
+  quoted.reserve(arg.size() + 2);
+  quoted.push_back('"');
+  for (char ch : arg) {
+    if (ch == '"') {
+      quoted += "\\\"";
+    } else {
+      quoted.push_back(ch);
+    }
+  }
+  quoted.push_back('"');
+  return quoted;
+#else
+  if (arg.empty()) {
+    return "''";
+  }
+
+  constexpr std::string_view safe_chars =
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+-=.,/:@%";
+  if (arg.find_first_not_of(safe_chars) == std::string::npos) {
+    return arg;
+  }
+
+  std::string quoted;
+  quoted.reserve(arg.size() + 2);
+  quoted.push_back('\'');
+  for (char ch : arg) {
+    if (ch == '\'') {
+      quoted += "'\\''";
+    } else {
+      quoted.push_back(ch);
+    }
+  }
+  quoted.push_back('\'');
+  return quoted;
+#endif
+}
+
+std::string quote_shell_arg(const fs::path &path) { return quote_shell_arg(path.string()); }
+
 void usage() {
   std::cerr << "codp solve [--project <path>] (default)\n"
                "codp update [--project <path>]\n"
@@ -46,11 +97,11 @@ void ensure_dir(const fs::path &p) {
 void ensure_bare_repo(const std::string &url, const fs::path &bare_path) {
   if (fs::exists(bare_path)) {
     // Fetch updates
-    std::string cmd = "git -C " + bare_path.string() + " fetch --all --prune";
+    std::string cmd = "git -C " + quote_shell_arg(bare_path) + " fetch --all --prune";
     std::system(cmd.c_str());
   } else {
     ensure_dir(bare_path.parent_path());
-    std::string cmd = "git clone --mirror " + url + " " + bare_path.string();
+    std::string cmd = "git clone --mirror " + quote_shell_arg(url) + " " + quote_shell_arg(bare_path);
     int rc = std::system(cmd.c_str());
     if (rc != 0) {
       throw std::runtime_error("git clone failed for " + url);

@@ -44,9 +44,9 @@ public:
   UUID() {
     std::random_device rd;
     std::mt19937_64 gen(rd());
-    std::uniform_int_distribution<uint8_t> dist(0, 255);
+    std::uniform_int_distribution<unsigned int> dist(0, 255);
     for (auto &byte : data_) {
-      byte = dist(gen);
+      byte = static_cast<uint8_t>(dist(gen));
     }
     // Adjust UUID fields according to RFC 4122:
     // - Set version to 4 (random UUID)
@@ -213,10 +213,111 @@ struct Node;
 struct MapEntry;
 struct SeqItem;
 
-// Sequence types - forward declarations
-using SimpleSequence = std::vector<Node>;  // For JSON-style sequences [a, b, c]
-using DashSequence = std::vector<SeqItem>; // For YAML dash sequences - a \n - b
-using Map = std::vector<MapEntry>;         // Map entries with comment support
+// Vector-like YAML container wrappers.
+//
+// These wrappers break the recursive type-completeness cycle between Node and
+// comment-bearing sequence/map entries. MSVC's STL instantiates more container
+// type traits while forming std::variant than libstdc++/libc++ do, so the
+// special members are defined only after Node, SeqItem, and MapEntry are all
+// complete.
+struct SimpleSequence {
+  using storage_type = std::vector<Node>;
+  using value_type = Node;
+  using iterator = storage_type::iterator;
+  using const_iterator = storage_type::const_iterator;
+
+  storage_type items;
+
+  SimpleSequence();
+  SimpleSequence(const SimpleSequence &other);
+  SimpleSequence(SimpleSequence &&other) noexcept;
+  SimpleSequence &operator=(const SimpleSequence &other);
+  SimpleSequence &operator=(SimpleSequence &&other) noexcept;
+  ~SimpleSequence();
+
+  bool empty() const noexcept;
+  size_t size() const noexcept;
+
+  iterator begin() noexcept;
+  const_iterator begin() const noexcept;
+  const_iterator cbegin() const noexcept;
+  iterator end() noexcept;
+  const_iterator end() const noexcept;
+  const_iterator cend() const noexcept;
+
+  value_type &operator[](size_t index);
+  const value_type &operator[](size_t index) const;
+
+  void push_back(const value_type &value);
+  void push_back(value_type &&value);
+  template <typename... Args> value_type &emplace_back(Args &&...args);
+};
+
+struct DashSequence {
+  using storage_type = std::vector<SeqItem>;
+  using value_type = SeqItem;
+  using iterator = storage_type::iterator;
+  using const_iterator = storage_type::const_iterator;
+
+  storage_type items;
+
+  DashSequence();
+  DashSequence(const DashSequence &other);
+  DashSequence(DashSequence &&other) noexcept;
+  DashSequence &operator=(const DashSequence &other);
+  DashSequence &operator=(DashSequence &&other) noexcept;
+  ~DashSequence();
+
+  bool empty() const noexcept;
+  size_t size() const noexcept;
+
+  iterator begin() noexcept;
+  const_iterator begin() const noexcept;
+  const_iterator cbegin() const noexcept;
+  iterator end() noexcept;
+  const_iterator end() const noexcept;
+  const_iterator cend() const noexcept;
+
+  value_type &operator[](size_t index);
+  const value_type &operator[](size_t index) const;
+
+  void push_back(const value_type &value);
+  void push_back(value_type &&value);
+  template <typename... Args> value_type &emplace_back(Args &&...args);
+};
+
+struct Map {
+  using storage_type = std::vector<MapEntry>;
+  using value_type = MapEntry;
+  using iterator = storage_type::iterator;
+  using const_iterator = storage_type::const_iterator;
+
+  storage_type items;
+
+  Map();
+  Map(const Map &other);
+  Map(Map &&other) noexcept;
+  Map &operator=(const Map &other);
+  Map &operator=(Map &&other) noexcept;
+  ~Map();
+
+  bool empty() const noexcept;
+  size_t size() const noexcept;
+
+  iterator begin() noexcept;
+  const_iterator begin() const noexcept;
+  const_iterator cbegin() const noexcept;
+  iterator end() noexcept;
+  const_iterator end() const noexcept;
+  const_iterator cend() const noexcept;
+
+  value_type &operator[](size_t index);
+  const value_type &operator[](size_t index) const;
+
+  void push_back(const value_type &value);
+  void push_back(value_type &&value);
+  template <typename... Args> value_type &emplace_back(Args &&...args);
+};
 
 // Complete YAML node type definition - no comments on nodes themselves
 struct Node {
@@ -463,6 +564,87 @@ struct SeqItem {
   SeqItem(Node v, std::vector<std::string_view> leading, std::string_view trailing)
       : value(std::move(v)), leading_comments(std::move(leading)), trailing_comment(trailing) {}
 };
+
+inline SimpleSequence::SimpleSequence() = default;
+inline SimpleSequence::SimpleSequence(const SimpleSequence &other) = default;
+inline SimpleSequence::SimpleSequence(SimpleSequence &&other) noexcept = default;
+inline SimpleSequence &SimpleSequence::operator=(const SimpleSequence &other) = default;
+inline SimpleSequence &SimpleSequence::operator=(SimpleSequence &&other) noexcept = default;
+inline SimpleSequence::~SimpleSequence() = default;
+
+inline bool SimpleSequence::empty() const noexcept { return items.empty(); }
+inline size_t SimpleSequence::size() const noexcept { return items.size(); }
+
+inline SimpleSequence::iterator SimpleSequence::begin() noexcept { return items.begin(); }
+inline SimpleSequence::const_iterator SimpleSequence::begin() const noexcept { return items.begin(); }
+inline SimpleSequence::const_iterator SimpleSequence::cbegin() const noexcept { return items.cbegin(); }
+inline SimpleSequence::iterator SimpleSequence::end() noexcept { return items.end(); }
+inline SimpleSequence::const_iterator SimpleSequence::end() const noexcept { return items.end(); }
+inline SimpleSequence::const_iterator SimpleSequence::cend() const noexcept { return items.cend(); }
+
+inline SimpleSequence::value_type &SimpleSequence::operator[](size_t index) { return items[index]; }
+inline const SimpleSequence::value_type &SimpleSequence::operator[](size_t index) const { return items[index]; }
+
+inline void SimpleSequence::push_back(const value_type &value) { items.push_back(value); }
+inline void SimpleSequence::push_back(value_type &&value) { items.push_back(std::move(value)); }
+
+template <typename... Args> inline SimpleSequence::value_type &SimpleSequence::emplace_back(Args &&...args) {
+  return items.emplace_back(std::forward<Args>(args)...);
+}
+
+inline DashSequence::DashSequence() = default;
+inline DashSequence::DashSequence(const DashSequence &other) = default;
+inline DashSequence::DashSequence(DashSequence &&other) noexcept = default;
+inline DashSequence &DashSequence::operator=(const DashSequence &other) = default;
+inline DashSequence &DashSequence::operator=(DashSequence &&other) noexcept = default;
+inline DashSequence::~DashSequence() = default;
+
+inline bool DashSequence::empty() const noexcept { return items.empty(); }
+inline size_t DashSequence::size() const noexcept { return items.size(); }
+
+inline DashSequence::iterator DashSequence::begin() noexcept { return items.begin(); }
+inline DashSequence::const_iterator DashSequence::begin() const noexcept { return items.begin(); }
+inline DashSequence::const_iterator DashSequence::cbegin() const noexcept { return items.cbegin(); }
+inline DashSequence::iterator DashSequence::end() noexcept { return items.end(); }
+inline DashSequence::const_iterator DashSequence::end() const noexcept { return items.end(); }
+inline DashSequence::const_iterator DashSequence::cend() const noexcept { return items.cend(); }
+
+inline DashSequence::value_type &DashSequence::operator[](size_t index) { return items[index]; }
+inline const DashSequence::value_type &DashSequence::operator[](size_t index) const { return items[index]; }
+
+inline void DashSequence::push_back(const value_type &value) { items.push_back(value); }
+inline void DashSequence::push_back(value_type &&value) { items.push_back(std::move(value)); }
+
+template <typename... Args> inline DashSequence::value_type &DashSequence::emplace_back(Args &&...args) {
+  return items.emplace_back(std::forward<Args>(args)...);
+}
+
+inline Map::Map() = default;
+inline Map::Map(const Map &other) = default;
+inline Map::Map(Map &&other) noexcept = default;
+inline Map &Map::operator=(const Map &other) = default;
+inline Map &Map::operator=(Map &&other) noexcept = default;
+inline Map::~Map() = default;
+
+inline bool Map::empty() const noexcept { return items.empty(); }
+inline size_t Map::size() const noexcept { return items.size(); }
+
+inline Map::iterator Map::begin() noexcept { return items.begin(); }
+inline Map::const_iterator Map::begin() const noexcept { return items.begin(); }
+inline Map::const_iterator Map::cbegin() const noexcept { return items.cbegin(); }
+inline Map::iterator Map::end() noexcept { return items.end(); }
+inline Map::const_iterator Map::end() const noexcept { return items.end(); }
+inline Map::const_iterator Map::cend() const noexcept { return items.cend(); }
+
+inline Map::value_type &Map::operator[](size_t index) { return items[index]; }
+inline const Map::value_type &Map::operator[](size_t index) const { return items[index]; }
+
+inline void Map::push_back(const value_type &value) { items.push_back(value); }
+inline void Map::push_back(value_type &&value) { items.push_back(std::move(value)); }
+
+template <typename... Args> inline Map::value_type &Map::emplace_back(Args &&...args) {
+  return items.emplace_back(std::forward<Args>(args)...);
+}
 
 // Inline definitions for Node constructors and methods now that types are complete
 inline Node::Node(const SimpleSequence &seq) : value(seq) {}
