@@ -83,7 +83,7 @@ text_files_equal() {
   local expected="$1"
   local actual="$2"
 
-  cmp -s "$expected" "$actual" || diff -q --strip-trailing-cr "$expected" "$actual" >/dev/null 2>&1
+  cmp -s "$expected" "$actual" || cmp -s <(sed $'s/\r$//' "$expected") <(sed $'s/\r$//' "$actual")
 }
 
 # Test function for ugly->pretty transformation
@@ -98,7 +98,7 @@ test_ugly_to_pretty() {
   
   # Generate pretty output from ugly file
   local temp_output=$(mktemp)
-  if ! $YAML_PRETTY_BIN "$ugly_file" 2>/dev/null > "$temp_output"; then
+  if ! "$YAML_PRETTY_BIN" "$ugly_file" 2>/dev/null > "$temp_output"; then
     echo -e "${RED}FAIL${NC} (parse error)"
     TESTS_FAILED=$((TESTS_FAILED + 1))
     rm -f "$temp_output"
@@ -116,7 +116,7 @@ test_ugly_to_pretty() {
     echo "  Expected: $pretty_file"
     echo "  Actual output differs"
     echo "  --- DIFF (expected vs actual) ---"
-    diff -u --strip-trailing-cr "$pretty_file" "$temp_output" || true
+    diff -u <(sed $'s/\r$//' "$pretty_file") <(sed $'s/\r$//' "$temp_output") || true
     echo "  --- END DIFF ---"
     if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
       echo "  --- EXPECTED CONTENT ---"
@@ -143,7 +143,7 @@ test_pretty_idempotency() {
   
   # Generate pretty output from already pretty file
   local temp_output=$(mktemp)
-  if ! $YAML_PRETTY_BIN "$pretty_file" 2>/dev/null > "$temp_output"; then
+  if ! "$YAML_PRETTY_BIN" "$pretty_file" 2>/dev/null > "$temp_output"; then
     echo -e "${RED}FAIL${NC} (parse error)"
     TESTS_FAILED=$((TESTS_FAILED + 1))
     rm -f "$temp_output"
@@ -161,7 +161,7 @@ test_pretty_idempotency() {
     echo "  Input: $pretty_file"
     echo "  Output differs from input - not idempotent!"
     echo "  --- DIFF (original vs after pretty-print) ---"
-    diff -u --strip-trailing-cr "$pretty_file" "$temp_output" || true
+    diff -u <(sed $'s/\r$//' "$pretty_file") <(sed $'s/\r$//' "$temp_output") || true
     echo "  --- END DIFF ---"
     if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
       echo "  --- ORIGINAL CONTENT ---"
@@ -184,7 +184,9 @@ show_diagnostic_tree() {
   
   if [[ "$DIAGNOSTIC_MODE" == "true" ]]; then
     echo -e "${BLUE}=== $label: Structural Tree Dump ===${NC}"
-    $YAML_PRETTY_BIN --verbose "$file" 2>/dev/null | sed -n '/=== PARSED TREE ===/,/=== FORMAT_YAML OUTPUT ===/p' | head -n -1
+    "$YAML_PRETTY_BIN" --verbose "$file" 2>/dev/null |
+      sed -n '/=== PARSED TREE ===/,/=== FORMAT_YAML OUTPUT ===/p' |
+      sed '$d'
     echo
   fi
 }
@@ -218,10 +220,10 @@ for ugly_file in "$UGLY_DIR"/*.yaml; do
       show_diagnostic_tree "$pretty_file" "PRETTY $test_name"
       
       # Test ugly->pretty transformation
-      test_ugly_to_pretty "$test_name" "$ugly_file" "$pretty_file"
+      test_ugly_to_pretty "$test_name" "$ugly_file" "$pretty_file" || true
       
       # Test pretty->pretty idempotency
-      test_pretty_idempotency "$test_name" "$pretty_file"
+      test_pretty_idempotency "$test_name" "$pretty_file" || true
       
     else
       echo -e "${YELLOW}⚠ Missing pretty file for $basename_file (skipping)${NC}"

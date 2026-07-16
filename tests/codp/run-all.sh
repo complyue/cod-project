@@ -64,8 +64,11 @@ for td in "$SCRIPT_DIR"/*/; do
   if [[ -f "$td/run.sh" ]]; then
     log_test "$(basename "$td")"
     run_test
-    (cd "$td" && ./run.sh)
-    EXIT_CODE=$?
+    if (cd "$td" && bash ./run.sh); then
+      EXIT_CODE=0
+    else
+      EXIT_CODE=$?
+    fi
     if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
         log_fail "$(basename "$td") failed with Segmentation Fault (exit code $EXIT_CODE)"
     elif [[ "$EXIT_CODE" -ne 0 ]]; then

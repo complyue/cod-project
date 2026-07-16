@@ -1,10 +1,14 @@
 #include "cod_cache.hh"
 
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Program.h"
+#include "llvm/Support/SHA256.h"
 
-#include <chrono>
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -65,8 +69,12 @@ namespace {
 namespace fs = std::filesystem;
 
 std::chrono::system_clock::time_point to_system_clock_time(std::filesystem::file_time_type file_time) {
-  return std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-      file_time - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+#ifdef _WIN32
+  const auto system_time = std::chrono::utc_clock::to_sys(std::filesystem::file_time_type::clock::to_utc(file_time));
+#else
+  const auto system_time = std::filesystem::file_time_type::clock::to_sys(file_time);
+#endif
+  return std::chrono::time_point_cast<std::chrono::system_clock::duration>(system_time);
 }
 
 fs::path clangxx_candidate_for_root(const fs::path &root) {
@@ -90,6 +98,14 @@ std::string fallback_clangxx() {
 }
 
 std::string find_clangxx(const fs::path &project_root = {}) {
+  const fs::path current_executable = llvm::sys::fs::getMainExecutable(nullptr, nullptr);
+  if (!current_executable.empty()) {
+    auto candidate = current_executable.parent_path() / fallback_clangxx();
+    if (fs::exists(candidate)) {
+      return candidate.string();
+    }
+  }
+
   if (!project_root.empty()) {
     auto candidate = clangxx_candidate_for_root(project_root);
     if (fs::exists(candidate)) {
@@ -108,56 +124,55 @@ std::string find_clangxx(const fs::path &project_root = {}) {
   return fallback_clangxx();
 }
 
-std::string quote_shell_arg(std::string arg) {
-#ifdef _WIN32
-  if (arg.empty()) {
-    return "\"\"";
+bool execute_and_wait(const std::string &program, std::vector<std::string> arguments) {
+  auto executable = llvm::sys::findProgramByName(program);
+  if (!executable) {
+    std::cerr << "Failed to find compiler '" << program << "': " << executable.getError().message() << '\n';
+    return false;
   }
 
-  const bool needs_quotes = arg.find_first_of(" \t\n\r\"") != std::string::npos;
-  if (!needs_quotes) {
-    return arg;
+  arguments.insert(arguments.begin(), *executable);
+  std::vector<llvm::StringRef> argument_refs;
+  argument_refs.reserve(arguments.size());
+  for (const auto &argument : arguments) {
+    argument_refs.emplace_back(argument);
   }
 
-  std::string quoted;
-  quoted.reserve(arg.size() + 2);
-  quoted.push_back('"');
-  for (char ch : arg) {
-    if (ch == '"') {
-      quoted += "\\\"";
-    } else {
-      quoted.push_back(ch);
-    }
+  std::string error_message;
+  const int result = llvm::sys::ExecuteAndWait(*executable, argument_refs, std::nullopt, {}, 0, 0, &error_message);
+  if (!error_message.empty()) {
+    std::cerr << "Failed to execute compiler '" << *executable << "': " << error_message << '\n';
   }
-  quoted.push_back('"');
-  return quoted;
-#else
-  if (arg.empty()) {
-    return "''";
-  }
-
-  constexpr std::string_view safe_chars =
-      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+-=.,/:@%";
-  if (arg.find_first_not_of(safe_chars) == std::string::npos) {
-    return arg;
-  }
-
-  std::string quoted;
-  quoted.reserve(arg.size() + 2);
-  quoted.push_back('\'');
-  for (char ch : arg) {
-    if (ch == '\'') {
-      quoted += "'\\''";
-    } else {
-      quoted.push_back(ch);
-    }
-  }
-  quoted.push_back('\'');
-  return quoted;
-#endif
+  return result == 0;
 }
 
-std::string quote_shell_arg(const fs::path &path) { return quote_shell_arg(path.string()); }
+std::optional<std::string> bitcode_output_key(const fs::path &project_root, const fs::path &source_path,
+                                              const std::string &compiler_path,
+                                              const std::vector<std::string> &compiler_args) {
+  std::ifstream source(source_path, std::ios::binary);
+  if (!source) {
+    return std::nullopt;
+  }
+  const std::string source_contents((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+
+  llvm::SHA256 hash;
+  auto add_field = [&](std::string_view value) {
+    const std::string size = std::to_string(value.size());
+    hash.update(size);
+    hash.update(":");
+    hash.update(llvm::StringRef(value.data(), value.size()));
+  };
+
+  add_field(fs::absolute(project_root).lexically_normal().generic_string());
+  add_field(fs::absolute(source_path).lexically_normal().generic_string());
+  add_field(compiler_path);
+  for (const auto &argument : compiler_args) {
+    add_field(argument);
+  }
+  add_field(source_contents);
+
+  return llvm::toHex(hash.final(), true);
+}
 
 } // namespace
 
@@ -173,8 +188,7 @@ std::vector<std::string> CompilerArgs(std::vector<std::string> compiler_args) {
 
 #ifdef _WIN32
   const bool already_defined = std::any_of(compiler_args.begin(), compiler_args.end(), [](const std::string &arg) {
-    return arg == "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH" ||
-           arg == "/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH";
+    return arg == "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH" || arg == "/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH";
   });
   if (!already_defined) {
     compiler_args.push_back("-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH");
@@ -316,33 +330,63 @@ bool regional_cache_entry::is_valid() const {
 // Basic implementation for generate_bitcode
 std::optional<fs::path> BuildCache::generate_bitcode(const fs::path &source_path,
                                                      const std::vector<std::string> &compiler_args) {
-  // Create a temporary bitcode file
   auto temp_dir = fs::temp_directory_path() / "cod_bitcode";
   fs::create_directories(temp_dir);
 
-  auto bitcode_path = temp_dir / (source_path.stem().string() + ".bc");
-
   // Get toolchain compiler path - use the project's build directory
   std::string compiler_path = find_clangxx(project_root_);
-
-  // Build clang command to generate bitcode
   auto effective_compiler_args = CompilerArgs(compiler_args);
-  std::string cmd = quote_shell_arg(compiler_path) + " -emit-llvm -c ";
-  for (const auto &arg : effective_compiler_args) {
-    // Skip any clang++ paths in the arguments (they should not be there for bitcode generation)
-    if (arg.find("clang++") == std::string::npos) {
-      cmd += quote_shell_arg(arg) + " ";
+
+  const auto output_key = bitcode_output_key(project_root_, source_path, compiler_path, effective_compiler_args);
+  if (!output_key) {
+    return std::nullopt;
+  }
+  const fs::path bitcode_path = temp_dir / (*output_key + ".bc");
+
+  llvm::SmallString<256> temporary_path_text;
+  const fs::path temporary_model = temp_dir / (*output_key + "-%%%%%%%%%%%%%%%%.bc");
+  if (const std::error_code error = llvm::sys::fs::createUniqueFile(temporary_model.string(), temporary_path_text)) {
+    std::cerr << "Failed to reserve temporary bitcode output: " << error.message() << '\n';
+    return std::nullopt;
+  }
+  const fs::path temporary_path(temporary_path_text.str().str());
+
+  // Build clang arguments to generate bitcode
+  std::vector<std::string> arguments = {"-emit-llvm", "-c"};
+  arguments.insert(arguments.end(), effective_compiler_args.begin(), effective_compiler_args.end());
+  arguments.push_back(source_path.string());
+  arguments.push_back("-o");
+  arguments.push_back(temporary_path.string());
+
+  if (!execute_and_wait(compiler_path, std::move(arguments))) {
+    std::error_code remove_error;
+    fs::remove(temporary_path, remove_error);
+    return std::nullopt;
+  }
+
+  std::error_code size_error;
+  const auto temporary_size = fs::file_size(temporary_path, size_error);
+  const auto current_output_key =
+      bitcode_output_key(project_root_, source_path, compiler_path, effective_compiler_args);
+  if (size_error || temporary_size == 0 || current_output_key != output_key) {
+    std::error_code remove_error;
+    fs::remove(temporary_path, remove_error);
+    return std::nullopt;
+  }
+
+  if (const std::error_code error = llvm::sys::fs::rename(temporary_path.string(), bitcode_path.string())) {
+    if (fs::exists(bitcode_path)) {
+      std::error_code remove_error;
+      fs::remove(temporary_path, remove_error);
+      return bitcode_path;
     }
-  }
-  cmd += quote_shell_arg(source_path) + " -o " + quote_shell_arg(bitcode_path);
-
-  // Execute the command
-  int result = std::system(cmd.c_str());
-  if (result == 0 && fs::exists(bitcode_path)) {
-    return bitcode_path;
+    std::cerr << "Failed to publish bitcode output: " << error.message() << '\n';
+    std::error_code remove_error;
+    fs::remove(temporary_path, remove_error);
+    return std::nullopt;
   }
 
-  return std::nullopt;
+  return bitcode_path;
 }
 
 BitcodeCompiler::BitcodeCompiler() = default;
@@ -353,20 +397,16 @@ bool BitcodeCompiler::compile_to_bitcode(const fs::path &source_path, const fs::
   // Get toolchain compiler path - look for project build directory
   std::string compiler_path = find_clangxx();
 
-  // Build clang command to generate bitcode
+  // Build clang arguments to generate bitcode
   auto effective_compiler_args = CompilerArgs(compiler_args);
-  std::string cmd = quote_shell_arg(compiler_path) + " -emit-llvm -c ";
-  for (const auto &arg : effective_compiler_args) {
-    // Skip any clang++ paths in the arguments (they should not be there for bitcode generation)
-    if (arg.find("clang++") == std::string::npos) {
-      cmd += quote_shell_arg(arg) + " ";
-    }
-  }
-  cmd += quote_shell_arg(source_path) + " -o " + quote_shell_arg(output_path);
+  std::vector<std::string> arguments = {"-emit-llvm", "-c"};
+  arguments.insert(arguments.end(), effective_compiler_args.begin(), effective_compiler_args.end());
+  arguments.push_back(source_path.string());
+  arguments.push_back("-o");
+  arguments.push_back(output_path.string());
 
   // Execute the command
-  int result = std::system(cmd.c_str());
-  return result == 0 && fs::exists(output_path);
+  return execute_and_wait(compiler_path, std::move(arguments)) && fs::exists(output_path);
 }
 
 bool BitcodeCompiler::link_bitcode(const std::vector<fs::path> &bitcode_files, const fs::path &output_executable,
@@ -374,25 +414,22 @@ bool BitcodeCompiler::link_bitcode(const std::vector<fs::path> &bitcode_files, c
   // Get toolchain compiler path - look for project build directory
   std::string compiler_path = find_clangxx();
 
-  // Build the linking command
-  std::string command = quote_shell_arg(compiler_path);
+  std::vector<std::string> arguments;
 
   // Add bitcode files
   for (const auto &bitcode_file : bitcode_files) {
-    command += " " + quote_shell_arg(bitcode_file);
+    arguments.push_back(bitcode_file.string());
   }
 
   // Add linker arguments
-  for (const auto &arg : linker_args) {
-    command += " " + quote_shell_arg(arg);
-  }
+  arguments.insert(arguments.end(), linker_args.begin(), linker_args.end());
 
   // Add output executable
-  command += " -o " + quote_shell_arg(output_executable);
+  arguments.push_back("-o");
+  arguments.push_back(output_executable.string());
 
   // Execute the linking command
-  int result = std::system(command.c_str());
-  return result == 0;
+  return execute_and_wait(compiler_path, std::move(arguments));
 }
 
 } // namespace cod::cache
@@ -674,11 +711,7 @@ bool BuildCache::is_timestamp_newer(const fs::path &source_path, const regional_
     return true; // If we can't get the timestamp, assume it's newer
   }
 
-  // Convert file_time_type to system_clock time_point for comparison
-  auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-      source_mtime - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
-
-  return sctp > entry.created_at();
+  return to_system_clock_time(source_mtime) > entry.created_at();
 }
 
 } // namespace cod::cache

@@ -53,21 +53,35 @@ function Add-PathDirectory {
 }
 
 function Import-VsDevEnvironment {
-    if ($env:VSCMD_VER -and (Get-Command -Name cl.exe -CommandType Application -ErrorAction SilentlyContinue)) {
+    if ($env:VSCMD_VER -and
+        $env:VSCMD_ARG_TGT_ARCH -eq "x64" -and
+        (Get-Command -Name cl.exe -CommandType Application -ErrorAction SilentlyContinue)) {
         Write-Host "Using existing Visual Studio developer environment $env:VSCMD_VER"
         return
     }
 
-    $vswhere = Resolve-Tool "vswhere.exe" @(
+    $vswhereCandidates = @(
         "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe",
         "$env:ProgramFiles\Microsoft Visual Studio\Installer\vswhere.exe"
     )
+    $vswhereCommand = Get-Command -Name "vswhere.exe" -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    $vswhere = if ($vswhereCommand) {
+        $vswhereCommand.Source
+    } else {
+        $vswhereCandidates |
+            Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+            Select-Object -First 1
+    }
 
-    $installPath = & $vswhere -latest -products "*" `
-        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-        -property installationPath
-    if ($LASTEXITCODE -ne 0 -or -not $installPath) {
-        $installPath = & $vswhere -latest -products "*" -property installationPath
+    $installPath = $null
+    if ($vswhere) {
+        $installPath = & $vswhere -latest -products "*" `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+        if ($LASTEXITCODE -ne 0 -or -not $installPath) {
+            $installPath = & $vswhere -latest -products "*" -property installationPath
+        }
     }
 
     $vsDevCmdCandidates = @()
@@ -76,7 +90,13 @@ function Import-VsDevEnvironment {
     }
     $vsDevCmdCandidates += @(
         "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat",
-        "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat"
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
     )
 
     $vsDevCmd = $vsDevCmdCandidates |
@@ -96,6 +116,11 @@ function Import-VsDevEnvironment {
         if ($line -match '^([^=]+)=(.*)$') {
             [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], "Process")
         }
+    }
+
+    if ($env:VSCMD_ARG_TGT_ARCH -ne "x64" -or
+        -not (Get-Command -Name cl.exe -CommandType Application -ErrorAction SilentlyContinue)) {
+        throw "Visual Studio environment was imported, but the MSVC x64 tools are still not available."
     }
 }
 
@@ -117,6 +142,9 @@ $Components = @(
         ForEach-Object { $_.Trim() } |
         Where-Object { $_ }
 )
+if ($Components.Count -eq 0) {
+    throw "At least one test component must be selected."
+}
 
 $CMake = Resolve-Tool "cmake.exe" @(
     "$env:ProgramFiles\CMake\bin\cmake.exe",
@@ -147,6 +175,9 @@ Write-Host "Toolchain: $Toolchain"
 
 $bashSourceDir = Convert-ToBashPath $SourceDir
 foreach ($component in $Components) {
+    if ($component -notmatch '^[A-Za-z0-9_-]+$') {
+        throw "Invalid test component name '$component'."
+    }
     $script = Join-Path $SourceDir (Join-Path "tests\$component" "run-all.sh")
     if (-not (Test-Path -LiteralPath $script -PathType Leaf)) {
         throw "Unknown or unsupported test component '$component': $script"

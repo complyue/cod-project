@@ -5,11 +5,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -17,6 +19,7 @@
 
 #include "../test_output_utils.hh"
 #include "cod_cache.hh"
+#include "llvm/Support/Program.h"
 
 // Helper macro for descriptive assertions
 #define TEST_ASSERT(condition, message)                                                                                \
@@ -84,6 +87,51 @@ fs::path createTestSource(const fs::path &dir, const std::string &content, const
   file << content;
   file.close();
   return source_path;
+}
+
+void testUtcTimestampConversion(bool verbose) {
+  TestLogger::log_test("UTC timestamp conversion");
+  (void)verbose;
+
+  std::tm epoch{};
+  epoch.tm_year = 70;
+  epoch.tm_mon = 0;
+  epoch.tm_mday = 1;
+  TEST_ASSERT(cod::cache::detail::from_utc_tm(epoch) == std::time_t{0}, "Unix epoch must be parsed as UTC");
+
+  const std::tm round_trip = cod::cache::detail::to_utc_tm(std::time_t{0});
+  TEST_ASSERT(round_trip.tm_year == 70 && round_trip.tm_mon == 0 && round_trip.tm_mday == 1 &&
+                  round_trip.tm_hour == 0 && round_trip.tm_min == 0 && round_trip.tm_sec == 0,
+              "Unix epoch must format as midnight UTC");
+
+  TestLogger::log_pass("UTC timestamp conversion test passed");
+}
+
+void testBitcodeOutputIsolation(bool verbose) {
+  TestLogger::log_test("bitcode output isolation");
+  (void)verbose;
+
+  TempDirGuard temp_dir;
+  const fs::path project_a = temp_dir.path() / "project-a";
+  const fs::path project_b = temp_dir.path() / "project-b";
+  fs::create_directories(project_a);
+  fs::create_directories(project_b);
+
+  const fs::path source_a = createTestSource(project_a, "int value() { return 1; }\n", "runner.cc");
+  const fs::path source_b = createTestSource(project_b, "int value() { return 2; }\n", "runner.cc");
+  const std::vector<std::string> compiler_args = {"-std=c++20"};
+
+  BuildCache cache_a(project_a, verbose);
+  BuildCache cache_b(project_b, verbose);
+  const auto bitcode_a = cache_a.generate_bitcode(source_a, compiler_args);
+  const auto bitcode_b = cache_b.generate_bitcode(source_b, compiler_args);
+
+  TEST_ASSERT(bitcode_a.has_value() && bitcode_b.has_value(), "Both bitcode compilations should succeed");
+  TEST_ASSERT(*bitcode_a != *bitcode_b, "Different projects must not share a generated bitcode path");
+  fs::remove(*bitcode_a);
+  fs::remove(*bitcode_b);
+
+  TestLogger::log_pass("Bitcode output isolation test passed");
 }
 
 void testSemanticHasher(bool verbose) {
@@ -396,7 +444,9 @@ void testBitcodeCompiler(bool verbose) {
   std::cout << "Testing bitcode compiler..." << std::endl;
   (void)verbose; // Suppress unused parameter warning
 
-  auto temp_dir = createTempDir();
+  auto temp_root = createTempDir();
+  auto temp_dir = temp_root / "path&shell";
+  fs::create_directories(temp_dir);
 
   // Create test source file
   std::string code = R"(
@@ -440,12 +490,11 @@ int main() {
 
   // Test execution (basic check)
   auto output_path = temp_dir / "output.txt";
-#ifdef _WIN32
-  std::string cmd = "cmd.exe /S /C \"\"" + executable_path.string() + "\" > \"" + output_path.string() + "\"\"";
-#else
-  std::string cmd = "\"" + executable_path.string() + "\" > \"" + output_path.string() + "\"";
-#endif
-  int result = std::system(cmd.c_str());
+  const std::string executable = executable_path.string();
+  const std::string output_path_text = output_path.string();
+  const std::vector<llvm::StringRef> arguments = {executable};
+  const std::array<std::optional<llvm::StringRef>, 3> redirects = {std::nullopt, output_path_text, std::nullopt};
+  int result = llvm::sys::ExecuteAndWait(executable, arguments, std::nullopt, redirects);
   TEST_ASSERT(result == 0, "Executable should run successfully");
 
   // Check output
@@ -456,7 +505,7 @@ int main() {
   TEST_ASSERT(output.find("Hello, Bitcode!") != std::string::npos, "Executable output should contain expected text");
 
   // Cleanup
-  fs::remove_all(temp_dir);
+  fs::remove_all(temp_root);
 
   std::cout << "✓ Bitcode compiler test passed" << std::endl;
 }
@@ -524,9 +573,31 @@ int main(int argc, char *argv[]) {
   TestLogger::log_header("CoD Cache Tests");
 
   int failed_tests = 0;
-  int total_tests = 6;
+  int total_tests = 8;
 
-  // Test 1: Semantic Hasher
+  // Test 1: UTC Timestamp Conversion
+  try {
+    testUtcTimestampConversion(verbose);
+  } catch (const std::exception &e) {
+    TestLogger::log_fail("UTC timestamp conversion test failed: " + std::string(e.what()));
+    failed_tests++;
+  } catch (...) {
+    TestLogger::log_fail("UTC timestamp conversion test failed with unknown exception");
+    failed_tests++;
+  }
+
+  // Test 2: Bitcode Output Isolation
+  try {
+    testBitcodeOutputIsolation(verbose);
+  } catch (const std::exception &e) {
+    TestLogger::log_fail("Bitcode output isolation test failed: " + std::string(e.what()));
+    failed_tests++;
+  } catch (...) {
+    TestLogger::log_fail("Bitcode output isolation test failed with unknown exception");
+    failed_tests++;
+  }
+
+  // Test 3: Semantic Hasher
   try {
     testSemanticHasher(verbose);
   } catch (const std::exception &e) {
@@ -537,7 +608,7 @@ int main(int argc, char *argv[]) {
     failed_tests++;
   }
 
-  // Test 2: Build Cache
+  // Test 4: Build Cache
   try {
     testBuildCache(verbose);
   } catch (const std::exception &e) {
@@ -548,7 +619,7 @@ int main(int argc, char *argv[]) {
     failed_tests++;
   }
 
-  // Test 3: Timestamp Optimization
+  // Test 5: Timestamp Optimization
   try {
     testTimestampOptimization(verbose);
   } catch (const std::exception &e) {
@@ -559,7 +630,7 @@ int main(int argc, char *argv[]) {
     failed_tests++;
   }
 
-  // Test 4: Bitcode Compiler
+  // Test 6: Bitcode Compiler
   try {
     testBitcodeCompiler(verbose);
   } catch (const std::exception &e) {
@@ -570,7 +641,7 @@ int main(int argc, char *argv[]) {
     failed_tests++;
   }
 
-  // Test 5: Cache Cleanup
+  // Test 7: Cache Cleanup
   try {
     testCacheCleanup(verbose);
   } catch (const std::exception &e) {
@@ -581,7 +652,7 @@ int main(int argc, char *argv[]) {
     failed_tests++;
   }
 
-  // Test 6: Edge Cases
+  // Test 8: Edge Cases
   try {
     testEdgeCases(verbose);
   } catch (const std::exception &e) {

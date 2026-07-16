@@ -1,16 +1,8 @@
 #include "codp_commands.hh"
 
-#include <cstdio>
-#include <cstring>
+#include <algorithm>
+#include <cctype>
 #include <map>
-
-#ifdef _WIN32
-#define COD_POPEN _popen
-#define COD_PCLOSE _pclose
-#else
-#define COD_POPEN popen
-#define COD_PCLOSE pclose
-#endif
 
 int cmd_solve(int argc, char **argv, int argi, const fs::path &project_path) {
   // cmd == "solve" - proceed with dependency resolution
@@ -87,8 +79,12 @@ int cmd_solve(int argc, char **argv, int argi, const fs::path &project_path) {
           dep_path = fs::weakly_canonical(dep_path);
 
           // Store relative path from project root
-          fs::path relative_path = fs::relative(dep_path, project_path);
-          locals[uuid_str] = relative_path.generic_string();
+          std::error_code relative_error;
+          fs::path manifest_path = fs::relative(dep_path, project_path, relative_error);
+          if (relative_error || manifest_path.empty()) {
+            manifest_path = dep_path;
+          }
+          locals[uuid_str] = manifest_path.generic_string();
 
           // Load and recurse into dep project
           fs::path dep_yaml_path = dep_path / "CodProject.yaml";
@@ -133,7 +129,7 @@ int cmd_solve(int argc, char **argv, int argi, const fs::path &project_path) {
 
     // Generate YAML using the new to_yaml function
     try {
-      yaml::Document doc("CodManifest.yaml", [&](yaml::YamlAuthor &author) {
+      yaml::Document doc((project_path / "CodManifest.yaml").string(), [&](yaml::YamlAuthor &author) {
         auto root = to_yaml(*manifest, author);
         author.addRoot(root);
       });
@@ -184,7 +180,7 @@ int cmd_update(int argc, char **argv, int argi, const fs::path &project_path) {
 
       // Ensure bare repo exists and is up to date
       std::string repo_key = repo_url_to_key(repo_url);
-      fs::path bare_repo_path = home_dir() / ".cod" / "pkgs" / "repos" / repo_key;
+      fs::path bare_repo_path = home_dir() / ".cod" / "pkgs" / "repos" / (repo_key + ".git");
 
       try {
         ensure_bare_repo(repo_url, bare_repo_path);
@@ -194,34 +190,36 @@ int cmd_update(int argc, char **argv, int argi, const fs::path &project_path) {
       }
 
       // Get latest commit hash for the branch
-      std::string git_cmd =
-          "git --git-dir=" + quote_shell_arg(bare_repo_path) + " rev-parse " + quote_shell_arg(branch);
-      FILE *pipe = COD_POPEN(git_cmd.c_str(), "r");
-      if (!pipe) {
+      auto result = run_command(
+          {"git", "--git-dir=" + bare_repo_path.string(), "rev-parse", "--verify", branch + "^{commit}"}, true);
+      if (result.exit_code != 0) {
         std::cerr << "Warning: Failed to get commit hash for " << repo_url << " (" << branch << ")" << std::endl;
         continue;
       }
 
-      char commit_hash[41];
-      if (fgets(commit_hash, sizeof(commit_hash), pipe) != nullptr) {
-        // Remove newline
-        size_t len = strlen(commit_hash);
-        if (len > 0 && commit_hash[len - 1] == '\n') {
-          commit_hash[len - 1] = '\0';
-        }
-
-        // Update the commit hash in the manifest entry
-        new (&entry.commit()) regional_str(*manifest_region, commit_hash);
-        std::cout << "  Updated to commit " << commit_hash << std::endl;
-      } else {
-        std::cerr << "Warning: Failed to read commit hash for " << repo_url << " (" << branch << ")" << std::endl;
+      auto first = std::find_if_not(result.output.begin(), result.output.end(),
+                                    [](unsigned char ch) { return std::isspace(ch); });
+      auto last = std::find_if_not(result.output.rbegin(), result.output.rend(), [](unsigned char ch) {
+                    return std::isspace(ch);
+                  }).base();
+      std::string commit_hash = first < last ? std::string(first, last) : std::string();
+      const bool valid_hash =
+          (commit_hash.size() == 40 || commit_hash.size() == 64) &&
+          std::all_of(commit_hash.begin(), commit_hash.end(), [](unsigned char ch) { return std::isxdigit(ch); });
+      if (!valid_hash) {
+        std::cerr << "Warning: Git returned an invalid commit hash for " << repo_url << " (" << branch << ")"
+                  << std::endl;
+        continue;
       }
-      COD_PCLOSE(pipe);
+
+      // Update the commit hash in the manifest entry
+      intern_str(*manifest_region, commit_hash, entry.commit());
+      std::cout << "  Updated to commit " << commit_hash << std::endl;
     }
 
     // Write updated manifest back to file
     try {
-      yaml::Document doc("CodManifest.yaml", [&](yaml::YamlAuthor &author) {
+      yaml::Document doc(manifest_yaml.string(), [&](yaml::YamlAuthor &author) {
         auto root = to_yaml(*manifest, author);
         author.addRoot(root);
       });
@@ -248,6 +246,3 @@ int cmd_debug(int argc, char **argv, int argi, const fs::path &project_path) {
   dumpTestDebugInfo(std::cerr);
   return 0;
 }
-
-#undef COD_POPEN
-#undef COD_PCLOSE

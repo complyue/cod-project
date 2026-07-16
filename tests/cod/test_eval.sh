@@ -3,7 +3,6 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEST_NAME="CoD Eval Tests"
 
 # Determine the cod executable path based on COD_TEST_TOOLCHAIN
 COD_PROJECT_SOURCE_DIR="$SCRIPT_DIR/../.."
@@ -216,19 +215,27 @@ test_eval_exit_codes() {
     rm -f /tmp/cod_exit_*
 }
 
-# Main test execution
-main() {
-    echo "Running $TEST_NAME..."
-    echo
-    
-    test_basic_evaluation
-    test_eval_with_custom_works
-    test_eval_long_form
-    test_multiline_expression
-    test_eval_exit_codes
-    
-    echo
-    echo "✔ All eval tests passed! ($PASS_COUNT/$TEST_COUNT)"
+# Test that a generated runner can find toolchain runtime DLLs without inheriting
+# the toolchain bin directory from its caller.
+test_toolchain_runtime_discovery() {
+    log_test "toolchain runtime discovery"
+    run_test
+
+    PROJECT_DIR=$(get_test_project_path)
+
+    if (cd "$PROJECT_DIR" && PATH="/usr/bin:/bin" "$COD_EXECUTABLE" --force-rebuild \
+        -e "shilos::yaml::format_yaml(shilos::yaml::Node(static_cast<int64_t>(42)))" \
+        > /tmp/cod_runtime_out 2> /tmp/cod_runtime_err); then
+        if grep -q "42" /tmp/cod_runtime_out; then
+            log_pass "generated runner finds toolchain runtime libraries"
+        else
+            log_fail "generated runner produced unexpected output"
+        fi
+    else
+        log_fail "generated runner could not find toolchain runtime libraries"
+    fi
+
+    rm -f /tmp/cod_runtime_*
 }
 
 # Run tests
@@ -239,6 +246,7 @@ test_eval_with_custom_works
 test_eval_long_form
 test_multiline_expression
 test_eval_exit_codes
+test_toolchain_runtime_discovery
 
 echo
 if [[ "$FAIL_COUNT" -eq 0 ]]; then

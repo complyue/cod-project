@@ -15,24 +15,18 @@ COD_TARGETS_TO_BUILD="Native"
 # COD_TARGETS_TO_BUILD="Native;NVPTX"
 
 # build type for CoD
-: ${COD_BUILD_TYPE:=Release} # or RelWithDebInfo, or Debug
+: "${COD_BUILD_TYPE:=Release}" # or RelWithDebInfo, or Debug
 
 { # keep body of cmds in this single command group, so they execute as a whole
 	# thus edit-during-(long)-execution and partial downloads are not problems
 	set -e
-	cd $(dirname "$0")
+	cd "$(dirname "$0")"
 	COD_SOURCE_DIR=$(pwd)
 
 	# One checkout/worktree owns one development environment.  Native, WSL,
 	# Docker, and macOS builds should use separate worktrees instead of sharing
 	# one source directory.  Keep the final development build tree at ./build so
 	# clangd finds build/compile_commands.json by convention.
-	if [ -L build ] || [ -L built ]; then
-		echo "Error: build/ and built/ must be real directories in this workflow." >&2
-		echo "Use a fresh worktree, or remove legacy build/built symlinks manually." >&2
-		exit 1
-	fi
-
 	BUILD_DIR="$COD_SOURCE_DIR/build"
 	BOOTSTRAP_DIR="$BUILD_DIR/.bootstrap"
 	STAGE1_DIR="$BOOTSTRAP_DIR/stage1"
@@ -40,6 +34,17 @@ COD_TARGETS_TO_BUILD="Native"
 	RUNTIME_INSTALL_DIR="$BOOTSTRAP_DIR/cod-rt"
 	STAGE2_INSTALL_DIR="$BUILD_DIR/cod"
 	FINAL_INSTALL_DIR="$COD_SOURCE_DIR/built"
+	for DIR in "$BUILD_DIR" "$FINAL_INSTALL_DIR" "$COD_SOURCE_DIR/llvm-project" \
+		"$BOOTSTRAP_DIR" "$STAGE1_DIR" "$STAGE2_DIR" "$RUNTIME_INSTALL_DIR" "$STAGE2_INSTALL_DIR"; do
+		if [ -L "$DIR" ]; then
+			echo "Error: $DIR must be a real directory, not a symlink." >&2
+			exit 1
+		fi
+		if [ -e "$DIR" ] && [ ! -d "$DIR" ]; then
+			echo "Error: $DIR must be a directory." >&2
+			exit 1
+		fi
+	done
 
 	if [ "$(uname)" == "Darwin" ]; then
 		# macOS
@@ -109,13 +114,30 @@ COD_TARGETS_TO_BUILD="Native"
 	# pull llvm-project repo here
 	# not to put it in ../ so we work in a single host dir, in case of devcontainers
 	if [ -d "./llvm-project/.git" ]; then
-		git -C "./llvm-project" pull
+		ACTUAL_LLVM_BRANCH=$(git -C "./llvm-project" branch --show-current)
+		if [ "$ACTUAL_LLVM_BRANCH" != "$LLVM_BRANCH" ]; then
+			echo "Error: llvm-project is on '$ACTUAL_LLVM_BRANCH', expected '$LLVM_BRANCH'." >&2
+			exit 1
+		fi
+		git -C "./llvm-project" pull --ff-only
 	else
-		git clone --depth 1 -b "$LLVM_BRANCH" https://github.com/llvm/llvm-project.git "./llvm-project" && (
-			cd llvm-project
-			find "../patches/llvm/$LLVM_BRANCH" -type f -name "*.patch" -print0 |
-				sort -z | xargs -0 -I{} git apply "{}"
-		)
+		git clone --depth 1 -b "$LLVM_BRANCH" https://github.com/llvm/llvm-project.git "./llvm-project"
+	fi
+	ACTUAL_LLVM_BRANCH=$(git -C "./llvm-project" branch --show-current)
+	if [ "$ACTUAL_LLVM_BRANCH" != "$LLVM_BRANCH" ]; then
+		echo "Error: llvm-project is on '$ACTUAL_LLVM_BRANCH', expected '$LLVM_BRANCH'." >&2
+		exit 1
+	fi
+	PATCH_DIR="$COD_SOURCE_DIR/patches/llvm/$LLVM_BRANCH"
+	if [ -d "$PATCH_DIR" ]; then
+		while IFS= read -r PATCH; do
+			if git -C "./llvm-project" apply --check "$PATCH" >/dev/null 2>&1; then
+				git -C "./llvm-project" apply "$PATCH"
+			elif ! git -C "./llvm-project" apply --reverse --check "$PATCH" >/dev/null 2>&1; then
+				echo "Error: LLVM patch cannot be applied cleanly: $PATCH" >&2
+				exit 1
+			fi
+		done < <(find "$PATCH_DIR" -type f -name "*.patch" -print | LC_ALL=C sort)
 	fi
 
 	STAGE_COMMON_CMAKE_OPTS=(
@@ -176,7 +198,9 @@ COD_TARGETS_TO_BUILD="Native"
 	#   we always (even on Linux) do HAVE_UNW_ADD_DYNAMIC_FDE=1 per:
 	#     https://github.com/llvm/llvm-project/issues/43419
 	#
-	test -x "$STAGE2_INSTALL_DIR/bin/cod" || (
+	{ test -x "$STAGE2_INSTALL_DIR/bin/cod" &&
+		test -x "$STAGE2_INSTALL_DIR/bin/clang++" &&
+		test -x "$STAGE2_INSTALL_DIR/bin/ld.lld"; } || (
 		#
 		# stage-1: build clang with system compiler (gcc or older clang) toolchain,
 		#          bundling lld, libc++ etc. with it
@@ -190,7 +214,9 @@ COD_TARGETS_TO_BUILD="Native"
 		#   rpath, this is crucial in case system installed (older) versions lack
 		#   symbols from our built libs from llvm-project
 		#
-		{ test -x "$STAGE1_DIR/bin/clang++" && test -d "$RUNTIME_INSTALL_DIR/lib"; } || (
+		{ test -x "$STAGE1_DIR/bin/clang++" &&
+			test -x "$STAGE1_DIR/bin/ld.lld" &&
+			test -d "$RUNTIME_INSTALL_DIR/lib"; } || (
 			mkdir -p "$STAGE1_DIR" && cd "$STAGE1_DIR"
 			cmake -DCMAKE_INSTALL_PREFIX="$RUNTIME_INSTALL_DIR" \
 				-DLLVM_TARGETS_TO_BUILD=Native \

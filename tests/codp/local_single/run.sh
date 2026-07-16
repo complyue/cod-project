@@ -41,10 +41,14 @@ if [[ ! -x "$YAMLCMP_BIN" ]]; then
   exit 1
 fi
 
-ROOT_DIR="$SCRIPT_DIR/data/root"
+WORK_DIR=$(mktemp -d "$SCRIPT_DIR/.tmp-project.XXXXXX")
+trap 'rm -rf "$WORK_DIR"' EXIT
+cp -R "$SCRIPT_DIR/data/." "$WORK_DIR/"
+ROOT_DIR="$WORK_DIR/root"
+rm -f "$ROOT_DIR/CodManifest.yaml"
 
-# Run codp directly inside root project dir
-(cd "$ROOT_DIR" && codp solve)
+# Run codp from outside the selected project directory.
+(cd "$WORK_DIR" && codp solve --project "$ROOT_DIR")
 
 MANIFEST="$ROOT_DIR/CodManifest.yaml"
 if [[ ! -f "$MANIFEST" ]]; then

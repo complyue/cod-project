@@ -39,9 +39,7 @@ class dbmr_file {
 
   explicit dbmr_file(HANDLE handle) : handle_(handle) {}
 
-  static std::wstring native_path(const std::string &file_name) {
-    return std::filesystem::path(file_name).wstring();
-  }
+  static std::wstring native_path(const std::string &file_name) { return std::filesystem::path(file_name).wstring(); }
 
   [[noreturn]] static void throw_last_error(const std::string &message, DWORD error = GetLastError()) {
     throw std::system_error(static_cast<int>(error), std::system_category(), message);
@@ -106,9 +104,9 @@ public:
 
   static dbmr_file create_or_open(const std::string &file_name) {
 #ifdef _WIN32
-    HANDLE handle = CreateFileW(native_path(file_name).c_str(), GENERIC_READ | GENERIC_WRITE,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
-                                nullptr);
+    HANDLE handle =
+        CreateFileW(native_path(file_name).c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
       throw_last_error("Failed to create file: " + file_name);
     }
@@ -156,13 +154,19 @@ public:
 
   void resize(size_t new_size, const std::string &file_name) {
 #ifdef _WIN32
+    if (!std::in_range<LONGLONG>(new_size)) {
+      throw std::length_error("File is too large to resize: " + file_name);
+    }
     LARGE_INTEGER distance;
     distance.QuadPart = static_cast<LONGLONG>(new_size);
     if (!SetFilePointerEx(handle_, distance, nullptr, FILE_BEGIN) || !SetEndOfFile(handle_)) {
       throw_last_error("Failed to resize file: " + file_name);
     }
 #else
-    if (::ftruncate(fd_, new_size) == -1) {
+    if (!std::in_range<off_t>(new_size)) {
+      throw std::length_error("File is too large to resize: " + file_name);
+    }
+    if (::ftruncate(fd_, static_cast<off_t>(new_size)) == -1) {
       throw_last_error("Failed to resize file: " + file_name);
     }
 #endif
@@ -259,6 +263,48 @@ private:
       : file_name_(file_name), file_(std::move(file)), region_(region), mapped_size_(mapped_size),
         constrict_on_close_(false) {}
 
+  static size_t checked_add(size_t lhs, size_t rhs, const std::string &file_name) {
+    if (rhs > (std::numeric_limits<size_t>::max)() - lhs) {
+      throw std::length_error("DBMR capacity is too large: " + file_name);
+    }
+    return lhs + rhs;
+  }
+
+  static memory_region<RT> *validate_mapped_region(detail::dbmr_file &file, void *mapped_addr, size_t file_size,
+                                                   const std::string &file_name) {
+    auto *region = static_cast<memory_region<RT> *>(mapped_addr);
+    auto reject = [&](const std::string &reason) {
+      file.unmap(mapped_addr, file_size);
+      file.close();
+      throw std::runtime_error("Invalid DBMR file '" + file_name + "': " + reason);
+    };
+
+    const size_t capacity = region->capacity();
+    const size_t occupation = region->occupation();
+    if (capacity < sizeof(memory_region<RT>)) {
+      reject("stored capacity is smaller than the region header");
+    }
+    if (occupation < sizeof(memory_region<RT>) || occupation > capacity) {
+      reject("stored occupation is outside the region capacity");
+    }
+    if (capacity > file_size) {
+      reject("stored capacity exceeds the mapped file size");
+    }
+    if (region->ro_offset_ < sizeof(memory_region<RT>) || region->ro_offset_ > occupation ||
+        sizeof(RT) > occupation - region->ro_offset_) {
+      reject("stored root object is outside the occupied region");
+    }
+    const auto root_address = reinterpret_cast<uintptr_t>(mapped_addr) + region->ro_offset_;
+    if (root_address % alignof(RT) != 0) {
+      reject("stored root object is misaligned");
+    }
+    if (region->root_type_uuid() != RT::TYPE_UUID) {
+      reject(std::string("root type mismatch: ") + region->root_type_uuid().to_string() + " vs expected " +
+             RT::TYPE_UUID.to_string());
+    }
+    return region;
+  }
+
 public:
   // writable ctor
   DBMR(const std::string &file_name, size_t reserve_free_capacity)
@@ -267,28 +313,28 @@ public:
 
     file_ = detail::dbmr_file::open_existing(file_name, true);
     file_size = file_.size(file_name);
-    assert(file_size >= sizeof(memory_region<RT>));
+    if (file_size < sizeof(memory_region<RT>)) {
+      throw std::runtime_error("Too small for a memory region: " + file_name);
+    }
 
     void *mapped_addr = file_.map(file_size, true, file_name);
     mapped_size_ = file_size;
-    region_ = static_cast<memory_region<RT> *>(mapped_addr);
-
-    if (region_->occupation() > file_size) { // this is insane
-      file_.unmap(mapped_addr, file_size);
-      file_.close();
-      throw std::logic_error("!?DBMR occupied more than the file size?!");
-    }
-
-    if (region_->root_type_uuid() != RT::TYPE_UUID) {
-      file_.unmap(mapped_addr, file_size);
-      file_.close();
-      throw std::runtime_error(std::string("Root Type mismatch: ") + region_->root_type_uuid().to_string() +
-                               " vs expected " + RT::TYPE_UUID.to_string());
-    }
+    region_ = validate_mapped_region(file_, mapped_addr, file_size, file_name);
 
     if (region_->free_capacity() < reserve_free_capacity) {
-      const size_t new_file_size = file_size + reserve_free_capacity - region_->free_capacity();
+      const size_t additional_capacity = reserve_free_capacity - region_->free_capacity();
+      size_t new_file_size;
+      try {
+        new_file_size = checked_add(file_size, additional_capacity, file_name);
+      } catch (...) {
+        file_.unmap(mapped_addr, file_size);
+        region_ = nullptr;
+        mapped_size_ = 0;
+        throw;
+      }
       file_.unmap(mapped_addr, file_size);
+      region_ = nullptr;
+      mapped_size_ = 0;
       file_.resize(new_file_size, file_name);
 
       file_size = new_file_size;
@@ -347,22 +393,7 @@ public:
     }
 
     void *mapped_addr = file.map(file_size, false, file_name);
-    auto *region = static_cast<memory_region<RT> *>(mapped_addr);
-
-    if (region->occupation() > file_size) { // this is insane
-      file.unmap(mapped_addr, file_size);
-      file.close();
-      throw std::logic_error("!?DBMR occupied more than the file size?!");
-    }
-
-    if (region->root_type_uuid() != RT::TYPE_UUID) {
-      file.unmap(mapped_addr, file_size);
-      file.close();
-      throw std::runtime_error(std::string("Root Type mismatch: ") + region->root_type_uuid().to_string() +
-                               " vs expected " + RT::TYPE_UUID.to_string());
-    }
-
-    assert(region->capacity() <= file_size);
+    auto *region = validate_mapped_region(file, mapped_addr, file_size, file_name);
 
     return DBMR<RT>(file_name, std::move(file), region, file_size);
   }
@@ -371,15 +402,22 @@ public:
   template <typename... Args>
     requires std::constructible_from<RT, memory_region<RT> &, Args...>
   static DBMR<RT> create(const std::string &file_name, size_t free_capacity, Args &&...args) {
-    auto file = detail::dbmr_file::create_or_open(file_name);
+    size_t file_size = checked_add(sizeof(memory_region<RT>), alignof(RT) - 1, file_name);
+    file_size = checked_add(file_size, sizeof(RT), file_name);
+    file_size = checked_add(file_size, free_capacity, file_name);
 
-    const size_t file_size = sizeof(memory_region<RT>) + sizeof(RT) + free_capacity;
+    auto file = detail::dbmr_file::create_or_open(file_name);
     file.resize(file_size, file_name);
 
     void *mapped_addr = file.map(file_size, true, file_name);
 
     auto *region = static_cast<memory_region<RT> *>(mapped_addr);
-    new (region) memory_region<RT>(file_size, std::forward<Args>(args)...);
+    try {
+      new (region) memory_region<RT>(file_size, std::forward<Args>(args)...);
+    } catch (...) {
+      file.unmap(mapped_addr, file_size);
+      throw;
+    }
 
     return DBMR<RT>(file_name, std::move(file), region, file_size);
   }

@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
     // First recognized non-option token becomes subcommand; otherwise treat as positional for default command
     if (!a.empty() && a[0] != '-') {
-      if (a == "solve" || a == "update" || a == "init" || a == "add" || a == "rm" || a == "debug") {
+      if (argi == -1 && (a == "solve" || a == "update" || a == "init" || a == "add" || a == "rm" || a == "debug")) {
         cmd = a;
         argi = i + 1;
       } else if (argi == -1) {

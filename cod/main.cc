@@ -14,10 +14,6 @@
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/Driver/Compilation.h"
-#include "clang/Driver/Driver.h"
-#include "clang/Driver/Tool.h"
-#include "clang/Driver/ToolChain.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -26,6 +22,7 @@
 #include "clang/Tooling/CommonOptionsParser.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Program.h"
@@ -41,6 +38,7 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -57,7 +55,6 @@ using namespace shilos;
 using namespace cod;
 using namespace cod::project;
 
-// Helper class to access LLVM Driver APIs for toolchain detection
 struct CodReplConfig {
   fs::path works_path = ".cod/works.dbmr";
   fs::path project_root;
@@ -72,19 +69,71 @@ struct CodReplConfig {
   std::chrono::hours cache_max_age = std::chrono::hours(24 * 7); // 1 week
 };
 
+// Resolves and uses the toolchain bundled with the running CoD executable.
 class CodTool {
 private:
   std::string executable_path_;
+  fs::path toolchain_root_;
+
+  void initializeToolchainRoot() {
+#ifdef _WIN32
+    llvm::SmallVector<wchar_t, 256> executable_path_buffer;
+    if (const auto error = llvm::sys::windows::UTF8ToUTF16(executable_path_, executable_path_buffer)) {
+      throw std::system_error(error, "failed to convert the CoD executable path to UTF-16");
+    }
+    toolchain_root_ = fs::path(std::wstring(executable_path_buffer.begin(), executable_path_buffer.end()))
+                          .parent_path()
+                          .parent_path();
+#else
+    toolchain_root_ = fs::path(executable_path_).parent_path().parent_path();
+#endif
+  }
+
+  fs::path getToolchainIncludePath() const {
+    const fs::path installed_include = toolchain_root_ / "include";
+    if (fs::exists(installed_include / "cod.hh")) {
+      return installed_include;
+    }
+
+    const fs::path development_include = toolchain_root_.parent_path() / "include";
+    if (fs::exists(toolchain_root_ / "CMakeCache.txt") && fs::exists(development_include / "cod.hh")) {
+      return development_include;
+    }
+    return {};
+  }
+
+#ifdef _WIN32
+  void addToolchainBinToPath() const {
+    const std::wstring toolchain_bin = (toolchain_root_ / "bin").wstring();
+    if (toolchain_bin.empty()) {
+      return;
+    }
+
+    const wchar_t *current_path = _wgetenv(L"PATH");
+    std::wstring updated_path = toolchain_bin;
+    if (current_path != nullptr && *current_path != L'\0') {
+      updated_path += L';';
+      updated_path += current_path;
+    }
+
+    if (_wputenv_s(L"PATH", updated_path.c_str()) != 0) {
+      throw std::runtime_error("failed to add the CoD toolchain directory to PATH");
+    }
+  }
+#endif
 
 public:
   CodTool() {
     // this is often used, get it once
     executable_path_ = llvm::sys::fs::getMainExecutable(nullptr, nullptr);
+    if (executable_path_.empty()) {
+      throw std::runtime_error("failed to resolve the CoD executable path");
+    }
+    initializeToolchainRoot();
+#ifdef _WIN32
+    addToolchainBinToPath();
+#endif
   }
-
-  const char *getClangProgramPath() const { return executable_path_.c_str(); }
-
-  std::string getResourcesPath() const { return clang::driver::Driver::GetResourcesPath(executable_path_, ""); }
 
   std::vector<std::string> buildLinkerArgs(const CodReplConfig &config) const {
     std::vector<std::string> args;
@@ -94,42 +143,31 @@ public:
     args.push_back("-fuse-ld=lld");
 #endif
 
-    // Add toolchain lib directory to rpath for libc++abi.1.dylib
-    // Use LLVM Driver API to get resource directory from cod's path
-    std::string ResourceDir = getResourcesPath();
+    const fs::path toolchain_lib = toolchain_root_ / "lib";
 
 #ifndef _WIN32
-    if (!ResourceDir.empty()) {
-      // The lib directory is typically at the same level as the resource directory
-      // ResourceDir is like '/path/to/build/lib/clang/18', so we need to go up two levels to get '/path/to/build/lib'
-      fs::path toolchain_lib = fs::path(ResourceDir).parent_path().parent_path();
-      if (fs::exists(toolchain_lib)) {
-        std::string rpath_arg = "-Wl,-rpath," + fs::absolute(toolchain_lib).string();
-        args.push_back(rpath_arg);
-        if (config.verbose) {
-          std::cerr << "[DEBUG] Adding rpath: " << fs::absolute(toolchain_lib).string() << "\n";
-        }
+    if (fs::exists(toolchain_lib)) {
+      std::string rpath_arg = "-Wl,-rpath," + fs::absolute(toolchain_lib).string();
+      args.push_back(rpath_arg);
+      if (config.verbose) {
+        std::cerr << "[DEBUG] Adding rpath: " << fs::absolute(toolchain_lib).string() << "\n";
       }
     }
 #endif
 
     // Add shilos library from toolchain
-    if (!ResourceDir.empty()) {
-      // The lib directory is typically at the same level as the resource directory
-      // ResourceDir is like '/path/to/build/lib/clang/18', so we need to go up two levels to get '/path/to/build/lib'
-      fs::path toolchain_lib = fs::path(ResourceDir).parent_path().parent_path();
-      if (fs::exists(toolchain_lib)) {
-        args.push_back("-L" + fs::absolute(toolchain_lib).string());
-        args.push_back("-lshilos");
-        if (config.verbose) {
-          std::cerr << "[DEBUG] Adding library path: " << fs::absolute(toolchain_lib).string() << "\n";
-        }
+    if (fs::exists(toolchain_lib)) {
+      args.push_back("-L" + fs::absolute(toolchain_lib).string());
+      args.push_back("-lshilos");
+      if (config.verbose) {
+        std::cerr << "[DEBUG] Adding library path: " << fs::absolute(toolchain_lib).string() << "\n";
       }
     }
 
     return args;
   }
 
+  std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) const;
   bool compileAndRun(const CodReplConfig &config, const std::string &submission) const;
   void runRepl(const CodReplConfig &config) const;
 };
@@ -509,13 +547,22 @@ static std::optional<int> runExecutableAndWait(const fs::path &binary_path) {
   if (run_pid == 0) {
     // Child process - execute binary
     execl(binary_path.c_str(), binary_path.c_str(), nullptr);
-    std::cerr << "Error: Failed to execute binary\n";
-    exit(1);
+    const int error = errno;
+    std::cerr << "Error: Failed to execute binary: " << std::strerror(error) << "\n";
+    _exit(127);
   }
   if (run_pid > 0) {
     // Parent process - wait for execution
-    int run_status;
-    waitpid(run_pid, &run_status, 0);
+    int run_status = 0;
+    pid_t wait_result;
+    do {
+      wait_result = waitpid(run_pid, &run_status, 0);
+    } while (wait_result == -1 && errno == EINTR);
+
+    if (wait_result == -1) {
+      std::cerr << "Error: Failed to wait for binary: " << std::strerror(errno) << "\n";
+      return std::nullopt;
+    }
 
     if (WIFEXITED(run_status)) {
       return WEXITSTATUS(run_status);
@@ -530,7 +577,7 @@ static std::optional<int> runExecutableAndWait(const fs::path &binary_path) {
 #endif
 }
 
-static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
+std::vector<std::string> CodTool::buildCompilerArgs(const CodReplConfig &config) const {
   std::vector<std::string> args;
 
   // Note: Do not include the compiler path here - it's handled by BitcodeCompiler
@@ -545,23 +592,11 @@ static std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) {
     args.push_back("-I" + project_include.string());
   }
 
-  // If we're in a test directory or the current project doesn't have cod.hh,
-  // also add the main CoD project include directory
-  auto cod_header = project_include / "cod.hh";
-  if (!fs::exists(cod_header)) {
-    // Try to find the main CoD project root by looking for a parent directory
-    // that contains both include/cod.hh and build/ directories
-    auto current = config.project_root;
-    while (!current.empty() && current != current.parent_path()) {
-      auto parent_include = current.parent_path() / "include";
-      auto parent_cod_header = parent_include / "cod.hh";
-      auto parent_build = current.parent_path() / "build";
-
-      if (fs::exists(parent_cod_header) && fs::exists(parent_build)) {
-        args.push_back("-I" + parent_include.string());
-        break;
-      }
-      current = current.parent_path();
+  const fs::path toolchain_include = getToolchainIncludePath();
+  if (!toolchain_include.empty() && toolchain_include != project_include) {
+    args.push_back("-I" + toolchain_include.string());
+    if (config.verbose) {
+      std::cerr << "[DEBUG] Adding toolchain headers: " << toolchain_include << "\n";
     }
   }
 

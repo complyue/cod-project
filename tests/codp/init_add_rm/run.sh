@@ -208,4 +208,19 @@ fi
 
 echo "  ✓ branches validation test passed"
 
+# Test 7: subcommand-like positional arguments
+echo "  Testing subcommand-like branch names..."
+cd "$TMP_DIR"
+mkdir -p command_branch
+cd command_branch
+
+codp init --uuid "55555555-5555-5555-5555-555555555555" command-branch \
+    "https://github.com/test/command-branch.git" add
+if [[ ! -f CodProject.yaml ]] || ! grep -q -- "- add" CodProject.yaml; then
+    echo "ERROR: positional branch name was interpreted as a subcommand"
+    exit 1
+fi
+
+echo "  ✓ subcommand-like branch name test passed"
+
 echo "All init/add/rm tests passed!"

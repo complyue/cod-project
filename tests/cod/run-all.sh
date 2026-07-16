@@ -12,10 +12,16 @@ echo "🔧 Using toolchain mode: $COD_TEST_TOOLCHAIN"
 
 # Configure (only once)
 mkdir -p "$BUILD_DIR"
-cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B "$BUILD_DIR" "$SCRIPT_DIR"
+if ! cmake -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B "$BUILD_DIR" "$SCRIPT_DIR"; then
+  echo "Failed to configure CoD tests" >&2
+  exit 1
+fi
 
 # Build (incremental)
-cmake --build "$BUILD_DIR"
+if ! cmake --build "$BUILD_DIR"; then
+  echo "Failed to build CoD tests" >&2
+  exit 1
+fi
 
 echo "🏃  Running shell-based tests..."
 # Define colors for output

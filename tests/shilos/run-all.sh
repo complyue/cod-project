@@ -52,8 +52,11 @@ for exe in "$BUILD_DIR"/*; do
   if [[ -x "$exe" && ! -d "$exe" ]]; then
     log_test "$(basename "$exe")"
     run_test
-    "$exe"
-    EXIT_CODE=$?
+    if "$exe"; then
+      EXIT_CODE=0
+    else
+      EXIT_CODE=$?
+    fi
     if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
         log_fail "$(basename "$exe") failed with Segmentation Fault (exit code $EXIT_CODE)"
     elif [[ "$EXIT_CODE" -ne 0 ]]; then
@@ -64,16 +67,17 @@ for exe in "$BUILD_DIR"/*; do
   fi
 done
 
-echo "✔ All shilos tests passed."
-
 # Run tests
 echo -e "${GREEN}=== Shilos Tests ===${NC}"
 for test_exec in "$BUILD_DIR"/tests/*; do
     if [[ -x "$test_exec" ]]; then
         log_test "$(basename "$test_exec")"
         run_test
-        "$test_exec"
-        EXIT_CODE=$?
+        if "$test_exec"; then
+          EXIT_CODE=0
+        else
+          EXIT_CODE=$?
+        fi
         if [[ "$EXIT_CODE" -eq 11 || "$EXIT_CODE" -eq 139 ]]; then
             log_fail "$(basename "$test_exec") failed with Segmentation Fault (exit code $EXIT_CODE)"
         elif [[ "$EXIT_CODE" -ne 0 ]]; then

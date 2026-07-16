@@ -13,8 +13,15 @@ COD_PROJECT_SRC_ROOT="$(
   cd "$(dirname -- "${BASH_SOURCE[0]:-$0}")/.." && pwd -P
 )"
 
-# Prepend both build/ and built/ bin directories to PATH
-export PATH="${COD_PROJECT_SRC_ROOT}/build/bin:${COD_PROJECT_SRC_ROOT}/built/bin:${PATH}"
+case "$COD_TEST_TOOLCHAIN" in
+  build|built)
+    export PATH="${COD_PROJECT_SRC_ROOT}/${COD_TEST_TOOLCHAIN}/bin:${PATH}"
+    ;;
+  *)
+    echo "COD_TEST_TOOLCHAIN must be 'build' or 'built', got: $COD_TEST_TOOLCHAIN" >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+esac
 
 resolve_test_exe() {
   if [ -x "$1" ]; then

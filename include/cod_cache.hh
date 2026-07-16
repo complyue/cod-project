@@ -6,6 +6,7 @@
 #include "shilos/vector_yaml.hh"
 
 #include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <iomanip>
 #include <memory>
@@ -30,6 +31,28 @@ namespace cache {
 
 namespace fs = std::filesystem;
 using namespace shilos;
+
+namespace detail {
+
+inline std::tm to_utc_tm(std::time_t timestamp) noexcept {
+  std::tm result{};
+#ifdef _WIN32
+  ::gmtime_s(&result, &timestamp);
+#else
+  ::gmtime_r(&timestamp, &result);
+#endif
+  return result;
+}
+
+inline std::time_t from_utc_tm(std::tm &value) noexcept {
+#ifdef _WIN32
+  return ::_mkgmtime(&value);
+#else
+  return ::timegm(&value);
+#endif
+}
+
+} // namespace detail
 
 // Cache key components for semantic hashing
 struct CacheKey {
@@ -269,8 +292,9 @@ inline yaml::Node to_yaml(const regional_cache_key &key, yaml::YamlAuthor &autho
   author.setMapValue(map, "semantic_hash", author.createString(key.semantic_hash()));
 
   auto time_t = std::chrono::system_clock::to_time_t(key.source_mtime());
+  auto utc_time = detail::to_utc_tm(time_t);
   std::ostringstream oss;
-  oss << std::put_time(std::gmtime(&time_t), "%Y-%m-%dT%H:%M:%SZ");
+  oss << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%SZ");
   author.setMapValue(map, "source_mtime", author.createString(oss.str()));
 
   return map;
@@ -324,7 +348,7 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_cache_key
       if (ss.fail()) {
         throw yaml::TypeError("Invalid time format for source_mtime");
       }
-      source_mtime = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+      source_mtime = std::chrono::system_clock::from_time_t(detail::from_utc_tm(tm));
     }
   }
 
@@ -342,8 +366,9 @@ inline yaml::Node to_yaml(const regional_cache_entry &entry, yaml::YamlAuthor &a
   author.setMapValue(map, "bitcode_path", author.createString(std::string(entry.bitcode_path())));
 
   auto time_t = std::chrono::system_clock::to_time_t(entry.created_at());
+  auto utc_time = detail::to_utc_tm(time_t);
   std::ostringstream oss;
-  oss << std::put_time(std::gmtime(&time_t), "%Y-%m-%dT%H:%M:%SZ");
+  oss << std::put_time(&utc_time, "%Y-%m-%dT%H:%M:%SZ");
   author.setMapValue(map, "created_at", author.createString(oss.str()));
 
   author.setMapValue(map, "file_size", yaml::Node(static_cast<int64_t>(entry.file_size())));
@@ -383,7 +408,7 @@ void from_yaml(memory_region<RT> &mr, const yaml::Node &node, regional_cache_ent
       if (ss.fail()) {
         throw yaml::TypeError("Invalid time format for created_at");
       }
-      created_at = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+      created_at = std::chrono::system_clock::from_time_t(detail::from_utc_tm(tm));
     } else if (key_str == "file_size") {
       file_size = static_cast<size_t>(value_node.asInt64());
     }

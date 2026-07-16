@@ -9,8 +9,10 @@
 #include <filesystem>
 #include <functional>
 #include <iostream>
+#include <string>
 #include <string_view>
 #include <unordered_set>
+#include <vector>
 
 using namespace shilos;
 using namespace cod::project;
@@ -19,8 +21,11 @@ namespace fs = std::filesystem;
 // Shared utility functions
 void usage();
 fs::path home_dir();
-std::string quote_shell_arg(std::string arg);
-std::string quote_shell_arg(const fs::path &path);
+struct CommandResult {
+  int exit_code;
+  std::string output;
+};
+CommandResult run_command(const std::vector<std::string> &arguments, bool capture_output = false);
 std::optional<fs::path> find_project_dir(fs::path start);
 void ensure_dir(const fs::path &p);
 void ensure_bare_repo(const std::string &url, const fs::path &bare_path);

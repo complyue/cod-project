@@ -3,11 +3,16 @@
 #include <shilos/list.hh>
 
 #include <cassert>
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 
 using namespace shilos;
+namespace fs = std::filesystem;
 
 // Test root types with TYPE_UUID
 struct TestRoot {
@@ -28,9 +33,27 @@ struct ComplexRoot {
       : name_(mr, name), items_(mr), counters_(mr), selected_() {}
 };
 
+struct ThrowingRoot {
+  static const UUID TYPE_UUID;
+  static inline void *region_address = nullptr;
+
+  explicit ThrowingRoot(memory_region<ThrowingRoot> &mr) {
+    region_address = &mr;
+    throw std::runtime_error("expected construction failure");
+  }
+};
+
+struct alignas(64) OverAlignedRoot {
+  static const UUID TYPE_UUID;
+
+  explicit OverAlignedRoot(memory_region<OverAlignedRoot> &) {}
+};
+
 // Define UUIDs
 const UUID TestRoot::TYPE_UUID = UUID("aaaaaaaa-bbbb-cccc-dddd-111111111111");
 const UUID ComplexRoot::TYPE_UUID = UUID("bbbbbbbb-cccc-dddd-eeee-222222222222");
+const UUID ThrowingRoot::TYPE_UUID = UUID("cccccccc-dddd-eeee-ffff-333333333333");
+const UUID OverAlignedRoot::TYPE_UUID = UUID("dddddddd-eeee-ffff-aaaa-444444444444");
 
 void test_basic_region_creation() {
   std::cout << "=== Testing basic region creation ===" << std::endl;
@@ -261,6 +284,91 @@ void test_nested_regional_types() {
   // Automatic cleanup via RAII
 }
 
+void test_dbmr_rejects_truncated_capacity() {
+  std::cout << "=== Testing DBMR file validation ===" << std::endl;
+
+  const auto file_path =
+      fs::temp_directory_path() /
+      ("shilos_dbmr_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".dbmr");
+  size_t occupation = 0;
+  {
+    auto dbmr = DBMR<TestRoot>::create(file_path.string(), 4096);
+    occupation = dbmr.region().occupation();
+  }
+
+  fs::resize_file(file_path, occupation);
+
+  bool rejected = false;
+  try {
+    DBMR<TestRoot> dbmr(file_path.string(), 0);
+  } catch (const std::runtime_error &) {
+    rejected = true;
+  }
+  fs::remove(file_path);
+
+  assert(rejected && "DBMR must reject a stored capacity larger than its mapped file");
+  std::cout << "DBMR file validation test passed!" << std::endl;
+}
+
+void test_dbmr_releases_failed_creation_mapping() {
+  std::cout << "=== Testing DBMR creation cleanup ===" << std::endl;
+
+  const auto file_path = fs::temp_directory_path() /
+                         ("shilos_dbmr_throw_test_" +
+                          std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".dbmr");
+  ThrowingRoot::region_address = nullptr;
+  bool threw = false;
+  try {
+    auto dbmr = DBMR<ThrowingRoot>::create(file_path.string(), 4096);
+  } catch (const std::runtime_error &) {
+    threw = true;
+  }
+
+#ifdef _WIN32
+  MEMORY_BASIC_INFORMATION memory_info{};
+  const SIZE_T queried = VirtualQuery(ThrowingRoot::region_address, &memory_info, sizeof(memory_info));
+  const bool mapping_released = queried == 0 || memory_info.State == MEM_FREE;
+#endif
+
+  std::error_code remove_error;
+  const bool removed = fs::remove(file_path, remove_error);
+  assert(threw && "DBMR root construction must propagate failures");
+  assert(ThrowingRoot::region_address != nullptr && "DBMR must enter the regional root constructor");
+#ifdef _WIN32
+  assert(mapping_released && "Failed DBMR creation must unmap its region");
+#endif
+  assert(removed && !remove_error && "Failed DBMR creation must release its mapped file");
+  std::cout << "DBMR creation cleanup test passed!" << std::endl;
+}
+
+void test_dbmr_capacity_bounds_and_alignment() {
+  std::cout << "=== Testing DBMR capacity bounds and root alignment ===" << std::endl;
+
+  const auto prefix =
+      "shilos_dbmr_bounds_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+  const auto oversized_path = fs::temp_directory_path() / (prefix + "_oversized.dbmr");
+  fs::remove(oversized_path);
+  bool oversized_rejected = false;
+  try {
+    auto dbmr = DBMR<TestRoot>::create(oversized_path.string(), (std::numeric_limits<size_t>::max)());
+  } catch (const std::length_error &) {
+    oversized_rejected = true;
+  } catch (const std::exception &) {
+  }
+  assert(oversized_rejected && "DBMR must reject capacities that overflow size_t");
+  assert(!fs::exists(oversized_path) && "Rejected DBMR capacity must not create a file");
+
+  const auto aligned_path = fs::temp_directory_path() / (prefix + "_aligned.dbmr");
+  {
+    auto dbmr = DBMR<OverAlignedRoot>::create(aligned_path.string(), 0);
+    const auto root_address = reinterpret_cast<uintptr_t>(dbmr.region().root().get());
+    assert(root_address % alignof(OverAlignedRoot) == 0 && "DBMR root object must satisfy its alignment");
+  }
+  fs::remove(aligned_path);
+
+  std::cout << "DBMR capacity bounds and root alignment test passed!" << std::endl;
+}
+
 int main() {
   std::cout << "Starting memory regions test suite..." << std::endl;
 
@@ -272,6 +380,9 @@ int main() {
     test_multiple_regions();
     test_region_lifetime();
     test_nested_regional_types();
+    test_dbmr_rejects_truncated_capacity();
+    test_dbmr_releases_failed_creation_mapping();
+    test_dbmr_capacity_bounds_and_alignment();
 
     std::cout << std::endl << "✅ All memory regions tests passed!" << std::endl;
     return 0;

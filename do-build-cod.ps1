@@ -6,6 +6,7 @@ param(
     [string]$TargetsToBuild = $(if ($env:COD_TARGETS_TO_BUILD) { $env:COD_TARGETS_TO_BUILD } else { "Native" }),
     [ValidateSet("Debug", "Release", "RelWithDebInfo", "MinSizeRel")]
     [string]$BuildType = $(if ($env:COD_BUILD_TYPE) { $env:COD_BUILD_TYPE } else { "Release" }),
+    [ValidateRange(1, [int]::MaxValue)]
     [int]$Jobs = [Math]::Max(1, [Environment]::ProcessorCount - 2),
     [switch]$NoPull,
     [switch]$EnableLLDB,
@@ -100,21 +101,35 @@ function Invoke-ToolExitCode {
 }
 
 function Import-VsDevEnvironment {
-    if ($env:VSCMD_VER -and (Get-Command -Name cl.exe -CommandType Application -ErrorAction SilentlyContinue)) {
+    if ($env:VSCMD_VER -and
+        $env:VSCMD_ARG_TGT_ARCH -eq "x64" -and
+        (Get-Command -Name cl.exe -CommandType Application -ErrorAction SilentlyContinue)) {
         Write-Host "Using existing Visual Studio developer environment $env:VSCMD_VER"
         return
     }
 
-    $vswhere = Resolve-Tool "vswhere.exe" @(
+    $vswhereCandidates = @(
         "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe",
         "$env:ProgramFiles\Microsoft Visual Studio\Installer\vswhere.exe"
     )
+    $vswhereCommand = Get-Command -Name "vswhere.exe" -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    $vswhere = if ($vswhereCommand) {
+        $vswhereCommand.Source
+    } else {
+        $vswhereCandidates |
+            Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } |
+            Select-Object -First 1
+    }
 
-    $installPath = & $vswhere -latest -products "*" `
-        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-        -property installationPath
-    if ($LASTEXITCODE -ne 0 -or -not $installPath) {
-        $installPath = & $vswhere -latest -products "*" -property installationPath
+    $installPath = $null
+    if ($vswhere) {
+        $installPath = & $vswhere -latest -products "*" `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+        if ($LASTEXITCODE -ne 0 -or -not $installPath) {
+            $installPath = & $vswhere -latest -products "*" -property installationPath
+        }
     }
 
     $vsDevCmdCandidates = @()
@@ -123,7 +138,13 @@ function Import-VsDevEnvironment {
     }
     $vsDevCmdCandidates += @(
         "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat",
-        "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat"
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat",
+        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat",
+        "$env:ProgramFiles\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat"
     )
 
     $vsDevCmd = $vsDevCmdCandidates |
@@ -145,8 +166,9 @@ function Import-VsDevEnvironment {
         }
     }
 
-    if (-not (Get-Command -Name cl.exe -CommandType Application -ErrorAction SilentlyContinue)) {
-        throw "Visual Studio environment was imported, but cl.exe is still not available."
+    if ($env:VSCMD_ARG_TGT_ARCH -ne "x64" -or
+        -not (Get-Command -Name cl.exe -CommandType Application -ErrorAction SilentlyContinue)) {
+        throw "Visual Studio environment was imported, but the MSVC x64 tools are still not available."
     }
 }
 
@@ -158,6 +180,9 @@ function Assert-PlainDirectoryIfPresent {
     }
 
     $item = Get-Item -LiteralPath $Path -Force
+    if (-not $item.PSIsContainer) {
+        throw "'$Path' must be a directory."
+    }
     if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
         throw "'$Path' must be a real directory, not a symlink or junction."
     }
@@ -191,6 +216,7 @@ function Remove-GeneratedTree {
     }
 
     Assert-InSourceTree $Path
+    Assert-PlainDirectoryIfPresent $Path
     Remove-Item -LiteralPath $Path -Recurse -Force
 }
 
@@ -346,20 +372,22 @@ function Assert-CMakeCompiler {
         return
     }
 
-    $actual = Get-CMakeCacheValue $cache "CMAKE_CXX_COMPILER"
-    if (-not $actual) {
-        return
-    }
+    foreach ($language in @("C", "CXX")) {
+        $actual = Get-CMakeCacheValue $cache "CMAKE_${language}_COMPILER"
+        if (-not $actual) {
+            continue
+        }
 
-    if ((Normalize-PathText $actual) -ne (Normalize-PathText $ExpectedCompiler)) {
-        throw @"
+        if ((Normalize-PathText $actual) -ne (Normalize-PathText $ExpectedCompiler)) {
+            throw @"
 Existing CMake build tree '$BuildDir' was configured with:
-  $actual
+  CMAKE_${language}_COMPILER=$actual
 but this bootstrap expects:
   $ExpectedCompiler
 
 Use a clean checkout/build directory for this development environment, or remove the stale build tree manually.
 "@
+        }
     }
 }
 
@@ -440,6 +468,12 @@ $PatchRoot = Join-Path $script:SourceDir (Join-Path "patches\llvm" $LLVMBranch)
 Write-Step "Checking build layout"
 Assert-PlainDirectoryIfPresent $BuildDir
 Assert-PlainDirectoryIfPresent $FinalInstallDir
+Assert-PlainDirectoryIfPresent $LlvmProjectDir
+Assert-PlainDirectoryIfPresent $BootstrapDir
+Assert-PlainDirectoryIfPresent $Stage1Dir
+Assert-PlainDirectoryIfPresent $Stage2Dir
+Assert-PlainDirectoryIfPresent $Stage3SelfHostDir
+Assert-PlainDirectoryIfPresent $Stage2InstallDir
 
 Write-Step "Discovering host tools"
 $CMake = Resolve-Tool "cmake.exe" @(
@@ -474,8 +508,15 @@ if (Test-Path -LiteralPath (Join-Path $LlvmProjectDir ".git") -PathType Containe
     if ($revParseCode -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $LlvmSourceDir "CMakeLists.txt") -PathType Leaf)) {
         Write-Host "Removing incomplete llvm-project checkout at $LlvmProjectDir"
         Remove-GeneratedTree $LlvmProjectDir
-    } elseif (-not $NoPull) {
-        Invoke-Tool $Git @("-c", "http.version=HTTP/1.1", "-C", $LlvmProjectDir, "pull", "--ff-only")
+    } else {
+        $actualLLVMBranch = [string](& $Git "-C" $LlvmProjectDir "branch" "--show-current")
+        $actualLLVMBranch = $actualLLVMBranch.Trim()
+        if ($LASTEXITCODE -ne 0 -or $actualLLVMBranch -ne $LLVMBranch) {
+            throw "llvm-project is on branch '$actualLLVMBranch', but this bootstrap requires '$LLVMBranch'."
+        }
+        if (-not $NoPull) {
+            Invoke-Tool $Git @("-c", "http.version=HTTP/1.1", "-C", $LlvmProjectDir, "pull", "--ff-only")
+        }
     }
 }
 
@@ -483,6 +524,11 @@ if (-not (Test-Path -LiteralPath $LlvmProjectDir)) {
     Invoke-Tool $Git @("-c", "http.version=HTTP/1.1", "clone", "--progress", "--depth", "1", "--single-branch", "-b", $LLVMBranch, "https://github.com/llvm/llvm-project.git", $LlvmProjectDir)
 } elseif (-not (Test-Path -LiteralPath (Join-Path $LlvmProjectDir ".git") -PathType Container)) {
     throw "'$LlvmProjectDir' exists but is not a git checkout."
+}
+$actualLLVMBranch = [string](& $Git "-C" $LlvmProjectDir "branch" "--show-current")
+$actualLLVMBranch = $actualLLVMBranch.Trim()
+if ($LASTEXITCODE -ne 0 -or $actualLLVMBranch -ne $LLVMBranch) {
+    throw "llvm-project is on branch '$actualLLVMBranch', but this bootstrap requires '$LLVMBranch'."
 }
 Apply-LlvmPatches $Git $LlvmProjectDir $PatchRoot
 
@@ -510,17 +556,22 @@ $Stage1ClangCl = Join-Path $Stage1Dir "bin\clang-cl.exe"
 $Stage1LldLink = Join-Path $Stage1Dir "bin\lld-link.exe"
 $Stage2Cod = Join-Path $Stage2InstallDir "bin\cod.exe"
 $Stage2ClangCl = Join-Path $Stage2InstallDir "bin\clang-cl.exe"
+$Stage2ClangXX = Join-Path $Stage2InstallDir "bin\clang++.exe"
 $Stage2LldLink = Join-Path $Stage2InstallDir "bin\lld-link.exe"
+$Stage2Shilos = Join-Path $Stage2InstallDir "bin\shilos.dll"
 $Stage2Ready = (Test-Executable $Stage2Cod) -and
     (Test-Executable $Stage2ClangCl) -and
-    (Test-Executable $Stage2LldLink)
+    (Test-Executable $Stage2ClangXX) -and
+    (Test-Executable $Stage2LldLink) -and
+    (Test-Executable $Stage2Shilos)
 
 Write-Step "Stage 1: build Clang/LLD with MSVC"
 if ($Stage2Ready) {
-    Write-Host "Stage 2 install already has $Stage2Cod, $Stage2ClangCl, and $Stage2LldLink"
+    Write-Host "Stage 2 install is complete at $Stage2InstallDir"
     Write-Host "Skipping transient stage 1."
 } elseif (-not ((Test-Executable $Stage1ClangCl) -and (Test-Executable $Stage1LldLink))) {
     Ensure-Directory $Stage1Dir
+    Assert-CMakeCompiler $Stage1Dir $Cl
     $stage1Args = @(
         "-B", $Stage1Dir,
         "-DCMAKE_INSTALL_PREFIX=$(Join-Path $BootstrapDir 'stage1-install')",
@@ -542,6 +593,7 @@ if ($Stage2Ready) {
 Write-Step "Stage 2: build/install bootstrap CoD toolchain with stage 1 Clang"
 if (-not $Stage2Ready) {
     Ensure-Directory $Stage2Dir
+    Assert-CMakeCompiler $Stage2Dir $Stage1ClangCl
     $stage2Args = @(
         "-B", $Stage2Dir,
         "-DCMAKE_INSTALL_PREFIX=$Stage2InstallDir",
@@ -561,9 +613,16 @@ if (-not $Stage2Ready) {
     Repair-ClangClResourceRules $Stage2Dir
     Invoke-CMakeBuild $CMake $Stage2Dir
     Invoke-CMakeBuild $CMake $Stage2Dir @("install")
-    $Stage2Ready = $true
+    $Stage2Ready = (Test-Executable $Stage2Cod) -and
+        (Test-Executable $Stage2ClangCl) -and
+        (Test-Executable $Stage2ClangXX) -and
+        (Test-Executable $Stage2LldLink) -and
+        (Test-Executable $Stage2Shilos)
+    if (-not $Stage2Ready) {
+        throw "Stage 2 install is incomplete. Expected cod.exe, clang-cl.exe, clang++.exe, lld-link.exe, and shilos.dll under $Stage2InstallDir."
+    }
 } else {
-    Write-Host "Stage 2 install already has $Stage2Cod, $Stage2ClangCl, and $Stage2LldLink"
+    Write-Host "Stage 2 install is complete at $Stage2InstallDir"
 }
 
 Write-Step "Stage 3: self-build final development tree with stage 2 CoD toolchain"

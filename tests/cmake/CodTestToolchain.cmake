@@ -78,8 +78,13 @@ function(cod_setup_test_target target_name)
     target_compile_options(${target_name} PRIVATE
       /utf-8
       /D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH
+      /UNDEBUG
     )
-  elseif(APPLE)
+  else()
+    target_compile_options(${target_name} PRIVATE -UNDEBUG)
+  endif()
+
+  if(APPLE)
     set_target_properties(${target_name} PROPERTIES
       BUILD_RPATH "${COD_TOOLCHAIN_DIR}/lib"
       INSTALL_NAME_DIR "@rpath"

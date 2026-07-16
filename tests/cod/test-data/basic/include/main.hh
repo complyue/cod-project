@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <memory>
+#include <shilos.hh>
 #include <string>
 #include <vector>
 
