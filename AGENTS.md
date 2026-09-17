@@ -2,6 +2,42 @@
 
 - Respond in English unless the user explicitly asks otherwise.
 
+## Design Authority and Value Lineage
+
+### Sources of authority
+- The design charter (the general principles, or 总则) is `design/RegionalSemanticPlatformCharter.md`.
+- `design/DesignAuthorityRegistry.md` is the canonical record of design concepts, mechanisms, abstractions, value-derivation/dependency relationships, document qualification, and human confirmations. Use stable record IDs and read only the entries relevant to the task.
+- Every design document, wherever located, must have a human-confirmed value-derivation path to the charter before it can serve as a delegated implementation contract. A technical dependency or a link to the charter alone does not establish that path.
+- Confirmation applies to an identified proposition, relationship, document revision and scope, not automatically to an entire file or every descendant. Existing code, merged commits, agent summaries, silence, and general approval of a direction are not evidence of approval of all detailed mechanisms.
+
+### Qualified design documents
+- A design is qualified only for the scope recorded as `confirmed` or validly `continued` in the registry: a human-confirmed baseline and derivation path exist; the current revision is covered; its constraints, non-goals and acceptance criteria are explicit; and no relevant upstream change or unresolved conflict invalidates the path.
+- Add a compact `Design authority` block near the top of each new or revised design document. Include its registry ID/link, design revision and covered sections, parent concept/relationship IDs and the value rationale, governing invariants/non-goals, acceptance criteria, human-confirmed baseline, and current continuity record when applicable. The registry is authoritative if a local summary is stale; uncertainty blocks delegation for the affected scope.
+- New designs and newly chosen concepts, abstractions or derivation relationships require human confirmation of their value and scope before qualification. Agents may draft them as `pending-human`; they must not self-approve them by borrowing an ancestor's confirmation.
+- A `continued` revision preserves an already qualified document's confirmed contract. It records an agent's continuity assessment, not another human confirmation. It cannot qualify a previously unconfirmed document or ratify an unresolved design choice.
+
+### Implementing against a qualified design
+- Read the applicable design contract, its targeted registry status/continuity entry, and directly needed dependency contracts. Identify the design IDs and covered scope for the task.
+- When the task stays within that qualified scope, agents are accountable to the local design and need not load the charter, unrelated designs, or the entire authority registry. Do not repeatedly ask humans to reconfirm an unchanged qualified design.
+- This context shortcut concerns the design charter only. It never waives this `AGENTS.md`, applicable repository instructions, task authorization, build/test restrictions, or operational safety requirements.
+- Missing qualification, stale evidence, contradictory implementation, an uncovered requirement, or a suspected break in the value chain triggers design review for the affected scope. Reading the charter alone does not manufacture missing human confirmation.
+- Do not disguise a design change as implementation-only work. If code, tests, defaults or interfaces would change the contract, follow the design-change procedure even if no Markdown edit was initially planned.
+
+### Creating or modifying a design
+1. Read the relevant charter clauses in their current context, the affected registry records and human confirmation evidence, and the necessary parent/dependency contracts. Unlike implementation under a qualified contract, design editing cannot skip the charter alignment check.
+2. Compare the proposed content with the human-confirmed baseline and the current accepted revision. Explain the preserved value chain and examine goals, assumptions, scope, invariants, trade-offs, interfaces, acceptance criteria and downstream dependencies. Consider the cumulative change since human confirmation, not just the latest small diff.
+3. If a change naturally continues an already qualified design without changing the confirmed contract or resolving an unconfirmed choice, record the rationale and old/new revision coverage as a continuity event and keep it `continued`. Editorial changes also need a brief continuity entry, but not a new human approval.
+4. If continuity is doubtful, or the proposal changes a confirmed value, boundary, material trade-off, parent relationship or open design choice, mark the affected scope `pending-human` or `needs-reconfirmation`. Present the proposed chain, the point of doubt, alternatives/consequences and the exact decision needed to a human. Do not activate the disputed design or implement it as accepted until explicit confirmation is recorded; unrelated qualified work may continue.
+5. Update the document's authority block and the registry together, preferably in one commit. Record affected descendants and dependencies; invalidate only scopes whose qualification can no longer be justified. An obsolete ancestor must not leave descendants silently qualified.
+- Changing the charter's goals, principles or approval rules requires explicit human confirmation; agents cannot rewrite the root to make a preferred design appear compliant.
+
+### Maintaining the authority registry
+- Record concepts and relationships separately. For each relationship identify its endpoints, kind (`derives-from`, `depends-on`, or `constrains`), rationale, scope/version and confirmation state. Value chains must explain why a mechanism serves a charter value; dependency chains explain what it requires. Dependency edges never grant design authority.
+- Human confirmation events must identify the actual human as known, an explicit statement with its source and timestamp, the accepted/rejected propositions and relationships, scope/revision and exclusions. A conversation excerpt can be recorded when no durable link exists; label its provenance and do not invent a URL, identity, signature or broader approval.
+- Keep human decision history append-only. Corrections, rejection, withdrawal, replacement and renewed confirmation are new events referencing the earlier event. Update the current-status index separately; never erase inconvenient evidence or relabel an agent assessment as a human decision.
+- Maintain reverse links to affected designs, supersession/invalidation records, and pending questions so the path from charter value to concept, mechanism and implementation contract remains traceable in both directions.
+- Existing documents without sufficient recorded evidence are `pending-human`, not automatically grandfathered in. Register their current revision, candidate value chain and missing confirmation; add the authority block when revising them. They remain readable references, but cannot supply the no-charter implementation shortcut or authorize new design decisions. Search for existing evidence before requesting a new decision; do not fabricate retrospective approval.
+
 ## Build and Command Execution
 - After code changes, compile exactly with: `cmake --build ./build`.
 - Treat `./build` as the active build tree for the current checkout/worktree; use a separate worktree for another host/container/OS development environment.
@@ -34,7 +70,7 @@
 
 ## Documentation
 - Write documents and source comments to reflect the final state; avoid narrating what changed or comparisons with earlier versions.
-- Exceptions: dedicated change logs (e.g., `CHANGELOG.md`) and places where old and new designs coexist.
+- Exceptions: dedicated change logs (e.g., `CHANGELOG.md`), the historical evidence and decision/continuity records in `design/DesignAuthorityRegistry.md`, and places where old and new designs coexist.
 
 ## Memory Regions and Regional Types (Critical)
 - Zero-cost relocation is mandatory for regional types.
