@@ -1,1 +1,82 @@
-.trae/rules/project_rules.md
+# CoD Project Rules for AI Agents
+
+- Respond in English unless the user explicitly asks otherwise.
+
+## Build and Command Execution
+- After code changes, compile exactly with: `cmake --build ./build`.
+- Treat `./build` as the active build tree for the current checkout/worktree; use a separate worktree for another host/container/OS development environment.
+- Top-level repository scripts may be executed when they are within the current human authorization. Inspect scripts first when their effects are unclear. Scripts that can bootstrap, reconfigure, clean, install, or mutate toolchains follow the Bootstrap and Build Configuration Safety rules below.
+- Do not create or modify build symlinks.
+- Do not re-create build directories, that's too time/resource costing.
+
+## Bootstrap and Build Configuration Safety
+- Unless the human explicitly authorizes a bootstrap/configuration task in the current conversation, agents must not run commands or make edits that can cause a full or partial rebootstrap of LLVM/Clang/CoD.
+- The normal post-edit build command `cmake --build ./build` is allowed only after source-only changes that do not alter build configuration. If build configuration files were changed, ask for explicit authorization before building.
+- Do not run CMake configure/generate commands for the main build without explicit authorization. This includes `cmake -S ... -B ...`, `cmake -B ./build`, `cmake --preset ...`, `cmake --fresh`, commands that pass new `-D...` cache options, or any command intended to regenerate `build/CMakeCache.txt`, `build/build.ninja`, or `build/CMakeFiles/`.
+- Do not clean, delete, move, rename, recreate, or bulk-edit build outputs without explicit authorization. This includes `build/`, `built/`, `build-*`, `built-*`, `build/.bootstrap/`, `CMakeCache.txt`, `CMakeFiles/`, `build.ninja`, `.ninja_*`, and generated install trees.
+- Do not invoke install, clean, runtime, LLVM, Clang, LLD, libc++, compiler-rt, or bootstrap stage targets without explicit authorization. Examples include `cmake --install`, `cmake --build ./build --target install`, `install-*`, `install-runtimes`, `clean`, `stage*`, `clang`, `lld`, `llvm`, `runtimes`, `libcxx`, and `compiler-rt`.
+- Do not modify bootstrap or toolchain definition files without explicit authorization. This includes `do-build-cod.*`, `prepare-*`, CMake files (`CMakeLists.txt`, `*.cmake`, presets, toolchain files), LLVM patch files under `patches/llvm/`, and files under `llvm-project/`.
+- Do not update, reinstall, remove, or switch host toolchains and SDKs without explicit authorization. This includes Visual Studio Build Tools/MSVC, Windows SDK, LLVM/Clang, CMake, Ninja, Git, system compilers, and package-manager commands such as `winget`, `choco`, `scoop`, `apt`, or `brew` when used for toolchain packages.
+- Reading build scripts, CMake files, caches, generated logs, or LLVM sources is allowed. Reporting what would need to be reconfigured or bootstrapped is allowed. Executing or editing the rebootstrap path requires explicit human authorization.
+
+## Tests
+- Do not run test scripts proactively.
+- When asked to run tests:
+  - Default toolchain: set `COD_TEST_TOOLCHAIN=build` and do not ask the user to confirm.
+  - Switch to `COD_TEST_TOOLCHAIN=built` only when the context clearly indicates release/pre-release testing.
+  - Confirm which component(s) to test if not explicit in the request.
+- You may execute test scripts under `tests/` and its subdirectories (e.g., `tests/**/run-all.sh`) or invoke CTest/CMake test targets directly when running tests.
+
+## Code Changes
+- C++20 only; prefer modern features and avoid legacy patterns unless strictly necessary.
+- Mimic existing style and header layout under `include/`.
+- Reuse existing libraries/utilities in the repo; do not add external dependencies unless requested by the user.
+
+## Documentation
+- Write documents and source comments to reflect the final state; avoid narrating what changed or comparisons with earlier versions.
+- Exceptions: dedicated change logs (e.g., `CHANGELOG.md`) and places where old and new designs coexist.
+
+## Memory Regions and Regional Types (Critical)
+- Zero-cost relocation is mandatory for regional types.
+- Allocate regional types in memory regions only (never on the stack).
+- No copy/move semantics for regional types.
+- Constructors that create regional objects must accept `memory_region&`.
+- Use `regional_ptr<T>` for intra-region references; use `global_ptr<T, RT>` for multi-region references.
+- `regional_ptr<T>` can only point to regional types or bits types - never standard C++ types like std::string or std::vector.
+- Prefer RAII via `auto_region<RT>`; ensure allocator symmetry; never use `delete` on memory regions.
+- Before modifying logic involving `regional_ptr`/`global_ptr` or region allocation semantics, consult `design/MemoryRegionAndRegionalTypes.md` and adhere strictly to its protocols.
+
+## YAML and Serialization
+- Keep YAML serialization optional and separate from core allocation logic.
+- Place YAML conversions in `*_yaml.hh` headers colocated with their corresponding types; this applies to both existing code and any new regional types you author.
+- Use and extend utilities under `include/shilos/*_yaml.hh`; adding new `*_yaml.hh` files is expected and idiomatic.
+
+## Package Management (codp)
+- Git/VCS is the single source of truth (no central registry).
+- Deterministic builds via lock file `CodManifest.yaml`.
+- Support local dependency overrides via `path:`.
+- Design for mmap-shared, zero-copy, zero-relocation assumptions.
+
+## LLVM Project Integration
+- If `/llvm-project` exists in the workspace and you are asked about LLVM internals, locate and cite code from there and verify file/line correctness before presenting.
+- If `/llvm-project` is absent, state that clearly and avoid speculation.
+
+## Do / Don’t
+- Do:
+  - Compile only with `cmake --build ./build`.
+  - Keep development tools pointed at `build/` in this worktree.
+  - Ask for explicit authorization before touching bootstrap/configuration state.
+  - Follow existing patterns and C++20 best practices.
+  - Prefer `auto_region`; preserve zero-cost-relocation invariants.
+  - Keep YAML logic isolated; use existing YAML helpers.
+  - Run top-level repository scripts only when their effects stay within the current human authorization.
+- Don’t:
+  - Execute top-level repository scripts that can bootstrap, reconfigure, clean, install, or mutate toolchains unless explicitly authorized.
+  - Reconfigure, clean, install, regenerate, or modify the bootstrapped toolchain path unless explicitly authorized.
+  - Allocate regional types on the stack or introduce copy/move.
+  - Add external dependencies without explicit approval.
+  - Break allocator matching or use `delete` on memory regions.
+
+## When Unsure
+- Ask which component to modify (shilos/cod/codp/tests).
+- Ask when a change could impact memory-region invariants.

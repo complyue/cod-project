@@ -1,7 +1,0 @@
-{
-	"name": "Ubuntu",
-	"shutdownAction": "none",
-	"build": {
-		"dockerfile": "Dockerfile"
-	}
-}
