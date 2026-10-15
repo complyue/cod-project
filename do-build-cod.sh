@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 
 #
-# This script does checkout the corresponding llvm-project branch, 3-stage
-# build CoD as an external project of LLVM, to form a toolset bundled with
-# llvm, clang, lld, libc++ and etc.
+# Build CoD with a pinned, unmodified LLVM release in three stages.
+# Linux bundles Clang, LLD, libc++, libc++abi, libunwind and compiler-rt.
+# See docs/LinuxBuildEnvironment.md for prerequisites and validation records.
 #
 
-# certain CoD branch should persist to a specific LLVM branche
-LLVM_BRANCH=release/18.x
+LLVM_RELEASE=llvmorg-23.1.3
+LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 
 # LLVM targets to be supported by CoD
-COD_TARGETS_TO_BUILD="Native"
+: "${COD_TARGETS_TO_BUILD:=Native}"
 # on Cuda ready OSes, include NVPTX target for Cuda support
 # COD_TARGETS_TO_BUILD="Native;NVPTX"
 
@@ -71,9 +71,8 @@ COD_TARGETS_TO_BUILD="Native"
 			# so far we use macOS' integrated libunwind, and build our own
 			# libc++, libc++abi and compiler-rt
 			#
-			# note we patch
-			#   clang/lib/Driver/ToolChains/Darwin.cpp
-			# to have the bundled libs being the default
+			# The macOS runtime selection requires separate validation against
+			# the pinned release; the Linux driver configuration is not used here.
 			#
 			-DLLVM_ENABLE_RUNTIMES="libcxxabi;libcxx;compiler-rt"
 			-DLIBCXXABI_USE_LLVM_UNWINDER=OFF
@@ -81,9 +80,7 @@ COD_TARGETS_TO_BUILD="Native"
 			-DCOMPILER_RT_USE_LLVM_UNWINDER=OFF
 		)
 
-	# TODO: support more OSes
-	else
-		# assuming Ubuntu
+	elif [ "$(uname)" == "Linux" ]; then
 		HOST_NTHREADS=$(nproc)
 
 		OS_SPEC_CMAKE_OPTS=(
@@ -93,9 +90,7 @@ COD_TARGETS_TO_BUILD="Native"
 			#
 			# build our own libc++ suite and compiler-rt on Linux
 			#
-			# note we patch
-			#   clang/lib/Driver/ToolChains/Gnu.cpp
-			# to have the bundled libs being the default
+			# Clang configuration files select the bundled library directory.
 			#
 			-DLLVM_ENABLE_RUNTIMES="libunwind;libcxxabi;libcxx;compiler-rt"
 			-DLIBCXXABI_ENABLE_STATIC_UNWINDER=ON
@@ -108,36 +103,27 @@ COD_TARGETS_TO_BUILD="Native"
 			-DCOMPILER_RT_USE_LLVM_UNWINDER=ON
 			-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
 		)
-
-	fi
-
-	# pull llvm-project repo here
-	# not to put it in ../ so we work in a single host dir, in case of devcontainers
-	if [ -d "./llvm-project/.git" ]; then
-		ACTUAL_LLVM_BRANCH=$(git -C "./llvm-project" branch --show-current)
-		if [ "$ACTUAL_LLVM_BRANCH" != "$LLVM_BRANCH" ]; then
-			echo "Error: llvm-project is on '$ACTUAL_LLVM_BRANCH', expected '$LLVM_BRANCH'." >&2
-			exit 1
-		fi
-		git -C "./llvm-project" pull --ff-only
 	else
-		git clone --depth 1 -b "$LLVM_BRANCH" https://github.com/llvm/llvm-project.git "./llvm-project"
-	fi
-	ACTUAL_LLVM_BRANCH=$(git -C "./llvm-project" branch --show-current)
-	if [ "$ACTUAL_LLVM_BRANCH" != "$LLVM_BRANCH" ]; then
-		echo "Error: llvm-project is on '$ACTUAL_LLVM_BRANCH', expected '$LLVM_BRANCH'." >&2
+		echo "Error: this bootstrap supports Linux and macOS hosts only." >&2
 		exit 1
 	fi
-	PATCH_DIR="$COD_SOURCE_DIR/patches/llvm/$LLVM_BRANCH"
-	if [ -d "$PATCH_DIR" ]; then
-		while IFS= read -r PATCH; do
-			if git -C "./llvm-project" apply --check "$PATCH" >/dev/null 2>&1; then
-				git -C "./llvm-project" apply "$PATCH"
-			elif ! git -C "./llvm-project" apply --reverse --check "$PATCH" >/dev/null 2>&1; then
-				echo "Error: LLVM patch cannot be applied cleanly: $PATCH" >&2
-				exit 1
-			fi
-		done < <(find "$PATCH_DIR" -type f -name "*.patch" -print | LC_ALL=C sort)
+
+	# Keep the source dependency in this worktree and never update it implicitly.
+	if [ ! -e "./llvm-project" ]; then
+		git clone --depth 1 --single-branch --no-checkout -b "$LLVM_RELEASE" \
+			https://github.com/llvm/llvm-project.git "./llvm-project"
+		git -C "./llvm-project" -c checkout.workers=8 sparse-checkout set --no-cone --stdin \
+			< "$COD_SOURCE_DIR/toolchain/llvm-sparse-checkout"
+		git -C "./llvm-project" -c checkout.workers=8 checkout --detach "$LLVM_COMMIT"
+	fi
+	ACTUAL_LLVM_COMMIT=$(git -C "./llvm-project" rev-parse HEAD)
+	if [ "$ACTUAL_LLVM_COMMIT" != "$LLVM_COMMIT" ]; then
+		echo "Error: llvm-project is at '$ACTUAL_LLVM_COMMIT', expected $LLVM_RELEASE ($LLVM_COMMIT)." >&2
+		exit 1
+	fi
+	if [ -n "$(git -C "./llvm-project" status --porcelain)" ]; then
+		echo "Error: the patch-free bootstrap requires an unmodified llvm-project checkout." >&2
+		exit 1
 	fi
 
 	STAGE_COMMON_CMAKE_OPTS=(
@@ -174,14 +160,19 @@ COD_TARGETS_TO_BUILD="Native"
 
 		-DLLVM_INCLUDE_DOCS=OFF
 		-DLLVM_INCLUDE_TESTS=OFF
+		-DLLVM_INCLUDE_BENCHMARKS=OFF
+		-DLIBCXX_INCLUDE_DOCS=OFF
+		-DLIBCXXABI_INCLUDE_DOCS=OFF
+		-DLIBUNWIND_INCLUDE_DOCS=OFF
 		-DLLVM_INSTALL_UTILS=OFF
 		-DLLVM_OPTIMIZED_TABLEGEN=ON
+		-DLLVM_PARALLEL_LINK_JOBS=1
 
 		-DCMAKE_POSITION_INDEPENDENT_CODE=ON
 		-DLLVM_ENABLE_IDE=ON
 		-DCMAKE_EXPORT_COMPILE_COMMANDS=1
 
-		${OS_SPEC_CMAKE_OPTS[@]}
+		"${OS_SPEC_CMAKE_OPTS[@]}"
 
 		-G
 		Ninja
@@ -190,7 +181,8 @@ COD_TARGETS_TO_BUILD="Native"
 	)
 
 	# spare 2 out of all available hardware threads
-	NJOBS=$((HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2)))
+	: "${COD_BUILD_JOBS:=$((HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2)))}"
+	export CMAKE_BUILD_PARALLEL_LEVEL="$COD_BUILD_JOBS"
 
 	#
 	# stage-2: build CoD toolset with stage1 clang then install it
@@ -222,9 +214,13 @@ COD_TARGETS_TO_BUILD="Native"
 				-DLLVM_TARGETS_TO_BUILD=Native \
 				-DCMAKE_BUILD_TYPE=Release \
 				"${STAGE_COMMON_CMAKE_OPTS[@]}"
-			ninja -j${NJOBS}
-			ninja -j${NJOBS} install-runtimes
+			cmake --build "$STAGE1_DIR"
+			cmake --build "$STAGE1_DIR" --target install-runtimes
 		)
+		if [ "$(uname)" == "Linux" ]; then
+			cp "$COD_SOURCE_DIR/toolchain/linux/clang.cfg" "$STAGE1_DIR/bin/clang.cfg"
+			cp "$COD_SOURCE_DIR/toolchain/linux/clang++.cfg" "$STAGE1_DIR/bin/clang++.cfg"
+		fi
 
 		mkdir -p "$STAGE2_DIR" && cd "$STAGE2_DIR"
 		cp -rf "$RUNTIME_INSTALL_DIR/lib" ./
@@ -240,8 +236,8 @@ COD_TARGETS_TO_BUILD="Native"
 			-DLLVM_TARGETS_TO_BUILD=Native \
 			-DCMAKE_BUILD_TYPE=Release \
 			"${STAGE_COMMON_CMAKE_OPTS[@]}"
-		ninja -j${NJOBS}
-		ninja -j${NJOBS} install
+		cmake --build "$STAGE2_DIR"
+		cmake --install "$STAGE2_DIR"
 	)
 
 	#
@@ -272,12 +268,10 @@ COD_TARGETS_TO_BUILD="Native"
 		-DCMAKE_BUILD_TYPE="$COD_BUILD_TYPE" \
 		"${STAGE_COMMON_CMAKE_OPTS[@]}" \
 		-DLLVM_ENABLE_PROJECTS="clang;lld;lldb"
-	ninja -j${NJOBS}
-	ninja -j${NJOBS} install
-
-	# cleanup artifacts not needed anymore; keep the stage2 installation under
-	# build/cod because it is the compiler recorded in compile_commands.json.
-	rm -rf "$BOOTSTRAP_DIR" || true
+	cd "$COD_SOURCE_DIR"
+	cmake --build ./build
+	cmake --install ./build
+	# Retain bootstrap outputs for incremental repair and reproducible diagnostics.
 
 	exit
 } # unreachable here and after

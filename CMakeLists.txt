@@ -27,6 +27,15 @@ include_directories( BEFORE
   include
   )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  foreach(driver clang clang++)
+    configure_file("toolchain/linux/${driver}.cfg"
+      "${CMAKE_BINARY_DIR}/bin/${driver}.cfg" COPYONLY)
+    install(FILES "toolchain/linux/${driver}.cfg"
+      DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT cod)
+  endforeach()
+endif()
+
 add_subdirectory(shilos)
 add_subdirectory(cod)
 add_subdirectory(codp)

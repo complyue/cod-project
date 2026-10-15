@@ -5,7 +5,7 @@ set(COD_PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 
 include("${COD_PROJECT_SOURCE_DIR}/tests/cmake/CodTestToolchain.cmake")
 
-project(cod_tests CXX)
+project(cod_tests C CXX)
 
 find_package(LLVM REQUIRED CONFIG PATHS "${COD_TOOLCHAIN_DIR}/lib/cmake/llvm" NO_DEFAULT_PATH)
 find_package(Clang REQUIRED CONFIG PATHS "${COD_TOOLCHAIN_DIR}/lib/cmake/clang" NO_DEFAULT_PATH)

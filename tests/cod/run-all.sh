@@ -5,8 +5,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 
-# Set default COD_TEST_TOOLCHAIN if not already set
-export COD_TEST_TOOLCHAIN="${COD_TEST_TOOLCHAIN:-build}"
+# Select the compiler and utilities from the requested test toolchain.
+# shellcheck source=tests/test-utils.sh
+source "$SCRIPT_DIR/../test-utils.sh"
 
 echo "🔧 Using toolchain mode: $COD_TEST_TOOLCHAIN"
 
