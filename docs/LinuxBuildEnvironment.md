@@ -22,11 +22,18 @@ Exact versions, upstream archive checksums and validation outcomes belong in
 
 Required host packages include `build-essential`, `git`, `pkg-config`, Python 3,
 `libffi-dev`, `libedit-dev`, `libncurses-dev`, `zlib1g-dev`, `libzstd-dev`,
-`libxml2-dev`, `python3-dev` and `swig`. The Python development files and SWIG
-support the final LLDB build. `prepare-ubuntu.sh` installs distro prerequisites;
+`libxml2-dev` and `python3-dev`. SWIG is also required; it and the Python
+development files support the final LLDB build. `prepare-ubuntu.sh` installs distro prerequisites;
 its CMake and Ninja package versions may differ from the validated upstream
 versions. The latest stable CMake and Ninja archives come from their official
 GitHub releases and must match the published SHA-256 digests.
+
+The deployed LTSP environment exposes CMake and Ninja through `/opt/bin`, with
+their installations under `/opt/cmake` and `/opt/ninja`. SWIG 4.5.1 is installed
+in the system image at `/usr/local/bin/swig`, with its library under
+`/usr/local/share/swig/4.5.1`. These deployed tools support a clean three-stage
+bootstrap with no trial installation or `/usr/local/bin/ninja` compatibility
+link. All bootstrap and test caches select `/opt/bin/ninja`.
 
 ## Build and validation
 
@@ -93,10 +100,9 @@ point the IDE at an intermediate bootstrap stage.
 The validated IDE combination is VSCodium 1.126.04524, the clangd extension 0.6.0
 and standalone clangd 23.1.0. Project checks cover diagnostics, completion, hover
 and definitions on six source/header files, including navigation to bundled
-libc++ headers and an unsaved diagnostic round trip. Clangd's exhaustive
-`--check` mode also reports failures in the `ExtractFunction` and
-`SwapBinaryOperands` refactoring actions; those actions are outside the passed
-IDE feature checks.
+libc++ headers and an unsaved diagnostic round trip. The deployed server is
+`/opt/clangd/bin/clangd`. Refactoring actions such as `ExtractFunction` and
+`SwapBinaryOperands` are outside the passed IDE feature checks.
 
 IDE acceptance requires the installed extension to activate on this checkout,
 start the configured server, and load `build/compile_commands.json`. Verify
@@ -116,3 +122,8 @@ the designated LTSP maintenance chat owns persistence in the `superuser`
 profile. Profile changes, deployment and reboot validation are tracked by
 `ltsp-diskless`, separately from the CoD build results. Do not reboot a client
 while its bootstrap or validation is running.
+
+Temporary trial paths and generated build caches are local development state.
+They do not require permanent compatibility paths in the system image. Host
+tool changes that invalidate a build configuration require a project-owned,
+explicitly authorized configuration or bootstrap using the deployed tools.
