@@ -65,6 +65,15 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 		# LLVM ExternalProject uses | to preserve nested CMake list values.
 		# compiler-rt dylibs live four levels below the toolchain's lib directory.
 		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_INSTALL_RPATH=@loader_path|@loader_path/../../../.."
+		# Apply the dyld compatibility policy inside the nested runtime build too.
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_EXE_LINKER_FLAGS=-Wl,-no_fixup_chains"
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-no_fixup_chains"
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_MODULE_LINKER_FLAGS=-Wl,-no_fixup_chains"
+		# Configure retained runtime caches with the selected linker and no
+		# extra project hooks or ABI re-exports. Recheck linker-specific flags.
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_PROJECT_Runtimes_INCLUDE="
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DLIBCXX_ADDITIONAL_LIBRARIES="
+		MACOS_RUNTIME_CMAKE_ARGS+=";-ULINKER_SUPPORTS_COLOR_DIAGNOSTICS"
 		if [ ! -d "$MACOS_SDK" ]; then
 			echo "Error: the selected macOS SDK does not exist: $MACOS_SDK" >&2
 			exit 1
@@ -73,6 +82,14 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 		OS_SPEC_CMAKE_OPTS=(
 			-DCMAKE_OSX_SYSROOT="$MACOS_SDK"
 			-DDEFAULT_SYSROOT="$MACOS_SDK"
+			# Use classic dyld bindings when bundled and system libc++ coexist.
+			-DCMAKE_EXE_LINKER_FLAGS=-Wl,-no_fixup_chains
+			-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-no_fixup_chains
+			-DCMAKE_MODULE_LINKER_FLAGS=-Wl,-no_fixup_chains
+			# This is a native bootstrap. Avoid extra compiler-rt slices such as
+			# x86_64h, which Mach-O LLD emits with the generic x86_64 subtype.
+			-DDARWIN_osx_ARCHS="$(uname -m)"
+			-DDARWIN_osx_BUILTIN_ARCHS="$(uname -m)"
 			# Mach-O LLD does not implement libc++'s symbol re-export lists.
 			# Use Apple's linker for runtimes; Clang still defaults to LLD.
 			-DRUNTIMES_CMAKE_ARGS="$MACOS_RUNTIME_CMAKE_ARGS"
@@ -81,6 +98,8 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 			-DCOMPILER_RT_ENABLE_TVOS=OFF
 			-DCOMPILER_RT_ENABLE_XROS=OFF
 			-DLLVM_CREATE_XCODE_TOOLCHAIN=OFF
+			-DCMAKE_PROJECT_Debugserver_INCLUDE=
+			-DLIBCXX_ADDITIONAL_LIBRARIES=
 
 			# Bundle libc++, libc++abi and compiler-rt, using the macOS
 			# unwinder supplied by libSystem.
@@ -204,7 +223,8 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 	#   we always (even on Linux) do HAVE_UNW_ADD_DYNAMIC_FDE=1 per:
 	#     https://github.com/llvm/llvm-project/issues/43419
 	#
-	{ test -x "$STAGE2_INSTALL_DIR/bin/cod" &&
+	{ test "${COD_RECONFIGURE_BOOTSTRAP:-0}" != 1 &&
+		test -x "$STAGE2_INSTALL_DIR/bin/cod" &&
 		test -x "$STAGE2_INSTALL_DIR/bin/clang++" &&
 		test -x "$STAGE2_INSTALL_DIR/bin/$BOOTSTRAP_LINKER"; } || (
 		#
@@ -220,7 +240,8 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 		#   rpath, this is crucial in case system installed (older) versions lack
 		#   symbols from our built libs from llvm-project
 		#
-		{ test -x "$STAGE1_DIR/bin/clang++" &&
+		{ test "${COD_RECONFIGURE_BOOTSTRAP:-0}" != 1 &&
+			test -x "$STAGE1_DIR/bin/clang++" &&
 			test -x "$STAGE1_DIR/bin/$BOOTSTRAP_LINKER" &&
 			test -d "$RUNTIME_INSTALL_DIR/lib"; } || (
 			mkdir -p "$STAGE1_DIR" && cd "$STAGE1_DIR"

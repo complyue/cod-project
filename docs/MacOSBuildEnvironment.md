@@ -29,6 +29,14 @@ It rejects a mismatched commit or local source changes. Each host environment
 owns its checkout and build tree. The active build is `build/`, the stage-two
 compiler installation is `build/cod/`, and the final installation is `built/`.
 Intermediate stages remain under `build/.bootstrap/` for incremental repair.
+Set `COD_RECONFIGURE_BOOTSTRAP=1` on the bootstrap command to configure and
+incrementally build both intermediate stages even when their tools are already
+installed. This retains completed build outputs. Keep `SDKROOT` consistent with
+the existing caches: a different path spelling for the same SDK can trigger
+unnecessary recompilation.
+Reconfiguration clears the runtime/debugserver hook settings and additional
+ABI re-export flags from retained caches, and rechecks linker color-diagnostic
+support for the selected Apple runtime linker.
 
 For source-only incremental work, use:
 
@@ -41,10 +49,19 @@ cmake --build ./build
 The macOS stages bundle libc++, libc++abi and compiler-rt, using the system
 unwinder supplied by libSystem. Later stages select the Mach-O linker
 `ld64.lld`. Compiler-rt's iOS, watchOS, tvOS and visionOS builds are disabled.
+Compiler-rt targets the native host architecture through `DARWIN_osx_ARCHS` and
+`DARWIN_osx_BUILTIN_ARCHS`. This avoids extra slices such as x86_64h, for which
+the pinned Mach-O LLD emits the generic x86_64 subtype.
 Runtime builds use the Apple linker: Mach-O LLD 23 does not implement the symbol
 re-export lists needed by libc++. This is
 configured through upstream `RUNTIMES_CMAKE_ARGS`; the bundled Clang drivers
 continue to use LLD for ordinary programs.
+
+Bootstrap executables, shared libraries, modules, nested runtimes and bundled
+driver link commands use `-no_fixup_chains`. This keeps classic dyld bindings
+when bundled and system libc++ coexist. The Intel bootstrap encountered this
+failure in TableGen; related reports appear in
+[LLVM issue 111570](https://github.com/llvm/llvm-project/issues/111570).
 
 Runtime dylibs search beside themselves and, for compiler-rt's nested library
 directory, in the toolchain's `lib/` directory before compiler-injected paths.
@@ -92,8 +109,33 @@ This host configuration does not install a signing certificate or change macOS
 security settings. The LLDB check covers breakpoint resolution, launch, stopping
 at `main`, frame inspection, and continuation to a successful exit.
 
-Exact results, tool checksums and log locations are recorded in
+The portable toolchain smoke checks run with:
+
+```sh
+COD_TEST_TOOLCHAIN=build bash tests/toolchain/run-all.sh
+```
+
+On macOS they cover C, C++20 formatting, exception rethrow, ABI demangling,
+bundled runtime selection, AddressSanitizer, and loading a bundled-runtime dylib
+after system libc++. They also check the driver's classic dyld binding policy.
+These checks pass on the local arm64 host with the combined configuration.
+All three retained bootstrap stages, installation, the final incremental build,
+CoD evaluation and LLDB Python/debugging checks also pass. Installed ASan,
+libc++ and libc++abi load from `built/` without development-build dylibs.
+
+Exact local results, tool checksums and log locations are recorded in
 [`toolchain/macos-validation.json`](../toolchain/macos-validation.json).
-No project test scripts have been run. Intel macOS, older macOS releases,
-universal distributions, installation relocation and cross-platform targets
-are unvalidated.
+Full project suites, universal distributions, installation relocation and
+cross-platform targets are outside this smoke coverage.
+
+## Intel baseline evidence
+
+The separate native x86_64 run at commit
+`0d69926` completed three stages and installation on macOS 14.7.7 with
+AppleClang 16.0.0 and SDK 15.2. Its original record is preserved in
+[`toolchain/macos-x86_64-validation.json`](../toolchain/macos-x86_64-validation.json).
+That run used LLD with a whole-library libc++abi re-export hook, and checked
+tool startup, Mach-O dependencies and runtime loading. It did not run functional
+smoke tests, LLDB Python scripts, or debugger launch/attach checks. Its evidence
+applies to that commit; the combined configuration still requires an Intel
+rerun, including the Apple runtime linker and compiler-rt runtime search paths.

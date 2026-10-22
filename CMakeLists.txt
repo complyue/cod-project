@@ -29,7 +29,7 @@ include_directories( BEFORE
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(COD_DRIVER_CONFIG_DIR "toolchain/linux")
-elseif(APPLE)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   set(COD_DRIVER_CONFIG_DIR "toolchain/macos")
 endif()
 

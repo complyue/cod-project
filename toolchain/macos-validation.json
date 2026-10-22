@@ -106,8 +106,10 @@
       "coverage": "Three native stages and installation with incremental repairs; build directories and completed objects retained."
     },
     "tests": {
-      "status": "not-run",
-      "reason": "Project test scripts were not requested."
+      "status": "passed-toolchain-smoke",
+      "command": "COD_TEST_TOOLCHAIN=build bash tests/toolchain/run-all.sh",
+      "log": "build/validation/macos-integrated-toolchain-smoke.log",
+      "not_run": "Full CoD, shilos, codp and YAML test suites."
     },
     "runtime_stage1": {
       "status": "passed",
@@ -172,8 +174,8 @@
     }
   },
   "unvalidated": [
-    "Project test suites",
-    "Intel macOS",
+    "Full project test suites beyond toolchain smoke",
+    "Combined configuration on Intel macOS; baseline evidence is in macos-x86_64-validation.json",
     "Older macOS releases",
     "Universal distributions",
     "Installation relocation",
@@ -193,6 +195,120 @@
     "runtime_build_with_install_rpath": true,
     "debugserver_compatibility": "For LLVM 23.1.3 only, -include memory on debugserver C++/Objective-C++ targets; no LLVM source edits.",
     "build_jobs": 6,
-    "llvm_parallel_link_jobs": 1
+    "llvm_parallel_link_jobs": 1,
+    "runtime_architectures": [
+      "arm64"
+    ],
+    "chained_fixups": false,
+    "sdk_selection_path": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+  },
+  "integration": {
+    "status": "passed-with-limitations",
+    "local_baseline": "805b5beed392acec658c223c4cc6f07612bec163",
+    "intel_baseline": "0d69926413a8a5b3440196fd4cb73e9e66b09f18",
+    "intel_evidence": "toolchain/macos-x86_64-validation.json",
+    "adopted_from_intel": [
+      "Native compiler-rt architecture selection",
+      "Classic dyld bindings for bootstrap, runtime and driver links",
+      "COD_RECONFIGURE_BOOTSTRAP=1 to refresh retained intermediate stages"
+    ],
+    "retained_from_arm64": [
+      "Apple runtime linker and upstream libc++ symbol-list re-exports",
+      "Loader-relative compiler-rt path to the toolchain lib directory",
+      "LLVM-23.1.3-only debugserver target header workaround",
+      "Required-tool and SDK checks, filtered LLVM source clone"
+    ],
+    "intel_rerun_required": true,
+    "checks": {
+      "shell_syntax": {
+        "status": "passed",
+        "command": "bash -n do-build-cod.sh prepare-macos.sh tests/toolchain/run-all.sh"
+      },
+      "incremental_build": {
+        "status": "passed",
+        "command": "cmake --build ./build",
+        "log": "build/validation/macos-integrated-incremental.log",
+        "coverage": "Incremental configure/generation and utility steps; no C++ source recompilation."
+      },
+      "toolchain_smoke": {
+        "status": "passed",
+        "command": "COD_TEST_TOOLCHAIN=build bash tests/toolchain/run-all.sh",
+        "log": "build/validation/macos-integrated-toolchain-smoke.log",
+        "coverage": "C; C++20 formatting; exception_ptr rethrow; ABI demangling; bundled libc++/libc++abi loading; ASan; system-first libc++ coexistence; driver classic dyld bindings."
+      },
+      "cod_eval": {
+        "status": "passed",
+        "toolchain": "build",
+        "expression": "6 * 7",
+        "result": "42",
+        "log": "build/validation/macos-integrated-cod-smoke.log"
+      },
+      "lldb_python": {
+        "status": "passed",
+        "toolchain": "build",
+        "version": "23.1.3",
+        "python_version": "3.9.6",
+        "log": "build/validation/macos-integrated-lldb-python.log"
+      },
+      "lldb_debug": {
+        "status": "passed",
+        "toolchain": "build",
+        "debugserver": "Xcode signed helper selected with LLDB_DEBUGSERVER_PATH",
+        "coverage": "Breakpoint at main, launch, stop, frame inspection, continue, exit zero.",
+        "log": "build/validation/macos-integrated-lldb-debug.log"
+      },
+      "installed_runtime": {
+        "status": "passed",
+        "coverage": "Installed C++20/exception/ABI smoke with ASan; libc++, libc++abi and ASan loaded from built/, with no development-build dylibs.",
+        "log": "build/validation/macos-integrated-installed-runtime.log"
+      },
+      "macho_inspection": {
+        "status": "passed",
+        "file_count": 25,
+        "coverage": "Native arm64 and no LC_DYLD_CHAINED_FIXUPS across stage1, stage2 installation, build and built.",
+        "log": "build/validation/macos-integrated-macho.json"
+      },
+      "runtime_caches": {
+        "status": "passed",
+        "coverage": "All three runtime caches select Apple ld, arm64, empty project hook/additional ABI flags, loader-relative RPATHs, and reject linker color-diagnostic support."
+      },
+      "compile_configuration": {
+        "status": "passed",
+        "coverage": "Forced memory include remains confined to debugserver targets; CoD main uses C++20."
+      },
+      "llvm_sources": {
+        "status": "passed",
+        "commit": "0d261d1ca552c95a8f007e061c787ac7132fbcbc",
+        "clean": true
+      }
+    },
+    "bootstrap_attempts": [
+      {
+        "log": "build/validation/macos-integrated-bootstrap.log",
+        "status": "interrupted",
+        "reason": "xcrun selected a different path spelling for the same SDK; resumed with the SDKROOT already used by the retained stage2/final caches. No build directories were recreated."
+      },
+      {
+        "log": "build/validation/macos-integrated-bootstrap-2.log",
+        "status": "interrupted",
+        "reason": "Applied compatibility resets for cached project hooks, additional ABI re-export flags and linker capability detection; resumed with completed objects retained."
+      },
+      {
+        "log": "build/validation/macos-integrated-bootstrap-3.log",
+        "status": "passed",
+        "exit_code": 0,
+        "coverage": "Reconfigured, built and installed all three retained native arm64 stages with the combined configuration."
+      }
+    ],
+    "completed_at_utc": "2026-10-22T09:20:23.099247+00:00",
+    "command": "SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk COD_RECONFIGURE_BOOTSTRAP=1 bash ./do-build-cod.sh",
+    "environment": "build/validation/macos-env.sh",
+    "validated_source_sha256": {
+      "CMakeLists.txt": "971ea094a1a8af64cb4ec78c7f31c2ea3ecffe4ed0be1a73a004e33f75b3e28b",
+      "do-build-cod.sh": "c5de18f935ebeb67b9ed2756c08e1cc0059d6acfb89f69d987e1c03984110a96",
+      "toolchain/macos/clang.cfg": "6fe8bec0e05152d4f31bddb82092e77f43d5b77c8ce439861884295375b452cb",
+      "toolchain/macos/clang++.cfg": "07109e2088720857daf6f9e6dc527bf085f46cb01041f5889766137d6d7cd21a",
+      "tests/toolchain/run-all.sh": "6fe56caac1051f97a50808a038d55b821a05bc3cbae973a09e879f62ffd5bb68"
+    }
   }
 }
