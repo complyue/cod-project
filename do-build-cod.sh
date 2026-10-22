@@ -3,7 +3,8 @@
 #
 # Build CoD with a pinned, unmodified LLVM release in three stages.
 # Linux bundles Clang, LLD, libc++, libc++abi, libunwind and compiler-rt.
-# See docs/LinuxBuildEnvironment.md for prerequisites and validation records.
+# macOS uses the selected Apple SDK and system unwinder with bundled C++ runtimes.
+# See docs/LinuxBuildEnvironment.md and docs/MacOSBuildEnvironment.md.
 #
 
 LLVM_RELEASE=llvmorg-23.1.3
@@ -22,6 +23,12 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 	set -e
 	cd "$(dirname "$0")"
 	COD_SOURCE_DIR=$(pwd)
+	for TOOL in cmake ninja git python3; do
+		if ! command -v "$TOOL" >/dev/null 2>&1; then
+			echo "Error: required bootstrap tool '$TOOL' was not found in PATH." >&2
+			exit 1
+		fi
+	done
 
 	# One checkout/worktree owns one development environment.  Native, WSL,
 	# Docker, and macOS builds should use separate worktrees instead of sharing
@@ -49,31 +56,36 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 	if [ "$(uname)" == "Darwin" ]; then
 		# macOS
 		HOST_NTHREADS=$(sysctl -n hw.ncpu)
+		BOOTSTRAP_LINKER=ld64.lld
+		DRIVER_CONFIG_DIR="$COD_SOURCE_DIR/toolchain/macos"
+		MACOS_SDK=$(xcrun --sdk "${SDKROOT:-macosx}" --show-sdk-path)
+		MACOS_LINKER=$(xcrun --find ld)
+		MACOS_RUNTIME_CMAKE_ARGS="-DLLVM_USE_LINKER=ld;-DCMAKE_LINKER=$MACOS_LINKER"
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"
+		# LLVM ExternalProject uses | to preserve nested CMake list values.
+		# compiler-rt dylibs live four levels below the toolchain's lib directory.
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_INSTALL_RPATH=@loader_path|@loader_path/../../../.."
+		if [ ! -d "$MACOS_SDK" ]; then
+			echo "Error: the selected macOS SDK does not exist: $MACOS_SDK" >&2
+			exit 1
+		fi
 
 		OS_SPEC_CMAKE_OPTS=(
-			-DDEFAULT_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+			-DCMAKE_OSX_SYSROOT="$MACOS_SDK"
+			-DDEFAULT_SYSROOT="$MACOS_SDK"
+			# Mach-O LLD does not implement libc++'s symbol re-export lists.
+			# Use Apple's linker for runtimes; Clang still defaults to LLD.
+			-DRUNTIMES_CMAKE_ARGS="$MACOS_RUNTIME_CMAKE_ARGS"
 			-DCOMPILER_RT_ENABLE_IOS=OFF
 			-DCOMPILER_RT_ENABLE_WATCHOS=OFF
 			-DCOMPILER_RT_ENABLE_TVOS=OFF
+			-DCOMPILER_RT_ENABLE_XROS=OFF
 			-DLLVM_CREATE_XCODE_TOOLCHAIN=OFF
 
-			#
-			# we want modern features of C++ (those beyond AppleClang) in CoD,
-			# tho things would inevitablly become complicated on macOS, e.g.
-			# CoD won't be able to load `.dylib`s built with Xcode.  cf.
-			#
-			#   https://discourse.llvm.org/t/can-different-versions-of-libc-coexist-in-a-program-at-runtime/69302/6
-			#
-			# the implicit libc++abi from macOS doesn't support our (newer)
-			# libc++ well, we have to build our own, yet libunwind from macOS
-			# (i.e. -lSystem) is better not overridden likely
-			#
-			# so far we use macOS' integrated libunwind, and build our own
-			# libc++, libc++abi and compiler-rt
-			#
-			# The macOS runtime selection requires separate validation against
-			# the pinned release; the Linux driver configuration is not used here.
-			#
+			# Bundle libc++, libc++abi and compiler-rt, using the macOS
+			# unwinder supplied by libSystem.
+			# Clang configuration files select the bundled libraries; libc++
+			# re-exports the in-tree libc++abi symbols through upstream CMake.
 			-DLLVM_ENABLE_RUNTIMES="libcxxabi;libcxx;compiler-rt"
 			-DLIBCXXABI_USE_LLVM_UNWINDER=OFF
 			-DLIBCXXABI_ENABLE_STATIC_UNWINDER=OFF
@@ -82,6 +94,8 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 
 	elif [ "$(uname)" == "Linux" ]; then
 		HOST_NTHREADS=$(nproc)
+		BOOTSTRAP_LINKER=ld.lld
+		DRIVER_CONFIG_DIR="$COD_SOURCE_DIR/toolchain/linux"
 
 		OS_SPEC_CMAKE_OPTS=(
 			-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF
@@ -110,7 +124,7 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 
 	# Keep the source dependency in this worktree and never update it implicitly.
 	if [ ! -e "./llvm-project" ]; then
-		git clone --depth 1 --single-branch --no-checkout -b "$LLVM_RELEASE" \
+		git clone --depth 1 --single-branch --filter=blob:none --no-checkout -b "$LLVM_RELEASE" \
 			https://github.com/llvm/llvm-project.git "./llvm-project"
 		git -C "./llvm-project" -c checkout.workers=8 sparse-checkout set --no-cone --stdin \
 			< "$COD_SOURCE_DIR/toolchain/llvm-sparse-checkout"
@@ -192,7 +206,7 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 	#
 	{ test -x "$STAGE2_INSTALL_DIR/bin/cod" &&
 		test -x "$STAGE2_INSTALL_DIR/bin/clang++" &&
-		test -x "$STAGE2_INSTALL_DIR/bin/ld.lld"; } || (
+		test -x "$STAGE2_INSTALL_DIR/bin/$BOOTSTRAP_LINKER"; } || (
 		#
 		# stage-1: build clang with system compiler (gcc or older clang) toolchain,
 		#          bundling lld, libc++ etc. with it
@@ -207,7 +221,7 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 		#   symbols from our built libs from llvm-project
 		#
 		{ test -x "$STAGE1_DIR/bin/clang++" &&
-			test -x "$STAGE1_DIR/bin/ld.lld" &&
+			test -x "$STAGE1_DIR/bin/$BOOTSTRAP_LINKER" &&
 			test -d "$RUNTIME_INSTALL_DIR/lib"; } || (
 			mkdir -p "$STAGE1_DIR" && cd "$STAGE1_DIR"
 			cmake -DCMAKE_INSTALL_PREFIX="$RUNTIME_INSTALL_DIR" \
@@ -217,10 +231,8 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 			cmake --build "$STAGE1_DIR"
 			cmake --build "$STAGE1_DIR" --target install-runtimes
 		)
-		if [ "$(uname)" == "Linux" ]; then
-			cp "$COD_SOURCE_DIR/toolchain/linux/clang.cfg" "$STAGE1_DIR/bin/clang.cfg"
-			cp "$COD_SOURCE_DIR/toolchain/linux/clang++.cfg" "$STAGE1_DIR/bin/clang++.cfg"
-		fi
+		cp "$DRIVER_CONFIG_DIR/clang.cfg" "$STAGE1_DIR/bin/clang.cfg"
+		cp "$DRIVER_CONFIG_DIR/clang++.cfg" "$STAGE1_DIR/bin/clang++.cfg"
 
 		mkdir -p "$STAGE2_DIR" && cd "$STAGE2_DIR"
 		cp -rf "$RUNTIME_INSTALL_DIR/lib" ./
@@ -228,7 +240,7 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 			-DCMAKE_SYSTEM_PREFIX_PATH="$STAGE1_DIR" \
 			-DCMAKE_C_COMPILER="$STAGE1_DIR/bin/clang" \
 			-DCMAKE_CXX_COMPILER="$STAGE1_DIR/bin/clang++" \
-			-DCMAKE_LINKER="$STAGE1_DIR/bin/ld.lld" \
+			-DCMAKE_LINKER="$STAGE1_DIR/bin/$BOOTSTRAP_LINKER" \
 			-DLLVM_ENABLE_LIBCXX=ON \
 			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 			-DLLVM_EXTERNAL_PROJECTS="cod" \
@@ -259,7 +271,7 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 		-DCMAKE_SYSTEM_PREFIX_PATH="$STAGE2_INSTALL_DIR" \
 		-DCMAKE_C_COMPILER="$STAGE2_INSTALL_DIR/bin/clang" \
 		-DCMAKE_CXX_COMPILER="$STAGE2_INSTALL_DIR/bin/clang++" \
-		-DCMAKE_LINKER="$STAGE2_INSTALL_DIR/bin/ld.lld" \
+		-DCMAKE_LINKER="$STAGE2_INSTALL_DIR/bin/$BOOTSTRAP_LINKER" \
 		-DLLVM_ENABLE_LIBCXX=ON \
 		-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 		-DLLVM_EXTERNAL_PROJECTS="cod" \

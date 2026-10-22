@@ -1,0 +1,198 @@
+{
+  "status": "passed-with-limitations",
+  "date": "2026-10-22",
+  "platform": "macOS 26.5.1 arm64 (25F80)",
+  "llvm": {
+    "tag": "llvmorg-23.1.3",
+    "commit": "0d261d1ca552c95a8f007e061c787ac7132fbcbc",
+    "patches": [],
+    "clean_checkout_verified": true
+  },
+  "bootstrap_compiler": "Apple clang 21.0.0 (clang-2100.1.1.101)",
+  "tools": {
+    "cmake": {
+      "version": "4.4.4",
+      "url": "https://github.com/Kitware/CMake/releases/download/v4.4.4/cmake-4.4.4-macos-universal.tar.gz",
+      "sha256": "4b7b73704b1db9b374e5c9ab8e17ac6148b817b6396ee75cd94a852cbac9d305",
+      "checksum_provenance": "GitHub upstream release asset digest",
+      "executable_version_verified": true
+    },
+    "ninja": {
+      "version": "1.13.2",
+      "url": "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-mac.zip",
+      "sha256": "c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b",
+      "checksum_provenance": "GitHub upstream release asset digest",
+      "executable_version_verified": true
+    },
+    "swig": {
+      "version": "4.5.1",
+      "url": "https://files.pythonhosted.org/packages/7d/11/d3c62d2fd989b2e5c2e0eb24e4debf90de0783f6841f2233b49d8ffa3227/swig-4.5.1-py3-none-macosx_10_9_universal2.whl",
+      "sha256": "ffdde0c2ca9e35792c4416abb087029d559399aa897d362c2bcb77e80c4efc16",
+      "checksum_provenance": "PyPI release metadata, verified by pip",
+      "executable_version_verified": true
+    },
+    "python": {
+      "version": "3.9.6",
+      "distribution": "Xcode Python3.framework"
+    }
+  },
+  "checks": {
+    "shell_syntax": {
+      "status": "passed",
+      "command": "bash -n do-build-cod.sh prepare-macos.sh"
+    },
+    "bootstrap": {
+      "status": "passed",
+      "command": "COD_BUILD_JOBS=6 bash ./do-build-cod.sh",
+      "environment": "build/validation/macos-env.sh",
+      "log": "build/validation/macos-runtime-rpath-repair.log",
+      "started_at_utc": "2026-10-21T15:54:25.881377+00:00",
+      "attempts": [
+        {
+          "pid": 2470,
+          "supervisor_pid": 2467,
+          "started_at_utc": "2026-10-21T15:54:25.881377+00:00",
+          "command": "COD_BUILD_JOBS=6 bash ./do-build-cod.sh",
+          "environment": "build/validation/macos-env.sh",
+          "log": "/Users/mac/EvtWorks/cod-project/build/validation/macos-bootstrap.log",
+          "script_sha256": "9b2251b1b89e256d5aa1f309a8a9b0e44400811612e38a99248dd31f322a47fc",
+          "status": "failed",
+          "exit_code": 1,
+          "completed_at_utc": "2026-10-21T16:14:15.478208+00:00",
+          "failure": "Mach-O LLD did not implement the symbol re-export lists needed by libc++; stage-two TableGen linking failed."
+        },
+        {
+          "pid": 43225,
+          "supervisor_pid": 43224,
+          "started_at_utc": "2026-10-21T16:23:07.915430+00:00",
+          "command": "COD_BUILD_JOBS=6 bash ./do-build-cod.sh",
+          "environment": "build/validation/macos-env.sh",
+          "log": "/Users/mac/EvtWorks/cod-project/build/validation/macos-bootstrap-2.log",
+          "script_sha256": "b613f047502264161359515216b4fab14b6b0ff45716bf3c81782ba69e49288f",
+          "status": "failed",
+          "exit_code": 1,
+          "completed_at_utc": "2026-10-21T21:00:30.916339+00:00",
+          "failure": "LLVM 23.1.3 debugserver headers require an explicit <memory> include with bundled libc++."
+        },
+        {
+          "supervisor_pid": 95724,
+          "started_at_utc": "2026-10-22T00:52:30.108932+00:00",
+          "commands": [
+            [
+              "cmake",
+              "--build",
+              "./build"
+            ],
+            [
+              "cmake",
+              "--install",
+              "./build"
+            ]
+          ],
+          "log": "/Users/mac/EvtWorks/cod-project/build/validation/macos-bootstrap-3.log",
+          "status": "passed",
+          "pid": 2057,
+          "current_command": [
+            "cmake",
+            "--install",
+            "./build"
+          ],
+          "exit_code": 0,
+          "completed_at_utc": "2026-10-22T01:03:42.135922+00:00"
+        }
+      ],
+      "exit_code": 0,
+      "completed_at_utc": "2026-10-22T08:23:29.263454+00:00",
+      "coverage": "Three native stages and installation with incremental repairs; build directories and completed objects retained."
+    },
+    "tests": {
+      "status": "not-run",
+      "reason": "Project test scripts were not requested."
+    },
+    "runtime_stage1": {
+      "status": "passed",
+      "coverage": "C++20 formatting, exception_ptr rethrow, ABI demangling, bundled libc++ and libc++abi loading without library-path overrides",
+      "log": "build/validation/runtime-smoke-stage1.log"
+    },
+    "runtime_repair": {
+      "status": "passed",
+      "log": "build/validation/macos-runtime-repair-2.log",
+      "configuration": "RUNTIMES_CMAKE_ARGS selects LLVM_USE_LINKER=ld and the Apple linker discovered by xcrun."
+    },
+    "build": {
+      "status": "passed",
+      "command": "cmake --build ./build",
+      "log": "build/validation/macos-runtime-rpath-repair.log"
+    },
+    "runtime_build": {
+      "status": "passed",
+      "coverage": "C++20 formatting, exception_ptr rethrow and demangling; build/lib libc++ and libc++abi selected without library-path overrides.",
+      "log": "build/validation/runtime-smoke-build.log"
+    },
+    "runtime_installed": {
+      "status": "passed",
+      "coverage": "C++20 formatting, exceptions and demangling; built/lib libc++ and libc++abi selected without development-build dylibs or library-path overrides.",
+      "log": "build/validation/runtime-smoke-installed.log"
+    },
+    "address_sanitizer": {
+      "status": "passed",
+      "coverage": "Installed C++20 program with -fsanitize=address; compiler-rt, libc++ and libc++abi loaded from built/.",
+      "log": "build/validation/runtime-smoke-asan.log"
+    },
+    "cod_eval": {
+      "status": "passed",
+      "expression": "6 * 7",
+      "result": "42",
+      "coverage": "Installed CoD compiles, links and executes in a minimal project.",
+      "log": "build/validation/cod-smoke.log"
+    },
+    "lldb_python": {
+      "status": "passed",
+      "lldb_version": "23.1.3",
+      "python_version": "3.9.6",
+      "log": "build/validation/lldb-python-smoke.log"
+    },
+    "lldb_bundled_debugserver": {
+      "status": "blocked-by-host-signing",
+      "reason": "macOS denies attach with the ad-hoc-signed bundled debugserver; no development signing identity is installed.",
+      "log": "build/validation/lldb-debug-smoke.log"
+    },
+    "lldb_system_debugserver": {
+      "status": "passed",
+      "debugserver": "/Applications/Xcode.app/Contents/SharedFrameworks/LLDB.framework/Versions/A/Resources/debugserver",
+      "selection": "LLDB_DEBUGSERVER_PATH",
+      "coverage": "Breakpoint resolution, launch, stop at main, frame inspection, continue and exit zero.",
+      "log": "build/validation/lldb-system-debugserver-smoke.log"
+    },
+    "incremental": {
+      "status": "passed",
+      "command": "cmake --build ./build",
+      "coverage": "Runtime configure/generation and utility steps completed without C++ source recompilation.",
+      "log": "build/validation/macos-incremental-final.log"
+    }
+  },
+  "unvalidated": [
+    "Project test suites",
+    "Intel macOS",
+    "Older macOS releases",
+    "Universal distributions",
+    "Installation relocation",
+    "Cross-platform targets"
+  ],
+  "sdk": {
+    "version": "26.5",
+    "path": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk"
+  },
+  "configuration": {
+    "program_linker": "ld64.lld",
+    "runtime_linker": "Apple ld selected with LLVM_USE_LINKER=ld",
+    "runtime_rpaths": [
+      "@loader_path",
+      "@loader_path/../../../.."
+    ],
+    "runtime_build_with_install_rpath": true,
+    "debugserver_compatibility": "For LLVM 23.1.3 only, -include memory on debugserver C++/Objective-C++ targets; no LLVM source edits.",
+    "build_jobs": 6,
+    "llvm_parallel_link_jobs": 1
+  }
+}

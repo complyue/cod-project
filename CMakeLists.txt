@@ -28,11 +28,29 @@ include_directories( BEFORE
   )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(COD_DRIVER_CONFIG_DIR "toolchain/linux")
+elseif(APPLE)
+  set(COD_DRIVER_CONFIG_DIR "toolchain/macos")
+endif()
+
+if(COD_DRIVER_CONFIG_DIR)
   foreach(driver clang clang++)
-    configure_file("toolchain/linux/${driver}.cfg"
+    configure_file("${COD_DRIVER_CONFIG_DIR}/${driver}.cfg"
       "${CMAKE_BINARY_DIR}/bin/${driver}.cfg" COPYONLY)
-    install(FILES "toolchain/linux/${driver}.cfg"
+    install(FILES "${COD_DRIVER_CONFIG_DIR}/${driver}.cfg"
       DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT cod)
+  endforeach()
+endif()
+
+# LLVM 23.1.3 debugserver headers require <memory> without including it.
+# Scope the compatibility include to its C++/Objective-C++ targets.
+if(APPLE AND LLVM_VERSION_MAJOR EQUAL 23 AND LLVM_VERSION_MINOR EQUAL 1
+    AND LLVM_VERSION_PATCH EQUAL 3)
+  foreach(debugserver_target lldbDebugserverCommon debugserver)
+    if(TARGET ${debugserver_target})
+      target_compile_options(${debugserver_target} PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:SHELL:-include memory>")
+    endif()
   endforeach()
 endif()
 
