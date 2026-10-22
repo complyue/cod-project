@@ -1,8 +1,9 @@
 # Linux build environment
 
 The Linux bootstrap uses an unmodified LLVM release, Clang configuration files
-for bundled runtime selection, and C++20 for CoD. macOS bootstrap validation is
-deferred. The Windows bootstrap has its own version selection.
+for bundled runtime selection, and C++20 for CoD. The macOS environment and
+validation are recorded in [MacOSBuildEnvironment.md](MacOSBuildEnvironment.md).
+The Windows bootstrap has its own version selection.
 
 ## Source and tools
 

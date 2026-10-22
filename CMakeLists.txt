@@ -27,11 +27,17 @@ include_directories( BEFORE
   include
   )
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  set(COD_DRIVER_CONFIG_DIR "toolchain/macos")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(COD_DRIVER_CONFIG_DIR "toolchain/linux")
+endif()
+
+if(COD_DRIVER_CONFIG_DIR)
   foreach(driver clang clang++)
-    configure_file("toolchain/linux/${driver}.cfg"
+    configure_file("${COD_DRIVER_CONFIG_DIR}/${driver}.cfg"
       "${CMAKE_BINARY_DIR}/bin/${driver}.cfg" COPYONLY)
-    install(FILES "toolchain/linux/${driver}.cfg"
+    install(FILES "${COD_DRIVER_CONFIG_DIR}/${driver}.cfg"
       DESTINATION "${CMAKE_INSTALL_BINDIR}" COMPONENT cod)
   endforeach()
 endif()

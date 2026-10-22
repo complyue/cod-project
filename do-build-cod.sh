@@ -3,7 +3,8 @@
 #
 # Build CoD with a pinned, unmodified LLVM release in three stages.
 # Linux bundles Clang, LLD, libc++, libc++abi, libunwind and compiler-rt.
-# See docs/LinuxBuildEnvironment.md for prerequisites and validation records.
+# macOS uses the system unwinder and bundles the other runtimes with Mach-O LLD.
+# See docs/LinuxBuildEnvironment.md and docs/MacOSBuildEnvironment.md.
 #
 
 LLVM_RELEASE=llvmorg-23.1.3
@@ -49,32 +50,37 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 	if [ "$(uname)" == "Darwin" ]; then
 		# macOS
 		HOST_NTHREADS=$(sysctl -n hw.ncpu)
+		MACOS_SDK=$(xcrun --sdk "${SDKROOT:-macosx}" --show-sdk-path)
+		LLVM_LINKER=ld64.lld
+		CLANG_CONFIG_DIR="$COD_SOURCE_DIR/toolchain/macos"
 
 		OS_SPEC_CMAKE_OPTS=(
-			-DDEFAULT_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+			-DCMAKE_OSX_SYSROOT="$MACOS_SDK"
+			-DDEFAULT_SYSROOT="$MACOS_SDK"
+			# Use classic dyld bindings when bundled and system libc++ coexist.
+			-DCMAKE_EXE_LINKER_FLAGS=-Wl,-no_fixup_chains
+			-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-no_fixup_chains
+			-DCMAKE_MODULE_LINKER_FLAGS=-Wl,-no_fixup_chains
+			# Match the native bootstrap target. Mach-O LLD emits the generic
+			# x86_64 subtype, so an extra x86_64h runtime slice cannot be merged.
+			-DDARWIN_osx_ARCHS="$(uname -m)"
+			-DDARWIN_osx_BUILTIN_ARCHS="$(uname -m)"
 			-DCOMPILER_RT_ENABLE_IOS=OFF
 			-DCOMPILER_RT_ENABLE_WATCHOS=OFF
 			-DCOMPILER_RT_ENABLE_TVOS=OFF
 			-DLLVM_CREATE_XCODE_TOOLCHAIN=OFF
+			# Supply debugserver's missing standard header without editing LLVM.
+			-DCMAKE_PROJECT_Debugserver_INCLUDE="$COD_SOURCE_DIR/toolchain/macos/debugserver.cmake"
 
-			#
-			# we want modern features of C++ (those beyond AppleClang) in CoD,
-			# tho things would inevitablly become complicated on macOS, e.g.
-			# CoD won't be able to load `.dylib`s built with Xcode.  cf.
-			#
-			#   https://discourse.llvm.org/t/can-different-versions-of-libc-coexist-in-a-program-at-runtime/69302/6
-			#
-			# the implicit libc++abi from macOS doesn't support our (newer)
-			# libc++ well, we have to build our own, yet libunwind from macOS
-			# (i.e. -lSystem) is better not overridden likely
-			#
-			# so far we use macOS' integrated libunwind, and build our own
-			# libc++, libc++abi and compiler-rt
-			#
-			# The macOS runtime selection requires separate validation against
-			# the pinned release; the Linux driver configuration is not used here.
-			#
+			# Bundle libc++, libc++abi and compiler-rt while using the macOS
+			# system unwinder. Keep system framework dependencies on libSystem.
+			# Clang configuration files select the bundled library directory.
+			# LLD supports whole-library re-exports, but not libc++abi's
+			# symbol-list re-exports. Apply this only to the shared libc++ build.
 			-DLLVM_ENABLE_RUNTIMES="libcxxabi;libcxx;compiler-rt"
+			# The runtime project hook owns this value; keep the outer cache empty.
+			-DLIBCXX_ADDITIONAL_LIBRARIES=
+			-DRUNTIMES_CMAKE_ARGS="-DCMAKE_PROJECT_Runtimes_INCLUDE=$COD_SOURCE_DIR/toolchain/macos/runtimes.cmake"
 			-DLIBCXXABI_USE_LLVM_UNWINDER=OFF
 			-DLIBCXXABI_ENABLE_STATIC_UNWINDER=OFF
 			-DCOMPILER_RT_USE_LLVM_UNWINDER=OFF
@@ -82,6 +88,8 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 
 	elif [ "$(uname)" == "Linux" ]; then
 		HOST_NTHREADS=$(nproc)
+		LLVM_LINKER=ld.lld
+		CLANG_CONFIG_DIR="$COD_SOURCE_DIR/toolchain/linux"
 
 		OS_SPEC_CMAKE_OPTS=(
 			-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF
@@ -190,9 +198,10 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 	#   we always (even on Linux) do HAVE_UNW_ADD_DYNAMIC_FDE=1 per:
 	#     https://github.com/llvm/llvm-project/issues/43419
 	#
-	{ test -x "$STAGE2_INSTALL_DIR/bin/cod" &&
+	{ test "${COD_RECONFIGURE_BOOTSTRAP:-0}" != 1 &&
+		test -x "$STAGE2_INSTALL_DIR/bin/cod" &&
 		test -x "$STAGE2_INSTALL_DIR/bin/clang++" &&
-		test -x "$STAGE2_INSTALL_DIR/bin/ld.lld"; } || (
+		test -x "$STAGE2_INSTALL_DIR/bin/$LLVM_LINKER"; } || (
 		#
 		# stage-1: build clang with system compiler (gcc or older clang) toolchain,
 		#          bundling lld, libc++ etc. with it
@@ -206,8 +215,9 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 		#   rpath, this is crucial in case system installed (older) versions lack
 		#   symbols from our built libs from llvm-project
 		#
-		{ test -x "$STAGE1_DIR/bin/clang++" &&
-			test -x "$STAGE1_DIR/bin/ld.lld" &&
+		{ test "${COD_RECONFIGURE_BOOTSTRAP:-0}" != 1 &&
+			test -x "$STAGE1_DIR/bin/clang++" &&
+			test -x "$STAGE1_DIR/bin/$LLVM_LINKER" &&
 			test -d "$RUNTIME_INSTALL_DIR/lib"; } || (
 			mkdir -p "$STAGE1_DIR" && cd "$STAGE1_DIR"
 			cmake -DCMAKE_INSTALL_PREFIX="$RUNTIME_INSTALL_DIR" \
@@ -217,10 +227,8 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 			cmake --build "$STAGE1_DIR"
 			cmake --build "$STAGE1_DIR" --target install-runtimes
 		)
-		if [ "$(uname)" == "Linux" ]; then
-			cp "$COD_SOURCE_DIR/toolchain/linux/clang.cfg" "$STAGE1_DIR/bin/clang.cfg"
-			cp "$COD_SOURCE_DIR/toolchain/linux/clang++.cfg" "$STAGE1_DIR/bin/clang++.cfg"
-		fi
+		cp "$CLANG_CONFIG_DIR/clang.cfg" "$STAGE1_DIR/bin/clang.cfg"
+		cp "$CLANG_CONFIG_DIR/clang++.cfg" "$STAGE1_DIR/bin/clang++.cfg"
 
 		mkdir -p "$STAGE2_DIR" && cd "$STAGE2_DIR"
 		cp -rf "$RUNTIME_INSTALL_DIR/lib" ./
@@ -228,7 +236,7 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 			-DCMAKE_SYSTEM_PREFIX_PATH="$STAGE1_DIR" \
 			-DCMAKE_C_COMPILER="$STAGE1_DIR/bin/clang" \
 			-DCMAKE_CXX_COMPILER="$STAGE1_DIR/bin/clang++" \
-			-DCMAKE_LINKER="$STAGE1_DIR/bin/ld.lld" \
+			-DCMAKE_LINKER="$STAGE1_DIR/bin/$LLVM_LINKER" \
 			-DLLVM_ENABLE_LIBCXX=ON \
 			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 			-DLLVM_EXTERNAL_PROJECTS="cod" \
@@ -259,7 +267,7 @@ LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 		-DCMAKE_SYSTEM_PREFIX_PATH="$STAGE2_INSTALL_DIR" \
 		-DCMAKE_C_COMPILER="$STAGE2_INSTALL_DIR/bin/clang" \
 		-DCMAKE_CXX_COMPILER="$STAGE2_INSTALL_DIR/bin/clang++" \
-		-DCMAKE_LINKER="$STAGE2_INSTALL_DIR/bin/ld.lld" \
+		-DCMAKE_LINKER="$STAGE2_INSTALL_DIR/bin/$LLVM_LINKER" \
 		-DLLVM_ENABLE_LIBCXX=ON \
 		-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 		-DLLVM_EXTERNAL_PROJECTS="cod" \

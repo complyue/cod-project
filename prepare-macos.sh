@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 
-brew install cmake ninja zlib
+set -e
+
+brew install cmake ninja zlib swig pkgconf
