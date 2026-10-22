@@ -137,5 +137,28 @@ AppleClang 16.0.0 and SDK 15.2. Its original record is preserved in
 That run used LLD with a whole-library libc++abi re-export hook, and checked
 tool startup, Mach-O dependencies and runtime loading. It did not run functional
 smoke tests, LLDB Python scripts, or debugger launch/attach checks. Its evidence
-applies to that commit; the combined configuration still requires an Intel
-rerun, including the Apple runtime linker and compiler-rt runtime search paths.
+applies to that commit.
+
+The combined configuration at `a956a2173e53c5e9f1a123a606d083a6b1b4b005` also
+passes the native Intel rerun on that host. All three retained stages and
+installation complete with the Apple runtime linker and compiler-rt's relative
+runtime search paths. The final `cmake --build ./build` check passes. With
+`COD_TEST_TOOLCHAIN=build`, the toolchain smoke suite passes C, C++20 formatting,
+exception rethrow, ABI demangling, bundled runtime loading, AddressSanitizer,
+system-first libc++ coexistence and classic dyld binding checks. CoD evaluates
+`6 * 7` to `42`, and LLDB runs Python 3.9.6.
+
+LLDB debugging passes with the signed Xcode helper: breakpoint resolution,
+launch, stop at `main`, frame inspection, continuation and exit zero. Initial
+debugger attempts timed out, including with that helper; after the stalled
+processes exited, Apple LLDB and the unified LLDB retry both launched the same
+fixture successfully. The cause of the transient stall is unconfirmed. The
+bundled ad-hoc helper was not revalidated after that stall. Installed binaries
+were inspected, but functional checks in this rerun use `build/`; full suites
+and relocation remain outside coverage.
+
+The `integration` section of
+[`toolchain/macos-x86_64-validation.json`](../toolchain/macos-x86_64-validation.json)
+records the Intel rerun separately from its baseline, including failed attempts
+and the successful debugger retry. Local logs use the
+`build/validation/macos-unified-` prefix.

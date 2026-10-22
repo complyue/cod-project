@@ -280,5 +280,90 @@
     "Absolute build-path fallback RPATHs remain; relocation was not tested.",
     "LLDB Python scripting and debugger launch/attach behavior were not tested.",
     "Repository test suites were not requested and were not run."
-  ]
+  ],
+  "integration": {
+    "status": "passed-with-limitations",
+    "date": "2026-10-22",
+    "commit": "a956a2173e53c5e9f1a123a606d083a6b1b4b005",
+    "branch": "codex/llvm23-patch-free-macos-unified",
+    "platform": "macOS 14.7.7 x86_64 (23H723)",
+    "bootstrap": {
+      "status": "passed",
+      "command": "SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk COD_RECONFIGURE_BOOTSTRAP=1 COD_BUILD_JOBS=6 bash ./do-build-cod.sh",
+      "exit_code": 0,
+      "started_at_utc": "2026-10-22T09:31:47.640077+00:00",
+      "completed_at_utc": "2026-10-22T09:34:50.305905+00:00",
+      "log": "build/validation/macos-unified-bootstrap.log",
+      "process_record": "build/validation/macos-unified-bootstrap-process.json",
+      "coverage": "All three retained native Intel stages and final installation refreshed incrementally; no build-tree recreation or LLVM source changes."
+    },
+    "incremental_build": {
+      "status": "passed",
+      "command": "cmake --build ./build",
+      "exit_code": 0,
+      "coverage": "Final incremental runtime configure/build and LLDB utility steps; no C++ source recompilation."
+    },
+    "toolchain_smoke": {
+      "status": "passed",
+      "command": "COD_TEST_TOOLCHAIN=build bash tests/toolchain/run-all.sh",
+      "log": "build/validation/macos-unified-toolchain-smoke.log",
+      "coverage": "C; C++20 formatting; exception_ptr rethrow; ABI demangling; bundled libc++/libc++abi loading; ASan; system-first libc++ coexistence; classic dyld bindings."
+    },
+    "cod_eval": {
+      "status": "passed",
+      "toolchain": "build",
+      "expression": "6 * 7",
+      "result": "42",
+      "log": "build/validation/macos-unified-cod-smoke.log"
+    },
+    "lldb_python": {
+      "status": "passed",
+      "toolchain": "build",
+      "lldb_version": "23.1.3",
+      "python_version": "3.9.6",
+      "log": "build/validation/macos-unified-lldb-python.log"
+    },
+    "lldb_debug": {
+      "status": "passed-after-retry",
+      "toolchain": "build",
+      "debugserver": "/Applications/Xcode.app/Contents/SharedFrameworks/LLDB.framework/Resources/debugserver",
+      "selection": "LLDB_DEBUGSERVER_PATH",
+      "coverage": "Breakpoint resolution, run, stop at main, frame inspection, continue, exit zero.",
+      "log": "build/validation/macos-unified-lldb-xcode-retry.log",
+      "initial_attempts": "Initial run and direct-launch attempts timed out, including with the Xcode helper. Some diagnostic processes temporarily remained in uninterruptible wait. They subsequently exited; direct fixture execution, Apple LLDB control and the unified LLDB retry passed. The cause of the transient stall was not established."
+    },
+    "lldb_bundled_debugserver": {
+      "status": "not_validated",
+      "reason": "Bundled-helper attempts timed out during the initial stall; it was not retried after the Xcode-helper launch passed. No signing-policy changes were made.",
+      "logs": [
+        "build/validation/macos-unified-lldb-bundled-debugserver.log",
+        "build/validation/macos-unified-lldb-bundled-direct-launch.log"
+      ]
+    },
+    "configuration_inspection": {
+      "status": "passed",
+      "log": "build/validation/macos-unified-configuration-inspection.json",
+      "runtime_caches": "All three use Apple ld, x86_64, empty legacy project hook/additional ABI flags, loader-relative RPATHs, and no linker color-diagnostic support.",
+      "macho": "20 artifacts across stage1, stage2 installation, build and built: native x86_64 and no chained fixups.",
+      "compile_options": "35 forced-memory-include commands confined to debugserver; CoD main uses C++20.",
+      "llvm_commit": "0d261d1ca552c95a8f007e061c787ac7132fbcbc",
+      "llvm_clean": true
+    },
+    "all_smoke_attempts": "build/validation/macos-unified-smoke-results.json",
+    "unvalidated": [
+      "Full project test suites",
+      "Functional smoke using the installed built/ toolchain",
+      "Bundled ad-hoc debugserver launch/attach",
+      "Installation relocation",
+      "Universal and cross-platform targets"
+    ],
+    "validated_source_sha256": {
+      "CMakeLists.txt": "971ea094a1a8af64cb4ec78c7f31c2ea3ecffe4ed0be1a73a004e33f75b3e28b",
+      "do-build-cod.sh": "c5de18f935ebeb67b9ed2756c08e1cc0059d6acfb89f69d987e1c03984110a96",
+      "toolchain/macos/clang.cfg": "6fe8bec0e05152d4f31bddb82092e77f43d5b77c8ce439861884295375b452cb",
+      "toolchain/macos/clang++.cfg": "07109e2088720857daf6f9e6dc527bf085f46cb01041f5889766137d6d7cd21a",
+      "tests/toolchain/run-all.sh": "6fe56caac1051f97a50808a038d55b821a05bc3cbae973a09e879f62ffd5bb68"
+    },
+    "completed_at_utc": "2026-10-22T09:47:22.391252+00:00"
+  }
 }
