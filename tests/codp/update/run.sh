@@ -21,7 +21,12 @@ trap cleanup EXIT
 
 mkdir -p "$WORK_DIR/home" "$WORK_DIR/project"
 export HOME="$WORK_DIR/home"
-export USERPROFILE="$(cygpath -w "$WORK_DIR/home")"
+case "$(uname -s)" in
+  MINGW*|MSYS*)
+    USERPROFILE=$(cygpath -w "$WORK_DIR/home")
+    export USERPROFILE
+    ;;
+esac
 
 SOURCE_REPO="$WORK_DIR/source"
 git init -q -b main "$SOURCE_REPO"

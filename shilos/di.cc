@@ -218,7 +218,7 @@ void formatBacktraceFrame(int btDepth, void *address, std::string &last_debug_fi
   llvm::DILineInfoSpecifier spec(llvm::DILineInfoSpecifier::FileLineInfoKind::AbsoluteFilePath,
                                  llvm::DILineInfoSpecifier::FunctionNameKind::LinkageName);
   llvm::object::SectionedAddress sectionedAddr = {debug_address, (uint64_t)-1LL};
-  llvm::DILineInfo lineInfo = module_info->context->getLineInfoForAddress(sectionedAddr, spec);
+  const auto lineInfo = module_info->context->getLineInfoForAddress(sectionedAddr, spec).value_or(llvm::DILineInfo{});
 
   // Prefer DWARF function name, demangled if possible
   std::string function_name;
@@ -298,7 +298,7 @@ void dumpDebugInfo(void *address, std::ostream &os) {
 
   // Get line info for the address
   llvm::object::SectionedAddress sectionedAddr = {debug_address, (uint64_t)-1LL};
-  llvm::DILineInfo lineInfo = module_info->context->getLineInfoForAddress(sectionedAddr, spec);
+  const auto lineInfo = module_info->context->getLineInfoForAddress(sectionedAddr, spec).value_or(llvm::DILineInfo{});
 
   // Dump the comprehensive debug information
   os << "  Function: " << (lineInfo.FunctionName.empty() ? "<unknown>" : lineInfo.FunctionName) << std::endl;

@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 
 #
-# This script does checkout the corresponding llvm-project branch, 3-stage
-# build CoD as an external project of LLVM, to form a toolset bundled with
-# llvm, clang, lld, libc++ and etc.
+# Build CoD with a pinned, unmodified LLVM release in three stages.
+# Linux bundles Clang, LLD, libc++, libc++abi, libunwind and compiler-rt.
+# macOS uses the selected Apple SDK and system unwinder with bundled C++ runtimes.
+# See docs/LinuxBuildEnvironment.md and docs/MacOSBuildEnvironment.md.
 #
 
-# certain CoD branch should persist to a specific LLVM branche
-LLVM_BRANCH=release/18.x
+LLVM_RELEASE=llvmorg-23.1.3
+LLVM_COMMIT=0d261d1ca552c95a8f007e061c787ac7132fbcbc
 
 # LLVM targets to be supported by CoD
-COD_TARGETS_TO_BUILD="Native"
+: "${COD_TARGETS_TO_BUILD:=Native}"
 # on Cuda ready OSes, include NVPTX target for Cuda support
 # COD_TARGETS_TO_BUILD="Native;NVPTX"
 
@@ -22,6 +23,12 @@ COD_TARGETS_TO_BUILD="Native"
 	set -e
 	cd "$(dirname "$0")"
 	COD_SOURCE_DIR=$(pwd)
+	for TOOL in cmake ninja git python3; do
+		if ! command -v "$TOOL" >/dev/null 2>&1; then
+			echo "Error: required bootstrap tool '$TOOL' was not found in PATH." >&2
+			exit 1
+		fi
+	done
 
 	# One checkout/worktree owns one development environment.  Native, WSL,
 	# Docker, and macOS builds should use separate worktrees instead of sharing
@@ -49,42 +56,65 @@ COD_TARGETS_TO_BUILD="Native"
 	if [ "$(uname)" == "Darwin" ]; then
 		# macOS
 		HOST_NTHREADS=$(sysctl -n hw.ncpu)
+		BOOTSTRAP_LINKER=ld64.lld
+		DRIVER_CONFIG_DIR="$COD_SOURCE_DIR/toolchain/macos"
+		MACOS_SDK=$(xcrun --sdk "${SDKROOT:-macosx}" --show-sdk-path)
+		MACOS_LINKER=$(xcrun --find ld)
+		MACOS_RUNTIME_CMAKE_ARGS="-DLLVM_USE_LINKER=ld;-DCMAKE_LINKER=$MACOS_LINKER"
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"
+		# LLVM ExternalProject uses | to preserve nested CMake list values.
+		# compiler-rt dylibs live four levels below the toolchain's lib directory.
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_INSTALL_RPATH=@loader_path|@loader_path/../../../.."
+		# Apply the dyld compatibility policy inside the nested runtime build too.
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_EXE_LINKER_FLAGS=-Wl,-no_fixup_chains"
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-no_fixup_chains"
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_MODULE_LINKER_FLAGS=-Wl,-no_fixup_chains"
+		# Configure retained runtime caches with the selected linker and no
+		# extra project hooks or ABI re-exports. Recheck linker-specific flags.
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DCMAKE_PROJECT_Runtimes_INCLUDE="
+		MACOS_RUNTIME_CMAKE_ARGS+=";-DLIBCXX_ADDITIONAL_LIBRARIES="
+		MACOS_RUNTIME_CMAKE_ARGS+=";-ULINKER_SUPPORTS_COLOR_DIAGNOSTICS"
+		if [ ! -d "$MACOS_SDK" ]; then
+			echo "Error: the selected macOS SDK does not exist: $MACOS_SDK" >&2
+			exit 1
+		fi
 
 		OS_SPEC_CMAKE_OPTS=(
-			-DDEFAULT_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
+			-DCMAKE_OSX_SYSROOT="$MACOS_SDK"
+			-DDEFAULT_SYSROOT="$MACOS_SDK"
+			# Use classic dyld bindings when bundled and system libc++ coexist.
+			-DCMAKE_EXE_LINKER_FLAGS=-Wl,-no_fixup_chains
+			-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-no_fixup_chains
+			-DCMAKE_MODULE_LINKER_FLAGS=-Wl,-no_fixup_chains
+			# This is a native bootstrap. Avoid extra compiler-rt slices such as
+			# x86_64h, which Mach-O LLD emits with the generic x86_64 subtype.
+			-DDARWIN_osx_ARCHS="$(uname -m)"
+			-DDARWIN_osx_BUILTIN_ARCHS="$(uname -m)"
+			# Mach-O LLD does not implement libc++'s symbol re-export lists.
+			# Use Apple's linker for runtimes; Clang still defaults to LLD.
+			-DRUNTIMES_CMAKE_ARGS="$MACOS_RUNTIME_CMAKE_ARGS"
 			-DCOMPILER_RT_ENABLE_IOS=OFF
 			-DCOMPILER_RT_ENABLE_WATCHOS=OFF
 			-DCOMPILER_RT_ENABLE_TVOS=OFF
+			-DCOMPILER_RT_ENABLE_XROS=OFF
 			-DLLVM_CREATE_XCODE_TOOLCHAIN=OFF
+			-DCMAKE_PROJECT_Debugserver_INCLUDE=
+			-DLIBCXX_ADDITIONAL_LIBRARIES=
 
-			#
-			# we want modern features of C++ (those beyond AppleClang) in CoD,
-			# tho things would inevitablly become complicated on macOS, e.g.
-			# CoD won't be able to load `.dylib`s built with Xcode.  cf.
-			#
-			#   https://discourse.llvm.org/t/can-different-versions-of-libc-coexist-in-a-program-at-runtime/69302/6
-			#
-			# the implicit libc++abi from macOS doesn't support our (newer)
-			# libc++ well, we have to build our own, yet libunwind from macOS
-			# (i.e. -lSystem) is better not overridden likely
-			#
-			# so far we use macOS' integrated libunwind, and build our own
-			# libc++, libc++abi and compiler-rt
-			#
-			# note we patch
-			#   clang/lib/Driver/ToolChains/Darwin.cpp
-			# to have the bundled libs being the default
-			#
+			# Bundle libc++, libc++abi and compiler-rt, using the macOS
+			# unwinder supplied by libSystem.
+			# Clang configuration files select the bundled libraries; libc++
+			# re-exports the in-tree libc++abi symbols through upstream CMake.
 			-DLLVM_ENABLE_RUNTIMES="libcxxabi;libcxx;compiler-rt"
 			-DLIBCXXABI_USE_LLVM_UNWINDER=OFF
 			-DLIBCXXABI_ENABLE_STATIC_UNWINDER=OFF
 			-DCOMPILER_RT_USE_LLVM_UNWINDER=OFF
 		)
 
-	# TODO: support more OSes
-	else
-		# assuming Ubuntu
+	elif [ "$(uname)" == "Linux" ]; then
 		HOST_NTHREADS=$(nproc)
+		BOOTSTRAP_LINKER=ld.lld
+		DRIVER_CONFIG_DIR="$COD_SOURCE_DIR/toolchain/linux"
 
 		OS_SPEC_CMAKE_OPTS=(
 			-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF
@@ -93,9 +123,7 @@ COD_TARGETS_TO_BUILD="Native"
 			#
 			# build our own libc++ suite and compiler-rt on Linux
 			#
-			# note we patch
-			#   clang/lib/Driver/ToolChains/Gnu.cpp
-			# to have the bundled libs being the default
+			# Clang configuration files select the bundled library directory.
 			#
 			-DLLVM_ENABLE_RUNTIMES="libunwind;libcxxabi;libcxx;compiler-rt"
 			-DLIBCXXABI_ENABLE_STATIC_UNWINDER=ON
@@ -108,36 +136,27 @@ COD_TARGETS_TO_BUILD="Native"
 			-DCOMPILER_RT_USE_LLVM_UNWINDER=ON
 			-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
 		)
-
-	fi
-
-	# pull llvm-project repo here
-	# not to put it in ../ so we work in a single host dir, in case of devcontainers
-	if [ -d "./llvm-project/.git" ]; then
-		ACTUAL_LLVM_BRANCH=$(git -C "./llvm-project" branch --show-current)
-		if [ "$ACTUAL_LLVM_BRANCH" != "$LLVM_BRANCH" ]; then
-			echo "Error: llvm-project is on '$ACTUAL_LLVM_BRANCH', expected '$LLVM_BRANCH'." >&2
-			exit 1
-		fi
-		git -C "./llvm-project" pull --ff-only
 	else
-		git clone --depth 1 -b "$LLVM_BRANCH" https://github.com/llvm/llvm-project.git "./llvm-project"
-	fi
-	ACTUAL_LLVM_BRANCH=$(git -C "./llvm-project" branch --show-current)
-	if [ "$ACTUAL_LLVM_BRANCH" != "$LLVM_BRANCH" ]; then
-		echo "Error: llvm-project is on '$ACTUAL_LLVM_BRANCH', expected '$LLVM_BRANCH'." >&2
+		echo "Error: this bootstrap supports Linux and macOS hosts only." >&2
 		exit 1
 	fi
-	PATCH_DIR="$COD_SOURCE_DIR/patches/llvm/$LLVM_BRANCH"
-	if [ -d "$PATCH_DIR" ]; then
-		while IFS= read -r PATCH; do
-			if git -C "./llvm-project" apply --check "$PATCH" >/dev/null 2>&1; then
-				git -C "./llvm-project" apply "$PATCH"
-			elif ! git -C "./llvm-project" apply --reverse --check "$PATCH" >/dev/null 2>&1; then
-				echo "Error: LLVM patch cannot be applied cleanly: $PATCH" >&2
-				exit 1
-			fi
-		done < <(find "$PATCH_DIR" -type f -name "*.patch" -print | LC_ALL=C sort)
+
+	# Keep the source dependency in this worktree and never update it implicitly.
+	if [ ! -e "./llvm-project" ]; then
+		git clone --depth 1 --single-branch --filter=blob:none --no-checkout -b "$LLVM_RELEASE" \
+			https://github.com/llvm/llvm-project.git "./llvm-project"
+		git -C "./llvm-project" -c checkout.workers=8 sparse-checkout set --no-cone --stdin \
+			< "$COD_SOURCE_DIR/toolchain/llvm-sparse-checkout"
+		git -C "./llvm-project" -c checkout.workers=8 checkout --detach "$LLVM_COMMIT"
+	fi
+	ACTUAL_LLVM_COMMIT=$(git -C "./llvm-project" rev-parse HEAD)
+	if [ "$ACTUAL_LLVM_COMMIT" != "$LLVM_COMMIT" ]; then
+		echo "Error: llvm-project is at '$ACTUAL_LLVM_COMMIT', expected $LLVM_RELEASE ($LLVM_COMMIT)." >&2
+		exit 1
+	fi
+	if [ -n "$(git -C "./llvm-project" status --porcelain)" ]; then
+		echo "Error: the patch-free bootstrap requires an unmodified llvm-project checkout." >&2
+		exit 1
 	fi
 
 	STAGE_COMMON_CMAKE_OPTS=(
@@ -174,14 +193,19 @@ COD_TARGETS_TO_BUILD="Native"
 
 		-DLLVM_INCLUDE_DOCS=OFF
 		-DLLVM_INCLUDE_TESTS=OFF
+		-DLLVM_INCLUDE_BENCHMARKS=OFF
+		-DLIBCXX_INCLUDE_DOCS=OFF
+		-DLIBCXXABI_INCLUDE_DOCS=OFF
+		-DLIBUNWIND_INCLUDE_DOCS=OFF
 		-DLLVM_INSTALL_UTILS=OFF
 		-DLLVM_OPTIMIZED_TABLEGEN=ON
+		-DLLVM_PARALLEL_LINK_JOBS=1
 
 		-DCMAKE_POSITION_INDEPENDENT_CODE=ON
 		-DLLVM_ENABLE_IDE=ON
 		-DCMAKE_EXPORT_COMPILE_COMMANDS=1
 
-		${OS_SPEC_CMAKE_OPTS[@]}
+		"${OS_SPEC_CMAKE_OPTS[@]}"
 
 		-G
 		Ninja
@@ -190,7 +214,8 @@ COD_TARGETS_TO_BUILD="Native"
 	)
 
 	# spare 2 out of all available hardware threads
-	NJOBS=$((HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2)))
+	: "${COD_BUILD_JOBS:=$((HOST_NTHREADS <= 3 ? 1 : (HOST_NTHREADS - 2)))}"
+	export CMAKE_BUILD_PARALLEL_LEVEL="$COD_BUILD_JOBS"
 
 	#
 	# stage-2: build CoD toolset with stage1 clang then install it
@@ -198,9 +223,10 @@ COD_TARGETS_TO_BUILD="Native"
 	#   we always (even on Linux) do HAVE_UNW_ADD_DYNAMIC_FDE=1 per:
 	#     https://github.com/llvm/llvm-project/issues/43419
 	#
-	{ test -x "$STAGE2_INSTALL_DIR/bin/cod" &&
+	{ test "${COD_RECONFIGURE_BOOTSTRAP:-0}" != 1 &&
+		test -x "$STAGE2_INSTALL_DIR/bin/cod" &&
 		test -x "$STAGE2_INSTALL_DIR/bin/clang++" &&
-		test -x "$STAGE2_INSTALL_DIR/bin/ld.lld"; } || (
+		test -x "$STAGE2_INSTALL_DIR/bin/$BOOTSTRAP_LINKER"; } || (
 		#
 		# stage-1: build clang with system compiler (gcc or older clang) toolchain,
 		#          bundling lld, libc++ etc. with it
@@ -214,17 +240,20 @@ COD_TARGETS_TO_BUILD="Native"
 		#   rpath, this is crucial in case system installed (older) versions lack
 		#   symbols from our built libs from llvm-project
 		#
-		{ test -x "$STAGE1_DIR/bin/clang++" &&
-			test -x "$STAGE1_DIR/bin/ld.lld" &&
+		{ test "${COD_RECONFIGURE_BOOTSTRAP:-0}" != 1 &&
+			test -x "$STAGE1_DIR/bin/clang++" &&
+			test -x "$STAGE1_DIR/bin/$BOOTSTRAP_LINKER" &&
 			test -d "$RUNTIME_INSTALL_DIR/lib"; } || (
 			mkdir -p "$STAGE1_DIR" && cd "$STAGE1_DIR"
 			cmake -DCMAKE_INSTALL_PREFIX="$RUNTIME_INSTALL_DIR" \
 				-DLLVM_TARGETS_TO_BUILD=Native \
 				-DCMAKE_BUILD_TYPE=Release \
 				"${STAGE_COMMON_CMAKE_OPTS[@]}"
-			ninja -j${NJOBS}
-			ninja -j${NJOBS} install-runtimes
+			cmake --build "$STAGE1_DIR"
+			cmake --build "$STAGE1_DIR" --target install-runtimes
 		)
+		cp "$DRIVER_CONFIG_DIR/clang.cfg" "$STAGE1_DIR/bin/clang.cfg"
+		cp "$DRIVER_CONFIG_DIR/clang++.cfg" "$STAGE1_DIR/bin/clang++.cfg"
 
 		mkdir -p "$STAGE2_DIR" && cd "$STAGE2_DIR"
 		cp -rf "$RUNTIME_INSTALL_DIR/lib" ./
@@ -232,7 +261,7 @@ COD_TARGETS_TO_BUILD="Native"
 			-DCMAKE_SYSTEM_PREFIX_PATH="$STAGE1_DIR" \
 			-DCMAKE_C_COMPILER="$STAGE1_DIR/bin/clang" \
 			-DCMAKE_CXX_COMPILER="$STAGE1_DIR/bin/clang++" \
-			-DCMAKE_LINKER="$STAGE1_DIR/bin/ld.lld" \
+			-DCMAKE_LINKER="$STAGE1_DIR/bin/$BOOTSTRAP_LINKER" \
 			-DLLVM_ENABLE_LIBCXX=ON \
 			-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 			-DLLVM_EXTERNAL_PROJECTS="cod" \
@@ -240,8 +269,8 @@ COD_TARGETS_TO_BUILD="Native"
 			-DLLVM_TARGETS_TO_BUILD=Native \
 			-DCMAKE_BUILD_TYPE=Release \
 			"${STAGE_COMMON_CMAKE_OPTS[@]}"
-		ninja -j${NJOBS}
-		ninja -j${NJOBS} install
+		cmake --build "$STAGE2_DIR"
+		cmake --install "$STAGE2_DIR"
 	)
 
 	#
@@ -263,7 +292,7 @@ COD_TARGETS_TO_BUILD="Native"
 		-DCMAKE_SYSTEM_PREFIX_PATH="$STAGE2_INSTALL_DIR" \
 		-DCMAKE_C_COMPILER="$STAGE2_INSTALL_DIR/bin/clang" \
 		-DCMAKE_CXX_COMPILER="$STAGE2_INSTALL_DIR/bin/clang++" \
-		-DCMAKE_LINKER="$STAGE2_INSTALL_DIR/bin/ld.lld" \
+		-DCMAKE_LINKER="$STAGE2_INSTALL_DIR/bin/$BOOTSTRAP_LINKER" \
 		-DLLVM_ENABLE_LIBCXX=ON \
 		-DHAVE_UNW_ADD_DYNAMIC_FDE=1 \
 		-DLLVM_EXTERNAL_PROJECTS="cod" \
@@ -272,12 +301,10 @@ COD_TARGETS_TO_BUILD="Native"
 		-DCMAKE_BUILD_TYPE="$COD_BUILD_TYPE" \
 		"${STAGE_COMMON_CMAKE_OPTS[@]}" \
 		-DLLVM_ENABLE_PROJECTS="clang;lld;lldb"
-	ninja -j${NJOBS}
-	ninja -j${NJOBS} install
-
-	# cleanup artifacts not needed anymore; keep the stage2 installation under
-	# build/cod because it is the compiler recorded in compile_commands.json.
-	rm -rf "$BOOTSTRAP_DIR" || true
+	cd "$COD_SOURCE_DIR"
+	cmake --build ./build
+	cmake --install ./build
+	# Retain bootstrap outputs for incremental repair and reproducible diagnostics.
 
 	exit
 } # unreachable here and after

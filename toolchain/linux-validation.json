@@ -1,0 +1,305 @@
+{
+  "status": "passed",
+  "date": "2026-10-15",
+  "platform": "Debian GNU/Linux 13 x86_64",
+  "llvm": {
+    "tag": "llvmorg-23.1.3",
+    "commit": "0d261d1ca552c95a8f007e061c787ac7132fbcbc",
+    "patches": []
+  },
+  "bootstrap_compiler": "GCC 14.2.0",
+  "tools": {
+    "cmake": {
+      "version": "4.4.4",
+      "url": "https://github.com/Kitware/CMake/releases/download/v4.4.4/cmake-4.4.4-linux-x86_64.tar.gz",
+      "sha256": "e5bb807f7728cb60cd8b27ebc97a2edb469b68655f21e844a600c3575b76f5bb",
+      "executable_version_verified": true,
+      "executable": "/opt/bin/cmake",
+      "installation_root": "/opt/cmake",
+      "deployment": "LTSP SSD addon",
+      "version_evidence": "build/validation/system-tools.json"
+    },
+    "ninja": {
+      "version": "1.13.2",
+      "url": "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip",
+      "sha256": "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6",
+      "executable_version_verified": true,
+      "executable": "/opt/bin/ninja",
+      "installation_root": "/opt/ninja",
+      "deployment": "LTSP SSD addon",
+      "version_evidence": "build/validation/system-tools.json"
+    },
+    "swig": {
+      "version": "4.5.1",
+      "url": "https://downloads.sourceforge.net/project/swig/swig/swig-4.5.1/swig-4.5.1.tar.gz",
+      "sha256": "7fec50b27deddab5455a9633780b6341eddfb96215a7619e93a76eb27178f653",
+      "checksum_provenance": "Computed from the archive downloaded over HTTPS from the upstream distribution host",
+      "executable": "/usr/local/bin/swig",
+      "installation_root": "/usr/local",
+      "executable_version_verified": true,
+      "integration_status": "passed: final LLDB build, breakpoint/continue and Python integration after installation relocation",
+      "integration_log": "build/validation/relocation.log",
+      "deployment": "LTSP superuser system image",
+      "version_evidence": "build/validation/system-tools.json",
+      "library_directory": "/usr/local/share/swig/4.5.1",
+      "source_record": "/usr/local/share/doc/swig/ltsp-source.txt"
+    },
+    "clangd": {
+      "version": "23.1.0",
+      "url": "https://github.com/clangd/clangd/releases/download/23.1.0/clangd-linux-23.1.0.zip",
+      "sha256": "e53b1a96196095faedb7642cf64964f7fb9ad4a0c1f00dd2c172a3d9dcbafdfd",
+      "checksum_provenance": "GitHub upstream release asset digest",
+      "executable": "/opt/clangd/bin/clangd",
+      "installation_root": "/opt/clangd",
+      "executable_version_verified": true,
+      "version_output": "clangd version 23.1.0 (https://github.com/llvm/llvm-project ea7d852a70e8bdfaf601d6626a760f9771b2c4b4)\nFeatures: linux+grpc\nPlatform: x86_64-unknown-linux-gnu",
+      "deployment": "LTSP SSD addon",
+      "version_evidence": "build/validation/system-tools.json"
+    }
+  },
+  "host_packages": {
+    "binutils": "2.44-3",
+    "build-essential": "12.12",
+    "g++": "4:14.2.0-1",
+    "g++-14": "14.2.0-19",
+    "gcc": "4:14.2.0-1",
+    "gcc-14": "14.2.0-19",
+    "git": "1:2.47.3-0+deb13u1",
+    "libc6-dev:amd64": "2.41-12+deb13u4",
+    "libedit-dev:amd64": "3.1-20250104-1",
+    "libffi-dev:amd64": "3.4.8-2",
+    "libncurses-dev:amd64": "6.5+20250216-2",
+    "libpcre2-dev:amd64": "10.46-1~deb13u3",
+    "libpython3.13-dev:amd64": "3.13.5-2+deb13u5",
+    "libxml2-dev:amd64": "2.12.7+dfsg+really2.9.14-2.1+deb13u3",
+    "libzstd-dev:amd64": "1.5.7+dfsg-1",
+    "pkg-config:amd64": "1.8.1-4",
+    "python3": "3.13.5-1",
+    "python3-dev": "3.13.5-1",
+    "python3.13": "3.13.5-2+deb13u5",
+    "python3.13-dev": "3.13.5-2+deb13u5",
+    "zlib1g-dev:amd64": "1:1.3.dfsg+really1.3.1-1+b1"
+  },
+  "checks": {
+    "bootstrap": {
+      "status": "passed",
+      "command": "COD_BUILD_JOBS=8 bash ./do-build-cod.sh",
+      "log": "build/validation/linux-bootstrap.log",
+      "process_record": "build/validation/linux-bootstrap-process.json",
+      "build_policy": "Clean three-stage SSD bootstrap after removing trial tools and prior build/install/test outputs; deployed system tools only.",
+      "exit_code": 0,
+      "completed_at_utc": "2026-10-15T19:40:10.619902+00:00",
+      "started_at_utc": "2026-10-15T18:27:08.111393+00:00",
+      "cleanup_record": "build/validation/system-toolchain-cleanup.json"
+    },
+    "build": {
+      "status": "passed",
+      "command": "cmake --build ./build",
+      "coverage": "Final stage including CoD, Clang, LLD, LLDB and bundled runtimes; installation also completed.",
+      "log": "build/validation/linux-bootstrap.log"
+    },
+    "tests": {
+      "status": "passed",
+      "toolchain": "build",
+      "suites": [
+        "toolchain",
+        "shilos",
+        "yaml-cmp",
+        "yaml-pretty",
+        "yaml-ux",
+        "yaml-exc-trace",
+        "codp",
+        "cod"
+      ],
+      "results": "build/validation/linux-tests.json",
+      "completed_suites": [
+        "toolchain",
+        "shilos",
+        "yaml-cmp",
+        "yaml-pretty",
+        "yaml-ux",
+        "yaml-exc-trace",
+        "codp",
+        "cod"
+      ],
+      "completed_at_utc": "2026-10-15T19:40:53.436226+00:00"
+    },
+    "runtime_selection": {
+      "status": "passed",
+      "log": "build/validation/test-toolchain.log"
+    },
+    "relocation": {
+      "status": "passed",
+      "log": "build/validation/relocation.log",
+      "result": "build/validation/relocation.json",
+      "coverage": [
+        "Original source, build and installation hidden in a private mount namespace",
+        "Relocated compiler, linker, debugger startup and llvm-config prefix",
+        "C/C++20 compile and run, formatting/exceptions, relocated libc++/libc++abi/libunwind loading without library-path overrides",
+        "CoD evaluates with original checkout unavailable",
+        "codp solves a dependency-free project and writes its lock file",
+        "LLDB breakpoint/run/continue and Python integration"
+      ],
+      "completed_at_utc": "2026-10-15T19:41:19.081313+00:00"
+    },
+    "shell": {
+      "status": "passed",
+      "commands": [
+        "bash -n do-build-cod.sh prepare-ubuntu.sh tests/toolchain/run-all.sh tests/cod/run-all.sh tests/codp/update/run.sh",
+        "shellcheck -x do-build-cod.sh prepare-ubuntu.sh tests/toolchain/run-all.sh",
+        "git diff --check"
+      ],
+      "validated_source_commit": "196a7ce3d77be2d05df862033837a5c1b1e67f01"
+    },
+    "ide": {
+      "status": "passed",
+      "editor": "VSCodium 1.126.04524",
+      "extension": "llvm-vs-code-extensions.vscode-clangd 0.6.0",
+      "clangd": "23.1.0",
+      "compilation_database": "build/compile_commands.json",
+      "evidence": "build/validation/ide-clangd.json",
+      "acceptance": [
+        "Installed VSCodium extension activates for this SSD checkout and launches the configured clangd.",
+        "clangd loads build/compile_commands.json and resolves C++20, bundled libc++, project and generated headers.",
+        "Real CoD, shilos and codp source/header diagnostics have no configuration-caused errors.",
+        "Completion, hover and go-to-definition work through the actual VSCodium extension on project symbols."
+      ],
+      "extension_startup": "passed",
+      "project_semantics": "passed",
+      "coverage": "Completion, hover, go-to-definition and diagnostics on six real project files; std::string_view resolves to bundled libc++.",
+      "server_executable": "/opt/clangd/bin/clangd",
+      "completed_at_utc": "2026-10-15T19:41:15.023Z",
+      "test_mode": "Installed extension in a local VSCodium extension test host on the actual checkout.",
+      "files": [
+        "shilos/di.cc",
+        "include/shilos/di.hh",
+        "codp/main.cc",
+        "codp/codp_commands.hh",
+        "cod/main.cc",
+        "include/cod.hh"
+      ],
+      "completion_latency_ms": [
+        39,
+        31,
+        34,
+        28,
+        106,
+        27
+      ],
+      "scope_exclusions": [
+        "Refactoring actions are not covered by this project IDE acceptance."
+      ]
+    },
+    "system_tool_paths": {
+      "status": "passed",
+      "cache_count": 18,
+      "cmake": "/opt/cmake/bin/cmake",
+      "ninja": "/opt/bin/ninja",
+      "swig_dir": "/usr/local/share/swig/4.5.1",
+      "trial_tools_absent": true,
+      "temporary_ninja_link_absent": true,
+      "cache_result": "build/validation/system-toolchain-caches.json",
+      "generated_build_files_contain_no_trial_paths": true
+    }
+  },
+  "ltsp_persistence": {
+    "owner_thread": "01a14006-e8ae-7a53-a4af-45941b6c53c4",
+    "status": "Deployed profile and SSD addons validated after reboot by a clean full bootstrap and project IDE acceptance.",
+    "assignment_source": "User instruction in the current chat on 2026-10-15",
+    "profile": "superuser",
+    "release": "superuser-cod-tools-7532b96",
+    "boot_id": "01fb6284-ab72-434b-8851-0542d47ebdb9"
+  },
+  "previous_validation": {
+    "date": "2026-10-13",
+    "status": "paused",
+    "platform": "Debian GNU/Linux 13 x86_64",
+    "source_thread_id": "01a1349b-a9fe-7f43-b910-930d23e96622",
+    "source_project": "/dwdhome/cya/EvtWorks/cod-project",
+    "checks": {
+      "bootstrap": {
+        "status": "passed",
+        "command": "COD_BUILD_JOBS=8 bash ./do-build-cod.sh",
+        "log": "build/validation/linux-bootstrap.log",
+        "process_record": "build/validation/linux-bootstrap-process.json",
+        "resumed_after_reboot": true,
+        "exit_code": 0
+      },
+      "build": {
+        "status": "passed",
+        "command": "cmake --build ./build",
+        "coverage": "stage 3 including CoD, Clang, LLD, LLDB and bundled runtimes",
+        "incremental_log": "build/validation/incremental-build.log"
+      },
+      "tests": {
+        "status": "paused",
+        "toolchain": "build",
+        "results": "build/validation/linux-tests.json",
+        "completed_suites": [
+          "toolchain",
+          "shilos",
+          "yaml-cmp",
+          "yaml-pretty",
+          "yaml-ux",
+          "yaml-exc-trace",
+          "codp"
+        ],
+        "pending": [
+          "final CoD suite retry"
+        ],
+        "final_retry_log": "build/validation/test-cod-final.log"
+      },
+      "runtime_selection": {
+        "status": "passed",
+        "log": "build/validation/test-toolchain.log",
+        "coverage": "C and C++20 compilation, formatting, exceptions and bundled libc++/libc++abi/libunwind loading without library-path environment overrides"
+      },
+      "relocation": {
+        "status": "passed",
+        "log": "build/validation/relocation.log",
+        "coverage": "copied installation with original checkout hidden in a private mount namespace; C/C++ smoke, compiler/linker startup, bundled shared libraries, llvm-config prefix, CoD evaluation, codp solve, LLDB breakpoint/continue and Python integration"
+      },
+      "stage1_installed_runtime_probe": {
+        "status": "passed",
+        "compiler": "Clang 23.1.3 at 0d261d1ca552c95a8f007e061c787ac7132fbcbc",
+        "coverage": "C++20 formatting and exception handling using clang++.cfg against a temporary runtime installation, with LD_LIBRARY_PATH unset",
+        "libraries_resolved_from_temporary_install": [
+          "libc++.so.1",
+          "libc++abi.so.1",
+          "libunwind.so.1"
+        ]
+      },
+      "shell": {
+        "status": "passed",
+        "commands": [
+          "bash -n do-build-cod.sh tests/toolchain/run-all.sh",
+          "shellcheck -x do-build-cod.sh prepare-ubuntu.sh tests/toolchain/run-all.sh",
+          "git diff --check"
+        ]
+      }
+    },
+    "pause_reason": "User requested moving development to a local SSD before continuing."
+  },
+  "ssd_workspace": "/ws/EvtWorks/cod-project",
+  "notes": [
+    "The validated LLVM source checkout is unmodified and uses no local patches.",
+    "All three bootstrap stages, installation, eight test suites, project IDE acceptance and relocation passed with deployed tools.",
+    "Temporary tool installations, the Ninja compatibility link, relocation copies and IDE test profiles are absent.",
+    "Prior trial and NFS validation records are historical evidence.",
+    "macOS validation remains deferred.",
+    "The 30-minute bootstrap/IDE heartbeat is paused after fresh acceptance passed."
+  ],
+  "software_policy": "Use latest stable tools; trial on local SSD /opt before handoff to the designated chat for controller superuser-profile publication.",
+  "prior_ssd_trial_validation": {
+    "status": "passed",
+    "completed_at_utc": "2026-10-15T16:32:03.913081+00:00",
+    "source_commit": "196a7ce3d77be2d05df862033837a5c1b1e67f01",
+    "evidence_archive": "/ws/EvtWorks/cod-project/.git/codex-validation-history/20261015T182535Z-prior-validation.tar.gz",
+    "standalone_clangd_sweep_limitations": [
+      "The exhaustive clangd --check feature sweep reports 2 ExtractFunction failures in codp/main.cc and 6 ExtractFunction/SwapBinaryOperands failures in cod/main.cc. These are refactoring-action failures, not compiler diagnostics; refactoring actions are not covered by the passed IDE acceptance."
+    ]
+  },
+  "validated_source_commit": "196a7ce3d77be2d05df862033837a5c1b1e67f01",
+  "completed_at_utc": "2026-10-15T19:41:19.425986+00:00",
+  "evidence": "build/validation/system-toolchain-validation.json"
+}

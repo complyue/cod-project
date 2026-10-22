@@ -1,0 +1,320 @@
+{
+  "status": "passed-with-limitations",
+  "date": "2026-10-22",
+  "platform": "macOS 26.5.1 arm64 (25F80)",
+  "llvm": {
+    "tag": "llvmorg-23.1.3",
+    "commit": "0d261d1ca552c95a8f007e061c787ac7132fbcbc",
+    "patches": [],
+    "clean_checkout_verified": true
+  },
+  "bootstrap_compiler": "Apple clang 21.0.0 (clang-2100.1.1.101)",
+  "tools": {
+    "cmake": {
+      "version": "4.4.4",
+      "url": "https://github.com/Kitware/CMake/releases/download/v4.4.4/cmake-4.4.4-macos-universal.tar.gz",
+      "sha256": "4b7b73704b1db9b374e5c9ab8e17ac6148b817b6396ee75cd94a852cbac9d305",
+      "checksum_provenance": "GitHub upstream release asset digest",
+      "executable_version_verified": true
+    },
+    "ninja": {
+      "version": "1.13.2",
+      "url": "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-mac.zip",
+      "sha256": "c99048673aa765960a99cf10c6ddb9f1fad506099ff0a0e137ad8960a88f321b",
+      "checksum_provenance": "GitHub upstream release asset digest",
+      "executable_version_verified": true
+    },
+    "swig": {
+      "version": "4.5.1",
+      "url": "https://files.pythonhosted.org/packages/7d/11/d3c62d2fd989b2e5c2e0eb24e4debf90de0783f6841f2233b49d8ffa3227/swig-4.5.1-py3-none-macosx_10_9_universal2.whl",
+      "sha256": "ffdde0c2ca9e35792c4416abb087029d559399aa897d362c2bcb77e80c4efc16",
+      "checksum_provenance": "PyPI release metadata, verified by pip",
+      "executable_version_verified": true
+    },
+    "python": {
+      "version": "3.9.6",
+      "distribution": "Xcode Python3.framework"
+    }
+  },
+  "checks": {
+    "shell_syntax": {
+      "status": "passed",
+      "command": "bash -n do-build-cod.sh prepare-macos.sh"
+    },
+    "bootstrap": {
+      "status": "passed",
+      "command": "COD_BUILD_JOBS=6 bash ./do-build-cod.sh",
+      "environment": "build/validation/macos-env.sh",
+      "log": "build/validation/macos-runtime-rpath-repair.log",
+      "started_at_utc": "2026-10-21T15:54:25.881377+00:00",
+      "attempts": [
+        {
+          "pid": 2470,
+          "supervisor_pid": 2467,
+          "started_at_utc": "2026-10-21T15:54:25.881377+00:00",
+          "command": "COD_BUILD_JOBS=6 bash ./do-build-cod.sh",
+          "environment": "build/validation/macos-env.sh",
+          "log": "/Users/mac/EvtWorks/cod-project/build/validation/macos-bootstrap.log",
+          "script_sha256": "9b2251b1b89e256d5aa1f309a8a9b0e44400811612e38a99248dd31f322a47fc",
+          "status": "failed",
+          "exit_code": 1,
+          "completed_at_utc": "2026-10-21T16:14:15.478208+00:00",
+          "failure": "Mach-O LLD did not implement the symbol re-export lists needed by libc++; stage-two TableGen linking failed."
+        },
+        {
+          "pid": 43225,
+          "supervisor_pid": 43224,
+          "started_at_utc": "2026-10-21T16:23:07.915430+00:00",
+          "command": "COD_BUILD_JOBS=6 bash ./do-build-cod.sh",
+          "environment": "build/validation/macos-env.sh",
+          "log": "/Users/mac/EvtWorks/cod-project/build/validation/macos-bootstrap-2.log",
+          "script_sha256": "b613f047502264161359515216b4fab14b6b0ff45716bf3c81782ba69e49288f",
+          "status": "failed",
+          "exit_code": 1,
+          "completed_at_utc": "2026-10-21T21:00:30.916339+00:00",
+          "failure": "LLVM 23.1.3 debugserver headers require an explicit <memory> include with bundled libc++."
+        },
+        {
+          "supervisor_pid": 95724,
+          "started_at_utc": "2026-10-22T00:52:30.108932+00:00",
+          "commands": [
+            [
+              "cmake",
+              "--build",
+              "./build"
+            ],
+            [
+              "cmake",
+              "--install",
+              "./build"
+            ]
+          ],
+          "log": "/Users/mac/EvtWorks/cod-project/build/validation/macos-bootstrap-3.log",
+          "status": "passed",
+          "pid": 2057,
+          "current_command": [
+            "cmake",
+            "--install",
+            "./build"
+          ],
+          "exit_code": 0,
+          "completed_at_utc": "2026-10-22T01:03:42.135922+00:00"
+        }
+      ],
+      "exit_code": 0,
+      "completed_at_utc": "2026-10-22T08:23:29.263454+00:00",
+      "coverage": "Three native stages and installation with incremental repairs; build directories and completed objects retained."
+    },
+    "tests": {
+      "status": "passed-toolchain-smoke",
+      "command": "COD_TEST_TOOLCHAIN=build bash tests/toolchain/run-all.sh",
+      "log": "build/validation/macos-integrated-toolchain-smoke.log",
+      "not_run": "Full CoD, shilos, codp and YAML test suites."
+    },
+    "runtime_stage1": {
+      "status": "passed",
+      "coverage": "C++20 formatting, exception_ptr rethrow, ABI demangling, bundled libc++ and libc++abi loading without library-path overrides",
+      "log": "build/validation/runtime-smoke-stage1.log"
+    },
+    "runtime_repair": {
+      "status": "passed",
+      "log": "build/validation/macos-runtime-repair-2.log",
+      "configuration": "RUNTIMES_CMAKE_ARGS selects LLVM_USE_LINKER=ld and the Apple linker discovered by xcrun."
+    },
+    "build": {
+      "status": "passed",
+      "command": "cmake --build ./build",
+      "log": "build/validation/macos-runtime-rpath-repair.log"
+    },
+    "runtime_build": {
+      "status": "passed",
+      "coverage": "C++20 formatting, exception_ptr rethrow and demangling; build/lib libc++ and libc++abi selected without library-path overrides.",
+      "log": "build/validation/runtime-smoke-build.log"
+    },
+    "runtime_installed": {
+      "status": "passed",
+      "coverage": "C++20 formatting, exceptions and demangling; built/lib libc++ and libc++abi selected without development-build dylibs or library-path overrides.",
+      "log": "build/validation/runtime-smoke-installed.log"
+    },
+    "address_sanitizer": {
+      "status": "passed",
+      "coverage": "Installed C++20 program with -fsanitize=address; compiler-rt, libc++ and libc++abi loaded from built/.",
+      "log": "build/validation/runtime-smoke-asan.log"
+    },
+    "cod_eval": {
+      "status": "passed",
+      "expression": "6 * 7",
+      "result": "42",
+      "coverage": "Installed CoD compiles, links and executes in a minimal project.",
+      "log": "build/validation/cod-smoke.log"
+    },
+    "lldb_python": {
+      "status": "passed",
+      "lldb_version": "23.1.3",
+      "python_version": "3.9.6",
+      "log": "build/validation/lldb-python-smoke.log"
+    },
+    "lldb_bundled_debugserver": {
+      "status": "blocked-by-host-signing",
+      "reason": "macOS denies attach with the ad-hoc-signed bundled debugserver; no development signing identity is installed.",
+      "log": "build/validation/lldb-debug-smoke.log"
+    },
+    "lldb_system_debugserver": {
+      "status": "passed",
+      "debugserver": "/Applications/Xcode.app/Contents/SharedFrameworks/LLDB.framework/Versions/A/Resources/debugserver",
+      "selection": "LLDB_DEBUGSERVER_PATH",
+      "coverage": "Breakpoint resolution, launch, stop at main, frame inspection, continue and exit zero.",
+      "log": "build/validation/lldb-system-debugserver-smoke.log"
+    },
+    "incremental": {
+      "status": "passed",
+      "command": "cmake --build ./build",
+      "coverage": "Runtime configure/generation and utility steps completed without C++ source recompilation.",
+      "log": "build/validation/macos-incremental-final.log"
+    }
+  },
+  "unvalidated": [
+    "Full project test suites beyond toolchain smoke",
+    "Older macOS releases",
+    "Universal distributions",
+    "Installation relocation",
+    "Cross-platform targets"
+  ],
+  "sdk": {
+    "version": "26.5",
+    "path": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk"
+  },
+  "configuration": {
+    "program_linker": "ld64.lld",
+    "runtime_linker": "Apple ld selected with LLVM_USE_LINKER=ld",
+    "runtime_rpaths": [
+      "@loader_path",
+      "@loader_path/../../../.."
+    ],
+    "runtime_build_with_install_rpath": true,
+    "debugserver_compatibility": "For LLVM 23.1.3 only, -include memory on debugserver C++/Objective-C++ targets; no LLVM source edits.",
+    "build_jobs": 6,
+    "llvm_parallel_link_jobs": 1,
+    "runtime_architectures": [
+      "arm64"
+    ],
+    "chained_fixups": false,
+    "sdk_selection_path": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+  },
+  "integration": {
+    "status": "passed-with-limitations",
+    "local_baseline": "805b5beed392acec658c223c4cc6f07612bec163",
+    "intel_baseline": "0d69926413a8a5b3440196fd4cb73e9e66b09f18",
+    "intel_evidence": "toolchain/macos-x86_64-validation.json",
+    "adopted_from_intel": [
+      "Native compiler-rt architecture selection",
+      "Classic dyld bindings for bootstrap, runtime and driver links",
+      "COD_RECONFIGURE_BOOTSTRAP=1 to refresh retained intermediate stages"
+    ],
+    "retained_from_arm64": [
+      "Apple runtime linker and upstream libc++ symbol-list re-exports",
+      "Loader-relative compiler-rt path to the toolchain lib directory",
+      "LLVM-23.1.3-only debugserver target header workaround",
+      "Required-tool and SDK checks, filtered LLVM source clone"
+    ],
+    "intel_rerun_required": false,
+    "checks": {
+      "shell_syntax": {
+        "status": "passed",
+        "command": "bash -n do-build-cod.sh prepare-macos.sh tests/toolchain/run-all.sh"
+      },
+      "incremental_build": {
+        "status": "passed",
+        "command": "cmake --build ./build",
+        "log": "build/validation/macos-integrated-incremental.log",
+        "coverage": "Incremental configure/generation and utility steps; no C++ source recompilation."
+      },
+      "toolchain_smoke": {
+        "status": "passed",
+        "command": "COD_TEST_TOOLCHAIN=build bash tests/toolchain/run-all.sh",
+        "log": "build/validation/macos-integrated-toolchain-smoke.log",
+        "coverage": "C; C++20 formatting; exception_ptr rethrow; ABI demangling; bundled libc++/libc++abi loading; ASan; system-first libc++ coexistence; driver classic dyld bindings."
+      },
+      "cod_eval": {
+        "status": "passed",
+        "toolchain": "build",
+        "expression": "6 * 7",
+        "result": "42",
+        "log": "build/validation/macos-integrated-cod-smoke.log"
+      },
+      "lldb_python": {
+        "status": "passed",
+        "toolchain": "build",
+        "version": "23.1.3",
+        "python_version": "3.9.6",
+        "log": "build/validation/macos-integrated-lldb-python.log"
+      },
+      "lldb_debug": {
+        "status": "passed",
+        "toolchain": "build",
+        "debugserver": "Xcode signed helper selected with LLDB_DEBUGSERVER_PATH",
+        "coverage": "Breakpoint at main, launch, stop, frame inspection, continue, exit zero.",
+        "log": "build/validation/macos-integrated-lldb-debug.log"
+      },
+      "installed_runtime": {
+        "status": "passed",
+        "coverage": "Installed C++20/exception/ABI smoke with ASan; libc++, libc++abi and ASan loaded from built/, with no development-build dylibs.",
+        "log": "build/validation/macos-integrated-installed-runtime.log"
+      },
+      "macho_inspection": {
+        "status": "passed",
+        "file_count": 25,
+        "coverage": "Native arm64 and no LC_DYLD_CHAINED_FIXUPS across stage1, stage2 installation, build and built.",
+        "log": "build/validation/macos-integrated-macho.json"
+      },
+      "runtime_caches": {
+        "status": "passed",
+        "coverage": "All three runtime caches select Apple ld, arm64, empty project hook/additional ABI flags, loader-relative RPATHs, and reject linker color-diagnostic support."
+      },
+      "compile_configuration": {
+        "status": "passed",
+        "coverage": "Forced memory include remains confined to debugserver targets; CoD main uses C++20."
+      },
+      "llvm_sources": {
+        "status": "passed",
+        "commit": "0d261d1ca552c95a8f007e061c787ac7132fbcbc",
+        "clean": true
+      }
+    },
+    "bootstrap_attempts": [
+      {
+        "log": "build/validation/macos-integrated-bootstrap.log",
+        "status": "interrupted",
+        "reason": "xcrun selected a different path spelling for the same SDK; resumed with the SDKROOT already used by the retained stage2/final caches. No build directories were recreated."
+      },
+      {
+        "log": "build/validation/macos-integrated-bootstrap-2.log",
+        "status": "interrupted",
+        "reason": "Applied compatibility resets for cached project hooks, additional ABI re-export flags and linker capability detection; resumed with completed objects retained."
+      },
+      {
+        "log": "build/validation/macos-integrated-bootstrap-3.log",
+        "status": "passed",
+        "exit_code": 0,
+        "coverage": "Reconfigured, built and installed all three retained native arm64 stages with the combined configuration."
+      }
+    ],
+    "completed_at_utc": "2026-10-22T09:20:23.099247+00:00",
+    "command": "SDKROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk COD_RECONFIGURE_BOOTSTRAP=1 bash ./do-build-cod.sh",
+    "environment": "build/validation/macos-env.sh",
+    "validated_source_sha256": {
+      "CMakeLists.txt": "971ea094a1a8af64cb4ec78c7f31c2ea3ecffe4ed0be1a73a004e33f75b3e28b",
+      "do-build-cod.sh": "c5de18f935ebeb67b9ed2756c08e1cc0059d6acfb89f69d987e1c03984110a96",
+      "toolchain/macos/clang.cfg": "6fe8bec0e05152d4f31bddb82092e77f43d5b77c8ce439861884295375b452cb",
+      "toolchain/macos/clang++.cfg": "07109e2088720857daf6f9e6dc527bf085f46cb01041f5889766137d6d7cd21a",
+      "tests/toolchain/run-all.sh": "6fe56caac1051f97a50808a038d55b821a05bc3cbae973a09e879f62ffd5bb68"
+    },
+    "intel_rerun": {
+      "status": "passed-with-limitations",
+      "commit": "a956a2173e53c5e9f1a123a606d083a6b1b4b005",
+      "evidence": "toolchain/macos-x86_64-validation.json#integration",
+      "coverage": "Three retained Intel stages and installation; final incremental build; build/ toolchain smoke; CoD evaluation; LLDB Python and debugging with the Xcode helper after retry; runtime/cache inspection.",
+      "limitations": "Bundled debugserver and installed functional smoke not validated in this rerun; initial debugger timeouts retained in the Intel evidence."
+    }
+  }
+}
