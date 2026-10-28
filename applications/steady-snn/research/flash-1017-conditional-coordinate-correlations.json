@@ -1,0 +1,275 @@
+{
+  "status": "observational input-table sensitivity analysis; no metric or mechanism adopted",
+  "started_at_utc": "2026-10-27T20:45:36.320310+00:00",
+  "completed_at_utc": "2026-10-27T20:46:14.626066+00:00",
+  "elapsed_seconds": 38.30578187699939,
+  "source": {
+    "repository": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "commit": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+    "matrix_shape": [
+      129280,
+      5120
+    ],
+    "embedding_sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c",
+    "tokenizer_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b"
+  },
+  "computation": {
+    "numpy_version": "2.3.5",
+    "seed": 2026102715,
+    "cohort_size": 8192,
+    "pair_count": 13104640,
+    "centering": "Each cohort centered separately; population covariance divisor n, irrelevant to Pearson correlation.",
+    "precision": "BF16 values decoded exactly to float32 then accumulated in float64; correlation maps stored float32 for comparisons.",
+    "neighbor_measure": "Top 16 absolute coordinate correlations, diagonal excluded. A descriptive rank-stability measure, not a chosen distance, sign convention or connection count.",
+    "groups_file_sha256": "8cbd902a8b04b379aca0cd567e22e81340e13a87fc35382efcade862ff574bfa",
+    "script_sha256": "d77c976c8057adfd2b1584bafe1adf2e0997bae6fdc6efad20264accdbeca192",
+    "random_top16_overlap_fraction_expectation": 0.003125610470795077,
+    "random_top16_overlap_count_expectation": 0.05000976753272123,
+    "analysis_script_local_path": "/ws/EvtWorks/research-cache/steady-snn-locality-20261027/analyze-flash-conditional-correlations.py",
+    "exact_token_groups_local_path": "/ws/EvtWorks/research-cache/steady-snn-locality-20261027/flash-token-piece-groups.json",
+    "classification_definition": "Mutually exclusive token-piece classes after ByteLevel inverse and strict UTF-8 decoding; boundary Unicode whitespace stripped only for classification. Exact group membership retained in the hashed groups file. Ordinary token IDs are 3 through 127999."
+  },
+  "groups": {
+    "no_letters": 4752,
+    "ascii_letters": 64054,
+    "partial_or_non_bytelevel": 1470,
+    "other_mixed": 19485,
+    "cjk_ideographs": 35185,
+    "latin_with_nonascii": 3051
+  },
+  "cohorts": {
+    "ascii_letters_A": {
+      "n": 8192,
+      "ids_sha256": "20a85cd1b082600e1d1c67c4a10c7f1d8283e1c5ce4b199931fd1cb38957a0ab",
+      "covariance_trace": 63.824734607071434,
+      "mean_norm": 1.988204935824251,
+      "correlation_sha256_float32_le": "e43ece7fdf704d40f8f37b4356bad327a0b70e77e537f216bf204fafdd4910b5"
+    },
+    "ascii_letters_B": {
+      "n": 8192,
+      "ids_sha256": "7e309e1f72cf35543b98cc7a63c498961f0a3f77f5df484100da5f858cc07414",
+      "covariance_trace": 63.55015407544574,
+      "mean_norm": 1.9910926386874896,
+      "correlation_sha256_float32_le": "2e65d4908d4e87f64b797b2f5dbece17f2ea32585ace78777f47a058cac809bd"
+    },
+    "cjk_ideographs_A": {
+      "n": 8192,
+      "ids_sha256": "3b859e7726c1da008cc565fe139c1c6c2445b28ea0b6f43b24778c5575370dca",
+      "covariance_trace": 72.05586543152504,
+      "mean_norm": 2.110514410955536,
+      "correlation_sha256_float32_le": "215b2c179c43ff239f4bbe4a6a249b439dc3e6dd1d1351abf6be97311e82f637"
+    },
+    "cjk_ideographs_B": {
+      "n": 8192,
+      "ids_sha256": "536add8c4ac581aabf5068c228dc6641035af186a0b607a0a5193caba0173774",
+      "covariance_trace": 72.04959493819304,
+      "mean_norm": 2.1058510907222963,
+      "correlation_sha256_float32_le": "159f530439821becc0b1bbbe86bdf9fc5d2e12aa54171acb5c86687bac02a93a"
+    },
+    "uniform_ordinary_A": {
+      "n": 8192,
+      "ids_sha256": "76bc999e6351aa2445f6080a9574ce790a57ae0cd907550300794b55f6214727",
+      "covariance_trace": 67.97688858605787,
+      "mean_norm": 1.820482830532308,
+      "correlation_sha256_float32_le": "b89ba018639846ed22e769ec147ba5016358bdeea7077ab17e066a3bb1ada3a0"
+    },
+    "uniform_ordinary_B": {
+      "n": 8192,
+      "ids_sha256": "80a0cdc85840fe8569fb917f07182e92fef78e03a269f74653cd481af4bad6c2",
+      "covariance_trace": 68.57030986778486,
+      "mean_norm": 1.8320188147819394,
+      "correlation_sha256_float32_le": "6449fe62ef9e894b121c4addcd6bc54041f184941bb0be41ef08cc46debff032"
+    }
+  },
+  "comparisons": [
+    {
+      "a": "ascii_letters_A",
+      "b": "ascii_letters_B",
+      "correlation_of_signed_pairwise_correlations": 0.9291958337971189,
+      "pairwise_correlation_rmse": 0.016792165004472264,
+      "top16_absolute_neighbor_overlap_mean": 7.744140625,
+      "top16_absolute_neighbor_overlap_median": 8.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.4840087890625,
+      "top16_absolute_neighbor_jaccard_mean": 0.327847164319207,
+      "pair_fraction_strong_in_both_at_005": 0.19178123168587616,
+      "same_sign_fraction_among_strong_in_both": 1.0
+    },
+    {
+      "a": "ascii_letters_A",
+      "b": "cjk_ideographs_A",
+      "correlation_of_signed_pairwise_correlations": 0.4454711492985722,
+      "pairwise_correlation_rmse": 0.045920004633873746,
+      "top16_absolute_neighbor_overlap_mean": 0.80390625,
+      "top16_absolute_neighbor_overlap_median": 1.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.050244140625,
+      "top16_absolute_neighbor_jaccard_mean": 0.026704231900196163,
+      "pair_fraction_strong_in_both_at_005": 0.0840559527007228,
+      "same_sign_fraction_among_strong_in_both": 0.941082483071166
+    },
+    {
+      "a": "ascii_letters_A",
+      "b": "cjk_ideographs_B",
+      "correlation_of_signed_pairwise_correlations": 0.44382238541187696,
+      "pairwise_correlation_rmse": 0.045942487385745606,
+      "top16_absolute_neighbor_overlap_mean": 0.7873046875,
+      "top16_absolute_neighbor_overlap_median": 1.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.04920654296875,
+      "top16_absolute_neighbor_jaccard_mean": 0.02613382428889242,
+      "pair_fraction_strong_in_both_at_005": 0.08360855391678063,
+      "same_sign_fraction_among_strong_in_both": 0.9402113794425278
+    },
+    {
+      "a": "ascii_letters_A",
+      "b": "uniform_ordinary_A",
+      "correlation_of_signed_pairwise_correlations": 0.8277414506871913,
+      "pairwise_correlation_rmse": 0.02496633727316035,
+      "top16_absolute_neighbor_overlap_mean": 4.6533203125,
+      "top16_absolute_neighbor_overlap_median": 5.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.29083251953125,
+      "top16_absolute_neighbor_jaccard_mean": 0.17611449647549426,
+      "pair_fraction_strong_in_both_at_005": 0.12851486191150616,
+      "same_sign_fraction_among_strong_in_both": 0.9999584357841772
+    },
+    {
+      "a": "ascii_letters_A",
+      "b": "uniform_ordinary_B",
+      "correlation_of_signed_pairwise_correlations": 0.8271818302053727,
+      "pairwise_correlation_rmse": 0.025004349893915936,
+      "top16_absolute_neighbor_overlap_mean": 4.649609375,
+      "top16_absolute_neighbor_overlap_median": 5.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.2906005859375,
+      "top16_absolute_neighbor_jaccard_mean": 0.17601392081614442,
+      "pair_fraction_strong_in_both_at_005": 0.1283610232711467,
+      "same_sign_fraction_among_strong_in_both": 0.9999661142899606
+    },
+    {
+      "a": "ascii_letters_B",
+      "b": "cjk_ideographs_A",
+      "correlation_of_signed_pairwise_correlations": 0.4454572271886454,
+      "pairwise_correlation_rmse": 0.04611785534588005,
+      "top16_absolute_neighbor_overlap_mean": 0.792578125,
+      "top16_absolute_neighbor_overlap_median": 1.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.0495361328125,
+      "top16_absolute_neighbor_jaccard_mean": 0.026309976323011637,
+      "pair_fraction_strong_in_both_at_005": 0.08499355953311194,
+      "same_sign_fraction_among_strong_in_both": 0.9400131081602787
+    },
+    {
+      "a": "ascii_letters_B",
+      "b": "cjk_ideographs_B",
+      "correlation_of_signed_pairwise_correlations": 0.4434674809674376,
+      "pairwise_correlation_rmse": 0.046155204909351814,
+      "top16_absolute_neighbor_overlap_mean": 0.7900390625,
+      "top16_absolute_neighbor_overlap_median": 1.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.04937744140625,
+      "top16_absolute_neighbor_jaccard_mean": 0.026269348400101318,
+      "pair_fraction_strong_in_both_at_005": 0.08445199562902911,
+      "same_sign_fraction_among_strong_in_both": 0.9392588683787034
+    },
+    {
+      "a": "ascii_letters_B",
+      "b": "uniform_ordinary_A",
+      "correlation_of_signed_pairwise_correlations": 0.8283524818608884,
+      "pairwise_correlation_rmse": 0.025110568367247097,
+      "top16_absolute_neighbor_overlap_mean": 4.6900390625,
+      "top16_absolute_neighbor_overlap_median": 5.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.29312744140625,
+      "top16_absolute_neighbor_jaccard_mean": 0.17782235393306342,
+      "pair_fraction_strong_in_both_at_005": 0.12940843853780035,
+      "same_sign_fraction_among_strong_in_both": 0.9999634401843086
+    },
+    {
+      "a": "ascii_letters_B",
+      "b": "uniform_ordinary_B",
+      "correlation_of_signed_pairwise_correlations": 0.8252703619931754,
+      "pairwise_correlation_rmse": 0.025319053716575637,
+      "top16_absolute_neighbor_overlap_mean": 4.6029296875,
+      "top16_absolute_neighbor_overlap_median": 5.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.28768310546875,
+      "top16_absolute_neighbor_jaccard_mean": 0.17382993074728342,
+      "pair_fraction_strong_in_both_at_005": 0.12872577957120532,
+      "same_sign_fraction_among_strong_in_both": 0.9999668031098372
+    },
+    {
+      "a": "cjk_ideographs_A",
+      "b": "cjk_ideographs_B",
+      "correlation_of_signed_pairwise_correlations": 0.9268105887663056,
+      "pairwise_correlation_rmse": 0.016330192405946402,
+      "top16_absolute_neighbor_overlap_mean": 7.933984375,
+      "top16_absolute_neighbor_overlap_median": 8.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.4958740234375,
+      "top16_absolute_neighbor_jaccard_mean": 0.33770082132896284,
+      "pair_fraction_strong_in_both_at_005": 0.17703828567591326,
+      "same_sign_fraction_among_strong_in_both": 1.0
+    },
+    {
+      "a": "cjk_ideographs_A",
+      "b": "uniform_ordinary_A",
+      "correlation_of_signed_pairwise_correlations": 0.6609997805797684,
+      "pairwise_correlation_rmse": 0.033531308690962484,
+      "top16_absolute_neighbor_overlap_mean": 2.337890625,
+      "top16_absolute_neighbor_overlap_median": 2.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.1461181640625,
+      "top16_absolute_neighbor_jaccard_mean": 0.08173578679404143,
+      "pair_fraction_strong_in_both_at_005": 0.0928639016409455,
+      "same_sign_fraction_among_strong_in_both": 0.9964452055469913
+    },
+    {
+      "a": "cjk_ideographs_A",
+      "b": "uniform_ordinary_B",
+      "correlation_of_signed_pairwise_correlations": 0.665589995840088,
+      "pairwise_correlation_rmse": 0.033308686553878676,
+      "top16_absolute_neighbor_overlap_mean": 2.3556640625,
+      "top16_absolute_neighbor_overlap_median": 2.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.14722900390625,
+      "top16_absolute_neighbor_jaccard_mean": 0.08237352245185602,
+      "pair_fraction_strong_in_both_at_005": 0.09364332022856027,
+      "same_sign_fraction_among_strong_in_both": 0.996634511172934
+    },
+    {
+      "a": "cjk_ideographs_B",
+      "b": "uniform_ordinary_A",
+      "correlation_of_signed_pairwise_correlations": 0.6595847050136686,
+      "pairwise_correlation_rmse": 0.033552031170407545,
+      "top16_absolute_neighbor_overlap_mean": 2.3615234375,
+      "top16_absolute_neighbor_overlap_median": 2.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.14759521484375,
+      "top16_absolute_neighbor_jaccard_mean": 0.08255804710931784,
+      "pair_fraction_strong_in_both_at_005": 0.0923629340447353,
+      "same_sign_fraction_among_strong_in_both": 0.9963606560898493
+    },
+    {
+      "a": "cjk_ideographs_B",
+      "b": "uniform_ordinary_B",
+      "correlation_of_signed_pairwise_correlations": 0.6646280927679407,
+      "pairwise_correlation_rmse": 0.03330796351943313,
+      "top16_absolute_neighbor_overlap_mean": 2.3623046875,
+      "top16_absolute_neighbor_overlap_median": 2.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.14764404296875,
+      "top16_absolute_neighbor_jaccard_mean": 0.08262505469753822,
+      "pair_fraction_strong_in_both_at_005": 0.0932182036286384,
+      "same_sign_fraction_among_strong_in_both": 0.9966216188560656
+    },
+    {
+      "a": "uniform_ordinary_A",
+      "b": "uniform_ordinary_B",
+      "correlation_of_signed_pairwise_correlations": 0.9035712305841895,
+      "pairwise_correlation_rmse": 0.016714447683957155,
+      "top16_absolute_neighbor_overlap_mean": 6.80390625,
+      "top16_absolute_neighbor_overlap_median": 7.0,
+      "top16_absolute_neighbor_overlap_fraction_mean": 0.425244140625,
+      "top16_absolute_neighbor_jaccard_mean": 0.2775564108733703,
+      "pair_fraction_strong_in_both_at_005": 0.12790843548544636,
+      "same_sign_fraction_among_strong_in_both": 1.0
+    }
+  ],
+  "limits": [
+    "Token-piece classes are based on spelling/Unicode script, not semantic labels or language identification. Leading/trailing whitespace is stripped only for classification.",
+    "All samples weight token types uniformly; there is no corpus-frequency or contextual hidden-state distribution.",
+    "Two disjoint samples within each class measure sensitivity to sampling. Across classes both distribution and learned representations differ; this is not a randomized semantic intervention.",
+    "Top absolute correlation can select either correlated or anticorrelated coordinates and does not itself define biological or semantic nearness. No coordinate basis, neuron role, pool capacity or topology is changed.",
+    "This is evidence about one input embedding table, not learned SNN response profiles or a demonstration of performance under any locality rule.",
+    "Across-group overlap is low relative to within-group overlap but remains above the independent-uniform-neighbor expectation (about 0.3126 percent). The four cross-group split comparisons are not independent replications."
+  ],
+  "authority": "D-08 pending-human; research under H-51, no delegated implementation contract"
+}

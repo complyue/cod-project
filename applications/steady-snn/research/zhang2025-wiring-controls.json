@@ -1,0 +1,1341 @@
+{
+  "status": "partial descriptive audit of public result files; not a rerun or complete statistical replication",
+  "source": {
+    "doi": "10.1093/pnasnexus/pgae580",
+    "repository": "XinjieZhang/wiring-cost-of-ANNs",
+    "tree_sha": "2f7df36ff6a65850d61aed732bdd7d0b07ee6ce6"
+  },
+  "method": "Read 72 plain-text files. Pair by model/task/rewiring/norm, not by trial order. Treat accuracy as a proportion; report differences in percentage points. Use sample SD for descriptive standardized differences. No new hypothesis test or hyperparameter optimization.",
+  "limits": [
+    "Six of 24 published condition combinations per norm are missing in this repository snapshot: RNN MNIST and ManteTask, each under three rewiring methods.",
+    "Filename case is matched explicitly; source filenames and hashes remain recorded.",
+    "The available subset is not assumed representative of missing conditions.",
+    "These summaries do not isolate penalty weighting from altered partner sampling and do not establish the best attainable non-geometric regularization baseline.",
+    "No model was trained or implemented; source code was only read."
+  ],
+  "summary": {
+    "L1": {
+      "available_conditions": 18,
+      "reported_conditions": 24,
+      "positive_condition_means": 13,
+      "negative_condition_means": 5,
+      "mean_difference_percentage_points_equal_condition_weight": 0.1666251711315588,
+      "median_difference_percentage_points": 0.0930082798004106,
+      "minimum_difference_percentage_points": -1.1562502384185769,
+      "maximum_difference_percentage_points": 0.8611106872558616,
+      "trials_per_arm": 165
+    },
+    "L2": {
+      "available_conditions": 18,
+      "reported_conditions": 24,
+      "positive_condition_means": 13,
+      "negative_condition_means": 5,
+      "mean_difference_percentage_points_equal_condition_weight": 0.26248345369762927,
+      "median_difference_percentage_points": 0.09715466022491293,
+      "minimum_difference_percentage_points": -0.3264516592025757,
+      "maximum_difference_percentage_points": 1.0416680574417136,
+      "trials_per_arm": 165
+    }
+  },
+  "conditions": [
+    {
+      "norm": "L1",
+      "condition": [
+        "GRU",
+        "HAR",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8733709752559662,
+        0.8736521303653717
+      ],
+      "sample_sd": [
+        0.002315093058931433,
+        0.003435067070981969
+      ],
+      "difference_percentage_points": 0.028115510940551758,
+      "standardized_mean_difference": 0.09598661301787623,
+      "files": [
+        {
+          "name": "GRU-HAR-DeepR-L1.txt",
+          "sha256": "12ab5362ea27655c0e505972110b6cb1026be8205b65a7487557039507071321"
+        },
+        {
+          "name": "GRU-HAR-DeepR-L1-wiring-cost.txt",
+          "sha256": "aa37057bfd5e16abb989a25accf7a267857fe8e2c9cd72636800f113cacd6a88"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "GRU",
+        "HAR",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8723235726356506,
+        0.8745471417903901
+      ],
+      "sample_sd": [
+        0.0019047663584109698,
+        0.0023616518925035396
+      ],
+      "difference_percentage_points": 0.22235691547394243,
+      "standardized_mean_difference": 1.0364327620758165,
+      "files": [
+        {
+          "name": "GRU-HAR-DSR-L1.txt",
+          "sha256": "19df7cff61d1b100308a9b624159b17beeb1c7cf8052a43923ac34e6b906e96c"
+        },
+        {
+          "name": "GRU-HAR-DSR-l1-wiring-cost.txt",
+          "sha256": "b6f1d885e36ba2a3aaa10789f8c424742ea15a59b620ee8d2792047c30d543f2"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "GRU",
+        "HAR",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8732379019260407,
+        0.8742380678653717
+      ],
+      "sample_sd": [
+        0.0021130064852065643,
+        0.0016253702962677088
+      ],
+      "difference_percentage_points": 0.10001659393310547,
+      "standardized_mean_difference": 0.5305854770815878,
+      "files": [
+        {
+          "name": "GRU-HAR-SET-L1.txt",
+          "sha256": "fcbd873e69b8e0ee76ca1066f1b27dfe446e8bf1b082550ff364c22bdf3282e0"
+        },
+        {
+          "name": "GRU-HAR-SET-L1-wiring-cost.txt",
+          "sha256": "12409827b9c6834d11455661055eb26160396a6684fc3b4e92dbe3a19fde7358"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "GRU",
+        "HGS",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7471180498600006,
+        0.7485763847827911
+      ],
+      "sample_sd": [
+        0.009230356473830558,
+        0.008342078030651543
+      ],
+      "difference_percentage_points": 0.14583349227904607,
+      "standardized_mean_difference": 0.16576818382182743,
+      "files": [
+        {
+          "name": "GRU-HGS-DeepR-L1.txt",
+          "sha256": "14f0053778493104e36e0b9cba3199bf4f5166a0e3e1419de72bd8e2a36e9e8a"
+        },
+        {
+          "name": "GRU-HGS-DeepR-L1-wiring-cost.txt",
+          "sha256": "a456f47263a8c55859407ac505b67f68d01b618bf6159d83b81d8bbee2d11213"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "GRU",
+        "HGS",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7418749988079071,
+        0.7473611176013947
+      ],
+      "sample_sd": [
+        0.015516338959206375,
+        0.011647001567930856
+      ],
+      "difference_percentage_points": 0.5486118793487593,
+      "standardized_mean_difference": 0.3998986732739017,
+      "files": [
+        {
+          "name": "GRU-HGS-DSR-L1.txt",
+          "sha256": "dd7dce35fea1c761d39cde771a1185546781b3dccf32f1948f494f743726291b"
+        },
+        {
+          "name": "GRU-HGS-DSR-L1-wiring-cost.txt",
+          "sha256": "00ded4c4602622ee55384d45a7e564b6e50662b3436fe98e66ed162a35dd98c7"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "GRU",
+        "HGS",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7526736080646514,
+        0.7582291722297668
+      ],
+      "sample_sd": [
+        0.013082343387523824,
+        0.011235849197914701
+      ],
+      "difference_percentage_points": 0.5555564165115379,
+      "standardized_mean_difference": 0.45559454292834645,
+      "files": [
+        {
+          "name": "GRU-HGS-SET-L1.txt",
+          "sha256": "43ff8f9df17763104d1db568a844d46bb9866c4c3102fe5920299425e52fdeb2"
+        },
+        {
+          "name": "GRU-HGS-SET-L1-wiring-cost.txt",
+          "sha256": "e0f8529648b947be9449b41a5ed7889d73ebfaa73bd7d7d33b077759a6b365fa"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "GRU",
+        "MNIST",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.9714399993419647,
+        0.9718200027942657
+      ],
+      "sample_sd": [
+        0.002237665668659318,
+        0.0015504826621065748
+      ],
+      "difference_percentage_points": 0.03800034523010476,
+      "standardized_mean_difference": 0.19740580078309303,
+      "files": [
+        {
+          "name": "GRU-MNIST-DeepR-L1.txt",
+          "sha256": "1efbc335645655ec69604a1ebfa1120192269ad2b3b0ba6ee7890ba3d184d826"
+        },
+        {
+          "name": "GRU-MNIST-DeepR-L1-wiring-cost.txt",
+          "sha256": "f310907d790ec1ffa14bc39c3ef8a39bee30be28c6581d4ecb54ccb6efa6ec4d"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "GRU",
+        "MNIST",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.9723099946975708,
+        0.973169994354248
+      ],
+      "sample_sd": [
+        0.001136709926802221,
+        0.001379256982001535
+      ],
+      "difference_percentage_points": 0.08599996566771573,
+      "standardized_mean_difference": 0.6804787967492347,
+      "files": [
+        {
+          "name": "GRU-MNIST-DSR-L1.txt",
+          "sha256": "ce88357ccf434d18736030ca8a7e18bea348e31e98d73e22c199f32ef68bf28c"
+        },
+        {
+          "name": "GRU-MNIST-DSR-L1-wiring-cost.txt",
+          "sha256": "a4d76252115cc253bdd6b22d073f3a2815ac1eed06ff1e27b2cf87dc37263961"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "GRU",
+        "MNIST",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.9721399962902069,
+        0.972760009765625
+      ],
+      "sample_sd": [
+        0.0018105906868906049,
+        0.0012518466066602433
+      ],
+      "difference_percentage_points": 0.062001347541817964,
+      "standardized_mean_difference": 0.3983393093022667,
+      "files": [
+        {
+          "name": "GRU-MNIST-SET-L1.txt",
+          "sha256": "d2b9950711aef9a13b49a196ecd5d24d1cab80d755935a5397c00660803eeff6"
+        },
+        {
+          "name": "GRU-MNIST-SET-L1-wiring-cost.txt",
+          "sha256": "d4b019f4b5a9b258ecab693522252fa96c3d2255224680e8104a00ca4e0f0674"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "HAR",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8476734220981598,
+        0.8553614377975464
+      ],
+      "sample_sd": [
+        0.0037517329035009483,
+        0.0028170069543051977
+      ],
+      "difference_percentage_points": 0.7688015699386597,
+      "standardized_mean_difference": 2.3174431900098993,
+      "files": [
+        {
+          "name": "RNN-HAR-DeepR-L1.txt",
+          "sha256": "5b51892126186b1a5c329c31253cdd38418a4409606d1b2a6f53fe2502360fe8"
+        },
+        {
+          "name": "RNN-HAR-DeepR-L1-wiring-cost.txt",
+          "sha256": "10234cac7008b5ef32aa33e431fa21bd479bfb30668f8382dd8259deb9396eb2"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "HAR",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8507190048694611,
+        0.858741843700409
+      ],
+      "sample_sd": [
+        0.0020500991261966093,
+        0.001668533854155964
+      ],
+      "difference_percentage_points": 0.8022838830947898,
+      "standardized_mean_difference": 4.292402507337382,
+      "files": [
+        {
+          "name": "RNN-HAR-DSR-L1.txt",
+          "sha256": "6f606428e0623b028f82bce52556b464c136f9d4bd7438f4467812b596304362"
+        },
+        {
+          "name": "RNN-HAR-DSR-L1-wiring-cost.txt",
+          "sha256": "956b7968ef16a3fe6a3e833048b8a7fae45eb926891751a4e8ba6380f5bfd0d7"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "HAR",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8586989283561707,
+        0.8584134578704834
+      ],
+      "sample_sd": [
+        0.003803924123291893,
+        0.001931738466036253
+      ],
+      "difference_percentage_points": -0.028547048568727806,
+      "standardized_mean_difference": -0.09462876923278779,
+      "files": [
+        {
+          "name": "RNN-HAR-SET-L1.txt",
+          "sha256": "37693e08432f0fedba0b1439d776482988fc0269d427df4f46cc7c4f88be5b75"
+        },
+        {
+          "name": "RNN-HAR-SET-L1-wiring-cost.txt",
+          "sha256": "bc603aa5f6d48f41f2fe4ba5d84afa25f974bb10db6e212b155d087ddd21501d"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "HGS",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.791076385974884,
+        0.7996874928474427
+      ],
+      "sample_sd": [
+        0.010954542480261564,
+        0.00974761044487391
+      ],
+      "difference_percentage_points": 0.8611106872558616,
+      "standardized_mean_difference": 0.8304943050629937,
+      "files": [
+        {
+          "name": "RNN-HGS-DeepR-L1.txt",
+          "sha256": "e332d7e5f24a01cde258d86dcd42900e3b0841348962486989486e5d1997dfe9"
+        },
+        {
+          "name": "RNN-HGS-DeepR-L1-wiring-cost.txt",
+          "sha256": "ccac431a1d5e1013ea3e6e1c3becc013f3c91d684d849c8d8e9a81f5bdcee04d"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "HGS",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7892361104488372,
+        0.7944097280502319
+      ],
+      "sample_sd": [
+        0.015147448373314333,
+        0.014332658649944159
+      ],
+      "difference_percentage_points": 0.5173617601394676,
+      "standardized_mean_difference": 0.35085643899180013,
+      "files": [
+        {
+          "name": "RNN-HGS-DSR-L1.txt",
+          "sha256": "1ad13dbf8130f29712113fa9bf34795f30d56a7689768c66cc394d3e22edc02c"
+        },
+        {
+          "name": "RNN-HGS-DSR-L1-wiring-cost.txt",
+          "sha256": "8124670cce200717212f6798e63bfabe76ac1ec1d15ae596bb1e3944b6cf18a3"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "HGS",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8132291674613953,
+        0.8016666650772095
+      ],
+      "sample_sd": [
+        0.014331726679204524,
+        0.007739574604205943
+      ],
+      "difference_percentage_points": -1.1562502384185769,
+      "standardized_mean_difference": -1.0039190502297304,
+      "files": [
+        {
+          "name": "RNN-HGS-SET-L1.txt",
+          "sha256": "4240296bcff0b0b154d89af50b557a2f8045394e368a2808ff98f2fd1a0f973a"
+        },
+        {
+          "name": "RNN-HGS-SET-L1-wiring-cost.txt",
+          "sha256": "6066486ad85e1e1bb136d0beb2962cd5b337000ad37e313dd22a8f510725195f"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "DMTask",
+        "DeepR"
+      ],
+      "trials": [
+        5,
+        5
+      ],
+      "mean_accuracy": [
+        0.87124,
+        0.86952
+      ],
+      "sample_sd": [
+        0.004851082353454736,
+        0.0033936705791812218
+      ],
+      "difference_percentage_points": -0.17200000000000548,
+      "standardized_mean_difference": -0.4108652711551312,
+      "files": [
+        {
+          "name": "RNN-DMTask-DeepR-L1.txt",
+          "sha256": "14815cf7756af19ff559087943b7ce3db6a4487b514d351d6f994cf21b7f7482"
+        },
+        {
+          "name": "RNN-DMTask-DeepR-L1-wiring-cost.txt",
+          "sha256": "0726620d15562fc38691cbef0f7e6b3650d8a015c6e2d0a1dde638e5a0bbdfc1"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "DMTask",
+        "DSR"
+      ],
+      "trials": [
+        5,
+        5
+      ],
+      "mean_accuracy": [
+        0.87406,
+        0.87156
+      ],
+      "sample_sd": [
+        0.003064800156617033,
+        0.002640643860879385
+      ],
+      "difference_percentage_points": -0.24999999999999467,
+      "standardized_mean_difference": -0.8739442575578381,
+      "files": [
+        {
+          "name": "RNN-DMTask-DSR-L1.txt",
+          "sha256": "90104614106b31341c75d46fcd74fe6524dd5d650017d774860e48b082231a8f"
+        },
+        {
+          "name": "RNN-DMTask-DSR-L1-wiring-cost.txt",
+          "sha256": "042b66a927b20c5dc2f11ae048a6d6a297db509a3c76d0f64b976d29ca8683ae"
+        }
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "DMTask",
+        "SET"
+      ],
+      "trials": [
+        5,
+        5
+      ],
+      "mean_accuracy": [
+        0.8729,
+        0.8716
+      ],
+      "sample_sd": [
+        0.005493177586788883,
+        0.0018466185312619337
+      ],
+      "difference_percentage_points": -0.12999999999999678,
+      "standardized_mean_difference": -0.3172383437434708,
+      "files": [
+        {
+          "name": "RNN-DMTask-SET-L1.txt",
+          "sha256": "9f2823ad551ef268ad33f4a36ffa0e5aff37d41fc66d679ce7d374659d2c1e43"
+        },
+        {
+          "name": "RNN-DMTask-SET-L1-wiring-cost.txt",
+          "sha256": "c0cc44c3c81ae6c64168c25e489bae97c940171c3f9e918b152a6ac055b37547"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "GRU",
+        "HAR",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8754228234291077,
+        0.876465916633606
+      ],
+      "sample_sd": [
+        0.002278059049296922,
+        0.0020969960315700698
+      ],
+      "difference_percentage_points": 0.10430932044982466,
+      "standardized_mean_difference": 0.4764287787204015,
+      "files": [
+        {
+          "name": "GRU-HAR-DeepR-L2.txt",
+          "sha256": "e17e46658746e1a7145fad4c42d7e43ad0366e99ebc643ee08b09c6f305aa1a4"
+        },
+        {
+          "name": "GRU-HAR-DeepR-L2-wiring-cost.txt",
+          "sha256": "d38d8597728670e7d978a95897ada805d894fe33e27eb087df931b72f507dcae"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "GRU",
+        "HAR",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8750257551670074,
+        0.8761911869049073
+      ],
+      "sample_sd": [
+        0.003431901422060063,
+        0.002120062454375562
+      ],
+      "difference_percentage_points": 0.11654317378998469,
+      "standardized_mean_difference": 0.4085763286653331,
+      "files": [
+        {
+          "name": "GRU-HAR-DSR-L2.txt",
+          "sha256": "b11fc51edc6b146f39613852c697cafd1aaaa0097c8d0f719e945fec5be3a661"
+        },
+        {
+          "name": "GRU-HAR-DSR-l2-wiring-cost.txt",
+          "sha256": "32d024ada2fa8cb5b43b1574ba7a3c1df969825faa19aabece8a556a43912e35"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "GRU",
+        "HAR",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8764702081680298,
+        0.8765624940395356
+      ],
+      "sample_sd": [
+        0.002582462313480291,
+        0.0024591468124800574
+      ],
+      "difference_percentage_points": 0.009228587150578171,
+      "standardized_mean_difference": 0.03659874284644892,
+      "files": [
+        {
+          "name": "GRU-HAR-SET-L2.txt",
+          "sha256": "6fb87690fd946c61089f942930a8ba7399f716f553e03c49a7122312c0c7a12f"
+        },
+        {
+          "name": "GRU-HAR-SET-L2-wiring-cost.txt",
+          "sha256": "0318ad7c7107fa8155a39d8f26ffabdca314b42e1672ebb955b9ffb40bfe8d71"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "GRU",
+        "HGS",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7435069501399993,
+        0.7532638907432556
+      ],
+      "sample_sd": [
+        0.01565031833046862,
+        0.015395864233884064
+      ],
+      "difference_percentage_points": 0.975694060325627,
+      "standardized_mean_difference": 0.628522549735008,
+      "files": [
+        {
+          "name": "GRU-HGS-DeepR-L2.txt",
+          "sha256": "315d432453a5f6379fba56c4d81a7b4d84e3f1d84cb0b59de483126686477360"
+        },
+        {
+          "name": "GRU-HGS-DeepR-L2-wiring-cost.txt",
+          "sha256": "1c8ad38ad836515b3434b4a7e904e7fcc49fb1441babfe6567d669e7505d2b99"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "GRU",
+        "HGS",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7527430653572083,
+        0.7504513978958129
+      ],
+      "sample_sd": [
+        0.01209305116682846,
+        0.012814398942045762
+      ],
+      "difference_percentage_points": -0.2291667461395308,
+      "standardized_mean_difference": -0.1839374959057491,
+      "files": [
+        {
+          "name": "GRU-HGS-DSR-L2.txt",
+          "sha256": "48b84429230ab68bad2a02b48c51b24cff72a7ee0690e7cbeb6fa830941ca987"
+        },
+        {
+          "name": "GRU-HGS-DSR-L2-wiring-cost.txt",
+          "sha256": "fb94060579cdbc5cd0cc1318dd41bbfb240b61ac2a6a8d285ba4ed43c7cb7b2d"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "GRU",
+        "HGS",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7542013883590698,
+        0.7520833373069763
+      ],
+      "sample_sd": [
+        0.017562460537665345,
+        0.011085765060257366
+      ],
+      "difference_percentage_points": -0.21180510520935059,
+      "standardized_mean_difference": -0.1442263029131304,
+      "files": [
+        {
+          "name": "GRU-HGS-SET-L2.txt",
+          "sha256": "69c1006eee3279dcef5673f2acf2bf29ef9b0a40c90dc5dedfbcfe999636b4fa"
+        },
+        {
+          "name": "GRU-HGS-SET-L2-wiring-cost.txt",
+          "sha256": "055b3fedaa6da6447294e11219fbc1ae67a6df007012d40507174ec7ef95926b"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "GRU",
+        "MNIST",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.9711099982261657,
+        0.9712100028991699
+      ],
+      "sample_sd": [
+        0.0015975245525830875,
+        0.0022975525914095797
+      ],
+      "difference_percentage_points": 0.01000046730041948,
+      "standardized_mean_difference": 0.05053954430155216,
+      "files": [
+        {
+          "name": "GRU-MNIST-DeepR-L2.txt",
+          "sha256": "31ddc75a6f86d37613f9f1e8b10f78b1a0be3a9e3e398ee4c846d1dd7553a9f0"
+        },
+        {
+          "name": "GRU-MNIST-DeepR-L2-wiring-cost.txt",
+          "sha256": "2e11b87f148694494a3305b9e55533cce306d8fe4585370cbb53f37d5d1c91d5"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "GRU",
+        "MNIST",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.972000002861023,
+        0.9719200015068055
+      ],
+      "sample_sd": [
+        0.001581838035010553,
+        0.002476025718155404
+      ],
+      "difference_percentage_points": -0.008000135421748489,
+      "standardized_mean_difference": -0.038506460991856194,
+      "files": [
+        {
+          "name": "GRU-MNIST-DSR-L2.txt",
+          "sha256": "11cb618c3f31758834456863bbf88fe6d22d97692214a94fa20aaa8681756331"
+        },
+        {
+          "name": "GRU-MNIST-DSR-L2-wiring-cost.txt",
+          "sha256": "c73b5d53a3d1c0acb99161a37c88ff534948327ebf55b076325846f7477f32f5"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "GRU",
+        "MNIST",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.972269994020462,
+        0.9725199997425079
+      ],
+      "sample_sd": [
+        0.0020303550268444643,
+        0.0008778785625685267
+      ],
+      "difference_percentage_points": 0.025000572204592064,
+      "standardized_mean_difference": 0.15983680603500264,
+      "files": [
+        {
+          "name": "GRU-MNIST-SET-L2.txt",
+          "sha256": "52c1b159c1ed27acdbeeb77062ce1ea4f1440dd91e65c08cd352466c454f117b"
+        },
+        {
+          "name": "GRU-MNIST-SET-L2-wiring-cost.txt",
+          "sha256": "63c3bc4181269b2f9009d4e456c572afb662d817320144a9a8500ba414505c97"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "HAR",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8434173285961151,
+        0.8509100198745727
+      ],
+      "sample_sd": [
+        0.0034090474550298178,
+        0.0031487184450266327
+      ],
+      "difference_percentage_points": 0.7492691278457642,
+      "standardized_mean_difference": 2.2833368656475326,
+      "files": [
+        {
+          "name": "RNN-HAR-DeepR-L2.txt",
+          "sha256": "9e0c9a8647860f380c4e3c253309bb6419d3a045ffc536e5ad1d5bb6a01886d5"
+        },
+        {
+          "name": "RNN-HAR-DeepR-L2-wiring-cost.txt",
+          "sha256": "1f6e2100be6c476f953d9ba944c2ce017807f7b07c8b220f12b51c0410a07b28"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "HAR",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.8470316827297211,
+        0.854052197933197
+      ],
+      "sample_sd": [
+        0.004680783080254284,
+        0.004112642003813948
+      ],
+      "difference_percentage_points": 0.7020515203475908,
+      "standardized_mean_difference": 1.5934422733567306,
+      "files": [
+        {
+          "name": "RNN-HAR-DSR-L2.txt",
+          "sha256": "2a2754bb4f1798105ac15c781cee3bf687d960f0162f5011ae8d97d20b4f0e5a"
+        },
+        {
+          "name": "RNN-HAR-DSR-L2-wiring-cost.txt",
+          "sha256": "60d60e22b8cca65b1e2bf9c09b4c1bb64975df86b6d9daeb15f8b3f4632d3c3c"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "HAR",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.855885136127472,
+        0.8526206195354462
+      ],
+      "sample_sd": [
+        0.004971985070989199,
+        0.001799503595433609
+      ],
+      "difference_percentage_points": -0.3264516592025757,
+      "standardized_mean_difference": -0.8731206019763964,
+      "files": [
+        {
+          "name": "RNN-HAR-SET-L2.txt",
+          "sha256": "1804decaedc983297dd90385a89f74e27c694fa2738433eb8c132a232e08f4ef"
+        },
+        {
+          "name": "RNN-HAR-SET-L2-wiring-cost.txt",
+          "sha256": "05d50bd2a39a0f37765d98d2a00f1980b0db2276b606db198bedda81f25c4823"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "HGS",
+        "DeepR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7856944441795349,
+        0.7929166674613952
+      ],
+      "sample_sd": [
+        0.014912874298587744,
+        0.008477089658087246
+      ],
+      "difference_percentage_points": 0.7222223281860285,
+      "standardized_mean_difference": 0.595420906957948,
+      "files": [
+        {
+          "name": "RNN-HGS-DeepR-L2.txt",
+          "sha256": "6c5438c0e079b85477a599f8d62a9ff61c6543a715d0101bf19235eb41c256a4"
+        },
+        {
+          "name": "RNN-HGS-DeepR-L2-wiring-cost.txt",
+          "sha256": "b4cdd50fbc6acb333b0bb34c16fedcac0ef9e03131f6534030f1f8f8f39fb1e4"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "HGS",
+        "DSR"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7797916650772094,
+        0.7902083456516266
+      ],
+      "sample_sd": [
+        0.015056793576374107,
+        0.008957470413898539
+      ],
+      "difference_percentage_points": 1.0416680574417136,
+      "standardized_mean_difference": 0.8408436703351939,
+      "files": [
+        {
+          "name": "RNN-HGS-DSR-L2.txt",
+          "sha256": "a563ebef2399908ac4ed975e676e56eaa4802fc8871b728c18fc4ab8bfd5a4bd"
+        },
+        {
+          "name": "RNN-HGS-DSR-L2-wiring-cost.txt",
+          "sha256": "a1f34649d151518d99b91f554d2476414e889e63f3c878a4d7917830d7b0b746"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "HGS",
+        "SET"
+      ],
+      "trials": [
+        10,
+        10
+      ],
+      "mean_accuracy": [
+        0.7860763907432556,
+        0.7927777767181396
+      ],
+      "sample_sd": [
+        0.01757082685519288,
+        0.014546362144511974
+      ],
+      "difference_percentage_points": 0.6701385974884011,
+      "standardized_mean_difference": 0.4154702615674006,
+      "files": [
+        {
+          "name": "RNN-HGS-SET-L2.txt",
+          "sha256": "a5a8739d99474140117c5e56ed59f2ca47a5e22569a90efc39322033a0bbeadc"
+        },
+        {
+          "name": "RNN-HGS-SET-L2-wiring-cost.txt",
+          "sha256": "f9d25cf7e695b5f93954bba1b11620bdd4ad20b4f095d47df1db286379357a1e"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "DMTask",
+        "DeepR"
+      ],
+      "trials": [
+        5,
+        5
+      ],
+      "mean_accuracy": [
+        0.86748,
+        0.8710600000000001
+      ],
+      "sample_sd": [
+        0.006736987457313548,
+        0.0034224260401066234
+      ],
+      "difference_percentage_points": 0.35800000000000276,
+      "standardized_mean_difference": 0.6700079723497822,
+      "files": [
+        {
+          "name": "RNN-DMTask-DeepR-L2.txt",
+          "sha256": "6f06c51828d6367ef7850b73ad4489551d4482afc08a6975f0d02851be7a0cf3"
+        },
+        {
+          "name": "RNN-DMTask-DeepR-L2-wiring-cost.txt",
+          "sha256": "6265acd0e4cc36bf94a9704671d1444e79b56e4e2d888e6c9a4dc23b1cec3d77"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "DMTask",
+        "DSR"
+      ],
+      "trials": [
+        5,
+        5
+      ],
+      "mean_accuracy": [
+        0.87214,
+        0.87304
+      ],
+      "sample_sd": [
+        0.0043223836016716526,
+        0.003952594084901736
+      ],
+      "difference_percentage_points": 0.09000000000000119,
+      "standardized_mean_difference": 0.21730637423002894,
+      "files": [
+        {
+          "name": "RNN-DMTask-DSR-L2.txt",
+          "sha256": "6b1b8c930c6277d6e3ed3d325e79de029b395e98c2a23e2f3707666382b2e6ba"
+        },
+        {
+          "name": "RNN-DMTask-DSR-L2-wiring-cost.txt",
+          "sha256": "62cf9ea5fca5daef9a64aeaeddd331372d1cd028b1b81ab93f6ad73366c60aa9"
+        }
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "DMTask",
+        "SET"
+      ],
+      "trials": [
+        5,
+        5
+      ],
+      "mean_accuracy": [
+        0.86902,
+        0.86828
+      ],
+      "sample_sd": [
+        0.0038486361220567383,
+        0.001570668647423759
+      ],
+      "difference_percentage_points": -0.07399999999999629,
+      "standardized_mean_difference": -0.2517603972918171,
+      "files": [
+        {
+          "name": "RNN-DMTask-SET-L2.txt",
+          "sha256": "5247450f5d1b7a42890ae40e75e8b108c23b462110ede22cc6966fb0a2de4cf4"
+        },
+        {
+          "name": "RNN-DMTask-SET-L2-wiring-cost.txt",
+          "sha256": "3ef5de78f0fd4ad218bdc455ab8b2911d7a81e73ab96e9425edfa88b41603cc3"
+        }
+      ]
+    }
+  ],
+  "missing": [
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "MNIST",
+        "DeepR"
+      ],
+      "files": [
+        "RNN-MNIST-DeepR-L1.txt",
+        "RNN-MNIST-DeepR-L1-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "MNIST",
+        "DSR"
+      ],
+      "files": [
+        "RNN-MNIST-DSR-L1.txt",
+        "RNN-MNIST-DSR-L1-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "MNIST",
+        "SET"
+      ],
+      "files": [
+        "RNN-MNIST-SET-L1.txt",
+        "RNN-MNIST-SET-L1-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "ManteTask",
+        "DeepR"
+      ],
+      "files": [
+        "RNN-ManteTask-DeepR-L1.txt",
+        "RNN-ManteTask-DeepR-L1-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "ManteTask",
+        "DSR"
+      ],
+      "files": [
+        "RNN-ManteTask-DSR-L1.txt",
+        "RNN-ManteTask-DSR-L1-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L1",
+      "condition": [
+        "RNN",
+        "ManteTask",
+        "SET"
+      ],
+      "files": [
+        "RNN-ManteTask-SET-L1.txt",
+        "RNN-ManteTask-SET-L1-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "MNIST",
+        "DeepR"
+      ],
+      "files": [
+        "RNN-MNIST-DeepR-L2.txt",
+        "RNN-MNIST-DeepR-L2-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "MNIST",
+        "DSR"
+      ],
+      "files": [
+        "RNN-MNIST-DSR-L2.txt",
+        "RNN-MNIST-DSR-L2-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "MNIST",
+        "SET"
+      ],
+      "files": [
+        "RNN-MNIST-SET-L2.txt",
+        "RNN-MNIST-SET-L2-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "ManteTask",
+        "DeepR"
+      ],
+      "files": [
+        "RNN-ManteTask-DeepR-L2.txt",
+        "RNN-ManteTask-DeepR-L2-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "ManteTask",
+        "DSR"
+      ],
+      "files": [
+        "RNN-ManteTask-DSR-L2.txt",
+        "RNN-ManteTask-DSR-L2-wiring-cost.txt"
+      ]
+    },
+    {
+      "norm": "L2",
+      "condition": [
+        "RNN",
+        "ManteTask",
+        "SET"
+      ],
+      "files": [
+        "RNN-ManteTask-SET-L2.txt",
+        "RNN-ManteTask-SET-L2-wiring-cost.txt"
+      ]
+    }
+  ],
+  "authority": "Research evidence only. D-08 remains pending-human; no topology, metric, learning rule or implementation contract is qualified."
+}

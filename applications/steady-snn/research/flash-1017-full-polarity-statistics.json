@@ -1,0 +1,289 @@
+{
+  "status": "Descriptive full-vocabulary halfwave statistics; no application encoder, partner score or layout selected",
+  "started_at_utc": "2026-10-28T01:49:51.062181+00:00",
+  "completed_at_utc": "2026-10-28T01:55:54.607537+00:00",
+  "elapsed_seconds": 363.5453713530005,
+  "source": {
+    "model": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "commit": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+    "sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c",
+    "shape": [
+      129280,
+      5120
+    ]
+  },
+  "sample": {
+    "rows": 127997,
+    "ids_sha256": "fc09169d10ede0353b9e7245b3c9990ba0714ddb639bb3e13eb0af7f8c909942",
+    "weighting": "Uniform ordinary token types, not corpus frequency or contextual states"
+  },
+  "computation": {
+    "dtype": "float64",
+    "numpy": "2.3.5",
+    "blas_threads": "8",
+    "block_rows": 2048
+  },
+  "definitions": {
+    "channels": "P=max(X,0), N=max(-X,0), ordered all P then all N",
+    "profile_geometry": "Centered Gram of per-channel variance-normalized token profiles; a conditional diagnostic distance, not a physical metric"
+  },
+  "covariance": {
+    "trace": 47.9165547660927,
+    "min_eigenvalue": 9.293592405888859e-06,
+    "largest_fraction": 0.023574132670605166,
+    "participation_ratio": 756.4921713344677,
+    "components_for_fraction": {
+      "0.5": 952,
+      "0.75": 3855,
+      "0.9": 6927,
+      "0.95": 8339,
+      "0.99": 9770
+    },
+    "top_fraction": {
+      "1": 0.023574132670605166,
+      "2": 0.03560311786887536,
+      "10": 0.0754165836534723,
+      "100": 0.21673137566459932,
+      "512": 0.4176059737745349,
+      "1024": 0.5103707606150386,
+      "2048": 0.6205064577752785,
+      "4096": 0.7643517210021611,
+      "8192": 0.9452996511260265
+    },
+    "numerical_rank_threshold_relative_1e_10": 10240
+  },
+  "profile_geometry": {
+    "trace": 10077.32711849676,
+    "min_eigenvalue": 1.4627763727585133e-14,
+    "largest_fraction": 0.01375358637317269,
+    "participation_ratio": 1203.8076168455113,
+    "components_for_fraction": {
+      "0.5": 1099,
+      "0.75": 4142,
+      "0.9": 7160,
+      "0.95": 8507,
+      "0.99": 9834
+    },
+    "top_fraction": {
+      "1": 0.01375358637317269,
+      "2": 0.021100397155865414,
+      "10": 0.05854547010874925,
+      "100": 0.19807032309509,
+      "512": 0.3976262705397797,
+      "1024": 0.4899691522810716,
+      "2048": 0.6000293515392277,
+      "4096": 0.7472765522881506,
+      "8192": 0.9391697847265197
+    },
+    "numerical_rank_threshold_relative_1e_10": 10239,
+    "top2_squared_gram_energy": 0.2926898918102486
+  },
+  "neighbor_statistics": {
+    "k": 16,
+    "definition": "Largest positive Pearson correlations with other-coordinate halfwaves; self and opposite polarity of the same coordinate excluded. Descriptive ranking only.",
+    "selected_correlation": {
+      "count": 163840,
+      "mean": 0.10380078350132119,
+      "min": 0.037356838692810784,
+      "p01": 0.06787064310921831,
+      "p05": 0.07552363160885188,
+      "median": 0.10048419729680298,
+      "p95": 0.14376779034511988,
+      "p99": 0.16926421916790949,
+      "max": 0.3854091177574324
+    },
+    "population_selection_count": {
+      "count": 10240,
+      "mean": 16.0,
+      "min": 0.0,
+      "p01": 0.0,
+      "p05": 0.0,
+      "median": 7.0,
+      "p95": 61.0,
+      "p99": 145.0,
+      "max": 641.0
+    },
+    "selected_unique_coordinate_count": {
+      "count": 10240,
+      "mean": 15.9998046875,
+      "min": 15.0,
+      "p01": 16.0,
+      "p05": 16.0,
+      "median": 16.0,
+      "p95": 16.0,
+      "p99": 16.0,
+      "max": 16.0
+    },
+    "overlap_with_raw_absolute_coordinate_top16": {
+      "count": 10240,
+      "mean": 0.5221211751302083,
+      "min": 0.0,
+      "p01": 0.1875,
+      "p05": 0.3125,
+      "median": 0.5,
+      "p95": 0.75,
+      "p99": 0.8125,
+      "max": 1.0
+    },
+    "most_selected_population_examples": [
+      {
+        "coordinate": 4986,
+        "polarity": "positive",
+        "selection_count": 641,
+        "mean": 0.07375697852404817,
+        "variance": 0.00814264352585957
+      },
+      {
+        "coordinate": 1545,
+        "polarity": "positive",
+        "selection_count": 546,
+        "mean": 0.06804852670407527,
+        "variance": 0.0074072241006368535
+      },
+      {
+        "coordinate": 2381,
+        "polarity": "negative",
+        "selection_count": 477,
+        "mean": 0.05028023014131809,
+        "variance": 0.005905910669500299
+      },
+      {
+        "coordinate": 2308,
+        "polarity": "positive",
+        "selection_count": 465,
+        "mean": 0.05361367222934956,
+        "variance": 0.006231715209170244
+      },
+      {
+        "coordinate": 3772,
+        "polarity": "negative",
+        "selection_count": 460,
+        "mean": 0.06538503537168018,
+        "variance": 0.007152923463881863
+      },
+      {
+        "coordinate": 486,
+        "polarity": "positive",
+        "selection_count": 418,
+        "mean": 0.05435703404572742,
+        "variance": 0.006202459590808264
+      },
+      {
+        "coordinate": 1308,
+        "polarity": "negative",
+        "selection_count": 394,
+        "mean": 0.046432326038829054,
+        "variance": 0.0053819719338043925
+      },
+      {
+        "coordinate": 607,
+        "polarity": "positive",
+        "selection_count": 390,
+        "mean": 0.06931959280387709,
+        "variance": 0.007598900297528454
+      },
+      {
+        "coordinate": 640,
+        "polarity": "negative",
+        "selection_count": 376,
+        "mean": 0.07484010150325258,
+        "variance": 0.007996317335063547
+      },
+      {
+        "coordinate": 2627,
+        "polarity": "positive",
+        "selection_count": 375,
+        "mean": 0.08041915434492494,
+        "variance": 0.00814646637363509
+      },
+      {
+        "coordinate": 1342,
+        "polarity": "positive",
+        "selection_count": 363,
+        "mean": 0.06203901865338517,
+        "variance": 0.006723149313503724
+      },
+      {
+        "coordinate": 4171,
+        "polarity": "negative",
+        "selection_count": 357,
+        "mean": 0.065530189075669,
+        "variance": 0.007206029164724116
+      },
+      {
+        "coordinate": 4715,
+        "polarity": "negative",
+        "selection_count": 319,
+        "mean": 0.05859368525337367,
+        "variance": 0.006437263517397393
+      },
+      {
+        "coordinate": 3608,
+        "polarity": "positive",
+        "selection_count": 307,
+        "mean": 0.09589421689733053,
+        "variance": 0.009309048492510942
+      },
+      {
+        "coordinate": 2714,
+        "polarity": "positive",
+        "selection_count": 307,
+        "mean": 0.04265082321745394,
+        "variance": 0.0049803063957177774
+      },
+      {
+        "coordinate": 4135,
+        "polarity": "positive",
+        "selection_count": 306,
+        "mean": 0.027202383070785777,
+        "variance": 0.003176286826369137
+      },
+      {
+        "coordinate": 1316,
+        "polarity": "positive",
+        "selection_count": 303,
+        "mean": 0.047464404482719935,
+        "variance": 0.005346143119496445
+      },
+      {
+        "coordinate": 1579,
+        "polarity": "negative",
+        "selection_count": 301,
+        "mean": 0.056152954766412015,
+        "variance": 0.0060951419923448765
+      },
+      {
+        "coordinate": 3447,
+        "polarity": "positive",
+        "selection_count": 301,
+        "mean": 0.0262130267664726,
+        "variance": 0.0025726270922108506
+      },
+      {
+        "coordinate": 3762,
+        "polarity": "negative",
+        "selection_count": 291,
+        "mean": 0.05415855849173488,
+        "variance": 0.006040589068201558
+      }
+    ]
+  },
+  "checks": {
+    "symmetry": 2.168404344971009e-19,
+    "positive_variance": 1.3071412442028363e-17,
+    "negative_variance": 6.938893903907228e-18,
+    "opponent_covariance": 3.1712913545201005e-18,
+    "signed_reconstruction": 3.469446951953614e-18,
+    "trace_eigen_relative": 0.0,
+    "frob_eigen_relative": 1.90215911457107e-15,
+    "centered_gram_row_sum_max": 1.1257661469699087e-13,
+    "independent_direct_halfwave_16channel_covariance_max_error": 1.305108365129426e-17
+  },
+  "limits": [
+    "Halfwave amplitudes are analytical proxies; probabilistic assignment to60 cells, FP4 phases and recurrent activity are unspecified.",
+    "Pearson normalization and top16 ranking are descriptive comparison choices, not proposed learning or wiring policies.",
+    "Selection-count heterogeneity in this ranking is not a live synaptic degree distribution or a biological power-law fit.",
+    "Global embedding error does not rule out a useful deliberately distorted local map.",
+    "No temporal, semantic-valence or causal-connectivity conclusion follows from token-type covariance."
+  ]
+}

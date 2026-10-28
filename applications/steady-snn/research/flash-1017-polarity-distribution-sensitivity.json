@@ -1,0 +1,225 @@
+{
+  "status": "Descriptive distribution-sensitivity analysis; no metric or mechanism selected",
+  "started_at_utc": "2026-10-28T01:58:51.135027+00:00",
+  "completed_at_utc": "2026-10-28T02:01:11.334015+00:00",
+  "elapsed_seconds": 140.1990105520017,
+  "source": {
+    "model": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "commit": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+    "embedding_sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c"
+  },
+  "computation": {
+    "numpy": "2.3.5",
+    "seed": 2026102715,
+    "channels": "P=max(X,0),N=max(-X,0)",
+    "precision": "Float64 moments, float32 retained correlation maps; comparison sums float64",
+    "ranking": "Top16 positive Pearson correlations, excluding own channel and opposite polarity of same coordinate",
+    "script_sha256": "c16dd80bcf068ca22fd54fff84dc389e536ee3b6c47b5f4e496daab45c56a63f"
+  },
+  "cohorts": {
+    "ascii_letters_A": {
+      "n": 8192,
+      "ids_sha256": "20a85cd1b082600e1d1c67c4a10c7f1d8283e1c5ce4b199931fd1cb38957a0ab",
+      "variance_trace": 44.916903102120244,
+      "min_selected_correlation": 0.05830533429980278,
+      "mean_selected_correlation": 0.12602870166301727,
+      "same_polarity_partner_fraction": 0.5002197265625
+    },
+    "ascii_letters_B": {
+      "n": 8192,
+      "ids_sha256": "7e309e1f72cf35543b98cc7a63c498961f0a3f77f5df484100da5f858cc07414",
+      "variance_trace": 44.667870169889135,
+      "min_selected_correlation": 0.0463155135512352,
+      "mean_selected_correlation": 0.1252821385860443,
+      "same_polarity_partner_fraction": 0.497412109375
+    },
+    "cjk_ideographs_A": {
+      "n": 8192,
+      "ids_sha256": "3b859e7726c1da008cc565fe139c1c6c2445b28ea0b6f43b24778c5575370dca",
+      "variance_trace": 50.44772749380166,
+      "min_selected_correlation": 0.052686940878629684,
+      "mean_selected_correlation": 0.11940479278564453,
+      "same_polarity_partner_fraction": 0.50001220703125
+    },
+    "cjk_ideographs_B": {
+      "n": 8192,
+      "ids_sha256": "536add8c4ac581aabf5068c228dc6641035af186a0b607a0a5193caba0173774",
+      "variance_trace": 50.441666363568885,
+      "min_selected_correlation": 0.05523198843002319,
+      "mean_selected_correlation": 0.11957444995641708,
+      "same_polarity_partner_fraction": 0.5017333984375
+    },
+    "uniform_ordinary_A": {
+      "n": 8192,
+      "ids_sha256": "76bc999e6351aa2445f6080a9574ce790a57ae0cd907550300794b55f6214727",
+      "variance_trace": 47.67159721831128,
+      "min_selected_correlation": 0.06133892014622688,
+      "mean_selected_correlation": 0.11234426498413086,
+      "same_polarity_partner_fraction": 0.499224853515625
+    },
+    "uniform_ordinary_B": {
+      "n": 8192,
+      "ids_sha256": "80a0cdc85840fe8569fb917f07182e92fef78e03a269f74653cd481af4bad6c2",
+      "variance_trace": 48.07835211470558,
+      "min_selected_correlation": 0.06274262815713882,
+      "mean_selected_correlation": 0.11217954009771347,
+      "same_polarity_partner_fraction": 0.500372314453125
+    }
+  },
+  "comparisons": [
+    {
+      "a": "ascii_letters_A",
+      "b": "ascii_letters_B",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.8897813532572616,
+      "pairwise_correlation_rmse": 0.016857450241423304,
+      "top16_positive_partner_overlap_fraction_mean": 0.368597412109375,
+      "top16_positive_partner_overlap_fraction_median": 0.375
+    },
+    {
+      "a": "ascii_letters_A",
+      "b": "cjk_ideographs_A",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.460683608462141,
+      "pairwise_correlation_rmse": 0.03673213573799973,
+      "top16_positive_partner_overlap_fraction_mean": 0.044097900390625,
+      "top16_positive_partner_overlap_fraction_median": 0.0
+    },
+    {
+      "a": "ascii_letters_A",
+      "b": "cjk_ideographs_B",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.4600602798772225,
+      "pairwise_correlation_rmse": 0.036704446139929084,
+      "top16_positive_partner_overlap_fraction_mean": 0.04373779296875,
+      "top16_positive_partner_overlap_fraction_median": 0.0
+    },
+    {
+      "a": "ascii_letters_A",
+      "b": "uniform_ordinary_A",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.797076534627458,
+      "pairwise_correlation_rmse": 0.02177164141705621,
+      "top16_positive_partner_overlap_fraction_mean": 0.2332275390625,
+      "top16_positive_partner_overlap_fraction_median": 0.25
+    },
+    {
+      "a": "ascii_letters_A",
+      "b": "uniform_ordinary_B",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.7961078931267179,
+      "pairwise_correlation_rmse": 0.021803816046020753,
+      "top16_positive_partner_overlap_fraction_mean": 0.231689453125,
+      "top16_positive_partner_overlap_fraction_median": 0.25
+    },
+    {
+      "a": "ascii_letters_B",
+      "b": "cjk_ideographs_A",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.45921731503759683,
+      "pairwise_correlation_rmse": 0.03665700006320125,
+      "top16_positive_partner_overlap_fraction_mean": 0.044317626953125,
+      "top16_positive_partner_overlap_fraction_median": 0.0
+    },
+    {
+      "a": "ascii_letters_B",
+      "b": "cjk_ideographs_B",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.45821668353464706,
+      "pairwise_correlation_rmse": 0.03664901637525046,
+      "top16_positive_partner_overlap_fraction_mean": 0.044354248046875,
+      "top16_positive_partner_overlap_fraction_median": 0.0
+    },
+    {
+      "a": "ascii_letters_B",
+      "b": "uniform_ordinary_A",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.7980164347340145,
+      "pairwise_correlation_rmse": 0.021771697124048604,
+      "top16_positive_partner_overlap_fraction_mean": 0.234869384765625,
+      "top16_positive_partner_overlap_fraction_median": 0.25
+    },
+    {
+      "a": "ascii_letters_B",
+      "b": "uniform_ordinary_B",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.7913544637088235,
+      "pairwise_correlation_rmse": 0.022079302841994258,
+      "top16_positive_partner_overlap_fraction_mean": 0.227288818359375,
+      "top16_positive_partner_overlap_fraction_median": 0.1875
+    },
+    {
+      "a": "cjk_ideographs_A",
+      "b": "cjk_ideographs_B",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.8871416069089517,
+      "pairwise_correlation_rmse": 0.016260339475787193,
+      "top16_positive_partner_overlap_fraction_mean": 0.385552978515625,
+      "top16_positive_partner_overlap_fraction_median": 0.375
+    },
+    {
+      "a": "cjk_ideographs_A",
+      "b": "uniform_ordinary_A",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.6483820791593705,
+      "pairwise_correlation_rmse": 0.027990377946285807,
+      "top16_positive_partner_overlap_fraction_mean": 0.124407958984375,
+      "top16_positive_partner_overlap_fraction_median": 0.125
+    },
+    {
+      "a": "cjk_ideographs_A",
+      "b": "uniform_ordinary_B",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.6495877831525236,
+      "pairwise_correlation_rmse": 0.027847418608691138,
+      "top16_positive_partner_overlap_fraction_mean": 0.1260498046875,
+      "top16_positive_partner_overlap_fraction_median": 0.125
+    },
+    {
+      "a": "cjk_ideographs_B",
+      "b": "uniform_ordinary_A",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.6479246257888862,
+      "pairwise_correlation_rmse": 0.027952323119623566,
+      "top16_positive_partner_overlap_fraction_mean": 0.123529052734375,
+      "top16_positive_partner_overlap_fraction_median": 0.125
+    },
+    {
+      "a": "cjk_ideographs_B",
+      "b": "uniform_ordinary_B",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.6495023096241083,
+      "pairwise_correlation_rmse": 0.027796454711187853,
+      "top16_positive_partner_overlap_fraction_mean": 0.1258544921875,
+      "top16_positive_partner_overlap_fraction_median": 0.125
+    },
+    {
+      "a": "uniform_ordinary_A",
+      "b": "uniform_ordinary_B",
+      "unique_population_pairs": 52418560,
+      "correlation_of_pairwise_correlations": 0.8544230966837905,
+      "pairwise_correlation_rmse": 0.016795713518597433,
+      "top16_positive_partner_overlap_fraction_mean": 0.306707763671875,
+      "top16_positive_partner_overlap_fraction_median": 0.3125
+    }
+  ],
+  "limits": [
+    "Unicode/spelling token-piece groups are neither semantic nor validated language labels.",
+    "Uniform token-type sampling is not contextual or corpus-frequency-weighted activity.",
+    "Two disjoint samples per group assess sampling sensitivity; cross-group pairs share cohorts and are not independent experiments.",
+    "Halfwave profiles are analytical inputs, not60-cell stochastic population responses or learned SNN activity.",
+    "No partner score, topology, degree law, normalization or learning rule is adopted."
+  ],
+  "checks": {
+    "cohort_ids_match_raw_coordinate_analysis": {
+      "ascii_letters_A": true,
+      "ascii_letters_B": true,
+      "cjk_ideographs_A": true,
+      "cjk_ideographs_B": true,
+      "uniform_ordinary_A": true,
+      "uniform_ordinary_B": true
+    },
+    "unique_other_coordinate_population_pairs": 52418560,
+    "independent_uniform_top16_expected_overlap_fraction": 0.0015628052353975385
+  }
+}

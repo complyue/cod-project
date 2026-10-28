@@ -1,14 +1,15 @@
 # Steady recurrent SNN: decisions and open questions
 
-Document-set revision: 24 · Recorded: 2026-10-26.
+Document-set revision: 32 · Recorded: 2026-10-27.
 
 ## Design authority
 
-- **Registry / coverage:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), revision 24, this application decision history and status index; mechanisms remain `pending-human`.
+- **Registry / coverage:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), revision 32, this application decision history and status index; mechanisms remain `pending-human`.
 - **Value lineage:** candidate P-25 → C-12 and P-22 → C-01 → V-01/V-02, with P-26 for C-13 adaptive capacity; explicit decisions preserve the meaning of the application while resource and execution choices evolve.
 - **Invariants / non-goals:** distinguish human constraints from assistant proposals and calculations. Source quotes are evidence for their stated scope, not approval of every generated document or downstream mechanism. Multi-field data defaults to SoA; AoS requires an access-pattern-specific cache rationale and empirical evidence (H-29). Standard field widths are 1, 2, 4, 8, 16, 32, ... bits (`8 * 2^n`, integer n with a positive whole-number bit count); FP4 is standard. Other widths require separate packing/alignment discussion (H-30–H-32). Consider auxiliary structures only after clear business requirements lead to an implementation-algorithm discussion; no preset auxiliary storage (H-34). Pool sizing targets M slightly above N with simple static indexing; J and final quotas remain open (H-38/H-39).
 - **Acceptance:** each selected mechanism needs its proposition, trade-off, scope, evidence and remaining dependencies recorded before implementation. The registry remains authoritative for qualification.
 - **Human baseline / continuity:** H-08–H-23 below. K-03–K-13 record the document set and preserve the prior decision history; no qualified application implementation baseline exists. H-20 requests biological evidence. H-21 provisionally retains the alpha-near-3 template and asks to evaluate target-owned incoming sets; execution details remain proposals under K-11. H-22 requests anatomical and physiological evidence about incoming degree and excitability; K-12 records this assessment without selecting an integration or activity-control mechanism. H-23 accepts compensating incoming weight scale as a reasonable direction and requests separate incoming-degree parameters; K-13 records the scoped assessment without choosing a weight formula or replacing the provisional allocation. H-24 assigns weight-scale policy to training strategy; K-14 records that boundary and clarifies calculated versus measured population evidence. H-25 keeps capacity allocation provisional and requests 100+100 population analysis; H-26 asks for measured human column counts. K-16 records these scoped assessments. H-27 requests the Flash 60+60 calculation; K-17 records verified width and conditional pool sizing without selecting new neural dynamics. H-28 places the embedding table in the shared node budget; K-18 records element-aligned array sizing and the per-CC/node accounting boundary. H-29 establishes that SoA default and the evidence requirement for exceptions; K-19 records this scope. H-30 requires field-specific discussion for nonstandard widths. H-31/H-32 define standard widths as powers of two in bits, including FP4; K-22 supersedes the nonnegative-exponent restriction recorded in K-21. Packing/access details remain separate from width classification. H-33 requests the scaling document’s current memory calculation; K-23 records synchronized budgets and indexing arithmetic. H-34 establishes requirements before auxiliary structures; K-24 records that principle and the removal of speculative structures and budgets. H-35 limits current planning to Flash 60+60; K-25 clarifies A and aligns the active examples and budgets with that scope. H-36 asks about planning-time sizing; H-37 asks about 15/16 classes. H-38 sets M slightly above N as the objective; H-39 excludes preserving older connection capacity. K-27 records the worked candidates without selecting final J or quotas.
+- **Current discussion:** H-50 / AD-044 clarifies that neurons already have their semantic-vector arrangement and no natural physical positions. [K-37](../../../design/DesignAuthorityRegistry.md#k-37) withdraws the premature soft-distance recommendation and the proposed choice between positions and a contact abstraction. H-51 / AD-045 requests corrected documents followed by at least 12 hours of deeper research into the computational benefit and applicability of biological locality. H-41–H-43 and H-46–H-48 remain; no new topology or learning mechanism is adopted.
 
 ## Human decisions
 
@@ -48,6 +49,19 @@ The speaker is the user in the [CoD project conversation](codex://threads/01a140
 | AD-030 | Set aside the V4 Pro 7,168-dimensional case for now; keep current planning focused on Flash 5,120 dimensions and 60+60 cells. Clarify A as the set count in the 100-slot class; explaining the existing value does not approve a final quota. | H-35; quote below |
 | AD-031 | Size the static pool so total slot sets M are slightly greater than total neurons N, while retaining convenient arithmetic indexing. No exact surplus percentage or final class count is selected. | [H-38](../../../design/DesignAuthorityRegistry.md#h-38); quote below |
 | AD-032 | Do not preserve connection capacity from an older sizing scenario as a constraint. Derive reserved slots from the current population, class geometry and small-surplus objective. | [H-39](../../../design/DesignAuthorityRegistry.md#h-39); quote below |
+| AD-033 | Use coactivity as the basic connection-learning direction, favoring nearer eligible partners outside a small very-near exclusion. Research 1D versus 2D; no dimension, metric, placement, kernel, exclusion radius or detailed weight update is selected. | [H-40](../../../design/DesignAuthorityRegistry.md#h-40); quote below; recorded 2026-10-27 |
+| AD-034 | Keep semantic-dimension/minicolumn labels free of distance preference. Evaluate equal cross-minicolumn connection opportunity with a preference for corresponding internal cell positions; research semantic representations versus biological locations. Shared-role meaning, exact equality semantics, geometry, polarity and learning mechanisms remain open. | [H-41](../../../design/DesignAuthorityRegistry.md#h-41); quote below; recorded 2026-10-27 |
+| AD-035 | Reject cross-minicolumn distance preference derived from internal minicolumn positions. The shared-position/aligned-index proposal is not an active design direction. | [H-42](../../../design/DesignAuthorityRegistry.md#h-42); first sentence below; recorded 2026-10-27 |
+| AD-036 | Deepen research into semantic-vector mappings and 2D topology within a human CC, seeking design inspiration. This selects a research scope, not an alternative encoding, biological equivalence or implementation. | H-42; second sentence below |
+| AD-037 | Treat CC as the basic semantic presentation unit, with approximate/non-exact replicas across CCs. Minicolumn/neuron semantic response roles are assigned statically; learning those roles is not required. Reassess topology research within that premise. Exact replication, response curves, learned dynamics and spatial layout are not selected. | [H-43](../../../design/DesignAuthorityRegistry.md#h-43); quote below; recorded 2026-10-27 |
+| AD-038 | Prioritize reconciling neuron positions implied by the fixed semantic-vector assignment with biological anatomical topology. Continue deeper research; 1D versus 2D is secondary. This does not select interleaving, anatomical compactness, an opportunity model or a relaxation of dimension neutrality. | [H-44](../../../design/DesignAuthorityRegistry.md#h-44); quote below; recorded 2026-10-27 |
+| AD-039 | Investigate whether actual ordinary-token embeddings use many dimensions, using `deepseek-ai/DeepSeek-V4.1-Flash-1017`; check local SSD capacity for its semantic table. The checkpoint is identified for this investigation, without selecting the final SNN encoder or deployment. | [H-45](../../../design/DesignAuthorityRegistry.md#h-45); quotes below; recorded 2026-10-27 |
+| AD-040 | Biological features need not correspond one-to-one with minicolumns. Train for bounded recurrent activity with three semantic regimes: noise-supported DMN with a slight negative-semantic activation advantage and gradual negative drift; sequential token-associated flow; and immersion through autonomous multidimensional semantic loops with varying bounded lengths. Exact single-coordinate activation is not the goal. | [H-46](../../../design/DesignAuthorityRegistry.md#h-46); quote below; recorded 2026-10-27 |
+| AD-041 | Apply the steady active-neuron fraction bound within each CC. | [H-47](../../../design/DesignAuthorityRegistry.md#h-47); scoped reply below; recorded 2026-10-27 |
+| AD-042 | Keep the per-CC fraction allowance broad; different mental states may have different activity levels. Do not require equal fractions for every phase/regime. Numerical bounds and counting rules remain open. | [H-48](../../../design/DesignAuthorityRegistry.md#h-48); quote below; recorded 2026-10-27 |
+| AD-043 | Continue deeper research to find scientific support for how the model should handle neuronal physical-distance preference. This requests an evidence-based assessment, without adopting a distance kernel, physical layout or learning mechanism. | [H-49](../../../design/DesignAuthorityRegistry.md#h-49); quote below; recorded 2026-10-27 |
+| AD-044 | The neurons already have a semantic-vector arrangement and no natural physical positions. Correct the premise of the physical-distance assessment; this does not select another topology. | [H-50](../../../design/DesignAuthorityRegistry.md#h-50); quote below; recorded 2026-10-27 |
+| AD-045 | Correct the documents, then continue substantive deeper research for at least 12 hours. Track evidence and actual research time; implementation remains deferred. | [H-51](../../../design/DesignAuthorityRegistry.md#h-51); quote below; recorded 2026-10-27 |
 
 AD-002 / H-09:
 
@@ -174,10 +188,69 @@ AD-032 / H-39:
 > 没必要 preserve “connection capacity from the older sizing case,” 吧？
 
 
+AD-033 / H-40:
+
+> 接下来讨论神经元连接学习算法中的邻近优先原则，其拓扑采用一维还是二维有没有本质区别。 基本的学习还是 fire-together->wire-together，只是对方节点选择上，肯定要按（排除一小片极近的豁免区之后）越近则选择的概率越高的原则。 你从拓扑学相关研究的调研入手，看看简单的一维邻近拓扑就够，还是用更接近生物现实的二维拓扑有本质性优势。
+
+AD-034 / H-41:
+
+> 对，我们的模型首先会把神经元下标域安排给 minicolumn 布局使用，而我们刻意让 minicolumn 代表语义向量的一维，鉴于语义向量的维度之间不该有距离远近概念，我们不能让距离偏好影响各 维度/minicolumn 的正交性。 也许可以考虑 “距离” 概念映射到 minicolumn 内部神经元之间的拓扑关系？ 也就是一个神经元与其它 minicolumn 的连接概率相等，但是选择对方 minicolumn 内部个体神经元时，偏好等位距离更近的。 这个设计方向有多大程度上成立，值得看看有没有语义向量与人脑神经元物理位置对应关系的研究成果。
+
+AD-035 / AD-036 / H-42:
+
+> 那 minicolumn 内部位置去产生跨 minicolumn 的距离偏好确实没有说得通的理由，这个方向不该走。 接下来值得深挖语义向量与人脑的单个CC范围内二维拓扑的映射关系的相关研究成果，找找启发思路。
+
+AD-037 / H-43:
+
+> 我们的设计，有一个源自 HTM 的前提假定是 CC 是语义呈现的基本单元，CC与CC之间是非精确replica关系，minicolumn代表一定的 概念/语义，所以目前为止神经元的 “**response properties across semantic space**” 我们是静态分配的而不是要求网络去学出来。 基于这个澄清再看看
+
+AD-038 / H-44:
+
+> 是啊，现在 1D vs 2D 已经不是主要问题了，首先要面对的是神经元之间的相对位置，我们建模基于语义向量分配的物理位置，跟生物解剖现实中的的神经元物理位置拓扑，如何消除明显冲突。 继续深挖相关研究成果吧
+
+AD-039 / H-45:
+
+> LLM的语义向量，应该没有单维激活倾向吧？ 普通token应该是不同程度激活多个维度的吧，这个有统计数据可以查的吧，看看 DS  V4.1F 的真实情况
+
+> 看 deepseek-ai/DeepSeek-V4.1-Flash-1017 ，本地ssd是否能存下语义表？
+
+AD-040 / H-46:
+
+> 所以人脑测量 “feature” 不跟 minicolumn 一一对应并不跟我们的建模冲突。 我们要训练的 SNN，并非精确语义单维激活，而是： 无任务 DMN 状态 —— 白噪音维持一定比例范围的稳态循环激活，语义上负面信息比正面信息后活跃稍强，所以稳态会慢慢滑向综合负面状态的极端；任务心流状态 —— token序列式轮番激活，整体仍维持一定比例范围的稳态激活；沉浸状态 —— 多维度语义向量循环式自我激活，循环链条长短不一，在一个特定范围内，整体神经元激活比例也维持一定的比例范围。
+
+AD-041 / H-47, answer to whether the activity-fraction bound applies within each CC, across the whole network, or both:
+
+> Within each CC
+
+AD-042 / H-48:
+
+> 每个CC内部激活比例是稳的，整体就不会失稳吧？ 另外这个比例不要求每个相态都一样，也不要太窄，应该允许不同心智状态在激活比例上也有所区别。
+
+The whole-network weighted-average bound in [ActivationRegimes](ActivationRegimes.md#whole-network-activity-follows-from-the-per-cc-bounds) is an agent mathematical consequence under consistent counting/window definitions. H-48 asks about that consequence; it does not approve an unrestricted dynamical-stability theorem. Semantic valence, coordinate sign, neuronal phases and mental regimes remain separate meanings.
+
+AD-043 / H-49:
+
+> 继续深挖科研成果，找到我们的建模应该如何处理神经元物理距离偏好的支持依据
+
+AD-044 / H-50:
+
+> 我们已经按语义向量安排神经元位置了，没有天然物理位置，你自己晕了？
+
+AD-045 / H-51:
+
+> 修正文档以后继续深挖，花足够成本，至少12小时以上
+
 ## Proposal history and current status
 
 | Proposal | Status / reason |
 | --- | --- |
+| Physical distance as an opportunity prior | Withdrawn agent recommendation after AD-044 / H-50, as recorded in K-37. The existing semantic arrangement supplies no physical metric. Biological findings remain references in [PhysicalDistancePreferenceResearch](PhysicalDistancePreferenceResearch.md); no choice between explicit positions and a contact abstraction is currently required. |
+| Steady activity and three mental regimes | AD-040–AD-042 specify broad per-CC occupancy bounds, with different levels allowed across mental states and distinct semantic trajectories. No exact set point, equal phase populations, global controller, valence estimator or transition/learning formula is selected. |
+| Biological feature / minicolumn correspondence | AD-040 permits non-bijective correspondence. Distributed semantic features are compatible with fixed coordinate roles; feature heterogeneity alone does not require interleaving or re-encoding. |
+| Proximity-biased coactivity learning | AD-033 remains the direction, with AD-034's dimension-index neutrality. AD-035 rejects the internal-position mechanism; no geometry or distance kernel is selected. [Semantic cortical mapping research](SemanticCorticalMappingResearch.md) assesses AD-036's research scope. |
+| Shared internal positions across minicolumns | Rejected by AD-035 / H-42. Equal cell index or an imposed shared internal coordinate supplies no accepted cross-minicolumn distance preference. |
+| Spatial interleaving of fixed semantic roles / selective neurite reach | Alternatives examined under AD-038, not adopted. Interleaving relaxes anatomical compactness and alone provides only expected label symmetry, not exact equal proposals for every source; H-41 did not select that full probability contract. Selective reach requires a justified opportunity model; neither adds preset structures or changes capacity budgets. |
+| Spatially organized neuronal response functions | AD-037 fixes semantic assignments and approximate-replica CCs; AD-038 prioritizes anatomical compatibility. Research distinguishes semantic group, compact anatomical population, neurite opportunity and storage order. Learning replacement roles remains outside the baseline. |
 | Dense local minicolumn blocks plus sparse or low-rank global coupling | Earlier assistant capacity sketch, not approved. AD-003 redirects the active proposal to contextual segments without assumed dense local blocks. Low-rank coupling is not equivalent to arbitrary sparse context matching. |
 | Pi 5 with 4 GB as a provisional reference | Earlier assistant assumption, replaced for current planning by the explicit AD-005 16 GB node ceiling. Pi 5 remains a reference CPU, not a confirmed fleet inventory. |
 | Flash pool size | AD-031 makes M slightly above N the objective; AD-032 excludes preserving earlier connection capacity. The [comparison](ConnectivityScalingResearch.md#sizing-objective-and-class-count-options) uses the smallest exact-halving pools above N: 15 classes give M=622573, 1.330241% surplus and 515.15 MiB; 16 give M=655350, 6.665039% surplus and 542.88 MiB. Final J and quotas remain open; execution uses a static pool. |
@@ -206,6 +279,9 @@ AD-032 / H-39:
 
 | Topic | Exact open decision | Consequence |
 | --- | --- | --- |
+| [SNN-02/SNN-03](ActivationRegimes.md) | What counts as active within a CC, over what time window, with what broad envelope and transient allowance? | Makes the selected local bound measurable while allowing different mental states to occupy different activity levels. |
+| [SNN-01/SNN-03/SNN-05](ActivationRegimes.md) | What defines negative semantic valence and its slight activation advantage, task-sequence success and an immersion loop's length? | Specifies the three semantic trajectories without substituting coordinate signs for meaning or choosing a learning rule prematurely. |
+| [SNN-01/SNN-03/SNN-05/SNN-07](PhysicalDistancePreferenceResearch.md) | Which computational effect of biological locality is useful within the existing semantic arrangement, and what evidence establishes its transfer conditions? | Research precedes any proposed metric or mechanism. There is no natural physical distance to parameterize, and no required choice between positions and a contact abstraction. A result may support retaining the current organization without adding geometry. |
 | [SNN-02/SNN-03/SNN-07](SynapticIntegrationResearch.md) | Which integration, input-timing and activity-control contract prevents unwanted degree bias while retaining useful selectivity? | Determines the meaning of activation, any branch or adaptation state, and acceptance beyond storage arithmetic. |
 | [SNN-01/SNN-04](ConnectivityScalingResearch.md#sizing-objective-and-class-count-options) | Which class count and quotas best satisfy the small-surplus objective for Flash 60+60? | With N=614400 and exact halving, 15 classes give 1.330241% surplus and a 12,800-slot maximum; 16 give 6.665039% and 18,432. No old-capacity preservation requirement applies. |
 | [SNN-05](SynapticIntegrationResearch.md#training-strategy-incoming-weight-scale) | Which training strategy, hyperparameters or dynamic planning/adaptation should govern weight scale? | Determines learned effective weights and any adaptation state; pure allocation migration preserves those weights and their effect. |
@@ -216,7 +292,6 @@ AD-032 / H-39:
 | [SNN-01](SignedPopulationEncoding.md#magnitude-and-contextual-cell-selection) | In the proposed positive/negative populations, do cells encode magnitude samples or select context with graded magnitude, and how is each population decoded? | Prevents contextual bursting from silently changing the represented coordinate. |
 | [SNN-01/SNN-02](SignedPopulationEncoding.md#coactivation-prediction-and-transitions-through-zero) | Can both polarities be active or predictive together, and what does cancellation mean? | Determines zero/sign transitions, hidden activity and information preserved in signed-vector messages. |
 | [SNN-02](Model.md#snn-02) | How do current activation and future prediction coexist, and what does the four-bit code mean? | Determines state transitions, extra fields and arithmetic. |
-| [SNN-03](Model.md#snn-03), [SNN-05](Model.md#snn-05) | Which recurrent invariant and learning task define success? | Supplies observable acceptance beyond a memory estimate. |
 | [SNN-06](Model.md#snn-06) | Which state is durable and how much history is retained? | Determines DBMR growth and compaction headroom. |
 
 Detailed choices and candidate value relationships remain open. Implementation is deferred under the user's language-design instruction H-07; this document set supports the ongoing discussion.

@@ -1,0 +1,44 @@
+{
+  "status": "Descriptive centrality association; not an explanation of biological hubs",
+  "source": "Cached full halfwave input-profile covariance and exact nearest-partner lists from ANA147/159",
+  "identity": "For unit-norm standardized profiles z_i and their centroid m, ||z_i-m||^2=1-2*mean_j corr(i,j)+mean_ij corr(i,j).",
+  "sample": "10240analyticalhalfwaveprofiles across127997uniformordinarytoken types; not614400individual neurons",
+  "results": [
+    {
+      "k": 16,
+      "pearson_count_vs_mean_correlation": 0.38765873617990376,
+      "pearson_log1p_count_vs_mean_correlation": 0.4639239502784702,
+      "spearman_count_vs_mean_correlation": 0.4668853992644825,
+      "count_max": 641,
+      "count_mean": 16.0
+    },
+    {
+      "k": 64,
+      "pearson_count_vs_mean_correlation": 0.481811699328644,
+      "pearson_log1p_count_vs_mean_correlation": 0.5370128373060243,
+      "spearman_count_vs_mean_correlation": 0.5499710608569294,
+      "count_max": 1329,
+      "count_mean": 64.0
+    },
+    {
+      "k": 100,
+      "pearson_count_vs_mean_correlation": 0.5171264360041953,
+      "pearson_log1p_count_vs_mean_correlation": 0.5649322488948342,
+      "spearman_count_vs_mean_correlation": 0.5786451450164108,
+      "count_max": 1647,
+      "count_mean": 100.0
+    }
+  ],
+  "grand_mean_correlation": 0.01588602358430084,
+  "squared_centroid_distance_range": [
+    0.9284913745910618,
+    1.1423132835127425
+  ],
+  "elapsed_seconds": 1.6504907400012598,
+  "limits": [
+    "These are deterministic full-table descriptive correlations, not causal effects, independent experimental samples or significance tests.",
+    "The high-dimensional distribution need not satisfy an isotropic-Gaussian theory.",
+    "No projection, mean removal, hub suppression or replacement capacity law is selected.",
+    "Ranking popularity does not establish a useful live degree or semantic influence."
+  ]
+}

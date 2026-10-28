@@ -1,0 +1,93 @@
+{
+  "status": "Conditional observational geometry diagnostic; no metric, layout or encoding change adopted",
+  "started_at_utc": "2026-10-27T19:50:40.358580+00:00",
+  "completed_at_utc": "2026-10-27T19:50:55.451135+00:00",
+  "source_covariance": "/ws/EvtWorks/research-cache/steady-snn-locality-20261027/flash-1017-full-covariance.npy",
+  "source_covariance_sha256": "adf2b6114d4255c5e41af4f442277e0b15573eff2766a88a704776389a0c8903",
+  "source_statistics": "flash-1017-full-covariance-statistics.json",
+  "population": "5120 centered, variance-normalized coordinate response profiles over 127997 equally weighted ordinary vocabulary entries",
+  "construction": "R is the coordinate correlation matrix. D_squared(i,j)=2*(1-R_ij). G=J*R*J, J=I-11T/5120, is the double-centered Gram matrix for those profile distances.",
+  "criterion": "Best positive-semidefinite rank-d approximation of G in Frobenius norm; not raw-distance stress, neighbor recall, or task loss.",
+  "checks": {
+    "correlation_diagonal_max_error": 2.220446049250313e-16,
+    "gram_row_sum_max_abs_error": 1.0658141036401503e-14,
+    "smallest_eigenvalue": -2.0122792321330962e-15,
+    "rank_tolerance": 1.1163910886090379e-10,
+    "rank_above_tolerance": 5119,
+    "trace_relative_error": 0.0,
+    "frob2_relative_error": 3.6718731038008585e-16
+  },
+  "trace": 5119.093722173557,
+  "participation_ratio": 661.2317057199728,
+  "best_rank_d": [
+    {
+      "dimensions": 1,
+      "trace_fraction": 0.019182848366369916,
+      "squared_Gram_Frobenius_fraction": 0.24332114828467963,
+      "best_rank_d_Gram_relative_Frobenius_error": 0.8698728939996465
+    },
+    {
+      "dimensions": 2,
+      "trace_fraction": 0.029168370976581023,
+      "squared_Gram_Frobenius_fraction": 0.3092529992645244,
+      "best_rank_d_Gram_relative_Frobenius_error": 0.8311119062650202
+    },
+    {
+      "dimensions": 3,
+      "trace_fraction": 0.037907776551322055,
+      "squared_Gram_Frobenius_fraction": 0.359756031978588,
+      "best_rank_d_Gram_relative_Frobenius_error": 0.800152465484805
+    },
+    {
+      "dimensions": 10,
+      "trace_fraction": 0.0801709896907055,
+      "squared_Gram_Frobenius_fraction": 0.5334304590748075,
+      "best_rank_d_Gram_relative_Frobenius_error": 0.6830589586010805
+    },
+    {
+      "dimensions": 100,
+      "trace_fraction": 0.26851319644233873,
+      "squared_Gram_Frobenius_fraction": 0.825549353000507,
+      "best_rank_d_Gram_relative_Frobenius_error": 0.4176728947388051
+    },
+    {
+      "dimensions": 512,
+      "trace_fraction": 0.5345729727525622,
+      "squared_Gram_Frobenius_fraction": 0.9586565672567242,
+      "best_rank_d_Gram_relative_Frobenius_error": 0.20333084552835506
+    },
+    {
+      "dimensions": 1024,
+      "trace_fraction": 0.6539659815665376,
+      "squared_Gram_Frobenius_fraction": 0.9776432137095603,
+      "best_rank_d_Gram_relative_Frobenius_error": 0.14952185890511022
+    }
+  ],
+  "dimensions_for_trace_fraction": {
+    "0.5": 417,
+    "0.9": 3326,
+    "0.95": 4103,
+    "0.99": 4879
+  },
+  "top_eigenvalues": [
+    98.19879864569151,
+    51.11682610655378,
+    44.73783621318541,
+    39.01695474782141,
+    36.20980071072257,
+    33.72418603302993,
+    31.10587638569782,
+    26.91567739992857,
+    25.39261236951587,
+    23.984241413984662
+  ],
+  "limits": [
+    "Raw input-coordinate profiles are not measured SNN neuron responses or biological tuning curves.",
+    "Equal vocabulary-type weighting is not corpus frequency, context, or temporal coactivity.",
+    "Centering and variance normalization are analytical choices, not accepted learning or encoding operations.",
+    "The result concerns this all-pairs distance/Gram preservation criterion only; local-neighborhood maps can have different objectives and biological geometry need not preserve these distances.",
+    "A useful geometric prior could distort these distances; this calculation neither supplies one nor proves none can help.",
+    "Signed population encoding and nonlinear conditional activation remain unspecified; negative populations are not modeled here.",
+    "No runtime arrays or additional application bookkeeping are proposed."
+  ]
+}

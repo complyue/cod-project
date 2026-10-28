@@ -1,0 +1,84 @@
+{
+  "status": "Independent necessary-condition calculation for strict Euclidean nearest-neighbor realization",
+  "source_graph": "Same full halfwave Pearson rankings as ANA159; no anatomical graph",
+  "assumptions": [
+    "Distinct map points and strict neighbor boundary; every row selects its closest k eligible points.",
+    "One forbidden own-coordinate opponent per row, in addition to self exclusion.",
+    "1D Euclidean line or2D Euclidean plane, not a torus, weighted metric, non-Euclidean geometry or variable-k graph."
+  ],
+  "proof": [
+    "Partition the line into2rays or plane into6half-open cones of angle60degrees around a candidate target.",
+    "If k+2selecting points lie in one cone, choose the farthest. Each of the other k+1points is strictly closer to it than the target is, by the cosine law.",
+    "After at most one opponent exclusion, at least k eligible closer points remain. Thus the target cannot be among its k nearest eligible partners, a contradiction.",
+    "Hence a target is selected by at most2(k+1)points on a line or6(k+1)in the plane.",
+    "If the original count is h_j and the map bound is B, at most min(h_j,B)original edges into j can be preserved. Summing gives the stated recall upper bound."
+  ],
+  "results": [
+    {
+      "dimensions": 1,
+      "k": 16,
+      "conservative_max_indegree": 34,
+      "observed_max_indegree": 641,
+      "profiles_above_bound": 1131,
+      "edges_that_cannot_all_be_preserved": 49382,
+      "total_edges": 163840,
+      "upper_bound_on_recall": 0.69859619140625
+    },
+    {
+      "dimensions": 2,
+      "k": 16,
+      "conservative_max_indegree": 102,
+      "observed_max_indegree": 641,
+      "profiles_above_bound": 209,
+      "edges_that_cannot_all_be_preserved": 15261,
+      "total_edges": 163840,
+      "upper_bound_on_recall": 0.906854248046875
+    },
+    {
+      "dimensions": 1,
+      "k": 64,
+      "conservative_max_indegree": 130,
+      "observed_max_indegree": 1329,
+      "profiles_above_bound": 1230,
+      "edges_that_cannot_all_be_preserved": 147584,
+      "total_edges": 655360,
+      "upper_bound_on_recall": 0.7748046875
+    },
+    {
+      "dimensions": 2,
+      "k": 64,
+      "conservative_max_indegree": 390,
+      "observed_max_indegree": 1329,
+      "profiles_above_bound": 140,
+      "edges_that_cannot_all_be_preserved": 26503,
+      "total_edges": 655360,
+      "upper_bound_on_recall": 0.9595596313476562
+    },
+    {
+      "dimensions": 1,
+      "k": 100,
+      "conservative_max_indegree": 202,
+      "observed_max_indegree": 1647,
+      "profiles_above_bound": 1236,
+      "edges_that_cannot_all_be_preserved": 201003,
+      "total_edges": 1024000,
+      "upper_bound_on_recall": 0.8037080078125001
+    },
+    {
+      "dimensions": 2,
+      "k": 100,
+      "conservative_max_indegree": 606,
+      "observed_max_indegree": 1647,
+      "profiles_above_bound": 109,
+      "edges_that_cannot_all_be_preserved": 26986,
+      "total_edges": 1024000,
+      "upper_bound_on_recall": 0.973646484375
+    }
+  ],
+  "limits": [
+    "This necessary condition is loose and does not determine the best achievable map or explain the entire observed loss.",
+    "Nearest-neighbor retention is a descriptive diagnostic, not an application requirement.",
+    "Variable-degree probabilistic spatial graphs are not subject to this same fixed-k bound; no conflict with the application capacity distribution follows.",
+    "This does not prove geometry has no useful computation or select a learning score."
+  ]
+}

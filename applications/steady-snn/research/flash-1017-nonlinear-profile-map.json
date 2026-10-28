@@ -1,0 +1,433 @@
+{
+  "status": "Descriptive nonlinear visualization countercheck; no neuron layout, learning rule or SNN experiment",
+  "started_at_utc": "2026-10-28T03:25:48.941341+00:00",
+  "completed_at_utc": "2026-10-28T04:05:55.662074+00:00",
+  "elapsed_seconds": 2406.720745851002,
+  "source": {
+    "model": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "commit": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+    "sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c",
+    "shape": [
+      129280,
+      5120
+    ]
+  },
+  "sample": {
+    "ordinary_token_types": 127997,
+    "weighting": "Uniform token types",
+    "profiles": 10240,
+    "definition": "Positive/negative halfwave amplitudes, variance-normalized over token types"
+  },
+  "method": {
+    "reference": "https://www.jmlr.org/papers/volume9/vandermaaten08a/vandermaaten08a.pdf",
+    "objective": "Symmetric t-SNE KL objective with full pairwise Gaussian affinities and Student-t map kernel",
+    "perplexity": 30,
+    "dimensions": 2,
+    "iterations": 1000,
+    "seeds": [
+      63,
+      64
+    ],
+    "early_exaggeration": 4,
+    "early_exaggeration_iterations": 50,
+    "base_learning_rate": 100,
+    "momentum": ".5before250iterations,.8after",
+    "adaptive_gains": "increase.2on gradient/update sign mismatch; otherwise multiply.8; minimum.01",
+    "initial_std": 0.0001,
+    "PCA_preprocessing": false,
+    "precision": "float64conditional affinities; float32symmetricP/map optimization; float64diagnostic sums",
+    "author_code_executed": false
+  },
+  "checks": {
+    "gradient_finite_difference": {
+      "1.0": {
+        "max_absolute_gradient_error": 6.497768295643525e-10,
+        "sum_gradient_norm": 9.020562075079397e-17
+      },
+      "4.0": {
+        "max_absolute_gradient_error": 7.467015894491169e-10,
+        "sum_gradient_norm": 2.482534153247273e-16
+      }
+    },
+    "max_conditional_entropy_error": 9.990572693574507e-07,
+    "affinity_sum": 0.9999999996876595,
+    "affinity_symmetry_max": 0.0,
+    "distance_precision_audit": [
+      {
+        "seed": 63,
+        "recall_mean_change_vs_original_float32_distance": {
+          "16": 0.0,
+          "64": 0.0,
+          "100": 0.0
+        }
+      },
+      {
+        "seed": 64,
+        "recall_mean_change_vs_original_float32_distance": {
+          "16": 0.0,
+          "64": 0.0,
+          "100": 0.0
+        }
+      }
+    ]
+  },
+  "runs": [
+    {
+      "seed": 63,
+      "elapsed_seconds": 1177.880579621,
+      "trace": [
+        {
+          "iteration_before_update": 0,
+          "KL": 5.380223216557209,
+          "gradient_norm": 2.973061600641813e-05,
+          "elapsed_seconds": 1.7689349139982369
+        },
+        {
+          "iteration_before_update": 100,
+          "KL": 4.577857519826367,
+          "gradient_norm": 0.0015957169234752655,
+          "elapsed_seconds": 121.39362615300342
+        },
+        {
+          "iteration_before_update": 200,
+          "KL": 4.276547835664818,
+          "gradient_norm": 0.00046255183406174183,
+          "elapsed_seconds": 239.85748920200422
+        },
+        {
+          "iteration_before_update": 300,
+          "KL": 4.12341636025044,
+          "gradient_norm": 0.0002474575594533235,
+          "elapsed_seconds": 357.69936844800395
+        },
+        {
+          "iteration_before_update": 400,
+          "KL": 4.020864754113308,
+          "gradient_norm": 0.00015989449457265437,
+          "elapsed_seconds": 475.7864444459992
+        },
+        {
+          "iteration_before_update": 500,
+          "KL": 3.9581810395597046,
+          "gradient_norm": 0.00011311898560961708,
+          "elapsed_seconds": 591.772971421
+        },
+        {
+          "iteration_before_update": 600,
+          "KL": 3.915036723424187,
+          "gradient_norm": 8.815049659460783e-05,
+          "elapsed_seconds": 704.6744575089979
+        },
+        {
+          "iteration_before_update": 700,
+          "KL": 3.8837575930181174,
+          "gradient_norm": 7.139989611459896e-05,
+          "elapsed_seconds": 821.4723627560015
+        },
+        {
+          "iteration_before_update": 800,
+          "KL": 3.8600622185254228,
+          "gradient_norm": 5.8456469560042024e-05,
+          "elapsed_seconds": 938.039929755003
+        },
+        {
+          "iteration_before_update": 900,
+          "KL": 3.841661508760387,
+          "gradient_norm": 4.961487866239622e-05,
+          "elapsed_seconds": 1059.1652049149998
+        },
+        {
+          "iteration_before_update": 999,
+          "KL": 3.827190489846366,
+          "gradient_norm": 4.3032836401835084e-05,
+          "elapsed_seconds": 1176.6367115610046
+        }
+      ],
+      "neighborhoods": {
+        "16": {
+          "recall": {
+            "mean": 0.10009765625,
+            "min": 0.0,
+            "p05": 0.0625,
+            "median": 0.0625,
+            "p95": 0.1875,
+            "max": 0.5625
+          },
+          "selected_original_correlation": {
+            "mean": 0.050194591303968125,
+            "min": -0.0729293296483475,
+            "p05": -0.0033302564956100497,
+            "median": 0.045632350023144995,
+            "p95": 0.11793320813435315,
+            "max": 0.3854091177574324
+          },
+          "ideal_mean_correlation": 0.10380078350132119,
+          "mean_correlation_gap": 0.05360619219735306,
+          "chance_expected_recall": 0.0015628052353975385,
+          "partner_selection_count": {
+            "mean": 16.0,
+            "min": 4.0,
+            "p05": 11.0,
+            "median": 16.0,
+            "p95": 21.0,
+            "max": 30.0
+          }
+        },
+        "64": {
+          "recall": {
+            "mean": 0.06481781005859374,
+            "min": 0.0,
+            "p05": 0.015625,
+            "median": 0.0625,
+            "p95": 0.140625,
+            "max": 0.578125
+          },
+          "selected_original_correlation": {
+            "mean": 0.04050202169861835,
+            "min": -0.09339718297164833,
+            "p05": -0.008084170840630539,
+            "median": 0.03792934422662016,
+            "p95": 0.0993907621196723,
+            "max": 0.3854091177574324
+          },
+          "ideal_mean_correlation": 0.09279906145049935,
+          "mean_correlation_gap": 0.052297039751881,
+          "chance_expected_recall": 0.006251220941590154,
+          "partner_selection_count": {
+            "mean": 64.0,
+            "min": 12.0,
+            "p05": 52.0,
+            "median": 65.0,
+            "p95": 74.0,
+            "max": 90.0
+          }
+        },
+        "100": {
+          "recall": {
+            "mean": 0.06754785156250001,
+            "min": 0.0,
+            "p05": 0.02,
+            "median": 0.06,
+            "p95": 0.15,
+            "max": 0.48
+          },
+          "selected_original_correlation": {
+            "mean": 0.038615687647510014,
+            "min": -0.12113005744183386,
+            "p05": -0.00900167290418758,
+            "median": 0.03637390423718011,
+            "p95": 0.09477990263730791,
+            "max": 0.3854091177574324
+          },
+          "ideal_mean_correlation": 0.08887179588027759,
+          "mean_correlation_gap": 0.05025610823276758,
+          "chance_expected_recall": 0.009767532721234616,
+          "partner_selection_count": {
+            "mean": 100.0,
+            "min": 26.0,
+            "p05": 74.0,
+            "median": 102.0,
+            "p95": 114.0,
+            "max": 135.0
+          }
+        }
+      }
+    },
+    {
+      "seed": 64,
+      "elapsed_seconds": 1190.4824727640007,
+      "trace": [
+        {
+          "iteration_before_update": 0,
+          "KL": 5.380223217812137,
+          "gradient_norm": 3.381438727956265e-05,
+          "elapsed_seconds": 1.7886887519998709
+        },
+        {
+          "iteration_before_update": 100,
+          "KL": 4.570840473112105,
+          "gradient_norm": 0.002046653302386403,
+          "elapsed_seconds": 126.44009538600221
+        },
+        {
+          "iteration_before_update": 200,
+          "KL": 4.250202705893999,
+          "gradient_norm": 0.00045262841740623116,
+          "elapsed_seconds": 247.2939838279999
+        },
+        {
+          "iteration_before_update": 300,
+          "KL": 4.100430974144196,
+          "gradient_norm": 0.00024289143038913608,
+          "elapsed_seconds": 368.4633744179955
+        },
+        {
+          "iteration_before_update": 400,
+          "KL": 3.996593562016553,
+          "gradient_norm": 0.00016323410090990365,
+          "elapsed_seconds": 489.04851485700055
+        },
+        {
+          "iteration_before_update": 500,
+          "KL": 3.933522199483477,
+          "gradient_norm": 0.00011502145207487047,
+          "elapsed_seconds": 606.7791729829987
+        },
+        {
+          "iteration_before_update": 600,
+          "KL": 3.890123153588064,
+          "gradient_norm": 8.789980347501114e-05,
+          "elapsed_seconds": 724.6934029719996
+        },
+        {
+          "iteration_before_update": 700,
+          "KL": 3.858462220483629,
+          "gradient_norm": 7.226017623906955e-05,
+          "elapsed_seconds": 837.9688237699957
+        },
+        {
+          "iteration_before_update": 800,
+          "KL": 3.834613881937708,
+          "gradient_norm": 6.012355152051896e-05,
+          "elapsed_seconds": 956.1699688469962
+        },
+        {
+          "iteration_before_update": 900,
+          "KL": 3.8161554070619363,
+          "gradient_norm": 4.9819809646578506e-05,
+          "elapsed_seconds": 1074.9013223889997
+        },
+        {
+          "iteration_before_update": 999,
+          "KL": 3.8015465964396125,
+          "gradient_norm": 4.271836587577127e-05,
+          "elapsed_seconds": 1189.3407507059965
+        }
+      ],
+      "neighborhoods": {
+        "16": {
+          "recall": {
+            "mean": 0.099945068359375,
+            "min": 0.0,
+            "p05": 0.0625,
+            "median": 0.0625,
+            "p95": 0.1875,
+            "max": 0.5625
+          },
+          "selected_original_correlation": {
+            "mean": 0.05025692979851758,
+            "min": -0.06939591524775883,
+            "p05": -0.002594879477600263,
+            "median": 0.045551476033547776,
+            "p95": 0.1178439123451686,
+            "max": 0.3854091177574324
+          },
+          "ideal_mean_correlation": 0.10380078350132119,
+          "mean_correlation_gap": 0.05354385370280361,
+          "chance_expected_recall": 0.0015628052353975385,
+          "partner_selection_count": {
+            "mean": 16.0,
+            "min": 3.0,
+            "p05": 11.0,
+            "median": 16.0,
+            "p95": 21.0,
+            "max": 28.0
+          }
+        },
+        "64": {
+          "recall": {
+            "mean": 0.06466064453125,
+            "min": 0.0,
+            "p05": 0.015625,
+            "median": 0.0625,
+            "p95": 0.140625,
+            "max": 0.5625
+          },
+          "selected_original_correlation": {
+            "mean": 0.040712293973654626,
+            "min": -0.09531570751670718,
+            "p05": -0.007217899736423624,
+            "median": 0.038086410033508884,
+            "p95": 0.09917219901047312,
+            "max": 0.3854091177574324
+          },
+          "ideal_mean_correlation": 0.09279906145049935,
+          "mean_correlation_gap": 0.05208676747684472,
+          "chance_expected_recall": 0.006251220941590154,
+          "partner_selection_count": {
+            "mean": 64.0,
+            "min": 17.0,
+            "p05": 51.0,
+            "median": 65.0,
+            "p95": 74.0,
+            "max": 89.0
+          }
+        },
+        "100": {
+          "recall": {
+            "mean": 0.067505859375,
+            "min": 0.0,
+            "p05": 0.02,
+            "median": 0.06,
+            "p95": 0.14,
+            "max": 0.51
+          },
+          "selected_original_correlation": {
+            "mean": 0.03889074316208952,
+            "min": -0.09531570751670718,
+            "p05": -0.008104498668519849,
+            "median": 0.03663060132388102,
+            "p95": 0.09457478451265824,
+            "max": 0.3854091177574324
+          },
+          "ideal_mean_correlation": 0.08887179588027759,
+          "mean_correlation_gap": 0.04998105271818807,
+          "chance_expected_recall": 0.009767532721234616,
+          "partner_selection_count": {
+            "mean": 100.0,
+            "min": 26.0,
+            "p05": 74.0,
+            "median": 102.0,
+            "p95": 115.0,
+            "max": 133.0
+          }
+        }
+      }
+    }
+  ],
+  "limits": [
+    "This is an independently implemented descriptive optimizer, not a validated biological circuit or reproduction of the source experiments.",
+    "Two starts and one perplexity do not establish an optimal layout or a universal dimensionality bound.",
+    "High rank permits local distortions; neighborhood preservation must be evaluated separately from global distance preservation.",
+    "No token frequencies, temporal relationships, recurrent context, FP4 state or within-population allocation are modeled.",
+    "The fitted coordinates have no anatomical meaning and are not an accepted application field or wiring prior."
+  ],
+  "cross_seed_neighborhood_overlap": {
+    "16": 0.381756591796875,
+    "64": 0.3071563720703125,
+    "100": 0.321462890625
+  },
+  "cross_seed_method": "Mean intersection/k of nearest eligible map-neighbor sets, same self/opponent exclusions; invariant to rotation and translation of either map.",
+  "trace_label": "KL trace values are evaluated before the indicated update; the final neighborhood measurements use coordinates after all1000updates.",
+  "diagnostic_exclusions": "Self and the opposite-polarity channel of the same coordinate are omitted from each diagnostic neighbor list; these exclusions do not define application connectivity.",
+  "coordinate_artifacts": [
+    {
+      "path": "/ws/EvtWorks/research-cache/steady-snn-locality-20261027/flash-localmap63-seed63.npy",
+      "sha256": "ddc48414dd620532951a54d6eb4e6999df3686434c191ccac76871527a84817c"
+    },
+    {
+      "path": "/ws/EvtWorks/research-cache/steady-snn-locality-20261027/flash-localmap63-seed64.npy",
+      "sha256": "611c51079371dbf4903983160345baef48331cab63f033c03f8223317e187302"
+    }
+  ],
+  "script_sha256": "b3d57661066c96d9d4773d7dfae21badde02a8fbbd0f4bd9d72fb4880b251fcd",
+  "diagnostic_distance_precision": "Float64 direct coordinate differences, checked against original float32 norm/dot-product diagnostic without refitting.",
+  "uniform_eligible_partner_mean_correlation": 0.015834469027641955,
+  "uniform_baseline_method": "Mean of all Pearson pairs after self and same-coordinate opponent exclusions; a uniformly selected eligible partner has this expectation. This is an association baseline, not a task score.",
+  "scratch_cleanup": {
+    "path": "/ws/EvtWorks/research-cache/steady-snn-locality-20261027/flash-localmap63-affinities.npy",
+    "bytes": 419430528,
+    "reason": "Recomputable full-pair affinity scratch; completed run measurements, method, checks and both coordinate arrays preserved.",
+    "removed_at_utc": "2026-10-28T04:15:10.063857+00:00"
+  }
+}
