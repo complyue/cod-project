@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-10-28T17:28:28.437423+00:00",
+  "status": "conditional_analytical_reference_not_selected_transition",
+  "scope": "H-55/H-65/H-66/H-71 growth, fading and useful recurrence, evaluated with H-76 input branches and H-77 cancellation; H-78 state choice remains open",
+  "assumptions": [
+    "An idealized ring of L reference cohorts, each carrying the same semantic distribution, has positive scalar transition gains g_j. These are effective response gains, not assigned edge weights or anatomical positions.",
+    "No saturation, recurrent interference, stochastic input, controller, quantization or other state. The examples evaluate products of gains, not a trained SNN."
+  ],
+  "cycle_derivation": {
+    "operator": "W sends cohort j to j+1 modulo L with gain g_j.",
+    "full_lap": "W^L = G*I, where G=product(g_j). Hence x[k+L]=G*x[k] for every initial phase mixture.",
+    "spectral_radius": "rho(W)=G^(1/L). Positive body gain can produce finite transient growth even when 0<G<1.",
+    "similarity": "With r=G^(1/L), h_0=1 and h_(j+1)=g_j*h_j/r, W=r*diag(h)*P*diag(h)^(-1), where P is the cyclic shift. An initial state proportional to h simply scales by r each step.",
+    "entry_dependence": "A state concentrated at phase j has amplitude multiplied by the next k gains. A mixture sums those phase responses. Net lap attenuation alone does not specify the first peak or a smooth response from every entry.",
+    "universal_growth_limit": "Every nonnegative phase input grows in total amplitude in one step only if every g_j>1, which forces G>1. This conditional linear ring cannot guarantee immediate growth from all phases while attenuating each lap."
+  },
+  "illustrative_parameters": {
+    "cohorts": 20,
+    "body_steps": 16,
+    "body_step_gain": 1.02,
+    "body_total_gain": 1.3727857050906125,
+    "return_steps": 4,
+    "return_step_gain": 0.8619782615631147,
+    "lap_gain": 0.757858283255199,
+    "frame_seconds": 0.01,
+    "lap_seconds": 0.2,
+    "same_phase_envelope_half_life_seconds": 0.5,
+    "root_gain": 0.9862327044933592,
+    "warning": "Arbitrary arithmetic values, not model parameter recommendations."
+  },
+  "entry_cases": [
+    {
+      "initial_phase_distribution": "body_start",
+      "amplitude_at_selected_steps": {
+        "0": 1,
+        "1": 1.02,
+        "4": 1.08243216,
+        "8": 1.1716593810022657,
+        "12": 1.2682417945625455,
+        "16": 1.3727857050906125,
+        "20": 0.7578582832551988
+      },
+      "first_lap_peak": 1.3727857050906125,
+      "first_lap_peak_step": 16,
+      "amplitude_after_lap": 0.7578582832551988
+    },
+    {
+      "initial_phase_distribution": "return_start",
+      "amplitude_at_selected_steps": {
+        "0": 1,
+        "1": 0.8619782615631147,
+        "4": 0.5520586938259059,
+        "8": 0.5975660844047541,
+        "12": 0.6468247474849804,
+        "16": 0.700143908561622,
+        "20": 0.757858283255199
+      },
+      "first_lap_peak": 1,
+      "first_lap_peak_step": 0,
+      "amplitude_after_lap": 0.757858283255199
+    },
+    {
+      "initial_phase_distribution": "uniform_phases",
+      "amplitude_at_selected_steps": {
+        "0": 1.0,
+        "1": 0.988395652312623,
+        "4": 0.9652865181667123,
+        "8": 0.9300385115585714,
+        "12": 0.8824201855340164,
+        "16": 0.8206316281493881,
+        "20": 0.7578582832551989
+      },
+      "first_lap_peak": 1.0,
+      "first_lap_peak_step": 0,
+      "amplitude_after_lap": 0.7578582832551989
+    }
+  ],
+  "noise_and_residual": {
+    "balanced_noise_then_cancellation": "For preexisting signed coordinate v and additive nonnegative noise with equal expected totals on the two polarities, H-77 gives v_next=v+noise_positive_total-noise_negative_total exactly. Thus E[v_next]=v. Cancellation alone cannot turn balanced background into an increased mean signed residual.",
+    "absolute_activity": "The post-cancellation summed active rate is |v_next|. Its expectation can rise while the expected signed coordinate is unchanged; total activity recovery does not establish semantic amplification.",
+    "independent_cell_noise": "With n cells per polarity and independent noise of per-cell variance s2, Var(v_next)=2*n*s2. Temporal whiteness alone does not imply this spatial independence.",
+    "common_noise_countercase": "If all cells in both equal-sized polarity populations receive the same nonnegative draw and no other activity exists, the added activity cancels completely. A common CC-wide amplitude control is different from using one common random draw.",
+    "linear_shared_network": "For fixed x_next=W*x+eta with state-independent identical additive drive in two coupled runs, their difference evolves as delta_next=W*delta. Increasing additive noise does not amplify that history difference. State-dependent noise regulation, nonlinear transfer and cancellation of population patterns break this reference assumption.",
+    "business_consequence": "Desired weak-residual growth must be assessed in the learned recurrent/transfer response under its actual noise control. No extra fatigue, timer, routing, noise provenance or memory subsystem follows from this analysis."
+  },
+  "interpretation": [
+    "The H-76 focused and broad entry branches can excite different reference phase mixtures. Training acceptance must include actual entries rather than only a hand-chosen chain head.",
+    "Repeated subpeaks are compatible with a declining same-phase envelope; the loose half-life does not demand monotonic decrease on every frame.",
+    "Body/return smoothing and shared small loops must be assessed by the actual semantic response and later influence. Exact reference-cohort tracking is not a runtime requirement."
+  ],
+  "generation_learning_boundary": "H-84: generation input calibration and evaluation of ensuing recurrence do not make the explicit broad weak fallback a teaching pattern or ordinary synaptic propagation to be learned. These conditional arithmetic results do not select flow learning targets.",
+  "updated_at_utc": "2026-10-28T18:28:51Z"
+}

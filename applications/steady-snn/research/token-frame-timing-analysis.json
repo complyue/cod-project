@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T20:41:39.741287+00:00",
+  "status": "Timing semantics and conditional affine arithmetic; no event policy or clock chosen",
+  "value_lineage": "C-15/P-29 requires causal context prediction and C-29/P-69 requires explicit frame transitions. C-24/P-52 preserves meaningful response timing; transport batching is not a license to change the observed sequence.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/token_frame_arithmetic.py",
+    "script_sha256": "386d2beb651aa375e8ff643d257e81d16b5ee51a0c6a4a5c8c194bda30fb9e62"
+  },
+  "clocks": {
+    "token_order": "Ordered observations and the prefix available before each observation.",
+    "modeled_time": "Elapsed model time controlling the specified response/noise/dynamics semantics.",
+    "neural_frame": "Complete source/destination state transition at the chosen modeled interval.",
+    "learning_exposure": "Which observed event or elapsed interval triggers an update; not automatically every neural frame.",
+    "wall_execution": "CPU/transport execution time. It need not equal modeled time during offline design comparisons."
+  },
+  "order_loss": {
+    "condition": "If a batch is reduced to a commutative aggregate and all other causally relevant state, parameters and future forcing are identical, permutations of that batch cannot be distinguished later by that model.",
+    "scope": "The condition excludes order-dependent retained state or ordered parameter updates. It does not assert that all batching loses order.",
+    "example": {
+      "equation": "x_next=W*x+u",
+      "W": [
+        [
+          "0",
+          "1/2"
+        ],
+        [
+          "1/2",
+          "0"
+        ]
+      ],
+      "initial_state": [
+        "0",
+        "0"
+      ],
+      "A": [
+        "1",
+        "0"
+      ],
+      "B": [
+        "0",
+        "1"
+      ],
+      "ordered_AB": [
+        "0",
+        "3/2"
+      ],
+      "ordered_BA": [
+        "3/2",
+        "0"
+      ],
+      "one_frame_sum_AB": [
+        "1",
+        "1"
+      ],
+      "one_frame_sum_BA": [
+        "1",
+        "1"
+      ]
+    },
+    "general_difference": "For two affine updates with identity input injection, x_AB-x_BA=(W-I)*(u_A-u_B).",
+    "exact_linear_batch": "For m ordered inputs, x_m=W^m*x_0+sum_(j=0..m-1) W^(m-1-j)*u_j. The positional factors preserve ordering; replacing this with an unweighted sum generally does not.",
+    "limits": "The reference has no cancellation, transfer nonlinearity, quantization, learning or noise. The exact affine formula does not justify collapsing actual nonlinear completed frames."
+  },
+  "boundary_alignment": {
+    "equation": "tau_hat=ceil(tau/Delta)*Delta; 0<=tau_hat-tau<Delta",
+    "events": [
+      {
+        "event_index": 0,
+        "requested_time": "1/1000",
+        "next_boundary": "1/100",
+        "delay": "9/1000"
+      },
+      {
+        "event_index": 1,
+        "requested_time": "9/1000",
+        "next_boundary": "1/100",
+        "delay": "1/1000"
+      },
+      {
+        "event_index": 2,
+        "requested_time": "11/1000",
+        "next_boundary": "1/50",
+        "delay": "9/1000"
+      },
+      {
+        "event_index": 3,
+        "requested_time": "19/1000",
+        "next_boundary": "1/50",
+        "delay": "1/1000"
+      }
+    ],
+    "observation": "Distinct events may map to the same frame boundary. Ordering them afterward or spreading them across boundaries is an explicit processing/time choice, not an unordered sum.",
+    "pure_decay_bound": "For a reference exponential with half-life H, an age shift less than Delta changes the amplitude ratio by at most1-2^(-Delta/H). This bounds isolated decay only.",
+    "pure_decay_cases": [
+      {
+        "frame_seconds": 0.001,
+        "reference_half_life_seconds": 0.5,
+        "largest_pure_decay_fractional_amplitude_difference": 0.0013853338989711084
+      },
+      {
+        "frame_seconds": 0.005,
+        "reference_half_life_seconds": 0.5,
+        "largest_pure_decay_fractional_amplitude_difference": 0.006907504562964073
+      },
+      {
+        "frame_seconds": 0.01,
+        "reference_half_life_seconds": 0.5,
+        "largest_pure_decay_fractional_amplitude_difference": 0.013767295506640798
+      },
+      {
+        "frame_seconds": 0.02,
+        "reference_half_life_seconds": 0.5,
+        "largest_pure_decay_fractional_amplitude_difference": 0.02734505258771447
+      },
+      {
+        "frame_seconds": 0.05,
+        "reference_half_life_seconds": 0.5,
+        "largest_pure_decay_fractional_amplitude_difference": 0.06696700846319259
+      },
+      {
+        "frame_seconds": 0.1,
+        "reference_half_life_seconds": 0.5,
+        "largest_pure_decay_fractional_amplitude_difference": 0.12944943670387588
+      }
+    ],
+    "limits": "The delay bound assumes independent boundary alignment with no queue backlog. Threshold, cancellation, recurrence, prediction windows and batched service can have different or larger consequences; no acceptable Delta follows from the scalar bound."
+  },
+  "event_vs_time_decay": {
+    "equation": "If an event-indexed mode retains r per observation, physical-time half-life at regular event gap T is T*ln(1/2)/ln(r).",
+    "cases": [
+      {
+        "seconds_per_observation": 0.01,
+        "fixed_retention_per_observation": 0.9,
+        "resulting_reference_half_life_seconds": 0.06578813478960585
+      },
+      {
+        "seconds_per_observation": 0.05,
+        "fixed_retention_per_observation": 0.9,
+        "resulting_reference_half_life_seconds": 0.3289406739480292
+      },
+      {
+        "seconds_per_observation": 0.1,
+        "fixed_retention_per_observation": 0.9,
+        "resulting_reference_half_life_seconds": 0.6578813478960585
+      }
+    ],
+    "observation": "One learning exposure per token does not make neural evolution event-clocked. A fixed per-event recurrence changes physical duration as token pacing changes.",
+    "limits": "Pure scalar decay can use time-dependent retention; this does not supply a valid arbitrary-time root of a learned nonlinear or discrete transition."
+  },
+  "prediction_boundary": {
+    "before": "Assess prediction available from the complete causal state and parameters before the observed token or its teaching update changes them.",
+    "after": "Use the now-observed token for independently defined learning responsibility and any justified state intervention, respecting H-84 generation exclusion.",
+    "between": "Specify how the preceding observed prefix becomes available to predict the next token. Merely applying several learning updates to one unchanged neural frame does not establish this.",
+    "alternatives": "Frame-aligned ordered observations and explicitly ordered within-interval input handling can be compared. H-75 alone does not select one token per frame, require a persistent token buffer, or authorize partial-frame recurrent reads.",
+    "future_information": "A supplied sequence identity, expected continuation or position label contains information beyond an otherwise ambiguous observed prefix. Such a cue must be an explicit task input, not silently borrowed from the training record to claim history-based disambiguation."
+  },
+  "future_comparisons": [
+    {
+      "alternatives": "Ordered frame-aligned presentation versus explicitly ordered input handling within a modeled interval",
+      "observations": "Prefix-sensitive pre-input predictions, preservation of token order, actual modeled spacing and neural work; identical packet batching must not silently redefine the sequence."
+    },
+    {
+      "alternatives": "Several event spacings at a stated neural time resolution",
+      "observations": "Prediction availability, useful history, dominant fading and exposure count; distinguish order recognition from learning exact duration."
+    },
+    {
+      "alternatives": "Information-equivalent initial contexts versus an explicitly supplied external start cue",
+      "observations": "What the model actually knows before each prediction; no hidden sequence labels, future tokens or position labels in the prediction readout."
+    }
+  ],
+  "not_selected": [
+    "frame interval",
+    "one token per frame",
+    "event queue",
+    "sequence start cue",
+    "positional encoding",
+    "duration learner",
+    "oscillator",
+    "reset policy",
+    "new history field"
+  ],
+  "scope_limit": "Exact finite affine composition and scalar time arithmetic only. No SNN implementation/training, neural simulation, benchmark, project tests or build."
+}

@@ -1,0 +1,879 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-10-28T18:34:23Z",
+  "status": "conditional design analysis; no learner or implementation selected",
+  "scope": "H-75 contextual cell identities, H-79—H-84 separate flow learning and generation behavior; H-78 state representation remains open",
+  "value_lineage": "C-15/P-29 through C-12/P-22 to charter C-01/V-01/V-02: learn context-dependent predictions of observed token sequences. C-14/P-27 preserves semantic-coordinate roles while individual cells distinguish context. These analyses motivate questions, not qualified mechanisms.",
+  "analyses": [
+    {
+      "id": "MR-FC001",
+      "topic": "Learning an unfamiliar transition needs a positive entry condition",
+      "derivation": "If postsynaptic learning eligibility is defined only by an already successful prediction, and no cell predicts a particular observed transition, every positive association update for that transition is zero. Repetition cannot create that association through this rule alone. Existing subthreshold drive, an observation-conditioned assignment, or another independently justified learning path could supply eligibility. The explicit generation fallback is not that teaching rule.",
+      "limit": "Conditional statement about an eligibility rule with no other positive update. Does not prove the present recurrent network has zero useful partial matches or select a teacher activation."
+    },
+    {
+      "id": "MR-FC002",
+      "topic": "Semantic equivalence does not determine contextual learning identity",
+      "example": {
+        "source_context_A": [
+          1,
+          0
+        ],
+        "source_context_B": [
+          0,
+          1
+        ],
+        "semantic_readout": "sum of the two target cells, both representing the same coordinate and polarity",
+        "contextual_assignment_A": [
+          1,
+          0
+        ],
+        "contextual_assignment_B": [
+          0,
+          1
+        ],
+        "shared_assignment": [
+          0.5,
+          0.5
+        ],
+        "illustrative_update": "Delta W = eta * target_assignment outer source_context; eta=1 only to display arithmetic",
+        "contextual_W_after_one_of_each": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ],
+        "shared_W_after_one_of_each": [
+          [
+            0.5,
+            0.5
+          ],
+          [
+            0.5,
+            0.5
+          ]
+        ],
+        "contextual_responses": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ],
+        "shared_responses": [
+          [
+            0.5,
+            0.5
+          ],
+          [
+            0.5,
+            0.5
+          ]
+        ]
+      },
+      "inference": "Equal semantic totals can coexist with distinct contextual cell responses. Reusing one input-only allocation erases that distinction in this limited transition. Randomly assigning targets independently on every presentation has a uniform expected assignment in an exchangeable model; its expected update alone supplies no context specialization.",
+      "limit": "Two-source/two-target linear arithmetic, not an SNN simulation or proposed learning formula. Other retained recurrent state can preserve history even when these target responses agree. Distributed reuse does not limit a 60-cell polarity group to 60 tokens or 60 global contexts."
+    },
+    {
+      "id": "MR-FC003",
+      "topic": "A partial context match and a transmitted prediction are different thresholds",
+      "derivation": "A target may receive meaningful context-dependent input below the threshold for predictive readiness. A candidate learning selector can inspect that evidence before deciding whether an association is unfamiliar. Existing incoming weighted sums are an initial information source to examine; calling them a matching score does not establish that they distinguish the required histories.",
+      "limit": "No new matching array, segment, affinity normalization, cell quota or threshold is selected. Raw input depends on activity, weight scale and incoming degree; storage capacity alone must not decide learning suitability."
+    },
+    {
+      "id": "MR-FC004",
+      "topic": "Learning-only assignment versus a training state intervention",
+      "alternatives": [
+        {
+          "name": "Learning-only assignment",
+          "meaning": "Assign responsibility for the observed token to contextual cells for connection updates while ordinary training dynamics determines their activity.",
+          "tradeoff": "Does not itself ensure that the chosen cells become the state representing this token for the next association. A separate assumption that dynamics already supplies that representation must be checked."
+        },
+        {
+          "name": "Observation-conditioned training activation",
+          "meaning": "Explicitly bring an independently selected contextual representation of the observed token into the training state, then learn preceding-context associations to it.",
+          "tradeoff": "Provides a concrete next contextual state, but introduces a teaching intervention and a possible difference between assisted training and natural prediction. Under H-86 it remains a real-data comparison option; assisted activity must never count as pre-input prediction success."
+        }
+      ],
+      "boundary": "These alternatives concern an independently defined training operation, not selection from the broad weak generation fallback. Neither is selected. They do not equate flow with DMN/token missing-group repair."
+    },
+    {
+      "id": "MR-FC005",
+      "topic": "Prediction alternatives are not a single signed average",
+      "example": {
+        "alternative_A": [
+          1,
+          1
+        ],
+        "alternative_B": [
+          -1,
+          1
+        ],
+        "equal_mixture_signed_mean": [
+          0,
+          1
+        ],
+        "same_mean_single_candidate_C": [
+          0,
+          1
+        ]
+      },
+      "derivation": "A readout retaining only the signed coordinate mean cannot distinguish the two alternatives A/B from the single candidate C. If opposite-sign predictive masses of equal size are subjected to full net cancellation, readiness evidence in that coordinate vanishes. Raw nonnegative cell identities or additional correlations may retain distinctions before aggregation, but their adequacy is not established.",
+      "limit": "Information-loss example, not a claim that the model must output a distribution or use separate readiness fields. H-77 active-rate cancellation remains; H-85 explicitly defers predictive-phase treatment to controlled comparison. Keeping both signs is necessary for that particular unaggregated representation but does not by itself encode cross-coordinate binding of complete token alternatives."
+    },
+    {
+      "id": "MR-FC006",
+      "topic": "Activity homeostasis does not establish context specialization",
+      "derivation": "A single per-CC activity total can be identical for two different allocations of activity and learning across neurons. Regulating that scalar alone cannot distinguish a representation that merges histories from one that retains them. This is a limitation of the observed scalar, not a demand for another controller.",
+      "limit": "The existing noise controller could influence specialization through network dynamics; it is not proved ineffective. No per-neuron usage counters or homeostatic rule are selected."
+    },
+    {
+      "id": "MR-FC007",
+      "topic": "Aggregate signed-population overlap is not signed-vector similarity",
+      "derivation": "For phi(v)=(positive part, negative magnitude part), dot(phi(v),phi(w))=(dot(v,w)+dot(abs(v),abs(w)))/2. The read-only real-embedding probe measures substantial positive overlap even for sampled pairs with near-zero signed cosine. In the conditional superposition W=sum_a y_a*x_a^T, this overlap produces cross-association terms.",
+      "evidence": "signed-population-overlap-probe.json",
+      "limit": "Aggregate input arithmetic, not trained contextual states or a prediction metric. No centering, inhibitory edge, uniform population allocation, dense matrix or context-memory structure selected."
+    },
+    {
+      "id": "MR-FC008",
+      "topic": "Causal state and credit across successive observed tokens",
+      "derivation": "Prediction must precede the current observation and teaching update; responsible targets are assigned from observation and preceding context independently of generation fallback; credited source and available slot need definition; the resulting contextual state must support the following association. If complete causal state is identical after shared fragments, identical future input and primitive random forcing cannot recover a lost earlier-history distinction under the same law.",
+      "example": {
+        "history_A": [
+          "A",
+          "D",
+          "B"
+        ],
+        "history_F": [
+          "F",
+          "D",
+          "B"
+        ],
+        "desired_next_after_A": "E",
+        "desired_next_after_F": "C",
+        "meaning": "Some causally relevant history difference must survive the shared D,B fragment. Existing cell identities and recurrence may supply it."
+      },
+      "comparison": "Contrast learning-responsibility-only and observation-conditioned training-state candidates, natural pre-input matching, and fixed-weight assessment versus further online adaptation. Compare weakening policies on shared and disambiguated contexts without penalizing every unobserved legitimate branch.",
+      "limit": "No separate history buffer, fixed context length, teacher activation, state field, edge class, learner or mandatory offline-only validation selected."
+    },
+    {
+      "id": "MR-FC009",
+      "topic": "Context matching and transmitted drive have different invariances",
+      "arithmetic": {
+        "source": [
+          1.0,
+          0.0
+        ],
+        "rows": {
+          "broad": [
+            1.0,
+            1.0
+          ],
+          "selective": [
+            0.6,
+            0.0
+          ],
+          "weak_selective": [
+            0.06,
+            0.0
+          ],
+          "empty": [
+            0.0,
+            0.0
+          ]
+        },
+        "scores": {
+          "broad": {
+            "raw_drive": 1.0,
+            "row_mass_normalized": 0.5,
+            "cosine": 0.7071067811865475
+          },
+          "selective": {
+            "raw_drive": 0.6,
+            "row_mass_normalized": 1.0,
+            "cosine": 1.0
+          },
+          "weak_selective": {
+            "raw_drive": 0.06,
+            "row_mass_normalized": 1.0,
+            "cosine": 1.0
+          },
+          "empty": {
+            "raw_drive": 0.0,
+            "row_mass_normalized": null,
+            "cosine": null
+          }
+        },
+        "representation_only_migration": {
+          "effective_incoming_weights": [
+            [
+              0.8,
+              0.2
+            ],
+            [
+              0.7,
+              0.0
+            ]
+          ],
+          "capacity_before": [
+            100,
+            100
+          ],
+          "capacity_after": [
+            144,
+            100
+          ],
+          "raw_drive_before_and_after": [
+            0.8,
+            0.7
+          ],
+          "drive_divided_by_reserved_capacity_before": [
+            0.008,
+            0.007
+          ],
+          "drive_divided_by_reserved_capacity_after": [
+            0.005555555555555556,
+            0.007
+          ],
+          "result": "Normalizing by reserved capacity reverses the ranking without changing any effective connection or source activity."
+        },
+        "source_fingerprint": {
+          "path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/context_assignment_arithmetic.py",
+          "sha256": "105badbd9681349eeeef41b005ff3ab7500571c0adeea10409911406ea7c02f8"
+        },
+        "limits": "Exact rational sums and illustrative normalized scores; no selected score, quota, teacher intervention or neural simulation. Zero-row handling is unspecified, not silently assigned a perfect or failed contextual match."
+      },
+      "derivation": "For nonnegative row w and source c, drive is w dot c. Dividing by row mass or vector norms removes some scale dependence and changes ranking. A matching score is not the actual neuronal transition or a success metric; a weak aligned row may be a useful learning candidate but still fail to predict. Dividing by reserved slot capacity additionally changes with storage-only migration.",
+      "comparison": "Compare drive-based and contextual-shape selection using unfamiliar acquisition, repeated reuse, natural pre-input matching, disambiguation and retained-degree demand. Keep effective-weight normalization separate from capacity normalization.",
+      "limit": "No score, normalized neuronal dynamics, target quota, matching cache or no-match initialization chosen."
+    },
+    {
+      "id": "MR-FC010",
+      "topic": "Symmetry breaking is necessary only where the relevant information is absent",
+      "derivation": "Let P permute contextual cells, z contain the complete causally relevant state and parameters, and F satisfy F(Pz,u)=P F(z,u) for the same input. If Pz=z initially, then P F(z,u)=F(z,u); induction preserves this symmetry under the same deterministic input sequence. Equal rows receiving identical source and responsibility increments also remain equal by direct subtraction.",
+      "boundary": "The premise fails when the existing graph, state, update rule or cell-specific forcing distinguishes the cells. Independent noise can break pathwise symmetry without proving useful specialization. A fixed index tie-break can always choose the same recipient for different histories; symmetry breaking alone is not contextual learning.",
+      "value": "Inspect existing heterogeneous state and effective connections before introducing additional fields, coordinates or selection machinery."
+    },
+    {
+      "id": "MR-FC011",
+      "topic": "Learning recipient selection does not settle prediction competition",
+      "derivation": "An observation-conditioned learning assignment occurs after the pre-input prediction being assessed. Selecting a few recipients for that observation does not itself choose a unique preceding prediction or require inhibitory modeled synapses. Actual future predictions depend on the resulting weights and dynamics.",
+      "comparison": "Preserve alternatives through ambiguous prefixes, then compare narrowing when real context distinguishes them; measure assistance separately from natural preactivation.",
+      "boundary": "H-84 generation fallback remains excluded; no winner array, quota, inhibitory circuit, teacher intervention or learning algorithm selected."
+    },
+    {
+      "id": "MR-FC012",
+      "topic": "Context fitting, future prediction and distinguishing-position assessment",
+      "arithmetic": {
+        "source_fingerprint": {
+          "path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/context_objective_arithmetic.py",
+          "sha256": "b8fc0a501d48346030d35ffe1d092c429aa9f4ab5c342bc49eff8c0910aa4f7f"
+        },
+        "context_partition": {
+          "premise": "Two independent fair bits c,n produce nonnegative source pattern x=(c/4,n). The later continuation is determined by c. Consider two recipient groups and represent x only by the chosen group identity.",
+          "samples": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.0
+            ],
+            [
+              0.25,
+              0.0
+            ],
+            [
+              0.25,
+              1.0
+            ]
+          ],
+          "future_labels": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "group_by_predictive_bit": {
+            "assignment": [
+              0,
+              0,
+              1,
+              1
+            ],
+            "centroids": [
+              [
+                0.0,
+                0.5
+              ],
+              [
+                0.25,
+                0.5
+              ]
+            ],
+            "input_reconstruction_MSE": 0.25,
+            "future_token_Brier": 0.0,
+            "best_future_token_accuracy": 1.0,
+            "future_one_probability_per_group": [
+              0.0,
+              1.0
+            ]
+          },
+          "group_by_nuisance_bit": {
+            "assignment": [
+              0,
+              1,
+              0,
+              1
+            ],
+            "centroids": [
+              [
+                0.125,
+                0.0
+              ],
+              [
+                0.125,
+                1.0
+              ]
+            ],
+            "input_reconstruction_MSE": 0.015625,
+            "future_token_Brier": 0.5,
+            "best_future_token_accuracy": 0.5,
+            "future_one_probability_per_group": [
+              0.5,
+              0.5
+            ]
+          },
+          "all_nonempty_two_group_partitions": [
+            {
+              "assignment": [
+                0,
+                0,
+                0,
+                1
+              ],
+              "centroids": [
+                [
+                  0.08333333333333333,
+                  0.3333333333333333
+                ],
+                [
+                  0.25,
+                  1.0
+                ]
+              ],
+              "input_reconstruction_MSE": 0.17708333333333334,
+              "future_token_Brier": 0.3333333333333333,
+              "best_future_token_accuracy": 0.75,
+              "future_one_probability_per_group": [
+                0.3333333333333333,
+                1.0
+              ]
+            },
+            {
+              "assignment": [
+                0,
+                0,
+                1,
+                0
+              ],
+              "centroids": [
+                [
+                  0.08333333333333333,
+                  0.6666666666666666
+                ],
+                [
+                  0.25,
+                  0.0
+                ]
+              ],
+              "input_reconstruction_MSE": 0.17708333333333334,
+              "future_token_Brier": 0.3333333333333333,
+              "best_future_token_accuracy": 0.75,
+              "future_one_probability_per_group": [
+                0.3333333333333333,
+                1.0
+              ]
+            },
+            {
+              "assignment": [
+                0,
+                0,
+                1,
+                1
+              ],
+              "centroids": [
+                [
+                  0.0,
+                  0.5
+                ],
+                [
+                  0.25,
+                  0.5
+                ]
+              ],
+              "input_reconstruction_MSE": 0.25,
+              "future_token_Brier": 0.0,
+              "best_future_token_accuracy": 1.0,
+              "future_one_probability_per_group": [
+                0.0,
+                1.0
+              ]
+            },
+            {
+              "assignment": [
+                0,
+                1,
+                0,
+                0
+              ],
+              "centroids": [
+                [
+                  0.16666666666666666,
+                  0.3333333333333333
+                ],
+                [
+                  0.0,
+                  1.0
+                ]
+              ],
+              "input_reconstruction_MSE": 0.17708333333333334,
+              "future_token_Brier": 0.3333333333333333,
+              "best_future_token_accuracy": 0.75,
+              "future_one_probability_per_group": [
+                0.6666666666666666,
+                0.0
+              ]
+            },
+            {
+              "assignment": [
+                0,
+                1,
+                0,
+                1
+              ],
+              "centroids": [
+                [
+                  0.125,
+                  0.0
+                ],
+                [
+                  0.125,
+                  1.0
+                ]
+              ],
+              "input_reconstruction_MSE": 0.015625,
+              "future_token_Brier": 0.5,
+              "best_future_token_accuracy": 0.5,
+              "future_one_probability_per_group": [
+                0.5,
+                0.5
+              ]
+            },
+            {
+              "assignment": [
+                0,
+                1,
+                1,
+                0
+              ],
+              "centroids": [
+                [
+                  0.125,
+                  0.5
+                ],
+                [
+                  0.125,
+                  0.5
+                ]
+              ],
+              "input_reconstruction_MSE": 0.265625,
+              "future_token_Brier": 0.5,
+              "best_future_token_accuracy": 0.5,
+              "future_one_probability_per_group": [
+                0.5,
+                0.5
+              ]
+            },
+            {
+              "assignment": [
+                0,
+                1,
+                1,
+                1
+              ],
+              "centroids": [
+                [
+                  0.0,
+                  0.0
+                ],
+                [
+                  0.16666666666666666,
+                  0.6666666666666666
+                ]
+              ],
+              "input_reconstruction_MSE": 0.17708333333333334,
+              "future_token_Brier": 0.3333333333333333,
+              "best_future_token_accuracy": 0.75,
+              "future_one_probability_per_group": [
+                0.0,
+                0.6666666666666666
+              ]
+            }
+          ],
+          "result": "The partition minimizing squared reconstruction error groups by n, yet its group identity is uninformative about the continuation. Grouping by c predicts exactly but has larger reconstruction error.",
+          "limit": "A finite conditional counterexample, not an EM simulation or a global impossibility result. If another part of the causal neural state retains c, selecting these recipients need not erase prediction. No learned feature axes, clustering mechanism or recipient count selected."
+        },
+        "shared_fragment_assessment": {
+          "premise": "Two equally likely observed histories A,X^k and F,X^k require respectively Y and Z next. A predictor succeeds on all k common-token transitions but predicts Y/Z equally at the final branch because it has lost the distinguishing cue. Timing of the branch is assumed known for this assessment only.",
+          "cases": [
+            {
+              "shared_length_k": 1,
+              "mean_top_one_accuracy": 0.75,
+              "mean_log_loss_bits": 0.5,
+              "branch_accuracy": 0.5,
+              "branch_log_loss_bits": 1.0
+            },
+            {
+              "shared_length_k": 5,
+              "mean_top_one_accuracy": 0.9166666666666666,
+              "mean_log_loss_bits": 0.16666666666666666,
+              "branch_accuracy": 0.5,
+              "branch_log_loss_bits": 1.0
+            },
+            {
+              "shared_length_k": 20,
+              "mean_top_one_accuracy": 0.9761904761904762,
+              "mean_log_loss_bits": 0.047619047619047616,
+              "branch_accuracy": 0.5,
+              "branch_log_loss_bits": 1.0
+            },
+            {
+              "shared_length_k": 100,
+              "mean_top_one_accuracy": 0.995049504950495,
+              "mean_log_loss_bits": 0.009900990099009901,
+              "branch_accuracy": 0.5,
+              "branch_log_loss_bits": 1.0
+            }
+          ],
+          "result": "Whole-sequence averages improve as the common fragment lengthens even though the contextual branch remains at chance. Assess distinguishing positions separately from shared-transition performance.",
+          "limit": "No positional counter, explicit branch detector, fixed context window, universal metric or new runtime statistic selected. These are assessment slices of known comparison sequences, not hidden information supplied to prediction."
+        },
+        "training_information_boundary": {
+          "statement": "Later observations may influence subsequent training changes once they have actually arrived; repeated or retrospective training on a known sequence is distinct from exposing the current prediction to its future input.",
+          "comparison": "Immediate local updates and outcome-informed credit remain different candidates if real shared-fragment behavior distinguishes them. Any extra retained information or replay work needs its own demonstrated value.",
+          "non_adoptions": "No eligibility trace, replay buffer, rejection sampler, hidden-state label, backpropagation rule or trained decoder selected."
+        },
+        "validation": "All seven two-group partitions enumerated using exact Fractions; branch assessment uses exact rational probabilities. No stochastic simulation, SNN training or project tests."
+      }
+    },
+    {
+      "id": "MR-FC013",
+      "topic": "Additional observed context is not necessarily componentwise additional source activity",
+      "recorded_at_utc": "2026-10-28T23:15:19Z",
+      "assumptions": [
+        "Fixed nonnegative incoming weights, fixed additive bias and coordinatewise nondecreasing response.",
+        "The comparison holds applied forcing fixed and excludes cross-cell normalization, cancellation and any history-dependent change of the transfer.",
+        "The same candidate populations and response criterion are compared before the tested input."
+      ],
+      "derivation": "If c_extended >= c_shared componentwise and W >= 0, then W*c_extended >= W*c_shared. A coordinatewise nondecreasing response preserves the inequality. Consequently an above-fixed-threshold ready set cannot shrink through this additive source extension alone, for any fixed learned W.",
+      "exact_rational_reference": {
+        "weights": [
+          [
+            "4/5",
+            "0"
+          ],
+          [
+            "4/5",
+            "4/5"
+          ]
+        ],
+        "response": "min(1, drive)",
+        "illustrative_threshold": "3/10",
+        "cases": {
+          "shared": {
+            "source": [
+              "1/2",
+              "0"
+            ],
+            "response": [
+              "2/5",
+              "2/5"
+            ],
+            "above_3_over_10": [
+              true,
+              true
+            ]
+          },
+          "additive": {
+            "source": [
+              "1/2",
+              "1/2"
+            ],
+            "response": [
+              "2/5",
+              "4/5"
+            ],
+            "above_3_over_10": [
+              true,
+              true
+            ]
+          },
+          "reallocated": {
+            "source": [
+              "0",
+              "1/2"
+            ],
+            "response": [
+              "0",
+              "2/5"
+            ],
+            "above_3_over_10": [
+              false,
+              true
+            ]
+          }
+        },
+        "verification": "Python standard-library Fraction evaluates these two-term sums exactly; no neural trajectory or training is run."
+      },
+      "interpretation": "H83 context-dependent narrowing needs observation of how the actual state and response change. More observed history need not mean more activity in every cell; H75 contextual identities and ordinary fading can replace a pattern rather than only append to it.",
+      "boundaries": [
+        "This conditional fact does not prove the complete signed-population model monotone or inadequate: H77 cancellation, changed source composition and background regulation lie outside the premise.",
+        "H85 leaves predictive cancellation undecided. No need for explicit inhibitory synapses follows.",
+        "A ranking or relative normalization can change while all absolute responses remain nondecreasing; these are different assessment observations. No hard threshold, competition rule, state replacement or negative-weight workaround is selected."
+      ]
+    },
+    {
+      "id": "MR-FC014",
+      "topic": "Contextual reassignment and downstream use must be assessed together",
+      "recorded_at_utc": "2026-10-29T01:34:41Z",
+      "assumptions": [
+        "Two persistent cells share one fixed coordinate/polarity role; their summed current rate is the semantic observable in this reference.",
+        "Two observed histories are supplied as distinct one-hot columns; E maps those histories to the cells, and R maps their activity to two different later target populations.",
+        "Only composition of fixed nonnegative linear maps is calculated; no neural trajectory, training dynamics, stochastic sampling or proposed learner."
+      ],
+      "exact_rational_reference": {
+        "initial_E": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ],
+        "retained_R": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ],
+        "same_population_sum_D": [
+          [
+            1,
+            1
+          ]
+        ],
+        "reassigned_E": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ],
+        "initial_semantic_outputs_D_E": [
+          [
+            "1",
+            "1"
+          ]
+        ],
+        "reassigned_semantic_outputs_D_E": [
+          [
+            "1",
+            "1"
+          ]
+        ],
+        "initial_later_outputs_R_E": [
+          [
+            "1",
+            "0"
+          ],
+          [
+            "0",
+            "1"
+          ]
+        ],
+        "reassigned_later_outputs_R_E": [
+          [
+            "0",
+            "1"
+          ],
+          [
+            "1",
+            "0"
+          ]
+        ],
+        "algebraically_compensated_R": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ],
+        "compensated_later_outputs_R_E": [
+          [
+            "1",
+            "0"
+          ],
+          [
+            "0",
+            "1"
+          ]
+        ]
+      },
+      "derivation": "Swapping which persistent cell receives each history preserves the current population sum and perfect distinguishability of the two histories, but unchanged downstream weights interchange their later predictions. A newly fitted diagnostic readout can conceal this incompatibility. For an abstract full relabeling h_new=P*h, preserving the linear map requires E_new=P*E and R_new=R*inverse(P); a recurrent operator would transform by conjugation with all relevant state/input/response quantities consistently relabeled. This is an equivalence identity, not an instruction to perform graph rewrites.",
+      "implication": "An assignment candidate should be compared by subsequent natural readiness after further learning and by retained DMN/token behavior, rather than only its immediate semantic match or a refitted context decoder. Stable neuron IDs permit learned associations to change; they do not promise fixed contextual meanings forever.",
+      "storage_boundary": "Capacity-only set migration preserves the same neuron IDs, effective endpoints, weights and state. It is not a contextual reassignment. With incoming ownership, a source cell is referenced in other targets incoming sets; changing its own row does not automatically change those references or compensate downstream meaning.",
+      "non_adoptions": [
+        "No mandatory global remapping, frozen context dictionary, extra labels, inverse adjacency, readout fitting, weight-repair pass or new capacity mechanism.",
+        "No proof that reassignment is always harmful: later learning or other state can restore useful behavior. Observe the complete required task."
+      ]
+    },
+    {
+      "id": "MR-FC015",
+      "topic": "Raw input compatibility depends on weight concentration and source covariance",
+      "recorded_at_utc": "2026-10-29T02:11:48Z",
+      "scope": "One incoming weighted gather with fixed mathematical weights, before transfer/cancellation; not a simulated neuron, measured context score or chosen weight format.",
+      "assumptions": [
+        "100 distinct retained sources per target, nonnegative weights and equal total weight one.",
+        "Independent identical Bernoulli source values with probability1/100 in the first comparison; no interpretation as an adopted rate-to-spike conversion.",
+        "The second comparison makes all source values equal to one common Bernoulli variable."
+      ],
+      "derivation": {
+        "general_mean": "E[u]=sum_i w_i*E[x_i]",
+        "general_variance": "Var[u]=sum_i w_i^2*Var[x_i]+2*sum_(i<j) w_i*w_j*Cov[x_i,x_j]",
+        "identical_independent": "Var[u]=sigma^2*sum_i w_i^2; the equal-weight averaging count is (sum_i w_i)^2/sum_i w_i^2.",
+        "bound": "For K nonnegative weights with nonzero sum, 1<=effective_count<=K; the upper bound follows from Cauchy-Schwarz, the lower from nonnegative cross products. It is not contextual storage capacity."
+      },
+      "cases": [
+        {
+          "name": "uniform",
+          "weight_groups": [
+            {
+              "count": 100,
+              "weight": "1/100"
+            }
+          ],
+          "live_sources": 100,
+          "total_weight": "1",
+          "squared_weight_sum": "1/100",
+          "mean_drive": "1/100",
+          "variance_independent": "99/1000000",
+          "effective_independent_count": "100",
+          "effective_independent_count_decimal": 100.0
+        },
+        {
+          "name": "concentrated",
+          "weight_groups": [
+            {
+              "count": 1,
+              "weight": "901/1000"
+            },
+            {
+              "count": 99,
+              "weight": "1/1000"
+            }
+          ],
+          "live_sources": 100,
+          "total_weight": "1",
+          "squared_weight_sum": "8119/10000",
+          "mean_drive": "1/100",
+          "variance_independent": "803781/100000000",
+          "effective_independent_count": "10000/8119",
+          "effective_independent_count_decimal": 1.231678778174652
+        }
+      ],
+      "independent_variance_ratio": "8119/100",
+      "optional_threshold_illustration": {
+        "threshold": "1/2",
+        "condition": "u>1/2",
+        "uniform_probability_exact_expression": "sum(comb(100,k)*(1/100)^k*(99/100)^(100-k), k=51..100)",
+        "uniform_probability_approx": 6.102815512992438e-74,
+        "concentrated_probability": "1/100",
+        "reason": "The99 weak inputs sum to at most99/1000; the strong input alone exceeds1/2. This threshold is illustrative, not a prediction criterion."
+      },
+      "fully_common_source_case": {
+        "both_drives": "u=shared_source because sum(w)=1",
+        "both_means": "1/100",
+        "both_variances": "99/10000",
+        "both_threshold_probabilities": "1/100",
+        "implication": "Weight-distribution-based independent averaging does not apply to a perfectly shared fluctuation."
+      },
+      "comparison_implication": "Equal degree and incoming weight sum do not equalize raw context-score distributions or response probabilities. Assess actual source statistics and later predictive behavior. A concentrated row may encode a valuable source; neither high variance nor small effective count establishes a bad association.",
+      "non_adoptions": [
+        "No normalization, matching threshold, pruning cutoff, capacity-law parameter, eligibility field or effective-count array.",
+        "No claim that a larger-variance row always wins contextual assignment, or that the scalar ratio measures memory capacity."
+      ],
+      "verification": "Exact Python3 Fraction sums checked degree and total weight, the8119/100 variance ratio and a rational binomial tail. No random trials, neural simulation or training."
+    }
+  ],
+  "primary_connections": [
+    {
+      "source_id": "MR-S016",
+      "use": "Distinct activation, learning assignment, prior active source and prior winner source roles; the application does not inherit bursting-based learning."
+    },
+    {
+      "source_id": "MR-S023",
+      "use": "A spiking TM model offers a different route to context specialization through plasticity homeostasis, illustrating that canonical best-match selection is not the only possible mechanism. Its inhibitory network, dendritic plateau, synaptic permanence and task-tuned traces are not adopted."
+    },
+    {
+      "source_id": "MR-S024",
+      "use": "The source separates sequence-memory representations from prediction decoding. Its sparse categorical encoding and classifier assumptions do not directly transfer to our signed dense vectors."
+    },
+    {
+      "source_id": "MR-S044",
+      "use": "Separates acquisition, contextual discrimination and association retention; categorical encoding and plasticity do not transfer as a selected learner."
+    },
+    {
+      "source_id": "MR-S045",
+      "use": "Input-model fitting has explicit probabilistic and architectural assumptions; it is not by itself the flow prediction objective."
+    },
+    {
+      "source_id": "MR-S046",
+      "use": "Context-specific assembly reuse can be unstable across long shared input in the studied recurrent WTA model."
+    },
+    {
+      "source_id": "MR-S047",
+      "use": "Online prediction and learning from later observed sequence outcomes have different information boundaries; its replay/tag machinery is not selected."
+    }
+  ],
+  "non_adoptions": [
+    "No runtime structures, extra per-edge fields, full-precision master weights, segments, traces, winner arrays or persistent token-specific masks.",
+    "No learning equation, teaching intervention, prediction cancellation policy or metric selected.",
+    "No actual SNN training, benchmark, implementation, project tests or build."
+  ],
+  "human_updates": [
+    "H-85: preserve predictive cancellation alternatives for later controlled comparison; no current decision.",
+    "H-86: record obvious real-data comparison choices directly without repeated user questions."
+  ],
+  "updated_at_utc": "2026-10-29T02:11:48Z"
+}

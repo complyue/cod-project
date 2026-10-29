@@ -1,0 +1,1119 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T19:56:01.668537+00:00",
+  "status": "conditional update-law, expectation and Markov-chain arithmetic; no learner selected",
+  "value_lineage": "C-15/P-29 requires contextual prediction while C-28/P-65 preserves meaningful low-precision learning. H-83 permits legitimate alternatives; H-84 excludes generation fallback. C-13/P-30 constrains stored associations.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/hebbian_update_arithmetic.py",
+    "script_sha256": "e55ae89481a821eed7054644d1717da0b6d6270d8a7638a3aeb7fd63403dfeb6"
+  },
+  "assumptions": [
+    "Reference c and y are binary source eligibility and target responsibility, supplied independently of current weight under a fixed assignment. They are not declared neuron fields.",
+    "Pairs are iid across the reference learning exposures. Actual recurrent/context-dependent assignments need not satisfy this assumption.",
+    "w is normalized to[0,1] for arithmetic. Physical weight units, scale, neural gain, learning exposures and numerical format remain open."
+  ],
+  "positive_only": {
+    "hard_bound": "w_next=min(1,w+eta*c*y). With fixed eta>0 and infinitely many positive pair occurrences, every represented edge reaches1 regardless of positive occurrence frequency.",
+    "soft_bound": "w_next=w+eta*c*y*(1-w). With0<eta<1 and infinitely many positive binary occurrences, w tends to1. E[w_n]=1-(1-w_0)*(1-eta*Pr(c*y=1))^n under iid exposures.",
+    "consequence": "Bounds prevent divergence but do not by themselves preserve graded association differences. Frequency changes learning time; these references do not prove that every bounded Hebbian rule saturates.",
+    "association_presence_boundary": {
+      "assumptions": [
+        "Fixed represented pairs; zero initial weights; binary source and target credit; infinitely repeated relevant pair occurrences; positive-only bounded updates; no noise, changing assignments, topology growth or recurrent dynamics."
+      ],
+      "limit": "w_ji tends to1 when pair(i,j) occurs infinitely often and remains0 when it never occurs. The limit records pair support rather than frequency.",
+      "two_context_reference": {
+        "observations": [
+          {
+            "source": [
+              1,
+              0
+            ],
+            "target": [
+              1,
+              0
+            ]
+          },
+          {
+            "source": [
+              0,
+              1
+            ],
+            "target": [
+              0,
+              1
+            ]
+          }
+        ],
+        "limiting_target_by_source_weights": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ],
+        "linear_responses_to_the_two_sources": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "shared_context_reference": {
+        "source": [
+          1
+        ],
+        "observed_targets": [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ],
+        "limiting_target_by_source_weights": [
+          [
+            1
+          ],
+          [
+            1
+          ]
+        ],
+        "linear_response": [
+          1,
+          1
+        ]
+      },
+      "interpretation": "Saturation does not alone prove loss of association selectivity. The shared-context case preserves both observed target possibilities but not their frequency or complete sequence context. Dense incidental coactivity can instead make the support unselective.",
+      "boundary": "Conditional limiting matrices only; no SNN learning run, binary-transmission semantics, support-learning rule, threshold, probability objective or removal/weakening policy selected."
+    }
+  },
+  "gating": {
+    "equations": {
+      "all_events": "w_next=(1-eta)*w+eta*c*y",
+      "source_enabled": "w_next=w+eta*c*(y-w)",
+      "target_enabled": "w_next=w+eta*y*(c-w)"
+    },
+    "equilibria": {
+      "all_events": "E[c*y]",
+      "source_enabled": "E[c*y]/E[c] when E[c]>0",
+      "target_enabled": "E[c*y]/E[y] when E[y]>0"
+    },
+    "limit": "These are different estimands, not automatically calibrated token probabilities. Graded c,y give weighted moments rather than binary conditional probabilities. Updating only positive pairs or only selected rows changes the exposure set and invalidates these formulas unless conditioning is recalculated.",
+    "cases": [
+      {
+        "source_probability": 1.0,
+        "target_given_source": 0.1,
+        "target_without_source": 0.1,
+        "all_event_EMA_mean": 0.1,
+        "source_enabled_EMA_mean": 0.1,
+        "target_enabled_EMA_mean": 1.0,
+        "source_enabled_mean_half_life_events": 44.01393630854736
+      },
+      {
+        "source_probability": 1.0,
+        "target_given_source": 0.5,
+        "target_without_source": 0.1,
+        "all_event_EMA_mean": 0.5,
+        "source_enabled_EMA_mean": 0.5,
+        "target_enabled_EMA_mean": 1.0,
+        "source_enabled_mean_half_life_events": 44.01393630854736
+      },
+      {
+        "source_probability": 1.0,
+        "target_given_source": 0.9,
+        "target_without_source": 0.1,
+        "all_event_EMA_mean": 0.9,
+        "source_enabled_EMA_mean": 0.9,
+        "target_enabled_EMA_mean": 1.0,
+        "source_enabled_mean_half_life_events": 44.01393630854736
+      },
+      {
+        "source_probability": 0.1,
+        "target_given_source": 0.1,
+        "target_without_source": 0.1,
+        "all_event_EMA_mean": 0.01,
+        "source_enabled_EMA_mean": 0.1,
+        "target_enabled_EMA_mean": 0.1,
+        "source_enabled_mean_half_life_events": 443.2675316439654
+      },
+      {
+        "source_probability": 0.1,
+        "target_given_source": 0.5,
+        "target_without_source": 0.1,
+        "all_event_EMA_mean": 0.05,
+        "source_enabled_EMA_mean": 0.5,
+        "target_enabled_EMA_mean": 0.35714285714285715,
+        "source_enabled_mean_half_life_events": 443.2675316439654
+      },
+      {
+        "source_probability": 0.1,
+        "target_given_source": 0.9,
+        "target_without_source": 0.1,
+        "all_event_EMA_mean": 0.09,
+        "source_enabled_EMA_mean": 0.9,
+        "target_enabled_EMA_mean": 0.5,
+        "source_enabled_mean_half_life_events": 443.2675316439654
+      },
+      {
+        "source_probability": 0.01,
+        "target_given_source": 0.1,
+        "target_without_source": 0.1,
+        "all_event_EMA_mean": 0.001,
+        "source_enabled_EMA_mean": 0.1,
+        "target_enabled_EMA_mean": 0.01,
+        "source_enabled_mean_half_life_events": 4435.795372967311
+      },
+      {
+        "source_probability": 0.01,
+        "target_given_source": 0.5,
+        "target_without_source": 0.1,
+        "all_event_EMA_mean": 0.005,
+        "source_enabled_EMA_mean": 0.5,
+        "target_enabled_EMA_mean": 0.04807692307692308,
+        "source_enabled_mean_half_life_events": 4435.795372967311
+      },
+      {
+        "source_probability": 0.01,
+        "target_given_source": 0.9,
+        "target_without_source": 0.1,
+        "all_event_EMA_mean": 0.009,
+        "source_enabled_EMA_mean": 0.9,
+        "target_enabled_EMA_mean": 0.08333333333333333,
+        "source_enabled_mean_half_life_events": 4435.795372967311
+      }
+    ]
+  },
+  "soft_depression": {
+    "equation": "w_next=w+eta*c*(y*(1-w)-beta*(1-y)*w)",
+    "bound_condition": "For c,y in[0,1], beta>=0 and eta*max(1,beta)<=1, the map preserves[0,1].",
+    "binary_stationary_mean": "p/(p+beta*(1-p)), p=Pr(y=1|c=1), provided positive effective exposure and denominator.",
+    "interpretation": "beta=1 is source-enabled EMA; beta=0 gives positive-only soft saturation. Intermediate or stronger depression changes branch weighting. A weight decrease is not a negative synapse or deletion.",
+    "limit": "An update-law comparison, not a selected depression policy, dynamic gain controller or prediction-error repair rule."
+  },
+  "exposure_time": {
+    "repeated_constant_target": "n frame updates with eta have effective coefficient1-(1-eta)^n. eta=.01 gives0.01,0.0956179,0.633968 for n=1,10,100.",
+    "physical_time": "eta(Delta)=1-exp(-lambda*Delta) composes consistently over fixed duration for this affine law; it still intentionally weights duration.",
+    "token_event": "One update per observed token avoids that duplicate exposure, but does not make the underlying contextual state independent of token timing.",
+    "recency": {
+      "eta": "1/2",
+      "initial": "1/2",
+      "AABB": "7/32",
+      "ABAB": "11/32"
+    },
+    "limit": "Synaptic adaptation time is distinct from the loose half-life of token activity. Neither exposure convention nor a stored eligibility history is selected."
+  },
+  "nearest_writeback": {
+    "rule": "After each scalar EMA update round to nearest listed level, ties to even code, no hidden residual.",
+    "formats": "Uniform unsigned normalized grids, and finite positive E4M3 codes either restricted to raw[0,1] or divided by448 to use the full finite range. These are diagnostic scales, not capacity-dependent or selected weight scales.",
+    "absorbing_condition": "For a uniform grid with K intervals, a code n is unchanged by either binary target when both eta*n and eta*(K-n) are below1/2; boundary ties follow the stated rule. eta*K<1/2 freezes every code.",
+    "cases": [
+      {
+        "format": "UINT4_unorm",
+        "eta": "1/64",
+        "number_of_codes": 16,
+        "absorbing_code_count": 16,
+        "smallest_absorbing_value": 0.0,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.0,
+        "positive_updates_that_change_code": 0
+      },
+      {
+        "format": "UINT4_unorm",
+        "eta": "1/256",
+        "number_of_codes": 16,
+        "absorbing_code_count": 16,
+        "smallest_absorbing_value": 0.0,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.0,
+        "positive_updates_that_change_code": 0
+      },
+      {
+        "format": "UINT4_unorm",
+        "eta": "1/1024",
+        "number_of_codes": 16,
+        "absorbing_code_count": 16,
+        "smallest_absorbing_value": 0.0,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.0,
+        "positive_updates_that_change_code": 0
+      },
+      {
+        "format": "UINT8_unorm",
+        "eta": "1/64",
+        "number_of_codes": 256,
+        "absorbing_code_count": 0,
+        "smallest_absorbing_value": null,
+        "largest_absorbing_value": null,
+        "all_positive_from_zero_final_value": 0.8784313725490196,
+        "positive_updates_that_change_code": 125
+      },
+      {
+        "format": "UINT8_unorm",
+        "eta": "1/256",
+        "number_of_codes": 256,
+        "absorbing_code_count": 1,
+        "smallest_absorbing_value": 0.5019607843137255,
+        "largest_absorbing_value": 0.5019607843137255,
+        "all_positive_from_zero_final_value": 0.5019607843137255,
+        "positive_updates_that_change_code": 128
+      },
+      {
+        "format": "UINT8_unorm",
+        "eta": "1/1024",
+        "number_of_codes": 256,
+        "absorbing_code_count": 256,
+        "smallest_absorbing_value": 0.0,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.0,
+        "positive_updates_that_change_code": 0
+      },
+      {
+        "format": "E4M3_unit_scale_to_one",
+        "eta": "1/64",
+        "number_of_codes": 57,
+        "absorbing_code_count": 17,
+        "smallest_absorbing_value": 0.25,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.25,
+        "positive_updates_that_change_code": 16
+      },
+      {
+        "format": "E4M3_unit_scale_to_one",
+        "eta": "1/256",
+        "number_of_codes": 57,
+        "absorbing_code_count": 33,
+        "smallest_absorbing_value": 0.0625,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.0625,
+        "positive_updates_that_change_code": 16
+      },
+      {
+        "format": "E4M3_unit_scale_to_one",
+        "eta": "1/1024",
+        "number_of_codes": 57,
+        "absorbing_code_count": 57,
+        "smallest_absorbing_value": 0.0,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.0,
+        "positive_updates_that_change_code": 0
+      },
+      {
+        "format": "E4M3_full_range_normalized",
+        "eta": "1/64",
+        "number_of_codes": 127,
+        "absorbing_code_count": 15,
+        "smallest_absorbing_value": 0.2857142857142857,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.2857142857142857,
+        "positive_updates_that_change_code": 17
+      },
+      {
+        "format": "E4M3_full_range_normalized",
+        "eta": "1/256",
+        "number_of_codes": 127,
+        "absorbing_code_count": 31,
+        "smallest_absorbing_value": 0.07142857142857142,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.07142857142857142,
+        "positive_updates_that_change_code": 17
+      },
+      {
+        "format": "E4M3_full_range_normalized",
+        "eta": "1/1024",
+        "number_of_codes": 127,
+        "absorbing_code_count": 47,
+        "smallest_absorbing_value": 0.017857142857142856,
+        "largest_absorbing_value": 1.0,
+        "all_positive_from_zero_final_value": 0.017857142857142856,
+        "positive_updates_that_change_code": 17
+      }
+    ],
+    "UINT8_eta_1_256_absorption": {
+      "proof": "In code units, for n<128 a zero target leaves n unchanged and a one target moves to n+1. For n>128 a zero target moves to n-1 and a one target leaves n unchanged. Code128 is fixed under either target. Every transition was checked with exact rational ties-to-even rounding.",
+      "consequence": "For iid Bernoulli targets with0<p<1 and any initial code, the weight eventually absorbs at128/255 with probability1, independently of p. This is a quantization artifact, not the ideal stationary mean p.",
+      "mean_exposures_from_zero": "128/p under the stated independent target law",
+      "limit": "Specific normalized UINT8 grid, eta1/256 and per-update nearest writeback without retained error. Not a claim about arbitrary INT8 learning."
+    },
+    "limit": "All-positive evolution and absorbing-code enumeration are exact scalar numerical properties, not a trained-network outcome or a claim that all FP8 scaling behaves identically."
+  },
+  "stochastic_uniform_writeback": {
+    "rule": "Independent unbiased rounding between the two bracketing uniform codes after each EMA update; target y is iid Bernoulli(p). Assume0<eta and eta*K<=1.",
+    "birth": "Pr(n to n+1)=p*eta*(K-n)",
+    "death": "Pr(n to n-1)=(1-p)*eta*n",
+    "stationary": "n~Binomial(K,p), from detailed balance. Thus E[w]=p and Var(w)=p*(1-p)/K, independent of eta in this small-step regime.",
+    "unquantized": "Unquantized EMA has stationary Var(w)=eta*p*(1-p)/(2-eta). Reducing eta reduces this reference variance but not the finite-grid stationary floor.",
+    "source_frequency": "Independent source eligibility multiplies all transition rates by q, changing mixing time but not this stationary law.",
+    "cases": [
+      {
+        "level_intervals": 15,
+        "eta": "1/64",
+        "target_probability": 0.001,
+        "mean": 0.001,
+        "normalized_weight_variance": 6.66e-05,
+        "unquantized_EMA_variance": 7.866141732283464e-06,
+        "stationary_probability_zero": 0.985104546362002
+      },
+      {
+        "level_intervals": 15,
+        "eta": "1/64",
+        "target_probability": 0.01,
+        "mean": 0.01,
+        "normalized_weight_variance": 0.00066,
+        "unquantized_EMA_variance": 7.795275590551181e-05,
+        "stationary_probability_zero": 0.8600583546412885
+      },
+      {
+        "level_intervals": 15,
+        "eta": "1/64",
+        "target_probability": 0.1,
+        "mean": 0.1,
+        "normalized_weight_variance": 0.006,
+        "unquantized_EMA_variance": 0.0007086614173228347,
+        "stationary_probability_zero": 0.205891132094649
+      },
+      {
+        "level_intervals": 15,
+        "eta": "1/64",
+        "target_probability": 0.5,
+        "mean": 0.5,
+        "normalized_weight_variance": 0.016666666666666666,
+        "unquantized_EMA_variance": 0.001968503937007874,
+        "stationary_probability_zero": 3.0517578125e-05
+      },
+      {
+        "level_intervals": 255,
+        "eta": "1/1024",
+        "target_probability": 0.001,
+        "mean": 0.001,
+        "normalized_weight_variance": 3.917647058823529e-06,
+        "unquantized_EMA_variance": 4.880312652662433e-07,
+        "stationary_probability_zero": 0.7748176364970053
+      },
+      {
+        "level_intervals": 255,
+        "eta": "1/1024",
+        "target_probability": 0.01,
+        "mean": 0.01,
+        "normalized_weight_variance": 3.882352941176471e-05,
+        "unquantized_EMA_variance": 4.8363458720078166e-06,
+        "stationary_probability_zero": 0.0770858423298929
+      },
+      {
+        "level_intervals": 255,
+        "eta": "1/1024",
+        "target_probability": 0.1,
+        "mean": 0.1,
+        "normalized_weight_variance": 0.00035294117647058826,
+        "unquantized_EMA_variance": 4.396678065461651e-05,
+        "stationary_probability_zero": 2.1470388702543237e-12
+      },
+      {
+        "level_intervals": 255,
+        "eta": "1/1024",
+        "target_probability": 0.5,
+        "mean": 0.5,
+        "normalized_weight_variance": 0.000980392156862745,
+        "unquantized_EMA_variance": 0.00012212994626282364,
+        "stationary_probability_zero": 1.727233711018889e-77
+      }
+    ],
+    "limit": "No stochastic rounding or probabilistic weight interpretation is selected. The fixed-assignment iid binary law does not establish behavior under recurrent learning, correlated sources, FP8 grids, clipping outside the interval or context-dependent targets. Zero weight need not mean a free slot."
+  },
+  "non_adoptions": [
+    "No trained SNN, random neural simulation, source/target assignment, numeric default or implementation.",
+    "No traces, per-edge residual/master copy, masks, pruning, new learning state, event counter or mandatory row scan.",
+    "No project test, build, toolchain change, commit or push."
+  ],
+  "prediction_error_reference": {
+    "recorded_at_utc": "2026-10-28T21:45:20.465422+00:00",
+    "status": "conditional analytical comparison; no chosen loss, flow learner or neural simulation",
+    "value_question": "Can a learning update account for several credited sources jointly producing one predictive response, while keeping observation learning separate from DMN/token repair?",
+    "linear_reference": {
+      "prediction": "y_hat_j=sum_i w_ji*c_i",
+      "loss": "L=1/2 sum_j (y_j-y_hat_j)^2",
+      "gradient_update": "Delta w_ji=eta*(y_j-y_hat_j)*c_i",
+      "conditions": "Fixed source credit and target assignment, one linear predictive operation. If those roles depend on the weights, or the score follows nonlinear/recurrent/cancellation operations, this is not the full derivative of the overall objective.",
+      "units": "Arbitrary normalized arithmetic units. y is a reference target, not a selected probability or actual semantic input encoder.",
+      "constraints": "Weights can remain nonnegative by limiting/projecting updates; this needs its own convergence/work accounting and is not inhibitory connectivity. No residual field or error-neuron population is implied by computing a temporary scalar mismatch."
+    },
+    "finite_pattern_cases": [
+      {
+        "name": "Two always-coactive sources",
+        "equiprobable_patterns": [
+          {
+            "c": [
+              1,
+              1
+            ],
+            "y": "1"
+          }
+        ],
+        "source_enabled_affine_stationary_means": {
+          "weights": [
+            "1",
+            "1"
+          ],
+          "raw_predictions": [
+            "2"
+          ],
+          "mean_squared_error": "1",
+          "half_mse_gradient": [
+            "1",
+            "1"
+          ]
+        },
+        "squared_error_optimum": {
+          "weights": [
+            "1/2",
+            "1/2"
+          ],
+          "raw_predictions": [
+            "1"
+          ],
+          "mean_squared_error": "0",
+          "half_mse_gradient": [
+            "0",
+            "0"
+          ]
+        }
+      },
+      {
+        "name": "Always-present source and a distinguishing source",
+        "equiprobable_patterns": [
+          {
+            "c": [
+              1,
+              0
+            ],
+            "y": "0"
+          },
+          {
+            "c": [
+              1,
+              1
+            ],
+            "y": "1"
+          }
+        ],
+        "source_enabled_affine_stationary_means": {
+          "weights": [
+            "1/2",
+            "1"
+          ],
+          "raw_predictions": [
+            "1/2",
+            "3/2"
+          ],
+          "mean_squared_error": "1/4",
+          "half_mse_gradient": [
+            "1/2",
+            "1/4"
+          ]
+        },
+        "squared_error_optimum": {
+          "weights": [
+            "0",
+            "1"
+          ],
+          "raw_predictions": [
+            "0",
+            "1"
+          ],
+          "mean_squared_error": "0",
+          "half_mse_gradient": [
+            "0",
+            "0"
+          ]
+        }
+      },
+      {
+        "name": "OR targets under a strictly linear response",
+        "equiprobable_patterns": [
+          {
+            "c": [
+              0,
+              0
+            ],
+            "y": "0"
+          },
+          {
+            "c": [
+              1,
+              0
+            ],
+            "y": "1"
+          },
+          {
+            "c": [
+              0,
+              1
+            ],
+            "y": "1"
+          },
+          {
+            "c": [
+              1,
+              1
+            ],
+            "y": "1"
+          }
+        ],
+        "source_enabled_affine_stationary_means": {
+          "weights": [
+            "1",
+            "1"
+          ],
+          "raw_predictions": [
+            "0",
+            "1",
+            "1",
+            "2"
+          ],
+          "mean_squared_error": "1/4",
+          "half_mse_gradient": [
+            "1/4",
+            "1/4"
+          ]
+        },
+        "squared_error_optimum": {
+          "weights": [
+            "2/3",
+            "2/3"
+          ],
+          "raw_predictions": [
+            "0",
+            "2/3",
+            "2/3",
+            "4/3"
+          ],
+          "mean_squared_error": "1/12",
+          "half_mse_gradient": [
+            "0",
+            "0"
+          ]
+        }
+      }
+    ],
+    "interpretation": [
+      "Source-enabled affinity means can be valid association statistics without being additive prediction coefficients. Different learning objectives give different weights. Reported pattern errors evaluate the mean weight vector, not the expected loss of a fluctuating online learner.",
+      "The linear OR case retains irreducible error; a saturating transfer can change that comparison. A smaller raw-sum error is not automatically the correct readiness behavior.",
+      "A loss on mean semantic coordinates can blur legitimate alternatives. H83 matching requires the eventual target/readout to distinguish that issue; no squared-error acceptance metric is selected."
+    ],
+    "cancellation_boundary": {
+      "reference": "One coordinate, fixed positive total P=1, trainable opposing total M initially0, target active output (positive0,negativeT=1). H77 yields (max(P-M,0),max(M-P,0)).",
+      "loss": "L(M)=1/2*(max(P-M,0)^2+(max(M-P,0)-T)^2).",
+      "positive_side_derivative": "For M<P, dL/dM=M-P. With 0<eta<1, gradient steps give P-M_n=(1-eta)^n*(P-M_0), staying strictly positive at every finite exact-arithmetic update.",
+      "signed_net_comparison": {
+        "loss": "1/2*(P-M+T)^2",
+        "closed_form": "M_n=(P+T)+(1-eta)^n*(M_0-P-T)",
+        "example_eta_one_quarter": "M_3=37/32=1.15625, so it crosses P=1 after3 updates from0.",
+        "limit": "Signed-net loss is another objective; it omits individual contextual-cell distinctions and is not selected."
+      },
+      "boundary": "The full loss is not differentiable at M=P: left derivative0, right derivative -T. A rule at equality, direct teaching, a different learning target or other dynamics changes the outcome; none is selected.",
+      "closed_form_values": [
+        {
+          "updates": 0,
+          "remaining_positive_output": "1",
+          "opposing_input": "0",
+          "desired_negative_output": "1",
+          "realized_negative_output": "0",
+          "half_squared_population_error": "1"
+        },
+        {
+          "updates": 1,
+          "remaining_positive_output": "3/4",
+          "opposing_input": "1/4",
+          "desired_negative_output": "1",
+          "realized_negative_output": "0",
+          "half_squared_population_error": "25/32"
+        },
+        {
+          "updates": 4,
+          "remaining_positive_output": "81/256",
+          "opposing_input": "175/256",
+          "desired_negative_output": "1",
+          "realized_negative_output": "0",
+          "half_squared_population_error": "72097/131072"
+        },
+        {
+          "updates": 10,
+          "remaining_positive_output": "59049/1048576",
+          "opposing_input": "989527/1048576",
+          "desired_negative_output": "1",
+          "realized_negative_output": "0",
+          "half_squared_population_error": "1102998412177/2199023255552"
+        },
+        {
+          "updates": 100,
+          "remaining_positive_output": "515377520732011331036461129765621272702107522001/1606938044258990275541962092341162602522202993782792835301376",
+          "opposing_input": "1606938044258474898021230081010126141392437372510090727779375/1606938044258990275541962092341162602522202993782792835301376",
+          "desired_negative_output": "1",
+          "realized_negative_output": "0",
+          "half_squared_population_error": "2582249878086908589655919437617000750204475131610545548610286185774100275411337169204607092372628732738086166357446537377/5164499756173817179311838344006023748659411585658447025661318713081295244033682389259290706560275662871806343945494986752"
+        }
+      ],
+      "limit": "This is a conditional reason to specify where learning error is measured. It is not a claim that flow uses active-rate squared error, that predictive cancellation is chosen, or that the actual SNN cannot learn polarity changes."
+    },
+    "source_connection": {
+      "id": "MR-S051",
+      "citation": "Millidge et al. (2024), Predictive coding networks for temporal prediction",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1011183",
+      "role": "Primary example of Hebbian products involving explicit prediction-error signals under its own inference model. It does not validate this fixed-graph candidate."
+    },
+    "non_adoptions": [
+      "No universal negative update for every unobserved branch.",
+      "No squared-error training target, hidden inference layer, error-neuron population, extra trace or optimizer selected.",
+      "No DMN/token shortfall rule used as the flow default.",
+      "No gradient through full recurrent history or cancellation selected."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/prediction_error_arithmetic.py",
+      "script_sha256": "15a8b4bf7eb9eb23a603b5fcaf27593657ea85eca91edbbf7b4af10c0abf897c"
+    }
+  },
+  "updated_at_utc": "2026-10-28T23:57:08Z",
+  "prediction_error_step_size": {
+    "recorded_at_utc": "2026-10-28T21:51:44.371002+00:00",
+    "status": "exact linear-reference arithmetic; no selected learning-rate policy",
+    "assumptions": "One fixed source vector c and target y, simultaneous delta update w_next=w+eta*(y-w dot c)*c. No clipping, weight quantization, changed assignment, cancellation or recurrence.",
+    "identity": "e_next=(1-eta*sum_i c_i^2)*e, with e=y-w dot c. For nonzero e and source energy, squared error decreases iff0<eta*sum_i c_i^2<2.",
+    "cases": [
+      {
+        "credited_unit_sources": 100,
+        "eta": "1/128",
+        "source_squared_norm": "100",
+        "error_multiplier": "7/32",
+        "loss_multiplier": "49/1024",
+        "loss_decreases": true
+      },
+      {
+        "credited_unit_sources": 100,
+        "eta": "1/32768",
+        "source_squared_norm": "100",
+        "error_multiplier": "8167/8192",
+        "loss_multiplier": "66699889/67108864",
+        "loss_decreases": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "eta": "1/128",
+        "source_squared_norm": "18432",
+        "error_multiplier": "-143",
+        "loss_multiplier": "20449",
+        "loss_decreases": false
+      },
+      {
+        "credited_unit_sources": 18432,
+        "eta": "1/32768",
+        "source_squared_norm": "18432",
+        "error_multiplier": "7/16",
+        "loss_multiplier": "49/256",
+        "loss_decreases": true
+      }
+    ],
+    "zero_source": "If all source credit is zero, this rule changes no edge; no division by an energy value is required. Source/target eligibility remains a separate design question.",
+    "comparison": "A sufficiently small fixed step and a source-energy-adjusted step eta=alpha/sum_i c_i^2 for nonzero energy are candidates. The latter gives e_next=(1-alpha)*e in this limited reference; no actual alpha or optimizer is chosen.",
+    "cost_scope": "The energy is a transient sum over credited retained sources. It could share a chosen learning-row traversal but adds arithmetic; no persistent per-row scale array follows. Reserved slot capacity is not the same quantity.",
+    "limits": [
+      "The class-sized examples use unit source values purely to expose scaling; they are not measured activity or a recommended eta.",
+      "Weight bounds/quantization and nonlinear/shared dynamics invalidate the simple identity unless their effects are separately included.",
+      "Learning step size, numeric decoding scale and trained response strength have distinct definitions."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/prediction_step_arithmetic.py",
+      "script_sha256": "b681dec22cffd264e878b7387e5220513e18606e33646455a0dd29e95097ef22"
+    }
+  },
+  "normalized_delta_writeback": {
+    "recorded_at_utc": "2026-10-28T21:58:59.169736+00:00",
+    "status": "closed-form conditional arithmetic; no selected precision, scale, rounding method or learner",
+    "assumptions": [
+      "One linear target with d fixed unit-valued credited sources, target1, source-energy step eta=1/d, initially zero equal weights; all endpoints already retained.",
+      "Working arithmetic is exact rational; only final per-edge storage is rounded. No nonlinearity, clipping beyond the stated storage range, noise, recurrent dynamics, source discovery or changing context.",
+      "The fixed pattern is repeated only in the analytical identity; no SNN training or simulation was executed. Equal weights make every next ideal value1/d, so the first rounded row is a fixed point for this restricted input."
+    ],
+    "dead_zone": {
+      "sufficient_condition": "For a uniform grid q, values initially on-grid and no boundary clipping, if abs(eta*e*c_i)<q/2 for every retained edge then nearest writeback leaves the entire row unchanged. Strict inequality avoids tie conventions.",
+      "source_energy_step": "At eta=alpha/sum_i c_i^2 with nonzero source energy, a sufficient band is abs(e)<q*sum_i c_i^2/(2*alpha*max_i abs(c_i)). For unit sources this is d*q/(2*alpha).",
+      "limit": "Other input patterns, different rounding, growth, initial weights, bounds or update laws can change the result. This is not an empirical failure claim for all integer learning."
+    },
+    "cases": [
+      {
+        "credited_unit_sources": 100,
+        "format": "UINT4_maximum_1",
+        "uniform_grid_step": "1/15",
+        "ideal_per_edge_update_from_zero": "1/100",
+        "stored_equal_weight": "0",
+        "raw_response_after_writeback": 0.0,
+        "response_exact": "0",
+        "remaining_error": 1.0,
+        "next_unrounded_weight": "1/100",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 100,
+        "format": "UINT8_maximum_1",
+        "uniform_grid_step": "1/255",
+        "ideal_per_edge_update_from_zero": "1/100",
+        "stored_equal_weight": "1/85",
+        "raw_response_after_writeback": 1.1764705882352942,
+        "response_exact": "20/17",
+        "remaining_error": -0.17647058823529413,
+        "next_unrounded_weight": "1/100",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 100,
+        "format": "E4M3_scaled_maximum_1",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/100",
+        "stored_equal_weight": "9/896",
+        "raw_response_after_writeback": 1.0044642857142858,
+        "response_exact": "225/224",
+        "remaining_error": -0.004464285714285714,
+        "next_unrounded_weight": "1/100",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 100,
+        "format": "UINT4_maximum_1/100",
+        "uniform_grid_step": "1/1500",
+        "ideal_per_edge_update_from_zero": "1/100",
+        "stored_equal_weight": "1/100",
+        "raw_response_after_writeback": 1.0,
+        "response_exact": "1",
+        "remaining_error": 0.0,
+        "next_unrounded_weight": "1/100",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 100,
+        "format": "UINT8_maximum_1/100",
+        "uniform_grid_step": "1/25500",
+        "ideal_per_edge_update_from_zero": "1/100",
+        "stored_equal_weight": "1/100",
+        "raw_response_after_writeback": 1.0,
+        "response_exact": "1",
+        "remaining_error": 0.0,
+        "next_unrounded_weight": "1/100",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 100,
+        "format": "E4M3_scaled_maximum_1/100",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/100",
+        "stored_equal_weight": "1/100",
+        "raw_response_after_writeback": 1.0,
+        "response_exact": "1",
+        "remaining_error": 0.0,
+        "next_unrounded_weight": "1/100",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 100,
+        "format": "E4M3_unscaled",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/100",
+        "stored_equal_weight": "5/512",
+        "raw_response_after_writeback": 0.9765625,
+        "response_exact": "125/128",
+        "remaining_error": 0.0234375,
+        "next_unrounded_weight": "1/100",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 100,
+        "format": "FP16_storage",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/100",
+        "stored_equal_weight": "1311/131072",
+        "raw_response_after_writeback": 1.000213623046875,
+        "response_exact": "32775/32768",
+        "remaining_error": -0.000213623046875,
+        "next_unrounded_weight": "1/100",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 100,
+        "format": "FP32_storage",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/100",
+        "stored_equal_weight": "5368709/536870912",
+        "raw_response_after_writeback": 0.9999999776482582,
+        "response_exact": "134217725/134217728",
+        "remaining_error": 2.2351741790771484e-08,
+        "next_unrounded_weight": "1/100",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "format": "UINT4_maximum_1",
+        "uniform_grid_step": "1/15",
+        "ideal_per_edge_update_from_zero": "1/18432",
+        "stored_equal_weight": "0",
+        "raw_response_after_writeback": 0.0,
+        "response_exact": "0",
+        "remaining_error": 1.0,
+        "next_unrounded_weight": "1/18432",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "format": "UINT8_maximum_1",
+        "uniform_grid_step": "1/255",
+        "ideal_per_edge_update_from_zero": "1/18432",
+        "stored_equal_weight": "0",
+        "raw_response_after_writeback": 0.0,
+        "response_exact": "0",
+        "remaining_error": 1.0,
+        "next_unrounded_weight": "1/18432",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "format": "E4M3_scaled_maximum_1",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/18432",
+        "stored_equal_weight": "3/57344",
+        "raw_response_after_writeback": 0.9642857142857143,
+        "response_exact": "27/28",
+        "remaining_error": 0.03571428571428571,
+        "next_unrounded_weight": "1/18432",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "format": "UINT4_maximum_1/100",
+        "uniform_grid_step": "1/1500",
+        "ideal_per_edge_update_from_zero": "1/18432",
+        "stored_equal_weight": "0",
+        "raw_response_after_writeback": 0.0,
+        "response_exact": "0",
+        "remaining_error": 1.0,
+        "next_unrounded_weight": "1/18432",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "format": "UINT8_maximum_1/100",
+        "uniform_grid_step": "1/25500",
+        "ideal_per_edge_update_from_zero": "1/18432",
+        "stored_equal_weight": "1/25500",
+        "raw_response_after_writeback": 0.7228235294117648,
+        "response_exact": "1536/2125",
+        "remaining_error": 0.2771764705882353,
+        "next_unrounded_weight": "1/18432",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "format": "E4M3_scaled_maximum_1/100",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/18432",
+        "stored_equal_weight": "1/17920",
+        "raw_response_after_writeback": 1.0285714285714285,
+        "response_exact": "36/35",
+        "remaining_error": -0.02857142857142857,
+        "next_unrounded_weight": "1/18432",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "format": "E4M3_unscaled",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/18432",
+        "stored_equal_weight": "0",
+        "raw_response_after_writeback": 0.0,
+        "response_exact": "0",
+        "remaining_error": 1.0,
+        "next_unrounded_weight": "1/18432",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "format": "FP16_storage",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/18432",
+        "stored_equal_weight": "455/8388608",
+        "raw_response_after_writeback": 0.999755859375,
+        "response_exact": "4095/4096",
+        "remaining_error": 0.000244140625,
+        "next_unrounded_weight": "1/18432",
+        "same_input_update_is_fixed_after_first_writeback": true
+      },
+      {
+        "credited_unit_sources": 18432,
+        "format": "FP32_storage",
+        "uniform_grid_step": null,
+        "ideal_per_edge_update_from_zero": "1/18432",
+        "stored_equal_weight": "14913081/274877906944",
+        "raw_response_after_writeback": 1.0000000074505806,
+        "response_exact": "134217729/134217728",
+        "remaining_error": -7.450580596923828e-09,
+        "next_unrounded_weight": "1/18432",
+        "same_input_update_is_fixed_after_first_writeback": true
+      }
+    ],
+    "format_definition": "Uniform full unsigned grids15/255 intervals; positive finite E4M3 codes0–126 with exponent bias7 and subnormals, ties to even. Scaled E4M3 uses maximum S divided by448. Unscaled E4M3 and IEEE binary16/32 store weights directly. All scales are diagnostic, not selected from capacity classes.",
+    "stable_ideal_step_quantized_cycle": {
+      "contributors": 18432,
+      "grid_step": "1/25500",
+      "normalized_step_alpha": "3/2",
+      "unquantized_error_multiplier": "-1/2",
+      "uniform_code_map": {
+        "0": 2,
+        "1": 2,
+        "2": 1
+      },
+      "two_cycle_row_responses": [
+        0.7228235294117648,
+        1.4456470588235295
+      ],
+      "interpretation": "An exact cycle of quantized weight updates across identical exposures, not a neural activity loop. No boundary clipping; all codes remain below255."
+    },
+    "independent_verification": "Six maximum0.01 results match the earlier static weight-precision-probe row gains. IEEE outputs also minimize exact distance over adjacent representable values; half-step ties use even code.",
+    "first_update_stochastic_rounding": {
+      "law": "For independent per-edge rounding of1/d on a uniform grid q, write1/(d*q)=k+p with integer k and0<=p<1. Row response=q*(d*k+X), X~Binomial(d,p); its mean is1 and variance=d*q^2*p*(1-p).",
+      "cases": [
+        {
+          "format": "UINT4_maximum_1",
+          "contributors": 18432,
+          "lower_code": 0,
+          "round_up_probability_exact": "5/6144",
+          "mean_raw_response": 1,
+          "independent_response_variance": 0.06661241319444444,
+          "independent_response_std": 0.258093806966468,
+          "expected_nonzero_edges": 15.0,
+          "shared_uniform_response_values": [
+            0.0,
+            1228.8
+          ],
+          "shared_uniform_response_variance": 1227.8,
+          "shared_uniform_response_std": 35.039977168942336
+        },
+        {
+          "format": "UINT8_maximum_1",
+          "contributors": 18432,
+          "lower_code": 0,
+          "round_up_probability_exact": "85/6144",
+          "mean_raw_response": 1,
+          "independent_response_variance": 0.0038673151552287583,
+          "independent_response_std": 0.06218774119735142,
+          "expected_nonzero_edges": 255.0,
+          "shared_uniform_response_values": [
+            0.0,
+            72.28235294117647
+          ],
+          "shared_uniform_response_variance": 71.28235294117647,
+          "shared_uniform_response_std": 8.442887713405673
+        },
+        {
+          "format": "UINT4_maximum_1/100",
+          "contributors": 18432,
+          "lower_code": 0,
+          "round_up_probability_exact": "125/1536",
+          "mean_raw_response": 1,
+          "independent_response_variance": 0.0006124131944444444,
+          "independent_response_std": 0.02474698354233187,
+          "expected_nonzero_edges": 1500.0,
+          "shared_uniform_response_values": [
+            0.0,
+            12.288
+          ],
+          "shared_uniform_response_variance": 11.288,
+          "shared_uniform_response_std": 3.359761896325393
+        },
+        {
+          "format": "UINT8_maximum_1/100",
+          "contributors": 18432,
+          "lower_code": 1,
+          "round_up_probability_exact": "589/1536",
+          "mean_raw_response": 1,
+          "independent_response_variance": 6.70154507881584e-06,
+          "independent_response_std": 0.0025887342619156256,
+          "expected_nonzero_edges": 18432.0,
+          "shared_uniform_response_values": [
+            0.7228235294117648,
+            1.4456470588235295
+          ],
+          "shared_uniform_response_variance": 0.12352287889273357,
+          "shared_uniform_response_std": 0.3514582178477743
+        }
+      ],
+      "limits": [
+        "Single initially nonnegative update only; it establishes no stationary learning or recurrent behavior. Later clipping and target/source changes require separate analysis.",
+        "If one shared uniform draw rounds all edges, the mean stays1 but variance is d times larger. Neither correlation policy is adopted.",
+        "A correct aggregate mean does not preserve every source-specific association; zero-valued retained weights are not unassigned slots.",
+        "Rounding randomness is distinct from the modeled activity-support noise."
+      ]
+    },
+    "comparison_value": [
+      "Adequate state/working precision cannot rescue updates discarded at per-edge writeback.",
+      "Compare wider stored weights and meaningful format scales before adding persistent residuals or master weights; existing memory accounting remains applicable.",
+      "Source-energy step adjustment and quantization must be assessed together using actual contextual patterns, not merely an ideal learning stability bound."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/normalized_delta_writeback.py",
+      "script_sha256": "faed18435640418184efc028bd6c8122c8af5eacbcdea612a65e76263668782f"
+    }
+  },
+  "projection_after_stochastic_update": {
+    "recorded_at_utc": "2026-10-28T22:04:51.876654+00:00",
+    "status": "exact conditional expectation and first-change waiting law; no neural training/simulation",
+    "assumptions": [
+      "D18432 retained endpoints, unit credited sources, common source-energy step1/D and target1. All existing weights are on the UINT8 grid q1/255.",
+      "Weights are first clipped to nonnegative values, then independently stochastically rounded within the stated range. No upper clipping occurs in these examples.",
+      "Compare two explicit rows with equal total256/255:256 code1 weights or2 code128 weights, with all remaining retained weights zero. Individual source identities are not assumed behaviorally interchangeable on other inputs."
+    ],
+    "identity": "For negative error e and lower bound0, E[w_i_next]=max(0,w_i+eta*e*c_i). Unbiased rounding preserves this projected value, not the unconstrained update.",
+    "cases": [
+      {
+        "nonzero_weights": 256,
+        "code_on_each_nonzero_weight": 1,
+        "retained_endpoints": 18432,
+        "initial_raw_response": "256/255",
+        "target": "1",
+        "unprojected_delta_per_edge": "-1/4700160",
+        "expected_raw_response_after_projection_and_unbiased_SR": "18431/18360",
+        "expected_remaining_overprediction": "71/18360",
+        "expected_decrease": "1/18360",
+        "probability_at_least_one_code_decrement": 0.013793254833067389,
+        "mean_exposures_until_first_changed_code": 72.49920429242275
+      },
+      {
+        "nonzero_weights": 2,
+        "code_on_each_nonzero_weight": 128,
+        "retained_endpoints": 18432,
+        "initial_raw_response": "256/255",
+        "target": "1",
+        "unprojected_delta_per_edge": "-1/4700160",
+        "expected_raw_response_after_projection_and_unbiased_SR": "471859/470016",
+        "expected_remaining_overprediction": "1843/470016",
+        "expected_decrease": "1/2350080",
+        "probability_at_least_one_code_decrement": 0.00010850400100519627,
+        "mean_exposures_until_first_changed_code": 9216.25000678187
+      }
+    ],
+    "waiting_law": "Each currently positive weight decreases by exactly one code with probability1/D; zero weights remain0. Until any change, the same row repeats, so waiting to the first changed code is geometric with probability1-(1-1/D)^n_positive. This is not total convergence time or physical duration.",
+    "conclusion": "Equal current output/error/source energy does not imply equal correction speed under bounds. The two expected decreases differ by128 because different numbers of coordinates can move downward.",
+    "limits": [
+      "This does not refute projected learning or establish its eventual stationary distribution. The two rows have different weight distributions and can differ on later contexts.",
+      "No constraint-aware normalization, active-set index, optimizer, master/residual state or source-exclusion policy is selected.",
+      "Single-update unbiasedness, mean prediction and actual later learning are different questions."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/projected_delta_arithmetic.py",
+      "script_sha256": "0cfe9c73cf235439d01cdb7109598c335eb46f93b46b907e8e8bfec21054d699"
+    }
+  }
+}

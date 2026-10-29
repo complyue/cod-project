@@ -1,0 +1,464 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T20:08:39.894298+00:00",
+  "status": "conditional integration and collision analysis; no neuron or segment mechanism selected",
+  "value_lineage": "C-15/P-29 needs context-dependent prediction; C-13/P-30 supplies bounded incoming capacity but does not guarantee context selectivity. H-74 requires a demonstrated computation before introducing grouping/state. H-75 supplies existing contextual cell identities.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/context_detection_arithmetic.py",
+    "script_sha256": "e0bd980a73df17d9ea035df346f09ff38c589b758f450694838752e28e69baee"
+  },
+  "assumptions": [
+    "Binary patterns and threshold detectors are diagnostic references. The application has graded rates and an unspecified transfer/readiness function.",
+    "All fixed-state single-unit comparisons hold previous local state and other inputs constant. They do not bound the whole nonlinear recurrent, polarity-cancelled network."
+  ],
+  "disjunction_of_contexts": {
+    "desired": "(a AND b) OR (c AND d)",
+    "single_affine_threshold_impossibility": "For positive patterns1100 and0011, w_a+w_b>=theta and w_c+w_d>=theta. Negative patterns1010 and0101 require w_a+w_c<theta and w_b+w_d<theta. Summing gives the same total weights both>=2*theta and<2*theta, a contradiction even with signed weights and a bias absorbed into theta.",
+    "two_detectors": "Two independent conjunction detectors followed by an OR realize the truth table. This demonstrates a computational distinction, not adopted branches, group metadata or inhibitory weights.",
+    "truth_table": [
+      {
+        "input": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "desired": false,
+        "two_detectors": false,
+        "pooled_unit_threshold_two": false
+      },
+      {
+        "input": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "desired": false,
+        "two_detectors": false,
+        "pooled_unit_threshold_two": false
+      },
+      {
+        "input": [
+          0,
+          0,
+          1,
+          0
+        ],
+        "desired": false,
+        "two_detectors": false,
+        "pooled_unit_threshold_two": false
+      },
+      {
+        "input": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "desired": true,
+        "two_detectors": true,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "desired": false,
+        "two_detectors": false,
+        "pooled_unit_threshold_two": false
+      },
+      {
+        "input": [
+          0,
+          1,
+          0,
+          1
+        ],
+        "desired": false,
+        "two_detectors": false,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          0,
+          1,
+          1,
+          0
+        ],
+        "desired": false,
+        "two_detectors": false,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          0,
+          1,
+          1,
+          1
+        ],
+        "desired": true,
+        "two_detectors": true,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          1,
+          0,
+          0,
+          0
+        ],
+        "desired": false,
+        "two_detectors": false,
+        "pooled_unit_threshold_two": false
+      },
+      {
+        "input": [
+          1,
+          0,
+          0,
+          1
+        ],
+        "desired": false,
+        "two_detectors": false,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          1,
+          0,
+          1,
+          0
+        ],
+        "desired": false,
+        "two_detectors": false,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          1,
+          0,
+          1,
+          1
+        ],
+        "desired": true,
+        "two_detectors": true,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          1,
+          1,
+          0,
+          0
+        ],
+        "desired": true,
+        "two_detectors": true,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          1,
+          1,
+          0,
+          1
+        ],
+        "desired": true,
+        "two_detectors": true,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "desired": true,
+        "two_detectors": true,
+        "pooled_unit_threshold_two": true
+      },
+      {
+        "input": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "desired": true,
+        "two_detectors": true,
+        "pooled_unit_threshold_two": true
+      }
+    ],
+    "existing_cell_alternative": "Different existing cells within the same coordinate/polarity population may carry the two contextual detections. That consumes contextual representational capacity and can alter later state/learning; it is not a free equivalence to subunits within one cell.",
+    "limit": "No impossibility result for nonlinear recurrent computation, multi-frame processing, other cell states or H-77 cancellation. More incoming slots alone cannot fix this fixed-state single-affine-detector counterexample."
+  },
+  "pooled_patterns": {
+    "observation": "Pooling remembered source sets can accept a mixed input that belongs to neither original context. Whether such inputs occur often enough to matter depends on the actual pattern distribution.",
+    "exact_conditional": "For a fixed union U of u source IDs and a uniformly random independent a-subset from n IDs: Pr(overlap>=theta | u)=sum_j>=theta C(u,j)*C(n-u,a-j)/C(n,a).",
+    "union_transition": "With M independent uniform s-subsets: Pr(U_next=u+j | U=u)=C(n-u,j)*C(u,s-j)/C(n,s). Average the conditional match probability over this union-size distribution.",
+    "expectation_limit": "E[match_probability(U)] is generally not match_probability(E[U]); independent occupancy is a distinct approximation. Exact union mean n*[1-(1-s/n)^M] does not make the approximation exact.",
+    "independent_verification": "All eight reported probabilities also match an exact inclusion-exclusion calculation: P(all k specified query cells covered)=sum_j=0..k (-1)^j*C(k,j)*[C(n-j,s)/C(n,s)]^M. For a=3, P(overlap>=2)=3*P(two specified covered)-2*P(all three covered).",
+    "cases": [
+      {
+        "unioned_patterns": 1,
+        "population": 60,
+        "stored_per_pattern": 3,
+        "query_active": 3,
+        "threshold": 2,
+        "expected_union": 3.0,
+        "exact_random_query_match": 0.005026300409117475,
+        "exact_query_membership_probability": 2.9222676797194625e-05,
+        "match_given_query_not_identical_to_any_stored_pattern": 0.004997223764575236,
+        "independent_occupancy_approximation": 0.00725
+      },
+      {
+        "unioned_patterns": 1,
+        "population": 60,
+        "stored_per_pattern": 3,
+        "query_active": 3,
+        "threshold": 3,
+        "expected_union": 3.0,
+        "exact_random_query_match": 2.9222676797194625e-05,
+        "exact_query_membership_probability": 2.9222676797194625e-05,
+        "match_given_query_not_identical_to_any_stored_pattern": 0.0,
+        "independent_occupancy_approximation": 0.000125
+      },
+      {
+        "unioned_patterns": 4,
+        "population": 60,
+        "stored_per_pattern": 3,
+        "query_active": 3,
+        "threshold": 2,
+        "expected_union": 11.129625,
+        "exact_random_query_match": 0.08590369966899962,
+        "exact_query_membership_probability": 0.00011688558349956315,
+        "match_given_query_not_identical_to_any_stored_pattern": 0.08579684249949802,
+        "independent_occupancy_approximation": 0.09045888145808642
+      },
+      {
+        "unioned_patterns": 4,
+        "population": 60,
+        "stored_per_pattern": 3,
+        "query_active": 3,
+        "threshold": 3,
+        "expected_union": 11.129625,
+        "exact_random_query_match": 0.0051139280507385716,
+        "exact_query_membership_probability": 0.00011688558349956315,
+        "match_given_query_not_identical_to_any_stored_pattern": 0.004997626617742336,
+        "independent_occupancy_approximation": 0.006382456204550537
+      },
+      {
+        "unioned_patterns": 16,
+        "population": 60,
+        "stored_per_pattern": 3,
+        "query_active": 3,
+        "threshold": 2,
+        "expected_union": 33.59239988089406,
+        "exact_random_query_match": 0.5903870797104399,
+        "exact_query_membership_probability": 0.00046746036694796117,
+        "match_given_query_not_identical_to_any_stored_pattern": 0.5901955123542681,
+        "independent_occupancy_approximation": 0.5893807272931133
+      },
+      {
+        "unioned_patterns": 16,
+        "population": 60,
+        "stored_per_pattern": 3,
+        "query_active": 3,
+        "threshold": 3,
+        "expected_union": 33.59239988089406,
+        "exact_random_query_match": 0.1708740552683695,
+        "exact_query_membership_probability": 0.00046746036694796117,
+        "match_given_query_not_identical_to_any_stored_pattern": 0.1704862904853314,
+        "independent_occupancy_approximation": 0.17549685708589796
+      },
+      {
+        "unioned_patterns": 64,
+        "population": 60,
+        "stored_per_pattern": 3,
+        "query_active": 3,
+        "threshold": 2,
+        "expected_union": 57.74855164733303,
+        "exact_random_query_match": 0.9960991817926292,
+        "exact_query_membership_probability": 0.001868530761172343,
+        "match_given_query_not_identical_to_any_stored_pattern": 0.9960918793489744,
+        "independent_occupancy_approximation": 0.9958814894851241
+      },
+      {
+        "unioned_patterns": 64,
+        "population": 60,
+        "stored_per_pattern": 3,
+        "query_active": 3,
+        "threshold": 3,
+        "expected_union": 57.74855164733303,
+        "exact_random_query_match": 0.8913728264767525,
+        "exact_query_membership_probability": 0.001868530761172343,
+        "match_given_query_not_identical_to_any_stored_pattern": 0.89116947328984,
+        "independent_occupancy_approximation": 0.8915989291593924
+      }
+    ],
+    "interpretation": "The independent query can coincide with a stored pattern. For a=s, exact membership probability is1-(1-1/C(n,s))^M and is contained in the match event. The conditional nonmember match excludes exact stored patterns but not every semantically legitimate alternative. The small population is a diagnostic, not a chosen intra-minicolumn connection domain."
+  },
+  "semantic_population_structure": {
+    "assumptions": "Illustrative 5120 dimensions, one chosen polarity each, exactly3 uniformly chosen cells out of60 on that polarity, independent choices across coordinates. A detector retains one source ID in each of100 distinct coordinates from a prior pattern.",
+    "active_cells": 15360,
+    "population": 614400,
+    "global_active_fraction": 0.025,
+    "same_token": "A fresh independent cell pattern for the same signed token overlaps each remembered endpoint with probability3/60.",
+    "random_sign": "An independent query with fair independent signs in each coordinate overlaps with probability3/120. Real token signs and strengths need not follow this law.",
+    "cases": [
+      {
+        "stored_endpoints": 100,
+        "threshold": 5,
+        "same_token_fresh_cell_pattern_match": 0.564018699314288,
+        "independent_fair_sign_query_match": 0.1062689993797072,
+        "ratio": 5.307462219522802
+      },
+      {
+        "stored_endpoints": 100,
+        "threshold": 10,
+        "same_token_fresh_cell_pattern_match": 0.028188294163416106,
+        "independent_fair_sign_query_match": 0.00021269979950835983,
+        "ratio": 132.52619056798036
+      },
+      {
+        "stored_endpoints": 100,
+        "threshold": 15,
+        "same_token_fresh_cell_pattern_match": 0.00013585423899229105,
+        "independent_fair_sign_query_match": 3.170038323754181e-08,
+        "ratio": 4285.570870682817
+      },
+      {
+        "stored_endpoints": 100,
+        "threshold": 20,
+        "same_token_fresh_cell_pattern_match": 1.0522953420147268e-07,
+        "independent_fair_sign_query_match": 7.123190976398242e-13,
+        "ratio": 147728.08218976148
+      }
+    ],
+    "limit": "These are conditional match probabilities, not observed false predictions. Contextual assignment is learned rather than necessarily resampled, real coordinates have unequal magnitudes, graded contributions differ from binary overlap, and target rows can repeat coordinates. Global sparsity alone is insufficient to transfer an iid random-vector recognition bound."
+  },
+  "evidence_comparisons": [
+    {
+      "candidate": "Single incoming sum with the chosen transfer/readiness law",
+      "value": "Uses existing source/weight organization and contextual cells.",
+      "look_for": "Whether actual shared and mixed contexts cause pre-input false readiness even after fair scale/threshold calibration.",
+      "boundary": "A linear example does not establish failure on the actual graded recurrent workload."
+    },
+    {
+      "candidate": "Distribute context detections among existing cells",
+      "value": "Uses H-75 contextual identities without assuming new subcellular storage.",
+      "look_for": "Whether learning finds distinct useful assignments and retains them as contexts accumulate.",
+      "boundary": "Finite population, activity semantics and shared recurrence still constrain the result; no number-of-contexts guarantee."
+    },
+    {
+      "candidate": "Separate nonlinear groups within a receiving neuron",
+      "value": "Can distinguish combinations that one affine detector cannot.",
+      "look_for": "Only favor if a demonstrated contextual-selectivity deficit is resolved at acceptable storage, work and learning cost.",
+      "boundary": "Grouping, learning and any state remain unselected. No branch IDs, permanence, traces or new array budget are preset."
+    }
+  ],
+  "non_adoptions": [
+    "No new physical metric, geometric wiring prior, inhibitory edge, neuron equation, dendritic mechanism, threshold or capacity revision.",
+    "No binary encoding, fixed recruitment count, random assignment default, training run or experiment framework.",
+    "No implementation, project tests, build, toolchain mutation, commit or push."
+  ],
+  "population_scaling_reference": {
+    "recorded_at_utc": "2026-10-29T00:07:13Z",
+    "assumptions": "One fixed s-endpoint binary detector; uniformly selected fixed-size active set of a out of N independent of the detector; threshold theta. No learning, graded rates, correlated semantic patterns, recurrence or simulation.",
+    "probability": "Pr(K>=theta)=sum(k=theta..s) C(a,k)*C(N-a,s-k)/C(N,s), with impossible terms zero.",
+    "fixed_fraction_limit": "For fixed s/theta and a/N -> p in (0,1), K converges to Binomial(s,p). Increasing N alone does not drive this false-match reference to zero.",
+    "fixed_count_limit": "For fixed a>=theta and fixed s>=theta, Pr(K>=theta) ~ C(s,theta)*(a)_theta/N^theta as N grows; falling activity fraction is part of this improvement.",
+    "cases": [
+      {
+        "comparison": "fixed_active_count",
+        "population": 4096,
+        "active_count": 128,
+        "sampled_endpoints": 24,
+        "threshold": 12,
+        "tail_probability": 1.0180447101812757e-12
+      },
+      {
+        "comparison": "fixed_active_count",
+        "population": 65536,
+        "active_count": 128,
+        "sampled_endpoints": 24,
+        "threshold": 12,
+        "tail_probability": 4.80561108636946e-27
+      },
+      {
+        "comparison": "fixed_active_count",
+        "population": 614400,
+        "active_count": 128,
+        "sampled_endpoints": 24,
+        "threshold": 12,
+        "tail_probability": 1.060029311074598e-38
+      },
+      {
+        "comparison": "fixed_active_fraction",
+        "population": 4096,
+        "active_count": 128,
+        "sampled_endpoints": 24,
+        "threshold": 12,
+        "tail_probability": 1.0180447101812757e-12
+      },
+      {
+        "comparison": "fixed_active_fraction",
+        "population": 65536,
+        "active_count": 2048,
+        "sampled_endpoints": 24,
+        "threshold": 12,
+        "tail_probability": 1.6036926280032241e-12
+      },
+      {
+        "comparison": "fixed_active_fraction",
+        "population": 614400,
+        "active_count": 19200,
+        "sampled_endpoints": 24,
+        "threshold": 12,
+        "tail_probability": 1.6462147961850083e-12
+      },
+      {
+        "comparison": "dense_fixed_fraction",
+        "population": 4096,
+        "active_count": 2048,
+        "sampled_endpoints": 24,
+        "threshold": 12,
+        "tail_probability": 0.5808272463737174
+      },
+      {
+        "comparison": "dense_fixed_fraction",
+        "population": 65536,
+        "active_count": 32768,
+        "sampled_endpoints": 24,
+        "threshold": 12,
+        "tail_probability": 0.5806048893335335
+      },
+      {
+        "comparison": "dense_fixed_fraction",
+        "population": 614400,
+        "active_count": 307200,
+        "sampled_endpoints": 24,
+        "threshold": 12,
+        "tail_probability": 0.5805917029694102
+      }
+    ],
+    "binomial_limits": [
+      {
+        "active_fraction": "1/32",
+        "limiting_tail_probability": 1.6513562568649549e-12
+      },
+      {
+        "active_fraction": "1/2",
+        "limiting_tail_probability": 0.5805901288986206
+      }
+    ],
+    "verification": "Exact Fraction distributions normalize for all9 cases; 3210 exact counting identities verify equivalent hypergeometric forms on N2..18, s1..min(N,6). No neural trajectories or random draws.",
+    "interpretation": "Population size and activity fraction are different scaling conditions. These reference numbers do not set actual false-prediction rates, active fraction, detector threshold or connection class.",
+    "primary_reference": "MR-S038; targeted expansion of sections4.2/5 and Figure5 caption. The asymptotic statements and nine arithmetic cases are independently derived here, not claimed measured results from the paper."
+  },
+  "updated_at_utc": "2026-10-29T00:07:13Z"
+}

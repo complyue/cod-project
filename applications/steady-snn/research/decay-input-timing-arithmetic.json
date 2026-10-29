@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-10-28T18:51:00Z",
+  "status": "conditional exact-rational and floating-format arithmetic; no SNN implementation",
+  "scope": "H-71/H-72 scheduled decay, H-73 adequate state precision, H-74 value before machinery, H-75 two-frame comparison",
+  "source_cache_path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/decay_input_timing_arithmetic.py",
+  "source_sha256": "554d62db116ee543b57f97b4aa76da3179219741f7611c59e4e2363069ea714f",
+  "assumptions": [
+    "The scalar recurrence x[n+1]=a*x[n]+u is illustrative; no neuron leakage law or local half-life is selected.",
+    "Exact rational iteration uses nonnegative nearest uniform quantization, ties upward; displayed floats are rounded summaries.",
+    "Quantized code is an observed output of latent arithmetic, not reset as the next latent state.",
+    "No source gathers, noise, cancellation, learning, saturation, phase encoding or network behavior is simulated."
+  ],
+  "constant_input_cases": [
+    {
+      "a": 0.99,
+      "u": 0.0,
+      "x0": 1.0,
+      "quantum": 0.01,
+      "equilibrium": 0.0,
+      "first_code_change": {
+        "frame": 1,
+        "value": 0.99,
+        "code": 99
+      },
+      "no_change_reason": null
+    },
+    {
+      "a": 0.99,
+      "u": 0.005,
+      "x0": 1.0,
+      "quantum": 0.01,
+      "equilibrium": 0.5,
+      "first_code_change": {
+        "frame": 2,
+        "value": 0.99005,
+        "code": 99
+      },
+      "no_change_reason": null
+    },
+    {
+      "a": 0.99,
+      "u": 0.00994,
+      "x0": 1.0,
+      "quantum": 0.01,
+      "equilibrium": 0.994,
+      "first_code_change": {
+        "frame": 179,
+        "value": 0.9949927755739885,
+        "code": 99
+      },
+      "no_change_reason": null
+    },
+    {
+      "a": 0.99,
+      "u": 0.00995,
+      "x0": 1.0,
+      "quantum": 0.01,
+      "equilibrium": 0.995,
+      "first_code_change": null,
+      "no_change_reason": "equilibrium remains in initial code interval"
+    },
+    {
+      "a": 0.99,
+      "u": 0.01,
+      "x0": 1.0,
+      "quantum": 0.01,
+      "equilibrium": 1.0,
+      "first_code_change": null,
+      "no_change_reason": "equilibrium remains in initial code interval"
+    },
+    {
+      "a": 0.99,
+      "u": 0.0101,
+      "x0": 1.0,
+      "quantum": 0.01,
+      "equilibrium": 1.01,
+      "first_code_change": {
+        "frame": 69,
+        "value": 1.005001629701008,
+        "code": 101
+      },
+      "no_change_reason": null
+    },
+    {
+      "a": 0.99,
+      "u": 0.015,
+      "x0": 1.0,
+      "quantum": 0.01,
+      "equilibrium": 1.5,
+      "first_code_change": {
+        "frame": 1,
+        "value": 1.005,
+        "code": 101
+      },
+      "no_change_reason": null
+    }
+  ],
+  "unchanged_code_input_cases": {
+    "a": 0.999,
+    "x0": 10.0,
+    "quantum": 1.0,
+    "no_input_first_change": {
+      "frame": 52,
+      "value": 9.493041681462655,
+      "code": 9
+    },
+    "cases": [
+      {
+        "input_frame": 20,
+        "input": 0.0,
+        "latent_before": 9.801888648295346,
+        "latent_after": 9.801888648295346,
+        "stored_code_before": 10,
+        "stored_code_after": 10,
+        "first_code_change_absolute_frame": 52
+      },
+      {
+        "input_frame": 20,
+        "input": 0.05,
+        "latent_before": 9.801888648295346,
+        "latent_after": 9.851888648295347,
+        "stored_code_before": 10,
+        "stored_code_after": 10,
+        "first_code_change_absolute_frame": 57
+      },
+      {
+        "input_frame": 20,
+        "input": 0.2,
+        "latent_before": 9.801888648295346,
+        "latent_after": 10.001888648295347,
+        "stored_code_before": 10,
+        "stored_code_after": 10,
+        "first_code_change_absolute_frame": 72
+      }
+    ]
+  },
+  "timestamp_encoding": {
+    "isolated_law": "x(t)=x0*exp(-lambda*(t-t0))",
+    "next_lower_boundary_time": "T=t+log(x(t)/b)/lambda",
+    "reconstruction": "x(t)=b*exp(lambda*(T-t)) when lambda and boundary b are known and the unforced law remains valid",
+    "meaning": "An exact timestamp can encode fractional amplitude progress. It is numerical state, not free bookkeeping.",
+    "timestamp_error": "A time error delta changes reconstructed amplitude by the factor exp(lambda*delta).",
+    "float32_absolute_time_cases": [
+      {
+        "absolute_time_seconds": 1,
+        "float32_local_spacing_seconds": 1.1920928955078125e-07,
+        "nearest_rounding_half_spacing_seconds": 5.960464477539063e-08,
+        "amplitude_relative_error_bound_for_half_second_half_life": 8.262958636250226e-08
+      },
+      {
+        "absolute_time_seconds": 3600,
+        "float32_local_spacing_seconds": 0.000244140625,
+        "nearest_rounding_half_spacing_seconds": 0.0001220703125,
+        "amplitude_relative_error_bound_for_half_second_half_life": 0.00016923970530223107
+      },
+      {
+        "absolute_time_seconds": 21600,
+        "float32_local_spacing_seconds": 0.001953125,
+        "nearest_rounding_half_spacing_seconds": 0.0009765625,
+        "amplitude_relative_error_bound_for_half_second_half_life": 0.0013547198921082058
+      },
+      {
+        "absolute_time_seconds": 86400,
+        "float32_local_spacing_seconds": 0.0078125,
+        "nearest_rounding_half_spacing_seconds": 0.00390625,
+        "amplitude_relative_error_bound_for_half_second_half_life": 0.005429901112802821
+      },
+      {
+        "absolute_time_seconds": 2592000,
+        "float32_local_spacing_seconds": 0.25,
+        "nearest_rounding_half_spacing_seconds": 0.125,
+        "amplitude_relative_error_bound_for_half_second_half_life": 0.18920711500272105
+      },
+      {
+        "absolute_time_seconds": 31536000,
+        "float32_local_spacing_seconds": 2.0,
+        "nearest_rounding_half_spacing_seconds": 1.0,
+        "amplitude_relative_error_bound_for_half_second_half_life": 3.0
+      }
+    ],
+    "limit": "The local spacing bound is illustrative for the specified positive normal timestamps, away from overflow. Relative epochs or integer ticks change the trade-off and are not selected.",
+    "finite_event_requirement": "Reconstruction from the next timestamp requires a finite known boundary crossing under the specified law. No-event cases need not identify the amplitude.",
+    "zero_code_counterexample": {
+      "quantum": 1,
+      "latent_amplitudes": [
+        0.2,
+        0.4
+      ],
+      "current_codes": [
+        0,
+        0
+      ],
+      "unforced_next_code_change": [
+        null,
+        null
+      ],
+      "same_new_input": 0.2,
+      "codes_after_input": [
+        0,
+        1
+      ],
+      "meaning": "The same zero code and absent event can hide different residual amplitudes that respond differently to later input. Deliberately truncating both to true zero is a different model choice, not an exact encoding of both latent states."
+    }
+  },
+  "conditional_storage": {
+    "neurons": 614400,
+    "one_UINT4_magnitude_array_bytes": 307200,
+    "one_uint32_timestamp_array_bytes": 2457600,
+    "UINT4_plus_uint32_timestamp_one_copy_bytes": 2764800,
+    "one_FP32_state_array_bytes": 2457600,
+    "two_UINT4_plus_two_uint32_timestamp_arrays_bytes": 5529600,
+    "two_FP32_state_arrays_bytes": 4915200,
+    "one_uint64_timestamp_array_bytes": 4915200,
+    "scope": "Named arrays only, excluding phase metadata, event dispatch and other state. These are alternative arithmetic cases, not a prescribed layout or requirement to double every timer field."
+  },
+  "integer_clock_reference": {
+    "tick_seconds": 0.01,
+    "uint32_wrap_days": 497.1026962962963,
+    "limit": "A wrapped absolute frame index needs a bounded comparison horizon or another clock interpretation; no timer type or wrap protocol selected."
+  },
+  "boundary_and_input_derivations": [
+    "For constant u and 0<a<1, x[n]=x_eq+a^n*(x0-x_eq), x_eq=u/(1-a). A lower boundary is unreachable if the monotone trajectory approaches it from above without crossing.",
+    "The first discrete frame depends on whether equality changes the code. At x0=1,a=.99,u=.005,q=.01, frame1 equals .995 and remains code100 under ties-up; frame2 changes to99.",
+    "An input can leave the current code unchanged but change the next crossing. Ignoring such input or restarting at the code center loses information.",
+    "For varying input, x[n+m]=a^m*x[n]+sum_{j=0}^{m-1} a^(m-1-j)*u[n+j]. The order and timing of inputs affect the result.",
+    "Scalar affine transitions compose as (a2,b2) after (a1,b1) -> (a2*a1,a2*b1+b2). A running sufficient amplitude can retain this contribution without keeping the full input history; low-precision writeback can still lose it.",
+    "A precomputed no-input event is only valid while its evolution assumptions hold. Recurrent input, sampled noise, cancellation or weight changes can invalidate them."
+  ],
+  "non_inferences": [
+    "No lower-code event under a maintained positive input is not automatically stale or a failure: the CC must retain regulated activity, and token-response fading differs from individual scalar decay.",
+    "These formulas do not select a per-neuron timer, residual array, queue, event index, output quantizer or continuous-time model.",
+    "Exact local decay timing does not prove agreement of a network reading quantized outputs with a network reading latent amplitudes."
+  ]
+}

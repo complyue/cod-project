@@ -1,0 +1,526 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T19:33:38.495039+00:00",
+  "status": "conditional combinatorics and causal analysis; not a selected learner",
+  "value_lineage": "C-15/P-29 requires contextual prediction; P-30 depends on C-13 fixed incoming capacity. Dependency does not confer authority.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/flow_slot_arithmetic.py",
+    "script_sha256": "3177dbde057e170548aeeafc9da98f1dce17f77ccee73e5df3739cf97bc44249"
+  },
+  "source_eligibility": {
+    "example": "A context predicts alternatives B and C; B is then observed, followed by D.",
+    "conditional_risk": "Crediting readiness for C as though C had been observed can strengthen C-to-D in a rule that intends credit for observed context. This does not establish that all weak predictive activity is useless as history.",
+    "alternatives": [
+      "Credit the independently established preceding contextual representation",
+      "Use graded preceding neural activity, distinguishing the role of weak readiness"
+    ],
+    "comparison": "Compare later pre-input matching, retained legitimate alternatives, shared-fragment discrimination and contamination from unobserved branches. No winner array, causal noise labels or eligibility trace is selected.",
+    "timing": "If neural frames are finer than token events, the preceding frame need not be the preceding token. Define credit at the information boundary actually used; the two-frame buffer alone stores no arbitrary-length history."
+  },
+  "local_operations": [
+    {
+      "condition": "Source ID already retained in the target set",
+      "consequence": "Weight adaptation needs no new endpoint slot; numerical update visibility is a separate issue."
+    },
+    {
+      "condition": "Needed source absent, useful free slot present",
+      "consequence": "An independently defined structural-growth operation can assign it; scanning or adapting only existing edges cannot discover that endpoint."
+    },
+    {
+      "condition": "Needed source absent and current set full",
+      "consequence": "Consider another context-compatible target, justified edge replacement, available larger set, or deferral. These change different semantics and none is selected."
+    },
+    {
+      "condition": "Prediction wrong despite available source and slot",
+      "consequence": "Capacity alone does not repair target assignment, context discrimination, timing or effective gain."
+    }
+  ],
+  "assignment_condition": {
+    "statement": "With one set per participating target, interchangeable sets and no extra placement restrictions, sort positive live degrees d and available capacities c in descending order. A static fit exists iff count(d)<=count(c) and d[i]<=c[i] for every i.",
+    "proof": "Necessity: the i largest demands require i capacities at least d[i]. Sufficiency: assign the i-th largest demand to the i-th largest capacity.",
+    "equivalent": "For every integer demand threshold, the number of targets at or above it must not exceed the number of sets at or above it.",
+    "limits": "A feasibility statement, not a runtime sort, histogram, migration algorithm or guarantee of a free destination during online changes.",
+    "example": {
+      "degrees": [
+        101,
+        101,
+        1,
+        1
+      ],
+      "capacities": [
+        200,
+        100,
+        100,
+        100
+      ],
+      "total_degree": 204,
+      "total_capacity": 500,
+      "fits": false
+    }
+  },
+  "pool_cases": [
+    {
+      "classes": 15,
+      "minimum_class_count": 311296,
+      "rows": [
+        {
+          "index": 0,
+          "capacity": 100,
+          "count": 311296
+        },
+        {
+          "index": 1,
+          "capacity": 144,
+          "count": 155648
+        },
+        {
+          "index": 2,
+          "capacity": 200,
+          "count": 77824
+        },
+        {
+          "index": 3,
+          "capacity": 288,
+          "count": 38912
+        },
+        {
+          "index": 4,
+          "capacity": 400,
+          "count": 19456
+        },
+        {
+          "index": 5,
+          "capacity": 576,
+          "count": 9728
+        },
+        {
+          "index": 6,
+          "capacity": 800,
+          "count": 4864
+        },
+        {
+          "index": 7,
+          "capacity": 1152,
+          "count": 2432
+        },
+        {
+          "index": 8,
+          "capacity": 1600,
+          "count": 1216
+        },
+        {
+          "index": 9,
+          "capacity": 2304,
+          "count": 608
+        },
+        {
+          "index": 10,
+          "capacity": 3200,
+          "count": 304
+        },
+        {
+          "index": 11,
+          "capacity": 4608,
+          "count": 152
+        },
+        {
+          "index": 12,
+          "capacity": 6400,
+          "count": 76
+        },
+        {
+          "index": 13,
+          "capacity": 9216,
+          "count": 38
+        },
+        {
+          "index": 14,
+          "capacity": 12800,
+          "count": 19
+        }
+      ],
+      "set_count": 622573,
+      "reserved_slots": 106492416,
+      "thresholds": [
+        {
+          "minimum_live_degree": 101,
+          "sets_large_enough": 311277,
+          "fraction_of_all_neurons": 0.5066357421875,
+          "minimum_neurons_below_degree_if_all_participate": 303123
+        },
+        {
+          "minimum_live_degree": 145,
+          "sets_large_enough": 155629,
+          "fraction_of_all_neurons": 0.25330240885416666,
+          "minimum_neurons_below_degree_if_all_participate": 458771
+        },
+        {
+          "minimum_live_degree": 201,
+          "sets_large_enough": 77805,
+          "fraction_of_all_neurons": 0.1266357421875,
+          "minimum_neurons_below_degree_if_all_participate": 536595
+        },
+        {
+          "minimum_live_degree": 1001,
+          "sets_large_enough": 4845,
+          "fraction_of_all_neurons": 0.0078857421875,
+          "minimum_neurons_below_degree_if_all_participate": 609555
+        },
+        {
+          "minimum_live_degree": 10001,
+          "sets_large_enough": 19,
+          "fraction_of_all_neurons": 3.092447916666667e-05,
+          "minimum_neurons_below_degree_if_all_participate": 614381
+        },
+        {
+          "minimum_live_degree": 12801,
+          "sets_large_enough": 0,
+          "fraction_of_all_neurons": 0.0,
+          "minimum_neurons_below_degree_if_all_participate": 614400
+        }
+      ],
+      "all_neurons_degree_101": {
+        "required_slots": 62054400,
+        "fewer_than_total_reserved_slots": true,
+        "feasible": false
+      }
+    },
+    {
+      "classes": 16,
+      "minimum_class_count": 327680,
+      "rows": [
+        {
+          "index": 0,
+          "capacity": 100,
+          "count": 327680
+        },
+        {
+          "index": 1,
+          "capacity": 144,
+          "count": 163840
+        },
+        {
+          "index": 2,
+          "capacity": 200,
+          "count": 81920
+        },
+        {
+          "index": 3,
+          "capacity": 288,
+          "count": 40960
+        },
+        {
+          "index": 4,
+          "capacity": 400,
+          "count": 20480
+        },
+        {
+          "index": 5,
+          "capacity": 576,
+          "count": 10240
+        },
+        {
+          "index": 6,
+          "capacity": 800,
+          "count": 5120
+        },
+        {
+          "index": 7,
+          "capacity": 1152,
+          "count": 2560
+        },
+        {
+          "index": 8,
+          "capacity": 1600,
+          "count": 1280
+        },
+        {
+          "index": 9,
+          "capacity": 2304,
+          "count": 640
+        },
+        {
+          "index": 10,
+          "capacity": 3200,
+          "count": 320
+        },
+        {
+          "index": 11,
+          "capacity": 4608,
+          "count": 160
+        },
+        {
+          "index": 12,
+          "capacity": 6400,
+          "count": 80
+        },
+        {
+          "index": 13,
+          "capacity": 9216,
+          "count": 40
+        },
+        {
+          "index": 14,
+          "capacity": 12800,
+          "count": 20
+        },
+        {
+          "index": 15,
+          "capacity": 18432,
+          "count": 10
+        }
+      ],
+      "set_count": 655350,
+      "reserved_slots": 112281600,
+      "thresholds": [
+        {
+          "minimum_live_degree": 101,
+          "sets_large_enough": 327670,
+          "fraction_of_all_neurons": 0.5333170572916667,
+          "minimum_neurons_below_degree_if_all_participate": 286730
+        },
+        {
+          "minimum_live_degree": 145,
+          "sets_large_enough": 163830,
+          "fraction_of_all_neurons": 0.266650390625,
+          "minimum_neurons_below_degree_if_all_participate": 450570
+        },
+        {
+          "minimum_live_degree": 201,
+          "sets_large_enough": 81910,
+          "fraction_of_all_neurons": 0.13331705729166668,
+          "minimum_neurons_below_degree_if_all_participate": 532490
+        },
+        {
+          "minimum_live_degree": 1001,
+          "sets_large_enough": 5110,
+          "fraction_of_all_neurons": 0.008317057291666667,
+          "minimum_neurons_below_degree_if_all_participate": 609290
+        },
+        {
+          "minimum_live_degree": 10001,
+          "sets_large_enough": 30,
+          "fraction_of_all_neurons": 4.8828125e-05,
+          "minimum_neurons_below_degree_if_all_participate": 614370
+        },
+        {
+          "minimum_live_degree": 12801,
+          "sets_large_enough": 10,
+          "fraction_of_all_neurons": 1.6276041666666666e-05,
+          "minimum_neurons_below_degree_if_all_participate": 614390
+        }
+      ],
+      "all_neurons_degree_101": {
+        "required_slots": 62054400,
+        "fewer_than_total_reserved_slots": true,
+        "feasible": false
+      }
+    }
+  ],
+  "source_union": {
+    "identity": "d_i = size(union of retained source-ID sets for all associations assigned to target i); repeated source IDs need no additional slot under the one-weight-per-source/target reference.",
+    "expected_uniform_formula": "U * (1-(1-k/U)^r)",
+    "assumptions": "r independent uniform k-subsets of U possible source identities, with every chosen edge retained. No deletion, contextual selection bias or weight-threshold criterion; expectation, not a realized bound or measured training demand.",
+    "cases": [
+      {
+        "source_population": 614400,
+        "sources_per_context": 32,
+        "contexts_or_repetitions": 1,
+        "expected_distinct_sources": 32.0,
+        "disjoint_upper_bound": 32
+      },
+      {
+        "source_population": 614400,
+        "sources_per_context": 32,
+        "contexts_or_repetitions": 4,
+        "expected_distinct_sources": 127.9900003472177,
+        "disjoint_upper_bound": 128
+      },
+      {
+        "source_population": 614400,
+        "sources_per_context": 32,
+        "contexts_or_repetitions": 16,
+        "expected_distinct_sources": 511.8000486028837,
+        "disjoint_upper_bound": 512
+      },
+      {
+        "source_population": 614400,
+        "sources_per_context": 32,
+        "contexts_or_repetitions": 64,
+        "expected_distinct_sources": 2044.6436137958483,
+        "disjoint_upper_bound": 2048
+      },
+      {
+        "source_population": 614400,
+        "sources_per_context": 32,
+        "contexts_or_repetitions": 256,
+        "expected_distinct_sources": 8137.839100699837,
+        "disjoint_upper_bound": 8192
+      },
+      {
+        "source_population": 614400,
+        "sources_per_context": 32,
+        "contexts_or_repetitions": 1024,
+        "expected_distinct_sources": 31910.32523174867,
+        "disjoint_upper_bound": 32768
+      },
+      {
+        "source_population": 60,
+        "sources_per_context": 3,
+        "contexts_or_repetitions": 1,
+        "expected_distinct_sources": 3.0,
+        "disjoint_upper_bound": 3
+      },
+      {
+        "source_population": 60,
+        "sources_per_context": 3,
+        "contexts_or_repetitions": 4,
+        "expected_distinct_sources": 11.129625,
+        "disjoint_upper_bound": 12
+      },
+      {
+        "source_population": 60,
+        "sources_per_context": 3,
+        "contexts_or_repetitions": 16,
+        "expected_distinct_sources": 33.59239988089406,
+        "disjoint_upper_bound": 48
+      },
+      {
+        "source_population": 60,
+        "sources_per_context": 3,
+        "contexts_or_repetitions": 64,
+        "expected_distinct_sources": 57.74855164733303,
+        "disjoint_upper_bound": 60
+      }
+    ],
+    "limits": "A 60-cell subset example concerns repeated selection for the same target; it is not the full token encoder or a limit on global contexts. Fractional participation does not make a fractional endpoint-ID slot. Different weights for the same source/target conditioned on context would require separately justified semantics."
+  },
+  "migration": {
+    "invariant": "Representation-only migration preserves effective weights and neural identity, not merely stored code bits.",
+    "example": {
+      "stored_code_value": 0.5,
+      "old_scale": 2,
+      "new_scale": 4,
+      "old_effective_weight": 1,
+      "new_effective_weight_if_code_unchanged": 2
+    },
+    "boundary": "A capacity-class-dependent interpretation would make an unchanged graph change response on migration. H-24 places scaling in training; no per-row scale field, recoding scheme or class normalization is selected."
+  },
+  "non_adoptions": [
+    "No source-credit rule, structural plasticity rule, edge deletion, runtime sorting, allocator metadata or growth index.",
+    "No changed class counts, per-edge field, weight-scale policy, incoming-owner qualification or heap allocation.",
+    "No SNN implementation, training, random neural simulation, benchmark, project test or build."
+  ],
+  "source_discovery_work": {
+    "recorded_at_utc": "2026-10-28T22:46:14Z",
+    "status": "exact conditional probability and work arithmetic, not runtime performance",
+    "value_lineage": "C-15/P-29 needs absent-source discovery; P-30 depends on fixed incoming storage. H-34/H-74 require demonstrated value before auxiliary structures.",
+    "assumptions": [
+      "One target row of d distinct retained source IDs, unchanged during one successful proposal.",
+      "Independent proposals from a fixed probability distribution over a diagnostic universe of U IDs.",
+      "Reject represented IDs; accept the first absent ID. Positive absent probability is required.",
+      "Linear membership check in row order, stopping at the first equal ID or after d comparisons.",
+      "Weighted examples distribute total retained proposal mass uniformly over the d row positions.",
+      "U=614400 is an illustrative universe, not a selected self-edge, semantic eligibility or credit policy.",
+      "Excludes candidate-generation cost, activity reads, edge writes, migration and hardware effects."
+    ],
+    "identities": {
+      "accepted_ID_probability": "p_i/(1-m) for an absent i, where m=sum(retained p_i)",
+      "mean_proposals": "1/(1-m)",
+      "mean_linear_membership_comparisons": "d + sum(retained p_i*position_i)/(1-m)",
+      "uniform_special_case": "d + d*(d+1)/(2*(U-d))",
+      "limits": "If m=1, no absent ID has positive proposal probability. Later accepted edges change m and the row."
+    },
+    "uniform_universe_size": 614400,
+    "uniform_cases": [
+      {
+        "retained_degree": 100,
+        "mean_proposals": {
+          "exact": "6144/6143",
+          "approximate": 1.0001627869119323
+        },
+        "mean_endpoint_comparisons": {
+          "exact": "1228701/12286",
+          "approximate": 100.00822073905258
+        }
+      },
+      {
+        "retained_degree": 18432,
+        "mean_proposals": {
+          "exact": "100/97",
+          "approximate": 1.0309278350515463
+        },
+        "mean_endpoint_comparisons": {
+          "exact": "3631107/194",
+          "approximate": 18717.046391752578
+        }
+      }
+    ],
+    "weighted_degree": 18432,
+    "weighted_cases": [
+      {
+        "retained_proposal_mass": {
+          "exact": "1/2",
+          "approximate": 0.5
+        },
+        "mean_proposals": {
+          "exact": "2",
+          "approximate": 2.0
+        },
+        "mean_endpoint_comparisons": {
+          "exact": "55297/2",
+          "approximate": 27648.5
+        }
+      },
+      {
+        "retained_proposal_mass": {
+          "exact": "9/10",
+          "approximate": 0.9
+        },
+        "mean_proposals": {
+          "exact": "10",
+          "approximate": 10.0
+        },
+        "mean_endpoint_comparisons": {
+          "exact": "202761/2",
+          "approximate": 101380.5
+        }
+      },
+      {
+        "retained_proposal_mass": {
+          "exact": "19/20",
+          "approximate": 0.95
+        },
+        "mean_proposals": {
+          "exact": "20",
+          "approximate": 20.0
+        },
+        "mean_endpoint_comparisons": {
+          "exact": "387091/2",
+          "approximate": 193545.5
+        }
+      },
+      {
+        "retained_proposal_mass": {
+          "exact": "99/100",
+          "approximate": 0.99
+        },
+        "mean_proposals": {
+          "exact": "100",
+          "approximate": 100.0
+        },
+        "mean_endpoint_comparisons": {
+          "exact": "1861731/2",
+          "approximate": 930865.5
+        }
+      }
+    ],
+    "non_adoptions": [
+      "No rejection loop, hash table, bitmap, ordered row or auxiliary source index selected.",
+      "Low proposal rejection alone does not establish cheap membership checks or useful source selection.",
+      "Sampling source IDs without persistent absent-edge parameters does not inherit a Bayesian convergence guarantee."
+    ],
+    "executable_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/source_discovery_arithmetic.py",
+    "executable_sha256": "4f82820c40bb8bb9b45ce059d90bf7dffd847b333fa85644d086603a13c48279"
+  }
+}

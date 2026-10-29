@@ -1,0 +1,617 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T20:17:18.442484+00:00",
+  "status": "conditional temporal-credit arithmetic and comparison proposals; no eligibility rule selected",
+  "value_lineage": "C-15/P-29 uses preceding context to predict observed tokens; C-26/P-61 preserves useful history and C-24/P-54 distinguishes dominant response duration from individual dynamics. H-74 forbids adding a trace merely because a literature algorithm has one.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/flow_temporal_credit_arithmetic.py",
+    "script_sha256": "96a17735b03b2388ee926b7e6566b01e39e25cec323e9cd5dcd29aec4210d276"
+  },
+  "assumptions": [
+    "Tokens arrive every T seconds in the first reference. Token-level indicator vectors are used only to derive a credit mixture, not as the application neuron encoding.",
+    "Each previous unit input contributes an additive exponential tail with half-life H, no saturation, noise, cancellation, contextual assignment or interaction. Infinite-past formulas are stationary references; finite starts have shorter sums.",
+    "Using H=0.5 seconds illustrates overlap. The user specifies a loose dominant-token response objective, not a universal per-neuron exponential leak or a selected learning window.",
+    "A hypothetical update uses pre-input source c_n and the independently observed token responsibility y_n. Available edges and a correlation update are assumed for the arithmetic; no growth or learning law is adopted."
+  ],
+  "symmetric_coactivity": {
+    "equation": "DeltaW=eta*a*a^T is symmetric on reciprocally available endpoints with equal update factors.",
+    "consequence": "That same-time product alone supplies no directional credit. Existing directed topology, different pre/post functions or states can create other asymmetries; this statement does not make the whole learned graph symmetric.",
+    "comparison": "A causal preceding-state/observed-target update is explicitly asymmetric and must identify its two time roles."
+  },
+  "causal_response_mixture": {
+    "state": "For post-token x_n=r*x_(n-1)+e_(token_n), the pre-input source at token n is c_n=sum_l>=1 r^l*e_(token_(n-l)), r=2^(-T/H).",
+    "expected_update": "For stationary input, E[c_(n,i)*1(token_n=j)]=sum_l>=1 r^l*Pr(token_(n-l)=i,token_n=j).",
+    "normalized_lag_mass": "Normalizing the infinite linear sum gives weights (1-r)*r^(l-1). The latest token contributes1-r; the latest K contribute1-r^K.",
+    "interpretation": "Crediting present recurrent activity can mix associations from several lags. That may supply useful long context or unwanted associations; it is not automatically the immediately preceding token transition.",
+    "cases": [
+      {
+        "token_interval_seconds": 0.01,
+        "reference_half_life_seconds": 0.5,
+        "per_token_retention": 0.9862327044933592,
+        "latest_token_share_of_infinite_linear_sum": 0.013767295506640827,
+        "most_recent_five_tokens_share": 0.06696700846319248,
+        "mean_lag_in_token_steps": 72.63590728604885,
+        "cyclic_ABC_before_B_relative_credit": {
+          "A": 1.0,
+          "C": 0.9862327044933592,
+          "B": 0.9726549474122855
+        }
+      },
+      {
+        "token_interval_seconds": 0.05,
+        "reference_half_life_seconds": 0.5,
+        "per_token_retention": 0.9330329915368074,
+        "latest_token_share_of_infinite_linear_sum": 0.06696700846319258,
+        "most_recent_five_tokens_share": 0.29289321881345254,
+        "mean_lag_in_token_steps": 14.932726172912968,
+        "cyclic_ABC_before_B_relative_credit": {
+          "A": 1.0,
+          "C": 0.9330329915368074,
+          "B": 0.8705505632961241
+        }
+      },
+      {
+        "token_interval_seconds": 0.1,
+        "reference_half_life_seconds": 0.5,
+        "per_token_retention": 0.8705505632961241,
+        "latest_token_share_of_infinite_linear_sum": 0.12944943670387585,
+        "most_recent_five_tokens_share": 0.5,
+        "mean_lag_in_token_steps": 7.725023958872576,
+        "cyclic_ABC_before_B_relative_credit": {
+          "A": 1.0,
+          "C": 0.8705505632961241,
+          "B": 0.757858283255199
+        }
+      },
+      {
+        "token_interval_seconds": 0.5,
+        "reference_half_life_seconds": 0.5,
+        "per_token_retention": 0.5,
+        "latest_token_share_of_infinite_linear_sum": 0.5,
+        "most_recent_five_tokens_share": 0.96875,
+        "mean_lag_in_token_steps": 2.0,
+        "cyclic_ABC_before_B_relative_credit": {
+          "A": 1.0,
+          "C": 0.5,
+          "B": 0.25
+        }
+      },
+      {
+        "token_interval_seconds": 1.0,
+        "reference_half_life_seconds": 0.5,
+        "per_token_retention": 0.25,
+        "latest_token_share_of_infinite_linear_sum": 0.75,
+        "most_recent_five_tokens_share": 0.9990234375,
+        "mean_lag_in_token_steps": 1.3333333333333333,
+        "cyclic_ABC_before_B_relative_credit": {
+          "A": 1.0,
+          "C": 0.25,
+          "B": 0.0625
+        }
+      }
+    ],
+    "cycle": "In a repeated A,B,C sequence, before B arrives, the linear source amounts are A:r/(1-r^3), C:r^2/(1-r^3), B:r^3/(1-r^3). Relative to A, the other credits are r and r^2.",
+    "cycle_limit": "B-to-B means an association between token-related populations, not necessarily a self-edge on one neuron. Useful recurrent loops remain allowed; nonadjacent credit is not itself failure."
+  },
+  "variable_timing": {
+    "equation": "For unequal gaps, each old input carries2^(-age/H); equal token order need not yield equal source credit.",
+    "finite_three_input_cases": [
+      {
+        "ages_seconds": [
+          0.05,
+          0.1,
+          0.15
+        ],
+        "linear_contributions": [
+          0.9330329915368074,
+          0.8705505632961241,
+          0.8122523963562356
+        ],
+        "normalized_credit_shares": [
+          0.3566863553169868,
+          0.3328001371417688,
+          0.31051350754124435
+        ]
+      },
+      {
+        "ages_seconds": [
+          0.05,
+          0.55,
+          0.6
+        ],
+        "linear_contributions": [
+          0.9330329915368074,
+          0.4665164957684037,
+          0.43527528164806206
+        ],
+        "normalized_credit_shares": [
+          0.5085134053804397,
+          0.2542567026902198,
+          0.23722989192934044
+        ]
+      }
+    ],
+    "distinction": "One update per token removes repeated learning exposures caused by the number of frames. It does not remove timing dependence of the recurrent source state. Exact physical-time decay composes over subdivided frames in this scalar reference; finite writeback can break that equivalence."
+  },
+  "alternatives": [
+    {
+      "source_basis": "Available recurrent state",
+      "value": "Uses the state that actually carries ongoing context without automatically adding a separate trace.",
+      "compare": "Pre-input matching and disambiguation, contamination by unobserved predictive alternatives, recurrence preservation and sensitivity to token spacing.",
+      "limit": "Current activity is not an oracle for which past observation should receive credit."
+    },
+    {
+      "source_basis": "Independently established preceding observed contextual representation",
+      "value": "Can target an observed transition without treating generation fallback as teaching.",
+      "compare": "Learning unfamiliar transitions and retaining longer history across shared fragments.",
+      "limit": "The representation must actually be available at the update boundary. Two neural frames do not preserve an arbitrary previous token event; any extra retention needs demonstrated value and budget."
+    },
+    {
+      "source_basis": "Temporally weighted changes or a narrower credit window",
+      "value": "May separate recent evidence from persistent background/context contributions.",
+      "compare": "Directionality versus loss of useful slow context, noise sensitivity, timing changes and low-precision update behavior.",
+      "limit": "For a known linear recurrence an innovation can subtract predictable decay, but that is not a valid general noise/causal decomposition after nonlinear recurrence or cancellation. No difference field, eligibility trace or time constant is selected."
+    }
+  ],
+  "empirical_scope": "Compare the same real sequences at specified pacing and meaningful timing variation, holding neural dynamics and learning-exposure count explicit. Do not shorten useful recurrence merely to make a chosen credit heuristic resemble adjacency. Timing sensitivity can be intended behavior rather than an error; the comparison must state its prediction claim.",
+  "non_adoptions": [
+    "No per-edge/per-neuron eligibility trace, token buffer, causal noise tag, baseline array, timer, winner store or new connection class.",
+    "No replacement of DMN/token repair by a flow rule, or selection of the independent training-state intervention.",
+    "No instantaneous symmetry requirement, fixed half-life, universal temporal kernel or requirement to remove small loops.",
+    "No SNN implementation/training, random neural simulation, benchmark, project tests, build, toolchain mutation, commit or push."
+  ],
+  "background_source_credit": {
+    "recorded_at_utc": "2026-10-28T22:15:42.261844+00:00",
+    "status": "exact conditional sampling and mean-update identities; no SNN training/simulation",
+    "value_lineage": "C15/P29 contextual prediction and C26/P60 useful history; P30 retained-source capacity dependency. H74 requires a demonstrated need before filters or state.",
+    "candidate_sampling": {
+      "assumptions": [
+        "One draw from currently eligible, absent endpoint IDs, with probability proportional to nonnegative source credit. Candidate counts are after any already-represented IDs are excluded.",
+        "Of307200 positive-credit candidates,6144 are informative by construction and have credit1. All other candidates have equal diagnostic credit b. Other CC cells may have zero credit.",
+        "The informative label is available to the arithmetic observer, not supplied to a runtime algorithm. No actual neural background distribution is assumed."
+      ],
+      "candidate_count": 307200,
+      "informative_count": 6144,
+      "formula": "P(outside informative set)=(Nc-S)*b/(S*a+(Nc-S)*b)",
+      "cases": [
+        {
+          "background_credit_per_candidate": {
+            "exact": "1/10000",
+            "decimal": 0.0001
+          },
+          "informative_credit_mass": {
+            "exact": "6144",
+            "decimal": 6144.0
+          },
+          "other_credit_mass": {
+            "exact": "18816/625",
+            "decimal": 30.1056
+          },
+          "first_candidate_probability_outside_informative_set": {
+            "exact": "49/10049",
+            "decimal": 0.004876107075330879
+          }
+        },
+        {
+          "background_credit_per_candidate": {
+            "exact": "1/1000",
+            "decimal": 0.001
+          },
+          "informative_credit_mass": {
+            "exact": "6144",
+            "decimal": 6144.0
+          },
+          "other_credit_mass": {
+            "exact": "37632/125",
+            "decimal": 301.056
+          },
+          "first_candidate_probability_outside_informative_set": {
+            "exact": "49/1049",
+            "decimal": 0.04671115347950429
+          }
+        },
+        {
+          "background_credit_per_candidate": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "informative_credit_mass": {
+            "exact": "6144",
+            "decimal": 6144.0
+          },
+          "other_credit_mass": {
+            "exact": "75264/25",
+            "decimal": 3010.56
+          },
+          "first_candidate_probability_outside_informative_set": {
+            "exact": "49/149",
+            "decimal": 0.3288590604026846
+          }
+        },
+        {
+          "background_credit_per_candidate": {
+            "exact": "1/10",
+            "decimal": 0.1
+          },
+          "informative_credit_mass": {
+            "exact": "6144",
+            "decimal": 6144.0
+          },
+          "other_credit_mass": {
+            "exact": "150528/5",
+            "decimal": 30105.6
+          },
+          "first_candidate_probability_outside_informative_set": {
+            "exact": "49/59",
+            "decimal": 0.8305084745762712
+          }
+        }
+      ],
+      "common_target_factor": "A shared positive target factor e cancels from normalized sampling of e*c_i. It can gate or change the number of growth opportunities without changing their relative source probabilities. e=0 gives no distribution unless a separate rule specifies one.",
+      "limits": "First-candidate law only. Without-replacement selection, retained endpoint exclusion and repeated learning change later draws and utility. This is not a false-connection rate measured in SNN data."
+    },
+    "source_enabled_mean_update": {
+      "assumptions": [
+        "Independent identically distributed exposures and fixed source/target roles, independent of the previous weight. The preceding informative indicator s predicts the later target y=s; no future token is exposed to the predictor.",
+        "Credit c=a when s=1 and c=b when s=0, with0<b<=a<=1. Target frequency is pi. Exact working/storage arithmetic, no growth or clipping.",
+        "Update w_next=w+eta*c*(y-w), with0<eta*a<=1. This is the earlier source-enabled affinity candidate, not a newly chosen learner."
+      ],
+      "identity": "At the fixed point of mean weight, E[w]=E[c*y]/E[c]=pi*a/(pi*a+(1-pi)*b). If c is constant, this is pi. If b=0 and pi*a>0, this is1.",
+      "cases": [
+        {
+          "target_frequency": {
+            "exact": "1/1000",
+            "decimal": 0.001
+          },
+          "credit_when_informative_indicator_present": {
+            "exact": "1",
+            "decimal": 1.0
+          },
+          "credit_when_indicator_absent": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "mean_source_credit": {
+            "exact": "1099/100000",
+            "decimal": 0.01099
+          },
+          "mean_credit_times_target": {
+            "exact": "1/1000",
+            "decimal": 0.001
+          },
+          "stationary_mean_weight": {
+            "exact": "100/1099",
+            "decimal": 0.09099181073703366
+          },
+          "mean_weight_for_constant_nondiscriminating_credit": {
+            "exact": "1/1000",
+            "decimal": 0.001
+          }
+        },
+        {
+          "target_frequency": {
+            "exact": "1/1000",
+            "decimal": 0.001
+          },
+          "credit_when_informative_indicator_present": {
+            "exact": "1/50",
+            "decimal": 0.02
+          },
+          "credit_when_indicator_absent": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "mean_source_credit": {
+            "exact": "1001/100000",
+            "decimal": 0.01001
+          },
+          "mean_credit_times_target": {
+            "exact": "1/50000",
+            "decimal": 2e-05
+          },
+          "stationary_mean_weight": {
+            "exact": "2/1001",
+            "decimal": 0.001998001998001998
+          },
+          "mean_weight_for_constant_nondiscriminating_credit": {
+            "exact": "1/1000",
+            "decimal": 0.001
+          }
+        },
+        {
+          "target_frequency": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "credit_when_informative_indicator_present": {
+            "exact": "1",
+            "decimal": 1.0
+          },
+          "credit_when_indicator_absent": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "mean_source_credit": {
+            "exact": "199/10000",
+            "decimal": 0.0199
+          },
+          "mean_credit_times_target": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "stationary_mean_weight": {
+            "exact": "100/199",
+            "decimal": 0.5025125628140703
+          },
+          "mean_weight_for_constant_nondiscriminating_credit": {
+            "exact": "1/100",
+            "decimal": 0.01
+          }
+        },
+        {
+          "target_frequency": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "credit_when_informative_indicator_present": {
+            "exact": "1/50",
+            "decimal": 0.02
+          },
+          "credit_when_indicator_absent": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "mean_source_credit": {
+            "exact": "101/10000",
+            "decimal": 0.0101
+          },
+          "mean_credit_times_target": {
+            "exact": "1/5000",
+            "decimal": 0.0002
+          },
+          "stationary_mean_weight": {
+            "exact": "2/101",
+            "decimal": 0.019801980198019802
+          },
+          "mean_weight_for_constant_nondiscriminating_credit": {
+            "exact": "1/100",
+            "decimal": 0.01
+          }
+        },
+        {
+          "target_frequency": {
+            "exact": "1/10",
+            "decimal": 0.1
+          },
+          "credit_when_informative_indicator_present": {
+            "exact": "1",
+            "decimal": 1.0
+          },
+          "credit_when_indicator_absent": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "mean_source_credit": {
+            "exact": "109/1000",
+            "decimal": 0.109
+          },
+          "mean_credit_times_target": {
+            "exact": "1/10",
+            "decimal": 0.1
+          },
+          "stationary_mean_weight": {
+            "exact": "100/109",
+            "decimal": 0.9174311926605505
+          },
+          "mean_weight_for_constant_nondiscriminating_credit": {
+            "exact": "1/10",
+            "decimal": 0.1
+          }
+        },
+        {
+          "target_frequency": {
+            "exact": "1/10",
+            "decimal": 0.1
+          },
+          "credit_when_informative_indicator_present": {
+            "exact": "1/50",
+            "decimal": 0.02
+          },
+          "credit_when_indicator_absent": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "mean_source_credit": {
+            "exact": "11/1000",
+            "decimal": 0.011
+          },
+          "mean_credit_times_target": {
+            "exact": "1/500",
+            "decimal": 0.002
+          },
+          "stationary_mean_weight": {
+            "exact": "2/11",
+            "decimal": 0.18181818181818182
+          },
+          "mean_weight_for_constant_nondiscriminating_credit": {
+            "exact": "1/10",
+            "decimal": 0.1
+          }
+        },
+        {
+          "target_frequency": {
+            "exact": "1/2",
+            "decimal": 0.5
+          },
+          "credit_when_informative_indicator_present": {
+            "exact": "1",
+            "decimal": 1.0
+          },
+          "credit_when_indicator_absent": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "mean_source_credit": {
+            "exact": "101/200",
+            "decimal": 0.505
+          },
+          "mean_credit_times_target": {
+            "exact": "1/2",
+            "decimal": 0.5
+          },
+          "stationary_mean_weight": {
+            "exact": "100/101",
+            "decimal": 0.9900990099009901
+          },
+          "mean_weight_for_constant_nondiscriminating_credit": {
+            "exact": "1/2",
+            "decimal": 0.5
+          }
+        },
+        {
+          "target_frequency": {
+            "exact": "1/2",
+            "decimal": 0.5
+          },
+          "credit_when_informative_indicator_present": {
+            "exact": "1/50",
+            "decimal": 0.02
+          },
+          "credit_when_indicator_absent": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "mean_source_credit": {
+            "exact": "3/200",
+            "decimal": 0.015
+          },
+          "mean_credit_times_target": {
+            "exact": "1/100",
+            "decimal": 0.01
+          },
+          "stationary_mean_weight": {
+            "exact": "2/3",
+            "decimal": 0.6666666666666666
+          },
+          "mean_weight_for_constant_nondiscriminating_credit": {
+            "exact": "1/2",
+            "decimal": 0.5
+          }
+        }
+      ],
+      "limits": "Stationary mean of an ideal scalar learning reference, not its variance, convergence speed, network behavior or proof that the weight is a calibrated probability. Actual recurrent state can correlate noise with target/context."
+    },
+    "comparison_consequence": "Assess source selection and learned predictive distinctions across the intended noise conditions and rare/shared contexts. Scalar magnitude alone does not identify the origin or future utility of a source contribution.",
+    "non_adoptions": [
+      "No amplitude/density eligibility threshold, noise-origin tag, source trace, covariance estimator or extra matching state.",
+      "No automatic reuse of regime-classification filters for learning; useful weak context and predictive readiness remain allowed.",
+      "No changes to activity bounds, no-inhibitory-connection direction, static incoming slots, or DMN/token repair scope."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/background_credit_arithmetic.py",
+      "script_sha256": "adae90e4f36421c6b8bf5e6b952e592ef003f3d79fb431b35ffb72a09d0bfe25",
+      "method": "Exact rational mass ratios and independent expectation-balance checks over two exposure states."
+    }
+  },
+  "updated_at_utc": "2026-10-29T00:41:15Z",
+  "prediction_horizon_reference": {
+    "recorded_at_utc": "2026-10-29T00:41:15Z",
+    "kind": "Exact finite Markov-chain matrix arithmetic; no neural simulation or learning run",
+    "purpose": "Distinguish next-input readiness assessment from a longer-horizon predictive quantity without rejecting useful long-context recurrence.",
+    "reference": "Three abstract categorical states A->B->C, with C->C; P is row-stochastic. They are not semantic coordinates, neurons or an adopted source model.",
+    "definitions": [
+      "M=sum(k>=0,gamma^k*P^k)=(I-gamma*P)^(-1), 0<gamma<1",
+      "M-I excludes the present state from discounted future occupancy.",
+      "The A row is (0,gamma,gamma^2/(1-gamma)); normalizing it yields (0,1-gamma,gamma), whereas the next-input distribution is (0,1,0).",
+      "The complete exact M and known gamma recover P=(I-M^(-1))/gamma. A raw occupancy row is not the same readout; this is not a claim that complete SR necessarily loses all one-step information."
+    ],
+    "cases": [
+      {
+        "discount": "1/10",
+        "next_state_distribution_from_A": [
+          "0",
+          "1",
+          "0"
+        ],
+        "discounted_future_occupancy_excluding_present": [
+          "0",
+          "1/10",
+          "1/90"
+        ],
+        "future_occupancy_normalized_for_comparison": [
+          "0",
+          "9/10",
+          "1/10"
+        ],
+        "next_transition_recovered_from_full_exact_matrix": true
+      },
+      {
+        "discount": "1/2",
+        "next_state_distribution_from_A": [
+          "0",
+          "1",
+          "0"
+        ],
+        "discounted_future_occupancy_excluding_present": [
+          "0",
+          "1/2",
+          "1/2"
+        ],
+        "future_occupancy_normalized_for_comparison": [
+          "0",
+          "1/2",
+          "1/2"
+        ],
+        "next_transition_recovered_from_full_exact_matrix": true
+      },
+      {
+        "discount": "9/10",
+        "next_state_distribution_from_A": [
+          "0",
+          "1",
+          "0"
+        ],
+        "discounted_future_occupancy_excluding_present": [
+          "0",
+          "9/10",
+          "81/10"
+        ],
+        "future_occupancy_normalized_for_comparison": [
+          "0",
+          "1/10",
+          "9/10"
+        ],
+        "next_transition_recovered_from_full_exact_matrix": true
+      },
+      {
+        "discount": "99/100",
+        "next_state_distribution_from_A": [
+          "0",
+          "1",
+          "0"
+        ],
+        "discounted_future_occupancy_excluding_present": [
+          "0",
+          "99/100",
+          "9801/100"
+        ],
+        "future_occupancy_normalized_for_comparison": [
+          "0",
+          "1/100",
+          "99/100"
+        ],
+        "next_transition_recovered_from_full_exact_matrix": true
+      }
+    ],
+    "verification": "Exact Fraction Gaussian elimination and both-sided inverse identities for all four discounts; separate geometric-series row identities; transition reconstruction checked.",
+    "source_connection": "MR-S090/MR-S091 define discounted future occupancy and specified neural learning realizations. This independent three-state example is not their empirical result.",
+    "application_boundary": "A correlation learned across overlapping responses can serve broader associations. Assessment must state its forecast horizon; a correctly learned broader statistic alone does not establish the provisional next-input matching objective.",
+    "non_adoptions": [
+      "No successor matrix or inverse readout",
+      "No TD learner or reward objective",
+      "No extra trace or replay",
+      "No probability interpretation of neuron rates",
+      "No selected discount or link to the isolated-token half-life"
+    ]
+  }
+}

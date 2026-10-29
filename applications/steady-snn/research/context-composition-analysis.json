@@ -1,0 +1,4861 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T20:31:56.450817+00:00",
+  "status": "Exact decomposition and conditional drive/cancellation examples; no representation or noise law selected",
+  "value_lineage": "C-14/H-75 gives individual contextual paths within a fixed semantic component; C-26/P-60 requires useful historical influence and C-18/H-77 preserves within-polarity ratios during cancellation. C-17 noise support must be assessed against those same values.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/context_composition_arithmetic.py",
+    "script_sha256": "bab357b5e402e830279e70fe445ec76989f6ce867f9138dafe5d727dd52afed6"
+  },
+  "analytical_coordinates": {
+    "equation": "For a nonzero post-cancellation coordinate, r_i=A*q_i in its surviving polarity, with A=sum_i r_i>0, q_i>=0 and sum_i q_i=1.",
+    "meaning": "A and q are analysis coordinates computed from existing rates. They are not two stored fields, an alternative neuron representation, or a token decoder. Coordinate normalization remains a separate choice.",
+    "conditional_dimension": {
+      "cells_per_polarity": 60,
+      "composition_dimension_per_nonzero_coordinate": 59,
+      "semantic_coordinates": 5120,
+      "composition_dimension_if_all_nonzero": 302080
+    },
+    "limits": "The simplex dimension counts local continuous freedom at fixed aggregate and polarity. It is not a number of reliably distinguishable contexts, stored bits, independent paths or learned memory capacity. Boundaries, numerical precision, graph structure and correlated dynamics restrict use. Composition entropy is not automatically predictive-token diversity; cross-coordinate associations and later responses matter.",
+    "zero_and_flip": "At zero active total, active composition is undefined and H-77 leaves no surviving active rates in that coordinate. A sign change selects the other population without a cell-index correspondence. Context can remain elsewhere; predictive-state behavior remains open under H-78/H-85."
+  },
+  "additive_drive": {
+    "positive_population": "Before new drive, p_i=A*q_i and negative active rates are zero. Add nonnegative z_i to the positive population and nonnegative opposite drive with total Z_minus.",
+    "survives": "If D=A+Z_plus-Z_minus>0, post-cancellation r_i=D*(A*q_i+z_i)/(A+Z_plus).",
+    "composition": "q_next_i=[A/(A+Z_plus)]*q_i+[Z_plus/(A+Z_plus)]*(z_i/Z_plus), for Z_plus>0.",
+    "interpretation": "Cancellation rescales the provisional positive population uniformly; it preserves that provisional composition, not necessarily the composition before new drive.",
+    "matching_totals": "If Z_plus=Z_minus, D=A exactly, while the composition can still change. The signed aggregate alone cannot detect that change.",
+    "paired_histories": "For two equal-A histories receiving identical realized added drive and retaining positive sign, their L1 composition difference is multiplied by A/(A+Z_plus). This holds for arbitrary nonnegative added-drive shape, not just uniform drive.",
+    "limits": "This isolates one addition/cancellation operation. Recurrent propagation, context-sensitive gain, independent stochastic trials, transfer functions and adaptive noise can alter later outcomes."
+  },
+  "uniform_drive_reference": {
+    "equation": "For equal per-cell drive epsilon to both m-cell polarities, q_next=lambda*q+(1-lambda)*uniform, lambda=A/(A+m*epsilon); signed total stays A.",
+    "repetition": "With repeated equal drive and no intervening recurrent transformation, q_n-uniform=lambda^n*(q_0-uniform).",
+    "cases": [
+      {
+        "per_cell_equal_added_drive": "1/1000",
+        "original_signed_total": "1",
+        "signed_total_after_cancellation": "1",
+        "composition_retention_factor": "50/53",
+        "one_step_L1_history_difference": "100/53",
+        "ten_repetitions_relative_composition_difference": 0.5583947769151182,
+        "composition_half_life_in_repetitions": 11.895661045941887
+      },
+      {
+        "per_cell_equal_added_drive": "1/100",
+        "original_signed_total": "1",
+        "signed_total_after_cancellation": "1",
+        "composition_retention_factor": "5/8",
+        "one_step_L1_history_difference": "5/4",
+        "ten_repetitions_relative_composition_difference": 0.009094947017729282,
+        "composition_half_life_in_repetitions": 1.4747698473569486
+      },
+      {
+        "per_cell_equal_added_drive": "1/10",
+        "original_signed_total": "1",
+        "signed_total_after_cancellation": "1",
+        "composition_retention_factor": "1/7",
+        "one_step_L1_history_difference": "2/7",
+        "ten_repetitions_relative_composition_difference": 3.5401331746414354e-09,
+        "composition_half_life_in_repetitions": 0.3562071871080221
+      }
+    ],
+    "limits": "Equal drive is a controlled deterministic addition, not a claim about the distribution of white noise. Neither epsilon nor this repeated operation is the proposed neural model; repetitions do not assign a physical frame duration."
+  },
+  "downstream_illustration": {
+    "first_source_only_drive_history1": "101/160",
+    "first_source_only_drive_history2": "1/160",
+    "difference": "5/8",
+    "explanation": "An already available unit-weight edge from source cell0 to another target receives different input despite equal current semantic totals. This is an algebraic illustration, not a trained association."
+  },
+  "future_comparisons": [
+    {
+      "alternatives": "Noise allocation and strength under the same required activity-support behavior",
+      "observations": "Measure preservation or restoration of context-dependent cell composition, later prediction, semantic residual and steerability; total signed value and active fraction are insufficient alone."
+    },
+    {
+      "alternatives": "Existing recurrent response with and without the specific added-drive intervention",
+      "observations": "Separate immediate redistribution from subsequent useful amplification. Prefer observing existing rates and later behavior before introducing any separate context storage."
+    },
+    {
+      "alternatives": "Numerical formats and update/cancellation ordering",
+      "observations": "Assess contextual response differences at comparable current semantic totals; equal scalar reconstruction error can hide different cell-level losses."
+    }
+  ],
+  "not_selected": [
+    "normalized-composition storage",
+    "extra context field",
+    "uniform noise",
+    "shared noise draws",
+    "feedback policy",
+    "decoder",
+    "new inhibitory connections",
+    "state interpretation",
+    "context capacity"
+  ],
+  "scope_limit": "Exact algebra and finite rational examples only; no SNN training/simulation, memory-capacity measurement, benchmark, project tests or build.",
+  "state_precision_reference": {
+    "status": "Conditional representation example; not a learned context or general format verdict",
+    "assumptions": [
+      "60 active positive cells, zero negative rates; no cancellation needed for these states",
+      "Two histories have all rates3/4 except first two rates3/4±2^-13, with their signs swapped",
+      "All other causal state and weights are identical; fixed next readout selects the first source with unit nonnegative weight",
+      "IEEE binary16/binary32 nearest-even conversion via Python struct; no underflow or tie in this example"
+    ],
+    "input_semantic_sum": 45,
+    "unrounded_first_source_readout_difference": "1/4096",
+    "cases": [
+      {
+        "format": "FP16",
+        "stored_states_identical": true,
+        "semantic_sum_error": 0.0,
+        "squared_rate_error": "1/33554432",
+        "relative_rate_l2_error": 2.9715850545971025e-05,
+        "squared_context_difference_after_storage": "0",
+        "first_source_only_readout_difference": "0"
+      },
+      {
+        "format": "FP32",
+        "stored_states_identical": false,
+        "semantic_sum_error": 0.0,
+        "squared_rate_error": "0",
+        "relative_rate_l2_error": 0.0,
+        "squared_context_difference_after_storage": "1/8388608",
+        "first_source_only_readout_difference": "1/4096"
+      }
+    ],
+    "interpretation": [
+      "Both formats preserve the present signed semantic sum exactly, yet binary16 erases this contextual distinction",
+      "Small total state error or zero current semantic error does not alone establish preservation of later relevant behavior",
+      "This does not prove trained contexts use such small differences or that binary16 is generally inadequate; distinct cell identities can encode more robustly",
+      "If the complete causal state becomes identical, identical subsequent inputs cannot recover which of these histories occurred without other information"
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/context_precision_arithmetic.py",
+      "script_sha256": "1dee41332779333db75afa951f4a07c5d3631014f20afbbc6baa7575b5e92b0f"
+    },
+    "scope_limit": "Exact rational and specified floating conversion only; no SNN training or simulation, project test, build or performance claim"
+  },
+  "updated_at_utc": "2026-10-29T02:42:04Z",
+  "fixed_input_context_retention": {
+    "status": "conditional single-operation real-embedding arithmetic; no neuron simulation or empirical trained-memory result",
+    "started_at_utc": "2026-10-28T21:36:31.623799+00:00",
+    "finished_at_utc": "2026-10-28T21:36:44.984111+00:00",
+    "wall_seconds": 13.360303526998905,
+    "source": {
+      "repository": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "revision": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+      "tensor": "embed.weight",
+      "shape": [
+        129280,
+        5120
+      ],
+      "dtype": "BF16",
+      "existing_verified_sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c",
+      "access": "Read-only mmap of existing local SSD tensor; no copy, download or modification."
+    },
+    "source_access": "Read-only mmap; sampled rows only; source untouched, no copy or download.",
+    "sampling": {
+      "reference": "signed-population-overlap-probe.json",
+      "row_count": 1024,
+      "unordered_pairs": 4096,
+      "ordered_directions": 8192,
+      "pair_sha256": "07052cad8e51acda8f47053641cf0ca26ac46214f864e68fb73df93c15ae6fa1",
+      "limits": "Uniform token-type sample, not corpus transitions; both directions evaluated; observations share token rows and are not iid."
+    },
+    "reference_semantics": {
+      "normalization": "Each token vector is scaled to L1 norm1; incoming vector is further scaled by beta. This is diagnostic scaling, not selected input normalization.",
+      "state": "Two histories share signed coordinate totals v but differ by a zero-sum redistribution among the60 cells of each surviving polarity. Incoming drive is held identical across histories. No recurrent step, transfer nonlinearity, clipping, noise, decay, readiness operation or quantization.",
+      "difference_distribution": "For the reported aggregate, coordinate L1 history differences are proportional to abs(v_j); this is a conditional pattern family, not measured learned context.",
+      "law": "If v_j*w_j>=0, an identical same-sign addition leaves absolute within-population differences unchanged. If signs oppose, the factor is max(0,1-beta*abs(w_j)/abs(v_j)).",
+      "aggregate": "R=sum_j abs(v_j)*factor_j, since sum_j abs(v_j)=1. Erased coordinate count uses factor==0. Composition differences normalized by new total behave differently from these absolute cell-rate differences."
+    },
+    "exact_map_checks": [
+      {
+        "same_sign_input": "1",
+        "opposing_input": "0",
+        "output_L1_difference": "1"
+      },
+      {
+        "same_sign_input": "0",
+        "opposing_input": "1/4",
+        "output_L1_difference": "3/4"
+      },
+      {
+        "same_sign_input": "0",
+        "opposing_input": "1",
+        "output_L1_difference": "0"
+      },
+      {
+        "same_sign_input": "0",
+        "opposing_input": "2",
+        "output_L1_difference": "0"
+      }
+    ],
+    "reciprocal_strength_check": {
+      "identity": "R(v,beta*w)=1-beta+beta*R(w,v/beta) for unit-L1 vectors; verified in both directions for beta0.1 and10.",
+      "max_absolute_error": 2.220446049250313e-16
+    },
+    "results": [
+      {
+        "incoming_L1_strength_beta": 0.1,
+        "relative_L1_context_difference_retained": {
+          "min": 0.9487950401619096,
+          "p05": 0.9520241865279315,
+          "median": 0.9546725805777971,
+          "p95": 0.958544286097385,
+          "max": 0.9691983223751338,
+          "mean": 0.9549108150729481
+        },
+        "old_sign_coordinates_not_erased": {
+          "min": 0.958203125,
+          "p05": 0.9646484375,
+          "median": 0.9685546875,
+          "p95": 0.9724609375,
+          "max": 0.97734375,
+          "mean": 0.9685283660888672
+        }
+      },
+      {
+        "incoming_L1_strength_beta": 1.0,
+        "relative_L1_context_difference_retained": {
+          "min": 0.6846580302124293,
+          "p05": 0.7041866917047874,
+          "median": 0.7223176162278505,
+          "p95": 0.7491820146302405,
+          "max": 0.8184649785323249,
+          "mean": 0.7238943945973288
+        },
+        "old_sign_coordinates_not_erased": {
+          "min": 0.7314453125,
+          "p05": 0.7455078125,
+          "median": 0.7572265625,
+          "p95": 0.7716796875,
+          "max": 0.8119140625,
+          "mean": 0.7578001499176026
+        }
+      },
+      {
+        "incoming_L1_strength_beta": 10.0,
+        "relative_L1_context_difference_retained": {
+          "min": 0.4879504016190972,
+          "p05": 0.5202418652793155,
+          "median": 0.546725805777971,
+          "p95": 0.5854428609738495,
+          "max": 0.691983223751338,
+          "mean": 0.5491081507294812
+        },
+        "old_sign_coordinates_not_erased": {
+          "min": 0.5017578125,
+          "p05": 0.52734375,
+          "median": 0.5455078125,
+          "p95": 0.57109375,
+          "max": 0.6380859375,
+          "mean": 0.5470719337463379
+        }
+      }
+    ],
+    "strong_input_limit": {
+      "meaning": "As beta tends to infinity, only same-sign old populations preserve this isolated absolute difference.",
+      "weighted_retention": {
+        "min": 0.46188327792763384,
+        "p05": 0.4951844509174741,
+        "median": 0.5219062449379388,
+        "p95": 0.5612471931390872,
+        "max": 0.6723494100602844,
+        "mean": 0.524427487336333
+      }
+    },
+    "interpretation": [
+      "Cancellation can erase active contextual distinctions in reversed coordinates without erasing all cell-level context across the CC.",
+      "Same-sign injection can dilute relative composition while leaving an absolute difference unchanged in this additive, unsaturated operation.",
+      "Actual context-dependent input selection, nonlinear dynamics and recurrence can change the result; per-pair factors must not be multiplied to claim sequence memory.",
+      "No separate history field, population index pairing, new encoder, retention threshold or learning rule is selected."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/input_cancellation_context_probe.py",
+      "script_sha256": "5ba4120976e3c59c8ac747d0f033040eaf167a9855e2558ff6f80e757ad20a8a"
+    }
+  },
+  "raw_input_context_retention": {
+    "status": "conditional same-scale embedding arithmetic; not a selected encoder or learned memory result",
+    "started_at_utc": "2026-10-28T21:48:54.603354+00:00",
+    "finished_at_utc": "2026-10-28T21:49:04.804797+00:00",
+    "wall_seconds": 10.20146726600069,
+    "source": {
+      "repository": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "revision": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+      "tensor": "embed.weight",
+      "shape": [
+        129280,
+        5120
+      ],
+      "dtype": "BF16",
+      "existing_verified_sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c",
+      "access": "Read-only mmap of existing local SSD tensor; no copy, download or modification."
+    },
+    "sampling": {
+      "reference": "signed-population-overlap-probe.json",
+      "sample_rows": 1024,
+      "ordered_pairs": 8192,
+      "pairs_sha256": "07052cad8e51acda8f47053641cf0ca26ac46214f864e68fb73df93c15ae6fa1",
+      "limits": "Same type sample and unordered pairs, evaluated in both directions. No corpus transitions, semantic labels or iid-pair claim."
+    },
+    "assumptions": "Same zero-sum within-population history differences as fixed_input_context_retention. Add a new raw embedding at the same global scale as the old embedding, followed only by H77. Row-normalized vectors are used internally only to calculate relative differences; norm ratio restores the raw input strength. No recurrence, clipping, input selection, noise or readiness operations.",
+    "formula": "R_raw(v,w) = sum_same |v_j|/||v||_1 + sum_opposite max(|v_j|-|w_j|,0)/||v||_1. With q=||w||_1/||v||_1, R_raw(v,w)-q*R_raw(w,v)=1-q.",
+    "sample_L1_norms": {
+      "min": 136.90619527548552,
+      "p05": 329.77570979595185,
+      "median": 485.4591921530664,
+      "p95": 605.8833476103841,
+      "max": 817.089382648468,
+      "mean": 476.58812391047445
+    },
+    "statistics": {
+      "input_to_old_L1_ratio": {
+        "min": 0.2241751259204437,
+        "p05": 0.6416115387277421,
+        "median": 1.0000000000324527,
+        "p95": 1.558575462995169,
+        "max": 4.460798208070973,
+        "mean": 1.0414142656417045
+      },
+      "raw_same_scale_retention": {
+        "min": 0.5552312376445756,
+        "p05": 0.6578780334925743,
+        "median": 0.7250845079798864,
+        "p95": 0.7884417269616151,
+        "max": 0.9024883851561785,
+        "mean": 0.7249188007532631
+      },
+      "unit_L1_retention": {
+        "min": 0.6846580302124293,
+        "p05": 0.7041866917047874,
+        "median": 0.7223176162278505,
+        "p95": 0.7491820146302405,
+        "max": 0.8184649785323249,
+        "mean": 0.7238943945973288
+      },
+      "retention_difference": {
+        "min": -0.1486603783708318,
+        "p05": -0.058380360534073424,
+        "median": 4.23650614589377e-09,
+        "p95": 0.0633187651278653,
+        "max": 0.1888076435467727,
+        "mean": 0.001024406155934221
+      },
+      "old_sign_coordinate_survival": {
+        "min": 0.5671875,
+        "p05": 0.6876953125,
+        "median": 0.758203125,
+        "p95": 0.8234375,
+        "max": 0.931640625,
+        "mean": 0.757536768913269
+      }
+    },
+    "paired_comparison": {
+      "fraction_absolute_retention_difference_over_0_05": 0.1705322265625,
+      "fraction_absolute_retention_difference_over_0_10": 0.017578125,
+      "maximum_reciprocal_identity_error": 4.440892098500626e-16
+    },
+    "extreme_paired_differences": [
+      {
+        "old_token_id": 396,
+        "input_token_id": 108559,
+        "input_to_old_L1_ratio": 4.460798208070973,
+        "raw_same_scale_retention": 0.565020363238574,
+        "unit_L1_retention": 0.7136807416094058,
+        "retention_difference": -0.1486603783708318,
+        "old_sign_coordinate_survival": 0.5671875
+      },
+      {
+        "old_token_id": 60,
+        "input_token_id": 9293,
+        "input_to_old_L1_ratio": 3.7381170338054375,
+        "raw_same_scale_retention": 0.5552312376445756,
+        "unit_L1_retention": 0.7000490361391715,
+        "retention_difference": -0.14481779849459586,
+        "old_sign_coordinate_survival": 0.5798828125
+      },
+      {
+        "old_token_id": 376,
+        "input_token_id": 96164,
+        "input_to_old_L1_ratio": 2.945416918380821,
+        "raw_same_scale_retention": 0.5768808934626004,
+        "unit_L1_retention": 0.7071272849944514,
+        "retention_difference": -0.13024639153185102,
+        "old_sign_coordinate_survival": 0.6099609375
+      },
+      {
+        "old_token_id": 118205,
+        "input_token_id": 4490,
+        "input_to_old_L1_ratio": 0.2948571969921553,
+        "raw_same_scale_retention": 0.8753691386733435,
+        "unit_L1_retention": 0.7072454038800706,
+        "retention_difference": 0.16812373479327292,
+        "old_sign_coordinate_survival": 0.9177734375
+      },
+      {
+        "old_token_id": 9293,
+        "input_token_id": 60,
+        "input_to_old_L1_ratio": 0.2675143637710002,
+        "raw_same_scale_retention": 0.8810179675132734,
+        "unit_L1_retention": 0.7000490361391714,
+        "retention_difference": 0.18096893137410208,
+        "old_sign_coordinate_survival": 0.9146484375
+      },
+      {
+        "old_token_id": 108559,
+        "input_token_id": 396,
+        "input_to_old_L1_ratio": 0.2241751259204437,
+        "raw_same_scale_retention": 0.9024883851561785,
+        "unit_L1_retention": 0.7136807416094058,
+        "retention_difference": 0.1888076435467727,
+        "old_sign_coordinate_survival": 0.931640625
+      }
+    ],
+    "interpretation": [
+      "A similar median under row normalization can conceal materially different per-token input strength and tails.",
+      "Raw tensor amplitude, diagnostic normalization and actual encoded activation are different; common scaling is another conditional comparison, not a chosen runtime input rule.",
+      "The measured retention concerns one specified cell-rate difference family, not learned context accuracy or a sequence lifetime."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/raw_input_context_probe.py",
+      "script_sha256": "9ce87c75614f6e04ad46fedfc0043c2499788f666d9a830a5e496dd7aaf30a39"
+    }
+  },
+  "lexical_contrast_probe": {
+    "status": "Read-only lexical input-row measurements and conditional net-sum arithmetic",
+    "started_at_utc": "2026-10-28T23:22:41.913722+00:00",
+    "finished_at_utc": "2026-10-28T23:22:42.155940+00:00",
+    "wall_seconds": 0.2422086849983316,
+    "selection": {
+      "pairs_declared_before_measurement": [
+        [
+          "good",
+          "bad"
+        ],
+        [
+          "happy",
+          "sad"
+        ],
+        [
+          "love",
+          "hate"
+        ],
+        [
+          "pleasant",
+          "unpleasant"
+        ],
+        [
+          "calm",
+          "anxious"
+        ],
+        [
+          "hope",
+          "despair"
+        ],
+        [
+          "safe",
+          "danger"
+        ],
+        [
+          "joy",
+          "sorrow"
+        ],
+        [
+          "positive",
+          "negative"
+        ],
+        [
+          "healthy",
+          "sick"
+        ],
+        [
+          "success",
+          "failure"
+        ]
+      ],
+      "count": 11,
+      "boundary": "Small hand-chosen English lexical contrasts, not a representative valence dataset or a definition of complementary DMN states. All declared pairs retained."
+    },
+    "source": {
+      "repository": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "revision": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+      "tensor": "embed.weight",
+      "shape": [
+        129280,
+        5120
+      ],
+      "dtype": "BF16",
+      "existing_verified_payload_sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c",
+      "access": "22 selected local SSD rows read only; no full tensor scan or copy",
+      "tokenizer_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b"
+    },
+    "token_identification": "Exact leading-space vocabulary entries; merge-rank replay on the declared ASCII word chunks returns each one as a single token. No full tokenizer library or surrounding-text behavior is claimed.",
+    "conditional_law": "Before other transfer, clipping, noise or recurrence, H77 preserves coordinate net n+g*p. With unit-L1 rows, f(g)=sum(abs(n_i+g*p_i)); f is convex and f(0)=1. Its right derivative at0 equals1-2*sum(abs(p_i) for n_i*p_i<0), including zero n correctly. A nonnegative derivative implies f(g)>=f(0) for every g>=0.",
+    "units": "Unsigned aggregate signed-coordinate rate under the stated linear readout, not neuron active fraction or a semantic-valence score. Unit-L1 scaling is diagnostic only; raw-row results retained separately.",
+    "results": [
+      {
+        "positive_label": "good",
+        "negative_label": "bad",
+        "positive_id": 1894,
+        "negative_id": 5763,
+        "positive_row_sha256": "8f5ffd0b25d8859cf5e06a9115e9c85b9459b99fae7f72648763a2dc662cd31e",
+        "negative_row_sha256": "2326e364753771c4a93f7e1c5bd876fd94bed461837c1f077bca0b07991e3169",
+        "signed_cosine": 0.5705679078131942,
+        "opposing_sign_coordinate_fraction": 0.31171875,
+        "opposing_input_L1_fraction": 0.21467382477153205,
+        "L1_right_derivative_at_zero_input": 0.570652350456936,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.6626310621839913,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.7691690113177778,
+            "fraction_removed_from_combined_L1": 0.11541549434111109,
+            "residual_cosine_with_positive_row": 0.8884712634523515
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.8579921557752754,
+            "fraction_removed_from_combined_L1": 0.11524183058320225,
+            "residual_cosine_with_positive_row": 0.899612266230908
+          }
+        ]
+      },
+      {
+        "positive_label": "happy",
+        "negative_label": "sad",
+        "positive_id": 8846,
+        "negative_id": 14064,
+        "positive_row_sha256": "b83172ce1ffd2efca5dddc655403d8be1ce555b0195953b7098f42a3d712c296",
+        "negative_row_sha256": "333dd42fca74f6d574e828b1af0fd8cea2c0b4692b9a403d7f05bec8ba103e88",
+        "signed_cosine": 0.38684568484582926,
+        "opposing_sign_coordinate_fraction": 0.378515625,
+        "opposing_input_L1_fraction": 0.3068367846911532,
+        "L1_right_derivative_at_zero_input": 0.3863264306176935,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.5994547633380507,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.6714739707903206,
+            "fraction_removed_from_combined_L1": 0.16426301460483972,
+            "residual_cosine_with_positive_row": 0.8328450051599832
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.7560466942411745,
+            "fraction_removed_from_combined_L1": 0.16378728845658364,
+            "residual_cosine_with_positive_row": 0.8499443156124753
+          }
+        ]
+      },
+      {
+        "positive_label": "love",
+        "negative_label": "hate",
+        "positive_id": 3518,
+        "negative_id": 20672,
+        "positive_row_sha256": "0abaab44003d99406d8e47079b65a11a4bc037f04220d0dce35f1a29e796fa8f",
+        "negative_row_sha256": "32cbf0aa2ef1a11ff806422ed4eae82d67e7b2a61711f6a9a9f53f48b9fed4b8",
+        "signed_cosine": 0.5336665079989499,
+        "opposing_sign_coordinate_fraction": 0.3251953125,
+        "opposing_input_L1_fraction": 0.23465941151793157,
+        "L1_right_derivative_at_zero_input": 0.5306811769641369,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.5854316348709556,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.746652556260056,
+            "fraction_removed_from_combined_L1": 0.12667372186997194,
+            "residual_cosine_with_positive_row": 0.8755001692726578
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.834898738410286,
+            "fraction_removed_from_combined_L1": 0.12623869599510196,
+            "residual_cosine_with_positive_row": 0.8878830450763758
+          }
+        ]
+      },
+      {
+        "positive_label": "pleasant",
+        "negative_label": "unpleasant",
+        "positive_id": 29880,
+        "negative_id": 49550,
+        "positive_row_sha256": "66a75ac63d1547e20d7a5c18f2d7f3610d6e2aaf750550efc4129a361d8447d4",
+        "negative_row_sha256": "e5190f43b82c42aa1fbf9d52e710d92a47e21080654315c8dd7829ef4aefcb0e",
+        "signed_cosine": 0.6162602463406287,
+        "opposing_sign_coordinate_fraction": 0.2923828125,
+        "opposing_input_L1_fraction": 0.1933129822664748,
+        "L1_right_derivative_at_zero_input": 0.6133740354670504,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.7188930781598588,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.798902738019729,
+            "fraction_removed_from_combined_L1": 0.10054863099013545,
+            "residual_cosine_with_positive_row": 0.8991538567542101
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.889164445203393,
+            "fraction_removed_from_combined_L1": 0.10039788323647947,
+            "residual_cosine_with_positive_row": 0.9090630289148843
+          }
+        ]
+      },
+      {
+        "positive_label": "calm",
+        "negative_label": "anxious",
+        "positive_id": 18715,
+        "negative_id": 33940,
+        "positive_row_sha256": "38e8322c61bc23811dcef8fdfa567d19f45fca466cdb793283aa241f8f1fcb6c",
+        "negative_row_sha256": "f77e77d25f7fb724db532f385d7fcc51e268dcdf033deacc8e43ab48a6dbf3ed",
+        "signed_cosine": 0.22700935380757428,
+        "opposing_sign_coordinate_fraction": 0.4298828125,
+        "opposing_input_L1_fraction": 0.38265085369048313,
+        "L1_right_derivative_at_zero_input": 0.2346982926190338,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.498510316367035,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.5645972781718704,
+            "fraction_removed_from_combined_L1": 0.21770136091406478,
+            "residual_cosine_with_positive_row": 0.7844822279149224
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.6432166758504967,
+            "fraction_removed_from_combined_L1": 0.21751586864262062,
+            "residual_cosine_with_positive_row": 0.807340422229013
+          }
+        ]
+      },
+      {
+        "positive_label": "hope",
+        "negative_label": "despair",
+        "positive_id": 6345,
+        "negative_id": 43611,
+        "positive_row_sha256": "d19f5bfbb035924a9dde3d02d5b5903809cb0556be4b85733920dbf77fb2d3d3",
+        "negative_row_sha256": "495c2beee726f33d68ca6e263d2548057a26adf89e53658fd65e9ed2230f1cb2",
+        "signed_cosine": 0.28996798565413545,
+        "opposing_sign_coordinate_fraction": 0.4119140625,
+        "opposing_input_L1_fraction": 0.3550313695596465,
+        "L1_right_derivative_at_zero_input": 0.2899372608807071,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.3492709348532959,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.60657715640046,
+            "fraction_removed_from_combined_L1": 0.19671142179976997,
+            "residual_cosine_with_positive_row": 0.8049469390365185
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.6873268758595612,
+            "fraction_removed_from_combined_L1": 0.19651101149544703,
+            "residual_cosine_with_positive_row": 0.8253876314484647
+          }
+        ]
+      },
+      {
+        "positive_label": "safe",
+        "negative_label": "danger",
+        "positive_id": 7681,
+        "negative_id": 9542,
+        "positive_row_sha256": "463fc562bcfcdb5351ff55a6ada2dbdf6c878e53d4f1b226c385733c330d21f9",
+        "negative_row_sha256": "3139be452b9c2e6bf510b02f04e750e96d51e41553303ccd784fd92489d8998e",
+        "signed_cosine": 0.3018305024048863,
+        "opposing_sign_coordinate_fraction": 0.403125,
+        "opposing_input_L1_fraction": 0.34572118638527355,
+        "L1_right_derivative_at_zero_input": 0.30855762722945296,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.509406987761586,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.6121345900338335,
+            "fraction_removed_from_combined_L1": 0.19393270498308324,
+            "residual_cosine_with_positive_row": 0.806386343946871
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.693269468557409,
+            "fraction_removed_from_combined_L1": 0.19368120544885292,
+            "residual_cosine_with_positive_row": 0.826508518202927
+          }
+        ]
+      },
+      {
+        "positive_label": "joy",
+        "negative_label": "sorrow",
+        "positive_id": 13642,
+        "negative_id": 41280,
+        "positive_row_sha256": "726fbb5e4d045663da5f3bd3af10237e7b8cb993400df38e919f90ae9066a13b",
+        "negative_row_sha256": "da64ee64a7874f99a954742011756115cd9db6e57d317f090dca6e522d578524",
+        "signed_cosine": 0.30410470107019494,
+        "opposing_sign_coordinate_fraction": 0.4017578125,
+        "opposing_input_L1_fraction": 0.34837468140995004,
+        "L1_right_derivative_at_zero_input": 0.30325063718009987,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.4755196926743837,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.6152773529436495,
+            "fraction_removed_from_combined_L1": 0.19236132352817525,
+            "residual_cosine_with_positive_row": 0.8067273974068182
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.6972301721112022,
+            "fraction_removed_from_combined_L1": 0.19179515613752285,
+            "residual_cosine_with_positive_row": 0.826785282582985
+          }
+        ]
+      },
+      {
+        "positive_label": "positive",
+        "negative_label": "negative",
+        "positive_id": 4337,
+        "negative_id": 6740,
+        "positive_row_sha256": "afbe1e639071c096c26acc6cf7685f8da3ae928b9bca34f81a0b870f56f0f9f8",
+        "negative_row_sha256": "7e518b101f3cec3247f9dce5a98f232910f5b655841ecb823a204b6c8d3b32d6",
+        "signed_cosine": 0.7254668437902169,
+        "opposing_sign_coordinate_fraction": 0.2376953125,
+        "opposing_input_L1_fraction": 0.13316355594617735,
+        "L1_right_derivative_at_zero_input": 0.7336728881076453,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.8540368745290914,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.864063112291886,
+            "fraction_removed_from_combined_L1": 0.06796844385405698,
+            "residual_cosine_with_positive_row": 0.9290576566208532
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.957630942136473,
+            "fraction_removed_from_combined_L1": 0.06779478945882245,
+            "residual_cosine_with_positive_row": 0.9359149434811385
+          }
+        ]
+      },
+      {
+        "positive_label": "healthy",
+        "negative_label": "sick",
+        "positive_id": 8112,
+        "negative_id": 14469,
+        "positive_row_sha256": "ecdee9a694b4610c98c42361eff4d882bac69e286738fa17ffcd8f3ee7844980",
+        "negative_row_sha256": "715e86ea7da19ac5210575ee79f9464d76a84513760190d869d097c5d2ff84af",
+        "signed_cosine": 0.30453499882034124,
+        "opposing_sign_coordinate_fraction": 0.4021484375,
+        "opposing_input_L1_fraction": 0.35053225377340436,
+        "L1_right_derivative_at_zero_input": 0.29893549245319123,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.5473124913998684,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.6125687646385958,
+            "fraction_removed_from_combined_L1": 0.1937156176807021,
+            "residual_cosine_with_positive_row": 0.8089326642759611
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.6945407449620729,
+            "fraction_removed_from_combined_L1": 0.19307583573234632,
+            "residual_cosine_with_positive_row": 0.8288679067315639
+          }
+        ]
+      },
+      {
+        "positive_label": "success",
+        "negative_label": "failure",
+        "positive_id": 3244,
+        "negative_id": 8977,
+        "positive_row_sha256": "11aeea4c7e66c77f724bf78a8499c6902c53c0037132020b8e34f2de3cda993b",
+        "negative_row_sha256": "b901ed2f3d15301d65c49dd98e70dcd42f16ec0d5bd6783a5c186b560f9f45cb",
+        "signed_cosine": 0.47796149283549055,
+        "opposing_sign_coordinate_fraction": 0.344140625,
+        "opposing_input_L1_fraction": 0.2636627587211084,
+        "L1_right_derivative_at_zero_input": 0.47267448255778316,
+        "nondecreasing_L1_for_all_nonnegative_input_gains": true,
+        "raw_equal_multiplier_post_L1_over_prior": 1.7694259137241832,
+        "unit_L1_comparisons": [
+          {
+            "positive_input_gain": 1.0,
+            "post_net_L1_over_prior_L1": 1.7203792789848966,
+            "fraction_removed_from_combined_L1": 0.1398103605075517,
+            "residual_cosine_with_positive_row": 0.8596523348443889
+          },
+          {
+            "positive_input_gain": 1.1,
+            "post_net_L1_over_prior_L1": 1.8077314751751998,
+            "fraction_removed_from_combined_L1": 0.13917548801180968,
+            "residual_cosine_with_positive_row": 0.873760808091422
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "signed_cosine_min": 0.22700935380757428,
+      "signed_cosine_max": 0.7254668437902169,
+      "nondecreasing_L1_cases": 11,
+      "equal_unit_L1_post_over_prior_min": 1.5645972781718704,
+      "equal_unit_L1_post_over_prior_max": 1.864063112291886
+    },
+    "limits": [
+      "A learned DMN state is not necessarily one of these negative-labeled rows.",
+      "Lexical labels are illustrative; contextual meanings, polysemy and compositional inputs are not measured.",
+      "No claim that a residual has positive meaning, that active-cell fraction rises/falls, or that the complete recurrent model fails/succeeds.",
+      "No embedding rotation, centering, sign flip, learned valence map, remapping or new classifier selected."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/lexical_contrast_arithmetic.py",
+      "sha256": "8a7f4351e0d0385b53df3e4e952ead223f90588931d3345b074d20867fc20ac3"
+    }
+  },
+  "matched_envelope_relaxation_reference": {
+    "recorded_at_utc": "2026-10-29T00:22:24Z",
+    "purpose": "Distinguish temporal-frame publication from self-retention dynamics, and semantic fading from contextual composition retention, without choosing a leak or extra state.",
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/context_relaxation_arithmetic.py",
+      "script_sha256": "901a2f6695dd80c833542fe938397d85bc8706ec1f302e591c4eb4b82727f884",
+      "method": "Exact Fraction matrix-vector identities for four parameter cases; closed-form mode powers, no neural trajectory or trained model."
+    },
+    "assumptions": [
+      "Four nonnegative cells: a1,a2 share one positive semantic population and b1,b2 share another. Other cells, including negative populations, contribute zero in this restricted reference.",
+      "P exchanges a1 with b1 and a2 with b2; these are cross-minicolumn connections, not paired opposing cells or proposed internal minicolumn edges.",
+      "T=(1-beta)*I+beta*g*P, with no external drive, noise, threshold, learning or rounding. H77 acts as the identity because no opposite activity is present.",
+      "Two earlier histories leave x=(1,0,0,1) and y=(0,1,1,0), each with the same semantic sum one in each of the two populations. No requirement that the input encoder directly produces these particular contextual patterns."
+    ],
+    "derivation": {
+      "semantic_mode": "For both histories each population sum is multiplied by q=1-beta+beta*g.",
+      "context_mode": "x-y=(1,-1,-1,1) is an eigenvector with mu=1-beta-beta*g. Its k-step difference is mu^k*(x-y), while each population sum is q^k.",
+      "matched_envelope": "Choose illustrative q=63/64 and g=1-(1-q)/beta. Each case has the same total and per-coordinate fading, with half-life log(1/2)/log(q) frames.",
+      "normalized_composition_difference": "Relative contrast changes by mu/q per transition; absolute contrast and contrast relative to the surviving semantic sum differ."
+    },
+    "cases": [
+      {
+        "beta": "1",
+        "cross_edge_gain": "63/64",
+        "semantic_sum_factor": "63/64",
+        "context_difference_factor": "-63/64",
+        "relative_context_factor": "-1",
+        "one_step_x": [
+          "0",
+          "63/64",
+          "63/64",
+          "0"
+        ],
+        "one_step_y": [
+          "63/64",
+          "0",
+          "0",
+          "63/64"
+        ],
+        "relative_context_after_ten_steps": 1.0
+      },
+      {
+        "beta": "1/2",
+        "cross_edge_gain": "31/32",
+        "semantic_sum_factor": "63/64",
+        "context_difference_factor": "1/64",
+        "relative_context_factor": "1/63",
+        "one_step_x": [
+          "1/2",
+          "31/64",
+          "31/64",
+          "1/2"
+        ],
+        "one_step_y": [
+          "31/64",
+          "1/2",
+          "1/2",
+          "31/64"
+        ],
+        "relative_context_after_ten_steps": 1.0153002788546763e-18
+      },
+      {
+        "beta": "1/4",
+        "cross_edge_gain": "15/16",
+        "semantic_sum_factor": "63/64",
+        "context_difference_factor": "33/64",
+        "relative_context_factor": "11/21",
+        "one_step_x": [
+          "3/4",
+          "15/64",
+          "15/64",
+          "3/4"
+        ],
+        "one_step_y": [
+          "15/64",
+          "3/4",
+          "3/4",
+          "15/64"
+        ],
+        "relative_context_after_ten_steps": 0.0015550125708269572
+      },
+      {
+        "beta": "65/128",
+        "cross_edge_gain": "63/65",
+        "semantic_sum_factor": "63/64",
+        "context_difference_factor": "0",
+        "relative_context_factor": "0",
+        "one_step_x": [
+          "63/128",
+          "63/128",
+          "63/128",
+          "63/128"
+        ],
+        "one_step_y": [
+          "63/128",
+          "63/128",
+          "63/128",
+          "63/128"
+        ],
+        "relative_context_after_ten_steps": 0.0
+      }
+    ],
+    "common_half_life_frames": 44.01393630854736,
+    "interpretation": [
+      "beta=1 alternates contextual patterns while preserving their contrast relative to the fading amplitude. beta=1/2 reduces relative contrast by 1/63 each step at the same semantic envelope.",
+      "beta=65/128 and g=63/65 merge the two complete four-cell states after one transition. Under fixed learned graph and identical future input/noise law, this restricted model cannot recover which earlier state occurred.",
+      "The pair comparison identifies a possible information loss, not useful task memory: preserved differences still need to improve later context-sensitive prediction.",
+      "State mixing is a modeling choice even when implemented through the same two frames. Matching a dominant-response half-life does not establish equivalent contextual retention."
+    ],
+    "non_adoptions": [
+      "No leak, time step, integration law, reciprocal circuit, per-neuron constant, context field or diagnostic runtime array selected.",
+      "No statement that direct updates are better than relaxation, or that the example predicts SNN performance.",
+      "No spontaneous small loops are rejected; no morphology or physical-distance bias introduced."
+    ]
+  },
+  "bounded_composition_reference": {
+    "recorded_at_utc": "2026-10-29T01:06:36Z",
+    "purpose": "Distinguish geometric composition freedom, finite representable patterns and learned reliable context.",
+    "assumptions": [
+      "One surviving polarity with60 cells, fixed total A, each rate in[0,R], R>0. This is a conditional cap, not an application choice.",
+      "The discrete count uses uniform unsigned codes0..Q with rate R*code/Q, Q=15 or255. It is not FP4, a signed INT format, or a selected neuron representation.",
+      "Counts include every syntactically representable pattern at the exact total; no trajectory, reachable-state model or decoder is supplied."
+    ],
+    "derivation": {
+      "continuous": "For0<A<60R the bounded fixed-total slice has affine dimension59, but its L1 diameter is2*min(A,60R-A). At A=0 or60R it is a singleton.",
+      "diameter_bound": "For two nonnegative vectors of equal sum A, L1 distance is at most2A. Applying the same bound to their deficits R-r gives2*(60R-A). For even60, disjoint filled supports attain2A up to A=30R; complementary deficits attain the other half.",
+      "count": "The number at code total S is the coefficient of x^S in(1+x+...+x^Q)^60. Symmetry follows by replacing each code j with Q-j.",
+      "meaning": "log2(count) is only a combinatorial storage upper bound at that exact total. It is not robust memory capacity, independent contexts, training success or a rate-format recommendation."
+    },
+    "verification": {
+      "small_code_total_counts_checked_by_exhaustive_enumeration": 72,
+      "small_even_population_diameters_checked_by_exhaustive_pair_comparison": 42,
+      "large_checks": "Exact coefficient symmetry, total cardinality, endpoint counts and stars-and-bars until the cap binds, for both bit widths."
+    },
+    "cases": [
+      {
+        "storage_bits_per_cell": 4,
+        "maximum_unsigned_code": 15,
+        "total_rate_in_units_of_per_cell_cap": "0",
+        "total_integer_code": 0,
+        "patterns_at_exact_total": "1",
+        "log2_pattern_count": 0.0,
+        "l1_diameter_in_units_of_per_cell_cap": "0"
+      },
+      {
+        "storage_bits_per_cell": 4,
+        "maximum_unsigned_code": 15,
+        "total_rate_in_units_of_per_cell_cap": "1/15",
+        "total_integer_code": 1,
+        "patterns_at_exact_total": "60",
+        "log2_pattern_count": 5.906890595608519,
+        "l1_diameter_in_units_of_per_cell_cap": "2/15"
+      },
+      {
+        "storage_bits_per_cell": 4,
+        "maximum_unsigned_code": 15,
+        "total_rate_in_units_of_per_cell_cap": "1",
+        "total_integer_code": 15,
+        "patterns_at_exact_total": "1824010149372864",
+        "log2_pattern_count": 50.69603518044969,
+        "l1_diameter_in_units_of_per_cell_cap": "2"
+      },
+      {
+        "storage_bits_per_cell": 4,
+        "maximum_unsigned_code": 15,
+        "total_rate_in_units_of_per_cell_cap": "15",
+        "total_integer_code": 225,
+        "patterns_at_exact_total": "12639737882881665639958971894003255045644345082141798761491104",
+        "log2_pattern_count": 202.97558033400267,
+        "l1_diameter_in_units_of_per_cell_cap": "30"
+      },
+      {
+        "storage_bits_per_cell": 4,
+        "maximum_unsigned_code": 15,
+        "total_rate_in_units_of_per_cell_cap": "30",
+        "total_integer_code": 450,
+        "patterns_at_exact_total": "19690509785693331116189305734291689189460001248379387889097358061843920",
+        "log2_pattern_count": 233.51246710509537,
+        "l1_diameter_in_units_of_per_cell_cap": "60"
+      },
+      {
+        "storage_bits_per_cell": 4,
+        "maximum_unsigned_code": 15,
+        "total_rate_in_units_of_per_cell_cap": "45",
+        "total_integer_code": 675,
+        "patterns_at_exact_total": "12639737882881665639958971894003255045644345082141798761491104",
+        "log2_pattern_count": 202.97558033400267,
+        "l1_diameter_in_units_of_per_cell_cap": "30"
+      },
+      {
+        "storage_bits_per_cell": 4,
+        "maximum_unsigned_code": 15,
+        "total_rate_in_units_of_per_cell_cap": "59",
+        "total_integer_code": 885,
+        "patterns_at_exact_total": "1824010149372864",
+        "log2_pattern_count": 50.69603518044969,
+        "l1_diameter_in_units_of_per_cell_cap": "2"
+      },
+      {
+        "storage_bits_per_cell": 4,
+        "maximum_unsigned_code": 15,
+        "total_rate_in_units_of_per_cell_cap": "899/15",
+        "total_integer_code": 899,
+        "patterns_at_exact_total": "60",
+        "log2_pattern_count": 5.906890595608519,
+        "l1_diameter_in_units_of_per_cell_cap": "2/15"
+      },
+      {
+        "storage_bits_per_cell": 4,
+        "maximum_unsigned_code": 15,
+        "total_rate_in_units_of_per_cell_cap": "60",
+        "total_integer_code": 900,
+        "patterns_at_exact_total": "1",
+        "log2_pattern_count": 0.0,
+        "l1_diameter_in_units_of_per_cell_cap": "0"
+      },
+      {
+        "storage_bits_per_cell": 8,
+        "maximum_unsigned_code": 255,
+        "total_rate_in_units_of_per_cell_cap": "0",
+        "total_integer_code": 0,
+        "patterns_at_exact_total": "1",
+        "log2_pattern_count": 0.0,
+        "l1_diameter_in_units_of_per_cell_cap": "0"
+      },
+      {
+        "storage_bits_per_cell": 8,
+        "maximum_unsigned_code": 255,
+        "total_rate_in_units_of_per_cell_cap": "1/255",
+        "total_integer_code": 1,
+        "patterns_at_exact_total": "60",
+        "log2_pattern_count": 5.906890595608519,
+        "l1_diameter_in_units_of_per_cell_cap": "2/255"
+      },
+      {
+        "storage_bits_per_cell": 8,
+        "maximum_unsigned_code": 255,
+        "total_rate_in_units_of_per_cell_cap": "1",
+        "total_integer_code": 255,
+        "patterns_at_exact_total": "44456320955220934151258649477347652519799618501256908237690702592",
+        "log2_pattern_count": 214.75578663385792,
+        "l1_diameter_in_units_of_per_cell_cap": "2"
+      },
+      {
+        "storage_bits_per_cell": 8,
+        "maximum_unsigned_code": 255,
+        "total_rate_in_units_of_per_cell_cap": "15",
+        "total_integer_code": 3825,
+        "patterns_at_exact_total": "78722351195532965832510736237374865352315997679249261489006070676675674567030460773119929550221312017237021852289918808372423428864",
+        "log2_pattern_count": 434.8274256455602,
+        "l1_diameter_in_units_of_per_cell_cap": "30"
+      },
+      {
+        "storage_bits_per_cell": 8,
+        "maximum_unsigned_code": 255,
+        "total_rate_in_units_of_per_cell_cap": "30",
+        "total_integer_code": 7650,
+        "patterns_at_exact_total": "2170190287470841930100808698861376872034633690824533253137060023868442145469035405067664828840806090553972065182619281817878369470027421381376",
+        "log2_pattern_count": 469.50968292628306,
+        "l1_diameter_in_units_of_per_cell_cap": "60"
+      },
+      {
+        "storage_bits_per_cell": 8,
+        "maximum_unsigned_code": 255,
+        "total_rate_in_units_of_per_cell_cap": "45",
+        "total_integer_code": 11475,
+        "patterns_at_exact_total": "78722351195532965832510736237374865352315997679249261489006070676675674567030460773119929550221312017237021852289918808372423428864",
+        "log2_pattern_count": 434.8274256455602,
+        "l1_diameter_in_units_of_per_cell_cap": "30"
+      },
+      {
+        "storage_bits_per_cell": 8,
+        "maximum_unsigned_code": 255,
+        "total_rate_in_units_of_per_cell_cap": "59",
+        "total_integer_code": 15045,
+        "patterns_at_exact_total": "44456320955220934151258649477347652519799618501256908237690702592",
+        "log2_pattern_count": 214.75578663385792,
+        "l1_diameter_in_units_of_per_cell_cap": "2"
+      },
+      {
+        "storage_bits_per_cell": 8,
+        "maximum_unsigned_code": 255,
+        "total_rate_in_units_of_per_cell_cap": "15299/255",
+        "total_integer_code": 15299,
+        "patterns_at_exact_total": "60",
+        "log2_pattern_count": 5.906890595608519,
+        "l1_diameter_in_units_of_per_cell_cap": "2/255"
+      },
+      {
+        "storage_bits_per_cell": 8,
+        "maximum_unsigned_code": 255,
+        "total_rate_in_units_of_per_cell_cap": "60",
+        "total_integer_code": 15300,
+        "patterns_at_exact_total": "1",
+        "log2_pattern_count": 0.0,
+        "l1_diameter_in_units_of_per_cell_cap": "0"
+      }
+    ],
+    "interpretation": [
+      "At total59R, continuous diameter is2R even though the local interior dimension is59. At total60R no active composition distinction remains in this coordinate.",
+      "One code step above zero or below full saturation has only60 patterns at the exact total, irrespective of whether storage has4 or8 bits; the physical step differs.",
+      "H77 can leave other coordinates informative; predictive semantics remain open. A cap or loss of one coordinate does not establish whole-network history loss."
+    ],
+    "non_adoptions": "No cap, saturation law, normalization, coding objective, entropy estimator, extra context state or preferred numeric format.",
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/composition_bounds_arithmetic.py",
+      "script_sha256": "58d6f0a1312a55d47b02349ab381f42ba59c7b7fcbd98ecb48a771b68d83985c"
+    }
+  },
+  "rated_valence_geometry": {
+    "status": "Read-only rated-word input-row geometry; no SNN or learned evaluator",
+    "started_at_utc": "2026-10-29T01:13:10.038630+00:00",
+    "finished_at_utc": "2026-10-29T01:13:23.222921+00:00",
+    "wall_seconds": 13.18427013100154,
+    "protocol": {
+      "recorded_before_embedding_measurements_at_utc": "2026-10-29T01:12:17Z",
+      "purpose": "Broaden lexical polarity geometry without defining a learned DMN state or training a valence evaluator.",
+      "ratings": "Publisher BRM-emot-submit.csv, V.Mean.Sum; words equally weighted, not weighted by rater count.",
+      "eligibility": "Lowercase ASCII letters only; exact leading-space single token confirmed by the existing tokenizer merge-rank replay; ordinary IDs3..127999.",
+      "groups": {
+        "negative": "V.Mean.Sum<=3",
+        "neutral": "4.5<=V.Mean.Sum<=5.5",
+        "positive": "V.Mean.Sum>=7"
+      },
+      "selection": "For each group choose64 eligible words with smallest SHA256 of UTF8 steady-snn-rated-valence-v1:<word>; select before reading their vectors.",
+      "comparisons": [
+        "All4096 positive-negative pairs",
+        "All4096 positive-neutral pairs",
+        "All4096 negative-neutral pairs",
+        "All2016 unordered distinct within-positive pairs",
+        "All2016 unordered distinct within-negative pairs",
+        "All2016 unordered distinct within-neutral pairs"
+      ],
+      "measurements": [
+        "Signed cosine on raw embedding rows",
+        "For between-group pairs, L1 magnitude of equal-unit-L1 sum",
+        "For positive-input/negative-prior pairs, input L1 mass on opposing-sign coordinates and f right derivative at zero, plus raw equal-multiplier sum/prior L1"
+      ],
+      "limits": [
+        "Descriptive chosen single-token English word subset; no population inference or independence claim for shared-word pairs.",
+        "No neural dynamics, active-cell count, learned DMN evaluation, residual valence judgment, model training, embedding transformation or chosen encoder.",
+        "Rating extremes are not necessarily complementary meanings; neutral and same-valence comparisons control only broad lexical geometry, not frequency, topic or polysemy."
+      ]
+    },
+    "protocol_sha256": "f84bfae9274d7564382aa40e75164d4c3278e5f8728eac73232316048fb17e24",
+    "ratings_source": {
+      "citation": "Warriner, Kuperman and Brysbaert2013, doi10.3758/s13428-012-0314-x",
+      "landing_page": "https://link.springer.com/article/10.3758/s13428-012-0314-x",
+      "public_supplement_url": "https://media.springernature.com/original/springer-static/esm/art%3A10.3758%2Fs13428-012-0314-x/MediaObjects/13428_2012_314_MOESM1_ESM.zip",
+      "zip_bytes": 1131281,
+      "zip_sha256": "5a0db0437ef234219fb899caced5eb3195dbf9f84396637ab4db74c50ca441aa",
+      "csv_member": "BRM-emot-submit.csv",
+      "csv_sha256": "85f6d7e35069b0eff3d9d88c4dbe08e6ae7dbdb81eac64be3f89ed0f5079d8e3",
+      "used_columns": [
+        "Word",
+        "V.Mean.Sum",
+        "V.SD.Sum",
+        "V.Rat.Sum"
+      ],
+      "direction_check": "Publisher calibrators jail1.91/free8.25 and actual happy8.47/sad2.10 establish higher values as more positive. Full subscription methods not read."
+    },
+    "embedding_source": {
+      "repository": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "revision": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+      "tensor": "embed.weight",
+      "shape": [
+        129280,
+        5120
+      ],
+      "dtype": "BF16",
+      "existing_verified_sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c",
+      "tokenizer_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "access": "192 selected local SSD rows;1966080 tensor bytes read. No full-tensor scan or copy."
+    },
+    "eligibility": {
+      "all_rated_words": 13915,
+      "ascii_lowercase": 13787,
+      "ordinary_single_leading_space_token": 8500
+    },
+    "eligible_group_counts": {
+      "negative": 624,
+      "neutral": 2730,
+      "positive": 617
+    },
+    "selected_groups": {
+      "negative": [
+        {
+          "word": "termination",
+          "token_id": 34386,
+          "valence_mean": 2.95,
+          "valence_sd": 2.11,
+          "rating_count": 21,
+          "row_sha256": "e27903140d4d6c3f07647d31a0abea900b025e578132e154cc28fe45c32216d0"
+        },
+        {
+          "word": "arsenic",
+          "token_id": 79313,
+          "valence_mean": 3.0,
+          "valence_sd": 1.82,
+          "rating_count": 21,
+          "row_sha256": "dbe4d065943343d27b4771fe0bf174f1b3e15a4c1afd54906627251a44692a00"
+        },
+        {
+          "word": "scam",
+          "token_id": 76898,
+          "valence_mean": 2.53,
+          "valence_sd": 1.87,
+          "rating_count": 19,
+          "row_sha256": "277a9fde0b456e43b4c184b930bbbeb5e4189c7401c3e6d254bfdeea891c8302"
+        },
+        {
+          "word": "monster",
+          "token_id": 38009,
+          "valence_mean": 2.55,
+          "valence_sd": 1.9,
+          "rating_count": 22,
+          "row_sha256": "d6510e739c5bc5272c3e1700bad8b7fe700b6d52825d677f81487a56363749a5"
+        },
+        {
+          "word": "afraid",
+          "token_id": 17601,
+          "valence_mean": 2.25,
+          "valence_sd": 1.16,
+          "rating_count": 20,
+          "row_sha256": "e2bf9352e9ecbe2550f73f839a2c0b7bdcc548c8048ecf947087ab00277cce50"
+        },
+        {
+          "word": "helpless",
+          "token_id": 49242,
+          "valence_mean": 2.24,
+          "valence_sd": 1.68,
+          "rating_count": 41,
+          "row_sha256": "d1c53543da38fde76e5871b83d6878a802da4cfa14eb3773ad00b1a9a5e12152"
+        },
+        {
+          "word": "poison",
+          "token_id": 23193,
+          "valence_mean": 2.16,
+          "valence_sd": 1.46,
+          "rating_count": 85,
+          "row_sha256": "bd914d463250bdff6eba62088355a34f7a620e7391b43269f664fd68d978e29b"
+        },
+        {
+          "word": "quarantine",
+          "token_id": 74855,
+          "valence_mean": 2.84,
+          "valence_sd": 2.36,
+          "rating_count": 19,
+          "row_sha256": "c69dd84841eeb3440902292e2e28de1644b60a759564840a3e07fa17aebe78fd"
+        },
+        {
+          "word": "venom",
+          "token_id": 64167,
+          "valence_mean": 2.93,
+          "valence_sd": 1.65,
+          "rating_count": 41,
+          "row_sha256": "06266bbe887b2ffe49d50f59334ef31373ec083c8d7d55a86591bd6407dff761"
+        },
+        {
+          "word": "fecal",
+          "token_id": 96325,
+          "valence_mean": 2.4,
+          "valence_sd": 1.14,
+          "rating_count": 20,
+          "row_sha256": "5e7a1e3a6bae9a2cb6249527a320427728dce32c9189e713249bbcb17ab770b3"
+        },
+        {
+          "word": "humiliation",
+          "token_id": 100022,
+          "valence_mean": 2.27,
+          "valence_sd": 1.42,
+          "rating_count": 22,
+          "row_sha256": "7b04eb13d0aa318ac4cf2cda8d1fc2500f71c3a825d3c7bd0382ad3e9a62dcbd"
+        },
+        {
+          "word": "heartbreaking",
+          "token_id": 109319,
+          "valence_mean": 2.91,
+          "valence_sd": 2.45,
+          "rating_count": 22,
+          "row_sha256": "246d42a6b0d740e7f4b0e5257681496cb99df35b16556d4707e3fbdf45c8721e"
+        },
+        {
+          "word": "rage",
+          "token_id": 46076,
+          "valence_mean": 2.5,
+          "valence_sd": 1.95,
+          "rating_count": 18,
+          "row_sha256": "109cfdbff2b4e07f4a5b1b10a1c38082f882135ca15a6687e6edb92e2f681904"
+        },
+        {
+          "word": "criminal",
+          "token_id": 14154,
+          "valence_mean": 2.11,
+          "valence_sd": 0.81,
+          "rating_count": 19,
+          "row_sha256": "ee693b170dc6ca9936013bc16143b3271d145d19c70260cb03328be6a6cca903"
+        },
+        {
+          "word": "rectal",
+          "token_id": 96437,
+          "valence_mean": 2.9,
+          "valence_sd": 1.7,
+          "rating_count": 21,
+          "row_sha256": "b6e59c980e594cbd4b442172ff4620aad668381545456903aedb54df15d8acb0"
+        },
+        {
+          "word": "unsafe",
+          "token_id": 56141,
+          "valence_mean": 2.84,
+          "valence_sd": 1.83,
+          "rating_count": 19,
+          "row_sha256": "abb11bdf096f6cdbc3df79ed66cf1b67089c2df6fabbdbfa91d71fb2bfcc063d"
+        },
+        {
+          "word": "hypocrisy",
+          "token_id": 115153,
+          "valence_mean": 2.62,
+          "valence_sd": 1.28,
+          "rating_count": 21,
+          "row_sha256": "6d3d224fd8762360cdaeaa7017382e93f1daba7b07dcb09b7e651aa01349c08f"
+        },
+        {
+          "word": "degenerate",
+          "token_id": 107121,
+          "valence_mean": 2.7,
+          "valence_sd": 1.3,
+          "rating_count": 20,
+          "row_sha256": "795b96736f13f8edc868e377d8569cfe8266c3750c579ed56a02909814f76656"
+        },
+        {
+          "word": "paralysis",
+          "token_id": 77880,
+          "valence_mean": 2.9,
+          "valence_sd": 2.09,
+          "rating_count": 42,
+          "row_sha256": "64e8f95c0d7dae4b0250993b6f9aec4b565710b734370e302e2719973bc1cd79"
+        },
+        {
+          "word": "injury",
+          "token_id": 10744,
+          "valence_mean": 2.32,
+          "valence_sd": 1.63,
+          "rating_count": 19,
+          "row_sha256": "ca7299f3d63e445a8cc85e5a86c8839ad651151b82050d7d5ab724b2cbd65742"
+        },
+        {
+          "word": "homicide",
+          "token_id": 92512,
+          "valence_mean": 1.5,
+          "valence_sd": 0.92,
+          "rating_count": 18,
+          "row_sha256": "5920fc97b813d85aac505b6ddde6a8182fe166d752e74be5fa1ff1e8df909013"
+        },
+        {
+          "word": "fatty",
+          "token_id": 25578,
+          "valence_mean": 2.38,
+          "valence_sd": 1.6,
+          "rating_count": 21,
+          "row_sha256": "c687ed76cffcdf2a2eff4e87463e772df00fbeccb92ea512440170692a88ca0f"
+        },
+        {
+          "word": "agitation",
+          "token_id": 76096,
+          "valence_mean": 2.84,
+          "valence_sd": 1.42,
+          "rating_count": 19,
+          "row_sha256": "00fada1f105ca9bca0730f6af25c8b87081f7ed6631b878af121c516ee84bbd4"
+        },
+        {
+          "word": "liar",
+          "token_id": 104024,
+          "valence_mean": 2.41,
+          "valence_sd": 2.15,
+          "rating_count": 22,
+          "row_sha256": "8c9f076c2d25607e54c4d836c2314b02947e19b333f746f633af0a8cb8f71123"
+        },
+        {
+          "word": "decay",
+          "token_id": 26288,
+          "valence_mean": 2.4,
+          "valence_sd": 1.57,
+          "rating_count": 20,
+          "row_sha256": "cfe711eac428e0876683605025c923f19d37346c37c7e2cdcfa49211c38d987d"
+        },
+        {
+          "word": "infectious",
+          "token_id": 32734,
+          "valence_mean": 2.63,
+          "valence_sd": 1.86,
+          "rating_count": 19,
+          "row_sha256": "70e71794dc0707ef95889ba4cd5a822d8a4ff8cb3f748531b3d16a4c40b1e92b"
+        },
+        {
+          "word": "terrorism",
+          "token_id": 42033,
+          "valence_mean": 1.6,
+          "valence_sd": 1.23,
+          "rating_count": 20,
+          "row_sha256": "ae93ee746ad051d28da715bfa769dbb7082b42fcd2a558fca6e53b78c8a784c8"
+        },
+        {
+          "word": "paranoid",
+          "token_id": 119499,
+          "valence_mean": 2.9,
+          "valence_sd": 1.18,
+          "rating_count": 21,
+          "row_sha256": "2085fb91f3529689c0948dc990ac6ef76c7d8562391f93b46c0e1b4cb1bd0d4c"
+        },
+        {
+          "word": "jealous",
+          "token_id": 44649,
+          "valence_mean": 2.38,
+          "valence_sd": 1.43,
+          "rating_count": 21,
+          "row_sha256": "cf4c903b4f3926804f9e9c45c1330b02649346019e2c11a44df25bce585ba70b"
+        },
+        {
+          "word": "malnutrition",
+          "token_id": 75802,
+          "valence_mean": 2.48,
+          "valence_sd": 1.25,
+          "rating_count": 21,
+          "row_sha256": "cd8c8a989e088932f43b5b18f9f392aaffba8fc0865850c34d2440c3558f6902"
+        },
+        {
+          "word": "battered",
+          "token_id": 97816,
+          "valence_mean": 2.95,
+          "valence_sd": 1.5,
+          "rating_count": 21,
+          "row_sha256": "568040b099c99d35dff9ef24a780ea570c9156389444bea3b61f728ca59df50c"
+        },
+        {
+          "word": "hassle",
+          "token_id": 77402,
+          "valence_mean": 2.95,
+          "valence_sd": 1.63,
+          "rating_count": 21,
+          "row_sha256": "bc930f0302b7ea8a074d418a3d5025b00f9ea189e450c6a1e4a427afe864b40f"
+        },
+        {
+          "word": "inmate",
+          "token_id": 105109,
+          "valence_mean": 2.67,
+          "valence_sd": 2.09,
+          "rating_count": 18,
+          "row_sha256": "016ed5d0dc7ef99e52fc91f13ba95334a7070b4bd4c20ba5d7d0ee04af9afa09"
+        },
+        {
+          "word": "murderer",
+          "token_id": 87658,
+          "valence_mean": 1.92,
+          "valence_sd": 1.63,
+          "rating_count": 101,
+          "row_sha256": "626d64c37da86b7a022d1010d5382ff5a0adae5a8b7e7807a7852d8db65231fb"
+        },
+        {
+          "word": "anxiety",
+          "token_id": 13526,
+          "valence_mean": 2.38,
+          "valence_sd": 1.66,
+          "rating_count": 21,
+          "row_sha256": "d77c2a62415d486828d0b04e64de327a0dd1ff3c340e7b8acc9d43fcbf9c49bf"
+        },
+        {
+          "word": "harm",
+          "token_id": 7426,
+          "valence_mean": 1.91,
+          "valence_sd": 1.11,
+          "rating_count": 22,
+          "row_sha256": "011ae7a144d0e2e49de5a2ce3b45b2a7ea11bd21cdd6c2527920deeb695daebd"
+        },
+        {
+          "word": "emergency",
+          "token_id": 13331,
+          "valence_mean": 2.72,
+          "valence_sd": 1.23,
+          "rating_count": 18,
+          "row_sha256": "a573f20c7736a2c5864c13955161f3fd0acbd5cfff336bbcc7e05386780b1d8c"
+        },
+        {
+          "word": "discontent",
+          "token_id": 96674,
+          "valence_mean": 2.75,
+          "valence_sd": 1.12,
+          "rating_count": 20,
+          "row_sha256": "84f64a683453016b88ad8b79d72f212a5475ea3e881c1dccd6df4e9cf4b81f35"
+        },
+        {
+          "word": "debt",
+          "token_id": 11896,
+          "valence_mean": 1.95,
+          "valence_sd": 0.97,
+          "rating_count": 21,
+          "row_sha256": "cb512409460c00966818db4e5847ac9addf3beb6492fd39bc780980f0ac65a85"
+        },
+        {
+          "word": "terrified",
+          "token_id": 67054,
+          "valence_mean": 2.51,
+          "valence_sd": 1.55,
+          "rating_count": 41,
+          "row_sha256": "3f6a7dc6b8c4c2fb0e0547b726a53fa6572440a193f4e9d4d5fae34abb5b7971"
+        },
+        {
+          "word": "ridicule",
+          "token_id": 123643,
+          "valence_mean": 2.95,
+          "valence_sd": 1.5,
+          "rating_count": 41,
+          "row_sha256": "367b5c6c761c7db3b6cc8478b6d0057db9bacd92d25eb654dcb3409d0cd7e347"
+        },
+        {
+          "word": "alienation",
+          "token_id": 98830,
+          "valence_mean": 2.53,
+          "valence_sd": 1.17,
+          "rating_count": 19,
+          "row_sha256": "7e20bf03065eda61f49e77b664695e68102b49c710dc62d6882ff5bb74273e08"
+        },
+        {
+          "word": "annoy",
+          "token_id": 30611,
+          "valence_mean": 2.49,
+          "valence_sd": 1.42,
+          "rating_count": 41,
+          "row_sha256": "ce6768017a5500520bc2609441fe85b4f2512345857d25b99737973d1c3dbff0"
+        },
+        {
+          "word": "suffer",
+          "token_id": 17828,
+          "valence_mean": 2.05,
+          "valence_sd": 1.32,
+          "rating_count": 20,
+          "row_sha256": "3684b96ee63ec70338e96e276aca839ee3b3fd1cb1d041c2991c485b3c3e2a5f"
+        },
+        {
+          "word": "punish",
+          "token_id": 43633,
+          "valence_mean": 2.86,
+          "valence_sd": 2.2,
+          "rating_count": 21,
+          "row_sha256": "0a446eba989fa5af4c03fb55df5c6523938c0766b3e4f17d44a938d8e8941e42"
+        },
+        {
+          "word": "gloom",
+          "token_id": 95177,
+          "valence_mean": 2.89,
+          "valence_sd": 1.41,
+          "rating_count": 38,
+          "row_sha256": "c48ed96e6c8c5f801f5584312b82fad62246c20352d8a9a59913c12b7fa8e99f"
+        },
+        {
+          "word": "confine",
+          "token_id": 114285,
+          "valence_mean": 3.0,
+          "valence_sd": 1.45,
+          "rating_count": 21,
+          "row_sha256": "5b9b174fe9d457d74def841d656493165e0cddfef7a841cab23e821c28f73028"
+        },
+        {
+          "word": "degrade",
+          "token_id": 88766,
+          "valence_mean": 2.62,
+          "valence_sd": 1.16,
+          "rating_count": 21,
+          "row_sha256": "6fa4b457b29b7552394beb2d9b20b7fd793b4c6a6eaad3d191a9d89a428d2c1f"
+        },
+        {
+          "word": "unemployment",
+          "token_id": 27635,
+          "valence_mean": 2.32,
+          "valence_sd": 1.25,
+          "rating_count": 22,
+          "row_sha256": "a6df73c77506d5853bf0f6bf844b53810556f34c986cf79221eb0c3e9324145a"
+        },
+        {
+          "word": "unrest",
+          "token_id": 48309,
+          "valence_mean": 2.63,
+          "valence_sd": 1.34,
+          "rating_count": 19,
+          "row_sha256": "7221a798c2debaed2766f414b9feb7d3119dddc8f3f7c7ba08d487ce4659a329"
+        },
+        {
+          "word": "flu",
+          "token_id": 5471,
+          "valence_mean": 2.58,
+          "valence_sd": 1.8,
+          "rating_count": 19,
+          "row_sha256": "c67bdc30cb599d2c20b41e5564771839bd0db6331443ec8746b1ae3c7ef036b9"
+        },
+        {
+          "word": "delinquency",
+          "token_id": 127220,
+          "valence_mean": 2.55,
+          "valence_sd": 1.23,
+          "rating_count": 20,
+          "row_sha256": "9672a3bca25845f64ac07b492b890dd01b7cd5564054a4c7f3ff7acba4cad3f7"
+        },
+        {
+          "word": "unethical",
+          "token_id": 104754,
+          "valence_mean": 2.19,
+          "valence_sd": 1.36,
+          "rating_count": 21,
+          "row_sha256": "f24217948c37e50d5987053b832de6edf9ff4145e34b9372bf3c5048fb853859"
+        },
+        {
+          "word": "deadly",
+          "token_id": 37303,
+          "valence_mean": 1.9,
+          "valence_sd": 1.17,
+          "rating_count": 20,
+          "row_sha256": "ba591df32b3044e206e58c988e64f64117b4c03dcbedef5bbdd66d329b638388"
+        },
+        {
+          "word": "wart",
+          "token_id": 38812,
+          "valence_mean": 2.67,
+          "valence_sd": 1.15,
+          "rating_count": 21,
+          "row_sha256": "49e524b5e22301b21662ceef179c800d31d12c4e34cdf661bfad2488c80c3f86"
+        },
+        {
+          "word": "morbid",
+          "token_id": 119722,
+          "valence_mean": 2.73,
+          "valence_sd": 1.67,
+          "rating_count": 41,
+          "row_sha256": "ecd2ad26c1e6bcf9a3ddce7c13ba971d98d6215aff63b8ccb313713500731b62"
+        },
+        {
+          "word": "discrimination",
+          "token_id": 20535,
+          "valence_mean": 2.45,
+          "valence_sd": 1.43,
+          "rating_count": 20,
+          "row_sha256": "85573d7cafc130d15e9c53fb0afa75b2ba989eeb2e19d206e77db36648944319"
+        },
+        {
+          "word": "violent",
+          "token_id": 23107,
+          "valence_mean": 2.26,
+          "valence_sd": 1.59,
+          "rating_count": 19,
+          "row_sha256": "606e1a48fea10f1e1dafa25bcdd688cd3c3ccbc4993d50640aab94b3f137eaba"
+        },
+        {
+          "word": "retaliation",
+          "token_id": 89219,
+          "valence_mean": 3.0,
+          "valence_sd": 1.37,
+          "rating_count": 19,
+          "row_sha256": "07b0f645c6f538b55b74aeda6ebec9655a2757686bf689d8000740c85c963154"
+        },
+        {
+          "word": "alcoholic",
+          "token_id": 60504,
+          "valence_mean": 2.49,
+          "valence_sd": 1.54,
+          "rating_count": 39,
+          "row_sha256": "1ccc5f636ecfefb74921be331a68de90adba78e0a88cbdd181372b19e7e514de"
+        },
+        {
+          "word": "plague",
+          "token_id": 58583,
+          "valence_mean": 2.42,
+          "valence_sd": 1.57,
+          "rating_count": 19,
+          "row_sha256": "e9aa49e282ef6e73036d4cab4b9a8b5f8fcc3a51e6b104e8e68d8532e6ba5ca9"
+        },
+        {
+          "word": "unpleasant",
+          "token_id": 49550,
+          "valence_mean": 2.53,
+          "valence_sd": 1.43,
+          "rating_count": 19,
+          "row_sha256": "e5190f43b82c42aa1fbf9d52e710d92a47e21080654315c8dd7829ef4aefcb0e"
+        },
+        {
+          "word": "illness",
+          "token_id": 13976,
+          "valence_mean": 1.95,
+          "valence_sd": 1.0,
+          "rating_count": 20,
+          "row_sha256": "db135d9fba42d047e6bd98af1ca87b6c3af816262e559fcdbd30c8ec4683ec1b"
+        },
+        {
+          "word": "crisis",
+          "token_id": 11785,
+          "valence_mean": 2.05,
+          "valence_sd": 1.08,
+          "rating_count": 19,
+          "row_sha256": "e376cda358639a022712f8aeb24aabe2b00b6944af4c0f9cc5db1dfa2ccd09b7"
+        }
+      ],
+      "neutral": [
+        {
+          "word": "foreground",
+          "token_id": 71462,
+          "valence_mean": 5.47,
+          "valence_sd": 1.54,
+          "rating_count": 19,
+          "row_sha256": "0382c79754a70981ff6a71bb95378c17d0589c3119fa711e61eccaec2a18999f"
+        },
+        {
+          "word": "council",
+          "token_id": 19951,
+          "valence_mean": 5.0,
+          "valence_sd": 1.65,
+          "rating_count": 20,
+          "row_sha256": "4480c77cdec7a25b853bb84365caf9a51b527e154365b2f96620f341b8112b73"
+        },
+        {
+          "word": "rally",
+          "token_id": 39277,
+          "valence_mean": 4.71,
+          "valence_sd": 1.93,
+          "rating_count": 21,
+          "row_sha256": "b58bbfb73dd91304c24e3befd3bda3919aa74e9088310fc9ccfd04fb05d980b6"
+        },
+        {
+          "word": "slice",
+          "token_id": 32389,
+          "valence_mean": 5.05,
+          "valence_sd": 1.65,
+          "rating_count": 19,
+          "row_sha256": "49a65ed051c431e6d82a985e64703874ab7ed217a0e4bb9ebc7bd347b34b90d2"
+        },
+        {
+          "word": "oblivious",
+          "token_id": 113350,
+          "valence_mean": 4.5,
+          "valence_sd": 1.42,
+          "rating_count": 18,
+          "row_sha256": "1e168092b6d7fcbe602cd2c232b04d442ca11565774d29d8aa6624ad05d331a8"
+        },
+        {
+          "word": "recap",
+          "token_id": 96483,
+          "valence_mean": 5.33,
+          "valence_sd": 1.24,
+          "rating_count": 21,
+          "row_sha256": "dffac81249d740add548835bfb58c2d77283f3a252ca6f4d0b675a018af9941b"
+        },
+        {
+          "word": "mention",
+          "token_id": 6731,
+          "valence_mean": 5.39,
+          "valence_sd": 1.5,
+          "rating_count": 18,
+          "row_sha256": "cb5d9059eba6a7a4053efd585322073a8cc7b5dcbee65cf77a865bb93f30d4db"
+        },
+        {
+          "word": "electron",
+          "token_id": 11599,
+          "valence_mean": 5.33,
+          "valence_sd": 2.06,
+          "rating_count": 18,
+          "row_sha256": "81dc36dfbfd7fb74fcdaab40204ab24413f62ab60eb3d837740d25d93b178652"
+        },
+        {
+          "word": "characterize",
+          "token_id": 40143,
+          "valence_mean": 5.5,
+          "valence_sd": 0.95,
+          "rating_count": 20,
+          "row_sha256": "338a249475c406c070ab4ea1a505554206305137e71dc2be84a3d9a1989d98c2"
+        },
+        {
+          "word": "foam",
+          "token_id": 40542,
+          "valence_mean": 5.25,
+          "valence_sd": 1.37,
+          "rating_count": 20,
+          "row_sha256": "6302d43aa88bd41e1e1522122175d3fb8bad8720c3a672e3c6f24e0e69ba023e"
+        },
+        {
+          "word": "singular",
+          "token_id": 22246,
+          "valence_mean": 4.89,
+          "valence_sd": 1.2,
+          "rating_count": 19,
+          "row_sha256": "abdd9906b0133814c359a540694b4fccd39cf344fa5e49af82d849f0d84dacb7"
+        },
+        {
+          "word": "pivot",
+          "token_id": 35005,
+          "valence_mean": 4.95,
+          "valence_sd": 1.22,
+          "rating_count": 19,
+          "row_sha256": "a635ee37f2ab584968ca72437ea95e68d4ef5d1eead901b84a337c5f9e161155"
+        },
+        {
+          "word": "necessity",
+          "token_id": 26099,
+          "valence_mean": 5.32,
+          "valence_sd": 1.6,
+          "rating_count": 19,
+          "row_sha256": "2badb6c78cea2c493b5924a95adf23af2f31bbd795f409187f68df0d1fa75bd9"
+        },
+        {
+          "word": "dotted",
+          "token_id": 47434,
+          "valence_mean": 4.86,
+          "valence_sd": 1.11,
+          "rating_count": 21,
+          "row_sha256": "306c24d136bd9f55c9671acb1878934f94b58fe2834425434b2d8860ee8973a2"
+        },
+        {
+          "word": "unnecessary",
+          "token_id": 28148,
+          "valence_mean": 4.62,
+          "valence_sd": 1.5,
+          "rating_count": 21,
+          "row_sha256": "db1bb80cfc2418b4f477c59fd651ce16e5cf1b01af2da7d6b0542d244acad4fb"
+        },
+        {
+          "word": "departmental",
+          "token_id": 97783,
+          "valence_mean": 4.67,
+          "valence_sd": 1.11,
+          "rating_count": 21,
+          "row_sha256": "9544430fb3e64dee987f8a2d7850e71fa5a069d93bdaf031e0c599fdf4d275cb"
+        },
+        {
+          "word": "noon",
+          "token_id": 45366,
+          "valence_mean": 5.38,
+          "valence_sd": 2.09,
+          "rating_count": 21,
+          "row_sha256": "dad96e9ae8223b61d5c53f100c31ce36f763b59cae3e2ca6d33028ff558ca0d3"
+        },
+        {
+          "word": "sedan",
+          "token_id": 86357,
+          "valence_mean": 5.05,
+          "valence_sd": 1.78,
+          "rating_count": 19,
+          "row_sha256": "0c2c6ba61e1d1ae1b1a79c1024e7cfaec73adec5ee2a79a65cec243657f9bab0"
+        },
+        {
+          "word": "grader",
+          "token_id": 113959,
+          "valence_mean": 5.26,
+          "valence_sd": 1.24,
+          "rating_count": 19,
+          "row_sha256": "ee07aba91b60db9beaf5fdedd6ff34094b29a4566500f523717e3c12f87eaa1a"
+        },
+        {
+          "word": "philosophy",
+          "token_id": 16296,
+          "valence_mean": 5.48,
+          "valence_sd": 1.94,
+          "rating_count": 21,
+          "row_sha256": "aaec21c8fa5c01110d56e0d67f19df57b7e979ed5b9049408586faa43c8a3699"
+        },
+        {
+          "word": "broadcast",
+          "token_id": 20774,
+          "valence_mean": 4.89,
+          "valence_sd": 1.94,
+          "rating_count": 18,
+          "row_sha256": "ef26ebb348e9cd3da8996b48b124955d86a2c2ccbe31944c43ff26f11b4f9ecc"
+        },
+        {
+          "word": "highway",
+          "token_id": 36397,
+          "valence_mean": 5.19,
+          "valence_sd": 1.54,
+          "rating_count": 21,
+          "row_sha256": "133d80b92c41c13fe466d1e1204434d1ff8569a18858e741a35683e3ffb5f7ff"
+        },
+        {
+          "word": "anomaly",
+          "token_id": 62137,
+          "valence_mean": 4.84,
+          "valence_sd": 1.74,
+          "rating_count": 19,
+          "row_sha256": "09db62d7ae3fbba1cf50aedc4c896551723f9102445fcb9fb5c6ea7afd578373"
+        },
+        {
+          "word": "switch",
+          "token_id": 8953,
+          "valence_mean": 5.29,
+          "valence_sd": 1.01,
+          "rating_count": 21,
+          "row_sha256": "651684735f4322e7c31169990bc3fbe1ad4e4ddee9b414a7c15bcb32e923f9e7"
+        },
+        {
+          "word": "executive",
+          "token_id": 15339,
+          "valence_mean": 4.95,
+          "valence_sd": 2.63,
+          "rating_count": 19,
+          "row_sha256": "801a733945fa31a422d94606d6ebf71d4b1ae3ba08993cfa2ca5f3f1fc51433c"
+        },
+        {
+          "word": "indefinite",
+          "token_id": 77804,
+          "valence_mean": 4.55,
+          "valence_sd": 1.43,
+          "rating_count": 20,
+          "row_sha256": "7d6baa6f24c99deccfc0d3a8e624d6f384df543a7f39d8b9c35bf47c72323321"
+        },
+        {
+          "word": "backbone",
+          "token_id": 53945,
+          "valence_mean": 5.16,
+          "valence_sd": 1.71,
+          "rating_count": 19,
+          "row_sha256": "2726ecb1e6a863e141f34fcc7f02330162415c8fee4669bd61bc36e3e03a4f95"
+        },
+        {
+          "word": "cod",
+          "token_id": 22838,
+          "valence_mean": 5.21,
+          "valence_sd": 1.81,
+          "rating_count": 19,
+          "row_sha256": "289812ccc772e817af4329cff045bba3b08784a44ddc36a9dc9a5b9827a72dc2"
+        },
+        {
+          "word": "amateur",
+          "token_id": 55107,
+          "valence_mean": 4.58,
+          "valence_sd": 1.17,
+          "rating_count": 19,
+          "row_sha256": "976525da10ac0b8bfe3d9c41c0f3c343364dfdfacd00112a75cb48eb6d5f61b2"
+        },
+        {
+          "word": "crisp",
+          "token_id": 50167,
+          "valence_mean": 5.23,
+          "valence_sd": 2.25,
+          "rating_count": 22,
+          "row_sha256": "38b915f4d5747330af57e2ae58db72c19ff94dcb8cb616b784305575df0e94ee"
+        },
+        {
+          "word": "unpack",
+          "token_id": 77577,
+          "valence_mean": 5.29,
+          "valence_sd": 1.68,
+          "rating_count": 24,
+          "row_sha256": "32069242387fe9e5687cc7dfc450824df594e3180d6c05988e931275e254d5d0"
+        },
+        {
+          "word": "tout",
+          "token_id": 15088,
+          "valence_mean": 5.35,
+          "valence_sd": 1.66,
+          "rating_count": 20,
+          "row_sha256": "12888b6f97489770f2b7699b0ff2b2f28dea99a44a130dd04288a5a304679581"
+        },
+        {
+          "word": "pound",
+          "token_id": 20552,
+          "valence_mean": 4.62,
+          "valence_sd": 2.06,
+          "rating_count": 21,
+          "row_sha256": "da9e9569cf00cf48838a668d3c4bf4b3d92b3f54f6d1f99536a364705b56bdc7"
+        },
+        {
+          "word": "genetics",
+          "token_id": 39612,
+          "valence_mean": 4.84,
+          "valence_sd": 1.61,
+          "rating_count": 19,
+          "row_sha256": "c6dc1a90eac5906aee51910ba829d06211084a038ac4f22fa01cce8cabe6ccdb"
+        },
+        {
+          "word": "qualifications",
+          "token_id": 37038,
+          "valence_mean": 5.37,
+          "valence_sd": 1.61,
+          "rating_count": 19,
+          "row_sha256": "828fa6cf2f43a743c937e26a5aaf8572ae815a39bf55addd9fdc7e9c4a3c1405"
+        },
+        {
+          "word": "dash",
+          "token_id": 48758,
+          "valence_mean": 5.05,
+          "valence_sd": 1.43,
+          "rating_count": 20,
+          "row_sha256": "84df8b3bc2462b65b4b536216c2b1fa1eb82ba139fc470656bb5a50ca43af112"
+        },
+        {
+          "word": "reigning",
+          "token_id": 124851,
+          "valence_mean": 5.25,
+          "valence_sd": 1.41,
+          "rating_count": 20,
+          "row_sha256": "fdcee2c5c405cfc04b902b6ec0887d6c48027dbc7ee4b04a629bfc1ebd6c150e"
+        },
+        {
+          "word": "bear",
+          "token_id": 13330,
+          "valence_mean": 5.33,
+          "valence_sd": 2.25,
+          "rating_count": 18,
+          "row_sha256": "08eba2ddc98196a1b29355f3c4fd48728a07ff5f5432827f6569f28f6f96a1e3"
+        },
+        {
+          "word": "await",
+          "token_id": 11864,
+          "valence_mean": 5.33,
+          "valence_sd": 1.33,
+          "rating_count": 18,
+          "row_sha256": "6ac5c11eeb6cb45e410828589a492c6e41f3e81be098713c5e46c2ad05831a83"
+        },
+        {
+          "word": "ocular",
+          "token_id": 77404,
+          "valence_mean": 4.86,
+          "valence_sd": 1.39,
+          "rating_count": 22,
+          "row_sha256": "8a22e455b70189cff2d247e5a6c8fd22bc34720f7f4c3efb0de0ab51490c1b90"
+        },
+        {
+          "word": "impulsive",
+          "token_id": 102206,
+          "valence_mean": 4.67,
+          "valence_sd": 1.53,
+          "rating_count": 21,
+          "row_sha256": "78661d7506326936d3f424918f8d8b05fa5ba031e52bedc0db436ecd4f438bcf"
+        },
+        {
+          "word": "evidence",
+          "token_id": 4933,
+          "valence_mean": 4.72,
+          "valence_sd": 2.19,
+          "rating_count": 18,
+          "row_sha256": "1a082543c4a485d3a6e36500e53e2c93c819ce24dc9f49acd7e736cd47885e0f"
+        },
+        {
+          "word": "tailor",
+          "token_id": 52118,
+          "valence_mean": 5.29,
+          "valence_sd": 2.03,
+          "rating_count": 21,
+          "row_sha256": "47c159dd20e460078e41c7b69ca2776876169df1a74f765e92e0f4ef62e44d51"
+        },
+        {
+          "word": "barley",
+          "token_id": 59483,
+          "valence_mean": 4.95,
+          "valence_sd": 1.5,
+          "rating_count": 22,
+          "row_sha256": "9bb52d58a3aaebc235688aa10d26589df656d6a4b64787e13a2b5acc7d076794"
+        },
+        {
+          "word": "mathematician",
+          "token_id": 85349,
+          "valence_mean": 5.24,
+          "valence_sd": 1.97,
+          "rating_count": 21,
+          "row_sha256": "97b8f7d039ee01afce1d9d1ce7068fa84f30d9cdf71095793c8a6d85ff0a1fd5"
+        },
+        {
+          "word": "pomp",
+          "token_id": 112453,
+          "valence_mean": 5.32,
+          "valence_sd": 1.06,
+          "rating_count": 19,
+          "row_sha256": "13543c503dcf2f8cbbc981330e417a58bb4fcfa97e5622953b7a407f48fa31c9"
+        },
+        {
+          "word": "league",
+          "token_id": 19307,
+          "valence_mean": 5.35,
+          "valence_sd": 1.84,
+          "rating_count": 20,
+          "row_sha256": "1114762d3acfdf3550bcc22a59118b24df1b8fe5bea20b47bfabfe54013a71f9"
+        },
+        {
+          "word": "staircase",
+          "token_id": 80298,
+          "valence_mean": 5.2,
+          "valence_sd": 1.06,
+          "rating_count": 20,
+          "row_sha256": "5fa5c4e313b46323964e2a1392b0a336c11dedd8403fb77a333efb2bce82d9b2"
+        },
+        {
+          "word": "holder",
+          "token_id": 30788,
+          "valence_mean": 5.17,
+          "valence_sd": 1.69,
+          "rating_count": 24,
+          "row_sha256": "e5526f455cc7d6ec90fb88da7df949b1de578c4f3a2888c0bc911dcace20927b"
+        },
+        {
+          "word": "convention",
+          "token_id": 27983,
+          "valence_mean": 5.0,
+          "valence_sd": 1.14,
+          "rating_count": 21,
+          "row_sha256": "9ce3dc3472f0b1b36a86faeba68ab9100b0828267c729df5332662549585b7f9"
+        },
+        {
+          "word": "razor",
+          "token_id": 96832,
+          "valence_mean": 4.9,
+          "valence_sd": 1.76,
+          "rating_count": 39,
+          "row_sha256": "9dbce7d1d19172d07f2137ac343a408ea6ed4a0322f36ed9e188ede5a3dbcfff"
+        },
+        {
+          "word": "polo",
+          "token_id": 96589,
+          "valence_mean": 5.21,
+          "valence_sd": 2.04,
+          "rating_count": 19,
+          "row_sha256": "428dfc160b3b4872ead6f1a173e47a47dcc2692357b55a5dc9ea2ecd1eeaa0af"
+        },
+        {
+          "word": "numerical",
+          "token_id": 19026,
+          "valence_mean": 5.0,
+          "valence_sd": 1.56,
+          "rating_count": 19,
+          "row_sha256": "c9583e396b3ba20b9851016b53f34e5b06b8202e0e87d3e7e7216d444fc1d36d"
+        },
+        {
+          "word": "flesh",
+          "token_id": 25970,
+          "valence_mean": 5.2,
+          "valence_sd": 2.07,
+          "rating_count": 20,
+          "row_sha256": "9178792a8b7da6a155dace928c41b219f0a7236c37fba58866db11c357ddc1ca"
+        },
+        {
+          "word": "enforcement",
+          "token_id": 19940,
+          "valence_mean": 4.67,
+          "valence_sd": 1.99,
+          "rating_count": 24,
+          "row_sha256": "eca430b7a2299782988562ba30aad2b5dbfeac5a21df650d564f73dddbafa0e1"
+        },
+        {
+          "word": "postal",
+          "token_id": 60241,
+          "valence_mean": 5.21,
+          "valence_sd": 1.81,
+          "rating_count": 19,
+          "row_sha256": "bb91e3487ff84b12fe85d437a008c8dc5eea355a660214aea3c235e9865c5f0a"
+        },
+        {
+          "word": "heed",
+          "token_id": 83448,
+          "valence_mean": 4.77,
+          "valence_sd": 1.41,
+          "rating_count": 22,
+          "row_sha256": "0be5b29d0cf833ac8774c67e78d6892c2ab8d783f1e7568fd23edbb591a5311b"
+        },
+        {
+          "word": "tracer",
+          "token_id": 91227,
+          "valence_mean": 5.05,
+          "valence_sd": 1.36,
+          "rating_count": 21,
+          "row_sha256": "22c9e8e348d1ebb2a0cf4806f80809f1ba87a15df81c8f3711e6c31b46036393"
+        },
+        {
+          "word": "steel",
+          "token_id": 14308,
+          "valence_mean": 4.95,
+          "valence_sd": 1.56,
+          "rating_count": 21,
+          "row_sha256": "d4ca3d3e034c5aa972d5899ac722646a3b28c0349cdff35ee93ece7bc84c3962"
+        },
+        {
+          "word": "hypothalamus",
+          "token_id": 105679,
+          "valence_mean": 5.3,
+          "valence_sd": 1.81,
+          "rating_count": 20,
+          "row_sha256": "25f997bbf2405579664d5727c4c1f560e804cc21396118963714a702f57152b5"
+        },
+        {
+          "word": "mid",
+          "token_id": 6431,
+          "valence_mean": 5.21,
+          "valence_sd": 1.41,
+          "rating_count": 24,
+          "row_sha256": "abb8279aec1d3f16aacce9c6b68e259e6bd3b8f156c9653b719cc2b850f3d43e"
+        },
+        {
+          "word": "facility",
+          "token_id": 15794,
+          "valence_mean": 5.33,
+          "valence_sd": 1.85,
+          "rating_count": 21,
+          "row_sha256": "3b2c353eb9f26766dbcae182713ce8198adeb60637a70496656c1b003c6b1ee6"
+        },
+        {
+          "word": "homosexual",
+          "token_id": 68288,
+          "valence_mean": 4.65,
+          "valence_sd": 1.98,
+          "rating_count": 20,
+          "row_sha256": "2959bcddf69666dd21d07fac33d8366b223ac02470bdd8404903d207f1722d98"
+        },
+        {
+          "word": "interpret",
+          "token_id": 7602,
+          "valence_mean": 5.2,
+          "valence_sd": 2.02,
+          "rating_count": 20,
+          "row_sha256": "adaae0bcbea795a7efa264adc0d06708fc15a6b003f39d34eb7866aa74aa14cd"
+        }
+      ],
+      "positive": [
+        {
+          "word": "happy",
+          "token_id": 8846,
+          "valence_mean": 8.47,
+          "valence_sd": 1.28,
+          "rating_count": 43,
+          "row_sha256": "b83172ce1ffd2efca5dddc655403d8be1ce555b0195953b7098f42a3d712c296"
+        },
+        {
+          "word": "strengthen",
+          "token_id": 15624,
+          "valence_mean": 7.21,
+          "valence_sd": 1.08,
+          "rating_count": 19,
+          "row_sha256": "e69d072b8c38cdec06105fc71317779cac7ccd445deda0986d725686567eb069"
+        },
+        {
+          "word": "fairness",
+          "token_id": 46642,
+          "valence_mean": 7.48,
+          "valence_sd": 1.29,
+          "rating_count": 21,
+          "row_sha256": "9297bec2b9c19b93081e87b521af2a3c617ad39617e6984339cc6b547a3326aa"
+        },
+        {
+          "word": "erection",
+          "token_id": 123283,
+          "valence_mean": 7.38,
+          "valence_sd": 2.04,
+          "rating_count": 21,
+          "row_sha256": "d0d6e7432784751241a242930bcc278e34de47638c81145ca64ccb8ac0a33ca6"
+        },
+        {
+          "word": "camp",
+          "token_id": 4971,
+          "valence_mean": 7.0,
+          "valence_sd": 1.61,
+          "rating_count": 18,
+          "row_sha256": "8ea69f9b70afe67b1097aff2a5ba1ea1ada2b66fc1f02e67a54ba1c36ea80091"
+        },
+        {
+          "word": "completion",
+          "token_id": 18967,
+          "valence_mean": 7.38,
+          "valence_sd": 1.72,
+          "rating_count": 21,
+          "row_sha256": "d53ed4e6443ff7a6cbec3e9f6e5ca6adf31e133dfb1ac302d2d2bae466891ece"
+        },
+        {
+          "word": "harmony",
+          "token_id": 34067,
+          "valence_mean": 7.55,
+          "valence_sd": 1.67,
+          "rating_count": 20,
+          "row_sha256": "394b02da826dab484f27a1e5c80eb777f4a5f6eec1b2d912d161bdefbca62f16"
+        },
+        {
+          "word": "thank",
+          "token_id": 11390,
+          "valence_mean": 7.77,
+          "valence_sd": 1.41,
+          "rating_count": 22,
+          "row_sha256": "bebc6044b9cbe04ab0defeabd7b287a650ada5067c77e00e10911267318b07c5"
+        },
+        {
+          "word": "relieve",
+          "token_id": 45501,
+          "valence_mean": 7.25,
+          "valence_sd": 1.59,
+          "rating_count": 20,
+          "row_sha256": "5fa4b0484eb8b546b0ff74525e53e9a8dbefcc99f5055ee1038aa39240633338"
+        },
+        {
+          "word": "surprise",
+          "token_id": 16567,
+          "valence_mean": 7.44,
+          "valence_sd": 1.58,
+          "rating_count": 18,
+          "row_sha256": "5dfd6870672d56b765307702f192375cdb7196ea81187d4470145c645125e8a6"
+        },
+        {
+          "word": "protector",
+          "token_id": 80894,
+          "valence_mean": 7.37,
+          "valence_sd": 1.57,
+          "rating_count": 19,
+          "row_sha256": "a940a052fdd30481d3577fbd96294bb0004799b354fe9885126c8bd7a015b18a"
+        },
+        {
+          "word": "cheer",
+          "token_id": 32967,
+          "valence_mean": 7.1,
+          "valence_sd": 1.5,
+          "rating_count": 40,
+          "row_sha256": "79d394c3eac420efd3d4beace0747cd71ee1654ad7f698ae19160634328c975b"
+        },
+        {
+          "word": "award",
+          "token_id": 11587,
+          "valence_mean": 7.86,
+          "valence_sd": 1.15,
+          "rating_count": 21,
+          "row_sha256": "1f99c10d9541b12402a3dc9f86c5ca5306b456971fd21f8ae529f5df1e3a666d"
+        },
+        {
+          "word": "opportunity",
+          "token_id": 7008,
+          "valence_mean": 7.1,
+          "valence_sd": 1.45,
+          "rating_count": 21,
+          "row_sha256": "e07fd0e8e43fa1331529174199122ee57b9d0fee5b588a1d5302189946b01b7d"
+        },
+        {
+          "word": "hearty",
+          "token_id": 84396,
+          "valence_mean": 7.25,
+          "valence_sd": 1.33,
+          "rating_count": 20,
+          "row_sha256": "b931204b86fd4d6b862256eeffd3925619c7e6a86d59475a1ac62ffa35730342"
+        },
+        {
+          "word": "magical",
+          "token_id": 33572,
+          "valence_mean": 8.23,
+          "valence_sd": 0.97,
+          "rating_count": 22,
+          "row_sha256": "59d9b135d5285ead65102535759ebeab369ad271f680fa6192cdc3333eb3ea0a"
+        },
+        {
+          "word": "thrilling",
+          "token_id": 54188,
+          "valence_mean": 7.19,
+          "valence_sd": 1.54,
+          "rating_count": 21,
+          "row_sha256": "2c321be87e6271130d15c224195f3fa53e189379d40faa4dcbf52346b8d91a35"
+        },
+        {
+          "word": "meditation",
+          "token_id": 32781,
+          "valence_mean": 7.21,
+          "valence_sd": 1.78,
+          "rating_count": 19,
+          "row_sha256": "de3cc7a90b349998a81fa4dc566811ee48fa30a3158933ad3aefbae60c2b0cfa"
+        },
+        {
+          "word": "soup",
+          "token_id": 28574,
+          "valence_mean": 7.05,
+          "valence_sd": 1.4,
+          "rating_count": 21,
+          "row_sha256": "b74eaeb97f9c2bef6aa896d1e7575aa674464def3a3f4bbd5f4544db40b39a72"
+        },
+        {
+          "word": "bravery",
+          "token_id": 89106,
+          "valence_mean": 7.38,
+          "valence_sd": 1.4,
+          "rating_count": 21,
+          "row_sha256": "48144ed5433a9457919f6fb60e7bd79ce2467aa666b1ef737f29dce1f0d95df1"
+        },
+        {
+          "word": "food",
+          "token_id": 3344,
+          "valence_mean": 7.52,
+          "valence_sd": 1.38,
+          "rating_count": 42,
+          "row_sha256": "227567de90b0c696f9c1ac84a98f39621e35396744a7ee0cca4941ccd45545ed"
+        },
+        {
+          "word": "approve",
+          "token_id": 43532,
+          "valence_mean": 7.0,
+          "valence_sd": 1.92,
+          "rating_count": 20,
+          "row_sha256": "cc9c580677a691ff773d0f8ac24331ed5a23192e549fa30b4e67a43092889933"
+        },
+        {
+          "word": "marvelous",
+          "token_id": 93785,
+          "valence_mean": 7.21,
+          "valence_sd": 1.72,
+          "rating_count": 19,
+          "row_sha256": "ee3435b19271e37516995a351603e8861ecad48aa512b8a6fb541c41884339bf"
+        },
+        {
+          "word": "floral",
+          "token_id": 64481,
+          "valence_mean": 7.42,
+          "valence_sd": 1.3,
+          "rating_count": 19,
+          "row_sha256": "7bc04f517297324d3a9f54756c6e131911f16cb94bf60a59267f4f5bdf0b1a50"
+        },
+        {
+          "word": "merciful",
+          "token_id": 109646,
+          "valence_mean": 7.0,
+          "valence_sd": 2.0,
+          "rating_count": 21,
+          "row_sha256": "8b2bb8f0c54f3418f8256c473390342c95944ff3cf99cee243174a5d70e93a0c"
+        },
+        {
+          "word": "trustworthy",
+          "token_id": 70751,
+          "valence_mean": 7.25,
+          "valence_sd": 1.55,
+          "rating_count": 20,
+          "row_sha256": "062c4f134643da7fbffde38b3aca9a31cd57a3c17fd70c88c4065e819860342a"
+        },
+        {
+          "word": "money",
+          "token_id": 4601,
+          "valence_mean": 7.1,
+          "valence_sd": 2.27,
+          "rating_count": 20,
+          "row_sha256": "1f9850c1182609ac2bd9c2c389bfbb45a3fb805d440f8e4b507fd3e2197cb181"
+        },
+        {
+          "word": "lover",
+          "token_id": 39636,
+          "valence_mean": 8.05,
+          "valence_sd": 1.25,
+          "rating_count": 22,
+          "row_sha256": "edf43ae5fe23457322b700ad87de232b5e3aa4779184830a10f30fd8c7a3a91e"
+        },
+        {
+          "word": "empathy",
+          "token_id": 34722,
+          "valence_mean": 7.29,
+          "valence_sd": 1.49,
+          "rating_count": 21,
+          "row_sha256": "9b58d3a1f02feb0a36bf0d660e606a3c1bb3e428372832f91c4be1f9f0b43f7f"
+        },
+        {
+          "word": "talented",
+          "token_id": 32943,
+          "valence_mean": 7.95,
+          "valence_sd": 1.07,
+          "rating_count": 21,
+          "row_sha256": "6348b547f52e4176ec45a60cb52610547d54d3863f440752c772443271a5dee8"
+        },
+        {
+          "word": "movie",
+          "token_id": 10937,
+          "valence_mean": 7.24,
+          "valence_sd": 1.51,
+          "rating_count": 41,
+          "row_sha256": "349f6225938ef0c4b132a0de9aaae608cc4932221fdfa54c6882c1a42916575e"
+        },
+        {
+          "word": "princess",
+          "token_id": 53620,
+          "valence_mean": 7.64,
+          "valence_sd": 1.94,
+          "rating_count": 22,
+          "row_sha256": "eca6734a0f815579e99abeb75caa28f86c65891d6964d45864e0cd915a90a8f2"
+        },
+        {
+          "word": "book",
+          "token_id": 2339,
+          "valence_mean": 7.05,
+          "valence_sd": 1.73,
+          "rating_count": 39,
+          "row_sha256": "9e03764e48f10b0a1733bad736be4be41de2042d5c7ebc45400535fabf992498"
+        },
+        {
+          "word": "woman",
+          "token_id": 6626,
+          "valence_mean": 7.09,
+          "valence_sd": 1.44,
+          "rating_count": 22,
+          "row_sha256": "987f790cd8eace0af91d2670f74ad1f18936911437df146b89d1e9a801ed0ace"
+        },
+        {
+          "word": "lake",
+          "token_id": 21432,
+          "valence_mean": 7.13,
+          "valence_sd": 1.34,
+          "rating_count": 39,
+          "row_sha256": "1f4da5df5a8db5fcb9fd0d2ee5bfc02d8069f3d4c3c83e93e4b4920084c54882"
+        },
+        {
+          "word": "sleep",
+          "token_id": 7053,
+          "valence_mean": 7.22,
+          "valence_sd": 1.65,
+          "rating_count": 41,
+          "row_sha256": "c5f1f10e4649b9911fb844468e535ef697eb0b09e7bb027a0ac1e52ff9ad2170"
+        },
+        {
+          "word": "admired",
+          "token_id": 61276,
+          "valence_mean": 7.25,
+          "valence_sd": 1.37,
+          "rating_count": 20,
+          "row_sha256": "5b342cf91b568158c8f4458e0dc2fcd803490aed7406fa435be6995f9e356e32"
+        },
+        {
+          "word": "glad",
+          "token_id": 18459,
+          "valence_mean": 7.55,
+          "valence_sd": 1.44,
+          "rating_count": 22,
+          "row_sha256": "7a845ea19a94e8f02f268513b7928dcfc4c3356cb79add46acebf2fc381066c1"
+        },
+        {
+          "word": "hopeful",
+          "token_id": 50799,
+          "valence_mean": 7.44,
+          "valence_sd": 1.34,
+          "rating_count": 41,
+          "row_sha256": "5ee530f3636d4feb4a97b793b2906f7e14b621b615f694a0def17a7a7a81e689"
+        },
+        {
+          "word": "fair",
+          "token_id": 7370,
+          "valence_mean": 7.14,
+          "valence_sd": 1.42,
+          "rating_count": 22,
+          "row_sha256": "a5ecbd223bd98dcf6c0a8908f158d6468b929b8589c5bc715cfea4b18a536a80"
+        },
+        {
+          "word": "magic",
+          "token_id": 17966,
+          "valence_mean": 7.17,
+          "valence_sd": 1.89,
+          "rating_count": 18,
+          "row_sha256": "4b29fe61ac74ece66c8b7a1d7f08251575b9bd437f2b176dfd5c2d12fca267d7"
+        },
+        {
+          "word": "spa",
+          "token_id": 66373,
+          "valence_mean": 7.38,
+          "valence_sd": 1.56,
+          "rating_count": 21,
+          "row_sha256": "1518b6764b725deb60502520b03d9a24a2a1c8e2ab1bc0033a6c1edf2d1efaa9"
+        },
+        {
+          "word": "loyalty",
+          "token_id": 31299,
+          "valence_mean": 7.18,
+          "valence_sd": 2.13,
+          "rating_count": 22,
+          "row_sha256": "8f197631616ad157df45b79e967f04d663347bc8a338cd75f2817b242658c410"
+        },
+        {
+          "word": "reliable",
+          "token_id": 14814,
+          "valence_mean": 7.3,
+          "valence_sd": 1.34,
+          "rating_count": 20,
+          "row_sha256": "759a2045c2ca1f37531da91bb274100b28e1c3cb204d80f8bea1620e118bd884"
+        },
+        {
+          "word": "tranquil",
+          "token_id": 73290,
+          "valence_mean": 7.11,
+          "valence_sd": 2.02,
+          "rating_count": 19,
+          "row_sha256": "cc0759fba5e6fc355b5d52c0b4a0e689da70108e65ce26e750e134279bd85232"
+        },
+        {
+          "word": "successful",
+          "token_id": 7877,
+          "valence_mean": 7.76,
+          "valence_sd": 1.76,
+          "rating_count": 21,
+          "row_sha256": "87f9d4bf4d2ec27c36709179cff79f9797109a5f2156b0e0c0d8f59afcddf4c3"
+        },
+        {
+          "word": "toy",
+          "token_id": 38319,
+          "valence_mean": 7.29,
+          "valence_sd": 1.47,
+          "rating_count": 42,
+          "row_sha256": "009c45839988ec5c25fecbb6b5729f7e870d2e818cded34348289eb0b5b96695"
+        },
+        {
+          "word": "swimming",
+          "token_id": 25992,
+          "valence_mean": 7.2,
+          "valence_sd": 1.77,
+          "rating_count": 20,
+          "row_sha256": "aedb39a1e6649e96cddb86c5a6395d4bd3fa5648bb80e09dc0cbcfb840249070"
+        },
+        {
+          "word": "shine",
+          "token_id": 42265,
+          "valence_mean": 7.27,
+          "valence_sd": 1.39,
+          "rating_count": 22,
+          "row_sha256": "ed4b3c7d1efa0d1387b738865186ca84d32f4ed58f4972e0fb6d4aed0ad601c6"
+        },
+        {
+          "word": "seasoned",
+          "token_id": 50991,
+          "valence_mean": 7.16,
+          "valence_sd": 1.42,
+          "rating_count": 19,
+          "row_sha256": "1ee9dfad438ecd1fd096d6007f255fde5f551258c2762d30c11e4a9b838ebcf2"
+        },
+        {
+          "word": "blossom",
+          "token_id": 98983,
+          "valence_mean": 7.05,
+          "valence_sd": 1.5,
+          "rating_count": 41,
+          "row_sha256": "53e52a2f7221a1f10bc93023947cdd86d685b0d1187056c50130154689f6dea6"
+        },
+        {
+          "word": "brilliance",
+          "token_id": 88986,
+          "valence_mean": 7.09,
+          "valence_sd": 1.72,
+          "rating_count": 22,
+          "row_sha256": "7199fe105ffd25a3d817852c1fab07ea1f6ddb142f9d5d2c2f5b19754d855c45"
+        },
+        {
+          "word": "relaxing",
+          "token_id": 47800,
+          "valence_mean": 8.19,
+          "valence_sd": 0.93,
+          "rating_count": 21,
+          "row_sha256": "865e2da30e06887717196303d8b09e1a58a145ab798b164f5ee15118fc44a8e3"
+        },
+        {
+          "word": "legacy",
+          "token_id": 21689,
+          "valence_mean": 7.38,
+          "valence_sd": 1.53,
+          "rating_count": 21,
+          "row_sha256": "5f51c2f832a8b5d5a2abb72e83e67aedd67e13c7695d76f30b09face7fba804b"
+        },
+        {
+          "word": "house",
+          "token_id": 4200,
+          "valence_mean": 7.19,
+          "valence_sd": 1.4,
+          "rating_count": 43,
+          "row_sha256": "1a585710f266440b4511d573d8db3c4897923122c429568d849181c448f2b5b3"
+        },
+        {
+          "word": "prosperous",
+          "token_id": 70648,
+          "valence_mean": 7.16,
+          "valence_sd": 1.8,
+          "rating_count": 19,
+          "row_sha256": "f7601bf2b68441213206999d108d31da691263bfb83831b0c5f39e6229ad779b"
+        },
+        {
+          "word": "teach",
+          "token_id": 10836,
+          "valence_mean": 7.06,
+          "valence_sd": 1.43,
+          "rating_count": 18,
+          "row_sha256": "3d60772caedac0c4d00528d6e4f356ce898a49ed7e624096d58f81386a9e4bdc"
+        },
+        {
+          "word": "acoustic",
+          "token_id": 36675,
+          "valence_mean": 7.1,
+          "valence_sd": 1.62,
+          "rating_count": 20,
+          "row_sha256": "7e9623c87c8c0aeec00975e2978ca76a1d1849a38758f56aadd232f2c42fda85"
+        },
+        {
+          "word": "daytime",
+          "token_id": 70853,
+          "valence_mean": 7.58,
+          "valence_sd": 1.3,
+          "rating_count": 19,
+          "row_sha256": "b1f29822f7ec45ab3fa62760d3a9799ed772b28ea9c4da4fdb73e37e329b248b"
+        },
+        {
+          "word": "praise",
+          "token_id": 27494,
+          "valence_mean": 7.65,
+          "valence_sd": 1.31,
+          "rating_count": 20,
+          "row_sha256": "ca3b777f7eb7ff18f38279ebfacd6115b9f94ae9ce1bd984d3e122e5098fbc54"
+        },
+        {
+          "word": "dedication",
+          "token_id": 29128,
+          "valence_mean": 7.38,
+          "valence_sd": 1.02,
+          "rating_count": 21,
+          "row_sha256": "470b9ed486e908d573fd40d24ea376c54a7f0e793d9f57c7f62e391886b05b61"
+        },
+        {
+          "word": "sibling",
+          "token_id": 72308,
+          "valence_mean": 7.27,
+          "valence_sd": 1.16,
+          "rating_count": 22,
+          "row_sha256": "f3f6100eaca94605510510da9c145b62aae03eee2f4f5699d938b3252a22d1b2"
+        },
+        {
+          "word": "wonderful",
+          "token_id": 13687,
+          "valence_mean": 7.41,
+          "valence_sd": 1.84,
+          "rating_count": 22,
+          "row_sha256": "50625c8d3ec2e4764e518737a12832568c850135f749b7397eb01d05bc45531f"
+        },
+        {
+          "word": "achievement",
+          "token_id": 21382,
+          "valence_mean": 7.28,
+          "valence_sd": 2.15,
+          "rating_count": 40,
+          "row_sha256": "cea876ae0c4fa8ee3afd066d40a8f6d0633b449ffb18303b6827d785a8af0530"
+        }
+      ]
+    },
+    "selection_frozen_before_tensor_access_sha256": "7147f430961551e6d49f2dedae157ce772870b59145f7982537f962d500cbcd7",
+    "results": {
+      "positive_negative": {
+        "cosine": {
+          "count": 4096,
+          "mean": 0.10280608153599005,
+          "quantiles_linear_interpolation": {
+            "0": -0.053514904517342525,
+            "0.05": 0.02619957407188811,
+            "0.25": 0.0681037983454989,
+            "0.5": 0.09787145907348511,
+            "0.75": 0.13394574954380306,
+            "0.95": 0.19314584530905096,
+            "1": 0.40069779044642634
+          }
+        },
+        "equal_unit_l1_sum": {
+          "count": 4096,
+          "mean": 1.48487629371578,
+          "quantiles_linear_interpolation": {
+            "0": 1.382408905616953,
+            "0.05": 1.4313094790913108,
+            "0.25": 1.4617836184881883,
+            "0.5": 1.482553086517215,
+            "0.75": 1.5060507247652266,
+            "0.95": 1.5454174587591372,
+            "1": 1.6727318219325598
+          }
+        },
+        "opposing_positive_l1_mass": {
+          "count": 4096,
+          "mean": 0.44847225779963684,
+          "quantiles_linear_interpolation": {
+            "0": 0.2986161590436528,
+            "0.05": 0.4028037594740191,
+            "0.25": 0.43275489398847367,
+            "0.5": 0.4507962446064321,
+            "0.75": 0.46645462114440345,
+            "0.95": 0.4879499280488474,
+            "1": 0.5260547273815789
+          }
+        },
+        "right_derivative": {
+          "count": 4096,
+          "mean": 0.1030554844007263,
+          "quantiles_linear_interpolation": {
+            "0": -0.052109454763157724,
+            "0.05": 0.02410014390230519,
+            "0.25": 0.06709075771119315,
+            "0.5": 0.09840751078713574,
+            "0.75": 0.13449021202305272,
+            "0.95": 0.19439248105196183,
+            "1": 0.4027676819126944
+          }
+        },
+        "raw_sum_over_negative_l1": {
+          "count": 4096,
+          "mean": 1.4236506031585712,
+          "quantiles_linear_interpolation": {
+            "0": 1.1104138669376147,
+            "0.05": 1.20533001098657,
+            "0.25": 1.3237433997393289,
+            "0.5": 1.4141372595902273,
+            "0.75": 1.515158425244044,
+            "0.95": 1.6750810307780177,
+            "1": 1.8510768196149865
+          }
+        },
+        "positive_cosine_count": 4063,
+        "nonnegative_right_derivative_count": 4055,
+        "unit_l1_sum_below_prior_count": 0,
+        "smallest_cosine_example": {
+          "comparison": "positive_negative",
+          "first": "book",
+          "second": "retaliation",
+          "cosine": -0.053514904517342525,
+          "equal_unit_l1_sum": 1.382408905616953,
+          "opposing_positive_l1_mass": 0.5260547273815789,
+          "right_derivative": -0.052109454763157724,
+          "raw_sum_over_negative_l1": 1.114286896826227
+        },
+        "smallest_derivative_example": {
+          "comparison": "positive_negative",
+          "first": "book",
+          "second": "retaliation",
+          "cosine": -0.053514904517342525,
+          "equal_unit_l1_sum": 1.382408905616953,
+          "opposing_positive_l1_mass": 0.5260547273815789,
+          "right_derivative": -0.052109454763157724,
+          "raw_sum_over_negative_l1": 1.114286896826227
+        }
+      },
+      "positive_neutral": {
+        "cosine": {
+          "count": 4096,
+          "mean": 0.09472622282583312,
+          "quantiles_linear_interpolation": {
+            "0": -0.05689876104649669,
+            "0.05": 0.024100384870556064,
+            "0.25": 0.05991363739928865,
+            "0.5": 0.08985143778838173,
+            "0.75": 0.12328383495044316,
+            "0.95": 0.18245823851223478,
+            "1": 0.3364968342460989
+          }
+        },
+        "equal_unit_l1_sum": {
+          "count": 4096,
+          "mean": 1.478723622889628,
+          "quantiles_linear_interpolation": {
+            "0": 1.364248007466895,
+            "0.05": 1.4289372862002292,
+            "0.25": 1.4550745805264498,
+            "0.5": 1.476417656856816,
+            "0.75": 1.4983771309695533,
+            "0.95": 1.5381021131795032,
+            "1": 1.6464629696797115
+          }
+        },
+        "positive_cosine_count": 4052
+      },
+      "negative_neutral": {
+        "cosine": {
+          "count": 4096,
+          "mean": 0.09210763560369897,
+          "quantiles_linear_interpolation": {
+            "0": -0.03253930141371737,
+            "0.05": 0.02191957108760597,
+            "0.25": 0.05735877087377521,
+            "0.5": 0.0852618390655143,
+            "0.75": 0.11940754997888978,
+            "0.95": 0.1835569798061125,
+            "1": 0.40684185904369513
+          }
+        },
+        "equal_unit_l1_sum": {
+          "count": 4096,
+          "mean": 1.4769177405046923,
+          "quantiles_linear_interpolation": {
+            "0": 1.3775184926026112,
+            "0.05": 1.4271420743930774,
+            "0.25": 1.4528073722324444,
+            "0.5": 1.4728124041459947,
+            "0.75": 1.4963554135824808,
+            "0.95": 1.5405356093108207,
+            "1": 1.6752523249899018
+          }
+        },
+        "positive_cosine_count": 4052
+      },
+      "positive_positive": {
+        "cosine": {
+          "count": 2016,
+          "mean": 0.12328430000111662,
+          "quantiles_linear_interpolation": {
+            "0": -0.029975067191942477,
+            "0.05": 0.03654283733716587,
+            "0.25": 0.082454275537865,
+            "0.5": 0.11496271890570166,
+            "0.75": 0.15571160002358286,
+            "0.95": 0.23258267470584149,
+            "1": 0.6018304981744984
+          }
+        },
+        "positive_cosine_count": 2005
+      },
+      "negative_negative": {
+        "cosine": {
+          "count": 2016,
+          "mean": 0.13026021254826883,
+          "quantiles_linear_interpolation": {
+            "0": -0.018392579187281006,
+            "0.05": 0.0480479515996983,
+            "0.25": 0.08823705511961955,
+            "0.5": 0.12397543865274885,
+            "0.75": 0.16227984848102378,
+            "0.95": 0.23521559866975836,
+            "1": 0.41961716886903255
+          }
+        },
+        "positive_cosine_count": 2014
+      },
+      "neutral_neutral": {
+        "cosine": {
+          "count": 2016,
+          "mean": 0.09519323188083614,
+          "quantiles_linear_interpolation": {
+            "0": -0.023090892397422666,
+            "0.05": 0.0215941356145055,
+            "0.25": 0.05945159598273558,
+            "0.5": 0.08858392447731267,
+            "0.75": 0.12307622295689466,
+            "0.95": 0.19226803881162216,
+            "1": 0.4119990991040028
+          }
+        },
+        "positive_cosine_count": 2000
+      }
+    },
+    "conditional_arithmetic": "With an input p and prior n represented by linear signed coordinate totals, H77 gives net n+g*p before other transfer/noise/recurrence. f(g)=L1(n+g*p) is convex. For unit-L1 p, f right derivative at0 is1-2 times input mass opposing n; zeros contribute positively. Nonnegative derivative makes f nondecreasing for all g>=0.",
+    "units_and_limits": [
+      "Descriptive chosen single-token English word subset; no population inference or independence claim for shared-word pairs.",
+      "No neural dynamics, active-cell count, learned DMN evaluation, residual valence judgment, model training, embedding transformation or chosen encoder.",
+      "Rating extremes are not necessarily complementary meanings; neutral and same-valence comparisons control only broad lexical geometry, not frequency, topic or polysemy.",
+      "L1 signed-coordinate magnitude is not the active-neuron fraction or semantic valence of the residual.",
+      "Repeated words make pair observations dependent. No significance test, confidence interval, general population estimate or trained-state result is claimed.",
+      "Per-word rating SD/count are retained as provenance; averaged human lexical ratings do not fix meanings in context or label arbitrary network states."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/rated_valence_geometry.py",
+      "script_sha256": "efb85a6c6e6a3598626c6825484bab51f9b012c3fcd1363e613d9da0c5449435",
+      "all_pair_metrics_cache": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/rated-valence-pair-arithmetic.json",
+      "all_pair_metrics_sha256": "cb5f08242b06794f0225ac2451dac4926ee64417aa34b880c6f54efee52d4a70"
+    }
+  },
+  "chinese_rated_valence_geometry": {
+    "status": "Descriptive actual-input row arithmetic; no neural simulation, fitting or training",
+    "started_at_utc": "2026-10-29T01:29:40.326270+00:00",
+    "finished_at_utc": "2026-10-29T01:29:52.996360+00:00",
+    "wall_seconds": 12.670090188999893,
+    "protocol": {
+      "declared_at_utc": "2026-10-29T01:29:09.616929+00:00",
+      "purpose": "Broaden actual native Flash input-row geometry beyond English using reported Chinese lexical ratings; descriptive only.",
+      "source": "Xu, Li and Chen2022(volume), online2021, public publisher CSV; Valence_Mean/SD/N. No Yao2017 PDF values used.",
+      "eligibility": "Word consists of2–4 characters each U+4E00..U+9FA5 and the inspected local tokenizer maps the standalone word without spaces to one ordinary tokenID3..127999. No transliteration, traditional/simplified conversion or multi-token pooling.",
+      "bands": {
+        "negative": "Valence_Mean<=-1.5",
+        "positive": "Valence_Mean>=1.5",
+        "neutral": "-0.375<=Valence_Mean<=0.375"
+      },
+      "selection": "Within each eligible band, sort by SHA256 UTF8(steady-snn-chinese-rated-valence-v1:<word>); use smallest64. Freeze exact word/tokenID/rating selection before tensor access. Stop rather than relax if fewer than64.",
+      "metrics": "Same pair arithmetic as English reference: cosine; equal-unit-L1 net magnitude; for positive/negative pairs, opposing input mass, derivative at zero nonnegative input gain, raw-sum/prior-L1. No vector processing beyond analysis normalization.",
+      "limits": [
+        "Band thresholds are analyst choices, not validated psychometric equivalence to English thresholds or matched cross-language stimuli.",
+        "Pairs share words and are not independent observations. No significance test, confidence interval or population prevalence.",
+        "Human word ratings are not contextual semantic judgments, token-fragment labels or DMN-state valence.",
+        "L1 magnitude is not active-neuron fraction. No neural dynamics, learning or residual-duration inference.",
+        "No centered/rotated/negated embeddings, runtime encoder, valence evaluator or implementation selected."
+      ]
+    },
+    "protocol_sha256": "94d85890148baccf0362447471f615d7f1347b5b84fdf9ad97bb79f44cbcb438",
+    "ratings_source": {
+      "source_id": "MR-S094",
+      "url": "https://media.springernature.com/original/springer-static/esm/art%3A10.3758%2Fs13428-021-01607-4/MediaObjects/13428_2021_1607_MOESM1_ESM.csv",
+      "cache": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/xu2022-publisher-ratings.csv",
+      "bytes": 1002626,
+      "sha256": "152f861fe3fe33b7c80763256c5266e28662de8edd5cbe7b7f1791c32d980cb7",
+      "encoding": "utf-8-sig",
+      "rows": 11310,
+      "fields_used": [
+        "Word",
+        "Valence_Mean",
+        "Valence_SD",
+        "Valence_N"
+      ],
+      "weighting": "Words equally weighted within each sample band; no rating-count weighting."
+    },
+    "embedding_source": {
+      "repository": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "revision": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+      "tensor": "embed.weight",
+      "shape": [
+        129280,
+        5120
+      ],
+      "dtype": "BF16",
+      "existing_verified_sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c",
+      "tokenizer_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "access": "192 selected local SSD rows,1966080 tensor bytes read; no full-tensor scan/copy."
+    },
+    "tokenization_scope": "Manual byte-level BPE merge-rank replay for the inspected restricted CJK-only span; no claim of general tokenizer implementation.",
+    "eligibility": {
+      "all_rated_words": 11310,
+      "cjk_only_2_to_4": 11310,
+      "ordinary_single_token": 5960
+    },
+    "eligible_group_counts": {
+      "negative": 298,
+      "neutral": 2277,
+      "positive": 478
+    },
+    "selected_groups": {
+      "negative": [
+        {
+          "word": "极端",
+          "token_id": 40160,
+          "valence_mean": -1.79,
+          "valence_sd": 1.1,
+          "rating_count": 24,
+          "row_sha256": "6758b25a8e582bbd1fa23d1be0550b670d4257007be6e612bff5c10aaccc4c5b"
+        },
+        {
+          "word": "可怕",
+          "token_id": 25847,
+          "valence_mean": -1.74,
+          "valence_sd": 0.75,
+          "rating_count": 23,
+          "row_sha256": "c6070a0a7d9b7dbd8c93f518a28ce2a2c7ece9d1e1f9f8da22072777cd9f5696"
+        },
+        {
+          "word": "妖怪",
+          "token_id": 77628,
+          "valence_mean": -1.74,
+          "valence_sd": 1.24,
+          "rating_count": 31,
+          "row_sha256": "846b384e68dca66e7858896b5c20a218aa00e5477a39f269f6e5d79676aec995"
+        },
+        {
+          "word": "不良",
+          "token_id": 17644,
+          "valence_mean": -1.65,
+          "valence_sd": 0.69,
+          "rating_count": 26,
+          "row_sha256": "2720d8157fbbd6c640c6fbb3d32823f4b143637c3da5ad2db5c6eba3a0f93d3c"
+        },
+        {
+          "word": "厌倦",
+          "token_id": 115392,
+          "valence_mean": -1.6,
+          "valence_sd": 0.82,
+          "rating_count": 25,
+          "row_sha256": "8c9f7cabcc8a54b13c81941b8e06c8f6929b4b9d29ad7872f28c2c2c5f43bd8d"
+        },
+        {
+          "word": "疫情",
+          "token_id": 7393,
+          "valence_mean": -1.96,
+          "valence_sd": 1.06,
+          "rating_count": 25,
+          "row_sha256": "81f98c39df7829a4cc88ff7a9792f24e5b303fc6feae5e511fb1d806ff273e8b"
+        },
+        {
+          "word": "炸弹",
+          "token_id": 70535,
+          "valence_mean": -1.5,
+          "valence_sd": 1.07,
+          "rating_count": 28,
+          "row_sha256": "ae01fe874ef46d815b83e78cb2960255de54ad46eb924d36e9e59000ebd3bf0a"
+        },
+        {
+          "word": "惊慌",
+          "token_id": 75549,
+          "valence_mean": -1.52,
+          "valence_sd": 1.08,
+          "rating_count": 25,
+          "row_sha256": "6c6bd78d0c60afc48a93d43408dc488b733cef708d882bc7a57ac2e3b2d9eddb"
+        },
+        {
+          "word": "舞弊",
+          "token_id": 112649,
+          "valence_mean": -2.06,
+          "valence_sd": 0.77,
+          "rating_count": 31,
+          "row_sha256": "4ee3ed16e7a7657e3c0466e5effc5f2f87fff54e3c520ccc0cd3bc960a267d55"
+        },
+        {
+          "word": "怨恨",
+          "token_id": 88698,
+          "valence_mean": -1.81,
+          "valence_sd": 0.9,
+          "rating_count": 26,
+          "row_sha256": "89d53f868b7583ce6bb595bed6d757acb6b5c53e41e4bcb73a684bf6c6e98743"
+        },
+        {
+          "word": "痛苦",
+          "token_id": 16837,
+          "valence_mean": -1.89,
+          "valence_sd": 1.1,
+          "rating_count": 28,
+          "row_sha256": "e326b7330368c0cda033a527029f34931e93de7c1072003a70ffe212379b92dc"
+        },
+        {
+          "word": "灭亡",
+          "token_id": 74830,
+          "valence_mean": -1.92,
+          "valence_sd": 1.19,
+          "rating_count": 25,
+          "row_sha256": "f4ef28f2d0f241a79f08dad94044cf27a903d1a6edb002249b65846a923a6fb2"
+        },
+        {
+          "word": "恐惧",
+          "token_id": 27927,
+          "valence_mean": -1.92,
+          "valence_sd": 0.93,
+          "rating_count": 24,
+          "row_sha256": "22becfd2c4debfc81e21b59b2f074e7589cd9137b675b53255b668673a2084f8"
+        },
+        {
+          "word": "残酷",
+          "token_id": 51047,
+          "valence_mean": -1.61,
+          "valence_sd": 1.07,
+          "rating_count": 28,
+          "row_sha256": "3219f0bdcbe9000a1afdeba9bed4ae17857be5872071a54508c8af118e786875"
+        },
+        {
+          "word": "废气",
+          "token_id": 98628,
+          "valence_mean": -1.56,
+          "valence_sd": 0.8,
+          "rating_count": 27,
+          "row_sha256": "d1053a18e0a58f7b72f3b746c502d9ac002811d9b522febed46f30d64f28b5d5"
+        },
+        {
+          "word": "被捕",
+          "token_id": 98459,
+          "valence_mean": -1.72,
+          "valence_sd": 1.02,
+          "rating_count": 32,
+          "row_sha256": "9f4b3d7143698f001adbf97046eb6f1aba39b8720efe44a1001b1f1ccdd5dcc2"
+        },
+        {
+          "word": "抢夺",
+          "token_id": 105595,
+          "valence_mean": -1.96,
+          "valence_sd": 0.76,
+          "rating_count": 27,
+          "row_sha256": "9d17590e5bfbf900f2787284d8abfccb33d67a528ccc80ac57c322554d12d6f2"
+        },
+        {
+          "word": "灭绝",
+          "token_id": 100381,
+          "valence_mean": -2.27,
+          "valence_sd": 0.83,
+          "rating_count": 22,
+          "row_sha256": "b91d0041b193ef5a59f66d751b15156ffdd9de6d1c3c917eb5b24699524cd4dd"
+        },
+        {
+          "word": "骗子",
+          "token_id": 80839,
+          "valence_mean": -2.52,
+          "valence_sd": 0.57,
+          "rating_count": 31,
+          "row_sha256": "bccdf2263393b4a323f10efc334c7bc2c0e7ede346871d2e56ee4ca92466e3e9"
+        },
+        {
+          "word": "事故",
+          "token_id": 12882,
+          "valence_mean": -1.58,
+          "valence_sd": 1.36,
+          "rating_count": 26,
+          "row_sha256": "dd67184c6487d865faf9296b18f0cd2596ae39ae26a8413119e0b57af0989da5"
+        },
+        {
+          "word": "封建",
+          "token_id": 27528,
+          "valence_mean": -1.54,
+          "valence_sd": 1.07,
+          "rating_count": 26,
+          "row_sha256": "7bf77d59f934bc60cf79761c9779203400a4168cb917b607b8603956b1043d77"
+        },
+        {
+          "word": "轰炸",
+          "token_id": 66754,
+          "valence_mean": -1.67,
+          "valence_sd": 1.39,
+          "rating_count": 21,
+          "row_sha256": "afc064149eab9bd0d0fde37d8ec43c6f3e443b9630147dc72cac10378b6c5098"
+        },
+        {
+          "word": "侵略",
+          "token_id": 44724,
+          "valence_mean": -2.23,
+          "valence_sd": 0.95,
+          "rating_count": 26,
+          "row_sha256": "f0a22a24fc421f6064a48c28f7697c62a98118195b9d1ad9631a0eaf9aebd124"
+        },
+        {
+          "word": "不幸",
+          "token_id": 38185,
+          "valence_mean": -1.92,
+          "valence_sd": 1.09,
+          "rating_count": 26,
+          "row_sha256": "b9c544eadc0d78180a80bee53796a02ec975cde38a8974e21701fb5b0e378a22"
+        },
+        {
+          "word": "殴打",
+          "token_id": 125331,
+          "valence_mean": -2.19,
+          "valence_sd": 0.68,
+          "rating_count": 27,
+          "row_sha256": "407fcfe434244b54f3dcf65247461396968e2b492df5de802916dcf1bbc4e757"
+        },
+        {
+          "word": "霸权",
+          "token_id": 125288,
+          "valence_mean": -1.76,
+          "valence_sd": 0.97,
+          "rating_count": 25,
+          "row_sha256": "cebda7b386409c82cf446d05bacf8bafda01bd403fa02f2f1b66c8a84c46a8fd"
+        },
+        {
+          "word": "贪婪",
+          "token_id": 76262,
+          "valence_mean": -2.31,
+          "valence_sd": 0.74,
+          "rating_count": 26,
+          "row_sha256": "cf98b0d41559498e3cc58727872957c6882ae2de108cedda24f3e0cd77e5cbe7"
+        },
+        {
+          "word": "沉迷",
+          "token_id": 90780,
+          "valence_mean": -1.54,
+          "valence_sd": 0.71,
+          "rating_count": 26,
+          "row_sha256": "2840798b3cfee5fb33354d741167058548f99500d11b343eac9e7a5c7dd15215"
+        },
+        {
+          "word": "罪恶",
+          "token_id": 79224,
+          "valence_mean": -2.44,
+          "valence_sd": 0.89,
+          "rating_count": 27,
+          "row_sha256": "ee549f2990597c0829777f2b891c90e8da719019bc1e7d4831f3c429eef283d8"
+        },
+        {
+          "word": "伤害",
+          "token_id": 16015,
+          "valence_mean": -1.68,
+          "valence_sd": 0.67,
+          "rating_count": 28,
+          "row_sha256": "06f1661a3bc9c6f98c207f4fe279bd3ed0970bda388373cbb3597a6cc64377b5"
+        },
+        {
+          "word": "毒品",
+          "token_id": 50993,
+          "valence_mean": -2.56,
+          "valence_sd": 0.75,
+          "rating_count": 27,
+          "row_sha256": "7fb71dc46e13f2f75b62666b9172c79cd48158c1415547d8ab68003b0739baf9"
+        },
+        {
+          "word": "报仇",
+          "token_id": 69941,
+          "valence_mean": -2.0,
+          "valence_sd": 1.04,
+          "rating_count": 25,
+          "row_sha256": "705fa5e0286a4b78324294c9748ade21f5d5495f13a9e6a3b685ca645679747e"
+        },
+        {
+          "word": "倒闭",
+          "token_id": 99616,
+          "valence_mean": -2.08,
+          "valence_sd": 0.76,
+          "rating_count": 25,
+          "row_sha256": "56091953ad40a3e00aa7ca803b0805eebd2605d86460b314a2872162c10f2427"
+        },
+        {
+          "word": "寄生",
+          "token_id": 56610,
+          "valence_mean": -1.5,
+          "valence_sd": 0.76,
+          "rating_count": 26,
+          "row_sha256": "c6a1599dc3aaf3a37eae48a2f481e3e8947381ff0a9a77c948b318f68e817f5a"
+        },
+        {
+          "word": "噩梦",
+          "token_id": 99557,
+          "valence_mean": -2.19,
+          "valence_sd": 0.9,
+          "rating_count": 26,
+          "row_sha256": "0f35e34d6c50b96e845f04dd3b8487b0504f7e88e2633d0c1a33d64aa1365f4e"
+        },
+        {
+          "word": "疾病",
+          "token_id": 10093,
+          "valence_mean": -1.8,
+          "valence_sd": 0.76,
+          "rating_count": 25,
+          "row_sha256": "068a38c3033d31cbb768540ed746f9ca13d9e593e4bade4f9c1cf65cfe738469"
+        },
+        {
+          "word": "变态",
+          "token_id": 71258,
+          "valence_mean": -2.48,
+          "valence_sd": 0.77,
+          "rating_count": 25,
+          "row_sha256": "9e5f88f1950f946419e093afd259b0d6bee186b15da432d69206fcb9b6b5a015"
+        },
+        {
+          "word": "杀手",
+          "token_id": 57112,
+          "valence_mean": -1.85,
+          "valence_sd": 1.05,
+          "rating_count": 26,
+          "row_sha256": "1f2f60d08367bd3cda36e82c60344246e6d0e799644bb9ea456bce58777575cf"
+        },
+        {
+          "word": "欺骗",
+          "token_id": 48703,
+          "valence_mean": -2.0,
+          "valence_sd": 0.76,
+          "rating_count": 25,
+          "row_sha256": "91a85d86cec1ca14eddda70fb67d1dc688c3d2c911c43264f8d4e603bcb9c304"
+        },
+        {
+          "word": "懒惰",
+          "token_id": 111947,
+          "valence_mean": -1.55,
+          "valence_sd": 0.91,
+          "rating_count": 22,
+          "row_sha256": "1c234320b9d4f9c2d8e0feb5eecbfe543343befacd484b0ceee216ffffe59a69"
+        },
+        {
+          "word": "开除",
+          "token_id": 85940,
+          "valence_mean": -1.68,
+          "valence_sd": 0.94,
+          "rating_count": 34,
+          "row_sha256": "525947f4c0b67755410e347dab57c9155d6890cf6f6ec4172a926d0e621bff41"
+        },
+        {
+          "word": "放弃",
+          "token_id": 15408,
+          "valence_mean": -1.5,
+          "valence_sd": 1.0,
+          "rating_count": 20,
+          "row_sha256": "f9807c9a8e2d488b8bcbf2ef4366986ee0bf82e9057d26ebcc05216bd38171f7"
+        },
+        {
+          "word": "过分",
+          "token_id": 43617,
+          "valence_mean": -1.77,
+          "valence_sd": 0.59,
+          "rating_count": 26,
+          "row_sha256": "03b098ea300b9fdd7df93dfa09f74c6817187475ddb9f1614c47e4fd0cb195b5"
+        },
+        {
+          "word": "倒霉",
+          "token_id": 70658,
+          "valence_mean": -1.96,
+          "valence_sd": 0.77,
+          "rating_count": 26,
+          "row_sha256": "2c931f2b44a71bdf456feb59cad4506384bd8c90a31a21209fa5696ddfb17216"
+        },
+        {
+          "word": "暴躁",
+          "token_id": 99248,
+          "valence_mean": -1.88,
+          "valence_sd": 0.9,
+          "rating_count": 24,
+          "row_sha256": "1eb198eba8d22fe734c4520a14a584f9b4f847e97a7c2d8b659c1b10b6d30f5a"
+        },
+        {
+          "word": "自卑",
+          "token_id": 68919,
+          "valence_mean": -1.56,
+          "valence_sd": 0.75,
+          "rating_count": 27,
+          "row_sha256": "8316d91a188c9902d466fd8db60f5ba054278e1f4e9da9ed1569d1c27b8523b4"
+        },
+        {
+          "word": "污水",
+          "token_id": 33299,
+          "valence_mean": -1.62,
+          "valence_sd": 1.02,
+          "rating_count": 26,
+          "row_sha256": "6614a1daee2c29141161b1e541c6ae306a5806918172674e90367ccbbd66e38f"
+        },
+        {
+          "word": "作弊",
+          "token_id": 100568,
+          "valence_mean": -2.16,
+          "valence_sd": 0.62,
+          "rating_count": 25,
+          "row_sha256": "1b70b64d37d9ab9310bd9c5772bfcb74037574360ff1bfdd085772af95974906"
+        },
+        {
+          "word": "叛乱",
+          "token_id": 118537,
+          "valence_mean": -1.96,
+          "valence_sd": 0.96,
+          "rating_count": 26,
+          "row_sha256": "cc649654390412ada2e5620a55ec79f9c667c550976eff4fc48a22b3403d0aaa"
+        },
+        {
+          "word": "奴隶",
+          "token_id": 44640,
+          "valence_mean": -2.08,
+          "valence_sd": 0.89,
+          "rating_count": 26,
+          "row_sha256": "751a7c63420283d2d8e0d61366f618048901f2521705109dba4c9b2cf8140c09"
+        },
+        {
+          "word": "通货膨胀",
+          "token_id": 59333,
+          "valence_mean": -1.52,
+          "valence_sd": 0.77,
+          "rating_count": 25,
+          "row_sha256": "92994adafd07933f81c18b91c58ba9732f4f1b94547be449f8bd5692bf9134aa"
+        },
+        {
+          "word": "畏惧",
+          "token_id": 66999,
+          "valence_mean": -1.74,
+          "valence_sd": 0.86,
+          "rating_count": 27,
+          "row_sha256": "00baaedf673f7fa9cc78d507d2e49810c3dd28a25bad300d32b4841300f764e5"
+        },
+        {
+          "word": "肇事",
+          "token_id": 107924,
+          "valence_mean": -1.93,
+          "valence_sd": 0.78,
+          "rating_count": 27,
+          "row_sha256": "0f32345f2fc5e665f5db58fbbe5131c20e5b803a500e36af1bc91c9bc15be2a3"
+        },
+        {
+          "word": "葬礼",
+          "token_id": 121712,
+          "valence_mean": -1.92,
+          "valence_sd": 1.02,
+          "rating_count": 24,
+          "row_sha256": "fe79392de478556df2dc1fac461dcd3ffb59d94aa6d58ce7a6061c35064521a3"
+        },
+        {
+          "word": "坟墓",
+          "token_id": 105445,
+          "valence_mean": -1.6,
+          "valence_sd": 0.91,
+          "rating_count": 25,
+          "row_sha256": "a7c425d065c714821ef8ae5586d64d356730982663a9fad15914a78bd60dcd1f"
+        },
+        {
+          "word": "土匪",
+          "token_id": 93198,
+          "valence_mean": -2.18,
+          "valence_sd": 0.9,
+          "rating_count": 28,
+          "row_sha256": "d874c20c31c20e92169b2b6e7f5c8d240031f175496c7d5df6bf79e6e5f5a7d9"
+        },
+        {
+          "word": "烦躁",
+          "token_id": 63947,
+          "valence_mean": -1.71,
+          "valence_sd": 0.62,
+          "rating_count": 24,
+          "row_sha256": "582e4e87ef3352f5e20c803bf5a6bd2f713a1878aea1f78f0b2111fabb18e86f"
+        },
+        {
+          "word": "忧愁",
+          "token_id": 117049,
+          "valence_mean": -1.5,
+          "valence_sd": 0.8,
+          "rating_count": 22,
+          "row_sha256": "6bed13d7197b865f3954dcfd4d957e7e16f27602465dc17e8e4657b7a31e9b50"
+        },
+        {
+          "word": "盗窃",
+          "token_id": 57327,
+          "valence_mean": -2.64,
+          "valence_sd": 0.58,
+          "rating_count": 22,
+          "row_sha256": "55a3c2a187fd66f711741d759574fef07f48b5fdf1d9b78ba1abc360e1495ce0"
+        },
+        {
+          "word": "车祸",
+          "token_id": 83541,
+          "valence_mean": -2.23,
+          "valence_sd": 0.86,
+          "rating_count": 26,
+          "row_sha256": "f477dcbc033a59c8288f648cdbd7e3b11c60cfaaad13eccefa6244ce089b553e"
+        },
+        {
+          "word": "枯萎",
+          "token_id": 114698,
+          "valence_mean": -1.72,
+          "valence_sd": 0.94,
+          "rating_count": 25,
+          "row_sha256": "b88a72b7fbf85737891b5acb3650b512163217ae4a96702e563a49024252abf8"
+        },
+        {
+          "word": "强盗",
+          "token_id": 114748,
+          "valence_mean": -2.68,
+          "valence_sd": 0.56,
+          "rating_count": 25,
+          "row_sha256": "48750b68de2903f5958bc80547438fe8ed5d6cb1ffaea16554ac842348a3b27e"
+        },
+        {
+          "word": "愚蠢",
+          "token_id": 69811,
+          "valence_mean": -1.71,
+          "valence_sd": 0.71,
+          "rating_count": 28,
+          "row_sha256": "11220d83718114ca1620301632cacf80c50c0ce0fd6499b8234edd57c4779d75"
+        },
+        {
+          "word": "抢劫",
+          "token_id": 67910,
+          "valence_mean": -2.64,
+          "valence_sd": 0.57,
+          "rating_count": 25,
+          "row_sha256": "e1c21e328677a1698cfa001b4ddcb5aad296021485db833fd8ffd6f9049cbca8"
+        }
+      ],
+      "neutral": [
+        {
+          "word": "早期",
+          "token_id": 20317,
+          "valence_mean": 0.19,
+          "valence_sd": 0.7,
+          "rating_count": 31,
+          "row_sha256": "f1e7dbaee75951648c50e501dd81dcf4e32dfd3262d7552142609e2def6149b1"
+        },
+        {
+          "word": "必经",
+          "token_id": 118878,
+          "valence_mean": 0.21,
+          "valence_sd": 0.66,
+          "rating_count": 24,
+          "row_sha256": "f24b8c6b3b67913905b1fda2d182982e8403e4d7306783e5123d3750ebd220b4"
+        },
+        {
+          "word": "英镑",
+          "token_id": 67694,
+          "valence_mean": 0.28,
+          "valence_sd": 0.84,
+          "rating_count": 25,
+          "row_sha256": "024d8df9f25c707afeace49b320d383b6e1ac60a0633b08e78426d7a2d15f310"
+        },
+        {
+          "word": "迟早",
+          "token_id": 87090,
+          "valence_mean": -0.17,
+          "valence_sd": 0.56,
+          "rating_count": 24,
+          "row_sha256": "bfa2a3296f44a384aeb5d16edabd56d7cc5225f1de5332434e87dfd4c3d32240"
+        },
+        {
+          "word": "属性",
+          "token_id": 14259,
+          "valence_mean": 0.16,
+          "valence_sd": 0.8,
+          "rating_count": 25,
+          "row_sha256": "40e88b9b9d89f5e82eca128a0c6191384bb9df7623228af3a631794ba43cf0a4"
+        },
+        {
+          "word": "麻辣",
+          "token_id": 96593,
+          "valence_mean": -0.29,
+          "valence_sd": 1.08,
+          "rating_count": 24,
+          "row_sha256": "6ebb65a3d7f2c973f1287658f104ada1d310d5eaa1ff002bed50dcf982c1b9ad"
+        },
+        {
+          "word": "建筑物",
+          "token_id": 38722,
+          "valence_mean": 0.24,
+          "valence_sd": 0.72,
+          "rating_count": 25,
+          "row_sha256": "e2ac409d6daa8c432838ae2d84384d67602315e18456b7c93b374bb14b0e2614"
+        },
+        {
+          "word": "配音",
+          "token_id": 106137,
+          "valence_mean": 0.23,
+          "valence_sd": 0.53,
+          "rating_count": 22,
+          "row_sha256": "9f94f6fab95e4087ba68cf5e4a7dd4ac9a0b53cdebfe31186e269929aafce673"
+        },
+        {
+          "word": "剧情",
+          "token_id": 34092,
+          "valence_mean": 0.04,
+          "valence_sd": 0.61,
+          "rating_count": 25,
+          "row_sha256": "3443ec8737deaf304ee35eb897fc2ecccb8e00143144d8cc32394be68bb52dbe"
+        },
+        {
+          "word": "切入",
+          "token_id": 66741,
+          "valence_mean": 0.24,
+          "valence_sd": 0.52,
+          "rating_count": 25,
+          "row_sha256": "6558033e66c92285220303e932e328852a5a8a8dd599fe446458a1c3b781c0b6"
+        },
+        {
+          "word": "目前",
+          "token_id": 5120,
+          "valence_mean": 0.21,
+          "valence_sd": 0.51,
+          "rating_count": 24,
+          "row_sha256": "a2629717970b85bfdb4457e888510b9b46b834655e48fc24423334fb8cdcd95a"
+        },
+        {
+          "word": "油漆",
+          "token_id": 82257,
+          "valence_mean": -0.25,
+          "valence_sd": 0.53,
+          "rating_count": 24,
+          "row_sha256": "9d983b18e75edc10c87648595e44a479b29d4a79dc7fa1fdfb4ff267e5e3d8f1"
+        },
+        {
+          "word": "田地",
+          "token_id": 102112,
+          "valence_mean": 0.16,
+          "valence_sd": 0.62,
+          "rating_count": 25,
+          "row_sha256": "199137733ebbfc5172121cc8a18104f844afb18e1430bf6af94c1533d56d60f3"
+        },
+        {
+          "word": "薄荷",
+          "token_id": 87458,
+          "valence_mean": 0.18,
+          "valence_sd": 0.85,
+          "rating_count": 22,
+          "row_sha256": "66318ed28d2e12f0e4fee3a9b46b3d3be34e80772f761b9ea8f42fa74c995b61"
+        },
+        {
+          "word": "众人",
+          "token_id": 18853,
+          "valence_mean": 0.08,
+          "valence_sd": 0.4,
+          "rating_count": 25,
+          "row_sha256": "08ea0b1889e220e70d5a78e0a13d3776e1f5a3089ee03b034f1316d4e91d0b4a"
+        },
+        {
+          "word": "引发",
+          "token_id": 23868,
+          "valence_mean": -0.33,
+          "valence_sd": 0.76,
+          "rating_count": 24,
+          "row_sha256": "290b358f0bb9fa075a4c9964bcefc3a1ec7445b8bf106737fe589300a0cb1528"
+        },
+        {
+          "word": "钓鱼",
+          "token_id": 56806,
+          "valence_mean": 0.2,
+          "valence_sd": 0.82,
+          "rating_count": 25,
+          "row_sha256": "fea1eb79f5d4195452d8323603c69d11e75800bcc58fec0d611ec41bd71c85a8"
+        },
+        {
+          "word": "甘油",
+          "token_id": 81380,
+          "valence_mean": 0.0,
+          "valence_sd": 0.56,
+          "rating_count": 20,
+          "row_sha256": "24ad481c19e14df6c0bac06626802a02a8cef82bce46b199345cd7608477c716"
+        },
+        {
+          "word": "物理",
+          "token_id": 13283,
+          "valence_mean": 0.0,
+          "valence_sd": 0.53,
+          "rating_count": 22,
+          "row_sha256": "1a01ae8968c48d45f741bf55fb75901c936f37ac301bd3b7d88060b429752801"
+        },
+        {
+          "word": "烘干",
+          "token_id": 85445,
+          "valence_mean": 0.33,
+          "valence_sd": 0.68,
+          "rating_count": 27,
+          "row_sha256": "8185e5565541b770702949322a8a31fbde018fe9149bce6c2ddd51da0b149ebb"
+        },
+        {
+          "word": "样子",
+          "token_id": 12232,
+          "valence_mean": -0.08,
+          "valence_sd": 0.7,
+          "rating_count": 25,
+          "row_sha256": "b0c9d7defafb8f6e994276be078cf2045865f20c2a9519de718ffbb51763f3e0"
+        },
+        {
+          "word": "据点",
+          "token_id": 121540,
+          "valence_mean": 0.04,
+          "valence_sd": 1.12,
+          "rating_count": 24,
+          "row_sha256": "4b18a3ae753a711224b765fa31505045fbd9b60816c7d6024be3b81ef1161601"
+        },
+        {
+          "word": "工具",
+          "token_id": 8620,
+          "valence_mean": 0.18,
+          "valence_sd": 0.59,
+          "rating_count": 22,
+          "row_sha256": "b90b33aa6c1b2c6d64465da5fbd80cb463c855bdcd71d8cc43f4439876b26387"
+        },
+        {
+          "word": "当时",
+          "token_id": 7085,
+          "valence_mean": -0.04,
+          "valence_sd": 0.2,
+          "rating_count": 25,
+          "row_sha256": "e31cc05ccf621e0ea9d561cdc4556b268062009d6531e0796a039d2f53a894b8"
+        },
+        {
+          "word": "测验",
+          "token_id": 61290,
+          "valence_mean": 0.33,
+          "valence_sd": 0.56,
+          "rating_count": 24,
+          "row_sha256": "7bd7c1f5e6f326090cc857f0840587a5109065198c7201f28b6e1017b30c82aa"
+        },
+        {
+          "word": "普通人",
+          "token_id": 44782,
+          "valence_mean": -0.07,
+          "valence_sd": 0.38,
+          "rating_count": 28,
+          "row_sha256": "871f5e1ef905296218d1a42987d6ed467c42a9ada2099907449e51d1f075ae59"
+        },
+        {
+          "word": "讲话",
+          "token_id": 18272,
+          "valence_mean": 0.18,
+          "valence_sd": 0.39,
+          "rating_count": 22,
+          "row_sha256": "a76cae29df19f8e43664371b685d8a0812666912038d28cb4fe36604958b854f"
+        },
+        {
+          "word": "股票",
+          "token_id": 13676,
+          "valence_mean": -0.09,
+          "valence_sd": 0.87,
+          "rating_count": 22,
+          "row_sha256": "7dda71d07a59b8dbb4970529a58012c10343099711c33201af99b15af18de8a7"
+        },
+        {
+          "word": "各地",
+          "token_id": 18451,
+          "valence_mean": 0.09,
+          "valence_sd": 0.42,
+          "rating_count": 23,
+          "row_sha256": "6eaab54e323714328bb3471ffc0b0810aa341f614348cfb19f1a10481df4f913"
+        },
+        {
+          "word": "流水",
+          "token_id": 34408,
+          "valence_mean": 0.19,
+          "valence_sd": 0.49,
+          "rating_count": 26,
+          "row_sha256": "2293e01ab52c864f54b233521a885e1ec410b9ce962acc06c59120cba4c022da"
+        },
+        {
+          "word": "广告",
+          "token_id": 12451,
+          "valence_mean": -0.1,
+          "valence_sd": 0.94,
+          "rating_count": 21,
+          "row_sha256": "4066ba9c2f61e5ea8726795a587c28ff492a1efe83a61ad27693c2621263121f"
+        },
+        {
+          "word": "政局",
+          "token_id": 115047,
+          "valence_mean": 0.32,
+          "valence_sd": 0.99,
+          "rating_count": 25,
+          "row_sha256": "63a24d921c502a2484c8f7d19a2dc6cf1722390480f471b7f28db8fa377405e3"
+        },
+        {
+          "word": "仲裁",
+          "token_id": 26531,
+          "valence_mean": -0.13,
+          "valence_sd": 1.45,
+          "rating_count": 24,
+          "row_sha256": "47e2da2fa3c8d2bb17d1f3948fb2da1d2ea956ca3b275af9f2e78ed58fc8c185"
+        },
+        {
+          "word": "评论",
+          "token_id": 14987,
+          "valence_mean": 0.08,
+          "valence_sd": 0.57,
+          "rating_count": 25,
+          "row_sha256": "353a361371f440d3d32c452399b77eb41f7606cebdf6dfa6d9139957a304df01"
+        },
+        {
+          "word": "还原",
+          "token_id": 32131,
+          "valence_mean": 0.31,
+          "valence_sd": 0.88,
+          "rating_count": 26,
+          "row_sha256": "94c9795b141242c84bf72184ebb10885e6b8c81d2b2bf1ba76a09533dd677f49"
+        },
+        {
+          "word": "管理处",
+          "token_id": 115976,
+          "valence_mean": 0.16,
+          "valence_sd": 0.62,
+          "rating_count": 25,
+          "row_sha256": "a9a5eecb6e496d48fad8b7f4840d51dd41243a9cc3f3642c211cc5551ce69cf7"
+        },
+        {
+          "word": "但愿",
+          "token_id": 93767,
+          "valence_mean": 0.32,
+          "valence_sd": 1.11,
+          "rating_count": 25,
+          "row_sha256": "a214429a9b30e4a1dcf183047b0be9bf30573cbb2cf7895501b1332a9a6f1114"
+        },
+        {
+          "word": "出兵",
+          "token_id": 100797,
+          "valence_mean": 0.04,
+          "valence_sd": 1.37,
+          "rating_count": 24,
+          "row_sha256": "31f24442bcb266f51ac2488aa1fce65bd2b9521856bf22c2374b5843461220e9"
+        },
+        {
+          "word": "篮子",
+          "token_id": 112369,
+          "valence_mean": 0.13,
+          "valence_sd": 0.54,
+          "rating_count": 24,
+          "row_sha256": "42594e03da1cd83e39ff40c49f425dfe2ba28bc0be7a7d0cbe28859e5419863a"
+        },
+        {
+          "word": "终点",
+          "token_id": 47342,
+          "valence_mean": 0.27,
+          "valence_sd": 1.08,
+          "rating_count": 26,
+          "row_sha256": "2bc00d87c12dadd2375ef6048949e009c6edc637f2423915aa5fe6cac73ec1d0"
+        },
+        {
+          "word": "再见",
+          "token_id": 50732,
+          "valence_mean": -0.3,
+          "valence_sd": 0.91,
+          "rating_count": 27,
+          "row_sha256": "12e8b90702752c02974eb028171ee5e08a6523e5f20ffec3b7910e592d437bd5"
+        },
+        {
+          "word": "改动",
+          "token_id": 87949,
+          "valence_mean": -0.08,
+          "valence_sd": 0.48,
+          "rating_count": 26,
+          "row_sha256": "2918cc54f5bad6029a35a29604ff0a8f0d76553cf3e67557b5b69169512cbcbf"
+        },
+        {
+          "word": "石头",
+          "token_id": 27995,
+          "valence_mean": 0.29,
+          "valence_sd": 0.46,
+          "rating_count": 28,
+          "row_sha256": "d36f49914a3eabf37b6d618d0c1ffccd81b93fb64c9d456bbd051644286c55ce"
+        },
+        {
+          "word": "角色",
+          "token_id": 14928,
+          "valence_mean": 0.09,
+          "valence_sd": 0.47,
+          "rating_count": 32,
+          "row_sha256": "26cc0d00c196bc42309b6c8a61b276e892ee1308721462fd1e6f83f893e7c81b"
+        },
+        {
+          "word": "电阻",
+          "token_id": 22154,
+          "valence_mean": -0.04,
+          "valence_sd": 0.71,
+          "rating_count": 23,
+          "row_sha256": "4d44546f76508a2421a60db2b7360a75ad87adb052006e625047a5d02ae08f0e"
+        },
+        {
+          "word": "厨房",
+          "token_id": 27192,
+          "valence_mean": 0.25,
+          "valence_sd": 0.44,
+          "rating_count": 24,
+          "row_sha256": "4d6821359547878214652500f611a31d49284b9c1417e180ef442fa1de791962"
+        },
+        {
+          "word": "三国",
+          "token_id": 42442,
+          "valence_mean": 0.24,
+          "valence_sd": 0.44,
+          "rating_count": 25,
+          "row_sha256": "dd979c52f5c9e25f715883f27a51676c03f870ee290b71e05063f5abb6ee195d"
+        },
+        {
+          "word": "碱性",
+          "token_id": 65194,
+          "valence_mean": -0.06,
+          "valence_sd": 0.36,
+          "rating_count": 31,
+          "row_sha256": "17e1bf5db56f82eac5480c1b9326048a5bf02573d7f860a9183b1695d2b91b64"
+        },
+        {
+          "word": "使用",
+          "token_id": 2541,
+          "valence_mean": 0.37,
+          "valence_sd": 0.79,
+          "rating_count": 27,
+          "row_sha256": "7df91a77483e0a1b435240ac0141af19a898809610ced500eb1838e45a5bb23a"
+        },
+        {
+          "word": "光盘",
+          "token_id": 65146,
+          "valence_mean": -0.17,
+          "valence_sd": 0.78,
+          "rating_count": 23,
+          "row_sha256": "c4becad7e9e3e56b88cb45a4c720885d9aa1669aa5c6b800b3f14bab52366082"
+        },
+        {
+          "word": "小说",
+          "token_id": 12630,
+          "valence_mean": 0.2,
+          "valence_sd": 0.58,
+          "rating_count": 25,
+          "row_sha256": "460c6a81e932e687bdc41f2ffd63845043d2448602baba1fa00a392796fe7ddb"
+        },
+        {
+          "word": "任意",
+          "token_id": 24970,
+          "valence_mean": -0.11,
+          "valence_sd": 0.57,
+          "rating_count": 28,
+          "row_sha256": "1b902cf4f328c98b8f551cfd2962effd5ea9042b96155c82c3b44318bc16fa59"
+        },
+        {
+          "word": "设备",
+          "token_id": 6034,
+          "valence_mean": 0.15,
+          "valence_sd": 0.36,
+          "rating_count": 27,
+          "row_sha256": "37148b58b82afd4a124b5f724e1ebea615f2e397faef4474387cf5bfd549e93a"
+        },
+        {
+          "word": "胜负",
+          "token_id": 90821,
+          "valence_mean": 0.17,
+          "valence_sd": 0.7,
+          "rating_count": 24,
+          "row_sha256": "5436420f9b165f9ee9d5db9acfd8d3e46170312177ad5291a6ef6922765f50db"
+        },
+        {
+          "word": "半夜",
+          "token_id": 46175,
+          "valence_mean": -0.35,
+          "valence_sd": 0.49,
+          "rating_count": 23,
+          "row_sha256": "b802a47e954a58643673f6af5308383701fb665fae7d67057e8fb88c675474f6"
+        },
+        {
+          "word": "分子",
+          "token_id": 11912,
+          "valence_mean": 0.21,
+          "valence_sd": 0.59,
+          "rating_count": 24,
+          "row_sha256": "1bd7d20ad5044af5468e9c7efa223d0cd39e21ddf7057ac9fef9b1c211a48d0a"
+        },
+        {
+          "word": "处境",
+          "token_id": 65792,
+          "valence_mean": 0.19,
+          "valence_sd": 0.87,
+          "rating_count": 21,
+          "row_sha256": "3263fc0542633ef98d64e4591e4c84c116fa97910af77cde2f462ea618c223c6"
+        },
+        {
+          "word": "圈子",
+          "token_id": 66266,
+          "valence_mean": 0.04,
+          "valence_sd": 0.45,
+          "rating_count": 26,
+          "row_sha256": "100478a0ca8909c06090dbc2be93451942801eac88aa74b4f7ec404541fb4834"
+        },
+        {
+          "word": "声明",
+          "token_id": 24320,
+          "valence_mean": 0.35,
+          "valence_sd": 0.8,
+          "rating_count": 26,
+          "row_sha256": "5299665dd811606502f1c14ff79612da46e87ccaa114ac64b217e5aba176e697"
+        },
+        {
+          "word": "直升机",
+          "token_id": 89769,
+          "valence_mean": 0.2,
+          "valence_sd": 0.5,
+          "rating_count": 25,
+          "row_sha256": "d433ac1d26b7a201266b5038964326835955574b84dccc38acc7a0b365d95a2d"
+        },
+        {
+          "word": "全日制",
+          "token_id": 77902,
+          "valence_mean": 0.29,
+          "valence_sd": 0.69,
+          "rating_count": 24,
+          "row_sha256": "64b92f3bc453c7a89be6ee78274eedaea411ed861a02aab22c7f0c537af82598"
+        },
+        {
+          "word": "教主",
+          "token_id": 97741,
+          "valence_mean": -0.28,
+          "valence_sd": 1.0,
+          "rating_count": 29,
+          "row_sha256": "1ba1a0a02ec997eb0a9f4e2f4c72cf6d8832e98176fecea93a39cc77d4aae906"
+        },
+        {
+          "word": "指甲",
+          "token_id": 59354,
+          "valence_mean": -0.12,
+          "valence_sd": 0.73,
+          "rating_count": 25,
+          "row_sha256": "57e098d028c67a407e036b48a698edca4695ee3d1fca23e51487f61d750d4ba3"
+        },
+        {
+          "word": "住宿",
+          "token_id": 42974,
+          "valence_mean": 0.27,
+          "valence_sd": 0.53,
+          "rating_count": 26,
+          "row_sha256": "84674751bacbff5bde5d60b48ddf343002a9cff27fcd42132de0e180bf169c72"
+        }
+      ],
+      "positive": [
+        {
+          "word": "欣慰",
+          "token_id": 63317,
+          "valence_mean": 1.59,
+          "valence_sd": 0.8,
+          "rating_count": 22,
+          "row_sha256": "6ecfed3ea07c6844e4d3977a0f25a9586f5cb76e5d50473b03f41c3aeeda2789"
+        },
+        {
+          "word": "负责",
+          "token_id": 6668,
+          "valence_mean": 1.64,
+          "valence_sd": 1.03,
+          "rating_count": 28,
+          "row_sha256": "f8db8f2d905fa1669cecfaf17fa2cfc7c31e1bb8e4820141a815a29c8cf8bf64"
+        },
+        {
+          "word": "挽救",
+          "token_id": 87992,
+          "valence_mean": 1.8,
+          "valence_sd": 0.91,
+          "rating_count": 25,
+          "row_sha256": "e2588e363fff94ec872c9d40bb8e4f98c55063c11cb8f118fad285a0a77c5e68"
+        },
+        {
+          "word": "克服",
+          "token_id": 25990,
+          "valence_mean": 1.75,
+          "valence_sd": 0.94,
+          "rating_count": 24,
+          "row_sha256": "54566af4ad1d4fc8e9bafd2e0c770d24f5c623dce8f96716b3e0c5cd1d26bdd9"
+        },
+        {
+          "word": "风趣",
+          "token_id": 121807,
+          "valence_mean": 1.69,
+          "valence_sd": 0.62,
+          "rating_count": 26,
+          "row_sha256": "09787a5f197de22d0a5dcd5ed860a4351e03d8913dfe2f83871bc397e8d6a43f"
+        },
+        {
+          "word": "荣耀",
+          "token_id": 47634,
+          "valence_mean": 2.0,
+          "valence_sd": 0.94,
+          "rating_count": 26,
+          "row_sha256": "90c5a621cd66ea901ea45ff2d57427feb188f6452fe10024ba3af4901dc9c921"
+        },
+        {
+          "word": "修养",
+          "token_id": 41787,
+          "valence_mean": 1.83,
+          "valence_sd": 0.82,
+          "rating_count": 24,
+          "row_sha256": "a0f7f830eba3c540a4833cc8681b250f22527be35ad71f5310ece299b71f695d"
+        },
+        {
+          "word": "团结",
+          "token_id": 19406,
+          "valence_mean": 2.23,
+          "valence_sd": 0.76,
+          "rating_count": 26,
+          "row_sha256": "06830d2f99579b30b75224d87e70730d21ef3414f3b5542c989dccb2bdce91b7"
+        },
+        {
+          "word": "造福",
+          "token_id": 97380,
+          "valence_mean": 1.96,
+          "valence_sd": 0.66,
+          "rating_count": 26,
+          "row_sha256": "8f0e5b2df0c04b812a064585ceb0cc6ce68894ccea3279f92f433e795e59bacf"
+        },
+        {
+          "word": "晋升",
+          "token_id": 58830,
+          "valence_mean": 2.0,
+          "valence_sd": 0.71,
+          "rating_count": 25,
+          "row_sha256": "8c96937a6c63cb512bb923a91ac9c6ad62338deebad30185ef88f741747a3eac"
+        },
+        {
+          "word": "团圆",
+          "token_id": 89400,
+          "valence_mean": 2.04,
+          "valence_sd": 0.91,
+          "rating_count": 24,
+          "row_sha256": "a623d2bfb3e17d78e2876716e62a2d5d2a429c8b6b91b7f2486bccb4452d843d"
+        },
+        {
+          "word": "祥和",
+          "token_id": 111168,
+          "valence_mean": 1.84,
+          "valence_sd": 0.63,
+          "rating_count": 32,
+          "row_sha256": "294fba7ea3e45d4d6891a0b911b2b54c3d3ebfadca0297b98d1a4ab9cbf5d55f"
+        },
+        {
+          "word": "坚定",
+          "token_id": 21260,
+          "valence_mean": 2.11,
+          "valence_sd": 0.75,
+          "rating_count": 27,
+          "row_sha256": "6f50d0e6bbff637a7894d5fa2df0b9d0f141b3622754a7116e263de1ee075853"
+        },
+        {
+          "word": "遵守",
+          "token_id": 22459,
+          "valence_mean": 1.81,
+          "valence_sd": 0.8,
+          "rating_count": 26,
+          "row_sha256": "18685f4a087cf6e8375b0d133dea2a638b676f14cc0d7a86d719792193891f5b"
+        },
+        {
+          "word": "文明",
+          "token_id": 9313,
+          "valence_mean": 1.65,
+          "valence_sd": 1.02,
+          "rating_count": 26,
+          "row_sha256": "d89b112d42e37008178bf32e1e0751a96571a1689c9d7529fa663d58d6d2f4d6"
+        },
+        {
+          "word": "传授",
+          "token_id": 57386,
+          "valence_mean": 1.61,
+          "valence_sd": 1.03,
+          "rating_count": 23,
+          "row_sha256": "5202630576d8331bdbaedeced2db10d822367d19dfbfbdcd87eed8f6a9410412"
+        },
+        {
+          "word": "觉悟",
+          "token_id": 73980,
+          "valence_mean": 1.74,
+          "valence_sd": 0.75,
+          "rating_count": 23,
+          "row_sha256": "b52734d5ee0879131bed81e40c4f0d1dcb36fcbe6b890d945325fb061a798c66"
+        },
+        {
+          "word": "安全",
+          "token_id": 3258,
+          "valence_mean": 2.0,
+          "valence_sd": 0.94,
+          "rating_count": 26,
+          "row_sha256": "fe378a7bc8b3073b5569eed0ff33df704e2604889387b9f10b9001a64f5b28b1"
+        },
+        {
+          "word": "赞叹",
+          "token_id": 79685,
+          "valence_mean": 1.79,
+          "valence_sd": 0.63,
+          "rating_count": 28,
+          "row_sha256": "dad38b9abb806769a167b3d95df3a8150255948366c5233d82d94ce8f48fd532"
+        },
+        {
+          "word": "荣誉",
+          "token_id": 27542,
+          "valence_mean": 2.31,
+          "valence_sd": 0.74,
+          "rating_count": 32,
+          "row_sha256": "2b8cceeba5bb16f03b0f641f0483c11b002123a76c6863eb7af8865f4b2b9231"
+        },
+        {
+          "word": "节约",
+          "token_id": 29268,
+          "valence_mean": 1.68,
+          "valence_sd": 0.85,
+          "rating_count": 25,
+          "row_sha256": "f07fbd7d0c4fa42b97d7d9b0d1bc443d4ec9b6507113d269abf0b8b9d5e102a0"
+        },
+        {
+          "word": "优化",
+          "token_id": 13208,
+          "valence_mean": 1.5,
+          "valence_sd": 0.78,
+          "rating_count": 24,
+          "row_sha256": "91d021c62b72d0e622f21fdf7a65b3f46e444ff55305aa1b7f8519dc75a4e6d3"
+        },
+        {
+          "word": "微笑",
+          "token_id": 23091,
+          "valence_mean": 1.68,
+          "valence_sd": 0.9,
+          "rating_count": 25,
+          "row_sha256": "87fc89fefe7caf26e0ddca120eb84e173bd28d7f05cdeeb8d1107367694835fa"
+        },
+        {
+          "word": "捐助",
+          "token_id": 122438,
+          "valence_mean": 2.09,
+          "valence_sd": 0.75,
+          "rating_count": 34,
+          "row_sha256": "e2b10b628fce03cdb8b1a5d43d2fdd7f20213ee006d85c6b1ca0040ca40cc1cc"
+        },
+        {
+          "word": "掌声",
+          "token_id": 55254,
+          "valence_mean": 1.65,
+          "valence_sd": 1.02,
+          "rating_count": 26,
+          "row_sha256": "f5b8e21adffb9e340d5511465792eb234bdc071ef4555f5fa3d7e3eb59471536"
+        },
+        {
+          "word": "善良",
+          "token_id": 34041,
+          "valence_mean": 2.23,
+          "valence_sd": 0.71,
+          "rating_count": 26,
+          "row_sha256": "ee4cb4b6acc774bb6d0307c8594169fbc53f82c808997d4ee9530505cfbf635b"
+        },
+        {
+          "word": "中国",
+          "token_id": 2069,
+          "valence_mean": 1.58,
+          "valence_sd": 1.32,
+          "rating_count": 24,
+          "row_sha256": "2a241ba5e777dae62615c4cb998685c65c4b793ee7fd3c10742a3b1d2baf1682"
+        },
+        {
+          "word": "支援",
+          "token_id": 31091,
+          "valence_mean": 1.63,
+          "valence_sd": 0.97,
+          "rating_count": 24,
+          "row_sha256": "3abfe1b9ab6ee4b51a55610340d015bb99e19def6338c3d33d50aff12d311785"
+        },
+        {
+          "word": "发达",
+          "token_id": 21163,
+          "valence_mean": 1.61,
+          "valence_sd": 0.72,
+          "rating_count": 23,
+          "row_sha256": "1bf4b7ab7d22c53d0eee1b492e157b709f8d49956249ced3beac52a354b8acd8"
+        },
+        {
+          "word": "救援",
+          "token_id": 29935,
+          "valence_mean": 1.85,
+          "valence_sd": 0.86,
+          "rating_count": 27,
+          "row_sha256": "5fad181d822e871890bce98f40fe1d8ce89175e883f2a77159aaec011916e6cd"
+        },
+        {
+          "word": "正宗",
+          "token_id": 120845,
+          "valence_mean": 1.5,
+          "valence_sd": 0.76,
+          "rating_count": 26,
+          "row_sha256": "4d66d36645e92aa0926be5bbdd026c1a7a8b76a5db04f7f4490044409eb1126e"
+        },
+        {
+          "word": "衷心",
+          "token_id": 109130,
+          "valence_mean": 1.81,
+          "valence_sd": 0.8,
+          "rating_count": 26,
+          "row_sha256": "979e61d479da4c73311ac585435238dba354c0463ed3ab645b529017edb4e5ca"
+        },
+        {
+          "word": "整齐",
+          "token_id": 38625,
+          "valence_mean": 1.65,
+          "valence_sd": 0.85,
+          "rating_count": 26,
+          "row_sha256": "28f2b41e13669684c1fb354e67835cb9343bb31a258340010248618cbc265c47"
+        },
+        {
+          "word": "拼搏",
+          "token_id": 47863,
+          "valence_mean": 1.94,
+          "valence_sd": 0.62,
+          "rating_count": 32,
+          "row_sha256": "753d494bd46f6ecf75e735716b4b7614b7fc1965a8a827ec94a0f797f232f3bd"
+        },
+        {
+          "word": "高级",
+          "token_id": 16566,
+          "valence_mean": 1.58,
+          "valence_sd": 0.9,
+          "rating_count": 26,
+          "row_sha256": "e1c1168b079df04ace9993e84e1eca80aebc866e62af994008ad8397fcbf2bff"
+        },
+        {
+          "word": "融洽",
+          "token_id": 86810,
+          "valence_mean": 1.75,
+          "valence_sd": 0.61,
+          "rating_count": 24,
+          "row_sha256": "dbf5e5215ad95dcd672f31126cd34c0e40dfc4348213582782b46f3007dd4263"
+        },
+        {
+          "word": "才能",
+          "token_id": 6206,
+          "valence_mean": 1.77,
+          "valence_sd": 0.87,
+          "rating_count": 22,
+          "row_sha256": "9affdbbc246cbc8f343cb69d060dc3dcafea6116d81862115021f021da5a5d45"
+        },
+        {
+          "word": "温馨",
+          "token_id": 36633,
+          "valence_mean": 1.94,
+          "valence_sd": 0.69,
+          "rating_count": 34,
+          "row_sha256": "a0bfaf74d5de93c39f77b88bdc5d83b1ed49e48f8b2426bdfdc0919e426a8528"
+        },
+        {
+          "word": "义工",
+          "token_id": 107114,
+          "valence_mean": 1.52,
+          "valence_sd": 0.77,
+          "rating_count": 25,
+          "row_sha256": "edf802f1329d519e607f65b8593ffb7065e35df04d888e401e5d060e1102639b"
+        },
+        {
+          "word": "舒畅",
+          "token_id": 104831,
+          "valence_mean": 1.88,
+          "valence_sd": 0.86,
+          "rating_count": 26,
+          "row_sha256": "acd27c22463c5ea6128a7fff15185e2c83c758e9589e5eda1cf92011b446cd61"
+        },
+        {
+          "word": "宏伟",
+          "token_id": 78165,
+          "valence_mean": 2.12,
+          "valence_sd": 0.83,
+          "rating_count": 25,
+          "row_sha256": "297f924acac2851a873933547a54bf063a42975ecde0e709fbab6faf9ef2496c"
+        },
+        {
+          "word": "帮忙",
+          "token_id": 26891,
+          "valence_mean": 1.68,
+          "valence_sd": 0.75,
+          "rating_count": 25,
+          "row_sha256": "8192f5f5b2ca3d3948147fa33677c5e2eb46ffa5b83721d8b1ffe77592516b47"
+        },
+        {
+          "word": "开心",
+          "token_id": 17995,
+          "valence_mean": 2.32,
+          "valence_sd": 0.61,
+          "rating_count": 28,
+          "row_sha256": "0567b9e3ffa4d8d40e2984cb6ef663289176136f03596628c8e03436048ce913"
+        },
+        {
+          "word": "崇拜",
+          "token_id": 46243,
+          "valence_mean": 1.92,
+          "valence_sd": 1.0,
+          "rating_count": 25,
+          "row_sha256": "41ba30c2d2f6f6ac4fb55e5f751cdc6f6f9ec1266557929aed5c731cda8174e7"
+        },
+        {
+          "word": "胜利",
+          "token_id": 17414,
+          "valence_mean": 2.18,
+          "valence_sd": 1.01,
+          "rating_count": 22,
+          "row_sha256": "89acd131889811888f8c6c21631977922819404309619a3ca04ec3629e4c22c5"
+        },
+        {
+          "word": "求婚",
+          "token_id": 105858,
+          "valence_mean": 1.52,
+          "valence_sd": 1.0,
+          "rating_count": 25,
+          "row_sha256": "d8716f2aeb660441f995375c3cda84c3361d1cc4193f2be360aa83aac3723145"
+        },
+        {
+          "word": "称赞",
+          "token_id": 55435,
+          "valence_mean": 2.19,
+          "valence_sd": 0.56,
+          "rating_count": 27,
+          "row_sha256": "90ee8cdf570a85bea43dbba4fd53a21b3daddfcd761bd7d5dd33d6e2b2a4e460"
+        },
+        {
+          "word": "理想",
+          "token_id": 12532,
+          "valence_mean": 1.96,
+          "valence_sd": 0.79,
+          "rating_count": 25,
+          "row_sha256": "bc0afb987c5213b9f4cc871b71cdbcfe623e177ab96625dce374c917a6a5cb0e"
+        },
+        {
+          "word": "果断",
+          "token_id": 54311,
+          "valence_mean": 1.63,
+          "valence_sd": 0.82,
+          "rating_count": 24,
+          "row_sha256": "7a32ae29fd7903eff17a815e162e0b1ca1f47aa81e8465c08722810fe090c249"
+        },
+        {
+          "word": "守护",
+          "token_id": 32993,
+          "valence_mean": 1.82,
+          "valence_sd": 0.66,
+          "rating_count": 22,
+          "row_sha256": "51312b00c1cf72d8a3f26ceef28e103d433a7b5bcc14df1af9b76a0f9df99ac4"
+        },
+        {
+          "word": "录取",
+          "token_id": 28912,
+          "valence_mean": 1.56,
+          "valence_sd": 0.87,
+          "rating_count": 25,
+          "row_sha256": "927b61fd72110fed68575275056f23049fe2f74be3bdf768ab08f6bdbe7db7b4"
+        },
+        {
+          "word": "忠心",
+          "token_id": 106369,
+          "valence_mean": 2.08,
+          "valence_sd": 1.2,
+          "rating_count": 26,
+          "row_sha256": "330fbea644b3f8fd3861e643c512efda244ff6c589bdc0bb6068ad8959cbb7cb"
+        },
+        {
+          "word": "冠军",
+          "token_id": 25476,
+          "valence_mean": 2.23,
+          "valence_sd": 0.82,
+          "rating_count": 26,
+          "row_sha256": "a07a35f95588705f738ba7e334567b4f9c3aad678e2c5c6f468dd2dd9d00dfc8"
+        },
+        {
+          "word": "无私",
+          "token_id": 53851,
+          "valence_mean": 2.18,
+          "valence_sd": 0.77,
+          "rating_count": 28,
+          "row_sha256": "c0d35dc935e2e38cf8c1cfce398232fef9f8b45116543cc3f8acd19985b52c4f"
+        },
+        {
+          "word": "舒适",
+          "token_id": 24959,
+          "valence_mean": 1.75,
+          "valence_sd": 0.79,
+          "rating_count": 24,
+          "row_sha256": "2a2b97825ffa9f2ba3114b159663972695797a4ea78032e4639e16d9ae91e69d"
+        },
+        {
+          "word": "报答",
+          "token_id": 113090,
+          "valence_mean": 1.88,
+          "valence_sd": 0.87,
+          "rating_count": 32,
+          "row_sha256": "f74c314202f8a92a74e4b33c422432efcd5c655b83e778124192f802bc16bc5b"
+        },
+        {
+          "word": "优秀",
+          "token_id": 9798,
+          "valence_mean": 2.32,
+          "valence_sd": 0.75,
+          "rating_count": 25,
+          "row_sha256": "a6b19803f70080fd3df12d765605a32320f27ef01b69be6d6d7b93612dc91cfc"
+        },
+        {
+          "word": "功德",
+          "token_id": 71151,
+          "valence_mean": 1.94,
+          "valence_sd": 0.84,
+          "rating_count": 32,
+          "row_sha256": "16caebfc75427ccbfb9d1cb05c539e3a06aca8537da671a76fcb5691c0fd0661"
+        },
+        {
+          "word": "婚礼",
+          "token_id": 39643,
+          "valence_mean": 1.85,
+          "valence_sd": 1.01,
+          "rating_count": 26,
+          "row_sha256": "47cc093b1b4290134b8cda36ce6e9b1a83b1e4836ba104b28abcf18a6cacb596"
+        },
+        {
+          "word": "春天",
+          "token_id": 29318,
+          "valence_mean": 1.57,
+          "valence_sd": 0.84,
+          "rating_count": 23,
+          "row_sha256": "591f9fbdda3edac6fb5ce51e08b432e04659451823fc4de12cae36c0facb3645"
+        },
+        {
+          "word": "可喜",
+          "token_id": 124003,
+          "valence_mean": 1.77,
+          "valence_sd": 0.82,
+          "rating_count": 26,
+          "row_sha256": "0349bbe8848b6e0e5d5e5a2d81106aa0f0f8e12b114d74628353effcfef82acf"
+        },
+        {
+          "word": "高手",
+          "token_id": 33502,
+          "valence_mean": 1.68,
+          "valence_sd": 0.77,
+          "rating_count": 28,
+          "row_sha256": "9ab58a1f39b5635a3e62345cf423a1e154a0e515f7a9012b913569cb22bd1f0e"
+        },
+        {
+          "word": "励志",
+          "token_id": 73767,
+          "valence_mean": 2.24,
+          "valence_sd": 0.6,
+          "rating_count": 25,
+          "row_sha256": "1b1d2d90938d031f0e5b140f391d7ac9bc4152d2248964ff0341aaf769bde8ae"
+        },
+        {
+          "word": "尽责",
+          "token_id": 70873,
+          "valence_mean": 2.08,
+          "valence_sd": 0.76,
+          "rating_count": 25,
+          "row_sha256": "1a704818d9c13803790aef670db6f15944bae844b3ca9ea17bcf8e093e5ce076"
+        }
+      ]
+    },
+    "selection_frozen_at_utc": "2026-10-29T01:29:40.624325+00:00",
+    "selection_frozen_before_tensor_access_sha256": "6422ccc3a61189ba291158f28cf96765f20e38eb73a6a3b464383aa20d5ab29b",
+    "results": {
+      "positive_negative": {
+        "cosine": {
+          "count": 4096,
+          "mean": 0.08593238575465688,
+          "quantiles_linear_interpolation": {
+            "0": -0.03442321811953884,
+            "0.05": 0.022641795029236467,
+            "0.25": 0.055354658878053034,
+            "0.5": 0.0819731819429759,
+            "0.75": 0.11140980769248884,
+            "0.95": 0.16180921207245674,
+            "1": 0.4706731786247397
+          }
+        },
+        "equal_unit_l1_sum": {
+          "count": 4096,
+          "mean": 1.4724932821501897,
+          "quantiles_linear_interpolation": {
+            "0": 1.3896045752259312,
+            "0.05": 1.4286175556303822,
+            "0.25": 1.451867478125963,
+            "0.5": 1.4704065659785255,
+            "0.75": 1.4900056349162725,
+            "0.95": 1.5246156436169898,
+            "1": 1.7234736980250813
+          }
+        },
+        "opposing_positive_l1_mass": {
+          "count": 4096,
+          "mean": 0.4568118613050716,
+          "quantiles_linear_interpolation": {
+            "0": 0.2652337026897309,
+            "0.05": 0.41843358699626326,
+            "0.25": 0.4440457532036529,
+            "0.5": 0.45862314228717216,
+            "0.75": 0.47183375923601656,
+            "0.95": 0.4891549988116105,
+            "1": 0.521138701226583
+          }
+        },
+        "right_derivative": {
+          "count": 4096,
+          "mean": 0.08637627738985679,
+          "quantiles_linear_interpolation": {
+            "0": -0.04227740245316591,
+            "0.05": 0.02169000237677898,
+            "0.25": 0.056332481527966945,
+            "0.5": 0.08275371542565564,
+            "0.75": 0.11190849359269418,
+            "0.95": 0.16313282600747345,
+            "1": 0.4695325946205382
+          }
+        },
+        "raw_sum_over_negative_l1": {
+          "count": 4096,
+          "mean": 1.4476624003535867,
+          "quantiles_linear_interpolation": {
+            "0": 1.1159849808985938,
+            "0.05": 1.2492713133128195,
+            "0.25": 1.356123929637122,
+            "0.5": 1.443983776893091,
+            "0.75": 1.5240183584010034,
+            "0.95": 1.6862218127854072,
+            "1": 1.9961047782705494
+          }
+        },
+        "positive_cosine_count": 4058,
+        "nonnegative_right_derivative_count": 4049,
+        "unit_l1_sum_below_prior_count": 0,
+        "smallest_cosine_example": {
+          "first": "中国",
+          "second": "枯萎",
+          "cosine": -0.03442321811953884,
+          "equal_unit_l1_sum": 1.395838693839072,
+          "opposing_positive_l1_mass": 0.5144012679806471,
+          "right_derivative": -0.02880253596129424,
+          "raw_sum_over_negative_l1": 1.1289921438894333
+        },
+        "smallest_derivative_example": {
+          "first": "中国",
+          "second": "舞弊",
+          "cosine": -0.03071477074646071,
+          "equal_unit_l1_sum": 1.3962101845921147,
+          "opposing_positive_l1_mass": 0.521138701226583,
+          "right_derivative": -0.04227740245316591,
+          "raw_sum_over_negative_l1": 1.1159849808985938
+        }
+      },
+      "positive_neutral": {
+        "cosine": {
+          "count": 4096,
+          "mean": 0.06832745157743762,
+          "quantiles_linear_interpolation": {
+            "0": -0.050116126048049686,
+            "0.05": 0.00946173389397846,
+            "0.25": 0.04065485869466777,
+            "0.5": 0.064425293018579,
+            "0.75": 0.09208320419762835,
+            "0.95": 0.13829363899028005,
+            "1": 0.34675775281223314
+          }
+        },
+        "equal_unit_l1_sum": {
+          "count": 4096,
+          "mean": 1.4606749103354875,
+          "quantiles_linear_interpolation": {
+            "0": 1.3746671782677893,
+            "0.05": 1.4184698152329638,
+            "0.25": 1.441513117375087,
+            "0.5": 1.4584507975499266,
+            "0.75": 1.4773642042727289,
+            "0.95": 1.5092848292798917,
+            "1": 1.6348929005452508
+          }
+        },
+        "positive_cosine_count": 3986
+      },
+      "negative_neutral": {
+        "cosine": {
+          "count": 4096,
+          "mean": 0.07189564055820845,
+          "quantiles_linear_interpolation": {
+            "0": -0.038964139793715304,
+            "0.05": 0.013651358410584095,
+            "0.25": 0.04491935961974175,
+            "0.5": 0.06958891757510853,
+            "0.75": 0.09468627722672908,
+            "0.95": 0.13825430347405157,
+            "1": 0.2942179975209451
+          }
+        },
+        "equal_unit_l1_sum": {
+          "count": 4096,
+          "mean": 1.4633975787119151,
+          "quantiles_linear_interpolation": {
+            "0": 1.379238989126584,
+            "0.05": 1.4221919243800665,
+            "0.25": 1.4451432063535974,
+            "0.5": 1.4621052514601893,
+            "0.75": 1.479592670669828,
+            "0.95": 1.509453665493223,
+            "1": 1.6237585090312763
+          }
+        },
+        "positive_cosine_count": 4033
+      },
+      "positive_positive": {
+        "cosine": {
+          "count": 2016,
+          "mean": 0.1098946396318393,
+          "quantiles_linear_interpolation": {
+            "0": -0.011176450179253276,
+            "0.05": 0.03415824936342907,
+            "0.25": 0.07389068198044987,
+            "0.5": 0.10575777540372229,
+            "0.75": 0.13942972163959658,
+            "0.95": 0.2000281480355977,
+            "1": 0.4567016157213262
+          }
+        },
+        "positive_cosine_count": 2010
+      },
+      "negative_negative": {
+        "cosine": {
+          "count": 2016,
+          "mean": 0.1284445520511897,
+          "quantiles_linear_interpolation": {
+            "0": -0.005354848444799179,
+            "0.05": 0.06034599526241419,
+            "0.25": 0.0921036786449963,
+            "0.5": 0.12107939960490083,
+            "0.75": 0.15544580423186563,
+            "0.95": 0.22515286308741794,
+            "1": 0.44494109930049924
+          }
+        },
+        "positive_cosine_count": 2015
+      },
+      "neutral_neutral": {
+        "cosine": {
+          "count": 2016,
+          "mean": 0.08055158421047054,
+          "quantiles_linear_interpolation": {
+            "0": -0.03978661980014919,
+            "0.05": 0.012667661388780616,
+            "0.25": 0.04658694570125484,
+            "0.5": 0.07366036088241304,
+            "0.75": 0.10733296850546596,
+            "0.95": 0.1688048346850553,
+            "1": 0.40744886920155005
+          }
+        },
+        "positive_cosine_count": 1972
+      }
+    },
+    "units_and_limits": [
+      "Band thresholds are analyst choices, not validated psychometric equivalence to English thresholds or matched cross-language stimuli.",
+      "Pairs share words and are not independent observations. No significance test, confidence interval or population prevalence.",
+      "Human word ratings are not contextual semantic judgments, token-fragment labels or DMN-state valence.",
+      "L1 magnitude is not active-neuron fraction. No neural dynamics, learning or residual-duration inference.",
+      "No centered/rotated/negated embeddings, runtime encoder, valence evaluator or implementation selected."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/chinese_rated_valence_geometry.py",
+      "script_sha256": "7c254d9e77a6f818bec0f9fa39edf799b9164f727db75130a4bb83dee668a66e",
+      "all_pair_metrics_cache": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/chinese-rated-valence-pair-arithmetic.json",
+      "all_pair_metrics_sha256": "7c7e69b29caaed25f50a3900a7f85779222e017f91d9245ff5fb0edd1365e4c3"
+    }
+  },
+  "balanced_drive_frame_scaling": {
+    "recorded_at_utc": "2026-10-29T02:42:04Z",
+    "kind": "Closed-form composition arithmetic; no time-marching neural simulation",
+    "value_lineage": "C26/P60 useful contextual distinctions, C24/P52 temporal semantics, H70/H71/H74 and H77; compare frame/noise units without new runtime state.",
+    "assumptions": [
+      "Two histories begin with different positive-cell compositions and the same positive active total A>0; their negative active populations are zero.",
+      "Each operation adds identical realized positive-cell drive to both histories and equal aggregate drive to the opposing polarity, then applies H77 without another transfer, clipping, recurrence, feedback or rounding.",
+      "Added drive totals Z_delta=kappa*Delta^alpha in each polarity; kappa has activity/time^alpha units. Model horizon T contains an integer T/Delta operations.",
+      "Reference allocation is uniform within each polarity; equal realized drive between histories is what supplies the contraction identity. This deterministic balanced input is not a sampled white-noise model."
+    ],
+    "derivation": {
+      "one_operation": "A remains the signed total; q_next=(A*q+z)/(A+Z_delta). Two histories therefore differ by A/(A+Z_delta) times their preceding composition difference.",
+      "horizon_retention": "R_Delta=[1+kappa*Delta^alpha/A]^(-T/Delta)",
+      "log_asymptotic": "log(R_Delta)=-(T*kappa/A)*Delta^(alpha-1)*(1+O(Delta^alpha)) for alpha>0 as Delta tends to zero through frame divisions of T.",
+      "limits": {
+        "0<alpha<1": "R_Delta tends to0",
+        "alpha=1": "R_Delta tends to exp(-T*kappa/A)",
+        "alpha>1": "R_Delta tends to1"
+      }
+    },
+    "reference_units": "A=1 activity unit, T=1 model-time unit, and kappa=1 in the appropriate activity/time^alpha units; alpha1 and1/2 match at the one-unit reference interval. These are alternative drive calibrations, not the same fully specified physical noise law.",
+    "cases": [
+      {
+        "frame_interval_model_units": "1/4",
+        "frames_in_one_model_unit": 4,
+        "linear_total_drive_per_polarity": "1/4",
+        "linear_retention_exact_expression": "(4/5)^4",
+        "linear_retention_decimal50": "0.4096",
+        "sqrt_total_drive_per_polarity": "1/2",
+        "sqrt_retention_exact_expression": "(2/3)^4",
+        "sqrt_retention_decimal50": "0.19753086419753086419753086419753086419753086419753"
+      },
+      {
+        "frame_interval_model_units": "1/16",
+        "frames_in_one_model_unit": 16,
+        "linear_total_drive_per_polarity": "1/16",
+        "linear_retention_exact_expression": "(16/17)^16",
+        "linear_retention_decimal50": "0.37908533191793612549147009809731418456393744259393",
+        "sqrt_total_drive_per_polarity": "1/4",
+        "sqrt_retention_exact_expression": "(4/5)^16",
+        "sqrt_retention_decimal50": "0.0281474976710656"
+      },
+      {
+        "frame_interval_model_units": "1/64",
+        "frames_in_one_model_unit": 64,
+        "linear_total_drive_per_polarity": "1/64",
+        "linear_retention_exact_expression": "(64/65)^64",
+        "linear_retention_decimal50": "0.37073493290097295412063565878389795308720440824280",
+        "sqrt_total_drive_per_polarity": "1/8",
+        "sqrt_retention_exact_expression": "(8/9)^64",
+        "sqrt_retention_decimal50": "0.00053240063325545158813557876117242576272514170388861"
+      },
+      {
+        "frame_interval_model_units": "1/256",
+        "frames_in_one_model_unit": 256,
+        "linear_total_drive_per_polarity": "1/256",
+        "linear_retention_exact_expression": "(256/257)^256",
+        "linear_retention_decimal50": "0.36859678852682846258571739173281921967700468586821",
+        "sqrt_total_drive_per_polarity": "1/16",
+        "sqrt_retention_exact_expression": "(16/17)^256",
+        "sqrt_retention_decimal50": "1.8188282334193067222991056174701692074279654651611E-7"
+      }
+    ],
+    "assessment": "Preserving the signed total does not make contextual retention independent of cadence. Scaling a positive balanced contribution by sqrt(Delta) differs from preserving its per-time mean; this reference does not establish the statistics of independently sampled noise after nonlinear cancellation.",
+    "limits": [
+      "R_Delta is the ratio of two composition differences under the stated operations, not a learned-memory lifetime or a success score.",
+      "Actual noise can have unequal totals, polarity reversals, correlations, recurrent amplification and activity-dependent control. No universal noise/step prescription follows.",
+      "The comparison uses existing rate values and H77; no context array, adaptive noise mechanism, scheduler or additional state is selected."
+    ]
+  }
+}

@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "status": "conditional_mathematical_analysis_not_selected_transition",
+  "recorded_at_utc": "2026-10-28T17:06:15.013894+00:00",
+  "purpose": "Assess what the H-77 cancellation operation allows in the simple H-75 frame architecture before adding inhibitory edge types, state or stability machinery.",
+  "analyses": [
+    {
+      "id": "MR-R001",
+      "topic": "Nonnegative connections can have signed effective coordinate action through intrinsic cancellation",
+      "assumptions": "One illustrative positive/negative aggregate coordinate, post-cancellation only one side active. Nonnegative self-channel weight a and cross-channel weight b; linear incoming sum then C, without noise or saturation.",
+      "formula": "v_next=(a-b)*v for v=p-n.",
+      "cases": [
+        {
+          "a": 0.9,
+          "b": 0.1,
+          "signed_gain": 0.8,
+          "behavior": "Sign-preserving decay"
+        },
+        {
+          "a": 0.1,
+          "b": 0.9,
+          "signed_gain": -0.8,
+          "behavior": "Alternating coordinate sign with decay"
+        },
+        {
+          "a": 1.1,
+          "b": 0.1,
+          "signed_gain": 1.0,
+          "behavior": "Neutral linear magnitude in exact arithmetic"
+        }
+      ],
+      "limit": "Capability example only. No mirrored connection blocks, signed synapses, per-cell positive/negative pairing or selected gain is implied. Coordinate sign is not semantic valence."
+    },
+    {
+      "id": "MR-R002",
+      "topic": "A sufficient absolute contraction condition is different from incoming capacity or activity occupancy",
+      "assumptions": "Illustrative F(r)=C(Phi(W*r+e+eta)), W>=0, same external input/noise when comparing two histories, Phi componentwise nonexpansive in L1. C is H-77 active-rate cancellation.",
+      "bound": "||F(r)-F(s)||_1 <= ||W||_1*||r-s||_1, with ||W||_1=max_j sum_i W_ij (weighted outgoing column sum).",
+      "consequence": "If this bound is strictly below1, differences contract geometrically under matched input/noise. That can bound unwanted amplification but also bounds retention of earlier-state distinctions.",
+      "limit": "Sufficient, not necessary. Failure of the bound is not instability or stale behavior. No column normalization, outgoing index, pruning rule or global spectral computation is proposed. Incoming capacity or row-weight compensation alone does not establish this bound."
+    },
+    {
+      "id": "MR-R003",
+      "topic": "Persistent cell activity, dominant token fade and later history influence remain separate",
+      "assumptions": "Existing shared graph and H-77 cancellation; a context difference may live in same-polarity cell identities with identical aggregate coordinate.",
+      "deduction": "Proportional cancellation preserves the surviving-side identity ratios at that operation, but zeroes opposing active identities. Subsequent recurrent mixing can preserve, attenuate, amplify or overwrite the difference.",
+      "implication": "Observe controlled later responses rather than infer memory from nonzero rates or infer erasure from a faded token envelope. H-78 readiness variants can differ in whether information survives cancellation outside active rate.",
+      "limit": "No independent readiness or memory store selected."
+    },
+    {
+      "id": "MR-R004",
+      "topic": "Reference-stage broadening need not be repaired solely to preserve a sharp chain",
+      "assumptions": "Stages have compatible semantic proportions; the actual shared response meets width/strength, fading and steerability targets.",
+      "deduction": "Several concurrently active stages can still implement the intended semantic response and history influence.",
+      "implication": "A narrower traveling front is not an independent value. Introduce a mechanism to enforce it only if a required response fails because of the spread.",
+      "limit": "Does not permit skipping a required semantic transition or counting harmful early returns as correct repair."
+    },
+    {
+      "id": "MR-R005",
+      "topic": "Intrinsic cancellation does not enforce a signed-only aggregate map",
+      "assumptions": "A reference aggregates each polarity population to p,m>=0. Linear nonnegative connectivity has blocks W=[[A,B],[C,D]], then H-77 cancellation preserves the signed net. This is not an aggregation of the actual contextual-cell graph.",
+      "derivation": [
+        "v_next=(A-C)*p+(B-D)*m.",
+        "For post-cancellation source aggregates p=v_positive,m=v_negative_magnitude: v_next=K_signed*v+K_absolute*abs(v).",
+        "K_signed=(A-C-B+D)/2; K_absolute=(A-C+B-D)/2.",
+        "A signed linear map independent of absolute magnitude would require K_absolute=0, equivalently A+B=C+D. H-77 alone does not impose this condition."
+      ],
+      "limit": "Magnitude-dependent terms are not automatically unwanted; semantic dynamics need not be linear. No balancing, mirrored blocks, negative synapses or neuron-index pairing selected."
+    },
+    {
+      "id": "MR-R006",
+      "topic": "Post-cancellation positive coactivation retains cross-association in a plain learning reference",
+      "assumptions": "One illustrative association from x=(1,1) to y=(1,0), trained by a nonnegative outer product of aggregate phi encodings scaled by norm(x)^2=2. Query v=(1,-1) has zero signed dot with x.",
+      "plain_weight_blocks": [
+        [
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      ],
+      "query_phi": [
+        1.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "net_response_after_cancellation": [
+        0.5,
+        0.0
+      ],
+      "comparison_signed_linear_response": [
+        0.0,
+        0.0
+      ],
+      "opponent_capability_reference": {
+        "blocks": [
+          [
+            0.5,
+            0.5,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.5,
+            0.5
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        "net_response": [
+          0.0,
+          0.0
+        ],
+        "meaning": "A different nonnegative aggregate operator can realize the signed linear map through cancellation, but includes connections absent from this observed coactivation update."
+      },
+      "limit": "Neither operator is an adopted learner. The alternative is a capability example, not a rule to mirror physical cells or impose a linear semantic transition. Contextual cell specificity and actual prediction objectives decide whether cross-response is harmful."
+    },
+    {
+      "id": "MR-R007",
+      "topic": "Exact semantic closure would remove a channel of useful context",
+      "assumptions": "D is a linear semantic readout and W a fixed linear neural transition. Complete semantic closure would mean D*W=K*D for some K.",
+      "deduction": "For any two neural states a,b with D(a-b)=0, that closure gives D*W*(a-b)=0 and, by induction, D*W^n*(a-b)=0. The equal current semantic readouts can never diverge under this fixed linear evolution.",
+      "value_implication": "The application intentionally allows different contextual cell identities with equal current semantic meaning to influence later responses. Removing every dependence on information hidden by the aggregate readout would defeat that route. Aggregate signed linearity is therefore not an automatic cleanup target.",
+      "limit": "Conditional linear closure statement; no context field, nonlinear mechanism or full-network closure constraint selected. Existing nonlinear/input-dependent dynamics require their own analysis."
+    }
+  ],
+  "updated_at_utc": "2026-10-28T19:21:52.828054+00:00"
+}

@@ -1,0 +1,550 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T19:38:16.624595+00:00",
+  "status": "closed-form probability and signal arithmetic; no neural simulation",
+  "value_lineage": "C-26/P-60: useful past input must affect later predictions, not merely persist as activity. C-24/C-28 preserve meaningful fading and numerical comparison. No new mechanism is selected.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/memory_gain_arithmetic.py",
+    "script_sha256": "06bb7d78708adbcf07094ba340df9f9a38722c3a34293f26fcfd8d90005ba173"
+  },
+  "stationary_reference": {
+    "law": "x[t] = a*x[t-1] + b*u[t] + eta[t], |a|<1",
+    "assumptions": "Independent zero-mean input u and other drive eta, both temporally iid with finite variances, fixed coefficients, stationary state; no saturation, cancellation, learned graph or activity-dependent controller.",
+    "derivation": [
+      "Var(x)=(b^2*Var(u)+Var(eta))/(1-a^2)",
+      "Cov(x[t],u[t-k])=b*a^k*Var(u)",
+      "Squared correlation R_k^2 = b^2*Var(u)*(1-a^2)*a^(2k)/(b^2*Var(u)+Var(eta))",
+      "The optimum scalar linear reconstruction has explained-variance fraction R_k^2. Summing k>=0 gives b^2*Var(u)/(b^2*Var(u)+Var(eta)), independent of a.",
+      "For fixed k>0, maximizing (1-a^2)*a^(2k) over 0<=a<1 gives a^2=k/(k+1). This is lag-specific, not a universal optimal gain."
+    ],
+    "rows": [
+      {
+        "a": 0.0,
+        "independent_drive_variance": 0.0,
+        "state_variance": 1.0,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 1.0
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.0
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.0
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 0.0
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 0.0
+          }
+        ],
+        "sum_over_all_lags": 1.0
+      },
+      {
+        "a": 0.0,
+        "independent_drive_variance": 0.1,
+        "state_variance": 1.1,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.9090909090909091
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.0
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.0
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 0.0
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 0.0
+          }
+        ],
+        "sum_over_all_lags": 0.9090909090909091
+      },
+      {
+        "a": 0.0,
+        "independent_drive_variance": 1.0,
+        "state_variance": 2.0,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.5
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.0
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.0
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 0.0
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 0.0
+          }
+        ],
+        "sum_over_all_lags": 0.5
+      },
+      {
+        "a": 0.5,
+        "independent_drive_variance": 0.0,
+        "state_variance": 1.3333333333333333,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.75
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.1875
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 7.152557373046875e-07
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 5.9164567891575885e-31
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 4.667261458395856e-61
+          }
+        ],
+        "sum_over_all_lags": 1.0
+      },
+      {
+        "a": 0.5,
+        "independent_drive_variance": 0.1,
+        "state_variance": 1.4666666666666668,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.6818181818181818
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.17045454545454544
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 6.502324884588068e-07
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 5.378597081052353e-31
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 4.242964962178051e-61
+          }
+        ],
+        "sum_over_all_lags": 0.9090909090909091
+      },
+      {
+        "a": 0.5,
+        "independent_drive_variance": 1.0,
+        "state_variance": 2.6666666666666665,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.375
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.09375
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 3.5762786865234375e-07
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 2.9582283945787943e-31
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 2.333630729197928e-61
+          }
+        ],
+        "sum_over_all_lags": 0.5
+      },
+      {
+        "a": 0.9,
+        "independent_drive_variance": 0.0,
+        "state_variance": 5.263157894736843,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.18999999999999995
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.15389999999999998
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.02309956437220817
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 5.046665788641632e-06
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 1.3404650306445194e-10
+          }
+        ],
+        "sum_over_all_lags": 1.0
+      },
+      {
+        "a": 0.9,
+        "independent_drive_variance": 0.1,
+        "state_variance": 5.789473684210528,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.17272727272727267
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.13990909090909087
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.020999603974734698
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 4.5878779896742105e-06
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 1.2186045733131994e-10
+          }
+        ],
+        "sum_over_all_lags": 0.9090909090909091
+      },
+      {
+        "a": 0.9,
+        "independent_drive_variance": 1.0,
+        "state_variance": 10.526315789473687,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.09499999999999997
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.07694999999999999
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.011549782186104085
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 2.523332894320816e-06
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 6.702325153222597e-11
+          }
+        ],
+        "sum_over_all_lags": 0.5
+      },
+      {
+        "a": 0.98,
+        "independent_drive_variance": 0.0,
+        "state_variance": 25.252525252525203,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.03960000000000008
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.038031840000000074
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.026437275681501785
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 0.005251734413432227
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 0.0006964826855865728
+          }
+        ],
+        "sum_over_all_lags": 1.0
+      },
+      {
+        "a": 0.98,
+        "independent_drive_variance": 0.1,
+        "state_variance": 27.777777777777725,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.03600000000000007
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.03457440000000006
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.02403388698318344
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 0.004774304012211115
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 0.0006331660778059752
+          }
+        ],
+        "sum_over_all_lags": 0.9090909090909091
+      },
+      {
+        "a": 0.98,
+        "independent_drive_variance": 1.0,
+        "state_variance": 50.505050505050406,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.01980000000000004
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.019015920000000037
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.013218637840750893
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 0.0026258672067161135
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 0.0003482413427932864
+          }
+        ],
+        "sum_over_all_lags": 0.5
+      },
+      {
+        "a": 0.995,
+        "independent_drive_variance": 0.0,
+        "state_variance": 100.25062656641649,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.009974999999999956
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.009875499374999956
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.00902348954073927
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 0.006042560103994984
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 0.0036604042717185
+          }
+        ],
+        "sum_over_all_lags": 1.0
+      },
+      {
+        "a": 0.995,
+        "independent_drive_variance": 0.1,
+        "state_variance": 110.27568922305814,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.009068181818181777
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.008977726704545415
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.008203172309762972
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 0.005493236458177259
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 0.003327640247016818
+          }
+        ],
+        "sum_over_all_lags": 0.9090909090909091
+      },
+      {
+        "a": 0.995,
+        "independent_drive_variance": 1.0,
+        "state_variance": 200.50125313283297,
+        "memory": [
+          {
+            "lag": 0,
+            "squared_correlation": 0.004987499999999978
+          },
+          {
+            "lag": 1,
+            "squared_correlation": 0.004937749687499978
+          },
+          {
+            "lag": 10,
+            "squared_correlation": 0.004511744770369635
+          },
+          {
+            "lag": 50,
+            "squared_correlation": 0.003021280051997492
+          },
+          {
+            "lag": 100,
+            "squared_correlation": 0.00183020213585925
+          }
+        ],
+        "sum_over_all_lags": 0.5
+      }
+    ],
+    "noise_free_lag_optima": [
+      {
+        "lag": 1,
+        "maximizing_a": 0.7071067811865476,
+        "maximum_squared_correlation": 0.25
+      },
+      {
+        "lag": 10,
+        "maximizing_a": 0.9534625892455924,
+        "maximum_squared_correlation": 0.03504938994813924
+      },
+      {
+        "lag": 50,
+        "maximizing_a": 0.9901475429766743,
+        "maximum_squared_correlation": 0.007284860433861981
+      },
+      {
+        "lag": 100,
+        "maximizing_a": 0.9950371902099892,
+        "maximum_squared_correlation": 0.0036605070527635534
+      }
+    ],
+    "limit": "Stronger retention redistributes this scalar memory across lags while increasing variance. The result does not bound the nonlinear multi-neuron model or choose its gains, decoder, noise law or frame duration."
+  },
+  "observation_noise": {
+    "law": "Observe x[t]+nu[t], with independent observation variance Var(nu).",
+    "sum_formula": "sum R_k^2 = b^2*Var(u)/(b^2*Var(u)+Var(eta)+Var(nu)*(1-a^2))",
+    "consequence": "An extra observation-noise assumption changes the gain dependence. Signal, process noise, readout noise and finite dynamic range cannot be interchanged.",
+    "limit": "Does not identify quantization errors as independent noise or propose observation noise in the application."
+  },
+  "paired_history_example": {
+    "law": "Two deterministic initial values differ by delta, then each follows x[n+1]=a*x[n]+eta[n], with Gaussian iid eta of standard deviation sigma.",
+    "a": 0.99,
+    "frames": 100,
+    "initial_difference": 1.0,
+    "noise_standard_deviation": 0.1,
+    "mean_difference": 0.3660323412732292,
+    "each_conditional_variance": 0.4351860930361996,
+    "perfectly_shared_noise_pair_difference": 0.3660323412732292,
+    "equal_prior_single_observation_bayes_error": 0.39072533285078237,
+    "derivation": "Each conditional distribution has the same Gaussian variance. Their optimal equal-prior classification threshold is the midpoint, with error Phi(-abs(mean difference)/(2*standard deviation)). Sharing the entire applied noise sequence makes the paired difference deterministic, while the single-run distributions still overlap.",
+    "consequence": "A controlled paired-history effect can establish causal persistence without establishing reliable single-run contextual prediction. Both questions are useful and distinct.",
+    "limit": "Analytical Gaussian reference, no classifier fitted or proposed. Actual adaptive noise changes with state, so equal primitive draws need not give equal applied noise. No history labels or separate context field are stored."
+  },
+  "non_adoptions": [
+    "No criticality target, global gain optimizer, reconstruction readout, Gaussian regulator, hidden history array or additional state.",
+    "No SNN training, random neural simulation, benchmark, implementation, project tests or build."
+  ],
+  "threshold_accessibility_reference": {
+    "recorded_at_utc": "2026-10-29T00:02:21Z",
+    "assumptions": [
+      "Two equally likely histories H=0/1 leave exact stored scalar drives X=0 or1/20. No evolving graph, recurrent updates, training or adaptive regulator.",
+      "Output is Y=1[X+U>1/10], with independent U uniform on[0,sigma]; sigma0 means zero noise. Strict/nonstrict boundary differs only on measure-zero events here."
+    ],
+    "calculation": "p_h=max(0,1-(theta-x_h)/sigma) for the listed subthreshold drives and sigma>0; I(H;Y)=h2((p0+p1)/2)-(h2(p0)+h2(p1))/2.",
+    "cases": [
+      {
+        "noise_upper_bound": "0",
+        "firing_probability_given_history0": "0",
+        "firing_probability_given_history1": "0",
+        "mutual_information_bits": -0.0
+      },
+      {
+        "noise_upper_bound": "1/20",
+        "firing_probability_given_history0": "0",
+        "firing_probability_given_history1": "0",
+        "mutual_information_bits": -0.0
+      },
+      {
+        "noise_upper_bound": "3/40",
+        "firing_probability_given_history0": "0",
+        "firing_probability_given_history1": "1/3",
+        "mutual_information_bits": 0.19087450462110933
+      },
+      {
+        "noise_upper_bound": "1/10",
+        "firing_probability_given_history0": "0",
+        "firing_probability_given_history1": "1/2",
+        "mutual_information_bits": 0.31127812445913283
+      },
+      {
+        "noise_upper_bound": "1/5",
+        "firing_probability_given_history0": "1/2",
+        "firing_probability_given_history1": "3/4",
+        "mutual_information_bits": 0.04879494069539858
+      },
+      {
+        "noise_upper_bound": "1",
+        "firing_probability_given_history0": "9/10",
+        "firing_probability_given_history1": "19/20",
+        "mutual_information_bits": 0.006615268773878302
+      }
+    ],
+    "verification": "Exact Fraction threshold probabilities; binary-entropy form agrees within1e-14 with the direct joint-distribution information sum in all6 cases. No random draws or neural trajectories.",
+    "complete_state_boundary": {
+      "premise": "H -> X -> Y is a Markov chain: X contains all relevant causal state, and the subsequent transition obtains no further information about H outside X. Include any history-dependent regulator or learned parameters in that state when applicable.",
+      "chain_rule": "I(H;X,Y)=I(H;X)+I(H;Y|X)=I(H;X)=I(H;Y)+I(H;X|Y), hence I(H;Y)<=I(H;X).",
+      "interpretation": "Different noisy/noiseless output maps can reveal different amounts of existing information. This does not recreate an erased distinction: if both histories leave the same complete state and subsequent driving law, their future conditional distributions coincide.",
+      "limits": "A semantic vector readout is not necessarily the complete state; neuron composition can retain information it omits. External later input may supply additional information, changing the premise."
+    },
+    "comparison": "Assess retained state distinctions and useful downstream responses separately. A revival of activity is not evidence that the earlier history was recovered.",
+    "non_adoptions": "No entropy estimator, optimal noise level, threshold, new state, binary neuron model, readout decoder or memory capacity selected.",
+    "primary_references": [
+      "MR-S085",
+      "MR-S086"
+    ]
+  },
+  "updated_at_utc": "2026-10-29T00:02:21Z"
+}

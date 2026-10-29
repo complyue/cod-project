@@ -1,0 +1,471 @@
+{
+  "schema_version": 1,
+  "status": "conditional_access_arithmetic",
+  "recorded_at_utc": "2026-10-28T16:12:36.897461+00:00",
+  "purpose": "Locate the likely value of computational optimization before adopting decay-event machinery under H-74.",
+  "assumptions": [
+    "Every reserved connection slot is visited once per update; this is a comparison case, not the selected execution algorithm or learned occupancy.",
+    "Four-byte endpoint IDs and one-byte weights follow the existing named-array sizing case. Source-state gathers, output writes, learning and loop overhead are additional.",
+    "Logical access bytes are not measured DRAM traffic or measured throughput; caching and execution details can change physical costs.",
+    "One FP32 state read and write is an arithmetic reference for the neuron-local pass, not a complete buffer/field layout.",
+    "Scheduling a local scalar decay does not by itself avoid connection visits. Any added structure must demonstrate a further necessary saving rather than presume one.",
+    "No timer arrays, outgoing index, queue, heap topology or runtime design are allocated or adopted."
+  ],
+  "cases": [
+    {
+      "classes": 15,
+      "neurons": 614400,
+      "reserved_slots": 106492416,
+      "slots_per_neuron": 173.3275,
+      "endpoint_weight_logical_bytes_per_full_reserved_scan": 532462080,
+      "one_fp32_state_read_and_write_bytes": 4915200,
+      "payload_to_one_state_read_write_ratio": 108.3296875,
+      "scan_rates": [
+        {
+          "updates_per_second": 10,
+          "logical_connection_bytes_per_second": 5324620800,
+          "decimal_GB_per_second": 5.3246208
+        },
+        {
+          "updates_per_second": 20,
+          "logical_connection_bytes_per_second": 10649241600,
+          "decimal_GB_per_second": 10.6492416
+        },
+        {
+          "updates_per_second": 50,
+          "logical_connection_bytes_per_second": 26623104000,
+          "decimal_GB_per_second": 26.623104
+        },
+        {
+          "updates_per_second": 100,
+          "logical_connection_bytes_per_second": 53246208000,
+          "decimal_GB_per_second": 53.246208
+        },
+        {
+          "updates_per_second": 200,
+          "logical_connection_bytes_per_second": 106492416000,
+          "decimal_GB_per_second": 106.492416
+        }
+      ]
+    },
+    {
+      "classes": 16,
+      "neurons": 614400,
+      "reserved_slots": 112281600,
+      "slots_per_neuron": 182.75,
+      "endpoint_weight_logical_bytes_per_full_reserved_scan": 561408000,
+      "one_fp32_state_read_and_write_bytes": 4915200,
+      "payload_to_one_state_read_write_ratio": 114.21875,
+      "scan_rates": [
+        {
+          "updates_per_second": 10,
+          "logical_connection_bytes_per_second": 5614080000,
+          "decimal_GB_per_second": 5.61408
+        },
+        {
+          "updates_per_second": 20,
+          "logical_connection_bytes_per_second": 11228160000,
+          "decimal_GB_per_second": 11.22816
+        },
+        {
+          "updates_per_second": 50,
+          "logical_connection_bytes_per_second": 28070400000,
+          "decimal_GB_per_second": 28.0704
+        },
+        {
+          "updates_per_second": 100,
+          "logical_connection_bytes_per_second": 56140800000,
+          "decimal_GB_per_second": 56.1408
+        },
+        {
+          "updates_per_second": 200,
+          "logical_connection_bytes_per_second": 112281600000,
+          "decimal_GB_per_second": 112.2816
+        }
+      ]
+    }
+  ],
+  "two_frame_state_cases": [
+    {
+      "neurons": 614400,
+      "scalar_fields_per_neuron_per_frame": 1,
+      "bytes_per_value": 2,
+      "frames": 2,
+      "state_bytes": 2457600,
+      "state_MiB": 2.34375,
+      "single_connection_pool": true,
+      "conditional_15_class_named_arrays_bytes": 542325172,
+      "conditional_16_class_named_arrays_bytes": 571402200
+    },
+    {
+      "neurons": 614400,
+      "scalar_fields_per_neuron_per_frame": 1,
+      "bytes_per_value": 4,
+      "frames": 2,
+      "state_bytes": 4915200,
+      "state_MiB": 4.6875,
+      "single_connection_pool": true,
+      "conditional_15_class_named_arrays_bytes": 544782772,
+      "conditional_16_class_named_arrays_bytes": 573859800
+    }
+  ],
+  "snapshot_order_example": {
+    "description": "Unit reciprocal two-neuron map; initial [1,0]; no self retention, noise or threshold. Own arithmetic example, not selected dynamics.",
+    "snapshot_next": [
+      0,
+      1
+    ],
+    "in_place_first_then_second": [
+      0,
+      0
+    ],
+    "in_place_second_then_first": [
+      1,
+      1
+    ],
+    "meaning": "Read/write order can change a transition unless sources come from the preceding snapshot."
+  },
+  "updated_at_utc": "2026-10-29T00:37:38Z",
+  "pi_reference_payload_comparison": {
+    "source": "modeling-source-ledger.json:MR-S021/MR-S022",
+    "nominal_interface_bytes_per_second": 17000000000,
+    "cases": [
+      {
+        "classes": 15,
+        "reserved_slots": 106492416,
+        "five_byte_full_payload_scan_seconds_at_nominal_17GBps": 0.03132129882352941,
+        "five_byte_payload_only_scan_rate": 31.927156202372196,
+        "four_point_five_byte_payload_only_scan_rate": 35.47461800263577,
+        "endpoint_only_payload_scan_rate": 39.908945252965246
+      },
+      {
+        "classes": 16,
+        "reserved_slots": 112281600,
+        "five_byte_full_payload_scan_seconds_at_nominal_17GBps": 0.033024,
+        "five_byte_payload_only_scan_rate": 30.281007751937985,
+        "four_point_five_byte_payload_only_scan_rate": 33.64556416881998,
+        "endpoint_only_payload_scan_rate": 37.85125968992248
+      }
+    ],
+    "meaning": "Illustrative full-reserved-payload streaming time using the vendor's nominal interface bandwidth. No measured throughput or selected update rate. Actual traversal may skip unassigned sets or unused capacity, while gathers, state writes, computation, learning and other activity add costs.",
+    "numeric_format_boundary": "Halving one-byte weights cuts a4+1-byte slot payload by10%, so this ideal payload-only rate improves by1/0.9, not2x. Integer dot-product availability alone does not eliminate indirect source reads or conversion/packing costs.",
+    "minimality": "Capacity does not determine visited work. A live-entry boundary or an alternative traversal may be worth considering only after a specified runtime/learning algorithm and update-rate need demonstrate the value. No count array, active index, reverse edge table, event scheduler or layout is adopted."
+  },
+  "source_state_cache_footprints": {
+    "source": "MR-S021 BCM2712/Pi5 reference, MR-S022 A76 load/store alignment section",
+    "purpose": "Small total RAM cost does not make source precision irrelevant to sparse-gather cache behavior.",
+    "reference": "Official BCM2712 summary:512kB L2 per core and2MB shared L3; A76 guide describes64-byte cache lines. This is a hardware reference, not the confirmed target fleet.",
+    "cases": [
+      {
+        "bits_per_source_value": 4,
+        "one_source_array_bytes": 307200,
+        "one_source_array_MiB": 0.29296875,
+        "cache_lines_64_bytes": 4800,
+        "two_frame_array_bytes": 614400
+      },
+      {
+        "bits_per_source_value": 8,
+        "one_source_array_bytes": 614400,
+        "one_source_array_MiB": 0.5859375,
+        "cache_lines_64_bytes": 9600,
+        "two_frame_array_bytes": 1228800
+      },
+      {
+        "bits_per_source_value": 16,
+        "one_source_array_bytes": 1228800,
+        "one_source_array_MiB": 1.171875,
+        "cache_lines_64_bytes": 19200,
+        "two_frame_array_bytes": 2457600
+      },
+      {
+        "bits_per_source_value": 32,
+        "one_source_array_bytes": 2457600,
+        "one_source_array_MiB": 2.34375,
+        "cache_lines_64_bytes": 38400,
+        "two_frame_array_bytes": 4915200
+      }
+    ],
+    "inference": "One FP32 source field is2.34375MiB, larger than the reference shared L3 capacity. FP16 is1.171875MiB. A smaller source working set could help irregular gathers; fitting by size is neither sufficient for residency nor proof of speed.",
+    "limits": [
+      "Other source fields, destination writes, streaming IDs/weights, cache associativity, access distribution and concurrent CCs affect the result.",
+      "Source reads can dominate additional traffic on misses; the existing five-byte slot count is logical payload, not complete measured memory traffic.",
+      "No duplicate low-width readout array, cache blocking, packing format, benchmark result or precision decision follows from these comparisons."
+    ]
+  },
+  "retained_edge_sweep_analysis": {
+    "artifact": "incoming-retained-prefix-analysis.json",
+    "scope": "Compares logical read costs for a retained prefix with an endpoint end marker or a separate count. Existing full-reserved scans remain upper-work comparison cases, not a mandatory traversal or measured performance. No layout/count is adopted."
+  },
+  "learning_pass_scope": {
+    "status": "Conditional incoming traversal arithmetic; not a selected learner or new index",
+    "value_lineage": "C15/P29 learns contextual preactivation; C13/P25 and P30 require feasible static incoming storage/work; H74 forbids unmotivated structures.",
+    "rules": [
+      {
+        "rule": "w_next=(1-eta)*w+eta*c*y",
+        "scope": "All retained edges participate in decay at each specified learning exposure; positive-pair visits alone change the rule."
+      },
+      {
+        "rule": "w_next=w+eta*c*(y-w)",
+        "scope": "Edges from nonzero credited sources; incoming layout alone does not enumerate their targets without row scans."
+      },
+      {
+        "rule": "w_next=w+eta*y*(c-w)",
+        "scope": "All retained edges in nonzero-responsibility target rows; selected rows permit a direct incoming traversal."
+      },
+      {
+        "rule": "w_next=w+eta*c*y*(1-w)",
+        "scope": "Only both-nonzero pairs change, but scanning selected target rows still reads IDs of credited and uncredited sources."
+      }
+    ],
+    "example": {
+      "incoming_source_ids_by_target": [
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          0,
+          1,
+          5,
+          6
+        ],
+        [
+          0,
+          1,
+          6,
+          7
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      ],
+      "credited_sources": [
+        0,
+        1
+      ],
+      "responsible_targets": [
+        6,
+        7
+      ],
+      "all_weights": "1/2",
+      "eta": "1/4",
+      "changed_edge_counts": {
+        "all_exposures": 32,
+        "source_enabled": 12,
+        "target_enabled": 16,
+        "positive_only": 4
+      },
+      "total_retained_edges": 32,
+      "selected_target_row_visits": 16,
+      "naive_target_fraction_times_edges": 8,
+      "meaning": "Target count alone underestimates work when selected targets have higher retained degree; unchanged writes do not imply avoided endpoint reads."
+    },
+    "general_comparison": [
+      "Record sum of retained degrees over the actually visited target rows, rather than reserved slots or selected-neuron fraction alone.",
+      "Count applicable learning exposures separately from neural frames; fusing a pass must preserve source snapshot, prediction-before-update and publication order.",
+      "Whether an existing gather can reuse loaded data depends on which target responsibility and source credit are available at that point.",
+      "Nonzero low rates and the regime classifier density filter do not automatically define learning eligibility.",
+      "Absent-source discovery, duplicate checking, migration, quantization and learned performance are additional and unmeasured here."
+    ],
+    "not_selected": [
+      "reverse adjacency",
+      "source/target index arrays",
+      "lazy decay metadata",
+      "learning trace",
+      "selected row counts",
+      "learning formula or threshold"
+    ],
+    "verification": "Exact Fraction evaluation over all32 retained edges, each with specified equal initial weight; formulas have deliberately different exposure semantics.",
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/learning_visit_arithmetic.py",
+      "script_sha256": "5d7dbe2beb2ffa2a95af5020360c82ec4d338afd445afe29aa2203f0be6d0c89"
+    },
+    "scope_limit": "No product code, SNN simulation/training, benchmark, project test, build or runtime memory allocation design."
+  },
+  "cpu_operand_paths": {
+    "recorded_at_utc": "2026-10-28T23:19:02Z",
+    "status": "Conditional operation accounting; no kernel, benchmark or numeric format selected",
+    "sources": [
+      "MR-S022",
+      "MR-S070",
+      "MR-S071",
+      "MR-S072",
+      "MR-S073"
+    ],
+    "value_lineage": "C28/P65 faithful affordable numerics, C29/P69 incoming gather and H74 requirement-led complexity.",
+    "common_work": [
+      "Read retained source IDs and stored weights.",
+      "Obtain the corresponding preceding-frame rates using those IDs.",
+      "Form products and reduce them at the chosen intermediate precision.",
+      "Apply the defined transfer/cancellation and final state conversion at the existing frame boundary."
+    ],
+    "alternatives": [
+      {
+        "stored_weights": "UINT8 or packed UINT4",
+        "source_rates": "FP16 or FP32",
+        "conditional_path": "Unpack if needed, interpret the integer weight scale, use floating source values and adequate product/reduction precision. Integer weight storage alone does not imply a byte-by-byte integer dot product.",
+        "cost_boundary": "Conversion/unpacking and indirect operand preparation remain; no source quantization or extra source buffer is implied."
+      },
+      {
+        "stored_weights": "FP16",
+        "source_rates": "FP16 or FP32",
+        "conditional_path": "Widen before products/reduction where required by numerical fidelity. Ordinary half support is not the same as half-input FP32 accumulating FMA support.",
+        "cost_boundary": "Extra weight bytes can trade against decoding and update precision; actual cost depends on target features and complete traversal."
+      },
+      {
+        "stored_weights": "UINT8 or expanded UINT4",
+        "source_rates": "Byte codes under a defined quantization",
+        "conditional_path": "Byte dot-product instructions consume prepared byte lanes and accumulate32-bit results. Apply the declared scales and reduction.",
+        "cost_boundary": "Rate quantization changes the communicated dynamics; scattered gathers, lane preparation, nibble unpacking and final reduction remain."
+      }
+    ],
+    "scale_factorization": {
+      "identity": "If w_ji=s_j*q_ji with a common row scale, sum_i w_ji*r_i = s_j*sum_i q_ji*r_i in exact arithmetic. If all source rates also have one common scale s_r, this becomes s_j*s_r*sum_i q_ji*k_i.",
+      "limits": "Different per-source scales do not factor out as one scalar. Floating conversion, rounding and reduction order require separate checks. No row-scale array, common scale, dynamic quantizer or representation is selected."
+    },
+    "feature_boundary": "Use the inspected target capability definitions, not a throughput table alone. No actual Pi device features, cycles, bandwidth or sustained frame rate were measured.",
+    "non_adoptions": [
+      "No vector kernel, reverse index, packed source buffer, CPU dispatch framework or cache reordering.",
+      "No change to static SoA capacity or neuron-state fields.",
+      "No benefit inferred from a feedforward accelerator or byte arithmetic alone."
+    ]
+  },
+  "changed_source_dependencies": {
+    "recorded_at_utc": "2026-10-29T00:37:38Z",
+    "kind": "Conditional dependency counting and one cancellation operation; no neural trajectory or workload measurement",
+    "assumptions": [
+      "Each distinct influential source independently changes its emitted value with probability f in the compared transition. This is not the active-neuron fraction or an adopted noise model.",
+      "d counts actual distinct source dependencies, not reserved capacity. Duplicate endpoints do not create independent change events.",
+      "A changed dependency is not proof that the target output changes or must be recomputed by a particular algorithm. Thresholds, compensating changes or justified incremental arithmetic can alter work.",
+      "Shared dependencies correlate affected rows; linearity of expectation can count affected rows without assuming independent rows. The per-row product still requires independent source-change events.",
+      "Independent local drive, decay, learning and cross-cell cancellation can require additional work. No reverse index, change bitmap, cached sum, queue or schedule is selected."
+    ],
+    "identity": "Pr(at least one changed dependency)=1-(1-f)^d",
+    "cases": [
+      {
+        "independent_source_change_probability": "1/10000",
+        "distinct_influential_sources": 100,
+        "probability_at_least_one_changed_source": 0.009950661308629184,
+        "probability_no_changed_source_decimal": "9.9004933869137082E-1"
+      },
+      {
+        "independent_source_change_probability": "1/10000",
+        "distinct_influential_sources": 1000,
+        "probability_at_least_one_changed_source": 0.09516710644145375,
+        "probability_no_changed_source_decimal": "9.0483289355854626E-1"
+      },
+      {
+        "independent_source_change_probability": "1/10000",
+        "distinct_influential_sources": 18432,
+        "probability_at_least_one_changed_source": 0.8417045675301065,
+        "probability_no_changed_source_decimal": "1.5829543246989354E-1"
+      },
+      {
+        "independent_source_change_probability": "1/1000",
+        "distinct_influential_sources": 100,
+        "probability_at_least_one_changed_source": 0.09520785288629095,
+        "probability_no_changed_source_decimal": "9.0479214711370904E-1"
+      },
+      {
+        "independent_source_change_probability": "1/1000",
+        "distinct_influential_sources": 1000,
+        "probability_at_least_one_changed_source": 0.6323045752290359,
+        "probability_no_changed_source_decimal": "3.6769542477096404E-1"
+      },
+      {
+        "independent_source_change_probability": "1/1000",
+        "distinct_influential_sources": 18432,
+        "probability_at_least_one_changed_source": 0.9999999902033186,
+        "probability_no_changed_source_decimal": "9.7966813280947171E-9"
+      },
+      {
+        "independent_source_change_probability": "1/100",
+        "distinct_influential_sources": 100,
+        "probability_at_least_one_changed_source": 0.6339676587267705,
+        "probability_no_changed_source_decimal": "3.6603234127322950E-1"
+      },
+      {
+        "independent_source_change_probability": "1/100",
+        "distinct_influential_sources": 1000,
+        "probability_at_least_one_changed_source": 0.9999568287525893,
+        "probability_no_changed_source_decimal": "4.3171247410658251E-5"
+      },
+      {
+        "independent_source_change_probability": "1/100",
+        "distinct_influential_sources": 18432,
+        "probability_at_least_one_changed_source": 1.0,
+        "probability_no_changed_source_decimal": "3.5310740240698359E-81"
+      }
+    ],
+    "group_union_identity": "For a specified group with S distinct influencing source IDs, Pr(any source changes)=1-(1-f)^S under the same independent source-change model; S depends on actual overlap.",
+    "group_union_cases": [
+      {
+        "distinct_source_union": 100,
+        "source_change_probability": "1/1000",
+        "probability_some_dependency_changes": 0.09520785288629095
+      },
+      {
+        "distinct_source_union": 6000,
+        "source_change_probability": "1/1000",
+        "probability_some_dependency_changes": 0.997528677882984
+      },
+      {
+        "distinct_source_union": 12000,
+        "source_change_probability": "1/1000",
+        "probability_some_dependency_changes": 0.999993892566994
+      }
+    ],
+    "cancellation_example": {
+      "provisional_positive_rates": "60 cells each 1/2",
+      "provisional_negative_total": "15",
+      "one_cell_added_drive": "1/20",
+      "before_each_positive_rate": "1/4",
+      "after_changed_cell": "3311/12020",
+      "after_each_other_positive_cell": "301/1202",
+      "number_of_changed_completed_positive_rates": 60,
+      "signed_total_change": "1/20",
+      "meaning": "One provisional-cell change alters the H77 common retention factor and hence every active cell in this surviving population. No opposite-cell index pairing or extra state is used."
+    },
+    "verification": {
+      "exact_small_probability_enumerations": 24,
+      "precision_for_large_degree_probabilities": "80 decimal digits before compact float output",
+      "cancellation": "Exact Fraction identities"
+    },
+    "application_implication": "Sparse emitted-value changes need not imply equally sparse affected targets; a scheduler comparison must use actual source changes, dependency overlap and completed cancellation semantics.",
+    "non_adoptions": [
+      "No event execution algorithm",
+      "No actual degree distribution inferred from the pool",
+      "No predicted speedup or minimum recomputation bound",
+      "No independence requirement for the application"
+    ]
+  }
+}

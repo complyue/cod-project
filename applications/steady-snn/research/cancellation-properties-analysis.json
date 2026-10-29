@@ -1,0 +1,424 @@
+{
+  "schema_version": 1,
+  "status": "derived_properties_of_H77_active_rate_operation",
+  "recorded_at_utc": "2026-10-28T17:02:20.003906+00:00",
+  "definition": "For nonnegative p,n, P=sum(p), M=sum(n), D=P-M. If D>0 output(p*D/P,0); if D<0 output(0,n*(-D)/M); otherwise zero. Only active rates are included.",
+  "value_question": "What follows directly from the selected cancellation rule, without adding mechanisms or data structures?",
+  "properties": [
+    {
+      "name": "Signed aggregate and magnitude",
+      "result": "Signed aggregate D is preserved; output L1 mass is abs(D).",
+      "reason": "The surviving rates sum to the signed net magnitude."
+    },
+    {
+      "name": "Within-polarity identity ratios",
+      "result": "Ratios among nonzero surviving-direction rates are preserved; independent permutations of the two polarity arrays commute with the operation.",
+      "reason": "One common scalar multiplies the surviving population; no cross-polarity index correspondence is used."
+    },
+    {
+      "name": "Idempotence and positive homogeneity",
+      "result": "C(C(x))=C(x); C(a*x)=a*C(x) for a>=0.",
+      "reason": "The first operation leaves only one polarity; multiplying both populations by a common nonnegative scale preserves their relative cancellation."
+    },
+    {
+      "name": "Absolute L1 perturbations are not amplified by cancellation alone",
+      "result": "For nonnegative active-rate vectors x,y, ||C(x)-C(y)||_1 <= ||x-y||_1.",
+      "derivation": "On P>M, positive-output derivative wrt positive input j is (1-M/P)*delta_ij+p_i*M/P^2; its column sum is1. Derivative wrt any negative input is -p_i/P and has absolute column sum1. The other sign is symmetric. C is continuous at P=M (output tends to zero), including the origin; integrating along the nonnegative-domain line segment gives the global L1 bound.",
+      "limit": "Relative error in a tiny signed remainder can still be large. Recurrent gain, thresholds and noise outside C may amplify differences; no global network stability claim."
+    },
+    {
+      "name": "Instantaneous active-support ceiling",
+      "result": "At most60 of the120 cells per dimension can have positive post-cancellation active rates; across614400 cells the ceiling is307200, i.e.50%.",
+      "limit": "Applies to the selected current-active-rate operation, not predictive readiness or temporal coverage; positive thresholds can lower the count further."
+    }
+  ],
+  "grouping_counterexample": {
+    "x": {
+      "positive": [
+        1,
+        0
+      ],
+      "negative": [
+        0.8,
+        0
+      ]
+    },
+    "y": {
+      "positive": [
+        0,
+        1
+      ],
+      "negative": [
+        0,
+        0
+      ]
+    },
+    "C_of_x_plus_y": {
+      "positive": [
+        0.6,
+        0.6
+      ],
+      "negative": [
+        0,
+        0
+      ]
+    },
+    "C_of_Cx_plus_y": {
+      "positive": [
+        0.2,
+        1.0
+      ],
+      "negative": [
+        0,
+        0
+      ]
+    },
+    "signed_total_both": 1.2,
+    "consequence": "Canceling partial contributions in sequence can change contextual cell ratios even when the signed total matches. The semantic boundary must precede any batching/reordering optimization.",
+    "scope": "Own exact-real arithmetic example; no packet order, frame duration or transfer ordering chosen."
+  },
+  "dense_positive_noise_comparison": {
+    "assumptions": [
+      "Each frame independently supplies positive continuous iid noise to every cell; no learned recurrence or predictive state; no other input.",
+      "Activity is counted by strictly positive rate with no threshold or density exclusion. These assumptions are not selected for the model."
+    ],
+    "exact_consequences": [
+      "With probability1, totals are unequal and every cell of the winning polarity has positive residual rate. Exactly50% of cells are nonzero each frame, regardless of positive noise amplitude.",
+      "By sign symmetry, either whole polarity population wins with probability1/2 per independent frame. Expected cumulative support fraction afterK frames is1-2^(-K)."
+    ],
+    "expected_support_by_frames": [
+      {
+        "frames": 1,
+        "fraction": 0.5
+      },
+      {
+        "frames": 2,
+        "fraction": 0.75
+      },
+      {
+        "frames": 3,
+        "fraction": 0.875
+      },
+      {
+        "frames": 5,
+        "fraction": 0.96875
+      },
+      {
+        "frames": 10,
+        "fraction": 0.9990234375
+      }
+    ],
+    "uniform_noise_mass_approximation": {
+      "assumption": "60 cells per side, independent Uniform(0,sigma) values.",
+      "exact_mean_before": "60*sigma",
+      "exact_variance_of_signed_net": "10*sigma^2",
+      "normal_approximation_mean_after": "sqrt(20/pi)*sigma",
+      "approximate_ratio_mean_after_to_mean_before": 0.042052208700336005,
+      "approximation_label": "CLT normal approximation, not measured SNN behavior."
+    },
+    "design_implication": "Define noise support/distribution and counted activity before choosing a regulator or coverage gate. Dense positive rates with zero-threshold counting would trivially fix occupancy and inflate noise-only coverage; this does not show the specified model fails, because those definitions are open.",
+    "non_goals": "No new controller, noise provenance flag, special filter, cutoff, stochastic simulation or state array is introduced."
+  },
+  "training_consequence": "Because cancellation couples cells within a minicolumn, repair must compare targets with the completed post-cancellation response. Changing one incoming drive can alter other same-dimension outputs; independent uncanceled cell deficits are not automatically the final deficits.",
+  "euclidean_error_analysis": {
+    "definition": "C is H-77 proportional population-wide cancellation of two nonnegative m-cell populations. No pairwise matching.",
+    "norm_bound": {
+      "L1": "||C(x)-C(y)||_1 <= ||x-y||_1.",
+      "L2": "||C(x)-C(y)||_2 <= sqrt(2*m)*||x-y||_2.",
+      "proof": "For one minicolumn, output L2 <= output L1 <= input L1 <= sqrt(2*m)*input L2. Sum squared bounds across independent minicolumn blocks to obtain the same whole-CC factor.",
+      "sharpness": "Take baseline p=(1/2,0,...,0), m_i=1/(2*m); perturb every positive rate by +epsilon and every negative rate by -epsilon. Baseline output is zero. The L2 amplification squared is 2*m*((1/2+epsilon)^2+(m-1)*epsilon^2)/(1/2+m*epsilon)^2, tending to 2*m as epsilon tends to zero from above.",
+      "m_60_factor": 10.954451150103322,
+      "limit": "Sharp worst-case bound in Euclidean norm; not a typical noise gain, failure probability or recurrent-network stability result."
+    },
+    "near_balance_cases": [
+      {
+        "epsilon": 0.001,
+        "input_L1": 0.12,
+        "output_L1": 0.12,
+        "L2_amplification_squared_exact": "37659/392",
+        "L2_amplification": 9.801473233704227
+      },
+      {
+        "epsilon": 0.0001,
+        "input_L1": 0.012,
+        "output_L1": 0.012,
+        "L2_amplification_squared_exact": "7503018/64009",
+        "L2_amplification": 10.82673415414362
+      },
+      {
+        "epsilon": 1e-06,
+        "input_L1": 0.00012,
+        "output_L1": 0.00012,
+        "L2_amplification_squared_exact": "75000300018/625150009",
+        "L2_amplification": 10.953158681256495
+      },
+      {
+        "epsilon": 1e-08,
+        "input_L1": 1.2e-06,
+        "output_L1": 1.2e-06,
+        "L2_amplification_squared_exact": "750000030000018/6250015000009",
+        "L2_amplification": 10.954438223866607
+      }
+    ],
+    "focused_vs_broad": {
+      "premise": "Positive total1, negative total1/2, then every negative cell increases by1/10000. Positive cells are either concentrated on one cell or uniform across60. Both cases retain the same signed total and lose the same signed amount.",
+      "focused": {
+        "input_L1": 0.006,
+        "output_L1": 0.006,
+        "L2_amplification_squared_exact": "60",
+        "L2_amplification": 7.745966692414834
+      },
+      "broad": {
+        "input_L1": 0.006,
+        "output_L1": 0.006,
+        "L2_amplification_squared_exact": "1",
+        "L2_amplification": 1.0
+      },
+      "meaning": "Composition is preserved by the cancellation; the same aggregate perturbation is concentrated or spread differently among distinct neuronal rates."
+    },
+    "validation": "All rates, differences and norm squares use exact Fractions. Closed-form near-balance ratio and focused/broad ratios checked independently; square roots are displayed floats.",
+    "scope": "One cancellation operation only. No neuron transfer, background-noise distribution, recurrence, quantizer, controller or error tolerance selected.",
+    "source_fingerprint": {
+      "path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/cancellation_norm_arithmetic.py",
+      "sha256": "067f02d70dd09c3513426420f6f6a572cfe713fb93627d3c56b46d36675005d9"
+    }
+  },
+  "updated_at_utc": "2026-10-29T03:14:54Z",
+  "post_cancellation_learning": {
+    "recorded_at_utc": "2026-10-28T22:51:33Z",
+    "status": "conditional one-operation derivative analysis, not a learning algorithm",
+    "value_lineage": "C-15/P-29 compares learning objectives; C-18/P-36 constrains them by H77 active-rate cancellation. H74 requires actual value before persistent state.",
+    "assumptions": [
+      "Nonnegative provisional rates, one minicolumn, P=sum(p)>M=sum(m). The opposite branch is symmetric.",
+      "A differentiable scalar objective of the post-cancellation rates supplies g_i=dL/dq_i on surviving cells.",
+      "Raw rates and source credits are independent inputs for this one-step reference. No recurrence, threshold, teaching or quantized-gradient rule is inferred.",
+      "Predictive cancellation is still undecided under H85; the calculation concerns active cancellation or an explicitly chosen later comparison."
+    ],
+    "identities": {
+      "forward": "q_i=p_i*(P-M)/P, losing outputs=0",
+      "temporary_weighted_signal": "mu=sum_i(g_i*p_i/P), beta=M/P",
+      "raw_winner_gradient": "dL/dp_k=((P-M)/P)*g_k + beta*mu",
+      "raw_loser_gradient": "dL/dm_k=-mu",
+      "sup_norm_bound": "max(abs(raw gradients)) <= max(abs(output gradients)) on this branch",
+      "signed_net_special_case": "For L=ell(P-M), raw positive gradient=ell_prime(P-M) and raw negative gradient=-ell_prime(P-M).",
+      "tie": "The cancellation map is generally nondifferentiable at P=M. A particular composed loss, such as a smooth signed-net loss, may still be differentiable."
+    },
+    "squared_cell_loss_example": {
+      "p": [
+        "3/2",
+        "1/2"
+      ],
+      "m": [
+        "3/4",
+        "1/4"
+      ],
+      "target_positive": [
+        "1/2",
+        "1/2"
+      ],
+      "post_positive": [
+        "3/4",
+        "1/4"
+      ],
+      "loss": {
+        "exact": "1/16",
+        "approximate": 0.0625
+      },
+      "output_gradient_positive": [
+        "1/4",
+        "-1/4"
+      ],
+      "raw_gradient_positive": [
+        "3/16",
+        "-1/16"
+      ],
+      "raw_gradient_negative": [
+        "-1/8",
+        "-1/8"
+      ],
+      "central_difference_max_absolute_error": 9.374999999998828e-14,
+      "central_difference_step": "1/1000000"
+    },
+    "exact_checks": [
+      {
+        "cells_per_polarity": 2,
+        "loser_to_winner_mass": "1/10",
+        "explicit_jacobian_agrees": true,
+        "polarity_mirror_agrees": true,
+        "max_gradient_bound_holds": true
+      },
+      {
+        "cells_per_polarity": 2,
+        "loser_to_winner_mass": "1/2",
+        "explicit_jacobian_agrees": true,
+        "polarity_mirror_agrees": true,
+        "max_gradient_bound_holds": true
+      },
+      {
+        "cells_per_polarity": 2,
+        "loser_to_winner_mass": "999999/1000000",
+        "explicit_jacobian_agrees": true,
+        "polarity_mirror_agrees": true,
+        "max_gradient_bound_holds": true
+      },
+      {
+        "cells_per_polarity": 60,
+        "loser_to_winner_mass": "1/10",
+        "explicit_jacobian_agrees": true,
+        "polarity_mirror_agrees": true,
+        "max_gradient_bound_holds": true
+      },
+      {
+        "cells_per_polarity": 60,
+        "loser_to_winner_mass": "1/2",
+        "explicit_jacobian_agrees": true,
+        "polarity_mirror_agrees": true,
+        "max_gradient_bound_holds": true
+      },
+      {
+        "cells_per_polarity": 60,
+        "loser_to_winner_mass": "999999/1000000",
+        "explicit_jacobian_agrees": true,
+        "polarity_mirror_agrees": true,
+        "max_gradient_bound_holds": true
+      }
+    ],
+    "binary32_range_example": {
+      "winner_total": 8.271806125530277e-25,
+      "loser_total": 4.1359030627651384e-25,
+      "rounded_P_squared": 0.0,
+      "consequence": "A direct M/P_squared coefficient divides by a zero intermediate although input totals are normal binary32 values.",
+      "ratio_form_gradients": [
+        0.1875,
+        -0.0625,
+        -0.125,
+        -0.125
+      ],
+      "limit": "This example does not prove full mixed-precision correctness, especially near a branch boundary."
+    },
+    "non_adoptions": [
+      "No gradient learner, loss, boundary derivative, predictive cancellation or extra state selected.",
+      "The within-minicolumn contraction can use transient aggregates; it does not require a stored dense Jacobian.",
+      "Whole-sequence credit, nonnegative weight bounds, numerical updates and actual response functions remain separate comparisons."
+    ],
+    "executable_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/cancellation_learning_arithmetic.py",
+    "executable_sha256": "5d6d24231cb2f525b5b365fc124558e569842413021133649afbe61d541ab049"
+  },
+  "forward_scaling_arithmetic": {
+    "recorded_at_utc": "2026-10-28T23:28:26Z",
+    "status": "Two exact-power scalar rounding references; no neuron transition implementation",
+    "value_lineage": "H77 makes cancellation the identity for a one-sided active population. C28/P65 and H70 require numerical evaluation to preserve meaningful behavior without unnecessary fields.",
+    "identity": "C(p,0)=p for every nonnegative positive-population vector; the current H77 law has D/P=1 in this branch.",
+    "assumptions": [
+      "One nonzero positive rate, no negative rate, finite representable totals.",
+      "Round after the indicated operations to binary16 or binary32, nearest ties-to-even with gradual underflow.",
+      "Python struct e/f conversions supply the rounding reference; powers-of-two arithmetic before conversion is exact in binary64. No target-device floating-point mode is measured."
+    ],
+    "cases": [
+      {
+        "format": "binary16",
+        "single_positive_rate_power_of_two": -14,
+        "single_positive_rate": 6.103515625e-05,
+        "negative_population_total": 0,
+        "positive_total": 6.103515625e-05,
+        "net": 6.103515625e-05,
+        "rounded_product_p_times_D": 0.0,
+        "multiply_then_divide": 0.0,
+        "rounded_common_retention_ratio": 1.0,
+        "ratio_then_multiply": 6.103515625e-05,
+        "mathematical_result": 6.103515625e-05
+      },
+      {
+        "format": "binary32",
+        "single_positive_rate_power_of_two": -80,
+        "single_positive_rate": 8.271806125530277e-25,
+        "negative_population_total": 0,
+        "positive_total": 8.271806125530277e-25,
+        "net": 8.271806125530277e-25,
+        "rounded_product_p_times_D": 0.0,
+        "multiply_then_divide": 0.0,
+        "rounded_common_retention_ratio": 1.0,
+        "ratio_then_multiply": 8.271806125530277e-25,
+        "mathematical_result": 8.271806125530277e-25
+      }
+    ],
+    "interpretation": "The algebraic spelling p_i*D/P is not an instruction-order contract. Forming the bounded common ratio first avoids an unnecessary tiny intermediate product in these cases.",
+    "limits": [
+      "A small ratio, inaccurate totals, final narrow writeback or flush-to-zero behavior still needs separate analysis.",
+      "No universal error bound or CPU speed claim; no epsilon floor, lower cutoff, residual field, extra frame or exact format selected."
+    ]
+  },
+  "support_and_magnitude_reference": {
+    "recorded_at_utc": "2026-10-29T01:18:23.547246+00:00",
+    "scope": "One algebraic input/cancellation operation on two minicolumns; not a time trajectory or learned DMN state.",
+    "assumptions": [
+      "60 cells per polarity per coordinate; active rates are nonnegative.",
+      "Prior coordinate totals are(1/4,1/4), uniformly distributed across each positive population.",
+      "Input coordinate totals are(1/2,-1/2), uniformly distributed across q cells of the corresponding polarity.",
+      "Apply H77 to provisional sums; no additional transfer, clipping, noise, learning or phase-state rule."
+    ],
+    "prior": {
+      "support": 120,
+      "fraction_of240_cells": "1/2",
+      "summed_rate": "1/2"
+    },
+    "net_after": "(3/4,-1/4)",
+    "cases": [
+      {
+        "input_recipients_per_nonzero_coordinate": 1,
+        "output_active_support": 61,
+        "output_fraction_of240_cells": "61/240",
+        "output_summed_rate": "1",
+        "common_threshold_interval_preserving_count": "0<=theta<1/240"
+      },
+      {
+        "input_recipients_per_nonzero_coordinate": 6,
+        "output_active_support": 66,
+        "output_fraction_of240_cells": "11/40",
+        "output_summed_rate": "1",
+        "common_threshold_interval_preserving_count": "0<=theta<1/240"
+      },
+      {
+        "input_recipients_per_nonzero_coordinate": 12,
+        "output_active_support": 72,
+        "output_fraction_of240_cells": "3/10",
+        "output_summed_rate": "1",
+        "common_threshold_interval_preserving_count": "0<=theta<1/240"
+      },
+      {
+        "input_recipients_per_nonzero_coordinate": 30,
+        "output_active_support": 90,
+        "output_fraction_of240_cells": "3/8",
+        "output_summed_rate": "1",
+        "common_threshold_interval_preserving_count": "0<=theta<1/240"
+      },
+      {
+        "input_recipients_per_nonzero_coordinate": 60,
+        "output_active_support": 120,
+        "output_fraction_of240_cells": "1/2",
+        "output_summed_rate": "1",
+        "common_threshold_interval_preserving_count": "0<=theta<1/240"
+      }
+    ],
+    "general_count_identity": "For a nonzero coordinate whose prior occupies all m cells of one polarity, a strictly input-winning opposing contribution replaces support m by q input recipients; prior-winning or same-sign input keeps support m. Exact ties remove support; a zero-prior coordinate requires separate accounting.",
+    "interpretation": [
+      "The same input and resulting signed totals can produce different active counts through existing cell participation.",
+      "For q=1, summed rate doubles while support falls120→61; for q=60, the same doubled rate leaves support120.",
+      "Thus an increase in net-vector L1 does not disprove a drop in active fraction, or establish one. Neither count nor L1 establishes positive residual meaning or later persistence."
+    ],
+    "non_adoptions": "No recruitment quota, activity threshold, semantic label for these vectors, DMN template, controller, new field or preferred H76 branch.",
+    "verification": "Five exact rational cases; signed totals, summed rate, support counts, rate bound and a nonempty threshold interval checked.",
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/support_magnitude_arithmetic.py",
+      "script_sha256": "907212e70b00476c3b6f7ae5df6caa9017ac48fe522de41a160793e491cae7a6"
+    }
+  },
+  "scope_clarifications": [
+    {
+      "recorded_at_utc": "2026-10-29T03:14:54Z",
+      "target": "dense_positive_noise_comparison",
+      "clarification": "The cumulative support formula concerns fresh noise-only frames without carried activity or other input; equal per-cell distributions give polarity symmetry, and frames are independent. It is not an estimate for a recurrent trajectory with retained state or biased polarity probabilities.",
+      "effect": "Existing assumptions, arithmetic and cases retained; synthesis states the conditional boundary explicitly. No noise process, threshold, classifier or auxiliary structure selected."
+    }
+  ]
+}

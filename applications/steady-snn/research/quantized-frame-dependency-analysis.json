@@ -1,0 +1,337 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-10-28T18:50:04Z",
+  "status": "conditional derivations; no implementation or chosen scheduler",
+  "scope": "H-71—H-75 faithful decay and economical two-frame recurrence; H-86 empirical alternatives retained directly",
+  "value_lineage": "C-27/P-63 preserves accumulated numerical evolution; C-28/P-65 compares representation costs and error; C-29/P-69 provides consistent frame semantics. These serve C-24/C-15 and C-12 through the existing candidate value chain, without selecting runtime machinery.",
+  "analyses": [
+    {
+      "id": "MR-QF001",
+      "topic": "Exact local timing does not eliminate quantized feedback",
+      "derivation": "For a continuous scalar self-decay law dx/dt=-lambda*x, the local unforced solution is exponential. In first-order QSS, the corresponding derivative uses quantized q: dx/dt=-lambda*q, so it is constant while q is unchanged. Both retain latent state, but their between-event trajectories differ. A network whose gathers read q can therefore differ from a network whose gathers read latent x, even if every local event is calculated exactly for its chosen law.",
+      "source": "MR-S002 §§2–3; own application distinction",
+      "limit": "No continuous-time law, QSS, output quantizer or latent field is adopted. The user's next-change scheduling idea is not automatically identical to first-order QSS."
+    },
+    {
+      "id": "MR-QF002",
+      "topic": "What work is actually avoided",
+      "derivation": "In target-owned incoming gather, determining the recurrent contribution generally requires reading source values through the target's slots. A timer for the target's local decay does not establish that its incoming contribution is unchanged. Avoiding that scan would need an established unchanged-input condition or another justified dependency mechanism. With new noise sampled each frame and existing gathers retained, a local decay scheduler may save only local arithmetic while adding event maintenance.",
+      "limit": "This is a dependency argument, not a measured performance claim or demand for an outgoing index. Quiet or specially structured cases can differ. No queue, dirty map, reverse edges or persistent accumulator is selected."
+    },
+    {
+      "id": "MR-QF003",
+      "topic": "A frame boundary is a semantic boundary",
+      "derivation": "For the H-75 proposal, source reads use the complete preceding frame and destination publication waits for all required next-state operations. A next-change estimate can identify a future frame in a conditional local law, but firing an event immediately and letting later destinations read it would alter the update semantics. Delayed processing must also respect the defined placement of input, noise and cancellation.",
+      "limit": "No frame interval, timer cadence or event ordering beyond the proposed consistent snapshot is chosen. Event scheduling may be analyzed within the frame scheme without turning it into asynchronous neural propagation."
+    },
+    {
+      "id": "MR-QF004",
+      "topic": "Local error propagates through the recurrence",
+      "assumptions": [
+        "Two trajectories use the same fixed transition F and the same external/noise realization.",
+        "F is K-Lipschitz in the norm being considered on the visited domain.",
+        "The approximate next frame adds an error with norm at most epsilon."
+      ],
+      "bound": "e[n+1] <= K*e[n]+epsilon; for equal initial states, e[n] <= epsilon*sum_{j=0}^{n-1} K^j. For K=1 this is n*epsilon; for K<1 it is bounded above by epsilon/(1-K).",
+      "connection": "For the conditional map C(Phi(W*r+input)), proportional active-rate cancellation C is L1 nonexpansive; if Phi is also L1 nonexpansive, K=||W||1 is a sufficient bound. The matrix1-norm uses outgoing weighted column sums, not allocated incoming class capacity.",
+      "limit": "A conservative bound, not measured error, a requirement that K<1, or an adopted normalization. Hard discontinuous state rules and threshold branches may not satisfy this Lipschitz assumption. Actual learned trajectories can be less sensitive than the worst-case bound; noise-coupled comparisons must not silently change the driving process. The simple ||W||1 example freezes the driving input. If the CC noise controller depends on state, its response belongs in the full transition and its error bound; changing learned weights also needs an additional comparison term."
+    },
+    {
+      "id": "MR-QF005",
+      "topic": "Half-life belongs to the response being measured",
+      "derivation": "A local scalar can remain at a positive equilibrium under continuing input while the distinguishable response to one earlier token fades. Conversely, local leakage can coexist with a sustained recurrent semantic pattern. No next-code deadline alone proves the token-response half-life, useful memory duration or external steerability.",
+      "limit": "This preserves the established response-versus-neuron distinction; it does not introduce separate stored token components or an expiry system."
+    },
+    {
+      "id": "MR-QF006",
+      "topic": "Deferred cancellation changes recurrent transmission",
+      "assumptions": "Four aggregate populations p1,m1,p2,m2; nonnegative cross-minicolumn linear transmission A, followed by active net cancellation C after each complete frame. This is exact conditional algebra, not the selected neuron law.",
+      "operator": [
+        [
+          0,
+          0,
+          1,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          2,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "initial": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "first_raw": [
+        0,
+        0,
+        2,
+        1
+      ],
+      "first_published": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "second_normal": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "second_if_first_cancellation_omitted": [
+        3,
+        0,
+        0,
+        0
+      ],
+      "derivation": "C(A*C(A*x)) differs from C(A*A*x). Cancellation removes m2 and proportionally reduces p2 before either can transmit on the next frame. A delayed correction cannot undo their already transmitted effects.",
+      "limit": "A scalar per population suffices to disprove batching in general; it does not collapse the real sixty contextual cells. Multiplying each whole transition by a common decay factor alpha multiplies both two-frame answers by alpha^2 and does not remove the discrepancy."
+    },
+    {
+      "id": "MR-QF007",
+      "topic": "When decay can be factored across other operations",
+      "derivation": "C(alpha*x)=alpha*C(x) for a common nonnegative factor. Distinct factors per minicolumn also commute with its independent cancellation when the same factor applies to all cells and both signs of that column. For diagonal D and fixed linear W, D*W=W*D iff (D_ii-D_jj)*W_ij=0 for every edge. Different rates on connected neurons generally prevent moving all attenuation to the end.",
+      "narrow_valid_case": "For F(x)=C(W*x), F is positively homogeneous. Repeated x_next=alpha*F(x) with fixed common alpha and no additive drive, thresholds or intermediate quantization gives x[n]=alpha^n*F^n(x[0]). F^n still contains every required cancellation; this does not replace it by C(W^n*x[0]).",
+      "limit": "No attenuation placement, integration equation or batching optimization selected. Additive input, state-dependent feedback, saturation, thresholds and quantization each need explicit treatment."
+    },
+    {
+      "id": "MR-QF008",
+      "topic": "Cancelled activity and sub-precision decay progress have different meaning",
+      "derivation": "A hidden numerical remainder can represent an evolving value lost by output quantization if that is the selected numerical model. It cannot silently preserve cancelled active activity for later propagation when H-77 makes that activity zero. Such restoration changes the state transition, rather than merely retaining rounding progress.",
+      "limit": "Predictive readiness remains separately open under H-85. No residual field or rule that erases all weak contextual activity is selected."
+    },
+    {
+      "id": "MR-QF009",
+      "topic": "Unbiased intermediate rounding does not commute with cancellation",
+      "arithmetic": {
+        "premise": "Each of m positive and m negative provisional rates equals p*q, with 0<p<1. Independent unbiased rounding to {0,q} occurs BEFORE exact H-77 cancellation. No other noise or transition is present.",
+        "without_intermediate_rounding": "The exact opposing totals agree; cancellation is zero in every cell. Rounding this zero afterward also gives zero.",
+        "with_intermediate_rounding": "Positive and negative active counts Kp,Km are independent Binomial(m,p); signed remaining sum is q*(Kp-Km), with mean zero and variance 2*m*p*(1-p)*q^2.",
+        "single_pair": "The two one-sided survival outcomes each have probability p*(1-p). E[C(Q(r))]=(q*p*(1-p),q*p*(1-p)), while C(E[Q(r)])=(0,0). The expected vector can occupy both signs although each realized cancelled vector cannot.",
+        "cases": [
+          {
+            "cells_per_polarity": 1,
+            "provisional_rate_over_quantum": 0.01,
+            "probability_nonzero_remainder": 0.0198,
+            "mean_unsigned_remainder_over_quantum": 0.0198,
+            "signed_remainder_variance_over_quantum_squared": 0.0198
+          },
+          {
+            "cells_per_polarity": 1,
+            "provisional_rate_over_quantum": 0.1,
+            "probability_nonzero_remainder": 0.18,
+            "mean_unsigned_remainder_over_quantum": 0.18,
+            "signed_remainder_variance_over_quantum_squared": 0.18
+          },
+          {
+            "cells_per_polarity": 1,
+            "provisional_rate_over_quantum": 0.5,
+            "probability_nonzero_remainder": 0.5,
+            "mean_unsigned_remainder_over_quantum": 0.5,
+            "signed_remainder_variance_over_quantum_squared": 0.5
+          },
+          {
+            "cells_per_polarity": 60,
+            "provisional_rate_over_quantum": 0.01,
+            "probability_nonzero_remainder": 0.5805101469533847,
+            "mean_unsigned_remainder_over_quantum": 0.7594456957524481,
+            "signed_remainder_variance_over_quantum_squared": 1.188
+          },
+          {
+            "cells_per_polarity": 60,
+            "provisional_rate_over_quantum": 0.1,
+            "probability_nonzero_remainder": 0.8779203312686208,
+            "mean_unsigned_remainder_over_quantum": 2.596881688570651,
+            "signed_remainder_variance_over_quantum_squared": 10.8
+          },
+          {
+            "cells_per_polarity": 60,
+            "provisional_rate_over_quantum": 0.5,
+            "probability_nonzero_remainder": 0.9273150210898833,
+            "mean_unsigned_remainder_over_quantum": 4.361098734607003,
+            "signed_remainder_variance_over_quantum_squared": 30.0
+          }
+        ],
+        "numeric_validation": "Exact Fraction enumeration of binomial distributions, independent variance formula and single-pair identities. No Monte Carlo samples or neural simulation.",
+        "frame_implication": "Writing provisional rates into a narrow next-frame representation before cancellation can introduce a different stochastic transition from deferring that narrowing until after cancellation. Both still read the same previous frame. These formulas isolate the intermediate conversion, before any further final-state rounding.",
+        "comparison": "Compare intermediate versus final narrowing with the same modeled noise and adequate reference arithmetic. Check residual fidelity, activity and later prediction; do not credit incidental quantization fluctuations as the deliberately controlled background noise.",
+        "limits": "A conditional first-bin uniform-grid example, not a requirement to use stochastic rounding or a claim that deterministic rounding creates this artifact. Shared or correlated random rounding changes the law. No polarity pairing, wider persistent field, extra frame, scratch layout or numerical default selected.",
+        "source_fingerprint": {
+          "path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/rounding_cancellation_arithmetic.py",
+          "sha256": "1145ba0c0d8e3ea8476dfb6f50396c584468e486cb2b78cf68652f264dc45491"
+        }
+      }
+    }
+  ],
+  "conditional_error_gain_examples": [
+    {
+      "K": 0.9,
+      "frames": 10,
+      "accumulated_bound_per_unit_epsilon": 6.5132155990000005
+    },
+    {
+      "K": 0.9,
+      "frames": 100,
+      "accumulated_bound_per_unit_epsilon": 9.999734386011127
+    },
+    {
+      "K": 0.9,
+      "frames": 1000,
+      "accumulated_bound_per_unit_epsilon": 10.000000000000002
+    },
+    {
+      "K": 0.99,
+      "frames": 10,
+      "accumulated_bound_per_unit_epsilon": 9.561792499119552
+    },
+    {
+      "K": 0.99,
+      "frames": 100,
+      "accumulated_bound_per_unit_epsilon": 63.39676587267702
+    },
+    {
+      "K": 0.99,
+      "frames": 1000,
+      "accumulated_bound_per_unit_epsilon": 99.99568287525885
+    },
+    {
+      "K": 1.0,
+      "frames": 10,
+      "accumulated_bound_per_unit_epsilon": 10.0
+    },
+    {
+      "K": 1.0,
+      "frames": 100,
+      "accumulated_bound_per_unit_epsilon": 100.0
+    },
+    {
+      "K": 1.0,
+      "frames": 1000,
+      "accumulated_bound_per_unit_epsilon": 1000.0
+    },
+    {
+      "K": 1.01,
+      "frames": 10,
+      "accumulated_bound_per_unit_epsilon": 10.46221254112045
+    },
+    {
+      "K": 1.01,
+      "frames": 100,
+      "accumulated_bound_per_unit_epsilon": 170.4813829421527
+    },
+    {
+      "K": 1.01,
+      "frames": 1000,
+      "accumulated_bound_per_unit_epsilon": 2095815.5637813825
+    }
+  ],
+  "non_adoptions": [
+    "No neuron equation or hard/soft threshold selected.",
+    "No scheduler, residual, latent variable, extra state buffer or event index selected.",
+    "No actual SNN training, simulation, performance benchmark, project test or build."
+  ],
+  "updated_at_utc": "2026-10-29T00:25:12Z",
+  "time_varying_error_retention": {
+    "recorded_at_utc": "2026-10-29T00:25:12Z",
+    "purpose": "Do not replace the actual retention law by its arithmetic mean when assessing recurrent numerical error.",
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/time_varying_error_arithmetic.py",
+      "script_sha256": "2733edbc2b0f88d914fb44684c4d4eec9a5e74269b61999d2dc9caddd08317b6",
+      "method": "Exact Fraction stationary variance identities and one coefficient-period closure, no neural simulation."
+    },
+    "reference": "e[t+1]=a[t]*e[t]+xi[t], independent zero-mean innovations xi with variance one, independent of coefficients and preceding error. Scalar linear error model, not the SNN background process or a proven quantizer error law.",
+    "fixed_case": "For fixed |a|<1, stationary variance is1/(1-a^2).",
+    "iid_case": {
+      "assumptions": "a[t] independent of preceding error and iid, equally likely1/10 or9/10.",
+      "mean_a": "1/2",
+      "mean_squared_a": "41/100",
+      "stationary_variance": "100/59",
+      "substituting_mean_a": "4/3",
+      "derivation": "Variance recursion is v_next=E[a^2]*v+1, not (E[a])^2*v+1."
+    },
+    "deterministic_periods": [
+      {
+        "name": "constant",
+        "periodic_retention": [
+          "1/2"
+        ],
+        "cycle_error_variance_multiplier": "1/4",
+        "stationary_phase_variances": [
+          "4/3"
+        ],
+        "stationary_phase_variance_values": [
+          1.3333333333333333
+        ],
+        "phase_mean_variance": 1.3333333333333333,
+        "largest_phase_variance": 1.3333333333333333
+      },
+      {
+        "name": "alternating",
+        "periodic_retention": [
+          "1/10",
+          "9/10"
+        ],
+        "cycle_error_variance_multiplier": "81/10000",
+        "stationary_phase_variances": [
+          "10100/9919",
+          "18100/9919"
+        ],
+        "stationary_phase_variance_values": [
+          1.018247807238633,
+          1.8247807238632927
+        ],
+        "phase_mean_variance": 1.4215142655509627,
+        "largest_phase_variance": 1.8247807238632927
+      },
+      {
+        "name": "clustered",
+        "periodic_retention": [
+          "1/10",
+          "1/10",
+          "9/10",
+          "9/10"
+        ],
+        "cycle_error_variance_multiplier": "6561/100000000",
+        "stationary_phase_variances": [
+          "102466100/99993439",
+          "101018100/99993439",
+          "181818100/99993439",
+          "247266100/99993439"
+        ],
+        "stationary_phase_variance_values": [
+          1.024728232419329,
+          1.0102472823241933,
+          1.8183002986825965,
+          2.472823241932903
+        ],
+        "phase_mean_variance": 1.5815247638397556,
+        "largest_phase_variance": 2.472823241932903
+      }
+    ],
+    "period_derivation": "For fixed periodic a, v_next=a^2*v+1. Compose the affine variance maps into v_end=B*v_start+C and solve v_start=C/(1-B). This gives phase-dependent stationary variance. All phases are checked to close exactly.",
+    "uniform_bound": "If every |a[t]|<=r<1 and the innovation cross terms vanish under the stated conditional independence, v[t+1]<=r^2*v[t]+1. From zero initial error this bounds variance by1/(1-r^2). A measured average a does not establish such a pointwise r.",
+    "limits": [
+      "Actual nearest rounding can be biased and state-dependent; its cross terms need not vanish. Scalar variance examples do not bound nonlinear cancellation, thresholds, evolving learned weights or regulated noise.",
+      "PACE MR-S005 motivates checking the assumptions behind its mean-decay expression; these independent examples are not a reproduction of its models or a quantitative claim about its benchmark results.",
+      "No error estimator, adaptive precision, scheduler, buffer, noise law or universal contraction requirement introduced."
+    ]
+  }
+}

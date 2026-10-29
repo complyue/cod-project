@@ -1,0 +1,233 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-10-28T17:56:18.896287+00:00",
+  "status": "preliminary_flow_design_with_open_comparison_choices",
+  "human_scope": [
+    "H-79: Hebbian/HTM learning belongs to token-sequence flow; DMN/single-token construction and repair are distinct.",
+    "H-80: no flow algorithm is established; do not assume it is a repair variant.",
+    "H-81: include initial flow algorithm design and raise material choices early.",
+    "H-82: direct criterion is predictive preactivation matching the input sequence; autonomous continuous generation is a separate design problem.",
+    "H-78: one phase-banded activity value and separate readiness/current firing remain candidates.",
+    "H-83: multiple predictions on shared matching fragments are expected; predictive diversity should narrow toward the training sequence as observed context grows.",
+    "H-84: explicit broad weak generation fallback is not ordinary synaptic transmission and is excluded from learning. Unfamiliar-transition learning must be designed independently, using HTM distinctions where useful.",
+    "H-85: predictive cancellation remains open for controlled comparison; H-77 active-rate operation and H-78 field comparison remain.",
+    "H-86: handle obvious empirical alternatives directly as later real-data comparisons without repeated questions."
+  ],
+  "prediction_assessment": {
+    "timing": "Read predictive state before the new token affects activation. The arriving token can subsequently provide the independent observation for assessment. This is a causal boundary, not a demand for a new persistent buffer.",
+    "circular_score_example": {
+      "assumptions": "Two nonnegative illustrative semantic components; actual input=(1,0); preactivation=(0.01,0.99). The entry rule activates only predicted cells compatible with the input. This toy is not a real embedding or chosen readiness decoder.",
+      "bad_metric": "Every input-activated cell was preactivated, so recall measured only on the selected cells can be1 despite a mostly irrelevant prediction.",
+      "independent_direction_cosine": 0.010100494835363273,
+      "consequence": "An acceptance metric must expose irrelevant predictions as well as matched input; prediction-guided selection itself cannot prove accurate prediction."
+    },
+    "identity": "The same semantic component may be carried by different contextual cells. A fixed per-token cell mask is not a specified ground truth. Immediate semantic compatibility and later context-dependent behavior are different observations.",
+    "strength": "H-82 does not require enough preactivation to emit or sustain an active generated token. Readiness must still be meaningful under the eventual state/gating semantics; zero or numerical dust cannot be validated by a direction-only division without a defined boundary.",
+    "open_metric": "No scalar loss, vector decoder, threshold, precision/recall weighting, alternative-token enumeration or confidence calibration has been selected.",
+    "comparison_analysis": "flow-prediction-assessment-analysis.json",
+    "empirical_scope": "Compare learned-sequence retention, contextual discrimination, held-out occurrences and continuing online learning as distinct claims. H-86 permits defining these comparisons without selecting a metric, decoder, reset or experiment framework."
+  },
+  "algorithm_independent_boundaries": [
+    "Distinguish preceding contextual state, naturally transmitted prediction before input, the externally observed training token, an independently specified learning representation and credited connection changes. The generation fallback is not a flow teaching pattern. No physical storage layout for these roles is selected.",
+    "Flow may learn associations between context and token-confirmed participation. The token sequence supplies observations; no DMN-style expected missing group or constructed chain target is inherited.",
+    "Weights may publish at the existing completed-frame boundary. This does not imply duplicate weights, a per-edge eligibility trace, a token replay store or a generic experiment framework.",
+    "A flow update must distinguish eligible sequence learning from arbitrary background/recurrent coactivity. Known training input events provide a candidate boundary; no operating-regime classifier is selected.",
+    "Autonomous generation thresholds, output sampling, repeated token emission and a continuation loop are outside this learner's direct acceptance target.",
+    "H-84 excludes learning the broad weak generation operation. It does not prohibit learning unfamiliar observed transitions or require disjoint neuron identities between generation and learning; any learning responsibility needs its own context/observation basis."
+  ],
+  "non_adoptions": [
+    "No learning equation, candidate recipient policy, auxiliary array or implementation is selected.",
+    "No HTM learning rule is assigned to DMN/single-token maintenance.",
+    "No autonomous generation algorithm is designed by this note.",
+    "No claim of training success, capacity, stability or CPU performance."
+  ],
+  "primary_references": [
+    "modeling-source-ledger.json:MR-S016",
+    "modeling-source-ledger.json:MR-S020"
+  ],
+  "updated_at_utc": "2026-10-29T02:57:49Z",
+  "conditional_prediction_credit_arithmetic": {
+    "status": "illustrative_arithmetic_not_selected_learning_rule",
+    "assumption": "At a visit to the same preceding context, one target event occurs with probability p. A hypothetical stored association receives +a on that event and -b otherwise. Analyze only interior values, before clipping, structural changes or other learning.",
+    "mean_interior_update": "p*a-(1-p)*b",
+    "positive_drift_condition": "p>b/(a+b)",
+    "equal_reward_penalty_example": {
+      "p": 0.3333333333333333,
+      "a": 1,
+      "b": 1,
+      "mean_update": -0.3333333333333333
+    },
+    "weaker_penalty_example": {
+      "p": 0.3333333333333333,
+      "a": 1,
+      "b": 0.25,
+      "mean_update": 0.16666666666666666
+    },
+    "interpretation": "A non-arriving continuation need not be an impossible continuation. Penalizing every unchosen prediction with equal strength can drive legitimate alternative associations downward in this reference. The choice of what is an error must precede a correction rule.",
+    "limits": "Interior drift is not a theorem that a clipped stochastic weight must vanish or remain. Actual graded sources, recipients, noise, shared recurrence and learning semantics are unspecified. No permanence field, positive/negative update rates or probabilistic interpretation of synaptic efficacy is adopted."
+  },
+  "neural_frame_and_token_time": {
+    "distinctions": [
+      "Neural frame k and its model interval Delta",
+      "External token event m at time T_m",
+      "The point at which a prediction is assessed and a weight update is credited"
+    ],
+    "primary_reference_boundary": "MR-S020 computes current activation from the prior prediction and then the next prediction from current activation in its sequence-step formulation. Our autonomous neural frames can occur between token events. A source sequence step is not automatically one neural frame here.",
+    "current_snapshot_candidate": "If the chosen model computes a prediction directly from the available preceding source state, an input-confirmed local update can use that same source state at the event boundary. This can fit the two-frame proposal without a persistent eligibility trace, but it chooses a timing interpretation that must be explicit.",
+    "persistent_readiness_case": "If readiness carries contributions from earlier source activity that is no longer available in the current state, crediting the actual earlier sources requires enough retained information, a different update rule, or acceptance that those past causes are not individually credited. The learner does not gain that information merely from storing readiness.",
+    "nonidentifiability_example": "Two equal-weight sources can separately create the same target readiness on different histories; suppose both sources are now zero and every other stored state is equal. An update using only that current state and the same arriving token cannot distinguish which source caused the readiness. This limits an exact causal-credit requirement, not all useful local learning.",
+    "minimality_boundary": "Useful recurrent context may already preserve the distinction. No eligibility trace, old-token buffer or per-edge state is justified before checking what the existing state and the chosen learning objective require. H-78 remains open.",
+    "cadence": "Matching at a specified token cadence does not establish matching after arbitrary gaps. Natural dominant-response fading, retained small-loop context and attention/noise conditions must be part of a later comparison. No token rate, frame interval or timing-window value is selected."
+  },
+  "context_length_objective": {
+    "human_record": "H-83/AD-089",
+    "criterion": "Validate matching and contraction of plausible predictive continuations as more sequence context is observed, allowing initial shared-fragment ambiguity.",
+    "distinctions": [
+      "The number of nonzero/predictive cells is not necessarily the number of plausible continuations.",
+      "Entropy over semantic-coordinate contributions is not automatically continuation uncertainty.",
+      "A later discriminating observation can resolve histories; identical observed histories cannot reveal an unobserved random future branch."
+    ],
+    "no_adoption": "No entropy measure, candidate list, fixed top-one criterion, monotonic-per-frame requirement or generation decoder is selected."
+  },
+  "withdrawn_analysis": [
+    {
+      "recorded_at_utc": "2026-10-28T18:28:51Z",
+      "reason": "H-84 corrects the premise of choosing flow learning recipients from the generation fallback. These alternatives are withdrawn, not active candidates.",
+      "prior_conditional_credit_alternatives": [
+        {
+          "name": "Selective contextual learning recipients",
+          "description": "During broad unfamiliar-token activation, learning could favor a small subset already most compatible with prior context; a no-match case needs an explicit recruitment policy.",
+          "value": "Preserves distinct contextual paths while retaining H-76 broad weak activation. Activation recipients and learning recipients need not be identical.",
+          "open_cost": "Selection rule, number of recipients, tie handling and magnitude calibration; no winner array or segment structure selected. This is a flow alternative, not DMN repair."
+        },
+        {
+          "name": "Graded recipient credit",
+          "description": "Distribute association changes according to token compatibility and existing contextual readiness rather than a hard selected subset.",
+          "value": "Fits rate/fraction semantics and may avoid a binary winner boundary.",
+          "open_cost": "Uniform weak readiness can spread learning broadly; the rule must demonstrate context specificity and avoid making noise incidental activity into repeated teaching. No formula selected."
+        },
+        {
+          "name": "Activity-proportional local association reference",
+          "description": "Use eligible pre-token activity and post-input activity as a simple correlation reference.",
+          "value": "A low-complexity candidate for comparison within the specified Hebbian direction.",
+          "open_cost": "Broad entry and autonomous recurrence can receive diffuse credit; raw correlation alone does not specify correction of irrelevant predictions, weight bounds or preservation of prior behavior. It is not asserted adequate."
+        }
+      ]
+    }
+  ],
+  "htm_role_analysis": {
+    "source": "modeling-source-ledger.json:MR-S016",
+    "observations": [
+      {
+        "operation": "activateCells",
+        "source_lines": [
+          186,
+          250
+        ],
+        "meaning": "Previous active and winner cells are retained for this sequence step; predicted-column activation and unexpected-column bursting have different selection paths."
+      },
+      {
+        "operation": "_activatePredictedColumn",
+        "source_lines": [
+          485,
+          515
+        ],
+        "meaning": "With learning enabled, adapt existing segment using previous active cells, grow new synapses using previous winner cells."
+      },
+      {
+        "operation": "_burstColumn",
+        "source_lines": [
+          577,
+          626
+        ],
+        "meaning": "All cells in an unexpected active column are active; one winner is selected through best matching segment or least-used cell. Segment adaptation/growth is gated by learn."
+      },
+      {
+        "operation": "_adaptSegment",
+        "source_lines": [
+          789,
+          828
+        ],
+        "meaning": "Permanence increases for previously active presynaptic cells, decreases otherwise, and is clipped; near-zero synapses/empty segments may be removed in this reference implementation."
+      }
+    ],
+    "application_boundary": "Canonical HTM does learn burst-related associations when enabled. H-84 is our separate generation-fallback exclusion, not a claim about HTM. Active, winner, matching-segment and credited-source roles help analyze responsibilities without adopting their arrays, dendritic segments, permanence or deletion mechanisms."
+  },
+  "unfamiliar_transition_design": {
+    "status": "open; conceptual analysis, no selected algorithm",
+    "value_chain": "H-82 requires predictive matching of observed sequences; H-83 requires contextual disambiguation; H-84 prevents the explicit generation fallback from becoming the learned target. The learner therefore needs a context-conditioned representation of the observed training token independent of that fallback.",
+    "minimum_questions": [
+      "When useful preactivation exists, how does the observed token confirm the responsible contextual path without self-confirming evaluation?",
+      "When no useful preactivation exists, what observation/context-based rule establishes a learning representation so that a previously unfamiliar transition can become predictable?",
+      "Which preceding cells carry the context responsible for that representation, and is it still available at the update boundary?"
+    ],
+    "non_inference": "Failure to predict an unfamiliar transition does not itself forbid learning it. No explicit teacher pulse, winner array, per-token mask, dendritic segment, eligibility trace or cold-start rule follows automatically."
+  },
+  "provisional_procedure": {
+    "status": "pending comparison family, not an adopted learner",
+    "value_chain": "C-15/P-29: observed sequence transitions should become context-dependent predictive readiness. P-30 depends on C-13 capacity; C-28/P-65 constrains numerical realization.",
+    "reference_exposure": "One observed training token, with physical-time accumulation retained as a separate comparison.",
+    "roles": {
+      "c": "Credited preceding source signal from a completed state under the selected activity/readiness interpretation; no stored array selected.",
+      "y": "Observation/context-assigned learning responsibility within fixed coordinate/polarity roles, independently of generation fallback; no stored array selected."
+    },
+    "steps": [
+      "Assess natural pre-input prediction before observation or weight changes.",
+      "Assign observation to contextual cells using meaningful matches or an independently defined randomized no-match entry. Raw and normalized context scores remain comparisons.",
+      "Compare responsibility-only assignment with a defined training input intervention; neither may count assistance as natural prediction or silently erase unrelated ongoing context.",
+      "Adapt retained eligible associations with a fully specified exposure, correlation and weakening law; include or exclude zero-target/zero-source cases explicitly.",
+      "Where growth is justified, compare sampling credited sources, excluding represented IDs, within static capacity; no full candidate matrix, allocator or pruning selected.",
+      "Publish only after required prior-weight reads and assess subsequent pre-input matching, narrowing and shared recurrence."
+    ],
+    "distinction_from_repair": "Uses observed context/target associations, not desired-versus-actual next-chain-group deficits.",
+    "empirical_questions": [
+      "Context assignment and reuse under shared fragments",
+      "Source meaning and learning exposure",
+      "Weight weakening and finite-precision realization",
+      "Independent training-state intervention versus responsibility-only assignment",
+      "Absent-edge sampling and class feasibility"
+    ],
+    "boundaries": [
+      "H-84 generation fallback remains excluded.",
+      "H-83 legitimate alternatives remain until available context disambiguates; no fixed single-winner continuation.",
+      "H-78/H-85 representation/cancellation comparisons remain open.",
+      "No runtime state fields, winner arrays, traces, dense search, source-degree index, heap topology or selected implementation."
+    ]
+  },
+  "update_law_analysis": "hebbian-update-law-analysis.json",
+  "integration_selectivity_analysis": {
+    "artifact": "context-detection-analysis.json",
+    "scope": "Compare the detection supplied by existing contextual cells and the chosen incoming integration before additional groups. A fixed-state single-affine-detector limitation is not a whole-network impossibility result. Random sparse-pattern error bounds require an input distribution compatible with actual semantic populations."
+  },
+  "temporal_credit_analysis": {
+    "artifact": "flow-temporal-credit-analysis.json",
+    "scope": "A current recurrent source can mix several observed-token lags. Compare available state, independent observed contextual representation and temporal weighting without choosing new traces or shortening useful history. One update per token does not remove pacing dependence of that state."
+  },
+  "token_frame_timing_analysis": "token-frame-timing-analysis.json",
+  "readiness_transmission_boundary": {
+    "recorded_at_utc": "2026-10-29T00:10:24Z",
+    "roles": "Stored state, recurrently emitted signal, prediction-guided input eligibility and learning source credit need explicit meanings. They need not be distinct fields or use identical mappings.",
+    "conditional_one_gather": {
+      "assumptions": "One source is predictively ready at1/4 but emits no current firing under a firing-only interpretation; one nonnegative unit-weight edge reaches a target. Other contributions are zero; no recurrence rollout, input, noise or learning.",
+      "readiness_as_transmitted_rate": "drive=1*(1/4)=1/4",
+      "readiness_as_nonemitting_preparation": "drive=1*0=0",
+      "interpretation": "Field layout alone does not decide this difference. Whether either response is useful depends on actual pre-input prediction, timing and retained context."
+    },
+    "reference_evidence": {
+      "source": "MR-S016",
+      "local_sha256": "4cdd4588f3bafc1c698fb1c18cab0f981152d4a697152855227b89e452ce3128",
+      "locations": "TemporalMemory.activateDendrites lines252–290 passes self.activeCells to computeActivity; getPredictiveCells lines900–912 derives predictive cells from activeSegments.",
+      "limit": "Prediction alone is not added to activeCells as an emitted fractional rate in this inspected reference. Active and predictive roles may overlap. Its segment/binary/burst semantics are not our selected model."
+    },
+    "comparison": "Separate storing/deriving readiness from what it transmits. Observe pre-input alternative retention and propagation between token events, useful weak context, source-credit contamination, fading and work. Preserve H77 active cancellation and H84 fallback exclusion; H78/H85 remain open.",
+    "non_adoptions": "No output gate, extra state, segmentation, phase threshold, learning mask or universal suppression of weak activity chosen. Weak useful firing is not automatically predictive-only readiness."
+  },
+  "metadata_reviews": [
+    {
+      "recorded_at_utc": "2026-10-29T02:57:49Z",
+      "former_status": "preliminary_flow_design_analysis_pending_human_choices",
+      "reason": "H86 directs obvious empirical alternatives to real-data comparison without repeated questions. H78/H85 remain open; the provisional procedure and its evidence are already synthesized in FlowLearning192.",
+      "authority_boundary": "D08 remains pending-human; this status correction selects no learner or implementation contract and does not reopen an answered question."
+    }
+  ]
+}

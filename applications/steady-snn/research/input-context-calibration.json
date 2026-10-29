@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "status": "conditional_analysis_not_selected_input_normalization",
+  "recorded_at_utc": "2026-10-28T16:49:32.337843+00:00",
+  "authority": "H-76 specifies branches; H-66 semantic fidelity, H-54/H-77 cancellation and H-71 contextual modulation remain. No numerical thresholds chosen.",
+  "value_question": "Which distinctions must the simple token-entry rule preserve without adding normalization or state machinery by default?",
+  "gain_analysis": {
+    "assumptions": "Illustrative nonzero vector v, linear aggregate output y_d=g_d*v_d, positive gains. This describes a diagnostic transformation, not the combined nonlinear network.",
+    "formula": "With w_d=v_d^2/sum(v^2), cosine(v,y)=E_w[g]/sqrt(E_w[g^2]). Uniform positive gain preserves direction; coordinate-varying gain can change it.",
+    "cases": [
+      {
+        "predictive_cells": 6,
+        "broad_cells": 60,
+        "focused_rate_per_cell": 1,
+        "broad_rate_per_cell": 0.1,
+        "aggregate_rates": [
+          6,
+          6.0
+        ],
+        "angle_from_equal_two_coordinate_input_degrees": 0.0
+      },
+      {
+        "predictive_cells": 12,
+        "broad_cells": 60,
+        "focused_rate_per_cell": 1,
+        "broad_rate_per_cell": 0.1,
+        "aggregate_rates": [
+          12,
+          6.0
+        ],
+        "angle_from_equal_two_coordinate_input_degrees": 18.434948822922017
+      },
+      {
+        "predictive_cells": 30,
+        "broad_cells": 60,
+        "focused_rate_per_cell": 1,
+        "broad_rate_per_cell": 0.1,
+        "aggregate_rates": [
+          30,
+          6.0
+        ],
+        "angle_from_equal_two_coordinate_input_degrees": 33.6900675259798
+      },
+      {
+        "predictive_cells": 60,
+        "broad_cells": 60,
+        "focused_rate_per_cell": 1,
+        "broad_rate_per_cell": 0.1,
+        "aggregate_rates": [
+          60,
+          6.0
+        ],
+        "angle_from_equal_two_coordinate_input_degrees": 39.28940686250036
+      }
+    ],
+    "limit": "Fixed per-cell h/l values are illustrative, not selected. Context-dependent changes can be intended; this does not impose runtime projection back to the input token."
+  },
+  "input_vs_response": {
+    "distinction": "Faithful representation of the supplied token, its confidence-dependent cellular recruitment, and the resulting context-plus-input network state are separate observables.",
+    "reason": "H-54/H-77 intentionally combine token input with prior state and cancel opposing activity; H-71 intends history to alter later responses. Requiring every contextual output to equal the isolated token would erase those goals.",
+    "assessment": "Evaluate isolated-token semantic recurrence under its specified entry conditions, and evaluate context-dependent or complementary-input behavior against the corresponding behavioral target. Do not normalize the full post-cancellation state to the latest token by default."
+  },
+  "conditional_bounded_rate_feasibility": {
+    "condition": "If a finite per-cell maximum r_max is later selected and an exact aggregate input budget I is required",
+    "bound": "m*r_max >= I is necessary for a selected group of size m; otherwise no per-cell calibration can meet both constraints.",
+    "limit": "Neither r_max nor exact input-budget preservation is selected. This identifies a conditional compatibility requirement, not an extra saturation/gating mechanism."
+  },
+  "broad_input_and_coverage": {
+    "arithmetic": "One sign per nonzero coordinate with all60 cells weakly recruited reaches307200 of614400 cell identities, i.e.50% support in that presentation.",
+    "distinctions": [
+      "Nonzero state support, counted active cells and qualified flexible-window coverage are different quantities.",
+      "H-57 illustrative20% flow cap applies to qualified coverage, not automatically every nonzero weak rate.",
+      "A transient unfamiliar-token response may differ from settled flow; no instantaneous DMN classification follows."
+    ],
+    "limit": "No new token/noise provenance flags, detector, cutoff, window or exception to user coverage requirements is introduced."
+  },
+  "minimal_state_sufficiency": {
+    "criterion": "Two histories with the same stored snapshot must lead to the same next-state law under the same next input/noise and fixed learned graph; otherwise a required distinction is missing.",
+    "alternatives": [
+      "One scalar whose activity ranges carry the chosen phases.",
+      "Prediction derived deterministically from the existing snapshot and learned incoming graph, without independent persistent readiness.",
+      "Separate evolving readiness only if required behavior distinguishes histories that the existing snapshot cannot distinguish."
+    ],
+    "timing_caution": "Checking a stored phase and deriving new readiness from the snapshot are different transition schedules; do not silently interchange them.",
+    "limit": "Separate semantic meanings do not alone require separate arrays. No option is selected pending the current discussion."
+  },
+  "generation_learning_boundary": "H-84: generation input calibration and evaluation of ensuing recurrence do not make the explicit broad weak fallback a teaching pattern or ordinary synaptic propagation to be learned. These conditional arithmetic results do not select flow learning targets.",
+  "updated_at_utc": "2026-10-28T18:28:51Z"
+}

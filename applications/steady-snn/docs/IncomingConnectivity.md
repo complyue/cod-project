@@ -1,14 +1,15 @@
 # Steady recurrent SNN: target-owned incoming connection sets
 
-Document-set revision: 24 · Recorded: 2026-10-26 · Topic: SNN-07 · Proposal under discussion.
+Document-set revision: 202 · Recorded: 2026-10-28 · Topic: SNN-07 · Proposal under discussion.
 
 ## Design authority
 
-- **Registry / coverage:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), revision 24, all sections here; `pending-human`.
-- **Value lineage:** candidate P-26 derives C-13 bounded adaptive connection storage from application C-12; P-25/P-22 connect D-08/C-12 to C-01 and V-01/V-02. Explicit edge ownership and update ordering make the same application transition inspectable across execution environments.
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 202, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Value lineage:** C-13/P-26 serves bounded adaptive storage; C-29/P-69 gives incoming gather an order-independent frame transition. P-70 is its storage dependency, not implementation authority. P-25/P-22 connect the application through C-12 to C-01 and V-01/V-02; the registry controls each relationship's scope.
 - **Invariants / non-goals:** fixed pools, parallel four-byte endpoint IDs and one-byte weights, per-neuron regional references, per-set owner IDs, regional relocation and lifetime rules. No heap growth, selected learning rule, complete HTM model or measured CPU performance follows from this proposal. Multi-field data defaults to SoA; AoS requires an access-pattern-specific cache rationale and empirical evidence (H-29). Standard field widths are 1, 2, 4, 8, 16, 32, ... bits (`8 * 2^n`, integer n with a positive whole-number bit count); FP4 is standard. Other widths require separate packing/alignment discussion (H-30–H-32). Consider auxiliary structures only after clear business requirements lead to an implementation-algorithm discussion; no preset auxiliary storage (H-34). Pool sizing targets M slightly above N with simple static indexing; J and final quotas remain open (H-38/H-39).
 - **Acceptance:** preserve the intended directed edges and weights; account for incoming class demand, update ordering, packed-state writes, migration and any routing index. Evaluate CPU cost and useful task behavior before implementation.
-- **Human baseline / continuity:** H-13–H-19 supply the storage constraints. [H-21](../../../design/DesignAuthorityRegistry.md#h-21) provisionally retains the alpha-near-3 template and requests evaluation of incoming ownership. It does not approve all execution details. K-11 records this draft; no qualified application implementation baseline exists. H-22 requests anatomical and physiological evidence about incoming degree and excitability; K-12 records this assessment without selecting an integration or activity-control mechanism. H-23 accepts compensating incoming weight scale as a reasonable direction and requests separate incoming-degree parameters; K-13 records the scoped assessment without choosing a weight formula or replacing the provisional allocation. H-24 assigns weight-scale policy to training strategy; K-14 records that boundary and clarifies calculated versus measured population evidence. H-25 keeps capacity allocation provisional and requests 100+100 population analysis; H-26 asks for measured human column counts. K-16 records these scoped assessments. H-27 requests the Flash 60+60 calculation; K-17 records verified width and conditional pool sizing without selecting new neural dynamics. H-28 places the embedding table in the shared node budget; K-18 records element-aligned array sizing and the per-CC/node accounting boundary. H-29 establishes that SoA default and the evidence requirement for exceptions; K-19 records this scope. H-30 requires field-specific discussion for nonstandard widths. H-31/H-32 define standard widths as powers of two in bits, including FP4; K-22 supersedes the nonnegative-exponent restriction recorded in K-21. Packing/access details remain separate from width classification. H-33 requests the scaling document’s current memory calculation; K-23 records synchronized budgets and indexing arithmetic. H-34 establishes requirements before auxiliary structures; K-24 records that principle and the removal of speculative structures and budgets. H-35 limits current planning to Flash 60+60; K-25 clarifies A and aligns the active examples and budgets with that scope. H-36 asks about planning-time sizing; H-37 asks about 15/16 classes. H-38 sets M slightly above N as the objective; H-39 excludes preserving older connection capacity. K-27 records the worked candidates without selecting final J or quotas.
+- **Human baseline:** H-13—H-39 supply the scoped static pool, layout, SoA and sizing constraints; H-21 requests incoming ownership evaluation. H-75 proposes two frames; H-73 allows wider state; H-76/H-77 specify input/cancellation. Exact layout and execution remain unqualified. The linked registry retains exact evidence and exclusions.
+- **Current assessment:** [K-108](../../../design/DesignAuthorityRegistry.md#k-108) derives retained-prefix comparison candidates from gather, learning and migration requirements. Counts and endpoint markers remain unselected; no auxiliary allowance enters the current budget. This is an agent assessment, not human confirmation or qualification. [K-207](../../../design/DesignAuthorityRegistry.md#k-207) records completion of the H-71 research pass; [progress](../research/modeling-refinement-progress.json) records its scope and substantive work.
 
 ## Recommendation and physical layout
 
@@ -36,9 +37,17 @@ For the same directed intra-CC graph, `sum(in_degree) = sum(out_degree) = E`. Th
 
 An incoming power-law capacity template also does not generate an outgoing power law. Choosing sources uniformly can yield a relatively concentrated outgoing distribution even with highly unequal incoming capacities. If the model needs influential outgoing hubs, source selection and learning must express that separately; no rule is selected here.
 
-The 19 sets with 12,800 slots would accommodate high **incoming** degree. A source may still influence 10,000 targets by appearing in 10,000 different targets' sets. Its outgoing degree is not capped by the capacity of its own incoming set, nor is the number of high-outgoing-degree neurons limited to 19 by this table.
+In the 15-class candidate, the 19 sets with 12,800 slots would accommodate high **incoming** degree. A source may still influence 10,000 targets by appearing in 10,000 different targets' sets. Its outgoing degree is not capped by the capacity of its own incoming set, nor is the number of high-outgoing-degree neurons limited to 19 by this table.
 
 Incoming and outgoing degree parameters are assessed separately in the [population comparison](ConnectivityScalingResearch.md#incoming-and-outgoing-degree-parameters). Its class-count ratios are calculated from fitted exponents and chosen spacing, not measured allocation quotas. H-23 accepts a compensating incoming weight scale as a reasonable model direction; H-24 places that policy within training strategy, potentially as a hyperparameter or dynamically planned/adapted quantity. It is not a capacity-allocation parameter and does not determine the degree exponent. The alpha=3 allocation remains provisional; the alpha=3.15 table is a sensitivity comparison.
+
+### Static capacity feasibility
+
+For one assigned set per participating target, let `d_i` be retained incoming degrees and `c_i` the available set capacities, each sorted in descending order. With interchangeable sets and no other placement restrictions, a static assignment exists exactly when there are enough sets and `d_i <= c_i` at every demand index. The necessity follows because the largest `i` demands need `i` sufficiently large sets; matching in sorted order supplies the sufficiency. Equivalently, at every degree threshold the number of targets requiring at least that degree cannot exceed the number of sufficiently large sets. This is a feasibility statement, not a prescribed runtime sort, histogram or migration algorithm.
+
+The [pool arithmetic](../research/flow-slot-capacity-analysis.json) gives 311,277 sets above 100 slots for the 15-class candidate and 327,670 for the 16-class candidate. If all 614,400 neurons participate, at least 303,123 or 286,730, respectively, must need no more than 100 inputs. Total slot count does not remove this constraint. Neurons requiring no assigned incoming set still retain their other model roles; this is not a new omission rule.
+
+Static feasibility does not guarantee that a suitable destination is currently free during a particular online migration. Final demand, current assignments and permitted publication order are separate questions. The existing extra sets help provide destinations, but no reservation or exchange machinery is inferred. [Flow learning](TrainingStrategy.md#capacity-demand-depends-on-contextual-assignment) must measure distinct retained sources and class demand after contextual assignment; a fixed distribution of storage capacities is not evidence for the learned degree distribution.
 
 ## Gather-based updates
 
@@ -56,11 +65,34 @@ Each target's source IDs and weights are traversed consecutively. Its accumulato
 
 All workers read the same prior-state snapshot. Publishing next state at the step boundary avoids accidental dependence on traversal order. Packed FP4 requires an additional detail: two neurons share a byte, so write partitions must respect byte/word boundaries or use a separate packing phase. Exclusive ownership of a neuron alone does not prevent packed writes from racing.
 
+H-75 proposes implementing this semantic update with **two alternating state frames**. Read only the completed frame while filling the other, then exchange their roles. The incoming sum is a temporary local quantity, not a persistent per-edge accumulator. H-73 permits FP16/FP32 state, avoiding packed-state write concerns for those candidates. [RateDynamics](RateDynamics.md#two-alternating-frames-with-incoming-gather) records consistent polarity cancellation, one-shot input and publication boundaries. H-76 consults preceding predictive state for token recruitment; H-77 specifies minicolumn-wide net cancellation and proportional retention before publication. No third whole-CC frame, duplicate connection pool, outgoing index or global inter-CC barrier is implied.
+
 Source-state reads are indirect and may be scattered. FP4/FP8 decoding, accumulation precision and the transition remain explicit costs and semantic choices. An immutable snapshot does not alone guarantee bit-identical floating-point reductions across implementations; summation order and precision must also be defined if required.
 
 This gather structure has a simulation precedent in postsynaptic summed variables: Brian describes summing synaptic contributions for each neuron at each time step. Its separate presynaptic event mechanism illustrates the distinct execution alternative. This is a semantic reference, not a proposed dependency. [Brian documentation](https://brian2.readthedocs.io/en/stable/user/synapses.html#summed-variables).
 
 Target ownership can also group local learning updates and future dendritic segments around the receiving neuron. It does not by itself specify segment boundaries, timing traces or HTM coincidence detection; a simple weighted sum is only the execution sketch above.
+
+## Identifying retained inputs without preset bookkeeping
+
+Gather, adaptation, growth and migration must distinguish retained edges from unused capacity. This is an actual requirement of the proposed algorithms; it does not yet justify a particular auxiliary array. In particular, a retained association can have zero weight and remain eligible for future learning. Using zero weight as an empty-slot marker would silently choose a topology-removal policy.
+
+A simple candidate keeps retained source/weight pairs in a consecutive prefix of the assigned set. Two ways to identify its end can be compared:
+
+| Candidate | End detection | Additional persistent storage | Potential value to establish |
+| --- | --- | ---: | --- |
+| Invalid endpoint at the first unused position, plus the class capacity bound | Stop at that endpoint; a full set stops at its capacity | None | Gather already discovers the end, which a colocated learning operation can reuse temporarily |
+| Separate `uint16` retained count per neuron | Read the count before traversing the prefix | 1,228,800 bytes per CC | Repeated end queries or execution improvements may justify retaining the count |
+
+At 614,400 neurons, the four-byte intra-CC endpoint namespace has values outside the valid neuron-ID range; no particular marker code is chosen. The marker occupies an already unused endpoint element, so a full set does not lose a usable slot. For the count candidate, both current maximum capacities—12,800 and 18,432—fit 16 bits. It is a separate SoA candidate field, not a reinstated bookkeeping allowance or part of the current named-array budget. Neither representation resolves source discovery, duplicate checking, free-set selection or the learning criterion for removal.
+
+Let `E` be the number of retained edges, `N_a` the number of assigned targets and `U` the number of their underfilled sets. The [conditional traversal arithmetic](../research/incoming-retained-prefix-analysis.json) gives `5*E + 4*U` logical endpoint/weight/stop-check bytes for the marker loop, or `5*E + 2*N_a` endpoint/weight/count bytes for the count loop. This counts the specified reads once, not cache-line traffic or complete frame cost. Source-state gathers, references, decoding, arithmetic, branches and writes remain additional.
+
+For a feasible example with 32 retained inputs on each of 614,400 targets, those totals are 100,761,600 and 99,532,800 bytes per frame. Both are far below the 16-class pool's 561,408,000-byte full reserved-array scan; neither is a throughput result. At 100 retained inputs per target, assigning all 327,680 minimum-capacity sets makes them full, so marker reads are unnecessary for those rows. The respective totals become 308,346,880 and 308,428,800 bytes. Even the small logical-byte difference between the candidates depends on occupancy; measured execution, not that difference alone, should decide whether the extra count is useful.
+
+Growth establishes new pairs and the new end before publication. Migration copies the retained prefix and establishes its destination end while preserving endpoint identities and effective weights. If a later justified removal algorithm fills a hole with the last pair, the mathematical edge multiset is preserved but floating-point reduction order changes. A required numerical tolerance or reproducibility property must guide that choice; no pruning, sorting or deterministic-reduction scheme is implied.
+
+These operations can be discussed at the existing complete-frame boundary. No heap allocation, free list, reverse index, new connection pool or branch-membership layout is prescribed. Compare the same retained graph and update schedule, favoring a count only when its actual algorithmic or measured execution value pays for the additional state.
 
 ## Memory and event-driven trade-off
 
@@ -72,6 +104,15 @@ For the worked 15-class Flash 60+60 candidate, incoming ownership preserves the 
 ```
 
 This includes reserved sets and slots. Region headers and algorithm-dependent storage are outside the named-array sum; no auxiliary structures or storage allowances are prescribed.
+
+The formula above assumes one FP4 state array. For H-75's two-frame proposal, replacing only `N/2` by `2*N*sizeof(state_value)` gives these exact conditional named-array totals:
+
+| Candidate pool | Two FP16 state frames | Two FP32 state frames |
+| --- | ---: | ---: |
+| 15 classes | 542325172 bytes / 517.201588 MiB | 544782772 bytes / 519.545338 MiB |
+| 16 classes | 571402200 bytes / 544.931602 MiB | 573859800 bytes / 547.275352 MiB |
+
+Each case has one scalar state value per neuron per frame, unchanged one-byte weights and the existing single ID/reference/owner arrays. These are not complete layouts or a selected precision. The node-shared embedding table is excluded from every per-CC total.
 
 An incoming sweep must process the retained edges needed by the chosen update semantics, even when few sources fire. The traversal algorithm determines whether unused slots are also visited; the representation of retained versus unused slots is not selected here. At the current pool's reserved-slot ceiling, a complete ID/weight-array scan covers 532,462,080 bytes; multiplying that by a step rate is workload arithmetic, not a throughput result.
 
@@ -85,7 +126,7 @@ An unassigned incoming set can represent no retained internal inputs; it does no
 
 ## Decisions still open
 
-- Adopt target ownership and choose synchronous gather updates, event-driven propagation, or a defined combination. Gather is the current recommendation.
+- Finalize H-75's two-frame incoming-gather proposal and its state/transition semantics. Event-driven propagation would need a demonstrated unmet requirement before adding its supporting structures.
 - Define incoming-set admission and useful underfilling separately from outgoing influence and suppression.
 - Specify point-neuron versus branch/segment integration, input timing, inhibition and gain/threshold regulation; compare degree-dependent background activation and task selectivity. These are open under H-22. Define precision, step boundaries, learning and migration publication, and budget any additional state.
 - Validate per-class incoming demand, outgoing hub formation, migration traffic and CPU bandwidth under an explicit task and update rate.

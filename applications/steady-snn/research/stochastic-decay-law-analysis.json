@@ -1,0 +1,490 @@
+{
+  "schema_version": 1,
+  "status": "conditional_arithmetic_not_selected_model",
+  "recorded_at_utc": "2026-10-28T19:20:57.045965+00:00",
+  "purpose": "Distinguish mean decay, individual extinction, update-law variability, clipping and background-supported activity before choosing low-bit stochastic numerics.",
+  "methods": "Closed-form moments and finite probability-generating-function recurrence in binary64; no random simulation, neural graph, training, benchmark or project tests.",
+  "alternatives": [
+    {
+      "name": "Independent survival",
+      "law": "Each initial activity quantum survives each frame independently with probability m and never reproduces.",
+      "distribution": "Z_n ~ Binomial(Z_0,m^n)",
+      "mean": "Z_0*m^n",
+      "variance": "Z_0*m^n*(1-m^n)",
+      "survival": "Pr(Z_n>0)=1-(1-m^n)^Z_0",
+      "range": "Never exceeds the initial count when there is no added input."
+    },
+    {
+      "name": "Poisson offspring branching",
+      "law": "Each present quantum independently produces Poisson(m) offspring next frame; no immigration for transient calculations.",
+      "mean": "Z_0*m^n",
+      "variance": "Z_0*m^n*(1-m^n)/(1-m), 0<m<1",
+      "survival": "q_0=0; q_(n+1)=exp(m*(q_n-1)); Pr(Z_n>0)=1-q_n^Z_0",
+      "range": "Unbounded count, even for Z_0=15 or255. These initial values do not make this an INT4/INT8 implementation."
+    }
+  ],
+  "shared_parameters": "m=2^(-frame_seconds/half_life_seconds). The same mean envelope is imposed only for comparison.",
+  "transient_cases": [
+    {
+      "initial_count": 1,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.01,
+      "steps": 1,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 0.9862327044933592,
+      "independent_survival": {
+        "variance": 0.013577757081073626,
+        "survival_probability": 0.9862327044933592,
+        "mean_given_nonzero": 1.0
+      },
+      "poisson_offspring": {
+        "variance": 0.9862327044933592,
+        "survival_probability": 0.6270208296612059,
+        "mean_given_nonzero": 1.572886669532564
+      }
+    },
+    {
+      "initial_count": 1,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.1,
+      "steps": 10,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 0.8705505632961243,
+      "independent_survival": {
+        "variance": 0.11269228004092495,
+        "survival_probability": 0.8705505632961243,
+        "mean_given_nonzero": 1.0
+      },
+      "poisson_offspring": {
+        "variance": 8.185506004906095,
+        "survival_probability": 0.1468238197717151,
+        "mean_given_nonzero": 5.9292188736791855
+      }
+    },
+    {
+      "initial_count": 1,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.5,
+      "steps": 50,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 0.5000000000000008,
+      "independent_survival": {
+        "variance": 0.25,
+        "survival_probability": 0.5000000000000008,
+        "mean_given_nonzero": 1.0
+      },
+      "poisson_offspring": {
+        "variance": 18.15897682151225,
+        "survival_probability": 0.025848173391565865,
+        "mean_given_nonzero": 19.343726631110744
+      }
+    },
+    {
+      "initial_count": 1,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 1,
+      "steps": 100,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 0.2500000000000007,
+      "independent_survival": {
+        "variance": 0.18750000000000036,
+        "survival_probability": 0.2500000000000007,
+        "mean_given_nonzero": 1.0
+      },
+      "poisson_offspring": {
+        "variance": 13.619232616134214,
+        "survival_probability": 0.00882692957434128,
+        "mean_given_nonzero": 28.322419239269536
+      }
+    },
+    {
+      "initial_count": 1,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 2,
+      "steps": 200,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 0.06250000000000037,
+      "independent_survival": {
+        "variance": 0.05859375000000033,
+        "survival_probability": 0.06250000000000037,
+        "mean_given_nonzero": 1.0
+      },
+      "poisson_offspring": {
+        "variance": 4.256010192541958,
+        "survival_probability": 0.0017834766250671708,
+        "mean_given_nonzero": 35.04391317584353
+      }
+    },
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.01,
+      "steps": 1,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 14.793490567400388,
+      "independent_survival": {
+        "variance": 0.20366635621610438,
+        "survival_probability": 1.0,
+        "mean_given_nonzero": 14.793490567400388
+      },
+      "poisson_offspring": {
+        "variance": 14.793490567400388,
+        "survival_probability": 0.9999996239300101,
+        "mean_given_nonzero": 14.793496130790329
+      }
+    },
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.1,
+      "steps": 10,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 13.058258449441865,
+      "independent_survival": {
+        "variance": 1.6903842006138743,
+        "survival_probability": 0.9999999999999519,
+        "mean_given_nonzero": 13.058258449442492
+      },
+      "poisson_offspring": {
+        "variance": 122.78259007359144,
+        "survival_probability": 0.9076193893660055,
+        "mean_given_nonzero": 14.387372727419784
+      }
+    },
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.5,
+      "steps": 50,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 7.5000000000000115,
+      "independent_survival": {
+        "variance": 3.75,
+        "survival_probability": 0.999969482421875,
+        "mean_given_nonzero": 7.5002288888210815
+      },
+      "poisson_offspring": {
+        "variance": 272.38465232268373,
+        "survival_probability": 0.3248508301750102,
+        "mean_given_nonzero": 23.087519880923377
+      }
+    },
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 1,
+      "steps": 100,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 3.7500000000000107,
+      "independent_survival": {
+        "variance": 2.8125000000000053,
+        "survival_probability": 0.9866365389898422,
+        "mean_given_nonzero": 3.8007917321199254
+      },
+      "poisson_offspring": {
+        "variance": 204.2884892420132,
+        "survival_probability": 0.12452769877616252,
+        "mean_given_nonzero": 30.1137822095356
+      }
+    },
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 2,
+      "steps": 200,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 0.9375000000000057,
+      "independent_survival": {
+        "variance": 0.878906250000005,
+        "survival_probability": 0.6201875941847566,
+        "mean_given_nonzero": 1.5116393955483094
+      },
+      "poisson_offspring": {
+        "variance": 63.84015288812937,
+        "survival_probability": 0.026420733940665523,
+        "mean_given_nonzero": 35.48349573124654
+      }
+    },
+    {
+      "initial_count": 255,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.01,
+      "steps": 1,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 251.4893396458066,
+      "independent_survival": {
+        "variance": 3.4623280556737748,
+        "survival_probability": 1.0,
+        "mean_given_nonzero": 251.4893396458066
+      },
+      "poisson_offspring": {
+        "variance": 251.4893396458066,
+        "survival_probability": 1.0,
+        "mean_given_nonzero": 251.4893396458066
+      }
+    },
+    {
+      "initial_count": 255,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.1,
+      "steps": 10,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 221.9903936405117,
+      "independent_survival": {
+        "variance": 28.736531410435862,
+        "survival_probability": 1.0,
+        "mean_given_nonzero": 221.9903936405117
+      },
+      "poisson_offspring": {
+        "variance": 2087.3040312510543,
+        "survival_probability": 1.0,
+        "mean_given_nonzero": 221.9903936405117
+      }
+    },
+    {
+      "initial_count": 255,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.5,
+      "steps": 50,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 127.5000000000002,
+      "independent_survival": {
+        "variance": 63.75,
+        "survival_probability": 1.0,
+        "mean_given_nonzero": 127.5000000000002
+      },
+      "poisson_offspring": {
+        "variance": 4630.539089485624,
+        "survival_probability": 0.9987416671175352,
+        "mean_given_nonzero": 127.66063958058093
+      }
+    },
+    {
+      "initial_count": 255,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 1,
+      "steps": 100,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 63.750000000000185,
+      "independent_survival": {
+        "variance": 47.8125000000001,
+        "survival_probability": 1.0,
+        "mean_given_nonzero": 63.750000000000185
+      },
+      "poisson_offspring": {
+        "variance": 3472.9043171142253,
+        "survival_probability": 0.8957392193540561,
+        "mean_given_nonzero": 71.170267665596
+      }
+    },
+    {
+      "initial_count": 255,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 2,
+      "steps": 200,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 15.937500000000096,
+      "independent_survival": {
+        "variance": 14.941406250000085,
+        "survival_probability": 0.9999999287679436,
+        "mean_given_nonzero": 15.937501135261074
+      },
+      "poisson_offspring": {
+        "variance": 1085.2825990981994,
+        "survival_probability": 0.3656741977181104,
+        "mean_given_nonzero": 43.58387903618493
+      }
+    }
+  ],
+  "cadence_cases": [
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.1,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.5,
+      "steps": 5,
+      "mean_offspring": 0.8705505632961241,
+      "mean_count": 7.499999999999999,
+      "independent_survival": {
+        "variance": 3.7499999999999996,
+        "survival_probability": 0.999969482421875,
+        "mean_given_nonzero": 7.500228888821069
+      },
+      "poisson_offspring": {
+        "variance": 28.968839845772152,
+        "survival_probability": 0.946794909926215,
+        "mean_given_nonzero": 7.921462104802068
+      }
+    },
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.05,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.5,
+      "steps": 10,
+      "mean_offspring": 0.9330329915368074,
+      "mean_count": 7.499999999999999,
+      "independent_survival": {
+        "variance": 3.7499999999999996,
+        "survival_probability": 0.999969482421875,
+        "mean_given_nonzero": 7.500228888821069
+      },
+      "poisson_offspring": {
+        "variance": 55.99772314842361,
+        "survival_probability": 0.8153372475272289,
+        "mean_given_nonzero": 9.198647581410206
+      }
+    },
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.01,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.5,
+      "steps": 50,
+      "mean_offspring": 0.9862327044933592,
+      "mean_count": 7.5000000000000115,
+      "independent_survival": {
+        "variance": 3.75,
+        "survival_probability": 0.999969482421875,
+        "mean_given_nonzero": 7.5002288888210815
+      },
+      "poisson_offspring": {
+        "variance": 272.38465232268373,
+        "survival_probability": 0.3248508301750102,
+        "mean_given_nonzero": 23.087519880923377
+      }
+    },
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.005,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.5,
+      "steps": 100,
+      "mean_offspring": 0.9930924954370359,
+      "mean_count": 7.5000000000000195,
+      "independent_survival": {
+        "variance": 3.7499999999999996,
+        "survival_probability": 0.999969482421875,
+        "mean_given_nonzero": 7.5002288888210895
+      },
+      "poisson_offspring": {
+        "variance": 542.887806416568,
+        "survival_probability": 0.1824399567735006,
+        "mean_given_nonzero": 41.109415572331436
+      }
+    },
+    {
+      "initial_count": 15,
+      "frame_seconds": 0.001,
+      "half_life_seconds": 0.5,
+      "duration_seconds": 0.5,
+      "steps": 500,
+      "mean_offspring": 0.9986146661010289,
+      "mean_count": 7.499999999999879,
+      "independent_survival": {
+        "variance": 3.7499999999999996,
+        "survival_probability": 0.999969482421875,
+        "mean_given_nonzero": 7.500228888820949
+      },
+      "poisson_offspring": {
+        "variance": 2706.928634883717,
+        "survival_probability": 0.04042290713811496,
+        "mean_given_nonzero": 185.5383625520613
+      }
+    }
+  ],
+  "cadence_deduction": "For fixed physical duration and half-life, independent thinning composes consistently. Poisson offspring of mean near1 retain order-one per-quantum variance every frame; the transient variance diverges approximately as1/frame_seconds when the frame shrinks. Matching mean retention alone therefore does not specify a consistent physical-time noise law.",
+  "finite_time_variance_condition": "In this independent-branching reference, a near-identity offspring variance proportional to frame duration can avoid that divergence when m=1-lambda*frame_duration+O(frame_duration^2). This does not select a birth/death model or SDE.",
+  "one_step_clipping_cases": [
+    {
+      "cap": 15,
+      "starting_count": 15,
+      "unclipped_poisson_mean": 14.793490567400388,
+      "probability_above_cap": 0.41076654065097873,
+      "mean_after_clipping": 13.365106300616837,
+      "mean_loss": 1.4283842667835511
+    },
+    {
+      "cap": 255,
+      "starting_count": 255,
+      "unclipped_poisson_mean": 251.4893396458066,
+      "probability_above_cap": 0.3963819538949105,
+      "mean_after_clipping": 246.7514017418358,
+      "mean_loss": 4.737937903970817
+    }
+  ],
+  "clipping_limit": "Clipping a Poisson update to an integer code cap changes its conditional mean immediately. A bounded implementation needs its own transition law; results from the unbounded reference cannot be transferred unchanged.",
+  "immigration_reference": {
+    "law": "Z_(n+1)=sum_{i=1}^{Z_n}Y_(n,i)+H_n; iid Poisson(m) offspring and independent iid Poisson(h) immigration,0<m<1.",
+    "stationary_mean": "h/(1-m)",
+    "stationary_variance": "mean/(1-m^2)",
+    "fixed_mean_cases": [
+      {
+        "mean_offspring": 0.5,
+        "chosen_stationary_mean": 15,
+        "immigration_mean": 7.5,
+        "variance": 20.0,
+        "fano_factor": 1.3333333333333333
+      },
+      {
+        "mean_offspring": 0.9,
+        "chosen_stationary_mean": 15,
+        "immigration_mean": 1.4999999999999996,
+        "variance": 78.94736842105266,
+        "fano_factor": 5.263157894736843
+      },
+      {
+        "mean_offspring": 0.98,
+        "chosen_stationary_mean": 15,
+        "immigration_mean": 0.30000000000000027,
+        "variance": 378.787878787878,
+        "fano_factor": 25.252525252525203
+      },
+      {
+        "mean_offspring": 0.9862327044933592,
+        "chosen_stationary_mean": 15,
+        "immigration_mean": 0.20650943259961196,
+        "variance": 548.5452972483648,
+        "fano_factor": 36.56968648322432
+      },
+      {
+        "mean_offspring": 0.995,
+        "chosen_stationary_mean": 15,
+        "immigration_mean": 0.07500000000000007,
+        "variance": 1503.7593984962473,
+        "fano_factor": 100.25062656641649
+      }
+    ],
+    "ancestry": "Expected descendants of the initial population remain Z_0*m^n even while new immigrants sustain total activity. Ancestry is a mathematical decomposition, not a proposed stored label.",
+    "limit": "Constant independent immigration is not H-53/H-55 adaptive noise regulation, and count is not automatically the active-neuron fraction or semantic readout."
+  },
+  "source_reference": {
+    "source_id": "MR-S029",
+    "url": "https://arxiv.org/html/1804.07864v2",
+    "use": "Wilting and Priesemann2019 Supplement3 gives the branching-with-immigration moment framework; transient and clipping comparisons here specialize elementary conditional laws.",
+    "limit": "No branching-ratio target, criticality claim, biological equivalence or estimator adopted."
+  },
+  "design_implications": [
+    "Assess single-trial attenuation, extinction, occasional growth and later reactivation alongside the mean semantic response.",
+    "Regulated total activity does not itself establish survival of the earlier semantic/contextual influence.",
+    "Changing frame duration, stochastic rounding, update law and saturation together can obscure the cause of behavior; compare their contributions explicitly.",
+    "Low integer width is neither the stochastic model nor proof of faithful natural cessation. Wider deterministic state with explicitly chosen noise remains a comparison."
+  ],
+  "source_cache_path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/stochastic_decay_arithmetic.py",
+  "source_sha256": "a4aa0c9e2ce876e61fa430cd25d74ef6e3bcf7dc3017b0df8518b76e73ca6a56"
+}

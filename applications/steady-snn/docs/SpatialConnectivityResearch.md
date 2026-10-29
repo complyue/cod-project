@@ -1,14 +1,15 @@
 # Steady recurrent SNN: spatial connectivity research and boundaries
 
-Document-set revision: 32 · Recorded: 2026-10-27 · Topics: SNN-03/SNN-05/SNN-07.
+Document-set revision: 74 · Recorded: 2026-10-28 · Topics: SNN-03/SNN-05/SNN-07.
 
 ## Design authority
 
-- **Registry / coverage:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), revision 32, all sections; `pending-human`, general research rather than an implementation contract.
+- **Registry / coverage:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), revision 74, all sections; `pending-human`, general research rather than an implementation contract.
 - **Value lineage:** candidate P-29 relates C-15's search for a justified proximity rule to C-12's contextual recurrence; P-25/P-22 connect the documents and application to C-01 and V-01/V-02. P-30 is a capacity dependency. P-31's shared-position scope is rejected under H-42 and grants no authority.
 - **Human baseline / continuity:** H-40 supplies coactivity/proximity research; H-41 excludes dimension-index distance; H-42 / AD-035 rejects cross-minicolumn internal-position bias. H-43 / AD-037 fixes semantic assignments and approximate-replica CCs. H-46–H-48 specify three regimes with broad per-CC activity bounds. H-50 clarifies that our semantic arrangement supplies no natural physical positions; H-51 requests at least 12 hours of deeper research after correction. [K-37](../../../design/DesignAuthorityRegistry.md#k-37) withdraws the premature application recommendation. No geometry or learning algorithm is selected.
 - **Invariants / non-goals:** preserve Flash 60+60 planning, static SoA capacity, regional relocation, training ownership of weight scale and requirements before auxiliary structures. Storage migration does not change learned semantics. No anatomical equivalence or measured learning advantage is asserted.
 - **Acceptance:** distinguish source findings from deductions, state the premises of each geometric claim, and establish a useful meaning for distance before selecting a learning kernel. The application contract remains under discussion.
+- **Current training scope:** H-63 / AD-060 requests unified DMN/token activation-chain construction and ongoing repair: when next-step activation is insufficient, select enough eligible expected-but-inactive cells. H-61's physical-distance omission, later Hebbian flow and emergent immersion remain; H-62's fixed groups remain a preliminary reference-policy option. [K-79](../../../design/DesignAuthorityRegistry.md#k-79), C-22/P-45–P-47 and [TrainingStrategy](TrainingStrategy.md#unified-next-step-repair) record the scope. Expected targets, teaching/update semantics and detailed implementation remain pending-human.
 
 ## Current status
 
@@ -19,6 +20,8 @@ The existing organization follows statically assigned semantic roles inside each
 This note retains general network geometry as reference material. Its 1D/2D and exclusion-zone deductions are conditional results, not a recommendation to impose positions on arbitrary dimension labels.
 
 [Physical distance preference research](PhysicalDistancePreferenceResearch.md) describes biological locality, selection beyond anatomical contact, heterogeneous live degrees and recurrent dynamics. Those findings do not yet justify an application distance prior. The formulas below are conditional tools requiring a meaningful metric; our semantic arrangement does not provide that metric.
+
+The [training-goal assessment](PhysicalDistancePreferenceResearch.md#training-goal-conclusion) supports H-61's decision to proceed without physical-distance preference. [TrainingStrategy](TrainingStrategy.md#unified-next-step-repair) discusses unified DMN/token construction and ongoing repair, later Hebbian flow learning and emergent immersion. Logical group order is a temporal relation, not a spatial metric. Geometry can be revisited for a specific demonstrated behavioral or computational benefit.
 
 ## General spatial-network research
 

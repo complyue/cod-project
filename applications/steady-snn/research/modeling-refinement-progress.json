@@ -1,0 +1,1932 @@
+{
+  "schema_version": 1,
+  "task": "Steady SNN context loops, accumulated/scheduled decay and numeric representations",
+  "status": "completed",
+  "goal_thread": "01a14005-1edf-70d1-adcf-c091e8652c75",
+  "requested_research_seconds_minimum": 43200,
+  "started_at_utc": "2026-10-28T15:05:36Z",
+  "client_timezone": "America/Los_Angeles",
+  "earliest_elapsed_completion_utc": "2026-10-29T03:05:36Z",
+  "accounting": {
+    "basis": "Nonoverlapping intervals of substantive research, reasoning, numerical analysis and documentation; no idle waits counted. Elapsed time alone does not satisfy the request.",
+    "completed_seconds": 43216,
+    "completed_intervals": [
+      {
+        "id": "MR-I001",
+        "started_at_utc": "2026-10-28T15:05:36Z",
+        "ended_at_utc": "2026-10-28T15:51:17Z",
+        "seconds": 2741,
+        "work": [
+          "Recorded H-71 scope and H-72/H-73/H-74 clarifications, preserving prior authority history",
+          "Analyzed useful loops versus dominant fading, noise support versus retained content, and simpler adequate-precision baselines",
+          "Read targeted primary memory, QSS and quantization sources with explicit transfer boundaries",
+          "Computed exact state/weight/accumulator arithmetic, 288 isolated-decay cases and conditional encoding on 2048 sampled real embeddings",
+          "Updated ContextLoopsAndNumerics, RateDynamics and Decisions, registry86/D-08 revision80; checked historical H/K/AD preservation and Markdown whitespace"
+        ],
+        "artifacts": [
+          "docs/ContextLoopsAndNumerics.md",
+          "research/numeric-representation-arithmetic.json",
+          "research/isolated-decay-probe.json",
+          "research/embedding-precision-probe.json"
+        ],
+        "limits": "No SNN implementation, training success, benchmark, project tests or build. Prior research time is not counted."
+      },
+      {
+        "id": "MR-I002",
+        "started_at_utc": "2026-10-28T15:51:17Z",
+        "ended_at_utc": "2026-10-28T16:33:59Z",
+        "seconds": 2562,
+        "work": [
+          "Compared FP16/FP32 evolving state, coefficient precision and literal next-code scheduling counts",
+          "Analyzed shared-loop gain, phase spreading, noise support, individual contextual identities and readiness semantics",
+          "Read rate-model equivalence and primary HTM context descriptions, with transfer limits",
+          "Incorporated H-75 contextual paths and two-frame incoming gather; exact state-array budgets and update-order arithmetic",
+          "Updated eight application documents and registry87/D-08 revision81, preserving H/K/AD history and checking Markdown/JSON",
+          "Examined conditional cancellation precision and why arbitrary opposing-cell index pairing changes surviving contextual activity"
+        ],
+        "artifacts": [
+          "research/floating-state-decay-probe.json",
+          "research/recurrent-chain-arithmetic.json",
+          "research/minimal-dynamics-analysis.json",
+          "research/execution-work-arithmetic.json",
+          "research/cancellation-frame-arithmetic.json",
+          "docs/RateDynamics.md",
+          "docs/IncomingConnectivity.md"
+        ],
+        "limits": "Conditional arithmetic and design research only. No SNN implementation, learned performance, benchmark, project tests or build."
+      },
+      {
+        "id": "MR-I003",
+        "started_at_utc": "2026-10-28T16:33:59Z",
+        "ended_at_utc": "2026-10-28T16:43:33Z",
+        "seconds": 574,
+        "work": [
+          "Integrated H-76 prediction-guided token entry and H-77 full minicolumn net cancellation with proportional surviving rates",
+          "Derived frame integration, within-population ratio preservation and the distinction between summed rate and active-cell count",
+          "Analyzed coordinate-strength calibration for strong/focused versus weak/broad input without selecting a normalization",
+          "Updated eight application documents and registry88/D-08 revision82; retained prior H/K/AD evidence and checked authority headers/Markdown/JSON"
+        ],
+        "artifacts": [
+          "docs/SignedPopulationEncoding.md",
+          "docs/RateDynamics.md",
+          "research/cancellation-frame-arithmetic.json"
+        ],
+        "limits": "Design and conditional arithmetic only; no implementation, project test or build."
+      },
+      {
+        "id": "MR-I004",
+        "started_at_utc": "2026-10-28T16:43:48Z",
+        "ended_at_utc": "2026-10-28T17:16:57Z",
+        "seconds": 1989,
+        "work": [
+          "Recorded H-78 deferring state representation for future controlled comparison; registry89/D-08 revision83",
+          "Examined NuPIC reference activation/prediction timing and retained read-only source fingerprint",
+          "Derived input gain/direction calibration and distinguished input encoding from context-plus-input response",
+          "Read Gupta2015/BinaryConnect2015 update/accumulator sections and computed28 conditional weight-format cases with explicit training-memory costs",
+          "Derived proportional cancellation properties, non-associative contextual results, instantaneous support bound and conditional noise-only counting behavior",
+          "Analyzed signed effective responses and conditional contraction without adding inhibitory edge types or normalization machinery",
+          "Read Ganguli2008 main memory analysis pp1–4, retaining linear/noise/range transfer limits",
+          "Updated registry90/D-08 revision84 and nine compact authority blocks, preserving human histories, invariants, acceptance and body prose; clarified README complete-transition boundary"
+        ],
+        "artifacts": [
+          "research/input-context-calibration.json",
+          "research/weight-precision-probe.json",
+          "research/cancellation-properties-analysis.json",
+          "research/cancellation-recurrence-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/SignedPopulationEncoding.md"
+        ],
+        "limits": "Conditional arithmetic, primary-source reading and design refinement only. No actual SNN implementation/training, performance benchmark, project test, build or toolchain mutation."
+      },
+      {
+        "id": "MR-I005",
+        "started_at_utc": "2026-10-28T17:17:16Z",
+        "ended_at_utc": "2026-10-28T17:49:30Z",
+        "seconds": 1934,
+        "work": [
+          "Derived weighted-ring entry dependence, transient growth with lap attenuation and balanced-noise signed-residual behavior",
+          "Analyzed direct frame-map versus continuous-time refinement and noise units; read Higham2001 targeted sections",
+          "Updated three documents and registry91/K-90 with conditional entry/time evidence; preserved historical records",
+          "Read Hawkins/Ahmad2016 activation/learning methods and scoped contextual-maintenance arithmetic",
+          "Integrated H-79—H-81: separate DMN/token repair from Hebbian/HTM token-sequence flow; include initial flow algorithm design and ask its first objective question early",
+          "Updated seven documents to86 and registry92/K-91, recording three human statements without selecting a flow algorithm or state representation",
+          "Derived nine stochastic weight-update arithmetic cases and limits of row-summed residual retention; no learner chosen"
+        ],
+        "artifacts": [
+          "research/body-return-response-analysis.json",
+          "research/frame-time-noise-analysis.json",
+          "research/context-maintenance-analysis.json",
+          "research/weight-update-precision-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/TrainingStrategy.md",
+          "docs/RateDynamics.md"
+        ],
+        "limits": "Conditional research and documentation only. No SNN implementation/training run, project tests, build, benchmark, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I006",
+        "started_at_utc": "2026-10-28T17:50:02Z",
+        "ended_at_utc": "2026-10-28T18:40:10Z",
+        "seconds": 3008,
+        "work": [
+          "Integrated H-82 prediction matching and H-83 context-dependent narrowing, preserving generation as a separate design task",
+          "Analyzed pre-input assessment, ambiguous prediction credit and neural-frame versus token-event timing",
+          "Read official Raspberry Pi/Arm hardware references and refined conditional full-scan/INT4 work arithmetic without benchmarking",
+          "Inspected NuPIC source activation, learning winners, adaptation and synapse growth; corrected fallback-derived teaching alternatives under H-84",
+          "Read targeted continuous-time TM and online sequence-learning primary sources, preserving transfer limits",
+          "Derived six conditional flow-context analyses: unfamiliar-transition eligibility, contextual identity, partial matches, learning responsibility versus training state, signed predictive ambiguity and limits of scalar homeostasis",
+          "Recorded H-85/H-86: defer predictive cancellation to comparison and handle obvious empirical alternatives directly without repeated questions",
+          "Updated D-08 through revision91 and registry97/K-96; verified preserved H/K/AD history, all17 document revisions, JSON and whitespace"
+        ],
+        "artifacts": [
+          "research/flow-learning-design-analysis.json",
+          "research/flow-context-assignment-analysis.json",
+          "research/context-maintenance-analysis.json",
+          "research/execution-work-arithmetic.json",
+          "research/modeling-source-ledger.json",
+          "docs/TrainingStrategy.md",
+          "docs/SignedPopulationEncoding.md",
+          "docs/RateDynamics.md",
+          "docs/Decisions.md"
+        ],
+        "limits": "Primary reading, conditional arithmetic and design documentation only; no actual SNN implementation/training, benchmark, project tests, build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I007",
+        "started_at_utc": "2026-10-28T18:40:32Z",
+        "ended_at_utc": "2026-10-28T19:02:09Z",
+        "seconds": 1297,
+        "work": [
+          "Examined next-representable-change scheduling under constant and intervening input using exact rational scalar arithmetic",
+          "Derived finite-timestamp amplitude reconstruction, no-event information-loss counterexample, timestamp precision growth and conditional storage costs",
+          "Distinguished exact local decay from first-order quantized feedback; analyzed incoming-gather dependencies, frame boundaries and conditional error propagation",
+          "Rechecked primary QSS assumptions and official BCM2712/A76 cache details; added source-state working-set comparisons without performance claims",
+          "Derived seven shared-learning analyses covering return gain, normalization interference, intrinsic signed modes, representable updates, missing-edge prerequisites and fixed versus resampled random gains",
+          "Read targeted primary quantized recurrent-network training and Loihi plastic-rounding studies, recording transfer limits",
+          "Updated D-08 through93 and registry99/K-98; preserved H/K/AD history and checked17 document revisions, research JSON, source fingerprint and Markdown whitespace"
+        ],
+        "artifacts": [
+          "research/decay-input-timing-arithmetic.json",
+          "research/quantized-frame-dependency-analysis.json",
+          "research/shared-learning-recurrence-analysis.json",
+          "research/execution-work-arithmetic.json",
+          "research/modeling-source-ledger.json",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/TrainingStrategy.md",
+          "docs/RateDynamics.md"
+        ],
+        "limits": "Research, exact/closed-form arithmetic and documentation only. No SNN implementation/training, benchmark, project tests, build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I008",
+        "started_at_utc": "2026-10-28T19:04:53Z",
+        "ended_at_utc": "2026-10-28T19:17:42Z",
+        "seconds": 769,
+        "work": [
+          "Derived exact conditional density-filter probabilities under temporal dependence, raw union versus input pacing, order-information loss and nonlinear noise attribution",
+          "Read targeted primary surrogate-analysis and timescale-estimation evidence with explicit access/read limits; separated full feedback comparisons from fixed forcing",
+          "Updated ActivationRegimes and ContextLoopsAndNumerics to94, registry100/K-99; empirical window and qualification choices handled directly under H-86",
+          "Expanded spiking TM reading on context overlap, prediction evaluation and repeated-start/noise/homeostasis limitations without adopting its mechanisms",
+          "Analyzed1024 actual Flash embedding rows and4096 sampled distinct-type pairs; verified signed versus nonnegative polarity-overlap identities and conditional cross-association terms",
+          "Refined causal roles in flow learning and preservation of history through shared fragments; TrainingStrategy95, registry101/K-100",
+          "Checked preserved H/K/AD records,17 document revision headers,40 research JSON files, local links, source fingerprints and Markdown whitespace"
+        ],
+        "artifacts": [
+          "research/temporal-coverage-analysis.json",
+          "research/signed-population-overlap-probe.json",
+          "research/flow-context-assignment-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/ActivationRegimes.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/TrainingStrategy.md"
+        ],
+        "limits": "Conditional arithmetic, read-only tensor analysis, primary-source reading and design documentation only. No neural training, implementation, performance benchmark, project tests, build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I009",
+        "started_at_utc": "2026-10-28T19:17:58Z",
+        "ended_at_utc": "2026-10-28T19:28:42Z",
+        "seconds": 644,
+        "work": [
+          "Derived nonnegative aggregate block decomposition after intrinsic cancellation and verified an exact coactivation cross-response counterexample",
+          "Examined why exact semantic closure can remove a route for contextual cell identity to affect later responses without selecting opponent balancing",
+          "Read Wilting/Priesemann2019 minimal-model methods and Supplement3 moment derivation, recording transfer limits",
+          "Computed closed-form survival and Poisson-offspring comparisons with equal mean half-life, cadence sensitivity, clipping and constant-immigration limits",
+          "Updated three documents to96 and registry102/K-101, preserving existing choices and human history",
+          "Computed specified binary16/binary32 product, sequential/pairwise reduction, order and minicolumn-cancellation/writeback examples",
+          "Updated ContextLoopsAndNumerics/RateDynamics97 and registry103/K-102; checked H/K/AD preservation,17 revisions,42 JSON files, links, fingerprints and moment recurrence"
+        ],
+        "artifacts": [
+          "research/cancellation-recurrence-analysis.json",
+          "research/stochastic-decay-law-analysis.json",
+          "research/floating-reduction-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/TrainingStrategy.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/RateDynamics.md"
+        ],
+        "limits": "Conditional algebra, probability-generating functions, floating arithmetic, primary reading and design documentation only. No neural training, random neural simulation, implementation, benchmark, project tests, build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I010",
+        "started_at_utc": "2026-10-28T19:31:09Z",
+        "work": [
+          "Read incoming/adaptive capacity contracts and targeted charter/registry entries; distinguished flow source credit, edge discovery and class exhaustion",
+          "Expanded NuPIC growth/capacity reading and read RigL primary algorithm, preserving transfer limits",
+          "Derived and independently checked sorted-capacity feasibility and source-union expectations for the existing15/16-class candidates; no capacity revision",
+          "Updated TrainingStrategy, IncomingConnectivity and AdaptiveConnectivity98 with registry104/K-103, including effective-weight preservation on migration",
+          "Derived exact deferred-cancellation counterexample and attenuation commutation conditions; retained H-75/H-77 frame semantics",
+          "Read Schuecker2018 primary model and memory/discussion sections; computed closed-form memory/gain and paired-history versus single-run discrimination examples",
+          "Updated ContextLoopsAndNumerics/RateDynamics99 and registry105/K-104; verified H/K/AD history,17 revisions,44 JSON files,31 unique sources, arithmetic, source fingerprints, local links and whitespace"
+        ],
+        "ended_at_utc": "2026-10-28T19:42:04Z",
+        "seconds": 655,
+        "artifacts": [
+          "research/flow-slot-capacity-analysis.json",
+          "research/quantized-frame-dependency-analysis.json",
+          "research/memory-gain-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/TrainingStrategy.md",
+          "docs/IncomingConnectivity.md",
+          "docs/AdaptiveConnectivity.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/RateDynamics.md"
+        ],
+        "limits": "Primary reading, exact combinatorics, closed-form probability and design documentation only. No neural training, random neural simulation, implementation, benchmark, project tests, build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I011",
+        "started_at_utc": "2026-10-28T19:42:47Z",
+        "work": [
+          "Developed the provisional flow procedure with separate pre-input assessment, contextual assignment, source credit, retained-edge adaptation and absent-edge discovery",
+          "Read targeted Oja1982, vanRossum2000 and Billings2009 primary passages; recorded access and transfer limits",
+          "Derived bounded Hebbian estimands, exposure cadence, recency and soft depression without selecting a learner",
+          "Enumerated exact finite-grid learning transitions; proved the specific UINT8 midpoint absorption and stochastic-rounding Binomial stationary law",
+          "Calculated complete two-FP32-frame costs for wider weights and low-bit/master alternatives",
+          "Updated TrainingStrategy and ContextLoopsAndNumerics100 with registry106/K-105; verified historical records,45 JSON files,34 sources, source fingerprint, independent drift/transition arithmetic and whitespace"
+        ],
+        "ended_at_utc": "2026-10-28T19:59:50Z",
+        "seconds": 1023,
+        "artifacts": [
+          "research/hebbian-update-law-analysis.json",
+          "research/flow-learning-design-analysis.json",
+          "research/numeric-representation-arithmetic.json",
+          "research/modeling-source-ledger.json",
+          "docs/TrainingStrategy.md",
+          "docs/ContextLoopsAndNumerics.md"
+        ],
+        "limits": "Primary reading, exact finite-state arithmetic, closed-form probability and design documentation only. No neural training, random neural simulation, implementation, benchmark, project tests, build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I012",
+        "started_at_utc": "2026-10-28T19:59:50Z",
+        "work": [
+          "Read targeted primary proper-scoring and sequential-forecasting sources; kept probability interpretation separate from readiness",
+          "Derived exact frequency, ambiguity, conditional-entropy, vector-mean and mixture-identifiability examples; distinguished retention, contextual prediction, generalization and online learning comparisons",
+          "Updated TrainingStrategy101 with registry107/K-106; empirical choices handled under H-86 without further questions",
+          "Read Poirazi2003 model/stimulus comparisons, Ahmad/Hawkins2016 sparse-pattern detection/union methods, and expanded HTM example/learning scope",
+          "Derived fixed-state conjunction-detector limitation, exact union-size and inclusion-exclusion probabilities, and conditional semantic-population match rates",
+          "Updated TrainingStrategy and SynapticIntegrationResearch102 with registry108/K-107; preserved simple existing-cell alternatives before new grouping/state",
+          "Verified independent probability identities, H/K/AD history,17 document revisions,47 research JSON files,38 source entries, source fingerprints, revised local links and whitespace"
+        ],
+        "ended_at_utc": "2026-10-28T20:09:28Z",
+        "seconds": 578,
+        "artifacts": [
+          "research/flow-prediction-assessment-analysis.json",
+          "research/context-detection-analysis.json",
+          "research/flow-learning-design-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/TrainingStrategy.md",
+          "docs/SynapticIntegrationResearch.md"
+        ],
+        "limits": "Primary reading, exact combinatorics, closed-form probability and design documentation only. No neural implementation/training, random neural simulation, fitted decoder, benchmark, project tests, build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I013",
+        "started_at_utc": "2026-10-28T20:10:07Z",
+        "work": [
+          "Related retained-edge traversal, growth and migration to contiguous-prefix marker/count alternatives without selecting auxiliary storage",
+          "Computed logical reads, existing-pool degree feasibility, complete named-array costs and migration payload; kept zero weight distinct from absence",
+          "Read Brea2013, accessible primary Gillett2020 material and expanded Bouhadjar sequence timing sections with explicit transfer limits",
+          "Derived temporal credit under persistent additive responses, token-event versus frame cadence, repeated-cycle overlap and variable-gap effects",
+          "Updated IncomingConnectivity/AdaptiveConnectivity103, TrainingStrategy104 and registry110/K-108/K-109; corrected Adaptive authority revision103",
+          "Verified H/K/AD history,49 research JSON files,40 sources, modified revision headers, source fingerprints, local file links and Markdown whitespace"
+        ],
+        "ended_at_utc": "2026-10-28T20:24:14Z",
+        "seconds": 847,
+        "artifacts": [
+          "research/incoming-retained-prefix-analysis.json",
+          "research/flow-temporal-credit-analysis.json",
+          "research/execution-work-arithmetic.json",
+          "research/flow-learning-design-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/IncomingConnectivity.md",
+          "docs/AdaptiveConnectivity.md",
+          "docs/TrainingStrategy.md"
+        ],
+        "limits": "Primary reading, conditional closed-form arithmetic and documentation only. No neural implementation/training, random neural simulation, benchmark, project tests, build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I014",
+        "started_at_utc": "2026-10-28T20:24:14Z",
+        "work": [
+          "Read targeted primary Harnack2015 and Zenke2013 homeostasis research, distinguishing regulated quantities, feedback delays and plasticity compensation with explicit transfer limits",
+          "Derived exact cancellation/noise activity-count counterexample, independent unsigned-rate integration, two feedback timing stability conditions and bounded-actuation feasibility",
+          "Updated ActivationRegimes and RateDynamics105 with registry111/K-110; no controller, threshold, window or new state selected",
+          "Derived existing-rate composition coordinates, equal-semantic-total context dilution, exact paired-history contraction and a downstream difference without added context storage",
+          "Updated ContextLoopsAndNumerics and SignedPopulationEncoding106 with registry112/K-111; kept predictive choices open",
+          "Consolidated README107 around current behavior, flow/generation/repair boundaries, exact conditional array costs and H-86 real-data comparisons; registry113/K-112",
+          "Checked H/K/AD preservation,17 revision headers,51 research JSON files,42 unique sources, arithmetic fingerprints,85 local links including anchors and Markdown whitespace"
+        ],
+        "ended_at_utc": "2026-10-28T20:37:27Z",
+        "seconds": 793,
+        "artifacts": [
+          "research/noise-feedback-analysis.json",
+          "research/context-composition-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/ActivationRegimes.md",
+          "docs/RateDynamics.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/SignedPopulationEncoding.md",
+          "docs/README.md"
+        ],
+        "limits": "Primary reading, exact algebra/probability,2x2 spectral arithmetic and documentation only. No neural implementation/training, random neural simulation, benchmark, project tests, build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I015",
+        "started_at_utc": "2026-10-28T20:38:13Z",
+        "work": [
+          "Derived ordered affine input composition, frame-boundary timing and separate neural, observation, learning and execution clocks; rechecked NuPIC activation/prediction order",
+          "Read Lober2026 timing/replay preprint with initial-cue and repeated-forcing limits; updated TrainingStrategy/RateDynamics108 and registry114/K113",
+          "Read Bouhadjar2025 spiking-TM conference paper methods/results/discussion, distinguishing acquisition, contextual discrimination and retention without transferring categorical capacity estimates",
+          "Derived contextual drive versus normalized matching examples, storage-only capacity ranking changes and conditional permutation symmetry; updated TrainingStrategy109, registry115/K114 and H86 comparison wording",
+          "Derived exact 60+60 uniform-noise sign probabilities, unsigned residual means and vector noise units using 100/150-digit arithmetic and independent triangular checks; ContextLoopsAndNumerics110 and registry116/K115",
+          "Derived exact finite-distribution effect of stochastic provisional rounding before cancellation versus final narrowing; six rational binomial cases, ContextLoopsAndNumerics111 and registry117/K116",
+          "Verified H01–H86 and prior K/AD history, all17 document revisions,52 JSON files,44 unique sources,63 revised local Markdown links/anchors, arithmetic fingerprints and git diff whitespace"
+        ],
+        "ended_at_utc": "2026-10-28T20:56:20Z",
+        "seconds": 1087,
+        "artifacts": [
+          "research/token-frame-timing-analysis.json",
+          "research/flow-context-assignment-analysis.json",
+          "research/noise-feedback-analysis.json",
+          "research/quantized-frame-dependency-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/TrainingStrategy.md",
+          "docs/RateDynamics.md",
+          "docs/ContextLoopsAndNumerics.md"
+        ],
+        "limits": "Primary-source review, exact algebra/probability and documentation only. No SNN implementation/training, random neural simulation, benchmark, project tests, build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I016",
+        "started_at_utc": "2026-10-28T20:56:35Z",
+        "work": [
+          "Read Nessler2013 input-fitting/STDP interpretation, Klampfl2013 contextual assembly and memory tradeoffs, and Kappel2014 forward versus whole-sequence learning with explicit transfer limits",
+          "Enumerated all two-group partitions for a predictive-versus-nuisance context example; derived branch-specific versus aggregate prediction measures; TrainingStrategy112 and registry118/K117",
+          "Proved sharp square-root120 Euclidean sensitivity bound for 60+60 proportional cancellation while preserving global L1 nonexpansiveness; ContextLoops113 and registry119/K118",
+          "Derived same-sign coordinate-marginal ambiguity and unsupported combinations under independent marginals; TrainingStrategy114 and registry120/K119",
+          "Verified all86 human records, prior117 K records and Decisions unchanged,52 parsed research JSON,47 sources,17 revision headers,54 local link paths, three arithmetic script fingerprints and git diff whitespace"
+        ],
+        "ended_at_utc": "2026-10-28T21:15:40Z",
+        "seconds": 1145,
+        "artifacts": [
+          "research/flow-context-assignment-analysis.json",
+          "research/cancellation-properties-analysis.json",
+          "research/flow-prediction-assessment-analysis.json",
+          "research/modeling-source-ledger.json",
+          "docs/TrainingStrategy.md",
+          "docs/ContextLoopsAndNumerics.md"
+        ],
+        "limits": "Primary-source reading, exact mathematical references and documentation only; no product implementation, SNN/training simulation, project tests, build, commit or push."
+      },
+      {
+        "id": "MR-I017",
+        "started_at_utc": "2026-10-28T21:15:40Z",
+        "work": [
+          "Read Knoll/Lindner2021 primary model, signal-encoding controls and discussion, distinguishing response/noise effects from average firing and one-presentation context; MR-S048",
+          "Derived exact first/second moments for60+60 capped-linear responses at ten noise levels, checked by independent piecewise integration; ContextLoops115/K120",
+          "Derived FP16/FP32 contextual-pattern example with exact present semantic sums but different later unit-weight responses; ContextLoops116/K121",
+          "Read Martinez/Lansner/Herman2019 noise, overlapping sequence and disambiguation sections and timing limitations; MR-S049",
+          "Counted actual changed edges and incoming visits for four candidate exposure rules on an exact32-edge reference; TrainingStrategy117/K122",
+          "Corrected one displayed standard-deviation rounding under K123; registry124/D08set118",
+          "Verified H01–H86, all prior K and unchanged Decisions history,17 document revisions,52 JSON files,49 source records,60 revised local links/anchors,three new arithmetic fingerprints and clean git diff whitespace"
+        ],
+        "ended_at_utc": "2026-10-28T21:23:56Z",
+        "seconds": 496,
+        "artifacts": [
+          "research/noise-feedback-analysis.json",
+          "research/context-composition-analysis.json",
+          "research/execution-work-arithmetic.json",
+          "research/modeling-source-ledger.json",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/TrainingStrategy.md"
+        ],
+        "limits": "Primary research and exact deterministic arithmetic only; no product implementation, SNN training/simulation, benchmark, project tests, build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I018",
+        "started_at_utc": "2026-10-28T21:24:11Z",
+        "ended_at_utc": "2026-10-28T21:38:03Z",
+        "seconds": 832,
+        "work": [
+          "Analyzed joint training feasibility and repeated undoing under exact affine and deficit-only references, keeping DMN/token maintenance separate from flow and selecting no protective mechanism (K124).",
+          "Moved the detailed flow discussion verbatim into FlowLearning at revision120, preserved linked summaries in TrainingStrategy, updated the document map, and corrected its cross-document reference (K125–126).",
+          "Read Higgins2014 background-plasticity methods/discussion, expanded indexed Billings2009 retention reading, and reviewed Cui2016v2 replacement/order tasks; distinguished adaptation, valid alternatives, elapsed context time and same-graph behavior (K127).",
+          "Derived active-context difference retention for a fixed additive token input and H77 cancellation; reused read-only Flash samples in both directions, checked exact maps and reciprocal-strength identity, and recorded conditional statistics with explicit limits (K128).",
+          "Audited 18 document revisions, 52 JSON artifacts, 50 source IDs, local links, current cache fingerprints and byte-preserved H/K/AD history. Confirmed original flow body moved verbatim; git diff --check passed."
+        ],
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "docs/TrainingStrategy.md",
+          "docs/README.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/shared-learning-recurrence-analysis.json",
+          "research/context-composition-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Design research and deterministic numerical/map arithmetic only. No SNN training/simulation, product implementation, project tests, build/toolchain mutation, source tensor copying, commit or push."
+      },
+      {
+        "id": "MR-I019",
+        "started_at_utc": "2026-10-28T21:38:23Z",
+        "ended_at_utc": "2026-10-28T21:54:11Z",
+        "seconds": 948,
+        "work": [
+          "Rechecked primary NuPIC matching/prediction/learning roles against the independent generation fallback boundary; moved the provisional flow procedure ahead of its evidence and consolidated a duplicated role list without changing operations (K129).",
+          "Read Millidge et al.2024 model/inference/circuit sections and publisher XML equations6–14, keeping hidden inference/error circuitry separate from application assumptions; expanded scoped indexed Gillett2020 evidence without claiming full-text access.",
+          "Derived a prediction-error-modulated flow candidate from a fixed linear objective, compared exact finite-pattern affinity means and least-squares coefficients, and examined a conditional H77 cancellation-boundary difference between population and signed-net objectives (K130).",
+          "Compared the existing Flash pair sample at common raw scale with diagnostic row normalization; retained original evidence and recorded paired differences, broader tails and reciprocal consistency without selecting an encoder (K131).",
+          "Derived exact source-energy/update-size dependence for the candidate, including zero credit and100/18432-unit-source cases, leaving fixed and adjusted steps open and selecting no scale field (K132).",
+          "Audited unchanged H01–86/K00–128/AD001–092, verbatim procedure relocation,18 document revisions,52 JSONs,51 source IDs,60 changed-document local links, new script/XML fingerprints, previous normalized statistics and clean whitespace."
+        ],
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/hebbian-update-law-analysis.json",
+          "research/context-composition-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Research and exact finite-pattern/update arithmetic only; no SNN implementation/training/simulation, project tests, build/toolchain change, tensor copy, commit or push."
+      },
+      {
+        "id": "MR-I020",
+        "started_at_utc": "2026-10-28T21:54:28Z",
+        "work": [
+          "Derived exact nearest-writeback fixed points and a learning-update cycle for a source-energy-adjusted prediction-error rule, with18 format/scale cases and first-update stochastic laws (K133).",
+          "Read Gupta2015 through MNIST DNN/CNN methods/results; distinguished eight fractional bits from eight total bits and wider accumulation from stored format (MR-S017).",
+          "Derived bounded-update expectations and first-change waiting laws for equal-output rows with different positive support; recorded limits without choosing optimizer or metadata (K134).",
+          "Verified prior86 human events,133 assessment events and unchanged Decisions history; parsed52JSONs, checked51source IDs,62 local links, new script fingerprints and clean diff whitespace."
+        ],
+        "previous_goal_turn_classification": "progress",
+        "previous_turn_evidence": [
+          "K129–132: flow procedure consolidation, predictive-error candidate and exact update/cancellation arithmetic, raw-scale Flash comparison",
+          "Registry133/D08set127,51 primary sources and audited18 document revisions/history/evidence"
+        ],
+        "ended_at_utc": "2026-10-28T22:08:47Z",
+        "seconds": 859,
+        "artifacts": [
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/FlowLearning.md",
+          "research/hebbian-update-law-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Primary research and exact finite-pattern arithmetic only; no product implementation, SNN training/simulation, project tests, build/toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I021",
+        "started_at_utc": "2026-10-28T22:08:47Z",
+        "work": [
+          "Read Rigotti2013 main-text population/task analyses and Barak2013 model definitions, selected noise/discrimination results and discussion; preserved primary-study assumptions and unchecked-supplement limits (MR-S052–053).",
+          "Integrated contextual selectivity within fixed semantic roles and a fixed cell budget into FlowLearning130; no added layer, rank objective or activity quota selected (K135/registry136).",
+          "Read Bourjaily/Miller2011 task, architecture, overlapping-stimulus learning results and method descriptions; retained over-association evidence with its inhibitory/WTA transfer limits (MR-S054), without adding a mechanism.",
+          "Verified unchanged H01–H86/K00–K134,24 Flow local links,52JSONs,54source IDs and clean diff whitespace."
+        ],
+        "previous_goal_turn_classification": "progress",
+        "previous_turn_evidence": [
+          "K133–134 quantized update and bounded-weight analysis; registry135/D08set129."
+        ],
+        "ended_at_utc": "2026-10-28T22:13:45Z",
+        "seconds": 298,
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Primary research and design synthesis only; no neural training/simulation, product implementation, project tests, build/toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I022",
+        "started_at_utc": "2026-10-28T22:13:58Z",
+        "work": [
+          "Derived exact credit-mass sampling and scalar source-enabled affinity means for background activity, rare contexts and weak informative credit; recorded the shared-error-factor limit without selecting a filter or state (K136).",
+          "Reviewed Model, SignedPopulationEncoding, TrainingStrategy, ActivationRegimes and RateDynamics for current H77–H86 boundaries. Corrected stale overview wording about active cancellation and linked contextual-credit composition (K137).",
+          "Revisited the Zeraati2022 primary full-text routes; CSHL PDF timed out, EuropePMC XML returned500, publisher access was blocked. Existing scoped evidence remains unchanged; no full-text reading claimed.",
+          "Derived a necessary cross-polarity qualified-coverage bound under H77. Measured separate sign-reversal geometry on the existing1024 Flash type sample read-only, preserving temporal/semantic limits and selecting no scheduler or threshold (K138).",
+          "Audited unchanged H01–H86/K00–K135/Decisions history,18 document revisions,66 local links,52 JSON artifacts,54 sources,new script fingerprints and Flash sample identity; git diff --check passed."
+        ],
+        "previous_goal_turn_classification": "progress",
+        "previous_turn_evidence": [
+          "K134–135 bounded numerical updates and contextual-selectivity comparison; registry136/D08set130;54 primary sources."
+        ],
+        "ended_at_utc": "2026-10-28T22:27:52Z",
+        "seconds": 834,
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "docs/Model.md",
+          "docs/ActivationRegimes.md",
+          "research/flow-temporal-credit-analysis.json",
+          "research/temporal-coverage-analysis.json"
+        ],
+        "limits": "Design research, exact conditional arithmetic and read-only embedding measurements only. No neural simulation/training, product implementation, project tests, build/toolchain changes, source-table copy, commit or push."
+      },
+      {
+        "id": "MR-I023",
+        "started_at_utc": "2026-10-28T22:29:51Z",
+        "work": [
+          "K139 observation-window information requirements, kernel comparison and conditional storage arithmetic; no detector selected.",
+          "K140 individual trajectories versus averaged timing/prediction evidence; MR-S055–057 with scoped readings.",
+          "K141 learning competition and statistical meaning distinguished from incoming storage ownership; MR-S058.",
+          "Audited historical H01–86/K00–138 preservation, unchanged Decisions,18 document revisions,52 JSON files,58 unique sources, new script fingerprint, local links and whitespace."
+        ],
+        "previous_goal_turn_classification": "progress",
+        "previous_turn_evidence": [
+          "K136–138 source-credit selectivity, cancellation consistency and cross-polarity coverage; registry139/D08set133."
+        ],
+        "ended_at_utc": "2026-10-28T22:40:44Z",
+        "seconds": 653,
+        "artifacts": [
+          "docs/ActivationRegimes.md",
+          "docs/FlowLearning.md",
+          "research/temporal-coverage-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Conditional arithmetic and primary-source design research only; no SNN model run, implementation, project tests, build or toolchain changes."
+      },
+      {
+        "id": "MR-I024",
+        "started_at_utc": "2026-10-28T22:40:44Z",
+        "work": [
+          "K142 scoped primary evidence distinguishes fitted readout and input-evoked responses from natural pre-input readiness; MR-S059/MR-S060.",
+          "Read BCPNN temporal/overlapping sequence model and record its inhibitory, teaching and temporal-credit limits as MR-S061.",
+          "K143 examined potential-edge latent state versus active-only sparse discovery; MR-S062/MR-S063. Exact rejection and linear membership arithmetic retained in existing capacity artifact.",
+          "Read e-prop factorization and LIF/ALIF credit derivations through the official OA XML; MR-S064 records narrow scope and no blanket per-source trace claim.",
+          "Audited H01–86/K00–141 history preservation, unchanged Decisions,52 parseable JSON files,64 unique sources, new script/source fingerprints, Flow links and whitespace."
+        ],
+        "ended_at_utc": "2026-10-28T22:49:45Z",
+        "seconds": 541,
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "research/flow-slot-capacity-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Primary-source review and exact conditional arithmetic only; no SNN implementation/training, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I025",
+        "started_at_utc": "2026-10-28T22:49:56Z",
+        "work": [
+          "K144 derived the one-operation H77 cancellation learning signal, exact branch checks and bounded ratio-form arithmetic; no predictive-cancellation or gradient learner selected.",
+          "Reviewed current flow procedure, contextual assignment, assessment, source discovery, retention and DMN/token maintenance against H74/H84/H86; existing empirical options already preserve the user-directed comparison boundary.",
+          "Audited H01–86/K00–143 preservation against the pre-K144 snapshot, unchanged Decisions and charter blob, 18 document revision headers, 52 parseable research JSON files and 64 unique sources.",
+          "Verified new arithmetic script and Bellec primary-source fingerprints, FlowLearning local links/anchors and git diff whitespace; no new mechanism added merely to extend the research."
+        ],
+        "previous_goal_turn_classification": "progress",
+        "previous_turn_evidence": [
+          "K142–143,FlowLearning138,source-discovery arithmetic and scoped source records59–64 changed authoritative design/research state."
+        ],
+        "ended_at_utc": "2026-10-28T22:56:36Z",
+        "seconds": 400,
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "research/cancellation-properties-analysis.json",
+          "research/modeling-refinement-progress.json"
+        ],
+        "limits": "Conditional mathematical analysis and design review only. No SNN implementation/training, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I026",
+        "started_at_utc": "2026-10-28T22:57:04Z",
+        "work": [
+          "K145 inspected HTM potential/connected matching and graded-weight transfer boundaries; MR-S065. Corrected stale registry header142 to the recorded maintenance sequence, preserving K142–144 history.",
+          "K146 read Fiete2010 sequence-learning model/methods and its released Figure2 source; MR-S066–067. Scoped coactivity credit to modeled temporal representation without importing nondecaying chains or inhibition.",
+          "K147 read MINT quantization methods/protocol and selected current author code; MR-S068–069. Distinguished short binary-spike classification, repeated input and simulated quantization from persistent rate recurrence or verified integer deployment.",
+          "Recorded strict/nonstrict integer threshold equivalences,1105 exact rational checks and half-shift versus nearest-even behavior in existing numerical artifact.",
+          "Audited H01–86 and prior K history, unchanged Decisions/charter,18 document coverage,52 JSON files,69 unique sources, retained prior64 source entries and numerical results, new source fingerprints, revised local links and whitespace."
+        ],
+        "previous_goal_turn_classification": "progress",
+        "previous_turn_evidence": [
+          "K144 conditional learning analysis audited; H/K history, script/source fingerprints and current design boundaries verified; completed accounting27507 seconds."
+        ],
+        "ended_at_utc": "2026-10-28T23:08:00Z",
+        "seconds": 656,
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/modeling-source-ledger.json",
+          "research/numeric-representation-arithmetic.json"
+        ],
+        "limits": "Read-only primary source/code inspection, design analysis and scalar arithmetic. No SNN implementation/training or author simulation, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I027",
+        "started_at_utc": "2026-10-28T23:08:24Z",
+        "work": [
+          "K148 rechecked Schuecker2018 signal/noise decomposition and colored-background comparison; distinguished remembered drive from unrelated background control without adding mechanisms.",
+          "K149 derived a conditional monotone-source boundary for contextual narrowing and exact rational examples; preserved H85 and existing state freedom without adding inhibition or competition.",
+          "Audited H01–86/K00–147 preservation, unchanged Decisions/charter, revised document coverage and links,52 JSON files,69 source records and prior12 context-assignment analyses; git diff --check passed."
+        ],
+        "previous_goal_turn_classification": "progress",
+        "previous_turn_evidence": [
+          "K145–147 updated flow/numeric design and authority records; primary sources65–69 and exact scalar boundaries recorded and audited."
+        ],
+        "ended_at_utc": "2026-10-28T23:15:58Z",
+        "seconds": 454,
+        "artifacts": [
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/FlowLearning.md",
+          "research/flow-context-assignment-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Targeted primary-source review, conditional algebra and design documentation only. No SNN implementation/training, author simulation, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I028",
+        "started_at_utc": "2026-10-28T23:16:09Z",
+        "work": [
+          "K150 inspected CPU operand mappings and target feature definitions, resolving a misleading widening-FMA inference from the older optimization table; MR-S070–073. Recorded scale/gather/conversion boundaries without adding a kernel or buffer.",
+          "K151 read lexical-contrast primary introduction/method and measured11 predeclared contrasts from22 actual Flash rows; derived the conditional net-L1 directional boundary. Preserved active-count and learned-DMN limits, no encoding/valence mechanism selected.",
+          "Audited H01–86/K00–149 history, unchanged Decisions/charter, current document coverage/links,52 JSON files,74 unique sources and prior arithmetic; verified local source, tokenizer and probe fingerprints; git diff --check passed."
+        ],
+        "previous_goal_turn_classification": "progress",
+        "previous_turn_evidence": [
+          "K148–149 clarified primary noise evidence and contextual narrowing; history, document coverage and arithmetic artifacts audited."
+        ],
+        "ended_at_utc": "2026-10-28T23:25:23Z",
+        "seconds": 554,
+        "artifacts": [
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/SignedPopulationEncoding.md",
+          "research/execution-work-arithmetic.json",
+          "research/context-composition-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Primary documentation/code reading, exact conditional reasoning and read-only22-row embedding probe only. No neural simulation/training, product implementation, project tests/build, toolchain changes, full tensor scan/copy, commit or push."
+      },
+      {
+        "id": "MR-I029",
+        "started_at_utc": "2026-10-28T23:25:44Z",
+        "work": [
+          "Reviewed current activity/feedback and contextual detector analyses; these already cover delay, monotone-response and nonlinear-context boundaries, so no duplicate mechanisms added.",
+          "K152 checked forward cancellation evaluation against H77 one-sided identity; two exact-power binary16/binary32 cases expose avoidable intermediate underflow without adding state.",
+          "K153 extended fixed-weight rounding analysis to repeated-edge walks, with exact four-graph enumeration; retained nonlinear/dependence limits and H71 useful-loop direction.",
+          "K154 read bounded-synapse and deterministic low-precision synaptic-memory sources; distinguished full learning-state cost, plasticity-event time and ideal-observer retrieval from actual sequence readiness. MR-S075–076 added; no mechanism selected.",
+          "K155 independently derived and checked a bounded-weight transition spectrum, stationary law and16/256-level relaxation examples; distinguished plasticity-opportunity statistics from bit count and task retrieval.",
+          "Audited H01–86 and all prior K entries against four snapshots, unchanged Decisions/charter,52 JSONs,76 source records and prior arithmetic; verified new probe fingerprint,71 revised-document local links and clean whitespace."
+        ],
+        "previous_goal_turn_classification": "progress",
+        "previous_turn_evidence": [
+          "K150–151: CPU operand/feature distinctions and actual Flash lexical-contrast measurements recorded; histories, sources and numeric artifacts verified."
+        ],
+        "ended_at_utc": "2026-10-28T23:37:14Z",
+        "seconds": 690,
+        "artifacts": [
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/FlowLearning.md",
+          "research/cancellation-properties-analysis.json",
+          "research/shared-learning-recurrence-analysis.json",
+          "research/weight-update-precision-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Primary-source research and exact conditional arithmetic only; no SNN implementation/training/simulation, author simulation, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I030",
+        "started_at_utc": "2026-10-28T23:37:14Z",
+        "work": [
+          "Reviewed existing integrated regime, rate, flow and capacity comparisons; preserved already covered constraints rather than duplicating mechanisms.",
+          "K156 inspected input-dependent convergence and cyclic-rehearsal primary sources77–79; added an independently evaluated scalar cue/basin reference and preserved actual-token, useful-context and no-extra-state boundaries.",
+          "K157 checked all16/256 uniform codes under a shared-range round trip; documented indirect changes to otherwise untouched associations without selecting scale state or a new learning mechanism.",
+          "K158 reviewed reverberation sources80–81 and distinguished brief-cue persistence from post-episode responsiveness; retained no extra resource/recovery state.",
+          "Audited K156–158 snapshot history, all52 research JSON files,81 unique source records, current document local links, unchanged charter and whitespace. Reviewed existing flow assessment and numeric comparisons before seeking further gaps."
+        ],
+        "ended_at_utc": "2026-10-28T23:49:41Z",
+        "seconds": 747,
+        "artifacts": [
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/ActivationRegimes.md",
+          "research/modeling-source-ledger.json",
+          "research/minimal-dynamics-analysis.json",
+          "research/weight-update-precision-analysis.json"
+        ],
+        "limits": "Primary-source research and conditional arithmetic only; no SNN implementation/training/simulation, author simulation, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I031",
+        "started_at_utc": "2026-10-28T23:49:41Z",
+        "work": [
+          "Inspected BCM1982 primary model definitions and modification rule: signed ideal synapses, baseline-relative firing and slow activity statistic limit transfer. Recorded MR-S082; existing flow update/assignment/state-cost comparisons already cover the needed distinction, so added no mechanism or duplicate section.",
+          "Reviewed current flow ambiguity assessment, dense-credit contamination, temporal exposure rules, shared-task acceptance and README synthesis; avoided repeating existing calculations.",
+          "K159 reviewed English/Chinese normative abstracts and derived MR-A008 renewal/Markov references to distinguish DMN semantic drift, response strength, residence and occurrence. No valence evaluator, label set or extra dynamics selected.",
+          "K160 distinguished positive-only association support from graded/frequency learning with exact limiting matrices and source-verified NuPIC weakening scopes; no probability target or extra learning mechanism imposed.",
+          "K161 audited weight-alphabet retention reasoning: explicitly accounted for physical step size and derived endpoint-acquisition time via810 exact first-step identities and six closed-form checks; no neural trajectories.",
+          "Audited K159–161 history preservation, exact arithmetic additions, unchanged prior results,84 source records, current revision coverage, local links, unchanged charter and whitespace. Rechecked retained-zero semantics and existing CPU/memory comparisons without duplicating them."
+        ],
+        "ended_at_utc": "2026-10-28T23:59:49Z",
+        "seconds": 608,
+        "artifacts": [
+          "docs/ActivationRegimes.md",
+          "docs/FlowLearning.md",
+          "research/modeling-source-ledger.json",
+          "research/minimal-dynamics-analysis.json",
+          "research/hebbian-update-law-analysis.json",
+          "research/weight-update-precision-analysis.json"
+        ],
+        "limits": "Research, source inspection and conditional arithmetic only; no SNN implementation/training/simulation, author simulation, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I032",
+        "started_at_utc": "2026-10-29T00:00:04Z",
+        "work": [
+          "Previous goal turn classified as progress: K158–161 added scoped primary evidence, distinguished DMN drift and association support, refined acquisition/retention arithmetic, and audited history and artifacts. Current authoritative progress and document revisions inspected before continuation.",
+          "K162 reviewed threshold-noise and information foundations, derived six exact-probability accessibility cases and the complete-state boundary; distinguished observable benefit from restoring erased history without adding a memory or entropy subsystem.",
+          "K163 expanded HTM sequence-noise and binary sparse-pattern source reading; derived fixed-count versus fixed-fraction overlap scaling, preserving empirical alternatives and existing model boundaries.",
+          "Audited K162/K163 history preservation, prior arithmetic,86 unique source records,52 JSON artifacts, revised-document links, authority coverage and unchanged charter; Markdown whitespace check passed. Reviewed shared learning, numerical scheduling and rate/encoding integration without duplicating already documented mechanisms."
+        ],
+        "ended_at_utc": "2026-10-29T00:08:31Z",
+        "seconds": 507,
+        "artifacts": [
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/FlowLearning.md",
+          "docs/SynapticIntegrationResearch.md",
+          "research/memory-gain-analysis.json",
+          "research/context-detection-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Research, primary-source review and conditional arithmetic only; no neural simulation, implementation, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I033",
+        "started_at_utc": "2026-10-29T00:08:51Z",
+        "work": [
+          "Previous goal turn classified as progress: K162/K163 added scoped threshold-noise and HTM evidence, exact conditional arithmetic, document/registry updates and preservation audits. Current progress and authoritative revisions inspected before continuation.",
+          "K164 distinguished predictive state representation from recurrent emission and learning credit; rechecked pinned NuPIC active/predictive paths and retained H78/H85 comparisons without choosing a gate or field.",
+          "K165 reviewed primary rate-reduction methods and noise-dependent transfer interpretation; derived and quadrature-checked12 Gaussian threshold-averaging cases, distinguishing explicit noise from already-averaged variability without choosing dynamics.",
+          "K166 read conditional/realized activity and heterogeneity limits of primary mesoscopic theory; exact4-outcome cancellation enumeration shows why ensemble means are not automatically instantaneous H77 rate frames.",
+          "K167 clarified README budget wording: two temporal frames of one FP32 scalar, not separate readiness/firing quantities in both frames; preserved every numerical total and open state choice.",
+          "Audited K164–167 history and prior artifact preservation, all revised-document local anchors,88 unique source records,52 valid research JSON files, unchanged charter and clean Markdown whitespace. Reviewed DMN/token repair for compatibility; existing scope already distinguishes meaningful response and deficits, so no additional repair mechanism was added."
+        ],
+        "ended_at_utc": "2026-10-29T00:15:41Z",
+        "seconds": 410,
+        "artifacts": [
+          "docs/RateDynamics.md",
+          "docs/FlowLearning.md",
+          "docs/README.md",
+          "research/flow-learning-design-analysis.json",
+          "research/frame-time-noise-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Research, source inspection and conditional arithmetic only; no neural simulation, implementation, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I034",
+        "started_at_utc": "2026-10-29T00:15:52Z",
+        "work": [
+          "Previous goal turn classified as progress: K164–167 clarified state/emission/learning roles, noise averaging and nonlinear cancellation, expanded primary sources, corrected frame-budget wording and audited evidence. Current progress and document revisions inspected before continuing.",
+          "K168 corrected stale encoding/message summaries against H54/H77: provisional opposed rates differ from completed state; completed signed net recovers polarity totals but not contextual cells; current encoding alternatives remain within opponent populations.",
+          "K169 exact matched-envelope comparison separates contextual composition retention from identical semantic fading under self-retention choices; updated RateDynamics/ContextLoopsAndNumerics and corrected stale D-GOV maintenance index without selecting a leak or state field.",
+          "K170 expanded PACE primary methods/limitations/memory reading; exact fixed/iid/periodic error-variance comparisons distinguish average retention from an applicable bound. Updated ContextLoopsAndNumerics and source scope without importing buffers or precision machinery.",
+          "K171 expanded Hopkins2020 primary rounding/comparator/reference/hardware reading; exact finite-probability and shared-draw arithmetic exposes low-update bias and changed collective variability without selecting RNG machinery.",
+          "Audited K168–171 history and prior artifact preservation, four changed document revisions/local links,88 source IDs and52 research JSON files. Charter and AD decision history unchanged; git diff --check passes. Reviewed token-entry and flow-assignment integration without adding redundant mechanisms."
+        ],
+        "ended_at_utc": "2026-10-29T00:28:45Z",
+        "seconds": 773,
+        "artifacts": [
+          "docs/Model.md",
+          "docs/SignedPopulationEncoding.md",
+          "docs/RateDynamics.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/context-composition-analysis.json",
+          "research/quantized-frame-dependency-analysis.json",
+          "research/weight-update-precision-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "limits": "Primary reading, integration review and conditional arithmetic only; no neural simulation, implementation, project tests/build, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I035",
+        "started_at_utc": "2026-10-29T00:28:56Z",
+        "work": [
+          "Previous goal turn classified as progress: K168–171 aligned active-polarity/message summaries, derived matched-envelope/context retention and numerical-error comparisons, expanded primary quantization reading and audited authority/evidence. Current worktree and progress revalidated before continuing.",
+          "Inspected H71–H75/H86 original evidence and current recurrence, scheduling, training, encoding and detector sections; mapped ten requirements to existing artifacts and verified referenced anchors. Existing complement/coverage/flow analyses cover considered concerns, so no duplicate mechanism or probe. Duration still incomplete; current revision/date metadata queued for reconciliation.",
+          "K172 expanded Augustin2017 primary rate-reduction assumptions, mean-field/exchangeability, integration and cost evidence; clarified its transfer boundary to retained contextual cells. No new mechanism or calculation added.",
+          "K173 derived conditional source-change/dependency probabilities and an exact cancellation spread example; distinguished actual dependencies, output changes and implementation work without adding event structures.",
+          "Audited K172/K173: preserved258 existing H/K events, all88 prior source entries and prior execution-work fields;89 unique sources,52 research JSON files parse, revised authority/links agree, charter hash unchanged and git diff --check passes."
+        ],
+        "ended_at_utc": "2026-10-29T00:38:40Z",
+        "seconds": 584,
+        "artifacts": [
+          "docs/RateDynamics.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/modeling-source-ledger.json",
+          "research/execution-work-arithmetic.json",
+          "research/modeling-refinement-progress.json"
+        ],
+        "limits": "Research, conditional dependency arithmetic, design-scope review and documentation only. No neural simulation, application implementation/training, project tests/build, benchmark, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I036",
+        "started_at_utc": "2026-10-29T00:38:51Z",
+        "work": [
+          "Previous goal turn classified as progress: K172/K173 expanded primary rate-reduction scope and source-dependency/cancellation work arithmetic, with preserved authority/evidence audit. Revalidated current worktree, goal and completed accounting before continuing.",
+          "K174 reviewed primary predictive-map/local-learning sources and rechecked Kappel assumptions; derived exact longer-horizon versus next-input reference without discarding useful long context or importing a new algorithm.",
+          "K175 derived shared-exposure stationary covariance despite independent stochastic rounding, with58 exact conditional-moment checks and12 diagnostic cases. Distinguished common data fluctuations from quantization and avoided adding averaging or RNG state.",
+          "Audited K174/K175:260 prior H/K events, existing source/artifact fields and16 untouched documents preserved;91 unique sources,52 JSON files, revision/authority links, charter hash and whitespace checked. Resolved earlier metadata concerns by inspecting explicit minor revision and client-local dates; no design edit warranted."
+        ],
+        "ended_at_utc": "2026-10-29T00:47:42Z",
+        "seconds": 531,
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/flow-temporal-credit-analysis.json",
+          "research/weight-update-precision-analysis.json",
+          "research/modeling-source-ledger.json",
+          "research/modeling-refinement-progress.json"
+        ],
+        "limits": "Primary-source research, exact conditional arithmetic and documentation only. No neural simulation, trained application, project tests/build, benchmark, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I037",
+        "started_at_utc": "2026-10-29T00:47:51Z",
+        "work": [
+          "Previous goal turn classified as progress: K174/K175 clarified forecast horizon and shared-exposure covariance, expanded source evidence, preserved authority history and corrected metadata-audit concerns. Current worktree and time accounting revalidated.",
+          "K176 reviewed H56/H57 coverage/path semantics and documented a conditional overlapping observation record, separating classifier identifiability from actual learned-regime evidence without adding state or resolving empirical choices.",
+          "K177 reviewed primary information-limiting-correlation evidence and derived exact spatial-noise/cancellation identities; distinguished temporal whiteness, global amplitude, aggregate disturbance and contextual composition without selecting noise or state.",
+          "Audited K176/K177:263 prior H/K events retained across the final revision; previous coverage/noise/source fields and untouched documents preserved. All18 explicit document revisions agree with D08,92 unique sources and52 research JSON parse, local links resolve, charter unchanged and git diff --check passes."
+        ],
+        "ended_at_utc": "2026-10-29T00:54:50Z",
+        "seconds": 419,
+        "artifacts": [
+          "docs/ActivationRegimes.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/temporal-coverage-analysis.json",
+          "research/noise-feedback-analysis.json",
+          "research/modeling-source-ledger.json",
+          "research/modeling-refinement-progress.json"
+        ],
+        "limits": "Primary-source research, exact conditional observation/covariance arithmetic and documentation. No neural simulation, implementation/training, project tests/build, benchmark, toolchain changes, commit or push."
+      },
+      {
+        "id": "MR-I038",
+        "started_at_utc": "2026-10-29T00:55:02Z",
+        "work": [
+          "Previous goal turn classified as progress: K176/K177 refined regime observability and spatial noise/cancellation comparisons, added primary evidence and preserved scoped authority. Revalidated current worktree and accounting before continuing.",
+          "K178 audited timing/credit integration and corrected capacity entry-point scope: linked explicit FP4 budgets to existing wider-state/two-frame comparisons, removed hypothetical supporting structures from budget prose, and preserved all tables and allocation choices.",
+          "K179 reviewed primary rate/spike learning derivation and noise limitations; clarified direct frame/token learning semantics without importing biological timing assumptions or new state. Existing contextual prediction acceptance remains.",
+          "K180 completed targeted Goldman/Rajan primary methods reading, distinguishing finite transient/readout fits, cue-invariant repeated delay drive and fully allocated versus partially trained connections. Preserved source history and scoped evidence without adding mechanisms.",
+          "K181 deepened the Hennig BCI source and derived exact bounded-composition diameter and code counts, distinguishing geometric freedom from reliable learned context without selecting saturation or precision.",
+          "K182 obtained the small public Warriner2013 supplement, froze the token-matched selection before reading192 Flash rows, and measured4096 cross-valence pairs with controls. Preserved41 derivative exceptions, raw/unit-scale comparisons and separation from learned DMN/active-count behavior. Updated two documents and source/authority evidence."
+        ],
+        "excluded_waits": [
+          {
+            "seconds": 65,
+            "reason": "Terminated an unproductive combined web ZIP/PDF request after bounded waits; excluded the initial31s yield and subsequent34s wait time from substantive accounting."
+          }
+        ],
+        "ended_at_utc": "2026-10-29T01:15:35Z",
+        "elapsed_seconds": 1233,
+        "seconds": 1168,
+        "artifacts": [
+          "docs/CapacityPlanning.md",
+          "docs/ConnectivityScalingResearch.md",
+          "docs/FlowLearning.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/SignedPopulationEncoding.md",
+          "docs/ActivationRegimes.md",
+          "research/context-composition-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "verification": [
+          "K178/K179/K180/K181/K182 checks preserve preceding human and agent histories, older analysis objects and source fields.",
+          "93 unique sources;52 JSON files parse;18 document revisions and local file links checked.",
+          "Exact bounded-composition references and independent cached aggregates for18336 lexical pairs verified; all41 cross-valence negative-derivative exceptions retained.",
+          "Charter SHA unchanged;git diff --check passes."
+        ],
+        "limits": "Primary-source reading, representation arithmetic and read-only input-row analysis only. No SNN training/implementation/simulation, author code, timing benchmark, project tests/build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I039",
+        "started_at_utc": "2026-10-29T01:16:14Z",
+        "work": [
+          "Previous goal turn classified as progress: K178–K182 refined capacity, source transfer, bounded contextual representation and actual rated-word Flash geometry. Revalidated current records and worktree; goal remains active with7592 substantive seconds outstanding.",
+          "K183 re-read H54/H55/H76/H77 and derived five exact participation-versus-magnitude examples, preventing lexical L1 results from being mistaken for an active-fraction test. Updated paired design sections and condensed the current registry coverage index without altering history.",
+          "K184 expanded Novikov2021 primary methods/results, distinguishing cued support from externally designated noise-group selectivity and threshold duration. Refined the existing paragraph and preserved source history without importing machinery.",
+          "K185 derived positive-uniform-kick mean/variance scaling under frame refinement, preserving fixed-frame and alternate-noise choices. Audited239 local Markdown anchors and retained/zero-weight endpoint semantics; existing links and distinctions were sound.",
+          "K186 broadened actual Flash lexical geometry to192 hash-selected Chinese rated single-token words from the publisher Xu2022 CSV, preserving47 initial-decrease exceptions and avoiding cross-language equivalence or active-fraction claims. Replaced two English-only paragraphs with a shared compact table; no neural model. Investigated Yao PDF extraction and newer OSF access but used neither dataset."
+        ],
+        "ended_at_utc": "2026-10-29T01:32:24Z",
+        "elapsed_seconds": 970,
+        "seconds": 970,
+        "artifacts": [
+          "docs/SignedPopulationEncoding.md",
+          "docs/ActivationRegimes.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/RateDynamics.md",
+          "research/cancellation-properties-analysis.json",
+          "research/frame-time-noise-analysis.json",
+          "research/context-composition-analysis.json",
+          "research/modeling-source-ledger.json"
+        ],
+        "verification": [
+          "K183–K186 prior H/K histories and Decisions preserved; previous calculations and source fields retained.",
+          "94 unique source IDs and52 valid research JSON files; all18 authority revision headers verified.",
+          "Independent18336 Chinese pair-cache aggregate checks retain47 negative initial derivatives; earlier English record unchanged.",
+          "Charter SHA unchanged, duplicate current D08 anchor removed, git diff --check passes."
+        ],
+        "limits": "Primary reading, conditional arithmetic, read-only token/embedding measurements and documentation only. No SNN implementation/training/simulation, author code, project tests/build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I040",
+        "started_at_utc": "2026-10-29T01:32:35Z",
+        "work": [
+          "Previous goal turn classified as progress: K183–K186 refined cancellation observables, primary noise evidence, frame scaling and actual Chinese Flash geometry. Current worktree and36578-second checkpoint revalidated; research remains active.",
+          "K187 derived exact same-semantic-population reassignment arithmetic: distinguishability and current vector can survive while fixed downstream prediction swaps. Linked this to the existing natural-readiness comparison and kept capacity migration separate, without prescribing remapping or new state.",
+          "K188 read primary Rule2020 drift results and methods, distinguishing stable task information from a natural prediction and explicitly supplied feedback. Condensed the existing readout paragraph and retained empirical comparison without prescribing frozen representations or compensation.",
+          "K189 compared Rule2022 self-healing maintenance with acquisition of unfamiliar transitions; scoped initial fitting, redundant tuning, per-cell statistics and fixed recurrence, preserving the existing flow comparison without adding mechanisms.",
+          "Reviewed observation assignment, frame publication and shared-weight learning for consistency; existing text already covers the interaction, so no duplicate mechanism or prose added. Audited prior H/K/AD history across K187–K189 snapshots, unchanged earlier source/artifact entries, unique96 source IDs, research JSON, charter hash and current authority metadata; git diff --check passed."
+        ],
+        "ended_at_utc": "2026-10-29T01:45:43Z",
+        "seconds": 788,
+        "excluded_wait_seconds": 0,
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "research/flow-context-assignment-analysis.json",
+          "research/modeling-source-ledger.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Source review, exact algebra and design consistency only. No neural implementation/training/simulation, author code, project tests/build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I041",
+        "started_at_utc": "2026-10-29T01:45:55Z",
+        "work": [
+          "Previous turn classified as progress: K187–K189 added exact contextual-reassignment evidence and primary drift/maintenance scope. Revalidated current worktree and37366-second checkpoint; goal remains active.",
+          "K190 distinguished direct conversion of a learned graph from construction/adaptation with candidate arithmetic, scoped Jacob author-version training methods, and clarified incremental empirical comparison in README. Preserved shared behavioral goals and explicit learning cost without selecting mechanisms.",
+          "K191 read primary binary-synapse methods through the public EuropePMC XML after publisher/PMC rendering failures. Distinguished one-bit effective weights from internal switching state and digit-label retention from contextual readiness; added scoped evidence without adopting machinery.",
+          "K192 expanded Erbas preprint reading to precision sweeps and matched-training methods: widening a fixed coarse-trained model need not improve its task. Clarified arithmetic reference versus learned behavior and synchronized compact source-table scopes, without selecting auxiliary memory or precision.",
+          "Verified nonoverlapping completed research intervals and explicit exclusions; corrected one MR-I040 artifact path with a retained correction record. Audited prior H/K/AD history and source fields across K190–K192 snapshots,97 unique sources, JSON, current authority and local file links, unchanged charter and git diff --check. Initial audit syntax typo was corrected; no project tests executed."
+        ],
+        "ended_at_utc": "2026-10-29T01:56:02Z",
+        "seconds": 607,
+        "excluded_wait_seconds": 0,
+        "artifacts": [
+          "docs/README.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/modeling-source-ledger.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Primary-source review and design refinement only. No neural implementation/training/simulation, author code, project tests/build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I042",
+        "started_at_utc": "2026-10-29T01:56:13Z",
+        "work": [
+          "Previous turn classified as progress: K190–K192 clarified conversion versus acquisition, full binary-synapse learning state and learned coarse-state compatibility. Current193/set187 authority and37973-second checkpoint revalidated; no blocker or pending empirical question.",
+          "K193 deepened Burak/Fiete main-paper reading through estimator, noise and simulation assumptions; distinguished continuous-valued rates from a tuned continuous attractor and scaling tuning from adding regulator noise. Updated one existing paragraph and scoped source history.",
+          "K194 retrieved the Kumar2008 author PDF after publisher/PMC/XML access failures; read neuron/network/embedding methods, rate and overlapping-chain results and discussion. Refined one existing TrainingStrategy source note to distinguish sustained-input propagation, graded fidelity and cross-activation; preserved all design alternatives.",
+          "Reviewed current degree/variance and flow compatibility analyses before adding work; avoided duplicating already covered calculations. Audited K193/K194 append-only H/K/AD/source history,98 unique sources,52 JSON artifacts, authority revisions, revised-document file links, unchanged charter and diff whitespace. No project tests executed."
+        ],
+        "ended_at_utc": "2026-10-29T02:06:22Z",
+        "seconds": 609,
+        "excluded_wait_seconds": 0,
+        "artifacts": [
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/TrainingStrategy.md",
+          "research/modeling-source-ledger.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Primary-source review and scoped design refinement only. No neural implementation/training/simulation, author code, project tests/build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I043",
+        "started_at_utc": "2026-10-29T02:06:55Z",
+        "work": [
+          "Previous turn classified as progress: K193/K194 expanded primary attractor and chain-propagation evidence, refined two documents and audited scoped history. Current195/set189 and38582-second checkpoint revalidated; no blocker.",
+          "K195 deepened Pereira/Brunel methods, learning/normalization/homeostatic results and discussion; checked MathML to resolve the prose AND/OR discrepancy. Linked actual learning-time recurrent conditions to natural readiness and retained behavior without adopting the paper's scale variables or generation objective.",
+          "K196 extended the existing equal-weight degree analysis with exact weighted-source/covariance arithmetic. Equal100-source total-one rows can differ81.19-fold in independent drive variance; common fluctuations remove the contrast. Linked this to contextual-score comparison without selecting normalization, pruning or new metadata.",
+          "Audited all local document links including anchors: no defects. Inspected468 absolute evidence references; two absent references are explicitly documented removal of the same419MB earlier-locality scratch array, not missing current evidence. Rehashed75 explicitly paired small evidence files (52,021,851 bytes), all matched; three larger files were not rehashed. Preserved K195/K196 H/K/AD histories, prior source fields and analysis prefix; current revisions,52 JSON,98 sources, charter and diff whitespace checked."
+        ],
+        "ended_at_utc": "2026-10-29T02:15:26Z",
+        "seconds": 511,
+        "excluded_wait_seconds": 0,
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "docs/SynapticIntegrationResearch.md",
+          "research/flow-context-assignment-analysis.json",
+          "research/modeling-source-ledger.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Primary-source methods review, exact single-gather distribution arithmetic and evidence/document audit only. No neural implementation/training/simulation, author code, project tests/build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I044",
+        "started_at_utc": "2026-10-29T02:16:02Z",
+        "work": [
+          "Previous turn classified as progress: K195/K196 deepened learning-condition evidence and weighted-input arithmetic, refined flow/integration docs and verified linked evidence. Current197/set191 and39093-second checkpoint revalidated; no blocker.",
+          "K197 reviewed Martinez2019 model/learning and actual methods, distinguishing offline batch fitting from the dynamic-rule formulation and graded internal current from binary winner output. Refined the existing noise/disambiguation paragraph and source scope; no mechanism adopted.",
+          "K198 revisited QSS theorem assumptions and parsed Appendix B, separating total quantization/hysteresis error and finite-horizon transient control from fixed-format indefinite accuracy. Refined the existing paragraph and source-table scope; retained screenshot/extraction limits without selecting event machinery.",
+          "Reviewed current fractional/rate and temporal-credit contracts before extending evidence; retained already adequate distinctions without duplicate analyses. Audited K197/K198 H/K histories, all92 AD decisions, old source fields,52 JSON artifacts,98 source IDs, synchronized revisions, unchanged charter and git diff --check. No project tests executed."
+        ],
+        "ended_at_utc": "2026-10-29T02:24:41Z",
+        "seconds": 519,
+        "excluded_wait_seconds": 0,
+        "artifacts": [
+          "docs/FlowLearning.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/modeling-source-ledger.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Primary-source review and scoped design/evidence refinement only. No neural implementation/training/simulation, author code, project tests/build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I045",
+        "started_at_utc": "2026-10-29T02:26:22Z",
+        "work": [
+          "Reviewed integrated rate/fraction, active cancellation, predictive cancellation and input-branch contracts against H75—H86; no new state interpretation selected.",
+          "K199 connects focused-entry use to actual pre-input contextual assessment under background activity; spontaneous learned readiness remains legitimate.",
+          "Rechecked Ostojic/Brunel adaptive-timescale and accuracy/first-order-statistics limits; existing model boundary is adequate, with an append-only source read-scope note.",
+          "Reviewed older Model/IncomingConnectivity/AdaptiveConnectivity/ActivationRegimes/TrainingStrategy scope for accidental conflation of flow learning and DMN/token repair; no contradictory learner assignment found.",
+          "Checked potential repeated FlowLearning passages; they were distinct tool-output chunks, not duplicated document content, so no unnecessary edit.",
+          "Validated preserved H/K history, unchanged Decisions, 52 parseable research JSON files, charter hash and Markdown whitespace."
+        ],
+        "ended_at_utc": "2026-10-29T02:35:46Z",
+        "seconds": 564,
+        "artifacts": [
+          "docs/SignedPopulationEncoding.md",
+          "docs/FlowLearning.md",
+          "docs/RateDynamics.md",
+          "research/modeling-source-ledger.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Design/source review only. No new empirical measurement, numerical probe, neural simulation/training, implementation, project tests/build, toolchain mutation, commit or push."
+      },
+      {
+        "id": "MR-I046",
+        "started_at_utc": "2026-10-29T02:36:02Z",
+        "work": [
+          "Revalidated40176 completed seconds, registry200/D08set194, and classified the previous turn as progress; no blocker.",
+          "Reviewed node-planning traffic against existing execution-work arithmetic and retained-edge semantics. K200 puts the existing 15/16-class logical scan rates beside RAM planning, with wall-time/model-time meanings and no throughput claim.",
+          "Derived the coupled effect of balanced opposing drive and frame duration on contextual composition. K201 records the closed-form retention product, positive-exponent limits and four exact rational-reference cases.",
+          "Confirmed the balanced-drive example preserves the signed total while changing paired-history composition; it is deterministic algebra, not sampled white noise or a learned trajectory. No noise law or context state selected.",
+          "Checked scope against H71/H74/H77/H86, preserved prior H/K/AD and composition evidence, unchanged charter, synchronized current revisions, parseable research JSON and Markdown whitespace."
+        ],
+        "ended_at_utc": "2026-10-29T02:44:40Z",
+        "seconds": 518,
+        "artifacts": [
+          "docs/CapacityPlanning.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/context-composition-analysis.json",
+          "research/execution-work-arithmetic.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Conditional exact arithmetic and design review only; no neural simulation/training, implementation, project tests/build, toolchain change, benchmark, commit or push."
+      },
+      {
+        "id": "MR-I047",
+        "started_at_utc": "2026-10-29T02:45:11Z",
+        "work": [
+          "Classified the previous turn as progress and revalidated40694 substantive seconds plus registry202/set196; no blocker.",
+          "K202 condensed three oversized storage/capacity authority summaries, preserving exact bodies except one direct FlowLearning link; scoped baselines and all canonical decision history retained.",
+          "Rechecked Michaelis2022 primary methods/results. K203 narrows the numerical learning evidence to its isolated weak plastic synapse, distinct from exact static recurrent emulation; no recurrent-learning accuracy claim imported.",
+          "K204 derived the directed-rounding finite-frame bound and exact one-code-decay condition. With half-second reference and1ms frames, UINT4/UINT8 reach zero far sooner than the reference despite nearest-writeback stagnation.",
+          "Recorded the scalar proof and80-digit coefficient check without trajectory stepping, neural simulation, a selected rounding law or added state.",
+          "Audited unchanged body contracts, prior H/K/AD preservation, append-only source/numeric evidence, synchronized revisions, research JSON and Markdown whitespace."
+        ],
+        "ended_at_utc": "2026-10-29T02:53:45Z",
+        "seconds": 514,
+        "artifacts": [
+          "docs/AdaptiveConnectivity.md",
+          "docs/CapacityPlanning.md",
+          "docs/ConnectivityScalingResearch.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/modeling-source-ledger.json",
+          "research/numeric-representation-arithmetic.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Documentation, primary-source reading and conditional scalar arithmetic only. No implementation, neural simulation/training, author code, project tests/build, toolchain change, benchmark, commit or push."
+      },
+      {
+        "id": "MR-I048",
+        "started_at_utc": "2026-10-29T02:54:17Z",
+        "work": [
+          "Classified the previous turn as progress and revalidated41208 substantive seconds plus registry205/set199; no blocker.",
+          "Reviewed current context and selectivity derivations against their scoped claims: lag-specific memory, paired causal effects versus single-run usability, complete-state information limits, affine-detector boundaries and population/activity scaling remain distinguished from SNN validation.",
+          "Inventoried52 research statuses and reconciled two stale labels. Mapped all four context-maintenance analyses to current synthesis; flow empirical alternatives remain open under H86 without a pending human reply.",
+          "Appended a current10-requirement in-progress coverage review with18 document revisions/hashes and explicit remaining time/closure work. Prior scope reviews retained unchanged.",
+          "Inspected the tracked worktree scope and absence of nested application/design AGENTS files; no source/build/toolchain files changed.",
+          "Verified all prior analytical fields preserved by metadata updates, research JSON parse and Markdown whitespace."
+        ],
+        "ended_at_utc": "2026-10-29T03:02:50Z",
+        "seconds": 513,
+        "artifacts": [
+          "research/context-maintenance-analysis.json",
+          "research/flow-learning-design-analysis.json",
+          "research/modeling-refinement-progress.json",
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/FlowLearning.md",
+          "docs/SynapticIntegrationResearch.md"
+        ],
+        "limits": "Source/contract synthesis and evidence audit only; no mechanism, implementation, neural simulation/training, project tests/build, toolchain change, commit or push. Research coverage is not model validation or implementation qualification."
+      },
+      {
+        "id": "MR-I049",
+        "started_at_utc": "2026-10-29T03:04:01Z",
+        "work": [
+          "Previous turn classified as progress: two research statuses reconciled against current synthesis and an18-document/10-requirement evidence review appended. Current registry205/set199 and41721 completed substantive seconds revalidated; no blocker.",
+          "Reviewed README and current flow procedure against H78/H82—H86: empirical alternatives have no pending user reply, pre-input matching remains independent of teaching, and shared recurrence is assessed separately from isolated plasticity examples.",
+          "Rechecked pinned NuPIC potential/connected activity, adaptation and source-growth implementations against existing synthesis; source hashes verified, source cards appended, no algorithm imported or additional mechanism needed.",
+          "Read current charter clauses and D08/DGOV coverage, prepared scoped final-status reconciliation while retaining human/assessment history. Completion remains contingent on actual substantive time and final audit.",
+          "Examined cancellation, cell-composition retention, noise covariance, numerical state/weight costs and flow exposure boundaries together; no additional state structure was justified.",
+          "K205 makes the existing noise-only coverage example's fresh-state, symmetry and independence assumptions explicit, preserving its arithmetic and actual recurrent comparison. Registry206/set200; prior291 H/K events and other17 documents preserved.",
+          "Targeted Bouhadjar2025 methods/results review distinguishes internal pre-input assessment from output and its categorical target metric from H83 legitimate alternatives; PDF screenshot failed, so equation/figure limits remain. K206 refines the existing FlowLearning paragraph. Registry207/set201; prior292 H/K events, other17 documents and all prior source fields preserved.",
+          "Verified Markdown whitespace and scoped authority updates; no change to the charter or implementation boundary."
+        ],
+        "ended_at_utc": "2026-10-29T03:18:49Z",
+        "seconds": 888,
+        "artifacts": [
+          "docs/ContextLoopsAndNumerics.md",
+          "docs/FlowLearning.md",
+          "research/cancellation-properties-analysis.json",
+          "research/modeling-source-ledger.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Primary-source reading, conditional reasoning and document clarification only; no model training, neural simulation, benchmark, implementation, project tests/build, toolchain change, commit or push."
+      },
+      {
+        "id": "MR-I050",
+        "started_at_utc": "2026-10-29T03:18:49Z",
+        "work": [
+          "Final research integration and requirement/evidence review; registry207/set201. Actual substantive minimum and final current-status reconciliation remain to be completed.",
+          "Reviewed the full causal chain from per-cell contextual identities and H77 cancellation through source credit, learning exposure, sparse growth and shared-graph acceptance; empirical choices remain separate from fixed behavioral requirements.",
+          "Rechecked the distinction between stored readiness, recurrent emission and teaching responsibility; two-frame publication does not resolve these semantics, and the current comparison requires no extra state by default.",
+          "Reviewed noise support, active counting and temporal coverage alongside natural cessation and useful context. The existing references preserve their assumptions; neither total activity nor an aggregate semantic sum establishes contextual prediction.",
+          "Rechecked static named-array budgets, class feasibility and representation-only migration against numerical candidates; no new allocation, alignment allowance, row quota or input encoder introduced.",
+          "Independently audited49 closed intervals:42609 substantive seconds,1319 seconds of inter-interval gaps and65 seconds of explicitly excluded waiting. Prepared guarded final-status reconciliation, preserving prior authority/history and the separate H51 record.",
+          "K207 reconciles completion metadata in12 application documents, the registry and source ledger while preserving all technical bodies, human decisions, analytical evidence and empirical choices.",
+          "Final document audit passed:293 prior H/K events, all AD history and source cards preserved;52 strict JSON files and all local document links/anchors checked;18 revisions match current coverage; charter unchanged.",
+          "Completed the final10-requirement evidence review and actual nonoverlapping time audit. Research completion establishes neither SNN behavior nor an implementation contract."
+        ],
+        "ended_at_utc": "2026-10-29T03:28:56Z",
+        "seconds": 607,
+        "artifacts": [
+          "docs/README.md",
+          "docs/FlowLearning.md",
+          "docs/ContextLoopsAndNumerics.md",
+          "research/modeling-source-ledger.json",
+          "research/modeling-refinement-progress.json",
+          "../../design/DesignAuthorityRegistry.md"
+        ],
+        "limits": "Research integration, document/evidence review and accounting only; no new mechanism, implementation, neural simulation/training, benchmark, project tests/build, toolchain change, commit or push."
+      }
+    ],
+    "final_audit": {
+      "recorded_at_utc": "2026-10-29T03:28:56Z",
+      "intervals": 50,
+      "substantive_seconds": 43216,
+      "elapsed_wall_seconds": 44600,
+      "untracked_gap_seconds": 1319,
+      "explicitly_excluded_seconds": 65,
+      "minimum_satisfied": true,
+      "basis": "Estimated substantive work intervals, not processor time; gaps and explicit unproductive waiting excluded."
+    }
+  },
+  "constraints": [
+    "Application design and research only; no product implementation or build/toolchain mutation",
+    "No proactive project test scripts",
+    "Do not erase prior human/assessment history",
+    "Do not infer scientific validation from numerical toy probes",
+    "No additional agents without explicit authorization",
+    "No automatic commit/push requested",
+    "H-74: each introduced concept, algorithm or data structure needs a real first-principles value chain; check whether a simpler adequate-precision baseline suffices",
+    "H-79—H-81: Hebbian/HTM is for token-sequence flow; include its initial algorithm design and discuss consequential choices early, without treating it as DMN/token repair. H-78 state choice remains open."
+  ],
+  "workstreams": [
+    {
+      "id": "MR-01",
+      "topic": "Useful recurrent context loops, long-context influence, steerability and interference",
+      "status": "research_pass_complete"
+    },
+    {
+      "id": "MR-02",
+      "topic": "Accumulated decay, deferred triggers, model-time semantics, events and shared activity",
+      "status": "research_pass_complete"
+    },
+    {
+      "id": "MR-03",
+      "topic": "Per-field INT8/INT4, unsigned/fixed-point alternatives, accumulation and state persistence",
+      "status": "research_pass_complete"
+    },
+    {
+      "id": "MR-04",
+      "topic": "Controlled mathematical/numerical comparisons and error/resource accounting",
+      "status": "research_pass_complete"
+    },
+    {
+      "id": "MR-05",
+      "topic": "Integrated model proposal, acceptance conditions and unresolved decisions",
+      "status": "research_pass_complete"
+    },
+    {
+      "id": "MR-06",
+      "topic": "Initial Hebbian/HTM flow-training algorithm design, separate from DMN/token repair; early discussion of objectives and credit rules",
+      "status": "research_pass_complete"
+    }
+  ],
+  "next_work": [],
+  "last_checkpoint_at_utc": "2026-10-29T03:28:56Z",
+  "pending_discussion": null,
+  "discussion_history": [
+    {
+      "question": "For the initial flow-learning design, what should successful learning of a token sequence produce?",
+      "status": "answered_H-82",
+      "answer": "Predictive preactivation closely matches the input sequence. Autonomous sustained generation is not required for this training criterion; generation mechanism/algorithm is separate."
+    },
+    {
+      "question": "When the same preceding context permits several next tokens, should preactivation retain several plausible populations or favor one continuation? This affects the meaning of a prediction not chosen by the arriving token.",
+      "status": "answered_H-83",
+      "choices": [
+        "Allow several plausible predictive populations; input selects among them",
+        "Favor one continuation; unmatched predictions count against the result"
+      ],
+      "boundary": "No choice inferred from elapsed time; analyze common credit and numeric requirements independently.",
+      "answer": "Expect several predictions on shared sequence fragments, then narrowing diversity toward the training sequence as observed distinguishing context grows."
+    },
+    {
+      "question": "For an unexpected token with broad weak activation, should flow learning favor a small context-compatible recipient group, distribute graded credit over the broad response, or retain both as candidates?",
+      "status": "premise_corrected_H-84",
+      "boundary": "The prior alternatives are withdrawn. This does not select a cold-start learning rule or prohibit unfamiliar-transition learning.",
+      "answer": "Broad weak activation is explicit generation behavior, not ordinary synaptic transmission, and is not learned. Refine HTM-related details with an independent flow-learning design."
+    },
+    {
+      "asked_at_utc": "2026-10-28T18:34:23Z",
+      "question": "When plausible next tokens require opposite signs on the same semantic coordinate, should both neuron groups be allowed to remain predictively ready until input resolves the ambiguity?",
+      "status": "answered_H-85_deferred_to_comparison",
+      "choices": [
+        "Preserve both predictive alternatives; cancel active firing only",
+        "Apply net cancellation to predictive readiness too",
+        "Keep both behaviors open for comparison"
+      ],
+      "boundary": "Prediction semantics only. H-78 state-field choice remains deferred; no choice inferred from elapsed time.",
+      "answer": "Leave design space for future controlled experiments; no current decision."
+    }
+  ],
+  "updated_at_utc": "2026-10-29T03:28:56Z",
+  "discussion_policy": "H-86: handle obvious empirical alternatives directly by retaining comparison options and meaningful observations; do not repeatedly ask the user to choose. No candidate is selected or implementation authorized by deferral.",
+  "scope_reviews": [
+    {
+      "recorded_at_utc": "2026-10-29T00:32:43Z",
+      "purpose": "In-progress requirement-to-evidence mapping, not final acceptance, model validation or qualification. R01 remains incomplete. Current sources inspected; final audit must recheck current revisions.",
+      "registry_revision": 172,
+      "document_set_revision": 166,
+      "document_revision_headers": {
+        "ConnectivityScalingResearch.md": "24",
+        "SemanticCorticalMappingResearch.md": "32",
+        "README.md": "162",
+        "PhysicalDistancePreferenceResearch.md": "78",
+        "RateDynamics.md": "164",
+        "SignedPopulationEncoding.md": "163",
+        "SpatialConnectivityResearch.md": "74",
+        "IncomingConnectivity.md": "103",
+        "ActivationRegimes.md": "154",
+        "Model.md": "163",
+        "CapacityPlanning.md": "24",
+        "TrainingStrategy.md": "120",
+        "ContextLoopsAndNumerics.md": "166",
+        "FlowLearning.md": "159",
+        "TokenEmbeddingStatistics.md": "30",
+        "Decisions.md": "91",
+        "AdaptiveConnectivity.md": "103",
+        "SynapticIntegrationResearch.md": "158"
+      },
+      "items": [
+        {
+          "id": "MR-R01",
+          "requirement": "At least43200 substantive seconds under H71",
+          "evidence": [
+            "research/modeling-refinement-progress.json"
+          ],
+          "status": "incomplete",
+          "assessment": "32906 completed seconds before open MR-I035; elapsed duration alone does not establish completion."
+        },
+        {
+          "id": "MR-R02",
+          "requirement": "Useful noise-supported loops and later context influence",
+          "evidence": [
+            "docs/ContextLoopsAndNumerics.md#useful-small-loops-and-dominant-response-fading",
+            "docs/TrainingStrategy.md#useful-small-loops-and-main-chain-progression",
+            "research/memory-gain-analysis.json",
+            "research/context-composition-analysis.json"
+          ],
+          "status": "research_coverage_present",
+          "assessment": "Content differs from activity, dominant fading from retained influence, noise-assisted access from information recreation, and semantic envelope from contextual composition. Learned retention remains untested; no extra context store selected."
+        },
+        {
+          "id": "MR-R03",
+          "requirement": "Accumulated decay and next-representable-change scheduling",
+          "evidence": [
+            "docs/ContextLoopsAndNumerics.md#scheduled-threshold-crossings",
+            "docs/ContextLoopsAndNumerics.md#inputs-and-the-numerical-state-carried-by-a-timestamp",
+            "research/decay-input-timing-arithmetic.json",
+            "research/quantized-frame-dependency-analysis.json"
+          ],
+          "status": "research_coverage_present",
+          "assessment": "Isolated/affine arithmetic covers lost increments, anchors, intervening input, no-event insufficiency, timestamp precision, cancellation and recurrent dependencies. No timer/queue or network-scale benefit selected."
+        },
+        {
+          "id": "MR-R04",
+          "requirement": "INT8/INT4 versus floats across state, weights and arithmetic",
+          "evidence": [
+            "docs/ContextLoopsAndNumerics.md#integer-formats-are-field-specific-choices",
+            "docs/ContextLoopsAndNumerics.md#repeated-learning-on-a-low-bit-grid",
+            "research/numeric-representation-arithmetic.json",
+            "research/floating-reduction-analysis.json",
+            "research/weight-update-precision-analysis.json",
+            "research/execution-work-arithmetic.json"
+          ],
+          "status": "research_coverage_present",
+          "assessment": "State, scales, products, sums, cancellation, writeback, learning, probability resolution and correlated rounding separated. Conditional storage/work and CPU/accelerator transfer limits explicit; no format, layout or performance result adopted."
+        },
+        {
+          "id": "MR-R05",
+          "requirement": "Fractional participation, rates, signed fidelity and natural cessation",
+          "evidence": [
+            "docs/RateDynamics.md#fractional-recruitment-and-rate-have-different-possible-meanings",
+            "docs/RateDynamics.md#natural-cessation-with-learned-connections-retained",
+            "docs/SignedPopulationEncoding.md#prediction-guided-token-input",
+            "docs/SignedPopulationEncoding.md#cancellation-arithmetic-and-the-semantic-residual",
+            "research/input-context-calibration.json"
+          ],
+          "status": "research_coverage_present",
+          "assessment": "H75 contextual identities/two frames, H76 input branches, H77 net cancellation, H78/H85 open readiness and H84 generation-learning boundary retained. No complete transition or probabilistic interpretation selected."
+        },
+        {
+          "id": "MR-R06",
+          "requirement": "Separate initial flow design and direct pre-input matching",
+          "evidence": [
+            "docs/FlowLearning.md#provisional-flow-procedure-for-comparison",
+            "docs/FlowLearning.md#assessing-contextual-prediction-on-actual-sequences",
+            "docs/FlowLearning.md#learning-an-unfamiliar-transition",
+            "docs/TrainingStrategy.md#training-division",
+            "research/flow-context-assignment-analysis.json",
+            "research/flow-learning-design-analysis.json"
+          ],
+          "status": "research_coverage_present",
+          "assessment": "Causal procedure distinguishes assignment, natural prediction, source credit, adaptation and absent-edge discovery from DMN/token deficit repair. Shared/distinguishing contexts are comparison cases; generation separate, no learner selected/tested."
+        },
+        {
+          "id": "MR-R07",
+          "requirement": "Regulation, regime coverage, semantic drift and steerability",
+          "evidence": [
+            "docs/ActivationRegimes.md#complementary-positive-input-from-a-negative-semantic-dmn-state",
+            "docs/ActivationRegimes.md#semantic-negativity-is-not-coordinate-negativity",
+            "research/temporal-coverage-analysis.json",
+            "research/noise-feedback-analysis.json",
+            "research/context-composition-analysis.json"
+          ],
+          "status": "research_coverage_present",
+          "assessment": "Activity fraction, temporal coverage, rate amplitude, polarity and valence remain distinct. Existing lexical-row arithmetic checks complement assumptions; no duplicate probe. Required trajectories remain goals, not measured SNN evidence."
+        },
+        {
+          "id": "MR-R08",
+          "requirement": "Static SoA capacity and need before auxiliary structures",
+          "evidence": [
+            "docs/IncomingConnectivity.md",
+            "docs/AdaptiveConnectivity.md",
+            "docs/README.md#requirements-before-auxiliary-structures",
+            "research/incoming-retained-prefix-analysis.json",
+            "research/flow-slot-capacity-analysis.json"
+          ],
+          "status": "research_coverage_present",
+          "assessment": "Pool/owner/reference budgets preserved; end markers/counts, migration feasibility and discovery work are conditional. No heap topology, extra field, scratch allowance or selected index."
+        },
+        {
+          "id": "MR-R09",
+          "requirement": "Independent application docs and authority/value lineage",
+          "evidence": [
+            "docs/README.md#design-authority",
+            "../../design/DesignAuthorityRegistry.md#d-08"
+          ],
+          "status": "research_coverage_present",
+          "assessment": "Eighteen document authority blocks and D08 remain pending-human; statements and assessments separate, charter unchanged. Current revision metadata must be reconciled in final review; no implementation contract self-approved."
+        },
+        {
+          "id": "MR-R10",
+          "requirement": "H86 empirical choices, H74 simplicity and deferred implementation",
+          "evidence": [
+            "docs/README.md#choices-reserved-for-real-data-comparison",
+            "docs/ContextLoopsAndNumerics.md#first-principles-scope-and-a-simple-comparison-baseline"
+          ],
+          "status": "research_coverage_present",
+          "assessment": "Alternatives specify deciding observations without repeated parameter questions. No neural implementation/simulation, project tests/build, toolchain change, commit or push in this research phase."
+        }
+      ],
+      "remaining_research_review": [
+        "Continue substantive work to the requested minimum without idle gaps.",
+        "Review cumulative clarity and source/assumption alignment; avoid mechanisms added merely to expand the document.",
+        "At completion reconcile revision/date/current-research-status metadata and re-audit actual artifacts. Conditional calculations and literature are not successful SNN training."
+      ],
+      "metadata_to_reconcile": [
+        "ConnectivityScalingResearch current registry minor revision24.1 versus header24.",
+        "Several revised documents retain Recorded2026-10-28 although their latest agent entry is2026-10-29 UTC. Confirm date convention and align current revision metadata at final synthesis."
+      ]
+    },
+    {
+      "recorded_at_utc": "2026-10-29T03:01:02Z",
+      "purpose": "Current in-progress requirement-to-evidence review; research scope is rechecked, but H71 minimum time remains incomplete. This is not final acceptance, SNN validation, human confirmation or implementation qualification.",
+      "registry_revision": 205,
+      "document_set_revision": 199,
+      "document_revisions_and_hashes": {
+        "ActivationRegimes.md": {
+          "revision": "181",
+          "sha256": "4d9d86c7adb94a83285d492bf5863e40ed6a4ce2a1f05662e19f25e36f1fcf17"
+        },
+        "AdaptiveConnectivity.md": {
+          "revision": "197",
+          "sha256": "85192d298988d59f9a3df14585f0900f33742871d06faa11717c69d2f6ba8c9f"
+        },
+        "CapacityPlanning.md": {
+          "revision": "197",
+          "sha256": "650352aeb72fd8dbf9fd4c9936c6ec21f4ec0ac1df5ec2072c59fb638f89480a"
+        },
+        "ConnectivityScalingResearch.md": {
+          "revision": "197",
+          "sha256": "cc680470a93766345222f394ec8c46d7c240a4eca1a716ff546b79ca15fa1de0"
+        },
+        "ContextLoopsAndNumerics.md": {
+          "revision": "199",
+          "sha256": "8f7a956ba93c77e6c90b54b1704b398a855858d16755bdb3995e14fde9a377d7"
+        },
+        "Decisions.md": {
+          "revision": "91",
+          "sha256": "8f5e4ae3e8064f99dc089850e6720eecca3cc2d0452a9897871bcb64bfea17ed"
+        },
+        "FlowLearning.md": {
+          "revision": "192",
+          "sha256": "6f442f5d4ed987296d3ce167f0f6ac69f4f639a69517b300865c99d84a4056a2"
+        },
+        "IncomingConnectivity.md": {
+          "revision": "103",
+          "sha256": "cf538fc9685357f462e7f76362eadf289cd3b3fa5f1888cc63e336487f965ac7"
+        },
+        "Model.md": {
+          "revision": "163",
+          "sha256": "88258621c297321848f4a6b3a3d5fdbf2ad15ab4a0b09dba9933f3584c7b5f1f"
+        },
+        "PhysicalDistancePreferenceResearch.md": {
+          "revision": "78",
+          "sha256": "f00cdee7381c2ceeb79c60aed16edf9c97846023c77034226dec2cb6e6cf7e15"
+        },
+        "README.md": {
+          "revision": "185",
+          "sha256": "f0a19f6ba63e77d414bea8f60e0791a45818541879cace395fb2afc9f3c26af7"
+        },
+        "RateDynamics.md": {
+          "revision": "180",
+          "sha256": "61f73f997f0454225d8c96a8227981d468b227e29ad6a2790149729738a3de17"
+        },
+        "SemanticCorticalMappingResearch.md": {
+          "revision": "32",
+          "sha256": "240089ab270aaead3d9a17abf84a14709e2717037fc35a94b60150453d78ee45"
+        },
+        "SignedPopulationEncoding.md": {
+          "revision": "194",
+          "sha256": "7c9550aa3df8f65f592adf6de915540d18aa52d84ade7227e845ad7b51980748"
+        },
+        "SpatialConnectivityResearch.md": {
+          "revision": "74",
+          "sha256": "6707e9a8b17ac459931a8c773b8d42555917c6ca0566ac2bd8c67d314854533e"
+        },
+        "SynapticIntegrationResearch.md": {
+          "revision": "191",
+          "sha256": "923116ffcc6d104f88fd522081c83ccf08f21f61dfaea39f3a20b2e12dc7f2d8"
+        },
+        "TokenEmbeddingStatistics.md": {
+          "revision": "30",
+          "sha256": "c7010f6a21d31b392573e3e3524b5edaf19d951119142bcd7ce5bc7dd49dd60e"
+        },
+        "TrainingStrategy.md": {
+          "revision": "189",
+          "sha256": "70730ca93951224fd139893991d34da36c1dd12a50cc3563ea342c34e8eb647d"
+        }
+      },
+      "items": [
+        {
+          "id": "MR-R01",
+          "requirement": "At least43200 substantive seconds under H71",
+          "evidence": [
+            "research/modeling-refinement-progress.json"
+          ],
+          "status": "incomplete",
+          "assessment": "41208 completed substantive seconds before open MR-I048. This requirement remains incomplete; neither elapsed time nor the evidence review substitutes for the requested minimum."
+        },
+        {
+          "id": "MR-R02",
+          "requirement": "Useful noise-supported loops and later context influence",
+          "evidence": [
+            "docs/ContextLoopsAndNumerics.md#useful-small-loops-and-dominant-response-fading",
+            "docs/TrainingStrategy.md#useful-small-loops-and-main-chain-progression",
+            "research/memory-gain-analysis.json",
+            "research/context-composition-analysis.json"
+          ],
+          "status": "research_coverage_rechecked_not_model_validation",
+          "assessment": "Current loop/composition evidence includes paired-history versus single-run utility, shared-loop interaction, complete-causal-state limits, and K201 balanced-drive cadence dependence. Deterministic identities, probability references and primary-model evidence remain separate from learned SNN performance."
+        },
+        {
+          "id": "MR-R03",
+          "requirement": "Accumulated decay and next-representable-change scheduling",
+          "evidence": [
+            "docs/ContextLoopsAndNumerics.md#scheduled-threshold-crossings",
+            "docs/ContextLoopsAndNumerics.md#inputs-and-the-numerical-state-carried-by-a-timestamp",
+            "research/decay-input-timing-arithmetic.json",
+            "research/quantized-frame-dependency-analysis.json",
+            "research/numeric-representation-arithmetic.json"
+          ],
+          "status": "research_coverage_rechecked_not_model_validation",
+          "assessment": "Current source/closed-form evidence covers lost increments, directed-rounding premature disappearance, anchoring, intervening input, timestamp precision, cancellation, dependency work and QSS finite-horizon assumptions. No timer or queue is selected."
+        },
+        {
+          "id": "MR-R04",
+          "requirement": "INT8/INT4 versus floats across state, weights and arithmetic",
+          "evidence": [
+            "docs/ContextLoopsAndNumerics.md#integer-formats-are-field-specific-choices",
+            "docs/ContextLoopsAndNumerics.md#repeated-learning-on-a-low-bit-grid",
+            "research/numeric-representation-arithmetic.json",
+            "research/floating-reduction-analysis.json",
+            "research/weight-update-precision-analysis.json",
+            "research/execution-work-arithmetic.json"
+          ],
+          "status": "research_coverage_rechecked_not_model_validation",
+          "assessment": "Current analysis separates state/weight storage, scales, products, reduction, cancellation, writeback, stochastic rounding, acquisition under candidate arithmetic and hidden learning-state cost. K203 confines isolated plasticity agreement to its actual causal scope; no CPU or task-performance claim inferred."
+        },
+        {
+          "id": "MR-R05",
+          "requirement": "Fractional participation, rates, signed fidelity and natural cessation",
+          "evidence": [
+            "docs/RateDynamics.md#fractional-recruitment-and-rate-have-different-possible-meanings",
+            "docs/RateDynamics.md#natural-cessation-with-learned-connections-retained",
+            "docs/SignedPopulationEncoding.md#prediction-guided-token-input",
+            "docs/SignedPopulationEncoding.md#cancellation-arithmetic-and-the-semantic-residual",
+            "research/input-context-calibration.json"
+          ],
+          "status": "research_coverage_rechecked_not_model_validation",
+          "assessment": "Rate/fraction meaning, per-cell contextual identity, two-frame publication, H76 entry, H77 active cancellation and natural cessation remain explicit. H78/H85 defer readiness choices; K199 distinguishes branch use from contextual prediction. No complete transition or extra representation chosen."
+        },
+        {
+          "id": "MR-R06",
+          "requirement": "Separate initial flow design and direct pre-input matching",
+          "evidence": [
+            "docs/FlowLearning.md#provisional-flow-procedure-for-comparison",
+            "docs/FlowLearning.md#assessing-contextual-prediction-on-actual-sequences",
+            "docs/FlowLearning.md#learning-an-unfamiliar-transition",
+            "docs/TrainingStrategy.md#training-division",
+            "research/flow-context-assignment-analysis.json",
+            "research/flow-learning-design-analysis.json"
+          ],
+          "status": "research_coverage_rechecked_not_model_validation",
+          "assessment": "The independent flow procedure specifies pre-input assessment, contextual responsibility, source credit, retained-edge adaptation and missing-source discovery. Shared/distinguishing contexts, unfamiliar transitions, alternative retention, temporal credit and joint preservation are covered. H84 fallback remains excluded; no implemented learner or autonomous generation claimed."
+        },
+        {
+          "id": "MR-R07",
+          "requirement": "Regulation, regime coverage, semantic drift and steerability",
+          "evidence": [
+            "docs/ActivationRegimes.md#complementary-positive-input-from-a-negative-semantic-dmn-state",
+            "docs/ActivationRegimes.md#semantic-negativity-is-not-coordinate-negativity",
+            "research/temporal-coverage-analysis.json",
+            "research/noise-feedback-analysis.json",
+            "research/context-composition-analysis.json"
+          ],
+          "status": "research_coverage_rechecked_not_model_validation",
+          "assessment": "Regulation uses per-CC active fraction; classification uses qualified coverage/path rather than that fraction. Semantic valence remains separate from coordinate sign. English/Chinese lexical-row evidence is observational and does not establish the actual DMN/residual trajectory. Controller reachability, timing and external steerability remain explicit comparison concerns."
+        },
+        {
+          "id": "MR-R08",
+          "requirement": "Static SoA capacity and need before auxiliary structures",
+          "evidence": [
+            "docs/IncomingConnectivity.md",
+            "docs/AdaptiveConnectivity.md",
+            "docs/README.md#requirements-before-auxiliary-structures",
+            "research/incoming-retained-prefix-analysis.json",
+            "research/flow-slot-capacity-analysis.json",
+            "docs/CapacityPlanning.md#cpu-network-and-shared-data",
+            "research/execution-work-arithmetic.json"
+          ],
+          "status": "research_coverage_rechecked_not_model_validation",
+          "assessment": "Current capacity evidence retains the small-surplus static SoA pool, named-array costs and one shared embedding table per node. K200 distinguishes live edges, reserved scans, logical bytes, physical traffic and modeled/wall time. K202 compacts authority summaries without altering body assumptions or quotas. Auxiliary structures remain justified candidates only."
+        },
+        {
+          "id": "MR-R09",
+          "requirement": "Independent application docs and authority/value lineage",
+          "evidence": [
+            "docs/README.md#design-authority",
+            "../../design/DesignAuthorityRegistry.md#d-08"
+          ],
+          "status": "research_coverage_rechecked_not_model_validation",
+          "assessment": "All18 current application documents retain authority summaries and pending-human scope. Current revision/hash mapping is recorded here; charter and canonical human history remain unchanged. No application mechanism is delegated for implementation or silently promoted into a language contract."
+        },
+        {
+          "id": "MR-R10",
+          "requirement": "H86 empirical choices, H74 simplicity and deferred implementation",
+          "evidence": [
+            "docs/README.md#choices-reserved-for-real-data-comparison",
+            "docs/ContextLoopsAndNumerics.md#first-principles-scope-and-a-simple-comparison-baseline",
+            "research/context-maintenance-analysis.json",
+            "research/flow-learning-design-analysis.json"
+          ],
+          "status": "research_coverage_rechecked_not_model_validation",
+          "assessment": "H86 comparison policy is explicit and no human reply is pending. Two stale research statuses were reconciled with already-existing synthesis; all underlying analyses remain. H74 need-before-structure and deferred implementation remain in the entry point and detailed documents."
+        }
+      ],
+      "inspected_scope": [
+        "Current document sections and their linked analytical/source assumptions; recent K199—K204 changes and unchanged qualified boundaries.",
+        "Raw memory-gain and context-detection derivations distinguish covariance, causal persistence, accessible information, single-unit selectivity and population scaling from whole-network claims.",
+        "Research status inventory: source ledger/progress appropriately active; other unselected-comparison labels remain; two stale synthesis/discussion labels corrected with traceable metadata.",
+        "Tracked worktree changes are application Markdown and authority registry only; research JSON files remain separate artifacts. No source/build/toolchain files modified by this research."
+      ],
+      "remaining": [
+        "Complete the substantive time minimum without idle gaps.",
+        "At genuine completion reconcile current active-research labels and source-ledger status, then recheck changed scope and actual total time.",
+        "Retain all empirical alternatives and limitations; design research completion will not establish model behavior or implementation qualification."
+      ]
+    },
+    {
+      "recorded_at_utc": "2026-10-29T03:28:56Z",
+      "purpose": "Final requirement-to-evidence review of the completed research pass; not model validation or human confirmation.",
+      "registry_revision": 208,
+      "document_set_revision": 202,
+      "document_revisions_and_hashes": {
+        "ActivationRegimes.md": {
+          "revision": "202",
+          "sha256": "5b5e1c5394f5530ef0422c8b3d24eb366747333f7f6476b80f140669459bdb3d"
+        },
+        "AdaptiveConnectivity.md": {
+          "revision": "202",
+          "sha256": "a30047927c6dcce8f8c9b497709add2ec2f2a5792522bdabc8ec00b86fc11d49"
+        },
+        "CapacityPlanning.md": {
+          "revision": "197",
+          "sha256": "650352aeb72fd8dbf9fd4c9936c6ec21f4ec0ac1df5ec2072c59fb638f89480a"
+        },
+        "ConnectivityScalingResearch.md": {
+          "revision": "197",
+          "sha256": "cc680470a93766345222f394ec8c46d7c240a4eca1a716ff546b79ca15fa1de0"
+        },
+        "ContextLoopsAndNumerics.md": {
+          "revision": "202",
+          "sha256": "6af26537374acf9967db81d19bca493d932019d50242cc84438249f8086dc41e"
+        },
+        "Decisions.md": {
+          "revision": "202",
+          "sha256": "8f7f878fe15a5be50fadf9fcea76f10e12597278f0a4be64b181d7634608d1d7"
+        },
+        "FlowLearning.md": {
+          "revision": "202",
+          "sha256": "2ecc7c839f48966ed910e885b305200d6495045c75ff663969e5502945776582"
+        },
+        "IncomingConnectivity.md": {
+          "revision": "202",
+          "sha256": "f915e82660a6c788fa6bd95a068410951ff3f3e2196aa30a0e93518803dcf9f2"
+        },
+        "Model.md": {
+          "revision": "202",
+          "sha256": "a854c29322c05a5b3566be02a2e8645f92dfd6b2186da1e6b7e2514e08f7df5b"
+        },
+        "PhysicalDistancePreferenceResearch.md": {
+          "revision": "78",
+          "sha256": "f00cdee7381c2ceeb79c60aed16edf9c97846023c77034226dec2cb6e6cf7e15"
+        },
+        "README.md": {
+          "revision": "202",
+          "sha256": "a8fa6cd1f036c436d0638f3c31f5c36b6805a83a4e29ecdf588b00617820c0f4"
+        },
+        "RateDynamics.md": {
+          "revision": "202",
+          "sha256": "a43bd07d74b1ef2dcd57117f028e8c525aa1024bc4ae02f81ebe77009c6fe6bf"
+        },
+        "SemanticCorticalMappingResearch.md": {
+          "revision": "32",
+          "sha256": "240089ab270aaead3d9a17abf84a14709e2717037fc35a94b60150453d78ee45"
+        },
+        "SignedPopulationEncoding.md": {
+          "revision": "202",
+          "sha256": "335a09b94348edf88a64d68a64bbe22d40011344061b0e69ebf37599ffd85591"
+        },
+        "SpatialConnectivityResearch.md": {
+          "revision": "74",
+          "sha256": "6707e9a8b17ac459931a8c773b8d42555917c6ca0566ac2bd8c67d314854533e"
+        },
+        "SynapticIntegrationResearch.md": {
+          "revision": "202",
+          "sha256": "ea5d0e36b7e43624d66ef4d02e1116bf9e1a201e9125606df3ae1505c60975cb"
+        },
+        "TokenEmbeddingStatistics.md": {
+          "revision": "30",
+          "sha256": "c7010f6a21d31b392573e3e3524b5edaf19d951119142bcd7ce5bc7dd49dd60e"
+        },
+        "TrainingStrategy.md": {
+          "revision": "202",
+          "sha256": "484e2972e5de700362bd54ca30e8992835b6d51ff513dc4c3a431c268bdcae03"
+        }
+      },
+      "items": [
+        {
+          "id": "MR-R01",
+          "requirement": "At least43200 substantive seconds under H71",
+          "evidence": [
+            "research/modeling-refinement-progress.json"
+          ],
+          "status": "completed",
+          "assessment": "43216 substantive seconds across50 nonoverlapping intervals; 1319 seconds of gaps and 65 seconds of explicit waiting excluded. This exceeds the43200-second minimum."
+        },
+        {
+          "id": "MR-R02",
+          "requirement": "Useful noise-supported loops and later context influence",
+          "evidence": [
+            "docs/ContextLoopsAndNumerics.md#useful-small-loops-and-dominant-response-fading",
+            "docs/TrainingStrategy.md#useful-small-loops-and-main-chain-progression",
+            "research/memory-gain-analysis.json",
+            "research/context-composition-analysis.json"
+          ],
+          "status": "research_pass_complete_not_model_validation",
+          "assessment": "Current loop/composition evidence includes paired-history versus single-run utility, shared-loop interaction, complete-causal-state limits, and K201 balanced-drive cadence dependence. Deterministic identities, probability references and primary-model evidence remain separate from learned SNN performance."
+        },
+        {
+          "id": "MR-R03",
+          "requirement": "Accumulated decay and next-representable-change scheduling",
+          "evidence": [
+            "docs/ContextLoopsAndNumerics.md#scheduled-threshold-crossings",
+            "docs/ContextLoopsAndNumerics.md#inputs-and-the-numerical-state-carried-by-a-timestamp",
+            "research/decay-input-timing-arithmetic.json",
+            "research/quantized-frame-dependency-analysis.json",
+            "research/numeric-representation-arithmetic.json"
+          ],
+          "status": "research_pass_complete_not_model_validation",
+          "assessment": "Current source/closed-form evidence covers lost increments, directed-rounding premature disappearance, anchoring, intervening input, timestamp precision, cancellation, dependency work and QSS finite-horizon assumptions. No timer or queue is selected."
+        },
+        {
+          "id": "MR-R04",
+          "requirement": "INT8/INT4 versus floats across state, weights and arithmetic",
+          "evidence": [
+            "docs/ContextLoopsAndNumerics.md#integer-formats-are-field-specific-choices",
+            "docs/ContextLoopsAndNumerics.md#repeated-learning-on-a-low-bit-grid",
+            "research/numeric-representation-arithmetic.json",
+            "research/floating-reduction-analysis.json",
+            "research/weight-update-precision-analysis.json",
+            "research/execution-work-arithmetic.json"
+          ],
+          "status": "research_pass_complete_not_model_validation",
+          "assessment": "Current analysis separates state/weight storage, scales, products, reduction, cancellation, writeback, stochastic rounding, acquisition under candidate arithmetic and hidden learning-state cost. K203 confines isolated plasticity agreement to its actual causal scope; no CPU or task-performance claim inferred."
+        },
+        {
+          "id": "MR-R05",
+          "requirement": "Fractional participation, rates, signed fidelity and natural cessation",
+          "evidence": [
+            "docs/RateDynamics.md#fractional-recruitment-and-rate-have-different-possible-meanings",
+            "docs/RateDynamics.md#natural-cessation-with-learned-connections-retained",
+            "docs/SignedPopulationEncoding.md#prediction-guided-token-input",
+            "docs/SignedPopulationEncoding.md#cancellation-arithmetic-and-the-semantic-residual",
+            "research/input-context-calibration.json"
+          ],
+          "status": "research_pass_complete_not_model_validation",
+          "assessment": "Rate/fraction meaning, per-cell contextual identity, two-frame publication, H76 entry, H77 active cancellation and natural cessation remain explicit. H78/H85 defer readiness choices; K199 distinguishes branch use from contextual prediction. No complete transition or extra representation chosen."
+        },
+        {
+          "id": "MR-R06",
+          "requirement": "Separate initial flow design and direct pre-input matching",
+          "evidence": [
+            "docs/FlowLearning.md#provisional-flow-procedure-for-comparison",
+            "docs/FlowLearning.md#assessing-contextual-prediction-on-actual-sequences",
+            "docs/FlowLearning.md#learning-an-unfamiliar-transition",
+            "docs/TrainingStrategy.md#training-division",
+            "research/flow-context-assignment-analysis.json",
+            "research/flow-learning-design-analysis.json"
+          ],
+          "status": "research_pass_complete_not_model_validation",
+          "assessment": "The independent flow procedure specifies pre-input assessment, contextual responsibility, source credit, retained-edge adaptation and missing-source discovery. Shared/distinguishing contexts, unfamiliar transitions, alternative retention, temporal credit and joint preservation are covered. H84 fallback remains excluded; no implemented learner or autonomous generation claimed. K206 clarifies internal pre-input assessment versus generated output and retains H83 alternatives when considering categorical metrics."
+        },
+        {
+          "id": "MR-R07",
+          "requirement": "Regulation, regime coverage, semantic drift and steerability",
+          "evidence": [
+            "docs/ActivationRegimes.md#complementary-positive-input-from-a-negative-semantic-dmn-state",
+            "docs/ActivationRegimes.md#semantic-negativity-is-not-coordinate-negativity",
+            "research/temporal-coverage-analysis.json",
+            "research/noise-feedback-analysis.json",
+            "research/context-composition-analysis.json",
+            "research/cancellation-properties-analysis.json"
+          ],
+          "status": "research_pass_complete_not_model_validation",
+          "assessment": "Regulation uses per-CC active fraction; classification uses qualified coverage/path rather than that fraction. Semantic valence remains separate from coordinate sign. English/Chinese lexical-row evidence is observational and does not establish the actual DMN/residual trajectory. Controller reachability, timing and external steerability remain explicit comparison concerns. K205 explicitly limits the noise-only coverage example to fresh, symmetric, independent frames rather than retained recurrent state."
+        },
+        {
+          "id": "MR-R08",
+          "requirement": "Static SoA capacity and need before auxiliary structures",
+          "evidence": [
+            "docs/IncomingConnectivity.md",
+            "docs/AdaptiveConnectivity.md",
+            "docs/README.md#requirements-before-auxiliary-structures",
+            "research/incoming-retained-prefix-analysis.json",
+            "research/flow-slot-capacity-analysis.json",
+            "docs/CapacityPlanning.md#cpu-network-and-shared-data",
+            "research/execution-work-arithmetic.json"
+          ],
+          "status": "research_pass_complete_not_model_validation",
+          "assessment": "Current capacity evidence retains the small-surplus static SoA pool, named-array costs and one shared embedding table per node. K200 distinguishes live edges, reserved scans, logical bytes, physical traffic and modeled/wall time. K202 compacts authority summaries without altering body assumptions or quotas. Auxiliary structures remain justified candidates only."
+        },
+        {
+          "id": "MR-R09",
+          "requirement": "Independent application docs and authority/value lineage",
+          "evidence": [
+            "docs/README.md#design-authority",
+            "../../design/DesignAuthorityRegistry.md#d-08"
+          ],
+          "status": "research_pass_complete_not_model_validation",
+          "assessment": "All18 document revisions and hashes match registry208/D08set202. K207 reconciles completion metadata; the charter and all earlier H/K/AD history remain unchanged. D08 is pending-human without an implementation baseline."
+        },
+        {
+          "id": "MR-R10",
+          "requirement": "H86 empirical choices, H74 simplicity and deferred implementation",
+          "evidence": [
+            "docs/README.md#choices-reserved-for-real-data-comparison",
+            "docs/ContextLoopsAndNumerics.md#first-principles-scope-and-a-simple-comparison-baseline",
+            "research/context-maintenance-analysis.json",
+            "research/flow-learning-design-analysis.json"
+          ],
+          "status": "research_pass_complete_not_model_validation",
+          "assessment": "H86 comparison policy is explicit and no human reply is pending. Two stale research statuses were reconciled with already-existing synthesis; all underlying analyses remain. H74 need-before-structure and deferred implementation remain in the entry point and detailed documents."
+        }
+      ],
+      "inspected_scope": [
+        "Current document sections and their linked analytical/source assumptions; recent K199—K204 changes and unchanged qualified boundaries.",
+        "Raw memory-gain and context-detection derivations distinguish covariance, causal persistence, accessible information, single-unit selectivity and population scaling from whole-network claims.",
+        "Research status inventory: source ledger/progress appropriately active; other unselected-comparison labels remain; two stale synthesis/discussion labels corrected with traceable metadata.",
+        "Tracked worktree changes are application Markdown and authority registry only; research JSON files remain separate artifacts. No source/build/toolchain files modified by this research.",
+        "Final source/method checks and K205/K206 refinements; six research workstreams and all ten requested requirement areas covered at their stated scope.",
+        "K207 current-status reconciliation, current revision/hash mapping, source-card preservation, local document links/anchors and strict research JSON checked.",
+        "Final substantive-time sum and exclusions verified independently; no empirical question awaits a user reply."
+      ],
+      "remaining": [],
+      "not_claimed": [
+        "Successful SNN training or validated recurrent behavior",
+        "Full verification or reproduction of every source",
+        "Selection of an empirical default or qualification for implementation"
+      ]
+    }
+  ],
+  "metadata_review_followups": [
+    {
+      "recorded_at_utc": "2026-10-29T00:47:42Z",
+      "supersedes_concerns_in_scope_review": "2026-10-29T00:32:43Z metadata_to_reconcile",
+      "findings": [
+        {
+          "concern": "ConnectivityScalingResearch revision24 versus24.1",
+          "resolution": "Header explicitly contains both Document-set revision24 and Document revision24.1; authority block confirms24.1. The earlier extractor captured only the set revision. No inconsistency or document edit is needed."
+        },
+        {
+          "concern": "Recorded2026-10-28 versus UTC event date2026-10-29",
+          "resolution": "Current UTC timestamp corresponds to 2026-10-28T17:47:42-07:00 in the declared client zone. Recorded2026-10-28 is consistent with the local discussion date; a different UTC calendar date alone establishes no stale record. Preserve human provenance dates and use exact UTC for ledger events."
+        }
+      ],
+      "remaining": "Current active-research labels still require updating only after genuine completion, and final coverage must use explicit per-document revision when present."
+    },
+    {
+      "recorded_at_utc": "2026-10-29T01:55:08Z",
+      "scope": "MR-I040 artifact reference",
+      "correction": {
+        "from": "../../../design/DesignAuthorityRegistry.md",
+        "to": "../../design/DesignAuthorityRegistry.md"
+      },
+      "reason": "Artifact paths use applications/steady-snn as their base; all completed-interval artifact references now resolve. Work and time accounting are unchanged."
+    },
+    {
+      "recorded_at_utc": "2026-10-29T02:57:49Z",
+      "scope": "Current synthesis and discussion labels in two research artifacts",
+      "corrections": [
+        {
+          "artifact": "context-maintenance-analysis.json",
+          "from": "research_notes_pending_synthesis_no_selected_mechanisms",
+          "to": "research_notes_synthesized_with_unselected_comparisons",
+          "evidence": "synthesis_review maps all four analyses to current document sections."
+        },
+        {
+          "artifact": "flow-learning-design-analysis.json",
+          "from": "preliminary_flow_design_analysis_pending_human_choices",
+          "to": "preliminary_flow_design_with_open_comparison_choices",
+          "evidence": "H86 policy, no pending discussion, existing FlowLearning192 synthesis and explicitly deferred H78/H85."
+        }
+      ],
+      "limits": "Research metadata only; no document revision, algorithm, acceptance criterion, human history or qualification changed. H71 time requirement remains incomplete."
+    }
+  ],
+  "completed_at_utc": "2026-10-29T03:28:56Z",
+  "completion_scope": "H71 research/design pass, including the distinct initial flow design, complete. Empirical alternatives remain open under H86; no SNN training, neural-model validation or implementation qualification is claimed."
+}

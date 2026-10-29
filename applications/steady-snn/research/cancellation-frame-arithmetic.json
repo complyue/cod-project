@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "status": "conditional_precision_arithmetic_with_H77_selected_active_rate_rule",
+  "recorded_at_utc": "2026-10-28T16:31:35.389357+00:00",
+  "value_question": "Can two-frame state and a simple population-local operation preserve the small semantic residual and contextual cell identities required by H-54/H-55/H-75?",
+  "assumptions": [
+    "60 cells per polarity; illustrative linear aggregate readout in common units; no phase-selection law chosen.",
+    "Arithmetic comparison is independent of any chosen cancellation amount.",
+    "Float storage is nearest ties-to-even; population arithmetic in binary64 isolates information lost at state write-back.",
+    "No product implementation, new state field, controller, test suite or actual trained SNN."
+  ],
+  "precision_cases": [
+    {
+      "format": "FP16",
+      "positive_per_cell": 0.51,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 0.6000000000000005,
+      "residual_from_stored_inputs": 0.5859375,
+      "relative_error": 0.023437500000000867
+    },
+    {
+      "format": "FP32",
+      "positive_per_cell": 0.51,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 0.6000000000000005,
+      "residual_from_stored_inputs": 0.5999994277954102,
+      "relative_error": 9.536743172944276e-07
+    },
+    {
+      "format": "FP16",
+      "positive_per_cell": 0.501,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 0.06000000000000005,
+      "residual_from_stored_inputs": 0.05859375,
+      "relative_error": 0.023437500000000867
+    },
+    {
+      "format": "FP32",
+      "positive_per_cell": 0.501,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 0.06000000000000005,
+      "residual_from_stored_inputs": 0.05999922752380371,
+      "relative_error": 1.2874603272372542e-05
+    },
+    {
+      "format": "FP16",
+      "positive_per_cell": 0.5001,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 0.005999999999999339,
+      "residual_from_stored_inputs": 0.0,
+      "relative_error": 1.0
+    },
+    {
+      "format": "FP32",
+      "positive_per_cell": 0.5001,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 0.005999999999999339,
+      "residual_from_stored_inputs": 0.006000995635986328,
+      "relative_error": 0.0001659393311648399
+    },
+    {
+      "format": "FP16",
+      "positive_per_cell": 0.50001,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 0.0005999999999972694,
+      "residual_from_stored_inputs": 0.0,
+      "relative_error": 1.0
+    },
+    {
+      "format": "FP32",
+      "positive_per_cell": 0.50001,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 0.0005999999999972694,
+      "residual_from_stored_inputs": 0.0006008148193359375,
+      "relative_error": 0.0013580322311197066
+    },
+    {
+      "format": "FP16",
+      "positive_per_cell": 0.500001,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 6.000000000172534e-05,
+      "residual_from_stored_inputs": 0.0,
+      "relative_error": 1.0
+    },
+    {
+      "format": "FP32",
+      "positive_per_cell": 0.500001,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 6.000000000172534e-05,
+      "residual_from_stored_inputs": 6.079673767089844e-05,
+      "relative_error": 0.013278961152503115
+    },
+    {
+      "format": "FP16",
+      "positive_per_cell": 0.5000001,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 5.999999996841865e-06,
+      "residual_from_stored_inputs": 0.0,
+      "relative_error": 1.0
+    },
+    {
+      "format": "FP32",
+      "positive_per_cell": 0.5000001,
+      "negative_per_cell": 0.5,
+      "reference_population_residual": 5.999999996841865e-06,
+      "residual_from_stored_inputs": 7.152557373046875e-06,
+      "relative_error": 0.19209289613527758
+    }
+  ],
+  "context_preserving_candidate": {
+    "condition": "If an equal amount c is removed from each population, and relative current strengths within each affected population should be preserved",
+    "rule": "P=sum(p_i), M=sum(m_i); 0<=c<=min(P,M); p_i_next=p_i*(P-c)/P for P>0; m_i_next=m_i*(M-c)/M for M>0; zero population stays zero.",
+    "deduction": "Uniform positive rescaling is forced by preserving all within-population strength ratios together with the specified total. It adds no per-cell identity mapping or persistent field.",
+    "limits": [
+      "The full c=min(P,M) active-rate operation is selected by H-77; its units, predictive-state treatment and transition timing still require specification.",
+      "Near P=M, the surviving amplitude may be dominated by numerical error or stochastic input; no semantic valence follows from coordinate sign.",
+      "Full c=min(P,M) removes the weaker polarity and all its current contextual activity; predictive alternatives need explicit phase semantics.",
+      "Uniform scaling preserves ratios but not necessarily the active-cell count defined by a threshold.",
+      "A local working vector may be used by an eventual implementation; this analysis allocates no persistent scratch array."
+    ],
+    "human_scope_update": "H-77 selects c=min(P,M) and proportional surviving active rates. The general-c derivation remains explanatory; it is no longer a competing amount choice for the specified active-rate operation."
+  },
+  "pairwise_index_counterexample": {
+    "positive": [
+      0.8,
+      0.2
+    ],
+    "negative": [
+      0.2,
+      0.3
+    ],
+    "aggregate_difference": 0.5,
+    "same_index_full_cancellation_positive": [
+      0.6,
+      0.0
+    ],
+    "same_index_full_cancellation_negative": [
+      0.0,
+      0.1
+    ],
+    "after_negative_identity_reordering_positive": [
+      0.5,
+      0.0
+    ],
+    "after_negative_identity_reordering_negative": [
+      0.0,
+      0.0
+    ],
+    "proportional_full_cancellation_positive": [
+      0.4,
+      0.1
+    ],
+    "proportional_full_cancellation_negative": [
+      0.0,
+      0.0
+    ],
+    "interpretation": "All give signed total .5, but arbitrary index pairing changes surviving cell identities and unsigned activity when the negative array is reordered. No opposite-polarity path correspondence was specified. This is a reason to avoid inventing such correspondence, not proof that proportional cancellation is selected."
+  },
+  "human_direction": {
+    "event": "H-77",
+    "rule": "Full minicolumn net cancellation and proportional retention of active rates in the surviving direction; no index pairing.",
+    "scope": "Active spiking-rate operation; prediction handling, transfer timing and exact state representation remain open."
+  }
+}

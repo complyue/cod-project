@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "status": "conditional_analysis_not_adopted_model",
+  "recorded_at_utc": "2026-10-28T16:12:36.897461+00:00",
+  "value_question": "Can existing rate, nonlinear response, cancellation and shared recurrence supply the required behavior before introducing auxiliary mechanisms?",
+  "analyses": [
+    {
+      "id": "MR-A001",
+      "topic": "A weak residual can receive preferential noise-assisted activation without a new memory field",
+      "assumptions": "One rectified response Phi(u)=max(u-theta,0); additive independent uniform input eta in [0,sigma]; x is current input drive, not a selected runtime state definition.",
+      "formula": "E[Phi(x+eta)] = 0 if x+sigma<=theta; (x+sigma-theta)^2/(2*sigma) if x<theta<x+sigma; x-theta+sigma/2 if x>=theta.",
+      "example": {
+        "theta": 1,
+        "sigma": 0.6,
+        "residual_drive": 0.6,
+        "expected_response_with_residual": 0.03333333333333332,
+        "expected_response_without_residual": 0
+      },
+      "inference": "An ordinary threshold can preferentially recruit a weak residual under common background statistics. This establishes a local possibility, not sustained recurrence or correct semantic content.",
+      "boundary": "No noise distribution, threshold, new field, short-term plasticity or whole-chain gate is selected."
+    },
+    {
+      "id": "MR-A002",
+      "topic": "Activity count and total rate can respond differently to noise around a threshold",
+      "assumptions": "Illustrative coordinate difference D=0.51; a cell is counted active if D>0.5. Equal-distribution positive/negative drive perturbations independently uniform [0,0.04] yield a centered triangular difference. No clipping is reached.",
+      "calculation": {
+        "initial_active_probability": 1,
+        "probability_falling_below_threshold": 0.28125,
+        "active_probability_after_noise": 0.71875,
+        "mean_signed_drive_after_noise": 0.51
+      },
+      "inference": "Mean signed drive stays fixed while thresholded activity probability falls. Raising noise is not universally equivalent to raising the active-cell count under intrinsic cancellation.",
+      "boundary": "This is a conditional counterexample, not evidence the planned regulator fails. First define the actual activity and cancellation semantics; do not add a controller mechanism in response to a hypothetical alone."
+    },
+    {
+      "id": "MR-A003",
+      "topic": "A rate model does not automatically need a separate neuron-decay timer",
+      "assumptions": "A direct discrete map z[k+1]=Phi(W*z[k]+input[k]) versus a leaky map z[k+1]=alpha*z[k]+beta*Phi(W*z[k]+input[k]) are alternative model semantics.",
+      "inference": "In the direct map, weakening can arise in the learned transition gain; the leaky map introduces a distinct retained temporal response. Choosing rate modeling alone does not select a leak law or additional evolving variable.",
+      "boundary": "The prediction/activation phase meaning remains a real requirement. A one-rate quantity is adequate only if its defined semantics cover the required future behavior."
+    },
+    {
+      "id": "MR-A004",
+      "topic": "Maintenance should assess the shared learned response",
+      "assumptions": "All chains use the same neurons and weights; existing useful loops are not aggressively eliminated; next-step deficit repair credits eligible natural activity.",
+      "inference": "Independent cycle-gain checks cannot establish the full response, and exact prescribed stage membership need not be enforced when the business target is already met. Evaluate semantic fidelity, width/strength, fading and steerability in context.",
+      "boundary": "Does not permit arbitrary out-of-scope repair or reclassifying harmful early returns as correct successors. No runtime cycle enumeration, per-token ownership map or new memory subsystem is implied."
+    },
+    {
+      "id": "MR-A005",
+      "topic": "Same instantaneous semantic vector can coexist with different future responses in the existing per-neuron state",
+      "assumptions": "Illustrative linear signed-population readout D and one-step linear recurrent operator W. Nonnegative neuron states a and b can differ by swapping equal activity between two same-polarity cells with different learned outputs.",
+      "condition": "D*(a-b)=0 can hold while D*W*(a-b)!=0. Nonlinear transitions use the corresponding direct response comparison rather than the linear formula.",
+      "inference": "Cell identities already provide degrees of freedom not visible in an instantaneous coordinate total. Useful recurrent context can use those existing differences; a separate per-token memory store or new context field does not follow.",
+      "boundary": "The algebra establishes representational possibility, not reachable-state diversity, useful memory duration, semantic usefulness or a biological capacity estimate. No readout matrix or hidden-space representation is adopted.",
+      "training_implication": "Do not force every correct semantic response into one canonical cell configuration; doing so could erase the distinctions meant to affect later behavior. Whether natural-credit deficit maintenance preserves them requires evaluation."
+    },
+    {
+      "id": "MR-A006",
+      "topic": "Choose the meaning of neuron state before equating it with firing rate",
+      "assumptions": "A neuron has a threshold theta; two subthreshold activation drives u=0.9*theta and u=0 currently emit zero rate. A subsequent contribution of0.2*theta distinguishes their readiness.",
+      "inference": "A pure zero firing-rate value cannot distinguish these two preactivation conditions. One floating activation-drive value could, with rate derived from it; alternatively an explicitly defined phase-aware encoding could preserve the distinction. Wider storage does not choose the semantic quantity.",
+      "boundary": "This identifies a requirement from the already intended prediction/activation phases. It does not select a membrane model, a second state field, threshold, decay law, phase encoding or prediction readout."
+    },
+    {
+      "id": "MR-A007",
+      "topic": "Persistent state and one-event redirection depend on the admissible cue",
+      "recorded_at_utc": "2026-10-28T23:42:06Z",
+      "reference": "A conditional scalar map x_next=tanh(2*x+u) on[-1,1], with one externally imposed u and zero input afterward. No background noise, learned state or SNN representation is included.",
+      "derivation": [
+        "At u=0 the map has roots0 and±s, where s=tanh(2*s), 0.5<s<1. Concavity for positive x makes the positive root unique apart from0; odd symmetry supplies the negative root.",
+        "The derivative at±s is2*(1-s*s)<1; zero has derivative2. Every state in(0,s) increases toward s, and every state in(-s,0) decreases toward -s. Values beyond±s converge from the other side.",
+        "Starting at -s, one cue gives tanh(u-2*s). A cue u=1 stays negative since2*s>1; a cue u=2 becomes positive since2*s<2. After the cue, the respective signs place the states in different zero-input basins.",
+        "A continuous u=1 protocol is different from the one-cue protocol. No generic convergence label can replace the specified admissible input and post-presentation behavior."
+      ],
+      "scalar_evaluation": {
+        "method": "64 bisection subdivisions on[0.5,1] using binary64 math.tanh; evaluate root residual, derivative and the two one-operation cue responses. No recurrent trajectory generated.",
+        "s": 0.9575040240772688,
+        "root_bracket": [
+          0.9575040240772686,
+          0.9575040240772688
+        ],
+        "root_residual": 0.0,
+        "derivative_at_nonzero_roots": 0.16637208775167434,
+        "state_after_unit_cue": -0.7235272886894787,
+        "state_after_double_unit_cue": 0.08478789125769146
+      },
+      "inference": "Multistability need not preclude redirection, while successful entrainment under a continued drive does not establish response to one presentation. Actual token/attention/noise protocols remain the relevant comparison.",
+      "boundary": "No stale-state diagnosis, tanh neuron model, selected cue gain, memory lifetime, spectral constraint, reset or added state. An unsuccessful allowed cue alone does not prove no other allowed token or sequence can steer the system."
+    },
+    {
+      "id": "MR-A008",
+      "topic": "Semantic drift, response strength and dwell occupancy are different observables",
+      "assumptions": [
+        "Negative/positive below are externally supplied semantic episode labels, not neuron polarity, embedding-coordinate signs or inferred ratings.",
+        "Renewal reference: iid episodes with negative-label probability q, finite positive duration means tau_minus/tau_plus and a valid long-time renewal average; no SNN dynamics, controller or evaluator is modeled.",
+        "Two-state continuous-time Markov reference separately uses positive transition rates a from positive to negative and b in the reverse direction. Rates are abstract inverse time units, not neural parameters."
+      ],
+      "renewal_formula": "Negative time fraction = q*tau_minus / (q*tau_minus + (1-q)*tau_plus).",
+      "renewal_cases": [
+        {
+          "negative_episode_fraction": "1/2",
+          "mean_negative_duration": "11/10",
+          "mean_positive_duration": "1",
+          "negative_time_fraction_exact": "11/21",
+          "negative_time_fraction": 0.5238095238095238
+        },
+        {
+          "negative_episode_fraction": "1/2",
+          "mean_negative_duration": "3",
+          "mean_positive_duration": "1",
+          "negative_time_fraction_exact": "3/4",
+          "negative_time_fraction": 0.75
+        },
+        {
+          "negative_episode_fraction": "3/4",
+          "mean_negative_duration": "1",
+          "mean_positive_duration": "1",
+          "negative_time_fraction_exact": "3/4",
+          "negative_time_fraction": 0.75
+        }
+      ],
+      "markov_formula": "p_minus(t)=a/(a+b)+(p_minus(0)-a/(a+b))*exp(-(a+b)*t).",
+      "markov_cases": [
+        {
+          "positive_to_negative_rate": "3",
+          "negative_to_positive_rate": "1",
+          "stationary_negative_fraction": "3/4",
+          "relaxation_time": "1/4"
+        },
+        {
+          "positive_to_negative_rate": "3/10",
+          "negative_to_positive_rate": "1/10",
+          "stationary_negative_fraction": "3/4",
+          "relaxation_time": "5/2"
+        }
+      ],
+      "interpretation": [
+        "A slight duration advantage yields a slight time-occupancy bias in this reference, not a theorem of convergence to extreme negative content. A slight weight change need not produce a proportionate duration change.",
+        "The same time occupancy can reflect different episode frequencies/durations; the same Markov stationary fraction can have different approach times.",
+        "Greater magnitude of a negative-labeled response is yet another observable; it is not by definition longer dwell, more frequent occurrence or a more negative interpreted meaning.",
+        "Assessment should distinguish intended slow within-DMN semantic change, extent of negative meaning, activity strength, dwell/return statistics and retained responsiveness to subsequent tokens."
+      ],
+      "boundary": "No two-state DMN model, new regime classifier feature, valence labels, lexicon, runtime evaluator, biasing input, duration field, transition rule or target numeric threshold selected. Calculation is conditional arithmetic, not neural simulation or clinical evidence."
+    }
+  ],
+  "updated_at_utc": "2026-10-28T23:53:15Z"
+}

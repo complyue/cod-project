@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "status": "completed_conditional_arithmetic",
+  "recorded_at_utc": "2026-10-28T15:59:53.427762+00:00",
+  "purpose": "Identify which claims follow from simple recurrent-chain arithmetic before adding mechanisms; no SNN model is selected.",
+  "assumptions": [
+    "All matrices are tiny linear explanatory examples, not a representation of the complete nonlinear regulated signed-population CC.",
+    "The two-cycle example has adjacency [[0,a,a],[a,0,0],[a,0,0]] with target rows and source columns. Each elementary cycle has product a^2 but their two-step returns add at the shared center.",
+    "The chain example uses T=alpha*I+(1-alpha)*P with P a cyclic stage permutation. Index is reference traversal stage, not neuron geometry or semantic dimension distance.",
+    "Normalized activity follows binomial advance-count arithmetic before wrapping; the first cyclic Fourier harmonic measures phase concentration. It is not a token-semantic readout.",
+    "The linear noise example has independent zero-mean innovations and no thresholds, nonlinear recruitment, cancellation or regulator. Higher persistence retains noise as well as signal.",
+    "No runtime cycle detector, spectral calculation, phase tracker, inhibition, adaptation or auxiliary state is proposed by these calculations."
+  ],
+  "formulas": {
+    "shared_cycles": "center[k+2] = 2*a^2*center[k] when initialized at the center; eigenvalues 0,+sqrt(2)*a,-sqrt(2)*a",
+    "chain_spread": "advance count after k steps has mean k*(1-alpha), variance k*(1-alpha)*alpha; first cyclic harmonic magnitude |alpha+(1-alpha)*exp(2*pi*i/L)|^k",
+    "noise_tradeoff": "SNR(k) = b^2*lambda^(2k)*(1-lambda^2)/sigma^2 at stationary noise variance; maximizing for fixed k>0 gives lambda^2=k/(k+1)"
+  },
+  "shared_cycle_cases": [
+    {
+      "edge_gain": 0.4,
+      "each_isolated_two_edge_cycle_product": 0.16000000000000003,
+      "isolated_cycle_spectral_radius": 0.4,
+      "two_shared_cycles_two_step_center_gain": 0.32000000000000006,
+      "shared_network_spectral_radius": 0.5656854249492381
+    },
+    {
+      "edge_gain": 0.6,
+      "each_isolated_two_edge_cycle_product": 0.36,
+      "isolated_cycle_spectral_radius": 0.6,
+      "two_shared_cycles_two_step_center_gain": 0.72,
+      "shared_network_spectral_radius": 0.848528137423857
+    },
+    {
+      "edge_gain": 0.7,
+      "each_isolated_two_edge_cycle_product": 0.48999999999999994,
+      "isolated_cycle_spectral_radius": 0.7,
+      "two_shared_cycles_two_step_center_gain": 0.9799999999999999,
+      "shared_network_spectral_radius": 0.9899494936611666
+    },
+    {
+      "edge_gain": 0.8,
+      "each_isolated_two_edge_cycle_product": 0.6400000000000001,
+      "isolated_cycle_spectral_radius": 0.8,
+      "two_shared_cycles_two_step_center_gain": 1.2800000000000002,
+      "shared_network_spectral_radius": 1.1313708498984762
+    },
+    {
+      "edge_gain": 0.9,
+      "each_isolated_two_edge_cycle_product": 0.81,
+      "isolated_cycle_spectral_radius": 0.9,
+      "two_shared_cycles_two_step_center_gain": 1.62,
+      "shared_network_spectral_radius": 1.2727922061357857
+    }
+  ],
+  "leaky_chain_cases": [
+    {
+      "chain_stages": 10,
+      "retained_fraction": 0,
+      "advance_fraction": 1,
+      "steps_for_mean_one_lap": 10,
+      "unwrapped_stage_std_at_one_lap": 0.0,
+      "first_harmonic_fraction_after_one_mean_lap": 1.0,
+      "first_harmonic_fraction_after_ten_mean_laps": 1.0
+    },
+    {
+      "chain_stages": 10,
+      "retained_fraction": 0.5,
+      "advance_fraction": 0.5,
+      "steps_for_mean_one_lap": 20,
+      "unwrapped_stage_std_at_one_lap": 2.23606797749979,
+      "first_harmonic_fraction_after_one_mean_lap": 0.3665443342365149,
+      "first_harmonic_fraction_after_ten_mean_laps": 4.3778926595236486e-05
+    },
+    {
+      "chain_stages": 10,
+      "retained_fraction": 0.9,
+      "advance_fraction": 0.09999999999999998,
+      "steps_for_mean_one_lap": 100,
+      "unwrapped_stage_std_at_one_lap": 2.9999999999999996,
+      "first_harmonic_fraction_after_one_mean_lap": 0.17393276710179595,
+      "first_harmonic_fraction_after_ten_mean_laps": 2.5340434787674774e-08
+    },
+    {
+      "chain_stages": 50,
+      "retained_fraction": 0,
+      "advance_fraction": 1,
+      "steps_for_mean_one_lap": 50,
+      "unwrapped_stage_std_at_one_lap": 0.0,
+      "first_harmonic_fraction_after_one_mean_lap": 1.0,
+      "first_harmonic_fraction_after_ten_mean_laps": 1.0
+    },
+    {
+      "chain_stages": 50,
+      "retained_fraction": 0.5,
+      "advance_fraction": 0.5,
+      "steps_for_mean_one_lap": 100,
+      "unwrapped_stage_std_at_one_lap": 5.0,
+      "first_harmonic_fraction_after_one_mean_lap": 0.8207619985462821,
+      "first_harmonic_fraction_after_ten_mean_laps": 0.1387306442416057
+    },
+    {
+      "chain_stages": 50,
+      "retained_fraction": 0.9,
+      "advance_fraction": 0.09999999999999998,
+      "steps_for_mean_one_lap": 500,
+      "unwrapped_stage_std_at_one_lap": 6.708203932499368,
+      "first_harmonic_fraction_after_one_mean_lap": 0.7011099898676059,
+      "first_harmonic_fraction_after_ten_mean_laps": 0.028698655608492486
+    },
+    {
+      "chain_stages": 100,
+      "retained_fraction": 0,
+      "advance_fraction": 1,
+      "steps_for_mean_one_lap": 100,
+      "unwrapped_stage_std_at_one_lap": 0.0,
+      "first_harmonic_fraction_after_one_mean_lap": 1.0,
+      "first_harmonic_fraction_after_ten_mean_laps": 1.0
+    },
+    {
+      "chain_stages": 100,
+      "retained_fraction": 0.5,
+      "advance_fraction": 0.5,
+      "steps_for_mean_one_lap": 200,
+      "unwrapped_stage_std_at_one_lap": 7.0710678118654755,
+      "first_harmonic_fraction_after_one_mean_lap": 0.9060033429700823,
+      "first_harmonic_fraction_after_ten_mean_laps": 0.37264731928453415
+    },
+    {
+      "chain_stages": 100,
+      "retained_fraction": 0.9,
+      "advance_fraction": 0.09999999999999998,
+      "steps_for_mean_one_lap": 1000,
+      "unwrapped_stage_std_at_one_lap": 9.486832980505136,
+      "first_harmonic_fraction_after_one_mean_lap": 0.8372555079478339,
+      "first_harmonic_fraction_after_ten_mean_laps": 0.16927005394051373
+    }
+  ],
+  "linear_noise_cases": [
+    {
+      "lag_steps": 10,
+      "retention_gain": 0.8,
+      "unit_innovation_stationary_variance": 2.7777777777777786,
+      "unit_initial_signal_power": 0.011529215046068483,
+      "normalized_snr": 0.0041505174165846525,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 10,
+      "retention_gain": 0.95,
+      "unit_innovation_stationary_variance": 10.256410256410254,
+      "unit_initial_signal_power": 0.3584859224085419,
+      "normalized_snr": 0.03495237743483284,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 10,
+      "retention_gain": 0.99,
+      "unit_innovation_stationary_variance": 50.25125628140696,
+      "unit_initial_signal_power": 0.8179069375972308,
+      "normalized_snr": 0.016276348058184915,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 10,
+      "retention_gain": 0.999,
+      "unit_innovation_stationary_variance": 500.250125062538,
+      "unit_initial_signal_power": 0.9801888648295347,
+      "normalized_snr": 0.0019593975407942135,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 10,
+      "retention_gain": 0.9534625892455924,
+      "unit_innovation_stationary_variance": 11.00000000000001,
+      "unit_initial_signal_power": 0.38554328942953203,
+      "normalized_snr": 0.03504938994813925,
+      "is_analytic_optimum_for_this_lag": true
+    },
+    {
+      "lag_steps": 100,
+      "retention_gain": 0.8,
+      "unit_innovation_stationary_variance": 2.7777777777777786,
+      "unit_initial_signal_power": 4.149515568881039e-20,
+      "normalized_snr": 1.4938256047971735e-20,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 100,
+      "retention_gain": 0.95,
+      "unit_innovation_stationary_variance": 10.256410256410254,
+      "unit_initial_signal_power": 3.50526662488287e-05,
+      "normalized_snr": 3.4176349592607993e-06,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 100,
+      "retention_gain": 0.99,
+      "unit_innovation_stationary_variance": 50.25125628140696,
+      "unit_initial_signal_power": 0.13397967485796172,
+      "normalized_snr": 0.002666195529673442,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 100,
+      "retention_gain": 0.999,
+      "unit_innovation_stationary_variance": 500.250125062538,
+      "unit_initial_signal_power": 0.8186488294786356,
+      "normalized_snr": 0.0016364790101277705,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 100,
+      "retention_gain": 0.9950371902099892,
+      "unit_innovation_stationary_variance": 100.99999999999991,
+      "unit_initial_signal_power": 0.3697112123291206,
+      "normalized_snr": 0.0036605070527635734,
+      "is_analytic_optimum_for_this_lag": true
+    },
+    {
+      "lag_steps": 500,
+      "retention_gain": 0.8,
+      "unit_innovation_stationary_variance": 2.7777777777777786,
+      "unit_initial_signal_power": 1.2302319221611854e-97,
+      "normalized_snr": 4.4288349197802656e-98,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 500,
+      "retention_gain": 0.95,
+      "unit_innovation_stationary_variance": 10.256410256410254,
+      "unit_initial_signal_power": 5.2918227477448005e-23,
+      "normalized_snr": 5.159527179051182e-24,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 500,
+      "retention_gain": 0.99,
+      "unit_innovation_stationary_variance": 50.25125628140696,
+      "unit_initial_signal_power": 4.317124741065786e-05,
+      "normalized_snr": 8.591078234720927e-07,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 500,
+      "retention_gain": 0.999,
+      "unit_innovation_stationary_variance": 500.250125062538,
+      "unit_initial_signal_power": 0.36769542477096373,
+      "normalized_snr": 0.0007350231541171466,
+      "is_analytic_optimum_for_this_lag": false
+    },
+    {
+      "lag_steps": 500,
+      "retention_gain": 0.9990014975043671,
+      "unit_innovation_stationary_variance": 500.9999999999589,
+      "unit_initial_signal_power": 0.3682470143526073,
+      "normalized_snr": 0.0007350239807437875,
+      "is_analytic_optimum_for_this_lag": true
+    }
+  ]
+}

@@ -1,0 +1,1224 @@
+{
+  "schema_version": 1,
+  "status": "scoped_review_complete",
+  "updated_at_utc": "2026-10-29T03:28:49Z",
+  "scope": "H-71 research, guided by H-72/H-73/H-74; sources provide evidence, never design qualification",
+  "sources": [
+    {
+      "id": "MR-S001",
+      "title": "Ganguli, Huh and Sompolinsky (2008), Memory traces in dynamical systems",
+      "url": "https://ganguli-gang.stanford.edu/pdf/08.Memory.pdf",
+      "source_kind": "Peer-reviewed primary theory",
+      "read_scope": "Main memory analysis pp1–4: Fisher definition/linear Gaussian setup, normal-network sum rule, nonnormal input alignment, transient amplification with and without feedback, finite dynamic-range assumptions and divergent example; SI proofs not read",
+      "relevance": "Useful history information differs from activity persistence; noise and gain tradeoffs",
+      "transfer_limit": "Linear additive-Gaussian information bounds and finite-variance assumptions are not a capacity bound for the nonlinear signed-population model. Cell/state-space directions are not biological physical geometry; no preferred-input eigenvector calculation or new architecture is selected."
+    },
+    {
+      "id": "MR-S002",
+      "title": "Kofman and Junco (2001), Quantized-State Systems: A DEVS Approach",
+      "url": "https://www.fceia.unr.edu.ar/~kofman/files/qss.pdf",
+      "source_kind": "Primary numerical-method paper",
+      "read_scope": "Introduction; §§2–3 definitions and theorem1–3 argument; theorem6 statement/conditions and indexed appendix overview. Full appendix proof not checked; web PDF screenshot unavailable.",
+      "relevance": "State-event approximation retains underlying evolution and uses hysteresis",
+      "transfer_limit": "Convergence as quantum shrinks under Lipschitz/non-saturation conditions is not validation of a fixed four-bit noisy network.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T02:23:04Z",
+          "read_scope": "Rechecked theorem1 hysteresis/event-spacing argument, theorem5 versus6 scope and parsed Appendix B convergence argument. PDF equation extraction is imperfect; screenshot requests failed with cache miss. No visual figure measurements, author code or complete proof certification.",
+          "finding": "The perturbation bound uses total state-quantization error, including hysteresis; its Gronwall transient bound depends on elapsed time. Pointwise convergence as error shrinks is distinct from a fixed-format all-time guarantee.",
+          "transfer_limit": "No hysteresis law, event queue, estimator, fixed error threshold or continuous-time SNN contract adopted. Existing scalar decay and frame comparison remains."
+        }
+      ]
+    },
+    {
+      "id": "MR-S003",
+      "title": "Jacob et al. (2018), Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference",
+      "url": "https://openaccess.thecvf.com/content_cvpr_2018/html/Jacob_Quantization_and_Training_CVPR_2018_paper.html",
+      "source_kind": "Peer-reviewed primary quantization research",
+      "read_scope": "Abstract and PDF integer arithmetic section/figure",
+      "relevance": "Operand storage, scales and accumulator precision are distinct",
+      "transfer_limit": "Feedforward ARM results do not establish sparse recurrent CPU speed or temporal state accuracy.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T01:47:47Z",
+          "url": "https://arxiv.org/html/1712.05877v1",
+          "scope": "Author version §3–3.1 and Algorithm1; CVF PDF access returned403. No source execution or experiment reanalysis.",
+          "finding": "Simulated quantization during forward training retains floating parameters and ordinary backpropagation; conversion and learning-aware evaluation answer different questions.",
+          "limit": "No learner, training schedule, master copy or resource/performance result transferred to this recurrent application."
+        }
+      ]
+    },
+    {
+      "id": "MR-S004",
+      "title": "Erbas, Intes and Pandey (2026), When Quantization Breaks Memory",
+      "url": "https://arxiv.org/html/2609.04490v1",
+      "source_kind": "Preprint v1, submitted 2026-09-03",
+      "read_scope": "Introduction, methods2.1–2.3, results3.1–3.2",
+      "relevance": "Repeated state write-back can suppress updates; matched training and variable semantics matter",
+      "transfer_limit": "Small GRU/LSTM imaging task; extra residual/direction states are not selected for this application.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T01:53:37Z",
+          "read_scope": "Results3.3–3.5/discussion, S4–S6, textual tables and S8 matched-training procedure. No figures measured, checkpoints run or author code inspected.",
+          "finding": "Fixed coarse-trained models need not improve under wider state; matched training changes operator rankings. Three matched runs share initialization and training specification.",
+          "transfer_limit": "Small distillation-trained imaging networks; storage-bit matching does not equate hardware cost. No operator, learner or precision adopted."
+        }
+      ]
+    },
+    {
+      "id": "MR-S005",
+      "title": "Haller, Laitenberger and Akbik (2026), PACE",
+      "url": "https://arxiv.org/html/2610.29545v1",
+      "source_kind": "Preprint v1, submitted 2026-10-21",
+      "read_scope": "Introduction, recurrence/chunk/buffer background, error propagation and channel-structure sections; method5.1 onward not fully read",
+      "relevance": "Less frequent write-back must preserve intermediate computation; buffer has cost",
+      "transfer_limit": "Gated-delta model and independent-error/contractive assumptions; not arbitrary SNN or freezing states.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T00:25:12Z",
+          "read_scope": "Re-read§§2.1–3.2; expanded to§§5.1–5.3, setup§6, textual results and limitations§7–8, AppendixE and AppendixF memory/measurement definitions. No plots measured, implementation executed or benchmark replicated.",
+          "findings": "Periodic rounding retains per-token decay/keys/values in a decode buffer, uses higher-precision group scales and can allocate wider heads. Throughput measurement covers uniform four-bit state, not the full channel-aligned/mixed-head method. Error equation5 uses a mean decay and independent error model; treating a time-varying arithmetic mean as a universal contraction bound is not justified by our separate scalar references.",
+          "transfer_limit": "Gated-delta chunk algebra and H100 serving results do not give an SNN frame-batching identity, CPU speedup or need for buffer/scale/head structures. Actual conditional error products, bias and correlations remain relevant."
+        }
+      ]
+    },
+    {
+      "id": "MR-S006",
+      "title": "Novikov et al. (2021), Activity Stabilization in a Population Model of Working Memory by Sinusoidal and Noisy Inputs",
+      "url": "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2021.647944/full",
+      "source_kind": "Peer-reviewed primary modeling study",
+      "read_scope": "Abstract, introduction, model description and single/two-circuit parameter construction",
+      "relevance": "Noise support is conditional on nonlinear operating regime and input correlations",
+      "transfer_limit": "Uses excitatory/inhibitory populations, synaptic timescales and STP; these are not adopted in early steady-snn.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T01:20:15Z",
+          "read_scope": "Expanded main methods, single/two/multiple-circuit results and discussion; termination definition and source-assigned noise grouping. No supplementary equation verification, plot measurements or author simulation.",
+          "findings": "The single-circuit comparison separates cued/uncued response under common noise levels. Multicircuit membership is designated through common versus independent drive. Duration uses a smoothed-rate threshold; it is not a half-life.",
+          "transfer_limit": "No semantic retrieval or globally uninformed noise-support guarantee. Synaptic resources, oscillators, inhibition and source-specific noise structure are not imported. The paper calls its exponential-like response concave; no mathematical curvature claim is transferred from that wording."
+        }
+      ]
+    },
+    {
+      "id": "MR-S007",
+      "title": "Burak and Fiete (2012), Fundamental limits on persistent activity in networks of noisy neurons",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3491496/",
+      "source_kind": "Peer-reviewed primary theory",
+      "read_scope": "Abstract, introduction, weak-fluctuation assumptions, diffusion and information-bound results",
+      "relevance": "Memory content can diffuse while activity persists",
+      "transfer_limit": "Continuous-attractor/Poisson/weak-fluctuation model; no universal bound for this application.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T01:58:49Z",
+          "url": "https://fietelab.mit.edu/wp-content/uploads/2018/12/infodiff_PNAS.pdf",
+          "read_scope": "Main results, internal/external estimation distinction, generalizations, discussion and methods through both simulation definitions; SI proofs/code and figure measurements not checked. PMC rendering and EuropePMC XML were unavailable.",
+          "finding": "Steady-manifold and weak-fluctuation assumptions matter; population/firing scaling preserves specified tuning. Constant-Gaussian extension is stated separately from the Poisson example.",
+          "transfer_limit": "Neither continuous rate values, finite fading loops nor activity-control noise establish these assumptions. No quantitative bound or mechanism transferred."
+        }
+      ]
+    },
+    {
+      "id": "MR-S008",
+      "title": "Hopkins et al. (2020), Stochastic rounding and reduced-precision fixed-point arithmetic for solving neural ordinary differential equations",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7015297/",
+      "source_kind": "Peer-reviewed primary numerical research",
+      "read_scope": "Indexed full-text methods, constants, mixed arithmetic, result and discussion excerpts; direct PMC access previously challenged",
+      "relevance": "Arithmetic constants, rounding and solver accumulation affect temporal dynamics",
+      "transfer_limit": "Main results are not proof that four-bit/eight-bit neuron state suffices; random rounding has computational cost and variability.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T00:27:45Z",
+          "url": "https://arxiv.org/pdf/1904.11263v5",
+          "read_scope": "Author draftv5 introduction/type definitions/rounding§2(c), PRNG§4(a), algorithmic versus arithmetic reference§5(a)(i), reduced comparator and16-bit§5(c)(iii–iv), discussion performance and future-work paragraphs. Journal-indexed excerpts cross-checked; no figure measurements, source execution or benchmarks.",
+          "findings": "Six random/residual comparator bits are an empirical result for specified four solvers/two neuron types against the same algorithm in binary64. They are not six-bit neuron state. Main types include32-bit fixed point; tested16-bit s8.7 remains inaccurate. Performance numbers are preliminary ARM968 comparisons to software floating point; independent versus reused per-operation random numbers is left to future study.",
+          "transfer_limit": "No Cortex-A76 speedup, four/eight-bit state acceptance, fixed comparator precision or independence scheme follows. Our finite-grid and shared-draw arithmetic is independent of the paper implementation."
+        }
+      ]
+    },
+    {
+      "id": "MR-S009",
+      "title": "Open Compute Project Microscaling Formats Specification v1.0 (2023)",
+      "url": "https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf",
+      "source_kind": "Primary published format specification",
+      "read_scope": "Scope and sections5.2–5.4, element encodings and block-scale separation",
+      "relevance": "Defines FP4 E2M1 and referenced FP8 E4M3 element values for conditional arithmetic",
+      "transfer_limit": "Element-code comparison does not adopt MX layout, scaling blocks or hardware."
+    },
+    {
+      "id": "MR-S010",
+      "title": "Pereira and Brunel (2020; volume2019), Unsupervised Learning of Persistent and Sequential Activity",
+      "url": "https://www.frontiersin.org/journals/computational-neuroscience/articles/10.3389/fncom.2019.00097/full",
+      "source_kind": "Peer-reviewed primary modeling study",
+      "read_scope": "Abstract/introduction; indexed methods1.4–1.7 and results2.1–2.2, including pure excitatory versus inhibited comparison, width broadening and learning assumptions",
+      "relevance": "Persistent versus sequential behavior depends on nonlinear transfer and recurrent/feedforward strengths; simple chains can broaden activity over traversal.",
+      "transfer_limit": "The paper compares pure excitatory and inhibited cases. Its homeostatic learning remedy is specific to its Hebbian rule, not a necessity theorem for deficit-based maintenance.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T02:08:33Z",
+          "read_scope": "Publisher methods1.1–1.6, results2.2–2.5 and discussion3.1–3.3; EuropePMC MathML equations7–10,12–13. Supplement proofs, figures as measurements and author code not inspected.",
+          "finding": "Effective recurrent gain changes during learning/recovery; plasticity and recurrence remain enabled together. Population-average rates and sequential basis-vector stimulation differ from individual contextual cells.",
+          "equation_clarification": "Eq10 disables learning only when both rates are below threshold, agreeing with methods1.4; results2.2 prose reverses this AND/OR wording. The equation was checked, not an implementation.",
+          "cache": {
+            "path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/pereira-brunel-2020.xml",
+            "bytes": 215291,
+            "sha256": "2ea122d7cfb8ff5cb9b5fb3cee5837f91faf415e32d0f50bf940573b0a0a13dd"
+          },
+          "transfer_limit": "No gating, normalization, auxiliary scale, stimulation timing or autonomous-generation criterion adopted."
+        }
+      ]
+    },
+    {
+      "id": "MR-S011",
+      "title": "Rajan et al. (2016), Recurrent Network Models of Sequence Generation and Memory",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4824643/",
+      "source_kind": "Peer-reviewed primary modeling study",
+      "read_scope": "Search-indexed abstract and selected network/sequence analysis; full methods queued",
+      "relevance": "Sequence production can depend on learned recurrent structure plus ongoing external input",
+      "transfer_limit": "Do not treat externally supported propagation as proof of autonomous one-shot-token recurrence.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T01:05:38Z",
+          "url": "https://arxiv.org/pdf/1603.04687",
+          "read_scope": "Author full preprint: main sequence analysis and delayed/multiple-cue memory; Experimental Procedures13.1–13.4 including external input, targets and training. Text parsed; no figure measurements, supplemental derivations or code execution. Supersedes the earlier queued-methods reading status for these sections.",
+          "findings": "Delay inputs are cue-invariant but time-varying and repeated across trials. Separately injected fresh noise tests tolerance. The network is fully connected; a small modified-weight fraction does not imply a sparse graph. Every neuron has a target, with RLS/FORCE updates restricted to chosen outgoing columns.",
+          "transfer_limit": "Neither autonomous one-shot recurrence under fresh regulated background nor our sparse budget or Hebbian/HTM learner is established. Common delay drive does not itself leak the cue identity."
+        }
+      ]
+    },
+    {
+      "id": "MR-S012",
+      "title": "Goldman (2009), Memory without Feedback in a Neural Network",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2674525/",
+      "source_kind": "Peer-reviewed primary theory/modeling",
+      "read_scope": "Search-indexed abstract and selected integrator/eigenmode discussion",
+      "relevance": "Topological recurrence and functional temporal memory mechanism differ",
+      "transfer_limit": "Linear/non-normal constructions do not directly validate early positive-synapse signed-population dynamics.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T01:05:38Z",
+          "read_scope": "Full main theoretical construction, transient versus eigenmode explanation, comparisons/discussion and Experimental Procedures through eigenvector/Schur construction; no supplementary derivations, figure measurements or author simulation.",
+          "findings": "Linear finite cascades support transient memory; rotated constructions separate anatomical feedback from functional propagation. Optimized fits use bounded readout weights. Closing a chain can preserve its first-pass response while changing later persistence.",
+          "transfer_limit": "Signed transformed weights/activity and fitted readouts do not establish the fixed semantic mapping or positive-edge dynamics here. No rotation, Schur runtime, new readout or open-ended chain is adopted."
+        }
+      ]
+    },
+    {
+      "id": "MR-S013",
+      "title": "Hennig et al. (2018), Constraints on neural redundancy",
+      "url": "https://elifesciences.org/articles/36774",
+      "source_kind": "Peer-reviewed primary BCI experiment",
+      "read_scope": "Abstract/introduction, known readout mapping and population-pattern comparison; detailed results not yet read",
+      "relevance": "The same readout can correspond to distinct cell patterns; accessible patterns can be constrained.",
+      "transfer_limit": "Macaque motor BCI, not semantic CC memory. Does not establish free usable capacity or a storage mechanism for our model.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T01:07:00Z",
+          "read_scope": "Main hypothesis/results and discussion; methods on factor mapping, behavior and session selection. No raw data reanalysis, per-step model, appendix derivations or figure measurement.",
+          "findings": "Conditioning on output-producing activity predicts distributions in the immediate output-null directions better than the tested independent alternatives. Analysis uses selected stable within-manifold learning sessions with balanced cursor targets over1–2hours; it does not prove an invariant long-term capacity.",
+          "transfer_limit": "The result motivates checking accessible composition under a required semantic response; it neither identifies semantic neurons nor supplies a capacity bound, null-space controller or new state for this SNN."
+        }
+      ]
+    },
+    {
+      "id": "MR-S014",
+      "title": "Miller and Fumarola (2012), Mathematical Equivalence of Two Common Forms of Firing Rate Models of Neural Networks",
+      "url": "https://www.columbia.edu/cu/neurotheory/Ken/pubs/Miller_Fumarola12.pdf",
+      "source_kind": "Peer-reviewed primary mathematical note",
+      "read_scope": "Main note pp1–5 including input transformation and noninvertible-W case; appendix opening and constant-conductance approximation",
+      "relevance": "Rate/current formulations require consistent input filtering and initial-state meaning; simply applying the same one-shot pulse to both need not produce equivalent dynamics.",
+      "transfer_limit": "Specific rate equations; does not select a neuron-state variable, extra filter or biological mechanism for this application."
+    },
+    {
+      "id": "MR-S015",
+      "title": "Numenta, Temporal Memory Algorithm Steps and Temporal Memory Algorithm",
+      "url": "https://www.numenta.com/assets/pdf/temporal-memory-algorithm/Temporal-Memory-Algorithm-Details.pdf",
+      "related_url": "https://www.numenta.com/resources/biological-and-machine-intelligence/temporal-memory-algorithm/",
+      "source_kind": "Primary algorithm description",
+      "read_scope": "Search-indexed column/cell/context explanation, prediction and variable-order sections; direct retrieval redirected to inaccessible site",
+      "relevance": "H-75 contextual paths: the same column input can recruit different cells for different temporal histories",
+      "transfer_limit": "Does not adopt HTM bursting, segments, binary permanence or a full learning algorithm; no memory-capacity claim for our rate model."
+    },
+    {
+      "id": "MR-S016",
+      "title": "Numenta NuPIC reference TemporalMemory Python implementation",
+      "url": "https://raw.githubusercontent.com/numenta/nupic/master/src/nupic/algorithms/temporal_memory.py",
+      "source_kind": "Primary reference implementation, retrieved 2026-10-28",
+      "read_scope": "State initialization, compute/activateCells/activateDendrites and predictive-cell derivation; inspected activateCells186–250, _activatePredictedColumn485–515, _burstColumn577–626 and _adaptSegment789–828 in the retained source. No execution or dependency adoption. Expanded inspection through _punishPredictedColumn, segment-limit handling, minimum-permanence removal, _leastUsedCell and _growSynapses (retained-source lines620–786). Rechecked compute/activateCells/activateDendrites/getPredictiveCells ordering (local reference lines169–294,900–912); this API step is not an application frame duration. Rechecked constructor lines90–100, _punishPredictedColumn627–649 and _adaptSegment789–828: default predictedSegmentDecrement0 differs from inactive-source depression in an observed segment.",
+      "content_sha256": "4cdd4588f3bafc1c698fb1c18cab0f981152d4a697152855227b89e452ce3128",
+      "git_blob_sha1": "4dcd7121c6a2e1c3447bd9544ab4c0162c4b0f3a",
+      "relevance": "Distinct active/predictive/winner roles; existing segment adaptation uses previous active cells while new synapse growth uses previous winners. learn gates adaptation, including burst-related learning. This helps separate sequence observations and learning responsibility from the application generation fallback.",
+      "transfer_limit": "Binary segmented HTM, not graded rate dynamics; separate meanings do not automatically prescribe new arrays or segments in steady-snn. GitHub connector failed; public source read and retained as compact SSD reference. H-84 excludes our explicit generation fallback from learning; canonical HTM does not universally exclude bursting from learning. No direct import of its cold-start rule, permanence or synapse-deletion behavior.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T00:10:24Z",
+          "scope": "Local pinned TemporalMemory.activateDendrites lines252–290 and getPredictiveCells lines900–912 inspected; SHA-256 reverified. No execution.",
+          "limit": "Current active-cell input and predictive-cell derivation have distinct roles; the reference does not select rate emission, field layout or segment structures for this application."
+        },
+        {
+          "recorded_at_utc": "2026-10-29T03:12:01Z",
+          "scope": "Pinned _burstColumn, _growSynapses and _adaptSegment implementation rechecked against FlowLearning generation-fallback, unfamiliar-transition and source-discovery sections. Existing adaptation uses previous active cells; growth uses previous winners after excluding represented IDs. No code execution.",
+          "limit": "Consistency review of existing synthesis; no new learning role, field, segment or permanence mechanism selected. H84 generation fallback remains excluded from learning; empirical alternatives stay open under H86."
+        }
+      ]
+    },
+    {
+      "id": "MR-S017",
+      "title": "Gupta et al. (2015), Deep Learning with Limited Numerical Precision",
+      "url": "https://proceedings.mlr.press/v37/gupta15.pdf",
+      "source_kind": "Peer-reviewed primary numerical/training research",
+      "read_scope": "Abstract/introduction; sections3.1/3.2 conversion, saturation, stochastic rounding and wider MACC; section4 training-variable formats and sections4.1.1/4.1.2 MNIST DNN/CNN methods and results. CIFAR/FPGA results not fully assessed.",
+      "relevance": "Low-width stored operands do not imply low-width accumulation; rounding scheme affects small training updates.",
+      "transfer_limit": "16-bit fixed-point image-network training: the DNN eight-bit precision result uses eight fractional bits within a16-bit word. CNN training uses momentum and distinct layer-output format. No proof for INT4/INT8 steady-snn or sparse CPU speed."
+    },
+    {
+      "id": "MR-S018",
+      "title": "Courbariaux, Bengio and David (2015), BinaryConnect",
+      "url": "https://proceedings.neurips.cc/paper_files/paper/2015/file/3e15cc11f979ed25912dff5b0669f2cd-Paper.pdf",
+      "source_kind": "Peer-reviewed primary training research",
+      "read_scope": "Abstract, introduction and sections2.1–2.3, especially propagation versus parameter update and Algorithm1",
+      "relevance": "Low-bit propagation can retain high-precision weights for training; training memory is not determined by inference codes alone.",
+      "transfer_limit": "Feedforward supervised SGD with signed binary weights; does not select a master copy, gradient learning or negative edges for this application."
+    },
+    {
+      "id": "MR-S019",
+      "title": "Higham (2001), An Algorithmic Introduction to Numerical Simulation of Stochastic Differential Equations",
+      "url": "https://www.maths.ed.ac.uk/~dhigham/Publications/P42.pdf",
+      "source_kind": "Peer-reviewed primary numerical-method exposition, SIAM Review43(3),525–546",
+      "read_scope": "Sections2 and4, start of section5: Brownian increment definition, Euler–Maruyama drift/noise scaling, coupled increments and strong-convergence meaning; later stability/proofs not read",
+      "relevance": "Changing the frame interval must preserve the intended noise units and physical-time meaning when a continuous stochastic reference is intended",
+      "transfer_limit": "Does not select an SDE, Brownian noise, integration algorithm, spatial correlations or extra state for the application; nonlinear application acceptance is separate."
+    },
+    {
+      "id": "MR-S020",
+      "title": "Hawkins and Ahmad (2016), Why Neurons Have Thousands of Synapses, a Theory of Sequence Memory in Neocortex",
+      "url": "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2016.00023/pdf",
+      "source_kind": "Peer-reviewed Hypothesis and Theory article with model simulations, published2016-03-30",
+      "read_scope": "Abstract/introduction and sparse-pattern formulation pp1–3; synaptic-learning discussion pp5–7; formal states, segment updates and implementation details pp11–12 (PDF page indices0–2,4–6,10–11). Remaining discussion/prediction sections not fully read. Expanded reading: primary PDF Figures3–6, binary synaptic efficacy versus graded permanence, 2048-column example with40 active columns,32 cells/column,128 segments/cell and40 synapses/segment, and its shared-fragment/first-order comparison.",
+      "relevance": "Contextual activation is a shared modeling reference; its learning selection and scalar permanence inform separately opened flow-learning research only, not DMN/token repair (H-79—H-81).",
+      "transfer_limit": "Its active dendrites, segment-specific permanence, local competition and sparse column inputs are not selected here. Model robustness is not a measured human-CC capacity or proof for our dense graded signed-vector input. H-78 remains open. No flow algorithm has been selected; H-81 authorizes preliminary design and early discussion. H-84 separately excludes explicit broad weak generation fallback from learning; the paper's sequence-learning treatment is not that exclusion. Example sparse column encoding differs from dense Flash semantic coordinates; binary efficacy with graded permanence is not evidence that our continuously graded learning needs no update precision."
+    },
+    {
+      "id": "MR-S021",
+      "title": "Raspberry Pi official processor documentation, BCM2712",
+      "url": "https://www.raspberrypi.com/documentation/computers/processors.html",
+      "source_kind": "Primary vendor documentation, checked2026-10-28",
+      "read_scope": "BCM2712 CPU/cache and32-bit LPDDR4X interface specifications",
+      "relevance": "Reference-platform resource comparison for the user's Raspberry-Pi-sized CC goal: four Cortex-A76 cores,512kB L2/core,2MB shared L3, nominal up-to17GB/s memory interface",
+      "transfer_limit": "Pi5 is a reference, not a confirmed fleet. Nominal bandwidth is not measured application throughput; reserved memory, visited connections and source-state/cache traffic differ."
+    },
+    {
+      "id": "MR-S022",
+      "title": "Arm Cortex-A76 Software Optimization Guide, version10.0 (2019–2021)",
+      "url": "https://documentation-service.arm.com/static/61c1f57d2183326f217720de",
+      "source_kind": "Primary vendor architecture/optimization documentation",
+      "read_scope": "ASIMD dot-product table PDFp25; floating conversion and multiply-accumulate tables PDFpp28–31; §4.5 load/store alignment and64-byte cache-line statement; cache-hit assumption of load-latency tables",
+      "relevance": "Integer dot-product and floating arithmetic/conversion paths exist; operand preparation, source indirection and memory traffic must be included in a representation comparison",
+      "transfer_limit": "Instruction throughput tables do not predict sparse neural gather speed or show INT4/INT8 superior to FP16/FP32 in this application. No ISA implementation, layout change or benchmark selected.",
+      "follow_up_review": {
+        "recorded_at_utc": "2026-10-28T23:19:02Z",
+        "scope": "MR-S070–073 distinguish instruction mappings, advertised capabilities and compiler feature definitions.",
+        "finding": "Do not infer A76 FMLAL availability from the version10 throughput table: the inspected core register description and compiler feature list do not advertise FP16FML. The support site indexes version12 but its contents were not obtained; no version12 reading is claimed. Prior general conversion/throughput limits remain."
+      }
+    },
+    {
+      "id": "MR-S023",
+      "title": "Bouhadjar, Wouters, Diesmann and Tetzlaff (2022), Sequence learning, prediction, and replay in networks of spiking neurons",
+      "url": "https://arxiv.org/html/2111.03456v2",
+      "source_kind": "Author manuscript v2, 2022-07-19; related PLoS Computational Biology DOI10.1371/journal.pcbi.1010233",
+      "read_scope": "Methods task/protocol, requirements, network and plasticity; connectivity constraints, performance measures, sequence-learning/prediction results; targeted limitations on repeated starts, noise and episode-tuned homeostasis. Replay and supplementary results not fully read. Expanded reading: sequence-speed section separates prediction timing from structural-learning timing; replay threshold intervention and limitations for slower sequences/irregular presentation.",
+      "relevance": "Context specialization requires more than generic coactivation in this model.",
+      "transfer_limit": "Uses inhibition, dendritic plateaus, permanence and task-tuned traces; not our graded signed-vector model. Does not authorize those mechanisms or learning from H-84 generation fallback. Version date checked independently of HTML display date. The reported10–75ms range belongs to their parameterization and does not set application token spacing or response decay."
+    },
+    {
+      "id": "MR-S024",
+      "title": "Cui, Ahmad and Hawkins (2016), Continuous online sequence learning with an unsupervised neural network model",
+      "url": "https://arxiv.org/pdf/1512.05463v2",
+      "source_kind": "Author draft v2, 2016-04-28; later journal reference Neural Computation28(11),2474–2504. Draft explicitly differs from the final article.",
+      "read_scope": "Abstract; criteria; §§3.2–3.4 representation, learning, encoder/classifier; §4.1 experimental setup and assessment; §4.3 multiple predictions. Other results not fully read.",
+      "relevance": "Contextual cell identities distinguish histories sharing current input. Prediction decoding is a separate operation, and their sequence assessment inspects state before the next observed item.",
+      "transfer_limit": "Sparse categorical SDRs, binary segmented TM and task-specific decoders differ from dense signed semantic vectors. No classifier, softmax layer, fixed top-K acceptance or sparsity level is adopted; reported performance is not transferred to our model.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-28T21:33:40Z",
+          "scope": "Draft v2 §§4.2 and4.4: deliberate replacement of paired sequence endings and varying shared-subsequence length. Section4.5 excerpt only; its complete results were not assessed.",
+          "limit": "Adaptation after replacement differs from preserving concurrent alternatives. Sequence order does not establish wall/model-time retention for the proposed rate dynamics. No performance or mechanism imported."
+        },
+        {
+          "recorded_at_utc": "2026-10-29T00:07:13Z",
+          "scope": "Draft v2 section4.5 temporal-noise experiment and section6.4 limitations, including high-dimensional-input scope. Figure8 caption read; plotted values not measured.",
+          "limit": "Replacement of an internal categorical symbol is not additive background neuron noise; loss of high-order performance is not proof that our rate model fails or a mandate for hierarchy/buffers."
+        }
+      ]
+    },
+    {
+      "id": "MR-S025",
+      "title": "Hubara et al. (2018), Quantized Neural Networks: Training Neural Networks with Low Precision Weights and Activations",
+      "url": "https://jmlr.csail.mit.edu/papers/volume18/16-456/16-456.pdf",
+      "source_kind": "Peer-reviewed primary study, JMLR18(187):1–30",
+      "read_scope": "§2.2 gradient computation/accumulation, start§2.3, §4.5 language models and Table4. Other training/implementation details only partly read.",
+      "relevance": "Reports low-bit recurrent-model prediction results; the described training method accumulates gradients in real-valued weight variables.",
+      "transfer_limit": "Their gradient-trained RNN/LSTM tasks and quantization differ from local flow learning and shared SNN recurrence. The inspected text does not establish every persistent recurrent intermediate's width. Low-bit run-time success is not proof that all learning state fits a4/8-bit slot; no master weights or gradient learner adopted."
+    },
+    {
+      "id": "MR-S026",
+      "title": "Michaelis et al. (2022), Brian2Loihi: An emulator for the neuromorphic chip Loihi using the spiking neural network simulator Brian",
+      "url": "https://www.frontiersin.org/journals/neuroinformatics/articles/10.3389/fninf.2022.1015624/full",
+      "source_kind": "Primary technology/emulation study, Frontiers in Neuroinformatics16,1015624,2022-11-09",
+      "read_scope": "Abstract; §2 neuron/input formulation overview; §§3.1–3.3 weight precision, plastic rounding and traces; targeted §4 learning comparisons and discussion. Supplementary equations and hardware implementation not independently reproduced.",
+      "relevance": "Uses field-specific integer precision and stochastic rounding for plastic weights/traces; distinguishes exact deterministic emulation from distributional agreement in learning.",
+      "transfer_limit": "This studies a particular Loihi spiking model and emulator, not steady-snn rate semantics or CPU performance. Its traces, exponent fields and plasticity structure are not selected. Distributional agreement does not guarantee identical learned paths or application acceptance.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T02:49:22Z",
+          "read_scope": "Rechecked §§3.2,4.1.3,4.2.2–4.2.3 and Discussion against the primary full text.",
+          "finding": "Exact recurrent emulation is demonstrated without plasticity. The learning example uses one plastic synapse with negligible postsynaptic influence and a separate strong spike-driving input. Reported trace/weight agreement does not test learned recurrent feedback. Identical chip configurations are reproducible; unknown stochastic-rounding details prevent corresponding trial-wise emulation.",
+          "limits": "No code executed, plots measured or full spike/weight distribution equivalence established. No Loihi timing, trace state, learning rule or performance claim transferred."
+        }
+      ]
+    },
+    {
+      "id": "MR-S027",
+      "title": "Louis, Gerstein, Grün and Diesmann (2010), Surrogate Spike Train Generation Through Dithering in Operational Time",
+      "url": "https://www.frontiersin.org/journals/computational-neuroscience/articles/10.3389/fncom.2010.00127/full",
+      "source_kind": "Peer-reviewed primary methods study, published2010-09-22",
+      "read_scope": "Abstract, introduction, variants of dithering and opening simulation-method discussion; detailed numerical results and appendix not fully read.",
+      "relevance": "Preserving average activity alone does not make a temporal surrogate a valid comparison; rate profile and interval-statistic distortions affect inferred synchrony.",
+      "transfer_limit": "Spike synchrony analysis differs from the rate-model regime detector. No operational-time transform, dither generator, null process or auxiliary array is adopted."
+    },
+    {
+      "id": "MR-S028",
+      "title": "Zeraati, Engel and Levina (2022), A flexible Bayesian framework for unbiased estimation of timescales",
+      "url": "https://www.nature.com/articles/s43588-022-00214-3",
+      "source_kind": "Peer-reviewed primary methods study, Nature Computational Science2,193–204, published2022-03-24",
+      "read_scope": "CSHL repository abstract and indexed primary-article passages on finite-sample autocorrelation bias, model fitting and trial-duration limitations. Publisher/PMC full-text opening blocked; repository PDF downloaded but no full-PDF text reading is claimed.",
+      "relevance": "Short correlated records can bias fitted timescales; an apparent temporal scale needs an adequate observation protocol.",
+      "transfer_limit": "Does not select Bayesian fitting, an OU mixture, a runtime detector or a token-response decay law. Autocorrelation timescale and the required semantic-response half-life are distinct.",
+      "cached_pdf": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/zeraati2022-timescales.pdf",
+      "cached_pdf_sha256": "2f5a7ea08486c3955275ded70f47f4e4ff58847de40855b79e35722cae6a940d"
+    },
+    {
+      "id": "MR-S029",
+      "title": "Wilting and Priesemann (2019), Between perfectly critical and fully irregular: a reverberating model captures and predicts cortical spike propagation",
+      "url": "https://arxiv.org/html/1804.07864v2",
+      "source_kind": "Author manuscript v2,2019-03-12; journal reference Cerebral Cortex2019, DOI10.1093/cercor/bhz049",
+      "read_scope": "Abstract/introduction; minimal-model and simulation/estimation methods; Supplement3 branching and immigration moments. Results and other supplements only partly inspected.",
+      "relevance": "Separates propagated activity from external drive and derives mean/variance for specified offspring and immigration laws.",
+      "transfer_limit": "Population spike-count reference, not the signed rate model or adaptive regulator. No measured branching ratio, criticality target, biological equivalence, estimator or connectivity rule transfers automatically."
+    },
+    {
+      "id": "MR-S030",
+      "title": "Evci et al. (2020), Rigging the Lottery: Making All Tickets Winners",
+      "url": "https://proceedings.mlr.press/v119/evci20a/evci20a.pdf",
+      "source_kind": "Primary ICML2020/PMLR119 paper",
+      "read_scope": "Abstract/introduction, related-work context and §3 algorithm including drop/grow criteria, budget and gradient computation; opening §4 only. No full empirical-result or supplement review.",
+      "relevance": "Separates updates to retained weights from explicitly evaluating absent connection candidates, under a fixed sparse budget.",
+      "transfer_limit": "Differentiable supervised networks and occasional dense gradients, not the proposed Hebbian/HTM rate model. No gradient loss, dense candidate search, deletion, zero initialization or performance result is adopted."
+    },
+    {
+      "id": "MR-S031",
+      "title": "Schuecker, Goedeke and Helias (2018), Optimal Sequence Memory in Driven Random Networks",
+      "url": "https://juser.fz-juelich.de/record/856457/files/PhysRevX.8.041029.pdf?subformat=pdfa&version=1",
+      "source_kind": "Published primary Phys.Rev.X8,041029; DOI10.1103/PhysRevX.8.041029",
+      "read_scope": "Introduction and model definition; §VII memory/readout assumptions and results; targeted §VIII discussion through memory/noise distinctions. Other derivations and appendices not fully reviewed. arXiv v3 is a2017 manuscript; v2 has an earlier title and is not treated as the2018 article.",
+      "relevance": "Distinguishes driven stability, correlations and reconstructible past input.",
+      "transfer_limit": "Dense signed Gaussian couplings, tanh dynamics, fixed stochastic drive and linear reconstruction differ from the proposed sparse signed-population model. No critical gain, capacity bound, noise law or readout transfers.",
+      "follow_up_review": {
+        "recorded_at_utc": "2026-10-28T23:13:33Z",
+        "read_scope": "Rechecked Eq1 and VII, particularly signal definition before Eq27 and colored-background comparison after Eq30; no appendix proof or author simulation.",
+        "finding": "The main remembered signal is the mean stochastic drive; background components and a separate colored-noise comparison are distinguished. This is not an isolated increase of unrelated background amplitude."
+      }
+    },
+    {
+      "id": "MR-S032",
+      "title": "Oja (1982), A Simplified Neuron Model as a Principal Component Analyzer",
+      "url": "https://neurophysics.ucsd.edu/courses/physics_171/Oja_1982.pdf",
+      "source_kind": "Primary J.Math.Biol.15,267–273; DOI10.1007/BF00275687",
+      "read_scope": "Abstract, model, normalization and small-update rule in introductory/§2 text, including indexed primary PDF excerpts. Full convergence proof not reviewed.",
+      "relevance": "A stabilizing Hebbian term comes with model assumptions and a specific statistical objective.",
+      "transfer_limit": "Linear principal-component learning is not proof of conditional token prediction, context assignment or preservation of fixed semantic roles; no Oja update or normalization is adopted."
+    },
+    {
+      "id": "MR-S033",
+      "title": "van Rossum, Bi and Turrigiano (2000), Stable Hebbian Learning from Spike Timing-Dependent Plasticity",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6773092/",
+      "source_kind": "Primary J.Neurosci.20(23),8812–8821; DOI10.1523/JNEUROSCI.20-23-08812.2000",
+      "read_scope": "Indexed primary abstract, introduction, targeted weight dependence, competition and activity-dependent scaling results/discussion. Direct PMC open hit browser check and publisher PDF403; full methods/derivations not inspected.",
+      "relevance": "Separates stable weight statistics from synaptic competition.",
+      "transfer_limit": "Spike timing and the specific scaling mechanism differ from this application. No empirical biological equivalence, STDP kernel, per-neuron sensor or scaling controller adopted."
+    },
+    {
+      "id": "MR-S034",
+      "title": "Billings and van Rossum (2009), Memory Retention and Spike-Timing-Dependent Plasticity",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2694112/",
+      "source_kind": "Primary J.Neurophysiol.101(6),2775–2788; DOI10.1152/jn.91007.2008",
+      "read_scope": "Indexed primary abstract, methods defining weight autocorrelation/recognition, single-neuron retention results, targeted parameter discussion and appendix excerpts. Direct page blocked; formulas present only as missing images were not treated as read.",
+      "relevance": "Stationary weight distributions and retention of individual learned associations are distinct.",
+      "transfer_limit": "Spiking and inhibition-based network mechanisms are not adopted. Synaptic memory under continued plasticity is not the half-life of an isolated token activity response.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-28T21:27:01Z",
+          "scope": "Indexed primary methods: weight-autocorrelation definition, modification-rate controls and plasticity-window discussion; appendix text for Poisson weight-dependent correlation time. Direct PMC remains blocked; image equations and full proof not verified.",
+          "implication": "Weight stationarity, modification rate and retained association need separate observations; no model-specific retention number or inhibition remedy transferred."
+        }
+      ]
+    },
+    {
+      "id": "MR-S035",
+      "title": "Gneiting and Raftery (2007), Strictly Proper Scoring Rules, Prediction, and Estimation",
+      "url": "https://sites.stat.washington.edu/people/raftery/Research/PDF/Gneiting2007jasa.pdf",
+      "source_kind": "Primary JASA102(477),359–378; DOI10.1198/016214506000001437",
+      "read_scope": "Parsed primary PDF introduction, §2.3 skill/reference comparisons, §3.1 categorical forecast definition and quadratic/spherical/log/zero-one examples; targeted §4 comments and §8 score behavior. Full general proofs and later estimation sections not read.",
+      "relevance": "Faithful ambiguity is distinct from modal success and raw assigned-probability reward; comparisons need the same forecast situations.",
+      "transfer_limit": "Neuronal readiness and connection weights are not automatically probability forecasts. No probability decoder, training loss, skill-score ratio or evaluation framework is adopted."
+    },
+    {
+      "id": "MR-S036",
+      "title": "Dawid (1984), Statistical Theory: The Prequential Approach",
+      "url": "https://people.csail.mit.edu/jrennie/trg/papers/dawid-prequential-84.pdf",
+      "source_kind": "Primary JRSS Series A147(2),278–290 with discussion through292; DOI10.2307/2981683",
+      "read_scope": "Indexed primary abstract, introduction and §3 prequential forecasting-system passages. Scanned PDF opened but screenshot content was not available in this tool view; no additional pages treated as read.",
+      "relevance": "Sequential forecast precedes the observation that can then update the next forecast.",
+      "transfer_limit": "The source specifies probability forecasts; no such interpretation of readiness is assumed. The causal ordering does not select a neuronal learner, state reset or corpus split."
+    },
+    {
+      "id": "MR-S037",
+      "title": "Poirazi, Brannon and Mel (2003), Pyramidal Neuron as Two-Layer Neural Network",
+      "url": "https://www.cs.jhu.edu/~ayuille1/courses/Stat271-Fall13/Poirazi_etal03b.pdf",
+      "source_kind": "Primary Neuron37,989–999; DOI10.1016/S0896-6273(03)00149-1",
+      "read_scope": "Parsed primary PDF introduction/two-layer reference equation, stimulus construction and Figure2 protocol, Tables1–2 and discussion on stimulus configuration, imperfect predictions and synchrony. Detailed channel calibration/supplement not read.",
+      "relevance": "A context-selectivity comparison should control overall input drive and expose combinations, not only overall response strength.",
+      "transfer_limit": "Detailed CA1 simulation with inhibitory synapses, not human CC anatomy or validation of this application. No branch count, nonlinear equation or additional state is adopted."
+    },
+    {
+      "id": "MR-S038",
+      "title": "Ahmad and Hawkins (2016), How do neurons operate on sparse distributed representations? A mathematical theory of sparsity, neurons and active dendrites",
+      "url": "https://arxiv.org/pdf/1601.00720v2",
+      "source_kind": "Primary author manuscript arXiv1601.00720v2,13May2016; journal-submission version as identified by arXiv",
+      "read_scope": "Parsed PDF §§2–3.3 binary model, overlap detection, population bound and union property; targeted §4.1 verification scope. No claim to have read all simulation figures or reproduced author experiments.",
+      "relevance": "Mixed unions trade lower representation cost for possible mixed-pattern matches; error probabilities depend on the query and stored-pattern distribution.",
+      "transfer_limit": "Static binary sparse-pattern analysis, not the graded semantic-population flow learner. Conditional exact union calculations in this project average over union-size distributions rather than assuming that expected size makes a nonlinear probability exact.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T00:07:13Z",
+          "scope": "Sections4.2 and5 distribution/binary-value limitations; Figure5 caption. Other figures not measured and author simulations not executed.",
+          "limit": "Uniform binary overlap changes differently when active count or active fraction is fixed. Independent conditional arithmetic records that distinction; no detection bound transferred to dense semantic rates."
+        }
+      ]
+    },
+    {
+      "id": "MR-S039",
+      "title": "Brea, Senn and Pfister (2013), Matching Recall and Storage in Sequence Learning with Spiking Neural Networks",
+      "url": "https://jbrea.github.io/assets/pdf/brea_et_al.-2013-matching_recall_and_storage_in_sequence_learning_w.pdf",
+      "source_kind": "Primary J.Neurosci.33(23),9565–9575; DOI10.1523/JNEUROSCI.4098-12.2013",
+      "read_scope": "Parsed primary PDF introduction, neuron response kernel, targeted batch/online learning equations8–12, initial-state and recall discussion, visible/hidden context and temporal-correlation passages/Figure2 caption, discussion opening. Full derivation and all numerical results not read.",
+      "relevance": "Learning-window meaning depends on neural dynamics; causal source credit, temporal correlations and retained history need explicit treatment.",
+      "transfer_limit": "The derivation uses a specified spiking distribution, hidden/visible division, synaptic eligibility traces and a hidden-weight global factor. None is imported into the graded semantic-population learner or inferred from H-84 teaching exclusion."
+    },
+    {
+      "id": "MR-S040",
+      "title": "Gillett, Pereira and Brunel (2020), Characteristics of sequential activity in networks with temporally asymmetric Hebbian learning",
+      "url": "https://knowledge.uchicago.edu/records/qv3fe-5dz29",
+      "source_kind": "Primary institutional record and indexed article; PNAS117,29948–29958; DOI10.1073/pnas.1918674117",
+      "read_scope": "Institutional abstract and indexed primary PMC passages defining the temporal-offset update and nonlinear pre/post transforms/zero-mean connection constraint. Full PDF retrieval failed; direct PMC browser check and Duke access barrier. No full mean-field/capacity proof treated as read.",
+      "relevance": "Temporal asymmetry and nonlinear pre/post transforms are specified parts of a Hebbian rule rather than consequences of naming coactivity learning.",
+      "transfer_limit": "Random input patterns, rate/spiking recall and signed/zero-mean connectivity differ from current nonnegative early-model edges and intrinsic cancellation. No recall-capacity or timing result is transferred as an application guarantee.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-28T21:46:20Z",
+          "scope": "Indexed primary discussion and selectivity example: random stored sequences, stable/fluctuating weight components and biophysical online-learning limitation. Not expanded verification of numerical methods.",
+          "source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7703604/",
+          "access_limit": "Direct PMC open showed captcha; a new Nanna download URL was unavailable. Indexed primary excerpts were read; no full-text-access claim."
+        }
+      ]
+    },
+    {
+      "id": "MR-S041",
+      "title": "Harnack, Pelko, Chaillet, Chitour and van Rossum (2015), Stability of Neuronal Networks with Homeostatic Regulation",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004357",
+      "source_kind": "Peer-reviewed primary theoretical research",
+      "read_scope": "Abstract, homeostatic framework and local stability narrative, cascaded and parallel feedback results, discussion. Image-rendered equation details and supplementary/global proofs were not independently checked.",
+      "relevance": "Recurrence, observation filtering and feedback delay interact; more intermediate regulation is not automatically stabilizing.",
+      "transfer_limit": "Intrinsic excitability/current feedback and its point-rate target differ from noise modulation of a flexible active-fraction band. No timescale, controller, biological equivalence or stability guarantee transfers to the application."
+    },
+    {
+      "id": "MR-S042",
+      "title": "Zenke, Hennequin and Gerstner (2013), Synaptic Plasticity in Neural Networks Needs Homeostasis with a Fast Rate Detector",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1003330",
+      "source_kind": "Peer-reviewed primary computational/theoretical research",
+      "read_scope": "Abstract/introduction; mean-field setup and model-comparison narrative; weight-decay and synaptic-scaling conclusions; discussion including correlations, basin and correlated-input limitations. Image-rendered formulas, supplemental proofs and reproduced simulations not checked.",
+      "relevance": "Plasticity can alter the response being regulated; compensatory detection timescale interacts with positive learning feedback.",
+      "transfer_limit": "Balanced excitatory/inhibitory spiking networks with triplet STDP and compensating plasticity differ from the present nonnegative-edge, intrinsic-cancellation, noise-controlled proposal. Seconds-to-minutes findings do not set this model cadence or choose a learner."
+    },
+    {
+      "id": "MR-S043",
+      "title": "Lober, Bouhadjar, Diesmann and Tetzlaff (2026), Learning sequence timing and control of replay speed in networks of spiking neurons",
+      "url": "https://arxiv.org/html/2605.22523v1",
+      "source_kind": "Primary preprint",
+      "read_scope": "Model and timing/replay results; discussion; input, readout, parameter-tuning and simulation methods. No code reproduction.",
+      "relevance": "Order, duration and replay speed are distinct; timing can consume additional contextual assemblies.",
+      "transfer_limit": "Single-melody examples use repeated input, an initial assembly cue, inhibition, dendritic plateaus and oscillatory replay. These do not transfer as mechanisms or success guarantees for our single-pulse, signed-coordinate model."
+    },
+    {
+      "id": "MR-S044",
+      "title": "Bouhadjar, Lober, Neftci, Diesmann and Tetzlaff (2025), Unsupervised Online Learning of Complex Sequences in Spiking Neuronal Networks",
+      "url": "https://juser.fz-juelich.de/record/1049039/files/article.pdf",
+      "source_kind": "Primary ICONS conference paper; DOI 10.1109/ICONS69015.2025.00038",
+      "read_scope": "Introduction, model/plasticity, training and evaluation narrative, results and discussion. Extracted mathematical glyphs, source code and simulations not independently verified.",
+      "relevance": "Context assignment, learning speed and retention are different limitations.",
+      "transfer_limit": "Fixed categorical columns, inhibition and structural plasticity differ from signed dense semantic populations; no model capacity or parameter choice transferred.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T03:18:02Z",
+          "scope": "Rechecked §§II-B/C, III-A and IV, particularly pre-input internal-state measurement and the single observed-symbol comparison. Retention limitation rechecked.",
+          "limit": "PDF page-2 screenshot failed with a cache miss; extracted equations, simulation and figures not independently verified. Existing source limits remain. Synthesis distinguishes this categorical metric from H83 alternative-preserving assessment."
+        }
+      ]
+    },
+    {
+      "id": "MR-S045",
+      "title": "Nessler, Pfeiffer, Buesing and Maass (2013), Bayesian Computation Emerges in Generic Cortical Microcircuits through Spike-Timing-Dependent Plasticity",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1003037",
+      "source_kind": "Peer-reviewed primary theoretical/computational study",
+      "read_scope": "Introduction, network/STDP and probabilistic interpretation, normalization/iid-assumption narrative and discussion. Image equations and full convergence proof not independently verified.",
+      "relevance": "Learning responsibilities depend on an explicit statistical objective.",
+      "transfer_limit": "Categorical populations, exponential firing, inhibition and intrinsic plasticity differ from fixed signed semantic roles; no Bayesian or sequence-learning guarantee transferred."
+    },
+    {
+      "id": "MR-S046",
+      "title": "Klampfl and Maass (2013), Emergence of Dynamic Memory Traces in Cortical Microcircuit Models through STDP",
+      "url": "https://igi-web.tugraz.at/PDF/218.pdf",
+      "source_kind": "Peer-reviewed primary study, author-hosted paper",
+      "read_scope": "Introduction, architecture/rate description; replay, assembly interlinking and contextual-discrimination narrative/captions; novel-input and retention trade-off. No code, figure-image measurement or full plasticity derivation checked.",
+      "relevance": "Repeated-input assemblies do not guarantee stable distinctions across shared contexts.",
+      "transfer_limit": "Lateral inhibition, learned response roles, spatial wiring and spiking dynamics differ; no topology, timing or plasticity mechanism transferred."
+    },
+    {
+      "id": "MR-S047",
+      "title": "Kappel, Nessler and Maass (2014), STDP Installs in Winner-Take-All Circuits an Online Approximation to Hidden Markov Model Learning",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1003511",
+      "source_kind": "Peer-reviewed primary theoretical/computational study",
+      "read_scope": "Forward-sampling explanation, online learning limits, rejection-sampling section and grammar comparison, convergence-comparison narrative and discussion. Image formulas, code and full proofs not independently verified.",
+      "relevance": "Later observed outcomes can guide learning without being available to an earlier prediction.",
+      "transfer_limit": "Its ideal inhibitory feedback, eligibility tags and repeated sequence sampling do not become requirements or selected mechanisms for this model.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T00:41:51Z",
+          "read_scope": "Re-read architecture, forward-state sampling, normalization assumptions and targeted simulation/grammar protocols. No formula-image verification or author code execution.",
+          "finding": "The probabilistic interpretation depends on ideal circuit normalization and specified observation/state models; it does not follow from generic positive weighted gathering. Existing transfer boundary remains sufficient; no new mechanism inferred."
+        }
+      ]
+    },
+    {
+      "id": "MR-S048",
+      "title": "Knoll and Lindner (2021), Recurrence-mediated suprathreshold stochastic resonance",
+      "url": "https://people.physik.hu-berlin.de/~lindner/PDF/Knoll-Lindner-JCNS-2021.pdf",
+      "source_kind": "Peer-reviewed primary computational study, author-hosted paper",
+      "read_scope": "Network model, coding-fraction definition, feedforward rate/noise controls and discussion; figure captions read, no figure measurements or code reproduced.",
+      "relevance": "Separates encoding benefit from average firing and distinguishes supplied noise from recurrent fluctuations.",
+      "transfer_limit": "Signed LIF connections, fixed random wiring and continuous stimulus do not establish one-presentation memory or select our transfer, noise law or controller."
+    },
+    {
+      "id": "MR-S049",
+      "title": "Martinez, Lansner and Herman (2019), Probabilistic associative learning suffices for learning the temporal structure of multiple sequences",
+      "url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0220161",
+      "source_kind": "Peer-reviewed primary computational study",
+      "read_scope": "Model organization narrative, noise and overlapping-representation results2.4–2.5, discussion3.1–3.4. Image equations, appendices, simulations and numerical figures not independently verified.",
+      "relevance": "Partially overlapping recall differs from identical shared-fragment disambiguation; noise-related improvement can reflect faster traversal before context decays.",
+      "transfer_limit": "Its WTA, adaptation, traces and signed weights are not adopted. The reported benefits depend on its task and timing; no shared-fragment length, recall guarantee or activity scale transfers.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T02:19:16Z",
+          "read_scope": "Publisher model and learning narrative2.1–2.3, disambiguation2.5/3.4 and methods4.1–4.3; image-only equations and appendix proofs remain unverified. No author code, trial data or figure measurements.",
+          "finding": "Methods specify offline batch parameter learning from the prescribed input time series; the dynamic rule is not evidence of continuous online-learning performance. Internal currents/adaptation coexist with binary WTA outputs.",
+          "transfer_limit": "Compare actual training mode, retained state and elapsed timing before transferring recall evidence. No adaptation, competition, trace layout or generation criterion adopted."
+        }
+      ]
+    },
+    {
+      "id": "MR-S050",
+      "title": "Higgins, Graupner and Brunel (2014), Memory Maintenance in Synapses with Calcium-Based Plasticity in the Presence of Background Activity",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1003834",
+      "source_kind": "Peer-reviewed primary theoretical/computational study",
+      "read_scope": "Model-term description, recurrent-network and fixed/virtual-synapse controls, memory-decay narrative and discussion. Image equations, proofs and code not independently verified.",
+      "relevance": "Background-driven synaptic retention depends on an enabled plasticity law and its assumptions.",
+      "transfer_limit": "Calcium, bistability, inhibitory populations and biological time scales are not adopted; background activity does not force weight updates in our design."
+    },
+    {
+      "id": "MR-S051",
+      "title": "Millidge, Tang, Osanlouy, Harper and Bogacz (2024), Predictive coding networks for temporal prediction",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1011183",
+      "source_kind": "Peer-reviewed primary model, published2024-04-01",
+      "read_scope": "Abstract; model foundations, inference/learning algorithm, circuit implementation and single-iteration discussion; initial filtering/learning results. Publisher XML equations6–14 inspected; appendix proofs not independently verified.",
+      "relevance": "Local Hebbian products can involve predictive errors with specified meanings and timing.",
+      "transfer_limit": "Hidden-state inference, error representation and inhibitory circuits differ from this application. No tPC architecture, loss, latent state or learning schedule selected.",
+      "publisher_xml": {
+        "url": "https://journals.plos.org/ploscompbiol/article/file?id=10.1371/journal.pcbi.1011183&type=manuscript",
+        "path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/millidge2024-temporal-predictive-coding.xml",
+        "sha256": "5c5056fff05471802d74fda948e7b61d8e61ec05a2b846cd9b8260c2b06ab439",
+        "checked_at_utc": "2026-10-28T21:52:25Z"
+      }
+    },
+    {
+      "id": "MR-S052",
+      "title": "Rigotti et al. (2013), The importance of mixed selectivity in complex cognitive tasks",
+      "url": "https://www.nature.com/articles/nature12160",
+      "primary_full_text": "https://www.cns.nyu.edu/wanglab/publications/pdf/rigotti_2013.pdf",
+      "source_kind": "Peer-reviewed primary experimental population analysis",
+      "read_scope": "Main-text task, mixed-selectivity, decoding, dimensionality, error-trial and discussion sections. Supplementary methods not independently checked.",
+      "relevance": "Current stimulus information can remain decodable when contextual combinations and behavioral performance differ.",
+      "transfer_limit": "237 PFC neurons/two monkeys, pseudo-populations and resampled analyses. No minicolumn mapping, application learner or causal intervention established by this reading."
+    },
+    {
+      "id": "MR-S053",
+      "title": "Barak, Rigotti and Fusi (2013), The Sparseness of Mixed Selectivity Neurons Controls the Generalization–Discrimination Trade-Off",
+      "url": "https://barak.net.technion.ac.il/files/2012/10/barak_rigotti_fusi_2013.pdf",
+      "source_kind": "Peer-reviewed primary theoretical/computational study",
+      "read_scope": "Introduction; task/RCN/readout/noise definitions; selected discrimination/generalization and coding-level results; discussion. Detailed analytical approximations not fully verified.",
+      "relevance": "Context separation and consistency under noise can trade off at finite population size.",
+      "transfer_limit": "Binary random inputs, signed projections and linear classification; population size changes in noise comparisons. Its roughly0.1 optimum is not an SNN activity target or a reason to add a hidden layer."
+    },
+    {
+      "id": "MR-S054",
+      "title": "Bourjaily and Miller (2011), Synaptic Plasticity and Connectivity Requirements to Produce Stimulus-Pair Specific Responses in Recurrent Networks of Spiking Neurons",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1001091",
+      "source_kind": "Peer-reviewed primary computational study",
+      "read_scope": "Main-text task/network architecture, selective-response and learning results, discussion, neuron/connectivity/noise/plasticity/homeostasis method descriptions. Equations embedded as images and supplementary plots not independently verified.",
+      "relevance": "Correlation learning can broaden responses to overlapping stimuli and erase initial distinctions; compare actual learned selectivity and behavior against the starting network.",
+      "transfer_limit": "Their400-cell spiking associative network includes inhibitory circuitry and separate reward-trained WTA decisions. Raising output activity enough to drive that decision is distinct from H82 predictive readiness. Its inhibitory remedy, per-cell homeostasis and spike rules are not adopted; selectivity improvement is not universal under every tested condition.",
+      "design_disposition": "Evidence retained for existing flow comparisons; no additional design mechanism or contract revision is required by this source alone."
+    },
+    {
+      "id": "MR-S055",
+      "title": "Miller and Katz (2010), Stochastic Transitions between Neural States in Taste Processing and Decision-Making",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2851230/",
+      "source_kind": "Primary computational study",
+      "read_scope": "Indexed abstract, introduction and selected methods/results/discussion passages; complete publisher/author PDFs inaccessible in this session. Not full-text verification.",
+      "relevance": "Compare individual response timing with trial averages; noise benefits depend on the task and regime.",
+      "transfer_limit": "Taste-processing and E/I decision networks do not specify our token fading, detector, noise level or response duration.",
+      "design_disposition": "Supports existing distinction between individual trajectories and aggregate envelopes; no mechanism selected."
+    },
+    {
+      "id": "MR-S056",
+      "title": "Asabuki and Clopath (2025), Embedding stochastic dynamics of the environment in spontaneous activity by prediction-based plasticity",
+      "url": "https://elifesciences.org/articles/95243",
+      "version": "Version of Record, DOI10.7554/eLife.95243.3",
+      "source_kind": "Primary computational study",
+      "read_scope": "Main results, discussion and methods, including displayed equations1–24, stimulation and assessment definitions. Supplementary plots and code not independently checked.",
+      "relevance": "Separates learned associations, spontaneous dynamics and trial-averaged predictability.",
+      "transfer_limit": "Distinct inhibitory plasticity, adapted response functions and Markovian tasks differ from this application. Its rules and thresholds are not adopted.",
+      "design_disposition": "Evidence for existing flow comparison boundaries; no implementation or general gradient claim."
+    },
+    {
+      "id": "MR-S057",
+      "title": "Bouchard and Brainard (2016), Auditory-induced neural dynamics in sensory-motor circuitry predict learned temporal and sequential statistics of birdsong",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5003256/",
+      "source_kind": "Primary experimental electrophysiology study",
+      "read_scope": "Main results/discussion and displayed SI methods, equationsS1–S5 and captionsS1/S2; no raw-data reanalysis. Repository PDF returned429; PMC text accessible.",
+      "relevance": "Response timing and next-element similarity vary with learned sequence statistics. The measurements use averages and explicit comparison with other syllables.",
+      "transfer_limit": "Sedated songbird HVC and first-order syllable statistics do not establish CC semantic coding, within-trial alternatives or our token half-life.",
+      "design_disposition": "Supports existing timing, comparison and averaging boundaries; no additional mechanism or design revision."
+    },
+    {
+      "id": "MR-S058",
+      "title": "Bouchard, Ganguli and Brainard (2015), Role of the site of synaptic competition and the balance of learning forces for Hebbian encoding of probabilistic Markov sequences",
+      "url": "https://www.frontiersin.org/journals/computational-neuroscience/articles/10.3389/fncom.2015.00092/full",
+      "source_kind": "Primary theoretical/computational study",
+      "read_scope": "Methods, binary conditional-probability analysis, initial recurrent results, STDP comparison and relevant discussion. Image-only equations and complete parameter sweeps not independently verified.",
+      "relevance": "Learning constraints determine statistical interpretation; storage ownership does not.",
+      "transfer_limit": "Categorical teaching and specified competition differ from dense contextual populations. No rule, normalization or parameter adopted.",
+      "design_disposition": "Supports existing exposure/meaning distinctions."
+    },
+    {
+      "id": "MR-S059",
+      "title": "Bouchard and Brainard (2013), Neural Encoding and Integration of Learned Probabilistic Sequences in Avian Sensory-Motor Circuitry",
+      "url": "https://escholarship.org/content/qt9vp3w0g9/qt9vp3w0g9.pdf",
+      "source_kind": "Primary experimental electrophysiology study",
+      "read_scope": "Main methods including sequence construction, response averaging and integration analysis; selected probability/integration results and discussion. No raw-data reanalysis.",
+      "relevance": "Prior sequence statistics affect later evoked responses over several elements; response integration and prospective prediction require different evidence.",
+      "transfer_limit": "Sedated songbird HVC, likely interneuron recordings and averaged evoked responses do not establish our predictive readiness, autonomous fading duration or CC implementation.",
+      "design_disposition": "Supports evidence boundaries; no numerical calibration or mechanism adopted."
+    },
+    {
+      "id": "MR-S060",
+      "title": "Lazar, Pipa and Triesch (2009), SORN: a self-organizing recurrent neural network",
+      "url": "https://www.frontiersin.org/journals/computational-neuroscience/articles/10.3389/neuro.10.023.2009/full",
+      "source_kind": "Primary computational study",
+      "read_scope": "Main model descriptions, results, discussion and appendix. Image-only equations and supplementary code/parameter details not independently verified.",
+      "relevance": "Separates learned contextual representation, supervised readout performance and representational drift during plasticity.",
+      "transfer_limit": "Binary E/I dynamics, threshold homeostasis, normalization and supervised readout differ from fixed signed populations and natural readiness.",
+      "design_disposition": "Supports distinguishing available information from the required prediction; no model mechanisms or thresholds adopted."
+    },
+    {
+      "id": "MR-S061",
+      "title": "Tully, Lindén, Hennig and Lansner (2016), Spike-Based Bayesian-Hebbian Learning of Temporal Sequences",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004954",
+      "source_kind": "Primary computational study",
+      "read_scope": "Main learning-model descriptions, sequential/overlapping-pattern results, relevant discussion and stimulation/assessment methods. Image-only equations, supplement and code not independently checked.",
+      "relevance": "Distinguishes trained temporal associations, ongoing dynamics and cue-triggered recall; overlap handling depends on the actual retained temporal influence.",
+      "transfer_limit": "WTA inhibition, signed learned couplings, two synaptic channels, adaptation and training with recurrent learned gains disabled differ materially from this application. Reported overlap and timing ranges are model-specific.",
+      "design_disposition": "Reference for existing comparison boundaries only; no BCPNN rule, trace, per-edge state or recall criterion adopted."
+    },
+    {
+      "id": "MR-S062",
+      "title": "Kappel, Habenschuss, Legenstein and Maass (2015), Synaptic Sampling: A Bayesian Approach to Neural Network Plasticity and Rewiring",
+      "url": "https://papers.nips.cc/paper_files/paper/2015/file/b1a59b315fc9a3002ce38bbe070ec3f5-Paper.pdf",
+      "source_kind": "Primary theoretical/computational conference paper",
+      "read_scope": "Main formulation, theorem statement and selected derivation, online approximation, rewiring model, WTA methods, lesion results and discussion. Convergence proof not independently reproduced.",
+      "relevance": "Structural exploration has specified latent variables, priors and stochastic dynamics; sparse effective weights do not alone imply sparse maintained state.",
+      "transfer_limit": "Potential-synapse parameters, WTA inference and likelihood-based sampling do not specify our bounded incoming pools or Hebbian flow learner.",
+      "design_disposition": "Reference for identifying actual retained information and work; no sampling posterior or latent edge state adopted."
+    },
+    {
+      "id": "MR-S063",
+      "title": "Bellec, Kappel, Maass and Legenstein (2018), Deep Rewiring: Training very sparse deep networks",
+      "url": "https://arxiv.org/pdf/1711.05136",
+      "version": "arXiv1711.05136v5; ICLR2018",
+      "source_kind": "Primary theoretical/computational conference paper",
+      "read_scope": "Sections1–2 and Algorithm1, initial classification/recurrent experiments, Section4 through the hard/soft sampling comparison. Appendix proofs and implementation not independently verified.",
+      "relevance": "Hard connection-count constraints permit active-only storage and random absent-edge proposals; soft dormant-parameter dynamics have different costs.",
+      "transfer_limit": "Backpropagation, fixed signs and global connectivity constraints differ from our learning semantics and incoming class feasibility. Reported performance is not a CPU benchmark for this model.",
+      "design_disposition": "Precedent for sparse discovery comparison only; no rewiring rule or convergence claim adopted."
+    },
+    {
+      "id": "MR-S064",
+      "title": "Bellec et al. (2020), A solution to the learning dilemma for recurrent networks of spiking neurons",
+      "url": "https://www.nature.com/articles/s41467-020-17236-y",
+      "source_kind": "Primary theoretical/computational study",
+      "read_scope": "Mathematical-basis results and Methods sections on factorization, LIF/ALIF eligibility and plasticity, equations1–4 and13–29. No task-performance or supplementary verification.",
+      "retrieved_fulltext": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7367848/fullTextXML",
+      "local_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/bellec2020-eprop.xml",
+      "local_sha256": "4ac4a7d82dfa745e06852c952bd29ec0188b78c9a1d9b823ff1b10360ffc4c4f",
+      "relevance": "Distinguishes exact gradient factorization from approximate online learning signals and neuron-model-dependent temporal credit.",
+      "transfer_limit": "The displayed LIF factorization does not make later filtering of products universally per-source. Adaptation and our minicolumn cancellation require different dependencies; no generic trace-size claim follows.",
+      "design_disposition": "Existing evidence for interpreting learning credit; no e-prop learner, derivative, feedback pathway or trace selected."
+    },
+    {
+      "id": "MR-S065",
+      "title": "Numenta NuPIC Connections reference: potential and connected activity",
+      "url": "https://raw.githubusercontent.com/numenta/nupic/master/src/nupic/algorithms/connections.py",
+      "source_kind": "Primary reference implementation",
+      "read_scope": "Connection/segment definitions and computeActivity, local lines353–380. Cross-checked TemporalMemory activation/matching thresholds, _burstColumn selection and _leastUsedCell against MR-S016. No code execution or dependency adoption.",
+      "local_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/numenta-connections-reference.py.txt",
+      "local_sha256": "81fabccd6e9bdce37253f9d6351898573346709bc41272b1999e76106dceee25",
+      "retrieval": "Web text retrieval failed; official raw source retrieved directly,16075bytes.",
+      "relevance": "Potential activity counts retained endpoints from active sources regardless of permanence; connected count additionally applies the permanence cutoff. Matching and transmitted prediction therefore have different semantics.",
+      "transfer_limit": "Binary source activity and segmented connectivity differ from graded sparse rate transmission. No permanence field, reverse index, cutoff, least-used policy or generation-fallback teaching is imported.",
+      "design_disposition": "Clarifies the existing unfamiliar-transition and contextual-assignment comparisons; D08 remains pending-human.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T03:12:01Z",
+          "scope": "Pinned computeActivity implementation rechecked: every retained active-source endpoint contributes potential count; connected count additionally applies its permanence cutoff. This remains distinct from effective graded incoming weights.",
+          "limit": "Consistency review of existing synthesis; no new learning role, field, segment or permanence mechanism selected. H84 generation fallback remains excluded from learning; empirical alternatives stay open under H86."
+        }
+      ]
+    },
+    {
+      "id": "MR-S066",
+      "title": "Fiete et al. (2010), Spike-Time-Dependent Plasticity and Heterosynaptic Competition Organize Networks to Produce Long Scale-Free Sequences of Neural Activity",
+      "url": "https://fietelab.mit.edu/wp-content/uploads/2018/12/sequence_formation_neuron10.pdf",
+      "source_kind": "Primary computational study with songbird-data analysis",
+      "read_scope": "Main model, chain formation/width/overlap, rule comparison and methods/parameters; PDF text. Screenshot failed; no supplementary verification or data reanalysis.",
+      "relevance": "Learning credit and chain organization depend on temporal representation and competition.",
+      "transfer_limit": "Disjoint nondecaying chains, inhibitory dynamics and input grouping do not establish our semantic fading or degree law.",
+      "design_disposition": "Evidence for existing timing/recurrence comparisons only."
+    },
+    {
+      "id": "MR-S067",
+      "title": "FieteLab Figure2 MATLAB reference",
+      "url": "https://github.com/FieteLab/Formation-of-neural-sequences-via-STDP-and-heterosynaptic-competition/blob/master/Fig_2_Simulation.m",
+      "source_kind": "Author-released primary code",
+      "read_scope": "Complete137-line source inspected without executing. Figure2 binary summed-weight demonstration only.",
+      "local_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/fiete2010-figure2.m.txt",
+      "local_sha256": "1c12d8b151c8075c1785682a3e3e72431b1f844813819b1b7fabbd1be8930e0e",
+      "relevance": "Uses complete preceding activity for thresholded propagation, dense pairwise antisymmetric updates, both weight-sum penalties and fixed-weight playback.",
+      "transfer_limit": "Released code starts at zero weights and uses an additive update and coefficients differing from the printed generic method; it cannot certify numerical reproduction. Playback receives multi-step barrages. No execution, wide-chain verification or sparse-cost inference.",
+      "design_disposition": "Reference inspection; no dynamics, data structure or training rule adopted."
+    },
+    {
+      "id": "MR-S068",
+      "title": "Yin et al. (2024), MINT: Multiplier-less INTeger Quantization for Energy Efficient Spiking Neural Networks",
+      "url": "https://arxiv.org/html/2305.09850v4",
+      "source_kind": "Primary computational/hardware-design study; author draftv4",
+      "read_scope": "SectionsIII–VI-B, equations1–10, inference algorithm and experimental protocol/results. No training or hardware reproduction.",
+      "relevance": "Separates low-bit inference from full-precision training and architecture-specific arithmetic savings.",
+      "transfer_limit": "Binary-spike vision inference and accelerator estimates do not establish persistent graded-rate behavior or CPU performance.",
+      "design_disposition": "Scoped numeric-comparison evidence only."
+    },
+    {
+      "id": "MR-S069",
+      "title": "MINT author implementation: selected VGG/LIF and quantizer paths",
+      "url": "https://github.com/RuokaiYin/MINT_Quantization",
+      "source_kind": "Author primary code linked by original repository",
+      "read_scope": "Complete spike_related.py; Q_ShareScale_VGG9 setup/reset/forward; QConv2dLIF forward; w_q/u_q and inference helpers. Other model paths not audited.",
+      "files": [
+        {
+          "name": "spike_related.py",
+          "local_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/mint-spike_related.py.txt",
+          "sha256": "354a12be4d996dc6f27ba9fafecdc22efe9ae16de2606600ea90f05a94681612"
+        },
+        {
+          "name": "quant_net.py",
+          "local_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/mint-quant_net.py.txt",
+          "sha256": "f2a938a5a17b92b97b7ef59c207f80045f00acb10adf6e111ab28764b668eb3b"
+        },
+        {
+          "name": "training_utils.py",
+          "local_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/mint-training_utils.py.txt",
+          "sha256": "e98ea8a4a2b8c3185a581ac601ff5e1a146eb179d7924143fb8c3487b56a9aca"
+        },
+        {
+          "name": "network_utils.py",
+          "local_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/mint-network_utils.py.txt",
+          "sha256": "174c9dd91da7b97f34685c5f5d331eb7a716b2cddbe07290d088230d256d662b"
+        }
+      ],
+      "relevance": "Selected VGG resets at each forward and reuses static input; stored membrane follows floating-point simulated quantization with tanh, clipping and rounding.",
+      "transfer_limit": "Read-only inspection, no execution. Ordinary forward is not independently verified integer deployment; paper and code timing/rounding equivalence is unproven.",
+      "design_disposition": "Evidence of evaluation scope and arithmetic questions, not a runtime dependency."
+    },
+    {
+      "id": "MR-S070",
+      "title": "Arm Cortex-A76 Core Technical Reference Manual, r4p1,100798_0401_00_en",
+      "url": "https://documentation-service.arm.com/static/5f562083235b3560a01e03bc",
+      "source_kind": "Primary vendor manual; checked2026-10-28",
+      "read_scope": "A10.1–A10.2; B2.62 ID_AA64ISAR0_EL1 and B2.67 ID_AA64PFR0_EL1 selected register descriptions. Text inspected; screenshot request did not provide an inspectable image in this tool response. Not a full620-page reading.",
+      "relevance": "DP is implemented; upper ISAR0 bits63:48 are RES0. AdvSIMD half-precision support has a distinct feature field. This prevents treating every entry in the optimization guide as an independent capability guarantee.",
+      "transfer_limit": "Reference core configuration, not a runtime feature measurement on a selected Pi device; no throughput benchmark."
+    },
+    {
+      "id": "MR-S071",
+      "title": "Arm Neon Intrinsics Reference, current published HTML",
+      "url": "https://arm-software.github.io/acle/neon_intrinsics/advsimd.html",
+      "source_kind": "Primary Arm ACLE reference, checked2026-10-28",
+      "read_scope": "Dot-product section and vdotq_u32/vdotq_s32 operand/result mappings; vcvt_f32_f16/vcvt_high_f32_f16 widening conversions.",
+      "relevance": "Byte dot products take two byte vectors and32-bit accumulators; FP16-to-FP32 conversion is a separate operation. Operand preparation and rates versus weights must be distinguished.",
+      "transfer_limit": "Intrinsic availability depends on target features. Signatures and instruction mappings neither measure sparse incoming-gather speed nor choose state quantization."
+    },
+    {
+      "id": "MR-S072",
+      "title": "Linux kernel documentation: ARM64 ELF hwcaps",
+      "url": "https://docs.kernel.org/arch/arm64/elf_hwcaps.html",
+      "source_kind": "Primary kernel documentation, checked2026-10-28",
+      "read_scope": "Introduction and interpretation; FPHP,ASIMDHP,ASIMDDP,ASIMDFHM entries.",
+      "relevance": "Separate feature flags identify half-precision support, byte dot products and half-precision widening multiply-accumulate functionality. Actual userspace feature exposure is distinct from instruction-table names.",
+      "transfer_limit": "No target device queried, feature-dispatch layer selected or benchmark run."
+    },
+    {
+      "id": "MR-S073",
+      "title": "Local LLVM AArch64 target feature definitions",
+      "url": "/ws/EvtWorks/cod-project/llvm-project/llvm/lib/Target/AArch64/AArch64Processors.td",
+      "source_kind": "Primary compiler source, read-only checkout inspection",
+      "read_scope": "AArch64Processors.td lines845–848 and1327–1330; AArch64Features.td HasV8_2aOps lines1043–1045.",
+      "relevance": "The A76 feature list has FullFP16 and DotProd but no FP16FML. This corroborates keeping the widening-FMA claim separate from ordinary half support.",
+      "transfer_limit": "A compiler target model is not a physical-device feature test. No compiler, CMake or toolchain command was run.",
+      "checkout_revision": "0d261d1ca552c95a8f007e061c787ac7132fbcbc",
+      "files": [
+        {
+          "path": "/ws/EvtWorks/cod-project/llvm-project/llvm/lib/Target/AArch64/AArch64Processors.td",
+          "sha256": "a6ddaeebcd2de55d0814aa9596635f446a2ae1ff4b1b738d1cee4048917faee5"
+        },
+        {
+          "path": "/ws/EvtWorks/cod-project/llvm-project/llvm/lib/Target/AArch64/AArch64Features.td",
+          "sha256": "f2ab00a297a6ee70bdbe19824b9ccc918d017c5ebb4bd9166ee13040480b8678"
+        }
+      ]
+    },
+    {
+      "id": "MR-S074",
+      "title": "Nguyen, Schulte im Walde and Vu2016, Integrating Distributional Lexical Contrast into Word Embeddings for Antonym–Synonym Distinction",
+      "url": "https://aclanthology.org/P16-2074/",
+      "source_kind": "Published primary ACL2016 short paper; DOI10.18653/v1/P16-2074",
+      "read_scope": "PDF introduction and§2.1 lexical-feature weighting, with§2.2 opening. Experimental results and performance claims not independently reviewed.",
+      "relevance": "Distributional relatedness can group lexical contrasts as well as similar meanings; the authors introduce an explicit contrast objective rather than equating antonymy with vector negation.",
+      "transfer_limit": "Their corpus vectors and skip-gram training are not the Flash table. No contrast retraining, WordNet supervision, valence estimator or embedding remapping is adopted."
+    },
+    {
+      "id": "MR-S075",
+      "title": "Fusi and Abbott (2007), Limits on the memory storage capacity of bounded synapses",
+      "url": "https://columbia.edu/cu/neurotheory/Larry/FusiNatNeuro07.pdf",
+      "source_kind": "Published primary paper; DOI10.1038/nn1859",
+      "read_scope": "Introduction, model and hard/soft-bound analysis, printed pp485–489 through Eq9 and its interpretation. Generalized bounds, later methods and supplementary proofs not reviewed.",
+      "relevance": "Distinguishes initial trace strength from retention under continuing modifications, with an equilibrium starting distribution and direct weight observation.",
+      "transfer_limit": "No neural retrieval circuit or capacity estimate for this model; its ongoing-plasticity clock is not token activity decay. No bounding or consolidation rule adopted."
+    },
+    {
+      "id": "MR-S076",
+      "title": "Benna and Fusi (Asilomar2017), Efficient online learning with low-precision synaptic variables",
+      "url": "https://ctn.zuckermaninstitute.columbia.edu/sites/default/files/content/Publications/2018/Benna%20%28Fusi%29%2C%20Efficient%20Online%20Learning%20with%20Low-Precision%20Synaptic%20Variables.pdf",
+      "source_kind": "Primary conference paper; DOI10.1109/ACSSC.2017.8335630. PDF labels Asilomar2017; institutional bibliography lists2018 publication.",
+      "read_scope": "Problem setting, multi-state/multi-chain/direction-marker/partial-reset constructions, correlated-input analysis and discussion, printed pp1610–1614. Figure captions read; plotted values not independently measured.",
+      "relevance": "Effective inference weights and complete learning state have different costs; memory age counts plasticity events.",
+      "transfer_limit": "Ideal-observer synaptic retention is not natural sequence readiness or active-loop memory. No extra variable, reset mechanism, packing, device implementation or memory scaling for this SNN adopted."
+    },
+    {
+      "id": "MR-S077",
+      "title": "Yildiz, Jaeger and Kiebel (2012), Re-Visiting the Echo State Property",
+      "url": "https://www.ai.rug.nl/minds/uploads/2519_Yildizetal12.pdf",
+      "source_kind": "Author-hosted June23 preprint of Neural Networks35 article; DOI10.1016/j.neunet.2012.07.005",
+      "read_scope": "Definitions; selected2D bifurcation derivation and captions; section4.1 sufficient matrix conditions; section5 input example and discussion opening. Full appendix proofs and plotted trajectories not independently checked.",
+      "relevance": "The convergence property depends on the nonlinear map and input; general spectral-radius counterexamples do not cancel the stated sufficient nonnegative-weight case.",
+      "transfer_limit": "Componentwise sigmoid reservoirs omit H77 cancellation and adaptive noise. No spectral normalization or universal state-forgetting objective adopted."
+    },
+    {
+      "id": "MR-S078",
+      "title": "Manjunath and Jaeger (2013), Echo State Property Linked to an Input",
+      "url": "https://www.ai.rug.nl/minds/uploads/ESP_NC.pdf",
+      "source_kind": "Author-hosted primary preprint of Neural Computation25:671–696; DOI10.1162/NECO_a_00411",
+      "read_scope": "Introduction, input-specific definitions, selected compact-state discussion, contraction interpretation and section2.1 periodic-input result/critique opening. Ergodic-law and later sufficient-condition proofs not reviewed.",
+      "relevance": "Input-specific convergence and temporal history sensitivity must be interpreted under the actual driving signal.",
+      "transfer_limit": "No global echo-state requirement, chaos classification, state reset or learned SNN stability theorem inferred."
+    },
+    {
+      "id": "MR-S079",
+      "title": "Jaeger and Eck (2008), Can’t Get You Out of My Head: A Connectionist Model of Cyclic Rehearsal",
+      "url": "https://www.ai.rug.nl/minds/uploads/2185_JaegerEck08.pdf",
+      "source_kind": "Primary chapter, LNAI4930 pp310–335; DOI10.1007/978-3-540-79037-2_17",
+      "read_scope": "Introduction and stated scope; section6 architecture; section7.1 selected recall/noise results and captions. Appendices, complete scaling study and plotted values not independently reviewed.",
+      "relevance": "Persistent cycling can lose the cued content; the architecture uses trained delayed readouts and voting feedback after repeated cues.",
+      "transfer_limit": "No ready-made one-token memory, emergent small-loop algorithm, delay subsystem or generated-output mechanism adopted."
+    },
+    {
+      "id": "MR-S080",
+      "title": "Lau and Bi (2005), Synaptic mechanisms of persistent reverberatory activity in neuronal networks",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1177363/",
+      "source_kind": "Primary experiment, PNAS102(29):10333–10338; DOI10.1073/pnas.0500717102",
+      "read_scope": "Indexed primary abstract, selected results/captions, and methods on preparation, stimulation recovery and duration definition. Direct PMC access presented a challenge; public EuropePMC XML returned500. No challenge bypass or full-PDF/plot inspection.",
+      "relevance": "Brief-cue persistent excitation and responsiveness after an episode are distinct observations.",
+      "transfer_limit": "Cultured hippocampal networks are not human CCs. The chosen30-second interval is not a minimum recovery bound; current-threshold duration is not token half-life."
+    },
+    {
+      "id": "MR-S081",
+      "title": "Volman and Gerkin (2011), Synaptic Scaling Stabilizes Persistent Activity Driven by Asynchronous Neurotransmitter Release",
+      "url": "https://rick.gerk.in/my-papers/volman-gerkin.pdf",
+      "source_kind": "Primary model, Neural Computation23(4):927–957; DOI10.1162/NECO_a_00098",
+      "read_scope": "Author PDF introduction, methods2.1–2.2 and opening2.3.1; Figure1 caption. Complete results, discussion and appendix not reviewed; no plot measurements or author simulations.",
+      "relevance": "Activity-dependent asynchronous release and depression provide one model of transient recurrent excitation.",
+      "transfer_limit": "External white-noise support is different. No additional terminal state, biological timescale, synaptic scaling law or spatial preference adopted."
+    },
+    {
+      "id": "MR-S082",
+      "title": "Bienenstock, Cooper and Munro (1982), Theory for the development of neuron selectivity: orientation specificity and binocular interaction in visual cortex",
+      "url": "https://www.cnbc.cmu.edu/~tai/nc19journalclubs/BCM_paper1982.pdf",
+      "source_kind": "Primary theory, Journal of Neuroscience2(1):32–48; DOI10.1523/JNEUROSCI.02-01-00032.1982",
+      "read_scope": "Abstract and sectionsI–II through modification-threshold and time-average assumptions, pp32–35. Later convergence proof, visual-development simulations and appendices not reviewed.",
+      "relevance": "Pattern-selective modification depends on an activity-history statistic as well as current pre/post activity; selective sensory response differs from continuation prediction.",
+      "transfer_limit": "The idealized weights can change sign and firing variables are deviations from spontaneous baseline. No sliding threshold, mean-activity field, signed synapse or sensory-selectivity objective adopted. Existing flow proposals already distinguish update meaning and state cost, so no new mechanism or duplicate design section added."
+    },
+    {
+      "id": "MR-S083",
+      "title": "Warriner, Kuperman and Brysbaert (2013), Norms of valence, arousal, and dominance for13,915 English lemmas",
+      "url": "https://link.springer.com/article/10.3758/s13428-012-0314-x",
+      "source_kind": "Primary normative study, Behavior Research Methods45:1191–1207; DOI10.3758/s13428-012-0314-x",
+      "read_scope": "Publisher abstract and public bibliographic notes only. Subscription full text and dataset not accessed; an alternate PDF returned403.",
+      "relevance": "Rated pleasantness, arousal and dominance are distinct observations.",
+      "transfer_limit": "No ratings imported or fitted evaluator built. Word norms do not label arbitrary token fragments, contextual compositions or CC states; no clinical DMN claim.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T01:14:14Z",
+          "read_scope": "Publisher abstract, calibration notes and public electronic supplement; actual CSV header and aggregate valence columns read. Full subscription article methods remain unread. This follow-up supersedes the earlier no-dataset-access limitation for the stated diagnostic.",
+          "public_supplement_url": "https://media.springernature.com/original/springer-static/esm/art%3A10.3758%2Fs13428-012-0314-x/MediaObjects/13428_2012_314_MOESM1_ESM.zip",
+          "zip_sha256": "5a0db0437ef234219fb899caced5eb3195dbf9f84396637ab4db74c50ca441aa",
+          "csv_sha256": "85f6d7e35069b0eff3d9d88c4dbe08e6ae7dbdb81eac64be3f89ed0f5079d8e3",
+          "findings": "13915 unique word rows supply mean, SD and rating count. Publisher calibration notes and data confirm larger valence means as more positive. A declared token join and hash selection precede the separate Flash arithmetic in context-composition-analysis.",
+          "transfer_limit": "Aggregate English word ratings are descriptive stimulus labels, not a classifier of autonomous CC states or a guarantee of semantic complementarity. No fitted evaluator, neural model or clinical inference."
+        }
+      ]
+    },
+    {
+      "id": "MR-S084",
+      "title": "Yao, Wu, Zhang and Wang (2017), Norms of valence, arousal, concreteness, familiarity, imageability, and context availability for1,100 Chinese words",
+      "url": "https://link.springer.com/article/10.3758/s13428-016-0793-2",
+      "source_kind": "Primary normative study, Behavior Research Methods49:1374–1385; online2016-08-23; DOI10.3758/s13428-016-0793-2",
+      "read_scope": "Publisher abstract, bibliographic details and public explanatory note. Subscription methods/full text, individual ratings and supplementary dataset not accessed.",
+      "relevance": "Separate affective and semantic ratings offer a possible future stimulus-control basis in Chinese.",
+      "transfer_limit": "No dataset adoption or assumption that each rated word is one Flash token; no learned valence direction or runtime interpretation.",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T01:31:30Z",
+          "read_scope": "Publisher-hosted ESM1 questionnaire text and ESM2 extracted table across32 pages; scale and column headers inspected. Full subscription methods not accessed; no successful visual rendering verification.",
+          "findings": "Questionnaire defines1 as very unpleasant and9 as very pleasant. Table extraction identifies1100 word spans but89 have merged numeric fields, so its values were not used for an embedding comparison.",
+          "provenance": {
+            "table_url": "https://media.springernature.com/original/springer-static/esm/art%3A10.3758%2Fs13428-016-0793-2/MediaObjects/13428_2016_793_MOESM2_ESM.pdf",
+            "download_bytes": 2163239,
+            "download_sha256": "1f2363042d68efb9e07f9be3607315051967d3c4f31480470d2d97f715e8f422"
+          },
+          "transfer_limit": "No allegation about the original data or rating validity follows from extraction difficulties. No values from this table entered the Chinese probe."
+        }
+      ]
+    },
+    {
+      "id": "MR-S085",
+      "title": "Kosko and Mitaim (2003), Stochastic resonance in noisy threshold neurons",
+      "url": "https://sipi.usc.edu/~kosko/NN2003.pdf",
+      "source_kind": "Primary theoretical paper, Neural Networks16:755–761; DOI10.1016/S0893-6080(03)00128-X",
+      "read_scope": "Author PDF introduction, section2 and finite-variance theorem1 statement/opening proof; indexed primary conclusion. Remaining proofs, simulation plots and infinite-variance theorem not independently checked.",
+      "relevance": "Added noise can improve a threshold output’s information about a subthreshold input under specified conditions.",
+      "transfer_limit": "Not recurrent history retention, adaptive CC noise, semantic fidelity or a guarantee of practically significant benefit; no noise law adopted."
+    },
+    {
+      "id": "MR-S086",
+      "title": "Shannon (1948), A Mathematical Theory of Communication",
+      "url": "https://web.mit.edu/6.976/www/handout/shannon.pdf",
+      "source_kind": "Primary paper, corrected reprint of Bell System Technical Journal27:379–423,623–656",
+      "read_scope": "Introduction and sections11–12 on channel variables, joint/conditional entropy and equivocation; other channel-coding proofs not reviewed for this task.",
+      "relevance": "Defines the conditional-information quantities used by the independently derived binary example and chain-rule argument.",
+      "transfer_limit": "Information about a specified history variable is not itself a semantic-utility measure or an SNN memory-capacity guarantee. No coding subsystem or online entropy estimator adopted."
+    },
+    {
+      "id": "MR-S087",
+      "title": "Ostojic and Brunel (2011), From Spiking Neuron Models to Linear-Nonlinear Models",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1001056",
+      "source_kind": "Peer-reviewed primary research, PLOS Computational Biology7(1):e1001056; published2011-01-20. Already cited in RateDynamics; targeted expanded reading recorded here.",
+      "read_scope": "Results setup and LN construction; LIF filter/nonlinearity narrative; selected adaptive/conductance comparison and discussion; methods input/transfer definitions and assessment narrative. Image-rendered equations and full Fokker–Planck derivations not independently verified; no plots measured or simulations executed.",
+      "relevance": "Rate reductions can average noise into transfer and temporal response; averaging assumptions differ from explicit stochastic per-cell dynamics.",
+      "transfer_limit": "Specified spiking models, trial averaging and Gaussian background do not define this application's individual rate law, attention noise or physical timescales. The project's Gaussian threshold convolution is independent conditional arithmetic, not a reproduction of the neuron equations. No adaptive-timescale mechanism adopted.",
+      "recorded_at_utc": "2026-10-29T00:12:01Z",
+      "additional_reading": [
+        {
+          "recorded_at_utc": "2026-10-29T02:35:46Z",
+          "scope": "Rechecked primary Results adaptive-timescale/conductance subsections, Discussion (including full spike trains), and Methods assessment of LN accuracy.",
+          "findings": [
+            "A fixed transfer/filter at baseline can miss faster responses under large drive; the proposed adaptive-timescale extension still loses accuracy at very weak background noise. This is a limitation of the specified spiking-to-rate reduction, not a requirement to add an adaptive response to this application.",
+            "The comparison targets trial-averaged first-order firing-rate statistics; it does not validate full spike-train correlations or the closed-loop recurrent application.",
+            "Correlation can stay high while response scale or absolute error is material. The paper separately examines mean/variance and RMS distance; no numerical fidelity threshold is transferred."
+          ],
+          "limits": "Image-rendered equations and numerical figure values were not independently decoded or measured. No author code, spiking simulation, neural training or reproduction. Current RateDynamics already states the relevant noise/reduction boundary; no new design mechanism or document change needed."
+        }
+      ]
+    },
+    {
+      "id": "MR-S088",
+      "title": "Schwalger, Deger and Gerstner (2017), Towards a theory of cortical columns: From spiking neurons to interacting neural populations of finite size",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005507",
+      "source_kind": "Peer-reviewed primary research, PLOS Computational Biology13(4):e1005507; published2017-04-19. Already cited in RateDynamics; expanded reading registered here.",
+      "read_scope": "Results population assumptions, conditional activity/finite-size correction narrative, Gaussian approximation and two finite-size effects; switching subsection; discussion limitations; selected continuum-limit narrative on temporal correlations. Image-rendered formulas, full derivation, numerical implementation and plots not independently checked.",
+      "relevance": "Conditional mean activity and realized stochastic activity play different roles; past fluctuations can influence subsequent conditional means, so white innovations do not imply white activity.",
+      "transfer_limit": "Homogeneous population/mean-field and quasi-renewal assumptions differ from individually connected semantic cells and broad degree classes. No population replacement, adaptation/refractory state, inhibitory circuit, noise formula or speedup imported. The cancellation enumeration is our independent one-operation reference.",
+      "recorded_at_utc": "2026-10-29T00:13:43Z"
+    },
+    {
+      "id": "MR-S089",
+      "title": "Augustin, Ladenbauer, Baumann and Obermayer (2017), Low-dimensional spike rate models derived from networks of adaptive integrate-and-fire neurons",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005545",
+      "source_kind": "Peer-reviewed primary rate-reduction study",
+      "read_scope": "Abstract/introduction; variance/oscillation results; computational complexity; discussion/extensions; model, mean-field and integration assumptions; cascade closing remarks. No complete spectral derivation, figures measured, code execution or timing replication.",
+      "relevance": "Clarifies population-average reduction assumptions and the distinction between simpler effective dynamics and preserved microscopic identity.",
+      "transfer_limit": "Our fixed contextual cells are not replaced by exchangeable population averages; no reduction table, adaptation variable or CPU speedup is adopted.",
+      "recorded_at_utc": "2026-10-29T00:35:34Z"
+    },
+    {
+      "id": "MR-S090",
+      "title": "Stachenfeld, Botvinick and Gershman (2017), The hippocampus as a predictive map",
+      "url": "https://gershmanlab.com/pubs/Stachenfeld17.pdf",
+      "source_kind": "Peer-reviewed primary theory/modeling paper; corrected author-hosted text",
+      "read_scope": "Definition and initial interpretation pp1–2; temporal-context discussion p10; online-method transition/occupancy definitions p12. No figure measurements, supplementary verification or simulations.",
+      "relevance": "Forecast horizon and contextual representation are different claims.",
+      "transfer_limit": "Neither a hippocampal mapping nor a tabular predictive representation, spectral basis or reward mechanism is adopted.",
+      "recorded_at_utc": "2026-10-29T00:41:51Z"
+    },
+    {
+      "id": "MR-S091",
+      "title": "Bono, Zannone, Pedrosa and Clopath (2023), Learning predictive cognitive maps with spiking neurons during behavior and replays",
+      "url": "https://elifesciences.org/articles/80671",
+      "source_kind": "Peer-reviewed primary theoretical/computational study, eLife12:e80671",
+      "read_scope": "Abstract, initial model/results, limitations and methods definitions/neuron model through the start of equivalence derivation; parameter/replay descriptions. Full appendix proof, code and simulations not verified.",
+      "relevance": "A biologically framed local rule learns a defined longer-horizon quantity under specific stimulation/timing assumptions.",
+      "transfer_limit": "Two-layer place-specific forcing, traces and potentiation/depression do not define our recurrent learner or select its time scale. Rendered update algebra is not relied upon as an independently verified theorem.",
+      "recorded_at_utc": "2026-10-29T00:41:51Z"
+    },
+    {
+      "id": "MR-S092",
+      "title": "Moreno-Bote, Beck, Kanitscheider, Pitkow, Latham and Pouget (2014), Information-limiting correlations",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4486057/",
+      "source_kind": "Peer-reviewed primary theoretical/computational study, Nature Neuroscience17:1410–1417",
+      "read_scope": "Abstract, main-text network/population arguments and discussion; online methods through equation28. Supplementary derivations, code and figures not independently verified.",
+      "relevance": "Correlation pattern and task-relevant variation matter; reducing mean pairwise correlation alone does not establish better information.",
+      "transfer_limit": "Their balanced spiking network and long-window/small-leak analytical limit do not describe our signed cancellation or establish contextual prediction. No covariance estimator or decorrelation objective follows.",
+      "recorded_at_utc": "2026-10-29T00:53:33Z"
+    },
+    {
+      "id": "MR-S093",
+      "title": "Kempter, Gerstner and van Hemmen (1999), Hebbian learning and spiking neurons",
+      "url": "https://www.cneuro.net/_files/ugd/29de7e_4378f28de9ac43369a2afcd33e0a0d2c.pdf",
+      "canonical_url": "https://doi.org/10.1103/PhysRevE.59.4498",
+      "source_kind": "Peer-reviewed primary theoretical study, Physical Review E59:4498–4514",
+      "read_scope": "Abstract; sectionsII–III; sectionVI noise assumptions and sectionVII discussion. Full variance appendix, figures and code not independently verified.",
+      "relevance": "Distinguishes a specified rate learner from reduction of a spike-timing rule.",
+      "transfer_limit": "Poisson, timescale and correlation assumptions do not define our frame dynamics or justify extra spike traces.",
+      "access_note": "EPFL repository download returned405; author abstract and mirrored published PDF inspected. Screenshot call returned no viewable image; no visual verification claimed.",
+      "recorded_at_utc": "2026-10-29T00:59:30Z"
+    },
+    {
+      "id": "MR-S094",
+      "title": "Xu, Li and Chen (2022; online2021), Valence and arousal ratings for11,310 simplified Chinese words",
+      "url": "https://link.springer.com/article/10.3758/s13428-021-01607-4",
+      "source_kind": "Primary normative study, Behavior Research Methods54:26–41; public publisher CSV supplement",
+      "read_scope": "Publisher abstract, bibliographic metadata and Open Practices statement; downloaded and parsed the complete11310-row CSV. Used Word, Valence_Mean, Valence_SD and Valence_N only. Full subscription article methods not accessed.",
+      "relevance": "Independent Chinese rated-word source for a declared subset matched to actual native Flash single-token rows; no translation or multi-token averaging.",
+      "transfer_limit": "Reported lexical averages do not label contextual compositions or arbitrary CC states. Analyst bands are not validated cross-language equivalents. No dataset adoption as a training/evaluation contract or valence decoder.",
+      "supplement": {
+        "url": "https://media.springernature.com/original/springer-static/esm/art%3A10.3758%2Fs13428-021-01607-4/MediaObjects/13428_2021_1607_MOESM1_ESM.csv",
+        "bytes": 1002626,
+        "sha256": "152f861fe3fe33b7c80763256c5266e28662de8edd5cbe7b7f1791c32d980cb7",
+        "columns_used": [
+          "Word",
+          "Valence_Mean",
+          "Valence_SD",
+          "Valence_N"
+        ],
+        "rows": 11310
+      },
+      "recorded_at_utc": "2026-10-29T01:31:30Z"
+    },
+    {
+      "id": "MR-S095",
+      "title": "Rule, Loback, Raman, Driscoll, Harvey and O'Leary (2020), Stable task information from an unstable neural population",
+      "url": "https://elifesciences.org/articles/51121",
+      "source_kind": "Primary analysis of mouse posterior-parietal calcium recordings plus computational decoding; eLife9:e51121",
+      "read_scope": "Main drift/readout results, discussion, task/preprocessing/decoding methods and online LMS section. No raw recordings, source execution, supplementary plots or figure measurements.",
+      "relevance": "Changing representation and usable downstream behavior require separate assessment; compensatory learning is possible under an explicitly supplied objective.",
+      "transfer_limit": "LMS uses kinematic target-error feedback and initialization from earlier sessions. Offline analyses select correct trials and center per trial; they do not establish causal next-token readiness. Measured recordings and modeled compensation do not measure biological synaptic updates or set an application timescale.",
+      "recorded_at_utc": "2026-10-29T01:39:15Z"
+    },
+    {
+      "id": "MR-S096",
+      "title": "Rule and O’Leary (2022), Self-healing codes: How stable neural populations can track continually reconfiguring neural representations",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8851551/",
+      "source_kind": "Primary computational study, PNAS119(7):e2106692119",
+      "read_scope": "Main results/discussion and simulation methods. No supplements, author code or figure measurements.",
+      "relevance": "Maintenance of established associations is distinct from new acquisition.",
+      "transfer_limit": "Initially fitted readout, redundant continuous-variable code, full-domain replay and per-cell statistics; recurrence held fixed in population variants. No proof that global activity control preserves contextual prediction, and no maintenance mechanism adopted.",
+      "recorded_at_utc": "2026-10-29T01:43:54Z"
+    },
+    {
+      "id": "MR-S097",
+      "title": "Nishi, Nomura, Marukame and Mizushima (2021), Stochastic binary synapses having sigmoidal cumulative distribution functions for unsupervised learning with spike timing-dependent plasticity",
+      "url": "https://www.nature.com/articles/s41598-021-97583-y",
+      "source_kind": "Primary computational study and proposed device mechanism, Scientific Reports11:18282",
+      "read_scope": "Publisher-indexed results plus EuropePMC XML introduction, discussion and both methods subsections. Algorithm image and supplements not inspected; no author simulation.",
+      "relevance": "Effective weight width differs from total history-bearing learning state.",
+      "transfer_limit": "Serial switching substates, sustained Poisson image input and inhibitory competition; digit assignment retention is not natural sequence prediction. No hardware or CPU resource result transferred.",
+      "retrieved_xml": {
+        "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC8440757/fullTextXML",
+        "bytes": 159291,
+        "sha256": "5e356564952e598c38f3d049d1ab384b068cef4471ab1b0858d774e47d31325e",
+        "local_cache": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/binary-synapse-2021.xml"
+      },
+      "recorded_at_utc": "2026-10-29T01:50:38Z",
+      "doi": "10.1038/s41598-021-97583-y"
+    },
+    {
+      "id": "MR-S098",
+      "title": "Kumar, Rotter and Aertsen (2008), Conditions for Propagating Synchronous Spiking and Asynchronous Firing Rates in a Cortical Network Model",
+      "url": "https://brainworks.biologie.uni-freiburg.de/2008/journal%20papers/kumar-jneurosci-2008.pdf",
+      "doi": "10.1523/JNEUROSCI.2542-07.2008",
+      "source_kind": "Peer-reviewed primary modeling study; author-hosted published PDF",
+      "read_scope": "Neuron/network/synapse/embedding methods; rate-propagation and overlapping-chain results; discussion, pp2–3 and8–12 of PDF. No figure measurements, author code or reproduction; publisher PDF403, PMC challenge, EuropePMC XML500 before author-copy access.",
+      "relevance": "Propagation, graded-input fidelity and cross-activation are distinct outcomes under embedding-network conditions.",
+      "transfer_limit": "Sustained rate input and fully connected conductance-based spiking chains do not establish one-shot semantic recurrence or parameters for this rate model. No topology, synchrony law or biological mechanism adopted.",
+      "recorded_at_utc": "2026-10-29T02:05:06Z"
+    }
+  ],
+  "completed_at_utc": "2026-10-29T03:28:49Z",
+  "completion_scope": "H71 scoped research/design pass complete. Individual read scopes and extraction/reproduction limits remain; this is not full verification of every source, SNN validation or implementation qualification."
+}

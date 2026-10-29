@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "kind": "Exact arithmetic, not performance or SNN validation",
+  "recorded_at_utc": "2026-10-28T15:10:04Z",
+  "authority": "H-71 exploration; design choices pending-human",
+  "baseline_sources": [
+    "../docs/CapacityPlanning.md",
+    "../docs/ConnectivityScalingResearch.md"
+  ],
+  "assumptions": [
+    "Packed 4-bit arrays without new scale metadata; existing whole-byte fields unchanged",
+    "Conditional field alternatives only; no schema adopted",
+    "Raw unsigned products are bounds before rescaling and additional terms"
+  ],
+  "cases": [
+    {
+      "classes": 15,
+      "neurons": 614400,
+      "slots": 106492416,
+      "sets": 622573,
+      "baseline_named_bytes": 540174772,
+      "baseline_mib": 515.150806427002,
+      "weight_candidates": [
+        {
+          "weight_bits": 4,
+          "named_bytes_without_scales_or_new_state": 486928564
+        },
+        {
+          "weight_bits": 8,
+          "named_bytes_without_scales_or_new_state": 540174772
+        },
+        {
+          "weight_bits": 16,
+          "named_bytes_without_scales_or_new_state": 646667188
+        }
+      ],
+      "state_candidates": [
+        {
+          "state_bits": 4,
+          "state_bytes": 307200,
+          "delta_bytes_from_4_bits": 0
+        },
+        {
+          "state_bits": 8,
+          "state_bytes": 614400,
+          "delta_bytes_from_4_bits": 307200
+        },
+        {
+          "state_bits": 16,
+          "state_bytes": 1228800,
+          "delta_bytes_from_4_bits": 921600
+        },
+        {
+          "state_bits": 32,
+          "state_bytes": 2457600,
+          "delta_bytes_from_4_bits": 2150400
+        }
+      ]
+    },
+    {
+      "classes": 16,
+      "neurons": 614400,
+      "slots": 112281600,
+      "sets": 655350,
+      "baseline_named_bytes": 569251800,
+      "baseline_mib": 542.8808212280273,
+      "weight_candidates": [
+        {
+          "weight_bits": 4,
+          "named_bytes_without_scales_or_new_state": 513111000
+        },
+        {
+          "weight_bits": 8,
+          "named_bytes_without_scales_or_new_state": 569251800
+        },
+        {
+          "weight_bits": 16,
+          "named_bytes_without_scales_or_new_state": 681533400
+        }
+      ],
+      "state_candidates": [
+        {
+          "state_bits": 4,
+          "state_bytes": 307200,
+          "delta_bytes_from_4_bits": 0
+        },
+        {
+          "state_bits": 8,
+          "state_bytes": 614400,
+          "delta_bytes_from_4_bits": 307200
+        },
+        {
+          "state_bits": 16,
+          "state_bytes": 1228800,
+          "delta_bytes_from_4_bits": 921600
+        },
+        {
+          "state_bits": 32,
+          "state_bytes": 2457600,
+          "delta_bytes_from_4_bits": 2150400
+        }
+      ]
+    }
+  ],
+  "accumulator_bounds": [
+    {
+      "fan_in": 12800,
+      "u8_times_u8": 832320000,
+      "three_u8_factors": 212241600000,
+      "u8_times_s8_max_positive": 414528000
+    },
+    {
+      "fan_in": 18432,
+      "u8_times_u8": 1198540800,
+      "three_u8_factors": 305627904000,
+      "u8_times_s8_max_positive": 596920320
+    }
+  ],
+  "two_frame_weight_comparisons": {
+    "scope": "Conditional comparison with exactly two FP32 neuron-state frames and the existing ID/reference/owner arrays; not a revised slot contract or selected weight format.",
+    "rows": [
+      {
+        "classes": 15,
+        "neurons": 614400,
+        "reserved_slots": 106492416,
+        "sets": 622573,
+        "fixed_ID_reference_owner_and_two_FP32_frame_bytes": 438290356,
+        "weight_array_alternatives": [
+          {
+            "representation": "one_byte_weight",
+            "weight_and_optional_master_bytes": 106492416,
+            "named_array_total_bytes": 544782772,
+            "named_array_total_MiB": 519.545337677002
+          },
+          {
+            "representation": "two_byte_weight",
+            "weight_and_optional_master_bytes": 212984832,
+            "named_array_total_bytes": 651275188,
+            "named_array_total_MiB": 621.104419708252
+          },
+          {
+            "representation": "four_byte_weight",
+            "weight_and_optional_master_bytes": 425969664,
+            "named_array_total_bytes": 864260020,
+            "named_array_total_MiB": 824.222583770752
+          },
+          {
+            "representation": "one_byte_weight_plus_four_byte_master",
+            "weight_and_optional_master_bytes": 532462080,
+            "named_array_total_bytes": 970752436,
+            "named_array_total_MiB": 925.781665802002
+          }
+        ]
+      },
+      {
+        "classes": 16,
+        "neurons": 614400,
+        "reserved_slots": 112281600,
+        "sets": 655350,
+        "fixed_ID_reference_owner_and_two_FP32_frame_bytes": 461578200,
+        "weight_array_alternatives": [
+          {
+            "representation": "one_byte_weight",
+            "weight_and_optional_master_bytes": 112281600,
+            "named_array_total_bytes": 573859800,
+            "named_array_total_MiB": 547.2753524780273
+          },
+          {
+            "representation": "two_byte_weight",
+            "weight_and_optional_master_bytes": 224563200,
+            "named_array_total_bytes": 686141400,
+            "named_array_total_MiB": 654.3554306030273
+          },
+          {
+            "representation": "four_byte_weight",
+            "weight_and_optional_master_bytes": 449126400,
+            "named_array_total_bytes": 910704600,
+            "named_array_total_MiB": 868.5155868530273
+          },
+          {
+            "representation": "one_byte_weight_plus_four_byte_master",
+            "weight_and_optional_master_bytes": 561408000,
+            "named_array_total_bytes": 1022986200,
+            "named_array_total_MiB": 975.5956649780273
+          }
+        ]
+      }
+    ],
+    "exclusions": "Node-shared embeddings, region headers, temporary workspace and any unselected fields are excluded. No new scale or master arrays are allocated.",
+    "value_question": "Compare simpler wider persistent weights against low-bit weights plus retained update state before presuming that a master copy or residual mechanism saves memory. Numerical adequacy and scan cost still need evidence."
+  },
+  "updated_at_utc": "2026-10-29T02:52:07Z",
+  "scalar_boundaries": {
+    "recorded_at_utc": "2026-10-28T23:07:04Z",
+    "status": "exact scalar identities; no neuron or format selected",
+    "strict_integer_comparison": "For integer k, k>theta iff k>=floor(theta)+1.",
+    "nonstrict_integer_comparison": "For integer k, k>=theta iff k>=ceil(theta).",
+    "verified_domain": {
+      "integer_k": [
+        -8,
+        8
+      ],
+      "theta": "n/4 for integer n from -32 through32",
+      "pairs": 1105
+    },
+    "integer_boundary_example": {
+      "k": 2,
+      "theta": 2,
+      "strict_original": false,
+      "incorrect_ge_ceil_replacement": true
+    },
+    "nonnegative_half_scaling": {
+      "input_code": 3,
+      "exact_half": "3/2",
+      "right_shift_one": 1,
+      "nearest_even": 2
+    },
+    "interpretation": "Coefficient, integer rounding and threshold equality are distinct semantics. No microscopic spike behavior or SNN performance is inferred."
+  },
+  "directed_decay_rounding": {
+    "recorded_at_utc": "2026-10-29T02:52:07Z",
+    "kind": "Closed-form scalar code arithmetic, not a neural simulation",
+    "value_lineage": "C27/P63 preserves meaningful decay progress; C28/P65 compares faithful numerical representations under H70—H74.",
+    "assumptions": [
+      "Nonnegative uniform codes k=0..K for a scalar on[0,1], initially at full scale.",
+      "Isolated multiplication by a with0<a<1 before destination rounding; no graph, input, noise, transfer, cancellation, phase field or retained residual.",
+      "The comparison concerns nearest ties-to-even versus floor of the updated positive value. Coefficient/intermediate storage precision is a separate issue.",
+      "A stored zero is a numerical boundary here, not an adopted natural-cessation criterion."
+    ],
+    "identities": {
+      "floor_update": "floor(a*k)=k-ceil((1-a)*k) for integer k>=0.",
+      "finite_bound": "Every positive code falls by at least one, so zero occurs in at most k_initial frames for any fixed0<a<1.",
+      "one_code_condition": "If0<(1-a)*K<1, every positive code falls by exactly one.",
+      "nearest_freeze_condition": "If(1-a)*K<1/2, every code is unchanged by nearest rounding; no tie occurs."
+    },
+    "reference": {
+      "frame_seconds": "0.001",
+      "intended_isolated_half_life_seconds": "0.5",
+      "coefficient_formula": "a=exp(-ln(2)*0.001/0.5)",
+      "coefficient_decimal80": "0.99861466610102892387363452484067256823281665552949015085708921930622120564813273",
+      "calculation": "80-digit Decimal exp/ln verifies the inequality with a wide margin; frame counts then follow exactly without stepping a trajectory.",
+      "cases": [
+        {
+          "bits": 4,
+          "initial_code": 15,
+          "largest_exact_decrement_decimal80": "0.02078000848456614189548212738991147650775016705764773714366171040668191527800905",
+          "nearest_writeback": "Every code is a fixed point because its decrement is strictly below half a code.",
+          "floor_writeback": "Every positive code decreases by exactly one per operation.",
+          "floor_zero_after_frames": 15,
+          "floor_zero_seconds": "0.015",
+          "floor_first_at_or_below_initial_half_after_frames": 8,
+          "floor_first_at_or_below_initial_half_seconds": "0.008"
+        },
+        {
+          "bits": 8,
+          "initial_code": 255,
+          "largest_exact_decrement_decimal80": "0.35326014423762441222319616562849510063175283998001153144224907691359255972615385",
+          "nearest_writeback": "Every code is a fixed point because its decrement is strictly below half a code.",
+          "floor_writeback": "Every positive code decreases by exactly one per operation.",
+          "floor_zero_after_frames": 255,
+          "floor_zero_seconds": "0.255",
+          "floor_first_at_or_below_initial_half_after_frames": 128,
+          "floor_first_at_or_below_initial_half_seconds": "0.128"
+        }
+      ]
+    },
+    "assessment": "Directed rounding can replace a frozen value with overly rapid finite disappearance. Neither termination nor the absence of stagnation proves faithful half-life or contextual retention.",
+    "not_selected": [
+      "No directed-rounding policy, decay law, frame interval, numerical format, timer, residual or extra state is selected.",
+      "The full learned response can replenish or redirect activity; scalar behavior is not a trained token trajectory."
+    ]
+  }
+}

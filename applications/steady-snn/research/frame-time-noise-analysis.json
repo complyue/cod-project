@@ -1,0 +1,405 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-10-28T17:28:28.437423+00:00",
+  "status": "conditional_time_and_noise_arithmetic_not_selected_dynamics",
+  "scope": "C-24/C-29 frame interpretation and C-17 noise conditions under H-74/H-75/H-78",
+  "frame_semantics": {
+    "direct_map": "For x[k+1]=W*x[k], fixed W advances one graph transition per frame. Halving Delta makes two graph transitions in the former physical interval, giving W^2 rather than W.",
+    "no_generic_half_step": "For the two-coordinate swap P=[[0,1],[1,0]], no real 2x2 matrix V satisfies V^2=P because det(V)^2>=0 while det(P)=-1. A direct frame map need not have a same-state continuous-time refinement. This is a linear algebra counterexample, not a demand to add state.",
+    "local_leak_limit": "A coefficient 1-exp(-Delta/tau) makes a frozen-drive scalar relaxation step-consistent; it does not make the complete nonlinear recurrent transition exact or preserve all path delays.",
+    "half_life": "For fixed ring gains and L stages, H=-L*Delta*log(2)/log(G). Recalibrating G can preserve this envelope scale but does not by itself preserve lap or entry timing.",
+    "decision_boundary": "A fixed discrete modeling interval is a valid candidate. A finer interval is not automatically more accurate until an underlying time law and comparison meaning are specified; no Delta, continuous model, delay array or scheduler is selected."
+  },
+  "noise_arithmetic": {
+    "assumptions": "Scalar additive recurrence without leak, for physical duration T with T/Delta whole steps; independent zero-mean unit-variance zeta. This reference is not the positive-rate input law of the application.",
+    "fixed_kicks": "x_next=x+sigma*zeta gives variance T*sigma^2/Delta.",
+    "sampled_drift": "x_next=x+Delta*sigma*zeta gives variance T*Delta*sigma^2.",
+    "diffusion": "x_next=x+sqrt(Delta)*sigma*zeta gives variance T*sigma^2.",
+    "meaning": "The three laws have different units and model meanings. Temporal whiteness alone does not select one or specify spatial correlation, positive kicks versus signed drive, distribution or controller update time.",
+    "source": "Higham2001 sections2 and4: Brownian increments have variance Delta, and enter Euler-Maruyama separately from Delta-scaled drift; this does not select Brownian noise or an SDE for the SNN."
+  },
+  "arithmetic_cases": [
+    {
+      "frame_seconds": 0.001,
+      "fixed_lap_gain_half_life_seconds": 0.049999999999999996,
+      "unit_kick_variance_after_one_second": 1000.0,
+      "unit_drift_sample_variance_after_one_second": 0.001,
+      "unit_diffusion_variance_after_one_second": 1.0
+    },
+    {
+      "frame_seconds": 0.005,
+      "fixed_lap_gain_half_life_seconds": 0.24999999999999994,
+      "unit_kick_variance_after_one_second": 200.0,
+      "unit_drift_sample_variance_after_one_second": 0.005,
+      "unit_diffusion_variance_after_one_second": 1.0
+    },
+    {
+      "frame_seconds": 0.01,
+      "fixed_lap_gain_half_life_seconds": 0.4999999999999999,
+      "unit_kick_variance_after_one_second": 100.0,
+      "unit_drift_sample_variance_after_one_second": 0.01,
+      "unit_diffusion_variance_after_one_second": 1.0
+    },
+    {
+      "frame_seconds": 0.02,
+      "fixed_lap_gain_half_life_seconds": 0.9999999999999998,
+      "unit_kick_variance_after_one_second": 50.0,
+      "unit_drift_sample_variance_after_one_second": 0.02,
+      "unit_diffusion_variance_after_one_second": 1.0
+    },
+    {
+      "frame_seconds": 0.05,
+      "fixed_lap_gain_half_life_seconds": 2.4999999999999996,
+      "unit_kick_variance_after_one_second": 20.0,
+      "unit_drift_sample_variance_after_one_second": 0.05,
+      "unit_diffusion_variance_after_one_second": 1.0
+    },
+    {
+      "frame_seconds": 0.1,
+      "fixed_lap_gain_half_life_seconds": 4.999999999999999,
+      "unit_kick_variance_after_one_second": 10.0,
+      "unit_drift_sample_variance_after_one_second": 0.1,
+      "unit_diffusion_variance_after_one_second": 1.0
+    }
+  ],
+  "comparison_conditions": [
+    "Compare physical token duration, response half-life, regulation cadence and coverage windows in model time, not unchanged frame counts.",
+    "For a selected continuous stochastic reference, pathwise refinement must aggregate the same increments over coarse intervals; independent new paths confound pathwise error. Distributional behavioral comparisons have a different purpose.",
+    "Nonlinear thresholds and cancellation can distinguish noise distributions even when their first two moments agree. No sampling implementation or generic experiment framework is selected."
+  ],
+  "source_url": "https://www.maths.ed.ac.uk/~dhigham/Publications/P42.pdf",
+  "noise_averaging_reference": {
+    "recorded_at_utc": "2026-10-29T00:12:01Z",
+    "assumptions": "Static binary threshold at theta, Gaussian input variability with standard deviation sigma>0; f_sigma(mu) is its expected output after this variability has already been averaged. Additional explicit independent Gaussian variability has standard deviation tau. This is not a spiking or recurrent simulation, and no Gaussian noise law is selected for the application.",
+    "response": "f_sigma(mu)=Phi((mu-theta)/sigma), with Phi the standard normal CDF.",
+    "second_average": "E_Z[f_sigma(mu+tau*Z)]=Phi((mu-theta)/sqrt(sigma^2+tau^2)) for independent standard Gaussian Z.",
+    "derivation": "The conditional probability becomes Pr(sigma*Z1-tau*Z2 <= mu-theta); independent centered Gaussian variances add. Averaging twice over independent replicas of one intended noise source instead changes the total variance.",
+    "cases": [
+      {
+        "mean_margin_in_intrinsic_noise_sd": -1,
+        "explicit_to_averaged_noise_sd_ratio": 0,
+        "expected_response": 0.15865525393145707
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": 0,
+        "explicit_to_averaged_noise_sd_ratio": 0,
+        "expected_response": 0.5
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": 1,
+        "explicit_to_averaged_noise_sd_ratio": 0,
+        "expected_response": 0.8413447460685429
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": -1,
+        "explicit_to_averaged_noise_sd_ratio": 0.5,
+        "expected_response": 0.18554668476134883
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": 0,
+        "explicit_to_averaged_noise_sd_ratio": 0.5,
+        "expected_response": 0.5
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": 1,
+        "explicit_to_averaged_noise_sd_ratio": 0.5,
+        "expected_response": 0.8144533152386512
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": -1,
+        "explicit_to_averaged_noise_sd_ratio": 1,
+        "expected_response": 0.23975006109347677
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": 0,
+        "explicit_to_averaged_noise_sd_ratio": 1,
+        "expected_response": 0.5
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": 1,
+        "explicit_to_averaged_noise_sd_ratio": 1,
+        "expected_response": 0.7602499389065233
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": -1,
+        "explicit_to_averaged_noise_sd_ratio": 2,
+        "expected_response": 0.3273604230092885
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": 0,
+        "explicit_to_averaged_noise_sd_ratio": 2,
+        "expected_response": 0.5
+      },
+      {
+        "mean_margin_in_intrinsic_noise_sd": 1,
+        "explicit_to_averaged_noise_sd_ratio": 2,
+        "expected_response": 0.6726395769907114
+      }
+    ],
+    "verification": {
+      "method": "Independent composite Simpson quadrature over Z in[-10,10],8192 subintervals for each of12 cases. Bounded CDF integrand leaves less than1.6e-23 Gaussian tail mass outside that range. Agreement is an arithmetic check, not a bound on application error.",
+      "maximum_absolute_difference": 2.220446049250313e-16
+    },
+    "interpretation": "An averaged transfer curve and explicit variability can coexist when they represent different intended sources or resolutions. Treating the same background variability in both places changes the reference model. A phenomenological transfer is not automatically noise-averaged.",
+    "limits": "One-step mean response only: no temporal kernel, cancellation, adaptive regulator, individual path retention, neuronal thresholds or physical time selected.",
+    "primary_context": "MR-S087 explains trial-averaged firing-rate reduction and noise-dependent transfer/filter properties. This Gaussian threshold identity is independently derived, not that paper's neuron equation."
+  },
+  "updated_at_utc": "2026-10-29T01:23:00Z",
+  "cancellation_and_ensemble_mean": {
+    "recorded_at_utc": "2026-10-29T00:13:43Z",
+    "assumptions": "One candidate cell in each polarity of a minicolumn independently receives0 or1 with probability p of1; other cells are zero. Apply H77 minicolumn-wide net cancellation once. This special case does not introduce paired-cell cancellation, a noise law or binary runtime states.",
+    "identity": "E[C(P,M)]=(p*(1-p),p*(1-p)), whereas C(E[P],E[M])=(0,0). Both signed means are zero; unsigned response and realized participation differ.",
+    "cases": [
+      {
+        "probability_per_polarity": "1/4",
+        "outcomes": [
+          {
+            "provisional": [
+              0,
+              0
+            ],
+            "probability": "9/16",
+            "cancelled": [
+              0,
+              0
+            ]
+          },
+          {
+            "provisional": [
+              0,
+              1
+            ],
+            "probability": "3/16",
+            "cancelled": [
+              0,
+              1
+            ]
+          },
+          {
+            "provisional": [
+              1,
+              0
+            ],
+            "probability": "3/16",
+            "cancelled": [
+              1,
+              0
+            ]
+          },
+          {
+            "provisional": [
+              1,
+              1
+            ],
+            "probability": "1/16",
+            "cancelled": [
+              0,
+              0
+            ]
+          }
+        ],
+        "mean_after_cancellation": [
+          "3/16",
+          "3/16"
+        ],
+        "cancellation_of_means": [
+          "0",
+          "0"
+        ],
+        "mean_unsigned_rate_after_cancellation": "3/8",
+        "mean_signed_rate": "0"
+      },
+      {
+        "probability_per_polarity": "1/2",
+        "outcomes": [
+          {
+            "provisional": [
+              0,
+              0
+            ],
+            "probability": "1/4",
+            "cancelled": [
+              0,
+              0
+            ]
+          },
+          {
+            "provisional": [
+              0,
+              1
+            ],
+            "probability": "1/4",
+            "cancelled": [
+              0,
+              1
+            ]
+          },
+          {
+            "provisional": [
+              1,
+              0
+            ],
+            "probability": "1/4",
+            "cancelled": [
+              1,
+              0
+            ]
+          },
+          {
+            "provisional": [
+              1,
+              1
+            ],
+            "probability": "1/4",
+            "cancelled": [
+              0,
+              0
+            ]
+          }
+        ],
+        "mean_after_cancellation": [
+          "1/4",
+          "1/4"
+        ],
+        "cancellation_of_means": [
+          "0",
+          "0"
+        ],
+        "mean_unsigned_rate_after_cancellation": "1/2",
+        "mean_signed_rate": "0"
+      },
+      {
+        "probability_per_polarity": "3/4",
+        "outcomes": [
+          {
+            "provisional": [
+              0,
+              0
+            ],
+            "probability": "1/16",
+            "cancelled": [
+              0,
+              0
+            ]
+          },
+          {
+            "provisional": [
+              0,
+              1
+            ],
+            "probability": "3/16",
+            "cancelled": [
+              0,
+              1
+            ]
+          },
+          {
+            "provisional": [
+              1,
+              0
+            ],
+            "probability": "3/16",
+            "cancelled": [
+              1,
+              0
+            ]
+          },
+          {
+            "provisional": [
+              1,
+              1
+            ],
+            "probability": "9/16",
+            "cancelled": [
+              0,
+              0
+            ]
+          }
+        ],
+        "mean_after_cancellation": [
+          "3/16",
+          "3/16"
+        ],
+        "cancellation_of_means": [
+          "0",
+          "0"
+        ],
+        "mean_unsigned_rate_after_cancellation": "3/8",
+        "mean_signed_rate": "0"
+      }
+    ],
+    "verification": "Enumerated all4 outcomes with exact Fraction probabilities for3 p values; no random draws or neural trajectories.",
+    "interpretation": "An ensemble/time-averaged post-cancellation value can contain both polarities although every individual completed frame obeys H77. It is not itself an admissible instantaneous post-cancellation snapshot with that same interpretation. A deterministic effective-rate model remains possible, but equating its trajectory to averaged stochastic trajectories requires additional justification.",
+    "non_adoptions": "No second moment, distribution state, spike simulator, new cancellation policy or selection of deterministic versus stochastic rates. Existing individual contextual identities and two-frame publication remain."
+  },
+  "positive_kick_scaling": {
+    "recorded_at_utc": "2026-10-29T01:23:00Z",
+    "assumptions": "Scalar sum over T/Delta independent positive U[0,A_Delta] kicks; no leak, transfer, cancellation, recurrence or feedback. T/Delta is integer. This is not a neuron simulation or selected noise law.",
+    "moments": {
+      "mean": "T*A_Delta/(2*Delta)",
+      "variance": "T*A_Delta^2/(12*Delta)"
+    },
+    "amplitude_only_scaling": {
+      "A_equals_cDelta": "Mean=c*T/2; variance=c^2*T*Delta/12 tends to0 as Delta shrinks.",
+      "A_equals_csqrtDelta": "Variance=c^2*T/12; mean=c*T/(2*sqrt(Delta)) grows without bound as Delta shrinks.",
+      "conclusion": "For this fixed-shape nonnegative-kick family, amplitude rescaling alone cannot preserve both positive mean input and nonzero accumulated variance under arbitrary frame refinement."
+    },
+    "cases": [
+      {
+        "delta_seconds": "1/100",
+        "amplitude_law": "Delta",
+        "mean_sum_at_T1": "1/2",
+        "variance_sum_at_T1": "1/1200"
+      },
+      {
+        "delta_seconds": "1/100",
+        "amplitude_law": "sqrt(Delta)",
+        "mean_sum_at_T1": "5",
+        "variance_sum_at_T1": "1/12"
+      },
+      {
+        "delta_seconds": "1/400",
+        "amplitude_law": "Delta",
+        "mean_sum_at_T1": "1/2",
+        "variance_sum_at_T1": "1/4800"
+      },
+      {
+        "delta_seconds": "1/400",
+        "amplitude_law": "sqrt(Delta)",
+        "mean_sum_at_T1": "10",
+        "variance_sum_at_T1": "1/12"
+      },
+      {
+        "delta_seconds": "1/1600",
+        "amplitude_law": "Delta",
+        "mean_sum_at_T1": "1/2",
+        "variance_sum_at_T1": "1/19200"
+      },
+      {
+        "delta_seconds": "1/1600",
+        "amplitude_law": "sqrt(Delta)",
+        "mean_sum_at_T1": "20",
+        "variance_sum_at_T1": "1/12"
+      },
+      {
+        "delta_seconds": "1/6400",
+        "amplitude_law": "Delta",
+        "mean_sum_at_T1": "1/2",
+        "variance_sum_at_T1": "1/76800"
+      },
+      {
+        "delta_seconds": "1/6400",
+        "amplitude_law": "sqrt(Delta)",
+        "mean_sum_at_T1": "40",
+        "variance_sum_at_T1": "1/12"
+      }
+    ],
+    "limits": [
+      "This does not prohibit positive-noise models or require a continuous-time limit. A fixed discrete model interval remains valid.",
+      "Centered temporal whiteness is compatible with a nonzero mean; zero-mean Brownian scaling cannot silently be applied to the uncentered positive kicks.",
+      "Other distributions, event probabilities or noise inside a nonlinear rate response have different limits and require their own declared units.",
+      "No offset, event process, sampler, noise channel, new state or controller is chosen."
+    ],
+    "verification": "Eight exact rational moment cases; no random draws or neural evolution generated."
+  }
+}

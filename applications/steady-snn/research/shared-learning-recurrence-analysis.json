@@ -1,0 +1,424 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-10-28T18:56:17Z",
+  "status": "conditional linear arithmetic and design implications; no selected learning rule",
+  "scope": "H-71 useful shared loops, H-79—H-84 distinct flow learning with shared neuron dynamics; H-86 retain empirical comparison alternatives",
+  "value_lineage": "C-15/P-29 sequence prediction must coexist with C-22/P-45 DMN/token maintenance and C-26/P-60 retained useful context. C-28/P-65 constrains precision of the learned behavior; no dedicated graph partition is implied.",
+  "analyses": [
+    {
+      "id": "MR-SW001",
+      "topic": "An association update changes existing return gain",
+      "reference": "Two nonnegative linear units, W=[[0,0.8],[0.8,0]], with an illustrative positive association update adding eta to W[1,0].",
+      "derivation": "The two-step return gain becomes0.8*(0.8+eta), and the spectral radius is its square root. It reaches1 at eta0.45. Immediate transmission improves while the linear fading margin shrinks.",
+      "arithmetic": [
+        {
+          "added_edge_strength": 0.0,
+          "two_step_return_gain": 0.64,
+          "linear_spectral_radius": 0.8,
+          "relation_to_unit_return": "below",
+          "same_phase_half_life_seconds_if_each_step_10ms": 0.031062837195053903
+        },
+        {
+          "added_edge_strength": 0.2,
+          "two_step_return_gain": 0.8,
+          "linear_spectral_radius": 0.8944271909999159,
+          "relation_to_unit_return": "below",
+          "same_phase_half_life_seconds_if_each_step_10ms": 0.06212567439010781
+        },
+        {
+          "added_edge_strength": 0.4375,
+          "two_step_return_gain": 0.99,
+          "linear_spectral_radius": 0.99498743710662,
+          "relation_to_unit_return": "below",
+          "same_phase_half_life_seconds_if_each_step_10ms": 1.3793512787305686
+        },
+        {
+          "added_edge_strength": 0.45,
+          "two_step_return_gain": 1.0,
+          "linear_spectral_radius": 1.0,
+          "relation_to_unit_return": "equal",
+          "same_phase_half_life_seconds_if_each_step_10ms": null
+        },
+        {
+          "added_edge_strength": 0.46875,
+          "two_step_return_gain": 1.015,
+          "linear_spectral_radius": 1.0074720839804943,
+          "relation_to_unit_return": "above",
+          "same_phase_half_life_seconds_if_each_step_10ms": null
+        },
+        {
+          "added_edge_strength": 0.5,
+          "two_step_return_gain": 1.04,
+          "linear_spectral_radius": 1.019803902718557,
+          "relation_to_unit_return": "above",
+          "same_phase_half_life_seconds_if_each_step_10ms": null
+        }
+      ],
+      "limit": "This is not the application update law or a conclusion that every positive learned connection destabilizes the nonlinear network. No global spectral-radius controller or learning-rate threshold is selected. The20ms lap used for optional half-life arithmetic is illustrative; the user's loose token-response goal is not equated with this local linear mode or used as a strict cutoff."
+    },
+    {
+      "id": "MR-SW002",
+      "topic": "Return paths explain why update location matters",
+      "derivation": "For a stable nonnegative linear W and a rank-one illustrative update eta*y*x^T, let R=(I-W)^(-1)=sum_{k>=0} W^k. The determinant identity is det(I-W-eta*y*x^T)=det(I-W)*(1-eta*x^T*R*y). A unit eigenvalue is possible when eta*x^T*R*y=1. The scalar combines existing return-path influences from targets y toward sources x; if it is zero, that specific rank-one addition does not produce this unit-eigenvalue crossing.",
+      "limit": "Analysis only, not a runtime matrix inverse, exact learning model or universal nonlinear stability test. A feedforward-only update can increase transient responses without closing a cycle. Useful small loops are not rejected merely because a return path exists."
+    },
+    {
+      "id": "MR-SW003",
+      "topic": "Uniform normalization can disturb previously learned responses",
+      "example": {
+        "old_incoming_weights": [
+          0.8,
+          0.2,
+          0.0
+        ],
+        "new_unscaled_weights": [
+          0.8,
+          0.2,
+          0.5
+        ],
+        "normalize_to_old_sum": [
+          0.5333333333333333,
+          0.13333333333333333,
+          0.3333333333333333
+        ],
+        "old_response_to_source_A_only": 0.8,
+        "new_response_to_source_A_only": 0.5333333333333333,
+        "relative_response_change": -0.3333333333333333
+      },
+      "derivation": "Preserving the sum of incoming weights does not preserve responses to every contextual source pattern. A new association and a normalized row can still weaken an existing path substantially.",
+      "limit": "No normalization, fixed row budget, inhibitory edge, per-edge role tag or separate flow network is selected. Weight-scale control remains training policy under H-24, independent of storage capacity."
+    },
+    {
+      "id": "MR-SW004",
+      "topic": "Intrinsic sign cancellation changes effective recurrent modes",
+      "reference": "Symmetric two-polarity aggregate map with same-sign coupling a and cross-sign coupling b, followed by signed-net active-rate cancellation.",
+      "derivation": "The signed difference evolves as (a-b)*v in this restricted linear aggregate example. Increasing positive same-sign weight increases this factor, while increasing positive cross-sign weight decreases it and can reverse the sign. Thus monotonically increasing the nonnegative pre-cancellation matrix does not imply a monotonic increase in the signed semantic response.",
+      "limit": "A conditional aggregate reduction, not a per-cell contextual model or an argument to add explicit inhibitory connections. H-85 predictive cancellation remains deferred."
+    },
+    {
+      "id": "MR-SW005",
+      "topic": "Quantized updates must be assessed in the stored graph",
+      "derivation": "The0.45 critical increment in MR-SW001 lies between0.4375 and0.46875. Rounding a desired change across that interval changes whether the reference return gain is below or above1. FP32 neuron state cannot undo a different stored recurrent weight. Training and assessment must therefore use the effective stored weights when comparing formats.",
+      "limit": "The displayed grid values are illustrative, not an FP8 format definition or a required precision. A scalar gain boundary does not establish whole-network failure, and quantization-aware learning may find different useful weights."
+    },
+    {
+      "id": "MR-SW006",
+      "topic": "Topology and learning eligibility are separate prerequisites",
+      "derivation": "A local rule cannot strengthen a source-target association that is absent from the current incoming set unless an independently defined slot assignment or migration operation supplies it. Choosing a learning recipient and assigning its contextual representation do not by themselves define source discovery, slot reuse or capacity handling. The existing static pool permits discussing these operations without heap allocation.",
+      "limit": "No new free list, reverse index, per-edge tag, history log, migration rule or extra field is prescribed. DMN/token repair already has capacity feasibility questions; flow must address its own observed-sequence needs rather than silently inheriting the repair algorithm."
+    },
+    {
+      "id": "MR-SW007",
+      "topic": "Unbiased coefficients do not ensure unbiased long recurrence",
+      "derivation": "For a positive scalar gain G drawn once and held across a response, the response after n laps is G^n. For n>=2, convexity gives E[G^n]>=E[G]^n. Independent resampling each lap instead gives E[product G_j]=E[G]^n. These are different temporal models even with the same marginal coefficient distribution.",
+      "arithmetic": [
+        {
+          "case": "generic effective gain pair",
+          "low_gain": 0.97,
+          "high_gain": 1.01,
+          "probability_high": 0.5,
+          "mean_gain": 0.99,
+          "laps": 10,
+          "response_at_mean_gain": 0.9043820750088044,
+          "expected_response_if_gain_drawn_once_then_held": 0.9210231261530664,
+          "expected_response_if_independent_gain_each_lap": 0.9043820750088044
+        },
+        {
+          "case": "generic effective gain pair",
+          "low_gain": 0.97,
+          "high_gain": 1.01,
+          "probability_high": 0.5,
+          "mean_gain": 0.99,
+          "laps": 100,
+          "response_at_mean_gain": 0.3660323412732292,
+          "expected_response_if_gain_drawn_once_then_held": 1.3761831686734671,
+          "expected_response_if_independent_gain_each_lap": 0.3660323412732292
+        },
+        {
+          "case": "generic effective gain pair",
+          "low_gain": 0.97,
+          "high_gain": 1.01,
+          "probability_high": 0.5,
+          "mean_gain": 0.99,
+          "laps": 1000,
+          "response_at_mean_gain": 4.317124741065786e-05,
+          "expected_response_if_gain_drawn_once_then_held": 10479.577818906922,
+          "expected_response_if_independent_gain_each_lap": 4.317124741065786e-05
+        },
+        {
+          "case": "unit-scaled E4M3 adjacent scalar gains",
+          "low_gain": 0.9375,
+          "high_gain": 1.0,
+          "probability_high": 0.84,
+          "mean_gain": 0.99,
+          "laps": 10,
+          "response_at_mean_gain": 0.9043820750088044,
+          "expected_response_if_gain_drawn_once_then_held": 0.9239136760077963,
+          "expected_response_if_independent_gain_each_lap": 0.9043820750088044
+        },
+        {
+          "case": "unit-scaled E4M3 adjacent scalar gains",
+          "low_gain": 0.9375,
+          "high_gain": 1.0,
+          "probability_high": 0.84,
+          "mean_gain": 0.99,
+          "laps": 100,
+          "response_at_mean_gain": 0.3660323412732292,
+          "expected_response_if_gain_drawn_once_then_held": 0.8402519112846423,
+          "expected_response_if_independent_gain_each_lap": 0.3660323412732292
+        },
+        {
+          "case": "unit-scaled E4M3 adjacent scalar gains",
+          "low_gain": 0.9375,
+          "high_gain": 1.0,
+          "probability_high": 0.84,
+          "mean_gain": 0.99,
+          "laps": 1000,
+          "response_at_mean_gain": 4.317124741065786e-05,
+          "expected_response_if_gain_drawn_once_then_held": 0.84,
+          "expected_response_if_independent_gain_each_lap": 4.317124741065786e-05
+        }
+      ],
+      "interpretation": "A persistent high-gain realization can dominate late ensemble averages. In the unit-scaled E4M3 example, unbiased casting of0.99 to0.9375 or1 yields a constant-gain1 case with probability0.84. That local reference does not fade in those realizations.",
+      "limit": "Conditional scalar arithmetic, not a claim that stochastic rounding in an actual learner draws one fixed scalar or that an FP8 network cannot fade. Repeated training updates, multiple edges, cancellation, nonlinearities and noise change the situation. Compare effective stored graphs and distributions of individual behavior; no stochastic rounding or per-lap weight resampling is selected."
+    },
+    {
+      "id": "MR-SW008",
+      "topic": "Repeated edges distinguish fixed weight rounding from linear acyclic paths",
+      "recorded_at_utc": "2026-10-28T23:30:36Z",
+      "assumptions": [
+        "Finite nonnegative linear matrix W with independently rounded edge coefficients, sampled once and held across transitions.",
+        "Each edge has the intended mean; source input is fixed independently of those sampled coefficients.",
+        "No neuron transfer, cancellation, clipping, adaptive noise or learning is included."
+      ],
+      "derivation": [
+        "Every entry of W^n is a sum over directed length-n walks; a walk contributes a product of edge coefficients.",
+        "For a walk using each edge at most once, independence makes its expected product equal the product of intended edge means.",
+        "If a walk repeats an edge m>1 times, its moment E[w_e^m] need not equal E[w_e]^m; nonnegative coefficients and convexity give the former at least as large.",
+        "Consequently E[W^n] >= E[W]^n entrywise under these assumptions. A directed acyclic graph has no repeated-edge walks, so equality holds for this linear comparison.",
+        "Nonlinearity can introduce a separate expectation mismatch even without recurrence; dependent or signed edge coefficients do not inherit this inequality."
+      ],
+      "exact_two_edge_reference": {
+        "topology": "Two reciprocal edges; observation after each complete two-step lap, starting with unit activity at one node.",
+        "quantization": "Illustrative uniform unsigned4-bit grid over[0,1]; both desired edge weights29/30 are independently rounded to14/15 or1 with probability1/2 each, once per graph.",
+        "mean_edge": "29/30",
+        "expected_response_formula": "((1+(14/15)^laps)/2)^2",
+        "mean_weight_response_formula": "(29/30)^(2*laps)",
+        "probability_both_stored_edges_equal_one": "1/4",
+        "cases": [
+          {
+            "laps": 1,
+            "expected_fixed_weight_response": 0.9344444444444444,
+            "response_with_mean_weights": 0.9344444444444444,
+            "ratio": 1.0
+          },
+          {
+            "laps": 2,
+            "expected_fixed_weight_response": 0.8752641975308642,
+            "response_with_mean_weights": 0.8731864197530864,
+            "ratio": 1.002379535149396
+          },
+          {
+            "laps": 10,
+            "expected_fixed_weight_response": 0.5637095184371749,
+            "response_with_mean_weights": 0.5076154869235626,
+            "ratio": 1.1105049647984027
+          },
+          {
+            "laps": 50,
+            "expected_fixed_weight_response": 0.2661306026985491,
+            "response_with_mean_weights": 0.03370344681193334,
+            "ratio": 7.896242903094427
+          },
+          {
+            "laps": 100,
+            "expected_fixed_weight_response": 0.2505045063132851,
+            "response_with_mean_weights": 0.0011359223270048194,
+            "ratio": 220.5296087222892
+          }
+        ],
+        "verification": "Exact Fraction enumeration of the four stored graphs equals the closed form at each displayed lap count."
+      },
+      "comparison_implication": "A one-pass coefficient mean does not describe a fixed recurrent graph. Compare actual stored graph realizations and useful temporal responses, while allowing the small loops desired by H71.",
+      "limits": [
+        "This is not a learned SNN, the selected weight scale, a degree allocation or a neural simulation.",
+        "An unattenuated reference loop is not proof of stale behavior; external steerability is untested.",
+        "No randomization policy, graph constraint, edge tag, loop enumeration, extra state or format is selected."
+      ]
+    }
+  ],
+  "comparison_observations": [
+    "Measure pre-input sequence matching and narrowing under longer distinguishing context using the effective stored weights.",
+    "Also examine required isolated-token fading, useful later-history effects, CC activity regulation and external steerability after learning changes the shared graph.",
+    "Use disagreement between desired updates and representable updates to evaluate rounding or accumulation candidates; do not equate unbiased expected updates with timely learning of each contextual path.",
+    "Keep empirical alternatives open under H-86; introduce extra storage or control only when a required behavior or measured resource issue justifies it."
+  ],
+  "non_adoptions": [
+    "No global spectral calculation, automatic normalization, graph partition, auxiliary structure or training algorithm selected.",
+    "No SNN implementation, training run, benchmark, project tests or build."
+  ],
+  "updated_at_utc": "2026-10-28T23:30:36Z",
+  "joint_objective_reference": {
+    "status": "Conditional target-feasibility and schedule arithmetic; no actual learner or repair formula selected",
+    "assumptions": [
+      "Scalar normalized weight shared by two hypothetical target fits; targetA=1,targetB=0",
+      "An exposure toward targett is w_next=(1-eta)*w+eta*t; exact arithmetic",
+      "A and B label generic mathematical stages, not an assertion that DMN and flow demand these weights"
+    ],
+    "derivation": {
+      "effective_block_update": "alpha=1-(1-eta)^number_of_exposures",
+      "denominator": "d=alphaA+alphaB-alphaA*alphaB",
+      "steady_after_A": "[alphaA*targetA+(1-alphaA)*alphaB*targetB]/d",
+      "steady_after_B": "[(1-alphaB)*alphaA*targetA+alphaB*targetB]/d",
+      "cycle_gap": "alphaA*alphaB*(targetA-targetB)/d",
+      "compatibility": "Scalar tolerances abs(w-targetA)<=epsilonA and abs(w-targetB)<=epsilonB have a common real solution iff abs(targetA-targetB)<=epsilonA+epsilonB; bounded weights additionally require intersection with their allowed range"
+    },
+    "cases": [
+      {
+        "eta_per_exposure": {
+          "exact": "1/10",
+          "decimal": 0.1
+        },
+        "A_exposures": 1,
+        "B_exposures": 1,
+        "steady_after_A": {
+          "exact": "10/19",
+          "decimal": 0.5263157894736842
+        },
+        "steady_after_B": {
+          "exact": "9/19",
+          "decimal": 0.47368421052631576
+        },
+        "steady_cycle_gap": {
+          "exact": "1/19",
+          "decimal": 0.05263157894736842
+        }
+      },
+      {
+        "eta_per_exposure": {
+          "exact": "1/100",
+          "decimal": 0.01
+        },
+        "A_exposures": 1,
+        "B_exposures": 1,
+        "steady_after_A": {
+          "exact": "100/199",
+          "decimal": 0.5025125628140703
+        },
+        "steady_after_B": {
+          "exact": "99/199",
+          "decimal": 0.49748743718592964
+        },
+        "steady_cycle_gap": {
+          "exact": "1/199",
+          "decimal": 0.005025125628140704
+        }
+      },
+      {
+        "eta_per_exposure": {
+          "exact": "1/100",
+          "decimal": 0.01
+        },
+        "A_exposures": 10,
+        "B_exposures": 10,
+        "steady_after_A": {
+          "exact": "100000000000000000000/190438207500880449001",
+          "decimal": 0.5251047114562747
+        },
+        "steady_after_B": {
+          "exact": "90438207500880449001/190438207500880449001",
+          "decimal": 0.47489528854372526
+        },
+        "steady_cycle_gap": {
+          "exact": "9561792499119550999/190438207500880449001",
+          "decimal": 0.050209422912549435
+        }
+      },
+      {
+        "eta_per_exposure": {
+          "exact": "1/100",
+          "decimal": 0.01
+        },
+        "A_exposures": 100,
+        "B_exposures": 100,
+        "steady_after_A": {
+          "exact": "100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000/136603234127322950493061602657251738618971207663892369140595737269931704475072474818719654351002695040066156910065284327471823569680179941585710535449170757427389035006098270837114978219916760849490001",
+          "decimal": 0.7320470897987204
+        },
+        "steady_after_B": {
+          "exact": "36603234127322950493061602657251738618971207663892369140595737269931704475072474818719654351002695040066156910065284327471823569680179941585710535449170757427389035006098270837114978219916760849490001/136603234127322950493061602657251738618971207663892369140595737269931704475072474818719654351002695040066156910065284327471823569680179941585710535449170757427389035006098270837114978219916760849490001",
+          "decimal": 0.2679529102012797
+        },
+        "steady_cycle_gap": {
+          "exact": "63396765872677049506938397342748261381028792336107630859404262730068295524927525181280345648997304959933843089934715672528176430319820058414289464550829242572610964993901729162885021780083239150509999/136603234127322950493061602657251738618971207663892369140595737269931704475072474818719654351002695040066156910065284327471823569680179941585710535449170757427389035006098270837114978219916760849490001",
+          "decimal": 0.46409417959744065
+        }
+      },
+      {
+        "eta_per_exposure": {
+          "exact": "1/100",
+          "decimal": 0.01
+        },
+        "A_exposures": 10,
+        "B_exposures": 1,
+        "steady_after_A": {
+          "exact": "956179249911955099900/1046617457412835548901",
+          "decimal": 0.9135900066826352
+        },
+        "steady_after_B": {
+          "exact": "946617457412835548901/1046617457412835548901",
+          "decimal": 0.9044541066158088
+        },
+        "steady_cycle_gap": {
+          "exact": "9561792499119550999/1046617457412835548901",
+          "decimal": 0.009135900066826352
+        }
+      }
+    ],
+    "positive_shortfall_reference": {
+      "maintenance": "R(w)=max(w,0.8)",
+      "other_stage": "five exact updates toward0.2 with eta0.1",
+      "weight_before_maintenance": {
+        "exact": "277147/500000",
+        "decimal": 0.554294
+      },
+      "restored_weight": {
+        "exact": "4/5",
+        "decimal": 0.8
+      },
+      "repeated_restoration": {
+        "exact": "122853/500000",
+        "decimal": 0.245706
+      },
+      "meaning": "A repeated post-maintenance snapshot can look stable while the same correction is required every cycle; not the adopted H63 repair law."
+    },
+    "compatible_existing_state_reference": {
+      "sourceA": [
+        1,
+        0
+      ],
+      "sourceB": [
+        0,
+        1
+      ],
+      "desired_responseA": 0.8,
+      "desired_responseB": 0.2,
+      "same_nonnegative_row": [
+        0.8,
+        0.2
+      ],
+      "meaning": "Different available context can permit one shared row to meet different response goals; the scalar contradiction is not a global impossibility result."
+    },
+    "comparison_observations": [
+      "Assess DMN, token response and flow prediction using the same stored graph after each relevant training stage.",
+      "Distinguish infeasible imposed targets, insufficient contextual distinction, forgetting under a chosen update, capacity exhaustion and numerical loss.",
+      "Shorter training blocks or smaller updates can reduce oscillation without making incompatible requirements jointly satisfiable.",
+      "First vary existing target specification, assignment and cadence where evidence warrants it; no per-edge role tags, protected graph, replay store or new consolidation stage is prescribed."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/shared_objective_arithmetic.py",
+      "script_sha256": "2e8c331e5ff228ee67342533d6cee6a4af1389e18d070328cbe293c04c34ea58"
+    },
+    "scope_limit": "Closed-form rational fixed points verified by one composition; no SNN dynamics or training simulation, benchmark, project test or build"
+  }
+}

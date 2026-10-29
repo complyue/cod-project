@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "status": "conditional_floating_arithmetic_not_runtime_benchmark",
+  "recorded_at_utc": "2026-10-28T19:25:23.269545+00:00",
+  "methods": "Python struct binary16/binary32 nearest-even conversion after every specified operation. Binary64 math.fsum reference; selected dyadic examples have exact representable totals. No SNN graph, training, performance measurement or project tests.",
+  "assumptions": [
+    "Uniform incoming examples use FP16 weights as an arithmetic reference, not the selected FP8 stored weight layout.",
+    "The intended1/k value, rounded stored operand, product precision and reduction precision are reported separately.",
+    "Order examples specify arithmetic terms directly; they do not assert those tiny terms fit every proposed storage format.",
+    "Pairwise reduction uses research-only lists; it does not select runtime buffers, ordering or parallel implementation."
+  ],
+  "equal_term_cases": [
+    {
+      "fanin": 100,
+      "stored_fp16_weight": 0.01000213623046875,
+      "intended_unquantized_sum": 1.0,
+      "exact_sum_of_stored_operands": 1.000213623046875,
+      "fp16_sequential": 0.98828125,
+      "fp16_pairwise": 1.0,
+      "fp32_sequential": 1.000213623046875,
+      "fp32_pairwise": 1.000213623046875
+    },
+    {
+      "fanin": 144,
+      "stored_fp16_weight": 0.0069427490234375,
+      "intended_unquantized_sum": 1.0,
+      "exact_sum_of_stored_operands": 0.999755859375,
+      "fp16_sequential": 0.98876953125,
+      "fp16_pairwise": 1.0,
+      "fp32_sequential": 0.999755859375,
+      "fp32_pairwise": 0.999755859375
+    },
+    {
+      "fanin": 2048,
+      "stored_fp16_weight": 0.00048828125,
+      "intended_unquantized_sum": 1.0,
+      "exact_sum_of_stored_operands": 1.0,
+      "fp16_sequential": 1.0,
+      "fp16_pairwise": 1.0,
+      "fp32_sequential": 1.0,
+      "fp32_pairwise": 1.0
+    },
+    {
+      "fanin": 4096,
+      "stored_fp16_weight": 0.000244140625,
+      "intended_unquantized_sum": 1.0,
+      "exact_sum_of_stored_operands": 1.0,
+      "fp16_sequential": 0.5,
+      "fp16_pairwise": 1.0,
+      "fp32_sequential": 1.0,
+      "fp32_pairwise": 1.0
+    },
+    {
+      "fanin": 16384,
+      "stored_fp16_weight": 6.103515625e-05,
+      "intended_unquantized_sum": 1.0,
+      "exact_sum_of_stored_operands": 1.0,
+      "fp16_sequential": 0.125,
+      "fp16_pairwise": 1.0,
+      "fp32_sequential": 1.0,
+      "fp32_pairwise": 1.0
+    },
+    {
+      "fanin": 18432,
+      "stored_fp16_weight": 5.424022674560547e-05,
+      "intended_unquantized_sum": 1.0,
+      "exact_sum_of_stored_operands": 0.999755859375,
+      "fp16_sequential": 0.125,
+      "fp16_pairwise": 1.0,
+      "fp32_sequential": 0.999755859375,
+      "fp32_pairwise": 0.999755859375
+    }
+  ],
+  "ordering_cases": [
+    {
+      "large_term": 1.0,
+      "small_term": 9.5367431640625e-07,
+      "small_count": 18431,
+      "reference": 1.0175771713256836,
+      "fp16_large_first": 1.0,
+      "fp16_small_first": 1.001953125,
+      "fp32_large_first": 1.0175771713256836,
+      "fp32_small_first": 1.0175771713256836,
+      "fp32_pairwise": 1.0175771713256836
+    },
+    {
+      "large_term": 1.0,
+      "small_term": 9.313225746154785e-10,
+      "small_count": 18431,
+      "reference": 1.0000171652063727,
+      "fp16_large_first": 1.0,
+      "fp16_small_first": 1.0,
+      "fp32_large_first": 1.0,
+      "fp32_small_first": 1.0000171661376953,
+      "fp32_pairwise": 1.0000170469284058
+    }
+  ],
+  "product_cases": [
+    {
+      "fp16_operand_a": 0.0009765625,
+      "fp16_operand_b": 9.5367431640625e-07,
+      "exact_product": 9.313225746154785e-10,
+      "product_rounded_fp16_then_widened": 0.0,
+      "product_computed_fp32": 9.313225746154785e-10
+    },
+    {
+      "fp16_operand_a": 6.103515625e-05,
+      "fp16_operand_b": 6.103515625e-05,
+      "exact_product": 3.725290298461914e-09,
+      "product_rounded_fp16_then_widened": 0.0,
+      "product_computed_fp32": 3.725290298461914e-09
+    },
+    {
+      "fp16_operand_a": 0.0009765625,
+      "fp16_operand_b": 0.0009765625,
+      "exact_product": 9.5367431640625e-07,
+      "product_rounded_fp16_then_widened": 9.5367431640625e-07,
+      "product_computed_fp32": 9.5367431640625e-07
+    }
+  ],
+  "minicolumn_cases": [
+    {
+      "small_source": 0.0009765625,
+      "reference_residual": 0.0009765625,
+      "totals": {
+        "fp16": {
+          "positive_total": 59.0,
+          "negative_total": 59.0,
+          "signed_residual": 0.0
+        },
+        "fp32": {
+          "positive_total": 59.0009765625,
+          "negative_total": 59.0,
+          "signed_residual": 0.0009765625
+        }
+      },
+      "exact_survivor_large_cell_rate": 1.6551632818577553e-05,
+      "fp16_written_surviving_rate_sum": 0.000977635383605957,
+      "fp32_written_surviving_rate_sum": 0.000976562460145658
+    },
+    {
+      "small_source": 9.5367431640625e-07,
+      "reference_residual": 9.5367431640625e-07,
+      "totals": {
+        "fp16": {
+          "positive_total": 59.0,
+          "negative_total": 59.0,
+          "signed_residual": 0.0
+        },
+        "fp32": {
+          "positive_total": 59.0,
+          "negative_total": 59.0,
+          "signed_residual": 0.0
+        }
+      },
+      "exact_survivor_large_cell_rate": 1.6163971203238742e-08,
+      "fp16_written_surviving_rate_sum": 0.0,
+      "fp32_written_surviving_rate_sum": 9.536743335977713e-07
+    }
+  ],
+  "exact_product_fact": "Every product of two finite IEEE binary16 operands is exactly representable in binary32: at most22 significant product bits, and exponent range within binary32. This does not make a long binary32 sum exact or describe arbitrary FP8 scales.",
+  "implications": [
+    "Intermediate product and accumulation width are independent of stored state and weight width.",
+    "H-75 frame snapshots remove destination-state visitation dependence; they do not make floating sums associative.",
+    "A small complement residual can disappear during population summation or after proportional retention is written back to narrow state.",
+    "Compare reduction order, temporary arithmetic and final state representation by semantic error, weak-context retention and work. No universal precision or bitwise reproducibility requirement selected.",
+    "A wider local total can be examined without assuming a persistent per-neuron residual or master array."
+  ],
+  "source_cache_path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/floating_reduction_arithmetic.py",
+  "source_sha256": "58cc14234118441adf9089dcc5bb190d7c51350317cd224dc333b30d117ebf22"
+}

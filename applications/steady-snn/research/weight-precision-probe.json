@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "status": "conditional_weight_arithmetic_not_selected_training_or_scale_policy",
+  "recorded_at_utc": "2026-10-28T16:53:59.195446+00:00",
+  "source_cache_path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/weight_precision_probe.py",
+  "source_sha256": "098e418d19e7fe4213f99a34b3a502d95c0b9551bdb0af41717ead43bc1112bf",
+  "purpose": "Separate low-width weight range, row-gain resolution and training-state cost while preserving H-24: capacity classes do not prescribe training weight scale.",
+  "assumptions": [
+    "Illustrative k simultaneously contributing equal source rates, ideal equal weights1/k and unit target gain. No neuron transfer, phase, noise, cancellation or learning algorithm.",
+    "k is a contributing-input count, not a rule assigning weights from allocated capacity. The 1/k hypothesis is not selected for training.",
+    "All global grids have maximum weight0.01; each scalar is rounded to its nearest available code with ties to even. No extra representational metadata is included in these scalar cases.",
+    "FP4/FP8 element levels follow the previously checked OCP formats; positive-only weights use only their nonnegative codes. This does not adopt an MX block format.",
+    "No learned weight distribution or recurrent behavior is inferred from these equal-weight rows."
+  ],
+  "cases": [
+    {
+      "contributors": 100,
+      "ideal_equal_weight": 0.01,
+      "method": "global_UINT4",
+      "quantized_weight": 0.01,
+      "uniform_input_gain": 1.0,
+      "relative_weight_error": 0.0
+    },
+    {
+      "contributors": 100,
+      "ideal_equal_weight": 0.01,
+      "method": "global_UINT8",
+      "quantized_weight": 0.01,
+      "uniform_input_gain": 1.0,
+      "relative_weight_error": 0.0
+    },
+    {
+      "contributors": 100,
+      "ideal_equal_weight": 0.01,
+      "method": "global_scaled_FP4_E2M1",
+      "quantized_weight": 0.01,
+      "uniform_input_gain": 1.0,
+      "relative_weight_error": 0.0
+    },
+    {
+      "contributors": 100,
+      "ideal_equal_weight": 0.01,
+      "method": "global_scaled_FP8_E4M3",
+      "quantized_weight": 0.01,
+      "uniform_input_gain": 1.0,
+      "relative_weight_error": 0.0
+    },
+    {
+      "contributors": 144,
+      "ideal_equal_weight": 0.006944444444444444,
+      "method": "global_UINT4",
+      "quantized_weight": 0.006666666666666667,
+      "uniform_input_gain": 0.9600000000000001,
+      "relative_weight_error": -0.03999999999999988
+    },
+    {
+      "contributors": 144,
+      "ideal_equal_weight": 0.006944444444444444,
+      "method": "global_UINT8",
+      "quantized_weight": 0.006941176470588235,
+      "uniform_input_gain": 0.9995294117647059,
+      "relative_weight_error": -0.000470588235294056
+    },
+    {
+      "contributors": 144,
+      "ideal_equal_weight": 0.006944444444444444,
+      "method": "global_scaled_FP4_E2M1",
+      "quantized_weight": 0.006666666666666667,
+      "uniform_input_gain": 0.9600000000000001,
+      "relative_weight_error": -0.03999999999999988
+    },
+    {
+      "contributors": 144,
+      "ideal_equal_weight": 0.006944444444444444,
+      "method": "global_scaled_FP8_E4M3",
+      "quantized_weight": 0.0071428571428571435,
+      "uniform_input_gain": 1.0285714285714287,
+      "relative_weight_error": 0.02857142857142872
+    },
+    {
+      "contributors": 200,
+      "ideal_equal_weight": 0.005,
+      "method": "global_UINT4",
+      "quantized_weight": 0.005333333333333333,
+      "uniform_input_gain": 1.0666666666666667,
+      "relative_weight_error": 0.06666666666666661
+    },
+    {
+      "contributors": 200,
+      "ideal_equal_weight": 0.005,
+      "method": "global_UINT8",
+      "quantized_weight": 0.005019607843137255,
+      "uniform_input_gain": 1.003921568627451,
+      "relative_weight_error": 0.003921568627450987
+    },
+    {
+      "contributors": 200,
+      "ideal_equal_weight": 0.005,
+      "method": "global_scaled_FP4_E2M1",
+      "quantized_weight": 0.005,
+      "uniform_input_gain": 1.0,
+      "relative_weight_error": 0.0
+    },
+    {
+      "contributors": 200,
+      "ideal_equal_weight": 0.005,
+      "method": "global_scaled_FP8_E4M3",
+      "quantized_weight": 0.005,
+      "uniform_input_gain": 1.0,
+      "relative_weight_error": 0.0
+    },
+    {
+      "contributors": 1000,
+      "ideal_equal_weight": 0.001,
+      "method": "global_UINT4",
+      "quantized_weight": 0.0013333333333333333,
+      "uniform_input_gain": 1.3333333333333333,
+      "relative_weight_error": 0.33333333333333326
+    },
+    {
+      "contributors": 1000,
+      "ideal_equal_weight": 0.001,
+      "method": "global_UINT8",
+      "quantized_weight": 0.001019607843137255,
+      "uniform_input_gain": 1.019607843137255,
+      "relative_weight_error": 0.019607843137254936
+    },
+    {
+      "contributors": 1000,
+      "ideal_equal_weight": 0.001,
+      "method": "global_scaled_FP4_E2M1",
+      "quantized_weight": 0.0008333333333333334,
+      "uniform_input_gain": 0.8333333333333334,
+      "relative_weight_error": -0.16666666666666663
+    },
+    {
+      "contributors": 1000,
+      "ideal_equal_weight": 0.001,
+      "method": "global_scaled_FP8_E4M3",
+      "quantized_weight": 0.0009821428571428572,
+      "uniform_input_gain": 0.9821428571428572,
+      "relative_weight_error": -0.01785714285714281
+    },
+    {
+      "contributors": 10000,
+      "ideal_equal_weight": 0.0001,
+      "method": "global_UINT4",
+      "quantized_weight": 0.0,
+      "uniform_input_gain": 0.0,
+      "relative_weight_error": -1.0
+    },
+    {
+      "contributors": 10000,
+      "ideal_equal_weight": 0.0001,
+      "method": "global_UINT8",
+      "quantized_weight": 0.0001176470588235294,
+      "uniform_input_gain": 1.176470588235294,
+      "relative_weight_error": 0.17647058823529396
+    },
+    {
+      "contributors": 10000,
+      "ideal_equal_weight": 0.0001,
+      "method": "global_scaled_FP4_E2M1",
+      "quantized_weight": 0.0,
+      "uniform_input_gain": 0.0,
+      "relative_weight_error": -1.0
+    },
+    {
+      "contributors": 10000,
+      "ideal_equal_weight": 0.0001,
+      "method": "global_scaled_FP8_E4M3",
+      "quantized_weight": 0.00010044642857142857,
+      "uniform_input_gain": 1.0044642857142856,
+      "relative_weight_error": 0.004464285714285648
+    },
+    {
+      "contributors": 12800,
+      "ideal_equal_weight": 7.8125e-05,
+      "method": "global_UINT4",
+      "quantized_weight": 0.0,
+      "uniform_input_gain": 0.0,
+      "relative_weight_error": -1.0
+    },
+    {
+      "contributors": 12800,
+      "ideal_equal_weight": 7.8125e-05,
+      "method": "global_UINT8",
+      "quantized_weight": 7.843137254901961e-05,
+      "uniform_input_gain": 1.003921568627451,
+      "relative_weight_error": 0.003921568627450987
+    },
+    {
+      "contributors": 12800,
+      "ideal_equal_weight": 7.8125e-05,
+      "method": "global_scaled_FP4_E2M1",
+      "quantized_weight": 0.0,
+      "uniform_input_gain": 0.0,
+      "relative_weight_error": -1.0
+    },
+    {
+      "contributors": 12800,
+      "ideal_equal_weight": 7.8125e-05,
+      "method": "global_scaled_FP8_E4M3",
+      "quantized_weight": 7.8125e-05,
+      "uniform_input_gain": 1.0,
+      "relative_weight_error": 0.0
+    },
+    {
+      "contributors": 18432,
+      "ideal_equal_weight": 5.425347222222222e-05,
+      "method": "global_UINT4",
+      "quantized_weight": 0.0,
+      "uniform_input_gain": 0.0,
+      "relative_weight_error": -1.0
+    },
+    {
+      "contributors": 18432,
+      "ideal_equal_weight": 5.425347222222222e-05,
+      "method": "global_UINT8",
+      "quantized_weight": 3.9215686274509805e-05,
+      "uniform_input_gain": 0.7228235294117648,
+      "relative_weight_error": -0.27717647058823525
+    },
+    {
+      "contributors": 18432,
+      "ideal_equal_weight": 5.425347222222222e-05,
+      "method": "global_scaled_FP4_E2M1",
+      "quantized_weight": 0.0,
+      "uniform_input_gain": 0.0,
+      "relative_weight_error": -1.0
+    },
+    {
+      "contributors": 18432,
+      "ideal_equal_weight": 5.425347222222222e-05,
+      "method": "global_scaled_FP8_E4M3",
+      "quantized_weight": 5.5803571428571434e-05,
+      "uniform_input_gain": 1.0285714285714287,
+      "relative_weight_error": 0.02857142857142872
+    }
+  ],
+  "collective_row_resolution": {
+    "example": "k18432, global UINT8 step0.01/255: assigning11364 edges code1 and7068 edges code2 gives total code sum25500 and unit gain for equal source rates.",
+    "code1_edges": 11364,
+    "code2_edges": 7068,
+    "sum_codes": 25500,
+    "aggregate_gain": 1.0,
+    "limit": "Identities with different learned roles or rates are not interchangeable. Matching one aggregate gain does not preserve responses to other input patterns, and does not select a balancing allocator.",
+    "UINT4_constraint": "At step0.01/15, unit aggregate gain contains1500 positive code units. At most1500 edges can be nonzero, so18432 distinct positive weak contributions cannot all survive this global grid."
+  },
+  "conditional_15_class_memory_with_two_FP32_scalar_frames": {
+    "connection_slots": 106492416,
+    "neurons": 614400,
+    "sets": 622573,
+    "one_byte_weights_no_new_metadata": 544782772,
+    "four_bit_weights_no_new_metadata": 491536564,
+    "four_bit_weights_plus_one_FP32_scale_per_neuron": 493994164,
+    "cost_of_one_FP32_scale_per_neuron": 2457600,
+    "cost_of_one_extra_FP32_value_per_reserved_edge": 425969664,
+    "note": "The scale and extra edge values are alternatives for cost assessment only, not allocated arrays. Reference/owner fields stay single; shared node embeddings excluded."
+  },
+  "conclusions_for_comparison": [
+    "A global low-width grid can strongly bias weak weights or round them to zero; floating range and integer linear resolution have different tradeoffs.",
+    "The quantization step of one edge does not equal the achievable resolution of a collective row gain. Actual contextual responses, not only row sums, determine adequacy.",
+    "Training precision costs must be counted. A full-precision value per edge is much more expensive than per-neuron state; no master-weight copy or optimizer state is presumed.",
+    "A scale attached to a row is mathematically compatible with incoming gather, but choosing one requires actual range/error evidence and preserves training ownership of weight policy."
+  ]
+}

@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T20:12:20.767149+00:00",
+  "status": "conditional retained-prefix algorithm comparison; neither representation adopted",
+  "value_lineage": "C-29/P-69 incoming gather must identify the retained inputs to each target; C-13/P-26 provides bounded storage, while P-30 makes it available to learning. H-34/H-74 require those actual traversal/growth/migration needs before considering any additional structure.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/incoming_prefix_arithmetic.py",
+    "script_sha256": "c34c085d5cd904afea6f8860a7204a800fd4bb2c9c20dc768dfde240838e8a3f"
+  },
+  "requirements": [
+    "Distinguish reserved capacity from retained edges for gather, adaptation, growth and migration.",
+    "Preserve a retained association even when its current weight is zero, unless a separately defined learning operation removes it.",
+    "Keep neuron identity and effective edge weights unchanged during representation-only reassignment; publish a complete row at the agreed boundary."
+  ],
+  "common_candidate": {
+    "live_prefix": "Retained endpoint/weight pairs occupy positions0..d-1 in the assigned fixed-capacity set; remaining positions are unused. This is a candidate organization, not an accepted layout.",
+    "zero_weight": "Zero weight is not an empty marker: the endpoint can still identify an association eligible for later adaptation. Declaring it absent would change topology/learning semantics.",
+    "endpoint_namespace": "At N=614400, a distinguished uint32 value outside valid intra-CC neuron IDs can mark a prefix end. No future endpoint namespace or particular sentinel code is fixed.",
+    "multiplicity": "Under the one-retained-edge-per-source/target candidate, growth excludes already represented source IDs. Multiple contacts between the same endpoints would need separate semantics; duplicate checking is not solved by either prefix-end encoding."
+  },
+  "candidates": [
+    {
+      "name": "Endpoint end marker with capacity bound",
+      "semantics": "For d<capacity, endpoint[d] is a reserved invalid value. Stop before reading a weight or source state for it. At d=capacity, the capacity bound terminates the row without an extra marker slot.",
+      "storage": "No additional persistent array; the marker occupies an already unused endpoint element. Slots beyond it are not graph members.",
+      "operations": "Gather discovers d while visiting the row. An algorithm performing adaptation/growth at that visit may reuse d as temporary worker state. A later unrelated operation must rediscover it if no other information supplies it.",
+      "limits": "Marker checking and bounded iteration have execution cost. This is not proven faster than a count, and using zero as the sentinel would conflict with a valid zero-based neuron ID unless the namespace explicitly excluded it."
+    },
+    {
+      "name": "Separate uint16 live count per neuron",
+      "semantics": "The target count d bounds the retained prefix; capacity still comes from the assigned class. No endpoint end marker is needed.",
+      "storage_bytes": 1228800,
+      "operations": "End lookup is direct; repeated operations can use it without rediscovering the end. Growth/removal must keep count and row contents consistent at publication. Pure migration with unchanged d need not change the logical count.",
+      "limits": "The current maximum capacities12800/18432 fit uint16. This is a justified comparison candidate, not an addition to the accepted array budget. Separate SoA storage respects standard16-bit width; no bit packing into owner IDs is proposed."
+    }
+  ],
+  "traffic": {
+    "symbols": "E retained edges, N_a assigned targets, U underfilled assigned sets.",
+    "marker": "5*E+4*U logical ID/weight/stop-check bytes per row sweep.",
+    "count": "5*E+2*N_a logical ID/weight/count bytes per row sweep.",
+    "limit": "Counts assume four-byte endpoints and one-byte weights, exactly one read of each named item, and the stated row loops. Reference loads, scattered source-state reads, decoding, arithmetic, cache-line transfers, prefetch, branches, writes and learning are additional. Logical bytes do not establish DRAM traffic, speed or Pi viability.",
+    "cases": [
+      {
+        "classes": 15,
+        "neurons": 614400,
+        "sets": 622573,
+        "reserved_slots": 106492416,
+        "maximum_capacity": 12800,
+        "base_named_arrays_with_two_FP32_state_frames_bytes": 544782772,
+        "sentinel_additional_persistent_bytes": 0,
+        "per_neuron_uint16_count_additional_bytes": 1228800,
+        "count_candidate_named_arrays_bytes": 546011572,
+        "full_reserved_endpoint_weight_scan_bytes": 532462080,
+        "examples": [
+          {
+            "all_targets_live_degree": 32,
+            "live_edges": 19660800,
+            "underfilled_assigned_sets": 614400,
+            "edge_payload_bytes_per_frame": 98304000,
+            "sentinel_endpoint_checks_bytes": 2457600,
+            "count_reads_bytes": 1228800,
+            "sentinel_payload_and_stop_bytes": 100761600,
+            "count_payload_and_count_bytes": 99532800,
+            "qualification": "The 100-degree example assigns every available minimum-size set before larger sets. These are feasible constructed occupancies, not learned degrees."
+          },
+          {
+            "all_targets_live_degree": 64,
+            "live_edges": 39321600,
+            "underfilled_assigned_sets": 614400,
+            "edge_payload_bytes_per_frame": 196608000,
+            "sentinel_endpoint_checks_bytes": 2457600,
+            "count_reads_bytes": 1228800,
+            "sentinel_payload_and_stop_bytes": 199065600,
+            "count_payload_and_count_bytes": 197836800,
+            "qualification": "The 100-degree example assigns every available minimum-size set before larger sets. These are feasible constructed occupancies, not learned degrees."
+          },
+          {
+            "all_targets_live_degree": 100,
+            "live_edges": 61440000,
+            "underfilled_assigned_sets": 303104,
+            "edge_payload_bytes_per_frame": 307200000,
+            "sentinel_endpoint_checks_bytes": 1212416,
+            "count_reads_bytes": 1228800,
+            "sentinel_payload_and_stop_bytes": 308412416,
+            "count_payload_and_count_bytes": 308428800,
+            "qualification": "The 100-degree example assigns every available minimum-size set before larger sets. These are feasible constructed occupancies, not learned degrees."
+          }
+        ]
+      },
+      {
+        "classes": 16,
+        "neurons": 614400,
+        "sets": 655350,
+        "reserved_slots": 112281600,
+        "maximum_capacity": 18432,
+        "base_named_arrays_with_two_FP32_state_frames_bytes": 573859800,
+        "sentinel_additional_persistent_bytes": 0,
+        "per_neuron_uint16_count_additional_bytes": 1228800,
+        "count_candidate_named_arrays_bytes": 575088600,
+        "full_reserved_endpoint_weight_scan_bytes": 561408000,
+        "examples": [
+          {
+            "all_targets_live_degree": 32,
+            "live_edges": 19660800,
+            "underfilled_assigned_sets": 614400,
+            "edge_payload_bytes_per_frame": 98304000,
+            "sentinel_endpoint_checks_bytes": 2457600,
+            "count_reads_bytes": 1228800,
+            "sentinel_payload_and_stop_bytes": 100761600,
+            "count_payload_and_count_bytes": 99532800,
+            "qualification": "The 100-degree example assigns every available minimum-size set before larger sets. These are feasible constructed occupancies, not learned degrees."
+          },
+          {
+            "all_targets_live_degree": 64,
+            "live_edges": 39321600,
+            "underfilled_assigned_sets": 614400,
+            "edge_payload_bytes_per_frame": 196608000,
+            "sentinel_endpoint_checks_bytes": 2457600,
+            "count_reads_bytes": 1228800,
+            "sentinel_payload_and_stop_bytes": 199065600,
+            "count_payload_and_count_bytes": 197836800,
+            "qualification": "The 100-degree example assigns every available minimum-size set before larger sets. These are feasible constructed occupancies, not learned degrees."
+          },
+          {
+            "all_targets_live_degree": 100,
+            "live_edges": 61440000,
+            "underfilled_assigned_sets": 286720,
+            "edge_payload_bytes_per_frame": 307200000,
+            "sentinel_endpoint_checks_bytes": 1146880,
+            "count_reads_bytes": 1228800,
+            "sentinel_payload_and_stop_bytes": 308346880,
+            "count_payload_and_count_bytes": 308428800,
+            "qualification": "The 100-degree example assigns every available minimum-size set before larger sets. These are feasible constructed occupancies, not learned degrees."
+          }
+        ]
+      }
+    ]
+  },
+  "mutation_boundaries": {
+    "append": "Write new endpoint and weight before publishing the new logical end. For the marker candidate, initialize the next marker if capacity remains. A complete-frame boundary can serialize these operations without choosing new synchronization machinery.",
+    "removal": "No removal policy is selected. If one is justified, moving the last retained pair into a hole can preserve the mathematical edge multiset but changes reduction order. Preserving order uses different work; choose only after the numerical/behavioral requirement is established.",
+    "migration": "Copy the retained d pairs, then establish the destination end representation before publication. Five*d copied payload bytes imply about10*d source-read/destination-write bytes; an underfilled destination marker adds one4-byte write in that candidate, before reference/owner and cache costs.",
+    "floating_order": "Reordering retained pairs can change a floating-point sum despite unchanged real-valued graph semantics. Effective-weight preservation alone does not establish bit-identical responses; no determinism requirement or sorting scheme is selected.",
+    "free_set_selection": "The existing owner map indicates assignment. A prefix representation does not select free-set discovery/reservation, migration timing or a replacement rule."
+  },
+  "decision_evidence": "Favor an explicit count only if repeated end queries, useful vectorization or measured traversal/update cost justify its persistent state. Favor the marker if it supplies the required operations more simply at adequate cost. Compare the same retained graph, state precision and update schedule; no free list, row index, extra topology or runtime experiment is prescribed.",
+  "non_adoptions": [
+    "No count array, sentinel code, prefix layout, pruning policy, sort, duplicate hash, free list or allocator implementation is selected.",
+    "No change to pool quotas, min-capacity admission, weight scale, five-byte slot payload or existing state-field choices.",
+    "No neural training, benchmark, project tests, build, toolchain change, commit or push."
+  ]
+}

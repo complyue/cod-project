@@ -1,9 +1,9 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：74
+记录版本：208
 
-建立日期：2026-09-17（本文件的事件时间统一使用 UTC）  
-纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)  
+建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
+纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
 执行规则：[AGENTS.md](../AGENTS.md) 的 `Design Authority and Value Lineage` 节。
 
 本文件是设计概念、机制、抽象建模、价值衍生关系、技术依赖及人类确认的权威登记处。它记录“为什么值得做、由谁确认、确认到哪里、哪些文档可以据此执行”，不是已实现能力清单，也不能自行创造人类授权。登记格式由智能体整理；人类确认仅来自明确的人工发言及其实际范围。
@@ -103,11 +103,24 @@ Design authority
 | C-09 | DBMR 支持本地 ontology 的检索、统计和 CRUD，日常不回收空间，按节奏重建载荷及 backing 文件压缩。 | §7 的候选近期应用 | H-06；不预定不可变版本、历史保留、并发或崩溃恢复算法。 |
 | C-10 | 现在开始领域语言设计，明确 sum/product ADT、方法调用和内存管理语义，跟踪讨论，稍后再实施。 | §2—6、§14 的候选设计范围 | H-06、H-07；确认讨论方向和时机，不追认助手建议或尚未生成的文档细节。 |
 | C-11 | C/C++ 作为与其他语言运行时互操作的兼容接口。 | §6 的候选运行时边界 | H-06；不指定 C ABI、C++ wrapper、句柄和所有权协议。 |
-| C-12 | 首个讨论应用为稳态循环激活 SNN：每 CC 一个 region，交换 token 语义向量，目标几百到几万 CC。H-43 明确 CC 是语义呈现基本单元，CC 之间为非精确 replica，minicolumn／神经元的语义响应角色静态分配，不要求网络学习这些身份。当前 Flash 5120 维、每维 60+60；每 CC 按树莓派预算，节点 RAM 上限 16 GB，应用文档独立。 | §2—3、§6—7、§12 的候选应用 | H-08—H-13、H-27、H-43、H-46—H-48；静态语义身份不冻结连接权重或活动状态。三种语义轨迹在每 CC 的宽活动比例范围内运行，允许不同心智状态的典型占比不同；具体数值、动力学及学习机制仍待讨论。 |
-| C-13 | SNN 静态槽集总数以略大于神经元数为明确目标，优先按 scale law 形成便于算术寻址的固定拓扑；不要求保留旧场景连接容量。神经元指向当前集；每槽 4-byte 对端 ID / 1-byte FP8 权重并行数组，每集一个 owner ID。训练使用既存集合迁移，不通过堆分配维护槽拓扑。最小集 100 槽；少出边源的取舍与入边准入分开。 | C-12 的容量设计方向，训练提出容量需求；§2—3、§7 的候选细化 | H-13—H-19 为约束基线；H-18 取代精确 N 集限制。H-20 请求文献调研，H-21 暂定 alpha≈3 的 100/144 分级模板，并要求评估 target-owned 入边归属。H-16 的 source-owned 归属作为对照；入边方案未被全文批准。H-22 要求评估大入度与激活的生物证据，未选择新上限或整合机制。H-23 认为大入度可由较小典型入权重补偿是合理方向，并要求区分入／出度参数；不指定权重函数或更换暂定表。H-24 明确权重尺度属于训练策略，可作为超参数或动态规划，不是容量分配参数。H-25 继续暂定容量规则并转向语义维建模；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量；J 和精确配额待定。具体更新、源参与／重入、空闲管理和学习／迁移仍待决。 |
-| C-14 | 每语义维分为正、负细胞群体，按身份区分极性，研究非负活动到有符号值的读出。H-27/H-35 的当前讨论限于 Flash 5120 维、每维 60+60；V4 Pro 人口比较暂不讨论。上下文、幅度及预测语义需协调。 | C-12 的编码候选细化；P-27 候选价值链，P-28 容量依赖 | H-25/H-27 要求评估及计算，未确认整套编码／学习机制；H-26 请求人脑柱细胞数证据。614400 神经元是当前条件算术，未选定最终 checkpoint、连接池或生物对应。 |
-| C-15 | 共活动连接学习与有业务依据的邻近规则研究；语义维号之间不定义远近。H-42 拒绝内部位置形成跨 minicolumn 距离偏好，当前无选定几何。 | C-12 的学习方向；P-29 候选价值链、P-30 容量依赖；P-31 的等位机制范围已 rejected | H-40—H-42、H-49—H-51、AD-033—AD-036、AD-043—AD-045；内部等位方案退出当前方向，不以软对齐或对应序号重引入。H-50 明确现有语义组织无天然物理度量，K-37 撤回软距离应用建议；深化研究不预选替代机制。 |
-| C-16 | 在 CC 非精确 replica、语义角色静态分配的前提下研究语义群体位置与生物解剖拓扑的兼容；区分角色、胞体位置、轴突／树突接触机会和存储顺序。 | C-12 的候选拓扑研究，P-32 候选价值链，P-33 编码依赖 | H-42 请求研究，H-43 固定语义角色，H-44 优先解决位置映射冲突而非 1D/2D。H-46 明确 measured feature 与 minicolumn 非一一对应并不冲突；H-49 请求距离依据，H-50 明确现有语义组织无天然物理位置，H-51 要求至少 12 小时研究。群体交错、选择性可达等只作额外解剖假设下的条件比较，不是当前必选项；不松动 H-41/H-42 边界。 |
+| C-12 | 首个讨论应用为稳态循环激活 SNN：每 CC 一个 region，交换 token 语义向量，目标几百到几万 CC。H-43 明确 CC 是语义呈现基本单元，CC 之间为非精确 replica，minicolumn／神经元的语义响应角色静态分配，不要求网络学习这些身份。当前 Flash 5120 维、每维 60+60；每 CC 按树莓派预算，节点 RAM 上限 16 GB，应用文档独立。 | §2—3、§6—7、§12 的候选应用 | H-08—H-13、H-27、H-43、H-46—H-48、H-52—H-59；静态语义身份不冻结连接权重或活动状态。三种语义轨迹在每 CC 的宽活动比例范围内运行，允许不同心智状态的典型占比不同；H-52 明确学习三相稳态吸引子及各种入口条件的预期收敛，单 token 自循环后逐渐淡出是中间目标；H-67 允许宽松半衰期尺度及 token 差异。H-53 明确单次随机激活、低噪音淡出与 DMN 检测后的噪音提升；H-54/H-55 增加互补正面输入的抵消、低活动增噪、残留先增长达峰再回落目标；H-56—H-58 以去噪窗口覆盖／路径检测状态并排除总激活比例，心流覆盖上限示例20%、DMN覆盖示例80%；H-59 要求正常循环状态均可由外部 token 驱使转向，失去该能力为 stale，重置是恢复候选；具体数值、动力学及算法待定。 H-61/H-62 记录阶段性无距离偏好与分阶段训练、静态批组的初步方案；immersion 保留为预期涌现而无专门训练目标。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-71 允许有用小循环保留较长上下文影响，不以主导响应淡出要求一切历史作用归零。 K-207 / D-08 set202 记录 H-71 实质研究完成并统一当前状态；H-86 经验比较、全部局部人工约束和 pending-human 范围保持，不新增实施资格。 |
+| C-13 | SNN 静态槽集总数以略大于神经元数为明确目标，优先按 scale law 形成便于算术寻址的固定拓扑；不要求保留旧场景连接容量。神经元指向当前集；每槽 4-byte 对端 ID / 1-byte FP8 权重并行数组，每集一个 owner ID。训练使用既存集合迁移，不通过堆分配维护槽拓扑。最小集 100 槽；少出边源的取舍与入边准入分开。 | C-12 的容量设计方向，训练提出容量需求；§2—3、§7 的候选细化 | H-13—H-19 为约束基线；H-18 取代精确 N 集限制。H-20 请求文献调研，H-21 暂定 alpha≈3 的 100/144 分级模板，并要求评估 target-owned 入边归属。H-16 的 source-owned 归属作为对照；入边方案未被全文批准。H-22 要求评估大入度与激活的生物证据，未选择新上限或整合机制。H-23 认为大入度可由较小典型入权重补偿是合理方向，并要求区分入／出度参数；不指定权重函数或更换暂定表。H-24 明确权重尺度属于训练策略，可作为超参数或动态规划，不是容量分配参数。H-25 继续暂定容量规则并转向语义维建模；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量；J 和精确配额待定。具体更新、源参与／重入、空闲管理和学习／迁移仍待决。 K-178 / CapacityPlanning、ConnectivityScalingResearch173 将明确的数组预算假设与 H-73/H-75/H-78 状态比较连接；容量配额、已算总额和需求先于辅助结构原则保持。 K-200 / CapacityPlanning195 将已记录的连接扫描算术纳入节点规划；RAM、保留度数、更新节奏和节点 CC 数分别约束可行性，不把全预留扫描当作强制算法或实测带宽。 K-202 / AdaptiveConnectivity、CapacityPlanning、ConnectivityScalingResearch197 精简 authority 摘要并直连独立 flow 文档；保留正文合同、来源、算术、开放选择及全部 H/K 历史，未授予实施资格。 |
+| C-14 | 每语义维分为正、负细胞群体，按身份区分极性，研究非负活动到有符号值的读出。H-27/H-35 的当前讨论限于 Flash 5120 维、每维 60+60；V4 Pro 人口比较暂不讨论。H-54 要求同维正负群体内在抵消（C-18）；上下文、幅度及预测语义需协调。 | C-12 的编码候选细化；P-27 候选价值链，P-28 容量依赖 | H-25/H-27 要求评估及计算，未确认整套编码／学习机制；H-26 请求人脑柱细胞数证据。614400 神经元是当前条件算术，未选定最终 checkpoint、连接池或生物对应。 H-75/AD-080 明确同一 minicolumn 内个体表示共享语义成分的不同上下文路径；不把这些身份归并为单一平均值或固定一细胞一条独占路径。 H-76/AD-082 指定 token 输入的预测选择：预测占比充分则强激活这些细胞，否则广范围低强度激活；阈值、强度与坐标校准待定。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-199 / SignedPopulationEncoding194 将预测输入分支的使用与有噪声下实际上下文匹配区分；保留 H-78/H-85 对照，不把自发就绪直接视为错误，不预选门限、噪音来源标签或额外状态。 |
+| C-15 | 以三相行为、入口收敛及有限 token 响应为目标的分阶段连接构建／学习：初步以直接激活链形成 DMN／token 循环，后期 flow 用 Hebbian；immersion 预期涌现，不主动训练。 | C-12 的学习方向；P-29 候选价值链、P-30 容量依赖；C-22 为构建方案，P-31 的等位机制范围已 rejected | H-61 细化 H-40/H-52 的方法分工并确认暂不加入物理距离偏好；H-41/H-42/H-43/H-50 的维号中立、等位拒绝、固定语义及无天然物理度量边界保留。H-52—H-59 的行为／噪音／检测／可转向性仍约束验收。H-62 仅初步倾向预先定组并要求比较，算法与正式价值链待定。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-79—H-81/AD-085—AD-087 明确 Hebbian/HTM 是 token 序列 flow 的学习方向，算法尚未选定；现授权初步设计并尽早讨论问题，不默认沿用 DMN/token 修补。 H-82/AD-088 以预测性预激活群与输入序列高度匹配作为 flow 直接训练验收；无需自主持续生成，生成算法另行设计。具体度量和学习规则仍待定。 H-83/AD-089 要求按序列长度验证：共享匹配片段允许多个预测，随上下文增长向训练序列收敛；不预设固定单候选或对每个未到达预测等量削弱。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 K-95 的 flow 初设分析与上下文分配候选保持 pending-human；H-85 明确预测正负并存／抵消留待实验；H-86 授权明显经验选项直接列为真实数据比较，不逐项询问。 K-98 将 flow 的预测改进与共享循环、fade-out 和外部可驱转性一起比较；未选归一化、图分区或关联更新公式。 K-127 / FlowLearning122 补充学习保留与替换证据的适用范围。 K-163 / FlowLearning158、SynapticIntegrationResearch158 明确 HTM 证据的扰动及人口缩放条件，不选择编码、门限或新状态。  K-174 / FlowLearning169 区分下一输入匹配与较长时域的关联统计；不把 successor representation 或 TD 机制加入模型。 K-179 / FlowLearning174 将直接定义的 rate/frame 学习与有条件的 spike-rule 降阶区分，不引入微观时序机制。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-188 / FlowLearning183、MR-S095 区分跨日表征漂移的任务读出与自身自然预激活；补偿模型所需目标误差反馈不等同实测突触学习，未预选补偿机制或冻结身份语义。 K-189 / FlowLearning184、MR-S096 区分已有关联的漂移维护与陌生转移学习；单细胞均值／方差调节不等同于 CC 活跃比例控制，不选择补偿机制。  K-195 / FlowLearning190、MR-S010 核查学习期间有效循环强度及持续可塑性的来源条件；自然预激活与后续行为按实际条件比较，不选择增益变量、学习门控或自主生成目标。  K-196 / FlowLearning191、SynapticIntegrationResearch191、MR-FC015 以同度／同权重和的条件汇集比较权重集中及源协方差；上下文输入分数不由容量或权重总量自动校准，不新增归一化、门限或元数据。  K-197 / FlowLearning192、MR-S049 深查实际离线批量学习及内部连续状态／二值输出区别；不将自主回放结果当在线 flow 或分级语义输出证据，未选状态、竞争或学习模式。 K-206 / FlowLearning201、MR-S044 细化预输入就绪度测量与生成输出的边界；保留 H-83 合理多候选，不将单一实际符号的分类计分直接变成本文验收。 |
+| C-16 | 在 CC 非精确 replica、语义角色静态分配的前提下研究语义群体位置与生物解剖拓扑的兼容；区分角色、胞体位置、轴突／树突接触机会和存储顺序。 | C-12 的候选拓扑研究，P-32 候选价值链，P-33 编码依赖 | H-42 请求研究，H-43 固定语义角色，H-44 优先解决位置映射冲突而非 1D/2D。H-46 明确 measured feature 与 minicolumn 非一一对应并不冲突；H-49 请求距离依据，H-50 明确现有语义组织无天然物理位置，H-51 要求至少 12 小时研究。群体交错、选择性可达等只作额外解剖假设下的条件比较，不是当前必选项；不松动 H-41/H-42 边界。 H-61 确认当前暂不加入物理距离倾向；解剖研究保留为参考，未来几何提案须有具体收益，非实现当前 SNN 的前置条件。K-78 记录此范围。 |
+| C-17 | 注意／活动／DMN 依赖的背景白噪音调节：专注要求下全局显著抑噪；低激活比例时提升噪音，包括抵消后的残留仍存在、尚未检测 DMN 的情况；DMN 下支持活动与慢语义收敛。 | C-12 的行为控制方向；P-34 候选价值链、P-35 约束学习条件、P-41 为检测输入边界 | H-53/H-55 确认功能目的；H-55 明确 DMN 检测不是所有增噪的前提。H-56 将总激活比例留作调节变量并排除其参与分类。控制范围、数值、优先级及算法仍未选。 K-177 / ContextLoopsAndNumerics172 区分全局噪音幅度控制与共享随机抽样，不预选空间协方差；真实行为比较仍开放。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
+| C-18 | 同一语义维正负群体的内在相互抑制／激活抵消，作为早期不建模显式抑制性突触连接时的固有作用；互补正面输入后降低活动并保留有用残值。 | C-12 的行为功能；P-36 候选价值链，P-37 编码依赖，P-38 学习约束 | H-54 确认功能与早期范围，H-55 确认残留先增长达峰再回落的目标；H-77/AD-083 明确 minicolumn 全局计算净余，按比例保留同方向活跃细胞 rate，不按下标配对；时序、预测相态处理和形式化关系未选。坐标极性不等于语义正负。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。 K-168 / SignedPopulationEncoding163、Model163 明确暂态与完成后的活跃极性总量；净值可恢复 H-77 后的总量但不恢复细胞上下文，未选消息合同。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。  K-183 / SignedPopulationEncoding178、ActivationRegimes178 和 cancellation-properties-analysis 以同一净向量下不同细胞参与数的精确例区分调节量与幅度；不选门限或招募配额。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-205 / ContextLoopsAndNumerics200 将噪音单独覆盖例的独立、对称、无保留状态条件明确写出；不将其用作实际回返轨迹估计，不选噪音律、计数门限或检测结构。 |
+| C-19 | 柔性窗口内的状态检测／训练观测：DMN 广覆盖、沉浸局限小群、心流在小覆盖内扫过不同群；排除总激活比例并剔除附加白噪音对覆盖的影响。 | C-12 的状态可观察性；P-39 候选价值链，P-40 活动定义依赖，P-41 约束调节／检测接口 | H-56 指定方向，H-57 排除超过示例20%覆盖的心流，H-58 要求去噪覆盖并提出低密度过滤候选；DMN80%、心流20%均示例，窗口、密度定义、阈值及算法未选。 K-176 / ActivationRegimes171 说明小群循环与跨群路径描述可以重叠，须由真实轨迹和观测条件检验区别；未选分类器或附加状态。 |
+| C-20 | 正常自循环活动必须保有外部 token 可转向性；没有外部 token 能打破或驱转该循环时才属于 stale。 | C-12 的行为响应要求；P-42 候选价值链 | H-59 确认正常／stale 的区别；不把长驻、重复、占比或窗口相态标签当作充分 stale 判据。输入域、响应语义及运行评估时限未选。 |
+| C-21 | 对失去外部输入可转向性的 stale 状态考虑系统性重置恢复。 | C-20 的恢复候选；P-43 候选价值关系，P-44 状态语义依赖 | H-59 的“可能需要”提出候选，未选择必备重置策略。触发证据、CC／网络范围、活动／预测／连接／持久状态的影响与保留及恢复入口未选。 |
+| C-22 | 统一的 DMN/token 激活链构建与修补训练：观察下一步自然激活量，从理论上该激活而未激活的群体选足够比例补足；初建是现有支持不足的情形，持续迭代主要维护有用传播。 | C-15 的训练机制提案；P-45 候选价值链，P-46 容量依赖、P-47 固定语义编码依赖 | H-63 明确要求按修补方向调整；H-61 的链连接／多步闭合仍作机制候选，H-62 静态批组可作参考而非强制轨迹。预期目标、激活量口径、选取比例、教学辅助／边更新、衰减阶段和实现待定。 H-64/AD-061 要求全局考虑和逐步采样、避免前序目标重用造成意外捷径；C-23/P-48—P-51、K-80 记录待讨论的约束／检查方案。 H-65/AD-062—AD-064 固定每 epoch 的训练范围并给出近似宽度、主体增强、回返削弱的参数角色；K-81 区分循环时长、净增益和实际维持时间。 H-66/AD-065—AD-067 以保持回返为初步预期，要求仔细处理增强／削弱，并偏好每步或最多几步的 token 分布保持；K-82 将完整后继群体与修补子集的比例约束区分，细节仍 pending-human。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 H-79—H-81 将本构建／修补范围明确限定为 DMN 与单 token；flow 的 Hebbian/HTM 初步算法另行设计，不从本算法直接推广。  K-194 / TrainingStrategy189、MR-S098 深查嵌入网络的链传播、幅度保真及交叉激活证据；保留实际共同背景下的维护验收，不导入持续输入、同步、几何或细胞机制。 |
+| C-23 | 全链约束下逐步选择修补目标：每 epoch 确定维护范围，以近似宽度和主体增强／回返削弱参数规划进程，再利用正确自然激活并补足缺失候选。 | C-22 的候选规划约束；P-48 价值衍生，P-49 容量依赖、P-50 编码依赖、P-51 修补约束 | H-64 要求全局考虑／逐步采样及避免意外捷径；H-65 明确 DMN 全体范围、token 按向量比例选 minicolumn 细胞且每 epoch 选一次。参数数值、逐步与累计增益定义、时间标度、回返对及表示仍 pending-human，不预设全网协调器或永久神经元相位。 H-66 把语义保持时间范围收紧到每步或少数几步，P-50 记录编码约束；K-82 分析有限人口、链宽／圈长、闭环维持和净增益的耦合，窗口、容差及采样策略待定。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 H-71/C-26/P-61 明确小循环可有上下文价值；避免主动构造有害捷径不授权强力消除小循环。 |
+| C-24 | 个体神经元的离散时间 rate／有效活动动力学与自然传播终止：保留学习连接，活动可因支持不足或随机失败而停止；半衰期式目标宽松且 token 间可不同。 | C-15 的候选动力学细化；P-52 价值衍生，P-53 编码依赖、P-54 修补约束、P-59 容量依赖 | H-67 提议并要求深入讨论，H-68 明确自然断链不清权重，H-70 要求全程数值精度；实际变量、更新、噪音、步长、阈值及格式仍 pending-human。不默认聚合 minicolumn 或采用抑制性边。 H-71/C-26—C-28 开放小循环上下文、累积／定时衰减及 INT8/INT4 比较；相关细节仍待定。 H-75/AD-081 的 C-29 提议两帧轮换连入汇集，保留个体身份和明确帧边界；转移函数、相态及时间步仍待定。 H-78/AD-084 明确当前不决定预测／当前活动的状态表示，保留未来实现对照实验余地；不预设额外字段或实验框架。 K-165 / RateDynamics160 明确 rate 降阶已包含的波动与显式噪音的意义，不选择噪音律或适应时间常数。 K-166 / RateDynamics161 区分平均与 H-77 抵消的次序，不以 ensemble 平均替代当前快照或加入分布状态。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-172 / RateDynamics167 深查 population-rate 降阶条件；不以群体平均加速替代个体上下文身份或宣称 CPU 收益。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
+| C-25 | 分数式神经元选取／参与：以可分贡献表达训练目标，与 rate 协作缓解整细胞计数的语义割裂。 | C-22 的候选目标表示；P-55 价值衍生，P-56 rate 依赖、P-57 编码依赖、P-58 进程约束 | H-69 初步提出方向；分数作为目标、概率、占空比或独立状态的含义待定。乘积足以决定后续行为时不预设双字段；共享身份与边的串扰不因分数化自动消失，完整契约 pending-human。 |
+| C-26 | 背景支持下的有用小循环上下文：大链构建避免主动制造有害捷径，同时保留能让较早输入影响后续输出的小循环。 | C-15 的行为方向细化；P-60 价值衍生、P-61 进程约束、P-62 动力学依赖 | H-71 明确不强力消除小循环并提出长上下文价值；主导响应淡出不等于擦除一切历史影响。具体识别、训练、容量／干扰和读出验收 pending-human。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-180 / ContextLoopsAndNumerics175、MR-S011/MR-S012 深查暂态读出、重复外部驱动与部分权重训练的条件；不导入变换、读出、学习规则或稀疏容量结论。  K-181 / ContextLoopsAndNumerics176、context-composition-analysis 明确固定总量下条件幅度界及可表示模式计数；MR-S013 的分布耦合证据不等于本模型容量。未选上限、编码或新增状态。  K-184 / ContextLoopsAndNumerics179、MR-S006 区分同噪音下有／无刺激的维持与外部噪音分组指定的选择性；不导入振荡、资源状态或模型时标。 K-193 / ContextLoopsAndNumerics188 核查连续吸引子记忆扩散的稳态、弱涨落及调谐缩放条件；连续 rate 或活动调节不自动满足它们，不导入记忆容量或噪音控制公式。 K-201 / ContextLoopsAndNumerics196、context-composition-analysis 的 balanced_drive_frame_scaling 将同维平衡驱动的组成收缩与帧间隔联系；保持净语义值不等于保持上下文，未把确定性例当作白噪音律或选取新的状态／调节机制。 |
+| C-27 | 累积／延后生效的衰减：保留跨小更新的衰减进度，可研究下一数值边界的未来触发。 | C-24 的时间／数值机制候选；P-63 价值衍生、P-64 表示／容量依赖 | H-71 要求深入比较，H-72 澄清可预计算下一次最小精度允许的变化；未确认计时器、残差、锚点、事件结构或具体衰减律。模型时间、输入到达、取消／重新计算和中间输出语义必须明确；pending-human。 K-97 的条件分析指出：有限下一边界时间可承载幅度进度，但无事件状态并非普遍充分；输入即使不改变 code 也可改变下一事件。时间戳精度／存储及真正省略的工作需比较，未选择新结构。  K-173 / ContextLoopsAndNumerics168 区分源变化稀疏与连入依赖／同维抵消传播的影响范围；不预设事件索引、缓存或重算算法。  K-198 / ContextLoopsAndNumerics193、MR-S002 核查 QSS 的总量化误差（包括滞回）趋零及观察时域条件；不把收敛结论当固定低精度任意时长保证，未选事件结构或滞回机制。 K-204 / ContextLoopsAndNumerics199、numeric-representation-arithmetic 的 directed_decay_rounding 区分向下取整避免停滞与保留衰减时间；有限归零不是半衰期／自然断链的充分证据，不选取整律或新状态。 |
+| C-28 | 按建模量选择 INT8/INT4、无符号／定点或浮点表示，分别论证存储、缩放、累加与动态更新精度。 | C-24 的候选数值细化；P-65 价值衍生、P-66 编码依赖、P-67 容量依赖、P-68 衰减约束 | H-71 授权整数替代研究，H-73 允许 FP16/FP32 神经元状态候选，H-70 精度要求保留；不确认全量替换或具体格式。静态槽算术是条件基线，字段／相态与元数据代价需明确；pending-human。 K-88 的条件权重算术区分动态范围、集体增益分辨率及训练存储；不按容量档位选权重尺度，不默认逐边高精度副本。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
+| C-29 | 两帧轮换的离散时间连入汇集：只读完整前帧，局部计算各目标后写入次帧，完成后交换。 | C-24 的执行语义候选；P-69 价值衍生、P-70 存储依赖 | H-75/AD-081 提议以快照简化更新，消除访问次序影响与逐边持久累积需求；临时求和仍存在。相态、抵消、输入、学习发布及时间步待定；不预设第三帧、双权重池或全网锁步，pending-human。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 K-167 / README162 澄清两帧单标量预算标签，数值和 H-78 选择空间不变。 |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
 | GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
 
@@ -148,7 +161,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 74，延续检查 K-01—K-73；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 208，延续检查 K-01—K-207；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -180,21 +193,19 @@ Design authority
 <a id="d-08"></a>
 ### D-08：稳态循环激活 SNN 独立应用文档集
 
-<a id="d-08"></a>
-
-- 当前覆盖：document-set revision 68，K-73 将 H-51 的完整研究评估整理到 [PhysicalDistancePreferenceResearch](../applications/steady-snn/docs/PhysicalDistancePreferenceResearch.md) revision 68，保留 H-50/K-37 的无天然物理度量边界，请求的持续研究与批判性综合已经完成，具体设计选择仍待讨论。以下五文件保持 revision 32： [README](../applications/steady-snn/docs/README.md)、[Model](../applications/steady-snn/docs/Model.md)、[Decisions](../applications/steady-snn/docs/Decisions.md)、[SemanticCorticalMappingResearch](../applications/steady-snn/docs/SemanticCorticalMappingResearch.md)、[SpatialConnectivityResearch](../applications/steady-snn/docs/SpatialConnectivityResearch.md)。[ActivationRegimes](../applications/steady-snn/docs/ActivationRegimes.md)、[TokenEmbeddingStatistics](../applications/steady-snn/docs/TokenEmbeddingStatistics.md) 保持 revision 30；[AdaptiveConnectivity](../applications/steady-snn/docs/AdaptiveConnectivity.md)、[SignedPopulationEncoding](../applications/steady-snn/docs/SignedPopulationEncoding.md) 保持 revision 28。[ConnectivityScalingResearch](../applications/steady-snn/docs/ConnectivityScalingResearch.md) 保持文档修订 24.1；[CapacityPlanning](../applications/steady-snn/docs/CapacityPlanning.md)、[IncomingConnectivity](../applications/steady-snn/docs/IncomingConnectivity.md)、[SynapticIntegrationResearch](../applications/steady-snn/docs/SynapticIntegrationResearch.md) 保持 revision 24。各文件修订与包含它们的 Git 提交共同定位。
+- 当前覆盖：document-set revision202；H-71 十二小时实质研究已完成，实际区间及逐项范围见 [modeling-refinement-progress.json](../applications/steady-snn/research/modeling-refinement-progress.json)。研究包括独立 flow 学习、真实输入几何、活跃比例与语义幅度、上下文保持、数值精度、衰减／执行成本及来源适用边界；具体证据与开放选择见各文档和 K-207。ActivationRegimes 为202；AdaptiveConnectivity 为202；CapacityPlanning 为197；ConnectivityScalingResearch 为197；ContextLoopsAndNumerics 为202；Decisions 为202；FlowLearning 为202；IncomingConnectivity 为202；Model 为202；PhysicalDistancePreferenceResearch 为78；README 为202；RateDynamics 为202；SemanticCorticalMappingResearch 为32；SignedPopulationEncoding 为202；SpatialConnectivityResearch 为74；SynapticIntegrationResearch 为202；TokenEmbeddingStatistics 为30；TrainingStrategy 为202。共18份应用文档；H-78/H-85 保持对照空间，H-86 指导明显经验选项直接保留比较；D-08 仍 pending-human，研究完成不等于模型验证或实施资格。H-51 完成记录与人工决定历史保留。
 - 人工依据：H-08—H-12 确立应用、容量优先、HTM 参考、文档分离和单节点 16 GB；H-13—H-19 确立可变容量需求、静态分配、当前集引用、少数万级出边评估、五字节 SoA 槽、owner 数组、可多于 N 的集合和百槽下限。H-21/H-25 暂定 alpha≈3、100/144 分级、逐档集合数减半；target-owned 入边归属仍是评估提案，低出度取舍不自动转为低入度删除。H-22—H-24 区分输入数与兴奋性，接受条件权重补偿方向，将 weight scale 归训练而非容量参数。H-25—H-27 分别提出正负群体、人体柱规模调研及 Flash 60+60 计算；H-35 限定当前 Flash 人口。H-28 将 embedding 表单列节点共享，H-29 规定 SoA 默认与实证例外，H-30—H-32 规定非标准位宽独立讨论和包括 FP4 的二次幂 bit 标准宽度。H-34 要求需求先于辅助结构；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量。完整证据和评估范围保留于 H-08—H-39 及 AD-001—AD-032。
-- 当前学习范围：H-40 保留共活动及邻近优先方向，H-41 排除维号距离并提出跨 minicolumn 等机会方向，但未确定提议或保留边的概率契约，H-42 / AD-035 拒绝内部等位偏好。H-43 / AD-037 固定 CC 基本单元、非精确 replica 及语义角色。H-44 / AD-038 将语义分配的位置与解剖拓扑兼容置于 1D/2D 之前；交错和选择性可达仅为研究替代，布局集合中的平均对称与逐细胞等概率须区分，后者仅作为较强的条件分析。H-46 / AD-040 明确 feature 与 minicolumn 非双射并不冲突，故不以此要求交错或重编码。
+- 当前学习范围：H-40 保留共活动及邻近优先方向，H-41 排除维号距离并提出跨 minicolumn 等机会方向，但未确定提议或保留边的概率契约，H-42 / AD-035 拒绝内部等位偏好。H-43 / AD-037 固定 CC 基本单元、非精确 replica 及语义角色。H-44 / AD-038 将语义分配的位置与解剖拓扑兼容置于 1D/2D 之前；交错和选择性可达仅为研究替代，布局集合中的平均对称与逐细胞等概率须区分，后者仅作为较强的条件分析。H-46 / AD-040 明确 feature 与 minicolumn 非双射并不冲突，故不以此要求交错或重编码。 H-52 / AD-046 指定三相稳态吸引子及各种入口条件的预期收敛为学习主目标，单 token 自循环激活并逐渐回归 DMN 为中间目标；H-67 将时间表述放宽为半衰期性质并允许 token 差异。 H-54 要求早期不建模显式抑制性连接，以同维正负群体固有抵消作用于活动；H-55 指定残留在噪音支持下先增强达峰再按 token 目标回落。 H-59 / AD-053 要求各正常状态的循环活动可受外部 token 驱使转向；不以循环本身判断失败。 H-66/AD-065—AD-067 初步预期尾头保持连接，并偏好每步维持 token 分布、最多几步有限偏离；强化／削弱策略全程细究，不采纳具体采样／增益算法。 H-68 明确自然断链是活动无法继续而非权重消除；H-69 提出分数选取配合 rate，H-70 要求数值精度细究。 H-71 指定有用小循环保留较长上下文价值，主链避免主动捷径不变；不强力消除小循环，主导淡出与历史影响分开。
 - 当前物理距离研究：H-50 / AD-044 明确神经元已经按语义向量组织，不具有天然物理位置。K-37 撤回 K-36 的软局部机会建议及“显式位置或有效接触表示”的预设选项；生物来源仍可作为研究资料。现无可代入距离核的物理度量；当前问题是生物邻近产生何种有用计算效果、是否能在现有语义组织内成立，而非默认增加几何、接触图或其它机制。H-51 / AD-045 要求修正文档后至少 12 小时深化研究；实际研究时间及来源证据单独记录，不以空等凑时长。
-- 当前行为／输入调查：H-45 / AD-039 指定 Flash-1017 实际输入表进行多维使用与 SSD 容量调查；不是最终部署选择；本地 SSD 实测的普通 127997 类型均用满 5120 个非零坐标，能量覆盖等完整指标见 TokenEmbeddingStatistics 及其紧凑证据。H-46—H-48 / AD-040—AD-042 要求每个 CC 内的激活比例处于宽范围，允许不同心智状态占比不同：无任务 DMN 的白噪音循环及负面语义缓慢漂移、任务 token 序列、沉浸状态的多维自主循环。语义负面不等于坐标负号；全网占比继承局部界限是同口径加权平均推论，不另选全局控制器。
-- 候选价值链：P-25 将 D-08 衍生自 C-12，P-22 连接 C-12 与 C-01、V-01/V-02；P-26 解释有界连接容量，P-27 解释正负表示，P-29 保留有依据的邻近共活动研究价值，P-32 探索可解释的响应函数空间组织。P-23 是 packet 依赖，P-28/P-30 是容量依赖，P-33 是输入／输出编码依赖；依赖不授予资格。P-31 的等位机制范围被 H-42 拒绝，其它形式化价值关系仍 pending-human。
+- 当前行为／输入调查：H-45 / AD-039 指定 Flash-1017 实际输入表进行多维使用与 SSD 容量调查；不是最终部署选择；本地 SSD 实测的普通 127997 类型均用满 5120 个非零坐标，能量覆盖等完整指标见 TokenEmbeddingStatistics 及其紧凑证据。H-46—H-48 / AD-040—AD-042 要求每个 CC 内的激活比例处于宽范围，允许不同心智状态占比不同：无任务 DMN 的白噪音循环及负面语义缓慢漂移、任务 token 序列、沉浸状态的多维自主循环。语义负面不等于坐标负号；全网占比继承局部界限是同口径加权平均推论，不另选全局控制器。 H-53 / AD-047 明确每 token 按各维强度一次随机激活相应比例细胞，专注要求下全局白噪音显著降低，响应在低噪音中淡出；检测 DMN 后提升白噪音维持活动比例，DMN 缓慢向负面语义而非坐标负值收敛。 H-55 增加低活动比例触发增噪，不等待 DMN 检测；H-56—H-58 将总激活比例排除出分类，按柔性窗口的去噪覆盖／路径判别：DMN 广覆盖（示例80%以上）、沉浸小范围、心流小覆盖内跨群路径，超过示例20%即非心流。低密度神经元排除法仍是候选，不是已选去噪算法。 H-59 将 stale 定义为外部 token 均不能打破／驱转当前循环；可能需要系统重置恢复，尚未选择运行判据、触发或作用范围。
+- 候选价值链：P-25 将 D-08 衍生自 C-12，P-22 连接 C-12 与 C-01、V-01/V-02；P-26 解释有界连接容量，P-27 解释正负表示，P-29 让连接构建与学习服务三相、有限 token 响应及上下文预测，P-32 探索可解释的响应函数空间组织。P-23 是 packet 依赖，P-28/P-30 是容量依赖，P-33 是输入／输出编码依赖；依赖不授予资格。P-31 的等位机制范围被 H-42 拒绝，其它形式化价值关系仍 pending-human。 P-34 将 C-17 的注意／DMN 噪音调节功能衍生自 C-12 的行为目标；P-35 约束 C-15 的学习与比较条件。这两个形式化关系仍 pending-human，不扩大 H-53 对功能方向的确认。 C-18/P-36—P-38 记录内在抵消的业务价值、极性依赖与早期学习约束；C-19/P-39—P-41 记录窗口检测的价值、可观察活动依赖与调节／分类边界。新增形式化边保持 pending-human。 C-20/P-42 把输入可转向性连接到 C-12 的正常行为目标；C-21/P-43/P-44 分别记录重置候选的恢复价值和状态语义依赖，正式关系仍 pending-human。 C-24/P-52 与 C-25/P-55 分别记录动力学及分数维护目标的候选价值；P-53/P-56/P-57/P-59 是依赖，P-54/P-58 是约束；正式资格仍 pending-human。 C-26/P-60、C-27/P-63、C-28/P-65 分别解释有用上下文、保留衰减进度及数值取舍；P-61/P-68 为约束，P-62/P-64/P-66/P-67 为依赖；正式资格 pending-human。
 - 研究进度资料：[locality-evidence.json](../applications/steady-snn/research/locality-evidence.json) 分别记录原始来源、已读范围及应用推论；[locality-research-progress.json](../applications/steady-snn/research/locality-research-progress.json) 记录 H-51 的实际研究区间，排除纠错／设置及空等。二者是研究工作记录，不是新增合格设计；H-51 的完成时长以实际区间记录为依据。 K-38—K-73 的可读综合区分布线编码成本、解剖图预测、干预传播、持续活动、带符号动力学、功能分组、单次序列传播、树突联合计算、学习表征、脑预测和 Flash 输入统计；没有由证据条目数量推出完成时长，也没有选定机制。
 - 当前容量：Flash `5120*(60+60)`，N=614400。K-27/K-28 的待选候选为 J=15、A=311296、M=622573、S=106492416、540174772 bytes，以及 J=16、A=327680、M=655350、S=112281600、569251800 bytes；剩余分别为 8173（1.330241%）和 40950（6.665039%）。FP4 每 byte 两值为计算假设；指定数组无需数组间 padding。1323827200-byte 两字节 embedding 表仅按节点计费。空间维度讨论不新增辅助数组或改变这些预算。
-- 当前资格：pending-human，无合格实施基线。人工已确认的局部方向与约束不扩展为全文或详细机制批准。FP4 相态、signed readout、整合／活动数值界限、三种语义轨迹的判据与算法、target ownership、最终配额、学习／迁移、消息及持久化仍按相应文档跟踪；本次没有新实施授权或后代资格升级。
-- 范围／不变量／验收：Model 的 SNN-01—SNN-03、SNN-05—SNN-06；CapacityPlanning 的 SNN-04 与资源验收；AdaptiveConnectivity 的 SNN-07 与迁移边界；ConnectivityScalingResearch 的尺度证据、静态预算及下标；IncomingConnectivity 的端点／执行边界；SynapticIntegrationResearch 的输入、兴奋性与训练权重尺度；SignedPopulationEncoding 的符号／上下文／相态；SpatialConnectivityResearch 的维度、排除区、概率测度、身份位置和比较条件；SemanticCorticalMappingResearch 的证据尺度、响应函数／状态／位置区分和编码边界；ActivationRegimes 的局部活动口径、三状态轨迹及全网加权平均边界；TokenEmbeddingStatistics 的张量来源、普通词表／控制码分组、浓度指标与采样范围；PhysicalDistancePreferenceResearch 的无天然物理度量边界、生物测量区分、计算作用及三状态适用条件；Decisions 的 AD-001—AD-045。保持 region relocation／生命周期、静态池、SoA、标准位宽和需求先于辅助结构原则。语义身份不得随容量迁移改变；若未来另经确认引入逻辑位置，迁移也须保持该位置，当前不预设位置；无性能或生物等价性承诺。
-- 下游：D-07 DL-13 仅为案例入口；可复用语言需求须另行确认，D-01—D-07 不因应用提案而取得新资格。C-15 的受影响范围为 D-08 的 SNN-03/SNN-05/SNN-07；C-13 的容量机制和现有算术不变；C-14 的编码边界通过 P-33 约束候选 C-16；P-31 的共享位置范围失效，无已合格后代受损。
+- 当前资格：pending-human，无合格实施基线。人工已确认的局部方向与约束不扩展为全文或详细机制批准。状态格式／相态、signed readout、整合／活动数值界限、三种语义轨迹的判据与算法、target ownership、最终配额、学习／迁移、消息及持久化仍按相应文档跟踪；本次没有新实施授权或后代资格升级。
+- 范围／不变量／验收：Model 的 SNN-01—SNN-03、SNN-05—SNN-06；CapacityPlanning 的 SNN-04 与资源验收；AdaptiveConnectivity 的 SNN-07 与迁移边界；ConnectivityScalingResearch 的尺度证据、静态预算及下标；IncomingConnectivity 的端点／执行边界；SynapticIntegrationResearch 的输入、兴奋性与训练权重尺度；SignedPopulationEncoding 的符号／上下文／相态与内在抵消；SpatialConnectivityResearch 的维度、排除区、概率测度、身份位置和比较条件；SemanticCorticalMappingResearch 的证据尺度、响应函数／状态／位置区分和编码边界；ActivationRegimes 的外部可转向性、stale／恢复边界和去噪覆盖／路径检测、残留增长／回落和局部活动口径、三状态吸引／收敛、单 token 响应、DMN 检测／噪音调节及全网加权平均边界；TokenEmbeddingStatistics 的张量来源、普通词表／控制码分组、浓度指标与采样范围；PhysicalDistancePreferenceResearch 的无天然物理度量边界、生物测量区分、计算作用及三状态适用条件；Decisions 的 AD-001—AD-092。保持 region relocation／生命周期、静态池、SoA、标准位宽和需求先于辅助结构原则。语义身份不得随容量迁移改变；若未来另经确认引入逻辑位置，迁移也须保持该位置，当前不预设位置；无性能或生物等价性承诺。 TrainingStrategy 明确阶段分工、批组／重叠比较、M/N 边数守恒、回环增益近似、输入入口、跨 token 干扰及未来 Hebbian 保持性；公式是列明假设下的分析，不是新实现契约。 H-63 修补验收进一步区分理论目标、自然响应与额外训练辅助；按预期衰减的响应不应被补回恒定宽度。 H-64 的全链约束／逐步采样分析区分宽度与强度、可用历史与回返许可、未来语义候选可行性、已有图可达与实际提前循环；结构机会不等同于动力学失败。 H-65 固定 epoch 范围和宽度／增强／削弱参数角色；分清范围比例与逐步语义、一次循环与持续时间、体内增长与跨圈净衰减。 H-66 将 token 分布保持收紧到每步或少数几步；K-82 区分连接闭合与有效再激活、完整后继与修补子集、目标群体与实际读出，并提出滚动窗口人口可行性和跨圈增益敏感性分析。 RateDynamics 的 C-24/C-25 分析单元级 rate、分数目标与有效贡献、半衰期／随机存活区分、自然终止／再激活、离散时标和多阶段数值误差；属于实质建模提案而非格式性延续。 ContextLoopsAndNumerics 比较历史对后续输出的作用、累积／未来触发语义、逐字段整数选择及条件内存／累加算术；研究活跃，未完成十二小时请求。 FlowLearning120 独立承载 flow 预激活匹配、上下文信用和初步算法比较；TrainingStrategy120 保留训练分工与 DMN/token 维护，K-125 未改正文机制。
+- 下游：D-07 DL-13 仅为案例入口；可复用语言需求须另行确认，D-01—D-07 不因应用提案而取得新资格。C-15 的受影响范围为 D-08 的 SNN-03/SNN-05/SNN-07；C-13 的容量机制和现有算术不变；C-14 的编码边界通过 P-33 约束候选 C-16；P-31 的共享位置范围失效，无已合格后代受损。 C-17/P-34/P-35 影响 D-08 的 ActivationRegimes、Model、Decisions 和 PhysicalDistancePreferenceResearch；没有已合格实施后代需失效。 C-18/C-19 影响 SignedPopulationEncoding、SynapticIntegrationResearch 及当前六文件的相应行为／检测范围；未选算法，无已合格实施后代。 C-20/C-21 影响 ActivationRegimes、Model、Decisions 和 PhysicalDistancePreferenceResearch 的输入响应与恢复候选范围，不改变区域、消息或持久化协议。 C-22/P-45—P-47 影响 TrainingStrategy 及当前七份同步到 revision74 的应用文档；无已合格后代失效，容量预算、编码所有权及语言／区域／消息／持久协议不变。 K-79 将同一八文件范围同步为持续修补方向，不使其它文档或已合格后代失效。 C-23/P-48—P-51 的候选范围为TrainingStrategy、Model、AdaptiveConnectivity、Decisions 的全链约束范围，保留其它十一文件修订与既有行为／容量／区域合同；没有合格后代因本次分析失效。 K-81 的 epoch 范围影响当前五个 revision76 文件；其它十份应用文档修订及已合格后代不变。 K-82 的回返／短时语义分析覆盖当前六个 revision77 文件；其余九份应用文档、容量预算及已合格后代不变。 K-83 新增 RateDynamics 并同步八份已有应用文档；影响 SNN-01—SNN-03/SNN-05/SNN-07 的时间、表示、训练及验收讨论。其余七份文档、既有容量算术假设及已合格后代不变；不授予实现资格。 K-84 新增 ContextLoopsAndNumerics 并同步七份已有文档，九份其它应用文档及容量基线不变；无已合格合同失效。
 
-以下关系均为智能体整理的候选价值解释或依赖，适用 D-07 revision 3、D-08 document-set revision 68（各文件修订见 D-08 覆盖表）的列明范围，除 P-31 明确为 `rejected` 外，状态为 `pending-human`。C-08—C-15 的方向／评估／拒绝按人工事件限定；C-16 是 H-42/H-44 研究请求及 H-43 静态角色前提下的候选解释，形式化衍生关系未获确认；技术依赖不授予资格。
+以下关系均为智能体整理的候选价值解释或依赖，适用 D-07 revision 3、D-08 document-set revision 84（各文件修订见 D-08 覆盖表）的列明范围，除 P-31 明确为 `rejected` 外，状态为 `pending-human`。C-08—C-15 的方向／评估／拒绝按人工事件限定；C-16 是 H-42/H-44 研究请求及 H-43 静态角色前提下的候选解释，形式化衍生关系未获确认；技术依赖不授予资格。
 
 | 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
 | --- | --- | --- | --- |
@@ -208,18 +219,57 @@ Design authority
 | P-19 | D-07 depends-on | C-03 | 引用、存储和样例需保留多 region/domain 集成能力；DL-03、DL-08、DL-13。 |
 | P-20 | D-07 depends-on | C-04 | 初始类型核心需解释与 value/type/kind 层级的边界；DL-01、DL-12。 |
 | P-21 | D-07 depends-on | C-02 | 方法、互操作和执行策略需明确环境解释与业务图的关系；DL-02、DL-11—DL-13。 |
-| P-22 | C-12 derives-from | C-01 | 用显式类型和方法表示 CC 状态、消息及循环激活逻辑，使算法语义可检查；D-08 document-set revision 68，不能据此把数值状态自动宣称为完整 ontology 或已实现的 GADT 程序。 |
+| P-22 | C-12 derives-from | C-01 | 用显式类型和方法表示 CC 状态、消息及循环激活逻辑，使算法语义可检查；D-08 document-set revision 79，不能据此把数值状态自动宣称为完整 ontology 或已实现的 GADT 程序。 |
 | P-23 | C-12 depends-on | C-08 | CC 间瞬时状态交换为 regional packet 的消息身份、应用时序和生命周期提供具体问题；D-08 / SNN-05、SNN-06。 |
 | P-24 | D-07 depends-on | C-12 | 以用户选定的首个应用推进语言讨论；D-07 DL-13 的独立案例链接；案例选择不批准其具体求解机制。 |
-| P-25 | D-08 derives-from | C-12 | 独立规范应用状态、转移、容量取舍和验收，保留可检查的业务意图；D-08 document-set revision 68 全文，具体机制尚未确认。 |
-| P-26 | C-13 derives-from | C-12 | 按有用连接需求配置容量，以有限存储表达不均匀的上下文复杂度；D-08 document-set revision 68 / SNN-07，按 H-19 以 100 槽为下限且允许忽略少连源；度分布、忽略的任务影响、学习收益与成本需要验证；H-21 的暂定模板与入边计算提案不改变该候选理由，输入准入与输出影响分别验证；H-22 进一步区分储存容量与神经元激活语义；H-23 的权重补偿方向与入度参数评估保留该区分，H-24 将权重尺度策略明确归于训练而非容量配置；形式化价值关系待确认。 |
-| P-27 | C-14 derives-from | C-12 | 用固定极性群体表达有符号语义坐标，使非负细胞活动与业务输入／输出的关系可检查；D-08 document-set revision 68 / SNN-01—SNN-03、SignedPopulationEncoding。合理性与权衡待确认，H-25 仅请求分析。 |
-| P-28 | C-14 depends-on | C-13 | 正负群体人口需要有界槽池、身份、权重和迁移机制；D-08 document-set revision 68 / SNN-04、SNN-07。该依赖不规定 alpha、权重尺度或池必须加倍，也不授予资格。 |
-| P-29 | C-15 derives-from | C-12 | 研究有功能依据的邻近规则以表达有用共活动关联，同时排除维号偏见；D-08 document-set revision 68（局部修订见覆盖表）/ SpatialConnectivityResearch、PhysicalDistancePreferenceResearch、SNN-03/SNN-05/SNN-07。H-50 明确现无物理度量；H-51 深化邻近计算收益及适用条件研究；K-37 撤回软核建议；H-42 拒绝等位机制；一般研究价值关系保持 pending-human，不由任何索引相似性自证。 |
-| P-30 | C-15 depends-on | C-13 | 学习产生的连接受静态槽容量约束，容量迁移须保持身份和既有边；几何位置的保持仅在未来另经确认引入几何时适用，不预设当前已有位置；D-08 revision 28 / SpatialConnectivityResearch、AdaptiveConnectivity。仅依赖，不选择 degree exponent、weight scale 或空间距离核；pending-human。 |
+| P-25 | D-08 derives-from | C-12 | 独立规范应用状态、转移、容量取舍和验收，保留可检查的业务意图；D-08 document-set revision 79 全文，具体机制尚未确认。 K-112 / README107 汇总已记录目标、研究候选和经验比较职责，不改变正式价值链或授予资格。 K-207 / D-08 set202 记录 H-71 实质研究完成并统一当前状态；H-86 经验比较、全部局部人工约束和 pending-human 范围保持，不新增实施资格。 |
+| P-26 | C-13 derives-from | C-12 | 按有用连接需求配置容量，以有限存储表达不均匀的上下文复杂度；D-08 document-set revision 79 / SNN-07，按 H-19 以 100 槽为下限且允许忽略少连源；度分布、忽略的任务影响、学习收益与成本需要验证；H-21 的暂定模板与入边计算提案不改变该候选理由，输入准入与输出影响分别验证；H-22 进一步区分储存容量与神经元激活语义；H-23 的权重补偿方向与入度参数评估保留该区分，H-24 将权重尺度策略明确归于训练而非容量配置；形式化价值关系待确认。 K-178 / CapacityPlanning、ConnectivityScalingResearch173 将明确的数组预算假设与 H-73/H-75/H-78 状态比较连接；容量配额、已算总额和需求先于辅助结构原则保持。 K-200 / CapacityPlanning195 将已记录的连接扫描算术纳入节点规划；RAM、保留度数、更新节奏和节点 CC 数分别约束可行性，不把全预留扫描当作强制算法或实测带宽。 K-202 / AdaptiveConnectivity、CapacityPlanning、ConnectivityScalingResearch197 精简 authority 摘要并直连独立 flow 文档；保留正文合同、来源、算术、开放选择及全部 H/K 历史，未授予实施资格。 |
+| P-27 | C-14 derives-from | C-12 | 用固定极性群体表达有符号语义坐标，使非负细胞活动与业务输入／输出的关系可检查；D-08 document-set revision 82 / SNN-01—SNN-03、SignedPopulationEncoding。合理性与权衡待确认，H-25 仅请求分析。 H-75 明确同柱个体的上下文路径价值，未选择完整读出或 HTM 学习机制。 H-76 的强预测／弱广激活输入使个体上下文路径参与当前语义输入；分支明确，数值校准及完整关系待确认。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。 K-111 / SignedPopulationEncoding106 链接同一非零 signed 总量下的个体组成分析；不选归一化字段或 decoder。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-199 / SignedPopulationEncoding194 将预测输入分支的使用与有噪声下实际上下文匹配区分；保留 H-78/H-85 对照，不把自发就绪直接视为错误，不预选门限、噪音来源标签或额外状态。 |
+| P-28 | C-14 depends-on | C-13 | 正负群体人口需要有界槽池、身份、权重和迁移机制；D-08 document-set revision 79 / SNN-04、SNN-07。该依赖不规定 alpha、权重尺度或池必须加倍，也不授予资格。 |
+| P-29 | C-15 derives-from | C-12 | 让连接构建／学习服务可检查的三相行为、入口收敛和有限 token 响应；D-08 当前覆盖表所列修订 / SNN-03/SNN-05/SNN-07、TrainingStrategy 及相关研究。H-61 提议直接构建 DMN／token 链、后期 Hebbian flow、immersion 涌现，并确认当前省略物理距离偏好；H-62 请求批组替代方案比较。方法方向是初步人类提案，形式化衍生链与参数算法仍 pending-human；H-41/H-42/H-50 边界不变。 H-63 的持续修补让训练维护既有行为；目标缺额与自然衰减分开，正式机制仍 pending-human。 H-79—H-81 的 flow 分支为 Hebbian/HTM 方向及初步设计授权，未选具体算法；不把 C-22 修补合同外推。 H-82/AD-088 以预测性预激活群与输入序列高度匹配作为 flow 直接训练验收；无需自主持续生成，生成算法另行设计。具体度量和学习规则仍待定。 H-83/AD-089 要求按序列长度验证：共享匹配片段允许多个预测，随上下文增长向训练序列收敛；不预设固定单候选或对每个未到达预测等量削弱。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 K-95 比较独立于生成 fallback 的上下文学习责任分配与训练状态干预；均为待讨论候选，不选择辅助结构或更新算法。 K-105 的初步 flow 流程把前序状态、观察分配、相关更新、缺失边发现与后续检验具体化；更新曝光／弱化与教学干预均为对照候选，不选算法或新字段。 K-106 将上下文预测与频率先验、语义均值及概率校准分开；真实数据比较不预选读出、度量或额外状态。 K-107 比较上下文组合检测与实际源模式分布，不把更多槽容量等同于更多独立上下文。 K-109 区分多步历史共现与相邻转移、学习曝光次数与源状态时序；信用窗口不自动采用活动半衰期。 K-113 / TrainingStrategy108 约束预测前可用信息和 token 顺序；不以未提供的序列身份、位置标签或后验读出宣称上下文预测。 K-114 / TrainingStrategy109 比较自然输入强度与上下文形状匹配，区分学习接收者、预测竞争和储备容量；不选择打分、配额或新字段。 K-117 / TrainingStrategy112 以未来预测区分上下文拟合目标和代表性分配，分歧位置检验不被共同片段的平均分掩盖；不选回溯信用机制。 K-119 / TrainingStrategy114 比较完整后续候选关系与各维边际兼容性，避免将维内预测误作完整 token 预测。 K-122 / TrainingStrategy117 将不同曝光规则的边更新与读访问范围分开计费，不以优化名义改变学习语义。 K-124 / TrainingStrategy119 区分具体目标不相容、已有上下文不足及更新干扰；以同一图检验各行为，不预设保护机制或调度。 K-125 将现有 flow 详细分析逐字移至 FlowLearning120；TrainingStrategy120 继续给出分工和维护，不新增关系或资格。 K-127 / FlowLearning122 区分有意替换、保留有效分支及共同图行为，序列阶数不自动等于模型时间记忆跨度；不选遗忘机制或新增任务。 K-129 / FlowLearning124 将既有候选流程提前并合并重复角色说明；不改变操作、实验选择或资格。 K-130 / FlowLearning125 比较关联统计与预测误差调制；一阶线性参考不扩展为完整网络梯度、确定损失或 DMN/token 修补规则。 K-132 / FlowLearning127 给出固定线性参考的源能量与更新幅度关系；不以容量档位替代实际输入，也不选步长调节机制。 K-133 / FlowLearning128 以实际写回而非理想步长判断候选的数值行为。 K-135 / FlowLearning130 以原始研究区分固定语义角色、上下文响应和噪音稳健性；不选新增层、稀疏比例或多样性目标。 K-136 / FlowLearning131 区分信用幅度、背景数量和有用上下文；条件采样／均值算术不选择过滤器或新状态。 K-137 / FlowLearning132 链接已有抵消／组成算术，语义总量不替代个体源信用检查。 K-140 / FlowLearning135 区分平均预测相似度与单次输入前状态的候选可用性；不引入生成要求或预测表示。 K-141 / FlowLearning136 将学习约束的概率解释与存储方向分开；类别输入研究不直接外推至密集分级上下文。  K-142 / FlowLearning137 区分自然 readiness 与拟合读出、输入后响应证据。  K-143 / FlowLearning138、flow-slot-capacity-analysis 保留缺失源发现及成员检查成本比较。  K-144 / FlowLearning139、cancellation-properties-analysis 保留单步抵消与时序学习比较，不选择梯度法或预测抵消。 K-145 / FlowLearning140 区分潜在突触匹配、连接门槛与分级权重传导；不默认增加 permanence／confidence 字段或采用 burst 教学。 K-146 / FlowLearning141 以原始时序模型区分共活动信用与时间单位；不导入 STDP、全局抑制或非衰减链。  K-174 / FlowLearning169 区分下一输入匹配与较长时域的关联统计；不把 successor representation 或 TD 机制加入模型。 K-179 / FlowLearning174 将直接定义的 rate/frame 学习与有条件的 spike-rule 降阶区分，不引入微观时序机制。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-188 / FlowLearning183、MR-S095 区分跨日表征漂移的任务读出与自身自然预激活；补偿模型所需目标误差反馈不等同实测突触学习，未预选补偿机制或冻结身份语义。 K-189 / FlowLearning184、MR-S096 区分已有关联的漂移维护与陌生转移学习；单细胞均值／方差调节不等同于 CC 活跃比例控制，不选择补偿机制。  K-195 / FlowLearning190、MR-S010 核查学习期间有效循环强度及持续可塑性的来源条件；自然预激活与后续行为按实际条件比较，不选择增益变量、学习门控或自主生成目标。  K-196 / FlowLearning191、SynapticIntegrationResearch191、MR-FC015 以同度／同权重和的条件汇集比较权重集中及源协方差；上下文输入分数不由容量或权重总量自动校准，不新增归一化、门限或元数据。  K-197 / FlowLearning192、MR-S049 深查实际离线批量学习及内部连续状态／二值输出区别；不将自主回放结果当在线 flow 或分级语义输出证据，未选状态、竞争或学习模式。 K-206 / FlowLearning201、MR-S044 细化预输入就绪度测量与生成输出的边界；保留 H-83 合理多候选，不将单一实际符号的分类计分直接变成本文验收。 |
+| P-30 | C-15 depends-on | C-13 | 学习产生的连接受静态槽容量约束，容量迁移须保持身份和既有边；几何位置的保持仅在未来另经确认引入几何时适用，不预设当前已有位置；D-08 当前覆盖表所列修订 / SpatialConnectivityResearch、AdaptiveConnectivity、IncomingConnectivity、TrainingStrategy。仅依赖，不选择 degree exponent、weight scale 或空间距离核；pending-human。 K-103 区分源选择、既存边适配、缺失边发现和逐档容量可行性；不采用增长／删除、排序或分配结构。 K-107 / SynapticIntegrationResearch102 说明容量供给与整合选择性不同；不采纳树突分组或新增存储。 K-122 的条件连入遍历计数区分实际目标度数、源信用和写回数；不选择反向索引或元数据。 K-163 / FlowLearning158、SynapticIntegrationResearch158 明确 HTM 证据的扰动及人口缩放条件，不选择编码、门限或新状态。 |
 | P-31 | C-15 depends-on | C-14 | **rejected**：H-42 / AD-035 拒绝本边原来服务的共享内部位置机制。revision 26 中对正负身份／上下文的依赖只留历史；不得据此延续等位 prior。 |
-| P-32 | C-16 derives-from | C-12 | 检查语义分配与解剖位置的兼容，避免物理建模假设暗改 H-43 的语义呈现及学习边界；D-08 document-set revision 68（局部修订见覆盖表）/ SemanticCorticalMappingResearch、PhysicalDistancePreferenceResearch。H-50 明确语义安排已存在而物理度量不存在，H-51 要求深化其计算意义研究；H-44 授权研究；H-46 澄清 feature/minicolumn 非双射并不构成冲突。三状态目标不批准群体交错或其它映射；候选价值关系 pending-human。 |
+| P-32 | C-16 derives-from | C-12 | 检查语义分配与解剖位置的兼容，避免物理建模假设暗改 H-43 的语义呈现及学习边界；D-08 document-set revision 79（局部修订见覆盖表）/ SemanticCorticalMappingResearch、PhysicalDistancePreferenceResearch。H-50 明确语义安排已存在而物理度量不存在，H-51 要求深化其计算意义研究；H-44 授权研究；H-46 澄清 feature/minicolumn 非双射并不构成冲突。三状态目标不批准群体交错或其它映射；候选价值关系 pending-human。 H-61 确认当前省略物理距离倾向；该解剖兼容研究不再是当前构建设计的前置任务，候选研究价值关系保持 pending-human。 |
 | P-33 | C-16 depends-on | C-14 | 拓扑研究须保留静态维度／极性归属，区分未定数值读出与角色身份；D-08 revision 28 / SemanticCorticalMappingResearch、SignedPopulationEncoding。仅依赖，不批准重编码、共同坐标或 replica 同步机制；pending-human。 |
+| P-34 | C-17 derives-from | C-12 | 专注时降低背景干扰，活动不足时增噪并支持 DMN，服务柔性活动目标及残留增长／回落；D-08 revision70 / ActivationRegimes、Model、Decisions。功能方向据 H-53/H-55，正式价值链和控制算法 pending-human。 K-110 / ActivationRegimes105 区分噪音与活动占比的条件响应、反馈时序和有限驱动可达性；不选控制器、阈值、窗口或额外状态。 K-115 / ContextLoopsAndNumerics110 给出固定帧内噪音尺度下的 60+60 条件矩，不把无符号活动增加等同于语义残值增强。 K-120 / ContextLoopsAndNumerics115 以阈值响应的精确条件矩区分噪音使残留可响应、均值放大与可靠信息；不选转移函数或控制器。 K-177 / ContextLoopsAndNumerics172 以条件噪音协方差与抵消后组成分析核查语义／上下文支持价值；未新增噪音机制或状态。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
+| P-35 | C-17 constrains | C-15 | 普通单次 token 的低噪音响应与抵消后活动不足增噪是不同的训练／比较条件；需验证残留先增强达峰再回落，不能把驱动差异当作连接／几何收益。D-08 revision70；H-53/H-55 的业务条件明确，正式约束关系及训练公式 pending-human。 K-110 要求实际比较区分固定驱动与完整反馈、冻结权重与学习后的响应；机制仍未选。 |
+| P-36 | C-18 derives-from | C-12 | 通过同维相反群体活动抵消服务互补正面输入的活动降低与有用残留目标；D-08 revision84 / SignedPopulationEncoding、ActivationRegimes。H-54 的功能目标及 H-77 的活跃 rate 净余／比例保留操作明确，正式价值关系 pending-human。 K-168 / SignedPopulationEncoding163、Model163 明确暂态与完成后的活跃极性总量；净值可恢复 H-77 后的总量但不恢复细胞上下文，未选消息合同。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。  K-183 / SignedPopulationEncoding178、ActivationRegimes178 和 cancellation-properties-analysis 以同一净向量下不同细胞参与数的精确例区分调节量与幅度；不选门限或招募配额。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-205 / ContextLoopsAndNumerics200 将噪音单独覆盖例的独立、对称、无保留状态条件明确写出；不将其用作实际回返轨迹估计，不选噪音律、计数门限或检测结构。 |
+| P-37 | C-18 depends-on | C-14 | 抵消依赖稳定的维度／极性归属及可比较的活动语义；D-08 revision84。只给依赖，H-77 已规定活跃 rate 的全量净余及比例保留并拒绝下标配对；预测相态、完整读出和新增存储不因依赖获批；pending-human。 |
+| P-38 | C-18 constrains | C-15 | 早期连接学习不得借显式抑制性突触实现目标，需在内在正负群体抵消条件下评估学习动态；D-08 revision84，H-54/H-77 范围明确，正式约束链 pending-human。  K-144 / FlowLearning139、cancellation-properties-analysis 保留单步抵消与时序学习比较，不选择梯度法或预测抵消。 |
+| P-39 | C-19 derives-from | C-12 | 用可观察的去噪窗口覆盖和路径使三相吸引／收敛目标可判别与训练，避免受调节的总占比代替相态；D-08 当前覆盖表所列修订，H-56—H-58 方向明确，正式关系 pending-human。 K-138 / ActivationRegimes133 给出 H-77 条件下广覆盖所需的跨极性参与下界；示例比例不变成固定阈值，向量几何不替代语义效价。 K-139 / ActivationRegimes134 区分双神经帧与观测历史，按所需行为比较 block／rolling／fading 窗口；不选窗口或字段。 K-176 / ActivationRegimes171 区分候选检测描述与已证实的可辨识性；相同允许观测无法单独证明不同因果来源，正式关系及具体规则仍待定。 |
+| P-40 | C-19 depends-on | C-12 | 窗口覆盖需要 CC 神经元身份、可计数的活动定义及时间口径；D-08 当前覆盖表所列修订，仅依赖，不选 FP4 相态、采样器或历史数组；pending-human。 |
+| P-41 | C-19 constrains | C-17 | 总激活比例进入活动调节但不进入相态分类，DMN 标签依窗口覆盖／路径；低占比增噪不自动表示 DMN。D-08 当前覆盖表所列修订，H-55/H-56 的职责边界明确，正式关系 pending-human。 |
+| P-42 | C-20 derives-from | C-12 | 使正常自循环保持外部输入可驱转，从而服务 token 语义交互及状态转换；D-08 revision71 / ActivationRegimes、Model、Decisions、PhysicalDistancePreferenceResearch。H-59 的行为要求明确，正式价值链及运行判据 pending-human。 |
+| P-43 | C-21 derives-from | C-20 | 在输入驱转能力丢失时考虑通过重置恢复该能力；D-08 revision71。H-59 仅提出可能需要，价值／代价及策略均为候选，pending-human。 |
+| P-44 | C-21 depends-on | C-12 | 重置需先定义被影响和保留的活动、预测、连接及持久状态与恢复入口；D-08 revision71 / SNN-03/SNN-05/SNN-06。仅依赖，不授予清除状态或改动区域协议的实施资格；pending-human。 |
+| P-45 | C-22 derives-from | C-15 | 以预期下一步响应与自然响应的缺额驱动持续修补，使初建和后续训练共同维护 DMN/token 行为及有限响应；D-08 当前覆盖表所列修订 / TrainingStrategy。H-63 明确提出方向，目标定义、教学与连接更新及形式化价值链仍 pending-human；后期 Hebbian flow 不因此被替换。 H-64 进一步要求兼顾预期进程及避免意外捷径，局部补足数量不足以说明完成目标。 H-79—H-81 明确范围为 DMN/token；flow 算法初设不继承此修补机制。 K-124 用条件反复补缺例说明修补后单独成功不证明与其他训练结果共存；不改变 H-63 的算法开放范围。  K-194 / TrainingStrategy189、MR-S098 深查嵌入网络的链传播、幅度保真及交叉激活证据；保留实际共同背景下的维护验收，不导入持续输入、同步、几何或细胞机制。 |
+| P-46 | C-22 depends-on | C-13 | 修补必须适配静态 SoA 槽池、累计活跃入度及可用容量类；已有边调权不新增端点槽，新增独立边才计入分配，不能按完整批组重复建边。D-08 document-set revision 79 / TrainingStrategy、AdaptiveConnectivity；技术依赖 pending-human，不选更新优先级、配额或堆结构。 |
+| P-47 | C-22 depends-on | C-14 | 理论应激活群体及缺额口径须保留固定坐标／极性与60细胞约束；候选目标不可任意跨语义补足，内在抵消和相态数值需纳入实际响应。D-08 document-set revision 79 / TrainingStrategy、Model；仅依赖，不采纳固定入口、精确配额算法、噪音因果标签或新编码；H-66 的每步／少数几步分布偏好约束目标，允许幅度增强与淡出。 |
+| P-48 | C-23 derives-from | C-22 | 将局部补足激活纳入预期完整进程，使维护保留有用的顺序、回返及有限响应，避免宽度足够却走捷径；D-08 document-set revision 79 / TrainingStrategy。H-64 授权分析并提出方向，具体价值权衡与完整契约 pending-human。 H-65 以维护目标决定 epoch 范围与增强／削弱策略，参数角色明确而详细传递函数未定。 H-66 要求按连接回返的预期分析有限响应，并保持短时语义比例；有限人口与循环增益的具体取舍仍 pending-human。 |
+| P-49 | C-23 depends-on | C-13 | 前瞻计划需考虑累计入度、可用容量类与共享图，当前可分配不代表以后步骤也可完成；D-08 document-set revision 79 / TrainingStrategy、AdaptiveConnectivity。仅依赖，不新增预留数组、出边索引或全图检查预算。 |
+| P-50 | C-23 depends-on | C-14 | 后续步骤的语义候选域与每坐标／极性60细胞限制影响不重叠分配和回返，不能用任意神经元补足稀缺语义角色；D-08 document-set revision 79 / TrainingStrategy、Model、SignedPopulationEncoding。H-65 固定每 epoch 的 token 比例范围；H-66 偏好每步保持原向量分布，最多允许少数几步的有限偏离。原向量比例、整数范围、完整后继响应和实际强度须区分；窗口、容差、读出及采样算法仍待定。仅技术依赖，不授予实现资格。 H-67/H-69 开放 rate 与分数参与；整数不重用人口界仅在对应假设下适用，短时向量目标仍保留。 |
+| P-51 | C-23 constrains | C-22 | 修补候选须在明确历史／回返范围内评估，并关注未来可行性及已有图造成的意外捷径；自然提前回激不能自动充当正确后继。D-08 document-set revision 79；H-64 指定要避免的现象，具体排除窗口、允许边、搜索与响应判据 pending-human。 H-66 的语义偏好适用于正确自然参与加修补后的完整后继群体，缺额子集不能无视已有参与再机械照搬全 token 比例；此为 K-82 的候选解释，不是已选算法。 |
+| P-52 | C-24 derives-from | C-15 | 用明确的时间／活动强度语义表达可维持又可自然淡出的循环响应，服务三相行为与 token 语义转向；D-08 当前覆盖表所列修订 / RateDynamics、Model、ActivationRegimes、SynapticIntegrationResearch。H-67 授权讨论而非选定模型；正式价值权衡及实现契约 pending-human。 K-165 / RateDynamics160 明确 rate 降阶已包含的波动与显式噪音的意义，不选择噪音律或适应时间常数。 K-166 / RateDynamics161 区分平均与 H-77 抵消的次序，不以 ensemble 平均替代当前快照或加入分布状态。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-172 / RateDynamics167 深查 population-rate 降阶条件；不以群体平均加速替代个体上下文身份或宣称 CPU 收益。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
+| P-53 | C-24 depends-on | C-14 | rate、分数与实际有符号输出须保留固定极性、预测／当前相态及内在抵消；D-08 revision84 / RateDynamics、SignedPopulationEncoding。依赖不允许静默重编码、丢弃上下文身份或改变活跃比例口径；pending-human。 H-76 输入需读取既有预测状态，H-77 规定活跃 rate 抵消；相态及时间边界不能隐式合并。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。 |
+| P-54 | C-24 constrains | C-22 | 修补需比较同一单位的期望和自然有效贡献，既有成功活动仍须计入；自然衰减不被补回恒定值，终止不删权重。D-08 当前覆盖表所列修订 / RateDynamics、TrainingStrategy；具体更新规则 pending-human。 |
+| P-55 | C-25 derives-from | C-22 | 分数参与让缺额及弱语义分量不被过早四舍五入为整细胞，服务目标驱动的维护与短时语义保持；D-08 revision81。H-69 提出方向；双因素语义、收益／代价及正式关系 pending-human。 |
+| P-56 | C-25 depends-on | C-24 | 分数与 rate 的条件含义及单位决定乘积、波动和持续状态，须避免重复衰减或重复存储；D-08 revision81 / RateDynamics。仅依赖，不确认 f*r 为最终公式或双字段布局；pending-human。 |
+| P-57 | C-25 depends-on | C-14 | 每坐标／极性有效贡献与原向量之间需明确读出、精度、低信号误差和一次输入映射；D-08 revision81 / RateDynamics、SignedPopulationEncoding。H-66 短时语义目标保留，不引入运行时按已知 token 强制投影；pending-human。 |
+| P-58 | C-25 constrains | C-23 | 分数参与和持续 rate 使整细胞不重用计数界成为条件比较，进程约束应区分持续活动、合法回返和意外捷径；同一身份分配给多个步骤仍共享其输出边。D-08 revision81 / RateDynamics、TrainingStrategy；具体历史与重叠规则 pending-human。 |
+| P-59 | C-24 depends-on | C-13 | 当前静态 SoA 端点池可作为候选存储基础，但 rate 更新的扫描工作、数值状态及计算精度须另由算法说明；D-08 revision81。不改变容量预算假设、不预设缓存／索引或额外数组；pending-human。 |
+| P-60 | C-26 derives-from | C-15 | 保留上下文对后续语义行为的影响，使有用记忆不只依赖大链主干延长输出；D-08 当前覆盖表所列修订 / ContextLoopsAndNumerics、TrainingStrategy、ActivationRegimes。H-71 确认方向，具体机制与正式关系 pending-human。 K-111 / ContextLoopsAndNumerics106 以现有 rate 的条件组成分解区分语义总量与后续上下文作用，不新增存储或宣称容量。 K-115 区分逐细胞噪音、坐标汇总尺度与整个向量的扰动；不以弱维符号变化数替代有用上下文或语义效果。 K-128 / ContextLoopsAndNumerics123 以固定输入下的条件活跃 rate 差异说明部分坐标抹除与全 CC 历史丢失不同；实测 embedding 算术不等于已学上下文性能。 K-131 / ContextLoopsAndNumerics126 在同一样本比较原始输入相对尺度；中位数接近不保证每个输入的上下文差异保留相同，不选编码归一化。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-180 / ContextLoopsAndNumerics175、MR-S011/MR-S012 深查暂态读出、重复外部驱动与部分权重训练的条件；不导入变换、读出、学习规则或稀疏容量结论。  K-181 / ContextLoopsAndNumerics176、context-composition-analysis 明确固定总量下条件幅度界及可表示模式计数；MR-S013 的分布耦合证据不等于本模型容量。未选上限、编码或新增状态。  K-184 / ContextLoopsAndNumerics179、MR-S006 区分同噪音下有／无刺激的维持与外部噪音分组指定的选择性；不导入振荡、资源状态或模型时标。 K-193 / ContextLoopsAndNumerics188 核查连续吸引子记忆扩散的稳态、弱涨落及调谐缩放条件；连续 rate 或活动调节不自动满足它们，不导入记忆容量或噪音控制公式。 K-201 / ContextLoopsAndNumerics196、context-composition-analysis 的 balanced_drive_frame_scaling 将同维平衡驱动的组成收缩与帧间隔联系；保持净语义值不等于保持上下文，未把确定性例当作白噪音律或选取新的状态／调节机制。 |
+| P-61 | C-26 constrains | C-23 | 主链选取中的防捷径偏好不得变为强力消除全网小循环；按实际进程破坏、语义干扰和不可驱转判错；D-08 revision84。H-71 方向明确，识别／干预策略 pending-human。 |
+| P-62 | C-26 depends-on | C-24 | 小循环上下文需要明确 rate、噪音、自然失续／再激活及读出时间尺度；主导幅度与历史影响不同；D-08 当前覆盖表所列修订。技术依赖不选择独立上下文状态或专门网络，pending-human。 |
+| P-63 | C-27 derives-from | C-24 | 保留小于表示量子但长期重要的衰减进度，使近似低精度执行仍服务实际淡出与维持；D-08 当前覆盖表所列修订 / ContextLoopsAndNumerics、RateDynamics。H-71 要求分析，具体定时／累积机制 pending-human。  K-173 / ContextLoopsAndNumerics168 区分源变化稀疏与连入依赖／同维抵消传播的影响范围；不预设事件索引、缓存或重算算法。  K-198 / ContextLoopsAndNumerics193、MR-S002 核查 QSS 的总量化误差（包括滞回）趋零及观察时域条件；不把收敛结论当固定低精度任意时长保证，未选事件结构或滞回机制。 K-204 / ContextLoopsAndNumerics199、numeric-representation-arithmetic 的 directed_decay_rounding 区分向下取整避免停滞与保留衰减时间；有限归零不是半衰期／自然断链的充分证据，不选取整律或新状态。 |
+| P-64 | C-27 depends-on | C-13 | 延后生效需要与静态区域、SoA 和所需状态预算协调，按算法说明锚点／残差／事件的真实代价；D-08 当前覆盖表所列修订。仅依赖，不预分配定时器数组或堆队列，pending-human。 |
+| P-65 | C-28 derives-from | C-24 | 以可检查的误差、范围和资源代价选择数值表示，避免存储便利悄改循环、抵消、衰减与训练语义；D-08 当前覆盖表所列修订。H-70/H-71 要求精度与整数比较，形式化取舍 pending-human。 K-98 用实际存储权重及其重复作用评估舍入，而非仅凭单步无偏性或宽状态认定行为保真。 K-102 分别核查乘积、归约、抵消和状态写回；宽存储不能替代中间精度，是否保留极弱信号由实际行为比较决定。 K-105 核查重复学习的舍入停滞和随机舍入稳态波动，比较宽权重与低位宽加副本的完整成本；不更改五字节槽基线。 K-116 / ContextLoopsAndNumerics111 以条件分布比较中间量化与最终写回，不把逐值无偏当成非线性转换后行为无偏。 K-118 / ContextLoopsAndNumerics113 区分已证 L1 非放大与 Euclidean 误差集中，不能把不同范数的局部界混用。 K-121 / ContextLoopsAndNumerics116 以精确浮点写回例区分当前语义和后续上下文作用的精度；不据此选格式。 K-133 / ContextLoopsAndNumerics128 将稳定的理想误差更新与逐边存储后的停滞／循环分开，比较宽权重和随机舍入的条件结果；不选格式、尺度或逐边残差。 K-134 / ContextLoopsAndNumerics129 以同误差、不同权重分布的条件例检查非负边界；不据此引入新步长或状态。 K-147 / ContextLoopsAndNumerics142 区分短时二值视觉推理与持续 rate 行为，并核对整数阈值／移位的算术语义；不选格式、字段或部署优化。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
+| P-66 | C-28 depends-on | C-14 | 位宽、符号、尺度与相态须保持有符号语义分量和残差含义，不能由整数格式自动推导新编码；D-08 revision84 / SignedPopulationEncoding、ContextLoopsAndNumerics。pending-human，仅依赖。 |
+| P-67 | C-28 depends-on | C-13 | 端点 ID、权重、状态与可能新增元数据分别计费；INT4 权重不自动使五字节槽减半，累加宽度另论；D-08 revision84。容量基线与所有权不变，pending-human。 |
+| P-68 | C-28 constrains | C-27 | 衰减的计时边界与小数进度受量化、缩放及舍入影响；不能把反复舍入停滞或重设时间当作自然记忆；D-08 当前覆盖表所列修订。具体误差容差／调度规则 pending-human。 |
+| P-69 | C-29 derives-from | C-24 | 使一次神经转移只依赖同一前帧，避免目标访问顺序改写活动传播；低成本双状态数组配合现有入边布局，服务明确可复现的业务时间语义。D-08 当前覆盖表所列修订 / RateDynamics、IncomingConnectivity、Model；H-75 提议方向，完整机制与正式关系 pending-human。 K-113 / RateDynamics108 区分观察次序、模型时长、神经帧与学习曝光；不选事件队列、每 token 一帧或额外历史状态。 K-116 区分相同前帧快照与抵消前后不同数值转换边界；不增加帧或持久状态。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 |
+| P-70 | C-29 depends-on | C-13 | 连入集提供目标拥有的源 ID/权重遍历；双帧仅复制所需状态字段，静态 SoA、容量与区域约束保留。D-08 当前覆盖表所列修订；依赖不授予资格，不选择并行调度器、第三帧、事件索引或连接池副本。 K-108 / IncomingConnectivity103 从真实遍历／增长／迁移需求比较保留前缀的端点标记与计数，不预设辅助数组。 |
+
+C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录；P-34—P-41 的形式化关系保持 pending-human。H-58 的低密度过滤是候选办法，不因功能要求获确认而自动成为所选算法。
 
 ### 影响检索索引
 
@@ -230,15 +280,34 @@ Design authority
 | V-03、C-05 | E-07、E-09；D-01、D-04，以及依赖 D-01 的 D-02、D-05；P-13、P-17 及 D-07 对应范围。 |
 | C-06、C-07 | E-08—E-10；D-05、D-06；P-18、D-07 的 DL-10 及后续源码／编辑设计。 |
 | C-08—C-11 | P-12—P-16、P-23；D-07 的 G-01—G-05、相关 DL-* 议题及 DD-001、DD-002；D-08 的消息与持久化边界；方向依据 H-06、H-07。 |
-| C-12 | P-22—P-33；D-08 全文、AD-001—AD-045；D-07 的 DL-13、DD-003—DD-004；方向和约束依据 H-08—H-51；P-31 仅供拒绝历史定位。 |
-| C-13 | P-26、P-28、P-30；D-08 的 SNN-02、SNN-03、SNN-04、SNN-06、SNN-07 与 AD-006—AD-023、AD-031/AD-032；H-13—H-19 的基线、H-20 的调研、H-21 的暂定模板与入边评估、H-22 的激活与解剖调研、H-23 的条件入权重方向和独立入度参数、H-24 的训练／容量职责边界、H-25 的容量暂定、H-38/H-39 的小剩余目标及排除旧容量约束；影响端点归属、度分布、最低容量含义、迁移／历史和计算／路由成本。 |
-| C-14 | P-27/P-28/P-33；P-31 为拒绝历史。D-08 的 SignedPopulationEncoding、SemanticCorticalMappingResearch、Model / SNN-01—SNN-03、SNN-05、CapacityPlanning / SNN-04、AD-021—AD-042 的相关范围，另见 TokenEmbeddingStatistics 的 H-45 输入测量及 ActivationRegimes 的效价／相态边界。H-43 固定语义角色，保留坐标／极性归属及现有容量；数值读出仍待决，学习重编码不属于当前方向。 |
-| C-15 | P-29/P-30；P-31 历史拒绝范围。D-08 的 SpatialConnectivityResearch、Model、AdaptiveConnectivity、SignedPopulationEncoding、PhysicalDistancePreferenceResearch 与 AD-033—AD-037、AD-043—AD-045；K-38—K-73 补充计算作用及转移条件的研究综合，区分解剖预测、传播、同步和持续活动；K-37 依据 H-50 撤回智能体的软机会建议，H-42 终止等位机制，H-43 将一般邻近研究限定于静态语义角色前提。 |
-| C-16 | P-32/P-33；D-08 SemanticCorticalMappingResearch、Model、SignedPopulationEncoding、README、ActivationRegimes、PhysicalDistancePreferenceResearch、AD-036—AD-045。H-46 允许 feature/minicolumn 非双射；H-43 固定语义角色及非精确 replica，H-44 优先解剖兼容；K-38—K-73 区分固定语义角色与可学习响应，检查脑对齐的位置不可辨识性及 Flash 坐标响应距离的条件几何；胞体位置、接触机会与功能选择的研究不自动批准布局或学习算法。 |
+| C-12 | P-22—P-68；D-08 全文、AD-001—AD-076；D-07 的 DL-13、DD-003—DD-004；方向和约束依据 H-08—H-71；P-31 仅供拒绝历史定位。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-71 允许有用小循环保留较长上下文影响，不以主导响应淡出要求一切历史作用归零。 K-112 / README107 给出当前方向、训练边界与真实数据比较索引；详细契约仍 pending-human。 K-207 / D-08 set202 记录 H-71 实质研究完成并统一当前状态；H-86 经验比较、全部局部人工约束和 pending-human 范围保持，不新增实施资格。 |
+| C-13 | P-26、P-28、P-30；D-08 的 SNN-02、SNN-03、SNN-04、SNN-06、SNN-07 与 AD-006—AD-023、AD-031/AD-032；H-13—H-19 的基线、H-20 的调研、H-21 的暂定模板与入边评估、H-22 的激活与解剖调研、H-23 的条件入权重方向和独立入度参数、H-24 的训练／容量职责边界、H-25 的容量暂定、H-38/H-39 的小剩余目标及排除旧容量约束；影响端点归属、度分布、最低容量含义、迁移／历史和计算／路由成本。 K-103 / revision98 给出逐档静态匹配条件并强调迁移保持有效权重；容量模板与所需辅助结构未变。 K-107 区分连接容量与上下文辨识能力，静态配额和布局不变。 K-108 从遍历与迁移需求比较两种前缀结束表示；辅助数组只列待验证候选，现有静态预算不加额。 K-178 / CapacityPlanning、ConnectivityScalingResearch173 将明确的数组预算假设与 H-73/H-75/H-78 状态比较连接；容量配额、已算总额和需求先于辅助结构原则保持。 K-200 / CapacityPlanning195 将已记录的连接扫描算术纳入节点规划；RAM、保留度数、更新节奏和节点 CC 数分别约束可行性，不把全预留扫描当作强制算法或实测带宽。 K-202 / AdaptiveConnectivity、CapacityPlanning、ConnectivityScalingResearch197 精简 authority 摘要并直连独立 flow 文档；保留正文合同、来源、算术、开放选择及全部 H/K 历史，未授予实施资格。 |
+| C-14 | P-27/P-28/P-33/P-37；P-31 为拒绝历史。D-08 的 SignedPopulationEncoding、SemanticCorticalMappingResearch、Model / SNN-01—SNN-03、SNN-05、CapacityPlanning / SNN-04、AD-021—AD-042 的相关范围，另见 TokenEmbeddingStatistics 的 H-45 输入测量及 ActivationRegimes 的效价／相态边界。H-43 固定语义角色，保留坐标／极性归属及现有容量；数值读出仍待决，学习重编码不属于当前方向。 H-65/H-66、AD-062/AD-067、P-47/P-50 另约束 TrainingStrategy 的 epoch 范围与短时语义保持；数值编码、窗口和容差仍待定。 H-75/AD-080 明确同一 minicolumn 内个体表示共享语义成分的不同上下文路径；不把这些身份归并为单一平均值或固定一细胞一条独占路径。 H-76/AD-082 指定 token 输入的预测选择：预测占比充分则强激活这些细胞，否则广范围低强度激活；阈值、强度与坐标校准待定。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。 K-111 区分附加驱动前的组成与抵消所保留的 provisional 组成；没有正负下标对应或新增字段。 K-137 / Model132 明确 H-77 活动抵消已指定，预测语义仍按 H-78/H-85 比较。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-199 / SignedPopulationEncoding194 将预测输入分支的使用与有噪声下实际上下文匹配区分；保留 H-78/H-85 对照，不把自发就绪直接视为错误，不预选门限、噪音来源标签或额外状态。 |
+| C-15 | P-29/P-30/P-35/P-38；P-31 历史拒绝范围；C-22/P-45。D-08 Model、ActivationRegimes、AdaptiveConnectivity、TrainingStrategy、PhysicalDistancePreferenceResearch、SpatialConnectivityResearch、Decisions。H-61/AD-055—AD-058 细化训练分工并确认阶段性省略物理距离偏好；H-62/AD-059 请求静态批组／重叠替代方案比较。K-78 保留 H-52—H-59 行为约束，不把“全部相态为目标”误作全部相态单独 Hebbian 训练。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-79—H-81/AD-085—AD-087 明确 Hebbian/HTM 是 token 序列 flow 的学习方向，算法尚未选定；现授权初步设计并尽早讨论问题，不默认沿用 DMN/token 修补。 H-82/AD-088 以预测性预激活群与输入序列高度匹配作为 flow 直接训练验收；无需自主持续生成，生成算法另行设计。具体度量和学习规则仍待定。 H-83/AD-089 要求按序列长度验证：共享匹配片段允许多个预测，随上下文增长向训练序列收敛；不预设固定单候选或对每个未到达预测等量削弱。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 K-95 的 flow 初设分析与上下文分配候选保持 pending-human；H-85 明确预测正负并存／抵消留待实验；H-86 授权明显经验选项直接列为真实数据比较，不逐项询问。 K-98 将 flow 的预测改进与共享循环、fade-out 和外部可驱转性一起比较；未选归一化、图分区或关联更新公式。 K-100 / TrainingStrategy95 区分正负群体非负重叠、signed 语义相似度与实际上下文细胞预测；flow 因果步骤仅待选角色，不采用学习律或额外状态。 K-103 区分未选择预测的源信用、实际前序上下文和缺失源边发现；经验选择保持对照，不继承生成 fallback。 K-105 / TrainingStrategy100 提出独立于修补的 flow 流程候选，区分联合频率、条件关联、权重保留与 token 活动半衰期。 K-106 / TrainingStrategy101 给出训练保持、共享片段、未见序列与在线更新的比较边界，经验方案保持开放。 K-107 / TrainingStrategy102、SynapticIntegrationResearch102 将整合能力与上下文分配一起比较，单检测器反例不外推为全网失败。 K-109 / TrainingStrategy104 将持续上下文与时序信用候选一起比较，不选 eligibility trace 或缩短所需循环。 K-113 对预测前信息、顺序保留和时钟比较作明确限定，学习规则未选。 K-114 / TrainingStrategy109 记录分配对称性、匹配与自然就绪的差别，以及后续自然预测比较；H-86 直接保留经验选项。 K-117 / TrainingStrategy112 明确后来已观察到的序列可影响后续训练，但不能提供较早预测的未来输入；保留局部／结果相关信用比较。 K-119 / TrainingStrategy114 以全正值候选区分跨维关系丢失与 H-85 预测抵消选择；不增加绑定状态或解码器。 K-122 / TrainingStrategy117、execution-work-arithmetic 比较学习规则对应的实际边工作；MR-S049 保留重叠与时序研究的有限可迁移性。 K-124 / TrainingStrategy119、shared-learning-recurrence-analysis 检查阶段交替的精确条件参考，未将标量矛盾归因于用户行为目标。 K-125 / FlowLearning120、TrainingStrategy120、README120 按训练职责整理现有正文；算法与历史不变。 K-127 / FlowLearning122 补充学习保留与替换证据的适用范围。 K-129 / FlowLearning124 整理候选流程的阅读顺序。 K-130 / FlowLearning125 增加误差调制的待比较学习候选及其限定。 K-132 / FlowLearning127 限定预测误差候选的步长算术。 K-135 / FlowLearning130、MR-S052/MR-S053 保留既有细胞预算内的区分／稳健性比较。 K-136 / FlowLearning131、flow-temporal-credit-analysis 保留背景／稀有上下文的源信用比较。 K-140 / FlowLearning135 保留序列条件与试次平均的不同证据范围。 K-141 / FlowLearning136 不以 incoming 归属预选学习竞争或推断方向。  K-142 / FlowLearning137 区分自然 readiness 与拟合读出、输入后响应证据。  K-143 / FlowLearning138、flow-slot-capacity-analysis 保留缺失源发现及成员检查成本比较。  K-144 / FlowLearning139、cancellation-properties-analysis 保留单步抵消与时序学习比较，不选择梯度法或预测抵消。 K-145 / FlowLearning140 区分潜在突触匹配、连接门槛与分级权重传导；不默认增加 permanence／confidence 字段或采用 burst 教学。 K-146 / FlowLearning141 以原始时序模型区分共活动信用与时间单位；不导入 STDP、全局抑制或非衰减链。  K-149 / FlowLearning144 记录固定非负汇集的条件单调边界；更多上下文不要求逐分量增添源活动，未选抑制或竞争。 K-154 / FlowLearning149 区分权重中的理想观察者记忆与自然序列预测；MR-S075/MR-S076 不构成额外巩固状态的依据。 K-155 / FlowLearning150 记录有限权重分布的精确松弛时标；不把状态数自动等同于任务记忆寿命。 K-159 / ActivationRegimes154、MR-A008 保留 DMN 语义漂移与驻留／幅度的独立比较，不选语义评估器或训练偏置机制。 K-160 / FlowLearning155 以固定二值信用极限区分关联支持与频率；核对 NuPIC 的不同削弱作用域，不引入概率目标或选定削弱规则。 K-163 / FlowLearning158、SynapticIntegrationResearch158 明确 HTM 证据的扰动及人口缩放条件，不选择编码、门限或新状态。  K-174 / FlowLearning169 区分下一输入匹配与较长时域的关联统计；不把 successor representation 或 TD 机制加入模型。 K-179 / FlowLearning174 将直接定义的 rate/frame 学习与有条件的 spike-rule 降阶区分，不引入微观时序机制。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-188 / FlowLearning183、MR-S095 区分跨日表征漂移的任务读出与自身自然预激活；补偿模型所需目标误差反馈不等同实测突触学习，未预选补偿机制或冻结身份语义。 K-189 / FlowLearning184、MR-S096 区分已有关联的漂移维护与陌生转移学习；单细胞均值／方差调节不等同于 CC 活跃比例控制，不选择补偿机制。  K-195 / FlowLearning190、MR-S010 核查学习期间有效循环强度及持续可塑性的来源条件；自然预激活与后续行为按实际条件比较，不选择增益变量、学习门控或自主生成目标。  K-196 / FlowLearning191、SynapticIntegrationResearch191、MR-FC015 以同度／同权重和的条件汇集比较权重集中及源协方差；上下文输入分数不由容量或权重总量自动校准，不新增归一化、门限或元数据。  K-197 / FlowLearning192、MR-S049 深查实际离线批量学习及内部连续状态／二值输出区别；不将自主回放结果当在线 flow 或分级语义输出证据，未选状态、竞争或学习模式。 K-206 / FlowLearning201、MR-S044 细化预输入就绪度测量与生成输出的边界；保留 H-83 合理多候选，不将单一实际符号的分类计分直接变成本文验收。 |
+| C-16 | P-32/P-33；D-08 SemanticCorticalMappingResearch、Model、SignedPopulationEncoding、README、ActivationRegimes、PhysicalDistancePreferenceResearch、AD-036—AD-045。H-46 允许 feature/minicolumn 非双射；H-43 固定语义角色及非精确 replica，H-44 优先解剖兼容；K-38—K-73 区分固定语义角色与可学习响应，检查脑对齐的位置不可辨识性及 Flash 坐标响应距离的条件几何；胞体位置、接触机会与功能选择的研究不自动批准布局或学习算法。 H-61 确认当前暂不加入物理距离倾向；解剖研究保留为参考，未来几何提案须有具体收益，非实现当前 SNN 的前置条件。K-78 记录此范围。 |
+| C-17 | P-34/P-35/P-41；D-08 revision70 的当前六文件；H-53/H-55 的抑噪／活动支持功能及 H-56 的分类输入边界。DMN-only 增噪解释由 H-55 的活动不足增噪要求细化；实现仍未选。 K-110 / ActivationRegimes105、RateDynamics105 增加噪音响应与完整帧反馈比较；总活动占比不改为 rate 总和，也不进入相态分类。 K-115 / ContextLoopsAndNumerics110 保留噪音和读出单位的条件比较，未选新机制或字段。 K-120 / ContextLoopsAndNumerics115、noise-feedback-analysis 记录非线性响应与原始研究控制比较；无新字段或噪音机制。 K-177 / ContextLoopsAndNumerics172 区分全局噪音幅度控制与共享随机抽样，不预选空间协方差；真实行为比较仍开放。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
+| C-18 | P-36/P-37/P-38；D-08 revision70 六文件中的抵消、早期连接范围及互补输入目标；H-54/H-55、AD-048/AD-049。 H-77/AD-083、K-87 将活跃 rate 的全局净余／比例保留明确到 D-08 revision82；预测相态与时间边界仍待定。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。  K-151 / SignedPopulationEncoding146 以实际 Flash 的11组词项及条件凸函数算术区分语义对立、坐标对冲、净 rate 总量与活跃计数；未选新编码或 valence 机制。 K-168 / SignedPopulationEncoding163、Model163 明确暂态与完成后的活跃极性总量；净值可恢复 H-77 后的总量但不恢复细胞上下文，未选消息合同。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。  K-183 / SignedPopulationEncoding178、ActivationRegimes178 和 cancellation-properties-analysis 以同一净向量下不同细胞参与数的精确例区分调节量与幅度；不选门限或招募配额。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-205 / ContextLoopsAndNumerics200 将噪音单独覆盖例的独立、对称、无保留状态条件明确写出；不将其用作实际回返轨迹估计，不选噪音律、计数门限或检测结构。 |
+| C-19 | P-39/P-40/P-41；ActivationRegimes、Model、Decisions、PhysicalDistancePreferenceResearch、SynapticIntegrationResearch 的去噪覆盖／路径、心流上限与调节／检测分离；H-56—H-58、AD-050—AD-052。 K-99 / ActivationRegimes94 区分密度、时间相关、路径次序和预测具体性；经验窗口／过滤项按 H-86 保留实际轨迹对照，不采用新分类器。 K-138 / ActivationRegimes133、temporal-coverage-analysis 记录跨极性覆盖界及条件 Flash 几何对照，不选分类器或符号调度。 K-139 / ActivationRegimes134、temporal-coverage-analysis 记录观测信息需求与窗口条件成本；没有预留新数组。 K-176 / ActivationRegimes171 说明小群循环与跨群路径描述可以重叠，须由真实轨迹和观测条件检验区别；未选分类器或附加状态。 |
+| C-20 | P-42/P-43；D-08 revision71 当前四文件，H-59/AD-053 的正常输入响应与 stale 边界；相态检测 C-19 与可转向性评估保持独立。 K-156 / ActivationRegimes151、MR-S077/MR-S078 和 MR-A007 区分持续驱动收敛与单次 token 后续响应，不以谱条件或一次输入失败判 stale。 |
+| C-21 | P-43/P-44；D-08 revision71 的恢复候选、触发／状态保留／恢复入口待决；没有运行重置策略或实施资格。 |
+| C-22 | P-45/P-46/P-47；D-08 当前覆盖表所列修订 TrainingStrategy、Model、ActivationRegimes、AdaptiveConnectivity、README、Decisions 及两份 locality 研究的当前范围；H-61—H-63、AD-056—AD-060、K-79。区分预期目标、自然响应、缺失群体、修补操作及非辅助验收；H-52—H-59 行为约束保留，详细算法 pending-human。 H-64/AD-061 要求全局考虑和逐步采样、避免前序目标重用造成意外捷径；C-23/P-48—P-51、K-80 记录待讨论的约束／检查方案。 H-65/AD-062—AD-064 固定每 epoch 的训练范围并给出近似宽度、主体增强、回返削弱的参数角色；K-81 区分循环时长、净增益和实际维持时间。 H-66/AD-065—AD-067 以保持回返为初步预期，要求仔细处理增强／削弱，并偏好每步或最多几步的 token 分布保持；K-82 将完整后继群体与修补子集的比例约束区分，细节仍 pending-human。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 K-90 的条件入口／增益分析影响 TrainingStrategy85；不要求运行时相位表或入口路由。 H-79—H-81 将本构建／修补范围明确限定为 DMN 与单 token；flow 的 Hebbian/HTM 初步算法另行设计，不从本算法直接推广。  K-194 / TrainingStrategy189、MR-S098 深查嵌入网络的链传播、幅度保真及交叉激活证据；保留实际共同背景下的维护验收，不导入持续输入、同步、几何或细胞机制。 |
+| C-23 | P-48—P-51；D-08 当前覆盖表所列 TrainingStrategy、Model、ActivationRegimes、README、AdaptiveConnectivity、Decisions；H-64/H-65、AD-061—AD-064、K-80/K-81。下游为 C-22 的范围／参数／采样约束，不是运行时相位表或新存储合同。 H-66 把语义保持时间范围收紧到每步或少数几步，P-50 记录编码约束；K-82 分析有限人口、链宽／圈长、闭环维持和净增益的耦合，窗口、容差及采样策略待定。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 H-71/C-26/P-61 明确小循环可有上下文价值；避免主动构造有害捷径不授权强力消除小循环。 |
+| C-24 | P-52/P-53/P-54/P-59；D-08 RateDynamics、Model、ActivationRegimes、TrainingStrategy、SynapticIntegrationResearch、README、Decisions；H-67/H-68/H-70、AD-068—AD-070/AD-072、K-83。影响时标、自然终止、误差、噪音及工作量；不改连接所有权或静态池。 H-71/C-26—C-28 开放小循环上下文、累积／定时衰减及 INT8/INT4 比较；相关细节仍待定。 H-75/AD-081 的 C-29 提议两帧轮换连入汇集，保留个体身份和明确帧边界；转移函数、相态及时间步仍待定。 H-78/AD-084 明确当前不决定预测／当前活动的状态表示，保留未来实现对照实验余地；不预设额外字段或实验框架。 K-90 在 RateDynamics85 区分固定离散帧与连续时间近似、噪音单位和比较口径；不选择时间律或状态字段。 K-165 / RateDynamics160 明确 rate 降阶已包含的波动与显式噪音的意义，不选择噪音律或适应时间常数。 K-166 / RateDynamics161 区分平均与 H-77 抵消的次序，不以 ensemble 平均替代当前快照或加入分布状态。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-172 / RateDynamics167 深查 population-rate 降阶条件；不以群体平均加速替代个体上下文身份或宣称 CPU 收益。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
+| C-25 | P-55—P-58；D-08 RateDynamics、SignedPopulationEncoding、TrainingStrategy、Model、ActivationRegimes、README、Decisions；H-69/AD-071、H-70/AD-072、K-83。影响分数目标、强度、阶段重叠与精度；无预设双字段或按 token 的运行时状态。 |
+| C-26 | P-60—P-62；D-08 ContextLoopsAndNumerics、TrainingStrategy、ActivationRegimes、Model、RateDynamics、README、Decisions；H-71/AD-073、K-84。影响循环目标、记忆与淡出验收，非新相态或空间布局。 K-90 在 ContextLoopsAndNumerics85 区分均衡噪音恢复活动和语义残留增强；实际共享动态仍须评估。 K-104 / ContextLoopsAndNumerics99 将配对历史的因果差异与有噪声单次可用预测分开；不以长期相关或临界增益代替行为验收。 K-111 / ContextLoopsAndNumerics106 推导等总量附加驱动下的组成差异衰减；有用上下文仍由后续响应验证。 K-115 / ContextLoopsAndNumerics110 保留噪音和读出单位的条件比较，未选新机制或字段。 K-128 / ContextLoopsAndNumerics123 记录固定输入与活跃上下文差异的条件分析。 K-131 / ContextLoopsAndNumerics126 加入共同尺度的原始行对照。  K-148 / ContextLoopsAndNumerics143 澄清随机输入记忆证据的信号／干扰角色，不把输入幅度效应当作背景噪音增益结论。 K-156 / ContextLoopsAndNumerics151、MR-S079 将持续循环与 cue 内容保持分开，不导入延迟读出或投票反馈子系统。 K-158 / ContextLoopsAndNumerics153、MR-S080/MR-S081 限定培养神经元回响及其模型的输入恢复证据，不导入突触资源或恢复计时。 K-162 / ContextLoopsAndNumerics157、memory-gain-analysis 区分已存信息的可访问性和完整状态的信息损失，不引入熵估计器或记忆字段。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-180 / ContextLoopsAndNumerics175、MR-S011/MR-S012 深查暂态读出、重复外部驱动与部分权重训练的条件；不导入变换、读出、学习规则或稀疏容量结论。  K-181 / ContextLoopsAndNumerics176、context-composition-analysis 明确固定总量下条件幅度界及可表示模式计数；MR-S013 的分布耦合证据不等于本模型容量。未选上限、编码或新增状态。  K-184 / ContextLoopsAndNumerics179、MR-S006 区分同噪音下有／无刺激的维持与外部噪音分组指定的选择性；不导入振荡、资源状态或模型时标。 K-193 / ContextLoopsAndNumerics188 核查连续吸引子记忆扩散的稳态、弱涨落及调谐缩放条件；连续 rate 或活动调节不自动满足它们，不导入记忆容量或噪音控制公式。 K-201 / ContextLoopsAndNumerics196、context-composition-analysis 的 balanced_drive_frame_scaling 将同维平衡驱动的组成收缩与帧间隔联系；保持净语义值不等于保持上下文，未把确定性例当作白噪音律或选取新的状态／调节机制。 |
+| C-27 | P-63/P-64/P-68；D-08 ContextLoopsAndNumerics、RateDynamics、TrainingStrategy、Decisions；H-71/AD-074、H-72/AD-077、H-74/AD-079、K-84/K-85。影响累积时间、数值进度、事件语义及资源代价；无已选定时器实现。 K-97 增加有输入计时、无事件信息不足、时间戳精度与帧依赖的条件研究；无定时器实现选择。 K-104 的精确反例要求延后数值衰减仍保留每帧抵消，不把已抵消活动当作数值余量恢复。  K-173 / ContextLoopsAndNumerics168 区分源变化稀疏与连入依赖／同维抵消传播的影响范围；不预设事件索引、缓存或重算算法。  K-198 / ContextLoopsAndNumerics193、MR-S002 核查 QSS 的总量化误差（包括滞回）趋零及观察时域条件；不把收敛结论当固定低精度任意时长保证，未选事件结构或滞回机制。 K-204 / ContextLoopsAndNumerics199、numeric-representation-arithmetic 的 directed_decay_rounding 区分向下取整避免停滞与保留衰减时间；有限归零不是半衰期／自然断链的充分证据，不选取整律或新状态。 |
+| C-28 | P-65—P-68；D-08 ContextLoopsAndNumerics、RateDynamics、SignedPopulationEncoding、Model、Decisions；H-71/AD-075、H-73/AD-078、H-74/AD-079、H-70、K-84/K-85。影响逐字段表示、精度、缩放和累加；旧容量算术保持条件基线。 K-88 的条件权重算术区分动态范围、集体增益分辨率及训练存储；不按容量档位选权重尺度，不默认逐边高精度副本。 K-98 增加共享循环增益与固定随机权重长期响应的条件分析及 MR-S025/MR-S026 来源；仍无精度／学习策略选择。 K-101 将相同平均衰减下的个体失续／爆发、时间步及饱和行为列入条件比较；不选随机量子模型。 K-105 / ContextLoopsAndNumerics100 给出精确量化学习停滞和条件 Binomial 稳态；单步无偏不等于稳定的弱关联，宽权重只作计费比较。 K-116 / ContextLoopsAndNumerics111 记录中间舍入和最终写回的条件行为差别；格式与存储算法未选。 K-118 / ContextLoopsAndNumerics113、cancellation-properties-analysis 给出条件 L2 界和准确有理算例；未设误差容限。 K-121 / ContextLoopsAndNumerics116、context-composition-analysis 检查零语义和误差仍可丢失个体区别的条件例。 K-133 / ContextLoopsAndNumerics128、FlowLearning128 记录条件预测误差更新的存储结果。 K-134 补充有界更新条件算术及 MR-S017 的16位字长澄清。 K-147 / ContextLoopsAndNumerics142 区分短时二值视觉推理与持续 rate 行为，并核对整数阈值／移位的算术语义；不选格式、字段或部署优化。  K-150 / ContextLoopsAndNumerics145 区分低位宽存储、浮点源值、字节点积和 CPU 能力；未选内核、量化器或额外缓冲。  K-152 / ContextLoopsAndNumerics147 记录抵消公式先乘后除的条件下溢及公共比例求值，不引入余量字段或截断阈值。  K-153 / ContextLoopsAndNumerics148 用重复边的矩解释固定权重舍入，保持非负独立线性前提；未排除有用小循环。 K-154 / ContextLoopsAndNumerics149 将低位宽推理与完整持久学习成本分开，不将多变量突触模型暗作一字节槽位。 K-157 / ContextLoopsAndNumerics152、weight-update-precision-analysis 保留共享范围往返时未更新权重的精确失真比较，不引入缩放字段或高精度副本。 K-161 / FlowLearning156、weight-update-precision-analysis 区分码步长、有效权重步长及初态学习到达时间，不将谱松弛时间当作任务习得。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
+| C-29 | P-69/P-70；D-08 revision81 的 RateDynamics、IncomingConnectivity、Model、TrainingStrategy、SignedPopulationEncoding、ContextLoopsAndNumerics、README、Decisions；H-75/AD-081、K-86。影响快照、发布、相态含义与条件状态预算，无已合格合同失效。 K-108 / IncomingConnectivity103、AdaptiveConnectivity103 区分保留边与预留容量的访问、边界发布和条件成本；不选择计数或前缀布局。 K-110 区分完整帧隔离与反馈观察延迟；不引入第三帧或控制字段。 K-113 / RateDynamics108 保留完整帧并明确输入观察的顺序语义；无新调度器或缓冲表示。 K-116 / ContextLoopsAndNumerics111 记录中间舍入和最终写回的条件行为差别；格式与存储算法未选。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 K-167 / README162 澄清两帧单标量预算标签，数值和 H-78 选择空间不变。 |
 | GOV-01、GOV-02 | AGENTS 中委托规则、本记录及所有据其判断资格的文档条目。 |
 | D-01 / D-06 | D-01 的候选使用方 D-02、D-04、D-05；D-06 的候选使用方 D-05。 |
 
 此表是便于定位的反向索引，不新增确认关系；变更时仍需搜索新增的所有引用，并更新受影响范围。
+
+
+
+
+
+
 
 
 
@@ -783,6 +852,501 @@ Design authority
 范围：D-08 revision 32 / AD-045；先按 H-50 修正文档，随后投入至少 12 小时继续深入研究相关科研依据。研究需保持语义角色、维度中性和已拒绝机制边界，记录来源、推理及实际工作进度。
 
 排除：没有批准产品实现、新拓扑、学习算法、工具链修改、提交推送或扩大文档资格。持续研究授权不构成任何尚未讨论机制的人工确认；不能用空等时间或无实质检索宣称达到研究投入要求。
+
+
+### H-52 — 三相稳态吸引子与单 token 有限响应学习目标
+
+<a id="h-52"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> **what relationships the connections learn**？ 主要是三相的稳态吸引子，力求各种入口条件都按预期收敛。 中间学习目标还包括每个token都在唯一性输入刺激下，自我循环激活，整体逐渐淡出回归DMN相态，理想的淡出时间是每token持续半秒左右回归 DMN 相态。
+
+范围：D-08 revision 69 / AD-046、C-12/C-15、SNN-03/SNN-05/SNN-07。学习主目标为既有 DMN、flow、immersion 三种心智相态的稳态吸引行为及入口条件对应的预期收敛；每 token 自循环激活后逐渐回归 DMN、理想时长约 0.5 秒，为中间目标。三种心智相态与细胞 inactive/predictive/active 分类分开。
+
+排除：不是确认某个损失函数、固定点／极限环数学模型、衰减常数、内部循环周期、2 token/s 输入速率、硬定时器或沉浸时长。具体入口集合、语义判据、时间容差、细胞动态和学习算法仍待讨论。H-53 进一步明确输入／噪音协议；未批准实施或整个 D-08 价值链。
+
+### H-53 — 单次随机输入、注意抑噪与 DMN 检测后恢复噪音
+
+<a id="h-53"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 的异步澄清答复；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。所答问题为是否仅呈现一次 token，随后不再输入该 token，而 DMN 背景噪音继续。
+
+> DMN 背景白噪音应有一定的全局抑制机制，在外部要求专注的场景下有相当幅度的降低。 token 唯一性输入应当只需要按语义向量各维强度随机激活相应比例的神经元一次，并在低噪音环境下稳态淡出，回归 DMN。 系统检测到 DMN 相态后提升背景白噪音维持激活比例，DMN则应当缓慢向负面语义（而非负值）方向收敛。
+
+范围：D-08 revision 69 / AD-047、C-12/C-15/C-17。明确一次随机激活：各语义维强度决定相应群体激活比例。外部要求专注时需全局显著降低白噪音，token 响应在低噪音下自循环并淡出。检测到 DMN 后提升背景白噪音维持活动比例，随后 DMN 缓慢向负面语义收敛。该答复不确认在 token 响应期间保持原 DMN 噪音水平。
+
+排除：低噪音不等于零噪音；噪音恢复不等于坐标负值偏置。全局控制覆盖的 CC／网络范围、强度到激活比例的公式、随机抽样法、噪音数值与控制曲线、DMN 判据、持续注意／新 token 的优先级、算法与辅助结构未选。确认控制功能及其业务目的，不确认智能体整理的 P-34/P-35 完整形式化价值链或任何实施合同。
+
+
+### H-54 — 早期内在极性抵消与互补正面输入残留
+
+<a id="h-54"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 我们早期阶段先不建模神经元的抑制性连接，固有的让一个语义维度中代表正负值的两组神经元相互抑制，其激活相互抵消。 预期是 DMN 滑到较负面语义状态时，外部与之互补的正面语义token刺激，短期会快速降低整体激活水平，让输入的正面语义激活在对冲后留下的残值，在背景噪音辅助下，能够维持更长时间。
+
+范围：D-08 revision70 / AD-048、C-12/C-14/C-15/C-18。早期排除显式抑制性突触连接，固有同维正负群体相互抑制并抵消活动；负面语义 DMN 中输入互补正面 token 后短期降低总体活动，保留正面语义残值并在背景噪音辅助下延长持续。
+
+排除与影响：未选抵消公式、强度／数量对应、细胞配对、预测相态处理、额外状态或实施。互补正面语义不自动等于坐标逐维相反，延长寿命为目标而非抵消算术的已证结论。
+
+### H-55 — 低活动增噪与残留先增强达峰再回落
+
+<a id="h-55"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 异步澄清答复；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 系统有维持整体激活比例在柔性目标范围的机制，正负语义抵消以后的整体低激活水平应导致系统提高背景噪音水平；但轻微的正面语义残留，应在背景白噪音下首先加强，达到峰值以后才按单token训练目标那样开始回落回归
+
+范围：D-08 revision70 / AD-049、C-12/C-15/C-17/C-18。总激活比例由系统调节至柔性目标范围；抵消后低活动触发增噪，不需要等待 DMN 检测。残留在白噪音下优先增强、达峰后再按单 token 目标回落。此答复细化 H-53，DMN 检测不是一切增噪的前提。
+
+排除与影响：未选反馈函数、与注意抑噪的数值合成、增长时间、峰值、精确延长比例或从峰值起算的数值时限。噪音维持占比与残留的语义选择性是两个目标；未增加算法／存储批准。
+
+### H-56 — 柔性窗口内覆盖与路径检测，排除总激活比例
+
+<a id="h-56"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 训练目标和检测条件：
+>
+> 总激活比例是系统调节目标，所以不参与检测。
+>
+> 检测逻辑大概是，在一个柔性窗口内：
+>
+> DMN - 激活覆盖大部分（比如80%以上）神经元
+> 沉浸 - 激活范围维持在少部分神经元
+> 任务心流 - 激活路径保持扫过不同神经元群
+
+范围：D-08 revision70 / AD-050、C-12/C-17/C-19。总激活比例明确排除出相态检测。柔性窗口中以广覆盖识别 DMN、小范围活动识别沉浸、跨群路径识别心流，同时作为训练目标方向。
+
+排除与影响：80%为示例，不是已锁定阈值；未选窗口长度／权重、活动定义、分组算法、完整判定式、额外模式或存储。时间覆盖不同于瞬时激活比例；H-57/H-58 进一步限定心流与覆盖去噪。
+
+### H-57 — 心流的短窗口覆盖上限
+
+<a id="h-57"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 心流状态不可能短时间扫过大的神经元覆盖面，总覆盖面如果超过（比如20%）就应该判非心流状态
+
+范围：D-08 revision70 / AD-051、C-19。本模型心流在短窗口的总覆盖不能大；超过覆盖上限（示例20%）必须判非心流。H-56 的跨不同群路径应在小总覆盖内发生，不保留当前模型中广覆盖仍可算心流的解释。
+
+排除与影响：20%为示例，不固定数值；覆盖超限只排除心流，不自动认定 DMN。未选短窗口长度、低覆盖下沉浸／心流的路径判据或算法。该陈述作为应用要求记录，不冒充普遍神经科学定理。
+
+### H-58 — 覆盖需剔除白噪音，低密度过滤作为候选
+
+<a id="h-58"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 覆盖面判断有必要剔除系统附加的白噪音，可能的办法是特定神经元的激活密度小于一定程度就不算
+
+范围：D-08 revision70 / AD-052、C-19。覆盖判断应剔除系统附加白噪音的影响；提出低于一定激活密度的神经元不计入，作为可能办法。去噪后的统一覆盖口径用于 H-56/H-57 的目标方向。
+
+排除与影响：过滤目的已明确；“可能的办法”不确认具体密度定义、阈值、窗口核、完美因果分离或实现。噪音辅助的有用持续残留不因噪音参与而自动排除。总激活比例仍不能作为分类特征；文中的条件算术仅用于离线一致性分析。
+
+
+### H-59 — 正常循环的外部可转向性与 stale 恢复候选
+
+<a id="h-59"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 自动循环激活属于预期状态，如果任何外部token输入都不能打破，那么确实属于stale，可能需要系统性重置操作机制。 预期的正常状态，都可以由外部token输入驱使网络转向
+
+范围：D-08 revision71 / AD-053、C-12/C-20/C-21。自动循环是预期行为，正常状态都应保有外部 token 驱使转向的能力；没有外部 token 能打破该循环时属于 stale。系统性重置作为可能的恢复机制进入讨论。
+
+排除与影响：不把重复、长驻或合格活动比例本身作为 stale；未要求任意单个 token 都必须引发转向。单次输入失败不自动证明所有输入均无效；允许运行输入、有效转向的观测、评估时限与判定证据待定。“可能需要”不确认自动重置、触发阈值、作用范围、状态／权重保留或恢复入口。相态分类、活动调节与输入响应评估分开；没有实施或当前重置操作授权。
+
+### H-60 — 按训练目标复核位置偏好的阶段性结论与继续研究价值
+
+<a id="h-60"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 基于这些训练目标，看看神经元位置选择偏好方面，可以有什么阶段性结论，是否值得继续深入探讨
+
+范围：D-08 revision72 / AD-054、C-15/C-16、P-29/P-32 的研究评估。请求基于既有训练目标评估神经元位置选择偏好，形成阶段性结论并判断继续探讨的价值。
+
+排除与影响：本发言是评估请求，不是对随后智能体结论的预先确认；不采纳无几何基线、随机选边、功能距离或任何学习算法，不撤回 H-40，不扩大 H-51 已完成的十二小时研究任务。保留 H-41/H-42/H-50 的边界与 H-52—H-59 的业务要求；无实验、实现、构建或测试授权。
+
+
+### H-61 — 暂不加入物理距离偏好与构造式激活链训练初步方案
+
+<a id="h-61"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 确实，物理距离倾向性可以暂不加入，也能先设计实现我们的 SNN。 另外需要专门提出训练方面我的初步想法，你分析记录： Hebbian 训练是后期 flow 训练的方法；immersion是预期的涌现行为不主动训练；DMN以及单token训练，采用直接创造激活链的方式 —— 决定一个初始激活规模，或者说激活链宽度，第一步激活这么多个范围内（DMN来说是全部，token来说是语义向量决定的各维比例选出神经元范围）的神经元；然后随机选出第二部激活的目标神经元，继而让第一步的每个神经元建立到 N 个第二步神经元的连接，理论上导致每个第二步神经元新建 M 个连入连接。 设计 M、N 以及各新连接的强度，让激活链足够自我维持。 链尾往链头的连接强度如果更大，则产生增强激活效果，如果更小，则产生减弱效果。 且链尾和链头的概念要拓宽到多步激活群，平滑更新强度避免断崖式变化。
+
+范围：D-08 revision73 / AD-055—AD-058、C-12/C-15/C-16/C-22。明确接受当前暂不加入物理距离倾向，可以推进 SNN 设计；提出训练初步方案并要求分析记录：后期 flow 使用 Hebbian，immersion 为预期涌现而不主动训练，DMN 和单 token 直接创造激活链。初始规模、候选范围、随机后继批组、每源 N 个后继、每目标 M 个入边及强度用于形成可维持的传播；多步头尾闭合及平滑强度用于探索增强／减弱效果。
+
+边界与影响：几何省略为当前明确决定，不表示永久排除。训练路线按“初步想法”记录，不把加强闭合就能得到增长再衰减视为已验证结论。M/N 守恒、精确或期望入度、动态模型、数值参数、时序、语义分配、槽复用及跨链作用待讨论；P-45—P-47 是待确认的形式化关系。H-52 的行为目标保留，但不再表述为三种相态都直接或 Hebbian 训练；H-40 的共活动方向限定到后期 flow。H-53—H-59 的输入、噪音、抵消、检测及可转向性仍适用。“可以先设计实现”不把未定机制变成合格契约；本次具体请求为分析记录，未执行代码或构建任务。
+
+
+### H-62 — 静态预定批组的初步倾向与重叠替代方案比较
+
+<a id="h-62"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+异步问题为：For a token’s constructed chain, should every step resample neurons using that token’s signed coordinate proportions, or may later steps change those proportions as long as the token’s semantic response is preserved?
+
+> 我倾向于开始之前静态把各批激活神经元确定下来，也就是避免每一步重新取样造成的重叠。 但这个想法比较初步，你还需深入分析比较与替代方法的效果预期差别，保持讨论这个话题。
+
+范围：D-08 revision73 / AD-059、C-22。倾向开始之前静态确定各批激活神经元，以避免逐步重新采样造成重叠；明确该想法初步，要求深入比较替代方法的预期效果并持续讨论。
+
+边界与影响：不把倾向升级为最终强制无交集策略；预计算与跨步不重叠是两个性质。同一批在不同循环圈复用与同一圈不同步骤共享是不同问题；跨 token 共享也需独立分析。回答没有确定每步是否保持 token 坐标比例，因此该问题仍开放；也没有批准改变单次随机 token 入口、运行时批组表、额外神经元状态或动态重接线。
+
+
+### H-63 — 统一初建与持续修补的 DMN/token 训练
+
+<a id="h-63"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 我又想了一下，DMN和token训练不止是初始建造激活链，其实持续训练迭代中更多的会是修补性激活链维护，这可能更好的是设计一个统一训练算法，下一步激活量不足时，从（理论上）该激活而未激活的群体中选足够比例作为下一步激活的神经元群，你这样调整一下
+
+范围：D-08 revision74 / AD-060、C-15/C-22、P-45—P-47。请求调整为统一的 DMN/token 训练算法方向：不止初始建链，持续迭代更多进行修补维护；下一步激活不足时，从理论上该激活但未激活的群体中选足够比例形成补充的下一步群体。
+
+边界与影响：初建和维护共用方向，不推定每一步重建完整边集；H-62 静态批组可以是参考候选，未被升级为强制集合或被全面否定。理论目标、计数／强度口径、选择比例、连接更新与临时教学刺激、训练频率和不足之外的错误处理均待讨论；没有确认具体公式或新辅助结构。H-61 的后期 Hebbian flow、immersion 不主动训练、暂不加入距离偏好保留。H-52—H-59 的有限淡出、噪音调节、抵消、检测与可转向性继续约束修补，不把正常淡出当缺陷。无代码／构建／测试实施请求。
+
+
+### H-64 — 全局考虑与逐步采样中的进程约束和捷径问题
+
+<a id="h-64"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 可能要静态考虑全局+每一步采样选取下一步的激活目标，激活链 宽度/强度 是一个目标，前序步骤的神经元也要避免选为后续的下一步目标，否则有可能建立预期外的捷径循环了，整体应该还是有复杂度，你深入思考分析
+
+范围：D-08 revision75 / AD-061、C-22/C-23。提出静态考虑全局与每步采样结合的方向，明确宽度／强度只是目标的一部分，并指出前序步骤神经元作为后续目标可能形成预期外捷径循环，要求深入分析复杂性。
+
+边界与影响：不自动规定“全局”为全网协调、永久神经元相位或预先固定所有批组；历史范围、正常循环的回返例外、前序资格及实际快捷响应判据待讨论。H-61 多步头尾闭合、H-63 持续修补、既有噪音／编码／检测／淡出／可转向性仍适用。具体无重复窗口、候选评分、路径搜索、辅助存储和更新算法没有被批准；不存在禁止全部网络环路或取消 immersion 的决定。
+
+
+### H-65 — 每 epoch 的维护范围与链宽、主体增强和回返削弱
+
+<a id="h-65"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 激活链如何走一遍，涉及的神经元群体，由 维护（训练/建造）目标决定，并应景设计不同的策略参数，主要包括：
+>
+> - 激活链宽度 —— 一步激活神经元的（大致）个数（不要求精确），范围内神经元总个数除以这个宽度，就是大体的一次循环步数，与维持时间直接相关
+> - 链主体过程的增强程度 和 链尾衔接链头过渡过程的削弱程度 —— 让背景噪音能够辅助增强弱激活循环，以及没有外部信号时平稳淡出
+>
+> DMN 训练时是全部神经元作为范围；单 token 训练时是按语义向量值作为比例选出各 minicolumn 中的神经元作为范围。 每个epoch选一次具体神经元范围。
+
+范围：D-08 revision76 / AD-062—AD-064、C-22/C-23。维护目标决定神经元范围和适用参数；链宽为一步激活的大致个数，不要求精确，范围规模除以宽度给出大体循环步数并关联维持时间。主体增强与尾头过渡削弱用于让噪音辅助弱激活循环、无外部信号时平稳淡出。DMN 范围为全部 CC 神经元；单 token 按语义向量比例选择各 minicolumn 细胞；每 epoch 确定一次具体范围。
+
+边界与影响：范围一次选定不等于每批身份都预先固定，也不要求每步重新选择范围、重置连接或使范围外神经元静默。向量比例作用于 epoch 范围，逐步／时间窗语义保持、归一化与整数取样仍未规定。数值宽度、时步、主体总增益或逐步增益约定、削弱函数与闭合对仍待讨论。无外部信号不取消背景噪音调节；循环时长和净增益均影响维持时间，未把约半秒 token 响应设为恰好一圈。保留 H-63 修补、H-64 捷径关注和既有行为目标；无实现／构建／测试请求。
+
+
+### H-66 — 保持尾头回返、谨慎设计增益及每步／少数几步 token 分布
+
+<a id="h-66"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> “the half-second token response” 只有在链尾不接链头的情况下才等于一个lap，我初步预期中不应该有链尾完全不接链头的情形，你分析看看呢
+>
+> 强化与削弱策略的确会非常微妙，需要仔细对待，设计过程要一直注意细节。
+>
+> 我初步判断还是应该每一步采样都保持 token 向量的分布，最多是放宽到少数几步以内维持分布，不能短时间内与token vector原本的维度分布偏离太多。
+
+范围：D-08 revision77 / AD-065—AD-067、C-22/C-23 及 C-14 的相应编码约束。用户的初步预期不包含链尾完全不接链头的情形，并要求分析其与约半秒 token 响应的关系。强化与削弱策略需要持续谨慎设计。每步采样倾向保持 token 原向量分布，最多放宽到少数几步维持，不能允许短时维度分布大幅偏离。
+
+边界与影响：这是具体初步方向和分析请求，不是完整机制的实现资格。窗口长度、误差度量／容差、整数采样、读出、步时和增益数值未定。H-65 的每 epoch 范围选择、H-63 的持续修补及 H-64 的捷径关注保持。连接保持不保证每次回返都产生可观测再激活；这一限定及有限人口／增益推导为 K-82 的智能体分析，不把用户关于一圈时长的直觉升级为数学定理。仅整圈平均保持不满足所述短时偏好；不由此采纳全网纯 token 状态、固定幅度、早期重用、时间滤波结构或新抑制性连接。未请求实现、构建、测试或推送。
+
+### H-67 — 宽松半衰期式目标与离散时间 spiking-rate 讨论
+
+<a id="h-67"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 半秒目标可以改为半衰期性质的定量要求，总之不需要严格精确，不同token有差异也是预期的，只要及时fade-out就行，具体时间可以宽松。
+>
+> 你提的两个设计问题，我感觉本质上是严格 spike-by-spike 建模模拟 SNN 的局限，我觉得可以转而在合适的离散时间尺度上建模 spiking-rate ，引入一定的断链条件，这样语义vector各维的数值就不容易被明显偏少的神经元个数搞得过于割裂。 你深入想下去，这是个挺大的设计决定和讨论话题。
+
+范围：D-08 revision78 / AD-068/AD-069、候选 C-24。半秒可用作半衰期性质的宽松定量目标，不要求精确，不同 token 的差异是预期，重点为及时淡出；据此替代当前说明中的“约半秒完成回归”解释，H-52/H-53 等原始历史不改写。提出离散时间 spiking-rate 并允许断链，要求深入讨论。
+
+边界：不是最终 rate 模型、时步、指数衰减、同质群体聚合或数值布局的确认。半衰期测量起点、幅度与背景口径、尾部和随机存活统计仍需设计。两项旧问题来自何种假设的辨析属于智能体分析；不把研究请求解释为对其数学归因的确认。无实现、构建或测试授权。
+
+### H-68 — 断链指活动自然终止而非连接权重消除
+
+<a id="h-68"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。 另含异步问题答复，问题标识 call_625bc0957e6d49ab9f39ce4f4e6aa597 / 0；不为该标识虚构独立链接。
+
+问题：For “断链条件,” which meaning is closest to your intent? I can analyze the alternatives while keeping the choice open.
+
+选项1：Stop weak ongoing propagation while retaining learned connections.
+选项2：Allow probabilistic propagation failures while retaining learned connections.
+选项3：Remove or zero learned connections when a condition is met.
+
+用户答复：
+
+> 1 和 2 都是
+
+随后明确：
+
+> 我说的 “断链” 是指激活链自然断掉，不是连接权重消除。
+
+范围：D-08 revision78 / AD-070、C-24。支持不足或概率性传播失败均属于要考虑的自然活动终止，学习连接仍保留。这澄清 H-67 的断链含义并与 H-66 的连接回返预期相容。
+
+边界：不批准消除或置零权重、独立 dropout、强制定时终止或带 token 标签的整链开关。具体失续机制、失续后的再激活、背景噪音和语义衰减条件仍待定。
+
+### H-69 — 分数式神经元选取配合 spike-rate
+
+<a id="h-69"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 选神经元使用离散整个形态确实仍是问题的一部分，我觉得可以用分数表示选中比例，与spike-rate配合，大概效果就对了
+
+范围：D-08 revision78 / AD-071、候选 C-25。明确整细胞离散选取也是问题来源，初步提出分数选中比例与 spike-rate 配合。
+
+边界：分数作为训练目标、概率、占空比或独立持续状态的解释未定；不由此确认双字段、最终 f*r 公式、每 token 私有状态、任意跨阶段复用或更新频率。固定身份和共享连接仍须考虑，后续语义／数值权衡 pending-human。
+
+### H-70 — 多环节浮点精度是设计要求
+
+<a id="h-70"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 对，浮点数精度需要在很多环节仔细处理，不容忽视。
+
+范围：D-08 revision78 / AD-072、C-24/C-25 及相关输入、累加、抵消、衰减和学习讨论；要求设计过程中细致处理多环节浮点精度。
+
+边界：未指定 FP4/FP8 之外的某种存储或累加格式、标度、舍入方式或误差预算。K-83 的停滞／残差算例及替代方案为智能体分析，不构成人类确认的数值实现合同；不预设辅助数组。
+
+### H-71 — 有用小循环、累积／定时衰减、整数表示与十二小时自主研究
+
+<a id="h-71"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 我们构建大（循环）激活链的同时，虽然避免主动制造中途的短路小循环，但是也不应该强力消除小循环，运行在一定背景噪音加持下能够维持的小循环也是期待的目标，这样长上下文才能给后续网络输出施加影响，而不是仅仅依靠直接激活链的主干产生连续的长输出。
+>
+> 衰减确实有必要考虑上实用的累积周期，而不是单步结算就完了，也许可以考虑对衰减律做未来触发定时器的方式生效之类的，你仔细深入考虑这个方向。
+>
+> 更极端一些，你深入考虑如果采用 INT8 甚至 INT4 来表达一些建模量，是否更优呢？
+>
+> 你自主推进12小时，综合以上思路和既定方向，完善打磨建模细节。
+
+范围：D-08 revision79 / AD-073—AD-076、C-26—C-28。大链构建避免主动中途捷径，但不强力消除小循环；一定背景噪音下维持的小循环是期待目标，使长上下文影响后续输出。要求深入考虑实用累积周期和未来触发衰减的可能性，以及 INT8/INT4 是否更适合部分建模量。授权十二小时自主综合研究和模型细节打磨。
+
+边界：不批准任意小循环、无限记忆、全网无循环检查、独立上下文网络、固定定时器或统一整数替换。仍保留已定语义、容量、相态／噪音／驱转方向；具体机制、读出、参数和数值布局待讨论。既有“及时淡出”按主导响应理解，不要求抹除所有有用历史影响；H-68 的自然断链仍不消除学习权重。研究请求不改变实施时机，也不授权构建／工具链变更或项目测试。
+
+研究计时：active goal 与进度资料记录开始时间 2026-10-28T15:05:36Z；这是工作开始的工具实测时间，不冒充用户消息时间。记录非重叠实质工作区间，不以空等或经过十二小时本身充数。首次登记时研究仍 active，尚未完成。
+
+### H-72 — 下一次数值精度允许变化的近程衰减触发
+
+<a id="h-72"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> scheduled decay 可以是预计算下一次最小精度允许的变化发生在什么时候，而不是安排过远的时间目标
+
+范围：D-08 revision80 / AD-077、C-27/P-63/P-68。澄清 scheduled decay 可以预测下一个表示精度所允许的变化时刻，再继续计算后续变化；不是预先设置遥远时间目标。保留累积进度与自然活动失续、学习权重不删除的既有方向。
+
+边界：未选择舍入模式、精度阈值、连续衰减律、残差／锚点字段、队列、取消规则或代码实现；正式关系及实施合同仍 pending-human。H-71 自主研究继续，计时不重启。
+
+### H-73 — 神经元状态可考虑 FP16 与 FP32
+
+<a id="h-73"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 每神经元的状态数值确实不用太限制，FP16 甚至 FP32 都可以考虑，因为规模确实不大。
+
+范围：D-08 revision80 / AD-078、C-28。允许神经元状态比较 FP16/FP32，不必为小规模状态数组强行限制精度。权重、输入编码、中间累加及相态布局仍需逐项讨论。
+
+边界：这是候选范围放宽，不确认一种最终浮点格式、字段数量、完整内存布局或统一全模型精度；原 FP4 数组预算仍是明示条件算术，不继续充当必须保持四位状态的约束。无实施或构建授权。
+
+### H-74 — 每项技术引入都须有第一性价值依赖链
+
+<a id="h-74"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 切忌朝过度工程方向走，技术概念、算法、数据结构的引入，都必须有真实第一性原则沿袭下来的价值依赖链支持。
+
+范围：D-08 revision80 / AD-079 的当前自主建模研究及其后续技术选择。每项概念、算法和数据结构均须追溯真实业务价值，检查简单方案是否已经满足；技术可行、已有论文或其它系统使用不足以建立本应用价值。对累积设计同样适用。
+
+边界：不把此原则当作对具体候选机制、价值边或文档全文的批准；不自行改写纲领目标。现有设计治理、H-34 需求先于辅助结构、静态 SoA 和实施延后约束保持。C-26—C-28 的研究可继续，但新增机制必须说明必要性与成本。
+
+
+### H-75 — 同柱细胞的上下文路径与双帧连入汇集
+
+<a id="h-75"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 一个minicolumn内的不同神经元代表同一概念的不同细分路径，正式 Numenta 的 HTM 相关理论中的重要模型之一。
+>
+> 我们的 SNN 更新可以采用 2 frame 轮换更新的算法吧？ 下一frame的神经元激活值，从上一frame的快照中取，配合对连入的槽集组织，计算简便很多，不必考虑中间累积状态。
+
+范围：D-08 revision81 / AD-080/AD-081。澄清同一 minicolumn 的细胞表示同一语义成分的不同上下文路径；提议下一帧从完整前帧取值、两帧轮换，配合连入槽集简化计算。C-14/C-24/C-29 与 P-69/P-70 记录这一方向及价值／依赖。
+
+边界：用户以讨论性问题提出算法；不将其扩展为完整状态／相态编码、转移函数、时间步、抵消、噪音、训练发布或并行实现批准。瞬时局部求和与跨步持久累积不同；双帧不表示复制权重。HTM 关联不批准自动引入树突段、burst、独立上下文存储或其全套学习算法。H-71 研究继续，未授权实施、构建或项目测试。
+
+### H-76 — 预测引导的 token 输入分支
+
+<a id="h-76"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 输入token生效时，遵循 Numenta 的 minicolumn 预测规则： 已经有足够比例预测性激活的神经元时，高度激活这些神经元；没有时，低强度激活 minicolumn 所属内大范围的神经元。
+
+范围：D-08 revision82 / AD-082、C-14/P-27/P-53。有足够比例预测性激活的细胞时强激活这些细胞；否则在 minicolumn 大范围施加低强度激活。这使 H-53 的一次输入具有上下文选择，不再默认无条件随机抽样。
+
+边界：未给出预测判据、占比阈值／分母、广度、强弱数值、逐坐标幅度校准或相态布局。保留一次输入与短时语义目标；不自动引入 HTM 树突段、burst 全细胞强激活、路由表或完整学习算法。
+
+### H-77 — 全 minicolumn 净余与同方向 rate 比例保留
+
+<a id="h-77"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 确实 minicolumn 内的正负抵消不该按下标对应，没有合理对应理由，应该是在 minicolumn 范围整体计算净余，然后按比例保留相同方向活跃神经元的 spiking-rate
+
+范围：D-08 revision82 / AD-083、C-18/P-36/P-37。明确拒绝下标配对；在 minicolumn 内计算正负活跃 rate 总量之差，将相同方向活跃细胞的 rate 按比例保留到该净余。P>N 时缩放正方 (P-N)/P 且负方为零；反之对称；相等时活跃 rate 全抵消。公式是所述规则的直接算术表达，不另选学习机制。
+
+边界：这里的对象是活跃 spiking-rate。未确定预测相态是否／怎样受影响、转移与抵消的先后、活跃计数阈值或数值容差；不清除连接，不证明语义效价或稳态。完整实施合同与形式化价值关系仍 pending-human。
+
+### H-78 — 状态表示保留未来对照实验空间
+
+<a id="h-78"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 的结构化问答；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+问题原文：For the initial model, should predictive preactivation be a low-strength range of the same neuron activity value, or separate readiness that can coexist with strong current firing?
+
+回答原文：
+
+> 设计上留将来实现时能做对照实验的余地，目前不决定
+
+范围：D-08 revision83 / AD-084、C-24/C-28。明确不在当前选择同一 activity 数值分段表达预测／活跃，还是预测准备与当前发放分开表达；设计应保留未来实现中做对照实验的余地。
+
+边界：不自动批准同时分配两套状态、额外字段、配置／插件系统或通用实验框架。H-76 输入分支、H-77 活跃 rate 净余／比例保留、H-75 双帧提案及既有行为目标均保留；状态解释需在这些目标下比较。当前仅研究／设计，实施延后。
+
+### H-79 — Hebbian/HTM 学习限于 token 序列 flow 训练
+
+<a id="h-79"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 原文；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+> 注意使用token序列训练flow相态时才是 Hebbian 与 HTM 学习模式，不要跟 DMN 和 单token 训练混淆。
+
+范围：D-08 revision86 / AD-085、C-15/C-22/P-29/P-45。Hebbian/HTM 学习方向属于 token 序列的 flow 训练；DMN 与单 token 保留直接构建和修补激活链的训练方向。H-76 是 token 生效时的激活规则，不据此把学习方法等同。
+
+边界：不批准完整 HTM 算法、树突段、permanence、额外存储或任何具体 flow 更新公式；H-78 的状态比较保持开放。
+
+### H-80 — Flow 算法尚未设计且不预设为修补变体
+
+<a id="h-80"></a>
+
+确认者、来源与记录日期同 H-79；准确消息时间未知。
+
+> flow学习训练算法还没开始设计，我感觉很可能不是 DMN 和 单token 那种修复算法。
+
+范围：D-08 revision86 / AD-086、C-15/C-22。用户明确 flow 算法仍未开始设计，并倾向它不同于 DMN/单 token 修补；不得把已有修补算法说成 flow 的既定方法。
+
+边界：这是状态澄清和初步判断，不选定另一具体算法，也不禁止共享已有神经动态、连接存储或基础数值操作。
+
+### H-81 — 目标包含 flow 初步算法设计并尽早讨论
+
+<a id="h-81"></a>
+
+确认者、来源与记录日期同 H-79；准确消息时间未知。
+
+> 你的目标包含做 flow 训练算法的初步设计，有待讨论的点尽早提出来跟我讨论
+
+范围：D-08 revision86 / AD-087、C-15/P-29。将 flow 训练算法初步设计明确纳入当前自主研究目标，重要未决点尽早与用户讨论。H-79/H-80 的方法边界仍适用，不能把“尚未设计”解释为排除初步设计工作。
+
+边界：授权研究／草拟／讨论，不预先采纳具体算法、选择神经元状态表示或启动实现。首个讨论点为预测引导后续外部输入、提前输出语义向量或两者的目标关系；当前尚待答复。
+
+### H-82 — Flow 训练以预测预激活匹配为直接验收
+
+<a id="h-82"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 结构化问答；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+问题原文：For the initial flow-learning design, what should successful learning of a token sequence produce?
+
+回答原文：
+
+> 序列训练的直接理想结果是预测性预激活的神经元群与输入序列高度匹配。 预激活强度有可能不足以维持长序列自主连续生成输出，作为训练的检验条件，高度匹配就够了。 持续输出的生成机制算法另行设计。
+
+范围：D-08 revision87 / AD-088、C-15/P-29。明确 flow 序列训练的直接目标／验收为预测预激活群与输入序列高度匹配；强度可不足以自主生成长序列，持续输出生成机制另行设计。H-79—H-81 的方法区分和初步设计任务保持。
+
+边界：不选择匹配度量、门限、误差／损失函数、预测候选个数、具体学习更新或状态表示；H-78 对照空间保持。不把单次训练检验要求扩展为完整应用的全部验收，也不以此撤销 DMN/单 token 的自主循环目标。
+
+### H-83 — 预测多样性随匹配序列上下文增长而收缩
+
+<a id="h-83"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 结构化问答；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+问题原文：When the same preceding context has several plausible next tokens, should acceptable preactivation retain multiple alternatives, or favor one continuation? This determines whether an unchosen prediction should be weakened during learning.
+
+回答原文：
+
+> 这个验证时是随着序列长度变化的，匹配的序列段的时候预测可能性多是预期的，随着序列变长，预期是预测预激活的多样性收缩，向训练输入token序列收敛
+
+范围：D-08 revision88 / AD-089、C-15/P-29。将预测验收与已观测序列长度关联；匹配共享片段时允许多种可能，后续上下文增长应使预测预激活多样性收缩并向训练输入序列收敛。H-82 的预测匹配目标与独立生成设计保持。
+
+边界：未选择多样性公式、候选表示、概率／熵模型、固定候选数或奖惩权重。不能把方向扩大为每帧严格单调下降，或对信息相同但未来有真实分支的历史宣称可预知唯一后继；具体度量与学习机制继续讨论。
+
+### H-84 — 生成模式广范围弱激活是显式且不学习的操作
+
+<a id="h-84"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 结构化问答；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+问题原文：For an unexpected token, H-76 keeps activation broad and weak. During flow learning, should we explicitly favor a small, context-compatible group of those cells for strengthening, or give graded learning credit to the whole broad response? This affects how distinct contextual paths emerge.
+
+回答原文：
+
+> “keeps activation broad and weak” 是生成模式下的表现，并非依赖正常神经元连接的传到实现，自然也不予学习。 你结合 HTM 细节打磨我们的相关细节。
+
+范围：D-08 revision89 / AD-090、C-14/C-15/P-27/P-29/P-53。纠正问题前提：广范围弱激活是生成模式中显式施加的行为，不由正常神经连接传播实现，也不作为学习对象；不能将该群体用作 flow 教学／强化来源。授权结合 HTM 细节打磨模型，但不把完整 HTM 学习实现直接导入。
+
+边界：未选择陌生训练转移如何获得学习表示／连接、winner 策略、permanence、树突段、逐细胞来源标记或完整模式实现。也未宣称陌生序列不能学习；该机制需独立设计。H-78 状态比较、H-79—H-83 的训练分工与预测目标保持。
+
+### H-85 — 预测态抵消留待对照实验，当前不选择
+
+<a id="h-85"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 结构化问答；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+问题原文：When plausible next tokens require opposite signs on the same semantic coordinate, should both neuron groups be allowed to remain predictively ready until input resolves the ambiguity? This concerns prediction semantics, not the deferred choice of state fields.
+
+回答原文：
+
+> 留设计空间到时候做对照实验吧，当前不做决定
+
+范围：D-08 revision91 / AD-091、C-14/C-18/P-27/P-53。保留相反符号预测就绪并存与预测净抵消的将来对照空间，当前不选择任何一方。
+
+边界：不把任一选项设为默认，不改变 H-77 活动 spiking-rate 的整体净抵消，不解决 H-78 的字段／状态表示选择，也不要求建立实验框架或现在运行训练。
+
+### H-86 — 明显适合真实数据比较的问题直接保留实验空间
+
+<a id="h-86"></a>
+
+确认者：本对话用户，未提供独立可核实姓名。来源：[CoD 项目对话](codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75) 当前消息；准确消息时间未知，按客户端日期 2026-10-28（America/Los_Angeles）记录。
+
+原文：
+
+> 有些明显可以留作真实数据做对照实验的，你直接按这个处理，不用问我了
+
+范围：D-08 revision91 / AD-092 的设计研究工作方式；对明显可由真实数据对照实验评估的选项，智能体直接记录候选、可观察差异及取舍，保留设计空间，无需逐项询问。
+
+边界：授权处理开放问题，不是确认某个候选机制、实施契约、实验框架或当前训练运行；不能把缺少价值／目标判断的问题伪装成已批准的经验默认。H-74 的第一性价值约束、H-78/H-85 的明确延期决定保持。
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -1621,3 +2185,1380 @@ Design authority
 - Research conclusion: retain no selected extra distance rule while discussing what temporal relations and contextual participation the existing cells must learn. This is a recommendation for discussion, not a human decision, accepted algorithm or implementation contract. Geometry may earn a place through demonstrated benefit under the existing roles and resource constraints.
 - Preserved boundaries: H-40–H-43/H-46–H-50, fixed signed coordinate roles, staticSoA capacity, training ownership of weight scale and requirements before auxiliary structures remain. K-36 remains withdrawn. No layout, contact graph, new state array, phase code, learning formula or numerical acceptance threshold is selected; no implementation/build/project tests/toolchain mutation/commit/push occurred for H-51.
 - Qualification: D-08 revision68 remains pending-human. D-01–D-07 and descendants unchanged; D-GOV revision74 maintenance alone continues H-05. H-51 research work is complete, with scientific limitations and design decisions explicitly left open.
+
+
+### K-74 — 2026-10-28: Attractor objectives, finite token responses and background-noise control
+
+<a id="k-74"></a>
+
+- Agent scope/alignment assessment of H-52/H-53, not additional human confirmation. H-01–H-51, K-00–K-73 and AD-001–AD-045 retain their original text; H-52/H-53 and AD-046/AD-047 append the actual user directions. Pre-event registry SHA-256: 21ffb260906c4354da4e97a47a6bb972e29aeaa5fe20857a39f5af2fe2962194.
+- Coverage: D-08 document-set69; ActivationRegimes30 → 69, Model32 → 69, Decisions32 → 69, PhysicalDistancePreferenceResearch68 → 69. Other ten document revisions and the completed H-51 evidence/progress records are unchanged. Registry74 → 75.
+- Charter alignment: §§1–3.3/7.1–7.2 retain explicit domain intent, identifiable state/behavior and reviewable changes. P-25/P-22 connect C-12 to C-01/V-01/V-02; P-29 links learning to application behavior. C-17/P-34/P-35 separately record the required attention/DMN noise-control function, its candidate value rationale and its constraint on learning conditions. Dependencies or prior research do not qualify these mechanisms.
+- Human scope: three-regime attracting behavior and convergence from varied entry conditions; a single stochastic token activation followed by recurrent semantic activity and gradual return to DMN near0.5seconds under low noise; global noise suppression for attention; increased white noise after DMN detection; slow convergence toward negative meaning. The objective and required functional ordering are recorded without treating them as a loss function, detector or control algorithm.
+- Preserved boundaries: fixed semantic roles and polarity, no natural physical distance, H-42 rejection, staticSoA capacity, weight-scale ownership by training, broad per-CC activity bounds, and requirements before auxiliary storage. The active-fraction weighted-average identity remains true; it is separate from H-53's new required noise-control function. No new position, per-token lookup table, mode flag or timer is selected.
+- Acceptance/questions: define intended entry/outcome pairs, exact stochastic encoder, token recurrence/fading and DMN observables, timing tolerances, noise levels/global scope, and precedence under continuing attention or new tokens. Return to active DMN differs from silence and from completion of its slow semantic drift. The half-second target does not set a decay constant, input rate or immersion lifetime. A primary abstract-level reference on noise-driven transitions illustrates terminology only; it is not evidence for the application target or a selected fading mechanism.
+- Qualification: scoped human directions are recognized; D-08 and P-34/P-35 remain pending-human for detailed design/implementation. No qualified descendant is invalidated; D-01–D-07 remain unchanged. D-GOV revision75 record maintenance continues H-05. No application implementation, build, project tests, toolchain changes, commit or push accompany this discussion update.
+
+
+### K-75 — 2026-10-28: Intrinsic cancellation, residual amplification and qualified temporal coverage
+
+<a id="k-75"></a>
+
+- Agent scope/alignment assessment of H-54–H-58, not additional human confirmation. Original H-01–H-53, K-00–K-74 and AD-001–AD-047 retain their text; new events record the actual scoped directions. Pre-event registry SHA-256: acdc568dccae5c8048df2a6d4c1fc764e2e660fa14f5de4ab58de23fee4290f1.
+- Coverage: D-08 document-set70; ActivationRegimes/Model/Decisions/PhysicalDistancePreferenceResearch69 → 70, SignedPopulationEncoding28 → 70, SynapticIntegrationResearch24 → 70. Other eight document revisions and the completed H-51 evidence/progress records remain unchanged. Registry75 → 76.
+- Charter alignment: §§1–3.3/7.1–7.2 preserve explicit behavioral intent, identifiable state/observables and reviewable changes. Existing P-25/P-22 connect C-12 to C-01/V-01/V-02. C-17 is refined by H-55; C-18/P-36–P-38 separate intrinsic cancellation from explicit inhibitory edges; C-19/P-39–P-41 separate temporal regime detection from activity regulation. Functional directions have scoped human evidence; formal chains and detailed implementation remain pending-human.
+- Behavior: early model excludes explicit inhibitory synapses and requires within-dimension opposite-polarity activity cancellation. Complementary positive input into negative-semantic DMN should lower activity; the low active fraction raises noise before DMN detection if needed. The positive residual grows preferentially to a peak, then follows token-like fading. This refines the DMN-only noise-restoration interpretation, preserving H-53's attention suppression and DMN support purposes.
+- Detection: total active fraction is solely a regulation input, excluded from classification. Flexible-window qualified coverage/path define DMN, immersion and flow; flow above a small upper coverage bound is rejected.80%DMN and20%flow are examples, not fixed thresholds. White-noise participation must be discounted; the low-density exclusion is a candidate, not an adopted estimator. Broad-coverage flow is outside H-57's application scope. Above the flow cap does not automatically mean DMN; low-coverage temporal distinctions remain open.
+- Analytical interpretation: equal cancellation can reduce unsigned activity while preserving a linear signed residual, but neither meaningful valence nor longer lifetime follows automatically. For an illustrative weighted active-time density, coverage×cutoff <= time-averaged active fraction is an offline consistency bound, not a detector input or selected implementation. Incidental noise filtering is distinct from rejecting useful noise-assisted recurrence.
+- Preserved constraints: static semantic/polarity identity, Flash60+60, staticSoA slots and budgets, no natural physical metric, H-42 rejection, training ownership of weight scale, broad per-CC activity allowance and requirements before auxiliary structures. No dense inhibitory matrix, noise-origin labels, detector history array, mode bit, reset timer or changed capacity budget is prescribed.
+- Acceptance/questions: define cancellation amount/timing/phase handling; noise-control scope and attention/support combination; semantic residual growth/peak/return criteria; flexible window, meaningful activity density, noise cutoff and low-coverage path discrimination. The ordinary half-second objective remains approximate; no new numerical lifetime or clock origin is selected.
+- Qualification: D-08 revision70 remains pending-human for detailed design/implementation; D-01–D-07 and qualified descendants unchanged. D-GOV revision76 record maintenance alone continues H-05. No application code, build, project tests, toolchain changes, commit or push accompany this discussion update.
+
+
+### K-76 — 2026-10-28: External-token steerability and candidate stale recovery
+
+<a id="k-76"></a>
+
+- Agent scope/alignment assessment under H-59, not additional human confirmation. H-01–H-58, K-00–K-75 and AD-001–AD-052 retain their text. Pre-event registry SHA-256: b35a79ad57cab1e6ec73b7bea68d3906eddbbe53a75c68f155ea943e5ec9512a.
+- Coverage: D-08 document-set71; ActivationRegimes/Model/Decisions/PhysicalDistancePreferenceResearch70 → 71. Other ten document revisions and the completed H-51 evidence/progress records unchanged. Registry76 → 77.
+- Charter alignment: §§1–3.3/7.1–7.2 preserve explicit behavioral intent, state/interaction meaning and reviewable recovery semantics. P-25/P-22 retain the C-12 → C-01/V-01/V-02 candidate path. C-20/P-42 identify normal input steerability; C-21/P-43/P-44 separately identify the possible recovery value and required state semantics. These formal relationships remain pending-human.
+- Human scope: autonomous recurrence is expected; all intended normal states remain externally steerable. Stale means no external token input can break/redirect that recurrence. Reset is a possible recovery operation, not a chosen policy. This sharpens the earlier activity-maintenance versus responsiveness distinction without treating immersion or long-lived cycles as faults.
+- Operational questions: admissible inputs and effective response, evaluation horizon/evidence, reset scope, affected/retained state and recovery entry. An unsuccessful token/trial does not establish universal unresponsiveness; a temporary input-dependent recurrent response may be normal even when it later returns to DMN. No formal full-state controllability theorem, probe schedule, watchdog, timer or implementation is selected.
+- Preservation/descendants: fixed semantic roles, intrinsic polarity cancellation and early absence of explicit inhibitory synapses, staticSoA capacity, noise feedback, qualified temporal coverage and exclusion of active fraction from classification remain unchanged. C-19 regime labels and C-20 responsiveness are distinct. No qualified descendant is invalidated; D-01–D-07 and region/message/storage contracts remain unchanged.
+- Qualification: D-08 revision71 and detailed recovery mechanisms remain pending-human. D-GOV revision77 record maintenance alone continues H-05. No code, build, project tests, toolchain mutation, reset operation, commit or push accompanies this discussion update.
+
+
+### K-77 — 2026-10-28: Goal-specific interim assessment of positional preference
+
+<a id="k-77"></a>
+
+- Agent assessment under H-60, not human adoption of its recommendations. H-01–H-59, K-00–K-76 and AD-001–AD-053 retain their historical text. Pre-event registry SHA-256: f85af361ace2bf6a0e8f6c1892442f511a9e8fc17007999aa44a7fd7418e46da.
+- Coverage: D-08 document-set71 → 72; PhysicalDistancePreferenceResearch/Decisions71 → 72 and SpatialConnectivityResearch32 → 72. Other eleven document revisions and the completed H-51 evidence/progress records remain unchanged. Registry77 → 78; current coverage, authority blocks and reverse links advance together.
+- Charter alignment: current §§1–3.3/7.1–7.2, blob9f0154035d52f976232000ab1601088b91948c0b, keep business intent, state/interaction meaning and reviewable evidence explicit. P-25/P-22 retain the candidate C-12 → C-01/V-01/V-02 chain; C-15/P-29 and C-16/P-32 evaluate locality by its contribution to specified semantic behavior. H-40–H-43/H-50 and cumulative H-52–H-59 conditions are preserved; source findings are not substituted for human authority.
+- Deductions: small neuron coverage can span every semantic dimension; consistent identity relabeling preserves the defined semantic and temporal observables without identifying a physical metric. Intrinsic same-coordinate opposition defines one interaction, not anatomical adjacency. Finite response timing, residual amplification/exit and normal-state steerability constrain dynamics but do not select a radius or spatial dimension. These are model deductions, not biological measurements or proofs that geometry cannot help.
+- Evidence: targeted primary-source refresh of Ding2025/LOC-029, Gillett–Brunel2024/LOC-081 and Mackey2025/LOC-257; functional selectivity beyond contact, nonspatial temporal control and conditional positive geometry results remain distinct. Existing AUD-079/AUD-101 and ANA-027 supply scoped source/order checks; no source-corpus counts, completed durations or author-model execution claims are changed. Explicit inhibitory circuitry, learned hidden meanings and dense pretraining remain material transfer limits where present.
+- Recommendation pending discussion: prioritize meaningful coactivity under noise, recurrent support with exits, and bounded partner discovery. Propose a comparison without added geometry; this does not select uniform final weights, all-to-all search, an auxiliary structure, a training filter or an implementation. H-58 detection filtering is not automatically a plasticity rule. H-40 is not withdrawn and geometry is not permanently excluded.
+- Comparison acceptance: a later geometry proposal needs a specific search, dynamical or measured execution benefit under fixed semantic encoding and matched resource/input/control conditions. Include token response, residual growth/peak/fade, qualified coverage/path and external redirection. No new threshold, timing policy, layout, contact graph or experiment is selected.
+- Descendants/qualification: D-08 revision72 and the recommendation remain pending-human; D-01–D-07, qualified descendants, capacity/encoding contracts and region/message/storage protocols remain unchanged. D-GOV revision78 record maintenance alone continues H-05. No application code, build, project tests, toolchain mutation, reset, commit or push accompanies this assessment.
+
+
+### K-78 — 2026-10-28: Constructed activation chains and precomputed-group alternatives
+
+<a id="k-78"></a>
+
+- Agent assessment of H-61/H-62; scoped geometry deferral is human-confirmed, while training mechanisms remain preliminary proposals. H-01–H-60, K-00–K-77 and AD-001–AD-054 retain their historical text. Pre-event registry SHA-256: be487cd9c827edbf87e79be4b39b1f5cac681948bdb52ac21e5ec231b559d6bb.
+- Coverage: D-08 document-set72 → 73; new TrainingStrategy73; ActivationRegimes/Model71 → 73, README32 → 73, AdaptiveConnectivity28 → 73, PhysicalDistancePreferenceResearch/SpatialConnectivityResearch/Decisions72 → 73. Other seven document revisions and H-51's completed evidence/progress records remain unchanged. Registry78 → 79; current coverage, authority blocks, concepts, relationships and reverse links updated together.
+- Charter alignment: current §§1–3.3/7.1–7.2, unchanged blob9f0154035d52f976232000ab1601088b91948c0b, preserve explicit business intent, identifiable state/interaction semantics and reviewable changes. P-25/P-22 retain C-12 → C-01/V-01/V-02. C-22/P-45 proposes inspectable direct construction under C-15; P-46/P-47 separately record static-capacity and fixed-encoding dependencies. Formal derivation remains pending-human; dependencies do not qualify it.
+- Cumulative scope: H-61 refines H-40/H-52 acquisition routes into direct DMN/token construction, later Hebbian flow and immersion without dedicated training, while retaining H-52–H-59 behavioral acceptance. Physical-distance preference is omitted for now. H-62 is a preliminary precomputation/overlap preference requiring comparison, not approval of strict disjointness, fixed quotas or a changed stochastic input encoder.
+- Exact deductions under stated graph assumptions: predecessor width times outgoing degree equals successor width times average incoming degree; independent per-source random selection does not ensure uniform target degree. Disjoint groups obey per-coordinate/polarity population limits, which can bind before total CC capacity. Transition contributions differ from total live degree; existing endpoint pairs and repeated laps are not new slots. Nominal five-byte edges remain SoA and introduce no padding or auxiliary arrays.
+- Conditional dynamics: effective loop gain depends on all transitions and the neuron law, not closure weight alone. Multi-step smoothing can distribute gain but changes in fan-in/timing must be accounted for. Constant scalar gain does not establish residual growth/peak/fade; realistic FP4/FP8, noise, cancellation, overlap and concurrent chains require evaluation. No leak, threshold, refractory rule, adaptation state, inhibition or runtime weight schedule is selected.
+- Comparison: precomputed disjoint groups, controlled reuse and resampling between construction attempts retain different length/interference trade-offs. Fresh random input may partially seed several phases; cross-token sharing differs from within-chain overlap. Whole-CC DMN eligibility does not prove broad qualified coverage or negative-semantic drift. Later flow learning must preserve useful constructed responses and steerability; immersion remains an outcome to assess.
+- Scientific scope: refreshed LOC-071's primary synfire-ring result and its inhibitory/homeostatic assumptions; Kumar2008 publisher-indexed abstract/Figure2 supports background-state sensitivity, with full text unavailable in this review. These references do not validate the early architecture or supply parameters. No new completed-corpus counts, duration claims, author-model runs or application experiments.
+- Descendants/qualification: D-08 revision73 and detailed C-22 mechanisms remain pending-human, without a qualified implementation baseline. D-01–D-07 and qualified descendants unchanged; no capacity, encoding, region/message/storage contract is silently replaced. D-GOV revision79 record maintenance alone continues H-05. No code, build, project tests, toolchain changes, commit or push accompany this analysis.
+
+
+### K-79 — 2026-10-28: Unified DMN/token construction and reparative maintenance
+
+<a id="k-79"></a>
+
+- Agent alignment and analysis under H-63, not approval of unchosen detailed formulas. H-01–H-62, K-00–K-78 and AD-001–AD-059 retain their historical text. Pre-event registry SHA-256: 38eb34bf37990a14e924cef175f206fd22b125409d64292cbc537c32f432e804.
+- Coverage: D-08 document-set73 → 74; TrainingStrategy, ActivationRegimes, Model, README, AdaptiveConnectivity, PhysicalDistancePreferenceResearch, SpatialConnectivityResearch and Decisions advance together. Other seven document revisions and completed H-51 records are unchanged. Registry79 → 80; authority blocks, C-22/P-45–P-47 and reverse links updated together.
+- Charter alignment: current §§1–3.3/7.1–7.2 at unchanged blob9f0154035d52f976232000ab1601088b91948c0b preserve explicit business goals and identifiable state/operation semantics. Existing C-22 → C-15 → C-12 and P-25/P-22 → C-01/V-01/V-02 retain their candidate value path; repair maintains desired behavior as learning continues. Capacity and fixed-encoding dependencies remain separate from value authority.
+- Human direction: initial construction and ongoing DMN/token maintenance share a shortfall-driven approach; eligible expected-but-inactive neurons supply the additional next-step group. Fixed reference groups and quota-defined candidates remain alternatives. Later Hebbian flow, emergent immersion, geometry omission and H-52–H-59 behavioral boundaries are preserved.
+- Analytical proposal: distinguish expected target, natural response before assistance, missing candidate set and selected repair set. The count-deficit formula and 20/12/40 example are explanatory candidates, not selected activation semantics or a universal ratio. Already adequate activity in an unrelated population cannot establish the intended response. Learning shortfall, global activity regulation and regime classification remain different roles.
+- Repair semantics: temporary activation may support a training episode but is not proof that connectivity sustains the transition. Existing-edge changes, new distinct edges and supplemental teaching are different operations; no priority or update formula is selected. Newly allocated edges obey sum-of-source and sum-of-target counts; whole-group M/N construction is a reference case rather than mandatory repair work.
+- Preserved goals: repair follows the intended maintenance/growth/fading conditions and legitimate external redirection; a constant floor could defeat token fading. No-deficit does not exclude excess, semantic or responsiveness errors. Noise-assisted meaningful recurrence remains eligible evidence; detector filtering is not automatically a plasticity rule. No waveform, controller, runtime history, teaching schedule or interference remedy is adopted.
+- Qualification: D-08 revision74 and detailed C-22 mechanisms remain pending-human, without an implementation baseline. No qualified descendants or D-01–D-07 contracts change. D-GOV revision80 maintenance alone continues H-05. Documentation only; no application code, build, project tests, scientific simulation, toolchain change, commit or push.
+
+
+### K-80 — 2026-10-28: Whole-chain constraints, adaptive sampling and shortcut analysis
+
+<a id="k-80"></a>
+
+- Agent analysis under H-64; proposed scope and algorithms are not self-approved. H-01–H-63, K-00–K-79 and AD-001–AD-060 retain their historical text. Pre-event registry SHA-256: 5f5eb1fdcd9ced3ae1de3342f61156b79a7db610448d41233f54638eee01b4fa.
+- Coverage: D-08 document-set74 → 75; TrainingStrategy, Model, AdaptiveConnectivity and Decisions advance. Other eleven document revisions and H-51's completed records remain unchanged. Registry80 → 81; C-23/P-48–P-51, authority blocks, current coverage and reverse links updated together.
+- Charter alignment: current §§1–3.3/7.1–7.2 at unchanged blob9f0154035d52f976232000ab1601088b91948c0b preserve explicit intended progress, state identities and reviewable effects of updates. C-23/P-48 proposes serving C-22's useful repair by retaining whole-chain intent; existing C-22 → C-15 → C-12 and P-25/P-22 → C-01/V-01/V-02 remain candidate paths. Capacity/encoding dependencies P-49/P-50 and repair constraint P-51 are recorded separately, all pending-human in detail.
+- Proposed division: constrain semantic and width/strength profiles, permissible progress/returns and future resources globally within a chain/CC analysis scope, then sample actual targets using natural success and missing response. No permanent phase per neuron, entire precomputed sequence, network coordinator or storage format is inferred. Earlier-role exclusion has a traversal/return scope; incidental white-noise touches do not automatically exhaust candidate history.
+- Analytical witnesses: choosing a from current candidates{a,b} exhausts later{a}, whereas b preserves completion. Fresh c outside history{a,b} can still close a->b->c->x->a when c->x->a already exists. A12-group chain with3 head/3 tail groups and all return pairs permits8–12-edge cycles. These finite examples were checked with arithmetic/graph inspection, not application simulation or project tests; edge counts are not physical response periods.
+- Structural/dynamical boundary: adding u->v closes a graph cycle iff an old v-to-u path exists, but such a path need not activate effectively. Weight-only changes can alter effective loops without graph changes. Rejecting all cycles conflicts with intended recurrence and may exclude nearly all candidates in a strongly connected graph; limited history or bounded search supplies no complete guarantee. Incoming lists can support reverse reachability without inherently requiring an outgoing index; work and temporary representation still need budgeting.
+- Acceptance: distinguish width from strength, quantity success from intended progression, natural premature reactivation from a correct successor, and planned multi-step return from unintended shortening. Whole-chain feasibility and combined-network response matter alongside local deficits. Possible weakening/rejection strategies, path limits, thresholds, rollout coverage and auxiliary structures remain open; no new inhibitory edges or runtime fields are selected.
+- Preservation/qualification: H-52–H-63 goals and boundaries remain, including finite fading, explicit input steerability, static SoA capacity, fixed semantic roles, no physical metric and immersion without dedicated training. D-08 revision75 and C-23 details remain pending-human; D-01–D-07 and qualified descendants unchanged. D-GOV revision81 maintenance alone continues H-05. No code, build, project tests, author simulation, toolchain change, commit or push.
+- Clarification of analytical scope: the8–12-transition closure calculation is exact for the illustrative group-level graph, not a guarantee that every sparse cellular realization conducts each route. Excluding earlier cells from new target roles does not require silencing legitimate residual/predictive activity; premature effective return must be distinguished from normal carryover.
+
+
+### K-81 — 2026-10-28: Epoch-scoped populations and body/return gain strategy
+
+<a id="k-81"></a>
+
+- Agent alignment and conditional analysis under H-65; the human specifies parameter roles and epoch scope, not the formulas or numeric values below. H-01–H-64, K-00–K-80 and AD-001–AD-061 retain their historical text. Pre-event registry SHA-256: d5af070642ea1e87c4fd7f4433fd65fbfbe9eba25d8245f18ad698504ff2fced.
+- Coverage: D-08 document-set75 → 76; TrainingStrategy/Model/Decisions75 → 76 and ActivationRegimes/README74 → 76. Other ten document revisions and completed H-51 records remain unchanged. Registry81 → 82; authority blocks, C-22/C-23 scope and relevant dependency/reverse records updated together.
+- Charter alignment: current §§1–3.3/7.1–7.2, unchanged blob9f0154035d52f976232000ab1601088b91948c0b, preserve explicit domain objectives, identifiable populations/state and inspectable transitions. C-23/P-48 serves C-22/C-15/C-12 through objective-dependent planning; existing P-25/P-22 connect to C-01/V-01/V-02. P-50's signed-encoding dependency constrains proportional epoch sampling without granting detailed qualification.
+- Human scope: one concrete scope per epoch, whole CC for DMN and token-proportional minicolumn cells for token maintenance; approximate width, body enhancement and tail/head attenuation are strategy roles. Scope selection, per-step group selection, repeated laps and retained graph updates are distinct. No per-epoch reset, fresh per-step enclosing scope or exact-count requirement is inferred.
+- Conditional analysis: for a roughly nonrepeating pass L≈scope_size/width; effective step time supplies lap duration, which combines with net gain to determine persistence. Aggregate body gain B and return transmission D give scalar G=B*D under a single-wave approximation. Fixed per-step gain changes B when chain length changes; illustrative g1.01/D0.9 gives0.9746 for8 body steps and1.0553 for16. These are arithmetic witnesses, not SNN simulations or selected parameters.
+- Growth/fading interpretation: body amplification with distributed return attenuation can yield within-lap growth and a peak while matching-phase amplitudes decay across laps. A constant positive effective noise contribution with G<1 supports a floor in the simple affine model; it does not establish semantic selectivity or an arbitrary growth/peak/fade envelope. Real noise feedback, cancellation, nonlinearities and quantization remain relevant. No new adaptation state or inhibitory edges are adopted.
+- Encoding/acceptance: epoch-wide token proportions do not automatically hold per step. Uniform draws have expected population contribution W*n_q/n; a no-reuse pass can use a population of n_q cells in at most n_q distinct steps. Per-step or window/traversal fidelity and integer selection remain open; no temporal decoder is silently introduced. Existing coverage and external-steerability requirements continue to apply.
+- Qualification/descendants: D-08 revision76 and detailed C-22/C-23 mechanisms remain pending-human; D-01–D-07, qualified descendants, capacity budgets and region/message/storage contracts are unchanged. D-GOV revision82 record maintenance alone continues H-05. No code, build, project tests, scientific simulation, toolchain change, commit or push.
+
+### K-82 — 2026-10-28: Connected recurrence and near-step token fidelity
+
+<a id="k-82"></a>
+
+- Agent alignment and conditional analysis under H-66. Human evidence is the preliminary return-connectivity expectation, continuing attention to gain details, and per-step token-distribution preference with at most a few steps of bounded deviation. H-01–H-65, K-00–K-81 and AD-001–AD-064 retain their historical text. Pre-event registry SHA-256: d5500fcc216114c9c2de31760fe451888f1c29a94f8b9005f9be12defb3f33ec.
+- Coverage: D-08 document-set76 → 77; TrainingStrategy/Model/ActivationRegimes/README/Decisions76 → 77 and SignedPopulationEncoding70 → 77. Other nine application documents and completed H-51 records remain unchanged. Registry82 → 83; local authority blocks, C-22/C-23 scope, P-47/P-48/P-50/P-51 and reverse dependencies updated together.
+- Charter alignment: current §§1–3.3/7.1–7.2, unchanged blob9f0154035d52f976232000ab1601088b91948c0b. C-23/P-48 serves C-22/C-15/C-12 by maintaining identifiable semantic progress and finite response; P-25/P-22 connect to C-01/V-01/V-02. C-14/P-50 supplies the encoding dependency, not independent qualification. Cumulative H-52–H-66 behavior, H-43 fixed roles, H-54 cancellation and H-34 requirements-before-structures remain governing constraints.
+- Recurrence analysis: the working chain retains tail/head wiring; finite token persistence is a response criterion across recurrence. Nonzero connections can return subthreshold, quantized/canceled or semantically indistinct activation, so a visible single pass does not establish an open topology. Body growth and return attenuation can coexist with net decay; neither fixed raw weights nor topology alone determine the observable duration.
+- Gain sensitivity: under the existing scalar approximation, small effective lap-gain errors compound over repeated short laps; 0.995^100≈0.606 and 1.005^100≈1.647 are illustrative arithmetic, not SNN simulations or recommended FP8 settings. Shorter laps can ease semantic population limits while requiring finer effective gain calibration for a given persistence. Actual thresholds, nonlinearities, noise feedback, intrinsic cancellation and quantization still require analysis.
+- Semantic target: H-66 narrows the earlier open timescale choice to preferred per-step fidelity with at most a few-step allowance. Whole-traversal averaging is insufficient. The original vector, integer epoch scope, target membership and actual strengths remain distinct; a varying response amplitude is compatible with preserved signed proportions. Balanced population selection and rolling-window assessment are agent proposals, without choosing a decoder, numerical error metric or storage representation.
+- Repair interpretation: fidelity applies to the complete eligible next-step response, accounting for correct natural activity before sampling missing contributions. A 10:10 target with 10:0 correct natural activity requires 0:10 repair, not a new 5:5 balanced repair subset. Extra/wrong activation remains a separate problem, and premature return does not count as a correct successor.
+- Conditional population bound: for a no-reuse circular L-step traversal, requiring a population in every rolling H-step window (1≤H≤L) needs at least ceil(L/H) distinct participation steps/cells. Two selected cells cannot provide that presence every3steps on a20-step lap; at least7 are needed. This necessary presence bound is not sufficient for proportions and does not demand every tiny nonzero coordinate be present. Scope/width/window/tolerance must be considered together; no silent out-of-scope selection or early-reuse exception is adopted.
+- Qualification/descendants: the six revised documents and detailed C-22/C-23 mechanisms remain pending-human; no qualified implementation baseline is continued or created. D-01–D-07, capacity budgets, relocation/storage/message contracts and other qualified descendants are unchanged. D-GOV revision83 record maintenance alone continues H-05. No code, build, project tests, scientific simulation, toolchain change, commit or push.
+
+### K-83 — 2026-10-28: Fractional recruitment, rate dynamics and natural extinction
+
+<a id="k-83"></a>
+
+- Agent analysis under H-67–H-70. Human timing relaxation, natural-cessation clarification, fractional-selection proposal and precision requirement are recorded separately from proposed equations, mechanisms and storage. H-01–H-66, K-00–K-82 and AD-001–AD-067 retain their historical text. Pre-event registry SHA-256: 449a552a954c370e0484039adc50e60ea7af7987f04a5d63a86d7f73eedea90d.
+- Coverage: D-08 document-set77 → 78; new RateDynamics78, TrainingStrategy/Model/ActivationRegimes/README/Decisions/SignedPopulationEncoding77 → 78, SynapticIntegrationResearch70 → 78 and PhysicalDistancePreferenceResearch74 → 78. Other seven application documents and completed H-51 evidence remain unchanged. Registry83 → 84; authority blocks, C-24/C-25, P-52–P-59 and reverse dependencies updated together.
+- Charter alignment: current §§1–3.3/7.1–7.2, unchanged blob9f0154035d52f976232000ab1601088b91948c0b. Explicit activity, temporal response, participation and termination keep business behavior inspectable. Candidate C-24/P-52 → C-15/C-12 and C-25/P-55 → C-22/C-15/C-12 connect through P-29/P-25/P-22 to C-01/V-01/V-02; encoding/dynamics/capacity dependencies confer no qualification. This is a material modeling proposal, not an editorial continuation or approval of detailed descendants.
+- Timing: H-67 permits half-life-like attenuation with broad tolerance and expected token variation. Complete return at half a second is not the current deadline. A candidate peak-referenced envelope, significant-tail behavior and individual-trial versus ensemble survival measurements remain open. Conditional exponential percentages are arithmetic, not a selected model or pass/fail schedule.
+- State analysis: explicit spikes, realized binned counts, individual-neuron effective rates and population averages have different semantics. The previous distinct-cell traversal bound is conditional on whole-cell nonreuse, not a theorem against all spike models. H-69's fractional participation can remove early integer rounding while retaining identity and connections; persistent rates do not automatically consume fresh identities on every numerical update.
+- Fraction/rate interpretation: f*r is an illustrative effective contribution. Fraction as a training target and effective rate as runtime activity is an agent recommendation, not an adopted allocation. Probability, duty fraction and conditional rate differ; duplicate attenuation and redundant state must be avoided. Fractional sharing does not create independent output routes or eliminate graph shortcuts. H-65 epoch scope, H-66 short-horizon fidelity, phase semantics and H-53 one-shot input require explicit reconciliation.
+- Natural cessation: H-68 retains learned weights and allows insufficient-support or stochastic failure of active propagation. No timer, edge deletion, independent dropout or per-token runtime termination mechanism is selected. Local failure, background-assisted revival, loss of coherent token influence and continuing DMN activity are distinct. A survival hazard can generate an ensemble half-life without gradual individual fading.
+- Precision: H-70 applies across input fractions, weighted products/sums, signed cancellation, repeated weak updates and cessation conditions. The illustrative retention 2^(-0.01/0.5)≈0.98623 can round repeatedly back to1 under a coarse quantizer, preventing decay. FP4/FP8 storage does not determine accumulation precision, scales or update semantics. Alternatives such as wider arithmetic/state, error retention or stochastic rounding are recorded without choosing fields or budgets.
+- Research scope: primary-source review of Ostojic/Brunel2011 abstract, noise-response results and discussion; Schwalger/Deger/Gerstner2017 abstract, finite-size/switching results and discussion/limitations; Augustin etal2017 abstract and author summary. These establish precedents and limitations, not validation of this architecture. Individual identity, heterogeneous connectivity, low-noise attention and early absence of inhibitory edges prevent automatic transfer of population reductions or performance claims.
+- Acceptance/dependencies: preserve active-neuron fraction versus total rate and qualified coverage, signed semantic roles, intrinsic cancellation, external steerability, later Hebbian/emergent immersion goals, static SoA capacity and requirements before auxiliary structures. Need time-step/precision sensitivity and actual response/resource evidence after a contract is selected. No simulation, benchmark, project tests, implementation, toolchain/build change, commit or push occurred.
+- Qualification: D-08 and new C-24/C-25 formal relationships remain pending-human. No previously qualified contract is continued, invalidated or silently replaced; D-01–D-07 and region/message/storage protocols are unchanged. Existing capacity arithmetic remains conditional on its documented fields. D-GOV revision84 maintenance alone continues H-05.
+
+### K-84 — 2026-10-28: Useful context loops and numeric/time research initiation
+
+<a id="k-84"></a>
+
+- Agent scope alignment and initial analysis under H-71. H-01–H-70, K-00–K-83 and AD-001–AD-072 retain their historical text. Pre-event registry SHA-256: abf02cb5097ab375eb33764f5206dc8cf37749536674bf053e2ee0459742bf65. Twelve-hour work is active, not completed by this entry.
+- Coverage: D-08 document-set78 → 79; new ContextLoopsAndNumerics79; RateDynamics/TrainingStrategy/Model/ActivationRegimes/README/Decisions/SignedPopulationEncoding78 → 79. Other nine documents, H-51 completed evidence and capacity baselines remain unchanged. Registry84 → 85; C-26–C-28, P-60–P-68, authority blocks and reverse links updated together. Compact progress and exact numeric-arithmetic records are research evidence, not implementation contracts.
+- Charter alignment: current §§1–3.3/7.1–7.2, unchanged blob9f0154035d52f976232000ab1601088b91948c0b. Useful history-dependent effects, explicit temporal semantics and inspectable numeric/resource tradeoffs serve C-15/C-24/C-12 and P-29/P-25/P-22 → C-01/V-01/V-02. The new relationships are candidate explanations; no dependency grants qualification.
+- Loop interpretation: distinguish deliberate main-chain construction from suppressing all smaller recurrences. Useful noise-supported loops may preserve context after a dominant token response fades. Proposed history-controlled comparisons examine later response differences, meaningful interference and external steerability; no private token loop, new state partition, readout or dedicated loop-training stage is selected. Current C-12 index also reflects H-67's relaxed timing rather than the older completion-at-half-second wording.
+- Decay analysis: compare retained error, wider evolving state, cumulative-time evaluation, next-code-boundary events and stochastic integer transitions. The exponential crossing time t0+tau*log(x0/b) assumes isolated decay; restarting from a code center, freezing intermediate effects or renewing a timestamp can change the dynamics. Frequent noise/input, event ordering, incoming-slot routing and rescheduling costs need evidence before choosing timers or auxiliary state.
+- Numeric arithmetic: N614400 state arrays occupy307200/614400/1228800/2457600 bytes at4/8/16/32bits. Packed4bit weights in the15-class example give486928564 named bytes before metadata, versus540174772 at8bits; four-byte IDs limit slot savings to10%. At fan-in18432, two raw unsigned8bit factors sum to1198540800, while three give305627904000. These are conditional bounds, not formats, performance guarantees or new allocations.
+- Stochastic model comparison: independent surviving integer quanta have binomial variance; at half survival CV=1/sqrt(q), about25.8% for15 and6.26% for255. This changes individual-response variability despite matching mean decay. The candidate is not equated to actual spikes, background regulation or a selected rounding law.
+- Initial sources: memory/noise primary leads, QSS original formulation, integer inference arithmetic, and two explicitly labeled2026 recurrent-state preprints. Source reading is ongoing and recorded by depth; no review-completion, model-validation or CPU-speedup claim. No scientific simulation or benchmark has yet been run in this H-71 phase; exact arithmetic only.
+- Qualification/dependencies: D-08 and C-26–C-28 formal relationships remain pending-human; this changes/refines modeling scope and is not a qualified-contract continuation. Existing phase/semantic identities, static SoA, natural cessation without deleting learned weights, external steerability and requirements before auxiliary structures remain. D-01–D-07 and qualified descendants unchanged. D-GOV85 maintenance alone continues H-05. No implementation, build, toolchain change, project tests, commit or push.
+
+### K-85 — 2026-10-28: Near-term decay events, wider state and justified complexity
+
+<a id="k-85"></a>
+
+- Agent assessment, not human confirmation. Inputs: H-71—H-74, cumulative H-52—H-70 behavior and H-34 requirements-before-structures. Charter §§1–3.3/7.1–7.2 remain aligned; unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`. Pre-entry registry SHA-256: `857be14964a23f266135a97c191fb2f05fd66e4e345d124b8ff65813fb89bf0a`. H-01—H-71, K-00—K-84 and AD-001—AD-076 retain their historical text.
+- Coverage: D-08 document-set79 → 80; ContextLoopsAndNumerics, RateDynamics and Decisions79 → 80. The other fourteen application documents retain their recorded revisions. Registry85 → 86; H-72—H-74/AD-077—AD-079, C-27/C-28 current scope, P-60—P-68 scope references and reverse indexes updated together. H-71 twelve-hour work remains active; no completion claim.
+- Value rationale: C-26/P-60 serves context-sensitive semantic behavior; C-27/P-63 preserves meaningful temporal evolution; C-28/P-65 serves faithful representation within resources. P-25/P-22 connect the application to C-01/V-01/V-02. H-74 requires demonstrating that each mechanism serves a real unmet behavior or resource need. Dependencies P-62/P-64/P-66/P-67 do not grant authority.
+- H-72 interpretation: predict the next precision-permitted state change, then the next, preserving progress. This is successive local scheduling, not a distant token-expiry target. Exact rounding boundaries, evolving input and cancellation still need semantics. H-73 opens FP16/FP32 neuron state; neither is selected. H-74 motivates an ordinary FP32 discrete-time research reference before adding scheduling, residual fields, scales or topology indexes.
+- Evidence: isolated-decay-probe.json records288 conditional fixed-point arithmetic cases, not neural simulation. A0.5s half-life at10ms steps stalls at15/15 under naive four-bit rounding and36/255 under eight-bit rounding; even sixteen-bit fixed-point has a small plateau. Retaining latent progress follows the isolated reference. Restarting successive events at new code centers instead of preserving trajectory phase changes the decay law. Numerical zero is not an adopted natural-extinction criterion.
+- Input evidence: embedding-precision-probe.json reads2048 sampled ordinary Flash-1017 rows plus8 separate examples from existing SSD data without copying it. Under diagnostic row-maximum scaling, median relative L2 errors are7.321% UINT4,0.431% UINT8,11.871% positive FP4 E2M1,2.647% positive FP8 E4M3 and0.0207% FP16. Ideal balanced population totals are explicitly conditional; they do not preserve individual learned outputs or select an allocator. No recurrence, learned-weight accuracy, semantic-task validation or CPU-speed claim follows.
+- Literature/transfer: targeted primary-source reads distinguish noise-supported activity from memory fidelity; retain the E/I and short-term-plasticity assumptions in the cited noise-support model, and weak-fluctuation/continuous-attractor assumptions in the diffusion analysis. QSS convergence assumptions do not validate a fixed low-bit noisy SNN. Recent recurrent-quantization preprints remain labeled as such and do not authorize their extra state or buffering here.
+- Cumulative constraints: main-chain construction avoids deliberately harmful shortcuts but does not aggressively suppress useful existing small loops; dominant fade can coexist with useful history. Fixed roles, one-shot token input, intrinsic cancellation, regulated active fraction distinct from regime classification, external steerability and no learned-weight deletion remain. State arrays are small relative to connection arrays; scheduling scalar decay alone does not establish a connection-traversal saving.
+- Qualification/descendants: all affected D-08 mechanism scopes remain pending-human; no qualified product contract is continued or created. Capacity arithmetic remains conditional, and D-01—D-07, charter, regional invariants and build/toolchain state are unchanged. D-GOV86 maintenance alone continues H-05. No implementation, project tests, build, install, commit or push.
+
+### K-86 — 2026-10-28: Contextual identities and two-frame incoming gather
+
+<a id="k-86"></a>
+
+- Agent assessment, not human confirmation. Inputs: H-75 plus cumulative H-52—H-74. Charter §§1–3.3/7.1–7.2 read in current context; blob `9f0154035d52f976232000ab1601088b91948c0b` unchanged. Pre-entry registry SHA-256 `cf4568b44919258bd0ad376baa15837c424660e131883eb61dcb7c20ea27147e`. Prior H-01—H-74, K-00—K-85, AD-001—AD-079 and exact human quotes are retained.
+- Coverage: D-08 set80 → 81; ContextLoopsAndNumerics/RateDynamics/Decisions80 → 81, TrainingStrategy/Model/SignedPopulationEncoding/README79 → 81, IncomingConnectivity24 → 81. Nine other documents retain their covered revisions. Registry86 → 87; H-75, AD-080/AD-081, C-29/P-69/P-70, local authority blocks and reverse references updated together. H-71 research remains active.
+- Value chain: C-29/P-69 derives a consistent neural transition from C-24/P-52 and C-15, through C-12 to C-01/V-01/V-02. All destinations read one completed state, avoiding traversal-order changes while using target-owned slots. P-70 is a storage dependency only. H-74 makes this simple baseline preferable to extra accumulators, events or indexes without an unmet need.
+- Context: H-75 confirms the intended contextual-path role of cell identities. Indexed primary Numenta algorithm descriptions distinguish column input from cell-specific temporal context; direct site retrieval was blocked by a redirect. This supports the distinction, not automatic transfer of segments, bursting, learning or precise memory capacity. Equal aggregate readout can coexist with different later responses through existing identities and weights; no new context subsystem is selected.
+- Frame proposal: two scalar FP16 frames cost2457600 bytes; FP32 costs4915200 bytes at N614400. IDs/weights/references/owners stay single. Incoming sums are temporary. Intrinsic polarity cancellation requires a consistent stage; a per-minicolumn next-state computation can avoid a third full frame. Transition, noise/input boundary and learning/migration publication remain proposals; no global distributed lockstep is imposed.
+- Arithmetic: floating-state-decay-probe.json separates FP16 from fixed-point results. A sufficiently slow decrement can freeze FP16 despite accurate intermediates; FP32 follows the examined case without added residual state. Literal adjacent-code scheduling crosses1024/8388608 intervals per normal-range FP16/FP32 halving. Frame updates coalesce them; a larger event tolerance would be a distinct approximation. These are conditional numerical cases, not SNN training or hardware benchmarks.
+- Shared dynamics: recurrent-chain-arithmetic.json demonstrates that two individually attenuating cycles may jointly amplify, and leaky progression can spread across reference stages without necessarily losing semantic fidelity. minimal-dynamics-analysis.json separates rate from readiness, noise-supported response from memory, and active count from amplitude. Execution-work arithmetic distinguishes cheap scalar state evolution from connection access. No graph-wide cycle detector, new controller, state field or temporal mechanism is adopted.
+- Cumulative scope: H-73 removes an obligatory four-bit state assumption; corresponding current-model prose is clarified without rewriting old conditional capacity calculations or human history. Useful small loops, no explicit inhibitory synapses, intrinsic cancellation, fractional/rate exploration, short-horizon semantics, timely dominant fading, external steerability, static SoA and requirements before structures remain.
+- Qualification/descendants: D-08 mechanisms and formal new relationships remain pending-human; no qualified implementation baseline is created or continued. D-01—D-07, charter, regional protocols and build/toolchain state are unchanged. D-GOV87 record maintenance alone continues H-05. No implementation, project tests, build, install, commit or push.
+
+### K-87 — 2026-10-28: Prediction-guided entry and proportional net cancellation
+
+<a id="k-87"></a>
+
+- Agent assessment, not human confirmation. Inputs H-76/H-77 refine H-53/H-54/H-75 under H-74's value requirement. Charter §§1–3.3/7.1–7.2 alignment remains; unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`. Pre-entry registry SHA-256 `3465157bfe4971c33cc7b8e627aaabde44ddddc9e2d1acdea312a9daf71b560c`. Prior H-01—H-75, K-00—K-86 and AD-001—AD-081 history is retained.
+- Coverage: D-08 set81 → 82; SignedPopulationEncoding/RateDynamics/Model/TrainingStrategy/IncomingConnectivity/Decisions/README81 → 82, ActivationRegimes79 → 82. Other nine document revisions remain. Registry87 → 88; H-76/H-77, AD-082/AD-083, C-14/C-18 and relevant P-27/P-36—P-38/P-53 scope, authority blocks and reverse records updated together. H-71 remains active.
+- Value lineage: C-14/P-27 serves semantic input through context-specific cell identities; C-18/P-36 serves the required opposing-activity reduction while preserving the signed residual. Both derive through C-12/P-22 to C-01/V-01/V-02. P-37/P-53 encode dependencies, not authority. The two user rules use existing minicolumn identities and state; no extra memory or routing subsystem is justified by them.
+- Input scope: H-76 supplies the two branches, not a threshold or normalization. Strong/focused and weak/broad recruitment must be calibrated against coordinate strength; different counts can compensate for different individual rates. Preserving aggregate input versus allowing confidence-dependent gain is not silently decided. Existing one-shot input, short-horizon fidelity and H-75 contextual paths remain; unconditional random entry is not the current general rule.
+- Cancellation scope: H-77 specifies the full active-rate net and proportional surviving distribution. Equal subtraction preserves signed aggregate; full cancellation leaves unsigned aggregate equal to absolute net. No arbitrary positive/negative index correspondence exists. Predictive readiness, transfer ordering and active-cell counting remain separate unresolved semantics.
+- Frame integration: read prediction before token application; next-frame active rates can be canceled locally before publication. Incoming recurrent gathers continue to read the preceding frame. No third whole-CC frame, duplicate weights, persistent per-edge accumulator or event structure is introduced. Training assesses the post-cancellation natural response before repair, rather than restoring the intentionally canceled side.
+- Numeric evidence: cancellation-frame-arithmetic.json contains conditional storage-rounding cases and a pairing counterexample. Two almost equal populations can lose their residual at FP16 write-back; FP32 preserves the illustrative difference more accurately, without proving a universal tolerance. The source ledger's Numenta entry supports context-based selective versus broad activation, not the application's graded thresholds or full implementation.
+- Qualification/descendants: H-76/H-77 are specific human modeling directions, not approval of every cumulative mechanism or document. Full D-08 contracts and formal relationships remain pending-human; no qualified implementation baseline is created or invalidated. D-01—D-07, charter, regional invariants, build/toolchain state and capacity assumptions remain. D-GOV88 record maintenance alone continues H-05. No implementation, project tests, build, install, commit or push.
+
+### K-88 — 2026-10-28: Deferred state choice and conditional weight precision
+
+<a id="k-88"></a>
+
+- Agent assessment, not human confirmation. Inputs H-78 and cumulative H-53/H-66/H-70—H-77. Charter §§1–3.3/7.1–7.2 remains aligned; unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`. Pre-entry registry SHA-256 `33864bbd43ba69eb9935df460a4481f00b24d0c20f661e46cbf8d799cc19cfa9`. Prior H-01—H-77, K-00—K-87 and AD-001—AD-083 history is retained.
+- Coverage: D-08 set82 → 83; ContextLoopsAndNumerics81 → 83, RateDynamics/SignedPopulationEncoding/Model/Decisions82 → 83. Twelve other documents retain their revisions. Registry88 → 89; H-78/AD-084, C-24/C-28 scope, relevant numerical/encoding relationships and local authority blocks updated together. H-71 twelve-hour work remains active.
+- Value chain: C-24/P-52 serves meaningful temporal semantic behavior, C-14/P-27 contextual input, and C-28/P-65 faithful affordable numerics, through C-15/C-12 to C-01/V-01/V-02. H-78 retains a comparison because readiness/current firing semantics materially affect H-76 input and H-77 cancellation. It does not justify allocating both layouts or building a generic framework.
+- State analysis: a separate meaning need not be independent stored state when derivable from the current snapshot; truly independent required history needs retention. Stored-phase selection and newly derived prediction have different timing. Read-only NuPIC reference source checks show activation uses existing segment state and dendrite activation then builds subsequent predictions; no segments or extra arrays are adopted. SHA-256 `4cdd4588f3bafc1c698fb1c18cab0f981152d4a697152855227b89e452ce3128` records the inspected source.
+- Input analysis: input-context-calibration.json derives how coordinate-varying gain can alter a vector, while a common gain preserves direction. H-54/H-77 cancellation and H-71 retained context intentionally change the resulting network response; this is not permission to project it back onto the latest token. Weak nonzero support, active-cell fraction and qualified temporal coverage remain distinct. No normalization, threshold or new detector is selected.
+- Weight arithmetic: weight-precision-probe.json contains28 conditional equal-input cases, using hypothetical1/k weights and one global grid. k denotes contributing inputs, not an allocated class or selected training rule. Global low-bit grids may erase weak routes; FP8 range helps in the example. Mixtures of integer edge codes can match a row gain more finely than one edge's quantum, but do not preserve arbitrary contextual responses. No balanced allocator, row scale or learning formula is selected.
+- Training cost: primary Gupta2015 and BinaryConnect2015 sections distinguish stored operands, temporary accumulation and retained update precision. Their supervised feedforward/specialized-hardware results do not establish sparse recurrent CPU accuracy or speed. One extra FP32 value per reserved edge costs425969664 bytes in the15-class candidate; neither master weights nor optimizer state is presumed for deficit maintenance.
+- Qualification/descendants: exact user directions stay scoped to their propositions; full D-08 contracts/formal relationships remain pending-human. No qualified contract is created or invalidated. D-01—D-07, charter, region invariants and build/toolchain state remain unchanged. D-GOV89 maintenance alone continues H-05. No implementation, project tests, build, install, commit or push.
+
+### K-89 — 2026-10-28: Cancellation consequences and compact authority summaries
+
+<a id="k-89"></a>
+
+- Agent assessment, not human confirmation. Inputs H-74—H-78 and existing behavior/representation constraints; no new human decision. Charter §§1–3.3/7.1–7.2 alignment remains, blob `9f0154035d52f976232000ab1601088b91948c0b` unchanged. Pre-entry registry SHA-256 `aa7b7724fc70b7f2bafd6775f9ecab0dc9e1c2ab175c98205df0092c4abf80d5`. H-01—H-78, K-00—K-88 and AD-001—AD-084 history retained.
+- Coverage: D-08 set83 → 84. ContextLoopsAndNumerics/RateDynamics/SignedPopulationEncoding/Model/Decisions83 → 84; TrainingStrategy/ActivationRegimes/IncomingConnectivity/README82 → 84. Eight other document revisions unchanged. Registry89 → 90 and relevant scope/reverse references updated together. H-71 research remains active, not complete.
+- Value rationale: C-18/P-36's selected net cancellation serves opposing-activity reduction and retained signed/contextual response. Deriving its consequences makes C-24/P-52 dynamics and C-29/P-69 frame ordering explicit without adding mechanisms. C-19 coverage and C-17 regulation remain different observables. All link through C-12/P-22 to C-01/V-01/V-02; dependencies grant no authority.
+- Derived properties: cancellation-properties-analysis.json proves signed-net preservation, proportional surviving ratios, independent within-polarity permutation equivariance, idempotence, positive homogeneity and an absolute L1 non-amplification bound on nonnegative rates. These are local mathematical consequences, not whole-network stability or numerical-relative-error guarantees.
+- Counting/timing: full cancellation leaves at most one 60-cell active polarity per dimension, hence at most 50% instantaneous positive-active-rate support. This does not bound predictive readiness or qualified coverage over time. Combining input contributions before cancellation can yield different contextual ratios from sequential partial cancellation despite identical signed totals. The chosen frame/transfer boundary must therefore be explicit.
+- Conditional noise analysis: dense independent positive noise with strictly-positive-rate counting would yield 50% activity almost surely regardless of its scale, and expected 87.5% cumulative support after 3 independent frames without recurrence. Those noise/counting definitions are not selected. The example motivates defining existing observables correctly, not adding a controller, provenance flag or filter by default.
+- Recurrence analysis: cancellation-recurrence-analysis.json separates nonnegative stored connections from signed effective coordinate effects through the selected intrinsic cancellation. A sufficient matched-input contraction bound is conditional and constrains memory as well as amplification; no column normalization, reverse index, spectral check or mirrored architecture is adopted. Existing shared graph response, not individual loop gains, remains the maintenance evidence.
+- Source depth: main Ganguli 2008 memory analysis pp1–4 read through input alignment, transient amplification/feedback and finite-range assumptions; supplementary proofs remain unread. Its linear additive-Gaussian bounds and architecture examples do not estimate this nonlinear model's capacity or introduce physical geometry. The conditional relevance is input-sensitive retention and growth compatible with eventual fading.
+- Editorial continuity: the nine working documents' repetitive authority narratives are replaced by compact scope, value lineage, governing invariants, acceptance, human-baseline references and current-assessment blocks. Their governing invariants/acceptance and non-authority body prose are retained; README clarifies that its open numerical boundary is the complete neural transition, consistent with H-77's specified cancellation; the registry and Decisions preserve exact human evidence. This improves reviewability under H-74 and AGENTS' compact-block requirement without qualifying a pending design or changing a confirmed contract.
+- Qualification/descendants: D-08 and formal mechanism relationships remain pending-human. No previously qualified product scope is created, continued or invalidated. D-01—D-07, charter, region protocols and build/toolchain state are unchanged. D-GOV90 maintenance alone continues H-05. No implementation, project tests, build, install, commit or push.
+
+
+<a id="k-90"></a>
+### K-90 — 2026-10-28: Entry-dependent fading and model-time noise semantics
+
+- Recorded: 2026-10-28T17:30:50Z. Agent assessment, not human confirmation; no new human decision. Charter §§1–3.3/7.1–7.2 remains aligned at blob `9f0154035d52f976232000ab1601088b91948c0b`. Pre-entry registry SHA-256 `8dfb4b1880d8089f27db67adc382d93b0109e1e9cb82fa0797ec2906cb27e2d0`. H-01—H-78, K-00—K-89 and AD-001—AD-084 history retained.
+- Coverage: D-08 set84 → 85; TrainingStrategy, RateDynamics and ContextLoopsAndNumerics84 → 85. Other fourteen document revisions remain. Registry90 → 91; affected current relationship scopes and reverse links updated. The D-GOV current index is corrected from its stale86/K-85 summary to91/K-90, consistent with the intervening recorded maintenance events; this creates no product approval.
+- Value chain: C-22/P-45 serves C-15's maintained response; C-24/P-52 and C-29/P-69 require explicit causal/model-time meaning; C-26/P-60 preserves useful history. These remain linked through C-12/P-22 to C-01/V-01/V-02. H-74 favors explaining behavior using existing connections and state before adding mechanisms. H-78's two state interpretations remain open.
+- Findings: an ideal positive weighted ring has W^L=G*I, permitting within-lap amplification with eventual fading, but its initial peak depends on the entry phase mixture. Focused and broad H-76 entries therefore belong in behavioral acceptance. Balanced additive noise followed only by H-77 cancellation preserves the mean signed coordinate while possibly increasing absolute activity; recurrence/transfer must supply any selective residual growth. These are conditional analytical implications, not achieved SNN behavior.
+- Time/numerics: a fixed frame map need not admit a same-state continuous half-step; frame duration changes propagation and response timing. Kicks, sampled drift and diffusion increments have different units and duration-dependent variance. Higham2001 §§2/4 and the start of§5 were read for increment scaling and pathwise comparison; no SDE, noise distribution, frame interval, delay state, timer, fatigue or entry router is selected.
+- Evidence: `body-return-response-analysis.json`, `frame-time-noise-analysis.json`, source MR-S019 and updated design sections preserve assumptions and limits. Arithmetic is independent reference reasoning, not product implementation, training success or a performance benchmark. H-71 substantive research continues below twelve hours.
+- Qualification/descendants: full D-08 mechanisms and formal relationships remain pending-human; no qualified product contract is created, continued or invalidated. D-01—D-07, charter, regional protocols and build/toolchain state remain unchanged. D-GOV91 record maintenance alone continues H-05. No implementation, project tests, build, install, commit or push.
+
+
+<a id="k-91"></a>
+### K-91 — 2026-10-28: Separate training methods and begin flow design
+
+- Recorded: 2026-10-28T17:47:09Z. Agent assessment of H-79—H-81, not approval of an algorithm. Charter §§1–3.3/7.1–7.2 remains aligned at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `e42a39089d6afe2f7e272088a4d3d0b173e7c415bae8589f0e4df3156096550b`. H-01—H-78, K-00—K-90 and AD-001—AD-084 history retained; H-79—H-81 and AD-085—AD-087 appended.
+- Coverage: D-08 set85 → 86; TrainingStrategy/RateDynamics/ContextLoopsAndNumerics85 → 86, ActivationRegimes/Model/README/Decisions84 → 86. Other ten document revisions remain. Registry91 → 92; C-15/C-22, P-29/P-45, current scope and reverse references updated together.
+- Value chain: C-15/P-29 connects the phase-specific learning goals to C-12, then C-01/V-01/V-02. C-22/P-45 remains DMN/token construction and repair. Distinguishing learning objectives from shared activation/dynamics preserves business intent under H-79/H-80; H-81 now explicitly authorizes initial flow design and early human discussion. No new implementation abstraction is approved.
+- Correction: recent HTM learning-source research must not be used to assign HTM learning selection to DMN/token repair. The research notes and source MR-S020 are scoped accordingly. H-76 prediction-guided token entry remains an activation rule; H-75 contextual identities and H-78 deferred state comparison remain unchanged.
+- Initial flow scope: the learner is undesigned, with Hebbian/HTM as its direction. The first pending question distinguishes contextual preactivation for externally driven progression from emitting an anticipated semantic vector and from pursuing both objectives. Credit assignment for broad/focused entry, erroneous prediction and background recurrence remains open; no update rule, eligibility trace, routing table, per-token state or imported full HTM implementation is selected.
+- Qualification/descendants: H-79—H-81 provide scoped human direction and design authorization, not approval of complete D-08 contracts or formal mechanisms. D-08 remains pending-human. D-01—D-07, charter, regional protocols and build/toolchain state are unchanged. D-GOV92 maintenance alone continues H-05. H-71 research continues; no implementation, build, project tests, install, commit or push.
+
+
+<a id="k-92"></a>
+### K-92 — 2026-10-28: Flow prediction matching without a generation requirement
+
+- Recorded: 2026-10-28T17:53:11Z. Agent assessment of H-82, not selection of a learner. Charter §§1–3.3/7.1–7.2 remains aligned at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `65d9231ea28404d94d9e0ab673db20262dcceec5374a4b92145341bbab2ac9c1`. H-01—H-81, K-00—K-91 and AD-001—AD-087 history retained; H-82/AD-088 appended.
+- Coverage: D-08 set86 → 87; TrainingStrategy/ActivationRegimes/Model/README/Decisions86 → 87. Other twelve documents retain their revisions. Registry92 → 93, C-15/P-29 scope and reverse references updated together.
+- Value chain: C-15/P-29 serves C-12's contextual sequence behavior, through C-01/V-01/V-02. H-82 specifies prediction/input compatibility as the immediate flow-learning goal and separates generation, preventing an unrelated autonomous-output requirement from distorting the learner. C-22/P-45 remains DMN/token maintenance; H-78 state comparison and H-79—H-81 design scope are preserved.
+- Assessment proposal: inspect preactivation before the new token affects state, and compare with an independent incoming-token criterion rather than only the cells selected from that prediction by H-76. Unwanted predictions, ambiguous continuations and meaningful readiness at low strength require discussion. This is analysis, not a confirmed metric, threshold, loss or algorithm.
+- Qualification/descendants: D-08 full contracts and formal mechanisms remain pending-human. No autonomous-generation algorithm, extra prediction field, token buffer or imported HTM machinery is selected. D-01—D-07, charter, regional protocols and build/toolchain state remain unchanged. D-GOV93 maintenance alone continues H-05. H-71 research continues; no implementation, project tests, build, install, commit or push.
+
+
+<a id="k-93"></a>
+### K-93 — 2026-10-28: Prediction diversity over growing context
+
+- Recorded: 2026-10-28T18:17:34Z. Agent assessment of H-83, not selection of a metric or learner. Charter §§1–3.3/7.1–7.2 remains aligned at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `f69112add939064a5467afe059110d2f2196fd128f0c627c9e45aaaceaf77ede`. H-01—H-82, K-00—K-92 and AD-001—AD-088 history retained; H-83/AD-089 appended.
+- Coverage: D-08 set87 → 88; TrainingStrategy/ActivationRegimes/Decisions87 → 88. Other fourteen documents retain their revisions. Registry93 → 94; C-15/P-29 and current/reverse scope references updated together.
+- Value chain: C-15/P-29 serves C-12's context-sensitive sequence behavior through C-01/V-01/V-02. H-83 refines H-82's direct learning criterion: ambiguity on matching shared fragments is expected, with increasing specificity as more sequence context identifies the training path. C-26/P-60's retained context supplies a relevant behavior dependency, not an automatic new mechanism or implementation approval.
+- Assessment: predictive diversity is not automatically neuron count or coordinate entropy. Known overlapping sequences can supply an independent assessment context without selecting a generation decoder. A fixed equally strong penalty for every unchosen continuation can suppress legitimate alternatives in a conditional association example; no penalty, normalization, candidate store or exact loss is selected. Context length and prediction timing remain separate from the neural-frame interval.
+- Research scope: flow credit alternatives and source-history availability are recorded in `flow-learning-design-analysis.json`; exact user goals govern that analysis. A new pending discussion asks whether unfamiliar-token broad activation should have selective contextual learning recipients or graded credit across the broad response. This asks about flow learning, not DMN/token missing-group repair.
+- Qualification/descendants: D-08 contracts/formal mechanisms remain pending-human. H-78 state comparison and H-79—H-82 training/generation boundaries remain. D-01—D-07, charter, regional protocols and build/toolchain state are unchanged. D-GOV94 maintenance alone continues H-05. H-71 research continues; no implementation, project tests, build, install, commit or push.
+
+
+<a id="k-94"></a>
+### K-94 — 2026-10-28: Exclude generation fallback from learning
+
+- Recorded: 2026-10-28T18:23:41Z. Agent assessment of H-84, not algorithm approval. Charter §§1–3.3/7.1–7.2 remains aligned at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `575fc6e9938d1c77b1e9962f219025b1e6acf8bd91dea991eb22a51be6d633e4`. H-01—H-83, K-00—K-93 and AD-001—AD-089 history retained; H-84/AD-090 appended.
+- Coverage: D-08 set88 → 89; TrainingStrategy/ActivationRegimes/Decisions88 → 89, SignedPopulationEncoding84 → 89, RateDynamics86 → 89 and Model87 → 89. Eleven other documents retain their revisions. Registry94 → 95; C-14/C-15, relevant P-27/P-29/P-53 scopes, current/reverse references updated.
+- Value chain: C-14/P-27 defines meaningful contextual input; C-15/P-29 learns predictive sequence relations in service of C-12 and C-01/V-01/V-02. H-84 separates an explicit generation input operation from normal synaptic transmission and learning. This prevents the learner from reproducing an artificial fallback rather than the desired context-to-sequence prediction.
+- Correction/invalidation scope: the recent question and research alternatives that chose flow-learning recipients from broad weak generation activation have an invalid premise under H-84 and are withdrawn from the active draft. Source-cell/context distinctions and independently derived numerical/timing results remain references with their assumptions. Generation input calibration and evaluation of subsequent learned recurrence remain valid topics; learning the fallback operation is excluded.
+- Primary check: inspected NuPIC reference activateCells, predicted-column, burst-column and segment-update paths at the previously recorded source fingerprint. It distinguishes active cells from winners; existing-segment adaptation uses previous active cells while growth uses previous winners, gated by learning. This does not mean canonical bursting is universally excluded from learning. The application follows H-84's explicit exclusion and must design unfamiliar-transition learning independently; no winner array, segment/permanence structure or teaching pulse is adopted.
+- Qualification/descendants: D-08 mechanisms remain pending-human. No qualified implementation scope is activated or invalidated. H-78 and H-79—H-83 remain; D-01—D-07, charter, regional protocols and build/toolchain state are unchanged. D-GOV95 maintenance alone continues H-05. H-71 research continues; no implementation, project tests, build, install, commit or push.
+
+<a id="k-95"></a>
+### K-95 — 2026-10-28: Context assignment and prediction ambiguity in flow learning
+
+- Recorded: 2026-10-28T18:36:19Z. Agent research assessment, not a human decision. Relevant charter §§1–3.3/7.1–7.2 checked in current context; charter blob remains `9f0154035d52f976232000ab1601088b91948c0b`. Pre-entry registry SHA-256 `1d1cf1108835cb552b4595a915d7409ae470ba4456c4e904f73d9235f03fe989`. H-01—H-84, K-00—K-94 and AD-001—AD-090 retained without rewriting history.
+- Coverage: D-08 set89 → 90; TrainingStrategy and Decisions89 → 90, other fifteen documents retain their revisions. Registry95 → 96; current index, C-15/P-29 scope and the two authority blocks updated together. P-29's current revision reference now follows the coverage index rather than its stale79 marker; this does not grant authority.
+- Value chain: C-15/P-29 → C-12/P-22 → C-01/V-01/V-02 grounds context-conditioned prediction learning; C-14/P-27 preserves fixed semantic meaning with distinct contextual cell identities. H-82/H-83 require pre-input matching and context-dependent narrowing. H-84 excludes explicit generation fallback from learning; H-74 requires a need before machinery.
+- Analysis: a prediction-only positive eligibility rule cannot learn a wholly unpredicted transition without another entry condition. Conditional two-cell arithmetic distinguishes semantic totals from contextual identities. Compare an independently observation/context-based learning assignment with a training-state intervention; neither is selected. Their consequences for the next transition must be assessed without inventing winner arrays, segments, permanence, teaching pulses or per-edge traces.
+- Prediction scope: signed-mean/cancellation arithmetic exposes information loss for opposite-sign alternatives. The question of preserving such predictive readiness has been raised to the human and remains unanswered; no cancellation policy or H-78 state layout is inferred. Active-rate cancellation remains H-77. Retaining coordinate marginals alone does not establish complete-token alternative binding.
+- Evidence: `flow-context-assignment-analysis.json` records six conditional analyses; MR-S023/MR-S024 add targeted primary continuous-time TM and online sequence-learning references, with read scopes and transfer limits. They do not justify importing inhibitory circuits, homeostatic traces, categorical SDR encoders or trained classifiers. Earlier fallback-recipient alternatives remain withdrawn under K-94.
+- Qualification/descendants: all D-08 algorithm candidates and value relationships remain pending-human; no implementation contract is continued or activated. Existing DMN/token maintenance, useful-loop goals and static SoA storage remain. D-01—D-07 and regional/build/toolchain protocols unchanged. D-GOV96 record maintenance alone continues H-05. H-71 substantive research continues; no implementation, project tests, build, install, commit or push.
+
+<a id="k-96"></a>
+### K-96 — 2026-10-28: Preserve empirical alternatives without repeated questions
+
+- Recorded: 2026-10-28T18:38:47Z. Agent assessment of H-85/H-86, not selection of a numerical or learning mechanism. Charter alignment remains §§1–3.3/7.1–7.2 at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `c4ed1d1083e1b0e0423a3dc50c5926278c7f38d18d36cf1289d0541891e5c3d1`. H-01—H-84, K-00—K-95 and AD-001—AD-090 retained; H-85/H-86 and AD-091/AD-092 appended.
+- Coverage: D-08 set90 → 91; TrainingStrategy/Decisions90 → 91, SignedPopulationEncoding/RateDynamics89 → 91. Other thirteen document revisions remain. Registry96 → 97; affected current concept/relationship summaries and authority blocks updated together.
+- Value chain: C-14/P-27 and C-18/P-53 preserve semantic roles and specified active-rate cancellation while C-15/P-29 evaluates context-dependent prediction. H-85 defers predictive cancellation; H-86 allows obvious empirical choices to be organized directly as comparisons. This preserves meaningful human-directed goals without turning each numerical/modeling uncertainty into a new interruption.
+- Comparison scope: record competing predictive behaviors, observe pre-input alternative compatibility and context narrowing, distinguish predictive cancellation from H-78 field representation, retain H-77 active-rate cancellation, and avoid treating a signed average as full alternative identity. These are proposed observations, not selected metrics or an experimental framework.
+- Supersession: K-95's question is answered by deferral, not by choosing either branch. Its information-loss analysis remains conditional; its pending-question status is superseded in current indexes and research progress. No historical statement is rewritten. Future obvious empirical choices should be recorded rather than repeatedly asked.
+- Qualification/descendants: D-08 and detailed mechanisms remain pending-human. H-79—H-84's phase split, prediction objective and generation-fallback exclusion remain. D-01—D-07, charter, regional and build/toolchain contracts are unchanged. D-GOV97 record maintenance alone continues H-05. H-71 research continues; no implementation, project tests, training run, build, install, commit or push.
+
+<a id="k-97"></a>
+### K-97 — 2026-10-28: Input-aware decay timing and quantized-frame dependencies
+
+- Recorded: 2026-10-28T18:52:29Z. Agent research assessment under H-71—H-75/H-86, not a human selection. Charter §§1–3.3/7.1–7.2 alignment retains explicit inspectable model semantics and measured execution trade-offs; unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`. Pre-entry registry SHA-256 `8ffe2b232f25fec3e0f76d01337f952f96c5c0a277c3b4036721a3e9b498aa46`. H-01—H-86, K-00—K-96 and AD-001—AD-092 retained.
+- Coverage: D-08 set91 → 92; ContextLoopsAndNumerics86 → 92 and RateDynamics91 → 92. Other fifteen revisions remain. Registry97 → 98; C-27/P-64 current and reverse summaries and the two authority blocks updated together. No new human confirmation or chosen concept is inferred.
+- Value chain: C-27/P-63 → C-24 and C-28/P-65 → C-24 preserve temporal evolution and meaningful numerical behavior; C-29/P-69 supplies consistent frames. Their C-15/C-12 path serves required response fading, useful context and feasible execution under V-01/V-02. H-74 requires saved work or fidelity benefit before additional mechanisms.
+- Evidence: `decay-input-timing-arithmetic.json` records exact rational scalar cases, unchanged-code inputs shifting a future crossing, finite-timestamp reconstruction and a no-event counterexample, absolute FP32 timestamp spacing, and conditional named-array costs. The cached arithmetic source fingerprint is retained; no neural graph is simulated. `quantized-frame-dependency-analysis.json` distinguishes local exact decay, quantized feedback, incoming-gather dependencies, frame publication and conditional error propagation.
+- Resource scope: `execution-work-arithmetic.json` adds source-field cache footprints using primary BCM2712/A76 reference details, with residency, workload and target-fleet limits. Small total state memory does not prove negligible gather cost; no precision choice or extra readout array is selected.
+- Cumulative comparison: H-72's next allowed change remains the intended scheduling interpretation; H-73 keeps FP16/FP32 valid alternatives. A timer may itself carry higher-precision state and is not universally sufficient when no event exists. H-86 directs these empirical trade-offs to comparison rather than repeated questions. Existing H-77 active cancellation, H-78/H-85 deferred choices, H-79—H-84 flow boundaries and static SoA storage remain.
+- Qualification/descendants: all numerical and scheduling mechanisms remain pending-human. No qualified implementation contract is continued or invalidated; D-01—D-07 and region/build/toolchain protocols unchanged. D-GOV98 maintenance alone continues H-05. H-71 substantive research continues; no implementation, project tests, training run, benchmark, build, install, commit or push.
+
+<a id="k-98"></a>
+### K-98 — 2026-10-28: Shared recurrence constrains learning and numerical updates
+
+- Recorded: 2026-10-28T18:58:47Z. Agent research assessment under H-71/H-74/H-79—H-86, not a selected learner. Charter alignment remains §§1–3.3/7.1–7.2 at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `a614297c7ad89d7fe0572e54d21d1686d34a42ac663e3240de0b3b938a82f35b`. H-01—H-86, K-00—K-97 and AD-001—AD-092 history preserved.
+- Coverage: D-08 set92 → 93; TrainingStrategy91 → 93 and ContextLoopsAndNumerics92 → 93. Other fifteen revisions remain. Registry98 → 99; C-15/P-65 current and C-28 reverse references and the two authority blocks updated together.
+- Value chain: C-15/P-29 prediction learning must coexist with C-22/P-45 maintained recurrence and C-26/P-60 useful context. C-28/P-65 preserves these behaviors under numerical updates. Their C-12/P-22 path serves inspectable application intent and feasible execution rather than optimizing a one-step numeric result in isolation.
+- Conditional evidence: `shared-learning-recurrence-analysis.json` records seven analyses: association changes to return gain, existing return-path dependence, normalization disturbing prior responses, intrinsic signed-mode differences, stored-weight precision, missing-edge/capacity prerequisites, and the distinction between fixed random gain and independent resampling. These are small exact/closed-form arithmetic references, not actual SNN training or a runtime spectral algorithm.
+- Source evidence: MR-S025/MR-S026 add targeted low-bit recurrent-network and Loihi-emulation primary checks. Real-valued training accumulation and stochastic plastic updates are distinct reference approaches. No master-weight array, trace, exponent layout or alternate hardware deployment is selected.
+- Preserved choices: flow remains separate from DMN/token repair; H-82 prediction matching and H-83 context narrowing are direct acceptance goals, with generation separate and H-84 fallback excluded from learning. Shared recurrence requires evaluating retained fading, useful history and steerability, not aggressive removal of small cycles. H-24 leaves weight-scale policy in training, independent of capacity. H-86 comparisons proceed without repeated questions.
+- Qualification/descendants: detailed algorithms and representations remain pending-human; no qualified contract is activated or invalidated. D-01—D-07 and regional/build/toolchain protocols unchanged. D-GOV99 maintenance alone continues H-05. H-71 research continues; no implementation, training run, benchmark, project tests, build, install, commit or push.
+
+
+<a id="k-99"></a>
+### K-99 — 2026-10-28: Temporal coverage and useful-context comparisons
+
+- Recorded: 2026-10-28T19:10:35Z. Agent research assessment under H-56—H-58/H-71/H-74/H-86, not a human mechanism choice. Charter §§1–3.3/7.1–7.2 alignment remains at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `e38b3bcfbcefe159b5023c77bdf61e922a4dd5953634af5d2c63a2c695f7173a`. H-01—H-86, K-00—K-98 and AD-001—AD-092 retained.
+- Coverage: D-08 set93 → 94; ActivationRegimes89 → 94 and ContextLoopsAndNumerics93 → 94. Other fifteen document revisions remain. Registry99 → 100; P-39—P-41 current revision scopes, C-19 reverse reference and both authority blocks updated together. No new human event or adopted concept.
+- Value chain: C-19/P-39 serves C-12's distinguishable regime behavior while P-41 preserves the separation from activity regulation. C-26/P-60 serves useful historical influence rather than mere activity persistence. Both connect through P-22 to C-01/V-01/V-02. H-74 requires evidence of a missing distinction before additional metrics or storage.
+- Evidence: exact conditional counting shows how identical marginal activity yields different density-qualified coverage under temporal dependence; a white-driven scalar reference has correlated state; event pacing and window length affect raw union and brief-participation filtering. Frame permutations preserve density while changing paths. An H-77 example shows cell-level noise subtraction is not additive, despite preserved signed sum. Shared primitive random draws and fixed applied forcing answer different counterfactual questions with adaptive noise regulation.
+- Primary reading: Louis2010 targeted surrogate-analysis sections and Zeraati2022 abstract/indexed primary passages support explicit comparison assumptions and short-record limits. Read scopes and access limitations are recorded; no full-PDF reading or application validation is claimed.
+- Cumulative scope: H-56 excludes total activity from classification; H-57's flow coverage cap is not removed; H-58's filtering purpose does not erase weak context. H-83 predictive narrowing is not raw cell-count reduction. H-86 empirical options are recorded directly with observations that favor them. H-78/H-85 choices, H-79—H-84 phase/learning boundaries and existing numerical/shared-recurrence analyses remain open or scoped as before.
+- Qualification/descendants: detector, window, threshold and comparison implementations remain pending-human. No counter array, temporal index, causal-noise label, Bayesian estimator or learning mechanism selected. No qualified product contract is created or invalidated; D-01—D-07 and regional/build/toolchain protocols unchanged. D-GOV100 maintenance alone continues H-05. H-71 research remains active; no implementation, training run, benchmark, project tests, build, install, commit or push.
+
+
+<a id="k-100"></a>
+### K-100 — 2026-10-28: Signed population overlap and flow-learning causal roles
+
+- Recorded: 2026-10-28T19:15:38Z. Agent research assessment under H-75/H-79—H-86, not a human algorithm decision. Charter §§1–3.3/7.1–7.2 alignment remains at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `3e8bf9b1638c144ee663d9be957f1bf129b924928a1d21be4aa814b3a43f7b30`. H-01—H-86, K-00—K-99 and AD-001—AD-092 preserved.
+- Coverage: D-08 set94 → 95; TrainingStrategy93 → 95. Sixteen other document revisions remain. Registry100 → 101; current index, C-15 reverse reference and TrainingStrategy authority block updated together. Research evidence expands without a new confirmed concept or relationship.
+- Value chain: C-15/P-29 serves context-dependent sequence prediction through C-12/P-22 to C-01/V-01/V-02. C-14/P-27 preserves fixed coordinate meaning with contextual cell identity; C-26/P-60 motivates retained history through shared fragments. H-74 favors explaining the existing representation's behavior before adding mechanisms.
+- Evidence: read-only arithmetic on1,024 sampled ordinary Flash token rows and4,096 distinct-type pairs verifies the signed-versus-nonnegative polarity-overlap identity. Median signed cosine is0.0438653, median split overlap0.3407703; these are sampled input geometry, not trained-state similarity or corpus-weighted semantic labels. A conditional positive outer-product reference exposes cross-association terms; no dense matrix is allocated or selected. Expanded Bouhadjar2022 reading covers prediction/context results and targeted limitations, without importing its remedy or H-84-incompatible teaching assumptions.
+- Proposed causal roles: observe natural prediction before the token/update; independently establish contextual learning responsibility; identify credited sources and slot feasibility; explain the state supporting the following transition; assess acquired predictions and shared recurrence. Complete state identity cannot preserve a lost distinction between histories under identical future forcing. Existing neuron identities may retain it; no additional history field follows. Fixed-weight and online-adaptation assessments answer different questions and remain comparison options.
+- Preserved choices: H-82 direct prediction matching, H-83 legitimate ambiguity and later narrowing, H-84 exclusion of generation fallback, H-78/H-85 open state/cancellation comparisons, separate DMN/token maintenance, static SoA capacity and no physical-distance prior. H-86 handles obvious empirical assignment/weakening choices without repeated questions.
+- Qualification/descendants: learner, assignment, weakening, source eligibility, decoder and state implementation remain pending-human. No centering, inhibitory edges, mirrored blocks, winner arrays, context buffers, dense graph or training framework adopted. D-01—D-07 and regional/build/toolchain contracts unchanged; no qualified product scope activated or invalidated. D-GOV101 maintenance alone continues H-05. H-71 research continues; no implementation, neural training, benchmark, project tests, build, install, commit or push.
+
+
+<a id="k-101"></a>
+### K-101 — 2026-10-28: Cancellation, contextual closure and stochastic decay laws
+
+- Recorded: 2026-10-28T19:23:47Z. Agent research assessment under H-67—H-78/H-79—H-86, not a human selection. Charter §§1–3.3/7.1–7.2 alignment remains at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `4b0c8c239d36e5a24b44a05828da3fcfc34dea8c141b5978db25f4a035c2cc36`. H-01—H-86, K-00—K-100 and AD-001—AD-092 retained.
+- Coverage: D-08 set95 → 96; TrainingStrategy95 → 96, ContextLoopsAndNumerics94 → 96, RateDynamics92 → 96. Fourteen other document revisions remain. Registry101 → 102; current index, C-28 reverse summary and three authority blocks updated together. No new human decision or adopted mechanism.
+- Value chain: C-15/P-29 learns contextual prediction while C-26/P-60 preserves useful history. C-28/P-65 and C-24/P-52 require numerical behavior faithful to fading and reactivation, through C-12/P-22 to C-01/V-01/V-02. H-74 requires examining existing operations before extra state or structure.
+- Cancellation analysis: an exact rational aggregate example shows that H-77 net cancellation does not generally remove positive-overlap cross-associations. General nonnegative blocks can yield signed- and absolute-magnitude terms. A different opponent operator demonstrates capability, not a learning rule or mirrored topology. Requiring every future semantic result to depend only on the current aggregate would remove one route for hidden contextual cell identity to matter; aggregate linearity is not an independent goal.
+- Stochastic analysis: elementary survival and Poisson-offspring laws share an imposed mean half-life but differ in extinction probability, conditional survivor size and variance. Poisson counts are unbounded; initial15/255 does not make them INT4/INT8 formats. Narrow clipping changes the conditional mean. Rescaling mean retention alone does not preserve fluctuation laws across frame durations. Constant immigration can support activity without preserving the original descendants; no origin labels or adaptive regulator are selected. Wilting/Priesemann2019 Supplement3 supplies a primary moment reference, with transfer limits recorded.
+- Cumulative scope: H-77 active cancellation, H-75 completed frames, H-67 loose semantic-response fading, H-68 retained weights and H-71 useful loops remain. H-78/H-85 options and H-86 direct empirical comparisons stay open. Flow design remains separate from DMN/token maintenance; H-84 fallback remains excluded from learning. Static SoA capacity and physical-position omission are unchanged.
+- Qualification/descendants: detailed dynamics, numerics and learners remain pending-human. No aggregate-neuron collapse, opponent-balance controller, mirrored edge blocks, stochastic law, event structure, ancestry field or criticality target adopted. D-01—D-07 and regional/build/toolchain contracts unchanged; no qualified product scope activated or invalidated. D-GOV102 maintenance alone continues H-05. H-71 research continues; no implementation, neural training, random simulation, benchmark, project tests, build, install, commit or push.
+
+
+<a id="k-102"></a>
+### K-102 — 2026-10-28: Intermediate arithmetic and weak residual preservation
+
+- Recorded: 2026-10-28T19:27:55Z. Agent research assessment under H-54/H-55/H-70/H-73—H-78/H-86, not a selected format. Charter §§1–3.3/7.1–7.2 alignment remains at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `5b549bb03e892689d3ad888effdf434c5f3c658adab6a9a874848799ea031459`. H-01—H-86, K-00—K-101 and AD-001—AD-092 retained.
+- Coverage: D-08 set96 → 97; ContextLoopsAndNumerics and RateDynamics96 → 97. Fifteen other document revisions remain. Registry102 → 103; P-65 scope, current index and both authority blocks updated together. No new concept or human confirmation.
+- Value chain: C-28/P-65 preserves C-24/P-52's meaningful activity evolution; C-18/P-36 supplies the intended residual after cancellation and C-26/P-60 preserves useful history. Their C-15/C-12 path serves semantic behavior and feasible execution under C-01/V-01/V-02. H-74 permits comparing simple wider temporary arithmetic before auxiliary error structures.
+- Evidence: specified binary16/binary32 nearest-even arithmetic separates operand rounding from product loss, long-sum stagnation, reduction-order effects, cancellation-total error and narrow state writeback. Equal-source examples at16,384/18,432 inputs lose most of their total under sequential FP16 accumulation; FP32 preserves the reported stored-operand sums. Dyadic60-cell examples expose residual loss even with accurately stored operands. Wider reference arithmetic is used only where sufficient for these cases; no universal exact floating oracle is claimed.
+- Cumulative scope: H-75 fixes source-frame visibility, not floating associativity. Temporary precision is separate from persistent state and existing static SoA capacity. Integer accumulation can be exact within range after quantization but cannot restore erased operands. H-86 leaves the behavioral significance of very weak residuals and the format/reduction trade-off to actual-data comparisons; no new user question is required.
+- Qualification/descendants: precision, reduction algorithm, threshold and update implementation remain pending-human. No FP64 state array, compensation field, special reduction buffer, bitwise-determinism contract or build flag selected. D-01—D-07 and regional/build/toolchain protocols unchanged; no qualified product scope activated or invalidated. D-GOV103 maintenance alone continues H-05. H-71 research continues; no implementation, neural training, benchmark, project tests, build, install, commit or push.
+
+<a id="k-103"></a>
+### K-103 — 2026-10-28: Flow source credit and static incoming capacity
+
+- Recorded: 2026-10-28T19:34:02Z. Agent research assessment under H-13—H-24/H-34/H-75/H-79—H-86, not a human learner choice. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `164850442078d44f18adc3e3bbd78deebd9945ca110d2b3040483fbbd8f4c024`. H-01—H-86, K-00—K-102 and AD-001—AD-092 history retained.
+- Coverage: D-08 set97 → 98; TrainingStrategy96 → 98, IncomingConnectivity84 → 98, AdaptiveConnectivity75 → 98. Fourteen other revisions remain. Registry103 → 104; P-30 current scope, C-13/C-15 reverse references and three authority blocks updated together. No new concept or confirmation.
+- Value chain: C-15/P-29 serves context-conditioned prediction through C-12/P-22 and C-01/V-01/V-02. P-30 depends on C-13's bounded storage. Distinguishing source credit, missing associations and allocation feasibility keeps capacity changes from substituting for the actual learning objective. H-74 requires demonstrated value before supporting machinery.
+- Evidence: expanded NuPIC source reading through growth and capacity enforcement; RigL primary §3 supplies a contrasting explicit absent-edge selection criterion, not an adopted learner. Exact pool arithmetic gives327670 sets above100 slots in the16-class candidate; assigning101 inputs to every neuron fails the class condition despite total slot headroom. Conditional source-union expectations distinguish repeated endpoint reuse from distinct retained edges. No SNN training or allocator is run.
+- Cumulative boundaries: H-79—H-84's learning split, pre-input assessment, legitimate ambiguity and fallback exclusion remain. Source readiness is not automatically an observed predecessor; empirical credit alternatives stay open under H-86. Representation-only migration must preserve decoded weights, not merely bits. AdaptiveConnectivity's ownership sentence is aligned with the existing registry: H-16 outgoing reference and H-21 incoming evaluation, without granting incoming implementation authority.
+- Qualification/descendants: all D-08 contracts remain pending-human. No growth, pruning, source-credit policy, class quota, scale field, index or heap topology is selected. Existing DMN/token maintenance, H-78/H-85 comparisons, static budgets and regional invariants remain. D-01—D-07, charter and build/toolchain state unchanged. D-GOV104 record maintenance alone continues H-05. H-71 research continues; no implementation, project tests, build, install, commit or push.
+
+<a id="k-104"></a>
+### K-104 — 2026-10-28: Deferred decay and usable context under noise
+
+- Recorded: 2026-10-28T19:38:30Z. Agent research assessment under H-67—H-78/H-82/H-85/H-86, not a human mechanism selection. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `9407299132fef9dafd71e16fc613786aca65075a5711992b940bc22d385c00cc`. H-01—H-86, K-00—K-103 and AD-001—AD-092 history retained.
+- Coverage: D-08 set98 → 99; ContextLoopsAndNumerics/RateDynamics97 → 99. Fifteen other document revisions remain. Registry104 → 105; C-26/C-27 reverse references and two authority blocks updated together. No new concept, relationship or confirmation.
+- Value chain: C-27/P-63 serves meaningful temporal evolution, constrained by C-18/H-77 cancellation and C-29/P-69 frame visibility. C-26/P-60 serves useful history-dependent responses, with H-82 prediction matching supplying a direct flow outcome. These derive through C-24/C-15, C-12/P-22 and C-01/V-01/V-02; numerical shortcuts must preserve the relevant semantics.
+- Evidence: exact nonnegative four-population arithmetic distinguishes C(A*C(A*x)) from C(A*A*x), returning1 versus3; common attenuation does not erase the difference. Conditional homogeneity/commutation identities delimit when attenuation can move through other operations. Closed-form scalar memory arithmetic separates lag-dependent retention, process noise, observation noise and paired causal influence from reliable single-run prediction. MR-S031 reads the2018 primary random-rate study's model and targeted memory/discussion sections; its dynamics and reconstruction measure are not adopted.
+- Cumulative scope: H-72 remains next allowed numerical change, not delayed biological cancellation; H-73/H-74 retain a simple adequate-precision comparison. Cancelled active rate is not a rounding remainder; H-85 still leaves predictive cancellation open. H-71 useful small loops, dominant token fading and H-59 steerability remain compatible requirements, without a universal gain/criticality target. H-86 handles numerical and empirical comparisons without another question.
+- Qualification/descendants: D-08 remains pending-human. No timer, latent field, batching scheme, criticality rule, readout, classifier, new noise law or neuron equation is selected. D-01—D-07, charter, regional protocols and build/toolchain state unchanged. D-GOV105 record maintenance alone continues H-05. H-71 research continues; no neural training, project tests, build, install, commit or push.
+
+<a id="k-105"></a>
+### K-105 — 2026-10-28: Provisional flow procedure and bounded low-bit learning
+
+- Recorded: 2026-10-28T19:51:17Z. Agent proposal and research assessment under H-70/H-71/H-74/H-79—H-86, not a human algorithm decision. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `c65bda21ce1599f71db5eb286173a62b255434404ddbf55ce5e31244d7c483ea`. H-01—H-86, K-00—K-104 and AD-001—AD-092 history retained.
+- Coverage: D-08 set99 → 100; TrainingStrategy98 → 100 and ContextLoopsAndNumerics99 → 100. Fifteen other revisions remain. Registry105 → 106; P-29/P-65 scope, C-15/C-28 reverse references and both authority blocks updated together. No new human confirmation or qualified learner.
+- Value chain: C-15/P-29 learns context-conditioned prediction through C-12/P-22 and C-01/V-01/V-02. C-28/P-65 requires stored updates to preserve that meaning within C-13 capacity. The provisional flow procedure explains observation assignment, source credit, correlation/weakening, absent-source discovery and pre-input assessment; it does not inherit C-22's next-chain-group repair target.
+- Evidence: conditional binary/graded update equations distinguish joint co-occurrence, source-enabled and target-enabled association means. Pure positive reinforcement saturates under stated repeated-exposure assumptions despite hard or soft bounds. Exact finite-grid arithmetic identifies UINT4/UINT8/E4M3 stalled updates; a conditional unbiased-rounding Markov chain has Binomial stationary weights and a variance floor. Complete two-FP32-frame array arithmetic compares wider weights with a low-bit/master combination without allocating either. MR-S032—MR-S034 retain explicit primary-read/access limits.
+- Cumulative boundaries: H-82 prediction matching and H-83 ambiguity/narrowing remain direct goals; H-84 fallback remains excluded. The independent training-state intervention stays paired with responsibility-only assignment, not adopted. Source/target roles name calculations, not stored arrays. Update frequency, conditional weighting, depression and finite precision stay empirical alternatives under H-86. H-78/H-85, existing cancellation, DMN/token maintenance, useful recurrence and external steerability remain.
+- Qualification/descendants: all D-08 mechanisms remain pending-human. No learning coefficient, neuron state format, physical weight scale, master copy, trace, winner array, pruning, heap topology or current training run is selected. The five-byte slot proposal and static class counts remain. D-01—D-07, charter, regional protocols and build/toolchain state unchanged. D-GOV106 record maintenance alone continues H-05. H-71 research continues; no SNN implementation, project tests, build, install, commit or push.
+
+<a id="k-106"></a>
+
+### K-106 — 2026-10-28: Context-sensitive prediction assessment
+
+- Recorded: 2026-10-28T20:03:10Z. Agent research and proposal under H-71/H-74/H-79—H-86, not a human metric decision. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `c5b40e77b96aaa88ae90aa8d3aae05aa09f16643ee6b5bc22b53cfa6f4dfb6c2`. H-01—H-86, K-00—K-105 and AD-001—AD-092 history retained.
+- Coverage: D-08 set100 → 101; TrainingStrategy100 → 101. Sixteen other document revisions remain. Registry106 → 107; P-29, C-15 reverse reference and the authority block updated together.
+- Value chain: C-15/P-29 serves H-82/H-83 context-conditioned prediction through C-12/P-22 and C-01/V-01/V-02. Separating semantic compatibility, earlier-history value and legitimate ambiguity makes the business outcome checkable without silently adopting a generation decoder or new state.
+- Evidence: exact finite examples distinguish frequency success from context-sensitive prediction, categorical confidence from top-one success, and vector-mean error from alternative preservation. A rank-nullity bound concerns a hypothetical linear mixture readout, not the rank or adequacy of the actual neuronal state. MR-S035/MR-S036 record targeted primary reading and access limits.
+- Cumulative boundaries: H-82's direct criterion remains prediction matching; held-out generalization is a separate comparison, not a new acceptance threshold. H-83 narrowing is assessed on informative histories rather than every frame. H-84 excludes generation fallback; H-78/H-85 remain open. Record joins and starting-state protocols do not introduce a stale-reset mechanism. H-86 handles obvious empirical choices directly.
+- Qualification/descendants: D-08 remains pending-human. No loss, decoder, probability model, calibration layer, baseline implementation, context buffer or experimental framework is selected. No descendant gains or loses implementation qualification; D-01—D-07, charter, regional protocols and build/toolchain state unchanged. D-GOV107 record maintenance alone continues H-05. H-71 research continues; no neural implementation/training, project tests, build, install, commit or push.
+
+<a id="k-107"></a>
+
+### K-107 — 2026-10-28: Integration selectivity and semantic pattern overlap
+
+- Recorded: 2026-10-28T20:07:35Z. Agent research and comparison proposal under H-22/H-71/H-74/H-75/H-82—H-86, not selection of dendritic integration. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `b1f857e70d036bdb898d3576acee92a0642b57271f8cab9183c6b1aae0258738`. H-01—H-86, K-00—K-106 and AD-001—AD-092 history retained.
+- Coverage: D-08 set101 → 102; TrainingStrategy101 → 102, SynapticIntegrationResearch78 → 102. Fifteen other revisions remain. Registry107 → 108; P-29/P-30, C-13/C-15 reverse references and both authority blocks updated together. The integration authority summary is condensed without changing its recorded constraints; evidence bullets reflect H-73 wider state and H-54 exclusion of inhibitory synapses.
+- Value chain: C-15/P-29 needs context-sensitive prediction through C-12/P-22 and C-01/V-01/V-02. C-13/P-30 supplies capacity, but a detector's computation and input statistics determine selectivity. H-74 requires evidence for any extra grouping rather than borrowing biological complexity as authority.
+- Evidence: an affine-threshold counterexample distinguishes alternative conjunctions from pooled partial matches; two detector roles can supply that computation. Exact union-size combinatorics and structured-population probabilities expose distribution assumptions behind random sparse-pattern bounds. MR-S037/MR-S038 and expanded MR-S020 reading preserve source-model limits.
+- Cumulative boundaries: the counterexample holds other state fixed and does not establish failure of nonlinear recurrent, multi-frame or polarity-cancelled dynamics. Existing contextual cells remain a comparison before new subcellular structure. No random encoder, threshold, neuron law, physical metric, grouping, branch ID, permanence, trace or array is chosen. H-78/H-85 and real-data choices remain open under H-86. Storage quotas, five-byte slots, noise/coverage, useful loops, fading and steerability are unchanged.
+- Qualification/descendants: D-08 remains pending-human; no implementation scope is newly qualified or invalidated. D-01—D-07, charter, regional protocols and build/toolchain state unchanged. D-GOV108 record maintenance alone continues H-05. H-71 research continues; no neural implementation/training, project tests, build, install, commit or push.
+
+<a id="k-108"></a>
+
+### K-108 — 2026-10-28: Retained-edge traversal before auxiliary storage
+
+- Recorded: 2026-10-28T20:13:22Z. Agent algorithm/cost comparison under H-34/H-71/H-74/H-75/H-86, not selection of a count field or row layout. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `9e46470972777a099bb746d7b5061f95e95af63166556b1f85c0b14ae3a3a25e`. H-01—H-86, K-00—K-107 and AD-001—AD-092 history retained.
+- Coverage: D-08 set102 → 103; IncomingConnectivity98 → 103 and AdaptiveConnectivity98 → 103. Fifteen other revisions remain. Registry108 → 109; P-70, C-13/C-29 reverse references and both authority blocks updated together. Current D-08 index wording reflects already recorded flow scope and AD-092; historical decisions are unchanged.
+- Value chain: C-29/P-69 gives a consistent frame transition, whose incoming gather depends on C-13 through P-70. Traversal, adaptation, growth and migration need to identify retained edges. A prefix marker can supply that without an added array; a count needs its own measured or algorithmic benefit under H-34/H-74. Both serve bounded explicit application state through C-12/P-22 and C-01/V-01/V-02.
+- Evidence: exact named-array and logical-read arithmetic covers the existing15/16-class pools with two FP32 state frames as a conditional reference. Feasible constant-degree cases separate live edges from reserved slots. The marker uses an existing unused endpoint, while a per-neuron uint16 count would add1228800 bytes; neither enters the accepted budget. Source-event and incoming-frame workload wording is distinguished.
+- Cumulative boundaries: zero weight is not automatically absence. End publication and migration preserve the chosen row semantics, endpoint identity and effective weights; reordering can still alter floating reduction. No pruning, duplicate policy, sorting, free-set structure, sentinel code, count, parallel scheduler or prefix layout is adopted. H-78/H-85, scale policy, capacity quotas, activity/noise, useful context, fading and steerability remain unchanged.
+- Qualification/descendants: D-08 remains pending-human. The comparison does not qualify an implementation or require a new runtime field. D-01—D-07, charter, regional protocols and build/toolchain state unchanged. D-GOV109 record maintenance alone continues H-05. H-71 research continues; no neural implementation/training, benchmark, project tests, build, install, commit or push.
+
+<a id="k-109"></a>
+
+### K-109 — 2026-10-28: Temporal credit with persistent recurrent context
+
+- Recorded: 2026-10-28T20:18:43Z. Agent research and comparison proposal under H-71/H-74/H-79—H-86, not selection of a credit kernel. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `7792b4a1517ba2ba32dfeaca3b9e9155e60aefb6e439565e84706aa05cab94ff`. H-01—H-86, K-00—K-108 and AD-001—AD-092 history retained.
+- Coverage: D-08 set103 → 104; TrainingStrategy102 → 104. Sixteen other revisions remain. Registry109 → 110; P-29, C-15 reverse reference and the authority block updated together.
+- Value chain: C-15/P-29 requires prediction from preceding context through C-12/P-22 and C-01/V-01/V-02. C-26/P-61 preserves useful historical influence, so a credit heuristic must not silently replace that value with immediate adjacency. Explicit source/target timing makes learning meaning assessable without preset traces or buffers.
+- Evidence: additive exponential response arithmetic gives a lag-weighted co-occurrence mixture and a repeated-three-token example; finite geometric sums and an exact rational case verify the formulas. Token-event update counts and physical-time source-state dependence are distinct. MR-S039/MR-S040 and expanded MR-S023 reading retain explicit method/access and transfer limits.
+- Cumulative boundaries: the reference half-life is illustrative and does not assign a universal neuron leak or learning constant from the dominant-token objective. Nonadjacent credit and small loops can be useful; neither is declared failure. H-84 generation fallback remains excluded. Available recurrent state, independently established observed representation and temporal weighting remain comparison candidates under H-86, with H-78/H-85 open.
+- Qualification/descendants: D-08 remains pending-human. No eligibility trace, winner/token store, derivative field, causal-noise label, neural equation, update window or selected learner is introduced. DMN/token construction/repair, storage, numeric choices and steerability remain unchanged. D-01—D-07, charter, regional protocols and build/toolchain state unchanged. D-GOV110 record maintenance alone continues H-05. H-71 research continues; no neural implementation/training, project tests, build, install, commit or push.
+
+<a id="k-110"></a>
+
+### K-110 — 2026-10-28: Activity response and noise-feedback timing
+
+- Recorded: 2026-10-28T20:27:19Z. Agent research and conditional comparison under H-53/H-55/H-56/H-71/H-74/H-75/H-77/H-86, not selection of a controller. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `acc376ee7ee6fbb2fdbbf683e098c58d2bfd1af7c640ec5513cd32f08142fbe8`. H-01—H-86, K-00—K-109 and AD-001—AD-092 history retained.
+- Coverage: D-08 set104 → 105; ActivationRegimes94 → 105 and RateDynamics99 → 105. Fifteen other revisions remain. Registry110 → 111; P-34/P-35, C-17/C-29 reverse references and both authority blocks updated together. The prior AdaptiveConnectivity103 authority-header correction is within K-108's recorded revision coverage.
+- Value chain: C-17/P-34 supplies attention-dependent noise and per-CC activity support through C-12/P-22 and C-01/V-01/V-02; P-35 keeps learning comparisons faithful to those operating conditions. C-29/P-69 gives complete-frame execution, whose feedback observation age must be explicit. Neither chain justifies a new control field without demonstrated need under H-34/H-74.
+- Evidence: exact triangular-noise probability gives a cancellation/threshold counterexample to assumed monotonic active fraction, distinct from summed rate. Exact 2×2 characteristic-polynomial conditions compare two observation timings; bounded linear equilibrium ranges expose conditional actuation limits. MR-S041/MR-S042 record primary homeostasis studies with different controlled quantities and explicit transfer limits.
+- Cumulative boundaries: the reference is not the actual CC, a neural transition, a universal gain law or a selected activity threshold. A local point reference does not replace the broad regime-dependent envelope. Noise remains fixed while constructing a frame; completed-frame feedback can affect the following transition. Activity remains excluded from regime classification. H-78/H-85, useful loops, fading, H-84 generation exclusion, nonnegative early connections and static SoA remain unchanged.
+- Qualification/descendants: D-08 remains pending-human. No controller, integrator/filter state, measurement window, priority rule, hard clamp, new inhibition or reset policy is selected. D-01—D-07, charter, regional protocols and build/toolchain state unchanged. D-GOV111 record maintenance alone continues H-05. H-71 research continues; no neural implementation/training, random neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-111"></a>
+
+### K-111 — 2026-10-28: Semantic aggregate and contextual cell composition
+
+- Recorded: 2026-10-28T20:32:22Z. Agent algebraic assessment under H-71/H-74/H-75/H-77/H-86, not selection of a state factorization. Charter §§1–3.3/7.1–7.2 alignment remains at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `0a5ad0d98bc830a8c0ab59e9392ab7b7fd35eb8b80db82a927cb7315930cc61c`. H-01—H-86, K-00—K-110 and AD-001—AD-092 history retained.
+- Coverage: D-08 set105 → 106; ContextLoopsAndNumerics100 → 106 and SignedPopulationEncoding91 → 106. Fifteen other revisions remain. Registry111 → 112; P-27/P-60, C-14/C-26 reverse references and both authority blocks updated together.
+- Value chain: C-14/P-27 gives fixed semantic roles distinct contextual cell identities; C-26/P-60 preserves their useful later influence through C-15/C-12/P-22 and C-01/V-01/V-02. C-18/H-77 specifies the cancellation operation. Measuring semantic aggregate alone cannot certify these contextual values; analyzing existing state before adding memory serves H-34/H-74.
+- Evidence: exact rational cancellation confirms normalized composition mixing under nonnegative added drive, equal-net examples, a downstream distinction and conditional repeated contraction. The local simplex dimension at a fixed nonzero aggregate is not a learned memory-capacity claim. No new biological source or training result is asserted.
+- Cumulative boundaries: normalized composition is an analysis coordinate computed from existing rates, not an array or runtime field. The deterministic equal-drive case is not a chosen white-noise law. Cancellation preserves provisional proportions after drive addition, with no contradiction to H-77. Subsequent learned recurrence may restore or amplify distinctions; zero/sign changes and H-78/H-85 remain explicitly open. H-84, flow/repair separation, flexible activity, static SoA and regional rules remain.
+- Qualification/descendants: D-08 remains pending-human. No normalized-state representation, context store, decoder, prediction-diversity metric, noise policy or capacity guarantee is introduced. D-01—D-07, charter and build/toolchain state unchanged. D-GOV112 record maintenance alone continues H-05. H-71 research continues; no neural implementation/training, random neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-112"></a>
+
+### K-112 — 2026-10-28: Current application overview and empirical comparisons
+
+- Recorded: 2026-10-28T20:36:28Z. Agent editorial consolidation under H-11/H-71/H-74/H-86. Charter §§1–3.3/7.1–7.2 alignment remains at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `4e094ce7459d7a436502080a8f6814e53f07abdfd2eef15c0fc60a32e51507e8`. H-01—H-86, K-00—K-111 and AD-001—AD-092 history retained.
+- Coverage: D-08 set106 → 107; README87 → 107. Sixteen other revisions remain. Registry112 → 113; P-25, C-12 reverse reference and the overview authority block updated together. This does not use editorial continuity to qualify a previously pending design.
+- Preserved value chain: P-25/P-22 connects the independent application discussion through C-12 to C-01/V-01/V-02. The overview presents already recorded behavioral, storage, learning and numerical directions and points to their scoped contracts. H-74 is served by distinguishing analytical quantities and comparison candidates from additional runtime machinery.
+- Cumulative review: H-78/H-85/H-86 experimental deferrals, H-79—H-84 flow/generation boundaries, two-frame execution, H-77 cancellation, context versus dominant fading, classifier versus activity control, fixed semantic roles and static SoA remain. The overview explicitly excludes generation fallback from learning and treats obvious empirical alternatives as comparisons without repeated parameter questions. Historical detail remains in the registry and topic documents.
+- Evidence and limits: named-array totals reproduce existing 15/16-class calculations for one FP4 field and the two-FP32-field comparison; neither is a final field layout. Source research, conditional arithmetic and actual input measurements remain distinct from trained application performance. No new technical concept, candidate default or confirmation event is introduced.
+- Qualification/descendants: D-08 remains pending-human; the overview does not activate an implementation contract. D-01—D-07, charter, regional protocols and build/toolchain state unchanged. D-GOV113 record maintenance alone continues H-05. H-71 research continues; no implementation, training, project tests, build, install, commit or push.
+
+<a id="k-113"></a>
+
+### K-113 — 2026-10-28: Token order, neural frames and available prediction context
+
+- Recorded: 2026-10-28T20:42:59Z. Agent timing analysis under H-67/H-71/H-74/H-75/H-82—H-86. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `30c1ed0ff724c0eb97fd2e31c49a7982bc70e0e77eab213a2f565909c4098d16`. H-01—H-86, K-00—K-112 and AD-001—AD-092 history retained.
+- Coverage: D-08 set107 → 108; RateDynamics105 → 108 and TrainingStrategy104 → 108. Fifteen other revisions remain. Registry113 → 114; P-29/P-69, C-15/C-29 reverse references and both authority blocks updated together.
+- Value chain: C-15/P-29 requires prediction from the actual observed prefix; C-29/P-69 makes state transitions consistent, and C-24/P-52 preserves meaningful timing through C-12/P-22 and C-01/V-01/V-02. Distinguishing token, frame, learning and execution clocks serves these behaviors without assuming a scheduler or stored history.
+- Evidence: exact affine composition gives order-sensitive two-input responses and the conditional loss from commutative aggregation; scalar boundary alignment and event-decay arithmetic delimit their own assumptions. MR-S016 API order was rechecked; MR-S043 records a recent primary timing/replay preprint and its top-down cue, repeated-input and architecture limits.
+- Cumulative boundaries: the order-loss argument assumes identical remaining causal state, parameters and future forcing; it does not reject all batching. A scalar decay bound does not set an adequate neural step. H-82 prediction does not require duration learning or continuous replay, and H-84 generation fallback remains excluded from teaching. No hidden sequence identity or future label is assumed in a history-based prediction comparison. H-78/H-85, useful context, fixed semantic roles, static SoA and active cancellation remain.
+- Qualification/descendants: D-08 remains pending-human. No one-token-per-frame rule, event queue, positional encoding, start cue, reset, oscillator or history field is selected. D-01—D-07, charter, regional protocols and build/toolchain state unchanged. D-GOV114 record maintenance alone continues H-05. H-71 research continues; no neural implementation/training, neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-114"></a>
+### K-114 — 2026-10-28: Contextual assignment, natural readiness and empirical comparison
+
+- Recorded: 2026-10-28T20:49:48Z. Agent analysis under H-71/H-74/H-75/H-79—H-86. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `a0515b98f8af2162cc6c026f1233397855c4afaf958fa6545dc7eebf3ee28f7c`. H-01—H-86, K-00—K-113 and AD-001—AD-092 history retained.
+- Coverage: D-08 set108 → 109; TrainingStrategy108 → 109. Sixteen other revisions remain. Registry114 → 115; P-29, C-15 reverse reference and the document authority block updated together.
+- Value chain: C-15/P-29 serves context-sensitive prediction through C-12/P-22 and C-01/V-01/V-02. Separating learning responsibility, available source evidence and natural readiness prevents a matching heuristic or assisted state from substituting for H-82 behavior. C-14/P-27 retains contextual identities within fixed semantic roles; C-13/P-26 constrains storage demand without giving capacity a semantic meaning.
+- Evidence: rational score arithmetic distinguishes effective drive, row-normalized matching and undefined empty-row matching; reserved-capacity normalization reverses a ranking under unchanged effective connections. A conditional permutation argument identifies when deterministic symmetry is preserved. MR-S044 records the primary 2025 spiking-TM paper with explicit categorical-input and plasticity transfer limits.
+- Cumulative boundaries: neither symmetry breaking nor normalized matching proves useful specialization. Existing graph/state heterogeneity is examined before new structures. Recipient selection after observation does not itself impose a unique pre-input prediction or introduce inhibitory modeled connections. H-86 retains empirical choices directly; an outdated discussion requirement in the candidate analysis is corrected without choosing its teaching intervention. H-84 generation fallback remains excluded; H-78/H-85 stay open.
+- Qualification/descendants: D-08 remains pending-human; no selector, quota, teacher rule, matching cache, winner array, new concept/relationship or implementation chosen. No qualified descendant is invalidated. Charter, D-01—D-07, regional protocols and build/toolchain state unchanged. D-GOV115 record maintenance alone continues H-05. H-71 research remains active; no neural implementation/training, neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-115"></a>
+### K-115 — 2026-10-28: Noise units and signed remainders in 60+60 populations
+
+- Recorded: 2026-10-28T20:52:54Z. Agent probability analysis under H-53—H-55/H-70/H-71/H-74/H-77/H-86. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `e9e1f20588e64513f16c1e09e7993ef20490e9a783aae1d10301b8852337bb97`. H-01—H-86, K-00—K-114 and AD-001—AD-092 history retained.
+- Coverage: D-08 set109 → 110; ContextLoopsAndNumerics106 → 110. Sixteen other revisions remain. Registry115 → 116; P-34/P-60, C-17/C-26 reverse references and the document authority block updated together.
+- Value chain: C-17/P-34 serves activity regulation and residual support; C-26/P-60 serves retained useful context through C-15/C-12/P-22 and C-01/V-01/V-02. C-18/P-36 supplies the intrinsic cancellation being analyzed. Distinguishing signed semantic effect from unsigned activity makes these goals assessable without selecting a noise mechanism.
+- Evidence: independent bounded per-cell additions reduce to a 120-uniform sum for one coordinate. Exact CDF and integrated-CDF arithmetic was checked at 100 and 150 decimal digits and against the independent single-pair triangular law. Eight conditional cases separate sign probability, unsigned magnitude and zero-mean vector perturbation. The script fingerprint and explicit assumptions are retained inside noise-feedback-analysis.json.
+- Cumulative boundaries: no sampled neural simulation or claim about trained behavior. Noise scale is fixed for the reference frame; clipping, quantization, recurrence and controller dynamics are outside these formulas. Raw-sum versus average readouts change scaling; no normalization is selected. Small-coordinate sign changes are not automatically semantic failure. H-77 cancellation, H-78/H-85 open choices, H-84 learning exclusion and H-86 empirical handling remain.
+- Qualification/descendants: D-08 remains pending-human. No noise law, correlation policy, amplitude, readout, controller, extra field or algorithm selected; no qualified descendant invalidated. Charter, D-01—D-07, regional protocols and build/toolchain state unchanged. D-GOV116 record maintenance alone continues H-05. H-71 research remains active; no implementation/training, benchmark, project tests, build, install, commit or push.
+
+<a id="k-116"></a>
+### K-116 — 2026-10-28: Intermediate rounding and cancellation boundaries
+
+- Recorded: 2026-10-28T20:54:49Z. Agent numerical analysis under H-70—H-75/H-77/H-86. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `96e8f2102e575d76970d7e568d8069b1c6d8896eef8eab849f52ad6f649bacd2`. H-01—H-86, K-00—K-115 and AD-001—AD-092 history retained.
+- Coverage: D-08 set110 → 111; ContextLoopsAndNumerics110 → 111. Sixteen other revisions remain. Registry116 → 117; P-65/P-69, C-28/C-29 reverse references and the authority block updated together.
+- Value chain: C-28/P-65 preserves meaningful rate, cancellation and fading arithmetic; C-29/P-69 preserves complete-frame state semantics through C-24/C-15/C-12/P-22 and C-01/V-01/V-02. An explicit conversion boundary serves these goals without choosing a stored representation.
+- Evidence: exact rational enumeration of one-pair and 60+60 first-bin stochastic rounding, checked against independent variance and one-pair formulas. Nonzero unsigned remainder can appear after unbiased provisional rounding even when the unrounded state cancels completely. MR-QF009 preserves six cases and the script fingerprint.
+- Boundaries: this is conditional arithmetic before further final writeback, not a neural simulation or a claim about deterministic rounding. Equal previous-frame snapshots do not equate different intermediate conversion orders. H-77 active cancellation, H-78/H-85 empirical choices and H-86 comparison policy remain; no quantization fluctuation is silently substituted for the controlled background input.
+- Qualification/descendants: D-08 remains pending-human; no rounding law, format, paired cells, extra frame, persistent residual or scratch layout selected. No qualified descendant invalidated. Charter, D-01—D-07 and build/toolchain state unchanged. D-GOV117 maintenance alone continues H-05. H-71 research remains active; no implementation/training, benchmark, project tests, build, install, commit or push.
+
+<a id="k-117"></a>
+### K-117 — 2026-10-28: Predictive context versus pattern fitting
+
+- Recorded: 2026-10-28T21:02:18Z. Agent research under H-71/H-74/H-75/H-79—H-86. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `48622abf19d9fc20daa33e6e732837a4dce6052be84b680525415809151fc2da`. H-01—H-86, K-00—K-116 and AD-001—AD-092 history retained.
+- Coverage: D-08 set111 → 112; TrainingStrategy109 → 112. Sixteen other revisions remain. Registry117 → 118; P-29, C-15 reverse reference and authority block updated together.
+- Value chain: C-15/P-29 serves H-82/H-83 contextual preactivation through C-12/P-22 and C-01/V-01/V-02. C-14/P-27 keeps individual contextual identities within fixed semantic roles. Evaluating retained predictive distinctions prevents input-fit or average-score improvements from substituting for the intended behavior.
+- Evidence: MR-S045—MR-S047 record primary competitive-learning and sequence-memory studies with read scopes and transfer limits. Exact enumeration of seven partitions shows a reconstruction optimum can discard a weaker predictive feature. Shared-fragment arithmetic shows whole-sequence accuracy approaching one while the distinguishing branch remains at chance; MR-FC012 retains the script fingerprint and scope.
+- Cumulative boundaries: no global impossibility or claim about trained SNN performance. Other neural state may retain the predictive cue. Future observations can affect later training after arrival, but not earlier inference. This clarifies K-113 information scope without selecting retrospective credit, replay, tags or a buffer. H-84 generation fallback stays excluded; H-78/H-85 stay open and H-86 directly retains empirical alternatives.
+- Qualification/descendants: D-08 remains pending-human. No statistical latent variable, clustering, learned semantic axes, recipient quota or new mechanism chosen; no qualified descendant invalidated. Charter, D-01—D-07, regional protocols and build/toolchain state unchanged. D-GOV118 maintenance alone continues H-05. H-71 research active; no implementation/training, neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-118"></a>
+### K-118 — 2026-10-28: Cancellation error bounds depend on the norm
+
+- Recorded: 2026-10-28T21:06:27Z. Agent numerical analysis under H-70/H-71/H-74/H-77/H-86. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `3cd7bd648849f6f343ce72cdf2cabcf12aaf9491a01263c51d685c6b6d6cc5e7`. H-01—H-86, K-00—K-117 and AD-001—AD-092 history retained.
+- Coverage: D-08 set112 → 113; ContextLoopsAndNumerics111 → 113. Sixteen other revisions remain. Registry118 → 119; P-65, C-28 reverse reference and authority block updated together.
+- Value chain: C-28/P-65 serves faithful cancellation, fading and retained context through C-24/C-15/C-12/P-22 and C-01/V-01/V-02. C-18/P-36 supplies the specified operation. Stating the applicable norm prevents an unrelated numerical stability claim from being inferred from its L1 property.
+- Evidence: the existing global L1 bound gives a blockwise Euclidean factor sqrt(120), approached by an explicit balanced 60+60 construction. Six exact rational perturbation cases verify this limit and the concentrated/uniform distinction; source fingerprint is retained in cancellation-properties-analysis.json.
+- Boundaries: this is a local worst-case or explicitly constructed ratio, not a typical noise distribution, trained response or whole-network gain. Composition remains proportionally preserved in the focused/uniform examples. H-77 is unchanged; H-78/H-85 remain open. No precision tolerance, normalization, new field or corrective algorithm selected.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Charter, D-01—D-07, regional protocols and build/toolchain state unchanged. D-GOV119 maintenance alone continues H-05. H-71 research active; no implementation/training, neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-119"></a>
+### K-119 — 2026-10-28: Coordinate alternatives and complete continuations
+
+- Recorded: 2026-10-28T21:12:34Z. Agent probability analysis under H-71/H-74/H-75/H-82—H-86. Charter §§1–3.3/7.1–7.2 alignment checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `c754cffe427d65536f24d26db2390d9b1b7f5efbf5e3b342409bb8e0d8116b75`. H-01—H-86, K-00—K-118 and AD-001—AD-092 history retained.
+- Coverage: D-08 set113 → 114; TrainingStrategy112 → 114. Sixteen other revisions remain. Registry119 → 120; P-29, C-15 reverse reference and authority block updated together.
+- Value chain: C-15/P-29 serves H-82/H-83 complete contextual prediction through C-12/P-22 and C-01/V-01/V-02; C-14/P-27 supplies fixed coordinate roles with individual contextual identities. Checking joint compatibility avoids substituting independent-coordinate success for the required continuation behavior.
+- Evidence: two positive-coordinate candidate pairs have identical per-coordinate distributions but opposite cross-coordinate covariance. Exact rational arithmetic verifies marginals and unsupported mass under an independent product. The example and fingerprint are retained in flow-prediction-assessment-analysis.json.
+- Boundaries: not a measured Flash collision, neural model failure or mandatory probability forecast. Existing contextual state and graph may encode the missing dependence. The same-polarity example is independent of H-85, which remains open together with H-78. No decoder, binding field, covariance matrix, candidate store, extra frame or new learning rule selected.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Charter, D-01—D-07 and build/toolchain state unchanged. D-GOV120 maintenance alone continues H-05. H-71 research active; no implementation/training, neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-120"></a>
+### K-120 — 2026-10-28: Noise-enabled response and useful information
+
+- Recorded: 2026-10-28T21:18:22Z. Agent research under H-55/H-71/H-74/H-77/H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `8e742b1db1f2a5d41082fb4a8f87a267bb10c3e68628c1aeedf4843260ec709a`. H-01—H-86, K-00—K-119 and AD-001—AD-092 history retained.
+- Coverage: D-08 set114 → 115; ContextLoopsAndNumerics113 → 115. Sixteen other document revisions remain. Registry120 → 121; P-34 and C-17/C-26 reverse references updated with the authority block.
+- Value chain: C-17/P-34 supports flexible activity and residual response through C-12/P-22 and C-01/V-01/V-02; C-26/P-60 requires useful subsequent context. Distinguishing response gain from reliability keeps numerical and biological analogies subordinate to those behaviors.
+- Evidence: exact rational first/second moments for ten noise levels through a capped linear transfer, independently checked by piecewise integration; noise-feedback-analysis retains assumptions and script fingerprint. MR-S048 records primary recurrent signal-encoding controls and their transfer limits.
+- Cumulative boundaries: H-77 active cancellation is unchanged. A steep response can amplify a conditional mean without establishing reliable information or learned recurrent growth; a unit-slope response has different limits. No continuous forcing is substituted for H-53 single presentation. H-78/H-85 stay open and H-86 keeps empirical alternatives without repeated questions.
+- Qualification/descendants: D-08 remains pending-human. No response function, threshold, noise law, extra field, inhibitory edge or controller selected; no qualified descendant invalidated. Charter, D-01—D-07, regional and build/toolchain state unchanged. D-GOV121 maintenance alone continues H-05. H-71 active; no implementation/training, random neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-121"></a>
+### K-121 — 2026-10-28: State precision and contextual identity
+
+- Recorded: 2026-10-28T21:19:22Z. Agent numerical analysis under H-70/H-71/H-73—H-75/H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `d72ea09bcd874d1dcee6f2a756e0302dfab774f3dc919875332077290b22622b`. H-01—H-86, K-00—K-120 and AD-001—AD-092 retained.
+- Coverage: D-08 set115 → 116; ContextLoopsAndNumerics115 → 116. Sixteen other revisions remain. Registry121 → 122; P-65/C-28 reverse references and authority block updated together.
+- Value chain: C-28/P-65 serves faithful dynamics through C-24/C-15/C-12/P-22 and C-01/V-01/V-02. C-14/H-75 and C-26/P-60 require individual contextual distinctions to affect later responses. Assessing only current semantic sums can miss that value.
+- Evidence: exact rational 60-cell states, specified IEEE binary16/binary32 conversion and a nonnegative unit-weight readout; context-composition-analysis retains values and script fingerprint. Equal signed sums and small rate-vector error coexist with complete loss of this particular distinction in binary16.
+- Boundaries: a conditional representation example, not a trained-context distribution or rejection of FP16. More robust patterns may suffice. All other causal state is identical in the example; no hidden information recovery or new memory subsystem is inferred. H-78/H-85 and numeric choices remain empirical comparisons under H-86.
+- Qualification/descendants: D-08 remains pending-human, no format/field or mechanism selected and no qualified descendant invalidated. Charter, D-01—D-07, regional and build/toolchain state unchanged. D-GOV122 maintenance alone continues H-05. H-71 active; no implementation/training, neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-122"></a>
+### K-122 — 2026-10-28: Learning exposure, traversal and contextual timing
+
+- Recorded: 2026-10-28T21:22:50Z. Agent research under H-71/H-74/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `80f8f89a702523a6aa4c34f20739ec28e36cc0f3f8b1e48197c036e371feace1`. H-01—H-86, K-00—K-121 and AD-001—AD-092 retained.
+- Coverage: D-08 set116 → 117; TrainingStrategy114 → 117. Sixteen other document revisions remain. Registry122 → 123; P-29/P-30 and C-15 reverse references updated with the authority block.
+- Value chain: C-15/P-29 serves contextual preactivation through C-12/P-22 and C-01/V-01/V-02; P-30 records the C-13 storage dependency without granting authority. Connecting exposure semantics to actual work serves H-74 and avoids cost estimates that silently change the learner.
+- Evidence: exact evaluation on32 retained edges distinguishes all-exposure, source-enabled, target-enabled and positive-only update counts; execution-work-arithmetic records assumptions and fingerprint. MR-S049 reads primary overlap/disambiguation and noise/timing results; no model performance is imported.
+- Cumulative boundaries: incoming traversal is the first comparison, not a chosen optimizer. Changed writes, visited IDs, reserved slots and target fractions differ. Source/target roles and token cadence remain the provisional flow discussion, separate from DMN/token repair and generation fallback. Faster internal traversal cannot alone demonstrate longer memory; external input timing stays explicit.
+- Qualification/descendants: D-08 remains pending-human. No learning rule, reverse index, lazy decay, trace, new field, threshold or scheduler selected; H-78/H-85/H-86 retained and no qualified descendant invalidated. Charter, D-01—D-07, regional and build/toolchain state unchanged. D-GOV123 maintenance alone continues H-05. H-71 active; no implementation/training, neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-123"></a>
+### K-123 — 2026-10-28: Conditional table rounding
+
+- Recorded: 2026-10-28T21:23:24Z. Editorial arithmetic correction under H-70/H-71; D-08 set117 → 118, ContextLoopsAndNumerics116 → 118, Registry123 → 124. The standard deviation at sigma0.12 is sqrt(463/240), displayed as1.3889 rather than1.3890. Exact evidence is unchanged.
+- C-17/P-34 and C-28/P-65 value paths, comparison scope, invariants and all open choices remain unchanged against H-55/H-70—H-86. D-08 remains pending-human; no qualified baseline or descendant changes. Charter blob `9f0154035d52f976232000ab1601088b91948c0b` unchanged; pre-entry registry SHA-256 `04fc6b15152ae0d008e10ef4824386551bc19243046ed4824a07cbfe3c8e87dd`. H-01—H-86, K-00—K-122 and AD-001—AD-092 retained; D-GOV124 maintenance alone continues H-05.
+
+<a id="k-124"></a>
+### K-124 — 2026-10-28: Joint behavior across distinct training stages
+
+- Recorded: 2026-10-28T21:27:01Z. Agent research under H-63/H-71/H-74/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `36e8ca5e7cdab40b1c1b181ad36ea5c0c7e627e5e7c2b18fbe6195f377ba9752`. H-01—H-86, K-00—K-123 and AD-001—AD-092 retained.
+- Coverage: D-08 set118 → 119; TrainingStrategy117 → 119. Sixteen other revisions remain. Registry124 → 125; P-29/P-45/C-15 reverse references and authority block updated together.
+- Value chain: C-15/P-29 and C-22/P-45 serve the shared C-12 behavioral goals through P-22/C-01/V-01/V-02. Joint assessment prevents alternating successful stages from substituting for a graph that preserves all required behaviors. H-74 favors identifying the actual conflict before adding protection machinery.
+- Evidence: exact affine block-composition fixed points, scalar feasibility condition, positive-shortfall recurrence and compatible two-source reference, with script fingerprint in shared-learning-recurrence-analysis. MR-S050 records a primary background-plasticity study with explicit assumptions; MR-S034 receives a limited indexed-method read-scope extension.
+- Cumulative boundaries: scalar incompatible targets do not establish conflicting DMN/token/flow goals or a whole-network impossibility. Smaller updates can reduce oscillation without satisfying incompatible demands. Activity and enabled plasticity remain separate; no universal noise-exclusion rule is inferred. H-84 generation fallback remains excluded from learning; H-78/H-85 stay open and H-86 governs empirical choices.
+- Qualification/descendants: D-08 remains pending-human. No learner, cadence, repair formula, protected edge, role tag, replay buffer, consolidation stage or separate graph selected; no qualified descendant invalidated. Charter, D-01—D-07, regional and build/toolchain state unchanged. D-GOV125 maintenance alone continues H-05. H-71 active; no implementation/training, neural simulation, benchmark, project tests, build, install, commit or push.
+
+<a id="k-125"></a>
+### K-125 — 2026-10-28: Separate flow and maintenance reading paths
+
+- Recorded: 2026-10-28T21:29:11Z. Editorial organization under H-11/H-74/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `e745a8e510ebc2809e7c85858347a9df62597f34387e053fcede750fdd12d602`. H-01—H-86, K-00—K-124 and AD-001—AD-092 retained.
+- Coverage: D-08 set119 → 120; TrainingStrategy119 → 120, README107 → 120; new FlowLearning120, all sections pending-human. Fifteen other revisions remain. Registry125 → 126 and current application count17 → 18. P-29/C-15 reverse references and three authority blocks updated together.
+- Value chain: H-79/H-80 distinguish Hebbian/HTM flow from DMN/token repair; C-15/P-29 and C-22/P-45 retain those purposes through C-12/P-22/C-01/V-01/V-02. Separate reading paths make that established division explicit without introducing a model concept or implementation boundary.
+- Preservation evidence: the7610-word flow body from TrainingStrategy119 is moved byte-for-byte to FlowLearning120, SHA-256 `10fd548871365ba76c2666cb861e4d05c0e5a574b14d116c9b519e96991879e8`. TrainingStrategy120 keeps a compact flow overview and the existing linked anchors, then unchanged DMN/token detail; README120 separates the two document scopes.
+- Qualification/descendants: editorial organization preserves proposals and human boundaries, but cannot qualify the previously pending flow contract. D-08 and FlowLearning remain pending-human; H-78/H-85/H-86 choices, acceptance and non-goals unchanged. No new mechanism, parent relationship, runtime field or interface; no qualified descendant invalidated. Charter, D-01—D-07, regional and build/toolchain state unchanged. D-GOV126 maintenance alone continues H-05. H-71 active; no implementation/training, project tests, build, commit or push.
+
+<a id="k-126"></a>
+### K-126 — 2026-10-28: Flow cross-document reference
+
+- Recorded: 2026-10-28T21:29:32Z. Editorial link correction: D-08 set120 → 121, FlowLearning120 → 121, Registry126 → 127. The reference to DMN/token repair “below” now links to TrainingStrategy120; no flow proposition or algorithm changes.
+- C-15/P-29 and C-22/P-45 scope, H-79—H-86 constraints and all18 documents' pending-human status remain. Charter blob `9f0154035d52f976232000ab1601088b91948c0b` unchanged; pre-entry registry SHA-256 `7450b8b9c6148a8af387d3cc9db3455b94b4c83febadd456377da571b2d3c3ee`. H/K/AD history retained; D-GOV127 maintenance alone continues H-05.
+
+<a id="k-127"></a>
+### K-127 — 2026-10-28: Retention and replacement in flow evidence
+
+- Recorded: 2026-10-28T21:33:40Z. Targeted primary-source review under H-71/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `698f4d831ebe0595c5ce26188fa392f37568e65599b8235bdd9e0ee0515151d1`. H-01—H-86, K-00—K-126 and AD-001—AD-092 retained.
+- Coverage: D-08 set121 → 122; FlowLearning121 → 122; other17 application revisions unchanged. Registry127 → 128. P-29/C-15 reverse references and the authority block updated together.
+- Value chain: C-15/P-29 serves contextual sequence prediction through C-12/P-22/C-01/V-01/V-02; H-82/H-83 require useful matching and legitimate ambiguity. MR-S024 additionally reads draft §§4.2/4.4 and distinguishes deliberate replacement from retention, and sequence order from elapsed model time. These are evidence boundaries, not a new learning objective.
+- Cumulative assessment: no universal historical retention, change detector, new nonstationarity task, learner, weight field or schedule is adopted. DMN/token preservation, generation exclusion, H-78/H-85 alternatives and H-86 comparison policy remain. D-08 stays pending-human; no qualified descendant is invalidated. Charter, D-01—D-07, regional/build/toolchain state unchanged; D-GOV128 maintenance alone continues H-05. H-71 remains active.
+
+<a id="k-128"></a>
+### K-128 — 2026-10-28: Fixed input, cancellation and active contextual differences
+
+- Recorded: 2026-10-28T21:37:12Z. Conditional real-data arithmetic under H-71/H-74—H-77/H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `a4f9400ac09f907afade4d0d713d00cd4f52a71280738175cc824e8b6da001fc`. H-01—H-86, K-00—K-127 and AD-001—AD-092 retained.
+- Coverage: D-08 set122 → 123; ContextLoopsAndNumerics118 → 123; other17 application revisions unchanged. Registry128 → 129. P-60/C-26 reverse references and the authority block updated together.
+- Value chain: C-26/P-60 preserves useful earlier contextual influence through C-15/C-12/P-22/C-01/V-01/V-02; C-18/P-36 constrains active cancellation. Distinguishing coordinate sign reversal from whole-CC context loss serves H-71/H-75 without adding state.
+- Evidence: exact proportional-cancellation difference law and rational checks; read-only existing Flash sample of1024 types and4096 pairs in both directions; context-composition-analysis records normalization, conditional difference distribution, statistics, reciprocal-strength consistency and script fingerprint. Source tensor unchanged; no download or copy.
+- Cumulative boundaries: one additive input/cancellation operation with common drive across two histories, not the actual context-dependent encoder, trained-memory measurement, neural simulation or prediction score. No recurrence, transfer nonlinearity, clipping, noise or precision claim. Do not multiply pair factors into sequence lifetime. H-78/H-85 remain open; H-77 is not broadened to readiness.
+- Qualification/descendants: D-08 remains pending-human; no field, encoder, gain, threshold, context subsystem or learning rule selected and no qualified descendant invalidated. Charter, D-01—D-07, regional/build/toolchain state unchanged; D-GOV129 maintenance alone continues H-05. H-71 remains active. No implementation, project tests, build, commit or push.
+
+<a id="k-129"></a>
+### K-129 — 2026-10-28: Flow procedure reading order
+
+- Recorded: 2026-10-28T21:41:49Z. Editorial consolidation under H-74/H-79—H-86; charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`. Pre-entry registry SHA-256 `668b5010dfeaa656c8aaa6566024780c2d175719c66ab0361159d31d96636f1a`. H-01—H-86, K-00—K-128 and AD-001—AD-092 retained.
+- Coverage: D-08 set123 → 124; FlowLearning122 → 124; other17 application revisions unchanged. Registry129 → 130. P-29/C-15 reverse links and the authority block updated together.
+- Preservation: the existing provisional procedure moves verbatim before the assessment section; block SHA-256 `f1b66aa1294c03785b53f8fe3515b8602525ec7d4dd1b3bd584d0edf429f6595`. The later five-step role list is consolidated into a link and the retained fixed-weight-assessment boundary. Its operations remain in the unchanged procedure and surrounding sections. No candidate, acceptance criterion, scope or assumption is added or selected.
+- Value/qualification: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 remains the same sequence-prediction purpose. This improves reviewability of that candidate and its empirical choices; it does not qualify the pending contract. D-08 remains pending-human, with no qualified descendant invalidated. Charter, D-01—D-07, regional/build/toolchain state unchanged; D-GOV130 maintenance alone continues H-05. H-71 remains active.
+
+<a id="k-130"></a>
+### K-130 — 2026-10-28: Prediction-error-modulated flow comparison
+
+- Recorded: 2026-10-28T21:46:20Z. Agent candidate analysis under H-71/H-74/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `6c6293fc28eaa9d6b7d2acbdae03b9e52561b31a4a6b52cfc747db349b98012c`. H-01—H-86, K-00—K-129 and AD-001—AD-092 retained.
+- Coverage: D-08 set124 → 125; FlowLearning124 → 125; other17 application revisions unchanged. Registry130 → 131. P-29/C-15 reverse links and the authority block updated together.
+- Candidate value chain: H-82 requires useful predictive matching; C-15/P-29 serves it through C-12/P-22/C-01/V-01/V-02. Accounting for the combined incoming response can give correlation updates an explicitly predictive objective. The candidate is pending-human and retained for H-86 comparison, not chosen or delegated for implementation.
+- Evidence: exact fixed-pattern stationary-mean and linear least-squares comparisons, plus a conditional cancellation-boundary recurrence, in hebbian-update-law-analysis. MR-S051 reads the primary temporal predictive-coding model/inference/circuit descriptions. Its error signals and hidden-state assumptions are not imported; the simple linear derivation is our conditional reference.
+- Cumulative scope: target/readout, source credit, actual response, nonnegative constraints, valid alternatives and learning exposure remain explicit choices. The formula is not the derivative of an arbitrary recurrent/canceled model or proof of improved SNN learning. Population-error and signed-net objectives can give different paths; H-78/H-85 remain open. No error field, hidden layer, optimizer, history gradient or extra allocation is selected. Flow observation learning remains distinct from DMN/token prescribed-group repair.
+- Qualification/descendants: D-08 remains pending-human. H-86 authorizes recording empirical alternatives, not confirming one; no qualified descendant is invalidated. Charter, D-01—D-07, regional/build/toolchain state unchanged; D-GOV131 maintenance alone continues H-05. H-71 active; no implementation, neural training/simulation, project tests, build, commit or push.
+
+<a id="k-131"></a>
+### K-131 — 2026-10-28: Raw input scale in the contextual cancellation comparison
+
+- Recorded: 2026-10-28T21:50:01Z. Read-only real-embedding arithmetic under H-70/H-71/H-74—H-77/H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `545cb1b840aa3daf8a638805d1a955ba8b1f0a9afb601d53ad47b86cf97399bc`. H-01—H-86, K-00—K-130 and AD-001—AD-092 retained.
+- Coverage: D-08 set125 → 126; ContextLoopsAndNumerics123 → 126; other17 application revisions unchanged. Registry131 → 132. P-60/C-26 reverse links and authority block updated together.
+- Value chain: C-26/P-60 through C-15/C-12/P-22/C-01/V-01/V-02 still concerns useful contextual influence. Preserving actual relative input magnitude in the comparison prevents a diagnostic normalization from silently supplying an encoding assumption.
+- Evidence: same1024 Flash rows and4096 sampled type pairs, both directions, compared under common raw scale and equal L1 norm. context-composition-analysis retains the original K128 result and adds separate raw-scale statistics, paired differences, reciprocal identity and a separate source-script fingerprint. Relative error/retention refers to the stated hypothetical cell-rate difference, not trained memory or corpus behavior.
+- Cumulative boundaries: no normalized or raw runtime encoder, token amplitude rule, new state, retention threshold or learning mechanism is selected. H-77 active cancellation and H-78/H-85 readiness alternatives remain; recurrent behavior cannot be inferred by multiplying pair statistics. D-08 remains pending-human and no qualified descendant is invalidated. Charter, D-01—D-07, regional/build/toolchain state unchanged; D-GOV132 maintenance alone continues H-05. H-71 active; no implementation, training, project tests, build, commit or push.
+
+<a id="k-132"></a>
+### K-132 — 2026-10-28: Source credit and prediction-update scale
+
+- Recorded: 2026-10-28T21:52:25Z. Exact candidate arithmetic under H-71/H-74/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `4225fcdaf4a8abfb68eceb543d2a300cb2fd68a8e6ce866c823b0a726e5a6917`. H-01—H-86, K-00—K-131 and AD-001—AD-092 retained.
+- Coverage: D-08 set126 → 127; FlowLearning125 → 127; other17 application revisions unchanged. Registry132 → 133; P-29/C-15 reverse links and authority block updated together.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 requires an update to improve its defined predictive quantity. The fixed-linear error identity depends on actual squared source credit, exposing a limit of an unspecified common learning coefficient across rows and input strengths. It supplies a conditional comparison, not a new capacity law.
+- Evidence/scope: hebbian-update-law-analysis adds an exact simultaneous-update identity,100/18432-unit-source arithmetic and zero-source boundary, with a separate script fingerprint. Fixed and source-energy-adjusted steps remain alternatives. No stored scale, extra index, optimizer or parameter selected. Prediction targets, nonnegative/quantized weights, actual dynamics, H-78/H-85 and shared DMN/token behavior remain open or governed as before.
+- Qualification/descendants: D-08 stays pending-human; H-86 comparison handling does not qualify the candidate or any descendant. Charter, D-01—D-07, regional/build/toolchain state unchanged; D-GOV133 maintenance alone continues H-05. H-71 active; no implementation, training, project tests, build, commit or push.
+
+<a id="k-133"></a>
+### K-133 — 2026-10-28: Quantized prediction-error updates
+
+- Recorded: 2026-10-28T22:00:09Z. Exact numerical analysis under H-70/H-71/H-73/H-74/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `ebe33a0db2a96ba1818781a9c12ff4a027e5285401c421f2fc2916cfb65d06c5`. H-01—H-86, K-00—K-132 and AD-001—AD-092 retained.
+- Coverage: D-08 set127 → 128; ContextLoopsAndNumerics126 → 128 and FlowLearning127 → 128; other16 application revisions unchanged. Registry133 → 134. P-65/P-29/C-28 reverse references and authority blocks updated together.
+- Value chain: C-28/P-65 supports faithful dynamics and learning through C-24/C-15/C-12/P-22/C-01/V-01/V-02. C-15/P-29 needs predictive improvement from the actual stored update. A decreasing ideal error is insufficient when writeback discards or cycles changes.
+- Evidence: hebbian-update-law-analysis adds an exact unchanged-update condition,18 format/scale cases, IEEE adjacent-value checks, agreement with six earlier static row gains, a two-state weight-update cycle and closed-form first-update rounding distributions. The separate script fingerprint and assumptions are retained; no random neural simulation or training run.
+- Cumulative boundaries: fixed linear target/source pattern and exact working arithmetic; diagnostic scales are not chosen by capacity. Same-pattern repetition proves only this conditional learning map. Stochastic first-update means do not establish stationary learning or contextual selectivity. Weight-update cycling is not H-71 neural recurrence. No format, scale, rounding-correlation policy, master value, residual field, optimizer or learning-rate policy selected; H-78/H-85 remain open.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Charter, D-01—D-07, regional/build/toolchain state unchanged; D-GOV134 maintenance alone continues H-05. H-71 active; no implementation, project tests, build, toolchain change, commit or push.
+
+<a id="k-134"></a>
+### K-134 — 2026-10-28: Nonnegative bounds and quantized learning
+
+- Recorded: 2026-10-28T22:07:43Z. Conditional arithmetic and scoped primary reading under H-70/H-71/H-73/H-74/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `21368b9714b27ec29a9bdc5705c39be557113e0906c6120fdec70d58e1bdbf01`. H-01—H-86, K-00—K-133 and AD-001—AD-092 retained.
+- Coverage: D-08 set128 → 129; ContextLoopsAndNumerics128 → 129; other17 application revisions unchanged. Registry134 → 135. Authority block and P-65/C-28 reverse references updated together.
+- Value chain: C-28/P-65 through C-24/C-15/C-12/P-22/C-01/V-01/V-02 requires evaluating actual stored learning behavior. An unbiased in-range rounding step does not erase the effect of the model's nonnegative weight constraint.
+- Evidence: hebbian-update-law-analysis adds exact conditional projected means and first-change waiting probabilities for two equal-output rows. MR-S017 reading now includes training variables and MNIST DNN/CNN methods/results; eight fractional bits in its DNN result are not an eight-bit total format.
+- Boundaries: reference rows have different source associations, so the arithmetic is not a learned-network comparison. First-change time is neither convergence time nor model time. No constraint-aware optimizer, index, master weight, residual, format or learner selected; H-78/H-85 remain open. D-08 remains pending-human, with no qualified descendant invalidated. Charter, D-01—D-07 and build/toolchain state unchanged; D-GOV135 maintenance alone continues H-05. H-71 active.
+
+<a id="k-135"></a>
+### K-135 — 2026-10-28: Contextual selectivity with fixed semantic roles
+
+- Recorded: 2026-10-28T22:11:39Z. Primary-source synthesis under H-71/H-74/H-75/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `e1e5c43534882a29ba391a578a1938ac5a9012d78eb84cd6b991de51455e83b4`. H-01—H-86, K-00—K-134 and AD-001—AD-092 retained.
+- Coverage: D-08 set129 → 130; FlowLearning128 → 130; other17 application revisions unchanged. Registry135 → 136. Authority block and P-29/C-15 reverse references updated together.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 serves predictive contextual distinctions; C-14/P-27/H-75 preserves fixed semantic contribution with individual contextual identity. Diverse responses matter when they support the required prediction, not as an independent optimization objective.
+- Evidence: MR-S052 reads Rigotti2013 main-text population/task analyses and discussion, with pseudo-population/resampling and unchecked supplement limits. MR-S053 reads Barak2013 model/readout definitions, selected discrimination/noise results and discussion; its input statistics, signed projections, readout and variable population sizes limit transfer.
+- Scope: compare separation of informative histories and consistency under intended noise within the existing neuron budget. No physical geometry, learned semantic remapping, hidden layer, dendritic partition, sparseness target, rank criterion, new learner or state selected. Prior prediction, generation-fallback exclusion, H-78/H-85 and DMN/token boundaries remain.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Charter, D-01—D-07 and build/toolchain state unchanged; D-GOV136 maintenance alone continues H-05. H-71 research active, with no product implementation or training run.
+
+<a id="k-136"></a>
+### K-136 — 2026-10-28: Background-sensitive source credit and discovery
+
+- Recorded: 2026-10-28T22:16:49Z. Exact conditional arithmetic under H-71/H-74/H-75/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `856c513a0aa63fb168987488bc73389cbc03a876b34f49dc64b6f49332aba153`. H-01—H-86, K-00—K-135 and AD-001—AD-092 retained.
+- Coverage: D-08 set130 → 131; FlowLearning130 → 131; other17 application revisions unchanged. Registry136 → 137. Authority block and P-29/C-15 reverse references updated together.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 requires associations useful for prediction; C-26/P-60/H-71 preserves weak useful history. P-30's static-capacity dependency makes endpoint discovery consequential, but does not supply a source-utility label.
+- Evidence: flow-temporal-credit-analysis adds exact first-draw credit-mass ratios, the cancellation of a shared positive target multiplier and fixed-role scalar mean-update identities across target frequencies and credit amplitudes. Independent rational expectation checks and the source-script hash are retained; no sampled learning or neural simulation.
+- Boundaries: synthetic informative labels are known only to the analysis. One draw is not repeated source admission; mean affinity is neither calibrated probability nor full-network behavior. Actual recurrent noise can be context-correlated. No amplitude/density filter, causal tag, trace, auxiliary field, learner or activity target selected. H-78/H-85 remain open; H-84 and DMN/token boundaries remain.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Charter, D-01—D-07 and build/toolchain state unchanged; D-GOV137 maintenance alone continues H-05. H-71 research active.
+
+<a id="k-137"></a>
+### K-137 — 2026-10-28: Active cancellation and contextual-credit consistency
+
+- Recorded: 2026-10-28T22:22:53Z. Existing-contract alignment under H-71/H-74—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; H-77/H-85 evidence and affected C-14/P-27/C-15/P-29 entries reread. Pre-entry registry SHA-256 `de16021bb282397c80431cc8dcc310fb66addda3c29e5e53b8012b021c5ee04b`. H-01—H-86, K-00—K-136 and AD-001—AD-092 retained.
+- Coverage: D-08 set131 → 132; Model89 → 132 and FlowLearning131 → 132; other16 application revisions unchanged. Registry137 → 138. Authority blocks, D-08 coverage and C-14/P-29 reverse references updated together.
+- Preserved chain: C-14/P-27 and C-18/P-36 serve explicit signed activity; C-15/P-29 serves contextual prediction through C-12/P-22/C-01/V-01/V-02. Model's broad statement that cancellation strength/selection remain open was stale relative to H-77. It now states the specified active operation, retaining open transition placement and predictive behavior. The generic local burst/inhibition instruction is replaced by the existing input/cancellation distinction.
+- Cumulative scope: Model's accepted human directions are unchanged; H-78/H-85/H-86 are retained, not resolved. FlowLearning links the existing K111 composition result to source credit: preserved semantic amplitude does not imply preserved cell identity. No new arithmetic, noise distribution, mechanism, criterion, field, learner or selection policy is introduced. Other model sections remain unchanged.
+- Qualification/descendants: editorial/coherence assessment cannot qualify the previously pending document. D-08 remains pending-human; no qualified descendant invalidated. Charter, D-01—D-07 and build/toolchain state unchanged; D-GOV138 maintenance alone continues H-05. H-71 active.
+
+<a id="k-138"></a>
+### K-138 — 2026-10-28: Qualified coverage under active polarity cancellation
+
+- Recorded: 2026-10-28T22:26:36Z. Exact counting and read-only embedding arithmetic under H-56—H-58/H-71/H-74/H-77/H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; H-56—H-58/H-77 evidence and C-19/P-39 reread. Pre-entry registry SHA-256 `97d710d6422035603b2b00f81de8d601e4c29a4eb3852e0307270dfb4bcde23f`. H-01—H-86, K-00—K-137 and AD-001—AD-092 retained.
+- Coverage: D-08 set132 → 133; ActivationRegimes105 → 133; other17 application revisions unchanged. Registry138 → 139. Authority block, current coverage and P-39/C-19 reverse references updated together.
+- Value chain: C-19/P-39 through C-12/P-22/C-01/V-01/V-02 makes the requested regimes observable; C-18/P-36 constrains actual active polarity participation. The counting bound exposes a necessary joint condition without altering either human direction.
+- Evidence: temporal-coverage-analysis adds exact bounds for six illustrative coverage levels and separate same-magnitude sign-reversal geometry on the existing1024 Flash type sample. Integer checks, direct cosine identity check, source/script fingerprints and assumptions retained. The SSD tensor is read-only; no full rescan, copy or neural simulation.
+- Scope/limits: coverage is conditional on counting post-cancellation active identities; predictive-state handling remains open. Eighty percent stays illustrative. The bound does not require simultaneous reversals, prove density qualification or infer semantic valence. The synthetic vector transformations are neither a DMN trajectory nor a proposed scheduler/encoder. No threshold, new state, noise rule or acceptance metric selected.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Existing Model/RateDynamics/SignedPopulationEncoding directions remain consistent. Charter, D-01—D-07 and build/toolchain state unchanged; D-GOV139 maintenance alone continues H-05. H-71 active.
+
+<a id="k-139"></a>
+
+### K-139 — 2026-10-28: Observation history, window semantics and conditional cost
+
+- Recorded: 2026-10-28T22:32:11Z. Conditional information/kernel analysis under H-34/H-56—H-58/H-71/H-74/H-75/H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; relevant human evidence and C-19/P-39/C-29/P-69—P-70 reread. Pre-entry registry SHA-256 `5eae3c66240958cd218b93213765724e5df663fe7aa4f0d58952dfb629882740`. H-01—H-86, K-00—K-138 and AD-001—AD-092 retained.
+- Coverage: D-08 set133 → 134; ActivationRegimes133 → 134; other17 document revisions unchanged. Registry139 → 140. Authority block, current coverage and C-19/P-39 reverse references updated together.
+- Value chain: C-19/P-39 through C-12/P-22/C-01/V-01/V-02 makes required temporal participation observable. H-34/H-74 require identifying the information a detector needs before charging storage; C-29/P-69 remains a complete neural-frame transition, not a claim that two snapshots reconstruct history.
+- Evidence: temporal-coverage-analysis adds exact same-snapshot and expiry counterexamples, rolling/fading kernel identities, a prescribed indicator-burst comparison and conditional direct payloads. Matching mean age and iid variance does not preserve transient qualification. No neural trajectory was simulated.
+- Scope/limits: binary indicators, hundred-frame window and five-percent cutoff are illustrative; readiness, activity definition and physical timing remain open. Block/rolling/fading choices have different semantics. Costs are candidate observation representations, not reserved CC bookkeeping or universal bounds. No runtime history, detector, path metric, noise filter, learning-credit rule or implementation selected.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. IncomingConnectivity/RateDynamics contracts and capacity tables unchanged. Charter, D-01—D-07 and build/toolchain state unchanged; D-GOV140 maintenance alone continues H-05. H-71 active.
+
+<a id="k-140"></a>
+
+### K-140 — 2026-10-28: Individual trajectories and averaged prediction evidence
+
+- Recorded: 2026-10-28T22:35:46Z. Primary-source review under H-67/H-71/H-74/H-82—H-86. Charter §§1–3.3/7.1–7.2 remains checked at blob `9f0154035d52f976232000ab1601088b91948c0b`; H-82/H-83 and C-15/P-29/C-19/P-39 scope checked. Pre-entry registry SHA-256 `e6469b939a05f1885db036cfda968f50ca6c8f92ed5de3ffb6d5fc2f4c1bb7ee`. H-01—H-86, K-00—K-139 and AD-001—AD-092 retained.
+- Coverage: D-08 set134 → 135; FlowLearning132 → 135 and ActivationRegimes134 → 135; other16 application revisions unchanged. Registry140 → 141. Authority blocks, coverage and flow reverse references updated together.
+- Value chain: C-15/P-29 and C-19/P-39 through C-12/P-22/C-01/V-01/V-02 make intended prediction and temporal behavior assessable. Distinguishing a single-state observation from an across-trial average prevents the assessment from silently changing the required phenomenon.
+- Evidence: source ledger adds MR-S055 Miller/Katz2010 with explicitly indexed reading, and MR-S056 Asabuki/Clopath2025 main-text methods/results/discussion. Existing observations gain scoped support; no model is reproduced. Four direct full-text routes for MR-S055 failed; no complete reading is claimed.
+- Scope/limits: no new trial count, probability interpretation, readiness representation, loss, inhibitory circuit, adaptation variable, detector or generation requirement selected. H-78/H-85 alternatives remain open. Existing H-67 variability and H-82/H-83 sequence criteria are preserved.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Window alternatives and resource budgets unchanged. Charter, D-01—D-07 and build/toolchain state unchanged; D-GOV141 maintenance alone continues H-05. H-71 active.
+
+<a id="k-141"></a>
+
+### K-141 — 2026-10-28: Learning constraints are distinct from incoming storage
+
+- Recorded: 2026-10-28T22:38:14Z. Scoped primary evidence under H-71/H-74/H-75/H-79—H-86. Charter §§1–3.3/7.1–7.2 remains checked at blob `9f0154035d52f976232000ab1601088b91948c0b`; existing C-15/P-29/P-30 and C-29/P-69—P-70 boundaries preserved. Pre-entry registry SHA-256 `ed6fa9711a1c98069a6d630619c9570210e24b58d5b783215593a948623d69e6`. H-01—H-86, K-00—K-140 and AD-001—AD-092 retained.
+- Coverage: D-08 set135 → 136; FlowLearning135 → 136; other17 document revisions unchanged. Registry141 → 142. Authority block, coverage and C-15/P-29 references updated together.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 requires learning to serve contextual prediction; P-30 and P-70 are storage dependencies. A convenient traversal does not establish a statistical learning objective.
+- Evidence: MR-S058 supplies scoped theoretical/computational context for the existing exposure analysis. MR-S057 separately records direct experimental timing/sequence evidence without introducing a new mechanism. Neither source is reproduced or used to select numerical parameters.
+- Scope/limits: no probability interpretation for dense graded neuronal activity, synaptic normalization, outgoing index, teaching policy or learner selected. Existing incoming-pool proposal and H-82 prediction criterion remain unchanged. Formal source assumptions and unverified image equations are recorded in the ledger.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. No capacity, runtime or language change; D-GOV142 maintenance alone continues H-05. H-71 active.
+
+<a id="k-142"></a>
+
+### K-142 — 2026-10-28: Natural prediction versus fitted or evoked evidence
+
+- Recorded: 2026-10-28T22:42:27Z. Primary-source interpretation under H-71/H-74/H-75/H-82/H-83/H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; relevant human evidence and C-15/P-29 read. Pre-entry registry SHA-256 `fb552ab3b5704e5d4410ba1f034cc4f43f1fa2f76521d122aafe6ffa19deec81`. H-01—H-86, K-00—K-141 and AD-001—AD-092 retained.
+- Coverage: D-08 set136 → 137; FlowLearning136 → 137; other17 document revisions unchanged. Registry142 → 143. Authority block, current coverage and reverse references updated together.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 serves the H-82/H-83 contextual preactivation criterion. Distinguishing evidence prevents a diagnostic decoder or an input-evoked response from silently substituting for that business result.
+- Evidence: MR-S059 and MR-S060 record scoped primary readings; a direct logical example separates distinct retained states from identical readiness. No network run or fitted decoder was created.
+- Scope/limits: comparison methods remain empirical under H-86. No readout, loss, homeostasis rule, inhibition, state field, time constant or learning algorithm selected. Existing timing and H-78/H-85 alternatives remain open.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Charter, D-01—D-07, capacity and runtime assumptions unchanged; D-GOV143 maintenance alone continues H-05. H-71 active.
+
+<a id="k-143"></a>
+
+### K-143 — 2026-10-28: Sparse source discovery and actual membership work
+
+- Recorded: 2026-10-28T22:46:46Z. Conditional work analysis and primary-source review under H-34/H-71/H-74/H-75/H-82/H-86. Charter §§1–3.3/7.1–7.2 remains checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; C-15/P-29/P-30 and IncomingConnectivity103 read. Pre-entry registry SHA-256 `ea797358b76d4b73f0eea48e1a223e772abec4c58379e9f13ee2777dc8f86221`. H-01—H-86, K-00—K-142 and AD-001—AD-092 retained.
+- Coverage: D-08 set137 → 138; FlowLearning137 → 138; other17 application revisions unchanged. Registry143 → 144. Authority block, current coverage and reverse references updated together.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 needs associations that improve contextual prediction. P-30 depends on C-13 fixed incoming capacity; H-34/H-74 require actual algorithmic value before auxiliary storage.
+- Evidence: flow-slot-capacity-analysis adds exact proposal/rejection and linear membership expectations. MR-S062/MR-S063 distinguish potential-edge state from bounded active-edge discovery. MR-S061 separately records temporal-learning transfer limits. No neural dynamics, training or hardware benchmark was run.
+- Scope/limits: diagnostic endpoint universe, independent fixed proposals and explicit row checks are conditional. No self-edge policy, source selector, index, rewiring law, dense latent state, global edge quota or Bayesian convergence guarantee selected. Existing pool feasibility and source-credit questions remain open.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. IncomingConnectivity103 contract and memory tables unchanged. Charter, D-01—D-07 and build/toolchain state unchanged; D-GOV144 maintenance alone continues H-05. H-71 active.
+
+<a id="k-144"></a>
+
+### K-144 — 2026-10-28: One-step learning through active-rate cancellation
+
+- Recorded: 2026-10-28T22:52:12Z. Conditional derivative and precision analysis under H-70/H-71/H-74/H-77/H-82/H-85/H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; C-15/P-29, C-18/P-36/P-38 and SignedPopulationEncoding106 read. Pre-entry registry SHA-256 `1d47448995e2397f5127b0c38fcd107f0a93adbedbedc9d4addaae1d64718bf2`. H-01—H-86, K-00—K-143 and AD-001—AD-092 retained.
+- Coverage: D-08 set138 → 139; FlowLearning138 → 139; other17 application revisions unchanged. Registry144 → 145. Authority block, current coverage and reverse references updated together.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 serves contextual prediction; P-38 requires respecting C-18 cancellation. H-74 motivates exposing the actual coupling before inferring persistent derivative or trace storage.
+- Evidence: cancellation-properties-analysis adds exact branch derivatives, a cell-pattern loss example, mirrored/explicit-Jacobian checks, a bounded-gradient observation and a conditional FP32 intermediate-underflow example. MR-S064 supplies scoped context for distinguishing local credit from full recurrent gradients.
+- Scope/limits: this is one prescribed operation, not a trained network or chosen learner. H-85 predictive cancellation and H-78 state representation remain open. No loss, boundary derivative, trace, dense Jacobian, auxiliary array or hardware-performance claim selected.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. H-77 cancellation, runtime and capacity assumptions unchanged; D-GOV145 maintenance alone continues H-05. H-71 active; no implementation, project tests/build or toolchain change.
+
+<a id="k-145"></a>
+
+### K-145 — 2026-10-28: HTM matching does not prescribe graded weight semantics
+
+- Recorded: 2026-10-28T22:59:19Z. Primary-source design review under H-71/H-74/H-79—H-86. Charter §§1–3.3/7.1–7.2 checked at unchanged blob `9f0154035d52f976232000ab1601088b91948c0b`; C-15/P-29, C-14/P-27 and the current frame/encoding contracts reviewed. Pre-entry registry SHA-256 `b8d723b4be6a25df36a8d5eca891e7524bbfd52b2aa7926b4f561e143af43b29`. H-01—H-86, K-00—K-144 and AD-001—AD-092 retained.
+- Coverage: D-08 set139 → 140; FlowLearning139 → 140; other17 application revisions unchanged. Registry maintenance145 → 146. The stale top-level label142 is corrected to146; K-142—K-144 and D-GOV already record143—145. This correction appends to, rather than rewrites, their historical evidence.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 serves context-sensitive prediction. H-74 requires a demonstrated need before adding storage; H-84 constrains how the HTM precedent can inform unfamiliar-transition learning.
+- Evidence: MR-S016 reinspection and MR-S065 inspect potential-versus-connected activity counts and their use in matching. Retained low-permanence structure can contribute to a match without connected transmission in that reference. This is not the meaning of a graded weight multiplying a source rate.
+- Scope/limits: compare compatibility with naturally available readiness; no permanence/confidence field, segment layout, activity threshold, least-used assignment or canonical burst-learning path adopted. H-78/H-85 empirical choices, existing numerical comparisons and H-77 cancellation remain unchanged.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Capacity, runtime and language contracts unchanged; D-GOV146 maintenance alone continues H-05. H-71 active; no implementation, project tests/build or toolchain change.
+
+<a id="k-146"></a>
+
+### K-146 — 2026-10-28: Temporal representation changes coactivity credit
+
+- Recorded: 2026-10-28T23:03:23Z. Primary-source inspection under H-67/H-71/H-74/H-79—H-86. Current charter §§1–3.3/7.1–7.2 and C-15/P-29/C-29/P-69 remain aligned; charter blob unchanged at `9f0154035d52f976232000ab1601088b91948c0b`. Pre-entry registry SHA-256 `db1c6f9d438534876a855319c8e781def4ecfab4557a65e38b732ddc0c9106ee`. H-01—H-86, K-00—K-145 and AD-001—AD-092 retained.
+- Coverage: D-08 set140 → 141; FlowLearning140 → 141; other17 document revisions unchanged. Registry146 → 147, with authority header, coverage and reverse references updated together.
+- Value chain: C-15/P-29 serves contextual prediction; C-24's rate proposal and C-29's frame boundary determine what information a proposed learning exposure can use. Preserving this meaning serves explicit application behavior through C-12/P-22/C-01/V-01/V-02.
+- Evidence: MR-S066 inspects a primary temporal-learning comparison; MR-S067 checks the limited released reference separately from printed generic methods. Read scopes and transfer limits are recorded in the source ledger. This refines the existing coactivity/timing comparison rather than adding a mechanism.
+- Scope/limits: no spike-window rule, inhibition, disjoint-chain objective, fixed temporal parameter or degree exponent is adopted. H-82 prediction, H-67 fading, H-71 useful context and H-84 fallback exclusion remain independent requirements.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Runtime, capacity and language contracts unchanged; D-GOV147 maintenance alone continues H-05. H-71 active; no implementation, author simulation, project tests/build or toolchain change.
+
+<a id="k-147"></a>
+
+### K-147 — 2026-10-28: Low-bit evidence and exact scalar boundaries
+
+- Recorded: 2026-10-28T23:07:04Z. Numeric/source review under H-70—H-75/H-86. Current charter §§1–3.3/7.1–7.2, C-28/P-65—P-68 and the current rate/frame/encoding documents checked; charter blob remains `9f0154035d52f976232000ab1601088b91948c0b`. Pre-entry registry SHA-256 `897cc78c02c10ce20251256d7acb4a1405ced9acce96394f0701e54258955818`. H-01—H-86, K-00—K-146 and AD-001—AD-092 retained.
+- Coverage: D-08 set141 → 142; ContextLoopsAndNumerics129 → 142; FlowLearning141 and other16 document revisions unchanged. Registry147 → 148. Authority block, current coverage and reverse references updated together.
+- Value chain: C-28/P-65 through C-24/C-15/P-29/C-12/P-22/C-01/V-01/V-02 serves faithful and affordable temporal behavior. H-74 requires matching a proposed precision optimization to the actual workload and operation semantics.
+- Evidence: MR-S068/MR-S069 inspect low-bit inference and selected released code under their stated read scopes. numeric-representation-arithmetic adds strict/nonstrict integer comparison identities,1105 rational pairs and a shift-versus-nearest-even half-scaling example. These are scalar calculations, not network validation.
+- Scope/limits: no code format, threshold, rounding rule, common scale, new field or accelerator selected. Short image inference is not evidence of sustained contextual recurrence; hardware and integer-deployment equivalence were not reproduced. Existing memory tables and earlier numeric findings remain conditional and unchanged.
+- Qualification/descendants: D-08 remains pending-human; no qualified descendant invalidated. Capacity, runtime and language contracts unchanged; D-GOV148 maintenance alone continues H-05. H-71 active; no implementation, author simulation, project tests/build or toolchain change.
+
+<a id="k-148"></a>
+
+### K-148 — 2026-10-28: Remembered drive and background interference
+
+- Recorded: 2026-10-28T23:13:33Z. Targeted evidence review under H-53/H-71/H-74/H-86; current charter §§1–3.3/7.1–7.2 and C-26/P-60/P-62 checked. Charter unchanged; pre-entry registry SHA-256 `80675b7def6a78e2aea36c67a148405e2b0e11143642448815a9e4dd793e8382`. H-01—H-86, K-00—K-147 and AD-001—AD-092 retained.
+- Coverage: D-08 set142 → 143; ContextLoopsAndNumerics142 → 143; other17 document revisions unchanged. Registry148 → 149; authority, current coverage and reverse link updated together.
+- Value chain: C-26/P-60 through C-15/P-29/C-12/P-22/C-01/V-01/V-02 serves useful history-dependent behavior. Identifying the actual remembered signal prevents a background-control proposal from borrowing evidence for a different task.
+- Evidence: MR-S031 targeted reread of §VII signal/readout definition and colored-background comparison. The existing memory arithmetic already separates signal and disturbance; no new model or numerical result is asserted.
+- Scope/qualification: no noise law, critical gain, readout, regulator, field or new acceptance threshold selected. H-78/H-85 remain open; D-08 stays pending-human and no qualified descendant is invalidated. D-GOV149 maintenance alone continues H-05. H-71 research remains active; no implementation, author simulation, project tests/build or toolchain change.
+
+<a id="k-149"></a>
+
+### K-149 — 2026-10-28: Context extension and monotone source activity
+
+- Recorded: 2026-10-28T23:15:19Z. Conditional reasoning under H-75/H-82/H-83/H-86, current charter §§1–3.3/7.1–7.2 and C-15/P-29/C-14 checked. Pre-entry registry SHA-256 `c8d35fc7450a4f3f521ce0add7fd695fd30273ce896048d115d17590f385257b`; charter unchanged. H-01—H-86, K-00—K-148 and AD-001—AD-092 retained.
+- Coverage: D-08 set143 → 144; FlowLearning141 → 144; ContextLoopsAndNumerics143 and other16 documents unchanged. Registry149 → 150; authority, current coverage and reverse link updated together.
+- Value chain: C-15/P-29 contextual prediction through C-12/P-22/C-01/V-01/V-02; C-14/H-75 individual paths provide existing representation freedom. H-74 favors checking these existing dynamics before proposing another competition mechanism.
+- Evidence: MR-FC013 derives a conditional monotone-response property and three exact two-source rational cases. It distinguishes observed history length, source composition, absolute readiness and relative ranking; no neural dynamics or learned performance is claimed.
+- Scope/qualification: the premise excludes cancellation, changing regulation and nonmonotone transfer. It does not establish an impossibility result for the full model or choose explicit inhibition, readiness cancellation, a threshold, new state or a learning rule. H-78/H-85 remain open; D-08 stays pending-human with no qualified descendant invalidated. D-GOV150 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain change, commit or push.
+
+<a id="k-150"></a>
+
+### K-150 — 2026-10-28: CPU operand and feature boundaries
+
+- Recorded: 2026-10-28T23:19:02Z. Primary documentation/code review under H-70—H-75/H-86. Current charter §§1–3.3/7.1–7.2, C-28/P-65—P-68, C-29/P-69 and current numeric/frame scope checked. Charter blob unchanged at `9f0154035d52f976232000ab1601088b91948c0b`; pre-entry registry SHA-256 `af014790f53cf5eaeb8c983763d62858424af6d7f231a871b045842f1200a7b6`. H-01—H-86, K-00—K-149 and AD-001—AD-092 retained.
+- Coverage: D-08 set144 → 145; ContextLoopsAndNumerics143 → 145; other17 documents unchanged. Registry150 → 151; authority, coverage and reverse link updated together.
+- Value chain: C-28/P-65 through C-24/C-15/P-29/C-12/P-22/C-01/V-01/V-02 serves faithful affordable dynamics. C-29 defines the relevant incoming traversal; H-74 requires evaluating operand preparation and precision before adding an optimization.
+- Evidence: MR-S070–073 inspect core capability descriptions, intrinsic operands, kernel flags and read-only local LLVM target definitions. MR-S022 receives an explicit feature-inference limitation. execution-work-arithmetic records conditional operand paths and exact-arithmetic scale factorization, with no cycle or throughput claim.
+- Scope/qualification: no state quantization, code format, scale field, source buffer, SIMD implementation, cache layout or dispatch framework selected. Capacity and runtime contracts remain unchanged; D-08 stays pending-human and no qualified descendant is invalidated. D-GOV151 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-151"></a>
+
+### K-151 — 2026-10-28: Lexical contrast and cancellation geometry
+
+- Recorded: 2026-10-28T23:23:31Z. Read-only input evidence and conditional reasoning under H-43/H-54/H-55/H-70/H-71/H-86. Current charter §§1–3.3/7.1–7.2 and C-14/P-27/C-18/P-36 checked; charter unchanged. Pre-entry registry SHA-256 `6a70cb5b9032968b6d91367168f1f0ea21f4633d635a7f3471c29d1319cae39c`. H-01—H-86, K-00—K-150 and AD-001—AD-092 retained.
+- Coverage: D-08 set145 → 146; SignedPopulationEncoding106 → 146; other17 document revisions unchanged. Registry151 → 152; authority, current coverage and reverse link updated together.
+- Value chain: C-18/P-36 and C-14/P-27 through C-15/P-29/C-12/P-22/C-01/V-01/V-02 connect the requested complementary-input behavior to actual signed input and retained meaning. H-74 requires checking that relation before introducing a valence mechanism.
+- Evidence: context-composition-analysis adds eleven predeclared lexical contrasts from22 read-only Flash BF16 rows and exact single-entry merge replay for the selected ASCII chunks. It records per-row and tokenizer hashes, raw and diagnostic-scaled results, a convex L1 directional condition and script fingerprint. MR-S074 supplies a narrowly read distributional-semantics reference, not evidence about Flash performance.
+- Scope: lexical labels are illustrative, not a confirmed valence dataset. The conditional net-sum calculation is not a neuron-count result, DMN trajectory or learned semantic response. H-54/H-55 targets remain; actual complementary state/input pairs must be evaluated. No rotation, negation, retraining, valence evaluator, new encoding or extra state selected.
+- Qualification/descendants: D-08 stays pending-human and no qualified descendant is invalidated. Runtime, capacity and language contracts unchanged; D-GOV152 maintenance alone continues H-05. H-71 active; no SNN implementation/training, project tests/build, toolchain changes, full tensor copy, commit or push.
+
+<a id="k-152"></a>
+
+### K-152 — 2026-10-28: Cancellation evaluation and its one-sided identity
+
+- Recorded: 2026-10-28T23:28:26Z. Conditional arithmetic review under H-70/H-73/H-74/H-77/H-86. Current charter §§1–3.3/7.1–7.2 and C-18/P-36/C-28/P-65 checked; charter unchanged. Pre-entry registry SHA-256 `ffb300a89495ce91a25bbff2f80fca2c66c8c508c3dd5b494d6e98096e4ab7a6`. H-01—H-86, K-00—K-151 and AD-001—AD-092 retained.
+- Coverage: D-08 set146 → 147; ContextLoopsAndNumerics145 → 147; other17 document revisions unchanged. Registry152 → 153; authority, coverage and reverse link updated together.
+- Value chain: C-28/P-65 protects C-18/P-36's specified net cancellation through C-15/P-29/C-12/P-22/C-01/V-01/V-02. H-74 favors suitable local arithmetic over new state where it already preserves the intended behavior.
+- Evidence: cancellation-properties-analysis adds two software-rounding references with exact-power inputs. Correct totals and individually representable rates do not make multiply-before-divide safe; the bounded common ratio preserves the checked one-sided identity. Earlier mathematical properties and derivative analysis remain unchanged.
+- Scope/qualification: nearest-even/gradual-underflow cases only; no target FP-mode measurement, universal accuracy claim, numeric format, cutoff, residual or kernel chosen. H-78/H-85 remain open; D-08 stays pending-human and no qualified descendant is invalidated. D-GOV153 maintenance alone continues H-05. H-71 active; no SNN implementation/training, project tests/build or toolchain change.
+
+<a id="k-153"></a>
+
+### K-153 — 2026-10-28: Fixed rounding and repeated edges
+
+- Recorded: 2026-10-28T23:30:36Z. Conditional mathematical review under H-70/H-71/H-74/H-86; current charter §§1–3.3/7.1–7.2, C-26/P-60 and C-28/P-65 checked. Charter unchanged; pre-entry registry SHA-256 `84dbb97e7241ab0b7968b8bc716d32a85202955a4092ef26c44a869db1dbaf3a`. H-01—H-86, K-00—K-152 and AD-001—AD-092 retained.
+- Coverage: D-08 set147 → 148; ContextLoopsAndNumerics147 → 148; other17 documents unchanged. Registry153 → 154; authority, coverage and reverse link updated together.
+- Value chain: C-28/P-65 serves faithful temporal behavior through C-24/C-15/P-29/C-12/P-22/C-01/V-01/V-02, while C-26/P-60 preserves useful small-loop context. Examining stored realizations prevents one-pass expectations from standing in for recurrent behavior.
+- Evidence: MR-SW008 uses the finite-walk expansion under independent nonnegative fixed coefficients and exact enumeration of four two-edge graphs. It extends the existing scalar-gain comparison without proposing a graph-analysis algorithm.
+- Scope/qualification: no nonlinear, signed or dependent-weight expectation guarantee; no measured SNN behavior, unsteerability conclusion, anti-loop rule, quantizer, scale, edge tag or new state. H-78/H-85 remain open; D-08 stays pending-human and no qualified descendant is invalidated. D-GOV154 maintenance alone continues H-05. H-71 active; no implementation, project tests/build or toolchain change.
+
+<a id="k-154"></a>
+
+### K-154 — 2026-10-28: Synaptic retention evidence and complete learning-state cost
+
+- Recorded: 2026-10-28T23:34:19Z. Primary-source review under H-70/H-71/H-74/H-81/H-82/H-86; current charter §§1–3.3/7.1–7.2, C-15/P-29 and C-28/P-65 checked. Charter unchanged; pre-entry registry SHA-256 `c38da46ec9b2c5dea9d9404248a1d8fe5bf0b542d09bb822eec0f6aa07d9ed98`. H-01—H-86, K-00—K-153 and AD-001—AD-092 retained.
+- Coverage: D-08 set148 → 149; FlowLearning144 → 149 and ContextLoopsAndNumerics148 → 149; other16 documents unchanged. Registry154 → 155; authority blocks, current coverage and reverse references updated together.
+- Value chain: C-28/P-65 serves faithful, affordable C-15/P-29 prediction through C-12/P-22/C-01/V-01/V-02. H-74 requires a behavioral reason for any extra learning state; an inference-weight width does not establish total learning cost.
+- Evidence: MR-S075/MR-S076 record targeted primary readings on bounded and multi-variable synapses. The comparison distinguishes retained weight information, actual network prediction, acquisition of new associations and useful active-loop history. Prior arithmetic and human objectives remain intact.
+- Scope/qualification: no capacity estimate for this SNN, bit packing, consolidation mechanism, hidden variable, learning clock, new training objective or format selected. Empirical comparisons remain open under H-86. D-08 stays pending-human; no qualified descendant is invalidated. D-GOV155 maintenance alone continues H-05. H-71 active; no SNN implementation/training, author simulation, project tests/build or toolchain change.
+
+<a id="k-155"></a>
+
+### K-155 — 2026-10-28: Weight alphabet size and learning exposure
+
+- Recorded: 2026-10-28T23:36:29Z. Conditional arithmetic under H-70/H-71/H-74/H-82/H-86; current charter §§1–3.3/7.1–7.2 and C-15/P-29/C-28/P-65 checked. Charter unchanged; pre-entry registry SHA-256 `02ed9d570be2d41dc256ae2def1adca6181e59a659ee3313317b7c0425d20275`. H-01—H-86, K-00—K-154 and AD-001—AD-092 retained.
+- Coverage: D-08 set149 → 150; FlowLearning149 → 150; other17 document revisions unchanged. Registry155 → 156; authority, current coverage and reverse reference updated together.
+- Value chain: C-28/P-65 supports faithful C-15/P-29 learning through C-12/P-22/C-01/V-01/V-02. Explicit update statistics prevent a storage-width argument from replacing evidence for contextual prediction and acquisition.
+- Evidence: weight-update-precision-analysis adds a finite nearest-neighbor weight reference,124 exact rational determinant-identity checks and eight scalar cases. The Poisson opportunity generator, invariant distribution and nonconstant decay modes are explicit; prior results remain unchanged.
+- Scope/qualification: a distribution-relaxation result is not task retrieval, active fading, neural-frame time or a biological capacity prediction. No learning clock, balance policy, numeric layout, extra state or update rule selected. D-08 stays pending-human; no qualified descendant invalidated. D-GOV156 maintenance alone continues H-05. H-71 active; no neural training/simulation, project tests/build or toolchain change.
+
+<a id="k-156"></a>
+
+### K-156 — 2026-10-28: Actual input conditions, redirection and useful cycling
+
+- Recorded: 2026-10-28T23:42:06Z. Primary-source and conditional analytical review under H-53/H-59/H-71/H-74/H-86. Current charter §§1–3.3/7.1–7.2, C-20/P-42 and C-26/P-60 checked; charter unchanged. Pre-entry registry SHA-256 `dc4f51310486651d6bff329d3f4b8b7be52b050e86da31f25c65bfc357a75a1f`. H-01—H-86, K-00—K-155 and AD-001—AD-092 retained.
+- Coverage: D-08 set150 → 151; ActivationRegimes135 → 151 and ContextLoopsAndNumerics149 → 151; other16 document revisions unchanged. Registry156 → 157; authority blocks, coverage and reverse references updated together.
+- Value chain: C-20/P-42 and C-26/P-60 serve meaningful externally steerable history through C-12/P-22/C-01/V-01/V-02. Input-specific observations avoid replacing required token behavior with an unrelated forcing experiment or recurrence label.
+- Evidence: MR-S077/MR-S078 delimit input-driven convergence; MR-A007 independently evaluates a scalar fixed point and two cue operations with analytic post-cue basin reasoning. MR-S079 distinguishes cue fidelity from cycling in a different architecture.
+- Scope/qualification: no SNN trajectory run, global echo-state requirement, spectral normalization, input strength, stale detector, delay subsystem, output-generation mechanism or new state selected. One unsuccessful cue does not establish unsteerability. H-78/H-85/H-86 remain open; D-08 pending-human; no qualified descendant invalidated. D-GOV157 maintenance alone continues H-05. H-71 active; no implementation, project tests/build or toolchain change.
+
+<a id="k-157"></a>
+
+### K-157 — 2026-10-28: Shared-range recoding and unchanged associations
+
+- Recorded: 2026-10-28T23:43:50Z. Conditional numerical review under H-24/H-70/H-71/H-74/H-86; current charter §§1–3.3/7.1–7.2 and C-28/P-65/C-15/P-29 checked. Charter unchanged; pre-entry registry SHA-256 `e35b42db96330bee314add095503149829f2ef616425ea9273e788ad0f1697e5`. H-01—H-86, K-00—K-156 and AD-001—AD-092 retained.
+- Coverage: D-08 set151 → 152; ContextLoopsAndNumerics151 → 152; other17 document revisions unchanged. Registry157 → 158; authority, coverage and reverse reference updated together.
+- Value chain: C-28/P-65 preserves C-15/P-29 associations through C-12/P-22/C-01/V-01/V-02. Accounting for indirect representation changes supports H-74's requirement that added learning machinery earn its cost.
+- Evidence: weight-update-precision-analysis adds exact uniform-grid range1→2→1 calculations for all16 and256 codes, retaining prior results. A range round trip need not preserve effective weights; the inspected association has no intended training update.
+- Scope/qualification: no range-selection algorithm, scale array, higher-precision copy, residual, cadence, weight format, intentional normalization or topology deletion selected. This is not a floating-codebook or SNN performance result. D-08 pending-human; no qualified descendant invalidated. D-GOV158 maintenance alone continues H-05. H-71 active; no neural simulation/training, project tests/build or toolchain change.
+
+<a id="k-158"></a>
+
+### K-158 — 2026-10-28: Reverberation and responsiveness to subsequent input
+
+- Recorded: 2026-10-28T23:48:17Z. Targeted primary-source review under H-53/H-59/H-71/H-74/H-86. Current charter §§1–3.3/7.1–7.2 and C-26/P-60/C-20/P-42 checked; charter unchanged. Pre-entry registry SHA-256 `61403150439094ae8c42aae5c0bc42b2e31e48622d1cdb0a154fa791ffcf7b65`. H-01—H-86, K-00—K-157 and AD-001—AD-092 retained.
+- Coverage: D-08 set152 → 153; ContextLoopsAndNumerics152 → 153; other17 document revisions unchanged. Registry158 → 159; authority, current coverage and reverse reference updated together.
+- Value chain: C-26/P-60 and C-20/P-42 serve meaningful steerable history through C-15/P-29/C-12/P-22/C-01/V-01/V-02. Distinguishing one persistent response from reusable input responsiveness protects the actual token/flow objective without adding machinery.
+- Evidence: MR-S080 records indexed primary experimental methods/results, including recovery conditions; MR-S081 records the author PDF's introduction and selected methods. Activity-dependent release/resource dynamics are distinguished from our regulated external background noise. No plot values or biological minimum recovery period inferred.
+- Scope/qualification: no biological equivalence, refractory period, recovery timer, synaptic resource field, topology law or neuron equation selected. This is a future behavioral comparison, not a neural simulation or result for the SNN. D-08 pending-human; no qualified descendant invalidated. D-GOV159 maintenance alone continues H-05. H-71 active; no implementation, author simulation, project tests/build or toolchain change.
+
+<a id="k-159"></a>
+
+### K-159 — 2026-10-28: Semantic drift and persistence statistics
+
+- Recorded: 2026-10-28T23:53:15Z. Conditional reasoning and targeted primary abstracts under H-46/H-53/H-54/H-71/H-74/H-86. Current charter §§1–3.3/7.1–7.2, C-12/P-22 and C-15/P-29 checked against the explicit human DMN target. Charter unchanged; pre-entry registry SHA-256 `313d782b3097dfa5b18d618d51227370177cdd883927f37800c982b28257931f`. H-01—H-86, K-00—K-158 and AD-001—AD-092 retained.
+- Coverage: D-08 set153 → 154; ActivationRegimes151 → 154; other17 document revisions unchanged. Registry159 → 160; authority, current coverage and reverse reference updated together.
+- Value chain: C-15/P-29 serves C-12/P-22/C-01/V-01/V-02 by assessing intended semantic behavior rather than substituting coordinate signs, stronger activity or a stationary occupancy statistic. H-74 keeps labels/evaluation separate from an assumed runtime subsystem.
+- Evidence: MR-S083/MR-S084 delimit lexical-rating evidence; MR-A008 derives renewal occupancy and two-state relaxation references with three exact rational occupancy cases and two rate cases. MR-S082 separately records a BCM source review without adopting its state or duplicating the existing learning comparison.
+- Scope/qualification: no lexicon or valence definition chosen for arbitrary CC states, no claim about human DMN, no neural simulation, evaluator, bias mechanism, new training stage, state field or target threshold. H-46/H-53 remain unchanged; empirical comparison remains open. D-08 pending-human; no qualified descendant invalidated. D-GOV160 maintenance alone continues H-05. H-71 active; no implementation, project tests/build or toolchain change.
+
+<a id="k-160"></a>
+
+### K-160 — 2026-10-28: Association support and graded prediction
+
+- Recorded: 2026-10-28T23:57:08Z. Conditional rule review under H-79—H-84/H-86; current charter §§1–3.3/7.1–7.2 and C-15/P-29 checked against the human prediction criterion. Charter unchanged; pre-entry registry SHA-256 `2bcdc546cc2c1ac79e8ad566433dfc3cac371132dfd4b8b72d4648e03dd432bf`. H-01—H-86, K-00—K-159 and AD-001—AD-092 retained.
+- Coverage: D-08 set154 → 155; FlowLearning150 → 155; other17 document revisions unchanged. Registry160 → 161; authority, current coverage and reverse reference updated together.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 requires useful contextual prediction; association presence, graded strength and frequency are different candidate meanings. H-74/H-86 prevent numerical saturation alone from mandating another learning mechanism.
+- Evidence: hebbian-update-law-analysis adds two fixed binary-credit limiting matrices; prior saturation and mean-update results remain unchanged. MR-S016 source hash rechecked; constructor default and _punishPredictedColumn/_adaptSegment scopes inspected without executing the reference.
+- Scope/qualification: no calibrated-probability objective, binary transmission, weakening rate, zero-punishment default, protected association, state field or full HTM algorithm selected. Dense/noisy credit and shared recurrence still require actual comparison. D-08 pending-human; no qualified descendant invalidated. D-GOV161 maintenance alone continues H-05. H-71 active; no SNN training/simulation, project tests/build or toolchain change.
+
+<a id="k-161"></a>
+
+### K-161 — 2026-10-28: Weight-step units and initial-state acquisition
+
+- Recorded: 2026-10-28T23:58:38Z. Conditional arithmetic refinement under H-70/H-71/H-74/H-82/H-86; current charter §§1–3.3/7.1–7.2 and C-15/P-29/C-28/P-65 checked. Charter unchanged; pre-entry registry SHA-256 `5422cba6bb232b0da27d9e3ff5d26923fde0ed6d35be02ecf290ce333aadf00b`. H-01—H-86, K-00—K-160 and AD-001—AD-092 retained.
+- Coverage: D-08 set155 → 156; FlowLearning155 → 156; other17 documents unchanged. Registry161 → 162; authority, current coverage and reverse reference updated together.
+- Value chain: C-28/P-65 supports faithful C-15/P-29 prediction through C-12/P-22/C-01/V-01/V-02. Explicit update units and acquisition conditions prevent a slow-mode calculation from substituting for useful learning or suggesting a free format benefit.
+- Evidence: weight-update-precision-analysis appends exact first-step equations,810 rational identities and six finite-sum/closed-form checks. Earlier eigenvalue and numerical results remain unchanged.
+- Scope/qualification: no sampled trajectories or SNN training; no endpoint learning objective, clock, format, update bias or extra state selected. D-08 pending-human; no qualified descendant invalidated. D-GOV162 maintenance alone continues H-05. H-71 active; no implementation, project tests/build or toolchain change.
+
+<a id="k-162"></a>
+
+### K-162 — 2026-10-29: Noise-assisted access and retained information
+
+- Recorded: 2026-10-29T00:02:21Z. Conditional information analysis and primary-source review under H-55/H-70/H-71/H-74/H-86. Current charter §§1–3.3/7.1–7.2 and C-26/P-60/C-28/P-65 checked; charter unchanged. Pre-entry registry SHA-256 `5dd8336293fb716debb829ea308277b476b653dde94c12fdda317ccf1f2a082c`. H-01—H-86, K-00—K-161 and AD-001—AD-092 retained.
+- Coverage: D-08 set156 → 157; ContextLoopsAndNumerics153 → 157; other17 documents unchanged. Registry162 → 163; authority, coverage and reverse reference updated together.
+- Value chain: C-26/P-60 supports meaningful history through C-15/P-29/C-12/P-22/C-01/V-01/V-02. Distinguishing surviving information from its accessible response supports the requested noise benefit without treating arbitrary revival as retained context.
+- Evidence: MR-S085 supplies scoped threshold-channel theory; MR-S086 supplies entropy/channel foundations. memory-gain-analysis adds six exact-probability channel cases, agreement of two information formulas and an independently stated chain-rule argument. Earlier gain/noise results remain intact.
+- Scope/qualification: no full SNN guarantee, memory-capacity estimate, entropy estimator, noise optimum, threshold, readout or new state chosen. The conditional argument includes hidden regulator/weight history and excludes later outside information about the earlier distinction. D-08 pending-human; no qualified descendant invalidated. D-GOV163 maintenance alone continues H-05. H-71 active; no neural simulation, implementation, project tests/build or toolchain change.
+
+<a id="k-163"></a>
+### K-163 — 2026-10-29: HTM robustness and population-scaling conditions
+
+- Recorded: 2026-10-29T00:07:13Z. Scoped primary-source review and independent overlap arithmetic under H-71/H-74/H-82/H-83/H-86. Current charter §§1–3.3/7.1–7.2 and C-15/P-29/P-30 checked; charter unchanged. Pre-entry registry SHA-256 `399a6ad6b2e3188bd248ec47dcc0cd1985f04f837ef6a61527f69acef1679e2e`. H-01—H-86, K-00—K-162 and AD-001—AD-092 retained.
+- Coverage: D-08 set157 → 158; FlowLearning156 → 158 and SynapticIntegrationResearch102 → 158; other16 documents unchanged. Registry163 → 164; authority, current coverage and reverse references updated together.
+- Value chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 serves contextual prediction; P-30 is only a capacity dependency. Distinguishing evidence conditions prevents population size or encoding robustness from being mistaken for acquired sequence behavior.
+- Evidence: expanded MR-S024/MR-S038 reading; context-detection-analysis adds9 normalized exact hypergeometric cases,2 binomial limits and3210 exact counting identities. Fixed-count and fixed-fraction asymptotics are independent conditional derivations, not measured SNN performance. Previous evidence remains intact.
+- Scope/qualification: no selected detector, sparsity, threshold, encoder, hierarchy, history buffer or robustness threshold. No changed H-82/H-83 acceptance or physical-distance prior. D-08 remains pending-human; no qualified descendants invalidated. Only D-GOV164 record maintenance continues H-05. H-71 active; no neural simulation, implementation, project tests/build, toolchain change, commit or push.
+
+<a id="k-164"></a>
+### K-164 — 2026-10-29: Predictive state and recurrent emission
+
+- Recorded: 2026-10-29T00:10:24Z. Refinement under H-71/H-74/H-75/H-78/H-82/H-85/H-86. Current charter §§1–3.3/7.1–7.2, C-29/P-69 and C-15/P-29 checked; charter unchanged. Pre-entry registry SHA-256 `36426c24ecc409d9e2be3a16bc6f4e9b5f6fd863189ac2f4fa3903744b2204e4`. H-01—H-86, K-00—K-163 and AD-001—AD-092 retained.
+- Coverage: D-08 set158 → 159; RateDynamics108 → 159 and FlowLearning158 → 159; other16 documents unchanged. Registry164 → 165; authority, coverage and reverse references updated together.
+- Value chain: C-29/P-69 through C-24/P-52/C-15/P-29/C-12/P-22/C-01/V-01/V-02 serves explicit transition meaning. Separating representation from emitted signal and learning credit preserves the human-deferred choices rather than silently selecting behavior through a field layout.
+- Evidence: MR-S016 pinned source hash and active/predictive paths rechecked. flow-learning-design-analysis adds an exact single-gather contrast and comparison roles; it does not simulate a recurrent learner or claim either alternative succeeds. Prior timing, learning and numeric evidence remains intact.
+- Scope/qualification: H-78/H-85 remain open, H-77 active cancellation and H-84 fallback exclusion unchanged. No transmission gate, phase threshold, extra field, winner mask, source-credit default or weak-context suppression chosen. D-08 pending-human; no qualified descendant invalidated. D-GOV165 maintenance alone continues H-05. H-71 active; no neural simulation, implementation, project tests/build or toolchain change.
+
+<a id="k-165"></a>
+### K-165 — 2026-10-29: Averaged rate response and explicit variability
+
+- Recorded: 2026-10-29T00:12:01Z. Primary-source review and conditional convolution arithmetic under H-67/H-70/H-71/H-74/H-86. Current charter §§1–3.3/7.1–7.2 and C-24/P-52/C-17/P-34 checked; charter unchanged. Pre-entry registry SHA-256 `567be594e676f1001839ea25e37bb5bc156c89bbc877c3b1d71faf9a1ed79700`. H-01—H-86, K-00—K-164 and AD-001—AD-092 retained.
+- Coverage: D-08 set159 → 160; RateDynamics159 → 160; other17 documents unchanged. Registry165 → 166; authority, coverage and reverse references updated together.
+- Value chain: C-24/P-52 through C-15/P-29/C-12/P-22/C-01/V-01/V-02 serves meaningful temporal/rate behavior. Defining averaged versus explicit variability prevents an unintended change to the requested background-support and attention conditions without adding mechanisms.
+- Evidence: MR-S087 targeted rate-reduction reading; frame-time-noise-analysis adds Gaussian threshold convolution and12 independently integrated scalar cases. This is a static conditional reference; no neuron simulation or biological parameter transfer. Existing frame/noise evidence remains intact.
+- Scope/qualification: no adopted Gaussian process, extra noise channel, adaptive transfer/time constant, rate interpretation or stochastic simulator. H-78/H-85 remain open; per-CC activity and two-frame boundaries unchanged. D-08 pending-human; no qualified descendants invalidated. D-GOV166 maintenance alone continues H-05. H-71 active; no implementation, project tests/build or toolchain change.
+
+<a id="k-166"></a>
+### K-166 — 2026-10-29: Effective rate snapshots and averaged cancellation
+
+- Recorded: 2026-10-29T00:13:43Z. Conditional arithmetic and primary mesoscopic-model review under H-67/H-70/H-71/H-74/H-75/H-77/H-86. Current charter §§1–3.3/7.1–7.2 and C-24/P-52/C-18/P-36 checked; charter unchanged. Pre-entry registry SHA-256 `0d5be3af107ddba2ffcdd9025f511e2c86b8f5a5ab5c90d3b76a6bb263072484`. H-01—H-86, K-00—K-165 and AD-001—AD-092 retained.
+- Coverage: D-08 set160 → 161; RateDynamics160 → 161; other17 documents unchanged. Registry166 → 167; authority, coverage and reverse references updated together.
+- Value chain: C-24/P-52 through C-15/P-29/C-12/P-22/C-01/V-01/V-02 preserves a defined rate interpretation; C-18/P-36 retains the required active cancellation. Distinguishing nonlinear averaging prevents equal signed means from standing in for actual activity behavior.
+- Evidence: MR-S088 expanded finite-population reading; frame-time-noise-analysis enumerates4 outcomes at each of3 exact rational probabilities. The calculation compares E[C] with C(E), without neural trajectories or a claim of biological equivalence. Existing evidence remains intact.
+- Scope/qualification: no spike simulator, distribution state, new phase/encoding/noise/cancellation policy or population aggregation selected. H-78/H-85 stay open and H-77 is unchanged. D-08 pending-human; no qualified descendant invalidated. D-GOV167 maintenance alone continues H-05. H-71 active; no implementation, project tests/build or toolchain change.
+
+<a id="k-167"></a>
+### K-167 — 2026-10-29: Temporal-frame budget wording
+
+- Recorded: 2026-10-29T00:15:01Z. Editorial clarification under H-73/H-74/H-75/H-78/H-86; charter §§1–3.3/8.1 and C-29/P-69/P-25 checked. Pre-entry registry SHA-256 `db691068e96c2924aaefafaefd7880c32fe497a8e3fd995db31f1dbb7b409911`. H-01—H-86, K-00—K-166 and AD-001—AD-092 retained.
+- Coverage: D-08 set161 → 162; README120 → 162; other17 documents unchanged. Registry167 → 168; authority, coverage and reverse references updated together.
+- Continuity assessment: the table already counted exactly two FP32 scalar arrays, one per temporal frame. Naming them as two state fields could be confused with independent readiness/firing quantities in each frame. Clarifying this label preserves every count, value, alternative, scope, invariant and acceptance condition; it chooses no new quantity or layout.
+- Value chain: P-25/C-12/P-22/C-01/V-01/V-02 and C-29/P-69 preserve an understandable transition/resource comparison. D-08 has no qualified baseline and remains pending-human; this editorial assessment does not grant continued product qualification. D-GOV168 maintenance alone continues H-05. No affected qualified descendants, implementation, tests/build or toolchain change. H-71 active.
+
+<a id="k-168"></a>
+### K-168 — 2026-10-29: Consistent active-polarity and message scope
+
+- Recorded: 2026-10-29T00:17:16Z. Integration review under H-54/H-74/H-77/H-78/H-85/H-86; current charter §§1–3.3/8.1 and C-18/P-36/C-14/P-27 checked. H-54/H-77 original statements re-read. Pre-entry registry SHA-256 `a21cf0c8f76b40b3de27aab52bab0f5151c7e16c46022cf50062369225adff32`. H-01—H-86, K-00—K-167 and AD-001—AD-092 retained.
+- Coverage: D-08 set162 → 163; SignedPopulationEncoding146 → 163 and Model132 → 163; other16 documents unchanged. Registry168 → 169; authority, coverage and reverse references updated together.
+- Preserved chain: C-18/P-36 and C-14/P-27 through C-12/P-22/C-01/V-01/V-02 require explicit semantic state. H-77 already removes the common active component at cancellation. The signed net determines completed active polarity totals before message rounding, but not individual cell composition. Provisional drive and predictive readiness remain distinct.
+- Alignment: corrected wording that treated equal opposed provisional activity as a completed active state or implied transmitting both completed polarity totals would preserve a nonzero common component. Model now describes count/graded alternatives within the H-54 opponent arrangement, instead of presenting baseline-only and unconstrained tuning codes as current alternatives; their earlier exploratory history remains in prior revisions. H-77's law is specified, while transition ordering and predictive handling remain open. No new human choice is inferred.
+- Scope/qualification: no decoder, scaling, wire format, predictive cancellation, cell remapping or extra field selected; byte counts and contextual-identity requirement unchanged. D-08 pending-human; no qualified descendant invalidated. D-GOV169 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-169"></a>
+### K-169 — 2026-10-29: Matched fading and distinct contextual retention
+
+- Recorded: 2026-10-29T00:22:53Z. H-71/H-74/H-75/H-78/H-86 research; current charter §§1–3.3/8.1 and C-24/P-52/C-26/P-60/C-29/P-69 checked. Pre-entry registry SHA-256 `4e6432a472dcf83e97d98fb0edb1a804356e033cb2ee1713bc03c4d194efc6a7`. H-01—H-86, K-00—K-168 and AD-001—AD-092 retained.
+- Coverage: D-08 set163 → 164; ContextLoopsAndNumerics157 → 164 and RateDynamics161 → 164; other16 documents unchanged. Registry169 → 170, with current coverage, authority blocks and reverse references updated. D-GOV's stale maintenance index is brought to170/K-169; this records H-05 continuity only, not application qualification.
+- Preserved chain: C-24/P-52 and C-26/P-60 through C-15/C-12/P-22/C-01/V-01/V-02 require timely semantic fading and useful contextual influence. C-29's snapshot removes traversal-order dependence; it does not choose self-retention. Equal aggregate fading is insufficient to infer equal later contextual behavior.
+- Evidence: context-composition-analysis adds an independent exact four-cell cross-minicolumn reference. T=(1-beta)I+beta*g*P has common semantic factor q and contextual-difference factor mu. Four Fraction cases hold q=63/64 fixed while relative composition alternates, contracts or vanishes. Single-operation identities and closed-form powers are checked; no neural trajectory, trained memory or noise behavior is claimed. Full-text access to the searched Jaeger2007 leaky-ESN paper failed; its indexed abstract was not used to substantiate these independent calculations.
+- Scope/qualification: no leak, time step, reciprocal circuit, per-cell parameter, auxiliary field, new comparison framework or default selected. Useful context is still assessed by later task behavior, not mere persistence. D-08 pending-human; no qualified descendant invalidated. D-GOV170 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-170"></a>
+### K-170 — 2026-10-29: Variable error retention and periodic-quantization evidence
+
+- Recorded: 2026-10-29T00:25:38Z. H-70—H-74/H-86 research; current charter §§1–3.3/7.1/8.1 and C-28/P-65 checked. Pre-entry registry SHA-256 `ca72d07a2695a5724bc680883302d06e7a55ad905fece36be36e5c0f90cc17ae`. H-01—H-86, K-00—K-169 and AD-001—AD-092 retained.
+- Coverage: D-08 set164 → 165; ContextLoopsAndNumerics164 → 165; other17 documents unchanged. Registry170 → 171; authority, coverage and reverse references updated together. MR-S005 receives append-only expanded read scope; source count remains88.
+- Preserved chain: C-28/P-65 through C-24/C-15/C-12/P-22/C-01/V-01/V-02 serves meaningful temporal precision within justified resource costs. A low-bit claim must include auxiliary memory and applicable transition/error assumptions. H-75's two-frame baseline and H-73's wider-state comparison remain intact.
+- Evidence: PACEv1 methods/setup/textual results/limitations and memory definitions read. Decode buffers preserve inputs and use higher-precision metadata; measured H100 throughput is for uniform INT4, not the full mixed-head method or CPU SNN. Independent exact scalar variance examples distinguish fixed, iid and periodically ordered retention. Equal mean a=1/2 does not bound all cases by4/3; iid0.1/0.9 gives100/59, and periodic order changes phase variances. This is a conditional error calculation, not neural simulation or a reproduction/refutation of the paper's empirical results.
+- Scope/qualification: no buffer, scheduler, precision allocation, scalar error estimator, contraction requirement or extra state selected. Actual nearest-rounding errors may be biased/dependent, so these references do not supply a universal SNN error bound. D-08 pending-human; no qualified descendant invalidated. D-GOV171 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-171"></a>
+### K-171 — 2026-10-29: Probability precision and correlated rounding
+
+- Recorded: 2026-10-29T00:28:14Z. H-70—H-74/H-86 research; current charter §§1–3.3/7.1/8.1 and C-28/P-65 checked. Pre-entry registry SHA-256 `0eecf105d34e7036c916c1c0e205884f54b14c9b39e21590694a14142f6ec9f5`. H-01—H-86, K-00—K-170 and AD-001—AD-092 retained.
+- Coverage: D-08 set165 → 166; ContextLoopsAndNumerics165 → 166; other17 documents unchanged. Registry171 → 172; authority, coverage and reverse references updated together. MR-S008 adds explicit author-draftv5 reading scope; source count remains88.
+- Preserved chain: C-28/P-65 through C-24/C-15/C-12/P-22/C-01/V-01/V-02 requires small meaningful changes to survive the actual numerical path. Weight bit width does not determine the implemented stochastic probability or joint update law. These are comparisons of existing numeric candidates, not a new learning mechanism.
+- Evidence: Hopkins2020 rounding/PRNG/reference/comparator methods and discussion distinguish arithmetic from algorithmic error, six comparator bits from neuronal storage, and ARM968 software-float timing from modern CPU claims. Independent Fraction counting checks five uniform-grid widths for p=1/18432; six bits yield zero or1/64 under the two explicitly different comparators. Ideal independent versus shared draws preserve one expected changed edge across18432 candidates but yield variance approximately1 versus18431. No PRNG, learner or neural trajectory executed; no figure-derived measurements or author code reproduction.
+- Scope/qualification: no PRNG, random bit width, independent-draw mandate, rounding policy, noise controller, residual field or experimental framework selected. The probability is a conditional illustration, not a measured update distribution. D-08 pending-human; no qualified descendant invalidated. D-GOV172 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-172"></a>
+### K-172 — 2026-10-29: Population reduction and individual contextual identities
+
+- Recorded: 2026-10-29T00:35:34Z. H-67/H-71/H-74/H-75/H-86 research; current charter §§1–3.3/7.1/8.1 and C-24/P-52 checked. Pre-entry registry SHA-256 `814018e93a7964deeb6bed208a51abbb13263fcdc52c1d3b47adb83d3eed8440`. H-01—H-86, K-00—K-171 and AD-001—AD-092 retained.
+- Coverage: D-08 set166 → 167; RateDynamics164 → 167; other17 documents unchanged. Registry172 → 173; authority, coverage and reverse references updated together. MR-S089 registers expanded reading of an already cited source.
+- Preserved chain: C-24/P-52 through C-15/C-12/P-22/C-01/V-01/V-02 requires explicit effective-rate semantics; H-75 retains distinct contextual identities. Performance evidence for a different level of description cannot justify eliminating those identities. H-74 favors the simplest sufficient dynamics, without importing an elaborate reduction.
+- Evidence: targeted primary-source reading and transfer-scope clarification only, recorded in MR-S089. No author simulation, timing reproduction, figure measurement or new arithmetic probe. Earlier evidence and comparison alternatives remain intact.
+- Scope/qualification: no population collapse, response table, filter, adaptation state, time step, noise process or numerical solver selected. D-08 pending-human; no qualified descendants invalidated. D-GOV173 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-173"></a>
+### K-173 — 2026-10-29: Sparse changes and affected dependencies
+
+- Recorded: 2026-10-29T00:37:38Z. H-71/H-72/H-74/H-75/H-77/H-86 research; current charter §§1–3.3/7.1/8.1 and C-27/P-63/C-29/P-69 checked. Pre-entry registry SHA-256 `1d918e34f183fc91e602e64d2a4e9e2f1f7fe62e52c94e81b516de339e4db6af`. H-01—H-86, K-00—K-172 and AD-001—AD-092 retained.
+- Coverage: D-08 set167 → 168; ContextLoopsAndNumerics166 → 168; other17 documents unchanged. Registry173 → 174; authority, coverage and reverse references updated together.
+- Preserved chain: C-27/P-63 through C-24/C-15/C-12/P-22/C-01/V-01/V-02 serves faithful slow evolution at justified execution cost. H-72's next-change idea does not remove dependencies, and H-75/H-77 preserve complete snapshots and proportional active cancellation. The comparison introduces no new mechanism.
+- Evidence: execution-work-arithmetic adds nine conditional source-change/degree cases, source-union dependence and one exact H-77 operation. Twenty-four small Bernoulli enumerations verify the probability identity; large cases use decimal arithmetic and retain the no-change probability to avoid treating a rounded one as certainty. Actual distinct dependencies differ from reserved capacity, and affected inputs differ from output changes or mandatory recomputation. No neural trajectory, event scheduler or timing benchmark.
+- Scope/qualification: no reverse index, cached accumulator, event queue, change map, independence requirement, sparse-output guarantee or default algorithm selected. D-08 pending-human; no qualified descendant invalidated. D-GOV174 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-174"></a>
+### K-174 — 2026-10-29: Prediction horizon and useful long-context associations
+
+- Recorded: 2026-10-29T00:41:51Z. H-71/H-74/H-79—H-83/H-86 research; current charter §§1–3.3/7.1/8.1 and C-15/P-29/C-26/P-60 checked. H-82/H-83/H-86 original evidence re-read. Pre-entry registry SHA-256 `6168c0de09b181c09e5859c891e1a1173b0947ca31d2dd43b54d11f356dada86`. H-01—H-86, K-00—K-173 and AD-001—AD-092 retained.
+- Coverage: D-08 set168 → 169; FlowLearning159 → 169; other17 documents unchanged. Registry174 → 175; authority, coverage and reverse references updated together. MR-S090/MR-S091 add scoped primary reading; MR-S047 gains a follow-up scope record.
+- Preserved chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 supplies meaningful sequence matching, while C-26/P-60 preserves useful historical influence. A correct longer-horizon statistic is not automatically a correct next-input forecast. This clarifies the existing comparison without removing nonadjacent associations or shortening context retention.
+- Evidence: flow-temporal-credit-analysis adds an exact three-state discounted-occupancy reference at four discounts, checks inverse identities and recovers the transition matrix. Primary definitions and specified neural realization are scoped separately in the ledger. No author simulation, fitted learner, neural trajectory, matrix implementation or new benchmark.
+- Scope/qualification: no successor representation, TD rule, reward objective, trace, replay, inverse readout, probability interpretation or discount selected. The example does not prove information loss in a complete exact matrix or require suppressing all distant associations. D-08 pending-human; no qualified descendant invalidated. D-GOV175 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-175"></a>
+### K-175 — 2026-10-29: Shared observations and independent numerical randomness
+
+- Recorded: 2026-10-29T00:46:40Z. H-70—H-74/H-86 research; current charter §§1–3.3/7.1/8.1 and C-28/P-65 checked. Pre-entry registry SHA-256 `60423e640332e2e85362573de93c4d57dab707861f10b13683e9731c30aab681`. H-01—H-86, K-00—K-174 and AD-001—AD-092 retained.
+- Coverage: D-08 set169 → 170; ContextLoopsAndNumerics168 → 170; other17 documents unchanged. Registry175 → 176; authority, coverage and reverse references updated together.
+- Preserved chain: C-28/P-65 through C-24/C-15/C-12/P-22/C-01/V-01/V-02 requires precision claims to cover the actual learning process. Independent arithmetic draws do not remove correlations induced by shared training evidence; ordinary real-valued learning can share that component too. This explains an existing numerical comparison without choosing a mechanism.
+- Evidence: weight-update-precision-analysis extends its bounded affine reference to common iid Bernoulli observations and conditionally independent ideal rounding. Exact conditional first/second/cross moments are checked over58 small code-state pairs; stationary covariance and twelve larger diagnostic cases follow algebraically. At K255/eta1/256, pair correlation is255/511. The variance of a100-weight mean is about50.4 times the independent-weight estimate, while the common covariance also equals the unquantized shared-observation variance. No sampled learner, neural trajectory or timing result.
+- Scope/qualification: no independence mandate for the application, row normalization, random generator, temporal averaging, residual field or prediction-accuracy claim. Input/assignment dependence, nonlinear recurrence and actual finite random probabilities remain outside the reference. D-08 pending-human; no qualified descendant invalidated. D-GOV176 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-176"></a>
+### K-176 — 2026-10-29: Regime observations and distinguishability
+
+- Recorded: 2026-10-29T00:51:27Z. H-56—H-58/H-86 research; current charter §§1–3.3/7.1/8.1 and C-19/P-39 checked. Pre-entry registry SHA-256 `6586fd4b0e58c20b157af586667f06eb2da0ee6ba97993096f1084afd2800749`. Existing H-01—H-86, K-00—K-175 and AD-001—AD-092 preserved.
+- Coverage: D-08 set170 → 171; ActivationRegimes154 → 171; other17 documents unchanged. Registry176 → 177; authority, current coverage and reverse references updated together.
+- Preserved chain: C-19/P-39 through C-12/P-22/C-01/V-01/V-02 requires observations that support the intended behavioral distinctions. Qualitative overlapping descriptions do not establish a complete classifier. H-86 permits keeping the empirical rule open without selecting new state or requesting an unnecessary decision.
+- Evidence: MR-TC008 constructs a sixteen-frame four-group observation record with10% coverage, per-cell density1/4, zero consecutive overlap and exact four-frame recurrence. The record meets no declared ground-truth label; no network trajectory is generated. Identical allowed observation windows cannot by themselves distinguish causal origins. The eventual learned regimes may still be distinguishable under an appropriate observation contract.
+- Scope/qualification: preserve the flow coverage cap, exclusion of total active fraction and useful cycles. No classifier, fourth regime, label precedence, input-history field or causal-label requirement. D-08 pending-human; no qualified descendant invalidated. D-GOV177 maintenance alone continues H-05. H-71 active; no implementation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-177"></a>
+### K-177 — 2026-10-29: Noise sharing and contextual composition
+
+- Recorded: 2026-10-29T00:53:33Z. H-53/H-55/H-70/H-74/H-77/H-86 research; current charter §§1–3.3/7.1/8.1 and C-17/P-34, C-26/P-60 checked. Pre-entry registry SHA-256 `ca87d0ac09939e0f2df698aa317c08eb28ba743bf9cf959a62777bffd7a2fbe0`. Existing H-01—H-86, K-00—K-176 and AD-001—AD-092 preserved.
+- Coverage: D-08 set171 → 172; ContextLoopsAndNumerics170 → 172; other17 documents unchanged. Registry177 → 178; current authority and reverse links updated together.
+- Preserved chain: C-17/P-34 and C-26/P-60 through C-12/P-22/C-01/V-01/V-02 require noise support to preserve meaningful response and useful context. Temporal whiteness and global amplitude regulation do not decide spatial sharing. Conditional arithmetic explains that existing comparison without choosing a generator or observation state.
+- Evidence: noise-feedback-analysis adds15 exact covariance identities and one H-77 composition calculation. At60+60, equal-variance additive noise gives signed-sum variance120v,7200v or0 for the three stated sharing cases. Equal shared additions preserve net1 while redistributing a concentrated positive response to61/120 and59 instances of1/120. MR-S092 supplies a scoped primary correlation/information reference; its network and asymptotic limits are not transferred as an application theorem.
+- Scope/qualification: no noise law, covariance estimator, decorrelation target, additional field, neuronal population change or controller. Net semantic value alone does not establish contextual invariance. D-08 pending-human; no qualified descendant invalidated. D-GOV178 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-178"></a>
+### K-178 — 2026-10-29: Capacity assumptions and current state comparisons
+
+- Recorded: 2026-10-29T00:56:58Z. H-34/H-73—H-75/H-78/H-86 integration review; current charter §§1–3.3/7.1/8.1 and C-13/P-26, C-28/P-65 checked. Pre-entry registry SHA-256 `6f2488e9e81037035627f41ee23c39b3aeacc52e8de4ea0233314baff15160e8`. Existing H-01—H-86, K-00—K-177 and AD-001—AD-092 preserved.
+- Coverage: D-08 set172 → 173; CapacityPlanning24 → 173 and ConnectivityScalingResearch24.1 → 173; other16 documents unchanged. Registry178 → 179; coverage, local authority and reverse references synchronized.
+- Preserved chain: C-13/P-26 and C-28/P-65 through C-12/P-22/C-01/V-01/V-02 require resource costs to reflect the candidate semantics. H-73 explicitly makes four-bit state a conditional calculation rather than a required format. The capacity entry points now link to the existing two-frame and numeric comparisons, keeping the tables and quotas intact.
+- Evidence: two frames of one FP32 scalar for614400 cells require4915200 bytes, replacing307200 FP4 bytes, a delta of4608000. Existing README totals agree. No new storage allowance or arithmetic assumption is introduced; named hypothetical queues/histories are removed from the budget prose in favor of the existing requirement-before-structure rule.
+- Scope/qualification: no final precision, independent readiness field, class count, endpoint ownership or runtime layout selected. D-08 remains pending-human; this clarification does not qualify an unconfirmed baseline or invalidate a qualified descendant. D-GOV179 record maintenance alone continues H-05. H-71 active; no implementation, tests/build, toolchain changes, commit or push.
+
+<a id="k-179"></a>
+### K-179 — 2026-10-29: Rate learning and spike-rule transfer
+
+- Recorded: 2026-10-29T00:59:30Z. H-67/H-70/H-74/H-79—H-86 research; current charter §§1–3.3/7.1/8.1 and C-15/P-29 checked. Pre-entry registry SHA-256 `d4ccfb7e812f6eed4efb937ed4f3510106b04f1806c5aead516023210fedcda8`. Existing H-01—H-86, K-00—K-178 and AD-001—AD-092 preserved.
+- Coverage: D-08 set173 → 174; FlowLearning169 → 174; other17 documents unchanged. Registry179 → 180; authority, current coverage and reverse links updated together.
+- Preserved chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 requires contextual prediction from declared learning semantics. C-24's rate direction does not depend on importing every microscopic biological mechanism. The candidate can be evaluated by H-82/H-83 while its particular source/target credit remains open.
+- Evidence: MR-S093 documents primary assumptions for reducing spike-level learning to rate products. No reduction theorem is asserted for this nonlinear recurrent application. Existing token/frame cadence, overlapping-context comparisons and numerical evidence remain unchanged.
+- Scope/qualification: no spike trace, microscopic time grid, timing window, biologically exact learner or new update rule. D-08 pending-human; no qualified descendant invalidated. D-GOV180 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-180"></a>
+### K-180 — 2026-10-29: Transient memory and externally supported sequences
+
+- Recorded: 2026-10-29T01:05:38Z. H-53/H-66/H-71/H-74/H-82/H-86 research; current charter §§1–3.3/7.1/8.1 and C-26/P-60 checked. Pre-entry registry SHA-256 `4062e8e44a023a49d1f9b0498912ad98035fba1f96cb4a75d2aebc496a0df30a`. H-01—H-86, K-00—K-179 and AD-001—AD-092 preserved.
+- Coverage: D-08 set174 → 175; ContextLoopsAndNumerics172 → 175; other17 documents unchanged. Registry180 → 181; authority, current coverage and reverse references updated together. Source-ledger additions preserve earlier read scopes as history.
+- Preserved chain: C-26/P-60 through C-15/C-12/P-22/C-01/V-01/V-02 serves useful historical influence on later behavior. Transient network activity, a fitted observable and ongoing external drive must be distinguished before transferring a published memory result. H-66 return connectivity and H-71 useful loops remain intact.
+- Evidence: targeted primary methods in Goldman2009 and the full Rajan2016 author preprint clarify linear/readout assumptions, cue-invariant delay drive, repeated filtered input versus fresh perturbation and allocated versus trained connectivity. This is source interpretation, not a new model or numerical trajectory. Earlier read-scope limitations remain visible alongside the follow-up records.
+- Scope/qualification: no coordinate rotation, Schur runtime, readout, training rule, frozen-noise requirement, chain cut or sparse-capacity conclusion adopted. D-08 pending-human; no qualified descendant invalidated. D-GOV181 record maintenance alone continues H-05. H-71 active; no implementation, author simulation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-181"></a>
+### K-181 — 2026-10-29: Bounded composition and contextual freedom
+
+- Recorded: 2026-10-29T01:07:00Z. H-70/H-71/H-73—H-75/H-77/H-86 research; current charter §§1–3.3/7.1/8.1 and C-26/P-60 checked. Pre-entry registry SHA-256 `521a461eff9fe7380d0b8fa1542c9f21eb451ba694ef5f24b7ca4c21d8b0da71`. H-01—H-86, K-00—K-180 and AD-001—AD-092 retained.
+- Coverage: D-08 set175 → 176; ContextLoopsAndNumerics175 → 176; other17 documents unchanged. Registry181 → 182; authority, coverage and reverse references synchronized. MR-S013 receives a follow-up reading record without changing its historical scope.
+- Preserved chain: C-26/P-60 through C-15/C-12/P-22/C-01/V-01/V-02 requires existing cell identities to carry useful context. A continuous dimension count alone cannot establish a usable memory. Conditional range and representation constraints refine that comparison while H-73 leaves precision open.
+- Evidence: exact fixed-total L1 diameter for60 bounded nonnegative values; coefficient counts for uniform4/8-bit codes at18 totals;72 small count comparisons and42 small diameter comparisons checked exhaustively, with large-count symmetry/cardinality checks. These are representation calculations, not neural dynamics. Hennig2018 methods/results distinguish observed distribution coupling from unrestricted output-null freedom and from a per-step forecast.
+- Scope/qualification: no activity cap, saturation law, uniform quantizer, coding objective, extra context field or memory-capacity claim. Other coordinates and unresolved predictive state may retain context. D-08 pending-human; no qualified descendant invalidated. D-GOV182 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, project tests/build, toolchain changes, commit or push.
+
+<a id="k-182"></a>
+### K-182 — 2026-10-29: Rated lexical polarity and actual input geometry
+
+- Recorded: 2026-10-29T01:14:14Z. H-43/H-53—H-55/H-70/H-71/H-74/H-77/H-86 research; current charter §§1–3.3/7.1/8.1 and C-14/P-27, C-18/P-36 checked. Pre-entry registry SHA-256 `3ff77114e31c8afc4305b45171875646df06f872d6c7e2deddd39dfbb85d92b1`. H-01—H-86, K-00—K-181 and AD-001—AD-092 preserved.
+- Coverage: D-08 set176 → 177; SignedPopulationEncoding163 → 177 and ActivationRegimes171 → 177; other16 documents unchanged. Registry182 → 183; authority, coverage and reverse links synchronized. MR-S083 gains actual publisher-supplement access evidence while retaining historical limits.
+- Preserved chain: C-14/P-27 and C-18/P-36 through C-12/P-22/C-01/V-01/V-02 require meaningful signed input and the specified complementary residual behavior. Lexical valence alone is not the required geometric or learned-state relation. Broader real-input evidence improves that existing distinction without replacing fixed semantic roles or changing the target.
+- Evidence: public1.13MB supplement fingerprinted;13915 unique rated words,8500 eligible ordinary single-token matches,64 hash-selected words in each of three predefined bands. Only192 local SSD tensor rows read. All4096 positive/negative pairs plus neutral/within-band controls analyzed descriptively; equal-unit-L1 net magnitude exceeds the prior for every cross-valence pair, but41 pairs have a negative initial derivative. Shared-word pair dependence, tokenizer scope, rating provenance and absence of a trained DMN state remain explicit. No full-tensor copy or scan.
+- Scope/qualification: no learned valence evaluator, embedding centering/rotation/negation, encoder normalization, gain-selection rule, active-count or neural-performance claim. The premeasurement protocol, exact selection and cache hashes are preserved; calculations use actual BF16 rows with wider analysis arithmetic. D-08 pending-human; no qualified descendant invalidated. D-GOV183 maintenance alone continues H-05. H-71 active; no SNN implementation/training/simulation, project tests/build, toolchain change, commit or push.
+
+<a id="k-183"></a>
+### K-183 — 2026-10-29: Active participation and net magnitude
+
+- Recorded: 2026-10-29T01:18:23Z. H-54/H-55/H-76/H-77/H-86 research; current charter §§1–3.3/7.1/8.1 and C-18/P-36 checked, with original human statements re-read. Pre-entry registry SHA-256 `01e5c55b75e639677d91f27b33aaaa2e00def2f5a284e0df86dbe054997becbc`. H-01—H-86, K-00—K-182 and AD-001—AD-092 preserved.
+- Coverage: D-08 set177 → 178; SignedPopulationEncoding177 → 178 and ActivationRegimes177 → 178; other16 documents unchanged. Registry183 → 184; authority and reverse references synchronized. The current document-set index is condensed around present scope/revisions; detailed history remains append-only.
+- Preserved chain: C-18/P-36 through C-12/P-22/C-01/V-01/V-02 serves the specified activity-deficit and semantic-residual behavior. H-55 regulates active fraction; net-vector magnitude is not a substitute. K-182's lexical results therefore neither demonstrate nor refute that complete target.
+- Evidence: five exact two-coordinate H-77 operations with equal input/net totals and varied input participation. L1 doubles from1/2 to1 while support can fall120→61 or remain120. Signed totals, support, maximum rate and a positive-threshold interval are checked algebraically. No new embedding rows, neural trajectory or semantic labels are supplied.
+- Scope/qualification: no recruitment quota, activity threshold, DMN template, transfer function, controller or extra statistic/state selected. Residual meaning and subsequent persistence remain behavioral comparisons. D-08 pending-human; no qualified descendant invalidated. D-GOV184 maintenance alone continues H-05. H-71 active; no implementation, training, neural simulation, project tests/build, toolchain change, commit or push.
+
+<a id="k-184"></a>
+### K-184 — 2026-10-29: Noise support and the source of selectivity
+
+- Recorded: 2026-10-29T01:20:15Z. H-53/H-55/H-71/H-74/H-86 research; current charter §§1–3.3/7.1/8.1 and C-26/P-60 checked. Pre-entry registry SHA-256 `141f785561e5243d42941c80a0f72bf5d9dd9bb18930f012199a576894d6acd4`. H-01—H-86, K-00—K-183 and AD-001—AD-092 preserved.
+- Coverage: D-08 set178 → 179; ContextLoopsAndNumerics176 → 179; other17 documents unchanged. Registry184 → 185; authority, coverage and reverse references synchronized. Earlier MR-S006 source fields remain as reading history.
+- Preserved chain: C-26/P-60 through C-15/C-12/P-22/C-01/V-01/V-02 requires useful retained content, not an externally supplied answer disguised as self-maintenance. Evidence can support stimulus-dependent persistence without establishing semantic selection from a globally regulated background.
+- Evidence: extended primary Novikov2021 reading distinguishes its cued/uncued comparison, externally designated common-noise groups and threshold-defined episode duration. The application paragraph is refined in place; no extra numerical probe or model is introduced.
+- Scope/qualification: no oscillator, inhibitory circuitry, synaptic resource, specific covariance, noise generator, selection signal or duration rule adopted. Existing real-data comparison space is preserved. D-08 pending-human; no qualified descendant invalidated. D-GOV185 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-185"></a>
+### K-185 — 2026-10-29: Positive noise increments and frame units
+
+- Recorded: 2026-10-29T01:23:00Z. H-53/H-55/H-67/H-70/H-74/H-75/H-86 research; current charter §§1–3.3/7.1/8.1 and C-17/P-34, C-24/P-52 checked. Pre-entry registry SHA-256 `cdd91b951301ebad000b2789107208b8c054c1b330efc50a62abdb988fd11bf5`. H-01—H-86, K-00—K-184 and AD-001—AD-092 preserved.
+- Coverage: D-08 set179 → 180; RateDynamics167 → 180; other17 documents unchanged. Registry185 → 186; authority, coverage and reverse links synchronized.
+- Preserved chain: C-17/P-34 and C-24/P-52 through C-15/C-12/P-22/C-01/V-01/V-02 require noise-supported temporal behavior with explicit units. Comparing frames cannot silently alter the mean external drive while claiming unchanged noise. This clarifies the existing positive-versus-signed noise comparison.
+- Evidence: elementary moments of independent positive uniform increments over a fixed duration; eight exact rational cases distinguish amplitude proportional to Delta from amplitude proportional to sqrt(Delta). No neural dynamics or random draws. The existing zero-mean Higham reference remains scoped to that premise. The audit also checked239 local Markdown anchor links, all resolving, and retained-edge wording, with no corrective edits needed there.
+- Scope/qualification: no positive-noise impossibility claim, required continuum limit, offset, event process, sampler, channel, controller or state field. Other distributions and nonlinear placements remain empirical alternatives under H-86. D-08 pending-human; no qualified descendant invalidated. D-GOV186 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, project tests/build, toolchain change, commit or push.
+
+<a id="k-186"></a>
+### K-186 — 2026-10-29: Chinese rated words and native input geometry
+
+- Recorded: 2026-10-29T01:31:30Z. H-43/H-53—H-55/H-70/H-71/H-74/H-77/H-86 research; current charter §§1–3.3/7.1/8.1 and C-14/P-27, C-18/P-36 checked. Pre-entry registry SHA-256 `0e62e75d698086e714911bce711534d06ca2f8289fb02a95819f00284ed6b9c6`. H-01—H-86, K-00—K-185 and AD-001—AD-092 preserved.
+- Coverage: D-08 set180 → 181; SignedPopulationEncoding178 → 181 and ActivationRegimes178 → 181; other16 documents unchanged. Registry186 → 187; authority, coverage and reverse references updated. One duplicate D-08 anchor removed from the current index. Earlier source fields retained; MR-S084 receives supplement-access limits and MR-S094 records the actual CSV source.
+- Preserved chain: C-14/P-27 and C-18/P-36 through C-12/P-22/C-01/V-01/V-02 require meaningful fixed-role input and the requested residual behavior. Independent language evidence checks a lexical-complement assumption without defining valence or changing the target.
+- Evidence: public1.00MB CSV,11310 unique rated words,5960 restricted ordinary single-token matches; deterministic64-per-band selection frozen before reading192 local SSD tensor rows. All4096 cross-valence pairs and neutral/within-band controls yield18336 descriptive comparisons. Equal-unit-L1 sums all exceed prior magnitude;47 pairs permit an initial decrease. Exact protocols, selections, source/row/cache hashes and exceptions retained. English/Chinese results are not matched translations or a language-effect estimate. Yao2017 PDF values and the unavailable newer OSF dataset were not used.
+- Scope/qualification: no neural trajectory, active-fraction result, learned-state interpretation, encoding/gain choice, valence classifier, training dataset contract or auxiliary structure selected. D-08 pending-human; no qualified descendant invalidated. D-GOV187 maintenance alone continues H-05. H-71 active; no SNN implementation/training/simulation, project tests/build, toolchain change, commit or push.
+
+<a id="k-187"></a>
+### K-187 — 2026-10-29: Contextual reassignment and downstream use
+
+- Recorded: 2026-10-29T01:34:58Z. H-71/H-74/H-75/H-79—H-86 research; current charter §§1–3.3/7.1/8.1 and C-15/P-29, C-14/P-27 checked. Pre-entry registry SHA-256 `bfe51c12069058488a9d382cfab831c310f36045e4f900e4cc8cd637607bc051`. H-01—H-86, K-00—K-186 and AD-001—AD-092 preserved.
+- Coverage: D-08 set181 → 182; FlowLearning174 → 182; other17 documents unchanged. Registry187 → 188; authority, current coverage and reverse references synchronized.
+- Preserved chain: C-15/P-29 and C-14/P-27 through C-12/P-22/C-01/V-01/V-02 require useful contextual identities and natural sequence preactivation. Equal current semantic totals and retained distinguishability do not establish compatibility with previously learned downstream associations.
+- Evidence: MR-FC014 composes two fixed nonnegative two-cell maps with exact rational arithmetic. A same-population assignment swap preserves the current sum while interchanging subsequent outputs under unchanged weights. Full relabeling equivalence is stated separately from learning and capacity-only migration. No neural model is executed. Existing SORN/readout and shared-graph comparisons remain the empirical context.
+- Scope/qualification: no prohibition on contextual change, mandatory graph remapping, frozen dictionary, reverse adjacency, repaired readout or new state. Assess actual later readiness and recovery during learning. D-08 pending-human; no qualified descendant invalidated. D-GOV188 maintenance alone continues H-05. H-71 active; no implementation/training/simulation, project tests/build, toolchain change, commit or push.
+
+<a id="k-188"></a>
+### K-188 — 2026-10-29: Drift evidence and feedback-assisted readout
+
+- Recorded: 2026-10-29T01:39:15Z. H-71/H-74/H-75/H-79—H-86 research; current charter §§1–3.3/7.1/8.1 and C-15/P-29 checked. Pre-entry registry SHA-256 `c3d277f1d36100e1661f52484351826d13d3ee14a479328db59fa9d7c213a980`. H-01—H-86, K-00—K-187 and AD-001—AD-092 preserved.
+- Coverage: D-08 set182 → 183; FlowLearning182 → 183; other17 documents unchanged. Registry188 → 189; authority, coverage and reverse references synchronized. MR-S095 supplies the primary read scope; preceding source entries remain unchanged.
+- Preserved chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 concerns natural contextual preactivation. A changing representation can retain task information, but externally fitted or feedback-assisted decoding is a different claim. This strengthens the existing interpretation of empirical readout comparisons and does not demand a fixed contextual dictionary.
+- Evidence: Rule2020 main results/discussion and targeted methods distinguish recordings, fitted multi-day decoders and online LMS with a kinematic target error. Offline trial selection/centering and day-scale observation are preserved as transfer limits. The existing SORN paragraph is condensed and the empirical scope made explicit; no added numerical probe.
+- Scope/qualification: no compensating learner, supervisory signal, decoder, additional state, biological synaptic measurement claim or drift/lifetime parameter transferred. D-08 pending-human; no qualified descendant invalidated. D-GOV189 maintenance alone continues H-05. H-71 active; no SNN implementation/training/simulation, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-189"></a>
+### K-189 — 2026-10-29: Learned-association maintenance and acquisition
+
+- Recorded: 2026-10-29T01:43:54Z. H-71/H-74/H-75/H-79—H-86 research; current charter §§1–3.3/7.1/8.1 and C-15/P-29 checked. Pre-entry registry SHA-256 `98112b132f90254824cb952e6d3ec601d82bf33622f8a1644294af2c33ce2bcb`. H-01—H-86, K-00—K-188 and AD-001—AD-092 preserved.
+- Coverage: D-08 set183 → 184; FlowLearning183 → 184; other17 documents unchanged. Registry189 → 190; authority, current coverage and reverse references synchronized. MR-S096 records the primary source and read scope.
+- Preserved chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 requires useful learned contextual prediction. Retention under changing representations and acquisition of unfamiliar transitions are separate contributions to that goal. The existing empirical comparison remains open under H-86.
+- Evidence: primary maintenance research is scoped to its initialization and internal reference assumptions. Its regulation cannot be identified with the application's already requested global activity function. No new arithmetic or neural experiment is claimed.
+- Scope/qualification: no compensating learner, per-cell homeostatic mechanism, stable subnet, replay, training signal or extra state selected. D-08 pending-human; no qualified descendant invalidated. D-GOV190 maintenance alone continues H-05. H-71 active; no implementation/training/simulation, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-190"></a>
+### K-190 — 2026-10-29: Conversion and acquisition under candidate arithmetic
+
+- Recorded: 2026-10-29T01:47:47Z. H-70—H-75/H-78/H-82—H-86 research; current charter §§1–3.3/7.1/8.1 and C-28/P-65, P-25 checked. Pre-entry registry SHA-256 `cef8f86d455c18bf15ee819f4d6b93c3450387872057d4b0ae81640b3730bf79`. H-01—H-86, K-00—K-189 and AD-001—AD-092 preserved.
+- Coverage: D-08 set184 → 185; ContextLoopsAndNumerics179 → 185 and README162 → 185; other16 documents unchanged. Registry190 → 191; current authority, coverage and reverse links synchronized. MR-S003 receives an append-only source follow-up.
+- Preserved chain: C-28/P-65 through C-24/C-15/C-12/P-22/C-01/V-01/V-02 requires faithful affordable behavior. Conversion measures sensitivity of an existing learned graph; construction or adaptation with candidate arithmetic measures attainable behavior and training cost. P-25's readable entry point explains incremental comparison without an exhaustive component menu.
+- Evidence: existing exact arithmetic and memory accounting remain unchanged; targeted Jacob training methods identify the distinction between low-width propagation and retained learning precision. No performance or acquisition experiment is claimed.
+- Scope/qualification: no numerical format, learner, master copy, optimizer, training budget, required experiment framework or complete transition selected. Empirical alternatives remain open; same shared behavioral goals apply. D-08 pending-human; no qualified descendant invalidated. D-GOV191 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-191"></a>
+### K-191 — 2026-10-29: Effective binary weights and internal learning state
+
+- Recorded: 2026-10-29T01:50:38Z. H-70—H-74/H-86 research; current charter §§1–3.3/7.1/8.1 and C-28/P-65 checked. Pre-entry registry SHA-256 `31f37e4244b1e987cbdf2ea1e72eb83f31cd829547a3538ae00d2e8c58cbe667`. H-01—H-86, K-00—K-190 and AD-001—AD-092 preserved.
+- Coverage: D-08 set185 → 186; ContextLoopsAndNumerics185 → 186; other17 documents unchanged. Registry191 → 192; authority, current coverage and reverse references synchronized. MR-S097 records scoped primary access and compact XML integrity evidence.
+- Preserved chain: C-28/P-65 through C-24/C-15/C-12/P-22/C-01/V-01/V-02 requires the full cost of faithful learning, rather than a propagation bit count alone. History-dependent internal distinctions remain relevant even when the visible weight does not change.
+- Evidence: primary binary-synapse methods expose internal switching state and a distinct memory-maintenance observable. This supplements the existing higher-precision-copy and multivariable-synapse comparisons without a new numerical probe.
+- Scope/qualification: no binary weight choice, switching stages, counters, spike rule, inhibitory architecture, classification objective or additional storage selected. D-08 pending-human; no qualified descendant invalidated. D-GOV192 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-192"></a>
+### K-192 — 2026-10-29: Wider arithmetic and learned coarse-state behavior
+
+- Recorded: 2026-10-29T01:53:37Z. H-70—H-74/H-86 research; current charter §§1–3.3/7.1/8.1 and C-28/P-65 checked. Pre-entry registry SHA-256 `e749de4a39695de6d7bd68f8cfff17c7650301fef93cca1b43d2f2c8317c3be5`. H-01—H-86, K-00—K-191 and AD-001—AD-092 preserved.
+- Coverage: D-08 set186 → 187; ContextLoopsAndNumerics186 → 187; other17 documents unchanged. Registry192 → 193; authority, current coverage and reverse references synchronized. MR-S004 receives an append-only follow-up; compact source-table read scopes also reflect the actual Jacob/Erbas review.
+- Preserved chain: C-28/P-65 through C-24/C-15/C-12/P-22/C-01/V-01/V-02 requires behavior and resource evidence. An arithmetic reference diagnoses a specified operation; changing a learned recurrence's storage is a different intervention. Keeping both purposes explicit preserves fair empirical alternatives under H-86.
+- Evidence: targeted preprint results and matched-training methods expand the existing read scope. These support a comparison distinction, not a reproduced application result or universal precision ranking.
+- Scope/qualification: no precision, state counter, residual, training method, distillation objective, test threshold or additional structure selected. Existing FP32 research baseline and shared behavioral goals remain. D-08 pending-human; no qualified descendant invalidated. D-GOV193 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-193"></a>
+### K-193 — 2026-10-29: Continuous-attractor evidence and noise regulation
+
+- Recorded: 2026-10-29T01:58:49Z. H-55/H-67/H-71/H-74/H-86 research; current charter §§1–3.3/7.1/8.1 and C-26/P-60 checked. Pre-entry registry SHA-256 `2a4e330e54bfdbf2cee76fe3921abff5bc38e1e5e6e5f4d488b86f9fc3f5086c`. H-01—H-86, K-00—K-192 and AD-001—AD-092 preserved.
+- Coverage: D-08 set187 → 188; ContextLoopsAndNumerics187 → 188; other17 documents unchanged. Registry193 → 194; authority, current coverage and reverse references synchronized. MR-S007 gains a scoped primary-PDF follow-up.
+- Preserved chain: C-26/P-60 through C-15/C-12/P-22/C-01/V-01/V-02 requires useful retained content and later behavior. C-17's activity support does not by itself provide a theorem's tuning assumptions. The existing noise-supported-loop comparison remains open under H-86.
+- Evidence: targeted main results and methods distinguish a continuous steady-state manifold from continuous numerical rates, and parameter scaling from added control noise. No new arithmetic, capacity estimate or neural experiment is claimed.
+- Scope/qualification: no manifold geometry, physical-distance prior, cellular time constant, decoder, noise law or additional controller adopted. D-08 pending-human; no qualified descendant invalidated. D-GOV194 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-194"></a>
+### K-194 — 2026-10-29: Chain propagation and graded-response fidelity
+
+- Recorded: 2026-10-29T02:05:06Z. H-63—H-71/H-74/H-86 research; current charter §§1–3.3/7.1/8.1 and C-22/P-45 checked. Pre-entry registry SHA-256 `27eeacec54bbe839aad8e81e7c679c7dce78a3ca6b56c34695ea8e270eca13ca`. H-01—H-86, K-00—K-193 and AD-001—AD-092 preserved.
+- Coverage: D-08 set188 → 189; TrainingStrategy120 → 189; other17 documents unchanged. Registry194 → 195; authority, current coverage and reverse references synchronized. MR-S098 records the primary author-copy reading.
+- Preserved chain: C-22/P-45 through C-15/C-12/P-22/C-01/V-01/V-02 connects repair to actual useful recurrence. H-66 semantic fidelity and H-71 useful loops require more than surviving activity. The existing shared-network comparison remains open under H-86.
+- Evidence: methods and targeted results distinguish sustained-input propagation from the application's one-shot response, and preserved activity from fidelity/interference. The existing source note is refined; no new numerical experiment or application result is claimed.
+- Scope/qualification: no chain width, firing rate, inhibitory circuitry, conductance state, spatial geometry, synchronization objective or new acceptance threshold selected. D-08 pending-human; no qualified descendant invalidated. D-GOV195 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-195"></a>
+### K-195 — 2026-10-29: Learning conditions and recalled recurrence
+
+- Recorded: 2026-10-29T02:08:33Z. H-71/H-74/H-79—H-86 research; unchanged current charter §§1–3.3/7.1/8.1 and C-15/P-29 checked. Pre-entry registry SHA-256 `bfd1885845044e88a0fbe5cac23a89889fa962deef27ac06b9b3a4d9e4ce9785`. H-01—H-86, K-00—K-194 and AD-001—AD-092 preserved.
+- Coverage: D-08 set189 → 190; FlowLearning184 → 190; other17 documents unchanged. Registry195 → 196; authority, current coverage and reverse references synchronized. MR-S010 gains a scoped primary-methods/MathML follow-up.
+- Preserved chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 requires learned contextual prediction and preserved shared behavior. Explicit learning conditions keep assisted responses from being mistaken for natural readiness; H-82 still separates autonomous generation.
+- Evidence: the source's gain-mediated learning and normalization comparison support stating the actual recurrent/learning conditions. Its population averages and input protocol do not establish this application's learner. Equation10 resolves a contradictory AND/OR statement in the source narrative; no source implementation or experiment was executed.
+- Scope/qualification: no auxiliary gain state, normalization rule, learning threshold/gate, temporal delay, stimulation method or output-generation criterion selected. D-08 pending-human; no qualified descendant invalidated. D-GOV196 maintenance alone continues H-05. H-71 active; no implementation, neural simulation, project tests/build, toolchain change, commit or push.
+
+<a id="k-196"></a>
+### K-196 — 2026-10-29: Weighted incoming drive and contextual comparison
+
+- Recorded: 2026-10-29T02:11:48Z. H-23/H-24/H-71/H-74/H-82/H-86 research; current charter §§1–3.3/7.1/8.1 and C-15/P-29 checked against the unchanged charter. Pre-entry registry SHA-256 `50ebc334aeecbfaa76d8aaff69ca92b0b77c4eb653a229c0eae1238bbf04e61f`. H-01—H-86, K-00—K-195 and AD-001—AD-092 preserved.
+- Coverage: D-08 set190 → 191; FlowLearning190 → 191 and SynapticIntegrationResearch158 → 191; other16 documents unchanged. Registry196 → 197; authority, current coverage and reverse references synchronized. MR-FC015 appends exact single-gather arithmetic.
+- Preserved chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 requires context-sensitive predictive behavior. Distinguishing degree, weight concentration and source covariance keeps a convenient input score from silently defining similarity. H-24 continues to separate training weight scale from capacity allocation.
+- Evidence: two100-source rows have equal total weight and mean drive but independent-source variances differing by81.19; common fluctuations remove that contrast. The optional threshold illustration is a conditional distribution calculation, not neural prediction or a selected acceptance score.
+- Scope/qualification: no matching threshold, row normalization, pruning rule, effective-count array, capacity exponent, biological law or extra state selected. Existing strong useful associations remain legitimate. D-08 pending-human; no qualified descendant invalidated. D-GOV197 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, project tests/build, toolchain change, commit or push.
+
+<a id="k-197"></a>
+### K-197 — 2026-10-29: Actual learning mode and the meaning of rate-model output
+
+- Recorded: 2026-10-29T02:19:16Z. H-67—H-71/H-74/H-79—H-86 research; unchanged current charter §§1–3.3/7.1/8.1 and C-15/P-29 checked. Pre-entry registry SHA-256 `3d3a0d447c93ba1cbe97a40ac5121377d2dcad66db96efa0f89c0c4893fd745a`. H-01—H-86, K-00—K-196 and AD-001—AD-092 preserved.
+- Coverage: D-08 set191 → 192; FlowLearning191 → 192; other17 documents unchanged. Registry197 → 198; authority, current coverage and reverse references synchronized. MR-S049 gains an append-only methods follow-up; the existing paragraph is refined.
+- Preserved chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 requires contextual prediction under the specified model and learning conditions. H-67's rate direction does not equate all rate-based source models, and H-82 keeps autonomous output generation separate.
+- Evidence: source methods distinguish the actual batch-learning protocol from a dynamic rule formulation, and graded internal variables from binary selected output. The prior noise/traversal interpretation remains within the reported limited disambiguation case.
+- Scope/qualification: no online/offline policy, adaptation field, hard winner selection, trace layout, timing parameter or generation criterion selected. D-08 pending-human; no qualified descendant invalidated. D-GOV198 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-198"></a>
+### K-198 — 2026-10-29: Quantized-state convergence and observation horizon
+
+- Recorded: 2026-10-29T02:23:04Z. H-70—H-74/H-86 research; unchanged current charter §§1–3.3/7.1/8.1 and C-27/P-63 checked. Pre-entry registry SHA-256 `a5016e848f5b76edb94cbb490c8c3ac13c600a80a560ce5885d2a18b3b8a388d`. H-01—H-86, K-00—K-197 and AD-001—AD-092 preserved.
+- Coverage: D-08 set192 → 193; ContextLoopsAndNumerics188 → 193; other17 documents unchanged. Registry198 → 199; authority, current coverage and reverse references synchronized. MR-S002 records the targeted theorem/parsed-proof follow-up and its access limits.
+- Preserved chain: C-27/P-63 through C-24/P-52/C-15/P-29/C-12/P-22/C-01/V-01/V-02 connects deferred decay to faithful behavior. Distinguishing vanishing quantization error from fixed-format temporal fidelity preserves the existing scheduling comparison and H-71 useful-context goal.
+- Evidence: the source's perturbation argument includes hysteresis error and an elapsed-time-dependent transient bound. No application error bound, observed performance or complete proof reproduction is claimed; imperfect equation extraction and failed screenshots remain recorded.
+- Scope/qualification: no hysteresis mechanism, event structure, error estimator, accuracy threshold or continuous-time model selected. D-08 pending-human; no qualified descendant invalidated. D-GOV199 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-199"></a>
+### K-199 — 2026-10-29: Predictive entry and background activity
+
+- Recorded: 2026-10-29T02:31:58Z. H-71/H-74/H-76/H-78/H-82—H-86 research; current charter §§1–3.3/7.1/8.1 and C-14/P-27 checked. Pre-entry registry SHA-256 `2a7a7f28bde09361626a5bf63d1f2f3eeae33150b7d9db3a0c7f89f722a9e73d`. H-01—H-86, K-00—K-198 and AD-001—AD-092 preserved.
+- Coverage: D-08 set193 → 194; SignedPopulationEncoding181 → 194; other17 documents unchanged. Registry199 → 200; authority, current coverage and reverse references synchronized.
+- Preserved chain: C-14/P-27 through C-12/P-22/C-01/V-01/V-02 uses contextual cell identity to direct semantic input. H-78's representation comparison must therefore assess actual contextual selectivity under the existing background activity, not merely how often a focused branch executes.
+- Evidence: a conceptual consequence of the open state interpretation, linked to the existing genuine-history and shorter-context comparison. No new empirical source, numerical probe, false-positive rate or experiment is claimed. Spontaneous learned readiness remains potentially useful; a separate field alone does not prove selective prediction.
+- Scope/qualification: no phase threshold, noise-origin tag, prediction gate, extra controller, field or new behavioral goal selected. D-08 pending-human; no qualified descendant invalidated. D-GOV200 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, project tests/build, toolchain change, commit or push.
+
+<a id="k-200"></a>
+### K-200 — 2026-10-29: Node capacity and connection-access work
+
+- Recorded: 2026-10-29T02:37:47Z. H-09/H-12/H-28/H-34/H-71/H-74/H-86 research; current unchanged charter §§1–3.3/7.1/8.1 and C-13/P-26 checked. Pre-entry registry SHA-256 `ccec5470a6862dd86880439f5e2d3aabe6a9da8c928648304afbc9a2e4614bf9`. H-01—H-86, K-00—K-199 and AD-001—AD-092 preserved.
+- Coverage: D-08 set194 → 195; CapacityPlanning173 → 195; other17 documents unchanged. Registry200 → 201; authority, current coverage and reverse references synchronized.
+- Preserved chain: C-13/P-26 and P-25 through C-12/P-22/C-01/V-01/V-02 require useful behavior within the target node's resources. Explicit traversal demand keeps a storage-fit calculation from implying an execution-rate guarantee. H-28's shared table remains counted once per node.
+- Evidence: existing execution-work-arithmetic cases rechecked by integer multiplication and summarized at their original illustrative scan rates. Retained edges, reserved slots, logical access bytes and physical memory traffic remain distinct. No new numerical experiment, hardware measurement or source claim.
+- Scope/qualification: no class quota, edge budget, frame interval, CC count, scheduler, index or field selected. D-08 pending-human; no qualified descendant invalidated. D-GOV201 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, project tests/build, toolchain change, commit or push.
+
+<a id="k-201"></a>
+### K-201 — 2026-10-29: Frame scaling and balanced-drive context dilution
+
+- Recorded: 2026-10-29T02:42:04Z. H-67/H-70/H-71/H-74/H-77/H-86 research; current unchanged charter §§1–3.3/7.1/8.1, C-26/P-60 and C-24/P-52 checked. Pre-entry registry SHA-256 `8ff1906a6e1f5fcef139407f8f574dd1efa7d423bef144e55a0af3a12315cbda`. H-01—H-86, K-00—K-200 and AD-001—AD-092 preserved.
+- Coverage: D-08 set195 → 196; ContextLoopsAndNumerics193 → 196; other17 documents unchanged. Registry201 → 202; authority, current coverage and reverse references synchronized.
+- Preserved chain: C-26/P-60 through C-15/P-29/C-12/P-22/C-01/V-01/V-02 requires earlier context to affect later behavior. C-24/P-52 connects the time interpretation to that behavior. An unchanged signed readout does not establish invariant cell-composition retention when the drive cadence changes.
+- Evidence: balanced_drive_frame_scaling extends the existing exact one-operation identity by a closed-form power. Equal aggregate opposing drive keeps the signed total constant; linear versus square-root frame scaling gives different composition limits. Four rational-reference cases use exact Fraction powers and50-digit Decimal conversion. This is deterministic conditional algebra, not a simulation or inference that independently sampled white noise has those trajectories.
+- Scope/qualification: no noise law, mean offset, frame interval, transfer function, context store or additional state selected. Existing learned recurrence may change the result; actual contextual prediction remains the deciding observation. D-08 pending-human; no qualified descendant invalidated. D-GOV202 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, project tests/build, toolchain change, commit or push.
+
+<a id="k-202"></a>
+### K-202 — 2026-10-29: Compact capacity and storage authority summaries
+
+- Recorded: 2026-10-29T02:46:13Z. H-71/H-74/H-86 research documentation; unchanged current charter §§1–3.3/7.1/8.1, C-13/P-26 and P-25 checked. Pre-entry registry SHA-256 `098ea93a13ac49ac2e49e13f1f01511c1c3037fb1ddcb19646e1b87d07f01d05`. H-01—H-86, K-00—K-201 and AD-001—AD-092 preserved.
+- Coverage: D-08 set196 → 197; AdaptiveConnectivity103, CapacityPlanning195 and ConnectivityScalingResearch173 → 197; other15 documents unchanged. Registry202 → 203; current coverage and reverse references synchronized.
+- Preserved chain: C-13/P-26 and P-25 through C-12/P-22/C-01/V-01/V-02 keep bounded storage and readable application evidence connected to useful behavior. Compact local authority blocks retain the scoped human baseline, value path, invariants, acceptance and pending status; chronological confirmation detail remains in this canonical registry.
+- Editorial scope: document bodies and numerical/source evidence remain unchanged, except AdaptiveConnectivity's flow-learning link now directly targets the separate FlowLearning section. Source-owned reference semantics and the incoming proposal remain distinct. No human event or assessment history is removed or relabeled as confirmation.
+- Scope/qualification: no value trade-off, field, algorithm, class quota, training role or acceptance criterion changed. D-08 remains pending-human; this editorial assessment cannot qualify a previously unconfirmed contract. No qualified descendant invalidated. D-GOV203 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, project tests/build, toolchain change, commit or push.
+
+<a id="k-203"></a>
+### K-203 — 2026-10-29: Numerical emulation and plastic feedback scope
+
+- Recorded: 2026-10-29T02:49:22Z. H-70—H-74/H-79—H-86 research; unchanged current charter §§1–3.3/7.1/8.1 and C-28/P-65 checked. Pre-entry registry SHA-256 `dd58b97ed4213d5518a5605215b37a05ba1234ded7bb8418a0b530f61e2af569`. H-01—H-86, K-00—K-202 and AD-001—AD-092 preserved.
+- Coverage: D-08 set197 → 198; ContextLoopsAndNumerics196 → 198; other17 documents unchanged. Registry203 → 204; authority, current coverage and reverse references synchronized. MR-S026 receives a scoped primary-reading follow-up.
+- Preserved chain: C-28/P-65 through C-24/C-15/C-12/P-22/C-01/V-01/V-02 requires useful numerical learning in the actual shared graph. Separating isolated arithmetic agreement from feedback during learning preserves that value without demanding bit-identical trajectories or selecting a mechanism.
+- Evidence: the source's static recurrent and plastic-synapse comparisons have different causal scopes; the existing paragraph/table now state that limit. No new numerical probe or reproduced experiment.
+- Scope/qualification: no random generator, trace, exponent, plasticity rule, numerical tolerance or implementation selected. D-08 pending-human; no qualified descendant invalidated. D-GOV204 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, author code, project tests/build, toolchain change, commit or push.
+
+<a id="k-204"></a>
+### K-204 — 2026-10-29: Directed rounding and premature scalar disappearance
+
+- Recorded: 2026-10-29T02:52:07Z. H-67—H-74/H-86 research; unchanged current charter §§1–3.3/7.1/8.1, C-27/P-63 and C-28/P-65 checked. Pre-entry registry SHA-256 `935d035f73b7f6f8b9bf60f668145b7728295051f8f3759eacbaf83bbc311b6d`. H-01—H-86, K-00—K-203 and AD-001—AD-092 preserved.
+- Coverage: D-08 set198 → 199; ContextLoopsAndNumerics198 → 199; other17 documents unchanged. Registry204 → 205; authority, current coverage and reverse references synchronized.
+- Preserved chain: C-27/P-63 through C-24/P-52/C-15/P-29/C-12/P-22/C-01/V-01/V-02 requires meaningful fading and context, rather than merely a changing code. C-28/P-65 makes the actual rounding operation part of that numerical comparison.
+- Evidence: directed_decay_rounding derives a finite frame-count bound and an exact one-code condition. An 80-digit coefficient check supplies two conditional UINT4/UINT8 cases at the existing half-second reference; no trajectory is stepped. Reaching zero can be premature even when nearest writeback would freeze. The text also replaces ambiguous “rounding away a decrement” wording with “discarding”.
+- Scope/qualification: no decay law, rounding policy, numerical format, zero-state criterion, scheduler or retained residual selected. The isolated reference is not a trained response. D-08 pending-human; no qualified descendant invalidated. D-GOV205 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, project tests/build, toolchain change, commit or push.
+
+<a id="k-205"></a>
+### K-205 — 2026-10-29: Noise-only coverage and retained-state boundaries
+
+- Recorded: 2026-10-29T03:14:54Z. H-71/H-74/H-77/H-86 research; unchanged current charter §§1–3.3/7.1/8.1 and C-18/P-36 checked. Pre-entry registry SHA-256 `0523892a095451b42f593f030201514c830446eb24976c0d86bed1f4abf12974`. H-01—H-86, K-00—K-204 and AD-001—AD-092 preserved.
+- Coverage: D-08 set199 → 200; ContextLoopsAndNumerics199 → 200; other 17 documents unchanged. Registry205 → 206; current coverage, authority and reverse references synchronized.
+- Preserved chain: C-18/P-36 through C-12/P-22/C-01/V-01/V-02 connects the specified cancellation to useful semantic behavior. Stating the conditional counting example's assumptions prevents an algebraic noise-only reference from silently fixing real recurrent coverage or a regime detector.
+- Evidence: the existing cancellation-properties-analysis assumptions and arithmetic are retained. The document now explicitly states fresh frames, equal positive continuous distributions, no carried activity or other input, polarity symmetry and temporal independence. This is clarification of the existing reference, not a new trajectory experiment or application prediction.
+- Scope/qualification: no noise law, counting threshold, classifier, state field or behavioral target selected. D-08 remains pending-human; no qualified descendant invalidated. D-GOV206 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, project tests/build, toolchain change, commit or push.
+
+<a id="k-206"></a>
+### K-206 — 2026-10-29: Internal prediction assessment and legitimate alternatives
+
+- Recorded: 2026-10-29T03:18:02Z. H-71/H-74/H-79—H-86 research; unchanged current charter §§1–3.3/7.1/8.1 and C-15/P-29 checked. Pre-entry registry SHA-256 `2031706c8dbccda9cd578e0ea57641eb2fa210e0868f05d53a5a339aa5bf2a31`. H-01—H-86, K-00—K-205 and AD-001—AD-092 preserved.
+- Coverage: D-08 set200 → 201; FlowLearning192 → 201; other 17 documents unchanged. Registry206 → 207; current coverage, authority and reverse references synchronized. MR-S044 receives a scoped methods follow-up.
+- Preserved chain: C-15/P-29 through C-12/P-22/C-01/V-01/V-02 serves contextual prediction. H-82 separates preactivation from continuous generation; H-83 preserves legitimate alternatives until context distinguishes them. A reference assessment must retain those goals rather than import its task's metric.
+- Evidence: targeted primary methods review refines the existing paragraph; no metric arithmetic, figure measurement or reproduced experiment. Source extraction limits remain recorded.
+- Scope/qualification: no prediction score, threshold, learner, dendritic state, inhibitory mechanism or output decoder selected. D-08 remains pending-human; no qualified descendant invalidated. D-GOV207 maintenance alone continues H-05. H-71 active; no implementation, neural simulation/training, project tests/build, toolchain change, commit or push.
+
+<a id="k-207"></a>
+### K-207 — 2026-10-29: Completion of the scoped modeling research pass
+
+- Recorded: 2026-10-29T03:28:49Z. H-71/H-74/H-78—H-86 research documentation; unchanged current charter §§1–3.3/7.1/8.1, C-12/P-22/P-25 and the applicable C-13—C-29 paths reviewed. Pre-entry registry SHA-256 `ccf0e9fc62e78951d6d73db2f79c73332258b09bbc2e84e7227dc12180547ea5`. H-01—H-86, K-00—K-206 and AD-001—AD-092 preserved.
+- Coverage: D-08 set201 → 202; twelve documents receive current-status/authority updates: ActivationRegimes181 → 202, AdaptiveConnectivity197 → 202, ContextLoopsAndNumerics200 → 202, Decisions91 → 202, FlowLearning201 → 202, IncomingConnectivity103 → 202, Model163 → 202, README185 → 202, RateDynamics180 → 202, SignedPopulationEncoding194 → 202, SynapticIntegrationResearch191 → 202, TrainingStrategy189 → 202. Other six documents remain at their recorded revisions. Registry207 → 208; current coverage and reverse references synchronized.
+- Preserved chain: P-25/P-22 through C-12 to C-01/V-01/V-02 connects readable application evidence with useful semantic behavior. The completion record distinguishes scoped research, human requirements, conditional calculations and empirical proposals; H-74's need-before-structure principle and H-86's comparison policy remain.
+- Evidence/accounting: the progress record preserves nonoverlapping substantive intervals, exclusions and the final requirement-to-evidence review. At least 43200 substantive seconds have elapsed before this closure entry. Source scopes vary; no source count, elapsed idle time or isolated calculation is treated as model validation. The source ledger's completion status covers this research pass, not full verification of every cited study.
+- Editorial scope: current active-research labels and completion references are reconciled. Existing technical bodies, analytical cases, human events and earlier assessments remain; no empirical alternative becomes a default. Earlier H-51 research and its timing remain separate.
+- Scope/qualification: D-08 remains pending-human, with no qualified application implementation baseline or newly qualified descendant. D-GOV208 maintenance alone continues H-05. No implementation, neural training/simulation, project tests/build, toolchain change, commit or push. Future model comparisons remain separate work rather than unfinished evidence claimed as validated here.

@@ -1,0 +1,684 @@
+{
+  "schema_version": 1,
+  "status": "conditional_analysis_not_selected_design",
+  "recorded_date_utc": "2026-10-28",
+  "scope": "H-56—H-58 noise-qualified temporal coverage, H-71 useful context, H-75 frames and H-86 direct empirical comparisons",
+  "method": "Exact rational probabilities and cancellation arithmetic; finite symbolic sequence examples. No neural training, simulation, benchmark or project tests.",
+  "analyses": [
+    {
+      "id": "MR-TC001",
+      "title": "Density qualification depends on temporal dependence",
+      "assumptions": [
+        "An illustrative cell is incidentally active with marginal probability0.01.",
+        "There are100 equally weighted frames; qualification requires active-time density at least0.05.",
+        "Independent Bernoulli draws are held for equal nonoverlapping blocks; the window aligns to block boundaries.",
+        "This is a constructed counting reference, not the proposed white-noise generator or an SNN response."
+      ],
+      "formula": "Pr(qualified)=sum_{j=ceil(B*d)}^B choose(B,j)*p^j*(1-p)^(B-j), B=window_frames/block_frames",
+      "cases": [
+        {
+          "block_frames": 1,
+          "independent_blocks": 100,
+          "required_active_blocks": 5,
+          "qualification_probability": 0.003432321587754515,
+          "expected_qualified_neurons": 2108.818383516374
+        },
+        {
+          "block_frames": 2,
+          "independent_blocks": 50,
+          "required_active_blocks": 3,
+          "qualification_probability": 0.013817270830600395,
+          "expected_qualified_neurons": 8489.331198320882
+        },
+        {
+          "block_frames": 5,
+          "independent_blocks": 20,
+          "required_active_blocks": 1,
+          "qualification_probability": 0.18209306240276912,
+          "expected_qualified_neurons": 111877.97754026136
+        },
+        {
+          "block_frames": 10,
+          "independent_blocks": 10,
+          "required_active_blocks": 1,
+          "qualification_probability": 0.09561792499119551,
+          "expected_qualified_neurons": 58747.653114590525
+        },
+        {
+          "block_frames": 20,
+          "independent_blocks": 5,
+          "required_active_blocks": 1,
+          "qualification_probability": 0.0490099501,
+          "expected_qualified_neurons": 30111.71334144
+        },
+        {
+          "block_frames": 50,
+          "independent_blocks": 2,
+          "required_active_blocks": 1,
+          "qualification_probability": 0.0199,
+          "expected_qualified_neurons": 12226.56
+        },
+        {
+          "block_frames": 100,
+          "independent_blocks": 1,
+          "required_active_blocks": 1,
+          "qualification_probability": 0.01,
+          "expected_qualified_neurons": 6144.0
+        }
+      ],
+      "interpretation": "Equal marginal activity does not determine density-qualified coverage. Dependence changes its distribution, sometimes nonmonotonically because the finite cutoff changes discretely. Cross-neuron independence is unnecessary for the expected count; it would matter for count variability.",
+      "transfer_limit": "Independent white input does not imply independent output activity after recurrence, cancellation and feedback. No block-noise model, density cutoff or runtime counter is selected."
+    },
+    {
+      "id": "MR-TC002",
+      "title": "White drive can produce correlated responses",
+      "conditional_law": "x[n+1]=a*x[n]+epsilon[n], |a|<1, zero-mean iid epsilon with variance sigma^2, stationary initialization",
+      "results": [
+        "Var(x)=sigma^2/(1-a^2)",
+        "Corr(x[n],x[n+k])=a^k",
+        "For0<a<1, correlation time in seconds=-frame_duration/log(a)."
+      ],
+      "interpretation": "Whiteness is a property of the forcing, not generally of the observed state. Thresholding the state need not preserve these correlation formulas.",
+      "transfer_limit": "Signed linear scalar reference only; no stochastic neuron law, Gaussian requirement, activity threshold or autocorrelation estimator selected."
+    },
+    {
+      "id": "MR-TC003",
+      "title": "Window length and input pacing jointly affect coverage",
+      "assumptions": [
+        "For one fixed neuron, each of m events includes it independently with probability p.",
+        "Raw union counts any inclusion; it has no density filter and does not model post-cancellation activity."
+      ],
+      "formula": "E(raw covered fraction)=1-(1-p)^m",
+      "cases": [
+        {
+          "per_event_participation": 0.01,
+          "events": 1,
+          "raw_union_fraction": 0.01
+        },
+        {
+          "per_event_participation": 0.01,
+          "events": 2,
+          "raw_union_fraction": 0.0199
+        },
+        {
+          "per_event_participation": 0.01,
+          "events": 4,
+          "raw_union_fraction": 0.03940399
+        },
+        {
+          "per_event_participation": 0.01,
+          "events": 5,
+          "raw_union_fraction": 0.0490099501
+        },
+        {
+          "per_event_participation": 0.01,
+          "events": 10,
+          "raw_union_fraction": 0.09561792499119551
+        },
+        {
+          "per_event_participation": 0.01,
+          "events": 20,
+          "raw_union_fraction": 0.18209306240276912
+        },
+        {
+          "per_event_participation": 0.01,
+          "events": 100,
+          "raw_union_fraction": 0.6339676587267705
+        },
+        {
+          "per_event_participation": 0.05,
+          "events": 1,
+          "raw_union_fraction": 0.05
+        },
+        {
+          "per_event_participation": 0.05,
+          "events": 2,
+          "raw_union_fraction": 0.0975
+        },
+        {
+          "per_event_participation": 0.05,
+          "events": 4,
+          "raw_union_fraction": 0.18549375
+        },
+        {
+          "per_event_participation": 0.05,
+          "events": 5,
+          "raw_union_fraction": 0.2262190625
+        },
+        {
+          "per_event_participation": 0.05,
+          "events": 10,
+          "raw_union_fraction": 0.4012630607616211
+        },
+        {
+          "per_event_participation": 0.05,
+          "events": 20,
+          "raw_union_fraction": 0.6415140775914577
+        },
+        {
+          "per_event_participation": 0.05,
+          "events": 100,
+          "raw_union_fraction": 0.994079470779666
+        },
+        {
+          "per_event_participation": 0.1,
+          "events": 1,
+          "raw_union_fraction": 0.1
+        },
+        {
+          "per_event_participation": 0.1,
+          "events": 2,
+          "raw_union_fraction": 0.19
+        },
+        {
+          "per_event_participation": 0.1,
+          "events": 4,
+          "raw_union_fraction": 0.3439
+        },
+        {
+          "per_event_participation": 0.1,
+          "events": 5,
+          "raw_union_fraction": 0.40951
+        },
+        {
+          "per_event_participation": 0.1,
+          "events": 10,
+          "raw_union_fraction": 0.6513215599
+        },
+        {
+          "per_event_participation": 0.1,
+          "events": 20,
+          "raw_union_fraction": 0.8784233454094307
+        },
+        {
+          "per_event_participation": 0.1,
+          "events": 100,
+          "raw_union_fraction": 0.9999734386011124
+        }
+      ],
+      "interpretations": [
+        "A per-event footprint below the illustrative flow cap does not ensure the multi-event window stays below it.",
+        "Context reuse and temporal overlap can change this reference substantially; actual contextual support is not independent.",
+        "The same physical-time window includes more token events at faster pacing; a fixed-event window spans different physical time.",
+        "Under a binary equal-frame reference, one true visit lasting b frames has density b/n. If the cutoff exceeds b/n it is excluded, regardless of its semantic relevance."
+      ],
+      "transfer_limit": "No selected window, cap, pacing rule, eligibility set, event-count field or reinterpretation of H-57."
+    },
+    {
+      "id": "MR-TC004",
+      "title": "Coverage and density cannot recover path order",
+      "examples": [
+        {
+          "sequence": "ABCDABCD",
+          "group_densities": {
+            "A": 0.25,
+            "B": 0.25,
+            "C": 0.25,
+            "D": 0.25
+          },
+          "cyclic_transition_counts": {
+            "AB": 2,
+            "BC": 2,
+            "CD": 2,
+            "DA": 2
+          }
+        },
+        {
+          "sequence": "AABBCCDD",
+          "group_densities": {
+            "A": 0.25,
+            "B": 0.25,
+            "C": 0.25,
+            "D": 0.25
+          },
+          "cyclic_transition_counts": {
+            "AA": 1,
+            "AB": 1,
+            "BB": 1,
+            "BC": 1,
+            "CC": 1,
+            "CD": 1,
+            "DD": 1,
+            "DA": 1
+          }
+        },
+        {
+          "sequence": "ABACBDCD",
+          "group_densities": {
+            "A": 0.25,
+            "B": 0.25,
+            "C": 0.25,
+            "D": 0.25
+          },
+          "cyclic_transition_counts": {
+            "AB": 1,
+            "BA": 1,
+            "AC": 1,
+            "CB": 1,
+            "BD": 1,
+            "DC": 1,
+            "CD": 1,
+            "DA": 1
+          }
+        }
+      ],
+      "proof": "Any permutation of frames preserves each cell's active-time density and union support but can change ordered transitions. The examples have identical0.25 group density and different cyclic transition counts.",
+      "interpretation": "Coverage-only observations cannot decide claims that depend on progression order. These examples are not labeled DMN, immersion or flow; a repeated path can still be normal.",
+      "transfer_limit": "No transition-count array, learned classifier, group detector or runtime path metric selected. H-56 excludes total activity from classification."
+    },
+    {
+      "id": "MR-TC005",
+      "title": "Known additive noise does not yield additive cell attribution after cancellation",
+      "operation": "H-77 minicolumn net cancellation with proportional surviving rates",
+      "recurrent_positive": [
+        2,
+        0
+      ],
+      "recurrent_negative": [
+        0,
+        0
+      ],
+      "noise_positive": [
+        0,
+        2
+      ],
+      "noise_negative": [
+        1,
+        0
+      ],
+      "combined_output": [
+        [
+          1.5,
+          1.5
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "noise_only_output": [
+        [
+          0.0,
+          1.0
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "subtracted_output": [
+        [
+          1.5,
+          0.5
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "recurrent_only_output": [
+        [
+          2.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "interpretation": "C(a+z)-C(z) differs from C(a) at individual-cell level. The signed sum remains additive in this example because C preserves that sum; contextual identity and coverage do not inherit that linearity.",
+      "transfer_limit": "No per-cell causal-noise tag or subtraction-based detector follows. Noise-assisted useful recurrence must be evaluated by its contextual effect."
+    },
+    {
+      "id": "MR-TC006",
+      "title": "Controlled noise under adaptive regulation",
+      "conditional_law": "r[n+1]=F(r[n], input[n], sigma(r[n],attention[n],...)*xi[n])",
+      "comparisons": [
+        {
+          "name": "shared primitive random draws",
+          "meaning": "Different history conditions receive the same xi sequence while each runs its own regulator; their actual noise amplitudes can differ.",
+          "estimates": "History effect through the complete modeled feedback system."
+        },
+        {
+          "name": "fixed applied forcing",
+          "meaning": "A prescribed applied-noise sequence or common amplitude schedule is imposed on both runs.",
+          "estimates": "A different controlled intervention that can isolate recurrence under matched forcing; it does not establish complete-regulator behavior."
+        }
+      ],
+      "interpretation": "Report which experiment was performed. Shared draws can improve paired comparisons but do not guarantee variance reduction or identical pathwise responses in nonlinear dynamics.",
+      "transfer_limit": "Neither comparison mandates storing all draws or an additional runtime field. No actual comparison is run here."
+    },
+    {
+      "id": "MR-TC007",
+      "title": "Prediction narrowing and coverage are distinct observables",
+      "examples": [
+        "With nonnegative predictive activity, scaling a broad pattern down can make cells fall below a threshold without improving relative compatibility with any continuation.",
+        "A meaningful response can use different contextual cells for the same semantic component; raw predictive support count need not equal the number of plausible next tokens."
+      ],
+      "interpretation": "H-83's narrowing must be evaluated against observed-context-compatible continuations before the next input. H-57's coverage is a separate temporal behavioral constraint; neither metric substitutes for the other.",
+      "transfer_limit": "No token probability distribution, fixed top-K, decoding layer, prediction threshold or loss selected."
+    },
+    {
+      "id": "MR-TC008",
+      "title": "Ordered paths do not by themselves establish unique regime labels",
+      "recorded_at_utc": "2026-10-29T00:49:23Z",
+      "kind": "Constructed observation record and logical identifiability argument, not a generated neural trajectory",
+      "reference": {
+        "population": 614400,
+        "four_disjoint_groups_of": 15360,
+        "group_order": "ABCDABCDABCDABCD",
+        "window_frames": 16,
+        "per_neuron_active_time_density_within_each_group": {
+          "A": "1/4",
+          "B": "1/4",
+          "C": "1/4",
+          "D": "1/4"
+        },
+        "qualified_coverage_if_cutoff_at_most_one_quarter": "1/10",
+        "consecutive_group_jaccard": "0",
+        "four_frame_lag_group_jaccard": "1"
+      },
+      "assumptions": [
+        "Groups are disjoint qualified activity sets of equal size. A density cutoff at most1/4 counts each participating cell; no cutoff is selected.",
+        "The groups can be chosen within the existing polarity populations so that each frame respects one active polarity per dimension. This establishes only that the observation record need not violate H77, not that it is a valid trained trajectory.",
+        "The record is not assigned a ground-truth regime. It illustrates overlap between limited-population recurrence and successive visits to different groups.",
+        "External forcing, predictive behavior and other state are not reconstructed from these activity records. No actual token encoder or input protocol is simulated."
+      ],
+      "logical_limit": "If two cases supply exactly the same allowed observation window, any classifier using only that window gives the same output distribution. It cannot infer a different causal origin solely from those observations.",
+      "implication": "The qualitative H56/H57 criteria restrict candidate labels but are not yet an exhaustive mutually exclusive rule. Actual trajectory comparisons must state which observable differences and task conditions justify a distinction; a path metric alone is not a universal guarantee.",
+      "boundary": "This does not show that the eventual learned regimes cannot be separated, require a distinction based on causal origin, or weaken the flow coverage cap. It prevents assuming separation before choosing and evaluating the observation contract.",
+      "non_adoptions": [
+        "No total-active-fraction classifier input",
+        "No new regime, label priority or forced ambiguity label",
+        "No external-input history field, mode flag, path counter or fitted classifier",
+        "No requirement to remove useful cyclic recurrence"
+      ],
+      "verification": "Exact group counts/densities and symbolic disjoint-set overlap identities. No network state evolution, training or project test."
+    }
+  ],
+  "comparison_candidates": [
+    {
+      "choice": "Activity-time density versus strength-qualified density",
+      "evidence": "Compare exclusion of incidental activity with retention of actual brief flow participation and noise-supported useful context.",
+      "preference": "Prefer the simpler definition if these errors and regime trajectories are adequate; integrated strength and active-time answer different questions."
+    },
+    {
+      "choice": "Physical-time versus event-relative observation windows",
+      "evidence": "Vary actual input pacing and recurrence times while preserving H-57 coverage semantics.",
+      "preference": "Favor the definition whose labels track intended temporal behavior without disguising broad coverage through a shrinking window."
+    },
+    {
+      "choice": "Density/coverage alone versus an additional ordered-path observable",
+      "evidence": "Use actual trajectories with comparable qualified footprint but different intended progression or confined recurrence.",
+      "preference": "Introduce a path observable only where density/coverage fail the required distinction; derive its storage after its meaning and value are established."
+    },
+    {
+      "choice": "Predictive cancellation and state representation",
+      "evidence": "Compare H-78/H-85 alternatives on shared and disambiguating real token sequences, with pre-input compatibility and retained uncertainty.",
+      "preference": "Do not infer success from falling predictive amplitude or raw cell count; retain both options until data discriminate."
+    }
+  ],
+  "evidence_limits": "Arithmetic counterexamples and future comparison conditions only. No human design choice or implementation contract is created; all detailed mechanisms remain pending-human.",
+  "executable_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/temporal_coverage_arithmetic.py",
+  "executable_sha256": "119b131bd762fa4fbfe73eb35798d56c788cc1bf0f6b6028664317af241df5f3",
+  "polarity_coverage_geometry": {
+    "recorded_at_utc": "2026-10-28T22:25:36.496484+00:00",
+    "status": "necessary combinatorial bound and separate conditional vector geometry; no neural simulation",
+    "value_lineage": "C19/P39 makes regime coverage meaningful under C18/P36 active cancellation; C14/P27 preserves fixed signed roles. No activity threshold or classifier selected.",
+    "coverage_assumptions": [
+      "D=5120 dimensions,60 cells in each polarity,614400 neurons total.",
+      "Qualified coverage counts post-cancellation active neuron identities over one window. A cell must qualify in its own polarity; prediction-only cells are not counted by this calculation.",
+      "H77 allows at most one active polarity per dimension at an instant. A dimension with qualified cells from only one polarity supplies at most60 identities; one with both supplies at most120."
+    ],
+    "coverage_identity": "K <= 60*(D-B)+120*B = 60*(D+B), hence B >= ceil(max(0,K-60*D)/60). For K=C*120*D integral, B/D >= max(0,2*C-1), with integer rounding as needed.",
+    "bound_limits": [
+      "Necessary, not sufficient: density qualification, activity envelope, temporal window and actual paths can be more restrictive.",
+      "Both polarities qualifying entails sign changes within the window, not simultaneous reversals across all B dimensions.",
+      "Coverage0.8 is illustrative H56, not a newly fixed threshold. Coordinate sign is not semantic valence."
+    ],
+    "geometry_assumptions": [
+      "Separately, reverse exactly k coordinate signs of one token embedding, preserving every magnitude. This is not a temporal trajectory, a learned DMN state or a change to the encoder.",
+      "For this restricted operation, cosine(v,flipped_v)=1-2*sum_flipped(v_j^2)/sum_all(v_j^2). The best cosine for a given k is obtained by selecting the k smallest squared magnitudes.",
+      "The illustrative k values equal the coverage-bound counts, but coverage does not require that many simultaneous flips. These cosines are not lower/upper bounds on actual DMN trajectories or semantic valence."
+    ],
+    "source": {
+      "repository": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "revision": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+      "tensor": "embed.weight",
+      "shape": [
+        129280,
+        5120
+      ],
+      "dtype": "BF16",
+      "existing_verified_sha256": "aa1ac979edab508950a871c370fa645a875203a1a35c20ba9c1d45bb1ed46e3c",
+      "access": "Read-only mmap of existing local SSD tensor; no copy, download or modification."
+    },
+    "sampling": {
+      "reference": "signed-population-overlap-probe.json",
+      "rows": 1024,
+      "sample_ids_sha256": "b5d0abc105e48be7739e96375802a9c16f1532334a7a148bae102da1dd8a23cb",
+      "limits": "Existing ordinary-token type sample; no corpus frequencies, semantic labels, neural responses or new full-tensor scan."
+    },
+    "cases": [
+      {
+        "qualified_coverage": 0.5,
+        "qualified_cells": 307200,
+        "minimum_dimensions_with_both_polarities": 0,
+        "minimum_dimension_fraction": 0.0,
+        "same_magnitude_simultaneous_flip_best_cosine": {
+          "min": 1.0,
+          "p05": 1.0,
+          "median": 1.0,
+          "p95": 1.0,
+          "max": 1.0
+        }
+      },
+      {
+        "qualified_coverage": 0.6,
+        "qualified_cells": 368640,
+        "minimum_dimensions_with_both_polarities": 1024,
+        "minimum_dimension_fraction": 0.2,
+        "same_magnitude_simultaneous_flip_best_cosine": {
+          "min": 0.9891720666698516,
+          "p05": 0.9906693746352062,
+          "median": 0.9915035687625954,
+          "p95": 0.9922998405989492,
+          "max": 0.9928745491535255
+        }
+      },
+      {
+        "qualified_coverage": 0.7,
+        "qualified_cells": 430080,
+        "minimum_dimensions_with_both_polarities": 2048,
+        "minimum_dimension_fraction": 0.4,
+        "same_magnitude_simultaneous_flip_best_cosine": {
+          "min": 0.9196201827668347,
+          "p05": 0.9248711058299776,
+          "median": 0.9293189607642509,
+          "p95": 0.9333029440462016,
+          "max": 0.9369584442930061
+        }
+      },
+      {
+        "qualified_coverage": 0.8,
+        "qualified_cells": 491520,
+        "minimum_dimensions_with_both_polarities": 3072,
+        "minimum_dimension_fraction": 0.6,
+        "same_magnitude_simultaneous_flip_best_cosine": {
+          "min": 0.7233800480558241,
+          "p05": 0.7320702319809486,
+          "median": 0.7420457276549484,
+          "p95": 0.7525905477520018,
+          "max": 0.7622400374932099
+        }
+      },
+      {
+        "qualified_coverage": 0.9,
+        "qualified_cells": 552960,
+        "minimum_dimensions_with_both_polarities": 4096,
+        "minimum_dimension_fraction": 0.8,
+        "same_magnitude_simultaneous_flip_best_cosine": {
+          "min": 0.2682064957512288,
+          "p05": 0.2824480780113805,
+          "median": 0.29844529577319723,
+          "p95": 0.31674387066604803,
+          "max": 0.35177084696713024
+        }
+      },
+      {
+        "qualified_coverage": 1.0,
+        "qualified_cells": 614400,
+        "minimum_dimensions_with_both_polarities": 5120,
+        "minimum_dimension_fraction": 1.0,
+        "same_magnitude_simultaneous_flip_best_cosine": {
+          "min": -1.0,
+          "p05": -1.0,
+          "median": -1.0,
+          "p95": -1.0,
+          "max": -1.0
+        }
+      }
+    ],
+    "maximum_direct_cosine_identity_error": 1.1102230246251565e-16,
+    "comparison_consequence": "Compare qualifying participation across polarities with actual semantic behavior. Sign-change counts, vector angle and semantic valence are distinct; the joint regime goals must be evaluated together.",
+    "non_adoptions": [
+      "No sign-flip scheduler, fixed code support, neuron quota, noise distribution, semantic metric or extra state."
+    ],
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/polarity_coverage_geometry.py",
+      "script_sha256": "be45673497bb7490d15f2ba545df17971b22b2f3c88f5d4f1f1c311ca5aad086",
+      "method": "Exact rational/integer coverage bounds; float64 sums of exact BF16 inputs and a direct first-row identity check.",
+      "wall_seconds": 1.9777718589975848
+    }
+  },
+  "updated_at_utc": "2026-10-29T00:49:23Z",
+  "observation_window_information": {
+    "recorded_at_utc": "2026-10-28T22:31:36.886921+00:00",
+    "status": "conditional information, kernel and storage arithmetic; no selected detector",
+    "value_lineage": "C19/P39 makes H56-H58 temporal participation observable; H74 and H34 require the needed information before a data structure. C29/P69 preserves complete neural frames without asserting that two frames recover earlier observations.",
+    "assumptions": [
+      "Illustrative binary indicator I_i[n] is observed from a complete published neural frame. Its activity definition is not selected.",
+      "Frames are equally spaced. Width100 and density cutoff0.05 are arithmetic examples, not model parameters.",
+      "Candidate filters observe an already-defined indicator; they do not alter neural dynamics or identify causal noise contributions.",
+      "No predictive readiness, per-edge activity accumulator, additional neural frame or persistent logging is required by this analysis."
+    ],
+    "information_examples": {
+      "same_two_latest_different_density": {
+        "histories_oldest_first": [
+          [
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            0
+          ]
+        ],
+        "four_frame_density": [
+          {
+            "exact": "1/4",
+            "decimal": 0.25
+          },
+          {
+            "exact": "3/4",
+            "decimal": 0.75
+          }
+        ],
+        "qualified_at_one_half": [
+          false,
+          true
+        ]
+      },
+      "same_count_and_latest_two_different_expiry": {
+        "histories_oldest_first": [
+          [
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "counts_after_one_zero": [
+          0,
+          1
+        ]
+      },
+      "proof_scope": "Counterexamples for arbitrary binary observation histories, not asserted SNN trajectories. A special dynamics could constrain histories; two snapshots alone supply no general reconstruction guarantee.",
+      "exact_rolling_count_information": "For one unrestricted W-bit history, current exact count and subsequent exact counts after W zero inputs reconstruct each departing bit by successive differences. Thus an exact deterministic rolling-count device must distinguish all2^W histories somewhere in its combined state. This is not a tight CC-wide bound under polarity constraints, a requirement to use a literal bit array, or a bound for threshold-only/approximate detectors."
+    },
+    "kernels": {
+      "rolling_box": {
+        "definition": "d[n]=(1/W)*sum_{k=0}^{W-1} I[n-k]",
+        "mean_age_frames": "(W-1)/2",
+        "sum_squared_weights": "1/W"
+      },
+      "exponential": {
+        "definition": "d[n]=(1-lambda)*I[n]+lambda*d[n-1]; stationary weights (1-lambda)*lambda^k, k>=0, in exact arithmetic",
+        "mean_age_frames": "lambda/(1-lambda)",
+        "sum_squared_weights": "(1-lambda)/(1+lambda)",
+        "weight_older_than_latest_W_observations": "lambda^W"
+      },
+      "matching": {
+        "lambda": {
+          "exact": "99/101",
+          "decimal": 0.9801980198019802
+        },
+        "mean_age_frames": {
+          "exact": "99/2",
+          "decimal": 49.5
+        },
+        "sum_squared_weights": {
+          "exact": "1/100",
+          "decimal": 0.01
+        },
+        "exponential_weight_outside_latest_W": 0.1353262606437916,
+        "interpretation": "lambda=(W-1)/(W+1) matches mean age and output variance for iid indicators of equal variance. It does not match responses to correlated or transient activity, threshold crossings, or finite-time support."
+      },
+      "transient_example": {
+        "prior_history": "all inactive",
+        "consecutive_active_frames": 10,
+        "subsequent_input": "all inactive",
+        "qualifies_when": "density >= 1/20",
+        "ema_peak": 0.1812747054363582,
+        "ema_first_unqualified_after_quiet_frames": 65,
+        "box_first_unqualified_after_quiet_frames": 96,
+        "formula_ema": "(1-lambda^b)*lambda^n after b active frames and n subsequent quiet frames",
+        "formula_box": "max(0,min(b,W-n))/W for b<=W and n>=0",
+        "interpretation": "Different post-burst qualification persists despite the matched stationary iid variance and mean age. This is a prescribed indicator sequence, not a simulated neuron."
+      }
+    },
+    "conditional_direct_storage_bytes": {
+      "neuron_count": 614400,
+      "nonoverlapping_block_W100_uint8_counts": 614400,
+      "rolling_W100_bitpacked_history": 7680000,
+      "rolling_history_plus_optional_uint8_counts": 8294400,
+      "exponential_one_FP32_density_per_neuron": 2457600,
+      "limits": [
+        "These are candidate payloads, not additions to the accepted CC capacity budget or lower bounds on every possible algorithm.",
+        "The block candidate only reports complete aligned blocks; it does not deliver the same continuous rolling observation and depends on block phase.",
+        "The rolling history can be recounted instead of storing cached counts; the optional count trades arithmetic for storage. No count cache is presumed.",
+        "FP32 exponential state approximates the real recurrence. Precision, initialization and model-time weighting need comparison; it is not an exact finite window.",
+        "Packed one-bit observations use a standard power-of-two bit width. Uint8 can represent0..100. Common position/time metadata and implementation overhead are not included or prescribed.",
+        "No event list, heap allocation, persistent log, per-edge record or extra frame selected. Any eventual multi-field layout follows the existing SoA rule."
+      ]
+    },
+    "comparison": [
+      "Judge incidental-activity rejection, retention of genuine brief participation, DMN/flow label transition timing and actual temporal order separately.",
+      "A fading window retains older activity and an aligned block changes with phase; neither can be called an optimization that preserves hard rolling-window semantics.",
+      "Observation history is distinct from neural recurrent state. Any online retained history must earn its cost by the required detector behavior; offline study alone does not mandate a runtime field.",
+      "Density still does not recover path order. Its filtering criterion must not silently become the flow-learning source-credit rule."
+    ],
+    "executable_source": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/observation_window_arithmetic.py",
+    "executable_sha256": "d05ec14010b53a7d9ab1650f4238ea7c7771162520e13f4c4b6e9fdd3c8a46e8"
+  }
+}

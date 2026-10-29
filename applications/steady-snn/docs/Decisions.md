@@ -1,15 +1,15 @@
 # Steady recurrent SNN: decisions and open questions
 
-Document-set revision: 32 · Recorded: 2026-10-27.
+Document-set revision: 202 · Recorded: 2026-10-28.
 
 ## Design authority
 
-- **Registry / coverage:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), revision 32, this application decision history and status index; mechanisms remain `pending-human`.
-- **Value lineage:** candidate P-25 → C-12 and P-22 → C-01 → V-01/V-02, with P-26 for C-13 adaptive capacity; explicit decisions preserve the meaning of the application while resource and execution choices evolve.
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 202, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Value lineage:** P-25 derives D-08 from C-12; recording propositions and their value/dependency relationships preserves application intent while choices evolve. The history distinguishes human direction, arithmetic and agent proposals. P-25/P-22 connect the application through C-12 to C-01 and V-01/V-02; the registry controls each relationship's scope.
 - **Invariants / non-goals:** distinguish human constraints from assistant proposals and calculations. Source quotes are evidence for their stated scope, not approval of every generated document or downstream mechanism. Multi-field data defaults to SoA; AoS requires an access-pattern-specific cache rationale and empirical evidence (H-29). Standard field widths are 1, 2, 4, 8, 16, 32, ... bits (`8 * 2^n`, integer n with a positive whole-number bit count); FP4 is standard. Other widths require separate packing/alignment discussion (H-30–H-32). Consider auxiliary structures only after clear business requirements lead to an implementation-algorithm discussion; no preset auxiliary storage (H-34). Pool sizing targets M slightly above N with simple static indexing; J and final quotas remain open (H-38/H-39).
 - **Acceptance:** each selected mechanism needs its proposition, trade-off, scope, evidence and remaining dependencies recorded before implementation. The registry remains authoritative for qualification.
-- **Human baseline / continuity:** H-08–H-23 below. K-03–K-13 record the document set and preserve the prior decision history; no qualified application implementation baseline exists. H-20 requests biological evidence. H-21 provisionally retains the alpha-near-3 template and asks to evaluate target-owned incoming sets; execution details remain proposals under K-11. H-22 requests anatomical and physiological evidence about incoming degree and excitability; K-12 records this assessment without selecting an integration or activity-control mechanism. H-23 accepts compensating incoming weight scale as a reasonable direction and requests separate incoming-degree parameters; K-13 records the scoped assessment without choosing a weight formula or replacing the provisional allocation. H-24 assigns weight-scale policy to training strategy; K-14 records that boundary and clarifies calculated versus measured population evidence. H-25 keeps capacity allocation provisional and requests 100+100 population analysis; H-26 asks for measured human column counts. K-16 records these scoped assessments. H-27 requests the Flash 60+60 calculation; K-17 records verified width and conditional pool sizing without selecting new neural dynamics. H-28 places the embedding table in the shared node budget; K-18 records element-aligned array sizing and the per-CC/node accounting boundary. H-29 establishes that SoA default and the evidence requirement for exceptions; K-19 records this scope. H-30 requires field-specific discussion for nonstandard widths. H-31/H-32 define standard widths as powers of two in bits, including FP4; K-22 supersedes the nonnegative-exponent restriction recorded in K-21. Packing/access details remain separate from width classification. H-33 requests the scaling document’s current memory calculation; K-23 records synchronized budgets and indexing arithmetic. H-34 establishes requirements before auxiliary structures; K-24 records that principle and the removal of speculative structures and budgets. H-35 limits current planning to Flash 60+60; K-25 clarifies A and aligns the active examples and budgets with that scope. H-36 asks about planning-time sizing; H-37 asks about 15/16 classes. H-38 sets M slightly above N as the objective; H-39 excludes preserving older connection capacity. K-27 records the worked candidates without selecting final J or quotas.
-- **Current discussion:** H-50 / AD-044 clarifies that neurons already have their semantic-vector arrangement and no natural physical positions. [K-37](../../../design/DesignAuthorityRegistry.md#k-37) withdraws the premature soft-distance recommendation and the proposed choice between positions and a contact abstraction. H-51 / AD-045 requests corrected documents followed by at least 12 hours of deeper research into the computational benefit and applicability of biological locality. H-41–H-43 and H-46–H-48 remain; no new topology or learning mechanism is adopted.
+- **Human baseline:** AD-001—AD-092 preserve the propositions sourced to H-08—H-86. A direction or comparison request does not approve every detailed mechanism; H-78 expressly leaves the state-model choice open. The linked registry retains exact evidence and exclusions.
+- **Current assessment:** [K-96](../../../design/DesignAuthorityRegistry.md#k-96) records H-85/H-86: predictive cancellation stays open for controlled comparison, and obvious empirical alternatives should be recorded directly for later real-data comparison without repeated questions. No candidate becomes a default by deferral. H-78 remains open; D-08 is unqualified; [K-207](../../../design/DesignAuthorityRegistry.md#k-207) records completion of the H-71 research pass; empirical choices remain open.
 
 ## Human decisions
 
@@ -62,6 +62,53 @@ The speaker is the user in the [CoD project conversation](codex://threads/01a140
 | AD-043 | Continue deeper research to find scientific support for how the model should handle neuronal physical-distance preference. This requests an evidence-based assessment, without adopting a distance kernel, physical layout or learning mechanism. | [H-49](../../../design/DesignAuthorityRegistry.md#h-49); quote below; recorded 2026-10-27 |
 | AD-044 | The neurons already have a semantic-vector arrangement and no natural physical positions. Correct the premise of the physical-distance assessment; this does not select another topology. | [H-50](../../../design/DesignAuthorityRegistry.md#h-50); quote below; recorded 2026-10-27 |
 | AD-045 | Correct the documents, then continue substantive deeper research for at least 12 hours. Track evidence and actual research time; implementation remains deferred. | [H-51](../../../design/DesignAuthorityRegistry.md#h-51); quote below; recorded 2026-10-27 |
+| AD-046 | Make the three mental regimes' steady attractor behavior and expected convergence from varied entry conditions the primary learning objective. An intermediate objective is that every token, under its own isolated stimulus, evokes self-recurrent activation that gradually fades back to DMN, ideally in about 0.5 seconds. AD-047 specifies the stimulus/noise sequence; numerical tolerances and mechanisms remain open. | [H-52](../../../design/DesignAuthorityRegistry.md#h-52); quote below; recorded 2026-10-28 |
+| AD-047 | Under external attention demands, substantially suppress background white noise globally. Present a token by randomly activating the corresponding fraction of cells according to each coordinate's strength once, then let recurrent activity fade to DMN under low noise. After DMN detection, raise white noise to maintain activity; DMN slowly converges toward negative semantic content, not negative coordinate values. Exact encoder, noise levels, global scope, detector and feedback algorithm remain open. | [H-53](../../../design/DesignAuthorityRegistry.md#h-53); clarification below; recorded 2026-10-28 |
+| AD-048 | In the early model, omit explicit inhibitory synaptic connections and use intrinsic mutual inhibition/cancellation between opposite-polarity populations within each semantic dimension. From a negative-semantic DMN state, a complementary positive token should briefly lower overall activation and leave a positive-semantic residual with longer noise-supported persistence. Detailed cancellation and lifetime criteria remain open. | [H-54](../../../design/DesignAuthorityRegistry.md#h-54); quote below; recorded 2026-10-28 |
+| AD-049 | Maintain total active fraction within a flexible target range. Low activity after cancellation increases white noise before DMN detection if needed. The small positive residual should strengthen preferentially to a peak, then begin token-like fading/return. Exact control law, growth time, peak and timing tolerances remain open. | [H-55](../../../design/DesignAuthorityRegistry.md#h-55); clarification below; recorded 2026-10-28 |
+| AD-050 | Exclude total active fraction from regime detection because it is a regulation target. Over a flexible window, DMN covers most neurons (over80% is an example), immersion remains within a small subset, and flow follows an activation path through different groups. These are detection/training directions; exact window, thresholds, trajectory criteria and overlap handling remain open. | [H-56](../../../design/DesignAuthorityRegistry.md#h-56); quote below; recorded 2026-10-28 |
+| AD-051 | Flow cannot cover a large neuron population within the short observation window. Coverage above an upper bound, illustratively20%, must be classified as non-flow. Progression across groups still occurs within the bounded footprint; this is not an instantaneous activity cap or an automatic DMN classification. | [H-57](../../../design/DesignAuthorityRegistry.md#h-57); quote below; recorded 2026-10-28 |
+| AD-052 | Coverage must discount added white-noise activity. A possible method is to omit neurons with insufficient activation density over the window. The filtering requirement is explicit; the density definition, window, threshold and algorithm remain proposals. | [H-58](../../../design/DesignAuthorityRegistry.md#h-58); quote below; recorded 2026-10-28 |
+| AD-053 | Autonomous recurrence is an expected state. Every intended normal state must remain steerable by external token input; if no external token input can break or redirect the recurrence, it is stale. A system-reset operation may be needed as recovery. Input-response criteria and reset trigger, scope, affected/retained state and policy remain open. | [H-59](../../../design/DesignAuthorityRegistry.md#h-59); quote below; recorded 2026-10-28 |
+| AD-054 | Assess positional preferences against the training objectives, identify an interim conclusion and judge whether deeper discussion is worthwhile. This authorizes reassessment; it does not adopt the resulting recommendation, choose a metric or authorize implementation. | [H-60](../../../design/DesignAuthorityRegistry.md#h-60); quote below; recorded 2026-10-28 |
+| AD-055 | Omit physical-distance preference for now so SNN design can proceed without it. This accepts the staged omission, not permanent exclusion of geometry or an otherwise fully qualified implementation contract. | [H-61](../../../design/DesignAuthorityRegistry.md#h-61); quote below; recorded 2026-10-28 |
+| AD-056 | Initial training proposal: use Hebbian learning for later flow training; expect immersion to emerge without directly training it; construct DMN and isolated-token activation chains directly. Behavioral acceptance remains applicable to every regime. | [H-61](../../../design/DesignAuthorityRegistry.md#h-61); quote below; recorded 2026-10-28 |
+| AD-057 | Choose an initial activation width and eligible domain, randomly choose successive target groups, and connect each predecessor neuron to N targets. Design incoming M, outgoing N and strengths for self-maintaining propagation. Exact degree balance, randomness, neuron law and parameters remain to be analyzed. | [H-61](../../../design/DesignAuthorityRegistry.md#h-61); quote below; recorded 2026-10-28 |
+| AD-058 | Propose stronger/weaker tail-to-head return for amplification/attenuation and extend head/tail to several activation steps, smoothing strength to avoid abrupt changes. This is an initial dynamical hypothesis; whole-loop gain, timing, smoothing and finite-response behavior remain open. | [H-61](../../../design/DesignAuthorityRegistry.md#h-61); quote below; recorded 2026-10-28 |
+| AD-059 | Preliminarily favor determining all activation groups before execution to avoid overlap caused by repeated sampling. Request deeper comparison and alternative-effect analysis. Precomputation and disjointness remain distinct; no final overlap policy or per-step semantic-proportion rule is selected. | [H-62](../../../design/DesignAuthorityRegistry.md#h-62); quote below; recorded 2026-10-28 |
+| AD-060 | DMN/token training includes ongoing reparative chain maintenance, not only initial construction. Seek a unified algorithm: when next-step activation is insufficient, select a sufficient proportion from the population that theoretically should activate but has not. Expected-target, selection, teaching and connection-update details remain open. | [H-63](../../../design/DesignAuthorityRegistry.md#h-63); quote below; recorded 2026-10-28 |
+| AD-061 | Consider global/static planning combined with per-step sampling of next activation targets. Width/strength is one goal; avoid selecting earlier-step neurons as later targets because this can create unintended shortcut loops. Request deeper analysis of the resulting complexity. Scope of history, deliberate returns, whole-chain planning and checks remain open. | [H-64](../../../design/DesignAuthorityRegistry.md#h-64); quote below; recorded 2026-10-28 |
+| AD-062 | The maintenance objective determines the participating scope. Select the concrete scope once per epoch: all CC neurons for DMN; for a token, select cells from each minicolumn in proportions determined by its semantic-vector values. This fixes scope selection frequency, not every step's batch, runtime readout or an epoch-wide reset of connections. | [H-65](../../../design/DesignAuthorityRegistry.md#h-65); quote below; recorded 2026-10-28 |
+| AD-063 | Chain width is an approximate number of neurons activated per step, without an exact-count requirement. Scope size divided by width gives the rough number of steps per pass, related to maintenance duration. Step timing, closure details and gain also affect persistence; no numerical setting is chosen. | [H-65](../../../design/DesignAuthorityRegistry.md#h-65); quote below; recorded 2026-10-28 |
+| AD-064 | Use objective-dependent body enhancement and tail-to-head attenuation as strategy parameters, allowing noise to assist weak recurrent activation and smooth fading without external signals. Exact gain convention, weight mapping, return profile and calibration remain open. | [H-65](../../../design/DesignAuthorityRegistry.md#h-65); quote below; recorded 2026-10-28 |
+| AD-065 | Preliminary expectation: activation chains retain tail-to-head connections; a completely disconnected return is not the intended case. Analyze the half-second token response across recurrence. The accompanying agent analysis distinguishes connection presence from successful reactivation; it does not infer duration or observable lap count from wiring alone. | [H-66](../../../design/DesignAuthorityRegistry.md#h-66); quote below; recorded 2026-10-28 |
+| AD-066 | Reinforcement and weakening strategies are subtle and require continuing attention to detail throughout design. The accompanying analysis examines gain definitions, coupling, thresholds, quantization, noise and realized semantic response; no numerical strategy is adopted. | [H-66](../../../design/DesignAuthorityRegistry.md#h-66); quote below; recorded 2026-10-28 |
+| AD-067 | Preliminary preference: preserve the token vector's distribution in each step's sample, allowing at most a few steps to maintain it; short-term coordinate distribution must not deviate too far. Whole-epoch or whole-lap averages alone are insufficient. Exact window, tolerance, integer sampling and readout remain open. | [H-66](../../../design/DesignAuthorityRegistry.md#h-66); quote below; recorded 2026-10-28 |
+| AD-068 | Permit a loose half-life-like quantitative description of token fading instead of requiring complete return at half a second. Exact precision is unnecessary; differences between tokens are expected, and timely fade-out is the objective. The observable, reference point, tolerance and significant-tail criterion remain open. | [H-67](../../../design/DesignAuthorityRegistry.md#h-67); quote below; recorded 2026-10-28 |
+| AD-069 | Propose modeling spiking rate at a suitable discrete time scale and allowing activation-chain cessation; request deeper discussion as a major modeling decision. A particular rate variable, time step, update law or population aggregation is not selected. | [H-67](../../../design/DesignAuthorityRegistry.md#h-67); quote below; recorded 2026-10-28 |
+| AD-070 | “断链” means natural cessation of active propagation, not eliminating connection weights. Both insufficient ongoing support and probabilistic propagation failure are intended possibilities. This does not select a timer, independent dropout rule or pruning operation. | [H-68](../../../design/DesignAuthorityRegistry.md#h-68); clarification below; recorded 2026-10-28 |
+| AD-071 | Propose expressing neuron selection as fractional participation together with spike rate, addressing the remaining granularity of whole-neuron selection. Fraction semantics, interaction with rate, epoch scope and storage remain under discussion. | [H-69](../../../design/DesignAuthorityRegistry.md#h-69); quote below; recorded 2026-10-28 |
+| AD-072 | Floating-point precision requires careful treatment across multiple stages of the design and cannot be ignored. Storage formats alone do not settle arithmetic/update behavior; exact precision, scaling and rounding policies remain open. | [H-70](../../../design/DesignAuthorityRegistry.md#h-70); quote below; recorded 2026-10-28 |
+| AD-073 | While constructing large recurrent activation chains, avoid deliberately introducing intermediate shortcut loops, but do not aggressively eliminate small loops. Noise-supported small loops are desired when they let longer context influence later network outputs rather than relying solely on the main chain for long output. Dominant response fading need not erase all later history effects. | [H-71](../../../design/DesignAuthorityRegistry.md#h-71); quote below; recorded 2026-10-28 |
+| AD-074 | Examine decay over practical accumulation periods rather than settling every small update independently; consider future scheduled triggers for applying the decay law. The exact accumulated quantity, model-time semantics, trigger invalidation and representation remain open. | [H-71](../../../design/DesignAuthorityRegistry.md#h-71); quote below; recorded 2026-10-28 |
+| AD-075 | Investigate whether INT8 or INT4 is preferable for some modeled quantities. This requests field-specific analysis, not a blanket format replacement or selected scale, signedness, accumulator, rounding or packing policy. | [H-71](../../../design/DesignAuthorityRegistry.md#h-71); quote below; recorded 2026-10-28 |
+| AD-076 | Autonomously spend twelve hours integrating these ideas with established directions and refining the modeling details. Record substantive research and design work; implementation remains deferred. | [H-71](../../../design/DesignAuthorityRegistry.md#h-71); quote below; recorded 2026-10-28 |
+| AD-077 | Scheduled decay can precompute when the next minimum-precision-permitted change occurs, rather than choose a distant time target. This clarifies the successive local event direction; rounding boundaries, progress retention, input handling and execution remain open. | [H-72](../../../design/DesignAuthorityRegistry.md#h-72); quote below; recorded 2026-10-28 |
+| AD-078 | Per-neuron state values need not be tightly restricted in precision: FP16 and FP32 may be considered because the array is relatively small. This opens the comparison; it does not select a format, phase layout or uniform precision for weights. | [H-73](../../../design/DesignAuthorityRegistry.md#h-73); quote below; recorded 2026-10-28 |
+| AD-079 | Avoid overengineering. Introducing technical concepts, algorithms or data structures requires a real value-dependency chain derived from first principles. This governs cumulative modeling choices as well as individual mechanisms; literature precedent and technical possibility alone do not supply application value. | [H-74](../../../design/DesignAuthorityRegistry.md#h-74); quote below; recorded 2026-10-28 |
+| AD-080 | Different neurons within a minicolumn represent different contextual paths for its shared semantic component, drawing on HTM. Individual learned identities have a purpose beyond aggregate magnitude; this does not select HTM segments, bursting or a new semantic-coordinate mapping. | [H-75](../../../design/DesignAuthorityRegistry.md#h-75); quote below; recorded 2026-10-28 |
+| AD-081 | Propose alternating two state frames: next-frame activations read the previous snapshot through target-owned incoming slots. This simplifies computation and avoids persistent intermediate accumulation. Exact state meaning, transition, cancellation, time step and implementation remain under discussion; temporary incoming sums still exist. | [H-75](../../../design/DesignAuthorityRegistry.md#h-75); quote below; recorded 2026-10-28 |
+| AD-082 | At token input, strongly activate cells when a sufficient proportion is already predictively activated; otherwise activate a broad part of the minicolumn at low intensity. This specifies context-dependent entry, while predictive criteria, proportions, strength functions and coordinate calibration remain open. | [H-76](../../../design/DesignAuthorityRegistry.md#h-76); quote below; recorded 2026-10-28 |
+| AD-083 | Do not pair positive/negative cells by index. Compute the net over the minicolumn, then proportionally retain the spiking rates of active neurons in the surviving direction. This specifies full active-rate net cancellation and preserves surviving within-population ratios; prediction handling and transition timing remain open. | [H-77](../../../design/DesignAuthorityRegistry.md#h-77); quote below; recorded 2026-10-28 |
+| AD-084 | Leave the neuron-state interpretation undecided and preserve room for future controlled implementation comparisons: one activity value with predictive/active ranges versus readiness distinct from current firing. This selects neither layout nor simultaneous storage, and does not request an experiment framework now. | [H-78](../../../design/DesignAuthorityRegistry.md#h-78); question and answer below; recorded 2026-10-28 |
+| AD-085 | Hebbian and HTM learning apply specifically to flow training with token sequences. DMN and isolated-token construction/repair must remain a distinct training method. The prediction-guided token-entry rule does not make these methods identical. | [H-79](../../../design/DesignAuthorityRegistry.md#h-79); quote below; recorded 2026-10-28 |
+| AD-086 | The flow-training algorithm has not yet been designed. The user expects it may differ from DMN/isolated-token repair; no common algorithm or particular alternative is selected. | [H-80](../../../design/DesignAuthorityRegistry.md#h-80); quote below; recorded 2026-10-28 |
+| AD-087 | Include preliminary flow-training algorithm design in the ongoing goal and raise discussion points early. This authorizes exploration, not adoption of an algorithm or implementation. | [H-81](../../../design/DesignAuthorityRegistry.md#h-81); quote below; recorded 2026-10-28 |
+| AD-088 | The direct ideal result of sequence training is predictive preactivation closely matching the input sequence. Preactivation need not sustain long autonomous output; matching suffices as the direct training criterion. Continuous output generation will have a separately designed mechanism/algorithm. | [H-82](../../../design/DesignAuthorityRegistry.md#h-82); question and answer below; recorded 2026-10-28 |
+| AD-089 | Validate flow prediction as sequence context grows: multiple possibilities on matching shared fragments are expected, then predictive diversity should contract toward the training input sequence. A fixed single-continuation requirement at every step is not selected. | [H-83](../../../design/DesignAuthorityRegistry.md#h-83); question and answer below; recorded 2026-10-28 |
+| AD-090 | Broad weak activation is a generation-mode behavior supplied explicitly rather than through ordinary neuronal connection transmission, and it is not learned. Refine the model using HTM details without treating this fallback as a flow teaching population. | [H-84](../../../design/DesignAuthorityRegistry.md#h-84); question and correction below; recorded 2026-10-28 |
+| AD-091 | Leave opposite-sign predictive readiness versus predictive net cancellation open for later controlled comparison; do not decide now. | [H-85](../../../design/DesignAuthorityRegistry.md#h-85); structured reply below; recorded 2026-10-28 |
+| AD-092 | Handle choices that are clearly suitable for later real-data comparisons directly as open empirical alternatives, without asking the user each time. | [H-86](../../../design/DesignAuthorityRegistry.md#h-86); explicit instruction below; recorded 2026-10-28 |
 
 AD-002 / H-09:
 
@@ -240,12 +287,211 @@ AD-045 / H-51:
 
 > 修正文档以后继续深挖，花足够成本，至少12小时以上
 
+AD-046 / H-52:
+
+> **what relationships the connections learn**？ 主要是三相的稳态吸引子，力求各种入口条件都按预期收敛。 中间学习目标还包括每个token都在唯一性输入刺激下，自我循环激活，整体逐渐淡出回归DMN相态，理想的淡出时间是每token持续半秒左右回归 DMN 相态。
+
+AD-047 / H-53, in response to clarification of the isolated-token stimulus and background noise:
+
+> DMN 背景白噪音应有一定的全局抑制机制，在外部要求专注的场景下有相当幅度的降低。 token 唯一性输入应当只需要按语义向量各维强度随机激活相应比例的神经元一次，并在低噪音环境下稳态淡出，回归 DMN。 系统检测到 DMN 相态后提升背景白噪音维持激活比例，DMN则应当缓慢向负面语义（而非负值）方向收敛。
+
+AD-048 / H-54:
+
+> 我们早期阶段先不建模神经元的抑制性连接，固有的让一个语义维度中代表正负值的两组神经元相互抑制，其激活相互抵消。 预期是 DMN 滑到较负面语义状态时，外部与之互补的正面语义token刺激，短期会快速降低整体激活水平，让输入的正面语义激活在对冲后留下的残值，在背景噪音辅助下，能够维持更长时间。
+
+AD-049 / H-55, clarifying noise support before DMN detection:
+
+> 系统有维持整体激活比例在柔性目标范围的机制，正负语义抵消以后的整体低激活水平应导致系统提高背景噪音水平；但轻微的正面语义残留，应在背景白噪音下首先加强，达到峰值以后才按单token训练目标那样开始回落回归
+
+AD-050 / H-56:
+
+> 训练目标和检测条件：
+>
+> 总激活比例是系统调节目标，所以不参与检测。
+>
+> 检测逻辑大概是，在一个柔性窗口内：
+>
+> DMN - 激活覆盖大部分（比如80%以上）神经元
+> 沉浸 - 激活范围维持在少部分神经元
+> 任务心流 - 激活路径保持扫过不同神经元群
+
+AD-051 / H-57:
+
+> 心流状态不可能短时间扫过大的神经元覆盖面，总覆盖面如果超过（比如20%）就应该判非心流状态
+
+AD-052 / H-58:
+
+> 覆盖面判断有必要剔除系统附加的白噪音，可能的办法是特定神经元的激活密度小于一定程度就不算
+
+AD-053 / H-59:
+
+> 自动循环激活属于预期状态，如果任何外部token输入都不能打破，那么确实属于stale，可能需要系统性重置操作机制。 预期的正常状态，都可以由外部token输入驱使网络转向
+
+AD-054 / H-60:
+
+> 基于这些训练目标，看看神经元位置选择偏好方面，可以有什么阶段性结论，是否值得继续深入探讨
+
+AD-055–AD-058 / H-61:
+
+> 确实，物理距离倾向性可以暂不加入，也能先设计实现我们的 SNN。 另外需要专门提出训练方面我的初步想法，你分析记录： Hebbian 训练是后期 flow 训练的方法；immersion是预期的涌现行为不主动训练；DMN以及单token训练，采用直接创造激活链的方式 —— 决定一个初始激活规模，或者说激活链宽度，第一步激活这么多个范围内（DMN来说是全部，token来说是语义向量决定的各维比例选出神经元范围）的神经元；然后随机选出第二部激活的目标神经元，继而让第一步的每个神经元建立到 N 个第二步神经元的连接，理论上导致每个第二步神经元新建 M 个连入连接。 设计 M、N 以及各新连接的强度，让激活链足够自我维持。 链尾往链头的连接强度如果更大，则产生增强激活效果，如果更小，则产生减弱效果。 且链尾和链头的概念要拓宽到多步激活群，平滑更新强度避免断崖式变化。
+
+AD-059 / H-62:
+
+> 我倾向于开始之前静态把各批激活神经元确定下来，也就是避免每一步重新取样造成的重叠。 但这个想法比较初步，你还需深入分析比较与替代方法的效果预期差别，保持讨论这个话题。
+
+AD-060 / H-63:
+
+> 我又想了一下，DMN和token训练不止是初始建造激活链，其实持续训练迭代中更多的会是修补性激活链维护，这可能更好的是设计一个统一训练算法，下一步激活量不足时，从（理论上）该激活而未激活的群体中选足够比例作为下一步激活的神经元群，你这样调整一下
+
+AD-061 / H-64:
+
+> 可能要静态考虑全局+每一步采样选取下一步的激活目标，激活链 宽度/强度 是一个目标，前序步骤的神经元也要避免选为后续的下一步目标，否则有可能建立预期外的捷径循环了，整体应该还是有复杂度，你深入思考分析
+
+AD-062–AD-064 / H-65:
+
+> 激活链如何走一遍，涉及的神经元群体，由 维护（训练/建造）目标决定，并应景设计不同的策略参数，主要包括：
+>
+> - 激活链宽度 —— 一步激活神经元的（大致）个数（不要求精确），范围内神经元总个数除以这个宽度，就是大体的一次循环步数，与维持时间直接相关
+> - 链主体过程的增强程度 和 链尾衔接链头过渡过程的削弱程度 —— 让背景噪音能够辅助增强弱激活循环，以及没有外部信号时平稳淡出
+>
+> DMN 训练时是全部神经元作为范围；单 token 训练时是按语义向量值作为比例选出各 minicolumn 中的神经元作为范围。 每个epoch选一次具体神经元范围。
+
+AD-065–AD-067 / H-66:
+
+> “the half-second token response” 只有在链尾不接链头的情况下才等于一个lap，我初步预期中不应该有链尾完全不接链头的情形，你分析看看呢
+>
+> 强化与削弱策略的确会非常微妙，需要仔细对待，设计过程要一直注意细节。
+>
+> 我初步判断还是应该每一步采样都保持 token 向量的分布，最多是放宽到少数几步以内维持分布，不能短时间内与token vector原本的维度分布偏离太多。
+
+AD-068/AD-069 / H-67:
+
+> 半秒目标可以改为半衰期性质的定量要求，总之不需要严格精确，不同token有差异也是预期的，只要及时fade-out就行，具体时间可以宽松。
+>
+> 你提的两个设计问题，我感觉本质上是严格 spike-by-spike 建模模拟 SNN 的局限，我觉得可以转而在合适的离散时间尺度上建模 spiking-rate ，引入一定的断链条件，这样语义vector各维的数值就不容易被明显偏少的神经元个数搞得过于割裂。 你深入想下去，这是个挺大的设计决定和讨论话题。
+
+AD-070 / H-68:
+
+In response to the question distinguishing (1) stopping weak ongoing propagation while retaining learned connections, (2) probabilistic propagation failure with connections retained, and (3) removing/zeroing learned connections, the user answered:
+
+> 1 和 2 都是
+
+The user then clarified:
+
+> 我说的 “断链” 是指激活链自然断掉，不是连接权重消除。
+
+AD-071 / H-69:
+
+> 选神经元使用离散整个形态确实仍是问题的一部分，我觉得可以用分数表示选中比例，与spike-rate配合，大概效果就对了
+
+AD-072 / H-70:
+
+> 对，浮点数精度需要在很多环节仔细处理，不容忽视。
+
+AD-073–AD-076 / H-71:
+
+> 我们构建大（循环）激活链的同时，虽然避免主动制造中途的短路小循环，但是也不应该强力消除小循环，运行在一定背景噪音加持下能够维持的小循环也是期待的目标，这样长上下文才能给后续网络输出施加影响，而不是仅仅依靠直接激活链的主干产生连续的长输出。
+>
+> 衰减确实有必要考虑上实用的累积周期，而不是单步结算就完了，也许可以考虑对衰减律做未来触发定时器的方式生效之类的，你仔细深入考虑这个方向。
+>
+> 更极端一些，你深入考虑如果采用 INT8 甚至 INT4 来表达一些建模量，是否更优呢？
+>
+> 你自主推进12小时，综合以上思路和既定方向，完善打磨建模细节。
+
+AD-077 / H-72 — user clarification, recorded 2026-10-28:
+
+> scheduled decay 可以是预计算下一次最小精度允许的变化发生在什么时候，而不是安排过远的时间目标
+
+AD-078 / H-73 — user direction, recorded 2026-10-28:
+
+> 每神经元的状态数值确实不用太限制，FP16 甚至 FP32 都可以考虑，因为规模确实不大。
+
+AD-079 / H-74 — user constraint, recorded 2026-10-28:
+
+> 切忌朝过度工程方向走，技术概念、算法、数据结构的引入，都必须有真实第一性原则沿袭下来的价值依赖链支持。
+
+AD-080/AD-081 / H-75 — user clarification and proposal, recorded 2026-10-28:
+
+> 一个minicolumn内的不同神经元代表同一概念的不同细分路径，正式 Numenta 的 HTM 相关理论中的重要模型之一。
+>
+> 我们的 SNN 更新可以采用 2 frame 轮换更新的算法吧？ 下一frame的神经元激活值，从上一frame的快照中取，配合对连入的槽集组织，计算简便很多，不必考虑中间累积状态。
+
+AD-082 / H-76 — user direction, recorded 2026-10-28:
+
+> 输入token生效时，遵循 Numenta 的 minicolumn 预测规则： 已经有足够比例预测性激活的神经元时，高度激活这些神经元；没有时，低强度激活 minicolumn 所属内大范围的神经元。
+
+AD-083 / H-77 — user direction, recorded 2026-10-28:
+
+> 确实 minicolumn 内的正负抵消不该按下标对应，没有合理对应理由，应该是在 minicolumn 范围整体计算净余，然后按比例保留相同方向活跃神经元的 spiking-rate
+
+AD-084 / H-78 — response to a state-model comparison question, recorded 2026-10-28:
+
+The question contrasted one activity value with predictive/active ranges and separate predictive readiness/current firing. The user answered:
+
+> 设计上留将来实现时能做对照实验的余地，目前不决定
+
+AD-085 / H-79 — user clarification, recorded 2026-10-28:
+
+> 注意使用token序列训练flow相态时才是 Hebbian 与 HTM 学习模式，不要跟 DMN 和 单token 训练混淆。
+
+AD-086 / H-80 — user clarification, recorded 2026-10-28:
+
+> flow学习训练算法还没开始设计，我感觉很可能不是 DMN 和 单token 那种修复算法。
+
+AD-087 / H-81 — user design instruction, recorded 2026-10-28:
+
+> 你的目标包含做 flow 训练算法的初步设计，有待讨论的点尽早提出来跟我讨论
+
+AD-088 / H-82 — response to the flow-learning objective question, recorded 2026-10-28:
+
+The question asked whether sequence learning should preactivate cells for the next external token, produce the next semantic vector before its arrival, or pursue both objectives. The user answered:
+
+> 序列训练的直接理想结果是预测性预激活的神经元群与输入序列高度匹配。 预激活强度有可能不足以维持长序列自主连续生成输出，作为训练的检验条件，高度匹配就够了。 持续输出的生成机制算法另行设计。
+
+AD-089 / H-83 — response to the ambiguous-continuation question, recorded 2026-10-28:
+
+The question contrasted retaining multiple plausible predictive populations with favoring one continuation. The user answered:
+
+> 这个验证时是随着序列长度变化的，匹配的序列段的时候预测可能性多是预期的，随着序列变长，预期是预测预激活的多样性收缩，向训练输入token序列收敛
+
+AD-090 / H-84 — correction of the flow-learning-recipient question, recorded 2026-10-28:
+
+The question proposed choosing learning recipients from broad weak activation after an unexpected token. The user corrected that premise:
+
+> “keeps activation broad and weak” 是生成模式下的表现，并非依赖正常神经元连接的传到实现，自然也不予学习。 你结合 HTM 细节打磨我们的相关细节。
+
+AD-091 / H-85 — predictive cancellation comparison, recorded 2026-10-28:
+
+Question: When plausible next tokens require opposite signs on the same semantic coordinate, should both neuron groups be allowed to remain predictively ready until input resolves the ambiguity? This concerns prediction semantics, not the deferred choice of state fields.
+
+> 留设计空间到时候做对照实验吧，当前不做决定
+
+AD-092 / H-86 — handling empirical design alternatives, recorded 2026-10-28:
+
+> 有些明显可以留作真实数据做对照实验的，你直接按这个处理，不用问我了
+
 ## Proposal history and current status
 
 | Proposal | Status / reason |
 | --- | --- |
+| Two-frame incoming gather | AD-081 proposes the preferred simple execution direction: immutable preceding state, destination-local sums and a completed next frame. FP32 scalar state in both frames costs 4.6875 MiB; weights remain single. The state and cancellation semantics remain open. |
+| Next-precision-change decay scheduling | AD-077 identifies the intended near-term prediction. Exact code boundaries and accumulated progress need explicit arithmetic; extra event structures require demonstrated benefit under AD-079. A straightforward FP32 discrete-time reference is an agent-proposed comparison baseline, not an adopted implementation. |
+| Wider neuron state | AD-078 allows FP16/FP32 consideration. One field costs 1.171875/2.34375 MiB at the current population; weights and intermediates need separate comparisons. Existing four-bit named-array totals remain conditional baselines. |
+| Physical-distance preference at this stage | AD-055 accepts omitting it for now. Geometry is not a prerequisite for the current [training discussion](TrainingStrategy.md); a future proposal still needs a concrete benefit. |
+| Unified DMN/token construction and maintenance | AD-060 emphasizes repeated repair of deficient expected next-step activation. Naturally achieved participation and selected missing participants are distinct; initial construction uses the same direction. Target semantics, selection fraction, teaching support, edge updates and assessment remain open. AD-085 reserves Hebbian/HTM for token-sequence flow; AD-086/AD-087 open its separate initial algorithm design. Immersion has no dedicated training objective. |
+| Epoch scope and strategy parameters | AD-062–AD-064 fix one scope per epoch, approximate width, body enhancement and return attenuation roles. Scope selection and stepwise sampling are distinct. AD-067 prefers per-step token fidelity with only a few-step allowance; its exact tolerance/window, gain convention, physical step time and numerical parameters remain open. |
+| Fractional recruitment and rate dynamics | AD-069/AD-071 open a major model change. Individual-neuron effective rates with fractional training targets are an agent recommendation; binary counts, population aggregation and explicit spikes remain distinct comparison levels. A no-reuse whole-cell bound is conditional on that assignment policy. AD-070 retains learned weights; AD-072 requires numerical care. No update law, new field or implementation is selected. |
+| Whole-chain constraints and adaptive target sampling | AD-061 requests global/static consideration and avoidance of earlier-step targets that can create unintended shortcuts. [Analysis](TrainingStrategy.md#global-constraints-and-stepwise-sampling) recommends constraining semantic/quantity profiles, future resources and permitted returns while sampling concrete targets adaptively. A fresh target can still have an existing return path; structural opportunity and harmful activation are distinct. The detailed plan/history/check algorithm is unselected. |
+| Activation-chain repair and closure | AD-064 assigns enhancement to the body and attenuation to the distributed tail/head transition; AD-057/AD-058's group and edge analysis remains relevant. Existing support and missing contributions are counted separately. AD-065 expects retained return connections. Within-lap growth can coexist with net attenuation across repeated laps; repair still follows the intended response. Connectivity does not alone guarantee successful reactivation or a particular visible lap count. |
+| Precomputed activation groups | AD-062 fixes the enclosing neuron scope once per epoch; it does not fix every batch. AD-059's precomputed batches and stepwise choices within the scope remain [alternatives](TrainingStrategy.md#alternatives-worth-comparing). Cross-token interference and fresh-input entry remain open; no runtime group structure is chosen. |
+| External-token steerability | AD-053 requires every normal state to remain externally steerable. Repetition, long immersion or normal active fraction does not establish stale; loss of effective input response does. Admissible inputs, response observables and the practical assessment horizon remain open. |
+| System reset for stale recovery | AD-053 raises reset as a possible recovery mechanism. Trigger, scope, retained/affected state, restart condition and automatic policy are unselected. This is a candidate, not a required reset on a single failed input. |
 | Physical distance as an opportunity prior | Withdrawn agent recommendation after AD-044 / H-50, as recorded in K-37. The existing semantic arrangement supplies no physical metric. Biological findings remain references in [PhysicalDistancePreferenceResearch](PhysicalDistancePreferenceResearch.md); no choice between explicit positions and a contact abstraction is currently required. |
-| Steady activity and three mental regimes | AD-040–AD-042 specify broad per-CC occupancy bounds, with different levels allowed across mental states and distinct semantic trajectories. No exact set point, equal phase populations, global controller, valence estimator or transition/learning formula is selected. |
+| Steady activity and three mental regimes | AD-040–AD-042 specify broad per-CC occupancy bounds and distinct semantic trajectories. AD-046 makes their steady attractor behavior and convergence from varied entry conditions the primary learning objective. No exact activity set point, equal phase populations, controller implementation, valence estimator or transition/learning formula is selected. |
+| Token-evoked recurrence and return to DMN | AD-068 permits a loose half-life-like timing scale around half a second with expected variation and timely fading. AD-047 retains one stochastic presentation and the noise conditions; AD-070 allows active propagation to cease naturally while learned weights remain. AD-073 permits useful small-loop context after the dominant response fades. Its envelope, individual-trial behavior, reference point and distinction from retained context remain open. |
+| Attention/activity/DMN background-noise control | AD-047 requires attention-dependent suppression and DMN activity support. AD-049 also raises noise in response to a low active fraction before DMN detection; the positive residual grows to a peak and then fades. AD-050 excludes the regulated fraction from classification. Global scope, noise levels and control/detector algorithms remain open. |
+| Intrinsic opposite-polarity cancellation | AD-048 requires within-dimension mutual inhibition/cancellation and excludes explicit inhibitory synaptic connections in the early model. The function changes activity, rather than only subtracting unchanged populations at readout; cell/phase/update details remain open. |
+| Regime detection | AD-050–AD-052 use qualified window coverage and paths: broad coverage for DMN, a small persistent footprint for immersion and progression within a limited footprint for flow. Exceeding an illustrative20% cap rules out flow. Noise must be discounted; a density gate is proposed. Total active fraction is excluded. Window/threshold definitions and low-coverage temporal distinctions remain open. |
 | Biological feature / minicolumn correspondence | AD-040 permits non-bijective correspondence. Distributed semantic features are compatible with fixed coordinate roles; feature heterogeneity alone does not require interleaving or re-encoding. |
 | Proximity-biased coactivity learning | AD-033 remains the direction, with AD-034's dimension-index neutrality. AD-035 rejects the internal-position mechanism; no geometry or distance kernel is selected. [Semantic cortical mapping research](SemanticCorticalMappingResearch.md) assesses AD-036's research scope. |
 | Shared internal positions across minicolumns | Rejected by AD-035 / H-42. Equal cell index or an imposed shared internal coordinate supplies no accepted cross-minicolumn distance preference. |
@@ -279,10 +525,27 @@ AD-045 / H-51:
 
 | Topic | Exact open decision | Consequence |
 | --- | --- | --- |
+| [SNN-03/SNN-05](TrainingStrategy.md#generation-fallback-and-sequence-learning) | How should an unfamiliar observed training transition establish a contextual learning representation and associations, independently of the generation fallback? | AD-090 excludes the explicit broad weak generation response from learning. HTM active cells, learning winners and connection updates are distinct reference roles; no imported structures or cold-start rule are selected. |
+| [SNN-01/SNN-02/SNN-05](TrainingStrategy.md#predictive-alternatives-and-signed-cancellation) | May opposite-sign populations retain simultaneous predictive readiness until input resolves the alternatives, or should readiness also undergo net cancellation? | AD-091 explicitly reserves this for controlled comparison. AD-092 directs obvious empirical alternatives to be handled without repeated questions. H-77 active-rate cancellation remains, and H-78 state fields remain undecided. |
+| [SNN-03/SNN-05](TrainingStrategy.md#flow-learning-initial-design-scope) | How should pre-input matching and contraction of plausible predictions be measured as sequence context grows? | AD-088/AD-089 require close matching and context-dependent narrowing; continuous output generation is separate. Distinguish plausible continuation diversity from cell count and avoid a self-confirming score. |
+| [SNN-03/SNN-05](ContextLoopsAndNumerics.md#useful-small-loops-and-dominant-response-fading) | Which later response differences establish useful small-loop context, and which interference actually defeats progression or steerability? | AD-073 rejects aggressive small-cycle elimination; a main-chain construction preference is not a whole-network acyclicity requirement. |
+| [SNN-02/SNN-03/SNN-07](ContextLoopsAndNumerics.md#accumulating-decay-instead-of-losing-each-small-update) | What accumulated information and model-time rule preserve decay between representable updates, and when is scheduling worthwhile? | AD-074/AD-077 favor preserving accumulated progress and predicting the next permitted change; AD-079 requires demonstrated benefit before extra scheduling machinery. |
+| [SNN-02/SNN-04/SNN-07](ContextLoopsAndNumerics.md#integer-formats-are-field-specific-choices) | Which quantities benefit from INT8/INT4, with which scale, accumulation and temporal error costs? | AD-075/AD-078 call for per-field comparison including FP16/FP32 state; AD-079 requires a real value chain for extra mechanisms. |
+| [SNN-01/SNN-02/SNN-03/SNN-05](RateDynamics.md#fractional-recruitment-and-rate-have-different-possible-meanings) | What does fractional selection mean, what does rate measure, and which quantity must persist? | Avoids duplicating one effective activity as two unspecified factors or reintroducing whole-event granularity through immediate binary sampling. |
+| [SNN-02/SNN-03/SNN-05](RateDynamics.md#natural-cessation-with-learned-connections-retained) | Which local transfer/noise conditions give natural cessation and later reactivation while preserving meaningful token proportions? | Makes AD-070 operational without weight deletion, token-specific runtime gates or assuming that an ensemble survival half-life proves gradual individual fading. |
+| [SNN-02/SNN-03/SNN-07](RateDynamics.md#numerical-precision-is-part-of-the-behavior) | Which representation and arithmetic preserve weak contributions, cancellation residuals and gradual updates across useful time steps? | Makes AD-072 assessable; FP4/FP8 storage alone does not determine accumulation precision, error control or actual fading. |
+| [SNN-03/SNN-05/SNN-06](ActivationRegimes.md#external-steerability-stale-states-and-recovery) | Which inputs and response criteria establish steerability, and if reset is adopted, what triggers it and what state is retained? | Makes AD-053 assessable without treating intended recurrence as failure or selecting a recovery implementation. |
 | [SNN-02/SNN-03](ActivationRegimes.md) | What counts as active within a CC, over what time window, with what broad envelope and transient allowance? | Makes the selected local bound measurable while allowing different mental states to occupy different activity levels. |
+| [SNN-03/SNN-05](ActivationRegimes.md#learning-objective-regime-attraction-and-token-transients) | Which entry conditions should reach which regime, and what demonstrates dominant token fading while useful history still affects later outputs? | Makes AD-046/AD-047 and AD-068 assessable while separating individual response envelopes, stochastic survival and the coverage-based return to DMN. |
+| [SNN-03/SNN-05](ActivationRegimes.md#attention-dmn-detection-and-global-background-noise-control) | What flexible-window coverage/path criteria distinguish the regimes, and how do noise suppression, activity support and new token arrivals combine? | Specifies the required noise-control behavior before choosing its detector, feedback algorithm or representation. |
 | [SNN-01/SNN-03/SNN-05](ActivationRegimes.md) | What defines negative semantic valence and its slight activation advantage, task-sequence success and an immersion loop's length? | Specifies the three semantic trajectories without substituting coordinate signs for meaning or choosing a learning rule prematurely. |
-| [SNN-01/SNN-03/SNN-05/SNN-07](PhysicalDistancePreferenceResearch.md) | Which computational effect of biological locality is useful within the existing semantic arrangement, and what evidence establishes its transfer conditions? | Research precedes any proposed metric or mechanism. There is no natural physical distance to parameterize, and no required choice between positions and a contact abstraction. A result may support retaining the current organization without adding geometry. |
-| [SNN-02/SNN-03/SNN-07](SynapticIntegrationResearch.md) | Which integration, input-timing and activity-control contract prevents unwanted degree bias while retaining useful selectivity? | Determines the meaning of activation, any branch or adaptation state, and acceptance beyond storage arithmetic. |
+| [SNN-01/SNN-03/SNN-05/SNN-07](TrainingStrategy.md#epoch-scope-width-and-gain-parameters) | How do approximate width, step time, body enhancement and return attenuation jointly produce the intended persistence under noise? | AD-062–AD-064 fix their roles and epoch scope. Per-step versus aggregate enhancement changes the coupling to chain length; numerical calibration remains open. |
+| [SNN-01/SNN-03/SNN-05](TrainingStrategy.md#token-proportions-apply-to-the-epoch-scope) | Which short window and error tolerance implement the per-step preference with at most a few-step allowance? | AD-067 excludes reliance on the whole-lap average alone. Integer epoch populations, nonrepeating progression and width must support short-window fidelity; repair balances the completed next-step group, including correct natural activity. |
+| [SNN-01/SNN-03/SNN-05/SNN-07](TrainingStrategy.md#global-constraints-and-stepwise-sampling) | Which whole-chain constraints govern ordinary progression, history exclusion, permitted return and future candidate feasibility? | AD-061 requires deeper analysis; neither a lifetime no-reuse rule nor only a short recent-history exclusion resolves intended recurrence and shortcuts. |
+| [SNN-02/SNN-03/SNN-05/SNN-07](TrainingStrategy.md#fresh-targets-can-still-close-unintended-loops) | What structural and response evidence distinguishes an unintended shortcut from useful recurrence in the shared graph? | Prior-participant exclusion alone is insufficient; full cycle rejection conflicts with recurrence, while bounded screening has explicit limits. Representation and work budgets remain open. |
+| [SNN-02/SNN-03/SNN-05/SNN-07](TrainingStrategy.md#unified-next-step-repair) | How do selected missing cells lead to durable connection repair, and how is response assessed without extra teaching assistance? | Distinguishes target selection, temporary activation, existing-edge updates and new allocation; neither an update rule nor an extra runtime structure is selected. |
+| [SNN-02/SNN-03/SNN-05/SNN-07](TrainingStrategy.md#propagation-depends-on-the-neuron-transition-law) | Which minimal neuron transition law makes constructed propagation, distributed closure and finite fading assessable? | Required before choosing M, N, weights or time per step; stronger return alone does not establish growth followed by fading. |
+| [SNN-02/SNN-03/SNN-07](SynapticIntegrationResearch.md) | Which integration, input-timing and activity-control contract achieves the targets with intrinsic polarity cancellation and no explicit inhibitory synaptic edges? | Determines the meaning of activation, any branch or adaptation state, and acceptance beyond storage arithmetic. |
 | [SNN-01/SNN-04](ConnectivityScalingResearch.md#sizing-objective-and-class-count-options) | Which class count and quotas best satisfy the small-surplus objective for Flash 60+60? | With N=614400 and exact halving, 15 classes give 1.330241% surplus and a 12,800-slot maximum; 16 give 6.665039% and 18,432. No old-capacity preservation requirement applies. |
 | [SNN-05](SynapticIntegrationResearch.md#training-strategy-incoming-weight-scale) | Which training strategy, hyperparameters or dynamic planning/adaptation should govern weight scale? | Determines learned effective weights and any adaptation state; pure allocation migration preserves those weights and their effect. |
 | [SNN-07](IncomingConnectivity.md) | Adopt incoming ownership and define gather/event-driven timing, incoming admission and the relationship to outgoing influence. | Determines update work, any routing index and the meaning of the 100-slot minimum. The alpha-near-3 layout is provisional. |
@@ -290,7 +553,7 @@ AD-045 / H-51:
 | [SNN-04](CapacityPlanning.md) | What context capacity, population and segment/synapse caps should the first model explore? What update/emission rate matters? | Determines memory, CPU demand and useful placement. |
 | [SNN-03](Model.md#snn-03) | How do dense signed coordinates generate sparse column/cell activity while retaining required magnitude and context? | Determines both representational fidelity and activity-driven CPU cost. |
 | [SNN-01](SignedPopulationEncoding.md#magnitude-and-contextual-cell-selection) | In the proposed positive/negative populations, do cells encode magnitude samples or select context with graded magnitude, and how is each population decoded? | Prevents contextual bursting from silently changing the represented coordinate. |
-| [SNN-01/SNN-02](SignedPopulationEncoding.md#coactivation-prediction-and-transitions-through-zero) | Can both polarities be active or predictive together, and what does cancellation mean? | Determines zero/sign transitions, hidden activity and information preserved in signed-vector messages. |
+| [SNN-01/SNN-02](SignedPopulationEncoding.md#coactivation-prediction-and-transitions-through-zero) | How does the required intrinsic cancellation act on current and predictive activity, and what residual information survives? | Determines zero/sign transitions, hidden activity and information preserved in signed-vector messages. |
 | [SNN-02](Model.md#snn-02) | How do current activation and future prediction coexist, and what does the four-bit code mean? | Determines state transitions, extra fields and arithmetic. |
 | [SNN-06](Model.md#snn-06) | Which state is durable and how much history is retained? | Determines DBMR growth and compaction headroom. |
 

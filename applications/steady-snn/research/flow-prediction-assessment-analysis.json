@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T20:01:57.716172+00:00",
+  "status": "conditional evaluation arithmetic and comparison proposals; no metric or decoder adopted",
+  "value_lineage": "C-15/P-29 serves H-82 prediction matching and H-83 context-dependent narrowing. C-26/P-61 and C-28/P-65 require useful context to survive numerical and dynamical effects. H-86 delegates obvious empirical alternatives to real-data comparison.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/flow_prediction_arithmetic.py",
+    "script_sha256": "01a6728d892f5cf548ecfea858e5897ca44b1e4acb63c50ae6af94e4c6b83f67"
+  },
+  "scope": [
+    "No trained neuron state, measured predictive performance, fitted decoder, training corpus or new runtime data structure.",
+    "Categorical probabilities below are explicitly hypothetical forecasts. Raw readiness, synaptic efficacy and semantic-coordinate magnitudes are not automatically token probabilities."
+  ],
+  "frequency_and_calibration": {
+    "true_distribution": [
+      0.9,
+      0.1
+    ],
+    "cases": [
+      {
+        "forecast": "frequency_matched",
+        "probabilities": [
+          0.9,
+          0.1
+        ],
+        "brier_loss": 0.18,
+        "log_loss_bits": 0.4689955935892812,
+        "observed_probability_reward": 0.82,
+        "top_one_accuracy_with_uniform_tie_break": 0.9
+      },
+      {
+        "forecast": "overconfident",
+        "probabilities": [
+          0.99,
+          0.01
+        ],
+        "brier_loss": 0.1962,
+        "log_loss_bits": 0.6774352317030761,
+        "observed_probability_reward": 0.892,
+        "top_one_accuracy_with_uniform_tie_break": 0.9
+      },
+      {
+        "forecast": "uniform",
+        "probabilities": [
+          0.5,
+          0.5
+        ],
+        "brier_loss": 0.5,
+        "log_loss_bits": 1.0,
+        "observed_probability_reward": 0.5,
+        "top_one_accuracy_with_uniform_tie_break": 0.5
+      }
+    ],
+    "brier_identity": "E[sum_j(q_j-1[Y=j])^2]=1-sum_j p_j^2+sum_j(q_j-p_j)^2.",
+    "log_identity": "E[-log2(q_Y)]=H_2(p)+KL_2(p||q), with infinite loss if positive-probability outcomes receive q=0.",
+    "implication": "Top-one success cannot distinguish forecasts with the same mode. Rewarding only q_Y encourages concentration on the most frequent event rather than preserving true ambiguity. Proper probability scores apply only after a meaningful probability forecast exists.",
+    "source": "MR-S035; identities also directly verified here."
+  },
+  "context_value": {
+    "setup": "Two equally frequent earlier histories share the same recent suffix. Their next-token laws are (3/4,1/4) and (1/4,3/4). The shorter-context marginal is (1/2,1/2).",
+    "short_context_brier": 0.5,
+    "long_context_brier": 0.375,
+    "short_context_log_bits": 1.0,
+    "long_context_log_bits": 0.8112781244591328,
+    "log_gain_bits": 0.18872187554086717,
+    "interpretation": "Better history-dependent prediction remains legitimately ambiguous. The oracle scores are conditional reference values, not application acceptance thresholds or claimed neural results.",
+    "finite_data": "Actual repeated fragments and branches are finite and dependent. Compare identical forecast situations and report which histories have enough evidence; absence of a branch in one sample does not establish impossibility."
+  },
+  "entropy_conditioning": {
+    "setup": "With probability0.9 the earlier context predicts A deterministically; with probability0.1 it leaves A/B equally likely. The short-context marginal is (0.95,0.05).",
+    "short_context_entropy_bits": 0.28639695711595625,
+    "rare_context_entropy_bits": 1.0,
+    "averaged_long_context_entropy_bits": 0.1,
+    "identity": "H(Y|X)-H(Y|X,Z)=I(Y;Z|X)>=0 when X,Z are nested information about the same target Y.",
+    "limit": "A particular revealed history can increase uncertainty, and moving to the next token changes Y. Neither the identity nor H-83 requires monotonic entropy along every token stream."
+  },
+  "vector_mean_limit": {
+    "setup": "Two equiprobable observed vectors (1,0),(0,1). A single vector forecast minimizes expected squared error at their mean.",
+    "mean": [
+      0.5,
+      0.5
+    ],
+    "mean_MSE": 0.5,
+    "one_branch_MSE": 1.0,
+    "identity": "E[||a-V||^2]=||a-E[V]||^2+E[||V-E[V]||^2].",
+    "implication": "A good vector point forecast need not represent alternative continuations. Semantic compatibility, contextual discrimination and probability calibration are different claims."
+  },
+  "mixture_identifiability": {
+    "assumptions": "A hypothetical linear mixture readout maps V token probabilities to d semantic-coordinate means; probabilities also sum to1. This is not a selected readiness decoder.",
+    "proof": "The augmented (d+1)-by-V map has nullity at least V-d-1. Any nonzero null direction h has sum(h)=0 and embedding*h=0. A sufficiently small positive and negative perturbation of an interior probability vector along h gives distinct valid distributions with the same readout.",
+    "cases": [
+      {
+        "vocabulary": 129280,
+        "coordinates": 5120,
+        "nullity_lower_bound": 124159
+      },
+      {
+        "vocabulary": 127997,
+        "coordinates": 5120,
+        "nullity_lower_bound": 122876
+      },
+      {
+        "vocabulary": 127997,
+        "coordinates": 10240,
+        "nullity_lower_bound": 117756
+      }
+    ],
+    "limit": "These are rank bounds from dimensions, not a measured matrix rank. Individual token vectors can still be distinct. Full contextual neuron patterns or nonlinear responses may carry distinctions absent from coordinate means; no new representation is prescribed."
+  },
+  "independent_coactivity": {
+    "source_probability": 0.1,
+    "target_probability": 0.2,
+    "joint": 0.02,
+    "covariance": 0,
+    "source_enabled_EMA_mean": 0.2,
+    "consequence": "A positive learned association can reflect the target prior without additional contextual information. A frequency reference is needed before treating positivity as learned context. This does not establish a need for centered weights, inhibitory synapses, mean arrays or noise labels."
+  },
+  "protocol_comparisons": [
+    {
+      "question": "Does the acquired network retain a learned transition?",
+      "comparison": "Assess pre-input predictions on learned sequences with weight updates held fixed, under specified initial state and noise.",
+      "favors": "Retained improvement over its own pre-training behavior without contemporaneous teaching.",
+      "limit": "Retention is not held-out generalization; no generation rollout is required."
+    },
+    {
+      "question": "Does the context distinguish histories beyond the recent shared fragment?",
+      "comparison": "Use genuine histories with the same suffix and different observed continuations; compare the same forecast positions against a frequency or shorter-context reference.",
+      "favors": "Improvement specifically where earlier observed history is informative, while legitimate shared-prefix alternatives remain.",
+      "limit": "Arbitrary prefix shuffling can create out-of-distribution histories and is not a substitute for matched natural cases."
+    },
+    {
+      "question": "Does learning generalize across sequence occurrences?",
+      "comparison": "Keep whole source sequences or episodes apart, document overlap and freeze any assessment mapping fitted on training data.",
+      "favors": "Pre-input improvement on held-out occurrences with no future/context labels supplied to the assessment map.",
+      "limit": "This is a separate stronger claim than remembering trained sequences; it is not silently added to H-82 as a new acceptance threshold."
+    },
+    {
+      "question": "What is the value of continued adaptation?",
+      "comparison": "Assess each prediction before the observed token updates state or weights, then permit the declared learner to adapt.",
+      "favors": "Useful sequential learning with the evaluation schedule and prior exposures explicit.",
+      "limit": "Past evaluation observations become training history; this is not a frozen held-out comparison."
+    },
+    {
+      "question": "How should sequence boundaries be treated?",
+      "comparison": "Use observed training sequences as the source of actual transitions; keep record-end/next-record joins outside credit unless they are intentional sequence input.",
+      "favors": "Context learned from supplied sequences rather than accidental storage order.",
+      "limit": "An evaluation starting-state protocol is not a runtime stale-reset mechanism; no delimiter token or reset procedure is adopted."
+    }
+  ],
+  "non_adoptions": [
+    "No automatic token decoder, loss, score threshold, calibration layer, candidate store, baseline model, history buffer or experiment framework.",
+    "No policy to remove frequency information, suppress alternatives, reset normal recurrence or introduce inhibitory connections.",
+    "No neural implementation/training, project tests, build, toolchain modification, commit or push."
+  ],
+  "coordinate_marginals_and_complete_alternatives": {
+    "premise": "Four artificial candidate vectors (1,1),(1,2),(2,1),(2,2), all coordinates positive. Two equally weighted alternatives are either the anti-diagonal pair or the diagonal pair.",
+    "candidate_vectors": [
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        2,
+        2
+      ]
+    ],
+    "anti_diagonal_probabilities": [
+      0.0,
+      0.5,
+      0.5,
+      0.0
+    ],
+    "diagonal_probabilities": [
+      0.5,
+      0.0,
+      0.0,
+      0.5
+    ],
+    "shared_coordinate_marginals": [
+      {
+        "1": 0.5,
+        "2": 0.5
+      },
+      {
+        "1": 0.5,
+        "2": 0.5
+      }
+    ],
+    "shared_mean_vector": [
+      1.5,
+      1.5
+    ],
+    "cross_coordinate_covariances": {
+      "anti_diagonal": -0.25,
+      "diagonal": 0.25
+    },
+    "independent_marginal_product_probabilities": [
+      0.25,
+      0.25,
+      0.25,
+      0.25
+    ],
+    "marginal_product_mass_on_unsupported_combinations": 0.5,
+    "conditional_log_loss_bits": {
+      "correct_joint_forecast": 1.0,
+      "independent_marginal_product": 2.0
+    },
+    "derivation": "Each coordinate independently has probabilities 1/2 on values1 and2 under either joint distribution. A representation retaining only these marginals cannot distinguish the two alternative sets. Multiplying marginals yields1/4 for all four combinations, including the two absent from the true set.",
+    "comparison": "Assess complete continuation compatibility as well as coordinate compatibility, using full available pre-input neural information. Include same-polarity alternatives so binding errors are not attributed only to predictive sign cancellation.",
+    "limits": "Artificial finite distributions, not measured Flash embeddings or an adopted probabilistic decoder. Current neuron identities, recurrent state and graph may carry the missing dependence. No requirement for a binding field, candidate list, covariance matrix, extra frame or runtime sampling; H78/H85 remain open.",
+    "validation": "Exact Fraction marginals, means, covariance and unsupported probability mass; log losses follow from true support probabilities1/2 versus1/4. No neural simulation or learning.",
+    "source_fingerprint": {
+      "path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/prediction_binding_arithmetic.py",
+      "sha256": "157188683bf5d6e73a72ced8c4a869d1b8456133c54c946b626027bebb8fe012"
+    }
+  },
+  "updated_at_utc": "2026-10-28T21:12:34Z"
+}

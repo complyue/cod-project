@@ -1,0 +1,664 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-10-28T17:48:53.316876+00:00",
+  "status": "conditional_numeric_analysis_no_learning_rule_selected",
+  "scope": "H-70/H-71 numeric care; H-79—H-81 preserve separate DMN/token maintenance and initial flow design. This analysis begins only after a phase-specific learner has supplied a desired weight change; it does not choose that learner.",
+  "assumptions": [
+    "For each edge j, a requested positive change d_j lies strictly between0 and its next upward representable spacing q_j. No clipping or other update occurs during this arithmetic comparison.",
+    "Independent stochastic rounding changes the stored edge by q_j with probability d_j/q_j, otherwise by0. A temporary sufficiently precise calculation is assumed; no persistent high-precision copy is presumed.",
+    "To evaluate immediate drive, source rates x_j are fixed and nonnegative. Correlations, nonlinear transfer, cancellation, changing sources and later training are outside these formulas."
+  ],
+  "exact_results": {
+    "mean_drive_change": "E[Delta u]=sum_j x_j*d_j",
+    "variance_drive_change": "Var(Delta u)=sum_j x_j^2*q_j*d_j*(1-d_j/q_j), under independent rounding",
+    "nearest_rounding": "When every d_j is below half its next spacing, nearest write-back from an unchanged stored weight discards each isolated update; repeated identical attempts need not accumulate.",
+    "edge_wait": "For repeated independent attempts at the same stored code with constant p, time to the first upward change is geometric with mean1/p visits. Unbiased aggregate change does not guarantee timely change of a particular edge.",
+    "limits": "Saturation/clipping biases expectations; shared randomness changes covariance; state-dependent learning changes probabilities. These equations establish neither behavioral robustness nor a CPU advantage."
+  },
+  "illustrative_grid": {
+    "description": "All k source rates are1; existing equal weights1/k give unit drive. A hypothetical learner requests aggregate increase epsilon spread equally across those edges.",
+    "format_interpretation": "For k=128,1024,16384, E4M3 with one fixed diagnostic real unit scale2^-8 represents these weights at powers of two in its normal range; the next upward spacing is w/8. The scale is held the same across cases, not assigned by capacity class.",
+    "non_adoption": "These artificial equal weights, scale, increments and independent rounding are not training parameters. k is live contributing inputs, not allocated slots.",
+    "cases": [
+      {
+        "contributing_edges": 128,
+        "existing_weight": 0.0078125,
+        "desired_aggregate_increase": 0.001,
+        "desired_per_edge_increase": 7.8125e-06,
+        "upward_quantum": 0.0009765625,
+        "round_up_probability": 0.008,
+        "expected_changed_edges": 1.024,
+        "probability_no_edge_changes": 0.3576794884487857,
+        "aggregate_change_standard_deviation": 0.0009842509842514764,
+        "mean_visits_until_this_edge_changes": 125.0
+      },
+      {
+        "contributing_edges": 128,
+        "existing_weight": 0.0078125,
+        "desired_aggregate_increase": 0.0001,
+        "desired_per_edge_increase": 7.8125e-07,
+        "upward_quantum": 0.0009765625,
+        "round_up_probability": 0.0008,
+        "expected_changed_edges": 0.1024,
+        "probability_no_edge_changes": 0.9026314198098631,
+        "aggregate_change_standard_deviation": 0.000312374974989995,
+        "mean_visits_until_this_edge_changes": 1250.0
+      },
+      {
+        "contributing_edges": 128,
+        "existing_weight": 0.0078125,
+        "desired_aggregate_increase": 1e-05,
+        "desired_per_edge_increase": 7.8125e-08,
+        "upward_quantum": 0.0009765625,
+        "round_up_probability": 8e-05,
+        "expected_changed_edges": 0.01024,
+        "probability_no_edge_changes": 0.9898118448515838,
+        "aggregate_change_standard_deviation": 9.881722395412654e-05,
+        "mean_visits_until_this_edge_changes": 12499.999999999998
+      },
+      {
+        "contributing_edges": 1024,
+        "existing_weight": 0.0009765625,
+        "desired_aggregate_increase": 0.001,
+        "desired_per_edge_increase": 9.765625e-07,
+        "upward_quantum": 0.0001220703125,
+        "round_up_probability": 0.008,
+        "expected_changed_edges": 8.192,
+        "probability_no_edge_changes": 0.0002678873991952595,
+        "aggregate_change_standard_deviation": 0.0003479852726768764,
+        "mean_visits_until_this_edge_changes": 125.0
+      },
+      {
+        "contributing_edges": 1024,
+        "existing_weight": 0.0009765625,
+        "desired_aggregate_increase": 0.0001,
+        "desired_per_edge_increase": 9.765625e-08,
+        "upward_quantum": 0.0001220703125,
+        "round_up_probability": 0.0008,
+        "expected_changed_edges": 0.8192,
+        "probability_no_edge_changes": 0.44063965126629795,
+        "aggregate_change_standard_deviation": 0.00011044123154420183,
+        "mean_visits_until_this_edge_changes": 1250.0
+      },
+      {
+        "contributing_edges": 1024,
+        "existing_weight": 0.0009765625,
+        "desired_aggregate_increase": 1e-05,
+        "desired_per_edge_increase": 9.765625e-09,
+        "upward_quantum": 0.0001220703125,
+        "round_up_probability": 8e-05,
+        "expected_changed_edges": 0.08192,
+        "probability_no_edge_changes": 0.9213426441796438,
+        "aggregate_change_standard_deviation": 3.493716457799631e-05,
+        "mean_visits_until_this_edge_changes": 12499.999999999998
+      },
+      {
+        "contributing_edges": 16384,
+        "existing_weight": 6.103515625e-05,
+        "desired_aggregate_increase": 0.001,
+        "desired_per_edge_increase": 6.103515625e-08,
+        "upward_quantum": 7.62939453125e-06,
+        "round_up_probability": 0.008,
+        "expected_changed_edges": 131.072,
+        "probability_no_edge_changes": 7.034554101435312e-58,
+        "aggregate_change_standard_deviation": 8.69963181692191e-05,
+        "mean_visits_until_this_edge_changes": 125.0
+      },
+      {
+        "contributing_edges": 16384,
+        "existing_weight": 6.103515625e-05,
+        "desired_aggregate_increase": 0.0001,
+        "desired_per_edge_increase": 6.103515625e-09,
+        "upward_quantum": 7.62939453125e-06,
+        "round_up_probability": 0.0008,
+        "expected_changed_edges": 13.1072,
+        "probability_no_edge_changes": 2.0199340857882275e-06,
+        "aggregate_change_standard_deviation": 2.7610307886050458e-05,
+        "mean_visits_until_this_edge_changes": 1250.0
+      },
+      {
+        "contributing_edges": 16384,
+        "existing_weight": 6.103515625e-05,
+        "desired_aggregate_increase": 1e-05,
+        "desired_per_edge_increase": 6.103515625e-10,
+        "upward_quantum": 7.62939453125e-06,
+        "round_up_probability": 8e-05,
+        "expected_changed_edges": 1.31072,
+        "probability_no_edge_changes": 0.2696117193212248,
+        "aggregate_change_standard_deviation": 8.734291144499078e-06,
+        "mean_visits_until_this_edge_changes": 12499.999999999998
+      }
+    ]
+  },
+  "aggregate_residual_limit": {
+    "example": "Two requested edge increments (epsilon,0) and (0,epsilon) have the same row-summed residual epsilon. If both stored weights remain unchanged after rounding, one scalar that remembers only that sum cannot distinguish the requests. A later source pattern (1,0) should receive different corrections in the two cases.",
+    "consequence": "A row-level accumulated sum can retain an aggregate target but not arbitrary edge-specific update direction. It is sufficient only under a further restriction, such as all pending updates sharing a known fixed direction.",
+    "boundary": "This does not prescribe a per-edge accumulator, master copy or replay buffer. Wider weights, stochastic rounding, coarser acceptable updates and algorithm-specific accumulation remain alternatives whose value depends on the actual learner."
+  },
+  "behavioral_relevance": [
+    "Evaluate intended collective drive and individual useful paths separately: many contributors reduce some aggregate variance but a small recurrent route may depend on a few particular edges.",
+    "Learning-update randomness is distinct from runtime background noise. The phase-specific objective and its numerical tolerance must precede a rounding policy.",
+    "No inference about acceptable INT4/INT8/FP8 training, token half-life, contextual memory capacity or execution speed follows from the arithmetic alone."
+  ],
+  "related_records": [
+    "weight-precision-probe.json",
+    "numeric-representation-arithmetic.json",
+    "modeling-source-ledger.json:MR-S017/MR-S018/MR-S020"
+  ],
+  "bounded_exposure_reference": {
+    "recorded_at_utc": "2026-10-28T23:36:29Z",
+    "purpose": "Separate numerical alphabet size from actual learning-update dynamics and synaptic-distribution retention.",
+    "assumptions": [
+      "A single finite weight index k in0..M-1. At independent Poisson update opportunities of rate r, move up by1 with probability p or down by1 with probability q=1-p, retaining a boundary state if the move would exceed it.",
+      "Fixed p in(0,1), equal level spacing, no neural state, task input, rounding, adaptive rule or changed graph. Weight can be normalized as k/(M-1)."
+    ],
+    "derivation": [
+      "The opportunity transition matrix P has upper diagonal p, lower diagonal q, boundary diagonals q at0 and p atM-1, and other diagonal entries zero.",
+      "Stationary detailed balance gives pi[k+1]/pi[k]=p/q, normalized across the M states. For p=q the distribution is uniform.",
+      "P is diagonally similar to a symmetric tridiagonal matrix with off-diagonal sqrt(p*q) and the same boundary diagonals. Its characteristic polynomial is (x-1)*Q[M-1](x), where Q[0]=1, Q[1]=x and Q[n]=x*Q[n-1]-p*q*Q[n-2].",
+      "Thus its nonconstant eigenvalues are2*sqrt(p*q)*cos(j*pi/M), j=1..M-1. The Poisson generator r*(P-I) gives slowest distribution relaxation tau=1/(r*(1-2*sqrt(p*q)*cos(pi/M))).",
+      "For balanced updates and large M, r*tau approaches2*M*M/(pi*pi). For fixed nonzero imbalance, r*tau approaches1/(sqrt(p)-sqrt(q))**2 instead. These limits do not include initial trace strength or actual retrieval."
+    ],
+    "verification": {
+      "method": "Exact Fraction comparison of the tridiagonal determinant polynomial with the claimed recurrence for M2..32 and four rational p values; scalar evaluation and stationary detailed-balance residuals for displayed cases. No sampled update trajectories.",
+      "script_path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/bounded_weight_exposure_arithmetic.py",
+      "script_sha256": "4c67d1912ea9a380dd7b14b25671ae339b72e305eb8d2b51340c32f7da26ce9a",
+      "exact_characteristic_polynomial_cases": 124,
+      "cases": [
+        {
+          "states": 16,
+          "potentiation_probability": "1/2",
+          "slowest_nonconstant_eigenvalue": 0.9807852804032304,
+          "poisson_relaxation_time_in_expected_opportunities": 52.04343445990868,
+          "normalized_stationary_mean_weight": 0.5,
+          "stationary_upper_boundary_probability": 0.0625,
+          "detailed_balance_max_absolute_residual": 0.0
+        },
+        {
+          "states": 16,
+          "potentiation_probability": "51/100",
+          "slowest_nonconstant_eigenvalue": 0.9805891037275201,
+          "poisson_relaxation_time_in_expected_opportunities": 51.517456276234064,
+          "normalized_stationary_mean_weight": 0.5562894646332287,
+          "stationary_upper_boundary_probability": 0.08295181855269225,
+          "detailed_balance_max_absolute_residual": 6.938893903907228e-18
+        },
+        {
+          "states": 16,
+          "potentiation_probability": "11/20",
+          "slowest_nonconstant_eigenvalue": 0.9758690325003079,
+          "poisson_relaxation_time_in_expected_opportunities": 41.44052657701182,
+          "normalized_stationary_mean_weight": 0.7448231825614362,
+          "stationary_upper_boundary_probability": 0.18945849702751769,
+          "detailed_balance_max_absolute_residual": 6.938893903907228e-18
+        },
+        {
+          "states": 16,
+          "potentiation_probability": "9/10",
+          "slowest_nonconstant_eigenvalue": 0.5884711682419382,
+          "poisson_relaxation_time_in_expected_opportunities": 2.429963401903031,
+          "normalized_stationary_mean_weight": 0.9916666666666673,
+          "stationary_upper_boundary_probability": 0.8888888888888894,
+          "detailed_balance_max_absolute_residual": 2.168404344971009e-19
+        },
+        {
+          "states": 256,
+          "potentiation_probability": "1/2",
+          "slowest_nonconstant_eigenvalue": 0.9999247018391445,
+          "poisson_relaxation_time_in_expected_opportunities": 13280.536850283466,
+          "normalized_stationary_mean_weight": 0.5,
+          "stationary_upper_boundary_probability": 0.00390625,
+          "detailed_balance_max_absolute_residual": 0.0
+        },
+        {
+          "states": 256,
+          "potentiation_probability": "51/100",
+          "slowest_nonconstant_eigenvalue": 0.999724696896282,
+          "poisson_relaxation_time_in_expected_opportunities": 3632.3600660317475,
+          "normalized_stationary_mean_weight": 0.9039573738749528,
+          "stationary_upper_boundary_probability": 0.03921708491699038,
+          "detailed_balance_max_absolute_residual": 3.469446951953614e-18
+        },
+        {
+          "states": 256,
+          "potentiation_probability": "11/20",
+          "slowest_nonconstant_eigenvalue": 0.9949125163825315,
+          "poisson_relaxation_time_in_expected_opportunities": 196.56082951626286,
+          "normalized_stationary_mean_weight": 0.9823529411764707,
+          "stationary_upper_boundary_probability": 0.18181818181818205,
+          "detailed_balance_max_absolute_residual": 1.3877787807814457e-17
+        },
+        {
+          "states": 256,
+          "potentiation_probability": "9/10",
+          "slowest_nonconstant_eigenvalue": 0.5999548211034866,
+          "poisson_relaxation_time_in_expected_opportunities": 2.499717663785888,
+          "normalized_stationary_mean_weight": 0.9995098039215686,
+          "stationary_upper_boundary_probability": 0.888888888888889,
+          "detailed_balance_max_absolute_residual": 1.3877787807814457e-17
+        }
+      ]
+    },
+    "interpretation": "In a specified learning model, increasing the alphabet can have very different retention effects depending on update statistics. Compare new-association acquisition and actual pre-input prediction under continued learning; stored bit count alone does not define that behavior.",
+    "limits": [
+      "Relaxation of a weight distribution is not active-rate decay, context-loop persistence, task memory capacity or natural sequence readiness.",
+      "Poisson opportunity time differs from a deterministic per-token event clock; for the latter a positive eigenmode decays as lambda**n and its e-fold count is -1/log(lambda). No clock chosen.",
+      "The16/256 levels are uniform mathematical alphabets, not a claim about IEEE/OCP floating codebooks or the selected encoding.",
+      "No balancing controller, consolidation variable, new learner, per-edge state, format or threshold selected."
+    ],
+    "related_primary_reference": "MR-S075 provides the bounded-synapse context; the finite-matrix recurrence and numerical cases here were independently checked.",
+    "step_units_and_initial_state": {
+      "normalized_step": "For a fixed[0,1]range, one level means1/(M-1); 256levels have17-times smaller moves than16levels. Equal per-event code moves do not hold physical update size fixed.",
+      "first_arrival_problem": "Start index0; stop upon first reaching K=M-1. Count update opportunities, including boundary stays; otherwise retain the existing random-walk assumptions.",
+      "derivation": [
+        "Let T_k be expected remaining opportunities. T_K=0; p*(T_0-T_1)=1; T_k=1+p*T_(k+1)+q*T_(k-1) in the interior.",
+        "Differences d_k=T_k-T_(k+1) satisfy d_0=1/p and p*d_k-q*d_(k-1)=1.",
+        "For p!=q, d_k=(1-(q/p)^(k+1))/(p-q), giving T_0=K/(p-q)-q/(p-q)^2*(1-(q/p)^K). For p=q=1/2, T_0=K*(K+1)."
+      ],
+      "verification": {
+        "method": "Exact Fraction first-step identities and finite summation versus closed form for each listed case; no sampled update trajectories.",
+        "first_step_identity_cases": 810,
+        "closed_form_sum_cases": 6
+      },
+      "cases": [
+        {
+          "levels": 16,
+          "up_probability": "1/2",
+          "normalized_step": "1/15",
+          "expected_bottom_to_top_opportunities": 240.0,
+          "slow_distribution_mode_opportunities": 52.04343445990868
+        },
+        {
+          "levels": 16,
+          "up_probability": "11/20",
+          "normalized_step": "1/15",
+          "expected_bottom_to_top_opportunities": 107.21799150265838,
+          "slow_distribution_mode_opportunities": 41.44052657701182
+        },
+        {
+          "levels": 16,
+          "up_probability": "9/10",
+          "normalized_step": "1/15",
+          "expected_bottom_to_top_opportunities": 18.59375,
+          "slow_distribution_mode_opportunities": 2.429963401903031
+        },
+        {
+          "levels": 256,
+          "up_probability": "1/2",
+          "normalized_step": "1/255",
+          "expected_bottom_to_top_opportunities": 65280.0,
+          "slow_distribution_mode_opportunities": 13280.536850283466
+        },
+        {
+          "levels": 256,
+          "up_probability": "11/20",
+          "normalized_step": "1/255",
+          "expected_bottom_to_top_opportunities": 2505.0,
+          "slow_distribution_mode_opportunities": 196.56082951626286
+        },
+        {
+          "levels": 256,
+          "up_probability": "9/10",
+          "normalized_step": "1/255",
+          "expected_bottom_to_top_opportunities": 318.59375,
+          "slow_distribution_mode_opportunities": 2.499717663785888
+        }
+      ],
+      "interpretation": "A nonconstant distribution mode is not worst-case equilibration or first-arrival time from a remote initial weight. More levels and smaller physical updates change acquisition as well as retention; neither this endpoint arrival nor the mode is task-learning success.",
+      "non_adoptions": "No endpoint target, learning clock, format, bias or additional state selected."
+    }
+  },
+  "updated_at_utc": "2026-10-29T00:46:10Z",
+  "range_change_reference": {
+    "recorded_at_utc": "2026-10-28T23:43:50Z",
+    "purpose": "Check whether shared representational range changes preserve an otherwise unmodified association.",
+    "assumptions": [
+      "Uniform unsigned b-bit codes0..K, K=2**b-1, decoded as c*R/K. Range R follows1,2,1.",
+      "Each change decodes the current stored value, encodes it on the new grid with nearest-even rounding and clips to0..K. No extra precision or original-code copy is retained.",
+      "Other learning may motivate a new range, but the inspected weights receive no intended effective-weight update. No particular range-selection rule is assumed."
+    ],
+    "derivation": [
+      "First recoding gives q=round_even(c/2). Decoded coarse weight is2*q/K. Return recoding gives c_final=min(K,2*q).",
+      "The original low bit is generally lost. Returning to a finer grid does not identify which original code produced q. All initial codes are checked exactly with Fraction rounding.",
+      "For c=1,3,5 the return codes are0,4,4 for both grid widths. Absolute errors depend on the original grid spacing; these are not universal FP4/FP8 results."
+    ],
+    "cases": [
+      {
+        "bits": 4,
+        "maximum_code": 15,
+        "codes_checked": 16,
+        "codes_changed_after_return": 7,
+        "positive_codes_rounded_to_zero": 1,
+        "examples": [
+          {
+            "initial_code": 1,
+            "code_in_doubled_range": 0,
+            "final_code_in_original_range": 0,
+            "initial_weight": "1/15",
+            "final_weight": "0"
+          },
+          {
+            "initial_code": 3,
+            "code_in_doubled_range": 2,
+            "final_code_in_original_range": 4,
+            "initial_weight": "1/5",
+            "final_weight": "4/15"
+          },
+          {
+            "initial_code": 5,
+            "code_in_doubled_range": 2,
+            "final_code_in_original_range": 4,
+            "initial_weight": "1/3",
+            "final_weight": "4/15"
+          }
+        ]
+      },
+      {
+        "bits": 8,
+        "maximum_code": 255,
+        "codes_checked": 256,
+        "codes_changed_after_return": 127,
+        "positive_codes_rounded_to_zero": 1,
+        "examples": [
+          {
+            "initial_code": 1,
+            "code_in_doubled_range": 0,
+            "final_code_in_original_range": 0,
+            "initial_weight": "1/255",
+            "final_weight": "0"
+          },
+          {
+            "initial_code": 3,
+            "code_in_doubled_range": 2,
+            "final_code_in_original_range": 4,
+            "initial_weight": "1/85",
+            "final_weight": "4/255"
+          },
+          {
+            "initial_code": 5,
+            "code_in_doubled_range": 2,
+            "final_code_in_original_range": 4,
+            "initial_weight": "1/51",
+            "final_weight": "4/255"
+          }
+        ]
+      }
+    ],
+    "interpretation": "Shared-scale adaptation can modify older contextual paths and incur row recoding work independently of the intended local learning update. Actual behavioral benefit and full costs belong in the representation comparison.",
+    "limits": [
+      "Zero effective weight need not remove the retained source-target pair or forbid later learning.",
+      "Representation-scale recoding is not intentional gain normalization, capacity-class migration or an approved training mechanism.",
+      "No scale array, high-precision copy, residual, re-encoding cadence, format or removal rule selected. No neural trajectory or training run."
+    ]
+  },
+  "rounding_probability_reference": {
+    "recorded_at_utc": "2026-10-29T00:27:45Z",
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/rounding_probability_arithmetic.py",
+      "script_sha256": "9e0afd628b0b16dc13feb6ca814a1771045fd1f580d347c083669a5a5cb65d6e",
+      "method": "Fraction counting identities; enumerate uniform random outcomes for widths through16, exact formula at32; no PRNG execution, training or neural simulation."
+    },
+    "purpose": "Check whether an implemented stochastic rounding probability and its correlations preserve the intended small updates; weight storage width alone does not specify them.",
+    "grid": "Rounding between adjacent codes with spacing q, ideal fractional increment p*q for0<=p<=1. Each event has fixed p and no clipping.",
+    "finite_comparison": {
+      "uniform_draw": "Integer U uniform in0..2^b-1; M=2^b.",
+      "direct_comparison": "U/M < p has probability ceil(M*p)/M for0<=p<=1, including endpoints.",
+      "floor_threshold": "U < floor(M*p) has probability floor(M*p)/M.",
+      "bound": "Each differs from p by less than1/M unless exact; relative error can be large when p is small. This concerns the specified finite uniform grid, not all possible random sampling algorithms.",
+      "cases": [
+        {
+          "bits": 4,
+          "levels": 16,
+          "desired_probability": "1/18432",
+          "floor_threshold_probability": "0",
+          "direct_grid_comparison_probability": "1/16",
+          "floor_relative_factor": "0",
+          "direct_relative_factor": "1152"
+        },
+        {
+          "bits": 6,
+          "levels": 64,
+          "desired_probability": "1/18432",
+          "floor_threshold_probability": "0",
+          "direct_grid_comparison_probability": "1/64",
+          "floor_relative_factor": "0",
+          "direct_relative_factor": "288"
+        },
+        {
+          "bits": 8,
+          "levels": 256,
+          "desired_probability": "1/18432",
+          "floor_threshold_probability": "0",
+          "direct_grid_comparison_probability": "1/256",
+          "floor_relative_factor": "0",
+          "direct_relative_factor": "72"
+        },
+        {
+          "bits": 16,
+          "levels": 65536,
+          "desired_probability": "1/18432",
+          "floor_threshold_probability": "3/65536",
+          "direct_grid_comparison_probability": "1/16384",
+          "floor_relative_factor": "27/32",
+          "direct_relative_factor": "9/8"
+        },
+        {
+          "bits": 32,
+          "levels": 4294967296,
+          "desired_probability": "1/18432",
+          "floor_threshold_probability": "29127/536870912",
+          "direct_grid_comparison_probability": "233017/4294967296",
+          "floor_relative_factor": "262143/262144",
+          "direct_relative_factor": "2097153/2097152"
+        }
+      ]
+    },
+    "shared_draw_reference": {
+      "assumptions": "n=18432 equal ideal positive one-code update events with p=1/n. Adjacent codes valid, no clipping; this is a conditional row comparison, not a selected learning exposure. Probabilities here are ideal, separate from finite-grid approximation above.",
+      "expected_changed_edges_both": 1,
+      "independent_count_variance": "18431/18432",
+      "shared_count_variance": "18431",
+      "independent_probability_any_change": 0.6321305384226749,
+      "shared_probability_any_change": "1/18432",
+      "derivation": "Independent Bernoulli indicators sum to variance n*p*(1-p); using one common draw makes the count n*B and variance n^2*p*(1-p). Both keep the same marginal expectation.",
+      "meaning": "Reusing randomness can change collective update variability despite unchanged per-edge expected changes; this is arithmetic randomness, not the application background-noise controller."
+    },
+    "limits": [
+      "No PRNG, residual/comparator width, independent-draw mandate, shared noise source, rounding rule or auxiliary array selected.",
+      "The example probability is not a measured trained update distribution. Hardware cost and acceptable behavioral error need actual comparisons.",
+      "MR-S008 reports six-bit comparison precision sufficient in specific ODE spike-timing tests; that empirical result does not establish unbiasedness or adequacy at every smaller probability."
+    ]
+  },
+  "shared_exposure_rounding_reference": {
+    "recorded_at_utc": "2026-10-29T00:46:10Z",
+    "kind": "Exact conditional update moments and stationary-moment identities; no sampled learner or neural trajectory",
+    "assumptions": [
+      "m normalized scalar weights share the same iid Bernoulli target y with probability 0<p<1; that target is independent of previous codes.",
+      "Each update is ideal stochastic rounding of w+eta*(y-w) on codes n=0..K, w=n/K, with 0<eta and eta*K<=1.",
+      "Rounding draws are independent across weights and exposures conditional on current codes and the common target. Their probabilities are treated as exact.",
+      "No changing assignment, unequal source credit, clipping beyond the preserved [0,1] interval, finite RNG grid, recurrence, cancellation, structural learning or adaptive noise controller is included.",
+      "The mean across weights is a diagnostic statistic, not a selected neural normalization or incoming gain."
+    ],
+    "conditional_code_moves": {
+      "y1": "n increases by one with probability eta*(K-n)",
+      "y0": "n decreases by one with probability eta*n"
+    },
+    "stationary_moments": {
+      "mean_weight": "p",
+      "one_weight_variance_v": "p*(1-p)/K",
+      "distinct_weight_covariance_c": "eta*p*(1-p)/(2-eta)",
+      "distinct_weight_correlation": "eta*K/(2-eta)",
+      "variance_of_mean_over_m_weights": "c+(v-c)/m",
+      "conditional_cross_moment": "E[n1_next*n2_next|n1,n2]=(1-eta)^2*n1*n2+eta*(1-eta)*K*p*(n1+n2)+eta^2*K^2*p",
+      "covariance_recursion_at_stationary_means": "Cov_next=(1-eta)^2*Cov+eta^2*K^2*p*(1-p)",
+      "unquantized_reference": "The affine real-valued learner driven by this same shared target has stationary variance c. Therefore the common-exposure floor is not itself caused by stochastic rounding."
+    },
+    "cases": [
+      {
+        "largest_code": 15,
+        "learning_rate": "1/256",
+        "target_probability": "1/100",
+        "weights_averaged": 1,
+        "one_weight_variance": 0.00066,
+        "pair_covariance": 1.9373776908023482e-05,
+        "pair_correlation": "15/511",
+        "mean_weight_variance": 0.00066,
+        "incorrect_independent_weight_variance": 0.00066,
+        "variance_ratio_to_independent_weight_assumption": 1.0
+      },
+      {
+        "largest_code": 15,
+        "learning_rate": "1/256",
+        "target_probability": "1/100",
+        "weights_averaged": 100,
+        "one_weight_variance": 0.00066,
+        "pair_covariance": 1.9373776908023482e-05,
+        "pair_correlation": "15/511",
+        "mean_weight_variance": 2.578003913894325e-05,
+        "incorrect_independent_weight_variance": 6.6e-06,
+        "variance_ratio_to_independent_weight_assumption": 3.9060665362035225
+      },
+      {
+        "largest_code": 15,
+        "learning_rate": "1/256",
+        "target_probability": "1/100",
+        "weights_averaged": 1000,
+        "one_weight_variance": 0.00066,
+        "pair_covariance": 1.9373776908023482e-05,
+        "pair_correlation": "15/511",
+        "mean_weight_variance": 2.001440313111546e-05,
+        "incorrect_independent_weight_variance": 6.6e-07,
+        "variance_ratio_to_independent_weight_assumption": 30.32485322896282
+      },
+      {
+        "largest_code": 15,
+        "learning_rate": "1/4096",
+        "target_probability": "1/100",
+        "weights_averaged": 1,
+        "one_weight_variance": 0.00066,
+        "pair_covariance": 1.2086436332560127e-06,
+        "pair_correlation": "15/8191",
+        "mean_weight_variance": 0.00066,
+        "incorrect_independent_weight_variance": 0.00066,
+        "variance_ratio_to_independent_weight_assumption": 1.0
+      },
+      {
+        "largest_code": 15,
+        "learning_rate": "1/4096",
+        "target_probability": "1/100",
+        "weights_averaged": 100,
+        "one_weight_variance": 0.00066,
+        "pair_covariance": 1.2086436332560127e-06,
+        "pair_correlation": "15/8191",
+        "mean_weight_variance": 7.796557196923452e-06,
+        "incorrect_independent_weight_variance": 6.6e-06,
+        "variance_ratio_to_independent_weight_assumption": 1.1812965449884019
+      },
+      {
+        "largest_code": 15,
+        "learning_rate": "1/4096",
+        "target_probability": "1/100",
+        "weights_averaged": 1000,
+        "one_weight_variance": 0.00066,
+        "pair_covariance": 1.2086436332560127e-06,
+        "pair_correlation": "15/8191",
+        "mean_weight_variance": 1.8674349896227567e-06,
+        "incorrect_independent_weight_variance": 6.6e-07,
+        "variance_ratio_to_independent_weight_assumption": 2.8294469539738736
+      },
+      {
+        "largest_code": 255,
+        "learning_rate": "1/256",
+        "target_probability": "1/100",
+        "weights_averaged": 1,
+        "one_weight_variance": 3.882352941176471e-05,
+        "pair_covariance": 1.9373776908023482e-05,
+        "pair_correlation": "255/511",
+        "mean_weight_variance": 3.882352941176471e-05,
+        "incorrect_independent_weight_variance": 3.882352941176471e-05,
+        "variance_ratio_to_independent_weight_assumption": 1.0
+      },
+      {
+        "largest_code": 255,
+        "learning_rate": "1/256",
+        "target_probability": "1/100",
+        "weights_averaged": 100,
+        "one_weight_variance": 3.882352941176471e-05,
+        "pair_covariance": 1.9373776908023482e-05,
+        "pair_correlation": "255/511",
+        "mean_weight_variance": 1.9568274433060894e-05,
+        "incorrect_independent_weight_variance": 3.8823529411764707e-07,
+        "variance_ratio_to_independent_weight_assumption": 50.403131115459885
+      },
+      {
+        "largest_code": 255,
+        "learning_rate": "1/256",
+        "target_probability": "1/100",
+        "weights_averaged": 1000,
+        "one_weight_variance": 3.882352941176471e-05,
+        "pair_covariance": 1.9373776908023482e-05,
+        "pair_correlation": "255/511",
+        "mean_weight_variance": 1.9393226660527226e-05,
+        "incorrect_independent_weight_variance": 3.882352941176471e-08,
+        "variance_ratio_to_independent_weight_assumption": 499.5225048923679
+      },
+      {
+        "largest_code": 255,
+        "learning_rate": "1/4096",
+        "target_probability": "1/100",
+        "weights_averaged": 1,
+        "one_weight_variance": 3.882352941176471e-05,
+        "pair_covariance": 1.2086436332560127e-06,
+        "pair_correlation": "255/8191",
+        "mean_weight_variance": 3.882352941176471e-05,
+        "incorrect_independent_weight_variance": 3.882352941176471e-05,
+        "variance_ratio_to_independent_weight_assumption": 1.0
+      },
+      {
+        "largest_code": 255,
+        "learning_rate": "1/4096",
+        "target_probability": "1/100",
+        "weights_averaged": 100,
+        "one_weight_variance": 3.882352941176471e-05,
+        "pair_covariance": 1.2086436332560127e-06,
+        "pair_correlation": "255/8191",
+        "mean_weight_variance": 1.5847924910410995e-06,
+        "incorrect_independent_weight_variance": 3.8823529411764707e-07,
+        "variance_ratio_to_independent_weight_assumption": 4.082041264802832
+      },
+      {
+        "largest_code": 255,
+        "learning_rate": "1/4096",
+        "target_probability": "1/100",
+        "weights_averaged": 1000,
+        "one_weight_variance": 3.882352941176471e-05,
+        "pair_covariance": 1.2086436332560127e-06,
+        "pair_correlation": "255/8191",
+        "mean_weight_variance": 1.2462585190345215e-06,
+        "incorrect_independent_weight_variance": 3.882352941176471e-08,
+        "variance_ratio_to_independent_weight_assumption": 32.100598217555856
+      }
+    ],
+    "verification": {
+      "exact_conditional_state_pair_checks": 58,
+      "small_code_ranges": [
+        1,
+        2,
+        3
+      ],
+      "target_probabilities": [
+        "1/4",
+        "3/4"
+      ],
+      "arithmetic": "Fraction",
+      "stationary_moment_identities_checked": true
+    },
+    "implication": "Independent arithmetic randomness does not make learned weights independent when they share observations. More averaged edges reduce the independent component but not the common exposure component under these assumptions.",
+    "non_adoptions": [
+      "No forced independence of application learning",
+      "No RNG or batching rule",
+      "No extra residual/trace/averaging state",
+      "No predicted network accuracy or actual degree distribution"
+    ]
+  }
+}

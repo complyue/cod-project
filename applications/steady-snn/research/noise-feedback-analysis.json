@@ -1,0 +1,2026 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-28T20:28:10.999570+00:00",
+  "status": "Conditional closed-form examples; no activity definition, noise law or controller selected",
+  "value_lineage": "C-17/P-34 serves per-CC flexible activity and residual support; P-35 constrains comparisons. C-29/P-69 requires explicit complete-frame timing. H-74 requires evidence of necessity before adding controller state.",
+  "provenance": {
+    "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/noise_feedback_arithmetic.py",
+    "script_sha256": "bf9ac0456b496a4e820c66f5797a75d15cee4e1aeb7e8c6b0e7686743be3b905"
+  },
+  "assumptions": [
+    "Activity fraction is distinct from summed rate, predictive readiness, semantic response and noise-qualified temporal coverage.",
+    "The two-cell calculation is a reduction of H-77 net cancellation, not the actual 60+60 network. Each frame adds independent U[0,sigma] drive to each polarity, before cancellation. Neither this noise distribution nor its spatial allocation is selected.",
+    "For the feedback calculation, activity deviations around an interior equilibrium obey delta_a_next=rho*delta_a+b*delta_sigma with 0<=rho<1 and b>0. This local reference does not establish these properties for the nonlinear SNN.",
+    "An integral error correction illustrates timing dependence only. Its point target is a local reference inside an allowable band, not a replacement of the user flexible regime-dependent envelope.",
+    "Controller bounds, saturation, nonlinearity, stochastic fluctuations, activity-estimation filters and learning are absent from the two-dimensional linear calculation. Its stability is local and is not a guarantee for full trajectories."
+  ],
+  "cancellation_and_activity": {
+    "equations": [
+      "D=d+sigma*(U-V), with U,V iid Uniform[0,1]",
+      "r_positive=max(D,0); r_negative=max(-D,0)",
+      "a=(1(D>theta)+1(D<-theta))/2",
+      "F_Z(z)=0 for z<=-1; (z+1)^2/2 for -1<z<=0; 1-(1-z)^2/2 for 0<z<1; 1 for z>=1",
+      "E[a]=[1-F_Z((theta-d)/sigma)+F_Z((-theta-d)/sigma)]/2 for sigma>0",
+      "E[|D|]=d for 0<=sigma<=d; d+(sigma-d)^3/(3*sigma^2) for sigma>d>=0"
+    ],
+    "initial_signed_drive": "1/5",
+    "activity_threshold": "1/10",
+    "cases": [
+      {
+        "noise_scale": {
+          "exact": "0",
+          "decimal": 0.0
+        },
+        "expected_active_fraction_of_two_cells": {
+          "exact": "1/2",
+          "decimal": 0.5
+        },
+        "expected_unsigned_rate_sum": {
+          "exact": "1/5",
+          "decimal": 0.2
+        },
+        "expected_signed_net": {
+          "exact": "1/5",
+          "decimal": 0.2
+        }
+      },
+      {
+        "noise_scale": {
+          "exact": "1/20",
+          "decimal": 0.05
+        },
+        "expected_active_fraction_of_two_cells": {
+          "exact": "1/2",
+          "decimal": 0.5
+        },
+        "expected_unsigned_rate_sum": {
+          "exact": "1/5",
+          "decimal": 0.2
+        },
+        "expected_signed_net": {
+          "exact": "1/5",
+          "decimal": 0.2
+        }
+      },
+      {
+        "noise_scale": {
+          "exact": "1/10",
+          "decimal": 0.1
+        },
+        "expected_active_fraction_of_two_cells": {
+          "exact": "1/2",
+          "decimal": 0.5
+        },
+        "expected_unsigned_rate_sum": {
+          "exact": "1/5",
+          "decimal": 0.2
+        },
+        "expected_signed_net": {
+          "exact": "1/5",
+          "decimal": 0.2
+        }
+      },
+      {
+        "noise_scale": {
+          "exact": "1/5",
+          "decimal": 0.2
+        },
+        "expected_active_fraction_of_two_cells": {
+          "exact": "7/16",
+          "decimal": 0.4375
+        },
+        "expected_unsigned_rate_sum": {
+          "exact": "1/5",
+          "decimal": 0.2
+        },
+        "expected_signed_net": {
+          "exact": "1/5",
+          "decimal": 0.2
+        }
+      },
+      {
+        "noise_scale": {
+          "exact": "3/10",
+          "decimal": 0.3
+        },
+        "expected_active_fraction_of_two_cells": {
+          "exact": "7/18",
+          "decimal": 0.3888888888888889
+        },
+        "expected_unsigned_rate_sum": {
+          "exact": "11/54",
+          "decimal": 0.2037037037037037
+        },
+        "expected_signed_net": {
+          "exact": "1/5",
+          "decimal": 0.2
+        }
+      },
+      {
+        "noise_scale": {
+          "exact": "2/5",
+          "decimal": 0.4
+        },
+        "expected_active_fraction_of_two_cells": {
+          "exact": "3/8",
+          "decimal": 0.375
+        },
+        "expected_unsigned_rate_sum": {
+          "exact": "13/60",
+          "decimal": 0.21666666666666667
+        },
+        "expected_signed_net": {
+          "exact": "1/5",
+          "decimal": 0.2
+        }
+      },
+      {
+        "noise_scale": {
+          "exact": "4/5",
+          "decimal": 0.8
+        },
+        "expected_active_fraction_of_two_cells": {
+          "exact": "13/32",
+          "decimal": 0.40625
+        },
+        "expected_unsigned_rate_sum": {
+          "exact": "5/16",
+          "decimal": 0.3125
+        },
+        "expected_signed_net": {
+          "exact": "1/5",
+          "decimal": 0.2
+        }
+      },
+      {
+        "noise_scale": {
+          "exact": "2",
+          "decimal": 2.0
+        },
+        "expected_active_fraction_of_two_cells": {
+          "exact": "91/200",
+          "decimal": 0.455
+        },
+        "expected_unsigned_rate_sum": {
+          "exact": "343/500",
+          "decimal": 0.686
+        },
+        "expected_signed_net": {
+          "exact": "1/5",
+          "decimal": 0.2
+        }
+      }
+    ],
+    "observation": "Increasing independent noise can reduce threshold-qualified active fraction while increasing expected unsigned rate. A positive control gain for activity cannot be inferred from positive noise drive.",
+    "homogeneous_limit": "C(sigma*x)=sigma*C(x) for sigma>=0. If the entire provisional input scales this way and there is no fixed additive drive, fixed-positive-threshold support is nondecreasing in sigma for each realization. The counterexample includes fixed signed drive, so it does not contradict this restricted monotonicity.",
+    "zero_threshold": "At d=0, theta=0, every sigma>0 gives active fraction1/2 almost surely. The actual full dense 60+60 positive-drive case likewise has one surviving polarity and50% instantaneous support almost surely under the stated nondegenerate assumptions; meaningful activity qualification is needed.",
+    "limits": "No empirical response curve, chosen threshold, CC activity target, stochastic law, or claimed monotonicity for real trajectories follows from the example."
+  },
+  "feedback_timing": {
+    "plant": "a_(t+1)=rho*a_t+b*sigma_t in deviation coordinates",
+    "lagged": "sigma_(t+1)=sigma_t-k*a_t; matrix[[rho,b],[-k,1]]",
+    "completed": "sigma_(t+1)=sigma_t-k*a_(t+1); matrix[[rho,b],[-k*rho,1-k*b]]",
+    "stability_conditions": {
+      "lagged": "0<bk<1-rho",
+      "completed": "0<bk<2(1+rho)"
+    },
+    "proof": "For lambda^2-T*lambda+D, strict unit-disc stability is equivalent to1-T+D>0,1+T+D>0,1-D>0. Substitution gives the stated bounds for0<=rho<1.",
+    "cases": [
+      {
+        "rho": "1/5",
+        "b": "1",
+        "k": "1/100",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-1/100",
+              "1"
+            ]
+          ],
+          "trace": "6/5",
+          "determinant": "21/100",
+          "jury_conditions": [
+            "1/100",
+            "241/100",
+            "79/100"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.9872983346207417,
+              "imaginary": 0.0
+            },
+            {
+              "real": 0.21270166537925828,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 0.9872983346207417
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-1/500",
+              "99/100"
+            ]
+          ],
+          "trace": "119/100",
+          "determinant": "1/5",
+          "jury_conditions": [
+            "1/100",
+            "239/100",
+            "4/5"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.9874601890638081,
+              "imaginary": 0.0
+            },
+            {
+              "real": 0.2025398109361919,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 0.9874601890638081
+        }
+      },
+      {
+        "rho": "1/5",
+        "b": "1",
+        "k": "1/10",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-1/10",
+              "1"
+            ]
+          ],
+          "trace": "6/5",
+          "determinant": "3/10",
+          "jury_conditions": [
+            "1/10",
+            "5/2",
+            "7/10"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.8449489742783178,
+              "imaginary": 0.0
+            },
+            {
+              "real": 0.3550510257216822,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 0.8449489742783178
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-1/50",
+              "9/10"
+            ]
+          ],
+          "trace": "11/10",
+          "determinant": "1/5",
+          "jury_conditions": [
+            "1/10",
+            "23/10",
+            "4/5"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.8701562118716425,
+              "imaginary": 0.0
+            },
+            {
+              "real": 0.2298437881283576,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 0.8701562118716425
+        }
+      },
+      {
+        "rho": "1/5",
+        "b": "1",
+        "k": "1/2",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-1/2",
+              "1"
+            ]
+          ],
+          "trace": "6/5",
+          "determinant": "7/10",
+          "jury_conditions": [
+            "1/2",
+            "29/10",
+            "3/10"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.6,
+              "imaginary": 0.5830951894845301
+            },
+            {
+              "real": 0.6,
+              "imaginary": -0.5830951894845301
+            }
+          ],
+          "spectral_radius": 0.8366600265340756
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-1/10",
+              "1/2"
+            ]
+          ],
+          "trace": "7/10",
+          "determinant": "1/5",
+          "jury_conditions": [
+            "1/2",
+            "19/10",
+            "4/5"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.35,
+              "imaginary": 0.2783882181415011
+            },
+            {
+              "real": 0.35,
+              "imaginary": -0.2783882181415011
+            }
+          ],
+          "spectral_radius": 0.4472135954999579
+        }
+      },
+      {
+        "rho": "1/5",
+        "b": "1",
+        "k": "1",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-1",
+              "1"
+            ]
+          ],
+          "trace": "6/5",
+          "determinant": "6/5",
+          "jury_conditions": [
+            "1",
+            "17/5",
+            "-1/5"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.6,
+              "imaginary": 0.916515138991168
+            },
+            {
+              "real": 0.6,
+              "imaginary": -0.916515138991168
+            }
+          ],
+          "spectral_radius": 1.0954451150103321
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-1/5",
+              "0"
+            ]
+          ],
+          "trace": "1/5",
+          "determinant": "1/5",
+          "jury_conditions": [
+            "1",
+            "7/5",
+            "4/5"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.1,
+              "imaginary": 0.43588989435406733
+            },
+            {
+              "real": 0.1,
+              "imaginary": -0.43588989435406733
+            }
+          ],
+          "spectral_radius": 0.4472135954999579
+        }
+      },
+      {
+        "rho": "1/5",
+        "b": "1",
+        "k": "3",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-3",
+              "1"
+            ]
+          ],
+          "trace": "6/5",
+          "determinant": "16/5",
+          "jury_conditions": [
+            "3",
+            "27/5",
+            "-11/5"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.6,
+              "imaginary": 1.6852299546352716
+            },
+            {
+              "real": 0.6,
+              "imaginary": -1.6852299546352716
+            }
+          ],
+          "spectral_radius": 1.7888543819998317
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-3/5",
+              "-2"
+            ]
+          ],
+          "trace": "-9/5",
+          "determinant": "1/5",
+          "jury_conditions": [
+            "3",
+            "-3/5",
+            "4/5"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": -0.1189750324093346,
+              "imaginary": 0.0
+            },
+            {
+              "real": -1.6810249675906654,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 1.6810249675906654
+        }
+      },
+      {
+        "rho": "1/5",
+        "b": "1",
+        "k": "4",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-4",
+              "1"
+            ]
+          ],
+          "trace": "6/5",
+          "determinant": "21/5",
+          "jury_conditions": [
+            "4",
+            "32/5",
+            "-16/5"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.6,
+              "imaginary": 1.9595917942265424
+            },
+            {
+              "real": 0.6,
+              "imaginary": -1.9595917942265424
+            }
+          ],
+          "spectral_radius": 2.0493901531919194
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "1/5",
+              "1"
+            ],
+            [
+              "-4/5",
+              "-3"
+            ]
+          ],
+          "trace": "-14/5",
+          "determinant": "1/5",
+          "jury_conditions": [
+            "4",
+            "-8/5",
+            "4/5"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": -0.07335008385784003,
+              "imaginary": 0.0
+            },
+            {
+              "real": -2.7266499161421596,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 2.7266499161421596
+        }
+      },
+      {
+        "rho": "4/5",
+        "b": "1",
+        "k": "1/100",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-1/100",
+              "1"
+            ]
+          ],
+          "trace": "9/5",
+          "determinant": "81/100",
+          "jury_conditions": [
+            "1/100",
+            "361/100",
+            "19/100"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.9,
+              "imaginary": 0.0
+            },
+            {
+              "real": 0.9,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 0.9
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-1/125",
+              "99/100"
+            ]
+          ],
+          "trace": "179/100",
+          "determinant": "4/5",
+          "jury_conditions": [
+            "1/100",
+            "359/100",
+            "1/5"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.9270156211871643,
+              "imaginary": 0.0
+            },
+            {
+              "real": 0.8629843788128357,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 0.9270156211871643
+        }
+      },
+      {
+        "rho": "4/5",
+        "b": "1",
+        "k": "1/10",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-1/10",
+              "1"
+            ]
+          ],
+          "trace": "9/5",
+          "determinant": "9/10",
+          "jury_conditions": [
+            "1/10",
+            "37/10",
+            "1/10"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.9,
+              "imaginary": 0.3
+            },
+            {
+              "real": 0.9,
+              "imaginary": -0.3
+            }
+          ],
+          "spectral_radius": 0.9486832980505138
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-2/25",
+              "9/10"
+            ]
+          ],
+          "trace": "17/10",
+          "determinant": "4/5",
+          "jury_conditions": [
+            "1/10",
+            "7/2",
+            "1/5"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.85,
+              "imaginary": 0.2783882181415011
+            },
+            {
+              "real": 0.85,
+              "imaginary": -0.2783882181415011
+            }
+          ],
+          "spectral_radius": 0.8944271909999159
+        }
+      },
+      {
+        "rho": "4/5",
+        "b": "1",
+        "k": "1/2",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-1/2",
+              "1"
+            ]
+          ],
+          "trace": "9/5",
+          "determinant": "13/10",
+          "jury_conditions": [
+            "1/2",
+            "41/10",
+            "-3/10"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.9,
+              "imaginary": 0.7
+            },
+            {
+              "real": 0.9,
+              "imaginary": -0.7
+            }
+          ],
+          "spectral_radius": 1.140175425099138
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-2/5",
+              "1/2"
+            ]
+          ],
+          "trace": "13/10",
+          "determinant": "4/5",
+          "jury_conditions": [
+            "1/2",
+            "31/10",
+            "1/5"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.65,
+              "imaginary": 0.6144102863722254
+            },
+            {
+              "real": 0.65,
+              "imaginary": -0.6144102863722254
+            }
+          ],
+          "spectral_radius": 0.8944271909999159
+        }
+      },
+      {
+        "rho": "4/5",
+        "b": "1",
+        "k": "1",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-1",
+              "1"
+            ]
+          ],
+          "trace": "9/5",
+          "determinant": "9/5",
+          "jury_conditions": [
+            "1",
+            "23/5",
+            "-4/5"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.9,
+              "imaginary": 0.99498743710662
+            },
+            {
+              "real": 0.9,
+              "imaginary": -0.99498743710662
+            }
+          ],
+          "spectral_radius": 1.3416407864998738
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-4/5",
+              "0"
+            ]
+          ],
+          "trace": "4/5",
+          "determinant": "4/5",
+          "jury_conditions": [
+            "1",
+            "13/5",
+            "1/5"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.4,
+              "imaginary": 0.8
+            },
+            {
+              "real": 0.4,
+              "imaginary": -0.8
+            }
+          ],
+          "spectral_radius": 0.894427190999916
+        }
+      },
+      {
+        "rho": "4/5",
+        "b": "1",
+        "k": "3",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-3",
+              "1"
+            ]
+          ],
+          "trace": "9/5",
+          "determinant": "19/5",
+          "jury_conditions": [
+            "3",
+            "33/5",
+            "-14/5"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.9,
+              "imaginary": 1.7291616465790582
+            },
+            {
+              "real": 0.9,
+              "imaginary": -1.7291616465790582
+            }
+          ],
+          "spectral_radius": 1.9493588689617927
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-12/5",
+              "-2"
+            ]
+          ],
+          "trace": "-6/5",
+          "determinant": "4/5",
+          "jury_conditions": [
+            "3",
+            "3/5",
+            "1/5"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": -0.6,
+              "imaginary": 0.6633249580710799
+            },
+            {
+              "real": -0.6,
+              "imaginary": -0.6633249580710799
+            }
+          ],
+          "spectral_radius": 0.8944271909999159
+        }
+      },
+      {
+        "rho": "4/5",
+        "b": "1",
+        "k": "4",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-4",
+              "1"
+            ]
+          ],
+          "trace": "9/5",
+          "determinant": "24/5",
+          "jury_conditions": [
+            "4",
+            "38/5",
+            "-19/5"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.9,
+              "imaginary": 1.997498435543818
+            },
+            {
+              "real": 0.9,
+              "imaginary": -1.997498435543818
+            }
+          ],
+          "spectral_radius": 2.1908902300206643
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "4/5",
+              "1"
+            ],
+            [
+              "-16/5",
+              "-3"
+            ]
+          ],
+          "trace": "-11/5",
+          "determinant": "4/5",
+          "jury_conditions": [
+            "4",
+            "-2/5",
+            "1/5"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": -0.4596875762567152,
+              "imaginary": 0.0
+            },
+            {
+              "real": -1.740312423743285,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 1.740312423743285
+        }
+      },
+      {
+        "rho": "49/50",
+        "b": "1",
+        "k": "1/100",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-1/100",
+              "1"
+            ]
+          ],
+          "trace": "99/50",
+          "determinant": "99/100",
+          "jury_conditions": [
+            "1/100",
+            "397/100",
+            "1/100"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.99,
+              "imaginary": 0.099498743710662
+            },
+            {
+              "real": 0.99,
+              "imaginary": -0.099498743710662
+            }
+          ],
+          "spectral_radius": 0.99498743710662
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-49/5000",
+              "99/100"
+            ]
+          ],
+          "trace": "197/100",
+          "determinant": "49/50",
+          "jury_conditions": [
+            "1/100",
+            "79/20",
+            "1/50"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.985,
+              "imaginary": 0.09886859966642594
+            },
+            {
+              "real": 0.985,
+              "imaginary": -0.09886859966642594
+            }
+          ],
+          "spectral_radius": 0.9899494936611665
+        }
+      },
+      {
+        "rho": "49/50",
+        "b": "1",
+        "k": "1/10",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-1/10",
+              "1"
+            ]
+          ],
+          "trace": "99/50",
+          "determinant": "27/25",
+          "jury_conditions": [
+            "1/10",
+            "203/50",
+            "-2/25"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.99,
+              "imaginary": 0.3160696125855822
+            },
+            {
+              "real": 0.99,
+              "imaginary": -0.3160696125855822
+            }
+          ],
+          "spectral_radius": 1.0392304845413263
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-49/500",
+              "9/10"
+            ]
+          ],
+          "trace": "47/25",
+          "determinant": "49/50",
+          "jury_conditions": [
+            "1/10",
+            "193/50",
+            "1/50"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.94,
+              "imaginary": 0.31048349392520047
+            },
+            {
+              "real": 0.94,
+              "imaginary": -0.31048349392520047
+            }
+          ],
+          "spectral_radius": 0.9899494936611665
+        }
+      },
+      {
+        "rho": "49/50",
+        "b": "1",
+        "k": "1/2",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-1/2",
+              "1"
+            ]
+          ],
+          "trace": "99/50",
+          "determinant": "37/25",
+          "jury_conditions": [
+            "1/2",
+            "223/50",
+            "-12/25"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.99,
+              "imaginary": 0.7070360669725414
+            },
+            {
+              "real": 0.99,
+              "imaginary": -0.7070360669725414
+            }
+          ],
+          "spectral_radius": 1.216552506059644
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-49/100",
+              "1/2"
+            ]
+          ],
+          "trace": "37/25",
+          "determinant": "49/50",
+          "jury_conditions": [
+            "1/2",
+            "173/50",
+            "1/50"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.74,
+              "imaginary": 0.6575712889109439
+            },
+            {
+              "real": 0.74,
+              "imaginary": -0.6575712889109439
+            }
+          ],
+          "spectral_radius": 0.9899494936611665
+        }
+      },
+      {
+        "rho": "49/50",
+        "b": "1",
+        "k": "1",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-1",
+              "1"
+            ]
+          ],
+          "trace": "99/50",
+          "determinant": "99/50",
+          "jury_conditions": [
+            "1",
+            "124/25",
+            "-49/50"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.99,
+              "imaginary": 0.9999499987499375
+            },
+            {
+              "real": 0.99,
+              "imaginary": -0.9999499987499375
+            }
+          ],
+          "spectral_radius": 1.407124727947029
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-49/50",
+              "0"
+            ]
+          ],
+          "trace": "49/50",
+          "determinant": "49/50",
+          "jury_conditions": [
+            "1",
+            "74/25",
+            "1/50"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": 0.49,
+              "imaginary": 0.8601744009211155
+            },
+            {
+              "real": 0.49,
+              "imaginary": -0.8601744009211155
+            }
+          ],
+          "spectral_radius": 0.9899494936611665
+        }
+      },
+      {
+        "rho": "49/50",
+        "b": "1",
+        "k": "3",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-3",
+              "1"
+            ]
+          ],
+          "trace": "99/50",
+          "determinant": "199/50",
+          "jury_conditions": [
+            "3",
+            "174/25",
+            "-149/50"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.99,
+              "imaginary": 1.732021939814851
+            },
+            {
+              "real": 0.99,
+              "imaginary": -1.732021939814851
+            }
+          ],
+          "spectral_radius": 1.9949937343260002
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-147/50",
+              "-2"
+            ]
+          ],
+          "trace": "-51/50",
+          "determinant": "49/50",
+          "jury_conditions": [
+            "3",
+            "24/25",
+            "1/50"
+          ],
+          "strictly_stable": true,
+          "eigenvalues": [
+            {
+              "real": -0.51,
+              "imaginary": 0.8484692098125894
+            },
+            {
+              "real": -0.51,
+              "imaginary": -0.8484692098125894
+            }
+          ],
+          "spectral_radius": 0.9899494936611665
+        }
+      },
+      {
+        "rho": "49/50",
+        "b": "1",
+        "k": "4",
+        "lagged_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-4",
+              "1"
+            ]
+          ],
+          "trace": "99/50",
+          "determinant": "249/50",
+          "jury_conditions": [
+            "4",
+            "199/25",
+            "-199/50"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": 0.99,
+              "imaginary": 1.999974999843748
+            },
+            {
+              "real": 0.99,
+              "imaginary": -1.999974999843748
+            }
+          ],
+          "spectral_radius": 2.2315913604421396
+        },
+        "completed_frame_measurement": {
+          "matrix": [
+            [
+              "49/50",
+              "1"
+            ],
+            [
+              "-98/25",
+              "-3"
+            ]
+          ],
+          "trace": "-101/50",
+          "determinant": "49/50",
+          "jury_conditions": [
+            "4",
+            "-1/25",
+            "1/50"
+          ],
+          "strictly_stable": false,
+          "eigenvalues": [
+            {
+              "real": -0.8097501560549921,
+              "imaginary": 0.0
+            },
+            {
+              "real": -1.2102498439450078,
+              "imaginary": 0.0
+            }
+          ],
+          "spectral_radius": 1.2102498439450078
+        }
+      }
+    ],
+    "interpretation": "Using the completed destination frame to choose the next transition noise need not violate two-frame isolation. Holding noise fixed within a transition does not by itself choose which completed observation the feedback uses.",
+    "limits": "The comparison does not select integral control, prefer a gain, fit rho/b, or require a per-neuron field. There is no universal fastest or slowest adequate control cadence."
+  },
+  "bounded_actuation": {
+    "equilibrium": "For a_next=rho*a+b*sigma+d, fixed0<=rho<1,b>0, andsigma in[sigma_min,sigma_max], reachable equilibria lie in[(b*sigma_min+d)/(1-rho),(b*sigma_max+d)/(1-rho)].",
+    "cases": [
+      {
+        "case": "reference",
+        "rho": "4/5",
+        "b": "1/10",
+        "forcing": "1/100",
+        "noise_interval": [
+          "0",
+          "1"
+        ],
+        "target_band": [
+          "1/10",
+          "3/10"
+        ],
+        "reachable_equilibrium_interval": [
+          "1/20",
+          "11/20"
+        ],
+        "intersects_band": true
+      },
+      {
+        "case": "restricted_noise",
+        "rho": "4/5",
+        "b": "1/10",
+        "forcing": "1/100",
+        "noise_interval": [
+          "0",
+          "1/20"
+        ],
+        "target_band": [
+          "1/10",
+          "3/10"
+        ],
+        "reachable_equilibrium_interval": [
+          "1/20",
+          "3/40"
+        ],
+        "intersects_band": false
+      },
+      {
+        "case": "strong_external_drive",
+        "rho": "4/5",
+        "b": "1/10",
+        "forcing": "2/25",
+        "noise_interval": [
+          "0",
+          "1"
+        ],
+        "target_band": [
+          "1/10",
+          "3/10"
+        ],
+        "reachable_equilibrium_interval": [
+          "2/5",
+          "9/10"
+        ],
+        "intersects_band": false
+      }
+    ],
+    "interpretation": "Attention suppression and activity support must be jointly feasible. Reducing added noise to zero cannot generally suppress already excessive external/recurrent drive. No priority policy or additional inhibitory mechanism is selected."
+  },
+  "future_comparisons": [
+    {
+      "alternatives": "Activity threshold/window definitions using individual rates",
+      "observations": "Sensitivity to noise magnitude, transient cancellation, numerically tiny rates and genuine brief participation; preserve activity fraction rather than substituting summed rate."
+    },
+    {
+      "alternatives": "Feedback based on latest completed activity versus intentionally delayed/averaged observation",
+      "observations": "Recovery time, excursions and persistent oscillations across token transitions and after learning; report cadence and units, not just numeric gain."
+    },
+    {
+      "alternatives": "Fixed primitive noise for mechanism isolation versus full closed-loop regulation",
+      "observations": "Separate effects on useful residual, fading, context prediction and steerability; replaying a fixed amplitude does not evaluate full feedback behavior."
+    },
+    {
+      "alternatives": "Simple bounded correction candidates under attention suppression and activity support",
+      "observations": "Reachability of the broad envelope and semantic behavior under actual inputs; add state or more elaborate control only after a simpler justified candidate demonstrably fails."
+    }
+  ],
+  "measurement_circularity": "Defining active as a fixed fraction of the largest current rates guarantees that count by definition; it is not evidence that the dynamics achieved activity regulation. Adaptive qualification may be compared, but its measurement meaning and sensitivity to absolute fading must remain explicit.",
+  "not_selected": [
+    "controller equation",
+    "activity threshold",
+    "measurement window",
+    "noise distribution",
+    "gain",
+    "filter state",
+    "hard set point",
+    "attention priority",
+    "new inhibitory edges",
+    "reset policy"
+  ],
+  "scope_limit": "No neural implementation/training, random neural simulation, benchmark, project tests or build. Exact rational probability and2x2 eigenvalue arithmetic only.",
+  "signed_population_noise": {
+    "scope": "One conditional frame, 60 cells per polarity, independent U[0,sigma] addition to each nonnegative provisional rate, then exact H-77 cancellation. Sigma is fixed for this frame; no clipping, recurrence, quantization or feedback dynamics included.",
+    "definitions": {
+      "d": "Pre-noise sum of positive rates minus sum of negative rates; d>=0 by symmetry.",
+      "D": "Post-noise signed remainder, preserved by exact cancellation.",
+      "delta": "d/sigma for sigma>0.",
+      "distribution": "D/sigma = delta + Y-60 where Y is the sum of 120 independent U[0,1] variables.",
+      "mean": "E[D]=d",
+      "variance": "Var(D)=10*sigma^2",
+      "cdf": "F_n(a) = sum_{k=0}^{floor(a)} (-1)^k binom(n,k)*(a-k)^n / n! for 0<=a<=n.",
+      "negative_probability": "F_120(60-delta), zero when delta>=60.",
+      "absolute_mean": "E[abs(D)]/sigma = delta + 2*sum_{k=0}^{floor(60-delta)} (-1)^k binom(120,k)*(60-delta-k)^121 / 121!, with empty sum zero."
+    },
+    "cases": [
+      {
+        "base_signed_remainder_over_noise_scale": 0.0,
+        "probability_negative_remainder": 0.5,
+        "normal_approximation_negative_probability": 0.5,
+        "mean_absolute_remainder_over_noise_scale": 2.524185550784371
+      },
+      {
+        "base_signed_remainder_over_noise_scale": 0.5,
+        "probability_negative_remainder": 0.4372608038719891,
+        "normal_approximation_negative_probability": 0.43718353058144593,
+        "mean_absolute_remainder_over_noise_scale": 2.5556201228862014
+      },
+      {
+        "base_signed_remainder_over_noise_scale": 1.0,
+        "probability_negative_remainder": 0.37605994659612374,
+        "normal_approximation_negative_probability": 0.3759148170229246,
+        "mean_absolute_remainder_over_noise_scale": 2.649149902150263
+      },
+      {
+        "base_signed_remainder_over_noise_scale": 2.0,
+        "probability_negative_remainder": 0.2637687554732729,
+        "normal_approximation_negative_probability": 0.26354462843276905,
+        "mean_absolute_remainder_over_noise_scale": 3.0121052791996146
+      },
+      {
+        "base_signed_remainder_over_noise_scale": 5.0,
+        "probability_negative_remainder": 0.05696101048236353,
+        "normal_approximation_negative_probability": 0.05692314900332902,
+        "mean_absolute_remainder_over_noise_scale": 5.153204735701086
+      },
+      {
+        "base_signed_remainder_over_noise_scale": 10.0,
+        "probability_negative_remainder": 0.0007578786392371668,
+        "normal_approximation_negative_probability": 0.0007827011290012744,
+        "mean_absolute_remainder_over_noise_scale": 10.001283349667464
+      },
+      {
+        "base_signed_remainder_over_noise_scale": 20.0,
+        "probability_negative_remainder": 6.437144049360398e-11,
+        "normal_approximation_negative_probability": 1.26981429473543e-10,
+        "mean_absolute_remainder_over_noise_scale": 20.00000000005731
+      },
+      {
+        "base_signed_remainder_over_noise_scale": 60.0,
+        "probability_negative_remainder": 0.0,
+        "normal_approximation_negative_probability": 1.407842152309737e-80,
+        "mean_absolute_remainder_over_noise_scale": 60.0
+      }
+    ],
+    "normalization": {
+      "general_population_size_m_each_polarity": "Raw-sum net noise variance = m*sigma^2/6; readout divided by m has variance sigma^2/(6*m). Thus neuron-count scaling depends on the defined signal and readout units.",
+      "independent_5120_coordinates": "For the raw-sum vector readout, E[||D-d||_2^2]=51200*sigma^2 in this one-frame reference.",
+      "relative_RMS_error": "sqrt(51200)*sigma/||d||_2 when ||d||_2>0; not a selected noise budget or prediction metric.",
+      "sqrt_51200": 226.27416997969522
+    },
+    "interpretation": "Unbiased signed noise can increase unsigned remaining activity and change weak coordinate signs. A flipped small component alone need not imply poor whole-vector fidelity. Residual magnitude growth alone is not evidence of strengthened semantic information.",
+    "checks": "120-uniform formula evaluated with 100- and 150-digit Decimal precision; agreement <1e-65. Independent single-pair triangular formulas checked. Normal approximation reported separately and not used for exact results.",
+    "source_fingerprint": {
+      "path": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/polarity_noise_arithmetic.py",
+      "sha256": "fdb883923518519c317cf81bc4505f822e21c559cf1f72710ca2fddb6ae04b61"
+    },
+    "non_adoptions": "No noise law, amplitude, readout normalization, correlation structure, controller, threshold or stored statistic selected. No actual neural simulation or training claim."
+  },
+  "updated_at_utc": "2026-10-29T00:53:02Z",
+  "nonlinear_response": {
+    "status": "Conditional one-transition response; no neuron equation or noise law selected",
+    "assumptions": [
+      "60 cells per polarity; each positive input is delta=.01 and negative input is zero",
+      "Every cell independently receives U[0,sigma] before the transfer; sigma fixed within transition",
+      "phi(x)=clip((x-theta)/b,0,1), theta=.1, b=.05; identical arbitrary input/output rate units for this reference",
+      "H77 cancellation after transfer preserves its signed population sum; no recurrence, quantization or feedback in this calculation"
+    ],
+    "formulas": {
+      "moment": "E[phi(delta+U)^k] = [J_k(delta+sigma-theta)-J_k(delta-theta)]/sigma",
+      "primitive": "J_k(t)=0 for t<=0; t^(k+1)/[(k+1)b^k] for0<t<b; t-k*b/(k+1) for t>=b",
+      "signed_mean": "m*(Ephi(delta+U)-Ephi(U))",
+      "signed_variance": "m*(Varphi(delta+U)+Varphi(U)) for independent cell draws",
+      "threshold_linear_comparison": "For phi(x)=max(x-theta,0),0<delta<theta and sigma>theta: mean increment per cell=delta*(1-theta/sigma)+delta^2/(2sigma), no greater than delta. General1-Lipschitz response cannot amplify same-draw differences above one."
+    },
+    "input_signed_sum": {
+      "rational": "3/5",
+      "decimal": 0.6
+    },
+    "cases": [
+      {
+        "noise_upper_bound": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "positive_cell_mean": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "negative_cell_mean": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "mean_over_standard_deviation": null
+      },
+      {
+        "noise_upper_bound": {
+          "rational": "1/20",
+          "decimal": 0.05
+        },
+        "positive_cell_mean": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "negative_cell_mean": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "mean_over_standard_deviation": null
+      },
+      {
+        "noise_upper_bound": {
+          "rational": "9/100",
+          "decimal": 0.09
+        },
+        "positive_cell_mean": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "negative_cell_mean": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "mean_over_standard_deviation": null
+      },
+      {
+        "noise_upper_bound": {
+          "rational": "19/200",
+          "decimal": 0.095
+        },
+        "positive_cell_mean": {
+          "rational": "1/380",
+          "decimal": 0.002631578947368421
+        },
+        "negative_cell_mean": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "3/19",
+          "decimal": 0.15789473684210525
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "73/7220",
+          "decimal": 0.010110803324099723
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "5/19",
+          "decimal": 0.2631578947368421
+        },
+        "mean_over_standard_deviation": 1.570271767770641
+      },
+      {
+        "noise_upper_bound": {
+          "rational": "1/10",
+          "decimal": 0.1
+        },
+        "positive_cell_mean": {
+          "rational": "1/100",
+          "decimal": 0.01
+        },
+        "negative_cell_mean": {
+          "rational": "0",
+          "decimal": 0.0
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "3/5",
+          "decimal": 0.6
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "37/500",
+          "decimal": 0.074
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "1",
+          "decimal": 1.0
+        },
+        "mean_over_standard_deviation": 2.205643866281423
+      },
+      {
+        "noise_upper_bound": {
+          "rational": "3/25",
+          "decimal": 0.12
+        },
+        "positive_cell_mean": {
+          "rational": "3/40",
+          "decimal": 0.075
+        },
+        "negative_cell_mean": {
+          "rational": "1/30",
+          "decimal": 0.03333333333333333
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "5/2",
+          "decimal": 2.5
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "463/240",
+          "decimal": 1.9291666666666667
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "25/6",
+          "decimal": 4.166666666666667
+        },
+        "mean_over_standard_deviation": 1.7999280043197121
+      },
+      {
+        "noise_upper_bound": {
+          "rational": "3/20",
+          "decimal": 0.15
+        },
+        "positive_cell_mean": {
+          "rational": "7/30",
+          "decimal": 0.23333333333333334
+        },
+        "negative_cell_mean": {
+          "rational": "1/6",
+          "decimal": 0.16666666666666666
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "4",
+          "decimal": 4.0
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "62/5",
+          "decimal": 12.4
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "20/3",
+          "decimal": 6.666666666666667
+        },
+        "mean_over_standard_deviation": 1.1359236684941296
+      },
+      {
+        "noise_upper_bound": {
+          "rational": "1/5",
+          "decimal": 0.2
+        },
+        "positive_cell_mean": {
+          "rational": "17/40",
+          "decimal": 0.425
+        },
+        "negative_cell_mean": {
+          "rational": "3/8",
+          "decimal": 0.375
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "3",
+          "decimal": 3.0
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "949/40",
+          "decimal": 23.725
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "5",
+          "decimal": 5.0
+        },
+        "mean_over_standard_deviation": 0.6159112604235644
+      },
+      {
+        "noise_upper_bound": {
+          "rational": "2/5",
+          "decimal": 0.4
+        },
+        "positive_cell_mean": {
+          "rational": "57/80",
+          "decimal": 0.7125
+        },
+        "negative_cell_mean": {
+          "rational": "11/16",
+          "decimal": 0.6875
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "3/2",
+          "decimal": 1.5
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "3629/160",
+          "decimal": 22.68125
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "5/2",
+          "decimal": 2.5
+        },
+        "mean_over_standard_deviation": 0.3149617147934267
+      },
+      {
+        "noise_upper_bound": {
+          "rational": "1",
+          "decimal": 1.0
+        },
+        "positive_cell_mean": {
+          "rational": "177/200",
+          "decimal": 0.885
+        },
+        "negative_cell_mean": {
+          "rational": "7/8",
+          "decimal": 0.875
+        },
+        "signed_mean_after_cancellation": {
+          "rational": "3/5",
+          "decimal": 0.6
+        },
+        "signed_variance_after_cancellation": {
+          "rational": "11669/1000",
+          "decimal": 11.669
+        },
+        "mean_gain_relative_to_input_sum": {
+          "rational": "1",
+          "decimal": 1.0
+        },
+        "mean_over_standard_deviation": 0.175644449563914
+      }
+    ],
+    "interpretation": [
+      "Nonlinearity with a sufficiently steep response can convert balanced noise plus a residual into greater mean signed output; cancellation alone does not do so",
+      "Noise can enable a previously subthreshold response without guaranteeing reliable contextual information or repeated growth",
+      "The larger mean at sigma=.15 has a lower mean/standard-deviation ratio than sigma=.10; neither statistic is adopted as a task metric",
+      "Recurrent selective amplification can contribute separately; no new inhibitory connection type or noise-specific amplification component is implied",
+      "Changing noise after feedback or composing learned transitions needs the full model, not iteration of the mean formula"
+    ],
+    "verification": "Exact Fraction antiderivatives independently checked by piecewise polynomial integration for ten noise levels and both first/second moments",
+    "provenance": {
+      "script": "/ws/EvtWorks/research-cache/steady-snn-modeling-20261028/noisy_transfer_arithmetic.py",
+      "script_sha256": "aed9a6148c2f2d3df26abb5f8101cd5743d72177103574f2f86edf144f6e836b"
+    },
+    "scope_limit": "No stochastic sampling, SNN/training implementation, learned prediction result, benchmark, project test or build"
+  },
+  "spatial_noise_covariance": {
+    "recorded_at_utc": "2026-10-29T00:53:02Z",
+    "scope": "Conditional simultaneous additive noise followed by exact H77 active-rate cancellation. No clipping, transfer nonlinearity, recurrence, learned response, controller or neural simulation.",
+    "definitions": {
+      "m": "Equal number of cells in each polarity.",
+      "v": "Common finite per-cell noise variance, with equal group means.",
+      "rho_w": "Pairwise correlation between distinct cells within each polarity.",
+      "rho_b": "Pairwise correlation across polarities.",
+      "general_identity": "For signed-sum vector s and covariance Sigma, Var(net noise)=s^T Sigma s.",
+      "equal_correlation_formula": "2*m*v*(1+(m-1)*rho_w-m*rho_b)",
+      "validity": "The assumed covariance must be positive semidefinite. Listed examples are realizable by independent and shared nonnegative random components; arbitrary rho_w/rho_b pairs are not allowed.",
+      "time": "Independent redraw of the complete noise vector at successive frames makes centered fluctuations temporally white in every example; temporal whiteness does not fix simultaneous spatial sharing."
+    },
+    "exact_cases": [
+      {
+        "m_per_polarity": 1,
+        "sharing": "independent_cells",
+        "within_correlation": "0",
+        "cross_correlation": "0",
+        "signed_sum_variance_over_per_cell_variance": "2",
+        "population_normalized_variance_over_per_cell_variance": "2"
+      },
+      {
+        "m_per_polarity": 1,
+        "sharing": "one_independent_draw_per_polarity",
+        "within_correlation": "1",
+        "cross_correlation": "0",
+        "signed_sum_variance_over_per_cell_variance": "2",
+        "population_normalized_variance_over_per_cell_variance": "2"
+      },
+      {
+        "m_per_polarity": 1,
+        "sharing": "one_common_draw_for_both_polarities",
+        "within_correlation": "1",
+        "cross_correlation": "1",
+        "signed_sum_variance_over_per_cell_variance": "0",
+        "population_normalized_variance_over_per_cell_variance": "0"
+      },
+      {
+        "m_per_polarity": 1,
+        "sharing": "one_percent_common_to_all",
+        "within_correlation": "1/100",
+        "cross_correlation": "1/100",
+        "signed_sum_variance_over_per_cell_variance": "99/50",
+        "population_normalized_variance_over_per_cell_variance": "99/50"
+      },
+      {
+        "m_per_polarity": 1,
+        "sharing": "one_percent_common_within_each_polarity",
+        "within_correlation": "1/100",
+        "cross_correlation": "0",
+        "signed_sum_variance_over_per_cell_variance": "2",
+        "population_normalized_variance_over_per_cell_variance": "2"
+      },
+      {
+        "m_per_polarity": 2,
+        "sharing": "independent_cells",
+        "within_correlation": "0",
+        "cross_correlation": "0",
+        "signed_sum_variance_over_per_cell_variance": "4",
+        "population_normalized_variance_over_per_cell_variance": "1"
+      },
+      {
+        "m_per_polarity": 2,
+        "sharing": "one_independent_draw_per_polarity",
+        "within_correlation": "1",
+        "cross_correlation": "0",
+        "signed_sum_variance_over_per_cell_variance": "8",
+        "population_normalized_variance_over_per_cell_variance": "2"
+      },
+      {
+        "m_per_polarity": 2,
+        "sharing": "one_common_draw_for_both_polarities",
+        "within_correlation": "1",
+        "cross_correlation": "1",
+        "signed_sum_variance_over_per_cell_variance": "0",
+        "population_normalized_variance_over_per_cell_variance": "0"
+      },
+      {
+        "m_per_polarity": 2,
+        "sharing": "one_percent_common_to_all",
+        "within_correlation": "1/100",
+        "cross_correlation": "1/100",
+        "signed_sum_variance_over_per_cell_variance": "99/25",
+        "population_normalized_variance_over_per_cell_variance": "99/100"
+      },
+      {
+        "m_per_polarity": 2,
+        "sharing": "one_percent_common_within_each_polarity",
+        "within_correlation": "1/100",
+        "cross_correlation": "0",
+        "signed_sum_variance_over_per_cell_variance": "101/25",
+        "population_normalized_variance_over_per_cell_variance": "101/100"
+      },
+      {
+        "m_per_polarity": 60,
+        "sharing": "independent_cells",
+        "within_correlation": "0",
+        "cross_correlation": "0",
+        "signed_sum_variance_over_per_cell_variance": "120",
+        "population_normalized_variance_over_per_cell_variance": "1/30"
+      },
+      {
+        "m_per_polarity": 60,
+        "sharing": "one_independent_draw_per_polarity",
+        "within_correlation": "1",
+        "cross_correlation": "0",
+        "signed_sum_variance_over_per_cell_variance": "7200",
+        "population_normalized_variance_over_per_cell_variance": "2"
+      },
+      {
+        "m_per_polarity": 60,
+        "sharing": "one_common_draw_for_both_polarities",
+        "within_correlation": "1",
+        "cross_correlation": "1",
+        "signed_sum_variance_over_per_cell_variance": "0",
+        "population_normalized_variance_over_per_cell_variance": "0"
+      },
+      {
+        "m_per_polarity": 60,
+        "sharing": "one_percent_common_to_all",
+        "within_correlation": "1/100",
+        "cross_correlation": "1/100",
+        "signed_sum_variance_over_per_cell_variance": "594/5",
+        "population_normalized_variance_over_per_cell_variance": "33/1000"
+      },
+      {
+        "m_per_polarity": 60,
+        "sharing": "one_percent_common_within_each_polarity",
+        "within_correlation": "1/100",
+        "cross_correlation": "0",
+        "signed_sum_variance_over_per_cell_variance": "954/5",
+        "population_normalized_variance_over_per_cell_variance": "53/1000"
+      }
+    ],
+    "unchanged_net_changed_context": {
+      "initial_positive_rates": "one cell1, the other59 zero",
+      "initial_negative_rates": "all60 zero",
+      "common_added_amount_each_of_120_cells": "1/60",
+      "signed_sum_before_and_after": "1",
+      "post_cancellation_original_cell": "61/120",
+      "post_cancellation_each_other_positive_cell": "1/120",
+      "post_cancellation_negative_cells": "0",
+      "meaning": "Equal added group totals cancel in the signed sum but alter the surviving composition. This is one deterministic noise realization, not an average or a trained trajectory."
+    },
+    "comparison_implication": "A shared global noise-amplitude command does not specify shared random draws. Compare semantic response and contextual prediction, not noise amplitude or mean pairwise correlation alone.",
+    "non_adoptions": "No common-noise generator, covariance matrix, decorrelation target, extra state, population change, or new controller selected.",
+    "verification": "Fifteen exact rational covariance-sum identities at m1/2/60; exact H77 composition identity. No network evolution or project tests."
+  }
+}

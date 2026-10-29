@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-10-28T17:35:57.571038+00:00",
+  "status": "research_notes_synthesized_with_unselected_comparisons",
+  "scope": "H-63/H-65 DMN/token maintenance and H-75/H-76 shared contextual activation; H-79/H-80 separate token-sequence flow learning; H-81 opens its initial algorithm design; H-78 state choice remains open; H-82 prediction matching, H-83 context-dependent narrowing and H-84 generation-fallback exclusion govern flow research",
+  "primary_source": "MR-S020 in modeling-source-ledger.json",
+  "primary_observation": "In canonical HTM, unexpected input broadly activates a column while selecting a learning winner using a matching segment or a fallback assignment. Existing segment adaptation consults previous active cells; growth consults previous winners. With learning enabled, burst-related activity can participate. These are reference roles, not adopted application mechanisms; H-84 separately excludes our explicit generation fallback from learning.",
+  "own_analyses": [
+    {
+      "id": "MR-CX001",
+      "topic": "Activation is not automatically the learning target",
+      "derivation": "H-76 specifies input activation; H-84 scopes its broad weak fallback to explicit generation behavior excluded from learning. H-63 separately specifies repairing deficient expected DMN/token recurrence. H-79—H-83 call for a distinct flow learner whose observed-sequence prediction improves and narrows with context. Neither generation fallback nor DMN repair supplies its teaching representation by default.",
+      "limit": "This does not select a learning-winner array, winner-take-all rule, persistent token mask, segment table or special edge category. Eligibility and correct natural response remain discussion items."
+    },
+    {
+      "id": "MR-CX002",
+      "topic": "Exchangeability is not absence of individual context",
+      "derivation": "A sampling rule symmetric under within-population cell permutations can yield different individual sparse connections in each realization. Equality of ensemble-average weights or roles does not imply identical realized responses; trained activity and weights may also be correlated.",
+      "conditional_loss_case": "If a direct linear transition has identical source columns for every cell within each coordinate/polarity population, any redistribution with zero sum in every population is annihilated by that transition. Aggregating away identities can therefore discard context even while preserving the immediate semantic vector.",
+      "limit": "The actual sparse graph need not have identical columns. Self-retention, nonlinear transfer and separate readiness change this conditional example; no claim that the selected training must homogenize cells."
+    },
+    {
+      "id": "MR-CX003",
+      "topic": "A summed readiness score has a representational boundary",
+      "patterns": {
+        "predict": [
+          [
+            1,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            1
+          ]
+        ],
+        "do_not_predict": [
+          [
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ]
+        ]
+      },
+      "proof": "The sum of the two predict patterns equals the sum of the two non-predict patterns. No one linear score w*x with a threshold can place both predict scores at or above threshold and both other scores below it: adding the inequalities contradicts the equal sums.",
+      "limit": "This is a single-cell, single-score example, not a network impossibility theorem or an application requirement. Distributed recurrence may supply contextual distinctions. H-75 does not require every neuron to recognize every union of arbitrary context patterns. No dendritic segments or multiple readiness fields follow by default."
+    },
+    {
+      "id": "MR-CX004",
+      "topic": "Useful context is an observable behavior",
+      "derivation": "Different stored connections or random cell identities alone show representational opportunity. Retained history must make the required difference to a later response under matched current input and appropriate noise/control conditions. A maintenance target that requires one fixed cell realization for every repeated token could remove valid alternate contexts.",
+      "limit": "No new readout, benchmark corpus, experiment framework or implementation is selected. The existing history-comparison proposal remains the appropriate behavioral question."
+    }
+  ],
+  "next_questions": [
+    "Flow: design context-conditioned learning for familiar and unfamiliar observed transitions under H-82/H-83 without learning the generation fallback excluded by H-84; no pending choice between fallback recipients remains.",
+    "How should expected participation credit a context-specific natural response inside the epoch goal without treating every incidental activation as correct?",
+    "Can adequate stored rate precision plus the existing incoming graph satisfy prediction and later-context behavior before adding a distinct persistent readiness state? Preserve both H-78 comparison branches.",
+    "How can repair address excessive or wrong responses while preserving nonnegative edge interpretation and useful shared routes? Weight weakening, activity cancellation and natural fading have different meanings; no learning rule selected."
+  ],
+  "updated_at_utc": "2026-10-29T02:57:49Z",
+  "training_boundary": "HTM learning observations are reference material for the separately designed flow learner. They do not provide a DMN/isolated-token repair rule. The latter is grounded in H-63/H-65, and no flow algorithm is selected.",
+  "synthesis_review": {
+    "recorded_at_utc": "2026-10-29T02:57:49Z",
+    "registry": "D-08, current document-set199; implementation qualification remains pending-human.",
+    "scope": "Current notes are synthesized into the application documents; the remaining questions are future comparison/design matters, not an outstanding request for an immediate human answer. H86 applies.",
+    "coverage": [
+      {
+        "analysis": "MR-CX001",
+        "document": "../docs/FlowLearning.md#generation-fallback-and-sequence-learning",
+        "revision": 192,
+        "finding": "Generation fallback, independent flow teaching responsibility and DMN/token repair are distinguished."
+      },
+      {
+        "analysis": "MR-CX002",
+        "document": "../docs/ContextLoopsAndNumerics.md#individual-identities-and-shared-recurrence",
+        "revision": 199,
+        "finding": "Individual learned identities and the limits of population-average reasoning remain explicit."
+      },
+      {
+        "analysis": "MR-CX003",
+        "document": "../docs/SynapticIntegrationResearch.md#context-selectivity-is-separate-from-connection-capacity",
+        "revision": 191,
+        "finding": "Single-score selectivity is distinguished from distributed nonlinear recurrence; no segment mechanism selected."
+      },
+      {
+        "analysis": "MR-CX004",
+        "document": "../docs/ContextLoopsAndNumerics.md#useful-small-loops-and-dominant-response-fading",
+        "revision": 199,
+        "finding": "Useful context is assessed through later behavior, distinct from mere activity or structural diversity."
+      }
+    ],
+    "former_status": "research_notes_pending_synthesis_no_selected_mechanisms",
+    "non_adoption": "No analysis conclusion, human direction, learner, auxiliary structure or qualification changed."
+  }
+}
