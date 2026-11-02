@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：208
+记录版本：209
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -121,6 +121,10 @@ Design authority
 | C-27 | 累积／延后生效的衰减：保留跨小更新的衰减进度，可研究下一数值边界的未来触发。 | C-24 的时间／数值机制候选；P-63 价值衍生、P-64 表示／容量依赖 | H-71 要求深入比较，H-72 澄清可预计算下一次最小精度允许的变化；未确认计时器、残差、锚点、事件结构或具体衰减律。模型时间、输入到达、取消／重新计算和中间输出语义必须明确；pending-human。 K-97 的条件分析指出：有限下一边界时间可承载幅度进度，但无事件状态并非普遍充分；输入即使不改变 code 也可改变下一事件。时间戳精度／存储及真正省略的工作需比较，未选择新结构。  K-173 / ContextLoopsAndNumerics168 区分源变化稀疏与连入依赖／同维抵消传播的影响范围；不预设事件索引、缓存或重算算法。  K-198 / ContextLoopsAndNumerics193、MR-S002 核查 QSS 的总量化误差（包括滞回）趋零及观察时域条件；不把收敛结论当固定低精度任意时长保证，未选事件结构或滞回机制。 K-204 / ContextLoopsAndNumerics199、numeric-representation-arithmetic 的 directed_decay_rounding 区分向下取整避免停滞与保留衰减时间；有限归零不是半衰期／自然断链的充分证据，不选取整律或新状态。 |
 | C-28 | 按建模量选择 INT8/INT4、无符号／定点或浮点表示，分别论证存储、缩放、累加与动态更新精度。 | C-24 的候选数值细化；P-65 价值衍生、P-66 编码依赖、P-67 容量依赖、P-68 衰减约束 | H-71 授权整数替代研究，H-73 允许 FP16/FP32 神经元状态候选，H-70 精度要求保留；不确认全量替换或具体格式。静态槽算术是条件基线，字段／相态与元数据代价需明确；pending-human。 K-88 的条件权重算术区分动态范围、集体增益分辨率及训练存储；不按容量档位选权重尺度，不默认逐边高精度副本。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
 | C-29 | 两帧轮换的离散时间连入汇集：只读完整前帧，局部计算各目标后写入次帧，完成后交换。 | C-24 的执行语义候选；P-69 价值衍生、P-70 存储依赖 | H-75/AD-081 提议以快照简化更新，消除访问次序影响与逐边持久累积需求；临时求和仍存在。相态、抵消、输入、学习发布及时间步待定；不预设第三帧、双权重池或全网锁步，pending-human。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 K-167 / README162 澄清两帧单标量预算标签，数值和 H-78 选择空间不变。 |
+| C-30 | 以长方形场景研究四分的功能关系：局部模式、物体识别、具身空间、自我觉察及后两者反馈。 | C-12 的认知应用研究；P-71 候选价值链、P-75 概念动力学依赖 | H-87 给定探索前提，不证明意识或解剖对应；D-09r1 S1/S2，机制 pending-human。 |
+| C-31 | 概念本体由经验抽象形成的预期模型及连接支持的激活链吸引子承载；每个 CC 拥有完整概念动力学空间的非严格副本，感受输入形成位置偏向。 | C-12 的学习前提细化；P-72 候选价值链、P-81 约束 C-30 分组 | H-88/H-89 明确建模前提；token 身份与直接导入 LLM 权重不替代 SNN 习得；D-09r1 S1—S3。训练、覆盖检验、完整状态含义未选。 |
+| C-32 | 将 5120 维容量与稀疏参与、rate 值域、实用分辨率及时间复用共同研究，区分已学库、即时表达与协同推演容量。 | C-12 的容量研究；P-73 候选价值链 | H-89/H-90 提出足够性和稀疏／时间解释；不确认 7±2 的成因、固定槽数、普适健康比例或容量结论；D-09r1 S4/S8。 |
+| C-33 | 有限精度个体 rate 建模须研究相连神经元 spike 时机的协同效益，分别评价传播与学习，避免把平均精度当作时序信息。 | C-24 的时序研究；P-74 候选价值链、P-76 数值依赖 | H-91 排除 firing/silent 二值解释并要求研究；D-09r1 S5—S8。滤波、延迟、相位、历史字段及 STDP 均未选。 |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
 | GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
 
@@ -161,7 +165,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 208，延续检查 K-01—K-207；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 209，延续检查 K-01—K-208；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -193,6 +197,8 @@ Design authority
 <a id="d-08"></a>
 ### D-08：稳态循环激活 SNN 独立应用文档集
 
+- 补充导航覆盖：K-208 将 README 局部修订从202更新为203，仅增加 D-09 双语认知模型追踪入口及对应权威说明；原18份文档的技术内容不变，其余17份文档的修订保持。D-09 两份文件单独登记为 revision1，不将新研究冒充 D-08 的已确认合同。H-71 完成状态保持。
+
 - 当前覆盖：document-set revision202；H-71 十二小时实质研究已完成，实际区间及逐项范围见 [modeling-refinement-progress.json](../applications/steady-snn/research/modeling-refinement-progress.json)。研究包括独立 flow 学习、真实输入几何、活跃比例与语义幅度、上下文保持、数值精度、衰减／执行成本及来源适用边界；具体证据与开放选择见各文档和 K-207。ActivationRegimes 为202；AdaptiveConnectivity 为202；CapacityPlanning 为197；ConnectivityScalingResearch 为197；ContextLoopsAndNumerics 为202；Decisions 为202；FlowLearning 为202；IncomingConnectivity 为202；Model 为202；PhysicalDistancePreferenceResearch 为78；README 为202；RateDynamics 为202；SemanticCorticalMappingResearch 为32；SignedPopulationEncoding 为202；SpatialConnectivityResearch 为74；SynapticIntegrationResearch 为202；TokenEmbeddingStatistics 为30；TrainingStrategy 为202。共18份应用文档；H-78/H-85 保持对照空间，H-86 指导明显经验选项直接保留比较；D-08 仍 pending-human，研究完成不等于模型验证或实施资格。H-51 完成记录与人工决定历史保留。
 - 人工依据：H-08—H-12 确立应用、容量优先、HTM 参考、文档分离和单节点 16 GB；H-13—H-19 确立可变容量需求、静态分配、当前集引用、少数万级出边评估、五字节 SoA 槽、owner 数组、可多于 N 的集合和百槽下限。H-21/H-25 暂定 alpha≈3、100/144 分级、逐档集合数减半；target-owned 入边归属仍是评估提案，低出度取舍不自动转为低入度删除。H-22—H-24 区分输入数与兴奋性，接受条件权重补偿方向，将 weight scale 归训练而非容量参数。H-25—H-27 分别提出正负群体、人体柱规模调研及 Flash 60+60 计算；H-35 限定当前 Flash 人口。H-28 将 embedding 表单列节点共享，H-29 规定 SoA 默认与实证例外，H-30—H-32 规定非标准位宽独立讨论和包括 FP4 的二次幂 bit 标准宽度。H-34 要求需求先于辅助结构；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量。完整证据和评估范围保留于 H-08—H-39 及 AD-001—AD-032。
 - 当前学习范围：H-40 保留共活动及邻近优先方向，H-41 排除维号距离并提出跨 minicolumn 等机会方向，但未确定提议或保留边的概率契约，H-42 / AD-035 拒绝内部等位偏好。H-43 / AD-037 固定 CC 基本单元、非精确 replica 及语义角色。H-44 / AD-038 将语义分配的位置与解剖拓扑兼容置于 1D/2D 之前；交错和选择性可达仅为研究替代，布局集合中的平均对称与逐细胞等概率须区分，后者仅作为较强的条件分析。H-46 / AD-040 明确 feature 与 minicolumn 非双射并不冲突，故不以此要求交错或重编码。 H-52 / AD-046 指定三相稳态吸引子及各种入口条件的预期收敛为学习主目标，单 token 自循环激活并逐渐回归 DMN 为中间目标；H-67 将时间表述放宽为半衰期性质并允许 token 差异。 H-54 要求早期不建模显式抑制性连接，以同维正负群体固有抵消作用于活动；H-55 指定残留在噪音支持下先增强达峰再按 token 目标回落。 H-59 / AD-053 要求各正常状态的循环活动可受外部 token 驱使转向；不以循环本身判断失败。 H-66/AD-065—AD-067 初步预期尾头保持连接，并偏好每步维持 token 分布、最多几步有限偏离；强化／削弱策略全程细究，不采纳具体采样／增益算法。 H-68 明确自然断链是活动无法继续而非权重消除；H-69 提出分数选取配合 rate，H-70 要求数值精度细究。 H-71 指定有用小循环保留较长上下文价值，主链避免主动捷径不变；不强力消除小循环，主导淡出与历史影响分开。
@@ -204,6 +210,18 @@ Design authority
 - 当前资格：pending-human，无合格实施基线。人工已确认的局部方向与约束不扩展为全文或详细机制批准。状态格式／相态、signed readout、整合／活动数值界限、三种语义轨迹的判据与算法、target ownership、最终配额、学习／迁移、消息及持久化仍按相应文档跟踪；本次没有新实施授权或后代资格升级。
 - 范围／不变量／验收：Model 的 SNN-01—SNN-03、SNN-05—SNN-06；CapacityPlanning 的 SNN-04 与资源验收；AdaptiveConnectivity 的 SNN-07 与迁移边界；ConnectivityScalingResearch 的尺度证据、静态预算及下标；IncomingConnectivity 的端点／执行边界；SynapticIntegrationResearch 的输入、兴奋性与训练权重尺度；SignedPopulationEncoding 的符号／上下文／相态与内在抵消；SpatialConnectivityResearch 的维度、排除区、概率测度、身份位置和比较条件；SemanticCorticalMappingResearch 的证据尺度、响应函数／状态／位置区分和编码边界；ActivationRegimes 的外部可转向性、stale／恢复边界和去噪覆盖／路径检测、残留增长／回落和局部活动口径、三状态吸引／收敛、单 token 响应、DMN 检测／噪音调节及全网加权平均边界；TokenEmbeddingStatistics 的张量来源、普通词表／控制码分组、浓度指标与采样范围；PhysicalDistancePreferenceResearch 的无天然物理度量边界、生物测量区分、计算作用及三状态适用条件；Decisions 的 AD-001—AD-092。保持 region relocation／生命周期、静态池、SoA、标准位宽和需求先于辅助结构原则。语义身份不得随容量迁移改变；若未来另经确认引入逻辑位置，迁移也须保持该位置，当前不预设位置；无性能或生物等价性承诺。 TrainingStrategy 明确阶段分工、批组／重叠比较、M/N 边数守恒、回环增益近似、输入入口、跨 token 干扰及未来 Hebbian 保持性；公式是列明假设下的分析，不是新实现契约。 H-63 修补验收进一步区分理论目标、自然响应与额外训练辅助；按预期衰减的响应不应被补回恒定宽度。 H-64 的全链约束／逐步采样分析区分宽度与强度、可用历史与回返许可、未来语义候选可行性、已有图可达与实际提前循环；结构机会不等同于动力学失败。 H-65 固定 epoch 范围和宽度／增强／削弱参数角色；分清范围比例与逐步语义、一次循环与持续时间、体内增长与跨圈净衰减。 H-66 将 token 分布保持收紧到每步或少数几步；K-82 区分连接闭合与有效再激活、完整后继与修补子集、目标群体与实际读出，并提出滚动窗口人口可行性和跨圈增益敏感性分析。 RateDynamics 的 C-24/C-25 分析单元级 rate、分数目标与有效贡献、半衰期／随机存活区分、自然终止／再激活、离散时标和多阶段数值误差；属于实质建模提案而非格式性延续。 ContextLoopsAndNumerics 比较历史对后续输出的作用、累积／未来触发语义、逐字段整数选择及条件内存／累加算术；研究活跃，未完成十二小时请求。 FlowLearning120 独立承载 flow 预激活匹配、上下文信用和初步算法比较；TrainingStrategy120 保留训练分工与 DMN/token 维护，K-125 未改正文机制。
 - 下游：D-07 DL-13 仅为案例入口；可复用语言需求须另行确认，D-01—D-07 不因应用提案而取得新资格。C-15 的受影响范围为 D-08 的 SNN-03/SNN-05/SNN-07；C-13 的容量机制和现有算术不变；C-14 的编码边界通过 P-33 约束候选 C-16；P-31 的共享位置范围失效，无已合格后代受损。 C-17/P-34/P-35 影响 D-08 的 ActivationRegimes、Model、Decisions 和 PhysicalDistancePreferenceResearch；没有已合格实施后代需失效。 C-18/C-19 影响 SignedPopulationEncoding、SynapticIntegrationResearch 及当前六文件的相应行为／检测范围；未选算法，无已合格实施后代。 C-20/C-21 影响 ActivationRegimes、Model、Decisions 和 PhysicalDistancePreferenceResearch 的输入响应与恢复候选范围，不改变区域、消息或持久化协议。 C-22/P-45—P-47 影响 TrainingStrategy 及当前七份同步到 revision74 的应用文档；无已合格后代失效，容量预算、编码所有权及语言／区域／消息／持久协议不变。 K-79 将同一八文件范围同步为持续修补方向，不使其它文档或已合格后代失效。 C-23/P-48—P-51 的候选范围为TrainingStrategy、Model、AdaptiveConnectivity、Decisions 的全链约束范围，保留其它十一文件修订与既有行为／容量／区域合同；没有合格后代因本次分析失效。 K-81 的 epoch 范围影响当前五个 revision76 文件；其它十份应用文档修订及已合格后代不变。 K-82 的回返／短时语义分析覆盖当前六个 revision77 文件；其余九份应用文档、容量预算及已合格后代不变。 K-83 新增 RateDynamics 并同步八份已有应用文档；影响 SNN-01—SNN-03/SNN-05/SNN-07 的时间、表示、训练及验收讨论。其余七份文档、既有容量算术假设及已合格后代不变；不授予实现资格。 K-84 新增 ContextLoopsAndNumerics 并同步七份已有文档，九份其它应用文档及容量基线不变；无已合格合同失效。
+
+### D-09：SNN 认知模型双语设计进度
+
+<a id="d-09"></a>
+
+- 文件：[English](../applications/steady-snn/docs/CognitiveModelProgress.en.md)、[中文](../applications/steady-snn/docs/CognitiveModelProgress.zh-CN.md)，两版均为 revision1；S1—S9 全文，CM-01—CM-08、CQ-01—CQ-08、R01—R15 对齐。两版各自自然成文，冲突以本记录中的人工命题和待决边界为准。
+- 人工依据：H-87 四分／长方形探索前提；H-88 概念内容须由 SNN 学得；H-89 完整概念空间的近似副本与感受位置偏向；H-90 稀疏、值域、精度和时间复用研究；H-91 有限精度 rate 与 spike 时序协同；H-92 双语整理授权。它们是本次命题基线，不构成对成稿全文的追认。
+- 候选价值链：D-09 经 P-77—P-80 衍生自 C-30—C-33；P-71—P-74 接到 C-12/C-24，再经既有 P-22/P-52/P-29 接 C-01/V-01/V-02。理由是把可解释的认知应用目标、预测学习、容量取舍和时序行为转成可比较的问题；不把 learned neural concepts 等同于纲领的形式 ontology 或已实现 GADT。
+- 依赖／约束：P-75 说明四分应用需要已学概念动力学，P-76 说明时序研究需要数值与状态语义，P-81 保留每 CC 完整概念库、排除按四分组硬切概念库的解释。依赖不授予资格。个体上下文身份、固定坐标、region／SoA、活动抵消及可驱转性保持；未选新增字段、几何、抑制边、更新或学习规则。
+- 当前状态：pending-human。文献与分析用于提出比较，未证明5k足够、认知自证成立或模型已训练成功；无合格实施基线。S8 的候选比较不授权当前运行实验。
+- 验收／待决：准确区分人工前提、分析判断、来源结论与候选；CQ-01—CQ-08 分别追踪读出充分性、关系绑定、抽象／副本习得、容量误差、时标、最小历史、学习归因及耦合可驱转性。需另行确认的选择及其后果均列在两版 S6/S8；当前仅完成记录，不请求重复确认原有前提。
+- 影响：D-08 的 Model、SignedPopulationEncoding、TrainingStrategy、FlowLearning、RateDynamics、SynapticIntegrationResearch、ActivationRegimes、IncomingConnectivity、CapacityPlanning、ContextLoopsAndNumerics 是相关后续评估对象，未被本文改写或升级。D-07 的可复用语言需求不随本应用研究自动扩大。无已合格后代失效；K-208 记录比较和范围。
 
 以下关系均为智能体整理的候选价值解释或依赖，适用 D-07 revision 3、D-08 document-set revision 84（各文件修订见 D-08 覆盖表）的列明范围，除 P-31 明确为 `rejected` 外，状态为 `pending-human`。C-08—C-15 的方向／评估／拒绝按人工事件限定；C-16 是 H-42/H-44 研究请求及 H-43 静态角色前提下的候选解释，形式化衍生关系未获确认；技术依赖不授予资格。
 
@@ -269,6 +287,22 @@ Design authority
 | P-69 | C-29 derives-from | C-24 | 使一次神经转移只依赖同一前帧，避免目标访问顺序改写活动传播；低成本双状态数组配合现有入边布局，服务明确可复现的业务时间语义。D-08 当前覆盖表所列修订 / RateDynamics、IncomingConnectivity、Model；H-75 提议方向，完整机制与正式关系 pending-human。 K-113 / RateDynamics108 区分观察次序、模型时长、神经帧与学习曝光；不选事件队列、每 token 一帧或额外历史状态。 K-116 区分相同前帧快照与抵消前后不同数值转换边界；不增加帧或持久状态。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 |
 | P-70 | C-29 depends-on | C-13 | 连入集提供目标拥有的源 ID/权重遍历；双帧仅复制所需状态字段，静态 SoA、容量与区域约束保留。D-08 当前覆盖表所列修订；依赖不授予资格，不选择并行调度器、第三帧、事件索引或连接池副本。 K-108 / IncomingConnectivity103 从真实遍历／增长／迁移需求比较保留前缀的端点标记与计数，不预设辅助数组。 |
 
+D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87—H-92 只支持所列建模前提与整理范围，不自动确认正式价值链。
+
+| 边 ID | 子节点与关系 | 父节点／对象 | 理由、范围与依据 |
+| --- | --- | --- | --- |
+| P-71 | C-30 derives-from | C-12 | 用同一长方形场景明确感知、身体参照和自我觉察的可观察联系；D-09r1 S1/S2，H-87 研究范围，正式关系待确认。 |
+| P-72 | C-31 derives-from | C-12 | 让概念内容落实到可习得、可泛化的预测动力学，避免用 token 名称代替学习；D-09r1 S1/S3，H-88/H-89 前提，正式关系待确认。 |
+| P-73 | C-32 derives-from | C-12 | 以任务误差、时间和资源界定实用容量，服务有界成本下的语义推演；D-09r1 S4/S8，H-89/H-90 研究要求，正式关系待确认。 |
+| P-74 | C-33 derives-from | C-24 | 保留 rate 降阶后仍影响传播和学习的时间关系，避免只改数字精度而丢掉因果作用；D-09r1 S5—S8，H-91 方向，正式关系待确认。 |
+| P-75 | C-30 depends-on | C-31 | 四分场景须使用网络已学得的对象、身体与观察概念；D-09r1 S2/S3，依赖不选择训练机制或授予权威。 |
+| P-76 | C-33 depends-on | C-28 | 比较时序候选须给出 rate、权重、平均窗口及保留状态的数值语义；D-09r1 S5/S6，依赖不选择格式或字段。 |
+| P-77 | D-09 derives-from | C-30 | 将四分探索收敛为场景、范围和功能问题；D-09r1 S1/S2/S8，H-92 授权整理，正式关系待确认。 |
+| P-78 | D-09 derives-from | C-31 | 保存概念习得与近似副本前提及其训练义务；D-09r1 S1/S3/S8，H-92 授权整理，正式关系待确认。 |
+| P-79 | D-09 derives-from | C-32 | 保留容量假设、证据边界和负荷／精度／时延比较；D-09r1 S4/S7/S8，H-92 授权整理，正式关系待确认。 |
+| P-80 | D-09 derives-from | C-33 | 明确时序协同的证据、降阶候选、信息损失与成本问题；D-09r1 S5—S8，H-92 授权整理，正式关系待确认。 |
+| P-81 | C-31 constrains | C-30 | 四组 CC 的分工不能解释为各自仅拥有一部分概念；每 CC 的完整近似副本及感受偏向是 H-89 的前提。D-09r1 S2/S3；正式约束登记待确认，不选择复制／同步算法。 |
+
 C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录；P-34—P-41 的形式化关系保持 pending-human。H-58 的低密度过滤是候选办法，不因功能要求获确认而自动成为所选算法。
 
 ### 影响检索索引
@@ -298,6 +332,8 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | C-27 | P-63/P-64/P-68；D-08 ContextLoopsAndNumerics、RateDynamics、TrainingStrategy、Decisions；H-71/AD-074、H-72/AD-077、H-74/AD-079、K-84/K-85。影响累积时间、数值进度、事件语义及资源代价；无已选定时器实现。 K-97 增加有输入计时、无事件信息不足、时间戳精度与帧依赖的条件研究；无定时器实现选择。 K-104 的精确反例要求延后数值衰减仍保留每帧抵消，不把已抵消活动当作数值余量恢复。  K-173 / ContextLoopsAndNumerics168 区分源变化稀疏与连入依赖／同维抵消传播的影响范围；不预设事件索引、缓存或重算算法。  K-198 / ContextLoopsAndNumerics193、MR-S002 核查 QSS 的总量化误差（包括滞回）趋零及观察时域条件；不把收敛结论当固定低精度任意时长保证，未选事件结构或滞回机制。 K-204 / ContextLoopsAndNumerics199、numeric-representation-arithmetic 的 directed_decay_rounding 区分向下取整避免停滞与保留衰减时间；有限归零不是半衰期／自然断链的充分证据，不选取整律或新状态。 |
 | C-28 | P-65—P-68；D-08 ContextLoopsAndNumerics、RateDynamics、SignedPopulationEncoding、Model、Decisions；H-71/AD-075、H-73/AD-078、H-74/AD-079、H-70、K-84/K-85。影响逐字段表示、精度、缩放和累加；旧容量算术保持条件基线。 K-88 的条件权重算术区分动态范围、集体增益分辨率及训练存储；不按容量档位选权重尺度，不默认逐边高精度副本。 K-98 增加共享循环增益与固定随机权重长期响应的条件分析及 MR-S025/MR-S026 来源；仍无精度／学习策略选择。 K-101 将相同平均衰减下的个体失续／爆发、时间步及饱和行为列入条件比较；不选随机量子模型。 K-105 / ContextLoopsAndNumerics100 给出精确量化学习停滞和条件 Binomial 稳态；单步无偏不等于稳定的弱关联，宽权重只作计费比较。 K-116 / ContextLoopsAndNumerics111 记录中间舍入和最终写回的条件行为差别；格式与存储算法未选。 K-118 / ContextLoopsAndNumerics113、cancellation-properties-analysis 给出条件 L2 界和准确有理算例；未设误差容限。 K-121 / ContextLoopsAndNumerics116、context-composition-analysis 检查零语义和误差仍可丢失个体区别的条件例。 K-133 / ContextLoopsAndNumerics128、FlowLearning128 记录条件预测误差更新的存储结果。 K-134 补充有界更新条件算术及 MR-S017 的16位字长澄清。 K-147 / ContextLoopsAndNumerics142 区分短时二值视觉推理与持续 rate 行为，并核对整数阈值／移位的算术语义；不选格式、字段或部署优化。  K-150 / ContextLoopsAndNumerics145 区分低位宽存储、浮点源值、字节点积和 CPU 能力；未选内核、量化器或额外缓冲。  K-152 / ContextLoopsAndNumerics147 记录抵消公式先乘后除的条件下溢及公共比例求值，不引入余量字段或截断阈值。  K-153 / ContextLoopsAndNumerics148 用重复边的矩解释固定权重舍入，保持非负独立线性前提；未排除有用小循环。 K-154 / ContextLoopsAndNumerics149 将低位宽推理与完整持久学习成本分开，不将多变量突触模型暗作一字节槽位。 K-157 / ContextLoopsAndNumerics152、weight-update-precision-analysis 保留共享范围往返时未更新权重的精确失真比较，不引入缩放字段或高精度副本。 K-161 / FlowLearning156、weight-update-precision-analysis 区分码步长、有效权重步长及初态学习到达时间，不将谱松弛时间当作任务习得。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
 | C-29 | P-69/P-70；D-08 revision81 的 RateDynamics、IncomingConnectivity、Model、TrainingStrategy、SignedPopulationEncoding、ContextLoopsAndNumerics、README、Decisions；H-75/AD-081、K-86。影响快照、发布、相态含义与条件状态预算，无已合格合同失效。 K-108 / IncomingConnectivity103、AdaptiveConnectivity103 区分保留边与预留容量的访问、边界发布和条件成本；不选择计数或前缀布局。 K-110 区分完整帧隔离与反馈观察延迟；不引入第三帧或控制字段。 K-113 / RateDynamics108 保留完整帧并明确输入观察的顺序语义；无新调度器或缓冲表示。 K-116 / ContextLoopsAndNumerics111 记录中间舍入和最终写回的条件行为差别；格式与存储算法未选。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 K-167 / README162 澄清两帧单标量预算标签，数值和 H-78 选择空间不变。 |
+| C-30—C-33 | P-71—P-81；D-09r1 两版全文及 CQ-01—CQ-08。上游 C-12/C-24/C-28 变化须检查这些范围；D-08 相关章节仅为受影响的待评估对象，无自动资格升级。 |
+| D-09 | README203 导航；D-08 的编码、学习、容量、时序及输入可驱转性；D-07 需求仅可另行确认。H-87—H-92 与 K-208 是本次证据入口。 |
 | GOV-01、GOV-02 | AGENTS 中委托规则、本记录及所有据其判断资格的文档条目。 |
 | D-01 / D-06 | D-01 的候选使用方 D-02、D-04、D-05；D-06 的候选使用方 D-05。 |
 
@@ -1347,6 +1383,80 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 范围：D-08 revision91 / AD-092 的设计研究工作方式；对明显可由真实数据对照实验评估的选项，智能体直接记录候选、可观察差异及取舍，保留设计空间，无需逐项询问。
 
 边界：授权处理开放问题，不是确认某个候选机制、实施契约、实验框架或当前训练运行；不能把缺少价值／目标判断的问题伪装成已批准的经验默认。H-74 的第一性价值约束、H-78/H-85 的明确延期决定保持。
+
+### H-87 — 四分完整载体假设与长方形认知场景
+
+<a id="h-87"></a>
+
+确认者：本对话用户，姓名未知。来源：本聊天可见用户消息的原文摘录；无可核实的永久链接。登记时间为2026-11-02T15:26:34Z；原消息精确UTC时间未知，客户端日期为2026-11-02（America/Los_Angeles）。以下 H-88—H-92 使用同样的身份、来源和时间精度，不以登记时间冒充发言时间。
+
+> 假定我们的多 CC snn 网络确实是 “四分” 的完整载体，我觉得更好的建模是这样：
+>
+> 以见到一个长方形框为认知场景简化分析案例。
+
+同一消息分别提出相分的二维“模式像素”视场、见分的长方形识别、自证分的身体／头眼姿态整合、证自证分的自我观察与材质好奇，并提出：
+
+> ”自证分“ 的空间感区域，进而还可以引入 ”证自证分“ 的自我觉察区域作为输入，形成 ”主体=我；行为=好奇地观察一个长方形“ 的语义，两组 CC 互相印证。
+
+范围：C-30、D-09r1 CM-01/S2 的探索场景。用户明确使用“假定”；记录场景不把意识、神经解剖对应或自证能力列为已验证事实。P-71/P-75/P-77 的正式关系及具体区域划分、接口、训练机制未确认。
+
+### H-88 — 概念本体由 SNN 的经验学习与动力学承载
+
+<a id="h-88"></a>
+
+确认者／来源／时间精度同 H-87。原文摘录：
+
+> 一个 “长方形” 概念本身不是其名字本身的身份所能定义的，而必须是所有跟长方形有关的经验记忆，经过抽象处理过后，形成的多种场景下长方形将如何影响主体对世界变化预期的模型信息。
+
+> 我觉得这部分 “概念本体信息” 应当由所有 CC 内部连接权重所承载的语义激活链吸引子去表达，这部分在静态token表中是完全没有的，也不能直接来源于 LLM 完整权重，是我们 snn 需要考虑如何训练出来的部分。
+
+范围：C-31、D-09r1 CM-02/S3。将概念经验与推演内容的学习责任放在 SNN；不以 token 身份或直接导入 LLM 权重代替。对静态表的排除是建模前提，不登记为已经测量出的“无任何统计语义”事实。未选抽象算法、吸引子形式、课程、教师或新编码；P-72/P-78 等正式关系待确认。
+
+### H-89 — 全概念动力学近似副本与感受位置偏向
+
+<a id="h-89"></a>
+
+确认者／来源／时间精度同 H-87。原文摘录：
+
+> 关于抽象，我们应该回到最初的假定： 5k 维语义向量，是否足以承载完整的概念+实用推演建模空间？
+
+> 然后我们仍然应该假设 CC 之间是非严格的replica关系，每个CC都包含全部概念动力学演变空间的吸引子，只是不是绝对严格相同，特别是处于直接感受区域（视场、肌肉等）的CC，应偏向于激活其本体位置信息对应的维度模式。
+
+范围：细化 H-43 的 replica 前提到 C-31、D-09r1 CM-03/S2/S3；C-32 的5k足够性作为问题保留。每 CC 包含完整概念动力学空间，不采用四分组各有独占概念库的解释。感受位置模式不等同单独位置轴、CC 内物理距离核或生物映射证明。不确认容量足够、完整库的训练／检验办法或副本同步协议；P-81 等正式关系仍待确认。
+
+### H-90 — 稀疏活动与时间复用及值域分辨率的联合容量问题
+
+<a id="h-90"></a>
+
+确认者／来源／时间精度同 H-87。原文摘录：
+
+> “7 ± 2” 问题还有个稀疏放大效应要考虑， 5120 是总数，而大脑不可能允许大部分神经元同时激活的工作模式，必然是稀疏激活才可能健康运行；可能这也是为什么一次只能 “7 ± 2” ，但是分步骤，从时间上散列开，我们还是可以处理绝大多数概念。
+
+> 考虑 “是否足够” 这个问题时，还要包含每一维的实用分辨率、总值域。 这样你再深入想象，看看哪些科研成果可以参考的。
+
+范围：C-32、D-09r1 CM-04/S4/S7/S8，研究稀疏、时间、精度和值域的联合影响。保留原文“可能”的假说强度；不把7±2因果解释、所有区域统一健康比例、二值神经元或5k足够性作为已证实结论，不规定固定槽数。P-73/P-79 正式关系待确认。
+
+### H-91 — 有限精度 rate 与 spike 时机协同须共同建模
+
+<a id="h-91"></a>
+
+确认者／来源／时间精度同 H-87。两条连续用户消息的原文：
+
+> 每个神经元不是 firing/slient 两种状态，我们按有限精度的 fire-rate 建模它们的，你修正一下
+
+> 是的，所以 spike-rate 精度不是个独立域，设计上我们需要一定程度考虑如何建模去体现各相连神经元的每次spike时机所对应的协同效益。 深入思考、调研可参考的学术研究成果。
+
+范围：C-33、D-09r1 CM-05/S5—S8，保留有限精度个体 rate，要求考察时机协同；细化 C-24/C-28 的研究问题。纠正二值状态解释，不要求放弃 rate 改为逐 spike 仿真。尚未确认因果滤波为必选项，亦未选择延迟、相位、适应、协方差、迹线、STDP、字段、时间步或数据格式。P-74/P-76/P-80 正式关系待确认。
+
+### H-92 — 双语设计进度文档整理授权
+
+<a id="h-92"></a>
+
+确认者／来源／时间精度同 H-87。原文：
+
+> 把讨论要点和阶段性结论整理成设计进度追踪文档，中英文双语对照各一个文件，各自母语达意，严格避免直译，避免翻译腔。
+
+范围：授权创建 D-09r1 中英文各一份文件，保存讨论要点、阶段性判断与开放问题，语言各自自然成文；同时按仓库规则登记来源和导航。不是对尚未见到的成稿、候选关系或技术机制的全文确认，不授权实现、仿真、测试、自举、构建、提交或推送。
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -3562,3 +3672,15 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 - Evidence/accounting: the progress record preserves nonoverlapping substantive intervals, exclusions and the final requirement-to-evidence review. At least 43200 substantive seconds have elapsed before this closure entry. Source scopes vary; no source count, elapsed idle time or isolated calculation is treated as model validation. The source ledger's completion status covers this research pass, not full verification of every cited study.
 - Editorial scope: current active-research labels and completion references are reconciled. Existing technical bodies, analytical cases, human events and earlier assessments remain; no empirical alternative becomes a default. Earlier H-51 research and its timing remain separate.
 - Scope/qualification: D-08 remains pending-human, with no qualified application implementation baseline or newly qualified descendant. D-GOV208 maintenance alone continues H-05. No implementation, neural training/simulation, project tests/build, toolchain change, commit or push. Future model comparisons remain separate work rather than unfinished evidence claimed as validated here.
+
+### K-208 — 2026-11-02: Bilingual cognitive-model progress and scoped human premises
+
+<a id="k-208"></a>
+
+- Recorded: 2026-11-02T15:26:34Z. Agent assessment, not human approval. Charter blob `9f0154035d52f976232000ab1601088b91948c0b`, current checkout `21359e336a088fdd22f94010545a5c2e33d036da`; charter §§1–3.3/7.1/8.1 and governance rules checked. Charter and AGENTS unchanged.
+- Coverage: new D-09 revision1, CognitiveModelProgress.en.md and CognitiveModelProgress.zh-CN.md, S1—S9; C-30—C-33, P-71—P-81, H-87—H-92 registered. D-08 README202 → 203 is navigation/authority metadata only; other D-08 revisions and the H-71 completion record remain. Registry208 → 209; only D-GOV maintenance continues H-05.
+- Human baseline and cumulative comparison: H-43's approximate replicas/fixed semantic roles and H-67—H-78's rate/context/frame/numerical boundaries remain. H-87—H-91 add an exploratory four-aspect scene, concept learning in the SNN, full repertoire per CC, capacity research, and timing cooperation. These are substantive new research premises, not editorial continuation of a qualified technical contract. H-92 authorizes faithful bilingual documentation, not ratification of assistant mechanisms.
+- Candidate value chain: D-09 → C-30/C-31/C-32 → C-12 → C-01 → V-01/V-02; D-09 → C-33 → C-24 → C-15 → C-12. New relationships remain pending-human. Neural concept content is not equated with a formally typed ontology. Dependencies and the C-31 constraint are separately recorded.
+- Reconciliation: D-09 uses the user's latest finite-precision rate premise; active support counts are illustrative, not binary neuronal states. It separates vector readout from contextual state, stored repertoire from simultaneous reasoning, and propagation from learning. Four-aspect groups do not partition concept ownership. Sources support limited claims; no biological identity, 5k sufficiency, seven-item mechanism, or trained SNN success is inferred.
+- Downstream and open scope: CQ-01—CQ-08 identify affected D-08 coding, training, timing, capacity and behavior scopes. No existing implementation contract is replaced, no qualified descendant is invalidated, and no new fields, numerical rules or algorithms are activated. D-08 and D-09 remain pending-human; the paired documents are reviewable research trackers.
+- Validation scope: documentation consistency, paired identifiers/references, local links, append-only history and diff whitespace; no code, build configuration, project tests, neural simulation, toolchain change, commit or push.

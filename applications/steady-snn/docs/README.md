@@ -1,15 +1,17 @@
 # Steady recurrent SNN: application design
 
-Document-set revision: 202 · Recorded: 2026-10-28 · Phase: discussion, implementation deferred.
+Document-set baseline: 202 · Document revision: 203 · Recorded: 2026-11-02 · Phase: discussion, implementation deferred.
 
 ## Design authority
 
-- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 202, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 203, all sections; `pending-human`. There is no qualified application implementation baseline.
 - **Value lineage:** P-25 derives this document set from application C-12; P-22 connects the application to C-01 and V-01/V-02 through explicit semantic behavior. C-13/P-26 serves bounded storage, C-14/P-27 contextual semantic encoding, C-15/P-29 learning, C-17/P-34 activity support, and C-26—C-29 useful context, numerical evolution and consistent frame execution. Dependencies do not grant authority.
 - **Invariants / non-goals:** one resident CC per region; fixed semantic roles and individual contextual identities; regional relocation/lifetime rules; static SoA connections and no heap topology. No physical-distance prior, explicit inhibitory synapses, complete neural transition, language syntax, implementation or measured performance is selected.
 - **Acceptance:** keep human constraints, conditional arithmetic, evidence and proposals distinguishable. Assess the required semantic behavior, useful context, fading, prediction, activity envelope, steerability and actual resource costs under a subsequently selected contract.
 - **Human baseline:** D-08 and H-08—H-86 retain the exact scoped statements. H-11 separates application documents; H-34/H-74 require a demonstrated value for additional structures; H-75—H-77 give contextual-cell, frame, input and active-cancellation directions. H-79—H-84 distinguish flow learning, prediction assessment and generation. H-78/H-85 defer readiness choices; H-86 delegates obvious empirical alternatives to real-data comparisons without repeated questions.
 - **Current assessment:** [K-190](../../../design/DesignAuthorityRegistry.md#k-190) makes the existing empirical comparisons incremental: identify a behavioral or resource question, compare relevant alternatives, and distinguish direct numerical conversion from acquisition under candidate arithmetic. No alternative is selected; D-08 stays pending-human. [K-207](../../../design/DesignAuthorityRegistry.md#k-207) records completion of the H-71 research pass; [progress](../research/modeling-refinement-progress.json) records its scope and substantive work.
+
+**Navigation assessment:** [K-208](../../../design/DesignAuthorityRegistry.md#k-208) covers revision 203's links to the separately registered [cognitive-model tracker](CognitiveModelProgress.en.md) and [中文版本](CognitiveModelProgress.zh-CN.md), D-09 revision 1. Its new research premises and open mechanisms do not qualify D-08 or change this technical baseline.
 
 This document set owns the application's model, resource planning and decisions. CoD's [language tracker](../../../design/DomainLanguageDesign.md) owns reusable language semantics. An application proposal becomes a language requirement only through an explicit design decision.
 
@@ -102,6 +104,7 @@ Prediction assessment must occur before the observed token changes state or weig
 
 | Document | Scope |
 | --- | --- |
+| [Cognitive model progress — English](CognitiveModelProgress.en.md) / [认知模型设计进度 — 中文](CognitiveModelProgress.zh-CN.md) | Four-aspect scene, learned concepts, full-repertoire CC replicas, capacity, temporal cooperation, and open decisions; D-09 revision 1. |
 | [Model](Model.md) | CC/minicolumn roles, signed coding, phases, embedding/messages, regions and persistence. |
 | [Activation regimes](ActivationRegimes.md) | Per-CC activity, DMN/flow/immersion, detection, noise feedback, residual behavior and steerability. |
 | [Training strategy](TrainingStrategy.md) | Training division and DMN/token activation-chain construction and repair. |
