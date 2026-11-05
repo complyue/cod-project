@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+behave @print(99);
+using units "units-library.cod" {m, cm};
+global cm_to_m::i64 = 7;

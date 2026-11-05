@@ -1077,6 +1077,13 @@ class Compiler {
     }
     fail(expr.at, "unsupported expression");
   }
+  static void select_function(Module &module, Function function, const std::string &alias, const Location &at) {
+    require_user_type_name(alias, at);
+    if (module.types.contains(alias) || module.globals.contains(alias))
+      fail(at, "duplicate lexical alias '" + alias + "'");
+    auto &methods = module.functions[alias];
+    if (std::find(methods.begin(), methods.end(), function) == methods.end()) methods.push_back(function);
+  }
   void execute_module(Module &module, const Environment &caller, const Location &at) {
     // This composes runtime code after the complete module scan. A repeated
     // encounter reuses the incorporated module's resources, never its effects.
@@ -1125,8 +1132,7 @@ class Compiler {
           const auto edge = conversion(function);
           if (!selected.contains(edge.source.identity) || !selected.contains(edge.target.identity)) continue;
           module.conversions.push_back(function);
-          auto &methods = module.functions[function.form->name];
-          if (std::find(methods.begin(), methods.end(), function) == methods.end()) methods.push_back(function);
+          select_function(module, function, function.form->name, form.at);
         }
         break;
       }
@@ -1144,6 +1150,7 @@ class Compiler {
         break;
       }
       case Form::Kind::global: {
+        if (module.functions.contains(form.name)) fail(form.at, "duplicate lexical name '" + form.name + "'");
         auto value = expression(*form.body, module, env, locals, false);
         if (value.region_id || value.type.kind == Type::reference || value.type == Type::region)
           fail(form.at, "module globals contain bits values, not regional resources or references");
@@ -1194,15 +1201,7 @@ class Compiler {
           require_user_type_name(form.alias, form.at);
           if (form.kind == Form::Kind::import_resource)
             fail(form.at, "function-body import is outside the prototype; use 'using' for a lexical function");
-          if (module.types.contains(form.alias) || module.globals.contains(form.alias))
-            fail(form.at, "duplicate lexical alias '" + form.alias + "'");
-          auto &methods = module.functions[form.alias];
-          for (const auto &candidate : function->second) {
-            bool existing = false;
-            for (const auto &current : methods)
-              if (current.form == candidate.form && current.lexical == candidate.lexical) existing = true;
-            if (!existing) methods.push_back(candidate);
-          }
+          for (const auto &candidate : function->second) select_function(module, candidate, form.alias, form.at);
         } else if (const auto value = source.globals.find(form.name); value != source.globals.end()) {
           if (module.types.contains(form.alias) || module.functions.contains(form.alias) ||
               !module.globals.emplace(form.alias, value->second).second)

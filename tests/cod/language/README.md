@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 12 · Recorded: 2026-11-05.
+Prototype reference revision: 13 · Recorded: 2026-11-05.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 12 · Recorded: 2026-11-05.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-233](../../../design/DesignAuthorityRegistry.md#k-233) records the current implementation, coverage and limits.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-234](../../../design/DesignAuthorityRegistry.md#k-234) records the current implementation, coverage and limits.
 
 ## Run
 
@@ -93,7 +93,7 @@ function distance(x (metres*))::f64 { scalar(x) }
 
 A unit definition creates a distinct compile-time type identity over a numeric scalar. `metres(2.0)` constructs it from that exact representation; `scalar(x)` extracts the representation explicitly. Aliases preserve identity and do not add a runtime tag. Methods can define meaningful arithmetic on unit values.
 
-`using units "units-library.cod" {m as metres, cm, mm};` selects one bundle of units and associated conversion methods. Repeated selections from the same source, duplicate identities through re-exports, and UoM import are rejected. Omitted-unit conversions are unavailable to automatic search, while source-bound private helper calls retain their lexical meaning.
+`using units "units-library.cod" {m as metres, cm, mm};` selects one bundle of units and associated conversion methods. Repeated selections from the same source, duplicate identities through re-exports, and UoM import are rejected. Omitted-unit conversions are unavailable to automatic search, while source-bound private helper calls retain their lexical meaning. Selected conversion functions share the ordinary lexical method namespace: they can join an overload set but cannot collide with a global value or type name.
 
 `x (metres)` requires that identity; `x (metres*)` permits conversion. `x (metres*<-cm<-mm)` uses a direct conversion when available, otherwise the declared indirect route. Automatic graph search chooses a unique path. Multiple unresolved paths warn and continue using the shortest route with declaration-order tie breaking, reporting an alternative witness. `--warnings-as-errors` and `-Werror=unit-conversion` turn those warnings into errors. Paths use the call site's selected bundle; route names resolve where the parameter is defined. Exact argument-tuple methods are selected before conversion-enabled alternatives.
 

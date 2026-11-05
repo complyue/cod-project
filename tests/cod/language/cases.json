@@ -673,5 +673,11 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "conditional rebinding in a logical operand needs an explicit scope"
+  },
+  {
+    "file": "units-name-collision.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "duplicate lexical name 'cm_to_m'"
   }
 ]

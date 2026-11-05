@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：234
+记录版本：235
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 234，延续检查 K-01—K-233；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 235，延续检查 K-01—K-234；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -263,7 +263,7 @@ Design authority
 - Downstream: D-07r14 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign211/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision12, describes the bounded H-122/H-123/H-139–H-145 checkpoint. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision13, describes the bounded H-122/H-123/H-139–H-145 checkpoint. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
 
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
@@ -4717,3 +4717,12 @@ Scope: Remove unnecessary implementation/test complexity as work advances. Apply
 - Agent correctness assessment under H-97/H-111 and the authorized H-122/H-123 increment. Charter §§1–4 and D-10r15's capture-by-value/effect-result rules remain governing. Registry233 →234; reference11 →12 records coverage. No language contract or design qualification changes; D-GOV234 maintenance alone continues H-05.
 - Reproducer: a procedure assigns `effect @route = effect @alias = @reader`, then calls `behave @route`. With an external value changed from 1 at definition to 2 at invocation, `perform` incorrectly produced 2 because capture analysis forgot the nested effect's procedure value. The analysis now propagates the existing expression result when establishing the outer binding; required transitive values are captured. `perform` produces 1 and `behave` produces 2. No additional runtime state or language mechanism is introduced.
 - Evidence: exact source-only build passed; 123 language checks and the five existing deep-composition cases pass. The existing capture-scope fixture includes this case without adding another entry fixture. Current validation records retain source hashes and explicitly identify the preceding all-four-group component run at commit `100e73a`; no fresh unrelated component, relocation or benchmark run is claimed. The zero-distance pointer-format decision from K-232 remains pending; no regional encoding change is made. The ten-hour goal remains active.
+
+
+<a id="k-234"></a>
+
+### K-234 — 2026-11-05: Consistent lexical selection for UoM bundles
+
+- Agent implementation assessment under H-130/H-134 and H-122/H-123/H-145. Charter §§1–4 and D-11r7's identity-preserving using bundles/pure methods remain governing. Registry234 →235; reference12 →13 records the existing lexical namespace constraint. Full D-07/D-10/D-11 qualification and their contracts are unchanged; D-GOV235 maintenance alone continues H-05.
+- A bundle-installed conversion bypassed the collision check used by ordinary function selection: `cm_to_m` could simultaneously name a conversion function and a module global. Shared function selection now applies the same type/global collision and method-deduplication rules to both paths. A later global declaration is also checked, so encounter order does not bypass the constraint. Valid method overloads and selected conversion routes retain their behavior; no new dispatch or conversion policy is chosen.
+- Evidence: `cmake --build ./build` passed; all 124 language checks passed. A single retained negative fixture requires rejection before preceding top-level output. Additional local probes confirm global-before, global-after and type-name collisions are rejected. The prior composition, relocation, numeric and component evidence retains its recorded revisions; those suites are not claimed freshly rerun for this frontend-only selection repair. The shared-pointer encoding decision remains pending and the ten-hour goal remains active.
