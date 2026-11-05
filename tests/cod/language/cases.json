@@ -468,5 +468,136 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "short-circuit operators"
+  },
+  {
+    "file": "units-basic.cod",
+    "exit": 0,
+    "stdout": "2.5\n1.25\n4\n5\n"
+  },
+  {
+    "file": "units-exact-reject.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected "
+  },
+  {
+    "file": "units-omitted-route.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected "
+  },
+  {
+    "file": "units-repeated.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "one using bundle"
+  },
+  {
+    "file": "units-import.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "not import"
+  },
+  {
+    "file": "units-identity.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected "
+  },
+  {
+    "file": "units-direct.cod",
+    "exit": 0,
+    "stdout": "12\n"
+  },
+  {
+    "file": "units-declared.cod",
+    "exit": 0,
+    "stdout": "2\n"
+  },
+  {
+    "file": "units-route-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "unavailable step"
+  },
+  {
+    "file": "units-priority.cod",
+    "exit": 0,
+    "stdout": "21\n"
+  },
+  {
+    "file": "units-impure.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "function cannot read symbolic effects"
+  },
+  {
+    "file": "units-procedure.cod",
+    "exit": 0,
+    "stdout": "6\n9\n"
+  },
+  {
+    "file": "units-exact-overload.cod",
+    "exit": 0,
+    "stdout": "2\n"
+  },
+  {
+    "file": "units-ambiguous.cod",
+    "exit": 0,
+    "stdout": "11\n",
+    "stderr_contains": "ambiguous unit conversion"
+  },
+  {
+    "file": "units-ambiguous.cod",
+    "args": [
+      "--warnings-as-errors"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "warning treated as error"
+  },
+  {
+    "file": "units-private-helper.cod",
+    "exit": 0,
+    "stdout": "200\n"
+  },
+  {
+    "file": "units-transitive.cod",
+    "exit": 0,
+    "stdout": "0.75\n"
+  },
+  {
+    "file": "units-duplicate-identity.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "repeated using of UoM identity"
+  },
+  {
+    "file": "units-exact-before-route.cod",
+    "exit": 0,
+    "stdout": "2\n"
+  },
+  {
+    "file": "units-cycle-no-route.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected "
+  },
+  {
+    "file": "units-argument-once.cod",
+    "exit": 0,
+    "stdout": "123\n2.5\n"
+  },
+  {
+    "file": "units-shorter-route.cod",
+    "exit": 0,
+    "stdout": "11\n",
+    "stderr_contains": "ambiguous unit conversion"
+  },
+  {
+    "file": "units-direct-ambiguous.cod",
+    "exit": 0,
+    "stdout": "2\n",
+    "stderr_contains": "ambiguous unit conversion"
   }
 ]

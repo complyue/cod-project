@@ -1,0 +1,3 @@
+using units "units-library.cod" {m, mm};
+function distance(x (m*))::f64 { scalar(x) }
+distance(mm(1250.0));

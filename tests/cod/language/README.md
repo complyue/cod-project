@@ -1,6 +1,6 @@
 # CoD native source prototype
 
-Prototype reference revision: 4 · Recorded: 2026-11-05.
+Prototype reference revision: 5 · Recorded: 2026-11-05.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 4 · Recorded: 2026-11-05.
 - **Value lineage:** C-35/C-36/C-37 and P-84/P-85/P-86 connect identity, scoped interpretation and pure computation to inspectable programs; C-38/P-87 connects the fixture to application-driven validation. These candidate paths retain their registry status.
 - **Human baseline / invariants:** H-96–H-121 supply the local symbol, callable, module, capture and storage rules. Preserve definition-value `perform`, current-binding `behave`, scope restoration, complete scanning before execution composition, and compile-time missing-binding errors. User values have no host-heap lifetime.
 - **Acceptance / non-goals:** actual source-to-native compilation and execution, scope/module examples, diagnostics before execution, and an exact-integer incoming gather. General regional allocation, sum/GADT syntax, persistent closures, concurrency and neural learning are outside this checkpoint. Named bits products, FP32/FP64 values and parameter-type methods are implemented.
-- **Assessment:** [K-225](../../../design/DesignAuthorityRegistry.md#k-225) records this typed-value/method/composition checkpoint and actual validation. H-122/H-123 authorize this language/runtime increment; H-139–H-141 specify complex composition, once-only incorporation and initial inlining. K-224 records the current module contract. [K-219](../../../design/DesignAuthorityRegistry.md#k-219) records implementation and measured evidence. The symbol-selection/map forms implement H-118; combined using and identity checks implement H-120/H-121; other experimental syntax, numerical conventions and unsupported edge cases do not settle the full language.
+- **Assessment:** [K-226](../../../design/DesignAuthorityRegistry.md#k-226) records nominal units and conversion-path validation under H-128/H-130/H-134–H-138. [K-225](../../../design/DesignAuthorityRegistry.md#k-225) records this typed-value/method/composition checkpoint and actual validation. H-122/H-123 authorize this language/runtime increment; H-139–H-141 specify complex composition, once-only incorporation and initial inlining. K-224 records the current module contract. [K-219](../../../design/DesignAuthorityRegistry.md#k-219) records implementation and measured evidence. The symbol-selection/map forms implement H-118; combined using and identity checks implement H-120/H-121; other experimental syntax, numerical conventions and unsupported edge cases do not settle the full language.
 
 ## Run
 
@@ -79,6 +79,25 @@ Products are nominal bits types identified by the defining module/declaration; e
 `let` binds an immutable lexical value inside an expression scope; module values use typed `global` declarations. Parameter annotations accept `:` or `::`; results accept `->` or `::`. Methods dispatch on the complete argument-type tuple. Selected function sets from multiple modules can share a local method name; duplicate identical matches are diagnosed when demanded. Operator methods use names such as `(+)`; `p + 1` and `(+)(p, 1)` select the same user-defined method. Unary/binary arities are distinct. Short-circuit operators remain control expressions.
 
 Pure inline scopes use fresh native names and do not add needless C++ nesting. Procedure scopes retain restoration semantics. Machine-code reuse is deferred; [stress_tests.py](stress_tests.py) measures generated-source size and compile/link/run time on deep and shared dependency graphs. Native code is optimized by the existing compiler, so source expansion is not a claim about runtime stack depth.
+
+## Units and conversion selection
+
+```text
+unit metres::f64;
+unit cm::f64;
+conversion function cm_to_metres(x (cm))::metres {
+    metres(scalar(x) / 100.0)
+}
+function distance(x (metres*))::f64 { scalar(x) }
+```
+
+A unit definition creates a distinct compile-time type identity over a numeric scalar. `metres(2.0)` constructs it from that exact representation; `scalar(x)` extracts the representation explicitly. Aliases preserve identity and do not add a runtime tag. Methods can define meaningful arithmetic on unit values.
+
+`using units "units-library.cod" {m as metres, cm, mm};` selects one bundle of units and associated conversion methods. Repeated selections from the same source, duplicate identities through re-exports, and UoM import are rejected. Omitted-unit conversions are unavailable to automatic search, while source-bound private helper calls retain their lexical meaning.
+
+`x (metres)` requires that identity; `x (metres*)` permits conversion. `x (metres*<-cm<-mm)` uses a direct conversion when available, otherwise the declared indirect route. Automatic graph search chooses a unique path. Multiple unresolved paths warn and continue using the shortest route with declaration-order tie breaking, reporting an alternative witness. `--warnings-as-errors` and `-Werror=unit-conversion` turn those warnings into errors. Paths use the call site's selected bundle; route names resolve where the parameter is defined. Exact argument-tuple methods are selected before conversion-enabled alternatives.
+
+Conversions are pure functions; they cannot read/write effects or invoke procedures. The original argument is evaluated once. Identity/route checks happen before native compilation, including when a preceding module initializer would print at runtime. The compiler does not enumerate cyclic walks or claim that distinct numeric formulas are equivalent.
 
 ## Module and storage boundary
 

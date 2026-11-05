@@ -1,0 +1,9 @@
+using symbol "std:io" @print;
+using units "units-library.cod" {m, cm};
+symbol @distance;
+symbol @read;
+effect @distance = m(4.0);
+procedure @read(x (m*))::f64 { scalar(@distance) + scalar(x) }
+effect @distance = m(7.0);
+behave @print(perform @read(cm(200.0)));
+behave @print(behave @read(cm(200.0)));

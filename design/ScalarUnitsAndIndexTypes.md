@@ -1,16 +1,16 @@
 # Scalar units, strict brands and array index domains
 
-Discussion revision: 4 · Recorded: 2026-11-05 · Status: alternatives under discussion.
+Discussion revision: 5 · Recorded: 2026-11-05 · Status: alternatives under discussion.
 
 ## Design authority
 
-- **Registry / scope:** [D-11](DesignAuthorityRegistry.md#d-11), revision 4, all sections; the mechanism and complete implementation contract are `pending-human`.
+- **Registry / scope:** [D-11](DesignAuthorityRegistry.md#d-11), revision 5, all sections; the mechanism and complete implementation contract are `pending-human`.
 - **Value lineage:** C-47/P-112 derives strict semantic scalar identities and typed indexing from C-10's explicit language semantics; D-11/P-113 develops that requirement into usable arithmetic. The candidate path continues through C-10/P-14/C-01 to inspectable typed business intent. Detecting an incorrect coordinate conversion before execution is the concrete benefit; creating a general numeric framework without a demonstrated use is not.
 - **Dependencies:** P-118 refers to C-13's static-pool formulas as an example, not authority to select an application configuration. C-49/P-119/P-120 record independent UoM identity and reuse; C-50/P-121–P-123 record pure conversion methods and argument-type dispatch; C-51/P-124–P-127 record parameter-controlled conversion, selected-bundle dependency and purity/identity constraints. Existing compile-time origin/alias rules inform alias behavior without using symbols as UoMs or choosing a type-identity encoding.
 - **Human baseline:** H-123 requires structured types and asks about scale-law index support while excluding SNN modeling from the coming increment. H-125 requires strict branded types, an array-declared index type and customizable scalar arithmetic, and requests UoM/newtype comparison. H-128 requires independent compile-time UoM entities, first-class type identities and identity-preserving local aliases, with no representation by symbols. H-130 supplies pure conversions and Julia-style argument-type method dispatch. H-134 specifies fresh definitions plus one-shot using selections with associated conversions; UoM import is not supported. H-135 makes automatic conversion a parameter annotation, H-136 specifies compile-time route discovery and configurable ambiguity warnings, and H-137/H-138 specify source-declared indirect routes with direct conversion taking priority. H-131 adds parenthesized operator names as syntax sugar for readable overloaded methods. H-132 keeps compound UoMs in the roadmap for physical-quantity computation and defers their immediate implementation. H-126 requires a substantive comparison before choosing the arithmetic foundation; it does not accept the agent's proposed newtype-first boundary.
 - **Invariants / non-goals:** distinct unit identities stay distinct; any automatic conversion must be enabled by the parameter and use selected pure conversion functions; no user heap, runtime unit dictionary, per-slot tag or heap-built topology follows. Preserve SoA and regional relocation. This document chooses no neural law, learning algorithm, pool configuration, general GADT implementation or complete operator grammar. Function access to regional snapshots is a separate subject in D-10 under H-124/H-127/H-129.
 - **Acceptance:** compare ordinary formulas, array access, literals, generic numeric functions, local/global positions, conversions and invalid cases; identify both what the checker proves and what remains a value/range condition. Implementation evidence must eventually cover compile-time diagnostics, native results and representation cost.
-- **Assessment:** [K-223](DesignAuthorityRegistry.md#k-223) records revision 4 and the one-shot using/conversion decisions; K-222 records the compound-UoM deferral; K-221 records the operator-method discussion; K-220 records the preceding identity/arithmetic and snapshot boundaries. No prior qualified D-11 baseline exists; this is not an implementation approval or continuity-based qualification.
+- **Assessment:** [K-226](DesignAuthorityRegistry.md#k-226) records revision 5 and the bounded native UoM implementation/evidence. [K-223](DesignAuthorityRegistry.md#k-223) records revision 4 and the one-shot using/conversion decisions; K-222 records the compound-UoM deferral; K-221 records the operator-method discussion; K-220 records the preceding identity/arithmetic and snapshot boundaries. No prior qualified D-11 baseline exists; this is not an implementation approval or continuity-based qualification.
 
 ## Initial increment and compound-UoM roadmap
 
@@ -263,3 +263,26 @@ The full comparison/acceptance catalog below covers both the initial increment a
 8. Representation inspection showing no per-element tag or wrapper allocation; actual conversion instructions remain visible.
 
 The bounded implementation increment uses the confirmed call, using and conversion rules. Compound-UoM algebra remains planned for later and is not a prerequisite.
+
+## Bounded native prototype
+
+The H-122/H-123 increment implements named units over `i64`, `f32` or `f64`. Unit identity is compile-time metadata; native values retain the scalar representation without a runtime unit tag. The following is runnable prototype syntax, not a complete unit algebra or permanent grammar:
+
+```text
+unit m::f64;
+unit cm::f64;
+conversion function cm_to_m(x (cm))::m { m(scalar(x) / 100.0) }
+function consume(x (m*))::f64 { scalar(x) }
+```
+
+A constructor such as `m(2.0)` requires the exact scalar representation. `scalar(x)` explicitly extracts it. Unit arithmetic uses declared pure methods such as `(+)`; merely sharing a scalar representation grants no implicit interchangeability. Compound-unit algebra remains deferred.
+
+A receiving module selects `using units "units.cod" {m as metres, cm, mm};`. Each source is selected once in that receiver, and selecting an already selected identity through a re-export is also rejected. Associated conversion methods are selected only when both endpoint units belong to that bundle. Their bodies and private helpers retain source lexical bindings. Re-exports preserve identities and the selected conversion set. Ordinary resource using/import cannot bypass this bundle rule.
+
+Automatic insertion searches the call site's selected conversion graph; the parameter's target and declared route aliases resolve in the defining module. An exact argument-tuple method is preferred before inspecting conversion routes. Otherwise there must be one applicable method; ambiguity between methods is an error distinct from ambiguity between routes for a chosen method. These dispatch details are bounded implementation conventions for review, not a general inference/coherence theory.
+
+Direct conversion takes priority; otherwise a supplied route is followed. Without a declared route, the implementation chooses the shortest available path, with source/bundle declaration order breaking equal lengths. Any other simple route produces a warning identifying the chosen route and one alternative witness. This deterministic warn-and-continue fallback does not assert numerical equivalence. `--warnings-as-errors` or `-Werror=unit-conversion` promotes that warning to a frontend error. A direct choice or explicit route avoids warnings about unrelated indirect alternatives; multiple conversion functions for the same selected step still require a warning.
+
+Search visits a finite graph. After selecting a shortest route, excluding each chosen edge in turn finds an alternative witness without enumerating every possible cyclic walk. A disconnected cycle supplies no route. Conversions are emitted as pure calls, evaluate the actual argument once, and participate in the same input snapshot as any nested function call when regional inputs are implemented.
+
+[Native fixtures](../tests/cod/language/README.md) and their validation records cover exact/starred acceptance, direct and declared priorities, multiple paths, configurable warnings, omitted units, duplicate selections, nominal aliases, source-private helpers, purity and captured/current unit-valued effects. A generated case re-exports 32 units through 16 modules and applies 31 conversions while a back-edge is present. This is language/runtime evidence, not SNN modeling or a compound-UoM implementation.

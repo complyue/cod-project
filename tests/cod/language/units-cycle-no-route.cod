@@ -1,0 +1,7 @@
+unit a::i64;
+unit b::i64;
+unit c::i64;
+conversion function ab(x (a))::b { b(scalar(x)) }
+conversion function ba(x (b))::a { a(scalar(x)) }
+function consume(x (c*))::i64 { scalar(x) }
+consume(a(1));

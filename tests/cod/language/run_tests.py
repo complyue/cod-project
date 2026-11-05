@@ -28,15 +28,17 @@ def main():
     if sys.argv[1:]:
         requested = set(sys.argv[1:])
         cases = [case for case in cases if Path(case["file"]).stem in requested]
-        if len(cases) != len(requested):
+        if {Path(case["file"]).stem for case in cases} != requested:
             raise SystemExit("Unknown or duplicate fixture selection")
     results = []
     for case in cases:
-        command = [str(executable), "--run", str(directory / case["file"])]
+        command = [str(executable), "--run", str(directory / case["file"]), *case.get("args", [])]
         result = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=60)
         passed = (result.returncode == case["exit"] and result.stdout == case["stdout"]
                   and case.get("stderr_contains", "") in result.stderr
-                  and (case["exit"] != 0 or result.stderr == ""))
+                  and (case["exit"] != 0 or result.stderr == "" or
+                       (case.get("stderr_contains") and all("[-Wunit-conversion]" in line
+                                                          for line in result.stderr.splitlines()))))
         results.append({"fixture": case["file"], "command": command, "expected": case,
                         "exit_code": result.returncode, "stdout": result.stdout,
                         "stderr": result.stderr, "passed": passed})

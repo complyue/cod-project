@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+unit start::f64;
+unit left::f64;
+unit right::f64;
+unit target::f64;
+conversion function a(x (start))::left { left(scalar(x)) }
+conversion function b(x (left))::target { target(scalar(x) + 10.0) }
+conversion function c(x (start))::right { right(scalar(x)) }
+conversion function d(x (right))::target { target(scalar(x) + 20.0) }
+function select(x (target*<-right<-start))::f64 { scalar(x) }
+behave @print(select(start(1.0)));

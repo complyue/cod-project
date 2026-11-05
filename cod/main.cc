@@ -171,7 +171,7 @@ public:
   std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) const;
   bool compileAndRun(const CodReplConfig &config, const std::string &submission) const;
   int compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
-                      const std::optional<fs::path> &emit_cpp) const;
+                      const std::optional<fs::path> &emit_cpp, bool warnings_as_errors) const;
   void runRepl(const CodReplConfig &config) const;
 };
 
@@ -187,6 +187,7 @@ static void printUsage(const char *prog_name) {
             << "  --run FILE          Compile and run a CoD source-language entry\n"
             << "  --check FILE        Check a CoD entry and its demanded call paths\n"
             << "  --emit-cpp FILE     Save native source with --run or --check\n"
+            << "  --warnings-as-errors  Reject ambiguous CoD unit conversions\n"
             << "  -h, --help          Show this help message\n"
             << "  --no-cache          Disable build cache\n"
             << "  --force-rebuild     Force rebuild (ignore cache)\n"
@@ -615,9 +616,10 @@ std::vector<std::string> CodTool::buildCompilerArgs(const CodReplConfig &config)
 }
 
 int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
-                            const std::optional<fs::path> &emit_cpp) const {
+                            const std::optional<fs::path> &emit_cpp, bool warnings_as_errors) const {
   try {
-    const auto compilation = cod::language::Compiler{}.compile(fs::absolute(entry));
+    const auto compilation = cod::language::Compiler{warnings_as_errors}.compile(fs::absolute(entry));
+    for (const auto &warning : compilation.warnings) std::cerr << warning << '\n';
     if (config.verbose) {
       for (const auto &module : compilation.scanned_modules)
         std::cerr << "[CoD scan] " << module << '\n';
@@ -820,6 +822,7 @@ int main(int argc, const char **argv) {
   std::optional<fs::path> language_entry;
   std::optional<fs::path> emit_cpp;
   bool check_only = false;
+  bool warnings_as_errors = false;
 
   // Parse command line arguments
   for (int i = 1; i < argc; ++i) {
@@ -847,6 +850,8 @@ int main(int argc, const char **argv) {
       }
       language_entry = fs::absolute(argv[++i]);
       check_only = arg == "--check";
+    } else if (arg == "--warnings-as-errors" || arg == "-Werror=unit-conversion") {
+      warnings_as_errors = true;
     } else if (arg == "--emit-cpp") {
       if (i + 1 >= argc) {
         std::cerr << "Error: --emit-cpp requires a path\n";
@@ -896,7 +901,11 @@ int main(int argc, const char **argv) {
       return 1;
     }
     if (config.project_root.empty()) config.project_root = language_entry->parent_path();
-    return CodTool{}.compileLanguage(config, *language_entry, check_only, emit_cpp);
+    return CodTool{}.compileLanguage(config, *language_entry, check_only, emit_cpp, warnings_as_errors);
+  }
+  if (warnings_as_errors) {
+    std::cerr << "Error: --warnings-as-errors requires --run or --check\n";
+    return 1;
   }
   if (emit_cpp) {
     std::cerr << "Error: --emit-cpp requires --run or --check\n";

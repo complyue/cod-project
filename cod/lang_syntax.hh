@@ -137,12 +137,13 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
 }
 
 struct Type {
-  enum Kind { integer, boolean, void_type, procedure, float32, float64, named, product };
+  enum Kind { integer, boolean, void_type, procedure, float32, float64, named, product, unit };
   Kind kind;
   std::string name;
   size_t identity = 0;
-  Type(Kind kind = void_type, std::string name = {}, size_t identity = 0)
-      : kind(kind), name(std::move(name)), identity(identity) {}
+  Kind representation = void_type;
+  Type(Kind kind = void_type, std::string name = {}, size_t identity = 0, Kind representation = void_type)
+      : kind(kind), name(std::move(name)), identity(identity), representation(representation) {}
   bool operator==(const Type &) const = default;
 };
 inline bool floating(Type type) { return type.kind == Type::float32 || type.kind == Type::float64; }
@@ -155,7 +156,7 @@ inline std::string type_name(const Type &type) {
   case Type::procedure: return "procedure";
   case Type::float32: return "f32";
   case Type::float64: return "f64";
-  case Type::named: case Type::product: return type.name;
+  case Type::named: case Type::product: case Type::unit: return type.name;
   }
   return "unknown";
 }
@@ -174,14 +175,17 @@ struct Parameter {
   std::string name;
   Type type;
   Location at;
+  bool automatic_conversion = false;
+  std::vector<std::string> conversion_route;
 };
+struct UnitSelection { std::string source, local; Location at; };
 struct SymbolMapping {
   std::string local;
   std::string source;
   Location at;
 };
 struct Form {
-  enum class Kind { symbol, symbol_from, function, procedure, product, global, using_resource, import_resource, expression };
+  enum class Kind { symbol, symbol_from, function, procedure, product, unit, using_units, global, using_resource, import_resource, expression };
   Kind kind;
   Location at;
   std::string name;
@@ -190,7 +194,9 @@ struct Form {
   bool symbolic = false;
   bool explicit_alias = false;
   bool using_symbol = false;
+  bool conversion = false;
   std::vector<SymbolMapping> mappings;
+  std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
   std::optional<Type> result_type;
   Expr body;
@@ -380,6 +386,13 @@ public:
           form->name = name(TokenKind::symbol).text;
         }
         expect(";");
+      } else if (take("unit")) {
+        form->kind = Form::Kind::unit;
+        form->name = name(TokenKind::identifier).text;
+        type_separator();
+        form->result_type = parse_type();
+        if (!numeric(*form->result_type)) fail(start.at, "a unit requires a scalar numeric representation");
+        expect(";");
       } else if (take("type")) {
         form->kind = Form::Kind::product;
         form->name = name(TokenKind::identifier).text;
@@ -393,7 +406,9 @@ public:
           if (!is("}")) expect(";");
         }
         take(";");
-      } else if (is("function") || is("procedure")) {
+      } else if (is("function") || is("procedure") || is("conversion")) {
+        form->conversion = take("conversion");
+        if (form->conversion && !is("function")) fail(peek().at, "conversion requires a pure function");
         const bool function = take("function");
         if (!function) expect("procedure");
         form->kind = function ? Form::Kind::function : Form::Kind::procedure;
@@ -402,10 +417,20 @@ public:
           if (!take(")")) {
             do {
               auto param = name(TokenKind::identifier);
-              type_separator();
-              const auto type = parse_type();
-              if (type == Type::void_type) fail(param.at, "a parameter must have a value type");
-              form->parameters.push_back({param.text, type, param.at});
+              Parameter parameter{param.text, Type::void_type, param.at};
+              if (take("(")) {
+                parameter.type = parse_type();
+                parameter.automatic_conversion = take("*");
+                if (is("<-") && !parameter.automatic_conversion)
+                  fail(peek().at, "a conversion route requires a starred parameter");
+                while (take("<-")) parameter.conversion_route.push_back(name(TokenKind::identifier).text);
+                expect(")");
+              } else {
+                type_separator();
+                parameter.type = parse_type();
+              }
+              if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
+              form->parameters.push_back(std::move(parameter));
             } while (take(","));
             expect(")");
           }
@@ -435,6 +460,21 @@ public:
         const bool using_resource = take("using");
         if (!using_resource) expect("import");
         form->kind = using_resource ? Form::Kind::using_resource : Form::Kind::import_resource;
+        if (take("units")) {
+          if (!using_resource) fail(start.at, "UoMs support fresh definitions and using, not import");
+          form->kind = Form::Kind::using_units;
+          form->path = name(TokenKind::string).text;
+          expect("{");
+          do {
+            auto source = name(TokenKind::identifier);
+            auto local = take("as") ? name(TokenKind::identifier).text : source.text;
+            form->units.push_back({source.text, local, source.at});
+          } while (take(","));
+          expect("}");
+          expect(";");
+          forms.push_back(std::move(form));
+          continue;
+        }
         if (take("symbol")) {
           if (!using_resource) fail(start.at, "import symbol is outside the prototype; declare its destination first");
           form->using_symbol = true;

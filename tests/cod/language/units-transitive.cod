@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+using units "units-reexport.cod" {metres as m, cm, mm};
+function consume(x (m*))::f64 { scalar(x) }
+behave @print(consume(mm(750.0)));

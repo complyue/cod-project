@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T20:31:33.127504+00:00",
+  "recorded_utc": "2026-11-05T20:48:04.006319+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
-  "passed": 86,
-  "total": 86,
+  "passed": 109,
+  "total": 109,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -1457,7 +1457,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-ambiguous.cod:3:1: ambiguous method 'f' with identical argument types\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-ambiguous.cod:3:1: ambiguous method 'f' for supplied argument types\n",
       "passed": true
     },
     {
@@ -1497,13 +1497,421 @@
       "passed": true
     },
     {
+      "fixture": "units-basic.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-basic.cod"
+      ],
+      "expected": {
+        "file": "units-basic.cod",
+        "exit": 0,
+        "stdout": "2.5\n1.25\n4\n5\n"
+      },
+      "exit_code": 0,
+      "stdout": "2.5\n1.25\n4\n5\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-exact-reject.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-exact-reject.cod"
+      ],
+      "expected": {
+        "file": "units-exact-reject.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected "
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-exact-reject.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::cm\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-omitted-route.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-omitted-route.cod"
+      ],
+      "expected": {
+        "file": "units-omitted-route.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected "
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-omitted-route.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::mm\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-repeated.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-repeated.cod"
+      ],
+      "expected": {
+        "file": "units-repeated.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "one using bundle"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-repeated.cod:2:1: UoMs from a source module must be selected in one using bundle\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-import.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-import.cod"
+      ],
+      "expected": {
+        "file": "units-import.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "not import"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-import.cod:1:1: UoMs support fresh definitions and using, not import\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-identity.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-identity.cod"
+      ],
+      "expected": {
+        "file": "units-identity.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected "
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-identity.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-other.cod::m\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-direct.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-direct.cod"
+      ],
+      "expected": {
+        "file": "units-direct.cod",
+        "exit": 0,
+        "stdout": "12\n"
+      },
+      "exit_code": 0,
+      "stdout": "12\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-declared.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-declared.cod"
+      ],
+      "expected": {
+        "file": "units-declared.cod",
+        "exit": 0,
+        "stdout": "2\n"
+      },
+      "exit_code": 0,
+      "stdout": "2\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-route-missing.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-route-missing.cod"
+      ],
+      "expected": {
+        "file": "units-route-missing.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "unavailable step"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-route-missing.cod:3:1: declared conversion route has an unavailable step from /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::mm to /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-priority.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-priority.cod"
+      ],
+      "expected": {
+        "file": "units-priority.cod",
+        "exit": 0,
+        "stdout": "21\n"
+      },
+      "exit_code": 0,
+      "stdout": "21\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-impure.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-impure.cod"
+      ],
+      "expected": {
+        "file": "units-impure.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "function cannot read symbolic effects"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-impure.cod:5:55: a function cannot read symbolic effects\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-procedure.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-procedure.cod"
+      ],
+      "expected": {
+        "file": "units-procedure.cod",
+        "exit": 0,
+        "stdout": "6\n9\n"
+      },
+      "exit_code": 0,
+      "stdout": "6\n9\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-exact-overload.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-exact-overload.cod"
+      ],
+      "expected": {
+        "file": "units-exact-overload.cod",
+        "exit": 0,
+        "stdout": "2\n"
+      },
+      "exit_code": 0,
+      "stdout": "2\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-ambiguous.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod"
+      ],
+      "expected": {
+        "file": "units-ambiguous.cod",
+        "exit": 0,
+        "stdout": "11\n",
+        "stderr_contains": "ambiguous unit conversion"
+      },
+      "exit_code": 0,
+      "stdout": "11\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod:11:15: warning: ambiguous unit conversion; selected /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::start --a--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::left --b--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::target; alternative /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::start --c--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::right --d--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::target [-Wunit-conversion]\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-ambiguous.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod",
+        "--warnings-as-errors"
+      ],
+      "expected": {
+        "file": "units-ambiguous.cod",
+        "args": [
+          "--warnings-as-errors"
+        ],
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "warning treated as error"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod:11:15: warning treated as error: ambiguous unit conversion; selected /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::start --a--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::left --b--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::target; alternative /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::start --c--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::right --d--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::target [-Wunit-conversion]\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-private-helper.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-private-helper.cod"
+      ],
+      "expected": {
+        "file": "units-private-helper.cod",
+        "exit": 0,
+        "stdout": "200\n"
+      },
+      "exit_code": 0,
+      "stdout": "200\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-transitive.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-transitive.cod"
+      ],
+      "expected": {
+        "file": "units-transitive.cod",
+        "exit": 0,
+        "stdout": "0.75\n"
+      },
+      "exit_code": 0,
+      "stdout": "0.75\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-duplicate-identity.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-duplicate-identity.cod"
+      ],
+      "expected": {
+        "file": "units-duplicate-identity.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "repeated using of UoM identity"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-duplicate-identity.cod:2:35: repeated using of UoM identity /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-exact-before-route.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-exact-before-route.cod"
+      ],
+      "expected": {
+        "file": "units-exact-before-route.cod",
+        "exit": 0,
+        "stdout": "2\n"
+      },
+      "exit_code": 0,
+      "stdout": "2\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-cycle-no-route.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod"
+      ],
+      "expected": {
+        "file": "units-cycle-no-route.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected "
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod:7:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod::c, got /ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod::a\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-argument-once.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-argument-once.cod"
+      ],
+      "expected": {
+        "file": "units-argument-once.cod",
+        "exit": 0,
+        "stdout": "123\n2.5\n"
+      },
+      "exit_code": 0,
+      "stdout": "123\n2.5\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-shorter-route.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-shorter-route.cod"
+      ],
+      "expected": {
+        "file": "units-shorter-route.cod",
+        "exit": 0,
+        "stdout": "11\n",
+        "stderr_contains": "ambiguous unit conversion"
+      },
+      "exit_code": 0,
+      "stdout": "11\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-shorter-route.cod:13:15: warning: ambiguous unit conversion; selected /ws/EvtWorks/cod-project/tests/cod/language/units-shorter-route.cod::a --ab--> /ws/EvtWorks/cod-project/tests/cod/language/units-shorter-route.cod::b --be--> /ws/EvtWorks/cod-project/tests/cod/language/units-shorter-route.cod::e; alternative /ws/EvtWorks/cod-project/tests/cod/language/units-shorter-route.cod::a --ac--> /ws/EvtWorks/cod-project/tests/cod/language/units-shorter-route.cod::c --cd--> /ws/EvtWorks/cod-project/tests/cod/language/units-shorter-route.cod::d --de--> /ws/EvtWorks/cod-project/tests/cod/language/units-shorter-route.cod::e [-Wunit-conversion]\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-direct-ambiguous.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-direct-ambiguous.cod"
+      ],
+      "expected": {
+        "file": "units-direct-ambiguous.cod",
+        "exit": 0,
+        "stdout": "2\n",
+        "stderr_contains": "ambiguous unit conversion"
+      },
+      "exit_code": 0,
+      "stdout": "2\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-direct-ambiguous.cod:7:15: warning: ambiguous unit conversion; selected /ws/EvtWorks/cod-project/tests/cod/language/units-direct-ambiguous.cod::a --first--> /ws/EvtWorks/cod-project/tests/cod/language/units-direct-ambiguous.cod::b; alternative /ws/EvtWorks/cod-project/tests/cod/language/units-direct-ambiguous.cod::a --second--> /ws/EvtWorks/cod-project/tests/cod/language/units-direct-ambiguous.cod::b [-Wunit-conversion]\n",
+      "passed": true
+    },
+    {
       "fixture": "frontend-only",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-cpp",
-        "/tmp/cod-language-check-cka7ex0w/program.cc"
+        "/tmp/cod-language-check-20gk13pv/program.cc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -1513,15 +1921,15 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "3749e906107b616523a9b5edf41e2c24e1443335f3cf13d454fbe9918bee377c"
+    "sha256": "514de3ee054d0a2510621b8e70b740b594a483f02a798d5f22c2daefddff4300"
   },
   "source_sha256": {
-    "cod/main.cc": "72a873f870ba462b3a9bfe4f62c8b6def4833b8a1b0e99a819bf452a7e43a0a2",
-    "cod/lang_syntax.hh": "c7f102af4c8f6a1a4ad67dc527ff45588971fb09acd9d48499be78b591537cc9",
-    "cod/lang_frontend.hh": "ae73fbc584ca00414bdd987772a3623b219273d0644878055c107a2978bc0873",
+    "cod/main.cc": "bcaa37e39665c6d70960f527bb2ee93c1868774adfd79d3a96c840651a4d39d3",
+    "cod/lang_syntax.hh": "1654d2c4600e0b156d483550fea0820dbf91eb5bbd6807a6575ffdba29575f7c",
+    "cod/lang_frontend.hh": "0310f4302937e7df45a1e8d6d1d87b716429bb706bdb96883f5c980109ffddc2",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
-    "tests/cod/language/run_tests.py": "32f4716debf9373976a6c92cfc39920da526810ac838fce4267aa1d026e2cea2",
-    "tests/cod/language/cases.json": "6cf7b59832d8fa44c8b52d93a51c05228444ed67ee0a57b07ecf883d8c33e0f7",
+    "tests/cod/language/run_tests.py": "a798caba7a860e0ebf14e0e28023c00f0e6dfce0dea55425f452c5ee7651e679",
+    "tests/cod/language/cases.json": "96b92cea9a0b27e4b0d9ed24da4919412ebd358f30b652f8842ab19b8567e581",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -1606,6 +2014,32 @@
     "tests/cod/language/symbol-trigger.cod": "0cafe9db9cb7ad59da3d394b17e49e2b979257d4803f2cbcdab2911baf8e6e27",
     "tests/cod/language/transitive.cod": "48684d171a1623887cedf493e48a7b96c5995144210c7da864ec0c72effac32f",
     "tests/cod/language/type-error.cod": "2ff51f72fd633a71402c479cc5d91dfea5c540e22f15c67c9b886b5152572d0f",
+    "tests/cod/language/units-ambiguous.cod": "a97921741942cf18b0e58e5c26a8ce8594489fd85e8f357998789679887c957e",
+    "tests/cod/language/units-argument-once.cod": "0895ac1730443a6944a6e75cfedd95fd4536673a9b138e5094917f0578375249",
+    "tests/cod/language/units-basic.cod": "ba7c2c4936400a4643a3eb428f7f383e01da429ea097f70662dec77c01dcdae4",
+    "tests/cod/language/units-cycle-no-route.cod": "f6ca6aa414d327b2dd52638c915b07adc934cff54f183bd0611791d51f62974b",
+    "tests/cod/language/units-declared.cod": "eddcf25e33ed850c50e03c774414f9751353dfe89628fde2a99c25b8d157f200",
+    "tests/cod/language/units-direct-ambiguous.cod": "b8341ca666101845a55c55c583bc98e11ab861accb80a2a267b56595cc1bbdd3",
+    "tests/cod/language/units-direct.cod": "61a118f79fd129234a1cb9de9bcb391c3e7e5906f4e584bf3da3f3a542364b98",
+    "tests/cod/language/units-duplicate-identity.cod": "1968bc03a65280f7a73d94e95969bd5090bad040b411fc50003574f4e73d87f3",
+    "tests/cod/language/units-exact-before-route.cod": "11196a88543c766ccf33f763bfa7f14e943ab4dca702d4027f9adb8cf7c340c2",
+    "tests/cod/language/units-exact-overload.cod": "b13f1a674f0c594babc34169562e3b3a956fed5d328e14cbccd09649cee8799f",
+    "tests/cod/language/units-exact-reject.cod": "5dea7f2bb91a1b1712f4c8c8331d66c05f7bdf40373a058cf5d6376d2a7086f1",
+    "tests/cod/language/units-identity.cod": "b2893ee3cfd3a82b45dc3ab5aa5e0c721f04cdf3efff7ac63239a04a47a68fa4",
+    "tests/cod/language/units-import.cod": "5cdcede49a4b8c7485e46f97df02eccd49f49fb814b6163ef0dc5b2ab7a2e7a9",
+    "tests/cod/language/units-impure.cod": "9d9e240d3fe902fdcbc6b91dce3e5243ab6c9d6dec8a5e9a4e7df7bf99d7207c",
+    "tests/cod/language/units-library.cod": "ee31d7f7feedf7110e4a11eeb410130332512876350251cbb95b71c3b2d694ee",
+    "tests/cod/language/units-omitted-route.cod": "c11b491afa766071e785b90e7ae1fcb0e7fa49adb98b0ee2a9727570be927ebb",
+    "tests/cod/language/units-other.cod": "5c752de7165b858fd48d9f06e6570726df006b4de3b11ec5cdabeb905538418d",
+    "tests/cod/language/units-priority.cod": "c8fe73918c4bfc4960c2db5c7aef00eba3e609e27172abfdfc38c96395525650",
+    "tests/cod/language/units-private-helper.cod": "fbc8fcf187fe6b48a15d1c02ee01e3bd875977f258af27c6e479014d183703d6",
+    "tests/cod/language/units-private-library.cod": "32f8e0ae3d123d020110ce1e3e5c1b74436f7f31edac4fa712799d58ad6238bd",
+    "tests/cod/language/units-procedure.cod": "b9b143f893ffb41ea08ae9dc93ff0240c7363fee02d3466c6300fcb7aab9ff6a",
+    "tests/cod/language/units-reexport.cod": "4c61b14fdb27185bef9cc1bebf40ab30da57d2d3f0f7e412347849a09645c2ac",
+    "tests/cod/language/units-repeated.cod": "0117bfe5d0cec83b85dd41193fd9463feebe64d0cac162283ddade376b8cb615",
+    "tests/cod/language/units-route-missing.cod": "a13cae172e84a0951b26f51fe3221914d6d7a0ff42ddf81b40d1713204848f69",
+    "tests/cod/language/units-shorter-route.cod": "e11b5c3e0f166013237bb4e101285e352b1fe02b0b270f6e5960852d4108cd9e",
+    "tests/cod/language/units-transitive.cod": "247fd0e5e70634c8bee2257cc9b8659bed4391d33fd4966f94bebd5a8227fac6",
     "tests/cod/language/unknown-map-local.cod": "fcbc91d5eb564e16f02d7967aa684d9e749daf3a4819993460472b3e602d6ff1",
     "tests/cod/language/unknown-map-role.cod": "7e2301626b3e161c28c900a05dae5d105ac26a91340bb4f437e3385f37b1168c",
     "tests/cod/language/using-alias-identity-mismatch.cod": "19c9a3633d55ec70c3af1f259b7de92bcf2905de367289912cc956fda89ed4c8",
@@ -1631,30 +2065,29 @@
     "tests/cod/language/using.cod": "ba0c7ebd8f497265a994201e6ee5be9c04274df10f8447be98d1bf13649671a9",
     "tests/cod/language/value-as-procedure.cod": "257248681baab5224b537b000532a2c5eedde5f0b87d5f024f3807eebf13b7ab",
     "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223",
-    "tests/cod/language/stress_tests.py": "45492acc24f82b3e73a3af464526172dda0add6a1b388ce23d474316066a373f"
+    "tests/cod/language/stress_tests.py": "64f3e33348c97cd60fd60661f6d59c12fa3291dc375916cfd2e6e6cbdbd41f84"
   },
-  "reference_revision": 4,
-  "status": "passed_typed_bits_methods_module_composition_checkpoint",
-  "baseline_commit": "ee6ced7a1d97ff39d4909a7c41070151672bf1f6",
+  "status": "passed_nominal_units_and_conversion_checkpoint",
   "authority": {
-    "design": "D-10 revision 13; D-07 revision 18; D-11 revision 4",
-    "request": "H-122/H-123/H-139\u2013H-141",
-    "assessment": "K-225",
-    "scope": "Named bits products, FP32/FP64, exact argument dispatch and operator names, once-only module incorporation and inline-call stress; not full-language qualification."
+    "design": "D-11 revision 5; D-07 revision 19; D-10 revision 13",
+    "request": "H-122/H-123/H-128/H-130/H-134\u2013H-141",
+    "assessment": "K-226",
+    "scope": "Compile-time nominal units, one-shot selected bundles, pure conversions and direct/declared/discovered route behavior; bounded native prototype."
   },
   "build": {
     "command": "cmake --build ./build",
     "exit_code": 0,
-    "source_build_count": 3,
+    "source_build_count": 2,
     "configuration_source_edits": false,
     "observed_default_graph_behavior": "The existing default build graph refreshed runtime sub-build configuration/outputs and its compilation database; no manual configure, bootstrap or install target was invoked.",
     "warnings": [
       "Existing LLVM OpenMPClause.h implicit-this-capture deprecation.",
       "Existing runtime CMake policy/deprecation warnings."
-    ]
+    ],
+    "log_sha256": "757cb8b61bb33d59f17d5024b56af24aa3561719ba6f7b45caccb5697eff185f"
   },
   "component_suite": {
-    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=build/validation/language-component.json tests/cod/run-all.sh",
+    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=build/validation/language-unit-component.json tests/cod/run-all.sh",
     "exit_code": 0,
     "passed_groups": 4,
     "total_groups": 4,
@@ -1666,8 +2099,8 @@
       },
       {
         "name": "test_language.sh",
-        "passed": 86,
-        "total": 86
+        "passed": 109,
+        "total": 109
       },
       {
         "name": "test_cod_cache",
@@ -1679,10 +2112,10 @@
         "status": "passed"
       }
     ],
-    "log_sha256": "ac4d0ca0f10e4e14379e643e41dca7102af15e9b4a55a18930be0b569fe3d6d0",
+    "log_sha256": "2e9a2f30ffb5c9a8c9a943d841dd26e66f167489959c0cbf19ce8c24233091d3",
     "summary_lines": [
       "\u001b[0;32m\u2714 All CoD Evaluation tests passed! (6/6)\u001b[0m",
-      "CoD language: 86/86 passed (build toolchain)",
+      "CoD language: 109/109 passed (build toolchain)",
       "\u001b[0;32m\u2714 All CoD cache tests passed! (8/8)\u001b[0m",
       "\u2714 All workspace tests passed!",
       "\u001b[0;32m\u2714 All CoD tests passed! (4/4)\u001b[0m"
@@ -1690,15 +2123,17 @@
   },
   "limits": [
     "Linux system/build toolchain only.",
-    "Regional arrays, UoM conversions, general GADT, package-version identity and concurrency are not implemented in this checkpoint.",
+    "Regional arrays, complete pointer-bearing snapshots, general GADT, compound-unit algebra, package-version identity and concurrency are not implemented in this checkpoint.",
     "No SNN model or learning acceptance.",
     "Cyclic initialization and recursive call policies remain outside this prototype.",
     "Inline graph sizes and compile/link/run times are fixture observations; no native runtime stack-depth or broad performance claim."
   ],
+  "reference_revision": 5,
+  "baseline_commit": "93793998af355ae62d0cc19806f808d11e8542c9",
   "check_breakdown": {
-    "native_success": 40,
+    "native_success": 53,
     "native_expected_runtime_failure": 1,
-    "expected_frontend_rejection": 44,
+    "expected_frontend_rejection": 54,
     "frontend_only_success": 1
   }
 }

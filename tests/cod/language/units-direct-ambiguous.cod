@@ -1,0 +1,7 @@
+using symbol "std:io" @print;
+unit a::i64;
+unit b::i64;
+conversion function first(x (a))::b { b(scalar(x)+1) }
+conversion function second(x (a))::b { b(scalar(x)+2) }
+function consume(x (b*))::i64 { scalar(x) }
+behave @print(consume(a(1)));

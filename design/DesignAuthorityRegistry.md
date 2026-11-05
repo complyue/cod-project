@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：226
+记录版本：227
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 226，延续检查 K-01—K-225；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 227，延续检查 K-01—K-226；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -206,7 +206,7 @@ Design authority
 <a id="d-07"></a>
 ### D-07：领域语言讨论与设计决策跟踪
 
-- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 18；用该修订及包含它的 Git 提交定位。
+- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 19；用该修订及包含它的 Git 提交定位。
 - 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-046。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
 - 人工依据：H-06 近期目标、H-07 跟踪授权、H-08/H-11 应用及分离；H-96 现在同步推进语言和 SNN 设计／实现／验证，取代当前范围内的笼统实施延后。H-97—H-121 为局部语义、惯用组织及语法建议依据。DD-002/H-07 历史不改写。
 - 当前资格：全文契约及未确认价值路径仍 pending-human；明确的人类命题按其本身范围 confirmed，不把新 WPO、存储或语法细节自动批准。K-214 记录有界原型证据；K-215 记录编译期身份／别名、import 映射和预先声明目标的细化；K-216 记录 symbol from 与局部符号 as 源 body 角色的语法建议；K-217 记录 H-118 授权的实现、构建和 CoD 组件测试；K-218 记录 using symbol 及省略 as 时的身份一致要求；K-219 记录 H-121 授权的实现、验证和实际测试证据。上述记录均不以未合格基线产生 continued 资格。
@@ -217,6 +217,8 @@ Design authority
 - Current planning: H-122/H-123 request a ten-hour goal after discussion and restrict it to language/runtime support. H-124/H-127/H-129 confirm regional function snapshots; H-125/H-126/H-128 require strict scalar identities, UoM comparison and independent unit identities. D-11r4 records the resolved H-133–H-138 choices. The bounded ten-hour goal runs from 2026-11-05T20:13:49Z through 2026-11-06T06:13:49Z; H-139–H-141 add complex composition, once-only module incorporation and measured initial inlining. No mechanism is approved by silence.
 - H-132/K-222 separate the compound-UoM roadmap from the initial run. D-07r16 LI-01–LI-03 record pending questions about returned regional references, imported conversion lexical bindings and automatic conversions during dispatch; proposals are not human decisions.
 - H-133–H-138/K-223 resolve the immediate review in D-07r17 LI-01–LI-04: ordinary caller lifetime, fresh-definition/one-shot UoM using, parameter-controlled conversion, compile-time discovery and direct-before-declared-indirect route choice. The bounded H-122/H-123 implementation goal can proceed under these local human decisions; full-document qualification is not inferred.
+- K-226 records the passing nominal-UoM/conversion checkpoint under H-122/H-123 and H-128/H-130/H-134–H-138; D-07r19 and D-11r5. The active goal still requires iteration and regional-data support.
+
 <a id="d-08"></a>
 ### D-08：稳态循环激活 SNN 独立应用文档集
 
@@ -261,7 +263,7 @@ Design authority
 - Downstream: D-07r14 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign211/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision4, describes the bounded H-122/H-123/H-139–H-141 checkpoint. [validation.json](../tests/cod/language/validation.json) records 85 source fixtures plus one frontend-only check and all four CoD component groups; [stress-validation.json](../tests/cod/language/stress-validation.json) records 128-module, 160-procedure and layered-DAG native checks. K-225 records actual scope and limits.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision5, describes the bounded H-122/H-123/H-139–H-141 checkpoint. [validation.json](../tests/cod/language/validation.json) records 108 source checks plus one frontend-only check and all four CoD component groups; [stress-validation.json](../tests/cod/language/stress-validation.json) records 128-module, 160-procedure and layered-DAG native checks. K-225 records actual scope and limits.
 
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
@@ -274,6 +276,8 @@ Design authority
 - H-139–H-141/K-224: D-10r13 incorporates each module once after scanning in encounter order; shared acyclic dependencies reuse resources. Deep-call and complex-graph acceptance measures initial inline lowering without requiring machine-code reuse.
 
 <a id="d-11"></a>
+- K-226: bounded native nominal units and conversion selection pass 109 language checks and all four CoD groups; selected-bundle, identity, purity and route behavior are in reference5/validation. Regional arrays and compound-unit algebra are not inferred from these results.
+
 ### D-11: Scalar units and array index types
 
 - File: [ScalarUnitsAndIndexTypes.md](ScalarUnitsAndIndexTypes.md), discussion revision 4, all sections; complete implementation contract pending-human.
@@ -480,6 +484,9 @@ Additional reverse impact: C-45/C-46 -> P-106–P-111, D-10r10, D-07r13 DL-14/DL
 
 
 **K-224 reverse coverage:** H-139–H-141 → C-44/P-103–P-105, D-10r13 and D-07r18/DD-044–DD-046. Repeated acyclic dependencies reuse incorporated resources; H-140 does not select cyclic-initialization behavior. H-141 retains inline lowering and measured size; no machine-code reuse framework is mandated. Current full-document status remains pending-human.
+
+
+**K-226 reverse coverage:** C-47/C-49/C-50/C-51 and P-112/P-119/P-120–P-127 → D-11r5 bounded native conventions, D-07r19 and reference5/validation. Source unit aliases preserve identity; parameter conversion remains pure and controlled by selected bundles. D-08 and D-10r13 contracts remain unchanged.
 
 ## 6. 人工确认事件（只追加）
 
@@ -4566,3 +4573,16 @@ Scope: Accepts initial procedure expansion/inlining while size remains reasonabl
 - Stress: 128-module pure chain emits 13,348 bytes of generated C++; 160-procedure inline chain emits 72,837 bytes and preserves captured/current values; layered diamonds with 2,047 expanded calls emit 146,935 bytes. Local compile/link/run times are approximately 0.14/0.42/0.57 seconds. These observations support H-141 initial inlining for these workloads, not a scalability theorem or native stack-depth claim.
 - Boundaries: UoM conversion implementation, static regional arrays, pure pointer traversal and numeric iteration remain goal work. No neural dynamics, general GADT, compound-unit algebra, cyclic-initialization policy, machine-code reuse framework, main build configuration or host toolchain change. Existing default build dependencies refreshed runtime sub-build outputs; no manual bootstrap/configure/install target was invoked.
 - Qualification: local human scope remains direct implementation authority; full D-07/D-10/D-11 contracts and unresolved formal derivation paths remain pending-human. D-GOV226 record maintenance alone continues H-05. The ten-hour goal remains active.
+
+
+### K-226 — 2026-11-05: Nominal units and selected pure conversion routes
+
+<a id="k-226"></a>
+
+- Agent implementation/evidence assessment under H-122/H-123/H-128/H-130/H-134–H-141. Read charter §§1–4, D-11r4, D-10r13 and D-07r18. Registry226 →227, D-11r4 →r5, D-07r18 →r19, reference4 →5. No new human confirmation event or full-document qualification is inferred.
+- Implemented scope: independent compile-time unit identities, numeric scalar representation without runtime tags, aliases, one-shot using bundles, associated conversions restricted to selected endpoints, source-bound pure helpers and re-exports. UoM import and repeated source/identity selections are rejected. Captured/current unit effects use typed slots.
+- Route semantics follow H-135–H-138: exact versus starred parameters, direct priority, declared indirect route, unique discovered path, warning with a deterministic chosen path and alternative witness, and optional warnings-as-errors. Caller-visible bundles supply automatic edges; parameter aliases resolve in the defining lexical module. Exact argument-tuple methods take priority; unresolved method ambiguity remains an error. The latter dispatch/search details are reviewable bounded conventions, not a general method-coherence theory.
+- First-principles implementation rationale: a finite graph of already selected pure converters implements the human-requested compile-time path choice. Breadth-first choice and edge-exclusion witness search avoid enumerating cyclic walks while exposing ambiguity. Source/bundle order breaks equal shortest paths only for warn-and-continue; distinct formulas are not claimed equivalent. Arguments evaluate once before conversion.
+- Evidence: two exact source-only builds succeeded. The final component suite passes all four groups: 109 language checks, six evaluation checks, eight cache checks and workspace checks. Four generated stress cases pass, including 16 unit re-export modules, 31 conversion steps and a back-edge, with 4,345 bytes of native source for that case and approximately 0.12 seconds compile/link/run locally. validation.json and stress-validation.json retain commands, outputs and source/executable hashes.
+- Boundaries: static regional arrays, complete pointer-bearing snapshots and numeric iteration remain work in the active ten-hour goal. Compound units, general GADT, runtime method mutation, neural equations/training and native code-sharing infrastructure remain excluded. No main build configuration, bootstrap source, toolchain or regional-pointer implementation was changed.
+- Authority: direct local human decisions supply the bounded implementation scope; complete D-07/D-10/D-11 and formal candidate derivations remain pending-human. D-GOV227 maintenance alone continues H-05.

@@ -1,0 +1,6 @@
+using symbol "std:io" @print;
+using units "units-library.cod" {m, cm};
+symbol @emit;
+procedure @emit()::cm { behave @print(123); cm(250.0) }
+function consume(x (m*))::f64 { scalar(x) }
+behave @print(consume(behave @emit()));

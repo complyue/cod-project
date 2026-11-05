@@ -1,0 +1,7 @@
+unit m::f64;
+unit cm::f64;
+unit half::f64;
+function factor()::f64 { 100.0 }
+conversion function to_half(x (m))::half { half(scalar(x) * 2.0) }
+conversion function half_to_cm(x (half))::cm { cm(scalar(x) * factor() / 2.0) }
+conversion function to_cm(x (m))::cm { half_to_cm(to_half(x)) }

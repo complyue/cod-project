@@ -3,12 +3,14 @@
 
 #include "lang_syntax.hh"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <queue>
 #include <set>
 #include <sstream>
 
@@ -28,6 +30,7 @@ using Locals = std::map<std::string, Value>;
 struct Function {
   Form *form;
   Module *lexical;
+  bool operator==(const Function &) const = default;
 };
 struct Procedure {
   Form *form = nullptr;
@@ -46,6 +49,9 @@ struct Module {
   std::map<const Form *, Module *> dependencies;
   std::map<std::string, std::vector<Function>> functions;
   std::map<std::string, Type> types;
+  std::vector<Function> conversions;
+  std::set<Module *> unit_sources;
+  std::set<size_t> selected_units;
   Locals globals;
   Environment exports;
   enum class State { registered, executing, complete } state = State::registered;
@@ -55,6 +61,7 @@ struct Compilation {
   std::string cpp;
   std::vector<std::string> scanned_modules;
   std::vector<std::string> execution_order;
+  std::vector<std::string> warnings;
 };
 
 class Compiler {
@@ -75,6 +82,9 @@ class Compiler {
   };
   std::vector<Product> products_;
   std::ostringstream type_definitions_;
+  size_t next_unit_ = 0;
+  bool warnings_as_errors_ = false;
+  std::vector<std::string> warnings_;
 
   std::string fresh(const char *prefix = "v") { return std::string(prefix) + std::to_string(serial_++); }
   static std::string cpp_type(const Type &type) {
@@ -84,6 +94,7 @@ class Compiler {
     case Type::float32: return "float";
     case Type::float64: return "double";
     case Type::product: return "Record" + std::to_string(type.identity);
+    case Type::unit: return cpp_type(type.representation);
     case Type::void_type: return "void";
     default: throw std::logic_error("unresolved native value type");
     }
@@ -163,6 +174,10 @@ class Compiler {
         if (result.symbols.contains(form.name) || result.symbol_aliases.contains(form.name))
           fail(form.at, "duplicate symbol name @" + form.name);
         new_symbol(result, form.name);
+      } else if (form.kind == Form::Kind::unit) {
+        if (!lexical_names.insert(form.name).second) fail(form.at, "duplicate lexical name '" + form.name + "'");
+        result.types.emplace(form.name, Type{Type::unit, result.path + "::" + form.name,
+                                            next_unit_++, form.result_type->kind});
       } else if (form.kind == Form::Kind::product) {
         if (!lexical_names.insert(form.name).second) fail(form.at, "duplicate lexical name '" + form.name + "'");
         const Type type{Type::product, result.path + "::" + form.name, products_.size()};
@@ -173,7 +188,14 @@ class Compiler {
             (form.kind != Form::Kind::function ||
              (!result.functions.contains(form.name) && !lexical_selections.contains(form.name))))
           fail(form.at, "duplicate lexical name '" + form.name + "'");
-        if (form.kind == Form::Kind::function) result.functions[form.name].push_back({&form, &result});
+        if (form.kind == Form::Kind::function) {
+          result.functions[form.name].push_back({&form, &result});
+          if (form.conversion) result.conversions.push_back({&form, &result});
+        }
+      } else if (form.kind == Form::Kind::using_units) {
+        for (const auto &selection : form.units)
+          if (!lexical_names.insert(selection.local).second)
+            fail(selection.at, "duplicate lexical name '" + selection.local + "'");
       } else if (form.kind == Form::Kind::symbol_from) {
         if (result.symbols.contains(form.alias) || !result.symbol_aliases.emplace(form.alias, &form).second)
           fail(form.at, "duplicate symbol alias @" + form.alias);
@@ -191,7 +213,7 @@ class Compiler {
     for (const auto &owned : result.forms) {
       auto &form = *owned;
       if (form.kind != Form::Kind::symbol_from && form.kind != Form::Kind::using_resource &&
-          form.kind != Form::Kind::import_resource) continue;
+          form.kind != Form::Kind::import_resource && form.kind != Form::Kind::using_units) continue;
       const auto dependency = form.path == "std:io" ? form.path :
           (std::filesystem::path(canonical).parent_path() / form.path).string();
       result.dependencies.emplace(&form, &load(dependency, form.at));
@@ -399,23 +421,168 @@ class Compiler {
     if (form.result_type) require(result.type, resolve(*form.result_type, lexical, form.at), form.at);
     return result;
   }
-  std::optional<Function> method(const std::string &name, Module &module,
-                                 const std::vector<Value> &args, const Location &at) {
+  struct Conversion {
+    Function function;
+    Type source, target;
+  };
+  struct Route {
+    std::vector<Function> steps;
+    std::vector<Function> alternative;
+  };
+  struct MethodMatch {
+    Function function;
+    std::vector<Route> routes;
+  };
+  Conversion conversion(Function function) {
+    auto &form = *function.form;
+    if (form.parameters.size() != 1 || !form.result_type || form.parameters[0].automatic_conversion)
+      fail(form.at, "a conversion function requires one exact UoM input and an explicit UoM result");
+    auto source = resolve(form.parameters[0].type, *function.lexical, form.at);
+    auto target = resolve(*form.result_type, *function.lexical, form.at);
+    if (source.kind != Type::unit || target.kind != Type::unit)
+      fail(form.at, "a conversion function must connect UoM types");
+    return {function, source, target};
+  }
+  std::vector<Conversion> conversion_graph(Module &module) {
+    std::vector<Conversion> result;
+    for (const auto &function : module.conversions) result.push_back(conversion(function));
+    return result;
+  }
+  static std::optional<std::vector<Function>> shortest_route(
+      const std::vector<Conversion> &graph, Type source, Type target,
+      const std::optional<Function> &excluded = {}) {
+    struct Step { size_t unit; std::vector<Function> path; };
+    std::queue<Step> pending;
+    std::set<size_t> visited{source.identity};
+    pending.push({source.identity, {}});
+    while (!pending.empty()) {
+      auto step = std::move(pending.front());
+      pending.pop();
+      for (const auto &edge : graph) {
+        if (edge.source.identity != step.unit || (excluded && edge.function == *excluded)) continue;
+        if (!visited.insert(edge.target.identity).second) continue;
+        auto path = step.path;
+        path.push_back(edge.function);
+        if (edge.target == target) return path;
+        pending.push({edge.target.identity, std::move(path)});
+      }
+    }
+    return {};
+  }
+  std::optional<Route> route(Type actual, const Parameter &parameter, Module &lexical,
+                              Module &caller, const Location &at) {
+    const auto target = resolve(parameter.type, lexical, parameter.at);
+    if (parameter.automatic_conversion && target.kind != Type::unit)
+      fail(parameter.at, "a starred parameter requires a UoM type");
+    if (actual == target) return Route{};
+    if (!parameter.automatic_conversion || actual.kind != Type::unit) return {};
+    const auto graph = conversion_graph(caller);
+    Route result;
+    for (const auto &edge : graph) {
+      if (edge.source != actual || edge.target != target) continue;
+      if (result.steps.empty()) result.steps = {edge.function};
+      else if (result.alternative.empty()) result.alternative = {edge.function};
+    }
+    if (!result.steps.empty()) return result;
+    if (!parameter.conversion_route.empty()) {
+      std::vector<Type> declared{target};
+      std::set<size_t> visited{target.identity};
+      for (const auto &name : parameter.conversion_route) {
+        const auto unit = resolve({Type::named, name}, lexical, parameter.at);
+        if (unit.kind != Type::unit || !visited.insert(unit.identity).second)
+          fail(parameter.at, "declared conversion route requires distinct UoM identities");
+        declared.push_back(unit);
+      }
+      size_t start = declared.size();
+      for (size_t i = 1; i < declared.size(); ++i) if (declared[i] == actual) start = i;
+      if (start == declared.size()) return {};
+      for (size_t i = start; i > 0; --i) {
+        std::optional<Function> selected, alternative;
+        for (const auto &edge : graph) {
+          if (edge.source != declared[i] || edge.target != declared[i-1]) continue;
+          if (!selected) selected = edge.function;
+          else if (!alternative) alternative = edge.function;
+        }
+        if (!selected) fail(at, "declared conversion route has an unavailable step from " +
+                                   type_name(declared[i]) + " to " + type_name(declared[i-1]));
+        if (alternative && result.alternative.empty()) {
+          result.alternative = result.steps;
+          result.alternative.push_back(*alternative);
+        } else if (!result.alternative.empty()) result.alternative.push_back(*selected);
+        result.steps.push_back(*selected);
+      }
+      return result;
+    }
+    const auto chosen = shortest_route(graph, actual, target);
+    if (!chosen) return {};
+    result.steps = *chosen;
+    // Any distinct simple path omits at least one edge of the chosen path.
+    // Find a witness without enumerating exponentially many cyclic walks.
+    for (const auto &edge : result.steps) {
+      if (auto alternative = shortest_route(graph, actual, target, edge)) {
+        result.alternative = std::move(*alternative);
+        break;
+      }
+    }
+    return result;
+  }
+  std::optional<MethodMatch> method(const std::string &name, Module &module,
+                                    const std::vector<Value> &args, const Location &at) {
     const auto found = module.functions.find(name);
     if (found == module.functions.end()) return {};
-    std::optional<Function> selected;
+    std::vector<MethodMatch> exact, converted;
     for (const auto &candidate : found->second) {
       if (candidate.form->parameters.size() != args.size()) continue;
       bool matches = true;
       for (size_t i = 0; i < args.size(); ++i) {
         const auto &parameter = candidate.form->parameters[i];
-        if (resolve(parameter.type, *candidate.lexical, parameter.at) != args[i].type) matches = false;
+        const auto type = resolve(parameter.type, *candidate.lexical, parameter.at);
+        if (parameter.automatic_conversion && type.kind != Type::unit)
+          fail(parameter.at, "a starred parameter requires a UoM type");
+        matches = matches && args[i].type == type;
       }
-      if (!matches) continue;
-      if (selected) fail(at, "ambiguous method '" + name + "' with identical argument types");
-      selected = candidate;
+      if (matches) exact.push_back({candidate, std::vector<Route>(args.size())});
     }
-    return selected;
+    if (exact.size() > 1) fail(at, "ambiguous method '" + name + "' for supplied argument types");
+    if (!exact.empty()) return exact.front();
+    for (const auto &candidate : found->second) {
+      if (candidate.form->parameters.size() != args.size()) continue;
+      MethodMatch match{candidate, {}};
+      bool matches = true, needs_conversion = false;
+      for (size_t i = 0; i < args.size(); ++i) {
+        auto path = route(args[i].type, candidate.form->parameters[i], *candidate.lexical, module, at);
+        if (!path) { matches = false; break; }
+        needs_conversion = needs_conversion || !path->steps.empty();
+        match.routes.push_back(std::move(*path));
+      }
+      if (matches) (needs_conversion ? converted : exact).push_back(std::move(match));
+    }
+    const auto &candidates = exact.empty() ? converted : exact;
+    if (candidates.size() > 1) fail(at, "ambiguous method '" + name + "' for supplied argument types");
+    if (candidates.empty()) return {};
+    return candidates.front();
+  }
+  Value converted(Value value, const Route &route, const Location &at, std::ostream &out) {
+    if (!route.alternative.empty()) {
+      auto describe = [&](const std::vector<Function> &path) {
+        std::string result = type_name(value.type);
+        for (const auto &step : path)
+          result += " --" + step.form->name + "--> " + type_name(conversion(step).target);
+        return result;
+      };
+      const auto message = "ambiguous unit conversion; selected " + describe(route.steps) +
+                           "; alternative " + describe(route.alternative) + " [-Wunit-conversion]";
+      if (warnings_as_errors_) fail(at, "warning treated as error: " + message);
+      warnings_.push_back(at.file + ":" + std::to_string(at.line) + ":" + std::to_string(at.column) +
+                          ": warning: " + message);
+    }
+    for (const auto &step : route.steps)
+      value = call(*step.form, *step.lexical, {}, {value}, true, at, out);
+    return value;
+  }
+  Value call_method(const MethodMatch &match, std::vector<Value> args, const Location &at, std::ostream &out) {
+    for (size_t i = 0; i < args.size(); ++i) args[i] = converted(args[i], match.routes[i], at, out);
+    return call(*match.function.form, *match.function.lexical, {}, args, true, at, out);
   }
   Value invoke(const Expression &expr, Module &module, Environment &env, Locals &locals,
                bool pure, std::ostream &out) {
@@ -425,7 +592,7 @@ class Compiler {
     if (found == env.end()) fail(expr.at, "missing required procedure binding " + symbol_names_[id]);
     if (!found->second.procedure) fail(expr.at, "perform/behave requires a procedure value");
     const auto proc = found->second.procedure; // Resolve before arguments/capture installation.
-    const auto args = arguments(expr, module, env, locals, pure, out);
+    auto args = arguments(expr, module, env, locals, pure, out);
     if (!proc->builtin.empty()) {
       if (args.size() != 1) fail(expr.at, "@" + proc->builtin + " expects one argument");
       if (proc->builtin == "assert") {
@@ -442,6 +609,12 @@ class Compiler {
         fail(expr.at, "@print expects a numeric scalar or bool");
       }
       return {};
+    }
+    if (args.size() == proc->form->parameters.size()) {
+      for (size_t i = 0; i < args.size(); ++i) {
+        if (const auto path = route(args[i].type, proc->form->parameters[i], *proc->lexical, module, expr.at))
+          args[i] = converted(args[i], *path, expr.at, out);
+      }
     }
     std::ostringstream body;
     auto call_env = env;
@@ -512,6 +685,11 @@ class Compiler {
       if (const auto found = module.types.find(expr.text); found != module.types.end()) {
         const auto type = resolve(found->second, module, expr.at);
         const auto args = arguments(expr, module, env, locals, pure, out);
+        if (type.kind == Type::unit) {
+          if (args.size() != 1) fail(expr.at, "a UoM constructor requires one scalar value");
+          require(args[0].type, type.representation, expr.at);
+          return {type, args[0].code, {}, nullptr};
+        }
         const auto &fields = products_.at(type.identity).fields;
         if (args.size() != fields.size()) fail(expr.at, "wrong field count for '" + expr.text + "'");
         std::string values;
@@ -523,12 +701,21 @@ class Compiler {
         return scalar(type, cpp_type(type) + "{" + values + "}", out);
       }
       const auto function = module.functions.find(expr.text);
+      if (expr.text == "scalar" && function == module.functions.end()) {
+        const auto args = arguments(expr, module, env, locals, pure, out);
+        if (args.size() != 1 || args[0].type.kind != Type::unit)
+          fail(expr.at, "scalar requires one UoM value");
+        return {args[0].type.representation, args[0].code, {}, nullptr};
+      }
       if (function == module.functions.end()) fail(expr.at, "unavailable lexical function '" + expr.text + "'");
       const auto args = arguments(expr, module, env, locals, pure, out);
       auto selected = method(expr.text, module, args, expr.at);
-      if (!selected && function->second.size() == 1) selected = function->second.front();
+      if (!selected && function->second.size() == 1) {
+        const auto &candidate = function->second.front();
+        return call(*candidate.form, *candidate.lexical, {}, args, true, expr.at, out);
+      }
       if (!selected) fail(expr.at, "no matching method for '" + expr.text + "'");
-      return call(*selected->form, *selected->lexical, {}, args, true, expr.at, out);
+      return call_method(*selected, args, expr.at, out);
     }
     case K::perform: case K::behave: return invoke(expr, module, env, locals, pure, out);
     case K::unary: {
@@ -537,7 +724,7 @@ class Compiler {
         return scalar(Type::integer, "std::numeric_limits<std::int64_t>::min()", out);
       auto value = expression(*expr.children[0], module, env, locals, pure, out);
       if (const auto selected = method(expr.text, module, {value}, expr.at))
-        return call(*selected->form, *selected->lexical, {}, {value}, true, expr.at, out);
+        return call_method(*selected, {value}, expr.at, out);
       if (expr.text == "-" && floating(value.type)) return scalar(value.type, "(-" + value.code + ")", out);
       require(value.type, expr.text == "!" ? Type::boolean : Type::integer, expr.at);
       return scalar(value.type, expr.text == "!" ? "(!" + value.code + ")" :
@@ -561,7 +748,7 @@ class Compiler {
       }
       auto right = expression(*expr.children[1], module, env, locals, pure, out);
       if (const auto selected = method(expr.text, module, {left, right}, expr.at))
-        return call(*selected->form, *selected->lexical, {}, {left, right}, true, expr.at, out);
+        return call_method(*selected, {left, right}, expr.at, out);
       require(right.type, left.type, expr.at);
       if (expr.text == "==" || expr.text == "!=") {
         if (!numeric(left.type) && left.type != Type::boolean) fail(expr.at, "equality requires scalar bits");
@@ -623,7 +810,31 @@ class Compiler {
       case Form::Kind::symbol:
         module.available_symbols.insert(form.name);
         break;
-      case Form::Kind::function: case Form::Kind::product: break;
+      case Form::Kind::function: case Form::Kind::product: case Form::Kind::unit: break;
+      case Form::Kind::using_units: {
+        auto &source = *module.dependencies.at(&form);
+        execute_module(source, env, form.at, body);
+        if (!module.unit_sources.insert(&source).second)
+          fail(form.at, "UoMs from a source module must be selected in one using bundle");
+        std::set<size_t> selected;
+        for (const auto &selection : form.units) {
+          const auto type = resolve({Type::named, selection.source}, source, selection.at);
+          if (type.kind != Type::unit) fail(selection.at, "using units requires UoM definitions");
+          if (!module.selected_units.insert(type.identity).second)
+            fail(selection.at, "repeated using of UoM identity " + type_name(type));
+          selected.insert(type.identity);
+          if (!module.types.emplace(selection.local, type).second)
+            fail(selection.at, "duplicate lexical alias '" + selection.local + "'");
+        }
+        for (const auto &function : source.conversions) {
+          const auto edge = conversion(function);
+          if (!selected.contains(edge.source.identity) || !selected.contains(edge.target.identity)) continue;
+          module.conversions.push_back(function);
+          auto &methods = module.functions[function.form->name];
+          if (std::find(methods.begin(), methods.end(), function) == methods.end()) methods.push_back(function);
+        }
+        break;
+      }
       case Form::Kind::symbol_from: {
         auto &source = *module.dependencies.at(&form);
         execute_module(source, env, form.at, body);
@@ -678,6 +889,8 @@ class Compiler {
             value = define_procedure(import_body(*value.procedure, form, module), module, env, body);
           bind(destination, std::move(value), module, env, form.at, body);
         } else if (const auto type = source.types.find(form.name); type != source.types.end()) {
+          if (type->second.kind == Type::unit)
+            fail(form.at, "select UoMs and their conversions together with using units");
           if (form.kind == Form::Kind::import_resource) fail(form.at, "types preserve identity through using");
           if (module.functions.contains(form.alias) || module.globals.contains(form.alias) ||
               !module.types.emplace(form.alias, type->second).second)
@@ -719,6 +932,7 @@ class Compiler {
   }
 
 public:
+  explicit Compiler(bool warnings_as_errors = false) : warnings_as_errors_(warnings_as_errors) {}
   Compilation compile(const std::filesystem::path &entry) {
     auto &module = load(entry.string(), {entry.string()});
     // All source files have been parsed before any execution semantics are lowered.
@@ -773,7 +987,7 @@ template<class T> struct Effect {
       if (type != Type::procedure) cpp << "  " << cpp_type(type) << " s" << id << "{};\n";
     cpp << "};\nstatic thread_local Context ctx;\nint main() {\n" << storage_.str() << body.str()
         << "return 0;\n}\n";
-    return {cpp.str(), scanned_, execution_order_};
+    return {cpp.str(), scanned_, execution_order_, warnings_};
   }
 };
 
