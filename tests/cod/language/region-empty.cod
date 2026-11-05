@@ -1,0 +1,12 @@
+using symbol "std:io" @print;
+array Flags[u8]::bool;
+symbol @arena;
+symbol @empty;
+symbol @full;
+effect @arena = region(4096u64);
+effect @empty = alloc @arena Flags(0u64, false);
+effect @full = alloc @arena Flags(255u64, false);
+behave @print(len(@empty));
+for (i in 0u8 .. 255u8) { store(@full, i, true); };
+behave @print(@full[254u8]);
+behave @print(len(@full));

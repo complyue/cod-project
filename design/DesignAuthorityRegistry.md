@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：230
+记录版本：231
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 230，延续检查 K-01—K-229；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 231，延续检查 K-01—K-230；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -254,7 +254,7 @@ Design authority
 <a id="d-10"></a>
 ### D-10: Symbols, dynamic scope and callable kinds
 
-- File: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), design revision 13, all sections. Human propositions/proposals H-96–H-138 retain their individually recorded confirmation/proposal scopes; the complete implementation contract and candidate value paths remain pending-human.
+- File: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), design revision 14, all sections. Human propositions/proposals H-96–H-141 retain their individually recorded confirmation/proposal scopes; the complete implementation contract and candidate value paths remain pending-human.
 - Value paths: P-90 connects D-10 to C-10; P-84/P-94/P-97/P-100 explain nominal identity, storage, expressions and reuse through C-10/P-14/C-01; P-85 connects context-dependent operations to C-02; P-86 connects pure/effectful distinction to C-01; P-99 connects vocabulary practice to C-35; C-44/P-103 connects phase-separated module composition to C-10, with P-105 depending on the definition-context distinction. The proposed paths serve inspectable semantic programs and explicit environment interpretation, without importing a full continuation/effect calculus.
 - Dependencies/constraints: P-88/P-92/P-96/P-101 preserve symbol identity and multi-region concerns. P-89/P-95/P-98/P-102/P-104 record the explicit local callable, capture, write, reuse and module-phase constraints. Dependencies do not confer qualification.
 - Invariants: nominal identity across aliases/versions; per-thread bindings and scope restoration; captured-value perform/current-binding behave; lexical functions and symbol-named dynamic procedures; module initialization scope; complete declaration scan before entry-driven dependency execution incorporation in encounter order; demand-driven whole-program checking with missing bindings rejected during compilation; only stack/@region user storage and bits/regional-pointer captures; zero-cost regional relocation; bits globals initialized by literals or function calls and top-level effect/perform/behave evaluated with module execution, never by declaration scanning.
@@ -263,13 +263,13 @@ Design authority
 - Downstream: D-07r14 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign211/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision6, describes the bounded H-122/H-123/H-139–H-141 checkpoint. [validation.json](../tests/cod/language/validation.json) records 131 source checks plus one frontend-only check and all four CoD component groups; [stress-validation.json](../tests/cod/language/stress-validation.json) records 128-module, 160-procedure and layered-DAG native checks. K-225 records actual scope and limits.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision9, describes the bounded H-122/H-123/H-139–H-141 checkpoint. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-230 record regional storage, deep inline compilation, representation and numeric evidence. Full-document qualification is not implied.
 
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
 
 
-- Current regional-access refinement: C-48/P-114/P-115/P-117, H-124/H-127/H-129 and K-220 specify dynamic region resources and pure input-reachable snapshot traversal, including nested-call lifetime. The scalar prototype has no implementation evidence for this new scope. D-11 treats index typing separately; no value-field-only restriction is accepted.
+- Current regional-access refinement: C-48/P-114/P-115/P-117, H-124/H-127/H-129 and K-220 specify dynamic region resources and pure input-reachable snapshot traversal, including nested-call lifetime. K-228–K-230 record regional traversal, returned references, mutation between pure calls and native relocation evidence for the bounded subset. D-11 treats index typing separately; no value-field-only restriction is accepted.
 
 - H-133/K-223 clarify existing input-reference results under the calling procedure/module scope; no new snapshot-lifetime machinery is needed. D-10r12 records this natural lifetime case without changing H-129 outer-call expiry.
 
@@ -280,15 +280,17 @@ Design authority
 
 ### D-11: Scalar units and array index types
 
-- File: [ScalarUnitsAndIndexTypes.md](ScalarUnitsAndIndexTypes.md), discussion revision 4, all sections; complete implementation contract pending-human.
+- File: [ScalarUnitsAndIndexTypes.md](ScalarUnitsAndIndexTypes.md), discussion revision 7, all sections; complete implementation contract pending-human.
 - Value chain: C-47/P-112 derives strict scalar meanings from C-10/P-14/C-01; D-11/P-113 develops the arithmetic/indexing requirement. C-49/P-119 supplies the proposed compositional value of independent UoM identity. These formal value relationships remain candidates, not inferred full-design confirmation.
 - Human scope: H-123 requires structured types and consideration of scale-law index support; H-125 requires strict branded identities and array index types; H-126 requests comparison before selection; H-128 confirms independent first-class compile-time UoMs and local aliases, not symbols; H-130 supplies pure Julia-style conversion dispatch; H-134 specifies fresh UoM definitions and one-shot using bundles, replacing UoM import; H-131 adds parenthesized operator-method names; H-132 plans compound UoMs while deferring their implementation. P-116/P-120/P-123 record those explicit constraints.
-- Dependency: P-118 uses C-13 pool arithmetic as a concrete example. Neither the dependency nor the worked formulas select a new pool configuration or neural model. D-10r11 handles regional snapshots separately.
+- Dependency: P-118 uses C-13 pool arithmetic as a concrete example. Neither the dependency nor the worked formulas select a new pool configuration or neural model. D-10r14 handles regional snapshots separately.
 - Invariants/non-goals: preserve unrelated identities and SoA storage; no user heap, per-value runtime tags, heap topology or new SNN modeling. Do not infer a bounds proof or origin equality from representation/measure equality. No full numeric hierarchy, dependent solver or GADT implementation is selected.
 - Acceptance: compare wrappers and UoM using forward/inverse pool formulas, typed arrays, generic arithmetic, literals, local/global domains, invalid types/ranges and runtime representation. Actual implementation must supply evidence; the analysis is not a test result.
 - Current bounded rules: H-133–H-138 and D-07r17 LI-01–LI-04 settle caller lifetime, unit selection, parameter annotations and conversion routes. C-51/P-124–P-127 record the user-controlled policy. Remaining grammar/representation details must stay within those rules. Compound-unit equality/inference is H-132 roadmap scope and does not block this run. K-220 registers the draft, K-221 records operator sugar and K-222 records the scope split and K-223 records the resolved local rules without self-qualification; the bounded ten-hour goal is authorized by H-122/H-123 after this review.
 
-The following relations apply at the scopes recorded in each row and the current D-07 revision 17, D-08 set211, D-09 revision2, D-10 revision12 and D-11 revision4 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
+- Current implementation evidence: K-226/K-227 cover nominal units, routes, numeric carriers and typed pool formulas; K-228–K-230 cover real SoA arrays, full-pool storage, snapshots and numeric boundary/candidate-selection repairs. Reference9 and its linked evidence remain bounded implementation records, not qualification of the complete pending contract.
+
+The following relations apply at the scopes recorded in each row and the current D-07 revision21, D-08 set211, D-09 revision2, D-10 revision14 and D-11 revision7 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
 
 | 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
 | --- | --- | --- | --- |
@@ -2139,6 +2141,16 @@ Human: this chat's user; independently verified name unavailable. Source: visibl
 > 恐怕 WPO 会让 procedure inlining 成为必然处理路径吧，重用机器代码片段作为中远期优化目标，初期只要程序尺寸不是太夸张，就先这么着
 
 Scope: Accepts initial procedure expansion/inlining while size remains reasonable. Machine-code fragment reuse is a medium/long-term optimization, not an immediate goal. Measure complex/deep-call size before introducing reuse machinery; this is not a claim that WPO theoretically requires native inlining.
+
+### H-142 — LLVM IR as the execution intermediate
+
+<a id="h-142"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 中间表示用的是C++源码？ 产生 .ll 或者 .bc 作为中间表示应该更好吧？
+
+Scope: Questions the generated-C++ intermediate and proposes LLVM textual IR or bitcode as a better execution intermediate. This is evidence of the user's requested direction and comparison, not blanket approval of a new runtime ABI, permanent IR schema or changed language semantics. The current pipeline is checked CoD → generated C++ → LLVM bitcode → native executable. Direct LLVM lowering is the next bounded implementation investigation within H-122/H-123; H-141's initial inlining and existing language/storage rules remain.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -4628,3 +4640,16 @@ Scope: Accepts initial procedure expansion/inlining while size remains reasonabl
 - Evidence: exact source-only builds pass; final all-four-group CoD regression includes 150 language checks, six evaluation checks, eight cache checks and workspace checks. Five stress cases pass. The 1,000-procedure case emits 459,105 C++ bytes and checks in about 0.68 seconds; native compile/link/run including both perform and behave takes about 3.60 seconds locally. The 512-module pure chain emits 50,339 bytes. Regional relocation is revalidated with the current compiler. Timing varies by load; no native call-stack-depth claim is made.
 - Kernel measurement: the existing multi-module FP32 A/B gather is scaled to 4,095 rows, 693,504 incoming slots and eight updates (5,548,032 edge visits). Every reported step matches an independently rounded FP32 reference. Actual region occupation is 3,500,416 bytes: 3,500,280 scalar-element bytes and 136 bytes for headers/root/allocation alignment. No per-slot padding is present. Emitted source is 40,817 bytes and the native executable with debug information is 196,952 bytes. Recorded native process time is approximately 0.072 seconds, including initialization, startup and checksum output; compile/link is recorded separately.
 - Boundaries: these measurements support H-141's initial inlining for the tested sizes; code reuse remains a medium/long-term optimization. No SNN transition/training rule, main configuration, bootstrap path, host toolchain, concurrency protocol or cross-region representation changes. Full contracts remain pending-human and no descendant acquires qualification. The ten-hour goal remains active; D-GOV230 maintenance alone continues H-05.
+
+
+### K-230 — 2026-11-05: Full-pool, numeric and composition validation
+
+<a id="k-230"></a>
+
+- Agent implementation/evidence assessment under H-122/H-123/H-125/H-128/H-130/H-133–H-141. Current charter §§1–4 and D-07/D-10/D-11 scoped rules were reviewed. Registry230 →231; D-10r13 →r14 updates evidence, D-11r6 →r7 records typed array/precision evidence, reference8 →9. D-07r21 stays current. Stale current-status descriptions are synchronized with actual evidence; historical H/K entries retain their original scope and counts. Full pending contracts do not acquire qualification.
+- Repairs: an overload with an unavailable declared conversion step is inapplicable during candidate selection, so it cannot prematurely reject another viable overload. A sole declaration keeps its missing-step diagnostic; direct-first, declared-route priority and ambiguity policies remain unchanged. FP32 literal range validation parses directly as FP32 instead of validating a rounded FP64 intermediary, preserving finite values arbitrarily close to underflow/overflow rounding boundaries. Genuine literal underflow/overflow remains diagnosed.
+- Composition: mutual regional record references, empty/byte-indexed arrays and imported regional factories pass. A factory imported into the receiving lexical context constructs its local nominal record and uses its local helper; source using retains its source type/helper. Pure overload selection distinguishes the resulting nominal record types. These exercise existing H-105/H-116/H-133 semantics without a new ownership or ABI rule.
+- Evidence: exact source-only builds pass; all four CoD component groups pass with 155 language checks, six evaluation checks, eight cache checks and workspace checks. Five deep dependency/call cases and emitted-layout relocation pass with the current compiler. A separate deterministic corpus compares 134 FP32 and 131 u64 regional-input results against independent arithmetic, covering signed zero, subnormals, precision boundaries and maximum-width unsigned values. Numeric and native trace/source hashes are retained.
+- Full-pool arithmetic: J16,q10 has 655,350 row/set positions and 112,281,600 slots. Actual region occupation is 566,650,928 bytes: 561,408,000 source-ID/weight element bytes, 5,242,800 two-frame element bytes and 128 non-element bytes. These are arithmetic rows, not a selected CC neuron count. Uniform-input one-pass gather checksums match the independent reference; initialization plus native process time is approximately 3.42 seconds locally. The 4,095-row eight-update case also passes. Measurements do not add a semantic-vector table or change an application capacity decision.
+- H-142 records the user's LLVM-IR question/proposal. Inspection confirms the current driver already produces .bc after C++ lowering, and the deployed build has LLVM IR construction/verification libraries plus llvm-as/llvm-dis. The root-level /llvm-project is absent; the configured sources are this checkout's llvm-project subtree. Direct LLVM emission can be investigated as source-only backend work without a bootstrap or configuration edit. This checkpoint does not claim that backend is implemented or ratify a runtime ABI.
+- Boundaries: no SNN law/training, compound-unit algebra, general GADT, concurrency, cross-region representation, machine-code sharing architecture, main configuration or host toolchain change. The autonomous goal remains active. D-GOV231 record maintenance alone continues H-05; no new human approval is inferred from test success.

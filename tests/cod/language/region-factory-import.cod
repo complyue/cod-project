@@ -1,0 +1,17 @@
+using symbol "std:io" @print;
+using "region-factory-source.cod" Node as SourceNode;
+symbol from "region-factory-source.cod" @arena;
+using symbol "region-factory-source.cod" @make as @source_make;
+regional type Node { score::i64; next::ref<Node>; }
+function adjust(x::i64)::i64 { x + 10 }
+function score(node::Node)::i64 { node.score + 100 }
+function score(node::SourceNode)::i64 { node.score + 200 }
+symbol @make;
+symbol @local;
+symbol @source;
+effect @arena = region(4096u64);
+import "region-factory-source.cod" @make as @make;
+effect @local = perform @make(5);
+effect @source = behave @source_make(5);
+behave @print(score(deref(@local)));
+behave @print(score(deref(@source)));

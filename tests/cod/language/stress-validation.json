@@ -1,10 +1,10 @@
 {
-  "recorded_utc": "2026-11-05T21:49:21.643664+00:00",
+  "recorded_utc": "2026-11-05T22:04:45.669097+00:00",
   "results": [
     {
       "case": "512-module-pure-chain",
-      "check_seconds": 0.03374661097768694,
-      "native_compile_link_run_seconds": 0.3076401259750128,
+      "check_seconds": 0.03531608497723937,
+      "native_compile_link_run_seconds": 0.319033010979183,
       "generated_bytes": 50339,
       "check_exit": 0,
       "check_stdout": "",
@@ -17,8 +17,8 @@
     },
     {
       "case": "1000-procedure-inline-chain",
-      "check_seconds": 0.680637190991547,
-      "native_compile_link_run_seconds": 3.6006930620060302,
+      "check_seconds": 0.6977062950027175,
+      "native_compile_link_run_seconds": 3.7592585039674304,
       "generated_bytes": 459105,
       "check_exit": 0,
       "check_stdout": "",
@@ -31,8 +31,8 @@
     },
     {
       "case": "layered-diamond-22-modules-2047-calls",
-      "check_seconds": 0.02290485898265615,
-      "native_compile_link_run_seconds": 0.643160114006605,
+      "check_seconds": 0.019061910978052765,
+      "native_compile_link_run_seconds": 0.6819701429922134,
       "generated_bytes": 148164,
       "check_exit": 0,
       "check_stdout": "",
@@ -45,8 +45,8 @@
     },
     {
       "case": "16-unit-reexports-31-conversion-steps-with-cycle",
-      "check_seconds": 0.01512457401258871,
-      "native_compile_link_run_seconds": 0.2260869829915464,
+      "check_seconds": 0.014530129032209516,
+      "native_compile_link_run_seconds": 0.2646929459879175,
       "generated_bytes": 5574,
       "check_exit": 0,
       "check_stdout": "",
@@ -59,8 +59,8 @@
     },
     {
       "case": "96-module-regional-snapshot-chain",
-      "check_seconds": 0.017503098992165178,
-      "native_compile_link_run_seconds": 1.8552208120236173,
+      "check_seconds": 0.018163278989959508,
+      "native_compile_link_run_seconds": 1.9523630780167878,
       "generated_bytes": 27141,
       "check_exit": 0,
       "check_stdout": "",

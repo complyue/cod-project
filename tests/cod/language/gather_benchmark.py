@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Measure a CoD SoA kernel and compare every reported step with FP32 arithmetic."""
 
+import argparse
 import datetime
 import hashlib
 import json
@@ -23,13 +24,13 @@ def run(command, root):
     return result.stdout, elapsed
 
 
-def reference(classes, frames):
+def reference(classes, frames, top_count, uniform):
     pack, unpack = struct.Struct('f').pack, struct.Struct('f').unpack
     def f32(x):
         return unpack(pack(x))[0]
     widths = [(100 if j % 2 == 0 else 144) * 2 ** (j // 2) for j in range(classes)]
-    capacities = [width for j, width in enumerate(widths) for _ in range(2 ** (classes - 1 - j))]
-    previous = [float(i + 1) for i in range(len(capacities))]
+    capacities = [width for j, width in enumerate(widths) for _ in range(top_count * 2 ** (classes - 1 - j))]
+    previous = [1.0] * len(capacities) if uniform else [float(i + 1) for i in range(len(capacities))]
     checksums = []
     for step in range(frames + 1):
         total = 0.0
@@ -38,6 +39,10 @@ def reference(classes, frames):
         checksums.append(format(total, '.9g'))
         if step == frames:
             break
+        if uniform and step == 0:
+            # Every term is exactly 1/256; these row sums are exactly representable.
+            previous = [float(capacity) / 256.0 for capacity in capacities]
+            continue
         following = []
         for target, capacity in enumerate(capacities):
             value = 0.0
@@ -49,6 +54,10 @@ def reference(classes, frames):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--full-pool', action='store_true',
+                        help='measure the J16,q10 arithmetic pool with one uniform-input gather')
+    options = parser.parse_args()
     directory = Path(__file__).resolve().parent
     root = directory.parents[2]
     mode = os.environ.get('COD_TEST_TOOLCHAIN', 'build')
@@ -56,18 +65,21 @@ def main():
         raise SystemExit('COD_TEST_TOOLCHAIN must be build or built')
     if os.name == 'nt':
         raise SystemExit('This native timing harness currently targets Linux/macOS')
-    classes, frames = 12, 8
-    expected, neurons, slots = reference(classes, frames)
+    classes, frames, top_count = (16, 1, 10) if options.full_pool else (12, 8, 1)
+    expected, neurons, slots = reference(classes, frames, top_count, options.full_pool)
+    payload = slots * 5 + neurons * 8
     toolchain = root / mode
     fixture = directory / 'region-gather.cod'
     source = fixture.read_text()
     source = re.sub(r'"([^"\n]+\.cod)"', lambda m: json.dumps(str(directory / m[1])), source)
-    source = source.replace('Layout(4u32, 1u64)', f'Layout({classes}u32, 1u64)')
+    source = source.replace('Layout(4u32, 1u64)', f'Layout({classes}u32, {top_count}u64)')
     source = source.replace('ClassId(4u32)', f'ClassId({classes}u32)')
-    source = source.replace('region(32768u64)', 'region(4194304u64)')
+    source = source.replace('region(32768u64)', f'region({payload + 4096}u64)')
     source = source.replace('frame in 0u32 .. 4u32', f'frame in 0u32 .. {frames}u32')
     source = source.replace('behave @assert(used_bytes(@arena) < 12000u64);',
                             'behave @print(used_bytes(@arena));')
+    if options.full_pool:
+        source = source.replace('f32(n + 1u32)', '1.0f32')
     with tempfile.TemporaryDirectory(prefix='cod-gather-benchmark-') as temporary:
         scratch = Path(temporary)
         entry, generated, executable = scratch / 'main.cod', scratch / 'main.cc', scratch / 'kernel'
@@ -82,10 +94,10 @@ def main():
         if lines[:-1] != expected:
             raise RuntimeError(f'FP32 result mismatch: expected={expected}, actual={lines}')
         occupied = int(lines[-1])
-        payload = slots * 5 + neurons * 8
         evidence = {'schema_version': 1, 'recorded_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     'platform': platform.platform(), 'toolchain': mode, 'passed': True,
-                    'classes': classes, 'rows': neurons, 'slots': slots, 'updates': frames,
+                    'classes': classes, 'top_class_sets': top_count, 'uniform_input': options.full_pool,
+                    'rows': neurons, 'slots': slots, 'updates': frames,
                     'edge_visits': slots * frames, 'checksums': expected,
                     'element_payload_bytes': payload, 'region_occupation_bytes': occupied,
                     'non_element_bytes': occupied - payload,
@@ -95,6 +107,7 @@ def main():
                     'notes': ['Timing includes initialization, process startup and printed checksums.',
                               'Native size includes debug information; no persistent code-sharing layer is used.',
                               'FP32 reference uses independent row capacities and rounded additions.',
+                              'The full-pool case assigns one arithmetic row per slot set; it is not a CC neuron count.',
                               'This numerical kernel defines no neuron transition or training rule.'],
                     'source_sha256': {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
                                       for p in [*sorted(directory.glob('region-gather*.cod')),

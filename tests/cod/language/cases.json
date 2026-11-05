@@ -828,5 +828,30 @@
     "file": "capture-scope-restore.cod",
     "exit": 0,
     "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n"
+  },
+  {
+    "file": "region-mutual.cod",
+    "exit": 0,
+    "stdout": "17\n29\n2.5\n"
+  },
+  {
+    "file": "region-factory-import.cod",
+    "exit": 0,
+    "stdout": "115\n206\n"
+  },
+  {
+    "file": "region-empty.cod",
+    "exit": 0,
+    "stdout": "0\ntrue\n255\n"
+  },
+  {
+    "file": "units-unavailable-overload.cod",
+    "exit": 0,
+    "stdout": "12\n12\n"
+  },
+  {
+    "file": "float-boundary-rounding.cod",
+    "exit": 0,
+    "stdout": "1.40129846e-45\n3.40282347e+38\n4.9406564584124654e-324\n"
   }
 ]

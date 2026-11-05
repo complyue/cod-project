@@ -1,0 +1,5 @@
+regional type Node { score::i64; next::ref<Node>; }
+symbol @arena;
+symbol @make;
+function adjust(x::i64)::i64 { x + 1 }
+procedure @make(x::i64)::ref<Node> { alloc @arena Node(adjust(x), null) }

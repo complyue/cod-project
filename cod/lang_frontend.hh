@@ -605,7 +605,7 @@ class Compiler {
     return {};
   }
   std::optional<Route> route(Type actual, const Parameter &parameter, Module &lexical,
-                              Module &caller, const Location &at) {
+                              Module &caller, const Location &at, bool diagnose_unavailable = true) {
     const auto target = resolve(parameter.type, lexical, parameter.at);
     if (parameter.automatic_conversion && target.kind != Type::unit)
       fail(parameter.at, "a starred parameter requires a UoM type");
@@ -638,8 +638,11 @@ class Compiler {
           if (!selected) selected = edge.function;
           else if (!alternative) alternative = edge.function;
         }
-        if (!selected) fail(at, "declared conversion route has an unavailable step from " +
-                                   type_name(declared[i]) + " to " + type_name(declared[i-1]));
+        if (!selected) {
+          if (!diagnose_unavailable) return {};
+          fail(at, "declared conversion route has an unavailable step from " +
+                       type_name(declared[i]) + " to " + type_name(declared[i-1]));
+        }
         if (alternative && result.alternative.empty()) {
           result.alternative = result.steps;
           result.alternative.push_back(*alternative);
@@ -685,7 +688,7 @@ class Compiler {
       MethodMatch match{candidate, {}};
       bool matches = true, needs_conversion = false;
       for (size_t i = 0; i < args.size(); ++i) {
-        auto path = route(args[i].type, candidate.form->parameters[i], *candidate.lexical, module, at);
+        auto path = route(args[i].type, candidate.form->parameters[i], *candidate.lexical, module, at, false);
         if (!path) { matches = false; break; }
         needs_conversion = needs_conversion || !path->steps.empty();
         match.routes.push_back(std::move(*path));
@@ -694,7 +697,17 @@ class Compiler {
     }
     const auto &candidates = exact.empty() ? converted : exact;
     if (candidates.size() > 1) fail(at, "ambiguous method '" + name + "' for supplied argument types");
-    if (candidates.empty()) return {};
+    if (candidates.empty()) {
+      // A missing edge makes an overload inapplicable. Preserve the detailed
+      // diagnostic for an unambiguous declaration after considering alternatives.
+      if (found->second.size() == 1) {
+        const auto &candidate = found->second.front();
+        if (candidate.form->parameters.size() == args.size())
+          for (size_t i = 0; i < args.size(); ++i)
+            route(args[i].type, candidate.form->parameters[i], *candidate.lexical, module, at);
+      }
+      return {};
+    }
     return candidates.front();
   }
   Value converted(Value value, const Route &route, const Location &at, std::ostream &out) {
@@ -1079,11 +1092,13 @@ class Compiler {
       auto spelling = expr.text;
       const auto type = spelling.ends_with("f32") ? Type::float32 : Type::float64;
       if (spelling.ends_with("f32") || spelling.ends_with("f64")) spelling.resize(spelling.size() - 3);
-      double value{};
-      const auto parsed = std::from_chars(spelling.data(), spelling.data() + spelling.size(), value);
-      if (parsed.ec != std::errc{} || parsed.ptr != spelling.data() + spelling.size() || !std::isfinite(value) ||
-          (type == Type::float32 && (!std::isfinite(static_cast<float>(value)) ||
-                                    (value != 0 && static_cast<float>(value) == 0))))
+      const auto in_range = [&](auto value) {
+        const auto parsed = std::from_chars(spelling.data(), spelling.data() + spelling.size(), value);
+        return parsed.ec == std::errc{} && parsed.ptr == spelling.data() + spelling.size() && std::isfinite(value);
+      };
+      // Validate in the declared precision: a double intermediate can round
+      // a finite f32 literal onto an underflow/overflow boundary.
+      if (!(type == Type::float32 ? in_range(float{}) : in_range(double{})))
         fail(expr.at, "floating literal is outside " + type_name(type) + " range");
       if (spelling.find_first_of(".eE") == std::string::npos) spelling += ".0";
       return scalar(type, spelling + (type == Type::float32 ? "f" : ""), out);

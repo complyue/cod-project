@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_utc": "2026-11-05T21:49:16.069483+00:00",
+  "recorded_utc": "2026-11-05T22:04:43.851868+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "passed": true,
@@ -14,9 +14,9 @@
     "pool_occupation_bytes": 10556,
     "non_element_bytes": 116
   },
-  "frontend_seconds": 0.01879609702154994,
-  "native_compile_link_seconds": 1.8320348499692045,
-  "native_process_seconds": 0.0014277540030889213,
+  "frontend_seconds": 0.0150639409548603,
+  "native_compile_link_seconds": 1.7967260049772449,
+  "native_process_seconds": 0.0015671880100853741,
   "generated_cpp_bytes": 9431,
   "native_harness_bytes": 188928,
   "notes": [
@@ -25,7 +25,7 @@
     "Non-element bytes include region/array headers, root and allocation alignment."
   ],
   "source_sha256": {
-    "cod/lang_frontend.hh": "da9cb44e605ef30e1e87df16edc78d7c216e320ef08f8da4438bd5084eb48058",
+    "cod/lang_frontend.hh": "dcabdb214ad0fc7282f06a702e5d73351b029157f4fc00e9b26548c5ee2b1f4e",
     "cod/lang_region_runtime.hh": "b7c4cc20f2ef2ff5715fdf4467d2593e1c0a9d3838c3f5745f9f751b1ff5faf4",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/language/region-records.cod": "b14807bb488e49f0f1a2d2ad48d2ce27294ae23afb6744fa18a99e74a3aeffc0",

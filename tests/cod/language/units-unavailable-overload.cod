@@ -1,0 +1,15 @@
+using symbol "std:io" @print;
+unit a::i64;
+unit b::i64;
+unit c::i64;
+unit m::i64;
+unit n::i64;
+conversion function ab(x (a))::b { b(scalar(x) + 1) }
+conversion function ac(x (a))::c { c(scalar(x) + 2) }
+conversion function cn(x (c))::n { n(scalar(x) + 3) }
+function choose(x (m*<-b<-a))::i64 { scalar(x) }
+function choose(x (n*))::i64 { scalar(x) }
+function reverse(x (n*))::i64 { scalar(x) }
+function reverse(x (m*<-b<-a))::i64 { scalar(x) }
+behave @print(choose(a(7)));
+behave @print(reverse(a(7)));

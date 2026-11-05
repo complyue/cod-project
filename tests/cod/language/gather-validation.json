@@ -1,10 +1,12 @@
 {
   "schema_version": 1,
-  "recorded_utc": "2026-11-05T21:49:18.166496+00:00",
+  "recorded_utc": "2026-11-05T22:04:41.999274+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "passed": true,
   "classes": 12,
+  "top_class_sets": 1,
+  "uniform_input": false,
   "rows": 4095,
   "slots": 693504,
   "updates": 8,
@@ -23,15 +25,16 @@
   "element_payload_bytes": 3500280,
   "region_occupation_bytes": 3500416,
   "non_element_bytes": 136,
-  "frontend_seconds": 0.015361361962277442,
-  "native_compile_link_seconds": 1.9667003210051917,
-  "native_process_seconds": 0.07226659602019936,
+  "frontend_seconds": 0.01738406397635117,
+  "native_compile_link_seconds": 2.013709874008782,
+  "native_process_seconds": 0.07249122200300917,
   "generated_cpp_bytes": 40817,
   "native_executable_bytes": 196952,
   "notes": [
     "Timing includes initialization, process startup and printed checksums.",
     "Native size includes debug information; no persistent code-sharing layer is used.",
     "FP32 reference uses independent row capacities and rounded additions.",
+    "The full-pool case assigns one arithmetic row per slot set; it is not a CC neuron count.",
     "This numerical kernel defines no neuron transition or training rule."
   ],
   "source_sha256": {
@@ -44,8 +47,8 @@
     "tests/cod/language/pool-layout.cod": "3cc4466300349659b0d080a6364f2b8936a534aa1c3440b31a2c76610d147672",
     "tests/cod/language/pool-typed.cod": "be349e069422a19967b247d78c1218b4f1cd703767925a460a4539e284f5232e",
     "tests/cod/language/pool-units.cod": "7e98a99907eb5a1d546055ecdac548d129c3cafc17c8c5352179ed21388473c3",
-    "cod/lang_frontend.hh": "da9cb44e605ef30e1e87df16edc78d7c216e320ef08f8da4438bd5084eb48058",
+    "cod/lang_frontend.hh": "dcabdb214ad0fc7282f06a702e5d73351b029157f4fc00e9b26548c5ee2b1f4e",
     "cod/lang_region_runtime.hh": "b7c4cc20f2ef2ff5715fdf4467d2593e1c0a9d3838c3f5745f9f751b1ff5faf4",
-    "tests/cod/language/gather_benchmark.py": "a02a80fb5a3286dc041bbe8a5fecd167ea3f5d5530cd605b7f7bac160f687c86"
+    "tests/cod/language/gather_benchmark.py": "87cb46ab70d733f8135513cf48b0248e06cec707c98a2d065b7b6d61bd7161b2"
   }
 }

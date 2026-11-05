@@ -1,0 +1,15 @@
+using symbol "std:io" @print;
+regional type Left { value::i64; right::ref<Right>; }
+regional type Right { value::f32; left::ref<Left>; }
+symbol @arena;
+symbol @left;
+symbol @right;
+function through(l::Left)::i64 { deref(deref(l.right).left).value }
+effect @arena = region(4096u64);
+effect @left = alloc @arena Left(17, null);
+effect @right = alloc @arena Right(2.5f32, @left);
+setfield(@left, right, @right);
+behave @print(through(deref(@left)));
+setfield(@left, value, 29);
+behave @print(through(deref(@left)));
+behave @print(deref(deref(@left).right).value);
