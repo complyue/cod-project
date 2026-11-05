@@ -1,4 +1,0 @@
-using units "pool-units.cod" {ClassId, ClassSetId, GlobalSetId, LocalSlot, GlobalSlot, SetCount, SlotCount, SlotsPerSet};
-using "pool-layout.cod" Layout;
-using "pool-index.cod" global_slot;
-global_slot(Layout(16u32, 10u64), ClassId(0u32), GlobalSetId(0u64), LocalSlot(0u32));

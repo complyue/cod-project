@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：231
+记录版本：232
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 231，延续检查 K-01—K-230；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 232，延续检查 K-01—K-231；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -206,15 +206,15 @@ Design authority
 <a id="d-07"></a>
 ### D-07：领域语言讨论与设计决策跟踪
 
-- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 21；用该修订及包含它的 Git 提交定位。
-- 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-046。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
+- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 22；用该修订及包含它的 Git 提交定位。
+- 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-048。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
 - 人工依据：H-06 近期目标、H-07 跟踪授权、H-08/H-11 应用及分离；H-96 现在同步推进语言和 SNN 设计／实现／验证，取代当前范围内的笼统实施延后。H-97—H-121 为局部语义、惯用组织及语法建议依据。DD-002/H-07 历史不改写。
 - 当前资格：全文契约及未确认价值路径仍 pending-human；明确的人类命题按其本身范围 confirmed，不把新 WPO、存储或语法细节自动批准。K-214 记录有界原型证据；K-215 记录编译期身份／别名、import 映射和预先声明目标的细化；K-216 记录 symbol from 与局部符号 as 源 body 角色的语法建议；K-217 记录 H-118 授权的实现、构建和 CoD 组件测试；K-218 记录 using symbol 及省略 as 时的身份一致要求；K-219 记录 H-121 授权的实现、验证和实际测试证据。上述记录均不以未合格基线产生 continued 资格。
 - 验收／边界：Scope and invariants、DL-13—DL-16；先以符号、capture、调用路径、两帧 gather 的有界实例细化契约。H-106 确定先扫描全部依赖、后按入口编译触碰顺序编入执行语义；H-107 允许字面 bits／function 调用初始化 global，以及模块执行期的顶层 effect/perform/behave；未选完整 parser、类型系统、ABI、跨区表示、循环初始化处理或神经元方程；构建／配置权限不扩大。
 - 影响：D-01—D-06 状态不变；D-08 与 D-10 同步当前局部方向，无已合格后代因此失效。
 
 - 当前直接工作授权：H-108 要求在即时语义问题解决后提交推送并设 goal 推进首版按需编译运行原型；H-109–H-111 解决本轮提出的触发、scope 生命周期和 effect 结果问题。H-118 进一步授权更新已讨论的 symbol from、预先声明 procedure 目标及 import 映射实现，测试通过后提交推送。H-121 进一步要求实现、验证并提交推送 using symbol／identity guard 的本轮细化。此授权不将其余开放机制或全文自动批准。
-- Current planning: H-122/H-123 request a ten-hour goal after discussion and restrict it to language/runtime support. H-124/H-127/H-129 confirm regional function snapshots; H-125/H-126/H-128 require strict scalar identities, UoM comparison and independent unit identities. D-11r4 records the resolved H-133–H-138 choices. The bounded ten-hour goal runs from 2026-11-05T20:13:49Z through 2026-11-06T06:13:49Z; H-139–H-141 add complex composition, once-only module incorporation and measured initial inlining. No mechanism is approved by silence.
+- Current planning: H-122/H-123 request a ten-hour goal after discussion and restrict it to language/runtime support. H-124/H-127/H-129 confirm regional function snapshots; H-125/H-126/H-128 require strict scalar identities, UoM comparison and independent unit identities. D-11r7 records the resolved H-133–H-138 choices and their bounded evidence. The bounded ten-hour goal runs from 2026-11-05T20:13:49Z through 2026-11-06T06:13:49Z; H-139–H-141 add complex composition, once-only module incorporation and measured initial inlining. No mechanism is approved by silence.
 - H-132/K-222 separate the compound-UoM roadmap from the initial run. D-07r16 LI-01–LI-03 record pending questions about returned regional references, imported conversion lexical bindings and automatic conversions during dispatch; proposals are not human decisions.
 - H-133–H-138/K-223 resolve the immediate review in D-07r17 LI-01–LI-04: ordinary caller lifetime, fresh-definition/one-shot UoM using, parameter-controlled conversion, compile-time discovery and direct-before-declared-indirect route choice. The bounded H-122/H-123 implementation goal can proceed under these local human decisions; full-document qualification is not inferred.
 - K-226 records nominal-UoM/conversion validation; K-227 records iteration/indexing. K-228 records regional storage, pure snapshots, relocation and A/B gather validation under H-123/H-124/H-127/H-129/H-133. D-07r21 is the current tracker; the autonomous goal remains active for further composition and runtime validation.
@@ -224,8 +224,8 @@ Design authority
 
 - 补充导航覆盖：K-208 将 README 局部修订从202更新为203，仅增加 D-09 双语认知模型追踪入口及对应权威说明；原18份文档的技术内容不变，其余17份文档的修订保持。D-09 两份文件单独登记为 revision1，不将新研究冒充 D-08 的已确认合同。H-71 完成状态保持。
 
-- 协同开发范围：H-96–H-121；K-210 引入 LanguageCoDesign，K-219 将 README210/LanguageCoDesign210 → 211，仅更新语言证据与授权边界；其余17份技术文档版本不变。C-38/P-87 解释以应用验证语言的候选价值，P-91 依赖 C-29 的 confirmed 两帧 pull，P-93 使应用路线依赖当前 D-10r10。模型 procedure 只在扫描时注册；全部依赖扫描完成后按入口编译触碰顺序编入顶层执行语义，读取扫描状态不构成捕获。顶层 global 的字面 bits／function 调用取值及 effect/perform/behave 表达式在模块执行期生效。函数负责显式数值输入输出，符号 procedure 负责上下文及区域写入；using/import 各自保留来源／接收定义上下文。路线及25个语义案例仍是规范／候选，另链接66项源程序 fixture 加1项 frontend-only 检查、完整 CoD 组件测试及双目标 gather 的实际证据；这不构成完整案例集通过、regional 数组实现或 SNN 训练证据；完整实现契约仍 pending-human。
-- 当前覆盖：document-set revision211；H-71 十二小时实质研究已完成，实际区间及逐项范围见 [modeling-refinement-progress.json](../applications/steady-snn/research/modeling-refinement-progress.json)。研究包括独立 flow 学习、真实输入几何、活跃比例与语义幅度、上下文保持、数值精度、衰减／执行成本及来源适用边界；具体证据与开放选择见各文档和 K-207。ActivationRegimes 为202；AdaptiveConnectivity 为202；CapacityPlanning 为204；ConnectivityScalingResearch 为197；ContextLoopsAndNumerics 为204；Decisions 为202；FlowLearning 为202；IncomingConnectivity 为204；Model 为204；PhysicalDistancePreferenceResearch 为78；README 为211；RateDynamics 为204；SemanticCorticalMappingResearch 为32；SignedPopulationEncoding 为202；SpatialConnectivityResearch 为74；SynapticIntegrationResearch 为204；TokenEmbeddingStatistics 为30；TrainingStrategy 为202；LanguageCoDesign 为211。共19份技术应用文档（D-09 两版单独登记）；H-78/H-85 保持对照空间，H-86 指导明显经验选项直接保留比较；D-08 仍 pending-human，研究完成不等于模型验证或实施资格。H-51 完成记录与人工决定历史保留。
+- 协同开发范围：H-96–H-145；K-231 更新 LanguageCoDesign212 的实际语言能力证据，其余18份文档修订不变。C-38/P-87 的应用驱动价值链、P-91 对 C-29 双帧 pull 的依赖以及 P-93 对 D-10 的语言依赖保持。H-123 将本轮限制为编程便利性／语言运行时支持；直接 LLVM 路径已验证类型、区域 SoA、快照、两帧算术 gather 和 relocation，不批准神经元模型／学习算法。完整应用契约仍 pending-human。
+- 当前覆盖：document-set revision212；H-71 十二小时实质研究已完成，实际区间及逐项范围见 [modeling-refinement-progress.json](../applications/steady-snn/research/modeling-refinement-progress.json)。研究包括独立 flow 学习、真实输入几何、活跃比例与语义幅度、上下文保持、数值精度、衰减／执行成本及来源适用边界；具体证据与开放选择见各文档和 K-207。ActivationRegimes 为202；AdaptiveConnectivity 为202；CapacityPlanning 为204；ConnectivityScalingResearch 为197；ContextLoopsAndNumerics 为204；Decisions 为202；FlowLearning 为202；IncomingConnectivity 为204；Model 为204；PhysicalDistancePreferenceResearch 为78；README 为211；RateDynamics 为204；SemanticCorticalMappingResearch 为32；SignedPopulationEncoding 为202；SpatialConnectivityResearch 为74；SynapticIntegrationResearch 为204；TokenEmbeddingStatistics 为30；TrainingStrategy 为202；LanguageCoDesign 为212。共19份技术应用文档（D-09 两版单独登记）；H-78/H-85 保持对照空间，H-86 指导明显经验选项直接保留比较；D-08 仍 pending-human，研究完成不等于模型验证或实施资格。H-51 完成记录与人工决定历史保留。
 - 人工依据：H-08—H-12 确立应用、容量优先、HTM 参考、文档分离和单节点 16 GB；H-13—H-19 确立可变容量需求、静态分配、当前集引用、少数万级出边评估、五字节 SoA 槽、owner 数组、可多于 N 的集合和百槽下限。H-21/H-25 暂定 alpha≈3、100/144 分级、逐档集合数减半；H-94 正式确认 target-owned 入连归属及双帧 pull，低出度取舍不自动转为低入度删除。H-22—H-24 区分输入数与兴奋性，接受条件权重补偿方向，将 weight scale 归训练而非容量参数。H-25—H-27 分别提出正负群体、人体柱规模调研及 Flash 60+60 计算；H-35 限定当前 Flash 人口。H-28 将 embedding 表单列节点共享，H-29 规定 SoA 默认与实证例外，H-30—H-32 规定非标准位宽独立讨论和包括 FP4 的二次幂 bit 标准宽度。H-34 要求需求先于辅助结构；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量。完整证据和评估范围保留于 H-08—H-39 及 AD-001—AD-032。
 - 当前学习范围：H-40 保留共活动及邻近优先方向，H-41 排除维号距离并提出跨 minicolumn 等机会方向，但未确定提议或保留边的概率契约，H-42 / AD-035 拒绝内部等位偏好。H-43 / AD-037 固定 CC 基本单元、非精确 replica 及语义角色。H-44 / AD-038 将语义分配的位置与解剖拓扑兼容置于 1D/2D 之前；交错和选择性可达仅为研究替代，布局集合中的平均对称与逐细胞等概率须区分，后者仅作为较强的条件分析。H-46 / AD-040 明确 feature 与 minicolumn 非双射并不冲突，故不以此要求交错或重编码。 H-52 / AD-046 指定三相稳态吸引子及各种入口条件的预期收敛为学习主目标，单 token 自循环激活并逐渐回归 DMN 为中间目标；H-67 将时间表述放宽为半衰期性质并允许 token 差异。 H-54 要求早期不建模显式抑制性连接，以同维正负群体固有抵消作用于活动；H-55 指定残留在噪音支持下先增强达峰再按 token 目标回落。 H-59 / AD-053 要求各正常状态的循环活动可受外部 token 驱使转向；不以循环本身判断失败。 H-66/AD-065—AD-067 初步预期尾头保持连接，并偏好每步维持 token 分布、最多几步有限偏离；强化／削弱策略全程细究，不采纳具体采样／增益算法。 H-68 明确自然断链是活动无法继续而非权重消除；H-69 提出分数选取配合 rate，H-70 要求数值精度细究。 H-71 指定有用小循环保留较长上下文价值，主链避免主动捷径不变；不强力消除小循环，主导淡出与历史影响分开。
 - 当前物理距离研究：H-50 / AD-044 明确神经元已经按语义向量组织，不具有天然物理位置。K-37 撤回 K-36 的软局部机会建议及“显式位置或有效接触表示”的预设选项；生物来源仍可作为研究资料。现无可代入距离核的物理度量；当前问题是生物邻近产生何种有用计算效果、是否能在现有语义组织内成立，而非默认增加几何、接触图或其它机制。H-51 / AD-045 要求修正文档后至少 12 小时深化研究；实际研究时间及来源证据单独记录，不以空等凑时长。
@@ -254,20 +254,22 @@ Design authority
 <a id="d-10"></a>
 ### D-10: Symbols, dynamic scope and callable kinds
 
-- File: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), design revision 14, all sections. Human propositions/proposals H-96–H-141 retain their individually recorded confirmation/proposal scopes; the complete implementation contract and candidate value paths remain pending-human.
+- File: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), design revision 15, all sections. Human propositions/proposals H-96–H-145 retain their individually recorded confirmation/proposal scopes; the complete implementation contract and candidate value paths remain pending-human.
 - Value paths: P-90 connects D-10 to C-10; P-84/P-94/P-97/P-100 explain nominal identity, storage, expressions and reuse through C-10/P-14/C-01; P-85 connects context-dependent operations to C-02; P-86 connects pure/effectful distinction to C-01; P-99 connects vocabulary practice to C-35; C-44/P-103 connects phase-separated module composition to C-10, with P-105 depending on the definition-context distinction. The proposed paths serve inspectable semantic programs and explicit environment interpretation, without importing a full continuation/effect calculus.
 - Dependencies/constraints: P-88/P-92/P-96/P-101 preserve symbol identity and multi-region concerns. P-89/P-95/P-98/P-102/P-104 record the explicit local callable, capture, write, reuse and module-phase constraints. Dependencies do not confer qualification.
 - Invariants: nominal identity across aliases/versions; per-thread bindings and scope restoration; captured-value perform/current-binding behave; lexical functions and symbol-named dynamic procedures; module initialization scope; complete declaration scan before entry-driven dependency execution incorporation in encounter order; demand-driven whole-program checking with missing bindings rejected during compilation; only stack/@region user storage and bits/regional-pointer captures; zero-cost regional relocation; bits globals initialized by literals or function calls and top-level effect/perform/behave evaluated with module execution, never by declaration scanning.
 - Acceptance: explain and eventually execute the semantic cases; reject invalid function effects, writes and missing requirements; preserve same-region lifetimes and immutable-A pull; distinguish registration from dynamic definition/capture and execution-incorporation order from scan order. Current [case records](../applications/steady-snn/research/cod-language-scope-cases.json) contain 25 specified/derived cases with selected [native prototype evidence](../tests/cod/language/validation.json). The 66 scalar/module source fixtures plus one frontend-only check do not validate the entire catalog, regional lifetimes or SNN learning.
-- Open/non-goals: concrete grammar/types, cyclic initialization rules, scope-result/evaluation rules, bits-global realization, symbol/TLS/closure ABI, pointer lifetimes, cross-region representation, cache protocol and native lowering. No independent module compilation, implicit user heap promotion or fully selected SNN dynamics.
+- Open/non-goals: concrete grammar/types, cyclic initialization rules, scope-result/evaluation rules, bits-global realization, symbol/TLS/closure ABI, pointer lifetimes, cross-region representation, cache protocol and permanent runtime ABI. H-143 selects direct LLVM IR as the sole CoD lowering path. No independent module compilation, implicit user heap promotion or fully selected SNN dynamics.
 - Downstream: D-07r14 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign211/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision9, describes the bounded H-122/H-123/H-139–H-141 checkpoint. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-230 record regional storage, deep inline compilation, representation and numeric evidence. Full-document qualification is not implied.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision10, describes the bounded H-122/H-123/H-139–H-145 checkpoint. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-231 record regional storage, deep inline compilation, representation, numeric evidence and the sole LLVM path. Full-document qualification is not implied.
 
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
 
+
+- H-143–H-145/K-231: D-10r15/reference10 use a single direct LLVM IR path and contract-focused tests. Generated C++ language lowering and backend selection are removed; native system services remain C++. H-143 supplies the local choice; no full pending contract is promoted.
 
 - Current regional-access refinement: C-48/P-114/P-115/P-117, H-124/H-127/H-129 and K-220 specify dynamic region resources and pure input-reachable snapshot traversal, including nested-call lifetime. K-228–K-230 record regional traversal, returned references, mutation between pure calls and native relocation evidence for the bounded subset. D-11 treats index typing separately; no value-field-only restriction is accepted.
 
@@ -288,9 +290,9 @@ Design authority
 - Acceptance: compare wrappers and UoM using forward/inverse pool formulas, typed arrays, generic arithmetic, literals, local/global domains, invalid types/ranges and runtime representation. Actual implementation must supply evidence; the analysis is not a test result.
 - Current bounded rules: H-133–H-138 and D-07r17 LI-01–LI-04 settle caller lifetime, unit selection, parameter annotations and conversion routes. C-51/P-124–P-127 record the user-controlled policy. Remaining grammar/representation details must stay within those rules. Compound-unit equality/inference is H-132 roadmap scope and does not block this run. K-220 registers the draft, K-221 records operator sugar and K-222 records the scope split and K-223 records the resolved local rules without self-qualification; the bounded ten-hour goal is authorized by H-122/H-123 after this review.
 
-- Current implementation evidence: K-226/K-227 cover nominal units, routes, numeric carriers and typed pool formulas; K-228–K-230 cover real SoA arrays, full-pool storage, snapshots and numeric boundary/candidate-selection repairs. Reference9 and its linked evidence remain bounded implementation records, not qualification of the complete pending contract.
+- Current implementation evidence: K-226/K-227 cover nominal units, routes, numeric carriers and typed pool formulas; K-228–K-230 cover real SoA arrays, full-pool storage, snapshots and numeric boundary/candidate-selection repairs. Reference10 and its linked evidence remain bounded implementation records, not qualification of the complete pending contract.
 
-The following relations apply at the scopes recorded in each row and the current D-07 revision21, D-08 set211, D-09 revision2, D-10 revision14 and D-11 revision7 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
+The following relations apply at the scopes recorded in each row and the current D-07 revision22, D-08 set212, D-09 revision2, D-10 revision15 and D-11 revision7 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
 
 | 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
 | --- | --- | --- | --- |
@@ -2151,6 +2153,36 @@ Human: this chat's user; independently verified name unavailable. Source: visibl
 > 中间表示用的是C++源码？ 产生 .ll 或者 .bc 作为中间表示应该更好吧？
 
 Scope: Questions the generated-C++ intermediate and proposes LLVM textual IR or bitcode as a better execution intermediate. This is evidence of the user's requested direction and comparison, not blanket approval of a new runtime ABI, permanent IR schema or changed language semantics. The current pipeline is checked CoD → generated C++ → LLVM bitcode → native executable. Direct LLVM lowering is the next bounded implementation investigation within H-122/H-123; H-141's initial inlining and existing language/storage rules remain.
+
+### H-143 — One LLVM IR lowering path
+
+<a id="h-143"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message in `codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`. Recorded 2026-11-05; exact message UTC timestamp unavailable.
+
+> 不要做过度工程，也不要做微优化，走基于 llvm ir 的最优路径，不需要考虑多后端
+
+Scope: Select the direct LLVM IR execution path for the current language/runtime work; do not retain a generated-C++ alternative or multi-backend architecture. Avoid overengineering and micro-optimization. This refines H-142; existing language/storage semantics, the small native system-service boundary and H-141 initial inlining remain. No persistent LLVM schema, new runtime ABI or full-document qualification is implied. C-02/C-10, D-07r22 DL-12 and D-10r15.
+
+### H-144 — Contract-based, lean test coverage
+
+<a id="h-144"></a>
+
+Human/source: the same visible user and conversation as H-143. Recorded 2026-11-05; exact message UTC timestamp unavailable.
+
+> 保持测试用例 mean and lean，不追求测试越多越好，只覆盖关键场景，从第一性原则出发评价测试覆盖率
+
+Scope: Evaluate coverage against meaningful language/runtime contracts and their failure consequences. Retain key scenarios and independent expected results, consolidate overlapping cases, and do not use case count as the goal or as proof of completeness. This governs the current H-122/H-123 validation effort; it does not waive relevant verification.
+
+### H-145 — Reduce technical debt during implementation
+
+<a id="h-145"></a>
+
+Human/source: the same visible user and conversation as H-143. Recorded 2026-11-05; exact message UTC timestamp unavailable.
+
+> 随着推进也能瘦身的地方就瘦身，持续削减技术债务
+
+Scope: Remove unnecessary implementation/test complexity as work advances. Apply this to obsolete emission code, duplicated fixtures and stale evidence/documentation; do not interpret it as authorization for unrelated toolchain changes, build cleanup or new mechanisms.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -4653,3 +4685,13 @@ Scope: Questions the generated-C++ intermediate and proposes LLVM textual IR or 
 - Full-pool arithmetic: J16,q10 has 655,350 row/set positions and 112,281,600 slots. Actual region occupation is 566,650,928 bytes: 561,408,000 source-ID/weight element bytes, 5,242,800 two-frame element bytes and 128 non-element bytes. These are arithmetic rows, not a selected CC neuron count. Uniform-input one-pass gather checksums match the independent reference; initialization plus native process time is approximately 3.42 seconds locally. The 4,095-row eight-update case also passes. Measurements do not add a semantic-vector table or change an application capacity decision.
 - H-142 records the user's LLVM-IR question/proposal. Inspection confirms the current driver already produces .bc after C++ lowering, and the deployed build has LLVM IR construction/verification libraries plus llvm-as/llvm-dis. The root-level /llvm-project is absent; the configured sources are this checkout's llvm-project subtree. Direct LLVM emission can be investigated as source-only backend work without a bootstrap or configuration edit. This checkpoint does not claim that backend is implemented or ratify a runtime ABI.
 - Boundaries: no SNN law/training, compound-unit algebra, general GADT, concurrency, cross-region representation, machine-code sharing architecture, main configuration or host toolchain change. The autonomous goal remains active. D-GOV231 record maintenance alone continues H-05; no new human approval is inferred from test success.
+
+<a id="k-231"></a>
+
+### K-231 — 2026-11-05: Direct LLVM lowering and contract-focused validation
+
+- Agent implementation/evidence assessment under H-122/H-123/H-139–H-145. Reviewed charter §§1–4, C-02/C-10 and D-07/D-10 scoped language/storage rules. Registry231 →232; D-07r21 →r22/DD-047–DD-048, D-10r14 →r15, reference9 →10. D-11r7 remains current. D-08 set211 →212 updates only LanguageCoDesign211 →212 to replace stale scalar-fixture references with actual language evidence; the scope-case catalog evidence links are synchronized while its 25 specified cases and application model contracts are unchanged. Append H-143–H-145 without changing earlier human statements or historical implementation reports.
+- Value path: direct LLVM execution serves the existing C-02 native-execution purpose and C-10 explicit language semantics. H-143 expressly selects this bounded implementation route. Formal candidate derivations and full D-07/D-10 contracts remain pending-human; no new persistent ABI, semantic graph encoding or delegated qualification is inferred.
+- Implementation: the demanded-call checker emits LLVM values, control flow, typed TLS effects, saved captures and region-relative memory operations directly. C++ language lowering and its selector are removed. A small fixed C++ system boundary supplies printing, checked region allocation/release and runtime failure. LLVM's standard native optimization/code-generation pipeline is used without custom optimization passes. Clang's existing target description supplies the target layout without changing build/link configuration.
+- Coverage: retain contract-distinct source scenarios; remove 33 overlapping entry cases and three orphan helpers. The numerical check keeps named precision/range boundaries plus a small deterministic sample instead of treating larger sample count as coverage. The artifact/relocation harness executes LLVM-created records and arrays, verifies .ll/.bc interoperability, then relocates sharing/cycles and frees the original before accessing the copy. The typed SoA gather supplies independent arithmetic and memory evidence, not a neural model or performance optimization target.
+- Source-only build command remains exactly `cmake --build ./build`; no build configuration, toolchain or bootstrap source edits. Fresh commands, outputs, hashes and measured results are linked from reference10. Broader SNN dynamics/training, compound UoM algebra, general GADT and cross-region representation remain excluded. D-GOV232 maintenance alone continues H-05; the ten-hour goal remains active.

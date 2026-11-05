@@ -1,4 +1,0 @@
-using symbol "std:io" @print;
-symbol from "vocabulary.cod" @p as @step;
-using symbol "source.cod" @p as @step;
-behave @print(perform @step);

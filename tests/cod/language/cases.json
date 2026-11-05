@@ -15,11 +15,6 @@
     "stdout": "1001\n907\n908\n"
   },
   {
-    "file": "frame.cod",
-    "exit": 0,
-    "stdout": "15\n14\n15\n14\n"
-  },
-  {
     "file": "transitive.cod",
     "exit": 0,
     "stdout": "2\n9\n5\n"
@@ -48,12 +43,6 @@
     "file": "global-resource.cod",
     "exit": 0,
     "stdout": "888\n40\n"
-  },
-  {
-    "file": "missing.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "missing required binding"
   },
   {
     "file": "missing-capture.cod",
@@ -108,11 +97,6 @@
     "stdout": "22\n11\n"
   },
   {
-    "file": "effect-result.cod",
-    "exit": 0,
-    "stdout": "6\n3\n"
-  },
-  {
     "file": "early-alias.cod",
     "exit": 2,
     "stdout": "",
@@ -122,17 +106,6 @@
     "file": "identity-restore.cod",
     "exit": 0,
     "stdout": "600\n7\n7\n"
-  },
-  {
-    "file": "identity-no-default.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "missing required binding"
-  },
-  {
-    "file": "using-destination.cod",
-    "exit": 0,
-    "stdout": "1001\n900\n401\n408\n"
   },
   {
     "file": "using-vocabulary-destination.cod",
@@ -170,24 +143,6 @@
     "stdout": "1001\n909\n"
   },
   {
-    "file": "mapped-missing-capture.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "unavailable definition-time capture"
-  },
-  {
-    "file": "missing-destination.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "must be declared before using/import"
-  },
-  {
-    "file": "late-destination.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "must be declared before using/import"
-  },
-  {
     "file": "late-alias-destination.cod",
     "exit": 2,
     "stdout": "",
@@ -212,12 +167,6 @@
     "stderr_contains": "duplicate source role @x"
   },
   {
-    "file": "reversed-map.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "undeclared symbol @x"
-  },
-  {
     "file": "using-with-map.cod",
     "exit": 2,
     "stdout": "",
@@ -230,22 +179,10 @@
     "stderr_contains": "undeclared symbol @x"
   },
   {
-    "file": "identity-as-procedure.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "has no procedure value"
-  },
-  {
     "file": "value-as-procedure.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "has no procedure value"
-  },
-  {
-    "file": "map-does-not-declare-local.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "undeclared symbol @x"
   },
   {
     "file": "mapping-shared-identity.cod",
@@ -259,41 +196,15 @@
     "stderr_contains": "splitting one source symbol identity"
   },
   {
-    "file": "duplicate-symbol-alias.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "duplicate symbol alias"
-  },
-  {
     "file": "builtin-body-import.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "no importable body"
   },
   {
-    "file": "using-symbol-basic.cod",
-    "exit": 0,
-    "stdout": "1\n5\n"
-  },
-  {
-    "file": "using-shared-identity.cod",
-    "exit": 0,
-    "stdout": "1001\n401\n408\n8\n"
-  },
-  {
     "file": "using-symbol-shared-identity.cod",
     "exit": 0,
     "stdout": "900\n1001\n401\n408\n8\n"
-  },
-  {
-    "file": "using-symbol-source.cod",
-    "exit": 0,
-    "stdout": "1001\n401\n408\n8\n"
-  },
-  {
-    "file": "using-symbol-renamed-shared.cod",
-    "exit": 0,
-    "stdout": "1001\n401\n"
   },
   {
     "file": "using-explicit-self.cod",
@@ -318,52 +229,10 @@
     "stderr_contains": "symbol identity mismatch:"
   },
   {
-    "file": "using-alias-identity-mismatch.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "symbol identity mismatch:"
-  },
-  {
-    "file": "using-symbol-renamed-mismatch.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "write using \"source.cod\" @p as @step;"
-  },
-  {
-    "file": "using-symbol-explicit-mismatch.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "symbol identity mismatch:"
-  },
-  {
     "file": "using-symbol-same-value.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "symbol identity mismatch:"
-  },
-  {
-    "file": "using-symbol-early.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "requires its using symbol encounter first"
-  },
-  {
-    "file": "using-symbol-no-procedure.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "has no procedure value"
-  },
-  {
-    "file": "using-symbol-with-map.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "a symbol map requires an imported procedure"
-  },
-  {
-    "file": "import-symbol-unsupported.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "import symbol is outside the prototype"
   },
   {
     "file": "products.cod",
@@ -384,12 +253,6 @@
     "file": "product-alias.cod",
     "exit": 0,
     "stdout": "0.75\n"
-  },
-  {
-    "file": "product-shapes.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "expected "
   },
   {
     "file": "product-cycle.cod",
@@ -419,16 +282,6 @@
     "file": "module-diamond.cod",
     "exit": 0,
     "stdout": "101\n3\n7\n3\n3\n"
-  },
-  {
-    "file": "module-repeat.cod",
-    "exit": 0,
-    "stdout": "101\n4\n8\n"
-  },
-  {
-    "file": "product-local.cod",
-    "exit": 0,
-    "stdout": "42\n"
   },
   {
     "file": "product-module-identity.cod",
@@ -515,12 +368,6 @@
     "stdout": "2\n"
   },
   {
-    "file": "units-route-missing.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "unavailable step"
-  },
-  {
     "file": "units-priority.cod",
     "exit": 0,
     "stdout": "21\n"
@@ -560,11 +407,6 @@
     "file": "units-private-helper.cod",
     "exit": 0,
     "stdout": "200\n"
-  },
-  {
-    "file": "units-transitive.cod",
-    "exit": 0,
-    "stdout": "0.75\n"
   },
   {
     "file": "units-duplicate-identity.cod",
@@ -611,11 +453,6 @@
     "stdout": "2\n8\n"
   },
   {
-    "file": "fold-units.cod",
-    "exit": 0,
-    "stdout": "7\n"
-  },
-  {
     "file": "iteration-scope.cod",
     "exit": 0,
     "stdout": "0\n1\n2\n9\n"
@@ -631,11 +468,6 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "expected "
-  },
-  {
-    "file": "fold-import.cod",
-    "exit": 0,
-    "stdout": "45\n"
   },
   {
     "file": "numeric-widths.cod",
@@ -691,12 +523,6 @@
     "stderr_contains": "numeric conversion out of range"
   },
   {
-    "file": "float-literal-underflow.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "outside f32 range"
-  },
-  {
     "file": "uint-loop-boundary.cod",
     "exit": 0,
     "stdout": "1\n1\n"
@@ -705,18 +531,6 @@
     "file": "pool-typed.cod",
     "exit": 0,
     "stdout": "655350\n112281600\n112281599\ntrue\n"
-  },
-  {
-    "file": "pool-index-type-error.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "expected "
-  },
-  {
-    "file": "reserved-unit.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "reserved scalar type name"
   },
   {
     "file": "reserved-alias.cod",

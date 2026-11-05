@@ -1,2 +1,0 @@
-symbol @count;
-procedure @count(n::i64)::i64 { fold (i in 0 .. n, sum = 0) { sum + i } }

@@ -1,10 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T22:05:25.471376+00:00",
+  "recorded_utc": "2026-11-05T22:46:19.445184+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
-  "passed": 155,
-  "total": 155,
+  "backend": "llvm",
+  "passed": 122,
+  "total": 122,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -54,23 +55,6 @@
       },
       "exit_code": 0,
       "stdout": "1001\n907\n908\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "frame.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/frame.cod"
-      ],
-      "expected": {
-        "file": "frame.cod",
-        "exit": 0,
-        "stdout": "15\n14\n15\n14\n"
-      },
-      "exit_code": 0,
-      "stdout": "15\n14\n15\n14\n",
       "stderr": "",
       "passed": true
     },
@@ -174,24 +158,6 @@
       "exit_code": 0,
       "stdout": "888\n40\n",
       "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "missing.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/missing.cod"
-      ],
-      "expected": {
-        "file": "missing.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "missing required binding"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/missing.cod:5:15: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/missing.cod::@missing\n",
       "passed": true
     },
     {
@@ -355,23 +321,6 @@
       "passed": true
     },
     {
-      "fixture": "effect-result.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/effect-result.cod"
-      ],
-      "expected": {
-        "file": "effect-result.cod",
-        "exit": 0,
-        "stdout": "6\n3\n"
-      },
-      "exit_code": 0,
-      "stdout": "6\n3\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
       "fixture": "early-alias.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -403,41 +352,6 @@
       },
       "exit_code": 0,
       "stdout": "600\n7\n7\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "identity-no-default.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/identity-no-default.cod"
-      ],
-      "expected": {
-        "file": "identity-no-default.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "missing required binding"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/identity-no-default.cod:4:15: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@x\n",
-      "passed": true
-    },
-    {
-      "fixture": "using-destination.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-destination.cod"
-      ],
-      "expected": {
-        "file": "using-destination.cod",
-        "exit": 0,
-        "stdout": "1001\n900\n401\n408\n"
-      },
-      "exit_code": 0,
-      "stdout": "1001\n900\n401\n408\n",
       "stderr": "",
       "passed": true
     },
@@ -561,60 +475,6 @@
       "passed": true
     },
     {
-      "fixture": "mapped-missing-capture.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/mapped-missing-capture.cod"
-      ],
-      "expected": {
-        "file": "mapped-missing-capture.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "unavailable definition-time capture"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/mapped-missing-capture.cod:8:23: perform requires an unavailable definition-time capture /ws/EvtWorks/cod-project/tests/cod/language/mapped-missing-capture.cod::@target\n",
-      "passed": true
-    },
-    {
-      "fixture": "missing-destination.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/missing-destination.cod"
-      ],
-      "expected": {
-        "file": "missing-destination.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "must be declared before using/import"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/missing-destination.cod:1:1: procedure destination @output must be declared before using/import\n",
-      "passed": true
-    },
-    {
-      "fixture": "late-destination.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/late-destination.cod"
-      ],
-      "expected": {
-        "file": "late-destination.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "must be declared before using/import"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/late-destination.cod:1:1: procedure destination @output must be declared before using/import\n",
-      "passed": true
-    },
-    {
       "fixture": "late-alias-destination.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -687,24 +547,6 @@
       "passed": true
     },
     {
-      "fixture": "reversed-map.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/reversed-map.cod"
-      ],
-      "expected": {
-        "file": "reversed-map.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "undeclared symbol @x"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/reversed-map.cod:4:40: undeclared symbol @x\n",
-      "passed": true
-    },
-    {
       "fixture": "using-with-map.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -741,24 +583,6 @@
       "passed": true
     },
     {
-      "fixture": "identity-as-procedure.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/identity-as-procedure.cod"
-      ],
-      "expected": {
-        "file": "identity-as-procedure.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "has no procedure value"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/identity-as-procedure.cod:2:1: source resource @p has no procedure value; use symbol from for identity\n",
-      "passed": true
-    },
-    {
       "fixture": "value-as-procedure.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -774,24 +598,6 @@
       "exit_code": 2,
       "stdout": "",
       "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/value-as-procedure.cod:2:1: source resource @x has no procedure value; use symbol from for identity\n",
-      "passed": true
-    },
-    {
-      "fixture": "map-does-not-declare-local.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/map-does-not-declare-local.cod"
-      ],
-      "expected": {
-        "file": "map-does-not-declare-local.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "undeclared symbol @x"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/map-does-not-declare-local.cod:8:15: undeclared symbol @x\n",
       "passed": true
     },
     {
@@ -830,24 +636,6 @@
       "passed": true
     },
     {
-      "fixture": "duplicate-symbol-alias.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/duplicate-symbol-alias.cod"
-      ],
-      "expected": {
-        "file": "duplicate-symbol-alias.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "duplicate symbol alias"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/duplicate-symbol-alias.cod:2:1: duplicate symbol alias @x\n",
-      "passed": true
-    },
-    {
       "fixture": "builtin-body-import.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -866,40 +654,6 @@
       "passed": true
     },
     {
-      "fixture": "using-symbol-basic.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-basic.cod"
-      ],
-      "expected": {
-        "file": "using-symbol-basic.cod",
-        "exit": 0,
-        "stdout": "1\n5\n"
-      },
-      "exit_code": 0,
-      "stdout": "1\n5\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "using-shared-identity.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-shared-identity.cod"
-      ],
-      "expected": {
-        "file": "using-shared-identity.cod",
-        "exit": 0,
-        "stdout": "1001\n401\n408\n8\n"
-      },
-      "exit_code": 0,
-      "stdout": "1001\n401\n408\n8\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
       "fixture": "using-symbol-shared-identity.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -913,40 +667,6 @@
       },
       "exit_code": 0,
       "stdout": "900\n1001\n401\n408\n8\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "using-symbol-source.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-source.cod"
-      ],
-      "expected": {
-        "file": "using-symbol-source.cod",
-        "exit": 0,
-        "stdout": "1001\n401\n408\n8\n"
-      },
-      "exit_code": 0,
-      "stdout": "1001\n401\n408\n8\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "using-symbol-renamed-shared.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-renamed-shared.cod"
-      ],
-      "expected": {
-        "file": "using-symbol-renamed-shared.cod",
-        "exit": 0,
-        "stdout": "1001\n401\n"
-      },
-      "exit_code": 0,
-      "stdout": "1001\n401\n",
       "stderr": "",
       "passed": true
     },
@@ -1021,60 +741,6 @@
       "passed": true
     },
     {
-      "fixture": "using-alias-identity-mismatch.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-alias-identity-mismatch.cod"
-      ],
-      "expected": {
-        "file": "using-alias-identity-mismatch.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "symbol identity mismatch:"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/using-alias-identity-mismatch.cod:2:1: symbol identity mismatch: source @p is /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@p, local @p is /ws/EvtWorks/cod-project/tests/cod/language/other-vocabulary.cod::@x; write using \"source.cod\" @p as @p; to select that destination explicitly\n",
-      "passed": true
-    },
-    {
-      "fixture": "using-symbol-renamed-mismatch.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-renamed-mismatch.cod"
-      ],
-      "expected": {
-        "file": "using-symbol-renamed-mismatch.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "write using \"source.cod\" @p as @step;"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-renamed-mismatch.cod:2:1: symbol identity mismatch: source @p is /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@p, local @step is /ws/EvtWorks/cod-project/tests/cod/language/other-vocabulary.cod::@x; write using \"source.cod\" @p as @step; to select that destination explicitly\n",
-      "passed": true
-    },
-    {
-      "fixture": "using-symbol-explicit-mismatch.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-explicit-mismatch.cod"
-      ],
-      "expected": {
-        "file": "using-symbol-explicit-mismatch.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "symbol identity mismatch:"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-explicit-mismatch.cod:2:1: symbol identity mismatch: source @print is std:io::@print, local @print is /ws/EvtWorks/cod-project/tests/cod/language/using-symbol-explicit-mismatch.cod::@print; write using \"std:io\" @print as @print; to select that destination explicitly\n",
-      "passed": true
-    },
-    {
       "fixture": "using-symbol-same-value.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -1090,78 +756,6 @@
       "exit_code": 2,
       "stdout": "",
       "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-same-value.cod:3:1: symbol identity mismatch: source @print is std:io::@print, local @local is /ws/EvtWorks/cod-project/tests/cod/language/using-symbol-same-value.cod::@local; write using \"std:io\" @print as @local; to select that destination explicitly\n",
-      "passed": true
-    },
-    {
-      "fixture": "using-symbol-early.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-early.cod"
-      ],
-      "expected": {
-        "file": "using-symbol-early.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "requires its using symbol encounter first"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-early.cod:1:8: symbol alias @print requires its using symbol encounter first in this prototype\n",
-      "passed": true
-    },
-    {
-      "fixture": "using-symbol-no-procedure.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-no-procedure.cod"
-      ],
-      "expected": {
-        "file": "using-symbol-no-procedure.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "has no procedure value"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-no-procedure.cod:1:1: source resource @p has no procedure value; use symbol from for identity\n",
-      "passed": true
-    },
-    {
-      "fixture": "using-symbol-with-map.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-with-map.cod"
-      ],
-      "expected": {
-        "file": "using-symbol-with-map.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "a symbol map requires an imported procedure"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/using-symbol-with-map.cod:1:1: a symbol map requires an imported procedure\n",
-      "passed": true
-    },
-    {
-      "fixture": "import-symbol-unsupported.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/import-symbol-unsupported.cod"
-      ],
-      "expected": {
-        "file": "import-symbol-unsupported.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "import symbol is outside the prototype"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/import-symbol-unsupported.cod:1:1: import symbol is outside the prototype; declare its destination first\n",
       "passed": true
     },
     {
@@ -1230,24 +824,6 @@
       "exit_code": 0,
       "stdout": "0.75\n",
       "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "product-shapes.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/product-shapes.cod"
-      ],
-      "expected": {
-        "file": "product-shapes.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "expected "
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/product-shapes.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/product-shapes.cod::First, got /ws/EvtWorks/cod-project/tests/cod/language/product-shapes.cod::Second\n",
       "passed": true
     },
     {
@@ -1336,40 +912,6 @@
       },
       "exit_code": 0,
       "stdout": "101\n3\n7\n3\n3\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "module-repeat.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/module-repeat.cod"
-      ],
-      "expected": {
-        "file": "module-repeat.cod",
-        "exit": 0,
-        "stdout": "101\n4\n8\n"
-      },
-      "exit_code": 0,
-      "stdout": "101\n4\n8\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "product-local.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/product-local.cod"
-      ],
-      "expected": {
-        "file": "product-local.cod",
-        "exit": 0,
-        "stdout": "42\n"
-      },
-      "exit_code": 0,
-      "stdout": "42\n",
       "stderr": "",
       "passed": true
     },
@@ -1638,24 +1180,6 @@
       "passed": true
     },
     {
-      "fixture": "units-route-missing.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/units-route-missing.cod"
-      ],
-      "expected": {
-        "file": "units-route-missing.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "unavailable step"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-route-missing.cod:3:1: declared conversion route has an unavailable step from /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::mm to /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m\n",
-      "passed": true
-    },
-    {
       "fixture": "units-priority.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -1778,23 +1302,6 @@
       },
       "exit_code": 0,
       "stdout": "200\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "units-transitive.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/units-transitive.cod"
-      ],
-      "expected": {
-        "file": "units-transitive.cod",
-        "exit": 0,
-        "stdout": "0.75\n"
-      },
-      "exit_code": 0,
-      "stdout": "0.75\n",
       "stderr": "",
       "passed": true
     },
@@ -1939,23 +1446,6 @@
       "passed": true
     },
     {
-      "fixture": "fold-units.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/fold-units.cod"
-      ],
-      "expected": {
-        "file": "fold-units.cod",
-        "exit": 0,
-        "stdout": "7\n"
-      },
-      "exit_code": 0,
-      "stdout": "7\n",
-      "stderr": "",
-      "passed": true
-    },
-    {
       "fixture": "iteration-scope.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -2006,23 +1496,6 @@
       "exit_code": 2,
       "stdout": "",
       "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/iteration-index-error.cod:3:6: expected /ws/EvtWorks/cod-project/tests/cod/language/iteration-index-error.cod::A, got /ws/EvtWorks/cod-project/tests/cod/language/iteration-index-error.cod::B\n",
-      "passed": true
-    },
-    {
-      "fixture": "fold-import.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/fold-import.cod"
-      ],
-      "expected": {
-        "file": "fold-import.cod",
-        "exit": 0,
-        "stdout": "45\n"
-      },
-      "exit_code": 0,
-      "stdout": "45\n",
-      "stderr": "",
       "passed": true
     },
     {
@@ -2187,24 +1660,6 @@
       "passed": true
     },
     {
-      "fixture": "float-literal-underflow.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/float-literal-underflow.cod"
-      ],
-      "expected": {
-        "file": "float-literal-underflow.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "outside f32 range"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/float-literal-underflow.cod:1:1: floating literal is outside f32 range\n",
-      "passed": true
-    },
-    {
       "fixture": "uint-loop-boundary.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -2236,42 +1691,6 @@
       "exit_code": 0,
       "stdout": "655350\n112281600\n112281599\ntrue\n",
       "stderr": "",
-      "passed": true
-    },
-    {
-      "fixture": "pool-index-type-error.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/pool-index-type-error.cod"
-      ],
-      "expected": {
-        "file": "pool-index-type-error.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "expected "
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/pool-index-type-error.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/pool-units.cod::ClassSetId, got /ws/EvtWorks/cod-project/tests/cod/language/pool-units.cod::GlobalSetId\n",
-      "passed": true
-    },
-    {
-      "fixture": "reserved-unit.cod",
-      "command": [
-        "/ws/EvtWorks/cod-project/build/bin/cod",
-        "--run",
-        "/ws/EvtWorks/cod-project/tests/cod/language/reserved-unit.cod"
-      ],
-      "expected": {
-        "file": "reserved-unit.cod",
-        "exit": 2,
-        "stdout": "",
-        "stderr_contains": "reserved scalar type name"
-      },
-      "exit_code": 2,
-      "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/reserved-unit.cod:1:1: reserved scalar type name 'u8'\n",
       "passed": true
     },
     {
@@ -2716,8 +2135,10 @@
         "/ws/EvtWorks/cod-project/build/bin/cod",
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
-        "--emit-cpp",
-        "/tmp/cod-language-check-gx4b384e/program.cc"
+        "--emit-llvm",
+        "/tmp/cod-language-check-ktidk8e_/program.ll",
+        "--emit-bc",
+        "/tmp/cod-language-check-ktidk8e_/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2727,17 +2148,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "07c905b1970b6ecd61203324283f7765d46f7699480a60b5ff5c0c6382febcd0"
+    "sha256": "158716bc0d35f12343228d930caf56c27ec4a26a08217c38232c58a00e531165"
   },
   "source_sha256": {
-    "cod/main.cc": "bcaa37e39665c6d70960f527bb2ee93c1868774adfd79d3a96c840651a4d39d3",
+    "cod/main.cc": "01fe80cbbe5bb365861a797c8fc3ddc1e0c7fb17ad0081dcfac8ddef46b940c6",
     "cod/lang_syntax.hh": "86d8266f2be6e0789cf64a8816dd0e6cc830cfd867345e01a394227d60664a10",
-    "cod/lang_frontend.hh": "dcabdb214ad0fc7282f06a702e5d73351b029157f4fc00e9b26548c5ee2b1f4e",
-    "cod/lang_region_runtime.hh": "b7c4cc20f2ef2ff5715fdf4467d2593e1c0a9d3838c3f5745f9f751b1ff5faf4",
+    "cod/lang_frontend.hh": "2826f6c5e403f1e0dc105df39341aeccfd7b6c71ce56cd0358d4441b1deb668c",
+    "cod/lang_llvm.hh": "a4e83b38939e7f94d844c8918409cfd7a96a36bb46efa131977d4de176790ff3",
+    "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
-    "tests/cod/language/run_tests.py": "c1ccdd9a411de959800147ffaf9ebc1a79fe9c4422c1f4bd8d399c74faf1f55f",
-    "tests/cod/language/cases.json": "105e1b3f81f62db2ad27d28c5008b76e1c5317f733258a6f4edc94868ed00655",
+    "tests/cod/language/run_tests.py": "c16c4602b95f7052e9161950396ba181a81ae5b3ba9d98faa79b821554f1960d",
+    "tests/cod/language/cases.json": "08f8c0fee110ed3001df2f5b29e6a7c313e6fc75d0a20a699025d324dc756260",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2752,45 +2174,30 @@
     "tests/cod/language/diamond-shared.cod": "6e0b21cbe0d3c227d5267070f1e2c4b5c3ea97cdcbe472d34131216044df8386",
     "tests/cod/language/diamond-vocab.cod": "9f39d23f781ca32847181988a011de270c30ac07a136ceb9663d935706347a0b",
     "tests/cod/language/duplicate-map-role.cod": "c8cb6967e8bbd2c17f2604eb139ec04f3669f3a4b21904f4890e7962066464d7",
-    "tests/cod/language/duplicate-symbol-alias.cod": "3788fe95e9db696d4e528291bd61994205e5f2551176012ecab7b4e623b6cc03",
     "tests/cod/language/early-alias.cod": "2760b0aa7d7131859f2e5fd2dfc4f6fa10fb8ab54eb12b720bbd51d894597177",
-    "tests/cod/language/effect-result.cod": "e94e72e0553d921284838d2e006c30c5c4724ccdad4d2dd649ebf51650e2118a",
     "tests/cod/language/float-boundary-rounding.cod": "a65c3d14a9a0c5ed02103674282f16be54d8990becd449173957846b60e978f4",
     "tests/cod/language/float-cast-boundary.cod": "bef6cf858853fd816d8a331c29fdbb8161070309395dabebbc5e9403f90c3041",
     "tests/cod/language/float-cast-nan.cod": "cf6fee8f317970a70f3bc8d6fd6e6f68f58acbbf4f32acf867fde730a4ce3d05",
     "tests/cod/language/float-cast-unsigned-boundary.cod": "617d0a2e5a7a11f8f43542e65570ef31c8a328a1529821ce15282124e7bbae4b",
-    "tests/cod/language/float-literal-underflow.cod": "a5399c716ef39b448fedbca80b41fba570fe1dd1993d09e386e59feece9cd7d5",
     "tests/cod/language/float-range-error.cod": "731d4de618632486fba7c11dc9d70ae220675ca6cc8eabd8a710d50f70d874cf",
     "tests/cod/language/float-width-error.cod": "4e9cfe886c7c19c3f8d5fdb27f412f238282564d1c9fbedecf8e77c7a965a977",
     "tests/cod/language/floating-captures.cod": "8faccd326ef6e732b7014a4c6b65c6499638c56cee4a877a75b978539ffd8b71",
-    "tests/cod/language/fold-import-source.cod": "bb7710f71bc5d69ca9769ac471a605471138bb85fcb354642084cd32b0950294",
-    "tests/cod/language/fold-import.cod": "7ca052d60028e403f219fdd2fd292055eecc1f2332101a843a7591c8ace9e3c9",
     "tests/cod/language/fold-products.cod": "d68f0c7e1afaf2e6272dfa2ca98d06bf8b45fb4886965360c2b26dccd9ce4cca",
     "tests/cod/language/fold-type-error.cod": "f136f1482ab60c9b840a2a7f46453af9db12ea1e99dea449be8f1b40ba9b86d3",
-    "tests/cod/language/fold-units.cod": "d01656d614558e2528c80051a8a37d4da913945f0f9b4617beb605b755e4a7d7",
-    "tests/cod/language/frame-model.cod": "5c29090333675934f6db3276e6a7b20e88faf9313d46e1a8b4dfbaaad986832f",
-    "tests/cod/language/frame-vocabulary.cod": "7d33d85b670825c8de9290678b83822b833744c1b273aeff25d17c25fad17e17",
-    "tests/cod/language/frame.cod": "78de75369c7e8d51f5d9a7b329b998450dfd3935767a7379f7664e2d179b3465",
     "tests/cod/language/function-resource.cod": "3869a9fca1bf84313df85a2825b0d9ffcc8ba6460dbac97085e6be0f03ab760f",
     "tests/cod/language/global-resource.cod": "694886af24edd9a94b35ec238bd37bc7785fbfa5be752d09bb2245c24c199c44",
-    "tests/cod/language/identity-as-procedure.cod": "d410d92dca95078505db6fc3d86f748916ecee26b00c78bf6c26f1415a797687",
-    "tests/cod/language/identity-no-default.cod": "05d7df91dd9653d4002250cc93dd0519e182c8b87c81bc749781b633bc438a99",
     "tests/cod/language/identity-provider.cod": "94023cd5972927eb2b347f08b0bbacecd96326d8d2aef5a450ed793d34247eb6",
     "tests/cod/language/identity-restore.cod": "a70e45ae17c7ea21909ae5fb2dd6982c64f7348795daf51e489aaae652f95d06",
     "tests/cod/language/identity.cod": "6734fe0e179debc22d4cb02f3fbe9e1a4111dbd93286009ac282815be05630c6",
     "tests/cod/language/import-default-identity.cod": "4c59cc22343a3ba92584c021d7e8edd7afd67a2c807c6ce97f5c3452a75224af",
     "tests/cod/language/import-mapping.cod": "0e80d08ae7e5b39210e25b3ffb569efba657b8a5026d343d7042d32c1cf6d349",
-    "tests/cod/language/import-symbol-unsupported.cod": "cc1097a62eacf6ac890f842c9efde26bed52053452ea2516b182a66b66ab2823",
     "tests/cod/language/import.cod": "ca7a3d1627e417d87dc6727812807d5158822fc2131da30c96e27b15dee77858",
     "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
     "tests/cod/language/iteration-index-error.cod": "f2a740829eae91e0cbacbd3f98ffde0b5dc777e2cc437865abbba9c996865ad6",
     "tests/cod/language/iteration-scope.cod": "71b031eb4f41b504bf7c0d257d44bda6c4ee9e70cde09293e446e4168a1c99bf",
     "tests/cod/language/late-alias-destination.cod": "06f1595b32fd5061ef439baf47280df1e3150f8b9ce7ff1e7d3c94faa61e5c13",
-    "tests/cod/language/late-destination.cod": "377d4955e208bcc19c15253cd5136ea1e2b395ac54253479225589b11eb079fc",
-    "tests/cod/language/map-does-not-declare-local.cod": "e643ed531b7e5e9ff281ff3a3c9c520cd04654bcb561d6aa1870e73d328f9025",
     "tests/cod/language/mapped-behave-later.cod": "552889d87d8eeef003dcdcc5e89da080447e9c74a414d7f31b7f2ebc8b35512d",
     "tests/cod/language/mapped-effects-model.cod": "3cc20044e1cd9fbaf5c92ac6ed048ab923da475d3e555887f8c3b91628bd4ccd",
-    "tests/cod/language/mapped-missing-capture.cod": "e67a2549e43fc3c0f1639ffc3fd0bee55cccffbaeb1ac92f0f75a65920211b8b",
     "tests/cod/language/mapped-perform-model.cod": "8bb222d131f6d17d7e9f45d18f094502d4ed3f58f0b38c23fe49291c6fe4cbde",
     "tests/cod/language/mapping-effects.cod": "776987de5ac51c5a0f563f71205f53c75615e529a3dea0131255aedfccbe0573",
     "tests/cod/language/mapping-perform-call.cod": "dced64656c19e3c193b692bfb1b06c9f2da3f1e0531b683f7b0cc44290f8b9b0",
@@ -2805,10 +2212,7 @@
     "tests/cod/language/methods.cod": "220003c479460ac88538c0d7efc89c2f8041e3db1e9ab6327d97c56729c51c88",
     "tests/cod/language/missing-capture.cod": "0e59004b31863a174459b9c5aa0fcedd8a940c2ec4d42d5835cae7fa374ebb21",
     "tests/cod/language/missing-default-alias.cod": "6e9b09ddf5c872aac6b7c0ff04621d4df21dd2e895d4154d2df7394898e35d02",
-    "tests/cod/language/missing-destination.cod": "e1d7a7a5fcaa81141baef5d3f3a240e5c20b5f16b97f5588cf13220071ed4622",
-    "tests/cod/language/missing.cod": "fee64b75bd994840163e9d4837464559bd096a4e2b54aafe76894988afc0004f",
     "tests/cod/language/module-diamond.cod": "d7c57a55265fb5c8050f8fbe8371670d8a958e4cf403252cd33fe8f8486aec25",
-    "tests/cod/language/module-repeat.cod": "ad18e6a92d5fa799a13008e0c2437084569b79e661428b4fe1dd6a09b9365a70",
     "tests/cod/language/numeric-widths.cod": "93aa98656d33b26633e1e3c5b4961a19ed5a96bcf04b112de36c8711b712146e",
     "tests/cod/language/operator-control.cod": "f3ef905413996098ab7037d759a071969042fc07e7113102c13da474baa57257",
     "tests/cod/language/operator-library.cod": "3b94be253e5924fe2783b5292ce9031051e91f6ae6c7cbf4b194d91db7349e38",
@@ -2817,7 +2221,6 @@
     "tests/cod/language/overflow.cod": "372077e05270e2852c8c3cf5e8d904bfa6f58d48242937b7f7560d60117fb1ea",
     "tests/cod/language/perform-without-caller.cod": "f31457d947a8a5b22b629778f68f67509b0679b617eeb71632934c1dd1a1727b",
     "tests/cod/language/plain-assignment.cod": "6832cc854107048ab81f0de5bddbfd78e70a7944f4a0a484d80b13578e1e3e4a",
-    "tests/cod/language/pool-index-type-error.cod": "06927472cc8478794fec2adffba3479ba25641d37e97113b9a492d72040cd2fa",
     "tests/cod/language/pool-index.cod": "ec0c7c35a2176e4c5c0e24156ee2a7a5f69a7a768d2fc1fccd3e6ed7b6296bca",
     "tests/cod/language/pool-layout.cod": "3cc4466300349659b0d080a6364f2b8936a534aa1c3440b31a2c76610d147672",
     "tests/cod/language/pool-typed.cod": "be349e069422a19967b247d78c1218b4f1cd703767925a460a4539e284f5232e",
@@ -2828,10 +2231,8 @@
     "tests/cod/language/product-cycle.cod": "d8a216df27fa251ac4e8ba9bf24193fb73a4c4f070caab241db64abe1f4770d0",
     "tests/cod/language/product-field-error.cod": "570f426dd389197a2765aad76b4590305013263bc12c5487ac629b90e8692c92",
     "tests/cod/language/product-library.cod": "a50ce9353fd26acbeb0cab28294e6d2b2dae3bea376aa640fe8752e20f5bd6f7",
-    "tests/cod/language/product-local.cod": "2b3daf5840cabd113d877c4fa0effc01f35c937e9c08619355fd7d7704d0aca9",
     "tests/cod/language/product-module-identity.cod": "d355cf9c10f7ef4be7b4269b63b05f8598b52396afc4c64b1ae561dbbcef54df",
     "tests/cod/language/product-other-library.cod": "6271a353553b396c6cf5f58d88b715a0ae21cc34050ad58e98d2538519b7812e",
-    "tests/cod/language/product-shapes.cod": "8558f873fab54b468015bc88b3a5b6f86e0278301d8a1df3fdffd21234865e12",
     "tests/cod/language/products.cod": "acc964555c72fd747632fee63df9c50d39dd300ab96fa2995bb67e3bf9fd176f",
     "tests/cod/language/region-arrays.cod": "3c37ca84cf5647de6956fdf309ee62614242733b6721ae5bfe7516bc260ff924",
     "tests/cod/language/region-bounds.cod": "0836e7152c34485384fc4b72c0b77dd6774977f4af073804b31ce2b84758df38",
@@ -2861,8 +2262,6 @@
     "tests/cod/language/reimport-mapping.cod": "63db9239d209daa02025b3e6487883eb994ad368d6ad99eb0a2ab6ff7553654f",
     "tests/cod/language/reimport-provider.cod": "6b5d8a3a979934983cd02b85989c1595d2cab5a9c4efaa2acf41adc7f477e66b",
     "tests/cod/language/reserved-alias.cod": "ec35242de749d7edf680866f8b2c8ccd3ca68e11b8372e6dcdc800519d787349",
-    "tests/cod/language/reserved-unit.cod": "5f4aa6986e906a691a0e931d3fa28503909cf0032eaf2eef0342f1cdc9b6c3ca",
-    "tests/cod/language/reversed-map.cod": "abbfc059feb0b7f012569289656ffe6a5f04b6232c3e9410c20d0c2cf2cdb387",
     "tests/cod/language/scan-error.cod": "f9ab5a964c3810e059417928e2a796b4a2a454614e5690c0f67cd0b63987a309",
     "tests/cod/language/scopes.cod": "648c3ac84fd66c17e2a296238a4e7111f0c98c2f5502cee66e1522c2961f90a0",
     "tests/cod/language/source.cod": "9652ffee31919d6bbe0e4b4ba39c3e132a079ba97724a2b3d4fde95915d6b4ed",
@@ -2899,34 +2298,28 @@
     "tests/cod/language/units-procedure.cod": "b9b143f893ffb41ea08ae9dc93ff0240c7363fee02d3466c6300fcb7aab9ff6a",
     "tests/cod/language/units-reexport.cod": "4c61b14fdb27185bef9cc1bebf40ab30da57d2d3f0f7e412347849a09645c2ac",
     "tests/cod/language/units-repeated.cod": "0117bfe5d0cec83b85dd41193fd9463feebe64d0cac162283ddade376b8cb615",
-    "tests/cod/language/units-route-missing.cod": "a13cae172e84a0951b26f51fe3221914d6d7a0ff42ddf81b40d1713204848f69",
     "tests/cod/language/units-shorter-route.cod": "e11b5c3e0f166013237bb4e101285e352b1fe02b0b270f6e5960852d4108cd9e",
-    "tests/cod/language/units-transitive.cod": "247fd0e5e70634c8bee2257cc9b8659bed4391d33fd4966f94bebd5a8227fac6",
     "tests/cod/language/units-unavailable-overload.cod": "a25a93a072990a7100ed711cd258c941f38f63bb80926f38002926fa75007636",
     "tests/cod/language/unknown-map-local.cod": "fcbc91d5eb564e16f02d7967aa684d9e749daf3a4819993460472b3e602d6ff1",
     "tests/cod/language/unknown-map-role.cod": "7e2301626b3e161c28c900a05dae5d105ac26a91340bb4f437e3385f37b1168c",
-    "tests/cod/language/using-alias-identity-mismatch.cod": "19c9a3633d55ec70c3af1f259b7de92bcf2905de367289912cc956fda89ed4c8",
-    "tests/cod/language/using-destination.cod": "0b9ce185fed9201a42c513799f16ab666ad1afd18ecd50e6ed49b49c65f3be1d",
     "tests/cod/language/using-explicit-self.cod": "c7dceac9ffefb92b04ca44c9e872c467ce096ab8b22ca3ad8e0dca8fc2805d29",
     "tests/cod/language/using-identity-mismatch.cod": "98b692570683bea588bd5415bc374351cdbae49cd18f89c77c49c5818bcbe076",
-    "tests/cod/language/using-shared-identity.cod": "5a8b2346014ccb4d9e389851b6cb9b890e79c22a35fbfcafe73b9f9ffa3b839f",
-    "tests/cod/language/using-symbol-basic.cod": "79eb8799f67177f37326d87ad91b4707a2a18db0b184ca965098f8221e98e49f",
-    "tests/cod/language/using-symbol-early.cod": "be20a0a2cb7031d94363e56834212ebaae38b40289bf8d397ebb83409d5d98b4",
-    "tests/cod/language/using-symbol-explicit-mismatch.cod": "332f79f8c43edc615193e76c1efa63a9fff879cf2067613aa67e1be49873aa95",
     "tests/cod/language/using-symbol-identity-mismatch.cod": "30980cab0e158fbd6d835ee3e589eeb5285d1e447fd21f166f6ddc86b6dbdc4a",
-    "tests/cod/language/using-symbol-no-procedure.cod": "6a0a60f2ac78fc9c70a9c38a7751df01b3da9d411b8d73a921982098ebfffb8f",
     "tests/cod/language/using-symbol-provider.cod": "6abc0953f9e3da560d2cf3a595d248237e45ff243c72d541195e48ffbbd155d2",
     "tests/cod/language/using-symbol-reexport.cod": "b0edf01a7650dd5fc3d139cd252803dbfbe99d750ab2c01353256d4f1fb12a5f",
-    "tests/cod/language/using-symbol-renamed-mismatch.cod": "2c3603de5c39d58cf14bfa43ae7dfd95f27dde85345c11903756cb81cf989acf",
-    "tests/cod/language/using-symbol-renamed-shared.cod": "8435d778f38a7b0e58cb5236a21b06acc267a4159a7612398f6ccb474271549b",
     "tests/cod/language/using-symbol-same-value.cod": "1263b6d585f829f015c0e5ca775c72b0cd5e02e538c3ca7736167c4820d692ee",
     "tests/cod/language/using-symbol-shared-identity.cod": "4989aff5460229ddfb301e0969ae0064e20035a1f3e90d04722a42b3617d397b",
-    "tests/cod/language/using-symbol-source.cod": "f5fd091f5b1552fa82dbfb84d5c28c8d266e8287a2c75ec8c9ae9087e5e39065",
-    "tests/cod/language/using-symbol-with-map.cod": "f3fdbbf73e3bb4448ca32b92c2b9aec75c82280478dbb7290963472312863827",
     "tests/cod/language/using-vocabulary-destination.cod": "a50d97e31b6fd297440ae6405e5634ebebcdd034d90084b866f204ff5712f916",
     "tests/cod/language/using-with-map.cod": "d1debe7352da93d7672302f1d8a8ee369df88d9054c9c6339e43cee2d46a78ee",
     "tests/cod/language/using.cod": "ba0c7ebd8f497265a994201e6ee5be9c04274df10f8447be98d1bf13649671a9",
     "tests/cod/language/value-as-procedure.cod": "257248681baab5224b537b000532a2c5eedde5f0b87d5f024f3807eebf13b7ab",
     "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223"
+  },
+  "component_suite": {
+    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=build/validation/language-llvm-final.json tests/cod/run-all.sh",
+    "exit_code": 0,
+    "passed_groups": 4,
+    "total_groups": 4,
+    "log_sha256": "8fa06282f4d8885dba62804ea69e068e45fb4cd090fb243a293f26caaba1d611"
   }
 }

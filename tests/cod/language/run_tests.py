@@ -47,25 +47,28 @@ def main():
             print(json.dumps(results[-1], indent=2))
 
     with tempfile.TemporaryDirectory(prefix="cod-language-check-") as scratch:
-        generated = Path(scratch) / "program.cc"
+        generated = Path(scratch) / "program.ll"
+        bitcode = Path(scratch) / "program.bc"
         command = [str(executable), "--check", str(directory / "import-mapping.cod"),
-                   "--emit-cpp", str(generated)]
+                   "--emit-llvm", str(generated), "--emit-bc", str(bitcode)]
         check = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=60)
         passed = (check.returncode == 0 and check.stdout == "" and check.stderr == ""
-                  and generated.is_file() and "static thread_local Context ctx;" in generated.read_text())
+                  and generated.is_file() and "define i32 @main()" in generated.read_text()
+                  and bitcode.read_bytes().startswith(b"BC\xc0\xde"))
         results.append({"fixture": "frontend-only", "command": command, "exit_code": check.returncode,
                         "stdout": check.stdout, "stderr": check.stderr, "passed": passed})
         print(f"{'PASS' if passed else 'FAIL'} frontend-only", flush=True)
 
     passed_count = sum(case["passed"] for case in results)
-    print(f"CoD language: {passed_count}/{len(results)} passed ({mode} toolchain)")
+    print(f"CoD language: {passed_count}/{len(results)} passed ({mode} toolchain, LLVM IR)")
     if report := os.environ.get("COD_LANGUAGE_REPORT"):
-        sources = [root / "cod/main.cc", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_region_runtime.hh",
+        sources = [root / "cod/main.cc", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh",
+                   root / "cod/lang_llvm.hh", root / "cod/lang_native_runtime.hh",
                    root / "include/shilos/region.hh",
                    root / "tests/cod/test_language.sh", directory / "run_tests.py", directory / "cases.json",
                    *sorted(directory.glob("*.cod"))]
         evidence = {"schema_version": 2, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    "platform": platform.platform(), "toolchain": mode, "passed": passed_count,
+                    "platform": platform.platform(), "toolchain": mode, "backend": "llvm", "passed": passed_count,
                     "total": len(results), "results": results,
                     "executable": {"path": str(executable.relative_to(root)), "sha256": digest(executable)},
                     "source_sha256": {str(path.relative_to(root)): digest(path) for path in sources}}

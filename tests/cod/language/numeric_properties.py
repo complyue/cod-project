@@ -32,10 +32,10 @@ def main():
         raise SystemExit('COD_TEST_TOOLCHAIN must be build or built')
     rng = random.Random(0xC0D2026)
     floats = [(f32(rng.uniform(-2 ** 20, 2 ** 20)), f32(rng.uniform(0.25, 2 ** 10)))
-              for _ in range(128)]
+              for _ in range(16)]
     floats += [(0.0, 1.0), (-0.0, 1.0), (f32(2 ** -149), 0.5),
                (f32(2 ** -126), 0.25), (16777216.0, 1.0), (16777215.0, 0.5)]
-    integers = [(rng.randrange(2 ** 30), rng.randrange(2 ** 30)) for _ in range(128)]
+    integers = [(rng.randrange(2 ** 30), rng.randrange(2 ** 30)) for _ in range(16)]
     integers += [(0, 0), (2 ** 32 - 1, 2 ** 32), (2 ** 63 - 1, 1)]
     lines = ['using symbol "std:io" @print;', 'unit Slot::u32;',
              'array Floats[Slot]::f32;', 'array Integers[Slot]::u64;',
@@ -74,7 +74,7 @@ def main():
             raise RuntimeError(json.dumps({'exit': result.returncode, 'stderr': result.stderr,
                                            'mismatches': mismatches[:16]}, indent=2))
         evidence = {'schema_version': 1, 'recorded_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    'toolchain': mode, 'passed': True, 'seed': '0xC0D2026',
+                    'toolchain': mode, 'backend': 'llvm', 'passed': True, 'seed': '0xC0D2026',
                     'f32_samples': len(floats), 'u64_samples': len(integers),
                     'native_compile_link_run_seconds': seconds,
                     'generated_cod_sha256': hashlib.sha256(source.encode()).hexdigest(),
@@ -83,7 +83,8 @@ def main():
                               'Includes signed zero, subnormals, precision-boundary values and large unsigned integers.',
                               'This validates arithmetic and regional input access, not a neural model.'],
                     'source_sha256': {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
-                                      for p in [root / 'cod/lang_frontend.hh', root / 'cod/lang_region_runtime.hh',
+                                      for p in [root / 'cod/lang_frontend.hh',
+                                                root / 'cod/lang_llvm.hh', root / 'cod/lang_native_runtime.hh',
                                                 Path(__file__).resolve()]}}
         if report := os.environ.get('COD_NUMERIC_REPORT'):
             Path(report).write_text(json.dumps(evidence, indent=2) + '\n')

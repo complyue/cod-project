@@ -1,9 +1,0 @@
-using symbol "std:io" @print;
-symbol from "diamond-vocab.cod" @gain;
-symbol from "diamond-vocab.cod" @read;
-effect @gain = 4;
-using "diamond-shared.cod" @read;
-effect @gain = 8;
-using "diamond-shared.cod" @read;
-behave @print(perform @read());
-behave @print(behave @read());

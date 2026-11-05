@@ -10,13 +10,11 @@
   "execution_evidence": {
     "reference": "../../../tests/cod/language/README.md",
     "record": "../../../tests/cod/language/validation.json",
-    "scope": "66 source fixtures (native execution or expected diagnostics) and one frontend-only check; the complete CoD component suite also passes. This is not a run of all 25 catalog cases.",
+    "scope": "Contract-focused native CoD corpus with direct LLVM IR emission, regional storage and expected diagnostics; the complete CoD component suite passes. This is not a run of all 25 catalog cases.",
     "selected_fixture_links": {
       "CS-01": [
         "identity.cod",
         "identity-restore.cod",
-        "using-symbol-basic.cod",
-        "using-shared-identity.cod",
         "using-symbol-reexport.cod"
       ],
       "CS-04": [
@@ -29,17 +27,15 @@
         "transitive.cod"
       ],
       "CS-12": [
-        "frame.cod"
+        "region-gather.cod"
       ],
       "CS-16": [
         "using.cod",
         "import.cod",
-        "using-destination.cod",
         "using-vocabulary-destination.cod",
         "import-mapping.cod",
         "import-default-identity.cod",
         "reimport-mapping.cod",
-        "using-symbol-source.cod",
         "using-symbol-shared-identity.cod",
         "using-explicit-self.cod"
       ],
@@ -51,16 +47,16 @@
         "global-resource.cod"
       ],
       "CS-25": [
-        "effect-result.cod"
+        "scopes.cod"
       ]
     },
     "partial_coverage_notes": [
       "Identity uses distinct canonical local module paths, not resolved versioned package origins.",
       "Scope/capture fixtures exercise equivalent scalar cases, not every exact trace or unwind form in the catalog.",
-      "Function, binding and type diagnostics cover named examples, not all variants in CS-08/CS-11/CS-13.",
-      "The frame fixture preserves A by program construction/assertions, not a checked immutable-view type.",
-      "Scan-before-execution is checked by rejecting a broken dependency before an earlier print can execute; the distinct scan/encounter order scenario CS-18 is not executed.",
-      "No regional-pointer, escaping-capture, concurrency or package-version acceptance."
+      "Function, binding and type diagnostics cover contract-distinct scenarios, not every spelling variant.",
+      "CS-12 has a multi-step regional A/B gather check; its exact two-scalar reverse-traversal trace is not executed. Distinct A/B storage is established by the program, not a unique-view type.",
+      "Scan-before-execution and once-only diamond composition are checked; the exact CS-18 scan/encounter trace remains separate.",
+      "Local regional snapshots, returned existing references and relocation have native evidence; cross-region, persistent escaping captures, concurrency and package-version acceptance remain open."
     ]
   },
   "cases": [

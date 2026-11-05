@@ -1,11 +1,11 @@
 {
-  "recorded_utc": "2026-11-05T22:04:45.669097+00:00",
+  "recorded_utc": "2026-11-05T22:48:36.866864+00:00",
   "results": [
     {
       "case": "512-module-pure-chain",
-      "check_seconds": 0.03531608497723937,
-      "native_compile_link_run_seconds": 0.319033010979183,
-      "generated_bytes": 50339,
+      "backend": "llvm",
+      "check_seconds": 0.04215992399258539,
+      "native_compile_link_run_seconds": 0.17393797100521624,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -13,13 +13,15 @@
       "stdout": "512\n",
       "stderr": "",
       "expected_stdout": "512\n",
+      "llvm_ir_bytes": 266021,
+      "bitcode_bytes": 66404,
       "passed": true
     },
     {
       "case": "1000-procedure-inline-chain",
-      "check_seconds": 0.6977062950027175,
-      "native_compile_link_run_seconds": 3.7592585039674304,
-      "generated_bytes": 459105,
+      "backend": "llvm",
+      "check_seconds": 0.6132622289587744,
+      "native_compile_link_run_seconds": 0.8051755880005658,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -27,13 +29,15 @@
       "stdout": "1004\n1008\n9\n",
       "stderr": "",
       "expected_stdout": "1004\n1008\n9\n",
+      "llvm_ir_bytes": 1098752,
+      "bitcode_bytes": 267396,
       "passed": true
     },
     {
       "case": "layered-diamond-22-modules-2047-calls",
-      "check_seconds": 0.019061910978052765,
-      "native_compile_link_run_seconds": 0.6819701429922134,
-      "generated_bytes": 148164,
+      "backend": "llvm",
+      "check_seconds": 0.047205558978021145,
+      "native_compile_link_run_seconds": 0.1906632210011594,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -41,13 +45,15 @@
       "stdout": "3072\n",
       "stderr": "",
       "expected_stdout": "3072\n",
+      "llvm_ir_bytes": 1078595,
+      "bitcode_bytes": 268764,
       "passed": true
     },
     {
       "case": "16-unit-reexports-31-conversion-steps-with-cycle",
-      "check_seconds": 0.014530129032209516,
-      "native_compile_link_run_seconds": 0.2646929459879175,
-      "generated_bytes": 5574,
+      "backend": "llvm",
+      "check_seconds": 0.016870966996066272,
+      "native_compile_link_run_seconds": 0.13675224501639605,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -55,13 +61,15 @@
       "stdout": "32\n",
       "stderr": "",
       "expected_stdout": "32\n",
+      "llvm_ir_bytes": 16124,
+      "bitcode_bytes": 6236,
       "passed": true
     },
     {
       "case": "96-module-regional-snapshot-chain",
-      "check_seconds": 0.018163278989959508,
-      "native_compile_link_run_seconds": 1.9523630780167878,
-      "generated_bytes": 27141,
+      "backend": "llvm",
+      "check_seconds": 0.02233806997537613,
+      "native_compile_link_run_seconds": 1.6089382910286076,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -69,6 +77,8 @@
       "stdout": "11\n29\n",
       "stderr": "",
       "expected_stdout": "11\n29\n",
+      "llvm_ir_bytes": 155292,
+      "bitcode_bytes": 31388,
       "passed": true
     }
   ]

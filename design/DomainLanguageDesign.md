@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 21
+Discussion revision: 22
 
 Recorded: 2026-10-22
 
@@ -11,12 +11,12 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 ## Design authority
 
 - **Registry:** [D-07](DesignAuthorityRegistry.md#d-07), which controls qualification and scope.
-- **Revision / covered scope:** discussion revision 21, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
+- **Revision / covered scope:** discussion revision 22, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
 - **Value lineage:** candidate P-12–P-18 connect the packet, database, language and interoperability concepts C-08–C-11 and this document to C-01, C-02, C-05 and C-06. Explicit language semantics should preserve inspectable business intent; regional transport and deferred reclamation should serve efficient persistent semantics; source tools should keep that semantics readable. These proposed derivations are not yet qualified implementation authority.
 - **Dependencies:** P-19–P-21 identify C-03, C-04 and C-02: multiple regions/domains, semantic levels and environment-specific effects. P-24 records application C-12 as an external example for DL-13; its model and resource choices are scoped to D-08. Existing C++ designs are reference material with their own registry status.
 - **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. H-96–H-141 supply the local symbol, callable, storage, snapshot and scalar-identity directions linked below; a complete grammar, ABI, storage protocol and implementation contract remain open.
 - **Human baseline:** H-06 supplies the near-term goals; H-07 establishes discussion tracking; H-08 selects the first application; H-11 requires its own document set. [H-96–H-121](DesignAuthorityRegistry.md#h-96) direct coordinated development and define the scoped language propositions in [D-10](SymbolicDynamicScope.md). H-122/H-123 bound the forthcoming run to useful language/runtime support; H-124/H-127/H-129 specify regional snapshot access, and H-125/H-126/H-128 require strict scalar identities and a substantive UoM comparison. They do not approve every proposed implementation detail.
-- **Continuity:** [K-228](DesignAuthorityRegistry.md#k-228) records revision 21 and the regional storage/snapshot implementation evidence. [K-227](DesignAuthorityRegistry.md#k-227) records revision 20, bounded iteration/numeric representations and the typed pool-index fixture. [K-226](DesignAuthorityRegistry.md#k-226) records revision 19 and the bounded UoM implementation checkpoint. [K-224](DesignAuthorityRegistry.md#k-224) records revision 18 and the H-139–H-141 complex-composition, once-only incorporation and initial-inlining scope. no qualified implementation baseline for D-07. K-02/K-03 record the earlier discussion baseline; [K-223](DesignAuthorityRegistry.md#k-223) records revision 17 and the resolved caller-scope, UoM-selection and parameter-conversion decisions; K-222 records the compound-UoM roadmap/initial-scope split; K-221 records parenthesized operator-method naming; K-220 records the bounded planning/typing discussion. K-219 retains the preceding implementation evidence. The full contract remains `pending-human`; this is not continuity-based qualification of an unqualified design.
+- **Continuity:** [K-231](DesignAuthorityRegistry.md#k-231) records revision 22: H-143 selects direct LLVM lowering, H-144 contract-focused tests and H-145 ongoing simplification. [K-228](DesignAuthorityRegistry.md#k-228) records revision 21 and the regional storage/snapshot implementation evidence. [K-227](DesignAuthorityRegistry.md#k-227) records revision 20, bounded iteration/numeric representations and the typed pool-index fixture. [K-226](DesignAuthorityRegistry.md#k-226) records revision 19 and the bounded UoM implementation checkpoint. [K-224](DesignAuthorityRegistry.md#k-224) records revision 18 and the H-139–H-141 complex-composition, once-only incorporation and initial-inlining scope. no qualified implementation baseline for D-07. K-02/K-03 record the earlier discussion baseline; [K-223](DesignAuthorityRegistry.md#k-223) records revision 17 and the resolved caller-scope, UoM-selection and parameter-conversion decisions; K-222 records the compound-UoM roadmap/initial-scope split; K-221 records parenthesized operator-method naming; K-220 records the bounded planning/typing discussion. K-219 retains the preceding implementation evidence. The full contract remains `pending-human`; this is not continuity-based qualification of an unqualified design.
 
 ## Confirmed direction
 
@@ -42,7 +42,7 @@ The governing context is [the charter](RegionalSemanticPlatformCharter.md), espe
 
 H-96 puts coordinated language/application development in scope. Each implemented increment needs a bounded contract grounded in the recorded human decisions; the direction does not select all mechanisms or authorize toolchain/configuration changes. Build and test operations retain the repository rules. It does not select a concrete parser, type theory, transport, transaction model, concurrent collector, wire ABI, query language or code-generation dependency. The scope of the first language version is open; broader GADT, kind-level and multi-domain goals remain in view when choosing a smaller initial scope.
 
-`apply`, `Result`, `execution_context` and similar names below are explanatory notation, not chosen syntax or API names. A C++ runtime, generated C++ or a reference interpreter are implementation candidates. C++ compatibility does not determine the domain language's semantics.
+`apply`, `Result`, `execution_context` and similar names below are explanatory notation, not chosen syntax or API names. H-143 selects direct LLVM IR for execution lowering; C++ supplies native system services and compatibility boundaries. C++ compatibility does not determine the domain language's semantics.
 
 ## Discussion dashboard
 
@@ -230,13 +230,13 @@ The sixteen topics contain confirmed local propositions and open implementation/
 
 **Question:** What is the smallest language and runtime implementation that can demonstrate the selected semantics without making the host language their only definition?
 
-- Compare a checked semantic representation with a reference interpreter, generated C++ and direct LLVM lowering. Identify their development cost and what each can validate.
+- Use direct LLVM IR as the sole execution lowering path under H-143. Keep source semantics and future persistent semantic graphs distinct from derived .ll/.bc artifacts; use LLVM's standard optimization pipeline without a multi-backend framework or custom micro-optimizations.
 - Decide which typed representation, checking rules and handler interfaces are shared. Any layout, validator, traversal or compactor generation should follow one defined type contract rather than diverging handwritten descriptions.
 - Bound syntax, ADT/GADT features, effects, query primitives and FFI for an initial version. Distinguish deliberate omissions from restrictions that would prevent multi-domain integration or later type/kind work.
 - H-106 separates complete dependency scanning/registration from entry-driven compilation of execution semantics. Top-level procedure declarations do not execute during scanning; dependency execution semantics are incorporated in encounter order.
 - Keep program intent separate from native code and caches. H-96/H-102 specify demand-driven whole-program compilation, with the complete caller paths available and no independent module compilation. Collect required symbolic variables, check binding availability/types, then lay out direct per-thread access. Concrete lowering, specialization and cache dependencies remain to be specified; this does not select machine-code JIT.
 
-**Current bounded implementation:** the [native source prototype](../tests/cod/language/README.md) parses/checks CoD, specializes demanded scalar call paths and uses generated C++ plus the existing Clang/LLVM compiler/linker to execute natively. Its experimental syntax and limitations are explicit. A regional typed program core, reference evaluator and production backend remain design work; this milestone adds no dependency or permanent backend choice.
+**Current bounded implementation:** the [native source prototype](../tests/cod/language/README.md) parses/checks CoD, specializes demanded call paths and emits LLVM IR/bitcode directly. The existing compiler/linker builds the native result with a small C++ system runtime. Experimental syntax and limits remain explicit. A persistent regional typed program core, general GADT and stable interoperation ABI remain design work. H-143 selects this execution path; H-144/H-145 require focused verification and removal of unnecessary complexity.
 
 **Decision evidence:** a scoped feature list, one lowering/execution trace and a comparison criterion between reference behavior and the selected production handler.
 
@@ -382,5 +382,7 @@ For each discussion, update the relevant topic's current answer and append a dec
 | DD-044 | 2026-11-05 | Deliberately stress multiple modules, complex dependencies and deep calls to expose and fix design/implementation issues. | H-139; DL-14/DL-16 |
 | DD-045 | 2026-11-05 | After scanning/loading, incorporate module top-level semantics into the result program in encounter order, once per module; encounters do not immediately execute user code. | H-140; C-44/P-104; D-10r13 |
 | DD-046 | 2026-11-05 | Retain initial procedure inlining while generated size remains reasonable; shared machine-code fragments are a medium/long-term optimization. | H-141; DL-16; D-10r13 |
+| DD-047 | 2026-11-05 | Use LLVM IR as the sole CoD execution intermediate; no generated-C++ backend or multi-backend machinery, and no micro-optimization work. | H-142/H-143; DL-12; D-10r15 |
+| DD-048 | 2026-11-05 | Judge tests by critical semantic contracts and failure consequences; consolidate overlap and reduce implementation/test debt as work advances. | H-144/H-145; DL-12–DL-16 |
 
 Dates above are recording dates. Exact source-message timestamps were unavailable; the registry records that provenance limit.

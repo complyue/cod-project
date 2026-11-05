@@ -8,6 +8,7 @@
 #include "cod.hh"
 #include "cod_cache.hh"
 #include "lang_frontend.hh"
+#include "lang_native_runtime.hh"
 
 #include "codp.hh"
 #include "codp_yaml.hh"
@@ -71,6 +72,10 @@ struct CodReplConfig {
 };
 
 // Resolves and uses the toolchain bundled with the running CoD executable.
+struct LanguageEmission {
+  std::optional<fs::path> ir, bitcode, runtime;
+};
+
 class CodTool {
 private:
   std::string executable_path_;
@@ -171,7 +176,7 @@ public:
   std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) const;
   bool compileAndRun(const CodReplConfig &config, const std::string &submission) const;
   int compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
-                      const std::optional<fs::path> &emit_cpp, bool warnings_as_errors) const;
+                      const LanguageEmission &emission, bool warnings_as_errors) const;
   void runRepl(const CodReplConfig &config) const;
 };
 
@@ -186,7 +191,9 @@ static void printUsage(const char *prog_name) {
             << "  -e, --eval EXPR     Evaluate expression/statement and exit\n"
             << "  --run FILE          Compile and run a CoD source-language entry\n"
             << "  --check FILE        Check a CoD entry and its demanded call paths\n"
-            << "  --emit-cpp FILE     Save native source with --run or --check\n"
+            << "  --emit-llvm FILE    Save directly emitted textual LLVM IR\n"
+            << "  --emit-bc FILE      Save directly emitted LLVM bitcode\n"
+            << "  --emit-runtime FILE Save native system services for external linking\n"
             << "  --warnings-as-errors  Reject ambiguous CoD unit conversions\n"
             << "  -h, --help          Show this help message\n"
             << "  --no-cache          Disable build cache\n"
@@ -616,7 +623,7 @@ std::vector<std::string> CodTool::buildCompilerArgs(const CodReplConfig &config)
 }
 
 int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
-                            const std::optional<fs::path> &emit_cpp, bool warnings_as_errors) const {
+                            const LanguageEmission &emission, bool warnings_as_errors) const {
   try {
     const auto compilation = cod::language::Compiler{warnings_as_errors}.compile(fs::absolute(entry));
     for (const auto &warning : compilation.warnings) std::cerr << warning << '\n';
@@ -626,12 +633,15 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
       for (const auto &module : compilation.execution_order)
         std::cerr << "[CoD execution semantics] " << module << '\n';
     }
-    if (emit_cpp) {
-      std::ofstream output(*emit_cpp);
-      output << compilation.cpp;
+    const auto write = [](const fs::path &path, const std::string &contents) {
+      std::ofstream output(path, std::ios::binary);
+      output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
       output.close();
-      if (!output) throw std::runtime_error("cannot write generated source: " + emit_cpp->string());
-    }
+      if (!output) throw std::runtime_error("cannot write generated artifact: " + path.string());
+    };
+    if (emission.ir) write(*emission.ir, compilation.llvm_ir);
+    if (emission.bitcode) write(*emission.bitcode, compilation.bitcode);
+    if (emission.runtime) write(*emission.runtime, cod::language::native_runtime_source(compilation.uses_regions));
     if (check_only) return 0;
 
     llvm::SmallString<256> directory;
@@ -639,26 +649,28 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
     if (const auto error = llvm::sys::fs::createUniqueDirectory(model, directory))
       throw std::system_error(error, "cannot create native compilation directory");
     const fs::path temporary(directory.str().str());
-    const auto source = temporary / "program.cc";
+    const auto source = temporary / "runtime.cc";
     const auto bitcode = temporary / "program.bc";
+    const auto runtime_bitcode = temporary / "runtime.bc";
     const auto executable = getRunnerPath(temporary);
     struct TemporaryFiles {
-      fs::path source, bitcode, executable, directory;
+      fs::path source, bitcode, runtime_bitcode, executable, directory;
       ~TemporaryFiles() {
         std::error_code ignored;
         fs::remove(source, ignored);
         fs::remove(bitcode, ignored);
+        fs::remove(runtime_bitcode, ignored);
         fs::remove(executable, ignored);
         fs::remove(directory, ignored);
       }
-    } cleanup{source, bitcode, executable, temporary};
-    std::ofstream output(source);
-    output << compilation.cpp;
-    output.close();
-    if (!output) throw std::runtime_error("cannot write native compilation source");
+    } cleanup{source, bitcode, runtime_bitcode, executable, temporary};
     cod::cache::BitcodeCompiler compiler;
-    if (!compiler.compile_to_bitcode(source, bitcode, buildCompilerArgs(config))) return 3;
-    if (!compiler.link_bitcode({bitcode}, executable, buildLinkerArgs(config))) return 3;
+    write(bitcode, compilation.bitcode);
+    write(source, cod::language::native_runtime_source(compilation.uses_regions));
+    if (!compiler.compile_to_bitcode(source, runtime_bitcode, buildCompilerArgs(config))) return 3;
+    auto linker_args = buildLinkerArgs(config);
+    linker_args.push_back("-O2");
+    if (!compiler.link_bitcode({bitcode, runtime_bitcode}, executable, linker_args)) return 3;
     return runExecutableAndWait(executable).value_or(3);
   } catch (const std::exception &error) {
     std::cerr << error.what() << '\n';
@@ -820,7 +832,7 @@ void CodTool::runRepl(const CodReplConfig &config) const {
 int main(int argc, const char **argv) {
   CodReplConfig config;
   std::optional<fs::path> language_entry;
-  std::optional<fs::path> emit_cpp;
+  LanguageEmission emission;
   bool check_only = false;
   bool warnings_as_errors = false;
 
@@ -852,12 +864,12 @@ int main(int argc, const char **argv) {
       check_only = arg == "--check";
     } else if (arg == "--warnings-as-errors" || arg == "-Werror=unit-conversion") {
       warnings_as_errors = true;
-    } else if (arg == "--emit-cpp") {
+    } else if (arg == "--emit-llvm" || arg == "--emit-bc" || arg == "--emit-runtime") {
       if (i + 1 >= argc) {
-        std::cerr << "Error: --emit-cpp requires a path\n";
+        std::cerr << "Error: " << arg << " requires a path\n";
         return 1;
       }
-      emit_cpp = fs::absolute(argv[++i]);
+      (arg == "--emit-llvm" ? emission.ir : arg == "--emit-bc" ? emission.bitcode : emission.runtime) = fs::absolute(argv[++i]);
     } else if (arg == "-e" || arg == "--eval") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires an expression argument\n";
@@ -901,14 +913,14 @@ int main(int argc, const char **argv) {
       return 1;
     }
     if (config.project_root.empty()) config.project_root = language_entry->parent_path();
-    return CodTool{}.compileLanguage(config, *language_entry, check_only, emit_cpp, warnings_as_errors);
+    return CodTool{}.compileLanguage(config, *language_entry, check_only, emission, warnings_as_errors);
   }
   if (warnings_as_errors) {
     std::cerr << "Error: --warnings-as-errors requires --run or --check\n";
     return 1;
   }
-  if (emit_cpp) {
-    std::cerr << "Error: --emit-cpp requires --run or --check\n";
+  if (emission.ir || emission.bitcode || emission.runtime) {
+    std::cerr << "Error: language emission options require --run or --check\n";
     return 1;
   }
 

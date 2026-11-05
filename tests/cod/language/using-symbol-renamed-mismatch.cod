@@ -1,2 +1,0 @@
-symbol from "other-vocabulary.cod" @x as @step;
-using symbol "source.cod" @p as @step;

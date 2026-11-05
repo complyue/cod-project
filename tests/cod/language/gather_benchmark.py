@@ -82,11 +82,12 @@ def main():
         source = source.replace('f32(n + 1u32)', '1.0f32')
     with tempfile.TemporaryDirectory(prefix='cod-gather-benchmark-') as temporary:
         scratch = Path(temporary)
-        entry, generated, executable = scratch / 'main.cod', scratch / 'main.cc', scratch / 'kernel'
+        entry, generated, executable = scratch / 'main.cod', scratch / 'main.ll', scratch / 'kernel'
+        bitcode, runtime = scratch / 'main.bc', scratch / 'runtime.cc'
         entry.write_text(source)
-        _, frontend_seconds = run([toolchain / 'bin/cod', '--check', entry, '--emit-cpp', generated], root)
+        _, frontend_seconds = run([toolchain / 'bin/cod', '--check', entry, '--emit-llvm', generated, '--emit-bc', bitcode, '--emit-runtime', runtime], root)
         command = [toolchain / 'bin/clang++', '-std=c++20', '-O2', '-g', '-stdlib=libc++', '-fuse-ld=lld',
-                   '-I' + str(root / 'include'), generated, '-o', executable,
+                   '-I' + str(root / 'include'), bitcode, runtime, '-o', executable,
                    '-L' + str(toolchain / 'lib'), '-Wl,-rpath,' + str(toolchain / 'lib')]
         _, compile_seconds = run(command, root)
         output, process_seconds = run([executable], root)
@@ -102,17 +103,17 @@ def main():
                     'element_payload_bytes': payload, 'region_occupation_bytes': occupied,
                     'non_element_bytes': occupied - payload,
                     'frontend_seconds': frontend_seconds, 'native_compile_link_seconds': compile_seconds,
-                    'native_process_seconds': process_seconds, 'generated_cpp_bytes': generated.stat().st_size,
+                    'native_process_seconds': process_seconds, 'llvm_ir_bytes': generated.stat().st_size, 'bitcode_bytes': bitcode.stat().st_size,
                     'native_executable_bytes': executable.stat().st_size,
                     'notes': ['Timing includes initialization, process startup and printed checksums.',
-                              'Native size includes debug information; no persistent code-sharing layer is used.',
+                              'Only the system runtime has C++ debug information; CoD code is directly emitted LLVM IR.',
                               'FP32 reference uses independent row capacities and rounded additions.',
                               'The full-pool case assigns one arithmetic row per slot set; it is not a CC neuron count.',
                               'This numerical kernel defines no neuron transition or training rule.'],
                     'source_sha256': {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
                                       for p in [*sorted(directory.glob('region-gather*.cod')),
                                                 *sorted(directory.glob('pool-*.cod')),
-                                                root / 'cod/lang_frontend.hh', root / 'cod/lang_region_runtime.hh',
+                                                root / 'cod/lang_frontend.hh', root / 'cod/lang_llvm.hh', root / 'cod/lang_native_runtime.hh',
                                                 Path(__file__).resolve()]}}
         if report := os.environ.get('COD_GATHER_REPORT'):
             Path(report).write_text(json.dumps(evidence, indent=2) + '\n')

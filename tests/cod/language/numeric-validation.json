@@ -1,22 +1,24 @@
 {
   "schema_version": 1,
-  "recorded_utc": "2026-11-05T22:03:25.944679+00:00",
+  "recorded_utc": "2026-11-05T22:49:13.395174+00:00",
   "toolchain": "build",
+  "backend": "llvm",
   "passed": true,
   "seed": "0xC0D2026",
-  "f32_samples": 134,
-  "u64_samples": 131,
-  "native_compile_link_run_seconds": 5.598226836998947,
-  "generated_cod_sha256": "cf165313574ff2d6f20f2a4872992e24631b5ded99f935d95c626c59688ecbcd",
-  "observed_trace_sha256": "7484dd5106161565772bcdd272d22f3fb57604bbeb48083f715a186370ff20ff",
+  "f32_samples": 22,
+  "u64_samples": 19,
+  "native_compile_link_run_seconds": 1.6655308390036225,
+  "generated_cod_sha256": "d7b066c95f5564567eb7be8dc49223b0f7f3073ee26c251b217a938a62bb3f4a",
+  "observed_trace_sha256": "42c28a127c0e54f3a7a603b4dba5e15c954f640c2be04390d2625b1c77ed8527",
   "notes": [
     "FP32 reference rounds after every arithmetic operation.",
     "Includes signed zero, subnormals, precision-boundary values and large unsigned integers.",
     "This validates arithmetic and regional input access, not a neural model."
   ],
   "source_sha256": {
-    "cod/lang_frontend.hh": "dcabdb214ad0fc7282f06a702e5d73351b029157f4fc00e9b26548c5ee2b1f4e",
-    "cod/lang_region_runtime.hh": "b7c4cc20f2ef2ff5715fdf4467d2593e1c0a9d3838c3f5745f9f751b1ff5faf4",
-    "tests/cod/language/numeric_properties.py": "50047f990b381d8651f98f15f227ea6ee59b9617191b4b358fcfbe72932eb3bc"
+    "cod/lang_frontend.hh": "2826f6c5e403f1e0dc105df39341aeccfd7b6c71ce56cd0358d4441b1deb668c",
+    "cod/lang_llvm.hh": "a4e83b38939e7f94d844c8918409cfd7a96a36bb46efa131977d4de176790ff3",
+    "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
+    "tests/cod/language/numeric_properties.py": "b2662a4815b8539c90a35b37028e935892df7076408a78e92ddc23b3104f94c5"
   }
 }

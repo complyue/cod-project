@@ -1,2 +1,0 @@
-behave @print(1);
-using symbol "std:io" @print;

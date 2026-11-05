@@ -10,20 +10,22 @@ import time
 
 
 def run(executable, root, entry, expected, label):
-    generated = entry.with_suffix('.cc')
+    generated = entry.with_suffix('.ll')
+    bitcode = entry.with_suffix('.bc')
     started = time.monotonic()
-    check = subprocess.run([str(executable), '--check', str(entry), '--emit-cpp', str(generated)],
+    check = subprocess.run([str(executable), '--check', str(entry), '--emit-llvm', str(generated), '--emit-bc', str(bitcode)],
                            cwd=root, capture_output=True, text=True, timeout=120)
     check_seconds = time.monotonic() - started
     started = time.monotonic()
     native = subprocess.run([str(executable), '--run', str(entry)], cwd=root,
                             capture_output=True, text=True, timeout=120)
-    result = {'case': label, 'check_seconds': check_seconds,
+    result = {'case': label, 'backend': 'llvm', 'check_seconds': check_seconds,
               'native_compile_link_run_seconds': time.monotonic() - started,
-              'generated_bytes': generated.stat().st_size if generated.exists() else None,
               'check_exit': check.returncode, 'check_stdout': check.stdout, 'check_stderr': check.stderr,
               'native_exit': native.returncode, 'stdout': native.stdout, 'stderr': native.stderr,
               'expected_stdout': expected}
+    result['llvm_ir_bytes'] = generated.stat().st_size if generated.exists() else None
+    result['bitcode_bytes'] = bitcode.stat().st_size if bitcode.exists() else None
     result['passed'] = (check.returncode == 0 and check.stdout == '' and check.stderr == ''
                         and native.returncode == 0 and native.stdout == expected and native.stderr == '')
     print(json.dumps(result), flush=True)

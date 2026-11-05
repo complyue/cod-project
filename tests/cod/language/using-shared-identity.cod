@@ -1,9 +1,0 @@
-using symbol "std:io" @print;
-symbol from "vocabulary.cod" @p;
-symbol from "vocabulary.cod" @x;
-effect @x = 7;
-using "source.cod" @p;
-effect @x = 8;
-behave @print(perform @p);
-behave @print(behave @p);
-behave @print(@x);

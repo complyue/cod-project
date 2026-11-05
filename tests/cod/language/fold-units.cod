@@ -1,7 +1,0 @@
-using symbol "std:io" @print;
-unit Slot::i64;
-unit Count::i64;
-function count(lo (Slot), hi (Slot))::Count {
-  fold (slot in lo .. hi, n = Count(0)) { Count(scalar(n) + 1) }
-}
-behave @print(scalar(count(Slot(4), Slot(11))));

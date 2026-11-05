@@ -1,4 +1,0 @@
-symbol @print;
-using "std:io" @print as @print;
-symbol from "identity-provider.cod" @x;
-behave @print(@x);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate emitted regional layouts and relocation without a second allocator."""
+"""Check LLVM artifact round-tripping and relocate an LLVM-created region image."""
 
 import datetime
 import hashlib
@@ -12,61 +12,58 @@ import tempfile
 import time
 
 
+# The only hook runs when the generated program releases its region. The CoD
+# program itself creates and mutates every object inspected here.
 HARNESS = r'''
-#undef main
+#undef cod_lang_region_free
 #include <cassert>
 #include <cstring>
-#include <iostream>
 
-int main() {
-  if (cod_fixture_main() != 0) return 1;
-  static_assert(!std::is_copy_constructible_v<Record0>);
-  static_assert(!std::is_move_constructible_v<Record0>);
-  static_assert(!std::is_copy_constructible_v<CoDArray<float>>);
-  static_assert(sizeof(shilos::regional_ptr<float>) == sizeof(std::intptr_t));
-  CoDRegionOwner relocated(4096);
-  std::uint64_t head_offset{}, array_offset{}, used{};
-  {
-    CoDRegionOwner original(4096);
-    auto values = original->create<CoDArray<float>>(3, 0.25f);
-    array_offset = region_offset(*original, values.get());
-    auto tail = original->create<Record0>(2.0f, 0, array_offset);
-    auto head = original->create<Record0>(3.0f, region_offset(*original, tail.get()), array_offset);
-    head_offset = region_offset(*original, head.get());
-    head->f1.get()->f1 = head;
-    used = original->occupation();
-    assert(&*original != &*relocated);
-    // Relocate the complete region image; never copy individual regional objects.
-    std::memcpy(static_cast<void *>(&*relocated), static_cast<const void *>(&*original), used);
-  }
-  const auto head = region_pointer<Record0>(*relocated, head_offset);
-  assert(head->f0 == 3.0f && head->f1->f0 == 2.0f);
-  assert(head->f1->f1.get() == head.get());
-  const auto array = region_pointer<CoDArray<float>>(*relocated, array_offset);
-  assert(head->f2.get() == array.get());
-  assert(head->f1->f2.get() == array.get());
-  assert(array->size == 3 && array->data.get()[2] == 0.25f);
-  array_store<float>(*relocated, array_offset, 1, 7.5f);
-  assert(head->f1->f2->data.get()[1] == 7.5f);
-
-  CoDRegionOwner pool(32768);
-  auto ids = pool->create<CoDArray<std::uint32_t>>(2064, 0);
-  auto weights = pool->create<CoDArray<std::uint8_t>>(2064, 1);
-  auto frame_a = pool->create<CoDArray<float>>(15, 0.0f);
-  auto frame_b = pool->create<CoDArray<float>>(15, 0.0f);
-  assert(sizeof(*ids->data.get()) == 4 && sizeof(*weights->data.get()) == 1);
-  assert(reinterpret_cast<std::uintptr_t>(ids->data.get()) % alignof(std::uint32_t) == 0);
-  assert(reinterpret_cast<std::uintptr_t>(frame_a->data.get()) % alignof(float) == 0);
-  assert(frame_a->data.get() != frame_b->data.get());
-  const std::uint64_t payload = 2064 * 5 + 15 * 8;
-  std::cout << "{\"relocation_passed\":true,\"relocated_bytes\":" << used
-            << ",\"slot_payload_bytes\":" << 2064 * 5
-            << ",\"two_frames_bytes\":" << 15 * 8
-            << ",\"region_header_bytes\":" << sizeof(CoDRegion)
-            << ",\"array_header_bytes\":" << sizeof(CoDArray<float>)
-            << ",\"pool_occupation_bytes\":" << pool->occupation()
-            << ",\"non_element_bytes\":" << pool->occupation() - payload
-            << "}\n";
+struct Values {
+  shilos::regional_ptr<float> data;
+  std::uint64_t size;
+  explicit Values(CoDRegion &) {}
+  Values(const Values &) = delete;
+  Values(Values &&) = delete;
+};
+struct Node {
+  float value;
+  shilos::regional_ptr<Node> next;
+  shilos::regional_ptr<Values> data;
+  explicit Node(CoDRegion &) {}
+  Node(const Node &) = delete;
+  Node(Node &&) = delete;
+};
+extern "C" void cod_lang_region_free(void *owner) {
+  auto &original = *static_cast<CoDRegion *>(owner);
+  CoDRegionOwner relocated(8192);
+  // Reproduce only allocation offsets with the same public allocator/layout.
+  auto *values_layout = relocated->allocate(sizeof(Values), alignof(Values));
+  relocated->allocate(2 * sizeof(float), alignof(float));
+  auto *tail_layout = relocated->allocate(sizeof(Node), alignof(Node));
+  auto *head_layout = relocated->allocate(sizeof(Node), alignof(Node));
+  const auto base = reinterpret_cast<std::byte *>(&*relocated);
+  const auto values_offset = static_cast<std::byte *>(values_layout) - base;
+  const auto tail_offset = static_cast<std::byte *>(tail_layout) - base;
+  const auto head_offset = static_cast<std::byte *>(head_layout) - base;
+  const auto used = original.occupation();
+  assert(used == relocated->occupation());
+  assert(&original != &*relocated);
+  std::memcpy(static_cast<void *>(&*relocated), static_cast<const void *>(&original), used);
+  cod_lang_region_release(owner);
+  const auto *head = reinterpret_cast<const Node *>(base + head_offset);
+  const auto *tail = reinterpret_cast<const Node *>(base + tail_offset);
+  const auto *values = reinterpret_cast<const Values *>(base + values_offset);
+  assert(head->value == 3.0f && tail->value == 7.0f);
+  assert(head->next.get() == tail && tail->next.get() == head);
+  assert(head->data.get() == values && tail->data.get() == values);
+  assert(values->size == 2 && values->data.get()[0] == 0.25f);
+  auto *mutable_values = reinterpret_cast<Values *>(base + values_offset);
+  mutable_values->data.get()[1] = 7.5f;
+  assert(tail->data->data.get()[1] == 7.5f);
+  std::printf("{\"relocation_passed\":true,\"relocated_bytes\":%llu,"
+              "\"region_header_bytes\":%zu,\"array_header_bytes\":%zu,\"record_bytes\":%zu}\n",
+              static_cast<unsigned long long>(used), sizeof(CoDRegion), sizeof(Values), sizeof(Node));
 }
 '''
 
@@ -87,38 +84,45 @@ def main():
     if mode not in ("build", "built"):
         raise SystemExit("COD_TEST_TOOLCHAIN must be build or built")
     toolchain = root / mode
-    cod = toolchain / "bin/cod"
-    compiler = toolchain / "bin/clang++"
     if os.name == "nt":
         raise SystemExit("This native layout measurement currently targets Linux/macOS")
     with tempfile.TemporaryDirectory(prefix="cod-regional-layout-") as temporary:
         scratch = Path(temporary)
-        generated = scratch / "generated.cc"
-        _, frontend_seconds = checked([cod, "--check", directory / "region-records.cod",
-                                        "--emit-cpp", generated], root)
+        entry, ir, bitcode, runtime = [scratch / name for name in ("main.cod", "main.ll", "main.bc", "runtime.cc")]
+        entry.write_text((directory / "region-records.cod").read_text() + "\nsetfield(@tail, next, @head);\n")
+        _, frontend_seconds = checked([toolchain / "bin/cod", "--check", entry,
+                                       "--emit-llvm", ir, "--emit-bc", bitcode, "--emit-runtime", runtime], root)
+        roundtrip = scratch / "roundtrip.bc"
+        disassembled = scratch / "roundtrip.ll"
+        checked([toolchain / "bin/llvm-as", ir, "-o", roundtrip], root)
+        checked([toolchain / "bin/llvm-dis", bitcode, "-o", disassembled], root)
+        checked([toolchain / "bin/opt", "-passes=verify", "-disable-output", roundtrip], root)
+        if "define i32 @main()" not in disassembled.read_text():
+            raise RuntimeError("Bitcode did not retain the generated entry function")
         source = scratch / "relocation.cc"
-        source.write_text('#define main cod_fixture_main\n' + generated.read_text() + HARNESS)
+        source.write_text('#define cod_lang_region_free cod_lang_region_release\n' + runtime.read_text() + HARNESS)
         executable = scratch / "relocation"
-        command = [compiler, "-std=c++20", "-O2", "-g", "-UNDEBUG", "-stdlib=libc++",
-                   "-fuse-ld=lld", "-I" + str(root / "include"), source, "-o", executable,
+        command = [toolchain / "bin/clang++", "-std=c++20", "-O2", "-g", "-UNDEBUG", "-stdlib=libc++",
+                   "-fuse-ld=lld", "-I" + str(root / "include"), roundtrip, source, "-o", executable,
                    "-L" + str(toolchain / "lib"), "-Wl,-rpath," + str(toolchain / "lib")]
         _, compile_seconds = checked(command, root)
         output, process_seconds = checked([executable], root)
         lines = output.splitlines()
         if lines[:-1] != ["5.25", "10.25", "true"]:
             raise RuntimeError("The source fixture did not retain its expected result: " + output)
-        evidence = {"schema_version": 1, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        evidence = {"schema_version": 2, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "platform": platform.platform(), "toolchain": mode, "passed": True,
-                    "layout": json.loads(lines[-1]), "frontend_seconds": frontend_seconds,
-                    "native_compile_link_seconds": compile_seconds, "native_process_seconds": process_seconds,
-                    "generated_cpp_bytes": generated.stat().st_size, "native_harness_bytes": executable.stat().st_size,
-                    "notes": ["Native size includes debug information and the relocation harness.",
-                              "Timing includes process startup; it is not a simulator throughput result.",
-                              "Non-element bytes include region/array headers, root and allocation alignment."],
+                    "llvm_artifact_roundtrip": True, "layout": json.loads(lines[-1]),
+                    "frontend_seconds": frontend_seconds, "native_compile_link_seconds": compile_seconds,
+                    "native_process_seconds": process_seconds, "llvm_ir_bytes": ir.stat().st_size,
+                    "bitcode_bytes": bitcode.stat().st_size,
+                    "notes": ["The CoD program creates the inspected records, array, sharing and cycle through LLVM IR.",
+                              "The release hook copies the whole image, frees the original, then checks references and mutation.",
+                              "Only system services and the independent layout/relocation check use C++."],
                     "source_sha256": {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-                                      for path in [root / "cod/lang_frontend.hh", root / "cod/lang_region_runtime.hh",
-                                                   root / "include/shilos/region.hh", directory / "region-records.cod",
-                                                   Path(__file__).resolve()]}}
+                                      for path in [root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
+                                                   root / "cod/lang_native_runtime.hh", root / "include/shilos/region.hh",
+                                                   directory / "region-records.cod", Path(__file__).resolve()]}}
         if report := os.environ.get("COD_REGIONAL_REPORT"):
             Path(report).write_text(json.dumps(evidence, indent=2) + "\n")
         print(json.dumps(evidence, indent=2))

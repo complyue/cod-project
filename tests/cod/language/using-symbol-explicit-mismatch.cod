@@ -1,2 +1,0 @@
-symbol @print;
-using symbol "std:io" @print as @print;

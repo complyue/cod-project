@@ -1,14 +1,14 @@
-# CoD native source prototype
+# CoD LLVM source prototype
 
-Prototype reference revision: 9 · Recorded: 2026-11-05.
+Prototype reference revision: 10 · Recorded: 2026-11-05.
 
 ## Design authority
 
-- **Registry / scope:** implementation evidence associated with [D-10 revision 13](../../../design/DesignAuthorityRegistry.md#d-10), under the direct [H-108](../../../design/DesignAuthorityRegistry.md#h-108) prototype request and [H-118](../../../design/DesignAuthorityRegistry.md#h-118) symbol-syntax implementation request, refined by [H-121](../../../design/DesignAuthorityRegistry.md#h-121) for combined using and identity checks. This reference describes the runnable subset; it is not a qualified specification of the full language.
-- **Value lineage:** C-35/C-36/C-37 and P-84/P-85/P-86 connect identity, scoped interpretation and pure computation to inspectable programs; C-38/P-87 connects the fixture to application-driven validation. These candidate paths retain their registry status.
-- **Human baseline / invariants:** H-96–H-121 supply the local symbol, callable, module, capture and storage rules. Preserve definition-value `perform`, current-binding `behave`, scope restoration, complete scanning before execution composition, and compile-time missing-binding errors. User values have no host-heap lifetime.
-- **Acceptance / non-goals:** actual source-to-native compilation and execution, scope/module examples, diagnostics before execution, and an exact-integer incoming gather. Fixed-capacity regions, typed SoA arrays, regional records and pure input-reachable traversal are included. Sum/GADT syntax, persistent closures, concurrency and neural learning are outside this checkpoint. Named bits products, FP32/FP64 values and parameter-type methods are implemented.
-- **Assessment:** [K-230](../../../design/DesignAuthorityRegistry.md#k-230) records full-pool and numeric measurements, regional type/import cases and conversion-candidate fixes. [K-229](../../../design/DesignAuthorityRegistry.md#k-229) records deep-call compiler fixes and measured SoA kernel cost. [K-228](../../../design/DesignAuthorityRegistry.md#k-228) records regional storage/snapshots, relocation and multi-module A/B gather evidence under H-123/H-124/H-127/H-129/H-133. [K-227](../../../design/DesignAuthorityRegistry.md#k-227) records bounded iteration, compact integer widths, checked numeric casts and typed pool-index validation. [K-226](../../../design/DesignAuthorityRegistry.md#k-226) records nominal units and conversion-path validation under H-128/H-130/H-134–H-138. [K-225](../../../design/DesignAuthorityRegistry.md#k-225) records this typed-value/method/composition checkpoint and actual validation. H-122/H-123 authorize this language/runtime increment; H-139–H-141 specify complex composition, once-only incorporation and initial inlining. K-224 records the current module contract. [K-219](../../../design/DesignAuthorityRegistry.md#k-219) records implementation and measured evidence. The symbol-selection/map forms implement H-118; combined using and identity checks implement H-120/H-121; other experimental syntax, numerical conventions and unsupported edge cases do not settle the full language.
+- **Registry / scope:** implementation reference for [D-10r15](../../../design/DesignAuthorityRegistry.md#d-10), D-07r22 and D-11r7. The complete design contracts remain pending-human; this reference describes the bounded implementation.
+- **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
+- **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification.
+- **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-231](../../../design/DesignAuthorityRegistry.md#k-231) records the current implementation, coverage and limits.
 
 ## Run
 
@@ -18,17 +18,17 @@ From the repository root, with its existing `build` toolchain:
 build/bin/cod --run tests/cod/language/scopes.cod
 build/bin/cod --run tests/cod/language/using.cod
 build/bin/cod --run tests/cod/language/import.cod
-build/bin/cod --run tests/cod/language/frame.cod
+build/bin/cod --run tests/cod/language/region-gather.cod
 ```
 
-`--run` parses the entry and its complete local dependency graph, checks demanded call paths, generates native source, invokes the project's Clang/LLVM compiler and linker, then executes the result. It cleans its own temporary source, bitcode and executable. It does not require a `CodProject.yaml`, modify a DBMR, or pass CoD text through as C++. The existing `--eval` C++ mode remains available separately.
+`--run` parses the entry and its complete local dependency graph, checks demanded call paths, emits LLVM IR/bitcode directly, invokes the existing compiler/linker with a small native system runtime, then executes the result. It removes its own temporary runtime source, bitcode and executable. The source mode needs no `CodProject.yaml` or DBMR. The existing `--eval` C++ facility remains a separate driver mode.
 
 ```sh
 build/bin/cod --check tests/cod/language/using.cod -v
-build/bin/cod --check tests/cod/language/using.cod --emit-cpp /tmp/cod-example.cc
+build/bin/cod --check tests/cod/language/using.cod --emit-llvm /tmp/cod-example.ll --emit-bc /tmp/cod-example.bc
 ```
 
-`--check` checks and lowers without invoking native compilation or executing the program. `-v` lists scanned modules and execution-composition encounters. `--emit-cpp` saves the generated source for review; that source is a derived artifact. `--run` and `--check` each accept one entry and cannot be combined with `--eval`.
+`--check` checks and lowers without invoking native compilation or executing the program. `-v` lists scanned modules and execution-composition encounters. `--emit-llvm` and `--emit-bc` save textual and binary forms of the same execution IR. `--emit-runtime FILE` writes the small C++ system services when separately linking an emitted artifact. CoD business logic is emitted only as LLVM IR; there is no backend selector. These outputs are derived artifacts, not persistent semantic graphs. `--run` and `--check` each accept one entry and cannot be combined with `--eval`.
 
 ## Supported source forms
 
@@ -57,7 +57,7 @@ behave @print(behave @p);   // 9: current dynamic binding
 - Lexical functions and immutable globals can be selected with `using "module.cod" name;`. Function-body `import` is unsupported.
 - Synthetic system module `std:io` provides `@print` for one scalar and `@assert` for one boolean. These are procedures; functions cannot invoke them or other effects. Use `using symbol "std:io" @print;`, or explicitly select an existing destination. Built-ins have no source body to `import`.
 
-Prototype expression evaluation is left-to-right; boolean operators short-circuit. Both conditional branches are checked. A symbolic write in a conditional logical operand requires an explicit nested scope. Arithmetic overflow and division by zero fail the native program with exit 70 rather than invoking C++ undefined behavior. These sequencing, block-result and numerical choices remain reviewable prototype conventions.
+Prototype expression evaluation is left-to-right; boolean operators short-circuit. Both conditional branches are checked. A symbolic write in a conditional logical operand requires an explicit nested scope. Arithmetic overflow and division by zero fail the native program with exit 70 before LLVM can evaluate an invalid operation. These sequencing, block-result and numerical choices remain reviewable prototype conventions.
 
 ## Typed values and methods
 
@@ -78,7 +78,7 @@ Products are nominal bits types identified by the defining module/declaration; e
 
 `let` binds an immutable lexical value inside an expression scope; module values use typed `global` declarations. Parameter annotations accept `:` or `::`; results accept `->` or `::`. Methods dispatch on the complete argument-type tuple. Selected function sets from multiple modules can share a local method name; duplicate identical matches are diagnosed when demanded. Operator methods use names such as `(+)`; `p + 1` and `(+)(p, 1)` select the same user-defined method. Unary/binary arities are distinct. Short-circuit operators remain control expressions.
 
-Pure inline scopes use fresh native names and do not add needless C++ nesting. Procedure scopes retain restoration semantics. Machine-code reuse is deferred; [stress_tests.py](stress_tests.py) measures generated-source size and compile/link/run time on deep and shared dependency graphs. The generated stress cases cover 512 source modules and 1,000 nested procedure specializations. Capture analysis restores only bindings changed in a scope; expression lowering uses separate routines to keep compiler host-stack frames small. Native code is optimized by the existing compiler, so source expansion is not a claim about runtime stack depth.
+Demanded function/procedure calls are inlined into LLVM control flow. Typed TLS slots hold active effects; SSA values retain captures and values to restore on scope exit. Machine-code reuse is deferred. [stress_tests.py](stress_tests.py) checks deep and shared dependency graphs and records IR/bitcode size and compile/link/run time, including 512 modules and 1,000 procedure specializations. LLVM's standard optimization pipeline handles native optimization; no custom optimizer or backend abstraction is used.
 
 ## Units and conversion selection
 
@@ -140,9 +140,9 @@ A function and its nested function calls may read every object reachable through
 
 The current compiler specializes owning-region information along known call paths. Returning a reference to a newly created, ending region is rejected; returning an allocation in a still-live caller region is allowed. Conditional/fold references retain one known owning region. Persisted cross-region fields remain a separate design topic. An imported source procedure may be used with `behave` under live caller bindings, while `perform` rejects a required capture whose source region has expired.
 
-[region-gather.cod](region-gather.cod) combines unit/layout/index modules with regional type, pure kernel and procedure modules. It fills separate source and weight arrays, then performs four A/B pull updates with FP32 snapshots. Its results match an independent FP32 arithmetic calculation. This is a programming-facility check, not a neuron transition or training rule. [gather_benchmark.py](gather_benchmark.py) scales the same source to 4,095 rows, 693,504 incoming slots and eight updates; [gather-validation.json](gather-validation.json) records comparison with an independent rounded FP32 reference. On the recorded Linux run, regional occupation is 3,500,416 bytes, of which 3,500,280 are array elements. The emitted C++ is 40,817 bytes; the native executable including debug information is 196,952 bytes. Native process time is about 0.07 seconds, including initialization and checksum output; this is a local arithmetic-kernel observation, not SNN throughput.
+[region-gather.cod](region-gather.cod) combines unit/layout/index modules with regional type, pure kernel and procedure modules. It fills separate source and weight arrays, then performs four A/B pull updates with FP32 snapshots. Its results match an independent FP32 arithmetic calculation. This is a programming-facility check, not a neuron transition or training rule. [gather_benchmark.py](gather_benchmark.py) scales the same source to 4,095 rows, 693,504 incoming slots and eight updates; [gather-validation.json](gather-validation.json) records comparison with an independent rounded FP32 reference. On the recorded Linux run, regional occupation is 3,500,416 bytes, of which 3,500,280 are array elements. The linked record contains IR/bitcode/native size and local process time, including initialization and checksum output. These observations establish runnable scale for this arithmetic workload, not SNN throughput.
 
-The optional `gather_benchmark.py --full-pool` case exercises all 112,281,600 slots of the J16,q10 arithmetic layout with uniform input and one gather. [gather-full-pool-validation.json](gather-full-pool-validation.json) records 566,650,928 occupied bytes and a local process time of approximately 3.4 seconds. It assigns one arithmetic row per slot set, rather than selecting an SNN neuron count. All 5-byte slot elements remain separate four-byte and one-byte arrays. [numeric_properties.py](numeric_properties.py) compares 134 FP32 and 131 u64 regional-input results against independent arithmetic; [numeric-validation.json](numeric-validation.json) records its trace and source hashes.
+The optional `gather_benchmark.py --full-pool` case exercises all 112,281,600 slots of the J16,q10 arithmetic layout with uniform input and one gather. [gather-full-pool-validation.json](gather-full-pool-validation.json) records 566,650,928 occupied bytes with measured local process time in the linked record. It assigns one arithmetic row per slot set, rather than selecting an SNN neuron count. All 5-byte slot elements remain separate four-byte and one-byte arrays. [numeric_properties.py](numeric_properties.py) compares 22 FP32 and 19 u64 regional-input results against independent arithmetic; [numeric-validation.json](numeric-validation.json) records its trace and source hashes.
 
 ## Module and storage boundary
 
@@ -160,7 +160,7 @@ The generated program uses fixed thread-local typed binding slots and stack-base
 
 ## Evidence
 
-[validation.json](validation.json) records the latest checkpoint’s commands, outputs, exit codes, source/executable hashes and component-suite evidence. [stress-validation.json](stress-validation.json) records generated dependency/call-graph checks. [regional-validation.json](regional-validation.json) records native layout, complete-image relocation and compilation/process measurements from [regional_runtime_tests.py](regional_runtime_tests.py). The harness uses the actual emitted record/array definitions and releases the original region before reading the relocated graph. Measurements are local observations, not portability or full-language acceptance claims.
+[validation.json](validation.json) records the latest checkpoint’s commands, outputs, exit codes, source/executable hashes and component-suite evidence. [stress-validation.json](stress-validation.json) records generated dependency/call-graph checks. [regional-validation.json](regional-validation.json) records native layout, complete-image relocation and compilation/process measurements from [regional_runtime_tests.py](regional_runtime_tests.py). The harness verifies LLVM artifact round-tripping and inspects the records/arrays created by LLVM execution through an independent layout view. It copies the complete region, releases the original, then checks sharing, a cycle and mutation through the relocated references. Measurements are local observations, not portability or full-language acceptance claims.
 
 The suite discovers [test_language.sh](../test_language.sh), which runs [run_tests.py](run_tests.py) against expected results in [cases.json](cases.json). To repeat the component suite with the existing build toolchain:
 
@@ -170,21 +170,19 @@ COD_TEST_TOOLCHAIN=build tests/cod/run-all.sh
 
 For the language group alone, use `COD_TEST_TOOLCHAIN=build tests/cod/test_language.sh`. Optional fixture stems select individual cases; the frontend-only check still runs. Set `COD_LANGUAGE_REPORT` to save a JSON result record. These tests compile and run accepted programs and require rejected programs to fail before any preceding top-level output.
 
-| Fixture | Observation |
+Coverage is judged by the contracts below, not by the number of fixtures or a source-line percentage. Each group needs an accepted execution path and the relevant rejection or corruption check. Overlapping spelling variants are not separate acceptance goals.
+
+| Contract and consequence | Key evidence |
 | --- | --- |
-| [scopes.cod](scopes.cod), [transitive.cod](transitive.cod) | Captured/current values, body-local restoration, repeat calls, transitive `behave` requirements |
-| [using.cod](using.cod), [import.cod](import.cod) | Source context gives `401,408`; receiving redefinition gives `907,908`; each source executes first and restores its effects |
-| [symbol-trigger.cod](symbol-trigger.cod), [function-resource.cod](function-resource.cod), [global-resource.cod](global-resource.cod) | Symbol, function and global references each incorporate observable source execution |
-| [identity.cod](identity.cod), [procedure-rebinding.cod](procedure-rebinding.cod), [effect-result.cod](effect-result.cod) | Alias identity versus distinct files, scoped procedure rebinding, newly bound expression result |
-| [identity-restore.cod](identity-restore.cod), [using-destination.cod](using-destination.cod), [using-vocabulary-destination.cod](using-vocabulary-destination.cod) | Identity selection retains no source value; fresh or vocabulary-selected destinations install procedures independently of the source identity |
-| [import-mapping.cod](import-mapping.cod), [import-default-identity.cod](import-default-identity.cod), [reimport-mapping.cod](reimport-mapping.cod) | Explicit supplier/role mapping, same-name receiving identities, receiving captures and reimported-body translation |
-| [mapping-effects.cod](mapping-effects.cod), [mapping-perform-call.cod](mapping-perform-call.cod), [mapped-behave-later.cod](mapped-behave-later.cod) | Mapped writes/calls, transitive capture requirements, restoration and later caller bindings for `behave` |
-| [using-symbol-basic.cod](using-symbol-basic.cod), [using-symbol-source.cod](using-symbol-source.cod) | Combined selection, renamed aliases sharing dynamic values, source initialization once, captured/current calls and restoration |
-| [using-shared-identity.cod](using-shared-identity.cod), [using-symbol-shared-identity.cod](using-symbol-shared-identity.cod), [using-symbol-reexport.cod](using-symbol-reexport.cod) | Shared vocabulary/re-export identity permits abbreviation and still installs the selected procedure |
-| [using-explicit-self.cod](using-explicit-self.cod), [using-identity-mismatch.cod](using-identity-mismatch.cod), [using-symbol-same-value.cod](using-symbol-same-value.cod) | Explicit self-`as` keeps identities distinct; omitted `as` and combined mismatches fail even when procedure values agree |
-| [frame.cod](frame.cod) | A = `[2,5]` produces B = `[15,14]`; reverse target traversal agrees, source A remains unchanged until both B values are ready, then publication exposes `[15,14]` |
-| Invalid fixtures | Missing binding/capture, effect access in a function, incompatible symbol types, plain assignment, broken dependency and premature alias use, undeclared destinations, invalid mapping names/direction and unsupported source resources fail with source-location diagnostics before execution |
+| Effects select the right context and restore it; otherwise nested calls silently change caller behavior. | `scopes`, `transitive`, `capture-scope-restore`; unavailable captures/bindings rejected. |
+| Module loading is separate from once-only execution; identities survive aliases and remain distinct from values. | `module-diamond`, resource-trigger fixtures, `import-mapping`, `using-symbol-reexport`, identity mismatch despite equal procedure values. |
+| Products/UoMs preserve identity, pure methods and deliberate conversion choice. | `products`, `methods`, selected unit bundles, exact/direct/declared routes, ambiguity warning/error, argument evaluated once. |
+| Control flow preserves order, short circuiting, iteration scopes and fold types. | `arithmetic`, `bounded-iteration`, `iteration-scope`, product/reference folds and invalid accumulator types. |
+| Pure calls read input-reachable data while procedures own mutation and region lifetime. | `region-records`, `region-capture`, module `perform`/`behave`, returned parent references, rejected writes/escapes/cross-region fields. |
+| Regional storage actually relocates without pointer repair. | LLVM artifact/relocation harness: sharing and cycle survive freeing the original; array mutation follows the relocated references. |
+| Numeric representation and typed SoA indexing produce the intended arithmetic. | Named overflow/cast/precision boundaries, small independent numeric sample, `region-gather` and one full-pool measurement. |
+| Composition remains usable at the requested depth and dependency shape. | One stress set: deep pure/procedure paths, shared DAG, conversion re-exports and regional snapshot chain. |
 
-The frame fixture uses scalar values and two explicit calls, not regional arrays or a general frame loop. It validates the H-94 data-flow meaning; it does not enforce an immutable-view type or establish SNN dynamics, training, scalability or performance. The broader [semantic case catalog](../../../applications/steady-snn/research/cod-language-scope-cases.json) includes unimplemented cases; these checks do not mark that entire catalog as passed.
+The broader [semantic case catalog](../../../applications/steady-snn/research/cod-language-scope-cases.json) includes unimplemented application cases. This corpus does not validate neural equations, learning, general GADT behavior, concurrency, source-level LLVM debugging or cross-platform runtime layouts. Tests are added when a concrete uncovered contract or bug warrants one; repetition alone is not evidence of stronger coverage.
 
-The emitted regional runtime is in [lang_region_runtime.hh](../../../cod/lang_region_runtime.hh). The implementation is in [lang_syntax.hh](../../../cod/lang_syntax.hh), [lang_frontend.hh](../../../cod/lang_frontend.hh) and [main.cc](../../../cod/main.cc). Source edits build with exactly `cmake --build ./build`. The existing default build graph also refreshed runtime sub-build/configuration outputs during validation; no build-configuration source or toolchain was changed.
+The implementation is in [lang_syntax.hh](../../../cod/lang_syntax.hh), [lang_frontend.hh](../../../cod/lang_frontend.hh), [lang_llvm.hh](../../../cod/lang_llvm.hh) and [main.cc](../../../cod/main.cc). [lang_native_runtime.hh](../../../cod/lang_native_runtime.hh) supplies the fixed system services. Source edits build with exactly `cmake --build ./build`; no toolchain or build-configuration source was changed for this lowering path.

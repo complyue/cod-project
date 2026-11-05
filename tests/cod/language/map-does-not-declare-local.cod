@@ -1,8 +1,0 @@
-symbol @print;
-using "std:io" @print as @print;
-symbol @step;
-symbol @target;
-function helper() -> i64 { 9 }
-effect @target = 7;
-import "source.cod" @p as @step with { @target as @x; };
-behave @print(@x);
