@@ -728,5 +728,100 @@
     "file": "cast-truncation.cod",
     "exit": 0,
     "stdout": "0\n255\n-9223372036854775808\n"
+  },
+  {
+    "file": "region-arrays.cod",
+    "exit": 0,
+    "stdout": "3.5\n2\n9.5\n11\n"
+  },
+  {
+    "file": "region-records.cod",
+    "exit": 0,
+    "stdout": "5.25\n10.25\ntrue\n"
+  },
+  {
+    "file": "region-capture.cod",
+    "exit": 0,
+    "stdout": "8\n8\n11\n"
+  },
+  {
+    "file": "region-pure-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "function cannot modify regional storage"
+  },
+  {
+    "file": "region-pure-create.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "function cannot create a region"
+  },
+  {
+    "file": "region-stack-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional objects require alloc"
+  },
+  {
+    "file": "region-index-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected "
+  },
+  {
+    "file": "region-escape.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "outlive its owning scope"
+  },
+  {
+    "file": "region-cross-pointer.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cross-region reference fields"
+  },
+  {
+    "file": "region-bounds.cod",
+    "exit": 70,
+    "stdout": "",
+    "stderr_contains": "regional array index out of bounds"
+  },
+  {
+    "file": "region-null.cod",
+    "exit": 70,
+    "stdout": "",
+    "stderr_contains": "null regional reference"
+  },
+  {
+    "file": "region-capacity.cod",
+    "exit": 70,
+    "stdout": "",
+    "stderr_contains": "bad_alloc"
+  },
+  {
+    "file": "region-module-behave.cod",
+    "exit": 0,
+    "stdout": "23\n"
+  },
+  {
+    "file": "region-module-perform.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "live owning region"
+  },
+  {
+    "file": "region-reference-fold.cod",
+    "exit": 0,
+    "stdout": "1\n2\n3\n-1\n-1\n2\n"
+  },
+  {
+    "file": "region-parent-allocation.cod",
+    "exit": 0,
+    "stdout": "19\n"
+  },
+  {
+    "file": "region-gather.cod",
+    "exit": 0,
+    "stdout": "120\n64.7070312\n34.8680573\n18.7906551\n10.1264286\n"
   }
 ]

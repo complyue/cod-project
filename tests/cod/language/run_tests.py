@@ -60,7 +60,8 @@ def main():
     passed_count = sum(case["passed"] for case in results)
     print(f"CoD language: {passed_count}/{len(results)} passed ({mode} toolchain)")
     if report := os.environ.get("COD_LANGUAGE_REPORT"):
-        sources = [root / "cod/main.cc", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh",
+        sources = [root / "cod/main.cc", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_region_runtime.hh",
+                   root / "include/shilos/region.hh",
                    root / "tests/cod/test_language.sh", directory / "run_tests.py", directory / "cases.json",
                    *sorted(directory.glob("*.cod"))]
         evidence = {"schema_version": 2, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),

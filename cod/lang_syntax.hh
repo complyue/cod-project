@@ -131,7 +131,7 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
         advance();
       }
     }
-    if (std::string("(){};,:.+-*/%<>=!").find(c) == std::string::npos && punctuation.size() != 2)
+    if (std::string("(){}[];,:.+-*/%<>=!").find(c) == std::string::npos && punctuation.size() != 2)
       fail(start, "unsupported character in CoD source");
     advance();
     tokens.push_back({TokenKind::punctuation, punctuation, start});
@@ -141,14 +141,20 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
 }
 
 struct Type {
-  enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64, named, product, unit };
+  enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
+              named, product, unit, region, regional, array, reference, null_ref };
   Kind kind;
   std::string name;
   size_t identity = 0;
   Kind representation = void_type;
+  std::shared_ptr<Type> target;
   Type(Kind kind = void_type, std::string name = {}, size_t identity = 0, Kind representation = void_type)
       : kind(kind), name(std::move(name)), identity(identity), representation(representation) {}
-  bool operator==(const Type &) const = default;
+  bool operator==(const Type &other) const {
+    return kind == other.kind && name == other.name && identity == other.identity &&
+           representation == other.representation &&
+           ((!target && !other.target) || (target && other.target && *target == *other.target));
+  }
 };
 inline bool floating(Type type) { return type.kind == Type::float32 || type.kind == Type::float64; }
 inline bool integral(Type type) {
@@ -166,13 +172,17 @@ inline std::string type_name(const Type &type) {
   case Type::procedure: return "procedure";
   case Type::float32: return "f32";
   case Type::float64: return "f64";
-  case Type::named: case Type::product: case Type::unit: return type.name;
+  case Type::named: case Type::product: case Type::unit: case Type::regional: case Type::array: return type.name;
+  case Type::region: return "region";
+  case Type::reference: return "ref<" + type_name(*type.target) + ">";
+  case Type::null_ref: return "null";
   }
   return "unknown";
 }
 
 struct Expression {
-  enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect, block, conditional, field, let, range_for, fold };
+  enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect,
+                    block, conditional, field, let, range_for, fold, allocate, index, null_ref };
   Kind kind;
   Location at;
   std::string text;
@@ -196,7 +206,7 @@ struct SymbolMapping {
   Location at;
 };
 struct Form {
-  enum class Kind { symbol, symbol_from, function, procedure, product, unit, using_units, global, using_resource, import_resource, expression };
+  enum class Kind { symbol, symbol_from, function, procedure, product, array, unit, using_units, global, using_resource, import_resource, expression };
   Kind kind;
   Location at;
   std::string name;
@@ -206,10 +216,12 @@ struct Form {
   bool explicit_alias = false;
   bool using_symbol = false;
   bool conversion = false;
+  bool regional = false;
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
   std::optional<Type> result_type;
+  std::optional<Type> index_type;
   Expr body;
 };
 
@@ -252,6 +264,14 @@ class Parser {
   }
   Type parse_type() {
     auto token = name(TokenKind::identifier);
+    if (token.text == "ref") {
+      expect("<");
+      Type type{Type::reference};
+      type.target = std::make_shared<Type>(parse_type());
+      expect(">");
+      return type;
+    }
+    if (token.text == "region") return Type::region;
     if (token.text == "i64") return Type::integer;
     if (token.text == "u8") return Type::uint8;
     if (token.text == "u32") return Type::uint32;
@@ -284,6 +304,13 @@ class Parser {
   }
   Expr primary() {
     auto token = peek();
+    if (take("alloc")) {
+      auto owner = make(Expression::Kind::symbol, name(TokenKind::symbol));
+      auto expr = make(Expression::Kind::allocate, name(TokenKind::identifier));
+      expr->children.push_back(std::move(owner));
+      arguments(*expr);
+      return expr;
+    }
     if (is("for") || is("fold")) {
       const bool fold = take("fold");
       if (!fold) expect("for");
@@ -367,6 +394,7 @@ class Parser {
     }
     if (token.kind == TokenKind::identifier) {
       ++cursor_;
+      if (token.text == "null") return make(Expression::Kind::null_ref, token);
       if (token.text == "true" || token.text == "false") return make(Expression::Kind::boolean, token);
       if (token.text == "procedure" || token.text == "function" || token.text == "global" || token.text == "symbol")
         fail(token.at, "prototype declarations belong at module top level");
@@ -378,10 +406,18 @@ class Parser {
   }
   Expr expression(int minimum = 0) {
     auto left = primary();
-    while (take(".")) {
-      auto member = make(Expression::Kind::field, name(TokenKind::identifier));
-      member->children.push_back(std::move(left));
-      left = std::move(member);
+    while (true) {
+      if (take(".")) {
+        auto member = make(Expression::Kind::field, name(TokenKind::identifier));
+        member->children.push_back(std::move(left));
+        left = std::move(member);
+      } else if (is("[")) {
+        auto index = make(Expression::Kind::index, expect("["));
+        index->children.push_back(std::move(left));
+        index->children.push_back(expression());
+        expect("]");
+        left = std::move(index);
+      } else break;
     }
     while (precedence(peek().text) >= minimum) {
       auto op = tokens_[cursor_++];
@@ -428,7 +464,18 @@ public:
         form->result_type = parse_type();
         if (!numeric(*form->result_type)) fail(start.at, "a unit requires a scalar numeric representation");
         expect(";");
-      } else if (take("type")) {
+      } else if (take("array")) {
+        form->kind = Form::Kind::array;
+        form->name = name(TokenKind::identifier).text;
+        expect("[");
+        form->index_type = parse_type();
+        expect("]");
+        type_separator();
+        form->result_type = parse_type();
+        expect(";");
+      } else if (is("type") || is("regional")) {
+        form->regional = take("regional");
+        expect("type");
         form->kind = Form::Kind::product;
         form->name = name(TokenKind::identifier).text;
         expect("{");

@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+using "region-source.cod" Values;
+symbol from "region-source.cod" @values;
+using symbol "region-source.cod" @read;
+symbol @arena;
+effect @arena = region(4096u64);
+effect @values = alloc @arena Values(1u64, 23);
+behave @print(behave @read());

@@ -49,11 +49,61 @@ struct alignas(64) OverAlignedRoot {
   explicit OverAlignedRoot(memory_region<OverAlignedRoot> &) {}
 };
 
+struct PointerRoot {
+  static const UUID TYPE_UUID;
+  regional_ptr<float> scalar_;
+  regional_ptr<regional_str> text_;
+
+  explicit PointerRoot(memory_region<PointerRoot> &) {}
+  PointerRoot(const PointerRoot &) = delete;
+  PointerRoot(PointerRoot &&) = delete;
+  PointerRoot &operator=(const PointerRoot &) = delete;
+  PointerRoot &operator=(PointerRoot &&) = delete;
+};
+
 // Define UUIDs
 const UUID TestRoot::TYPE_UUID = UUID("aaaaaaaa-bbbb-cccc-dddd-111111111111");
 const UUID ComplexRoot::TYPE_UUID = UUID("bbbbbbbb-cccc-dddd-eeee-222222222222");
 const UUID ThrowingRoot::TYPE_UUID = UUID("cccccccc-dddd-eeee-ffff-333333333333");
 const UUID OverAlignedRoot::TYPE_UUID = UUID("dddddddd-eeee-ffff-aaaa-444444444444");
+const UUID PointerRoot::TYPE_UUID = UUID("eeeeeeee-ffff-aaaa-bbbb-555555555555");
+
+void test_scalar_and_record_pointer_fields() {
+  auto_region<PointerRoot> region(4096);
+  auto_region<PointerRoot> other(4096);
+  auto root = region->root();
+  auto number = region->create_bits<float>(1.25f);
+  auto text = region->create<regional_str>("regional field");
+
+  assert(!root.get(&PointerRoot::scalar_));
+  root.set(&PointerRoot::scalar_, number);
+  root.set(&PointerRoot::text_, text);
+  *root.get(&PointerRoot::scalar_) = 2.5f;
+  assert(*number == 2.5f);
+  assert(*root.get(&PointerRoot::text_) == std::string_view("regional field"));
+
+  const auto const_root = root;
+  const auto const_number = const_root.get(&PointerRoot::scalar_);
+  static_assert(std::is_same_v<decltype(*const_number), const float &>);
+  assert(*const_number == 2.5f);
+  assert(*const_root.get(&PointerRoot::text_) == std::string_view("regional field"));
+
+  bool cross_region_rejected = false;
+  try {
+    root.set(&PointerRoot::scalar_, other->create_bits<float>(9.0f));
+  } catch (const std::invalid_argument &) {
+    cross_region_rejected = true;
+  }
+  assert(cross_region_rejected);
+  assert(*root.get(&PointerRoot::scalar_) == 2.5f);
+
+  root.clear(&PointerRoot::scalar_);
+  assert(!root.get(&PointerRoot::scalar_));
+  assert(!const_root.get(&PointerRoot::scalar_));
+  root.set(&PointerRoot::text_, region->null<regional_str>());
+  assert(!root.get(&PointerRoot::text_));
+  std::cout << "Scalar and record pointer fields test passed!" << std::endl;
+}
 
 void test_basic_region_creation() {
   std::cout << "=== Testing basic region creation ===" << std::endl;
@@ -376,6 +426,7 @@ int main() {
     test_basic_region_creation();
     test_region_allocation();
     test_pointer_conversions();
+    test_scalar_and_record_pointer_fields();
     test_region_constraints();
     test_multiple_regions();
     test_region_lifetime();

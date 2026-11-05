@@ -1,0 +1,8 @@
+regional type Node { value::i64; next::ref<Node>; }
+symbol @first;
+symbol @second;
+symbol @node;
+effect @first = region(4096u64);
+effect @second = region(4096u64);
+effect @node = alloc @first Node(1, null);
+alloc @second Node(2, @node);

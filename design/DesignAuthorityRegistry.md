@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：228
+记录版本：229
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -129,7 +129,7 @@ Design authority
 | C-35 | 模块定义一等名义符号；别名保留身份，不同来源／共存版本可区分。 | C-10；P-84 候选价值衍生 | H-96 确认局部语义；H-112 要求明确来源和本地别名；H-114 明确 identity 是 compile-time value，alias 仅在编译期存在。D-10r10、D-07r13 DL-14。身份字节格式、生成及持久协议未选。 |
 | C-36 | 每线程符号变量与 scoped effect；按值 capture，perform 临时安装，behave 使用当前绑定；按需 WPO 检查完整调用路径及直接访问布局。 | C-02；P-85 候选价值衍生，P-88/P-92 依赖 | H-96/H-97/H-102/H-104 确认语义边界：缺少必需变量是编译错误、不独立编译模块、读 @name、仅 effect 写。D-10r1；分析算法／TLS ABI 未选。 |
 | C-37 | lexical function 只有显式输入输出；dynamic procedure 必须以符号命名并可访问 effects；模块顶层 dynamic scope 为初始化程序。 | C-01；P-86 候选价值衍生，P-89 约束 | H-98/H-103 confirmed 局部规则；D-10r1、D-07r4 DL-02/DL-15。初始化组合、词法细节和完整类型规则待设计。 H-124/H-127/H-129: regions are dynamic resources for procedures; functions may dereference the full input-reachable read-only graph throughout a nested call tree, with snapshot expiry at the outermost return. C-48/D-10r11 track this local scope. |
-| C-38 | 用实际 SNN 需求同步推进 CoD 语言与应用的设计、实现和验证。 | C-12；P-87 候选价值衍生，P-91/P-93 依赖 | H-96 确认方向；D-08 LanguageCoDesign205、D-07 DL-16。分步路线是待完善提案，数值方程和训练规则不自动确定。 H-122/H-123 limit the planned ten-hour run to language/runtime support, structured types and indexing; no SNN modeling/learning. Goal start awaits immediate design discussion. |
+| C-38 | 用实际 SNN 需求同步推进 CoD 语言与应用的设计、实现和验证。 | C-12；P-87 候选价值衍生，P-91/P-93 依赖 | H-96 确认方向；D-08 LanguageCoDesign205、D-07 DL-16。分步路线是待完善提案，数值方程和训练规则不自动确定。 H-122/H-123 limit the planned ten-hour run to language/runtime support, structured types and indexing; no SNN modeling/learning. The bounded goal is active; K-228 records regional support and snapshot validation. |
 | C-39 | 用户对象只有 stack/@region 载体；native heap 仅系统代码使用；capture 仅 bits/regional ptr。 | C-10；P-94 候选价值衍生，P-95 约束 | H-99/H-100 confirmed；D-10r1。无隐式用户 heap closure，区域对象不 copy/move；具体闭包表示／生命周期检查未选。 |
 | C-40 | 跨 region 引用的明确占位：独立区域间引用、生命周期及重载／版本场景逐步设计。 | C-03；P-96 依赖 | H-101 要求保留概念；D-10r1、D-07 DL-03/DL-08。无指针编码、注册表或第三 capture 类别选择。 |
 | C-41 | expression-oriented 语言方向及显式 void；符号读写作为表达式组合。 | C-10；P-97 候选价值衍生，P-98 约束 | H-104 的读写形式及结果方向；D-10r1、D-07 DL-15。H-111 确认 effect 返回新值；块结果及复合表达式顺序待定。 |
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 228，延续检查 K-01—K-227；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 229，延续检查 K-01—K-228；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -206,7 +206,7 @@ Design authority
 <a id="d-07"></a>
 ### D-07：领域语言讨论与设计决策跟踪
 
-- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 20；用该修订及包含它的 Git 提交定位。
+- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 21；用该修订及包含它的 Git 提交定位。
 - 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-046。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
 - 人工依据：H-06 近期目标、H-07 跟踪授权、H-08/H-11 应用及分离；H-96 现在同步推进语言和 SNN 设计／实现／验证，取代当前范围内的笼统实施延后。H-97—H-121 为局部语义、惯用组织及语法建议依据。DD-002/H-07 历史不改写。
 - 当前资格：全文契约及未确认价值路径仍 pending-human；明确的人类命题按其本身范围 confirmed，不把新 WPO、存储或语法细节自动批准。K-214 记录有界原型证据；K-215 记录编译期身份／别名、import 映射和预先声明目标的细化；K-216 记录 symbol from 与局部符号 as 源 body 角色的语法建议；K-217 记录 H-118 授权的实现、构建和 CoD 组件测试；K-218 记录 using symbol 及省略 as 时的身份一致要求；K-219 记录 H-121 授权的实现、验证和实际测试证据。上述记录均不以未合格基线产生 continued 资格。
@@ -217,7 +217,7 @@ Design authority
 - Current planning: H-122/H-123 request a ten-hour goal after discussion and restrict it to language/runtime support. H-124/H-127/H-129 confirm regional function snapshots; H-125/H-126/H-128 require strict scalar identities, UoM comparison and independent unit identities. D-11r4 records the resolved H-133–H-138 choices. The bounded ten-hour goal runs from 2026-11-05T20:13:49Z through 2026-11-06T06:13:49Z; H-139–H-141 add complex composition, once-only module incorporation and measured initial inlining. No mechanism is approved by silence.
 - H-132/K-222 separate the compound-UoM roadmap from the initial run. D-07r16 LI-01–LI-03 record pending questions about returned regional references, imported conversion lexical bindings and automatic conversions during dispatch; proposals are not human decisions.
 - H-133–H-138/K-223 resolve the immediate review in D-07r17 LI-01–LI-04: ordinary caller lifetime, fresh-definition/one-shot UoM using, parameter-controlled conversion, compile-time discovery and direct-before-declared-indirect route choice. The bounded H-122/H-123 implementation goal can proceed under these local human decisions; full-document qualification is not inferred.
-- K-226 records the passing nominal-UoM/conversion checkpoint under H-122/H-123 and H-128/H-130/H-134–H-138; D-07r19 and D-11r5. The active goal still requires iteration and regional-data support.
+- K-226 records nominal-UoM/conversion validation; K-227 records iteration/indexing. K-228 records regional storage, pure snapshots, relocation and A/B gather validation under H-123/H-124/H-127/H-129/H-133. D-07r21 is the current tracker; the autonomous goal remains active for further composition and runtime validation.
 
 <a id="d-08"></a>
 ### D-08：稳态循环激活 SNN 独立应用文档集
@@ -4602,3 +4602,17 @@ Scope: Accepts initial procedure expansion/inlining while size remains reasonabl
 - Exposed/fixed issues: introducing scalar u8 collided with a generated user unit named u8. Such definitions/aliases now fail early with a reserved-name diagnostic, and the stress generator uses non-reserved unit names. Float-to-integer bounds are checked after truncation. Aggregate initialization warnings introduced in the preceding increment are removed; the final source build retains only existing upstream warnings.
 - Evidence: three exact source-only builds in this checkpoint; final full CoD suite passes four groups with 132 language checks, six evaluation checks, eight cache checks and workspace checks. All four graph stress cases pass after the collision fix. Native loops handle a million-step reduction and endpoint-near-limit cases without compile-time iteration expansion. validation.json/stress-validation.json hold actual commands, outputs and source/executable hashes.
 - Boundaries: regional arrays and pointer-bearing snapshot traversal remain active-goal work. The shilos regional specification and implementation have been inspected for that next step; no regional allocator/pointer semantics, bootstrap source, main configuration, toolchain or SNN model is modified here. Full contracts remain pending-human; D-GOV228 maintenance alone continues H-05.
+
+
+### K-228 — 2026-11-05: Regional storage, snapshots and emitted-layout validation
+
+<a id="k-228"></a>
+
+- Agent implementation/evidence assessment under H-122/H-123/H-124/H-127/H-129/H-133 and H-139–H-141. Reviewed charter §§1–4, D-10 storage/snapshot rules and MemoryRegionAndRegionalTypes allocation/pointer protocols. Registry228 →229; D-07r20 →r21, reference6 →7. D-10r13 and D-11r6 remain current. This records bounded implementation under local human decisions, not qualification of full pending contracts or a new human confirmation.
+- Value chain preserved: typed regional storage serves inspectable, efficiently accessed domain data; H-123 requires useful static SoA storage and structured values. Pure traversal realizes H-127/H-129 without graph copies, per-object snapshot state or effect access. Source-level regional records/arrays use the existing allocator and self-relative persisted fields. Known owning regions are specialized by WPO; this is not a selected general cross-region ABI or permission system.
+- Implemented: fixed-capacity region resources, region-only record construction, scalar SoA arrays with declared integer/UoM index identity, typed references, read-only views, field/array reads, procedure-only mutation and returned existing references. New-region escape and dead captured-region use are rejected; allocations into a live caller region may be returned. Pointer capture retains reference identity while later pointee mutations remain visible. Conditional/fold references currently require one owning region. Regional records cannot copy/move or construct on the stack; product arrays and cross-region stored fields remain outside the subset.
+- Runtime repair: scalar global_ptr instantiation exposed eager pointer-to-member types in shilos record helpers. Deferring the owner type to the member template permits scalar targets; get/set/clear now project through the target object, handle heterogeneous fields and retain same-region checks. Existing stored pointer layout, allocation and relocation semantics are unchanged. Focused shilos tests cover scalar access, const reads, heterogeneous fields, null/clear and rejected cross-region assignment.
+- Evidence: exact source-only builds succeeded; all four CoD groups pass, including 149 language checks, six evaluation checks, eight cache checks and workspace checks. All four shilos test executables pass. Five graph stress cases pass, including a 96-module regional traversal returning an existing reference and observing subsequent mutation. That case emits 27,141 C++ bytes and completes local native compilation/link/run in approximately 1.89 seconds. These are local observations, not runtime call-stack depth claims.
+- Application-shaped fixture: separate units, pool layout/index, regional types, pure gather and procedure modules execute four FP32 A/B updates over 15 rows and 2,064 slots. Printed checksums match an independent rounded FP32 calculation. This validates storage/iteration/composition only and selects no SNN equation, state-transition ordering or learning mechanism.
+- Relocation/layout: a harness compiled from actual emitted record/array definitions copies a complete 128-byte occupied region image, releases its original storage, then validates a cycle, shared array references and mutation at the new base. A separate four-array pool has 10,320 slot-element bytes and 120 frame-element bytes, with 116 non-element bytes: native region/array headers, root and allocation alignment. No per-slot padding is introduced. regional-validation.json preserves sizes, timings and source hashes; validation.json/stress-validation.json preserve language and graph evidence.
+- Boundaries: persistent closures, cross-region representation, general GADT, compound-unit algebra, concurrency and SNN modeling/training remain excluded. Source tests and emitted-type harnesses use the deployed build toolchain; no main configuration, bootstrap source or host toolchain change. The ten-hour goal remains active for further stress, numeric correctness and measured kernel cost. D-GOV229 maintenance alone continues H-05; no unqualified descendant becomes qualified.

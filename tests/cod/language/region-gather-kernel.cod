@@ -1,0 +1,17 @@
+using units "pool-units.cod" {GlobalSetId, LocalSlot};
+using units "region-gather-types.cod" {Neuron};
+using "region-gather-types.cod" Frame;
+using "region-gather-types.cod" Incoming;
+using "pool-layout.cod" Layout;
+using "pool-layout.cod" capacity;
+using "pool-index.cod" locate;
+using "pool-index.cod" global_slot;
+function gather(input::Frame, graph::Incoming, layout::Layout, target (GlobalSetId))::f32 {
+  let position = locate(layout, target);
+  let sources = deref(graph.sources);
+  let weights = deref(graph.weights);
+  fold (j in 0u32 .. scalar(capacity(position.class_id)), sum = 0.0f32) {
+    let slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
+    sum + input[sources[slot]] * f32(weights[slot]) / 256.0f32
+  }
+}

@@ -1,0 +1,2 @@
+using symbol "region-source.cod" @read;
+perform @read();

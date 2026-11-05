@@ -1,0 +1,13 @@
+using symbol "std:io" @print;
+array Values[u32]::i64;
+symbol @arena;
+symbol @values;
+symbol @read;
+effect @arena = region(4096u64);
+effect @values = alloc @arena Values(1u64, 3);
+procedure @read()::i64 { @values[0u32] }
+store(@values, 0u32, 8);
+behave @print(perform @read());
+effect @values = alloc @arena Values(1u64, 11);
+behave @print(perform @read());
+behave @print(behave @read());

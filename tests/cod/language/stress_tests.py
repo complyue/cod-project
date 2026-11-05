@@ -88,6 +88,28 @@ def main():
                          f'using units "{previous}" {{{names}}};\n'
                          f'using "{previous}" finish;\nbehave @print(finish(unit0(1)));\n')
         results.append(run(executable, root, entry, '32\n', '16-unit-reexports-31-conversion-steps-with-cycle'))
+
+        (directory / 'regional-types.cod').write_text(
+            'regional type Node { value::f32; next::ref<Node>; }\n')
+        depth = 96
+        for i in range(depth):
+            body = 'using "regional-types.cod" Node;\n'
+            if i + 1 < depth:
+                body += f'using "regional-{i+1}.cod" find as next;\n'
+            body += 'function find(node::Node)::ref<Node> { '
+            body += ('next(deref(node.next))' if i + 1 < depth else 'node.next') + ' }\n'
+            (directory / f'regional-{i}.cod').write_text(body)
+        entry = directory / 'regional-main.cod'
+        entry.write_text('using symbol "std:io" @print;\nusing "regional-types.cod" Node;\n'
+                         'using "regional-0.cod" find;\nsymbol @arena;\nsymbol @head;\nsymbol @tail;\n'
+                         'effect @arena = region(16384u64);\n'
+                         'effect @tail = alloc @arena Node(11.0f32, null);\n'
+                         f'effect @head = fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'
+                         '  alloc @arena Node(f32(i), node)\n};\n'
+                         'behave @print(deref(find(deref(@head))).value);\n'
+                         'setfield(@tail, value, 29.0f32);\n'
+                         'behave @print(deref(find(deref(@head))).value);\n')
+        results.append(run(executable, root, entry, '11\n29\n', '96-module-regional-snapshot-chain'))
     if report := os.environ.get('COD_LANGUAGE_STRESS_REPORT'):
         Path(report).write_text(json.dumps({'recorded_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                                           'results': results}, indent=2) + '\n')

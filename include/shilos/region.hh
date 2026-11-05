@@ -340,20 +340,22 @@ public:
   global_ptr &operator=(const global_ptr<VT, RT> &) = default;
   global_ptr &operator=(global_ptr<VT, RT> &&) = default;
 
-  template <typename F> //
-  void clear(regional_ptr<F> VT::*ptrField) {
-    this->*ptrField.offset_ = 0;
+  template <typename F, typename Owner = VT>
+    requires std::is_base_of_v<Owner, VT>
+  void clear(regional_ptr<F> Owner::*ptrField) {
+    (get()->*ptrField).offset_ = 0;
   }
 
-  template <typename F> //
-  const global_ptr<F, RT> &set(regional_ptr<F> VT::*ptrField, const global_ptr<F, RT> &tgt) {
-    if (&tgt.region_ != &region_) {
+  template <typename F, typename Owner = VT>
+    requires std::is_base_of_v<Owner, VT>
+  const global_ptr<F, RT> &set(regional_ptr<F> Owner::*ptrField, const global_ptr<F, RT> &tgt) {
+    if (&tgt.region() != &region_) {
       throw std::invalid_argument("Cross-region pointer assignment is not allowed. "
                                   "Attempted to assign a pointer from a different memory region. "
                                   "Both the source and target pointers must belong to the same memory region.");
     }
-    regional_ptr<F> &fp = this->*ptrField;
-    VT *vp = tgt.get();
+    regional_ptr<F> &fp = get()->*ptrField;
+    const F *vp = tgt.get();
     if (!vp) {
       fp.offset_ = 0;
     } else {
@@ -362,29 +364,20 @@ public:
     return tgt;
   }
 
-  template <typename F> //
-  global_ptr<F, RT> get(regional_ptr<F> VT::*ptrField) {
-    regional_ptr<F> &fp = this->*ptrField;
-    VT *vp = fp.get();
-    if (!vp) {
-      return global_ptr<F, RT>(region_, 0);
-    } else {
-      return global_ptr<F, RT>(region_, reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(&region_));
-    }
+  template <typename F, typename Owner = VT>
+    requires std::is_base_of_v<Owner, VT>
+  global_ptr<F, RT> get(regional_ptr<F> Owner::*ptrField) {
+    regional_ptr<F> &fp = get()->*ptrField;
+    F *vp = fp.get();
+    return vp ? region_.cast_ptr(vp) : region_.template null<F>();
   }
 
-  template <typename F> //
-  const global_ptr<F, RT> get(regional_ptr<F> VT::*ptrField) const {
-    const regional_ptr<F> &fp = this->*ptrField;
-    const VT *vp = fp.get();
-    if (!vp) {
-      // const_cast is safe here: global_ptr only stores a reference, doesn't modify the region
-      return global_ptr<F, RT>(const_cast<memory_region<RT> &>(region_), 0);
-    } else {
-      // const_cast is safe here: global_ptr only stores a reference, doesn't modify the region
-      return global_ptr<F, RT>(const_cast<memory_region<RT> &>(region_),
-                               reinterpret_cast<intptr_t>(vp) - reinterpret_cast<intptr_t>(&region_));
-    }
+  template <typename F, typename Owner = VT>
+    requires std::is_base_of_v<Owner, VT>
+  const global_ptr<F, RT> get(regional_ptr<F> Owner::*ptrField) const {
+    const regional_ptr<F> &fp = get()->*ptrField;
+    const F *vp = fp.get();
+    return vp ? region_.cast_ptr(vp) : region_.template null<F>();
   }
 
   VT *get() {

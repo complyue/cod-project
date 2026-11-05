@@ -1,0 +1,7 @@
+using units "pool-units.cod" {GlobalSlot};
+unit Neuron::u32;
+array Frame[Neuron]::f32;
+array Sources[GlobalSlot]::Neuron;
+array Weights[GlobalSlot]::u8;
+regional type Incoming { sources::ref<Sources>; weights::ref<Weights>; }
+symbol @step;

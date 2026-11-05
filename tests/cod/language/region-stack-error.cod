@@ -1,0 +1,2 @@
+regional type Node { value::i64; }
+Node(2);
