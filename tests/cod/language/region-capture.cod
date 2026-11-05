@@ -2,12 +2,26 @@ using symbol "std:io" @print;
 array Values[u32]::i64;
 symbol @arena;
 symbol @values;
+symbol @first;
 symbol @read;
 effect @arena = region(4096u64);
 effect @values = alloc @arena Values(1u64, 3);
+effect @first = @values;
 procedure @read()::i64 { @values[0u32] }
 store(@values, 0u32, 8);
 behave @print(perform @read());
 effect @values = alloc @arena Values(1u64, 11);
 behave @print(perform @read());
 behave @print(behave @read());
+
+function cell(values::Values)::ref<i64> { ref_at(values, 0u32) }
+function sum(a::Values, b::Values)::i64 { deref(cell(a)) + deref(cell(b)) }
+effect @arena = region(4096u64);
+effect @values = alloc @arena Values(1u64, 13);
+behave @print(@first == @values);
+behave @print(cell(deref(@first)) == cell(deref(@values)));
+behave @print(perform @read());
+behave @print(behave @read());
+behave @print(sum(deref(@first), deref(@values)));
+store(cell(deref(@values)), 17);
+behave @print(sum(deref(@first), deref(@values)));

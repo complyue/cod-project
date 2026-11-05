@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 13 · Recorded: 2026-11-05.
+Prototype reference revision: 14 · Recorded: 2026-11-05.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 13 · Recorded: 2026-11-05.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-234](../../../design/DesignAuthorityRegistry.md#k-234) records the current implementation, coverage and limits.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-235](../../../design/DesignAuthorityRegistry.md#k-235) records the current implementation, coverage and limits.
 
 ## Run
 
@@ -138,7 +138,7 @@ Known pointer-format defect: a reference field at byte zero of a record cannot c
 
 Procedures may use `store(array, index, value)`, `store(scalar_ref, value)` and `setfield(record_ref, field, value)`. Their stored results survive dynamic-scope restoration. `effect` only changes a binding and restores that binding on scope exit. `used_bytes` and `capacity_bytes` inspect a region resource from a procedure. Capacity includes the native region header; allocation requests specify payload bytes.
 
-A function and its nested function calls may read every object reachable through their explicit inputs, including reference fields. They cannot allocate, mutate storage, access effect bindings or call procedures. This enforces the single-threaded read-only snapshot without copying a graph or introducing snapshot state. An existing input reference may be returned to the calling procedure; a subsequent outer function call observes intervening procedure writes. Pointer captures preserve the reference value, not the pointed-to contents.
+A function and its nested function calls may read every object reachable through their explicit inputs, including reference fields. They cannot allocate, mutate storage, access effect bindings or call procedures. This enforces the single-threaded read-only snapshot without copying a graph or introducing snapshot state. An existing input reference may be returned to the calling procedure; a subsequent outer function call observes intervening procedure writes. Pointer captures preserve the reference value, not the pointed-to contents. Explicit inputs may come from separate live regions: equal relative offsets do not make references equal, and returned references retain their original owner. This does not permit a stored cross-region field.
 
 The current compiler specializes owning-region information along known call paths. Returning a reference to a newly created, ending region is rejected; returning an allocation in a still-live caller region is allowed. Conditional/fold references retain one known owning region. Persisted cross-region fields remain a separate design topic. An imported source procedure may be used with `behave` under live caller bindings, while `perform` rejects a required capture whose source region has expired.
 
@@ -180,7 +180,7 @@ Coverage is judged by the contracts below, not by the number of fixtures or a so
 | Module loading is separate from once-only execution; identities survive aliases and remain distinct from values. | `module-diamond`, resource-trigger fixtures, `import-mapping`, `using-symbol-reexport`, identity mismatch despite equal procedure values. |
 | Products/UoMs preserve identity, pure methods and deliberate conversion choice. | `products`, `methods`, selected unit bundles, exact/direct/declared routes, ambiguity warning/error, argument evaluated once. |
 | Control flow preserves order, short circuiting, iteration scopes and fold types. | `arithmetic`, rejected unscoped logical writes even to an equal value, `bounded-iteration`, `iteration-scope`, product/reference folds and invalid accumulator types. |
-| Pure calls read input-reachable data while procedures own mutation and region lifetime. | `region-records`, `region-capture`, module `perform`/`behave`, returned parent references, rejected writes/escapes/cross-region fields. |
+| Pure calls read input-reachable data while procedures own mutation and region lifetime. | `products` with regional nested-product storage, `region-records`, `region-capture` across independent owners, module `perform`/`behave`, returned parent references, rejected writes/escapes/cross-region fields. |
 | Regional storage actually relocates without pointer repair. | LLVM artifact/relocation harness: sharing and cycle survive freeing the original; array mutation follows the relocated references. |
 | Numeric representation and typed SoA indexing produce the intended arithmetic. | Named overflow/cast/precision boundaries, small independent numeric sample, `region-gather` and one full-pool measurement. |
 | Composition remains usable at the requested depth and dependency shape. | One stress set: deep pure/procedure paths, shared DAG, conversion re-exports and regional snapshot chain. |

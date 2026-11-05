@@ -9,3 +9,19 @@ behave @print(b.pair.x);
 behave @print(b.pair.count);
 behave @print(metric(b));
 behave @assert(b.enabled);
+
+regional type Envelope { content::Box; next::ref<Envelope>; }
+function contents(e::Envelope)::Box { e.content }
+function through(e::Envelope)::i64 { contents(deref(e.next)).pair.count }
+symbol @arena;
+symbol @envelope;
+effect @arena = region(1024u64);
+effect @envelope = alloc @arena Envelope(b, null);
+setfield(@envelope, next, @envelope);
+{
+  let saved = contents(deref(@envelope));
+  setfield(@envelope, content, Box(Pair(4.0f32, 9), false));
+  behave @print(saved.pair.count);
+  behave @print(through(deref(@envelope)));
+  behave @print(contents(deref(@envelope)).enabled);
+};

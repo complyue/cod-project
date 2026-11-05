@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T23:20:13.284238+00:00",
+  "recorded_utc": "2026-11-05T23:34:37.925511+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -768,10 +768,10 @@
       "expected": {
         "file": "products.cod",
         "exit": 0,
-        "stdout": "2.5\n6\n-2.5\n"
+        "stdout": "2.5\n6\n-2.5\n6\n9\nfalse\n"
       },
       "exit_code": 0,
-      "stdout": "2.5\n6\n-2.5\n",
+      "stdout": "2.5\n6\n-2.5\n6\n9\nfalse\n",
       "stderr": "",
       "passed": true
     },
@@ -1772,10 +1772,10 @@
       "expected": {
         "file": "region-capture.cod",
         "exit": 0,
-        "stdout": "8\n8\n11\n"
+        "stdout": "8\n8\n11\nfalse\nfalse\n8\n13\n21\n25\n"
       },
       "exit_code": 0,
-      "stdout": "8\n8\n11\n",
+      "stdout": "8\n8\n11\nfalse\nfalse\n8\n13\n21\n25\n",
       "stderr": "",
       "passed": true
     },
@@ -2172,9 +2172,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-o35slg6r/program.ll",
+        "/tmp/cod-language-check-33ion9jf/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-o35slg6r/program.bc"
+        "/tmp/cod-language-check-33ion9jf/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2195,7 +2195,7 @@
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "c16c4602b95f7052e9161950396ba181a81ae5b3ba9d98faa79b821554f1960d",
-    "tests/cod/language/cases.json": "7a41d5f955a203575c29cd9fc2f8efa7a66ac1adc9e6d6a24c977d0d9e990938",
+    "tests/cod/language/cases.json": "a4210b3aadda0b5f7f7974c34f4293b89b4afd9db624c9f54352d607b0472c3d",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2270,11 +2270,11 @@
     "tests/cod/language/product-library.cod": "a50ce9353fd26acbeb0cab28294e6d2b2dae3bea376aa640fe8752e20f5bd6f7",
     "tests/cod/language/product-module-identity.cod": "d355cf9c10f7ef4be7b4269b63b05f8598b52396afc4c64b1ae561dbbcef54df",
     "tests/cod/language/product-other-library.cod": "6271a353553b396c6cf5f58d88b715a0ae21cc34050ad58e98d2538519b7812e",
-    "tests/cod/language/products.cod": "acc964555c72fd747632fee63df9c50d39dd300ab96fa2995bb67e3bf9fd176f",
+    "tests/cod/language/products.cod": "fc200917186dd1fca71a72163bb37089d8f5a0e600f1c62c8e561956e103be1b",
     "tests/cod/language/region-arrays.cod": "3c37ca84cf5647de6956fdf309ee62614242733b6721ae5bfe7516bc260ff924",
     "tests/cod/language/region-bounds.cod": "0836e7152c34485384fc4b72c0b77dd6774977f4af073804b31ce2b84758df38",
     "tests/cod/language/region-capacity.cod": "7205497704fa1ab6a25353c90b9cda7320f095855bdd5ef83b5301e8a7ab613d",
-    "tests/cod/language/region-capture.cod": "4c677d34294f3dc2c991fa9fa329d7c8d720b76c40215bb35751933cb6cce2b5",
+    "tests/cod/language/region-capture.cod": "40133895371604dd4e4d441bd4154804527720ab18055775784c6179b0aaf4cb",
     "tests/cod/language/region-cross-pointer.cod": "fa66513068945c510b063548bde6c9a8f9ea4b90569a089e5dca6640b39cf316",
     "tests/cod/language/region-empty.cod": "b192cd7458adb49402606d5dbcdf200a08492bf51342bb969a93049a4ae47c8b",
     "tests/cod/language/region-escape.cod": "da218c647176017b5e2cd9fe3e4b741f91e366be744572f351f63a0c71e052a3",

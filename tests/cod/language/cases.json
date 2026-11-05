@@ -237,7 +237,7 @@
   {
     "file": "products.cod",
     "exit": 0,
-    "stdout": "2.5\n6\n-2.5\n"
+    "stdout": "2.5\n6\n-2.5\n6\n9\nfalse\n"
   },
   {
     "file": "floating-captures.cod",
@@ -556,7 +556,7 @@
   {
     "file": "region-capture.cod",
     "exit": 0,
-    "stdout": "8\n8\n11\n"
+    "stdout": "8\n8\n11\nfalse\nfalse\n8\n13\n21\n25\n"
   },
   {
     "file": "region-pure-write.cod",
