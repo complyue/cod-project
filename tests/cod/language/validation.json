@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T21:37:41.593496+00:00",
+  "recorded_utc": "2026-11-05T21:49:56.320087+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
-  "passed": 149,
-  "total": 149,
+  "passed": 150,
+  "total": 150,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -2609,13 +2609,30 @@
       "passed": true
     },
     {
+      "fixture": "capture-scope-restore.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/capture-scope-restore.cod"
+      ],
+      "expected": {
+        "file": "capture-scope-restore.cod",
+        "exit": 0,
+        "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n"
+      },
+      "exit_code": 0,
+      "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
       "fixture": "frontend-only",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-cpp",
-        "/tmp/cod-language-check-ecxpzhbb/program.cc"
+        "/tmp/cod-language-check-4zq2unqu/program.cc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2625,23 +2642,24 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "e787bc738cd5359a240700714ff917cbc02f2aa5aec5a50efcc5104a3d7d48ca"
+    "sha256": "d8be61b68a09b1933f368f910217526337f7436abba3c08f9abd342ffd6a9958"
   },
   "source_sha256": {
     "cod/main.cc": "bcaa37e39665c6d70960f527bb2ee93c1868774adfd79d3a96c840651a4d39d3",
     "cod/lang_syntax.hh": "86d8266f2be6e0789cf64a8816dd0e6cc830cfd867345e01a394227d60664a10",
-    "cod/lang_frontend.hh": "76bc213105304fcba9c468b2a9158eb7ee6c977eb991d3bb3bde3826402eb26a",
+    "cod/lang_frontend.hh": "da9cb44e605ef30e1e87df16edc78d7c216e320ef08f8da4438bd5084eb48058",
     "cod/lang_region_runtime.hh": "b7c4cc20f2ef2ff5715fdf4467d2593e1c0a9d3838c3f5745f9f751b1ff5faf4",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "c1ccdd9a411de959800147ffaf9ebc1a79fe9c4422c1f4bd8d399c74faf1f55f",
-    "tests/cod/language/cases.json": "b317862239305ae4f65a0b0fce32f1cabcb36e67f0cc94395a258d61474e3af4",
+    "tests/cod/language/cases.json": "43c0d3623c18829093df218776411d592586408ef6392676dde51ed1225e6489",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
     "tests/cod/language/bounded-iteration.cod": "7b7228907eb4e81a5d2ff66f3c1a090dfe90f31167497111781f143b985f3d14",
     "tests/cod/language/broken-dependency.cod": "6cd8716b5bdcd5e22a9deb4c3b308fcd0908c74b7d4ce0d1a3c30632955679d3",
     "tests/cod/language/builtin-body-import.cod": "673482f8e33208d9a242f2fbe7fdc032ba62996c343a5ed4ae1d8717263f4418",
+    "tests/cod/language/capture-scope-restore.cod": "98f905210c324a27b4261685e5d23140ce40abf75b5281bad735f81b5e095f2d",
     "tests/cod/language/cast-truncation.cod": "513b8b42b993f3408775af8542e18a84cc7317272636c33a385179ae8b5c7838",
     "tests/cod/language/destination-vocabulary.cod": "490d565b9a59f98f5fb958cd4f7de225845803c139c7e6a5d4824add0c03a68f",
     "tests/cod/language/diamond-left.cod": "86975e2f1597f2d8050b1231064be1e3cba2a99a93ee79d4b8743d543c11efd8",

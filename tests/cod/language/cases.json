@@ -823,5 +823,10 @@
     "file": "region-gather.cod",
     "exit": 0,
     "stdout": "120\n64.7070312\n34.8680573\n18.7906551\n10.1264286\n"
+  },
+  {
+    "file": "capture-scope-restore.cod",
+    "exit": 0,
+    "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n"
   }
 ]

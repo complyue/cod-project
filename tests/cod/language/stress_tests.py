@@ -36,16 +36,16 @@ def main():
     results = []
     with tempfile.TemporaryDirectory(prefix='cod-composition-stress-') as scratch:
         directory = Path(scratch)
-        depth = 128
+        depth = 512
         for i in range(depth):
             body = f'using "pure-{i+1}.cod" f as next;\n' if i + 1 < depth else ''
             body += 'function f(x::i64)::i64 { ' + ('next(x + 1)' if i + 1 < depth else 'x + 1') + ' }\n'
             (directory / f'pure-{i}.cod').write_text(body)
         entry = directory / 'pure-main.cod'
         entry.write_text('using symbol "std:io" @print;\nusing "pure-0.cod" f;\nbehave @print(f(0));\n')
-        results.append(run(executable, root, entry, f'{depth}\n', '128-module-pure-chain'))
+        results.append(run(executable, root, entry, f'{depth}\n', '512-module-pure-chain'))
 
-        depth = 160
+        depth = 1000
         lines = ['using symbol "std:io" @print;', 'symbol @base;', 'effect @base = 5;']
         for i in range(depth):
             lines.append(f'symbol @p{i};')
@@ -55,7 +55,7 @@ def main():
                   f'behave @print(behave @p{depth-1}(0));', 'behave @print(@base);']
         entry = directory / 'procedure-main.cod'
         entry.write_text('\n'.join(lines) + '\n')
-        results.append(run(executable, root, entry, f'{depth-1+5}\n{depth-1+9}\n9\n', '160-procedure-inline-chain'))
+        results.append(run(executable, root, entry, f'{depth-1+5}\n{depth-1+9}\n9\n', '1000-procedure-inline-chain'))
 
         layers = 10
         for level in range(layers, -1, -1):

@@ -1,0 +1,39 @@
+using symbol "std:io" @print;
+symbol @x;
+symbol @y;
+symbol @left;
+symbol @right;
+symbol @route;
+symbol @nested;
+symbol @branch;
+effect @x = 10;
+effect @y = 20;
+procedure @left()::i64 { @x }
+procedure @right()::i64 { @y }
+effect @route = @left;
+procedure @nested()::i64 {
+  let middle = {
+    effect @route = @right;
+    let inner = { effect @route = @left; behave @route() };
+    inner * 1000 + behave @route()
+  };
+  middle * 1000 + behave @route()
+}
+procedure @branch(flag::bool)::i64 {
+  let selected = if (flag) {
+    effect @route = @right;
+    behave @route()
+  } else {
+    effect @route = @left;
+    behave @route()
+  };
+  selected * 1000 + behave @route()
+}
+effect @x = 100;
+effect @y = 200;
+behave @print(perform @nested());
+behave @print(behave @nested());
+behave @print(perform @branch(true));
+behave @print(perform @branch(false));
+behave @print(behave @branch(true));
+behave @print(behave @route());

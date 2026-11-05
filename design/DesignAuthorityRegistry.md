@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：229
+记录版本：230
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 229，延续检查 K-01—K-228；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 230，延续检查 K-01—K-229；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -4616,3 +4616,15 @@ Scope: Accepts initial procedure expansion/inlining while size remains reasonabl
 - Application-shaped fixture: separate units, pool layout/index, regional types, pure gather and procedure modules execute four FP32 A/B updates over 15 rows and 2,064 slots. Printed checksums match an independent rounded FP32 calculation. This validates storage/iteration/composition only and selects no SNN equation, state-transition ordering or learning mechanism.
 - Relocation/layout: a harness compiled from actual emitted record/array definitions copies a complete 128-byte occupied region image, releases its original storage, then validates a cycle, shared array references and mutation at the new base. A separate four-array pool has 10,320 slot-element bytes and 120 frame-element bytes, with 116 non-element bytes: native region/array headers, root and allocation alignment. No per-slot padding is introduced. regional-validation.json preserves sizes, timings and source hashes; validation.json/stress-validation.json preserve language and graph evidence.
 - Boundaries: persistent closures, cross-region representation, general GADT, compound-unit algebra, concurrency and SNN modeling/training remain excluded. Source tests and emitted-type harnesses use the deployed build toolchain; no main configuration, bootstrap source or host toolchain change. The ten-hour goal remains active for further stress, numeric correctness and measured kernel cost. D-GOV229 maintenance alone continues H-05; no unqualified descendant becomes qualified.
+
+
+### K-229 — 2026-11-05: Deep inline compilation and measured SoA kernel cost
+
+<a id="k-229"></a>
+
+- Agent implementation/evidence assessment under H-122/H-123/H-139–H-141. Current charter §§1–4, D-10r13 scope/capture semantics and the H-141 initial-inline boundary remain governing. Registry229 →230 and reference7 →8; D-07r21/D-10r13/D-11r6 contracts and all human history are unchanged. No new language contract, code-sharing architecture or application-model choice is introduced.
+- Observed limits: a 640-procedure probe took about 22 seconds while capture analysis copied whole binding environments at each nested scope. A 1,000-procedure probe crashed before native-source emission. LLDB located the latter at the recursive expression dispatcher, whose native host-stack frame reserved about 7.7 KiB. These are compiler implementation failures, not evidence that generated programs require shared procedure machine code.
+- Repairs: capture analysis logs and restores only changed bindings while preserving transitive current-binding selection; selected procedure ownership remains live across nested rebinding. Separate expression-kind lowering routines reduce the dispatcher's host-stack footprint. Neither alters generated user storage, captures, effect restoration or procedure inlining. A focused case checks nested and conditional procedure rebinding under both perform and behave.
+- Evidence: exact source-only builds pass; final all-four-group CoD regression includes 150 language checks, six evaluation checks, eight cache checks and workspace checks. Five stress cases pass. The 1,000-procedure case emits 459,105 C++ bytes and checks in about 0.68 seconds; native compile/link/run including both perform and behave takes about 3.60 seconds locally. The 512-module pure chain emits 50,339 bytes. Regional relocation is revalidated with the current compiler. Timing varies by load; no native call-stack-depth claim is made.
+- Kernel measurement: the existing multi-module FP32 A/B gather is scaled to 4,095 rows, 693,504 incoming slots and eight updates (5,548,032 edge visits). Every reported step matches an independently rounded FP32 reference. Actual region occupation is 3,500,416 bytes: 3,500,280 scalar-element bytes and 136 bytes for headers/root/allocation alignment. No per-slot padding is present. Emitted source is 40,817 bytes and the native executable with debug information is 196,952 bytes. Recorded native process time is approximately 0.072 seconds, including initialization, startup and checksum output; compile/link is recorded separately.
+- Boundaries: these measurements support H-141's initial inlining for the tested sizes; code reuse remains a medium/long-term optimization. No SNN transition/training rule, main configuration, bootstrap path, host toolchain, concurrency protocol or cross-region representation changes. Full contracts remain pending-human and no descendant acquires qualification. The ten-hour goal remains active; D-GOV230 maintenance alone continues H-05.

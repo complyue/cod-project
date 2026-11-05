@@ -416,61 +416,87 @@ class Compiler {
     env[id] = std::move(value);
   }
 
+  // Capture analysis restores only bindings changed in a nested scope. Copying
+  // the entire environment at each call makes deep inline chains needlessly
+  // expensive, even when their bodies only read one dynamic value.
+  struct CaptureState {
+    Environment visible;
+    std::set<size_t> provided;
+    struct Change {
+      size_t id;
+      std::optional<Value> previous;
+      bool newly_provided;
+    };
+    std::vector<Change> changes;
+
+    void bind(size_t id, std::optional<Value> value) {
+      const auto found = visible.find(id);
+      changes.push_back({id, found == visible.end() ? std::nullopt : std::optional<Value>(found->second),
+                         provided.insert(id).second});
+      if (value) visible[id] = std::move(*value);
+      else visible.erase(id);
+    }
+    void restore(size_t mark) {
+      while (changes.size() > mark) {
+        auto change = std::move(changes.back());
+        changes.pop_back();
+        if (change.previous) visible[change.id] = std::move(*change.previous);
+        else visible.erase(change.id);
+        if (change.newly_provided) provided.erase(change.id);
+      }
+    }
+  };
+
   // Only used, externally supplied symbolic values become captures. A behave
   // dependency includes the selected callee's needs; perform supplies its own.
-  void collect(const Expression &expr, Module &module, Environment &visible,
-               std::set<size_t> &provided, std::set<size_t> &needed,
-               std::set<const Procedure *> &visiting) {
+  void collect(const Expression &expr, Module &module, CaptureState &state,
+               std::set<size_t> &needed, std::set<const Procedure *> &visiting) {
     using K = Expression::Kind;
     if (expr.kind == K::block || expr.kind == K::conditional) {
-      if (expr.kind == K::conditional) collect(*expr.children[0], module, visible, provided, needed, visiting);
+      if (expr.kind == K::conditional) collect(*expr.children[0], module, state, needed, visiting);
       const size_t begin = expr.kind == K::conditional ? 1 : 0;
-      auto inner_visible = visible;
-      auto inner_provided = provided;
+      const auto mark = state.changes.size();
       for (size_t i = begin; i < expr.children.size(); ++i) {
-        if (expr.kind == K::conditional) {
-          inner_visible = visible;
-          inner_provided = provided;
-        }
-        collect(*expr.children[i], module, inner_visible, inner_provided, needed, visiting);
+        collect(*expr.children[i], module, state, needed, visiting);
+        if (expr.kind == K::conditional) state.restore(mark);
       }
+      state.restore(mark);
       return;
     }
-    for (const auto &child : expr.children) collect(*child, module, visible, provided, needed, visiting);
+    for (const auto &child : expr.children) collect(*child, module, state, needed, visiting);
     if (expr.kind == K::symbol || expr.kind == K::perform || expr.kind == K::behave) {
       const auto id = expression_symbol(expr, module);
-      if (!provided.contains(id)) needed.insert(id);
+      if (!state.provided.contains(id)) needed.insert(id);
       if (expr.kind == K::behave) {
-        const auto callee = visible.find(id);
-        if (callee != visible.end() && callee->second.procedure) {
-          auto &proc = *callee->second.procedure;
-          if (proc.form && visiting.insert(&proc).second) {
-            auto next_visible = visible;
-            auto next_provided = provided;
-            collect(*proc.form->body, *proc.lexical, next_visible, next_provided, needed, visiting);
-            visiting.erase(&proc);
+        const auto callee = state.visible.find(id);
+        if (callee != state.visible.end() && callee->second.procedure) {
+          // Own the selected procedure while nested effects can replace its binding.
+          const auto proc = callee->second.procedure;
+          if (proc->form && visiting.insert(proc.get()).second) {
+            const auto mark = state.changes.size();
+            collect(*proc->form->body, *proc->lexical, state, needed, visiting);
+            state.restore(mark);
+            visiting.erase(proc.get());
           }
         }
       }
     } else if (expr.kind == K::effect) {
       const auto id = expression_symbol(expr, module);
-      provided.insert(id);
+      std::optional<Value> value;
       if (expr.children[0]->kind == K::symbol) {
         const auto source = expression_symbol(*expr.children[0], module);
-        if (const auto found = visible.find(source); found != visible.end()) visible[id] = found->second;
-      } else {
-        visible.erase(id);
+        if (const auto found = state.visible.find(source); found != state.visible.end()) value = found->second;
       }
+      state.bind(id, std::move(value));
     }
   }
   Value define_procedure(Form &form, Module &lexical, const Environment &env, std::ostream &out) {
     auto proc = std::make_shared<Procedure>();
     proc->form = &form;
     proc->lexical = &lexical;
-    auto visible = env;
-    std::set<size_t> provided;
+    CaptureState state{env, {}, {}};
     std::set<const Procedure *> visiting;
-    collect(*form.body, lexical, visible, provided, proc->requirements, visiting);
+    collect(*form.body, lexical, state, proc->requirements, visiting);
     for (const auto id : proc->requirements) {
       const auto found = env.find(id);
       if (found == env.end()) continue; // A perform path must later prove the capture exists.
@@ -753,6 +779,278 @@ class Compiler {
     auto result = call(*proc->form, *proc->lexical, std::move(call_env), args, false, expr.at, body);
     return finish_scope(body.str(), result, out);
   }
+  Value allocate_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
+                          bool pure, std::ostream &out) {
+    if (pure) fail(expr.at, "a function cannot allocate regional storage");
+    auto owner = expression(*expr.children[0], module, env, locals, pure, out);
+    require(owner.type, Type::region, expr.at);
+    const auto region = region_of(owner, expr.at);
+    auto type = resolve({Type::named, expr.text}, module, expr.at);
+    if (type.kind != Type::array && type.kind != Type::regional)
+      fail(expr.at, "alloc requires a regional type or regional array");
+    std::vector<Value> args;
+    for (size_t i = 1; i < expr.children.size(); ++i)
+      args.push_back(expression(*expr.children[i], module, env, locals, pure, out));
+    std::string values;
+    if (type.kind == Type::array) {
+      if (args.size() != 2 || !integral(args[0].type))
+        fail(expr.at, "array allocation requires an integer length and initial element value");
+      require(args[1].type, arrays_.at(type.identity).element, expr.at);
+      values = "checked_cast<std::uint64_t>(" + args[0].code + "), " + args[1].code;
+    } else {
+      const auto &fields = products_.at(type.identity).fields;
+      if (args.size() != fields.size()) fail(expr.at, "wrong field count for regional allocation");
+      for (size_t i = 0; i < args.size(); ++i) {
+        if (!(args[i].type == Type::null_ref && fields[i].type.kind == Type::reference))
+          require(args[i].type, fields[i].type, expr.at);
+        if (args[i].region_id && args[i].region_id != owner.region_id)
+          fail(expr.at, "cross-region reference fields are outside this prototype");
+        if (i) values += ", ";
+        values += args[i].code;
+      }
+    }
+    return scalar(reference(type), "region_offset(" + region + ", (" + region + ").create<" +
+        payload_type(type) + ">(" + values + ").get())", out, owner.region_id);
+  }
+  Value loop_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
+                          bool pure, std::ostream &out) {
+    using K = Expression::Kind;
+    const auto first = expression(*expr.children[0], module, env, locals, pure, out);
+    const auto last = expression(*expr.children[1], module, env, locals, pure, out);
+    require(last.type, first.type, expr.at);
+    if (!integral(first.type) && !(first.type.kind == Type::unit && integral(first.type.representation)))
+      fail(expr.at, "a range requires integer endpoints or one integer-backed UoM identity");
+    const auto index = fresh("index");
+    auto inner_locals = locals;
+    inner_locals[expr.text] = {first.type, index, {}, nullptr};
+    Value accumulator;
+    if (expr.kind == K::fold) {
+      accumulator = expression(*expr.children[2], module, env, locals, pure, out);
+      if (accumulator.type == Type::void_type || accumulator.type == Type::procedure ||
+          accumulator.type == Type::region || accumulator.type == Type::null_ref ||
+          accumulator.type.kind == Type::array || accumulator.type.kind == Type::regional)
+        fail(expr.at, "a fold accumulator requires a bits value");
+      const auto name = fresh("accumulator");
+      out << cpp_type(accumulator.type) << " " << name << " = " << accumulator.code << ";\n";
+      accumulator.code = name;
+      inner_locals[expr.binding] = accumulator;
+    }
+    std::ostringstream body;
+    const auto next = block(*expr.children.back(), module, env, std::move(inner_locals), pure, body);
+    out << "for (" << cpp_type(first.type) << " " << index << " = " << first.code << "; "
+        << index << " < " << last.code << "; ++" << index << ") {\n" << body.str();
+    if (expr.kind == K::fold) {
+      require(next.type, accumulator.type, expr.at);
+      if (next.region_id != accumulator.region_id)
+        fail(expr.at, "a fold reference must retain its owning region");
+      out << accumulator.code << " = " << next.code << ";\n";
+    }
+    out << "}\n";
+    return accumulator;
+  }
+  Value call_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
+                          bool pure, std::ostream &out) {
+    using K = Expression::Kind;
+    if (expr.text == "region") {
+      if (pure) fail(expr.at, "a function cannot create a region resource");
+      const auto args = arguments(expr, module, env, locals, pure, out);
+      if (args.size() != 1 || !integral(args[0].type)) fail(expr.at, "region requires an integer byte capacity");
+      regional_runtime_ = true;
+      const auto owner = fresh("region");
+      const auto id = regions_.size();
+      regions_.push_back({owner, true});
+      out << "CoDRegionOwner " << owner << "(region_capacity(checked_cast<std::uint64_t>("
+          << args[0].code << ")));\n";
+      return {Type::region, owner, {}, nullptr, id};
+    }
+    if (expr.text == "used_bytes" || expr.text == "capacity_bytes") {
+      if (pure) fail(expr.at, "a function cannot inspect a region resource");
+      const auto args = arguments(expr, module, env, locals, pure, out);
+      if (args.size() != 1) fail(expr.at, "region size requires one resource");
+      require(args[0].type, Type::region, expr.at);
+      return scalar(Type::uint64, "(" + region_of(args[0], expr.at) + ")." +
+          (expr.text == "used_bytes" ? "occupation()" : "capacity()"), out);
+    }
+    if (expr.text == "deref") {
+      const auto args = arguments(expr, module, env, locals, pure, out);
+      if (args.size() != 1 || args[0].type.kind != Type::reference)
+        fail(expr.at, "deref requires a typed regional reference");
+      const auto type = resolve(*args[0].type.target, module, expr.at);
+      const auto region = region_of(args[0], expr.at);
+      if (type.kind == Type::array || type.kind == Type::regional)
+        return {type, args[0].code, {}, nullptr, args[0].region_id};
+      return scalar(type, "region_read<" + payload_type(type) + ">(" + region + ", " + args[0].code + ")", out);
+    }
+    if (expr.text == "len" || expr.text == "ref_at") {
+      const auto args = arguments(expr, module, env, locals, pure, out);
+      if (args.size() != (expr.text == "len" ? 1u : 2u)) fail(expr.at, "wrong array argument count");
+      if (expr.text == "ref_at") return array_element(args[0], args[1], expr.at, out, true);
+      const auto type = array_type(args[0], expr.at);
+      return scalar(Type::uint64, "region_read<" + payload_type(type) + ">(" + region_of(args[0], expr.at) +
+                    ", " + args[0].code + ").size", out);
+    }
+    if (expr.text == "store") {
+      if (pure) fail(expr.at, "a function cannot modify regional storage");
+      const auto args = arguments(expr, module, env, locals, pure, out);
+      if (args.size() == 2 && args[0].type.kind == Type::reference &&
+          (numeric(*args[0].type.target) || *args[0].type.target == Type::boolean || args[0].type.target->kind == Type::unit)) {
+        require(args[1].type, *args[0].type.target, expr.at);
+        out << "if (!" << args[0].code << ") runtime_failure(\"null regional reference\");\n";
+        out << "*region_pointer<" << cpp_type(args[1].type) << ">(" << region_of(args[0], expr.at)
+            << ", " << args[0].code << ").get() = " << args[1].code << ";\n";
+        return args[1];
+      }
+      if (args.size() != 3) fail(expr.at, "store requires an array/index/value or scalar reference/value");
+      const auto type = array_type(args[0], expr.at);
+      const auto &layout = arrays_.at(type.identity);
+      require(args[1].type, layout.index, expr.at);
+      require(args[2].type, layout.element, expr.at);
+      return scalar(layout.element, "array_store<" + cpp_type(layout.element) + ">(" + region_of(args[0], expr.at) +
+          ", " + args[0].code + ", checked_cast<std::uint64_t>(" + args[1].code + "), " + args[2].code + ")", out);
+    }
+    if (expr.text == "setfield") {
+      if (pure) fail(expr.at, "a function cannot modify regional storage");
+      if (expr.children.size() != 3 || expr.children[1]->kind != K::name)
+        fail(expr.at, "setfield requires a reference, field name and value");
+      const auto object = expression(*expr.children[0], module, env, locals, pure, out);
+      if (object.type.kind != Type::reference || object.type.target->kind != Type::regional)
+        fail(expr.at, "setfield requires a reference to a regional record");
+      const auto type = resolve(*object.type.target, module, expr.at);
+      auto value = expression(*expr.children[2], module, env, locals, pure, out);
+      const auto &fields = products_.at(type.identity).fields;
+      for (size_t i = 0; i < fields.size(); ++i) {
+        if (fields[i].name != expr.children[1]->text) continue;
+        const auto field = fields[i].type;
+        if (value.type == Type::null_ref && field.kind == Type::reference) value.type = field;
+        require(value.type, field, expr.at);
+        if (value.region_id && value.region_id != object.region_id)
+          fail(expr.at, "cross-region reference fields are outside this prototype");
+        const auto region = region_of(object, expr.at);
+        out << "if (!" << object.code << ") runtime_failure(\"null regional reference\");\n";
+        out << "region_pointer<" << payload_type(type) << ">(" << region << ", " << object.code << ")->f" << i << " = ";
+        if (field.kind == Type::reference) {
+          out << "region_pointer<" << payload_type(*field.target) << ">(" << region << ", " << value.code << ")";
+          value.region_id = object.region_id;
+        } else out << value.code;
+        out << ";\n";
+        return value;
+      }
+      fail(expr.at, "no such regional field '" + expr.children[1]->text + "'");
+    }
+    static const std::map<std::string, Type> casts{{"i64", Type::integer}, {"u8", Type::uint8},
+        {"u32", Type::uint32}, {"u64", Type::uint64}, {"f32", Type::float32}, {"f64", Type::float64}};
+    if (const auto cast = casts.find(expr.text); cast != casts.end()) {
+      const auto args = arguments(expr, module, env, locals, pure, out);
+      if (args.size() != 1 || !numeric(args[0].type)) fail(expr.at, "numeric conversion requires one scalar value");
+      return scalar(cast->second, "checked_cast<" + cpp_type(cast->second) + ">(" + args[0].code + ")", out);
+    }
+    if (const auto found = module.types.find(expr.text); found != module.types.end()) {
+      const auto type = resolve(found->second, module, expr.at);
+      if (type.kind == Type::regional || type.kind == Type::array)
+        fail(expr.at, "regional objects require alloc in a region resource");
+      const auto args = arguments(expr, module, env, locals, pure, out);
+      if (type.kind == Type::unit) {
+        if (args.size() != 1) fail(expr.at, "a UoM constructor requires one scalar value");
+        require(args[0].type, type.representation, expr.at);
+        return {type, args[0].code, {}, nullptr};
+      }
+      const auto &fields = products_.at(type.identity).fields;
+      if (args.size() != fields.size()) fail(expr.at, "wrong field count for '" + expr.text + "'");
+      std::string values;
+      for (size_t i = 0; i < args.size(); ++i) {
+        require(args[i].type, fields[i].type, expr.at);
+        if (i) values += ", ";
+        values += args[i].code;
+      }
+      return scalar(type, cpp_type(type) + "{" + values + "}", out);
+    }
+    const auto function = module.functions.find(expr.text);
+    if (expr.text == "scalar" && function == module.functions.end()) {
+      const auto args = arguments(expr, module, env, locals, pure, out);
+      if (args.size() != 1 || args[0].type.kind != Type::unit)
+        fail(expr.at, "scalar requires one UoM value");
+      return {args[0].type.representation, args[0].code, {}, nullptr};
+    }
+    if (function == module.functions.end()) fail(expr.at, "unavailable lexical function '" + expr.text + "'");
+    const auto args = arguments(expr, module, env, locals, pure, out);
+    auto selected = method(expr.text, module, args, expr.at);
+    if (!selected && function->second.size() == 1) {
+      const auto &candidate = function->second.front();
+      return call(*candidate.form, *candidate.lexical, {}, args, true, expr.at, out);
+    }
+    if (!selected) fail(expr.at, "no matching method for '" + expr.text + "'");
+    return call_method(*selected, args, expr.at, out);
+  }
+  Value binary_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
+                          bool pure, std::ostream &out) {
+    auto left = expression(*expr.children[0], module, env, locals, pure, out);
+    if (expr.text == "&&" || expr.text == "||") {
+      require(left.type, Type::boolean, expr.at);
+      auto right_env = env;
+      auto right_locals = locals;
+      std::ostringstream right_body;
+      const auto right = expression(*expr.children[1], module, right_env, right_locals, pure, right_body);
+      require(right.type, Type::boolean, expr.at);
+      if (right_env != env) fail(expr.at, "conditional rebinding in a logical operand needs an explicit scope");
+      const auto result = fresh("logical");
+      out << "bool " << result << " = " << left.code << ";\nif ("
+          << (expr.text == "||" ? "!" : "") << result << ") {\n" << right_body.str()
+          << result << " = " << right.code << ";\n}\n";
+      return {Type::boolean, result, {}, nullptr};
+    }
+    auto right = expression(*expr.children[1], module, env, locals, pure, out);
+    if (const auto selected = method(expr.text, module, {left, right}, expr.at))
+      return call_method(*selected, {left, right}, expr.at, out);
+    if ((expr.text == "==" || expr.text == "!=") &&
+        (left.type.kind == Type::reference || left.type == Type::null_ref) &&
+        (right.type.kind == Type::reference || right.type == Type::null_ref)) {
+      if (left.type != Type::null_ref && right.type != Type::null_ref) require(right.type, left.type, expr.at);
+      auto equality = "(" + left.code + " == " + right.code + ")";
+      if (left.region_id && right.region_id && left.region_id != right.region_id)
+        equality = "(" + left.code + " == 0 && " + right.code + " == 0)";
+      return scalar(Type::boolean, expr.text == "==" ? equality : "(!" + equality + ")", out);
+    }
+    require(right.type, left.type, expr.at);
+    if (expr.text == "==" || expr.text == "!=") {
+      if (!numeric(left.type) && left.type != Type::boolean) fail(expr.at, "equality requires scalar bits");
+      return scalar(Type::boolean, "(" + left.code + expr.text + right.code + ")", out);
+    }
+    if (!numeric(left.type)) fail(expr.at, "arithmetic requires numeric operands");
+    if (expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=")
+      return scalar(Type::boolean, "(" + left.code + expr.text + right.code + ")", out);
+    if (floating(left.type)) {
+      if (expr.text == "%") fail(expr.at, "remainder requires integer operands");
+      return scalar(left.type, "(" + left.code + expr.text + right.code + ")", out);
+    }
+    const std::map<std::string, std::string> names{{"+", "add"}, {"-", "sub"}, {"*", "mul"}, {"/", "div"}, {"%", "rem"}};
+    return scalar(left.type, "checked_" + names.at(expr.text) + "(" + left.code + ", " + right.code + ")", out);
+  }
+  Value conditional_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
+                          bool pure, std::ostream &out) {
+    const auto condition = expression(*expr.children[0], module, env, locals, pure, out);
+    require(condition.type, Type::boolean, expr.at);
+    std::ostringstream yes, no;
+    auto first = block(*expr.children[1], module, env, locals, pure, yes);
+    auto second = block(*expr.children[2], module, env, locals, pure, no);
+    if (first.type == Type::null_ref && second.type.kind == Type::reference) {
+      first.type = second.type;
+      first.region_id = second.region_id;
+    } else if (second.type == Type::null_ref && first.type.kind == Type::reference) {
+      second.type = first.type;
+      second.region_id = first.region_id;
+    }
+    require(second.type, first.type, expr.at);
+    if (first.region_id != second.region_id) fail(expr.at, "conditional references require one owning region");
+    if (first.type == Type::void_type || first.type == Type::region || first.type == Type::null_ref) {
+      out << "if (" << condition.code << ") {\n" << yes.str() << "} else {\n" << no.str() << "}\n";
+      return first;
+    }
+    const auto result = fresh("choice");
+    out << cpp_type(first.type) << " " << result << "{};\nif (" << condition.code << ") {\n"
+        << yes.str() << result << " = " << first.code << ";\n} else {\n" << no.str()
+        << result << " = " << second.code << ";\n}\n";
+    return {first.type, result, {}, nullptr, first.region_id};
+  }
   Value expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
                    bool pure, std::ostream &out) {
     using K = Expression::Kind;
@@ -835,204 +1133,10 @@ class Compiler {
       bind(expression_symbol(expr, module), value, module, env, expr.at, out);
       return value;
     }
-    case K::allocate: {
-      if (pure) fail(expr.at, "a function cannot allocate regional storage");
-      auto owner = expression(*expr.children[0], module, env, locals, pure, out);
-      require(owner.type, Type::region, expr.at);
-      const auto region = region_of(owner, expr.at);
-      auto type = resolve({Type::named, expr.text}, module, expr.at);
-      if (type.kind != Type::array && type.kind != Type::regional)
-        fail(expr.at, "alloc requires a regional type or regional array");
-      std::vector<Value> args;
-      for (size_t i = 1; i < expr.children.size(); ++i)
-        args.push_back(expression(*expr.children[i], module, env, locals, pure, out));
-      std::string values;
-      if (type.kind == Type::array) {
-        if (args.size() != 2 || !integral(args[0].type))
-          fail(expr.at, "array allocation requires an integer length and initial element value");
-        require(args[1].type, arrays_.at(type.identity).element, expr.at);
-        values = "checked_cast<std::uint64_t>(" + args[0].code + "), " + args[1].code;
-      } else {
-        const auto &fields = products_.at(type.identity).fields;
-        if (args.size() != fields.size()) fail(expr.at, "wrong field count for regional allocation");
-        for (size_t i = 0; i < args.size(); ++i) {
-          if (!(args[i].type == Type::null_ref && fields[i].type.kind == Type::reference))
-            require(args[i].type, fields[i].type, expr.at);
-          if (args[i].region_id && args[i].region_id != owner.region_id)
-            fail(expr.at, "cross-region reference fields are outside this prototype");
-          if (i) values += ", ";
-          values += args[i].code;
-        }
-      }
-      return scalar(reference(type), "region_offset(" + region + ", (" + region + ").create<" +
-          payload_type(type) + ">(" + values + ").get())", out, owner.region_id);
-    }
-    case K::range_for: case K::fold: {
-      const auto first = expression(*expr.children[0], module, env, locals, pure, out);
-      const auto last = expression(*expr.children[1], module, env, locals, pure, out);
-      require(last.type, first.type, expr.at);
-      if (!integral(first.type) && !(first.type.kind == Type::unit && integral(first.type.representation)))
-        fail(expr.at, "a range requires integer endpoints or one integer-backed UoM identity");
-      const auto index = fresh("index");
-      auto inner_locals = locals;
-      inner_locals[expr.text] = {first.type, index, {}, nullptr};
-      Value accumulator;
-      if (expr.kind == K::fold) {
-        accumulator = expression(*expr.children[2], module, env, locals, pure, out);
-        if (accumulator.type == Type::void_type || accumulator.type == Type::procedure ||
-            accumulator.type == Type::region || accumulator.type == Type::null_ref ||
-            accumulator.type.kind == Type::array || accumulator.type.kind == Type::regional)
-          fail(expr.at, "a fold accumulator requires a bits value");
-        const auto name = fresh("accumulator");
-        out << cpp_type(accumulator.type) << " " << name << " = " << accumulator.code << ";\n";
-        accumulator.code = name;
-        inner_locals[expr.binding] = accumulator;
-      }
-      std::ostringstream body;
-      const auto next = block(*expr.children.back(), module, env, std::move(inner_locals), pure, body);
-      out << "for (" << cpp_type(first.type) << " " << index << " = " << first.code << "; "
-          << index << " < " << last.code << "; ++" << index << ") {\n" << body.str();
-      if (expr.kind == K::fold) {
-        require(next.type, accumulator.type, expr.at);
-        if (next.region_id != accumulator.region_id)
-          fail(expr.at, "a fold reference must retain its owning region");
-        out << accumulator.code << " = " << next.code << ";\n";
-      }
-      out << "}\n";
-      return accumulator;
-    }
+    case K::allocate: return allocate_expression(expr, module, env, locals, pure, out);
+    case K::range_for: case K::fold: return loop_expression(expr, module, env, locals, pure, out);
     case K::block: return block(expr, module, env, locals, pure, out);
-    case K::call: {
-      if (expr.text == "region") {
-        if (pure) fail(expr.at, "a function cannot create a region resource");
-        const auto args = arguments(expr, module, env, locals, pure, out);
-        if (args.size() != 1 || !integral(args[0].type)) fail(expr.at, "region requires an integer byte capacity");
-        regional_runtime_ = true;
-        const auto owner = fresh("region");
-        const auto id = regions_.size();
-        regions_.push_back({owner, true});
-        out << "CoDRegionOwner " << owner << "(region_capacity(checked_cast<std::uint64_t>("
-            << args[0].code << ")));\n";
-        return {Type::region, owner, {}, nullptr, id};
-      }
-      if (expr.text == "used_bytes" || expr.text == "capacity_bytes") {
-        if (pure) fail(expr.at, "a function cannot inspect a region resource");
-        const auto args = arguments(expr, module, env, locals, pure, out);
-        if (args.size() != 1) fail(expr.at, "region size requires one resource");
-        require(args[0].type, Type::region, expr.at);
-        return scalar(Type::uint64, "(" + region_of(args[0], expr.at) + ")." +
-            (expr.text == "used_bytes" ? "occupation()" : "capacity()"), out);
-      }
-      if (expr.text == "deref") {
-        const auto args = arguments(expr, module, env, locals, pure, out);
-        if (args.size() != 1 || args[0].type.kind != Type::reference)
-          fail(expr.at, "deref requires a typed regional reference");
-        const auto type = resolve(*args[0].type.target, module, expr.at);
-        const auto region = region_of(args[0], expr.at);
-        if (type.kind == Type::array || type.kind == Type::regional)
-          return {type, args[0].code, {}, nullptr, args[0].region_id};
-        return scalar(type, "region_read<" + payload_type(type) + ">(" + region + ", " + args[0].code + ")", out);
-      }
-      if (expr.text == "len" || expr.text == "ref_at") {
-        const auto args = arguments(expr, module, env, locals, pure, out);
-        if (args.size() != (expr.text == "len" ? 1u : 2u)) fail(expr.at, "wrong array argument count");
-        if (expr.text == "ref_at") return array_element(args[0], args[1], expr.at, out, true);
-        const auto type = array_type(args[0], expr.at);
-        return scalar(Type::uint64, "region_read<" + payload_type(type) + ">(" + region_of(args[0], expr.at) +
-                      ", " + args[0].code + ").size", out);
-      }
-      if (expr.text == "store") {
-        if (pure) fail(expr.at, "a function cannot modify regional storage");
-        const auto args = arguments(expr, module, env, locals, pure, out);
-        if (args.size() == 2 && args[0].type.kind == Type::reference &&
-            (numeric(*args[0].type.target) || *args[0].type.target == Type::boolean || args[0].type.target->kind == Type::unit)) {
-          require(args[1].type, *args[0].type.target, expr.at);
-          out << "if (!" << args[0].code << ") runtime_failure(\"null regional reference\");\n";
-          out << "*region_pointer<" << cpp_type(args[1].type) << ">(" << region_of(args[0], expr.at)
-              << ", " << args[0].code << ").get() = " << args[1].code << ";\n";
-          return args[1];
-        }
-        if (args.size() != 3) fail(expr.at, "store requires an array/index/value or scalar reference/value");
-        const auto type = array_type(args[0], expr.at);
-        const auto &layout = arrays_.at(type.identity);
-        require(args[1].type, layout.index, expr.at);
-        require(args[2].type, layout.element, expr.at);
-        return scalar(layout.element, "array_store<" + cpp_type(layout.element) + ">(" + region_of(args[0], expr.at) +
-            ", " + args[0].code + ", checked_cast<std::uint64_t>(" + args[1].code + "), " + args[2].code + ")", out);
-      }
-      if (expr.text == "setfield") {
-        if (pure) fail(expr.at, "a function cannot modify regional storage");
-        if (expr.children.size() != 3 || expr.children[1]->kind != K::name)
-          fail(expr.at, "setfield requires a reference, field name and value");
-        const auto object = expression(*expr.children[0], module, env, locals, pure, out);
-        if (object.type.kind != Type::reference || object.type.target->kind != Type::regional)
-          fail(expr.at, "setfield requires a reference to a regional record");
-        const auto type = resolve(*object.type.target, module, expr.at);
-        auto value = expression(*expr.children[2], module, env, locals, pure, out);
-        const auto &fields = products_.at(type.identity).fields;
-        for (size_t i = 0; i < fields.size(); ++i) {
-          if (fields[i].name != expr.children[1]->text) continue;
-          const auto field = fields[i].type;
-          if (value.type == Type::null_ref && field.kind == Type::reference) value.type = field;
-          require(value.type, field, expr.at);
-          if (value.region_id && value.region_id != object.region_id)
-            fail(expr.at, "cross-region reference fields are outside this prototype");
-          const auto region = region_of(object, expr.at);
-          out << "if (!" << object.code << ") runtime_failure(\"null regional reference\");\n";
-          out << "region_pointer<" << payload_type(type) << ">(" << region << ", " << object.code << ")->f" << i << " = ";
-          if (field.kind == Type::reference) {
-            out << "region_pointer<" << payload_type(*field.target) << ">(" << region << ", " << value.code << ")";
-            value.region_id = object.region_id;
-          } else out << value.code;
-          out << ";\n";
-          return value;
-        }
-        fail(expr.at, "no such regional field '" + expr.children[1]->text + "'");
-      }
-      static const std::map<std::string, Type> casts{{"i64", Type::integer}, {"u8", Type::uint8},
-          {"u32", Type::uint32}, {"u64", Type::uint64}, {"f32", Type::float32}, {"f64", Type::float64}};
-      if (const auto cast = casts.find(expr.text); cast != casts.end()) {
-        const auto args = arguments(expr, module, env, locals, pure, out);
-        if (args.size() != 1 || !numeric(args[0].type)) fail(expr.at, "numeric conversion requires one scalar value");
-        return scalar(cast->second, "checked_cast<" + cpp_type(cast->second) + ">(" + args[0].code + ")", out);
-      }
-      if (const auto found = module.types.find(expr.text); found != module.types.end()) {
-        const auto type = resolve(found->second, module, expr.at);
-        if (type.kind == Type::regional || type.kind == Type::array)
-          fail(expr.at, "regional objects require alloc in a region resource");
-        const auto args = arguments(expr, module, env, locals, pure, out);
-        if (type.kind == Type::unit) {
-          if (args.size() != 1) fail(expr.at, "a UoM constructor requires one scalar value");
-          require(args[0].type, type.representation, expr.at);
-          return {type, args[0].code, {}, nullptr};
-        }
-        const auto &fields = products_.at(type.identity).fields;
-        if (args.size() != fields.size()) fail(expr.at, "wrong field count for '" + expr.text + "'");
-        std::string values;
-        for (size_t i = 0; i < args.size(); ++i) {
-          require(args[i].type, fields[i].type, expr.at);
-          if (i) values += ", ";
-          values += args[i].code;
-        }
-        return scalar(type, cpp_type(type) + "{" + values + "}", out);
-      }
-      const auto function = module.functions.find(expr.text);
-      if (expr.text == "scalar" && function == module.functions.end()) {
-        const auto args = arguments(expr, module, env, locals, pure, out);
-        if (args.size() != 1 || args[0].type.kind != Type::unit)
-          fail(expr.at, "scalar requires one UoM value");
-        return {args[0].type.representation, args[0].code, {}, nullptr};
-      }
-      if (function == module.functions.end()) fail(expr.at, "unavailable lexical function '" + expr.text + "'");
-      const auto args = arguments(expr, module, env, locals, pure, out);
-      auto selected = method(expr.text, module, args, expr.at);
-      if (!selected && function->second.size() == 1) {
-        const auto &candidate = function->second.front();
-        return call(*candidate.form, *candidate.lexical, {}, args, true, expr.at, out);
-      }
-      if (!selected) fail(expr.at, "no matching method for '" + expr.text + "'");
-      return call_method(*selected, args, expr.at, out);
-    }
+    case K::call: return call_expression(expr, module, env, locals, pure, out);
     case K::perform: case K::behave: return invoke(expr, module, env, locals, pure, out);
     case K::unary: {
       if (expr.text == "-" && expr.children[0]->kind == K::integer &&
@@ -1046,74 +1150,8 @@ class Compiler {
       return scalar(value.type, expr.text == "!" ? "(!" + value.code + ")" :
                                               "checked_sub(INT64_C(0), " + value.code + ")", out);
     }
-    case K::binary: {
-      auto left = expression(*expr.children[0], module, env, locals, pure, out);
-      if (expr.text == "&&" || expr.text == "||") {
-        require(left.type, Type::boolean, expr.at);
-        auto right_env = env;
-        auto right_locals = locals;
-        std::ostringstream right_body;
-        const auto right = expression(*expr.children[1], module, right_env, right_locals, pure, right_body);
-        require(right.type, Type::boolean, expr.at);
-        if (right_env != env) fail(expr.at, "conditional rebinding in a logical operand needs an explicit scope");
-        const auto result = fresh("logical");
-        out << "bool " << result << " = " << left.code << ";\nif ("
-            << (expr.text == "||" ? "!" : "") << result << ") {\n" << right_body.str()
-            << result << " = " << right.code << ";\n}\n";
-        return {Type::boolean, result, {}, nullptr};
-      }
-      auto right = expression(*expr.children[1], module, env, locals, pure, out);
-      if (const auto selected = method(expr.text, module, {left, right}, expr.at))
-        return call_method(*selected, {left, right}, expr.at, out);
-      if ((expr.text == "==" || expr.text == "!=") &&
-          (left.type.kind == Type::reference || left.type == Type::null_ref) &&
-          (right.type.kind == Type::reference || right.type == Type::null_ref)) {
-        if (left.type != Type::null_ref && right.type != Type::null_ref) require(right.type, left.type, expr.at);
-        auto equality = "(" + left.code + " == " + right.code + ")";
-        if (left.region_id && right.region_id && left.region_id != right.region_id)
-          equality = "(" + left.code + " == 0 && " + right.code + " == 0)";
-        return scalar(Type::boolean, expr.text == "==" ? equality : "(!" + equality + ")", out);
-      }
-      require(right.type, left.type, expr.at);
-      if (expr.text == "==" || expr.text == "!=") {
-        if (!numeric(left.type) && left.type != Type::boolean) fail(expr.at, "equality requires scalar bits");
-        return scalar(Type::boolean, "(" + left.code + expr.text + right.code + ")", out);
-      }
-      if (!numeric(left.type)) fail(expr.at, "arithmetic requires numeric operands");
-      if (expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=")
-        return scalar(Type::boolean, "(" + left.code + expr.text + right.code + ")", out);
-      if (floating(left.type)) {
-        if (expr.text == "%") fail(expr.at, "remainder requires integer operands");
-        return scalar(left.type, "(" + left.code + expr.text + right.code + ")", out);
-      }
-      const std::map<std::string, std::string> names{{"+", "add"}, {"-", "sub"}, {"*", "mul"}, {"/", "div"}, {"%", "rem"}};
-      return scalar(left.type, "checked_" + names.at(expr.text) + "(" + left.code + ", " + right.code + ")", out);
-    }
-    case K::conditional: {
-      const auto condition = expression(*expr.children[0], module, env, locals, pure, out);
-      require(condition.type, Type::boolean, expr.at);
-      std::ostringstream yes, no;
-      auto first = block(*expr.children[1], module, env, locals, pure, yes);
-      auto second = block(*expr.children[2], module, env, locals, pure, no);
-      if (first.type == Type::null_ref && second.type.kind == Type::reference) {
-        first.type = second.type;
-        first.region_id = second.region_id;
-      } else if (second.type == Type::null_ref && first.type.kind == Type::reference) {
-        second.type = first.type;
-        second.region_id = first.region_id;
-      }
-      require(second.type, first.type, expr.at);
-      if (first.region_id != second.region_id) fail(expr.at, "conditional references require one owning region");
-      if (first.type == Type::void_type || first.type == Type::region || first.type == Type::null_ref) {
-        out << "if (" << condition.code << ") {\n" << yes.str() << "} else {\n" << no.str() << "}\n";
-        return first;
-      }
-      const auto result = fresh("choice");
-      out << cpp_type(first.type) << " " << result << "{};\nif (" << condition.code << ") {\n"
-          << yes.str() << result << " = " << first.code << ";\n} else {\n" << no.str()
-          << result << " = " << second.code << ";\n}\n";
-      return {first.type, result, {}, nullptr, first.region_id};
-    }
+    case K::binary: return binary_expression(expr, module, env, locals, pure, out);
+    case K::conditional: return conditional_expression(expr, module, env, locals, pure, out);
     }
     fail(expr.at, "unsupported expression");
   }
