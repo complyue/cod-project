@@ -1,0 +1,5 @@
+using "std:io" @print;
+using "vocabulary.cod" @x;
+symbol @token;
+effect @x = 99;
+behave @print(777);

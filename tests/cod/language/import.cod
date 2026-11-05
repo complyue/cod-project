@@ -1,0 +1,10 @@
+using "std:io" @print;
+using "std:io" @assert;
+using "vocabulary.cod" @x;
+function helper() -> i64 { 9 }
+effect @x = 7;
+import "source.cod" @p;
+behave @assert(@x == 7);
+effect @x = 8;
+behave @print(perform @p);
+behave @print(behave @p);

@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 7
+Discussion revision: 8
 
 Recorded: 2026-10-22
 
@@ -11,12 +11,12 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 ## Design authority
 
 - **Registry:** [D-07](DesignAuthorityRegistry.md#d-07), which controls qualification and scope.
-- **Revision / covered scope:** discussion revision 7, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
+- **Revision / covered scope:** discussion revision 8, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
 - **Value lineage:** candidate P-12–P-18 connect the packet, database, language and interoperability concepts C-08–C-11 and this document to C-01, C-02, C-05 and C-06. Explicit language semantics should preserve inspectable business intent; regional transport and deferred reclamation should serve efficient persistent semantics; source tools should keep that semantics readable. These proposed derivations are not yet qualified implementation authority.
 - **Dependencies:** P-19–P-21 identify C-03, C-04 and C-02: multiple regions/domains, semantic levels and environment-specific effects. P-24 records application C-12 as an external example for DL-13; its model and resource choices are scoped to D-08. Existing C++ designs are reference material with their own registry status.
 - **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. H-96–H-111 supply the local symbol, callable, storage and expression directions linked below; a complete grammar, ABI, storage protocol and implementation contract remain open.
 - **Human baseline:** H-06 supplies the near-term goals; H-07 establishes discussion tracking; H-08 selects the first application; H-11 requires its own document set. [H-96–H-111](DesignAuthorityRegistry.md#h-96) direct coordinated development and define the scoped language propositions in [D-10](SymbolicDynamicScope.md). They do not approve every proposed implementation detail.
-- **Continuity:** no qualified implementation baseline for D-07. K-02/K-03 record the earlier discussion baseline; [K-213](DesignAuthorityRegistry.md#k-213) records revision 7, the prototype request and resolved immediate semantics. The full contract remains `pending-human`; this is not continuity-based qualification of an unqualified design.
+- **Continuity:** no qualified implementation baseline for D-07. K-02/K-03 record the earlier discussion baseline; [K-214](DesignAuthorityRegistry.md#k-214) records revision 8 and bounded native execution evidence under that request. The full contract remains `pending-human`; this is not continuity-based qualification of an unqualified design.
 
 ## Confirmed direction
 
@@ -232,7 +232,7 @@ The sixteen topics contain confirmed local propositions and open implementation/
 - H-106 separates complete dependency scanning/registration from entry-driven compilation of execution semantics. Top-level procedure declarations do not execute during scanning; dependency execution semantics are incorporated in encounter order.
 - Keep program intent separate from native code and caches. H-96/H-102 specify demand-driven whole-program compilation, with the complete caller paths available and no independent module compilation. Collect required symbolic variables, check binding availability/types, then lay out direct per-thread access. Concrete lowering, specialization and cache dependencies remain to be specified; this does not select machine-code JIT.
 
-**Proposal to discuss:** a small semantic core and reference execution path, with C++ supplying runtime primitives; native optimization follows evidence from a working business flow. No backend or new dependency is selected.
+**Current bounded implementation:** the [native source prototype](../tests/cod/language/README.md) parses/checks CoD, specializes demanded scalar call paths and uses generated C++ plus the existing Clang/LLVM compiler/linker to execute natively. Its experimental syntax and limitations are explicit. A regional typed program core, reference evaluator and production backend remain design work; this milestone adds no dependency or permanent backend choice.
 
 **Decision evidence:** a scoped feature list, one lowering/execution trace and a comparison criterion between reference behavior and the selected production handler.
 
@@ -268,7 +268,7 @@ This first local example is a possible intermediate milestone. The charter's bro
 
 **Confirmed immediate review:** every cross-module reference triggers module execution semantics (H-109). Its top-level scope ends when execution finishes; only `using`/`import` bring effective resources into the receiver (H-110). `effect` yields the newly bound value (H-111).
 
-**Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, repeated/cyclic encounters, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 4.
+**Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, repeated/cyclic encounters, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 5.
 
 **Decision evidence:** alias/version separation, nested effects, both call modes, transitive `behave` dependencies, a reachable path missing a required binding, scan-time absence of effects/captures and an encounter order different from dependency scan order. No independent module compiler is presumed.
 
@@ -286,18 +286,18 @@ This first local example is a possible intermediate milestone. The charter's bro
 
 H-96 establishes joint development; H-108 requests a checkpoint/push and an autonomous goal for the first demand-compiled runnable prototype after reviewing immediate choices. H-109–H-111 resolve that review; [D-10's first-prototype boundary](SymbolicDynamicScope.md#first-native-prototype-boundary) identifies the milestone. The application-owned [LanguageCoDesign](../applications/steady-snn/docs/LanguageCoDesign.md) proposes increments from nominal symbols and call modes to one immutable-A/incoming-gather/B-publication step, then a small checked program representation and native specialization. H-94's target-owned two-frame pull is the application boundary; it does not fix neuronal equations or training algorithms.
 
-Numerical source evaluation and integration motivate pure functions with explicit inputs. Target/frame context, selected randomness, regional writes and publication motivate procedures. Each increment needs semantic examples and actual execution evidence before optimization or SNN learning success can be claimed. The [case file](../applications/steady-snn/research/cod-language-scope-cases.json) currently specifies expectations only; no language compiler or simulation has executed it.
+Numerical source evaluation and integration motivate pure functions with explicit inputs. Target/frame context, selected randomness, regional writes and publication motivate procedures. Each increment needs semantic examples and actual execution evidence before optimization or SNN learning success can be claimed. The [case file](../applications/steady-snn/research/cod-language-scope-cases.json) links selected [native fixture evidence](../tests/cod/language/validation.json). Twenty-two direct checks establish the bounded scalar/module path and a two-target gather; the complete case catalog, regional frame implementation and neuronal behavior remain unvalidated.
 
 ## Implementation evidence to account for
 
-These observations describe repository commit `b72669e5d2bd9374e3aa69d6dd2c4ca1a5ca94c6`; they are inputs to discussion, not proof that a language mechanism is already implemented or approved.
+Storage observations below describe repository commit `b72669e5d2bd9374e3aa69d6dd2c4ca1a5ca94c6`. The driver row links the current native prototype with hashed execution evidence. Implementation observations do not grant design authority.
 
 | Existing facility | Relevant observation | Topics |
 | --- | --- | --- |
 | [Regional storage](../include/shilos/region.hh) | `regional_ptr` is self-relative; allocation advances `occupation_`; capacity and occupied bytes are distinct. The current `RegionalType` concept is a destructibility check, not a recursive proof of legal regional fields. | DL-01, DL-03, DL-04 |
 | [Cross-region runtime pointer](../include/shilos/region.hh) | `global_ptr` holds a native reference to a region and an offset. A persistent/process-independent identity and resolution protocol still needs a design. | DL-03, DL-08 |
 | [DBMR](../include/shilos/dbmr.hh) | Mapped-region validation checks header/root conditions. `constrict_on_close` trims unused tail capacity; it does not rebuild a graph to reclaim unreachable internal allocations. | DL-04, DL-06, DL-09 |
-| [CoD driver](../cod/main.cc) | The current submission path generates and compiles a C++ runner. It is an execution facility, not an implementation of the proposed domain language. | DL-02, DL-12 |
+| [CoD driver](../cod/main.cc) | The C++ submission path remains; the added CoD source path parses/checks the bounded scalar/module language before native compilation. [Prototype reference and evidence](../tests/cod/language/README.md) identify its limits; no full ADT/GADT or regional source-language implementation is claimed. | DL-02, DL-12 |
 
 The [memory-region design](MemoryRegionAndRegionalTypes.md), [CoD driver design](CompileOnDemand.md) and [YAML conversion design](YamlConversionsOfRegionalTypes.md) remain relevant references with the qualification limits listed in the registry. Reusing code does not select its representation as the language's contract.
 

@@ -1,0 +1,3 @@
+using "std:io" @print;
+using "math-source.cod" base;
+behave @print(base);

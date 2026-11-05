@@ -1,0 +1,3 @@
+using "std:io" @print;
+behave @print(999);
+using "broken-dependency.cod" incomplete;

@@ -1,0 +1,6 @@
+using "std:io" @print;
+symbol @x;
+symbol @p;
+procedure @p -> i64 { @x }
+effect @x = 9;
+behave @print(perform @p);

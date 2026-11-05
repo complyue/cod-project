@@ -1,0 +1,24 @@
+// Exact-integer data-flow fixture, not a neuron equation or trained SNN.
+using "std:io" @print;
+using "std:io" @assert;
+using "frame-vocabulary.cod" @a0;
+using "frame-vocabulary.cod" @a1;
+using "frame-vocabulary.cod" @target;
+symbol @b0;
+symbol @b1;
+effect @a0 = 2;
+effect @a1 = 5;
+using "frame-model.cod" @update;
+effect @b0 = { effect @target = 0; behave @update };
+effect @b1 = { effect @target = 1; behave @update };
+behave @print(@b0);
+behave @print(@b1);
+behave @assert({ effect @target = 1; behave @update } == @b1);
+behave @assert({ effect @target = 0; behave @update } == @b0);
+behave @assert(@a0 == 2);
+behave @assert(@a1 == 5);
+// Publish only after every target has read the same source frame.
+effect @a0 = @b0;
+effect @a1 = @b1;
+behave @print(@a0);
+behave @print(@a1);

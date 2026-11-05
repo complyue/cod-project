@@ -1,0 +1,317 @@
+{
+  "schema_version": 1,
+  "reference_revision": 1,
+  "status": "passed_bounded_native_prototype",
+  "recorded_date": "2026-11-05",
+  "checkpoint_commit": "a8be9bbc8a29618f183cb49b4d964615598c4b25",
+  "authority": "design/DesignAuthorityRegistry.md#k-214",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "source_build_count": 3,
+    "configuration_source_edits": false,
+    "observed_default_graph_behavior": "The first build regenerated main CMake metadata; the default graph also configured/refreshed runtime sub-build outputs, including a compiler-rt dummy object, libcxx_fuzzer install step and compilation database generation. No manual configure, bootstrap, install target or toolchain change was invoked.",
+    "warnings": [
+      "Existing LLVM OpenMPClause.h implicit-this-capture deprecation.",
+      "Existing runtimes CMake policy/deprecation warnings."
+    ]
+  },
+  "direct_checks": [
+    {
+      "fixture": "scopes.cod",
+      "command": "build/bin/cod --run tests/cod/language/scopes.cod",
+      "expected_exit": 0,
+      "expected_output": "1\n7\n2\n2\n8\n8\n6\n9\n6\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "1\n7\n2\n2\n8\n8\n6\n9\n6\n",
+      "passed": true
+    },
+    {
+      "fixture": "using.cod",
+      "command": "build/bin/cod --run tests/cod/language/using.cod",
+      "expected_exit": 0,
+      "expected_output": "1001\n401\n408\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "1001\n401\n408\n",
+      "passed": true
+    },
+    {
+      "fixture": "import.cod",
+      "command": "build/bin/cod --run tests/cod/language/import.cod",
+      "expected_exit": 0,
+      "expected_output": "1001\n907\n908\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "1001\n907\n908\n",
+      "passed": true
+    },
+    {
+      "fixture": "frame.cod",
+      "command": "build/bin/cod --run tests/cod/language/frame.cod",
+      "expected_exit": 0,
+      "expected_output": "15\n14\n15\n14\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "15\n14\n15\n14\n",
+      "passed": true
+    },
+    {
+      "fixture": "transitive.cod",
+      "command": "build/bin/cod --run tests/cod/language/transitive.cod",
+      "expected_exit": 0,
+      "expected_output": "2\n9\n5\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "2\n9\n5\n",
+      "passed": true
+    },
+    {
+      "fixture": "identity.cod",
+      "command": "build/bin/cod --run tests/cod/language/identity.cod",
+      "expected_exit": 0,
+      "expected_output": "3\n8\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "3\n8\n",
+      "passed": true
+    },
+    {
+      "fixture": "arithmetic.cod",
+      "command": "build/bin/cod --run tests/cod/language/arithmetic.cod",
+      "expected_exit": 0,
+      "expected_output": "10\n7\n8\n-9223372036854775808\nfalse\ntrue\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "10\n7\n8\n-9223372036854775808\nfalse\ntrue\n",
+      "passed": true
+    },
+    {
+      "fixture": "symbol-trigger.cod",
+      "command": "build/bin/cod --run tests/cod/language/symbol-trigger.cod",
+      "expected_exit": 0,
+      "expected_output": "777\n7\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "777\n7\n",
+      "passed": true
+    },
+    {
+      "fixture": "function-resource.cod",
+      "command": "build/bin/cod --run tests/cod/language/function-resource.cod",
+      "expected_exit": 0,
+      "expected_output": "888\n42\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "888\n42\n",
+      "passed": true
+    },
+    {
+      "fixture": "global-resource.cod",
+      "command": "build/bin/cod --run tests/cod/language/global-resource.cod",
+      "expected_exit": 0,
+      "expected_output": "888\n40\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "888\n40\n",
+      "passed": true
+    },
+    {
+      "fixture": "missing.cod",
+      "command": "build/bin/cod --run tests/cod/language/missing.cod",
+      "expected_exit": 2,
+      "expected_output": "missing required binding",
+      "match": "contains",
+      "actual_exit": 2,
+      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/missing.cod:4:15: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/missing.cod::@missing\n",
+      "passed": true
+    },
+    {
+      "fixture": "missing-capture.cod",
+      "command": "build/bin/cod --run tests/cod/language/missing-capture.cod",
+      "expected_exit": 2,
+      "expected_output": "unavailable definition-time capture",
+      "match": "contains",
+      "actual_exit": 2,
+      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod:6:23: perform requires an unavailable definition-time capture /ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod::@x\n",
+      "passed": true
+    },
+    {
+      "fixture": "impure-function.cod",
+      "command": "build/bin/cod --run tests/cod/language/impure-function.cod",
+      "expected_exit": 2,
+      "expected_output": "function cannot read symbolic effects",
+      "match": "contains",
+      "actual_exit": 2,
+      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/impure-function.cod:3:25: a function cannot read symbolic effects\n",
+      "passed": true
+    },
+    {
+      "fixture": "type-error.cod",
+      "command": "build/bin/cod --run tests/cod/language/type-error.cod",
+      "expected_exit": 2,
+      "expected_output": "incompatible value types",
+      "match": "contains",
+      "actual_exit": 2,
+      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/type-error.cod:3:8: incompatible value types for /ws/EvtWorks/cod-project/tests/cod/language/type-error.cod::@x\n",
+      "passed": true
+    },
+    {
+      "fixture": "plain-assignment.cod",
+      "command": "build/bin/cod --run tests/cod/language/plain-assignment.cod",
+      "expected_exit": 2,
+      "expected_output": "expected ';'",
+      "match": "contains",
+      "actual_exit": 2,
+      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/plain-assignment.cod:3:4: expected ';'\n",
+      "passed": true
+    },
+    {
+      "fixture": "scan-error.cod",
+      "command": "build/bin/cod --run tests/cod/language/scan-error.cod",
+      "expected_exit": 2,
+      "expected_output": "expected a lexical name",
+      "match": "contains",
+      "actual_exit": 2,
+      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/broken-dependency.cod:2:1: expected a lexical name\n",
+      "passed": true
+    },
+    {
+      "fixture": "overflow.cod",
+      "command": "build/bin/cod --run tests/cod/language/overflow.cod",
+      "expected_exit": 70,
+      "expected_output": "i64 addition overflow",
+      "match": "contains",
+      "actual_exit": 70,
+      "actual_output": "i64 addition overflow\n",
+      "passed": true
+    },
+    {
+      "fixture": "perform-without-caller.cod",
+      "command": "build/bin/cod --run tests/cod/language/perform-without-caller.cod",
+      "expected_exit": 0,
+      "expected_output": "1001\n401\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "1001\n401\n",
+      "passed": true
+    },
+    {
+      "fixture": "behave-without-caller.cod",
+      "command": "build/bin/cod --run tests/cod/language/behave-without-caller.cod",
+      "expected_exit": 2,
+      "expected_output": "missing required binding",
+      "match": "contains",
+      "actual_exit": 2,
+      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/source.cod:6:40: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@x\n",
+      "passed": true
+    },
+    {
+      "fixture": "procedure-rebinding.cod",
+      "command": "build/bin/cod --run tests/cod/language/procedure-rebinding.cod",
+      "expected_exit": 0,
+      "expected_output": "22\n11\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "22\n11\n",
+      "passed": true
+    },
+    {
+      "fixture": "effect-result.cod",
+      "command": "build/bin/cod --run tests/cod/language/effect-result.cod",
+      "expected_exit": 0,
+      "expected_output": "6\n3\n",
+      "match": "exact",
+      "actual_exit": 0,
+      "actual_output": "6\n3\n",
+      "passed": true
+    },
+    {
+      "fixture": "early-alias.cod",
+      "command": "build/bin/cod --run tests/cod/language/early-alias.cod",
+      "expected_exit": 2,
+      "expected_output": "requires its using/import encounter first",
+      "match": "contains",
+      "actual_exit": 2,
+      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/early-alias.cod:1:8: symbol alias @x requires its using/import encounter first in this prototype\n",
+      "passed": true
+    }
+  ],
+  "frontend_check": {
+    "command": "build/bin/cod --check tests/cod/language/using.cod --emit-cpp /tmp/cod-using-native.cc -v",
+    "exit_code": 0,
+    "output": "[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/using.cod\n[CoD scan] std:io\n[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod\n[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/source.cod\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/using.cod\n[CoD execution semantics] std:io\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/source.cod\n",
+    "program_executed": false
+  },
+  "cpp_compatibility": {
+    "command": "build/bin/cod --project tests/cod/test-data/basic --works /tmp/cod-prototype-compat.dbmr --eval 'std::cout << (40 + 2) << std::endl;'",
+    "exit_code": 0,
+    "output": "42\nUsing existing workspace: \"/tmp/cod-prototype-compat.dbmr\"\nProject root: \"/ws/EvtWorks/cod-project/tests/cod/test-data/basic\"\n"
+  },
+  "native_trace": {
+    "command": "strace -f -s 300 -e trace=execve -o /tmp/cod-native-prototype-exec.log build/bin/cod --run tests/cod/language/using.cod",
+    "exit_code": 0,
+    "output": "1001\n401\n408\n",
+    "successful_exec_paths": [
+      "build/bin/cod",
+      "/ws/EvtWorks/cod-project/build/bin/clang++",
+      "/ws/EvtWorks/cod-project/build/bin/clang++",
+      "/ws/EvtWorks/cod-project/build/bin/clang-23",
+      "/ws/EvtWorks/cod-project/build/bin/ld.lld",
+      "/tmp/cod-language-1a6beb/runner"
+    ]
+  },
+  "limits": [
+    "Direct source examples were executed for the authorized prototype goal; no repository test suite was run.",
+    "Linux x86_64 only; no macOS/Windows native-prototype validation.",
+    "No complete 25-case catalog execution, region/lifetime or concurrency acceptance.",
+    "Scalar two-target fixture only; no regional arrays, immutable-view checker, neural dynamics, training, scalability or benchmark claim.",
+    "Experimental syntax, left-to-right evaluation, last-expression scope results, checked i64 arithmetic and local-path identity do not settle the full language contract."
+  ],
+  "source_sha256": {
+    "cod/main.cc": "72a873f870ba462b3a9bfe4f62c8b6def4833b8a1b0e99a819bf452a7e43a0a2",
+    "cod/lang_syntax.hh": "d12a3348b7e3ef524945ab3c6f2dbb45b77deadf49aa980176a95a4f42888ecf",
+    "cod/lang_frontend.hh": "6b557eacd2170ee5d03a98062e68fc660757e45b3d6676a83dab68037b118a4c",
+    "tests/cod/language/arithmetic.cod": "fc6fe6842727ffab6aae020ac8577ff107fd791d31c1c09092e88e49ad383653",
+    "tests/cod/language/behave-without-caller.cod": "1000b912b9f65ecfcbb0721d808ac6a0e0cf525b124497f7dd40f7431f6b3fd6",
+    "tests/cod/language/broken-dependency.cod": "6cd8716b5bdcd5e22a9deb4c3b308fcd0908c74b7d4ce0d1a3c30632955679d3",
+    "tests/cod/language/early-alias.cod": "8157159fa15baa3694552773f4cd60b8eddbb1d60357417d08361d4957ef8a07",
+    "tests/cod/language/effect-result.cod": "02d915f6dedaf234cc86e079495167deb27a11c400e01ec9062e5f987df35034",
+    "tests/cod/language/frame-model.cod": "7fbaff95a2c8c5a7253fd5b025da5821c52f229e97e7377d5ee5b4764b3639f8",
+    "tests/cod/language/frame-vocabulary.cod": "7d33d85b670825c8de9290678b83822b833744c1b273aeff25d17c25fad17e17",
+    "tests/cod/language/frame.cod": "c74ecf36524110561fe1c6385fe21499b51dd02ae58f9a07bef96719fafa6765",
+    "tests/cod/language/function-resource.cod": "c31f784b7b2f171231724f3aca259711f848a39e2541a5adb66580b022674327",
+    "tests/cod/language/global-resource.cod": "68bc09c94a8d5e38ab6a08423db5c202dd8f09c9caa0c3cfae1e52a959028925",
+    "tests/cod/language/identity.cod": "ee4ca8808d0c2ef1c460934c27104ba891ca9588185ecf82d2ee0de619ef124c",
+    "tests/cod/language/import.cod": "83fc02eae6626fd6e7c43be8dc0af54c1b14a63a7f0cc39da8086eaff9f710cb",
+    "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
+    "tests/cod/language/math-source.cod": "08826dd8f11368e63a9cb09b14495ab0189294b56f8893718d93a3f890f2ebfd",
+    "tests/cod/language/missing-capture.cod": "fb7ec6cbd83f9b72ba359a2aa9f45a4c89fa3d02d4f863c90a9b27f21429c716",
+    "tests/cod/language/missing.cod": "0074bbf2bd1b0b2d45f056553df516d0318fdf07f565f202ae1933fa66d21e9a",
+    "tests/cod/language/other-vocabulary.cod": "80817103481ee22506c050a6fcdc3ce82aefb15cebe6573d84d8a66f00aad547",
+    "tests/cod/language/overflow.cod": "903fc062d6c1c833aaef115cf62cf6a253390c15c86f144a32399d8010a78f20",
+    "tests/cod/language/perform-without-caller.cod": "3beed30a6b73924f94b71d8fe3b767681cf1f18d57b4e0a1f24ed935badc3e89",
+    "tests/cod/language/plain-assignment.cod": "6832cc854107048ab81f0de5bddbfd78e70a7944f4a0a484d80b13578e1e3e4a",
+    "tests/cod/language/procedure-rebinding.cod": "23a85c5c289c2258637f5bab9c416f9c8c212096d37316c8cfaff7d04f7325ba",
+    "tests/cod/language/scan-error.cod": "c14baf99c62c7ab431318e202b3d6ad117cb956fd02b61a3cfae4d0f9303668b",
+    "tests/cod/language/scopes.cod": "f8c84851c4b6932f8dbfdfe09ee238575af985f220801bc71aa380f8a63538e3",
+    "tests/cod/language/source.cod": "04de5919353cfd8d3cb4713f11cafe4670ce36a5e8665b280a8204dcbbffffaf",
+    "tests/cod/language/symbol-source.cod": "5dcb773ab1c54f85f2acdbf6164ffdfc9e26a24194607be92ce650a2aa5d8308",
+    "tests/cod/language/symbol-trigger.cod": "3d44315c8a9034523a20d16eb287f5481c89f3e7f9e45ff4a54505190cfa9132",
+    "tests/cod/language/transitive.cod": "1feff31a2fc55c5ed8aa23a238a2e645d4e3ef39156ba2ff5c23d29a8a86e0eb",
+    "tests/cod/language/type-error.cod": "2ff51f72fd633a71402c479cc5d91dfea5c540e22f15c67c9b886b5152572d0f",
+    "tests/cod/language/using.cod": "9954ad2b2f2ab6f6478b9f02ec92cc444fc1cc5d08dbc0d1d04b1328f4ce859a",
+    "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223"
+  },
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "70e49b8b69e41a4f4e7a823f1e76dc9368a77e0758d57793dda7dcd6c95f6582"
+  },
+  "environment": {
+    "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
+    "machine": "x86_64",
+    "cwd": "/ws/EvtWorks/cod-project",
+    "evidence_preserved_utc": "2026-11-05T16:16:28.092055+00:00"
+  }
+}

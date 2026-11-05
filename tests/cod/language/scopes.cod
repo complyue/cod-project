@@ -1,0 +1,21 @@
+using "std:io" @print;
+using "std:io" @assert;
+symbol @x;
+symbol @read;
+symbol @increment;
+function twice(x: i64) -> i64 { x * 2 }
+global initial: i64 = twice(3);
+effect @x = 1;
+procedure @read -> i64 { @x }
+procedure @increment -> i64 { effect @x = @x + 1; @x }
+effect @x = 7;
+behave @print(perform @read);
+behave @print(behave @read);
+behave @print(perform @increment);
+behave @print(perform @increment);
+behave @print(behave @increment);
+behave @print(behave @increment);
+behave @assert(@x == 7);
+behave @print(effect @x = initial);
+{ effect @x = 9; behave @print(@x); };
+behave @print(@x);

@@ -1,0 +1,12 @@
+using "std:io" @print;
+using "std:io" @assert;
+symbol @flag;
+function choose(x: i64) -> i64 { if (x < 0) { -x } else { x * 2 } }
+behave @print(0010);
+behave @print(choose(-7));
+behave @print(choose(4));
+behave @print(-9223372036854775808);
+effect @flag = true;
+behave @print(false && { effect @flag = false; true });
+behave @print(true || { effect @flag = false; false });
+behave @assert(@flag);

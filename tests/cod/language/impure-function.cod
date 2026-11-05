@@ -1,0 +1,4 @@
+symbol @x;
+effect @x = 1;
+function bad() -> i64 { @x }
+global result: i64 = bad();

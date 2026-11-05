@@ -1,0 +1,3 @@
+// Shared identities; this module establishes no dynamic values.
+symbol @x;
+symbol @p;

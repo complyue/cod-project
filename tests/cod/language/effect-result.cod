@@ -1,0 +1,6 @@
+using "std:io" @print;
+symbol @x;
+function twice(x: i64) -> i64 { x * 2 }
+effect @x = 1;
+behave @print(twice(effect @x = 3));
+behave @print(@x);

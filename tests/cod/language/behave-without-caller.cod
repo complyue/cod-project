@@ -1,0 +1,3 @@
+using "std:io" @print;
+using "source.cod" @p;
+behave @print(behave @p);

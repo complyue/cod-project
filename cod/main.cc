@@ -7,6 +7,7 @@
 
 #include "cod.hh"
 #include "cod_cache.hh"
+#include "lang_frontend.hh"
 
 #include "codp.hh"
 #include "codp_yaml.hh"
@@ -169,6 +170,8 @@ public:
 
   std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) const;
   bool compileAndRun(const CodReplConfig &config, const std::string &submission) const;
+  int compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
+                      const std::optional<fs::path> &emit_cpp) const;
   void runRepl(const CodReplConfig &config) const;
 };
 
@@ -181,6 +184,9 @@ static void printUsage(const char *prog_name) {
             << "  -w, --works PATH    Workspace DBMR file path (default: ./.cod/works.dbmr)\n"
             << "  --project PATH      Project root directory (default: auto-detect)\n"
             << "  -e, --eval EXPR     Evaluate expression/statement and exit\n"
+            << "  --run FILE          Compile and run a CoD source-language entry\n"
+            << "  --check FILE        Check a CoD entry and its demanded call paths\n"
+            << "  --emit-cpp FILE     Save native source with --run or --check\n"
             << "  -h, --help          Show this help message\n"
             << "  --no-cache          Disable build cache\n"
             << "  --force-rebuild     Force rebuild (ignore cache)\n"
@@ -608,6 +614,56 @@ std::vector<std::string> CodTool::buildCompilerArgs(const CodReplConfig &config)
   return args;
 }
 
+int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
+                            const std::optional<fs::path> &emit_cpp) const {
+  try {
+    const auto compilation = cod::language::Compiler{}.compile(fs::absolute(entry));
+    if (config.verbose) {
+      for (const auto &module : compilation.scanned_modules)
+        std::cerr << "[CoD scan] " << module << '\n';
+      for (const auto &module : compilation.execution_order)
+        std::cerr << "[CoD execution semantics] " << module << '\n';
+    }
+    if (emit_cpp) {
+      std::ofstream output(*emit_cpp);
+      output << compilation.cpp;
+      output.close();
+      if (!output) throw std::runtime_error("cannot write generated source: " + emit_cpp->string());
+    }
+    if (check_only) return 0;
+
+    llvm::SmallString<256> directory;
+    const auto model = (fs::temp_directory_path() / "cod-language").string();
+    if (const auto error = llvm::sys::fs::createUniqueDirectory(model, directory))
+      throw std::system_error(error, "cannot create native compilation directory");
+    const fs::path temporary(directory.str().str());
+    const auto source = temporary / "program.cc";
+    const auto bitcode = temporary / "program.bc";
+    const auto executable = getRunnerPath(temporary);
+    struct TemporaryFiles {
+      fs::path source, bitcode, executable, directory;
+      ~TemporaryFiles() {
+        std::error_code ignored;
+        fs::remove(source, ignored);
+        fs::remove(bitcode, ignored);
+        fs::remove(executable, ignored);
+        fs::remove(directory, ignored);
+      }
+    } cleanup{source, bitcode, executable, temporary};
+    std::ofstream output(source);
+    output << compilation.cpp;
+    output.close();
+    if (!output) throw std::runtime_error("cannot write native compilation source");
+    cod::cache::BitcodeCompiler compiler;
+    if (!compiler.compile_to_bitcode(source, bitcode, buildCompilerArgs(config))) return 3;
+    if (!compiler.link_bitcode({bitcode}, executable, buildLinkerArgs(config))) return 3;
+    return runExecutableAndWait(executable).value_or(3);
+  } catch (const std::exception &error) {
+    std::cerr << error.what() << '\n';
+    return 2;
+  }
+}
+
 // CodTool method implementations
 bool CodTool::compileAndRun(const CodReplConfig &config, const std::string &submission) const {
   auto temp_dir = getTempDir(config);
@@ -761,6 +817,9 @@ void CodTool::runRepl(const CodReplConfig &config) const {
 
 int main(int argc, const char **argv) {
   CodReplConfig config;
+  std::optional<fs::path> language_entry;
+  std::optional<fs::path> emit_cpp;
+  bool check_only = false;
 
   // Parse command line arguments
   for (int i = 1; i < argc; ++i) {
@@ -781,6 +840,19 @@ int main(int argc, const char **argv) {
         return 1;
       }
       config.project_root = fs::absolute(argv[++i]);
+    } else if (arg == "--run" || arg == "--check") {
+      if (i + 1 >= argc || language_entry) {
+        std::cerr << "Error: provide exactly one --run or --check entry file\n";
+        return 1;
+      }
+      language_entry = fs::absolute(argv[++i]);
+      check_only = arg == "--check";
+    } else if (arg == "--emit-cpp") {
+      if (i + 1 >= argc) {
+        std::cerr << "Error: --emit-cpp requires a path\n";
+        return 1;
+      }
+      emit_cpp = fs::absolute(argv[++i]);
     } else if (arg == "-e" || arg == "--eval") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires an expression argument\n";
@@ -816,6 +888,19 @@ int main(int argc, const char **argv) {
       printUsage(argv[0]);
       return 1;
     }
+  }
+
+  if (language_entry) {
+    if (config.eval_expression) {
+      std::cerr << "Error: CoD source mode cannot be combined with --eval\n";
+      return 1;
+    }
+    if (config.project_root.empty()) config.project_root = language_entry->parent_path();
+    return CodTool{}.compileLanguage(config, *language_entry, check_only, emit_cpp);
+  }
+  if (emit_cpp) {
+    std::cerr << "Error: --emit-cpp requires --run or --check\n";
+    return 1;
   }
 
   // Auto-detect project root if not specified

@@ -1,13 +1,56 @@
 {
   "schema_version": 1,
-  "status": "specified_not_executed",
+  "status": "specified_with_selected_native_evidence",
   "recorded_date": "2026-11-05",
   "design_documents": [
     "../../../design/SymbolicDynamicScope.md",
     "../docs/LanguageCoDesign.md"
   ],
   "purpose": "Reviewable language semantics and SNN execution expectations for joint development.",
-  "execution_evidence": null,
+  "execution_evidence": {
+    "reference": "../../../tests/cod/language/README.md",
+    "record": "../../../tests/cod/language/validation.json",
+    "scope": "22 direct scalar/module checks plus native process, frontend-only and C++ compatibility evidence; not a run of all 25 catalog cases.",
+    "selected_fixture_links": {
+      "CS-01": [
+        "identity.cod"
+      ],
+      "CS-04": [
+        "scopes.cod"
+      ],
+      "CS-05": [
+        "scopes.cod"
+      ],
+      "CS-07": [
+        "transitive.cod"
+      ],
+      "CS-12": [
+        "frame.cod"
+      ],
+      "CS-16": [
+        "using.cod",
+        "import.cod"
+      ],
+      "CS-23": [
+        "symbol-trigger.cod",
+        "using.cod",
+        "import.cod",
+        "function-resource.cod",
+        "global-resource.cod"
+      ],
+      "CS-25": [
+        "effect-result.cod"
+      ]
+    },
+    "partial_coverage_notes": [
+      "Identity uses distinct canonical local module paths, not resolved versioned package origins.",
+      "Scope/capture fixtures exercise equivalent scalar cases, not every exact trace or unwind form in the catalog.",
+      "Function, binding and type diagnostics cover named examples, not all variants in CS-08/CS-11/CS-13.",
+      "The frame fixture preserves A by program construction/assertions, not a checked immutable-view type.",
+      "Scan-before-execution is checked by rejecting a broken dependency before an earlier print can execute; the distinct scan/encounter order scenario CS-18 is not executed.",
+      "No regional-pointer, escaping-capture, concurrency or package-version acceptance."
+    ]
+  },
   "cases": [
     {
       "id": "CS-01",
@@ -515,7 +558,7 @@
     }
   ],
   "limits": [
-    "No compiler/runtime implementation or test execution claimed.",
+    "The complete catalog remains a specification; selected actual native prototype evidence is linked separately.",
     "Candidate type/lifetime, initialization-composition and expression-result rules remain separate from confirmed user semantics. Missing required bindings are compilation errors.",
     "No package-identity byte format, TLS ABI, cross-region pointer representation or neural model is selected."
   ]
