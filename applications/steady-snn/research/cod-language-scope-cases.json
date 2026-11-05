@@ -10,10 +10,11 @@
   "execution_evidence": {
     "reference": "../../../tests/cod/language/README.md",
     "record": "../../../tests/cod/language/validation.json",
-    "scope": "22 direct scalar/module checks plus native process, frontend-only and C++ compatibility evidence; not a run of all 25 catalog cases.",
+    "scope": "49 native scalar/module fixtures and one frontend-only check; the complete CoD component suite also passes. This is not a run of all 25 catalog cases.",
     "selected_fixture_links": {
       "CS-01": [
-        "identity.cod"
+        "identity.cod",
+        "identity-restore.cod"
       ],
       "CS-04": [
         "scopes.cod"
@@ -29,7 +30,12 @@
       ],
       "CS-16": [
         "using.cod",
-        "import.cod"
+        "import.cod",
+        "using-destination.cod",
+        "using-vocabulary-destination.cod",
+        "import-mapping.cod",
+        "import-default-identity.cod",
+        "reimport-mapping.cod"
       ],
       "CS-23": [
         "symbol-trigger.cod",

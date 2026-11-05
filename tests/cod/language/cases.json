@@ -1,0 +1,273 @@
+[
+  {
+    "file": "scopes.cod",
+    "exit": 0,
+    "stdout": "1\n7\n2\n2\n8\n8\n6\n9\n6\n"
+  },
+  {
+    "file": "using.cod",
+    "exit": 0,
+    "stdout": "1001\n401\n408\n"
+  },
+  {
+    "file": "import.cod",
+    "exit": 0,
+    "stdout": "1001\n907\n908\n"
+  },
+  {
+    "file": "frame.cod",
+    "exit": 0,
+    "stdout": "15\n14\n15\n14\n"
+  },
+  {
+    "file": "transitive.cod",
+    "exit": 0,
+    "stdout": "2\n9\n5\n"
+  },
+  {
+    "file": "identity.cod",
+    "exit": 0,
+    "stdout": "3\n8\n"
+  },
+  {
+    "file": "arithmetic.cod",
+    "exit": 0,
+    "stdout": "10\n7\n8\n-9223372036854775808\nfalse\ntrue\n"
+  },
+  {
+    "file": "symbol-trigger.cod",
+    "exit": 0,
+    "stdout": "777\n7\n"
+  },
+  {
+    "file": "function-resource.cod",
+    "exit": 0,
+    "stdout": "888\n42\n"
+  },
+  {
+    "file": "global-resource.cod",
+    "exit": 0,
+    "stdout": "888\n40\n"
+  },
+  {
+    "file": "missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "missing-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "unavailable definition-time capture"
+  },
+  {
+    "file": "impure-function.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "function cannot read symbolic effects"
+  },
+  {
+    "file": "type-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "incompatible value types"
+  },
+  {
+    "file": "plain-assignment.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected ';'"
+  },
+  {
+    "file": "scan-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected a lexical name"
+  },
+  {
+    "file": "overflow.cod",
+    "exit": 70,
+    "stdout": "",
+    "stderr_contains": "i64 addition overflow"
+  },
+  {
+    "file": "perform-without-caller.cod",
+    "exit": 0,
+    "stdout": "1001\n401\n"
+  },
+  {
+    "file": "behave-without-caller.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "procedure-rebinding.cod",
+    "exit": 0,
+    "stdout": "22\n11\n"
+  },
+  {
+    "file": "effect-result.cod",
+    "exit": 0,
+    "stdout": "6\n3\n"
+  },
+  {
+    "file": "early-alias.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "requires its symbol from encounter first"
+  },
+  {
+    "file": "identity-restore.cod",
+    "exit": 0,
+    "stdout": "600\n7\n7\n"
+  },
+  {
+    "file": "identity-no-default.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "using-destination.cod",
+    "exit": 0,
+    "stdout": "1001\n900\n401\n408\n"
+  },
+  {
+    "file": "using-vocabulary-destination.cod",
+    "exit": 0,
+    "stdout": "1001\n401\n"
+  },
+  {
+    "file": "import-mapping.cod",
+    "exit": 0,
+    "stdout": "1001\n907\n908\n8\n"
+  },
+  {
+    "file": "import-default-identity.cod",
+    "exit": 0,
+    "stdout": "1001\n907\n908\n"
+  },
+  {
+    "file": "mapping-effects.cod",
+    "exit": 0,
+    "stdout": "60\n100\n9\n"
+  },
+  {
+    "file": "mapping-perform-call.cod",
+    "exit": 0,
+    "stdout": "3\n3\n"
+  },
+  {
+    "file": "reimport-mapping.cod",
+    "exit": 0,
+    "stdout": "1001\n302\n303\n"
+  },
+  {
+    "file": "mapped-behave-later.cod",
+    "exit": 0,
+    "stdout": "1001\n909\n"
+  },
+  {
+    "file": "mapped-missing-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "unavailable definition-time capture"
+  },
+  {
+    "file": "missing-destination.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "must be declared before using/import"
+  },
+  {
+    "file": "late-destination.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "must be declared before using/import"
+  },
+  {
+    "file": "late-alias-destination.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "must be declared before using/import"
+  },
+  {
+    "file": "unknown-map-local.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "undeclared symbol @missing"
+  },
+  {
+    "file": "unknown-map-role.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "unknown source-body role @missing"
+  },
+  {
+    "file": "duplicate-map-role.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "duplicate source role @x"
+  },
+  {
+    "file": "reversed-map.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "undeclared symbol @x"
+  },
+  {
+    "file": "using-with-map.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a symbol map requires an imported procedure"
+  },
+  {
+    "file": "missing-default-alias.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "undeclared symbol @x"
+  },
+  {
+    "file": "identity-as-procedure.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "has no procedure value"
+  },
+  {
+    "file": "value-as-procedure.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "has no procedure value"
+  },
+  {
+    "file": "map-does-not-declare-local.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "undeclared symbol @x"
+  },
+  {
+    "file": "mapping-shared-identity.cod",
+    "exit": 0,
+    "stdout": "6\n"
+  },
+  {
+    "file": "mapping-split-identity.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "splitting one source symbol identity"
+  },
+  {
+    "file": "duplicate-symbol-alias.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "duplicate symbol alias"
+  },
+  {
+    "file": "builtin-body-import.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "no importable body"
+  }
+]

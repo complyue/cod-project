@@ -1,3 +1,5 @@
+symbol @print;
 using "std:io" @print;
+symbol @p;
 using "source.cod" @p;
 behave @print(perform @p);

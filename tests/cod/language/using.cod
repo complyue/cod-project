@@ -1,8 +1,11 @@
+symbol @print;
 using "std:io" @print;
+symbol @assert;
 using "std:io" @assert;
-using "vocabulary.cod" @x;
+symbol from "vocabulary.cod" @x;
 function helper() -> i64 { 9 }
 effect @x = 7;
+symbol @p;
 using "source.cod" @p;
 behave @assert(@x == 7);
 effect @x = 8;

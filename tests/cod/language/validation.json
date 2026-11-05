@@ -1,317 +1,1025 @@
 {
-  "schema_version": 1,
-  "reference_revision": 1,
-  "status": "passed_bounded_native_prototype",
-  "recorded_date": "2026-11-05",
-  "checkpoint_commit": "a8be9bbc8a29618f183cb49b4d964615598c4b25",
-  "authority": "design/DesignAuthorityRegistry.md#k-214",
+  "schema_version": 2,
+  "recorded_utc": "2026-11-05T17:41:17.666334+00:00",
+  "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
+  "toolchain": "build",
+  "passed": 50,
+  "total": 50,
+  "results": [
+    {
+      "fixture": "scopes.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/scopes.cod"
+      ],
+      "expected": {
+        "file": "scopes.cod",
+        "exit": 0,
+        "stdout": "1\n7\n2\n2\n8\n8\n6\n9\n6\n"
+      },
+      "exit_code": 0,
+      "stdout": "1\n7\n2\n2\n8\n8\n6\n9\n6\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "using.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/using.cod"
+      ],
+      "expected": {
+        "file": "using.cod",
+        "exit": 0,
+        "stdout": "1001\n401\n408\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n401\n408\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "import.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/import.cod"
+      ],
+      "expected": {
+        "file": "import.cod",
+        "exit": 0,
+        "stdout": "1001\n907\n908\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n907\n908\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "frame.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/frame.cod"
+      ],
+      "expected": {
+        "file": "frame.cod",
+        "exit": 0,
+        "stdout": "15\n14\n15\n14\n"
+      },
+      "exit_code": 0,
+      "stdout": "15\n14\n15\n14\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "transitive.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/transitive.cod"
+      ],
+      "expected": {
+        "file": "transitive.cod",
+        "exit": 0,
+        "stdout": "2\n9\n5\n"
+      },
+      "exit_code": 0,
+      "stdout": "2\n9\n5\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "identity.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/identity.cod"
+      ],
+      "expected": {
+        "file": "identity.cod",
+        "exit": 0,
+        "stdout": "3\n8\n"
+      },
+      "exit_code": 0,
+      "stdout": "3\n8\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "arithmetic.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/arithmetic.cod"
+      ],
+      "expected": {
+        "file": "arithmetic.cod",
+        "exit": 0,
+        "stdout": "10\n7\n8\n-9223372036854775808\nfalse\ntrue\n"
+      },
+      "exit_code": 0,
+      "stdout": "10\n7\n8\n-9223372036854775808\nfalse\ntrue\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "symbol-trigger.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/symbol-trigger.cod"
+      ],
+      "expected": {
+        "file": "symbol-trigger.cod",
+        "exit": 0,
+        "stdout": "777\n7\n"
+      },
+      "exit_code": 0,
+      "stdout": "777\n7\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "function-resource.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/function-resource.cod"
+      ],
+      "expected": {
+        "file": "function-resource.cod",
+        "exit": 0,
+        "stdout": "888\n42\n"
+      },
+      "exit_code": 0,
+      "stdout": "888\n42\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "global-resource.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/global-resource.cod"
+      ],
+      "expected": {
+        "file": "global-resource.cod",
+        "exit": 0,
+        "stdout": "888\n40\n"
+      },
+      "exit_code": 0,
+      "stdout": "888\n40\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "missing.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/missing.cod"
+      ],
+      "expected": {
+        "file": "missing.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "missing required binding"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/missing.cod:5:15: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/missing.cod::@missing\n",
+      "passed": true
+    },
+    {
+      "fixture": "missing-capture.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod"
+      ],
+      "expected": {
+        "file": "missing-capture.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "unavailable definition-time capture"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod:7:23: perform requires an unavailable definition-time capture /ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod::@x\n",
+      "passed": true
+    },
+    {
+      "fixture": "impure-function.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/impure-function.cod"
+      ],
+      "expected": {
+        "file": "impure-function.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "function cannot read symbolic effects"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/impure-function.cod:3:25: a function cannot read symbolic effects\n",
+      "passed": true
+    },
+    {
+      "fixture": "type-error.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/type-error.cod"
+      ],
+      "expected": {
+        "file": "type-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "incompatible value types"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/type-error.cod:3:8: incompatible value types for /ws/EvtWorks/cod-project/tests/cod/language/type-error.cod::@x\n",
+      "passed": true
+    },
+    {
+      "fixture": "plain-assignment.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/plain-assignment.cod"
+      ],
+      "expected": {
+        "file": "plain-assignment.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected ';'"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/plain-assignment.cod:3:4: expected ';'\n",
+      "passed": true
+    },
+    {
+      "fixture": "scan-error.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/scan-error.cod"
+      ],
+      "expected": {
+        "file": "scan-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected a lexical name"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/broken-dependency.cod:2:1: expected a lexical name\n",
+      "passed": true
+    },
+    {
+      "fixture": "overflow.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/overflow.cod"
+      ],
+      "expected": {
+        "file": "overflow.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "i64 addition overflow"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "i64 addition overflow\n",
+      "passed": true
+    },
+    {
+      "fixture": "perform-without-caller.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/perform-without-caller.cod"
+      ],
+      "expected": {
+        "file": "perform-without-caller.cod",
+        "exit": 0,
+        "stdout": "1001\n401\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n401\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "behave-without-caller.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/behave-without-caller.cod"
+      ],
+      "expected": {
+        "file": "behave-without-caller.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "missing required binding"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/source.cod:7:40: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@x\n",
+      "passed": true
+    },
+    {
+      "fixture": "procedure-rebinding.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/procedure-rebinding.cod"
+      ],
+      "expected": {
+        "file": "procedure-rebinding.cod",
+        "exit": 0,
+        "stdout": "22\n11\n"
+      },
+      "exit_code": 0,
+      "stdout": "22\n11\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "effect-result.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/effect-result.cod"
+      ],
+      "expected": {
+        "file": "effect-result.cod",
+        "exit": 0,
+        "stdout": "6\n3\n"
+      },
+      "exit_code": 0,
+      "stdout": "6\n3\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "early-alias.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/early-alias.cod"
+      ],
+      "expected": {
+        "file": "early-alias.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "requires its symbol from encounter first"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/early-alias.cod:1:8: symbol alias @x requires its symbol from encounter first in this prototype\n",
+      "passed": true
+    },
+    {
+      "fixture": "identity-restore.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/identity-restore.cod"
+      ],
+      "expected": {
+        "file": "identity-restore.cod",
+        "exit": 0,
+        "stdout": "600\n7\n7\n"
+      },
+      "exit_code": 0,
+      "stdout": "600\n7\n7\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "identity-no-default.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/identity-no-default.cod"
+      ],
+      "expected": {
+        "file": "identity-no-default.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "missing required binding"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/identity-no-default.cod:4:15: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@x\n",
+      "passed": true
+    },
+    {
+      "fixture": "using-destination.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/using-destination.cod"
+      ],
+      "expected": {
+        "file": "using-destination.cod",
+        "exit": 0,
+        "stdout": "1001\n900\n401\n408\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n900\n401\n408\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "using-vocabulary-destination.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/using-vocabulary-destination.cod"
+      ],
+      "expected": {
+        "file": "using-vocabulary-destination.cod",
+        "exit": 0,
+        "stdout": "1001\n401\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n401\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "import-mapping.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod"
+      ],
+      "expected": {
+        "file": "import-mapping.cod",
+        "exit": 0,
+        "stdout": "1001\n907\n908\n8\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n907\n908\n8\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "import-default-identity.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/import-default-identity.cod"
+      ],
+      "expected": {
+        "file": "import-default-identity.cod",
+        "exit": 0,
+        "stdout": "1001\n907\n908\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n907\n908\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "mapping-effects.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/mapping-effects.cod"
+      ],
+      "expected": {
+        "file": "mapping-effects.cod",
+        "exit": 0,
+        "stdout": "60\n100\n9\n"
+      },
+      "exit_code": 0,
+      "stdout": "60\n100\n9\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "mapping-perform-call.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/mapping-perform-call.cod"
+      ],
+      "expected": {
+        "file": "mapping-perform-call.cod",
+        "exit": 0,
+        "stdout": "3\n3\n"
+      },
+      "exit_code": 0,
+      "stdout": "3\n3\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "reimport-mapping.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/reimport-mapping.cod"
+      ],
+      "expected": {
+        "file": "reimport-mapping.cod",
+        "exit": 0,
+        "stdout": "1001\n302\n303\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n302\n303\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "mapped-behave-later.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/mapped-behave-later.cod"
+      ],
+      "expected": {
+        "file": "mapped-behave-later.cod",
+        "exit": 0,
+        "stdout": "1001\n909\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n909\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "mapped-missing-capture.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/mapped-missing-capture.cod"
+      ],
+      "expected": {
+        "file": "mapped-missing-capture.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "unavailable definition-time capture"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/mapped-missing-capture.cod:8:23: perform requires an unavailable definition-time capture /ws/EvtWorks/cod-project/tests/cod/language/mapped-missing-capture.cod::@target\n",
+      "passed": true
+    },
+    {
+      "fixture": "missing-destination.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/missing-destination.cod"
+      ],
+      "expected": {
+        "file": "missing-destination.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "must be declared before using/import"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/missing-destination.cod:1:1: procedure destination @output must be declared before using/import\n",
+      "passed": true
+    },
+    {
+      "fixture": "late-destination.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/late-destination.cod"
+      ],
+      "expected": {
+        "file": "late-destination.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "must be declared before using/import"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/late-destination.cod:1:1: procedure destination @output must be declared before using/import\n",
+      "passed": true
+    },
+    {
+      "fixture": "late-alias-destination.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/late-alias-destination.cod"
+      ],
+      "expected": {
+        "file": "late-alias-destination.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "must be declared before using/import"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/late-alias-destination.cod:1:1: procedure destination @output must be declared before using/import\n",
+      "passed": true
+    },
+    {
+      "fixture": "unknown-map-local.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/unknown-map-local.cod"
+      ],
+      "expected": {
+        "file": "unknown-map-local.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "undeclared symbol @missing"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/unknown-map-local.cod:2:40: undeclared symbol @missing\n",
+      "passed": true
+    },
+    {
+      "fixture": "unknown-map-role.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/unknown-map-role.cod"
+      ],
+      "expected": {
+        "file": "unknown-map-role.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "unknown source-body role @missing"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/unknown-map-role.cod:5:40: unknown source-body role @missing in symbol map\n",
+      "passed": true
+    },
+    {
+      "fixture": "duplicate-map-role.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/duplicate-map-role.cod"
+      ],
+      "expected": {
+        "file": "duplicate-map-role.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "duplicate source role @x"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/duplicate-map-role.cod:4:55: duplicate source role @x in symbol map\n",
+      "passed": true
+    },
+    {
+      "fixture": "reversed-map.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/reversed-map.cod"
+      ],
+      "expected": {
+        "file": "reversed-map.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "undeclared symbol @x"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/reversed-map.cod:4:40: undeclared symbol @x\n",
+      "passed": true
+    },
+    {
+      "fixture": "using-with-map.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/using-with-map.cod"
+      ],
+      "expected": {
+        "file": "using-with-map.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "a symbol map requires an imported procedure"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/using-with-map.cod:4:1: a symbol map requires an imported procedure\n",
+      "passed": true
+    },
+    {
+      "fixture": "missing-default-alias.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/missing-default-alias.cod"
+      ],
+      "expected": {
+        "file": "missing-default-alias.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "undeclared symbol @x"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/source.cod:7:40: undeclared symbol @x\n",
+      "passed": true
+    },
+    {
+      "fixture": "identity-as-procedure.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/identity-as-procedure.cod"
+      ],
+      "expected": {
+        "file": "identity-as-procedure.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "has no procedure value"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/identity-as-procedure.cod:2:1: source resource @p has no procedure value; use symbol from for identity\n",
+      "passed": true
+    },
+    {
+      "fixture": "value-as-procedure.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/value-as-procedure.cod"
+      ],
+      "expected": {
+        "file": "value-as-procedure.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "has no procedure value"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/value-as-procedure.cod:2:1: source resource @x has no procedure value; use symbol from for identity\n",
+      "passed": true
+    },
+    {
+      "fixture": "map-does-not-declare-local.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/map-does-not-declare-local.cod"
+      ],
+      "expected": {
+        "file": "map-does-not-declare-local.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "undeclared symbol @x"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/map-does-not-declare-local.cod:8:15: undeclared symbol @x\n",
+      "passed": true
+    },
+    {
+      "fixture": "mapping-shared-identity.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/mapping-shared-identity.cod"
+      ],
+      "expected": {
+        "file": "mapping-shared-identity.cod",
+        "exit": 0,
+        "stdout": "6\n"
+      },
+      "exit_code": 0,
+      "stdout": "6\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "mapping-split-identity.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/mapping-split-identity.cod"
+      ],
+      "expected": {
+        "file": "mapping-split-identity.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "splitting one source symbol identity"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/aliased-body-model.cod:4:28: splitting one source symbol identity across destinations is outside the prototype\n",
+      "passed": true
+    },
+    {
+      "fixture": "duplicate-symbol-alias.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/duplicate-symbol-alias.cod"
+      ],
+      "expected": {
+        "file": "duplicate-symbol-alias.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "duplicate symbol alias"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/duplicate-symbol-alias.cod:2:1: duplicate symbol alias @x\n",
+      "passed": true
+    },
+    {
+      "fixture": "builtin-body-import.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/builtin-body-import.cod"
+      ],
+      "expected": {
+        "file": "builtin-body-import.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "no importable body"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/builtin-body-import.cod:2:1: a built-in procedure has no importable body; use using\n",
+      "passed": true
+    },
+    {
+      "fixture": "frontend-only",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--check",
+        "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
+        "--emit-cpp",
+        "/tmp/cod-language-check-di9ti70v/program.cc"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "8a2c154c7ced15cd9c7f7f79791b9f3a819be86cc11bbc274cfc54c07f1430be"
+  },
+  "source_sha256": {
+    "cod/main.cc": "72a873f870ba462b3a9bfe4f62c8b6def4833b8a1b0e99a819bf452a7e43a0a2",
+    "cod/lang_syntax.hh": "ad9ed9394db7765bce7dbee0774a75ee33de3df2c9210267aec1776f0c7dbe0b",
+    "cod/lang_frontend.hh": "33349222bcaec63a241ccf9b20dd1e783d8bc9ae7a3ea4481c306535c4ee6f39",
+    "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
+    "tests/cod/language/run_tests.py": "32f4716debf9373976a6c92cfc39920da526810ac838fce4267aa1d026e2cea2",
+    "tests/cod/language/cases.json": "0aa0a825754e593ba3d5879e5a6ea669695b8509617694864d3a40647d41645b",
+    "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
+    "tests/cod/language/arithmetic.cod": "6b0f37ec46d0aab0e089355e7a31b1bf79bab609a957a46342ccb8950f8a2be4",
+    "tests/cod/language/behave-without-caller.cod": "c051cd23adf1365bf45ce3705b979d665d3f05af2219172713d2075653a291dd",
+    "tests/cod/language/broken-dependency.cod": "6cd8716b5bdcd5e22a9deb4c3b308fcd0908c74b7d4ce0d1a3c30632955679d3",
+    "tests/cod/language/builtin-body-import.cod": "673482f8e33208d9a242f2fbe7fdc032ba62996c343a5ed4ae1d8717263f4418",
+    "tests/cod/language/destination-vocabulary.cod": "490d565b9a59f98f5fb958cd4f7de225845803c139c7e6a5d4824add0c03a68f",
+    "tests/cod/language/duplicate-map-role.cod": "c8cb6967e8bbd2c17f2604eb139ec04f3669f3a4b21904f4890e7962066464d7",
+    "tests/cod/language/duplicate-symbol-alias.cod": "3788fe95e9db696d4e528291bd61994205e5f2551176012ecab7b4e623b6cc03",
+    "tests/cod/language/early-alias.cod": "2760b0aa7d7131859f2e5fd2dfc4f6fa10fb8ab54eb12b720bbd51d894597177",
+    "tests/cod/language/effect-result.cod": "3e4b608579841bf137e026598fd161855cdabdc1eced94728a70eae4cea6045f",
+    "tests/cod/language/frame-model.cod": "5c29090333675934f6db3276e6a7b20e88faf9313d46e1a8b4dfbaaad986832f",
+    "tests/cod/language/frame-vocabulary.cod": "7d33d85b670825c8de9290678b83822b833744c1b273aeff25d17c25fad17e17",
+    "tests/cod/language/frame.cod": "94cb4c13fdfa6e4b9cdf1a6a261245d4fdd4a45e6bf43e0f88a624d4f02dc9b1",
+    "tests/cod/language/function-resource.cod": "287736a222f0cb6685ee00573031f4a99c69178e3857a9ab54ab2af195a8cca8",
+    "tests/cod/language/global-resource.cod": "65342fc0aa73ed7eb67fd88b96f30f401186ead393b6f205adf9eebf3a770343",
+    "tests/cod/language/identity-as-procedure.cod": "d410d92dca95078505db6fc3d86f748916ecee26b00c78bf6c26f1415a797687",
+    "tests/cod/language/identity-no-default.cod": "1204bed759d305812e95e8c29a853695d8bfd357f57bc8d50b955c422739886a",
+    "tests/cod/language/identity-provider.cod": "db45cf51f68fab4a210096dbbe0cf7699d1e7f31cf2cf6a5e977ec6c2b4f6eda",
+    "tests/cod/language/identity-restore.cod": "453dd28bf39a061cc596f435f6400a9c62e66acea1d0b4e5e29c9a18ed8988ed",
+    "tests/cod/language/identity.cod": "8de0e013827a9709083037721f586516a61bee3ee838097fedabc7d17ecb63c6",
+    "tests/cod/language/import-default-identity.cod": "b8fed7ec47f492fa773ff0905c4b50516701411d63c0fe3f0d25488e5b8ee311",
+    "tests/cod/language/import-mapping.cod": "c9f538f5c289ee1430480e965713dc162a0470757692c5fed36f2e0c55a3e2ed",
+    "tests/cod/language/import.cod": "71f959f06f112603db8fd81af23b469fc55829afaf1e7d1f477a23e8e6946bab",
+    "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
+    "tests/cod/language/late-alias-destination.cod": "06f1595b32fd5061ef439baf47280df1e3150f8b9ce7ff1e7d3c94faa61e5c13",
+    "tests/cod/language/late-destination.cod": "377d4955e208bcc19c15253cd5136ea1e2b395ac54253479225589b11eb079fc",
+    "tests/cod/language/map-does-not-declare-local.cod": "dd5aa09fa2a3f3535fdb3c05a839ad6c4229806b581faa0550e68c234c02549d",
+    "tests/cod/language/mapped-behave-later.cod": "e2639aea9599ee0c53a23f5a2e32e67d993c78f1c34dddd17dc897309f79db1e",
+    "tests/cod/language/mapped-effects-model.cod": "3cc20044e1cd9fbaf5c92ac6ed048ab923da475d3e555887f8c3b91628bd4ccd",
+    "tests/cod/language/mapped-missing-capture.cod": "7c0ee508e7cea6b112f065bd4421517c2055ab011c5feb2824a8b87edb7ac37e",
+    "tests/cod/language/mapped-perform-model.cod": "8bb222d131f6d17d7e9f45d18f094502d4ed3f58f0b38c23fe49291c6fe4cbde",
+    "tests/cod/language/mapping-effects.cod": "66b59985eefde5735ee9729970e6f2252dd506c09e91e0ec76debf0a26d429a3",
+    "tests/cod/language/mapping-perform-call.cod": "ed8cbdea091fe9ea1ac93fa0e3c6ba64b624a3772a2cf9d580050a475bd91ac2",
+    "tests/cod/language/mapping-shared-identity.cod": "07d598b0788ebcc60113118d2150386b6c20820f0201cdb71963980368868605",
+    "tests/cod/language/mapping-split-identity.cod": "8b7715bd33013c0ea3336576f4487d67d3f011e9db4ad35e89760eaf2b400d36",
+    "tests/cod/language/math-source.cod": "f38dba24771754199641c2994ec543e29c9b2d77cf093663a12c0e5cbb039159",
+    "tests/cod/language/missing-capture.cod": "464786441a567a054a8cfa2f5734167cecdaef903b4b9346fc04df99ab612168",
+    "tests/cod/language/missing-default-alias.cod": "6e9b09ddf5c872aac6b7c0ff04621d4df21dd2e895d4154d2df7394898e35d02",
+    "tests/cod/language/missing-destination.cod": "e1d7a7a5fcaa81141baef5d3f3a240e5c20b5f16b97f5588cf13220071ed4622",
+    "tests/cod/language/missing.cod": "9e48e72d724e1eb912d81d4c58d24b464cf2609b4631d85d9eeb8937e98522be",
+    "tests/cod/language/other-vocabulary.cod": "80817103481ee22506c050a6fcdc3ce82aefb15cebe6573d84d8a66f00aad547",
+    "tests/cod/language/overflow.cod": "a7ea91090d69eb40a999becfd8429cfb6f026afe61e30c5851879bc3eccd4f4c",
+    "tests/cod/language/perform-without-caller.cod": "0d6b3863cc01ddf0c92c225dcd658cdb07853f371e4a453416595e42324eb4bf",
+    "tests/cod/language/plain-assignment.cod": "6832cc854107048ab81f0de5bddbfd78e70a7944f4a0a484d80b13578e1e3e4a",
+    "tests/cod/language/procedure-rebinding.cod": "70a29a194241b252b7062e1de74383a6d75deaa7d11dff6d53dbc6824099a539",
+    "tests/cod/language/reimport-mapping.cod": "d9559672e14e1afec39cfa041a65bf648fdf7ac441f70e17445cde3ee7ff269f",
+    "tests/cod/language/reimport-provider.cod": "6b5d8a3a979934983cd02b85989c1595d2cab5a9c4efaa2acf41adc7f477e66b",
+    "tests/cod/language/reversed-map.cod": "abbfc059feb0b7f012569289656ffe6a5f04b6232c3e9410c20d0c2cf2cdb387",
+    "tests/cod/language/scan-error.cod": "8ddc483f5c8d0cdfca8e83957ff301d3fcc8324ccb8b67659b82471b95859f67",
+    "tests/cod/language/scopes.cod": "3c3373878fbb4fd087807d4e170ba196319d43b1dc28e5c5d8eecf392001ea46",
+    "tests/cod/language/source.cod": "7d39e48800eab0210b04e39759c95eed23130d31d929fca4663bb7db8abb6ba8",
+    "tests/cod/language/symbol-source.cod": "e6f54b8deecefc46db87ff3f9d7da045569d5a7df59514bda3fc688caefe7b72",
+    "tests/cod/language/symbol-trigger.cod": "15f161b6aeca1748930ba5b701685a006f1dcc9550c64f694db21ae557310d8b",
+    "tests/cod/language/transitive.cod": "7b3b1dba3ca79df364c83f20a3b68142c1ba7c5fb755568c1cfff054acce95eb",
+    "tests/cod/language/type-error.cod": "2ff51f72fd633a71402c479cc5d91dfea5c540e22f15c67c9b886b5152572d0f",
+    "tests/cod/language/unknown-map-local.cod": "fcbc91d5eb564e16f02d7967aa684d9e749daf3a4819993460472b3e602d6ff1",
+    "tests/cod/language/unknown-map-role.cod": "7e2301626b3e161c28c900a05dae5d105ac26a91340bb4f437e3385f37b1168c",
+    "tests/cod/language/using-destination.cod": "77576d31cb922cb3f5c3a3335d405eae660a7852137da8d16d66cd65e43b2c27",
+    "tests/cod/language/using-vocabulary-destination.cod": "4f5ac6912b1dd0b8acca0ac820db980abd938956d92a81fcb2634897210da008",
+    "tests/cod/language/using-with-map.cod": "d1debe7352da93d7672302f1d8a8ee369df88d9054c9c6339e43cee2d46a78ee",
+    "tests/cod/language/using.cod": "4789024472f83b365b10a71cd3cc82677b7ba98141237d8e9bb1f07842fef6fa",
+    "tests/cod/language/value-as-procedure.cod": "257248681baab5224b537b000532a2c5eedde5f0b87d5f024f3807eebf13b7ab",
+    "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223"
+  },
+  "reference_revision": 2,
+  "status": "passed_bounded_native_prototype_and_cod_component_suite",
+  "baseline_commit": "256300ba5f85c7f1ff290ce5142653b4e351d558",
+  "authority": {
+    "design": "D-10 revision 8",
+    "request": "H-118",
+    "assessment": "K-217",
+    "scope": "Symbol selection, predeclared procedure destinations and compile-time import-body maps; not full-language qualification."
+  },
   "build": {
     "command": "cmake --build ./build",
     "exit_code": 0,
-    "source_build_count": 3,
+    "source_build_count": 1,
     "configuration_source_edits": false,
-    "observed_default_graph_behavior": "The first build regenerated main CMake metadata; the default graph also configured/refreshed runtime sub-build outputs, including a compiler-rt dummy object, libcxx_fuzzer install step and compilation database generation. No manual configure, bootstrap, install target or toolchain change was invoked.",
+    "observed_default_graph_behavior": "The existing default graph refreshed runtime sub-build configuration/outputs, a compiler-rt nsan dummy object, libcxx_fuzzer install step and compilation database. No manual configure, bootstrap or install target was invoked.",
     "warnings": [
       "Existing LLVM OpenMPClause.h implicit-this-capture deprecation.",
       "Existing runtimes CMake policy/deprecation warnings."
     ]
   },
-  "direct_checks": [
-    {
-      "fixture": "scopes.cod",
-      "command": "build/bin/cod --run tests/cod/language/scopes.cod",
-      "expected_exit": 0,
-      "expected_output": "1\n7\n2\n2\n8\n8\n6\n9\n6\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "1\n7\n2\n2\n8\n8\n6\n9\n6\n",
-      "passed": true
-    },
-    {
-      "fixture": "using.cod",
-      "command": "build/bin/cod --run tests/cod/language/using.cod",
-      "expected_exit": 0,
-      "expected_output": "1001\n401\n408\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "1001\n401\n408\n",
-      "passed": true
-    },
-    {
-      "fixture": "import.cod",
-      "command": "build/bin/cod --run tests/cod/language/import.cod",
-      "expected_exit": 0,
-      "expected_output": "1001\n907\n908\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "1001\n907\n908\n",
-      "passed": true
-    },
-    {
-      "fixture": "frame.cod",
-      "command": "build/bin/cod --run tests/cod/language/frame.cod",
-      "expected_exit": 0,
-      "expected_output": "15\n14\n15\n14\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "15\n14\n15\n14\n",
-      "passed": true
-    },
-    {
-      "fixture": "transitive.cod",
-      "command": "build/bin/cod --run tests/cod/language/transitive.cod",
-      "expected_exit": 0,
-      "expected_output": "2\n9\n5\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "2\n9\n5\n",
-      "passed": true
-    },
-    {
-      "fixture": "identity.cod",
-      "command": "build/bin/cod --run tests/cod/language/identity.cod",
-      "expected_exit": 0,
-      "expected_output": "3\n8\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "3\n8\n",
-      "passed": true
-    },
-    {
-      "fixture": "arithmetic.cod",
-      "command": "build/bin/cod --run tests/cod/language/arithmetic.cod",
-      "expected_exit": 0,
-      "expected_output": "10\n7\n8\n-9223372036854775808\nfalse\ntrue\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "10\n7\n8\n-9223372036854775808\nfalse\ntrue\n",
-      "passed": true
-    },
-    {
-      "fixture": "symbol-trigger.cod",
-      "command": "build/bin/cod --run tests/cod/language/symbol-trigger.cod",
-      "expected_exit": 0,
-      "expected_output": "777\n7\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "777\n7\n",
-      "passed": true
-    },
-    {
-      "fixture": "function-resource.cod",
-      "command": "build/bin/cod --run tests/cod/language/function-resource.cod",
-      "expected_exit": 0,
-      "expected_output": "888\n42\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "888\n42\n",
-      "passed": true
-    },
-    {
-      "fixture": "global-resource.cod",
-      "command": "build/bin/cod --run tests/cod/language/global-resource.cod",
-      "expected_exit": 0,
-      "expected_output": "888\n40\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "888\n40\n",
-      "passed": true
-    },
-    {
-      "fixture": "missing.cod",
-      "command": "build/bin/cod --run tests/cod/language/missing.cod",
-      "expected_exit": 2,
-      "expected_output": "missing required binding",
-      "match": "contains",
-      "actual_exit": 2,
-      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/missing.cod:4:15: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/missing.cod::@missing\n",
-      "passed": true
-    },
-    {
-      "fixture": "missing-capture.cod",
-      "command": "build/bin/cod --run tests/cod/language/missing-capture.cod",
-      "expected_exit": 2,
-      "expected_output": "unavailable definition-time capture",
-      "match": "contains",
-      "actual_exit": 2,
-      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod:6:23: perform requires an unavailable definition-time capture /ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod::@x\n",
-      "passed": true
-    },
-    {
-      "fixture": "impure-function.cod",
-      "command": "build/bin/cod --run tests/cod/language/impure-function.cod",
-      "expected_exit": 2,
-      "expected_output": "function cannot read symbolic effects",
-      "match": "contains",
-      "actual_exit": 2,
-      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/impure-function.cod:3:25: a function cannot read symbolic effects\n",
-      "passed": true
-    },
-    {
-      "fixture": "type-error.cod",
-      "command": "build/bin/cod --run tests/cod/language/type-error.cod",
-      "expected_exit": 2,
-      "expected_output": "incompatible value types",
-      "match": "contains",
-      "actual_exit": 2,
-      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/type-error.cod:3:8: incompatible value types for /ws/EvtWorks/cod-project/tests/cod/language/type-error.cod::@x\n",
-      "passed": true
-    },
-    {
-      "fixture": "plain-assignment.cod",
-      "command": "build/bin/cod --run tests/cod/language/plain-assignment.cod",
-      "expected_exit": 2,
-      "expected_output": "expected ';'",
-      "match": "contains",
-      "actual_exit": 2,
-      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/plain-assignment.cod:3:4: expected ';'\n",
-      "passed": true
-    },
-    {
-      "fixture": "scan-error.cod",
-      "command": "build/bin/cod --run tests/cod/language/scan-error.cod",
-      "expected_exit": 2,
-      "expected_output": "expected a lexical name",
-      "match": "contains",
-      "actual_exit": 2,
-      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/broken-dependency.cod:2:1: expected a lexical name\n",
-      "passed": true
-    },
-    {
-      "fixture": "overflow.cod",
-      "command": "build/bin/cod --run tests/cod/language/overflow.cod",
-      "expected_exit": 70,
-      "expected_output": "i64 addition overflow",
-      "match": "contains",
-      "actual_exit": 70,
-      "actual_output": "i64 addition overflow\n",
-      "passed": true
-    },
-    {
-      "fixture": "perform-without-caller.cod",
-      "command": "build/bin/cod --run tests/cod/language/perform-without-caller.cod",
-      "expected_exit": 0,
-      "expected_output": "1001\n401\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "1001\n401\n",
-      "passed": true
-    },
-    {
-      "fixture": "behave-without-caller.cod",
-      "command": "build/bin/cod --run tests/cod/language/behave-without-caller.cod",
-      "expected_exit": 2,
-      "expected_output": "missing required binding",
-      "match": "contains",
-      "actual_exit": 2,
-      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/source.cod:6:40: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@x\n",
-      "passed": true
-    },
-    {
-      "fixture": "procedure-rebinding.cod",
-      "command": "build/bin/cod --run tests/cod/language/procedure-rebinding.cod",
-      "expected_exit": 0,
-      "expected_output": "22\n11\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "22\n11\n",
-      "passed": true
-    },
-    {
-      "fixture": "effect-result.cod",
-      "command": "build/bin/cod --run tests/cod/language/effect-result.cod",
-      "expected_exit": 0,
-      "expected_output": "6\n3\n",
-      "match": "exact",
-      "actual_exit": 0,
-      "actual_output": "6\n3\n",
-      "passed": true
-    },
-    {
-      "fixture": "early-alias.cod",
-      "command": "build/bin/cod --run tests/cod/language/early-alias.cod",
-      "expected_exit": 2,
-      "expected_output": "requires its using/import encounter first",
-      "match": "contains",
-      "actual_exit": 2,
-      "actual_output": "/ws/EvtWorks/cod-project/tests/cod/language/early-alias.cod:1:8: symbol alias @x requires its using/import encounter first in this prototype\n",
-      "passed": true
-    }
-  ],
-  "frontend_check": {
-    "command": "build/bin/cod --check tests/cod/language/using.cod --emit-cpp /tmp/cod-using-native.cc -v",
+  "component_suite": {
+    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-language-symbol-validation.json tests/cod/run-all.sh",
     "exit_code": 0,
-    "output": "[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/using.cod\n[CoD scan] std:io\n[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod\n[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/source.cod\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/using.cod\n[CoD execution semantics] std:io\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/source.cod\n",
-    "program_executed": false
-  },
-  "cpp_compatibility": {
-    "command": "build/bin/cod --project tests/cod/test-data/basic --works /tmp/cod-prototype-compat.dbmr --eval 'std::cout << (40 + 2) << std::endl;'",
-    "exit_code": 0,
-    "output": "42\nUsing existing workspace: \"/tmp/cod-prototype-compat.dbmr\"\nProject root: \"/ws/EvtWorks/cod-project/tests/cod/test-data/basic\"\n"
-  },
-  "native_trace": {
-    "command": "strace -f -s 300 -e trace=execve -o /tmp/cod-native-prototype-exec.log build/bin/cod --run tests/cod/language/using.cod",
-    "exit_code": 0,
-    "output": "1001\n401\n408\n",
-    "successful_exec_paths": [
-      "build/bin/cod",
-      "/ws/EvtWorks/cod-project/build/bin/clang++",
-      "/ws/EvtWorks/cod-project/build/bin/clang++",
-      "/ws/EvtWorks/cod-project/build/bin/clang-23",
-      "/ws/EvtWorks/cod-project/build/bin/ld.lld",
-      "/tmp/cod-language-1a6beb/runner"
+    "passed_groups": 4,
+    "total_groups": 4,
+    "groups": [
+      {
+        "name": "test_eval.sh",
+        "passed": 6,
+        "total": 6
+      },
+      {
+        "name": "test_language.sh",
+        "passed": 50,
+        "total": 50
+      },
+      {
+        "name": "test_cod_cache",
+        "passed": 8,
+        "total": 8
+      },
+      {
+        "name": "test_cod_workspace",
+        "status": "passed"
+      }
+    ],
+    "log_sha256": "6001e94af5c3af79921dc5d05b1a0f8349b59a213606a064a8460ffc43ef0230",
+    "summary_lines": [
+      "\u2714 All CoD Evaluation tests passed! (6/6)",
+      "CoD language: 50/50 passed (build toolchain)",
+      "\u2714 All CoD cache tests passed! (8/8)",
+      "\u2714 All workspace tests passed!",
+      "\u2714 All CoD tests passed! (4/4)"
     ]
   },
   "limits": [
-    "Direct source examples were executed for the authorized prototype goal; no repository test suite was run.",
-    "Linux x86_64 only; no macOS/Windows native-prototype validation.",
-    "No complete 25-case catalog execution, region/lifetime or concurrency acceptance.",
-    "Scalar two-target fixture only; no regional arrays, immutable-view checker, neural dynamics, training, scalability or benchmark claim.",
-    "Experimental syntax, left-to-right evaluation, last-expression scope results, checked i64 arithmetic and local-path identity do not settle the full language contract."
+    "49 native fixtures plus one frontend-only check; no claim that all 25 semantic catalog cases were executed.",
+    "The scalar two-target frame fixture is not a regional-array implementation or SNN model/training validation.",
+    "Linux build toolchain evidence only; no cross-platform, package-version, concurrency, pointer-lifetime or performance result.",
+    "Broader mapping and repeated/cyclic module policies remain outside the prototype."
   ],
-  "source_sha256": {
-    "cod/main.cc": "72a873f870ba462b3a9bfe4f62c8b6def4833b8a1b0e99a819bf452a7e43a0a2",
-    "cod/lang_syntax.hh": "d12a3348b7e3ef524945ab3c6f2dbb45b77deadf49aa980176a95a4f42888ecf",
-    "cod/lang_frontend.hh": "6b557eacd2170ee5d03a98062e68fc660757e45b3d6676a83dab68037b118a4c",
-    "tests/cod/language/arithmetic.cod": "fc6fe6842727ffab6aae020ac8577ff107fd791d31c1c09092e88e49ad383653",
-    "tests/cod/language/behave-without-caller.cod": "1000b912b9f65ecfcbb0721d808ac6a0e0cf525b124497f7dd40f7431f6b3fd6",
-    "tests/cod/language/broken-dependency.cod": "6cd8716b5bdcd5e22a9deb4c3b308fcd0908c74b7d4ce0d1a3c30632955679d3",
-    "tests/cod/language/early-alias.cod": "8157159fa15baa3694552773f4cd60b8eddbb1d60357417d08361d4957ef8a07",
-    "tests/cod/language/effect-result.cod": "02d915f6dedaf234cc86e079495167deb27a11c400e01ec9062e5f987df35034",
-    "tests/cod/language/frame-model.cod": "7fbaff95a2c8c5a7253fd5b025da5821c52f229e97e7377d5ee5b4764b3639f8",
-    "tests/cod/language/frame-vocabulary.cod": "7d33d85b670825c8de9290678b83822b833744c1b273aeff25d17c25fad17e17",
-    "tests/cod/language/frame.cod": "c74ecf36524110561fe1c6385fe21499b51dd02ae58f9a07bef96719fafa6765",
-    "tests/cod/language/function-resource.cod": "c31f784b7b2f171231724f3aca259711f848a39e2541a5adb66580b022674327",
-    "tests/cod/language/global-resource.cod": "68bc09c94a8d5e38ab6a08423db5c202dd8f09c9caa0c3cfae1e52a959028925",
-    "tests/cod/language/identity.cod": "ee4ca8808d0c2ef1c460934c27104ba891ca9588185ecf82d2ee0de619ef124c",
-    "tests/cod/language/import.cod": "83fc02eae6626fd6e7c43be8dc0af54c1b14a63a7f0cc39da8086eaff9f710cb",
-    "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
-    "tests/cod/language/math-source.cod": "08826dd8f11368e63a9cb09b14495ab0189294b56f8893718d93a3f890f2ebfd",
-    "tests/cod/language/missing-capture.cod": "fb7ec6cbd83f9b72ba359a2aa9f45a4c89fa3d02d4f863c90a9b27f21429c716",
-    "tests/cod/language/missing.cod": "0074bbf2bd1b0b2d45f056553df516d0318fdf07f565f202ae1933fa66d21e9a",
-    "tests/cod/language/other-vocabulary.cod": "80817103481ee22506c050a6fcdc3ce82aefb15cebe6573d84d8a66f00aad547",
-    "tests/cod/language/overflow.cod": "903fc062d6c1c833aaef115cf62cf6a253390c15c86f144a32399d8010a78f20",
-    "tests/cod/language/perform-without-caller.cod": "3beed30a6b73924f94b71d8fe3b767681cf1f18d57b4e0a1f24ed935badc3e89",
-    "tests/cod/language/plain-assignment.cod": "6832cc854107048ab81f0de5bddbfd78e70a7944f4a0a484d80b13578e1e3e4a",
-    "tests/cod/language/procedure-rebinding.cod": "23a85c5c289c2258637f5bab9c416f9c8c212096d37316c8cfaff7d04f7325ba",
-    "tests/cod/language/scan-error.cod": "c14baf99c62c7ab431318e202b3d6ad117cb956fd02b61a3cfae4d0f9303668b",
-    "tests/cod/language/scopes.cod": "f8c84851c4b6932f8dbfdfe09ee238575af985f220801bc71aa380f8a63538e3",
-    "tests/cod/language/source.cod": "04de5919353cfd8d3cb4713f11cafe4670ce36a5e8665b280a8204dcbbffffaf",
-    "tests/cod/language/symbol-source.cod": "5dcb773ab1c54f85f2acdbf6164ffdfc9e26a24194607be92ce650a2aa5d8308",
-    "tests/cod/language/symbol-trigger.cod": "3d44315c8a9034523a20d16eb287f5481c89f3e7f9e45ff4a54505190cfa9132",
-    "tests/cod/language/transitive.cod": "1feff31a2fc55c5ed8aa23a238a2e645d4e3ef39156ba2ff5c23d29a8a86e0eb",
-    "tests/cod/language/type-error.cod": "2ff51f72fd633a71402c479cc5d91dfea5c540e22f15c67c9b886b5152572d0f",
-    "tests/cod/language/using.cod": "9954ad2b2f2ab6f6478b9f02ec92cc444fc1cc5d08dbc0d1d04b1328f4ce859a",
-    "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223"
-  },
-  "executable": {
-    "path": "build/bin/cod",
-    "sha256": "70e49b8b69e41a4f4e7a823f1e76dc9368a77e0758d57793dda7dcd6c95f6582"
-  },
-  "environment": {
-    "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
-    "machine": "x86_64",
-    "cwd": "/ws/EvtWorks/cod-project",
-    "evidence_preserved_utc": "2026-11-05T16:16:28.092055+00:00"
+  "check_breakdown": {
+    "native_success": 23,
+    "native_expected_runtime_failure": 1,
+    "expected_frontend_rejection": 25,
+    "frontend_only_success": 1
   }
 }

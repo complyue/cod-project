@@ -1,0 +1,4 @@
+symbol @step;
+symbol @target;
+function helper() -> i64 { 9 }
+using "source.cod" @p as @step with { @target as @x; };

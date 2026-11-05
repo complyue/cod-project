@@ -1,2 +1,3 @@
+symbol @print;
 using "std:io" @print;
 behave @print(9223372036854775807 + 1);

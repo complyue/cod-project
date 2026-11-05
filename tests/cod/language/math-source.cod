@@ -1,3 +1,4 @@
+symbol @print;
 using "std:io" @print;
 function seed() -> i64 { 20 * 2 }
 global base: i64 = seed();

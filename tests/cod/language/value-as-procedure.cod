@@ -1,0 +1,2 @@
+symbol @step;
+using "identity-provider.cod" @x as @step;

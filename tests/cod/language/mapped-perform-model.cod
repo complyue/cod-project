@@ -1,0 +1,3 @@
+symbol @next;
+symbol @update;
+procedure @update -> i64 { perform @next }

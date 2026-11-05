@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 8
+Discussion revision: 11
 
 Recorded: 2026-10-22
 
@@ -11,12 +11,12 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 ## Design authority
 
 - **Registry:** [D-07](DesignAuthorityRegistry.md#d-07), which controls qualification and scope.
-- **Revision / covered scope:** discussion revision 8, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
+- **Revision / covered scope:** discussion revision 11, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
 - **Value lineage:** candidate P-12–P-18 connect the packet, database, language and interoperability concepts C-08–C-11 and this document to C-01, C-02, C-05 and C-06. Explicit language semantics should preserve inspectable business intent; regional transport and deferred reclamation should serve efficient persistent semantics; source tools should keep that semantics readable. These proposed derivations are not yet qualified implementation authority.
 - **Dependencies:** P-19–P-21 identify C-03, C-04 and C-02: multiple regions/domains, semantic levels and environment-specific effects. P-24 records application C-12 as an external example for DL-13; its model and resource choices are scoped to D-08. Existing C++ designs are reference material with their own registry status.
-- **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. H-96–H-111 supply the local symbol, callable, storage and expression directions linked below; a complete grammar, ABI, storage protocol and implementation contract remain open.
-- **Human baseline:** H-06 supplies the near-term goals; H-07 establishes discussion tracking; H-08 selects the first application; H-11 requires its own document set. [H-96–H-111](DesignAuthorityRegistry.md#h-96) direct coordinated development and define the scoped language propositions in [D-10](SymbolicDynamicScope.md). They do not approve every proposed implementation detail.
-- **Continuity:** no qualified implementation baseline for D-07. K-02/K-03 record the earlier discussion baseline; [K-214](DesignAuthorityRegistry.md#k-214) records revision 8 and bounded native execution evidence under that request. The full contract remains `pending-human`; this is not continuity-based qualification of an unqualified design.
+- **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. H-96–H-118 supply the local symbol, callable, storage and expression directions linked below; a complete grammar, ABI, storage protocol and implementation contract remain open.
+- **Human baseline:** H-06 supplies the near-term goals; H-07 establishes discussion tracking; H-08 selects the first application; H-11 requires its own document set. [H-96–H-118](DesignAuthorityRegistry.md#h-96) direct coordinated development and define the scoped language propositions in [D-10](SymbolicDynamicScope.md). They do not approve every proposed implementation detail.
+- **Continuity:** no qualified implementation baseline for D-07. K-02/K-03 record the earlier discussion baseline; [K-217](DesignAuthorityRegistry.md#k-217) records revision 11, H-118 implementation authorization and the passing bounded prototype/component tests. The full contract remains `pending-human`; this is not continuity-based qualification of an unqualified design.
 
 ## Confirmed direction
 
@@ -268,7 +268,9 @@ This first local example is a possible intermediate milestone. The charter's bro
 
 **Confirmed immediate review:** every cross-module reference triggers module execution semantics (H-109). Its top-level scope ends when execution finishes; only `using`/`import` bring effective resources into the receiver (H-110). `effect` yields the newly bound value (H-111).
 
-**Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, repeated/cyclic encounters, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 5.
+**Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, repeated/cyclic encounters, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 8.
+
+**Origin/alias review:** H-112 requires explicit provenance and local aliases. H-113 excludes lexical symbolic variables and ordinary assignment. H-114 makes identities compile-time values and aliases compile-time names; runtime values bind under identities. H-115 permits an import-body alias map with matching-name defaults. H-116 requires a preexisting local destination symbol for `using/import "module" @source as @local`. [D-10's relationship model](SymbolicDynamicScope.md#symbol-origins-aliases-and-dynamic-values) separates identity selection, procedure-value installation and body translation. H-117 proposes `symbol from "module" @source as @local` and `with { @local as @source_role; }`, read as supplying a local symbol for the source body’s role. H-118 authorizes implementing these discussed forms. The compiler separates identity selection from procedure installation and resolves each imported body’s aliases before capture analysis. Broader mapping edge policies remain open; unsupported cases receive explicit diagnostics.
 
 **Decision evidence:** alias/version separation, nested effects, both call modes, transitive `behave` dependencies, a reachable path missing a required binding, scan-time absence of effects/captures and an encounter order different from dependency scan order. No independent module compiler is presumed.
 
@@ -286,7 +288,7 @@ This first local example is a possible intermediate milestone. The charter's bro
 
 H-96 establishes joint development; H-108 requests a checkpoint/push and an autonomous goal for the first demand-compiled runnable prototype after reviewing immediate choices. H-109–H-111 resolve that review; [D-10's first-prototype boundary](SymbolicDynamicScope.md#first-native-prototype-boundary) identifies the milestone. The application-owned [LanguageCoDesign](../applications/steady-snn/docs/LanguageCoDesign.md) proposes increments from nominal symbols and call modes to one immutable-A/incoming-gather/B-publication step, then a small checked program representation and native specialization. H-94's target-owned two-frame pull is the application boundary; it does not fix neuronal equations or training algorithms.
 
-Numerical source evaluation and integration motivate pure functions with explicit inputs. Target/frame context, selected randomness, regional writes and publication motivate procedures. Each increment needs semantic examples and actual execution evidence before optimization or SNN learning success can be claimed. The [case file](../applications/steady-snn/research/cod-language-scope-cases.json) links selected [native fixture evidence](../tests/cod/language/validation.json). Twenty-two direct checks establish the bounded scalar/module path and a two-target gather; the complete case catalog, regional frame implementation and neuronal behavior remain unvalidated.
+Numerical source evaluation and integration motivate pure functions with explicit inputs. Target/frame context, selected randomness, regional writes and publication motivate procedures. Each increment needs semantic examples and actual execution evidence before optimization or SNN learning success can be claimed. The [case file](../applications/steady-snn/research/cod-language-scope-cases.json) links selected [native fixture evidence](../tests/cod/language/validation.json). Forty-nine native fixtures and one frontend-only check establish the bounded scalar/module path, identity selection, import maps and a two-target gather; the complete case catalog, regional frame implementation and neuronal behavior remain unvalidated.
 
 ## Implementation evidence to account for
 
@@ -328,5 +330,12 @@ For each discussion, update the relevant topic's current answer and append a dec
 | DD-017 | 2026-11-05 | Every kind of cross-module reference triggers source-module execution semantics, including vocabulary symbols and imported bodies. | H-109; DL-14 |
 | DD-018 | 2026-11-05 | Source-module top-level scope ends after execution; only using/import bring effective resources into the current module. Source effects do not stay ambient in the receiver. | H-110; DL-14 |
 | DD-019 | 2026-11-05 | An effect expression evaluates to its newly bound value. | H-111; DL-15 |
+| DD-020 | 2026-11-05 | Review explicit symbol origins and local aliases through syntax, semantics and practical use. No concrete new spelling or resource-selection mechanism is approved by this request. | H-112; DL-14; D-10r6 |
+| DD-021 | 2026-11-05 | Symbolic variables have dynamic scope only; ordinary `@x = 2` is invalid and assignment requires `effect @x = 2`. Source aliases select identity without creating lexical symbol variables. | H-113; DL-14/DL-15; D-10r6 |
+| DD-022 | 2026-11-05 | Symbol identity is a compile-time value; module-local aliases exist only at compile time. Runtime values bind under symbol identities. | H-114; DL-14; D-10r6 |
+| DD-023 | 2026-11-05 | Procedure import permits a symbol-alias mapping table; matching source/local aliases need no explicit mapping entry. Exact table spelling and edge rules remain open. | H-115; DL-14; D-10r6 |
+| DD-024 | 2026-11-05 | Permit `using/import "<modu>" @src_name as @local_name`; the destination symbol must already be declared locally or introduced from a vocabulary module. This selects where the procedure value is installed, not a fresh alias of the source identity. | H-116; DL-14; D-10r6 |
+| DD-025 | 2026-11-05 | Propose `symbol from "module" ...` for vocabulary identity selection and review `with { @local as @source_role; }` as supplying the receiving symbol in the imported body’s role. The working draft uses this direction; full grammar and remaining edge policies are not thereby approved. | H-117; DL-14; D-10r7 |
+| DD-026 | 2026-11-05 | Implement the discussed symbol-from selection, predeclared procedure destinations and receiving-symbol-as-source-role import maps; run tests, then commit and push. This authorizes the bounded increment, not unresolved full-language mechanisms. | H-118; DL-14–DL-16; D-10r8 |
 
 Dates above are recording dates. Exact source-message timestamps were unavailable; the registry records that provenance limit.

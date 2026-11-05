@@ -41,6 +41,7 @@ struct Module {
   std::map<std::string, size_t> symbols;
   std::map<std::string, Form *> symbol_aliases;
   std::set<std::string> active_aliases;
+  std::set<std::string> available_symbols;
   std::map<const Form *, Module *> dependencies;
   std::map<std::string, Function> functions;
   Locals globals;
@@ -64,6 +65,7 @@ class Compiler {
   std::ostringstream storage_;
   size_t serial_ = 0;
   std::set<const Form *> active_calls_;
+  std::vector<std::unique_ptr<Form>> imported_forms_;
 
   std::string fresh(const char *prefix = "v") { return std::string(prefix) + std::to_string(serial_++); }
   static std::string cpp_type(Type type) { return type == Type::boolean ? "bool" : "std::int64_t"; }
@@ -119,12 +121,13 @@ class Compiler {
         if (!lexical_names.insert(form.name).second) fail(form.at, "duplicate lexical name '" + form.name + "'");
         if (form.kind == Form::Kind::function) result.functions.emplace(form.name, Function{&form, &result});
         else result.declarations_only = false;
+      } else if (form.kind == Form::Kind::symbol_from) {
+        result.declarations_only = false;
+        if (result.symbols.contains(form.alias) || !result.symbol_aliases.emplace(form.alias, &form).second)
+          fail(form.at, "duplicate symbol alias @" + form.alias);
       } else if (form.kind == Form::Kind::using_resource || form.kind == Form::Kind::import_resource) {
         result.declarations_only = false;
-        if (form.symbolic) {
-          if (result.symbols.contains(form.alias) || !result.symbol_aliases.emplace(form.alias, &form).second)
-            fail(form.at, "duplicate symbol alias @" + form.alias);
-        } else if (!lexical_names.insert(form.alias).second) {
+        if (!form.symbolic && !lexical_names.insert(form.alias).second) {
           fail(form.at, "duplicate lexical alias '" + form.alias + "'");
         }
       } else {
@@ -133,7 +136,8 @@ class Compiler {
     }
     for (const auto &owned : result.forms) {
       auto &form = *owned;
-      if (form.kind != Form::Kind::using_resource && form.kind != Form::Kind::import_resource) continue;
+      if (form.kind != Form::Kind::symbol_from && form.kind != Form::Kind::using_resource &&
+          form.kind != Form::Kind::import_resource) continue;
       const auto dependency = form.path == "std:io" ? form.path :
           (std::filesystem::path(canonical).parent_path() / form.path).string();
       result.dependencies.emplace(&form, &load(dependency, form.at));
@@ -146,7 +150,7 @@ class Compiler {
     const auto alias = module.symbol_aliases.find(name);
     if (alias == module.symbol_aliases.end()) fail(at, "undeclared symbol @" + name);
     if (!module.active_aliases.contains(name))
-      fail(at, "symbol alias @" + name + " requires its using/import encounter first in this prototype");
+      fail(at, "symbol alias @" + name + " requires its symbol from encounter first in this prototype");
     if (!visiting.emplace(&module, name).second) fail(at, "cyclic symbol alias @" + name);
     auto *form = alias->second;
     const auto id = symbol(*module.dependencies.at(form), form->name, at, visiting);
@@ -156,6 +160,57 @@ class Compiler {
   size_t symbol(Module &module, const std::string &name, const Location &at) {
     std::set<std::pair<Module *, std::string>> visiting;
     return symbol(module, name, at, visiting);
+  }
+  size_t expression_symbol(const Expression &expr, Module &module) {
+    if (expr.symbol_id) return *expr.symbol_id;
+    return symbol(module, expr.text, expr.at);
+  }
+  static bool uses_symbol(Expression::Kind kind) {
+    using K = Expression::Kind;
+    return kind == K::symbol || kind == K::effect || kind == K::perform || kind == K::behave;
+  }
+  Expr import_expression(const Expression &source_expr, Module &source, Module &receiver,
+                         const std::map<std::string, std::string> &names,
+                         std::map<size_t, size_t> &identities, std::set<std::string> &used) {
+    auto expr = std::make_unique<Expression>(Expression{
+        source_expr.kind, source_expr.at, source_expr.text, {}, source_expr.symbol_id});
+    if (uses_symbol(expr->kind)) {
+      used.insert(source_expr.text);
+      const auto renamed = names.find(source_expr.text);
+      expr->text = renamed == names.end() ? source_expr.text : renamed->second;
+      expr->symbol_id = symbol(receiver, expr->text, expr->at);
+      const auto source_id = expression_symbol(source_expr, source);
+      const auto [found, added] = identities.emplace(source_id, *expr->symbol_id);
+      if (!added && found->second != *expr->symbol_id)
+        fail(expr->at, "splitting one source symbol identity across destinations is outside the prototype");
+    }
+    for (const auto &child : source_expr.children)
+      expr->children.push_back(import_expression(*child, source, receiver, names, identities, used));
+    return expr;
+  }
+  Form &import_body(const Procedure &source, const Form &selection, Module &receiver) {
+    if (!source.form) fail(selection.at, "a built-in procedure has no importable body; use using");
+    std::map<std::string, std::string> names;
+    for (const auto &mapping : selection.mappings) {
+      if (!names.emplace(mapping.source, mapping.local).second)
+        fail(mapping.at, "duplicate source role @" + mapping.source + " in symbol map");
+      symbol(receiver, mapping.local, mapping.at);
+    }
+    auto form = std::make_unique<Form>();
+    form->kind = Form::Kind::procedure;
+    form->at = selection.at;
+    form->name = selection.alias;
+    form->parameters = source.form->parameters;
+    form->result_type = source.form->result_type;
+    std::map<size_t, size_t> identities;
+    std::set<std::string> used;
+    form->body = import_expression(*source.form->body, *source.lexical, receiver, names, identities, used);
+    for (const auto &mapping : selection.mappings)
+      if (!used.contains(mapping.source))
+        fail(mapping.at, "unknown source-body role @" + mapping.source + " in symbol map");
+    auto &result = *form;
+    imported_forms_.push_back(std::move(form));
+    return result;
   }
   void fix_type(size_t id, Type type, const Location &at) {
     const auto [found, added] = symbol_types_.emplace(id, type);
@@ -201,7 +256,7 @@ class Compiler {
     }
     for (const auto &child : expr.children) collect(*child, module, visible, provided, needed, visiting);
     if (expr.kind == K::symbol || expr.kind == K::perform || expr.kind == K::behave) {
-      const auto id = symbol(module, expr.text, expr.at);
+      const auto id = expression_symbol(expr, module);
       if (!provided.contains(id)) needed.insert(id);
       if (expr.kind == K::behave) {
         const auto callee = visible.find(id);
@@ -216,10 +271,10 @@ class Compiler {
         }
       }
     } else if (expr.kind == K::effect) {
-      const auto id = symbol(module, expr.text, expr.at);
+      const auto id = expression_symbol(expr, module);
       provided.insert(id);
       if (expr.children[0]->kind == K::symbol) {
-        const auto source = symbol(module, expr.children[0]->text, expr.at);
+        const auto source = expression_symbol(*expr.children[0], module);
         if (const auto found = visible.find(source); found != visible.end()) visible[id] = found->second;
       } else {
         visible.erase(id);
@@ -288,7 +343,7 @@ class Compiler {
   Value invoke(const Expression &expr, Module &module, Environment &env, Locals &locals,
                bool pure, std::ostream &out) {
     if (pure) fail(expr.at, "a function cannot invoke a procedure");
-    const auto id = symbol(module, expr.text, expr.at);
+    const auto id = expression_symbol(expr, module);
     const auto found = env.find(id);
     if (found == env.end()) fail(expr.at, "missing required procedure binding " + symbol_names_[id]);
     if (!found->second.procedure) fail(expr.at, "perform/behave requires a procedure value");
@@ -337,11 +392,11 @@ class Compiler {
     }
     case K::symbol:
       if (pure) fail(expr.at, "a function cannot read symbolic effects");
-      return read_symbol(symbol(module, expr.text, expr.at), env, expr.at, out);
+      return read_symbol(expression_symbol(expr, module), env, expr.at, out);
     case K::effect: {
       if (pure) fail(expr.at, "a function cannot establish effects");
       auto value = expression(*expr.children[0], module, env, locals, pure, out);
-      bind(symbol(module, expr.text, expr.at), value, module, env, expr.at, out);
+      bind(expression_symbol(expr, module), value, module, env, expr.at, out);
       return value;
     }
     case K::block: return block(expr, module, env, locals, pure, out);
@@ -434,7 +489,18 @@ class Compiler {
     for (const auto &owned : module.forms) {
       auto &form = *owned;
       switch (form.kind) {
-      case Form::Kind::symbol: case Form::Kind::function: break;
+      case Form::Kind::symbol:
+        module.available_symbols.insert(form.name);
+        break;
+      case Form::Kind::function: break;
+      case Form::Kind::symbol_from: {
+        auto &source = *module.dependencies.at(&form);
+        execute_module(source, env, form.at, body);
+        symbol(source, form.name, form.at);
+        module.active_aliases.insert(form.alias);
+        module.available_symbols.insert(form.alias);
+        break;
+      }
       case Form::Kind::procedure: {
         const auto id = symbol(module, form.name, form.at);
         bind(id, define_procedure(form, module, env, body), module, env, form.at, body);
@@ -453,17 +519,20 @@ class Compiler {
         expression(*form.body, module, env, locals, false, body);
         break;
       case Form::Kind::using_resource: case Form::Kind::import_resource: {
+        if (form.symbolic && !module.available_symbols.contains(form.alias))
+          fail(form.at, "procedure destination @" + form.alias + " must be declared before using/import");
         auto &source = *module.dependencies.at(&form);
         execute_module(source, env, form.at, body);
         if (form.symbolic) {
-          const auto id = symbol(source, form.name, form.at);
-          module.active_aliases.insert(form.alias);
-          if (const auto resource = source.exports.find(id); resource != source.exports.end()) {
-            auto value = resource->second;
-            if (form.kind == Form::Kind::import_resource && value.procedure && value.procedure->form)
-              value = define_procedure(*value.procedure->form, module, env, body);
-            bind(id, std::move(value), module, env, form.at, body);
-          }
+          const auto source_id = symbol(source, form.name, form.at);
+          const auto resource = source.exports.find(source_id);
+          if (resource == source.exports.end() || !resource->second.procedure)
+            fail(form.at, "source resource @" + form.name + " has no procedure value; use symbol from for identity");
+          auto value = resource->second;
+          if (form.kind == Form::Kind::import_resource)
+            value = define_procedure(import_body(*value.procedure, form, module), module, env, body);
+          const auto destination = symbol(module, form.alias, form.at);
+          bind(destination, std::move(value), module, env, form.at, body);
         } else if (const auto function = source.functions.find(form.name); function != source.functions.end()) {
           if (form.kind == Form::Kind::import_resource)
             fail(form.at, "function-body import is outside the prototype; use 'using' for a lexical function");

@@ -1,0 +1,2 @@
+symbol @step;
+using "vocabulary.cod" @p as @step;

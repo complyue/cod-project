@@ -134,6 +134,7 @@ struct Expression {
   Location at;
   std::string text;
   std::vector<std::unique_ptr<Expression>> children;
+  std::optional<size_t> symbol_id;
 };
 using Expr = std::unique_ptr<Expression>;
 
@@ -142,14 +143,20 @@ struct Parameter {
   Type type;
   Location at;
 };
+struct SymbolMapping {
+  std::string local;
+  std::string source;
+  Location at;
+};
 struct Form {
-  enum class Kind { symbol, function, procedure, global, using_resource, import_resource, expression };
+  enum class Kind { symbol, symbol_from, function, procedure, global, using_resource, import_resource, expression };
   Kind kind;
   Location at;
   std::string name;
   std::string path;
   std::string alias;
   bool symbolic = false;
+  std::vector<SymbolMapping> mappings;
   std::vector<Parameter> parameters;
   std::optional<Type> result_type;
   Expr body;
@@ -175,6 +182,14 @@ class Parser {
       fail(peek().at, kind == TokenKind::symbol ? "expected a symbol name" : "expected a lexical name");
     return tokens_[cursor_++];
   }
+  void resource(Form &form, bool symbolic) {
+    if (peek().kind != TokenKind::string) fail(peek().at, "expected a quoted module path");
+    form.path = tokens_[cursor_++].text;
+    form.symbolic = symbolic || peek().kind == TokenKind::symbol;
+    const auto kind = form.symbolic ? TokenKind::symbol : TokenKind::identifier;
+    form.name = name(kind).text;
+    form.alias = take("as") ? name(kind).text : form.name;
+  }
   Type parse_type() {
     auto token = name(TokenKind::identifier);
     if (token.text == "i64") return Type::integer;
@@ -192,7 +207,7 @@ class Parser {
     return -1;
   }
   Expr make(Expression::Kind kind, const Token &token) {
-    return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}});
+    return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}});
   }
   void arguments(Expression &expr) {
     expect("(");
@@ -290,8 +305,13 @@ public:
       auto form = std::make_unique<Form>();
       form->at = start.at;
       if (take("symbol")) {
-        form->kind = Form::Kind::symbol;
-        form->name = name(TokenKind::symbol).text;
+        if (take("from")) {
+          form->kind = Form::Kind::symbol_from;
+          resource(*form, true);
+        } else {
+          form->kind = Form::Kind::symbol;
+          form->name = name(TokenKind::symbol).text;
+        }
         expect(";");
       } else if (is("function") || is("procedure")) {
         const bool function = take("function");
@@ -334,12 +354,19 @@ public:
         const bool using_resource = take("using");
         if (!using_resource) expect("import");
         form->kind = using_resource ? Form::Kind::using_resource : Form::Kind::import_resource;
-        if (peek().kind != TokenKind::string) fail(peek().at, "expected a quoted module path");
-        form->path = tokens_[cursor_++].text;
-        form->symbolic = peek().kind == TokenKind::symbol;
-        auto resource = name(form->symbolic ? TokenKind::symbol : TokenKind::identifier);
-        form->name = resource.text;
-        form->alias = take("as") ? name(form->symbolic ? TokenKind::symbol : TokenKind::identifier).text : form->name;
+        resource(*form, false);
+        if (take("with")) {
+          if (using_resource || !form->symbolic)
+            fail(start.at, "a symbol map requires an imported procedure");
+          expect("{");
+          while (!take("}")) {
+            auto local = name(TokenKind::symbol);
+            expect("as");
+            auto source = name(TokenKind::symbol);
+            form->mappings.push_back({local.text, source.text, local.at});
+            expect(";");
+          }
+        }
         expect(";");
       } else {
         form->kind = Form::Kind::expression;

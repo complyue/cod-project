@@ -1,0 +1,10 @@
+symbol @print;
+using "std:io" @print;
+symbol @step;
+symbol @x;
+function helper() -> i64 { 9 }
+effect @x = 7;
+import "source.cod" @p as @step;
+effect @x = 8;
+behave @print(perform @step);
+behave @print(behave @step);

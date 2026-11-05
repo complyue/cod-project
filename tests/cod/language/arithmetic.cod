@@ -1,4 +1,6 @@
+symbol @print;
 using "std:io" @print;
+symbol @assert;
 using "std:io" @assert;
 symbol @flag;
 function choose(x: i64) -> i64 { if (x < 0) { -x } else { x * 2 } }

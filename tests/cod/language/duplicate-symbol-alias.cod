@@ -1,0 +1,2 @@
+symbol @x;
+symbol from "vocabulary.cod" @x;

@@ -1,0 +1,4 @@
+symbol @step;
+symbol @left;
+symbol @right;
+import "aliased-body-model.cod" @p as @step with { @left as @a; @right as @b; };

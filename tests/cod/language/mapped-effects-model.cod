@@ -1,0 +1,4 @@
+symbol @target;
+symbol @next;
+symbol @update;
+procedure @update -> i64 { effect @target = @target + 1; behave @next }

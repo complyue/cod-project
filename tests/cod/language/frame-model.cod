@@ -1,7 +1,7 @@
-using "frame-vocabulary.cod" @a0;
-using "frame-vocabulary.cod" @a1;
-using "frame-vocabulary.cod" @target;
-using "frame-vocabulary.cod" @update;
+symbol from "frame-vocabulary.cod" @a0;
+symbol from "frame-vocabulary.cod" @a1;
+symbol from "frame-vocabulary.cod" @target;
+symbol from "frame-vocabulary.cod" @update;
 function gather(a0: i64, a1: i64, target: i64) -> i64 {
   if (target == 0) { a1 * 3 } else { a0 * 7 }
 }

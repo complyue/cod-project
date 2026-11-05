@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：215
+记录版本：218
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -126,7 +126,7 @@ Design authority
 | C-32 | 将 5120 维容量与稀疏参与、rate 值域、实用分辨率及时间复用共同研究，区分已学库、即时表达与协同推演容量。 | C-12 的容量研究；P-73 候选价值链 | H-89/H-90 提出足够性和稀疏／时间解释；不确认 7±2 的成因、固定槽数、普适健康比例或容量结论；D-09r1 S4/S8。 |
 | C-33 | 有限精度个体 rate 建模须研究相连神经元 spike 时机的协同效益，分别评价传播与学习，避免把平均精度当作时序信息。 | C-24 的时序研究；P-74 候选价值链、P-76 数值依赖 | H-91 排除 firing/silent 二值解释并要求研究；D-09r1 S5—S8。滤波、延迟、相位、历史字段及 STDP 均未选。 |
 | C-34 | 连续神经元动力学及其 AP 输出：连续 AP 来自同一持续演化状态，全局曲线可作为放电阶段输出函数；保留可能使能学习／泛化的机制，避免无需求的精确生理重建。 | C-33 的机制保留边界；P-82 候选价值衍生，P-83 约束 C-29 | H-93 确认源端连续性，H-95 明确目标；D-08 set204 的 RateDynamics/Model/IncomingConnectivity、D-09r2 S5.1。无需由多帧输出推定独立 AP 尾部对象或线性叠加；具体方程、恢复／能耗状态与参数未选。 |
-| C-35 | 模块定义一等名义符号；别名保留身份，不同来源／共存版本可区分。 | C-10；P-84 候选价值衍生 | H-96 确认局部语义；D-10r1、D-07r4 DL-14。身份字节格式、生成及持久协议未选。 |
+| C-35 | 模块定义一等名义符号；别名保留身份，不同来源／共存版本可区分。 | C-10；P-84 候选价值衍生 | H-96 确认局部语义；H-112 要求明确来源和本地别名；H-114 明确 identity 是 compile-time value，alias 仅在编译期存在。D-10r8、D-07r11 DL-14。身份字节格式、生成及持久协议未选。 |
 | C-36 | 每线程符号变量与 scoped effect；按值 capture，perform 临时安装，behave 使用当前绑定；按需 WPO 检查完整调用路径及直接访问布局。 | C-02；P-85 候选价值衍生，P-88/P-92 依赖 | H-96/H-97/H-102/H-104 确认语义边界：缺少必需变量是编译错误、不独立编译模块、读 @name、仅 effect 写。D-10r1；分析算法／TLS ABI 未选。 |
 | C-37 | lexical function 只有显式输入输出；dynamic procedure 必须以符号命名并可访问 effects；模块顶层 dynamic scope 为初始化程序。 | C-01；P-86 候选价值衍生，P-89 约束 | H-98/H-103 confirmed 局部规则；D-10r1、D-07r4 DL-02/DL-15。初始化组合、词法细节和完整类型规则待设计。 |
 | C-38 | 用实际 SNN 需求同步推进 CoD 语言与应用的设计、实现和验证。 | C-12；P-87 候选价值衍生，P-91/P-93 依赖 | H-96 确认方向；D-08 LanguageCoDesign205、D-07 DL-16。分步路线是待完善提案，数值方程和训练规则不自动确定。 |
@@ -134,8 +134,10 @@ Design authority
 | C-40 | 跨 region 引用的明确占位：独立区域间引用、生命周期及重载／版本场景逐步设计。 | C-03；P-96 依赖 | H-101 要求保留概念；D-10r1、D-07 DL-03/DL-08。无指针编码、注册表或第三 capture 类别选择。 |
 | C-41 | expression-oriented 语言方向及显式 void；符号读写作为表达式组合。 | C-10；P-97 候选价值衍生，P-98 约束 | H-104 的读写形式及结果方向；D-10r1、D-07 DL-15。H-111 确认 effect 返回新值；块结果及复合表达式顺序待定。 |
 | C-42 | 专门词汇表模块只声明符号并辅以注释，供模块共享身份。 | C-35；P-99 候选价值衍生 | H-105 给定惯用组织；D-10r1。注释不替代类型检查，不默认安装变量值或 procedure 实现。 |
-| C-43 | 外部 procedure 的 using 保留源定义；import 按源 body 在当前 lexical/dynamic scope 重新定义。 | C-10；P-100 候选价值衍生，P-101 依赖，P-102 约束 | H-105 confirmed 定义上下文差异；D-10r1。与 perform/behave 调用模式正交；具体导入语法、目的符号及显式限定名处理待设计。 |
+| C-43 | 外部 procedure 的 using 保留源定义；import 按源 body 在当前 lexical/dynamic scope 重新定义。 | C-10；P-100 候选价值衍生，P-101 依赖，P-102 约束 | H-105 confirmed 定义上下文差异；D-10r1。与 perform/behave 调用模式正交；H-115 允许 import body 的 alias 映射；H-116 确定 using/import "module" @src as @local，目标 symbol 必须预先存在。D-10r8；H-118 授权实现 H-117 的 symbol from 及 local as source-role 映射拼写，完整语法及边界政策仍待定。 |
 | C-44 | Complete declaration scanning/registration precedes entry-driven compilation; dependency top-level execution semantics are incorporated in encounter order. | C-10; P-103 candidate value path, P-104 constraint, P-105 dependency | H-106/H-107 confirm top-level declaration/expression categories, scan-only registration and phase/order boundary. Bits globals use literal/function-call initializers; effect/perform/behave run with module execution. H-109/H-110 confirm every cross-module reference as trigger and source-scope teardown, with using/import retaining selected effective resources. D-10r4, D-07r7, D-08 LanguageCoDesign208. Repeated/cyclic encounters and bits-global realization remain open. |
+| C-45 | Explicit origin and category selection distinguishes a compile-time symbol alias from retaining a runtime effective resource. | C-35/C-43; P-106–P-108 | H-112 requests provenance/alias review. H-117 supplies `symbol from`; H-118 authorizes its bounded implementation in D-10r8. The complete selection contract remains pending-human; no runtime namespace object introduced. |
+| C-46 | Procedure import translates source-body aliases at compile time; using/import installs the resulting procedure under an already known destination identity. | C-43/C-35/C-36; P-109–P-111 | H-114 confirms staging; H-115 permits alias maps and matching-name defaults; H-116 requires a preexisting destination. H-117 supplies local supplier `as` source-body role; H-118 authorizes the bounded implementation. Broader source-alias and mapping edge rules remain pending. D-10r8. |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
 | GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
 
@@ -177,7 +179,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 215，延续检查 K-01—K-214；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 218，延续检查 K-01—K-217；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -199,21 +201,21 @@ Design authority
 <a id="d-07"></a>
 ### D-07：领域语言讨论与设计决策跟踪
 
-- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 8；用该修订及包含它的 Git 提交定位。
-- 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-019。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
-- 人工依据：H-06 近期目标、H-07 跟踪授权、H-08/H-11 应用及分离；H-96 现在同步推进语言和 SNN 设计／实现／验证，取代当前范围内的笼统实施延后。H-97—H-111 为局部语义及惯用组织依据。DD-002/H-07 历史不改写。
-- 当前资格：全文契约及未确认价值路径仍 pending-human；明确的人类命题按其本身范围 confirmed，不把新 WPO、存储或语法细节自动批准。K-214 记录已运行的有界原型证据，不是由未合格基线产生 continued 的事件。
+- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 11；用该修订及包含它的 Git 提交定位。
+- 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-026。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
+- 人工依据：H-06 近期目标、H-07 跟踪授权、H-08/H-11 应用及分离；H-96 现在同步推进语言和 SNN 设计／实现／验证，取代当前范围内的笼统实施延后。H-97—H-118 为局部语义、惯用组织及语法建议依据。DD-002/H-07 历史不改写。
+- 当前资格：全文契约及未确认价值路径仍 pending-human；明确的人类命题按其本身范围 confirmed，不把新 WPO、存储或语法细节自动批准。K-214 记录有界原型证据；K-215 记录编译期身份／别名、import 映射和预先声明目标的细化；K-216 记录 symbol from 与局部符号 as 源 body 角色的语法建议；K-217 记录 H-118 授权的实现、构建和 CoD 组件测试。上述记录均不以未合格基线产生 continued 资格。
 - 验收／边界：Scope and invariants、DL-13—DL-16；先以符号、capture、调用路径、两帧 gather 的有界实例细化契约。H-106 确定先扫描全部依赖、后按入口编译触碰顺序编入执行语义；H-107 允许字面 bits／function 调用初始化 global，以及模块执行期的顶层 effect/perform/behave；未选完整 parser、类型系统、ABI、跨区表示、重复／循环触碰处理或神经元方程；构建／配置权限不扩大。
 - 影响：D-01—D-06 状态不变；D-08 与 D-10 同步当前局部方向，无已合格后代因此失效。
 
-- 当前直接工作授权：H-108 要求在即时语义问题解决后提交推送并设 goal 推进首版按需编译运行原型；H-109–H-111 解决本轮提出的触发、scope 生命周期和 effect 结果问题。此授权不将其余开放机制或全文自动批准。
+- 当前直接工作授权：H-108 要求在即时语义问题解决后提交推送并设 goal 推进首版按需编译运行原型；H-109–H-111 解决本轮提出的触发、scope 生命周期和 effect 结果问题。H-118 进一步授权更新已讨论的 symbol from、预先声明 procedure 目标及 import 映射实现，测试通过后提交推送。此授权不将其余开放机制或全文自动批准。
 <a id="d-08"></a>
 ### D-08：稳态循环激活 SNN 独立应用文档集
 
 - 补充导航覆盖：K-208 将 README 局部修订从202更新为203，仅增加 D-09 双语认知模型追踪入口及对应权威说明；原18份文档的技术内容不变，其余17份文档的修订保持。D-09 两份文件单独登记为 revision1，不将新研究冒充 D-08 的已确认合同。H-71 完成状态保持。
 
-- 协同开发范围：H-96–H-111；K-210 引入 LanguageCoDesign，K-214 将 README208/LanguageCoDesign208 → 209；其余17份技术文档版本不变。C-38/P-87 解释以应用验证语言的候选价值，P-91 依赖 C-29 的 confirmed 两帧 pull，P-93 使应用路线依赖 D-10r5。模型 procedure 只在扫描时注册；全部依赖扫描完成后按入口编译触碰顺序编入顶层执行语义，读取扫描状态不构成捕获。顶层 global 的字面 bits／function 调用取值及 effect/perform/behave 表达式在模块执行期生效。函数负责显式数值输入输出，符号 procedure 负责上下文及区域写入；using/import 各自保留来源／接收定义上下文。路线及25个语义案例仍是规范／候选，另链接22项直接原生检查与双目标 gather 的实际证据；这不构成完整案例集通过、regional 数组实现或 SNN 训练证据；完整实现契约仍 pending-human。
-- 当前覆盖：document-set revision209；H-71 十二小时实质研究已完成，实际区间及逐项范围见 [modeling-refinement-progress.json](../applications/steady-snn/research/modeling-refinement-progress.json)。研究包括独立 flow 学习、真实输入几何、活跃比例与语义幅度、上下文保持、数值精度、衰减／执行成本及来源适用边界；具体证据与开放选择见各文档和 K-207。ActivationRegimes 为202；AdaptiveConnectivity 为202；CapacityPlanning 为204；ConnectivityScalingResearch 为197；ContextLoopsAndNumerics 为204；Decisions 为202；FlowLearning 为202；IncomingConnectivity 为204；Model 为204；PhysicalDistancePreferenceResearch 为78；README 为209；RateDynamics 为204；SemanticCorticalMappingResearch 为32；SignedPopulationEncoding 为202；SpatialConnectivityResearch 为74；SynapticIntegrationResearch 为204；TokenEmbeddingStatistics 为30；TrainingStrategy 为202；LanguageCoDesign 为209。共19份技术应用文档（D-09 两版单独登记）；H-78/H-85 保持对照空间，H-86 指导明显经验选项直接保留比较；D-08 仍 pending-human，研究完成不等于模型验证或实施资格。H-51 完成记录与人工决定历史保留。
+- 协同开发范围：H-96–H-118；K-210 引入 LanguageCoDesign，K-217 将 README209/LanguageCoDesign209 → 210，仅更新语言证据与授权边界；其余17份技术文档版本不变。C-38/P-87 解释以应用验证语言的候选价值，P-91 依赖 C-29 的 confirmed 两帧 pull，P-93 使应用路线依赖当前 D-10r8。模型 procedure 只在扫描时注册；全部依赖扫描完成后按入口编译触碰顺序编入顶层执行语义，读取扫描状态不构成捕获。顶层 global 的字面 bits／function 调用取值及 effect/perform/behave 表达式在模块执行期生效。函数负责显式数值输入输出，符号 procedure 负责上下文及区域写入；using/import 各自保留来源／接收定义上下文。路线及25个语义案例仍是规范／候选，另链接49项原生 fixture 加1项 frontend-only 检查、完整 CoD 组件测试及双目标 gather 的实际证据；这不构成完整案例集通过、regional 数组实现或 SNN 训练证据；完整实现契约仍 pending-human。
+- 当前覆盖：document-set revision210；H-71 十二小时实质研究已完成，实际区间及逐项范围见 [modeling-refinement-progress.json](../applications/steady-snn/research/modeling-refinement-progress.json)。研究包括独立 flow 学习、真实输入几何、活跃比例与语义幅度、上下文保持、数值精度、衰减／执行成本及来源适用边界；具体证据与开放选择见各文档和 K-207。ActivationRegimes 为202；AdaptiveConnectivity 为202；CapacityPlanning 为204；ConnectivityScalingResearch 为197；ContextLoopsAndNumerics 为204；Decisions 为202；FlowLearning 为202；IncomingConnectivity 为204；Model 为204；PhysicalDistancePreferenceResearch 为78；README 为210；RateDynamics 为204；SemanticCorticalMappingResearch 为32；SignedPopulationEncoding 为202；SpatialConnectivityResearch 为74；SynapticIntegrationResearch 为204；TokenEmbeddingStatistics 为30；TrainingStrategy 为202；LanguageCoDesign 为210。共19份技术应用文档（D-09 两版单独登记）；H-78/H-85 保持对照空间，H-86 指导明显经验选项直接保留比较；D-08 仍 pending-human，研究完成不等于模型验证或实施资格。H-51 完成记录与人工决定历史保留。
 - 人工依据：H-08—H-12 确立应用、容量优先、HTM 参考、文档分离和单节点 16 GB；H-13—H-19 确立可变容量需求、静态分配、当前集引用、少数万级出边评估、五字节 SoA 槽、owner 数组、可多于 N 的集合和百槽下限。H-21/H-25 暂定 alpha≈3、100/144 分级、逐档集合数减半；H-94 正式确认 target-owned 入连归属及双帧 pull，低出度取舍不自动转为低入度删除。H-22—H-24 区分输入数与兴奋性，接受条件权重补偿方向，将 weight scale 归训练而非容量参数。H-25—H-27 分别提出正负群体、人体柱规模调研及 Flash 60+60 计算；H-35 限定当前 Flash 人口。H-28 将 embedding 表单列节点共享，H-29 规定 SoA 默认与实证例外，H-30—H-32 规定非标准位宽独立讨论和包括 FP4 的二次幂 bit 标准宽度。H-34 要求需求先于辅助结构；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量。完整证据和评估范围保留于 H-08—H-39 及 AD-001—AD-032。
 - 当前学习范围：H-40 保留共活动及邻近优先方向，H-41 排除维号距离并提出跨 minicolumn 等机会方向，但未确定提议或保留边的概率契约，H-42 / AD-035 拒绝内部等位偏好。H-43 / AD-037 固定 CC 基本单元、非精确 replica 及语义角色。H-44 / AD-038 将语义分配的位置与解剖拓扑兼容置于 1D/2D 之前；交错和选择性可达仅为研究替代，布局集合中的平均对称与逐细胞等概率须区分，后者仅作为较强的条件分析。H-46 / AD-040 明确 feature 与 minicolumn 非双射并不冲突，故不以此要求交错或重编码。 H-52 / AD-046 指定三相稳态吸引子及各种入口条件的预期收敛为学习主目标，单 token 自循环激活并逐渐回归 DMN 为中间目标；H-67 将时间表述放宽为半衰期性质并允许 token 差异。 H-54 要求早期不建模显式抑制性连接，以同维正负群体固有抵消作用于活动；H-55 指定残留在噪音支持下先增强达峰再按 token 目标回落。 H-59 / AD-053 要求各正常状态的循环活动可受外部 token 驱使转向；不以循环本身判断失败。 H-66/AD-065—AD-067 初步预期尾头保持连接，并偏好每步维持 token 分布、最多几步有限偏离；强化／削弱策略全程细究，不采纳具体采样／增益算法。 H-68 明确自然断链是活动无法继续而非权重消除；H-69 提出分数选取配合 rate，H-70 要求数值精度细究。 H-71 指定有用小循环保留较长上下文价值，主链避免主动捷径不变；不强力消除小循环，主导淡出与历史影响分开。
 - 当前物理距离研究：H-50 / AD-044 明确神经元已经按语义向量组织，不具有天然物理位置。K-37 撤回 K-36 的软局部机会建议及“显式位置或有效接触表示”的预设选项；生物来源仍可作为研究资料。现无可代入距离核的物理度量；当前问题是生物邻近产生何种有用计算效果、是否能在现有语义组织内成立，而非默认增加几何、接触图或其它机制。H-51 / AD-045 要求修正文档后至少 12 小时深化研究；实际研究时间及来源证据单独记录，不以空等凑时长。
@@ -242,18 +244,21 @@ Design authority
 <a id="d-10"></a>
 ### D-10: Symbols, dynamic scope and callable kinds
 
-- File: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), design revision 5, all sections. Human propositions H-96–H-111 are locally confirmed at their stated scopes; the complete implementation contract and candidate value paths remain pending-human.
+- File: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), design revision 8, all sections. Human propositions/proposals H-96–H-118 retain their individually recorded confirmation/proposal scopes; the complete implementation contract and candidate value paths remain pending-human.
 - Value paths: P-90 connects D-10 to C-10; P-84/P-94/P-97/P-100 explain nominal identity, storage, expressions and reuse through C-10/P-14/C-01; P-85 connects context-dependent operations to C-02; P-86 connects pure/effectful distinction to C-01; P-99 connects vocabulary practice to C-35; C-44/P-103 connects phase-separated module composition to C-10, with P-105 depending on the definition-context distinction. The proposed paths serve inspectable semantic programs and explicit environment interpretation, without importing a full continuation/effect calculus.
 - Dependencies/constraints: P-88/P-92/P-96/P-101 preserve symbol identity and multi-region concerns. P-89/P-95/P-98/P-102/P-104 record the explicit local callable, capture, write, reuse and module-phase constraints. Dependencies do not confer qualification.
 - Invariants: nominal identity across aliases/versions; per-thread bindings and scope restoration; captured-value perform/current-binding behave; lexical functions and symbol-named dynamic procedures; module initialization scope; complete declaration scan before entry-driven dependency execution incorporation in encounter order; demand-driven whole-program checking with missing bindings rejected during compilation; only stack/@region user storage and bits/regional-pointer captures; zero-cost regional relocation; bits globals initialized by literals or function calls and top-level effect/perform/behave evaluated with module execution, never by declaration scanning.
-- Acceptance: explain and eventually execute the semantic cases; reject invalid function effects, writes and missing requirements; preserve same-region lifetimes and immutable-A pull; distinguish registration from dynamic definition/capture and execution-incorporation order from scan order. Current [case records](../applications/steady-snn/research/cod-language-scope-cases.json) contain 25 specified/derived cases with selected [native prototype evidence](../tests/cod/language/validation.json). The 22 direct scalar/module checks do not validate the entire catalog, regional lifetimes or SNN learning.
+- Acceptance: explain and eventually execute the semantic cases; reject invalid function effects, writes and missing requirements; preserve same-region lifetimes and immutable-A pull; distinguish registration from dynamic definition/capture and execution-incorporation order from scan order. Current [case records](../applications/steady-snn/research/cod-language-scope-cases.json) contain 25 specified/derived cases with selected [native prototype evidence](../tests/cod/language/validation.json). The 49 native scalar/module fixtures plus one frontend-only check do not validate the entire catalog, regional lifetimes or SNN learning.
 - Open/non-goals: concrete grammar/types, repeated/cyclic encounter rules, scope-result/evaluation rules, bits-global realization, symbol/TLS/closure ABI, pointer lifetimes, cross-region representation, cache protocol and native lowering. No independent module compilation, implicit user heap promotion or fully selected SNN dynamics.
-- Downstream: D-07r8 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign209/README209. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence; no previously qualified D-10 baseline or affected qualified descendant exists.
+- Downstream: D-07r11 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign210/README210. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; no previously qualified D-10 baseline or affected qualified descendant exists.
 
-- Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. Work relies on the explicit request and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision1, is implementation documentation associated with D-10r5 under direct H-108. [validation.json](../tests/cod/language/validation.json) hashes sources/executable and records 22 direct checks, native compiler/linker/runner execution and C++ compatibility. The scalar/local-module syntax, left-to-right order, last-expression block result, checked i64 arithmetic and stack/TLS lowering are experimental prototype conventions, not newly confirmed permanent language contracts. Local-file identity is not resolved package-version identity; region/GADT/concurrency/full-simulator scopes remain open.
+- Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision2, is implementation documentation associated with D-10r8 under direct H-108/H-118. [validation.json](../tests/cod/language/validation.json) hashes sources/executable and records49 native fixtures plus1 frontend-only check, a passing source build and all4 CoD test groups (language, evaluation, cache, workspace). The last-expression block convention, numerical rules and other experimental limitations are not permanent language decisions. Local-file identity is not resolved package-version identity; region/GADT/concurrency/full-simulator scopes remain open.
+- Current implementation boundary: H-112–H-118 and C-45/C-46 cover explicit source identities, compile-time aliases, predeclared destinations and import body translation in D-10r8/D-07r11. `symbol from` selects only an identity; symbolic using/import requires a procedure resource and installs it under the receiving destination. `with { @local as @source_role; }` resolves receiving identities before capture/checking; source definitions remain unchanged. Same-name defaults, mapped effects/calls and reimport are tested. Unknown/duplicate map roles, missing destinations and identity-splitting mappings are diagnosed; these bounded exclusions do not settle the full mapping policy. D-08 set210 updates evidence links only; no neuronal model or regional representation is selected. No qualified descendant is invalidated.
 
-The following relations apply at the scopes recorded in each row and the current D-07 revision 8, D-08 set209, D-09 revision2 and D-10 revision5 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
+
+
+The following relations apply at the scopes recorded in each row and the current D-07 revision 11, D-08 set210, D-09 revision2 and D-10 revision8 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
 
 | 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
 | --- | --- | --- | --- |
@@ -348,7 +353,7 @@ D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87
 | P-95 | C-39 constrains | C-36 | H-99/H-100 confirmed: user objects have stack/@region carriers; capture payloads are bits or regional pointers. No implicit user heap lifetime. D-10r1 local scope, representation remains open. |
 | P-96 | C-40 depends-on | C-03 | Cross-region references must account for independently managed regions and contexts; H-101 placeholder, D-10r1. Dependency proposal; no implementation contract. |
 | P-97 | C-41 derives-from | C-10 | Expression results and explicit void make computation/effect composition visible in types; H-104 direction, D-10r1. Formal value path pending-human. |
-| P-98 | C-41 constrains | C-36 | H-104 confirmed read/write forms: @name reads, effect @name = rhs is the only symbolic write; both are expressions. H-111 confirms the newly bound value as the effect result. Scope results and compound sequencing remain open. D-10r4. |
+| P-98 | C-41 constrains | C-36 | H-104 confirmed read/write forms: @name reads, effect @name = rhs is the only symbolic write; both are expressions. H-111 confirms the newly bound value as the effect result. H-113 confirms there are no lexically scoped symbolic variables; ordinary symbolic assignment is invalid. Scope results and compound sequencing remain open. D-10r8. |
 | P-99 | C-42 derives-from | C-35 | A symbol-only vocabulary lets independent modules share nominal concepts without selecting implementations; H-105 practice, D-10r1. Formal value path pending-human. |
 | P-100 | C-43 derives-from | C-10 | Explicit using/import distinguishes preserving an existing definition from reusing a body under receiving meanings; H-105, D-10r1. Formal value path pending-human. |
 | P-101 | C-43 depends-on | C-35 | Procedure reuse must distinguish symbol identities/aliases from definition contexts; D-10r1. Dependency proposal; destination-binding syntax remains open. |
@@ -356,6 +361,12 @@ D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87
 | P-103 | C-44 derives-from | C-10 | Make declaration availability and execution/capture order explicit in language semantics; D-10r2 module section, D-07r5 DL-12/DL-14. H-106 supplies the mechanism; this formal value path remains pending-human. |
 | P-104 | C-44 constrains | C-36 | H-106/H-107 confirmed: top-level symbol/function/bits-global definitions, registered procedure bodies and effect/perform/behave expressions. Bits globals use literal or function-call initializers. All entry dependencies are scanned/loaded before entry execution compilation; dependency execution semantics are incorporated in encounter order. Initializers, dynamic definitions and top-level effects/calls execute with the module, not during scanning. H-109 confirms every cross-module reference as trigger; H-110 closes the source scope after execution and limits effective-resource transfer to using/import. D-10r4 local scope; repeated/cyclic encounter policy remains open. |
 | P-105 | C-44 depends-on | C-43 | Entry-driven composition must retain source versus receiving definition contexts for using/import; D-10r2. Dependency only; H-109/H-110 supply reference triggers and source-scope teardown. Repeated/cyclic encounter policy remains open. |
+| P-106 | C-45 derives-from | C-35 | Explicit source selection exposes nominal provenance while short local aliases preserve readable operations; D-10r8 origin/alias section. Candidate value path pending-human. |
+| P-107 | C-45 depends-on | C-43 | Naming a symbol identity must be distinguished from retaining or redefining a procedure resource; D-10r8. Dependency only; H-118 authorizes the bounded identity-only selector implementation, without qualifying a complete resource-selection contract. |
+| P-108 | C-45 depends-on | C-44 | Every source selection retains H-109/H-110 execution/teardown obligations; identity-only naming is not an initialization exemption. D-10r8. No new repeated/cyclic encounter policy. |
+| P-109 | C-46 derives-from | C-43 | Compile-time alias adaptation makes receiving-context body reuse explicit and destinations independently selectable; D-10r8. H-115/H-116 mechanism statements do not qualify this complete candidate value path. |
+| P-110 | C-46 depends-on | C-35 | Translate source/receiving aliases to nominal compile-time values before runtime layout; aliases are not runtime variables or names. H-114 constraint; D-10r8. Mapping edge policies remain open. |
+| P-111 | C-46 constrains | C-36 | H-113–H-118 local scope: symbolic values remain dynamically bound; import has a compile-time alias map and using/import requires an existing destination symbol. Derivation: gather captures after receiving identity resolution. D-10r8; no ordinary symbolic assignment, identity unification or runtime alias lookup. |
 
 C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录；P-34—P-41 的形式化关系保持 pending-human。H-58 的低密度过滤是候选办法，不因功能要求获确认而自动成为所选算法。
 
@@ -415,6 +426,8 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 
 **K-213 reverse coverage:** H-108 directly authorizes the C-38 language/application prototype milestone; H-109/H-110 refine C-44/P-104 through D-10r4 module composition and D-07r7 DL-14; H-111 refines C-41/P-98 expression results. D-08 LanguageCoDesign208/README208 link the bounded native prototype. Prior candidate value paths and full-contract pending status remain; local human semantics are not postponed for repeated confirmation.
 
+
+Additional reverse impact: C-45/C-46 -> P-106–P-111, D-10r8, D-07r11 DL-14/DL-15, D-08 LanguageCoDesign210/README210, native frontend and reference2/validation; H-112–H-118.
 ## 6. 人工确认事件（只追加）
 
 各事件的确认者为其来源对话中发出相应消息的**用户（人工决策者）**。H-01—H-05 的来源为初始化登记时的仓库任务对话；后续事件分别注明来源。没有独立签名或公开消息 URL 时如实标明，不推定 GitHub 登录身份，不虚构外部链接。已知的消息时间使用 UTC；时间不可得时只记录整理日期与该限制，不用整理时间冒充发言时间。
@@ -1729,6 +1742,83 @@ Human: this chat's user; independently verified name unavailable. Source: visibl
 > Return the newly bound value
 
 Scope: Reply to the result of effect @x = 3. The expression yields 3, the new value, not the previous value or void. Enclosing-scope restoration still applies. Block-result and compound-evaluation rules are separate.
+
+
+### H-112 — Explicit symbol origins and local aliases
+
+<a id="h-112"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message/reply in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 现在符号的使用好像文法还不太顺，你看看应该有明确的来源，且本地模块可以用别名指代其它模块来源的符号，这个从 syntax/semantics/pragmatics 几方面都看看怎么设计更好
+
+Scope: Requests an origin-explicit/local-alias syntax, semantics and pragmatics review. Reinforces H-96 nominal provenance and aliases; does not approve the agent's proposed category keywords, qualification punctuation or replacement implementation.
+
+
+### H-113 — Symbolic variables have dynamic scope only
+
+<a id="h-113"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message/reply in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 另外不该有 lexical scope 的符号变量吧， `@x = 2;` 不允许，只能有 `effect @x = 2;` 这种dyanmic scope的符号变量
+
+Scope: Confirms no lexically scoped symbolic variable and no ordinary assignment to it. H-104 effect-only writes remain. Compile-time names for identities do not create lexical runtime variables; ordinary non-symbolic lexical values are outside this clarification.
+
+
+### H-114 — Compile-time identities and aliases, runtime value bindings
+
+<a id="h-114"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message/reply in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> symbol identity 应该是 compile-time value，模块本地 symbol alias 应该仅存在于编译时，运行时只有 symbol identity 去bind什么 runtime-value。 整个关系你理清楚了跟我讨论
+
+Scope: Reply to the imported-body identity question. Confirms staging: identities are compile-time values and module aliases exist only at compile time; runtime values bind under identities. Requests the relationship model for discussion. This statement alone does not select the earlier proposed preserve-source-identity alternative for import.
+
+
+### H-115 — Import-time symbol alias maps
+
+<a id="h-115"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message/reply in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> import procedure 时应该允许提供 symbol aliasing 映射表，当源模块使用的 symbol 别名与本地模块相同时可以默认不映射
+
+Scope: Confirms that procedure import may supply a source-body alias translation table; matching source/receiving aliases need no explicit entry. Exact syntax and cases where multiple source aliases share an identity remain open. Read with H-105 receiving-context redefinition and H-114 compile-time aliases; no runtime alias table is requested.
+
+
+### H-116 — Procedure renaming selects a preexisting local symbol
+
+<a id="h-116"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message/reply in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 而且应该允许 `using/import "<modu>" @src_name as @local_name;` 这种本地重命名语法。 本地模块需要先 `symbol @local_name` 或者用什么语法引入其它词汇表模块定义的 `@local_name` symbol
+
+Scope: Confirms this procedure using/import spelling and the requirement that the destination symbol exist beforehand, either declared locally or introduced from another vocabulary. Consequence: the procedure value is installed under that destination identity, which need not equal the source resource identity; this is not an automatic source-identity alias declaration. The vocabulary identity-import spelling is still requested design work.
+
+
+### H-117 — Symbol-from declarations and local supplier as source-body role
+
+<a id="h-117"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 我建议 'symbol from "\<modu>" ...' 代替 'using symbol "\<modu>" ...' 。 `with { @tgt_neuron as @target; };` 是不是改成 `with { @target as @tgt_neuron; };` 语义才符合直觉？
+
+Scope: Proposes the `symbol from` vocabulary-selection prefix and asks whether the table should put the receiving symbol before the source-body role. The current discussion draft adopts these spellings for evaluation: `@target as @tgt_neuron` supplies the receiving identity for the imported body's alias. This records the human suggestion/question and the agent's agreement, not approval of the full grammar, every mapping edge policy or implementation. H-109/H-110 source execution/teardown and H-114 compile-time identity/alias boundaries remain.
+
+### H-118 — Implement, test and push the discussed symbol syntax
+
+<a id="h-118"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 更新实现，测试都过了提交推送一版
+
+Scope: Directly authorizes updating the implementation to the immediately discussed H-112–H-117 symbol forms, running the affected CoD tests, then committing and pushing after success. The bounded accepted syntax is `symbol from "module" @source as @local`, predeclared procedure destinations in `using/import "module" @source as @local`, and import maps written `with { @local as @source_role; }`. Preserve compile-time identity/aliases, same-name defaults, receiving-context redefinition, capture-by-value/current-binding calls and source-scope teardown. This does not approve unresolved mapping edge policies, general module repetition/cycles, regional/GADT representation or all full-language proposals. Build configuration/toolchain authority is not expanded.
+
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -4028,3 +4118,40 @@ Scope: Reply to the result of effect @x = 3. The expression yields 3, the new va
 - Actual evidence: [validation.json](../tests/cod/language/validation.json) records22 direct checks after the final source build. Successful examples demonstrate scalar captures/restoration, transitive requirements, all four using/import-call-mode combinations, symbol/function/global execution triggers, new-value expression results and nominal alias/distinct-file identity. Invalid demanded entries fail before top-level output; native overflow is checked. A process trace shows project Clang compiling bitcode, project linker activity and execution of the generated runner. Frontend-only checking emits its plan without executing the source; existing C++ evaluation outputs42. The two-target frame stores B=[15,14] from A=[2,5], verifies reverse traversal and unchanged A, then publishes both next-frame values. This is data-flow evidence, not neural simulation or proof of immutable-view typing.
 - Build/operational evidence: three source-only build invocations used exactly `cmake --build ./build`, each successful. The existing default graph regenerated main CMake metadata on the first invocation and also refreshed runtime sub-build/configuration outputs, a dummy compiler-rt object, libcxx_fuzzer install step and compilation database. No manual configure/bootstrap/install target, build-tree cleaning, configuration-source edit or toolchain update was performed; the automatic behavior was reported. The existing LLVM deprecated implicit-this-capture and CMake policy warnings remain. Direct prototype executions serve the requested compile/run acceptance; no repository test suite was invoked.
 - Review criteria: preserve human and prior assessment history, verify source/evidence hashes and exact outputs, JSON structure, document/anchor links, revision coverage and whitespace; inspect the source diff for build/configuration or regional-invariant changes. Selected fixture links do not relabel the complete25-case specification as executed. Subsequent language/model increments require their own bounded contract/evidence.
+
+### K-215 — 2026-11-05: Symbol staging, body alias translation and explicit procedure destinations
+
+<a id="k-215"></a>
+
+- Agent design-review record, not confirmation of the remaining proposals. Current charter §§1–4, 6, 8–9 and 11 checked with H-96/H-103–H-116, C-35/C-36/C-41–C-44, P-84/P-98–P-105 and the parser/frontend/reference. Charter and AGENTS unchanged. The user requested relationship/syntax discussion, not activation of an unreviewed replacement grammar.
+- Coverage: registry215 → 216; D-10r5 → r6; D-07r8 → r9, DD-020–DD-024; append H-112–H-116, C-45/C-46 and P-106–P-111 with reverse impact. D-08 set209, its19 technical document revisions, D-09r2 and native prototype/reference1/validation remain unchanged. Preserve all earlier H/K/DD events and executed evidence.
+- Human boundaries: explicit origin/local aliases; exclusively dynamic symbolic variables and effect-only assignment; compile-time identity values/aliases; import-time alias map with same-name defaults; using/import source-to-local spelling with a previously declared/selected destination symbol. The early assistant suggestion to preserve all source identities through import was not adopted: H-114 clarified staging and H-115 supplied alias adaptation. Capture-by-value perform/current-binding behave and source initialization/teardown still apply.
+- Relationship model: compile-time source/alias resolution yields nominal identities; WPO supplies runtime locations; runtime values/captures remain dynamic. Vocabulary identity introduction and procedure installation under an existing destination are different operations. Two aliases of one identity share the same dynamic binding. Body translation precedes capture requirements and lowering; destination selection and body translation are independent. Imported-body name auto-matching is a compile-time correspondence, never identity equality by spelling or runtime name lookup.
+- Candidate value chain: C-45 via P-106/C-35 makes origins and local naming inspectable; P-107/P-108 preserve definition/context and initialization dependencies. C-46 via P-109/C-43 makes receiving-context reuse deliberate; P-110 requires nominal resolution, P-111 connects the supplied constraints to dynamic bindings. These serve C-10/C-01/C-02 and readable semantic source; candidate formal paths remain pending-human rather than borrowing ancestor approval.
+- Open spelling/edges: `using symbol` for identity-only selection and `with { @source as @local; }` for the table are proposals. Same-spelling/default resolution to a different receiving identity is explained as the coherent receiving-context interpretation for review. Conflicting mappings of source aliases sharing one identity, unused map keys, grouped/repeated references and general qualified expressions remain open. No runtime namespace, dynamic alias table, new memory carrier or generic mapping framework is selected.
+- Implementation impact: the existing prototype already resolves aliases at compilation and rejects plain assignment, but its generic resource selection introduces source-identity aliases automatically. H-116 instead requires an existing destination and can bind the procedure under a distinct identity; H-115 adds explicit body adaptation. K-214's22 checks are historical revision-5 acceptance, not validation of this refined contract. A later implementation must separate symbol-name selection, procedure destination resolution, body mapping and capture collection. No qualified descendant is silently continued across the changed boundary; complete D-07/D-10 contracts stay pending-human. Only D-GOV216 record maintenance continues H-05.
+- Review/evidence: read actual parser/frontend and identity/procedure fixtures. Primary Rust/Racket module references support only naming comparisons; no foreign language initialization or effect semantics is adopted. Check local links, revisions, history preservation and diff whitespace. This turn edits design records only: no source changes, project build/tests, toolchain/configuration operations, commit or push.
+
+### K-216 — 2026-11-05: Vocabulary declarations and supplier-as-role map spelling
+
+<a id="k-216"></a>
+
+- Agent design assessment under H-117; reviewed current charter §§1–4/8–9, D-10r6/D-07r9, C-35/C-43/C-45/C-46, P-106–P-111 and H-109–H-116. No charter or authority rule changes. The working-tree baseline already included H-112–H-116/K-215; those records are preserved.
+- Coverage: registry216 → 217; D-10r6 → r7; D-07r9 → r10, DD-025. Append H-117/K-216; retain existing concepts/relationships with updated revision scope. D-08 set209, D-09r2 and implementation/reference/evidence remain unchanged. Existing DD row contents are preserved; blank separators between rows are removed to keep one valid Markdown table.
+- Value and semantics: `symbol from` groups nominal identity introduction with symbol declarations, while using/import select effective procedure resources. Local aliases and symbol identities remain compile-time entities; dynamic values still require the specified binding operations. In `with { @target as @tgt_neuron; }`, the left side resolves to the receiving identity and the right names a source-body role. The compiler correspondence remains resolve_imported(source-role)=resolve_local(supplier); wording direction does not invert runtime value flow or introduce a runtime alias.
+- Cumulative comparison: H-117's proposed prefix replaces the earlier agent `using symbol` candidate; its local-supplier-first table replaces the earlier source-alias-first draft spelling. Both are current discussion syntax, not an inferred approval of all mapping edge policies. H-115 same-name defaults, H-116 predeclared destinations, captured/current call modes and H-109/H-110 execution/restoration are preserved. The outer as selects a procedure destination; the inner as supplies an identity for a role in the redefined body.
+- Acceptance/impact: document examples must use the intended two name environments and preserve the source identity when introducing a vocabulary alias. Future checks must reject missing local suppliers or unknown source-body roles, and capture after identity resolution. No qualified descendant is silently continued across an unconfirmed choice. D-07/D-10 full contracts and candidate value paths remain pending-human; D-GOV217 maintenance alone continues H-05.
+- Validation scope: prior H/K/DD preservation, synchronized current revisions, local links/anchors, example direction and diff whitespace. Design records only; no compiler edit, build, test, toolchain/configuration operation, commit or push.
+
+
+### K-217 — 2026-11-05: Explicit symbol selection and mapped procedure imports implemented
+
+<a id="k-217"></a>
+
+- Agent implementation/evidence assessment under direct H-118, not a blanket qualification. Reviewed current charter §§1–4, 6, 8 and12–14 with H-96–H-117, D-10r7/D-07r10, C-35/C-36/C-43/C-45/C-46 and P-106–P-111. Charter, AGENTS, regional-pointer semantics and build/toolchain sources remain unchanged.
+- Coverage: registry217 →218; append H-118 and this event; D-10r7 →r8, D-07r10 →r11/DD-026, D-08 set209 →210 (LanguageCoDesign/README209 →210; other17 documents unchanged). Reference1 →2 and actual validation evidence updated; all25 semantic catalog propositions/statuses retained. H-01–H-117, K-00–K-216 and DD-001–DD-025 remain append-only history.
+- Preserved value chain: C-45/P-106/C-35 exposes nominal origin without changing a symbol through aliases; C-46/P-109/C-43 makes receiving-context reuse explicit. P-107/P-108/P-110 preserve resource/context dependencies; P-111 preserves dynamic bindings and capture after identity resolution. These serve readable typed programs and explicit interpretation under C-10/C-01/C-02. H-118 authorizes this bounded implementation, not the unconfirmed full formal paths or every descendant.
+- Implementation: `symbol from` introduces only a compile-time identity alias; symbolic using/import requires an already introduced destination and selects a procedure value. Import clones/instantiates the source body, maps local supplier to source role, then resolves capture/required-binding semantics. Reads, effect targets, perform/behave calls and reimports use the resolved identities; original bodies are unchanged. The runtime retains fixed scalar TLS access without alias dictionaries or user heap objects.
+- Acceptance evidence: one exact `cmake --build ./build` succeeded after source-only edits. `COD_TEST_TOOLCHAIN=build tests/cod/run-all.sh` passed all4 groups:49 native language fixtures plus1 frontend-only check,6 C++ evaluation checks,8 cache checks and workspace checks. `validation.json` records outputs/exits, hashes and compact suite evidence. The existing default build graph refreshed runtime configuration/outputs; no manual configure/bootstrap/install target, configuration-source edit or toolchain mutation was invoked.
+- Boundary/trade-offs: missing local suppliers/destinations, unknown/duplicate source roles and splitting one source identity across destinations are diagnosed; broader mapping policy is still open. Built-ins require using because they have no importable body. General repetition/cycles, runtime symbols, regional pointers/GADT, concurrency, full SNN and cross-platform/performance acceptance remain outside this increment. No new runtime structure or numerical/training rule is selected.
+- Downstream/qualification: D-08 language evidence links update without changing its19 application contracts, C-29 pull architecture or case specifications. No qualified descendant is invalidated. Full D-07/D-08/D-10 contracts and candidate value paths remain pending-human; only D-GOV218 maintenance continues H-05. Commit/push are authorized by H-118 and follow passing validation.

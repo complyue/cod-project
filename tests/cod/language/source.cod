@@ -1,6 +1,7 @@
+symbol @print;
 using "std:io" @print;
-using "vocabulary.cod" @x;
-using "vocabulary.cod" @p;
+symbol from "vocabulary.cod" @x;
+symbol from "vocabulary.cod" @p;
 function helper() -> i64 { 4 }
 effect @x = 1;
 procedure @p -> i64 { helper() * 100 + @x }

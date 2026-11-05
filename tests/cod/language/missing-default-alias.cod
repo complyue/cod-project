@@ -1,0 +1,2 @@
+symbol @step;
+import "source.cod" @p as @step;

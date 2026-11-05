@@ -1,0 +1,4 @@
+symbol from "vocabulary.cod" @x as @a;
+symbol from "vocabulary.cod" @x as @b;
+symbol @p;
+procedure @p -> i64 { @a + @b }

@@ -1,0 +1,2 @@
+symbol @print;
+import "std:io" @print;

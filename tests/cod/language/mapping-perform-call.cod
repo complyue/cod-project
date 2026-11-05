@@ -1,0 +1,11 @@
+symbol @print;
+using "std:io" @print;
+symbol @step;
+symbol @cell;
+symbol @helper;
+effect @cell = 3;
+procedure @helper -> i64 { @cell }
+import "mapped-perform-model.cod" @update as @step with { @helper as @next; };
+effect @cell = 9;
+behave @print(perform @step);
+behave @print(behave @step);

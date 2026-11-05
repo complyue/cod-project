@@ -1,3 +1,4 @@
+symbol @print;
 using "std:io" @print;
 symbol @missing;
 behave @print(111);

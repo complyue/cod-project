@@ -1,0 +1,2 @@
+using "std:io" @print as @output;
+symbol @output;

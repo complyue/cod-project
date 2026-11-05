@@ -1,4 +1,6 @@
+symbol @print;
 using "std:io" @print;
+symbol @assert;
 using "std:io" @assert;
 symbol @x;
 symbol @read;

@@ -1,0 +1,4 @@
+symbol @step;
+symbol @target;
+function helper() -> i64 { 9 }
+import "source.cod" @p as @step with { @x as @target; };

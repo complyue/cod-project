@@ -1,0 +1,5 @@
+symbol @print;
+using "std:io" @print;
+symbol from "vocabulary.cod" @x;
+effect @x = 41;
+behave @print(600);

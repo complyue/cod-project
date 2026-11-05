@@ -1,13 +1,16 @@
 // Exact-integer data-flow fixture, not a neuron equation or trained SNN.
+symbol @print;
 using "std:io" @print;
+symbol @assert;
 using "std:io" @assert;
-using "frame-vocabulary.cod" @a0;
-using "frame-vocabulary.cod" @a1;
-using "frame-vocabulary.cod" @target;
+symbol from "frame-vocabulary.cod" @a0;
+symbol from "frame-vocabulary.cod" @a1;
+symbol from "frame-vocabulary.cod" @target;
 symbol @b0;
 symbol @b1;
 effect @a0 = 2;
 effect @a1 = 5;
+symbol @update;
 using "frame-model.cod" @update;
 effect @b0 = { effect @target = 0; behave @update };
 effect @b1 = { effect @target = 1; behave @update };

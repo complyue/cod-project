@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Execute CoD source fixtures and compare observable results and diagnostics."""
+
+import datetime
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import subprocess
+import sys
+import tempfile
+
+
+def digest(path):
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def main():
+    directory = Path(__file__).resolve().parent
+    root = directory.parents[2]
+    mode = os.environ.get("COD_TEST_TOOLCHAIN", "build")
+    if mode not in ("build", "built"):
+        raise SystemExit("COD_TEST_TOOLCHAIN must be build or built")
+    executable = root / mode / "bin" / ("cod.exe" if os.name == "nt" else "cod")
+    cases = json.loads((directory / "cases.json").read_text())
+    if sys.argv[1:]:
+        requested = set(sys.argv[1:])
+        cases = [case for case in cases if Path(case["file"]).stem in requested]
+        if len(cases) != len(requested):
+            raise SystemExit("Unknown or duplicate fixture selection")
+    results = []
+    for case in cases:
+        command = [str(executable), "--run", str(directory / case["file"])]
+        result = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=60)
+        passed = (result.returncode == case["exit"] and result.stdout == case["stdout"]
+                  and case.get("stderr_contains", "") in result.stderr
+                  and (case["exit"] != 0 or result.stderr == ""))
+        results.append({"fixture": case["file"], "command": command, "expected": case,
+                        "exit_code": result.returncode, "stdout": result.stdout,
+                        "stderr": result.stderr, "passed": passed})
+        print(f"{'PASS' if passed else 'FAIL'} {case['file']}", flush=True)
+        if not passed:
+            print(json.dumps(results[-1], indent=2))
+
+    with tempfile.TemporaryDirectory(prefix="cod-language-check-") as scratch:
+        generated = Path(scratch) / "program.cc"
+        command = [str(executable), "--check", str(directory / "import-mapping.cod"),
+                   "--emit-cpp", str(generated)]
+        check = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=60)
+        passed = (check.returncode == 0 and check.stdout == "" and check.stderr == ""
+                  and generated.is_file() and "static thread_local Context ctx;" in generated.read_text())
+        results.append({"fixture": "frontend-only", "command": command, "exit_code": check.returncode,
+                        "stdout": check.stdout, "stderr": check.stderr, "passed": passed})
+        print(f"{'PASS' if passed else 'FAIL'} frontend-only", flush=True)
+
+    passed_count = sum(case["passed"] for case in results)
+    print(f"CoD language: {passed_count}/{len(results)} passed ({mode} toolchain)")
+    if report := os.environ.get("COD_LANGUAGE_REPORT"):
+        sources = [root / "cod/main.cc", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh",
+                   root / "tests/cod/test_language.sh", directory / "run_tests.py", directory / "cases.json",
+                   *sorted(directory.glob("*.cod"))]
+        evidence = {"schema_version": 2, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "platform": platform.platform(), "toolchain": mode, "passed": passed_count,
+                    "total": len(results), "results": results,
+                    "executable": {"path": str(executable.relative_to(root)), "sha256": digest(executable)},
+                    "source_sha256": {str(path.relative_to(root)): digest(path) for path in sources}}
+        Path(report).write_text(json.dumps(evidence, indent=2) + "\n")
+    return 0 if passed_count == len(results) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
