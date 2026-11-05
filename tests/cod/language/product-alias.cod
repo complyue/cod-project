@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+using "product-library.cod" Position as LocalPosition;
+using "product-library.cod" read;
+behave @print(read(LocalPosition(5, 0.75f32)));

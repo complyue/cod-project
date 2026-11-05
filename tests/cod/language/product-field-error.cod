@@ -1,0 +1,2 @@
+type A { value::i64; }
+A(1).missing;

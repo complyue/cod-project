@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+type Pair { x::f32; count::i64; }
+type Box { pair::Pair; enabled::bool; }
+function double(p::Pair)::Pair { Pair(p.x * 2.0f32, p.count * 2) }
+function metric(b::Box)::f32 { if (b.enabled) { -b.pair.x } else { 0.0f32 } }
+global b::Box = Box(double(Pair(1.25f32, 3)), true);
+behave @print(b.pair.x);
+behave @print(b.pair.count);
+behave @print(metric(b));
+behave @assert(b.enabled);

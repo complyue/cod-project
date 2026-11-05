@@ -1,0 +1,3 @@
+using "product-library.cod" read;
+using "product-other-library.cod" Position;
+read(Position(2, 1.0f32));

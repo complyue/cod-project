@@ -364,5 +364,109 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "import symbol is outside the prototype"
+  },
+  {
+    "file": "products.cod",
+    "exit": 0,
+    "stdout": "2.5\n6\n-2.5\n"
+  },
+  {
+    "file": "floating-captures.cod",
+    "exit": 0,
+    "stdout": "1.25\n2.5\n2.5\n150.25\n"
+  },
+  {
+    "file": "product-captures.cod",
+    "exit": 0,
+    "stdout": "7\n9\n2.5\n"
+  },
+  {
+    "file": "product-alias.cod",
+    "exit": 0,
+    "stdout": "0.75\n"
+  },
+  {
+    "file": "product-shapes.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected "
+  },
+  {
+    "file": "product-cycle.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "recursive by-value product"
+  },
+  {
+    "file": "product-field-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "no field"
+  },
+  {
+    "file": "float-width-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected f32, got f64"
+  },
+  {
+    "file": "float-range-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "floating literal is outside f32 range"
+  },
+  {
+    "file": "module-diamond.cod",
+    "exit": 0,
+    "stdout": "101\n3\n7\n3\n3\n"
+  },
+  {
+    "file": "module-repeat.cod",
+    "exit": 0,
+    "stdout": "101\n4\n8\n"
+  },
+  {
+    "file": "product-local.cod",
+    "exit": 0,
+    "stdout": "42\n"
+  },
+  {
+    "file": "product-module-identity.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected "
+  },
+  {
+    "file": "methods.cod",
+    "exit": 0,
+    "stdout": "8\n7.5\n15\n15\n-7\n"
+  },
+  {
+    "file": "method-modules.cod",
+    "exit": 0,
+    "stdout": "9\n12\n6\n7\n"
+  },
+  {
+    "file": "operator-using.cod",
+    "exit": 0,
+    "stdout": "12\n12\n"
+  },
+  {
+    "file": "method-ambiguous.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "ambiguous method"
+  },
+  {
+    "file": "method-no-match.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "no matching method"
+  },
+  {
+    "file": "operator-control.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "short-circuit operators"
   }
 ]

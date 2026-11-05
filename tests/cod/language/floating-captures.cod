@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+symbol @x;
+symbol @read;
+effect @x = 1.25f32;
+procedure @read()::f32 { @x }
+effect @x = 2.5f32;
+behave @print(perform @read());
+behave @print(behave @read());
+behave @print(@x);
+behave @print(1.5e2 + 0.25f64);

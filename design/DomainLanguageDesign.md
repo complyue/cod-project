@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 13
+Discussion revision: 18
 
 Recorded: 2026-10-22
 
@@ -11,12 +11,12 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 ## Design authority
 
 - **Registry:** [D-07](DesignAuthorityRegistry.md#d-07), which controls qualification and scope.
-- **Revision / covered scope:** discussion revision 13, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
+- **Revision / covered scope:** discussion revision 18, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
 - **Value lineage:** candidate P-12–P-18 connect the packet, database, language and interoperability concepts C-08–C-11 and this document to C-01, C-02, C-05 and C-06. Explicit language semantics should preserve inspectable business intent; regional transport and deferred reclamation should serve efficient persistent semantics; source tools should keep that semantics readable. These proposed derivations are not yet qualified implementation authority.
 - **Dependencies:** P-19–P-21 identify C-03, C-04 and C-02: multiple regions/domains, semantic levels and environment-specific effects. P-24 records application C-12 as an external example for DL-13; its model and resource choices are scoped to D-08. Existing C++ designs are reference material with their own registry status.
-- **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. H-96–H-121 supply the local symbol, callable, storage and expression directions linked below; a complete grammar, ABI, storage protocol and implementation contract remain open.
-- **Human baseline:** H-06 supplies the near-term goals; H-07 establishes discussion tracking; H-08 selects the first application; H-11 requires its own document set. [H-96–H-121](DesignAuthorityRegistry.md#h-96) direct coordinated development and define the scoped language propositions in [D-10](SymbolicDynamicScope.md). They do not approve every proposed implementation detail.
-- **Continuity:** no qualified implementation baseline for D-07. K-02/K-03 record the earlier discussion baseline; [K-219](DesignAuthorityRegistry.md#k-219) records revision 13, H-121 implementation authorization and the passing using shorthand/identity checks and CoD component suite. The full contract remains `pending-human`; this is not continuity-based qualification of an unqualified design.
+- **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. H-96–H-141 supply the local symbol, callable, storage, snapshot and scalar-identity directions linked below; a complete grammar, ABI, storage protocol and implementation contract remain open.
+- **Human baseline:** H-06 supplies the near-term goals; H-07 establishes discussion tracking; H-08 selects the first application; H-11 requires its own document set. [H-96–H-121](DesignAuthorityRegistry.md#h-96) direct coordinated development and define the scoped language propositions in [D-10](SymbolicDynamicScope.md). H-122/H-123 bound the forthcoming run to useful language/runtime support; H-124/H-127/H-129 specify regional snapshot access, and H-125/H-126/H-128 require strict scalar identities and a substantive UoM comparison. They do not approve every proposed implementation detail.
+- **Continuity:** [K-224](DesignAuthorityRegistry.md#k-224) records revision 18 and the H-139–H-141 complex-composition, once-only incorporation and initial-inlining scope. no qualified implementation baseline for D-07. K-02/K-03 record the earlier discussion baseline; [K-223](DesignAuthorityRegistry.md#k-223) records revision 17 and the resolved caller-scope, UoM-selection and parameter-conversion decisions; K-222 records the compound-UoM roadmap/initial-scope split; K-221 records parenthesized operator-method naming; K-220 records the bounded planning/typing discussion. K-219 retains the preceding implementation evidence. The full contract remains `pending-human`; this is not continuity-based qualification of an unqualified design.
 
 ## Confirmed direction
 
@@ -76,10 +76,12 @@ The sixteen topics contain confirmed local propositions and open implementation/
 
 **Question:** What does the language define and preserve: domain types and values, method/program graphs, ontology relations, or which initial subset of them?
 
-- Decide nominal versus structural identity, sum constructors and product fields, recursive types, pattern matching/exhaustiveness, equality and admissible regional fields. Keep semantic type identity separate from physical layout.
+- Preserve strict branded identity under H-125 and independent compile-time UoM identities under H-128; structural layout alone does not establish equivalence. Discuss sum constructors and product fields, recursive types, pattern matching/exhaustiveness, equality and admissible regional fields. Keep semantic type identity separate from physical layout.
 - Distinguish ordinary ADTs from indexed GADTs. Specify the initial role of type parameters, kind checking, inference and type equivalence without silently treating the full long-term type theory as already selected.
 - Decide which ontology relations and constraints are first-class, what is explicitly asserted versus inferred, and how independently defined domain concepts can be mapped. Similar field layouts do not establish conceptual equivalence.
 - Explain how domain signatures can be loaded and checked without requiring every domain constructor to become a fixed host-language enum. Distinguish published definitions from parser/solver scratch state.
+
+**Current scalar discussion:** [ScalarUnitsAndIndexTypes](ScalarUnitsAndIndexTypes.md), D-11r4, compares newtype-style wrappers with UoM arithmetic against actual pool formulas. Arrays declare an index type; scalar operations must preserve or explicitly transform its meaning. H-128 makes UoMs independent named compile-time entities with first-class type identities, same-name distinct definitions and identity-preserving local aliases; they are not represented by symbols. H-130 supplies pure conversion methods with Julia-style argument-type dispatch; H-134 specifies fresh UoM definitions and one-shot using selections, with no UoM import. H-135–H-138 specify parameter-controlled conversion and compile-time route choice. H-131 adds parenthesized operator names such as `(+)` for readable method definitions; D-11 proposes ordinary pure-method dispatch and arity-based unary/binary selection. H-132 plans compound UoMs for future physical-quantity use and defers their implementation; compound equivalence/inference does not block this increment. Index origins and literal rules remain open within the bounded interface discussion. H-126 requests analysis before selecting the mechanism.
 
 **Proposal to discuss:** start from a small explicit sum/product and method core whose checked representation can express business logic and evolve toward the charter's GADT graphs. Decide the necessary indexed features from concrete programs.
 
@@ -104,6 +106,8 @@ The sixteen topics contain confirmed local propositions and open implementation/
 ### DL-03 — Regions, ownership and lifetimes
 
 **Confirmed local direction:** user objects have only stack and `@region` carriers; only system code uses the native heap. Capture payloads are bits or regional pointers. There is no implicit heap promotion of user closures or regional-object copying. C-40 reserves cross-region references without choosing their representation or extending capture categories. H-99–H-101; [capture and lifetime discussion](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime).
+
+**Regional access:** H-124 makes regions dynamically scoped resources operated on by procedures. H-127/H-129 permit a function to read the complete reachable structure, including pointer dereferences, through its explicit input values. The outermost function call and its nested function calls share one read-only snapshot; it expires when that outer call returns. Procedures may call functions; functions cannot call procedures. This is a single-threaded semantic read boundary, not graph copying, region freezing or permission for effects inside a function. See [D-10 storage semantics](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime).
 
 **Question:** Which region owns every value and reference throughout packet application, querying and persistence?
 
@@ -268,7 +272,7 @@ This first local example is a possible intermediate milestone. The charter's bro
 
 **Confirmed immediate review:** every cross-module reference triggers module execution semantics (H-109). Its top-level scope ends when execution finishes; only `using`/`import` bring effective resources into the receiver (H-110). `effect` yields the newly bound value (H-111).
 
-**Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, repeated/cyclic encounters, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 10.
+**Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, cyclic initialization, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 13.
 
 **Origin/alias review:** H-112 requires explicit provenance and local aliases. H-113 excludes lexical symbolic variables and ordinary assignment. H-114 makes identities compile-time values and aliases compile-time names; runtime values bind under identities. H-115 permits an import-body alias map with matching-name defaults. H-116 requires a preexisting local destination symbol for `using/import "module" @source as @local`. [D-10's relationship model](SymbolicDynamicScope.md#symbol-origins-aliases-and-dynamic-values) separates identity selection, procedure-value installation and body translation. H-117 proposes `symbol from "module" @source as @local` and `with { @local as @source_role; }`, read as supplying a local symbol for the source body’s role. H-118 authorizes implementing these discussed forms. The compiler separates identity selection from procedure installation and resolves each imported body’s aliases before capture analysis. Broader mapping edge policies remain open; unsupported cases receive explicit diagnostics.
 
@@ -290,7 +294,25 @@ This first local example is a possible intermediate milestone. The charter's bro
 
 H-96 establishes joint development; H-108 requests a checkpoint/push and an autonomous goal for the first demand-compiled runnable prototype after reviewing immediate choices. H-109–H-111 resolve that review; [D-10's first-prototype boundary](SymbolicDynamicScope.md#first-native-prototype-boundary) identifies the milestone. The application-owned [LanguageCoDesign](../applications/steady-snn/docs/LanguageCoDesign.md) proposes increments from nominal symbols and call modes to one immutable-A/incoming-gather/B-publication step, then a small checked program representation and native specialization. H-94's target-owned two-frame pull is the application boundary; it does not fix neuronal equations or training algorithms.
 
+**Current increment:** H-122 requests a ten-hour autonomous goal after immediate choices are discussed; H-123 limits it to language/runtime programming support with structured types, static regional storage and index-conversion capability. SNN modeling and learning are excluded from this run. H-125/H-126 request scalar arithmetic design review; H-132 defers compound-UoM implementation. H-133–H-138 resolve the immediate choices below for the bounded run. Application-shaped arithmetic fixtures can validate programming facilities without becoming model equations. H-139 adds complex dependency graphs and deep calls; H-140 specifies once-only incorporation after scanning; H-141 prioritizes a simple inlined procedure implementation with measured size over immediate machine-code reuse.
+
 Numerical source evaluation and integration motivate pure functions with explicit inputs. Target/frame context, selected randomness, regional writes and publication motivate procedures. Each increment needs semantic examples and actual execution evidence before optimization or SNN learning success can be claimed. The [case file](../applications/steady-snn/research/cod-language-scope-cases.json) links selected [native fixture evidence](../tests/cod/language/validation.json). Sixty-six source fixtures and one frontend-only check establish the bounded scalar/module path, identity selection, import maps and a two-target gather; the complete case catalog, regional frame implementation and neuronal behavior remain unvalidated.
+
+<a id="immediate-increment-decisions"></a>
+#### Immediate increment decisions
+
+H-133–H-138 resolve the immediate review without requiring another lifetime mechanism or compound-unit algebra:
+
+| ID | Decision | Current rule |
+| --- | --- | --- |
+| LI-01 | Result references from a pure function | H-133: the calling procedure scope, including module top level, keeps inputs alive around the call. Returning an existing input-reachable reference uses that ordinary lifetime; outer snapshot expiry does not destroy the object. |
+| LI-02 | UoM definition reuse | H-134: fresh definitions and one-shot using only; no UoM import. Select the intended UoMs and their associated conversions together. Partial selections exclude conversions involving omitted UoMs; repeated using does not extend the bundle. |
+| LI-03 | Conversion during method selection | H-135: `amount (m)` forbids inserted conversion; `amount (m*)` permits it. This is a user-declared parameter policy, not a universal language restriction. |
+| LI-04 | Conversion route selection | H-136: discover routes at compile time, choose a unique route automatically, warn about unresolved alternatives and allow warnings-as-errors. H-137/H-138: a direct conversion wins; otherwise use the declared indirect route, illustrated by `m*<-cm<-mm`. |
+
+The run develops structured product values, named UoMs with these selection/conversion rules, Julia-style argument-type methods and parenthesized operator names, bounded numerical iteration, static SoA regional arrays and pure snapshot traversal. Regional references retain existing lifetime/relocation rules. Compound-unit algebra, general GADT machinery, custom operator precedence and cross-region representation remain separate increments. No new SNN dynamics or learning rule enters this work.
+
+Validation uses CoD language/runtime component checks and arithmetic fixtures: strict versus convertible parameters, using-bundle selection, route preference/warnings, structured index conversion, rejected domain mismatches, nested snapshot reads, returned input references, and repeated numerical gather/A-B execution. Existing numeric failure behavior supplies a reference for invalid arithmetic; no new exception/recovery framework is required. Source-only compilation uses the repository's active build tree and normal build command; build configuration and toolchains remain unchanged.
 
 ## Implementation evidence to account for
 
@@ -342,5 +364,23 @@ For each discussion, update the relevant topic's current answer and append a dec
 | DD-027 | 2026-11-05 | Propose one-line `using symbol "std:io" @print;` and assess its semantic risks. The discussion interprets it as selecting the source identity and procedure together; H-120 supplies the existing-name rule. | H-119; DL-14; D-10r9 |
 | DD-028 | 2026-11-05 | When a local same-name symbol already has a compile-time identity, abbreviated using requires equality with the source identity. A mismatch is a compilation error unless ordinary using explicitly selects the destination, including `as @print` with unchanged spelling. Shared vocabulary identities retain short forms. | H-120; DL-14; D-10r9 |
 | DD-029 | 2026-11-05 | Implement and validate the discussed combined using and identity-checked abbreviation, then commit and push. This is direct authorization for that bounded increment, not approval of unresolved import or full-language policies. | H-121; DL-14–DL-16; D-10r10 |
+| DD-030 | 2026-11-05 | Discuss decisions before starting a ten-hour autonomous language/application goal. | H-122; DL-16 |
+| DD-031 | 2026-11-05 | Limit this run to useful CoD language/runtime support, including structured regional types and consideration of scale-law index conversions; exclude SNN modeling and learning. | H-123; DL-01/DL-03/DL-16 |
+| DD-032 | 2026-11-05 | Regions are dynamic resources available to procedures. Functions receive dereferenced values and may read their complete reachable graph in a pure snapshot. | H-124/H-127; DL-02/DL-03/DL-15; D-10r11 |
+| DD-033 | 2026-11-05 | Require strict branded types, array-specific index-type declarations and meaningful scalar arithmetic; compare UoM and newtype mechanisms before choosing. | H-125/H-126; DL-01; D-11r1 |
+| DD-034 | 2026-11-05 | UoMs are named compile-time entities with independent first-class type identities; same names from different definitions may denote different entities, local aliases preserve the selected identity, and symbols do not represent them. | H-128; DL-01; D-11r1 |
+| DD-035 | 2026-11-05 | Procedures may call functions, functions cannot call procedures; nested functions share the outermost function call's read-only snapshot of input-reachable external objects, and that snapshot expires on return. | H-129; DL-02/DL-03/DL-15; D-10r11 |
+| DD-036 | 2026-11-05 | UoM using preserves identity; import copies the definition into a fresh local identity. Conversion formulas are pure, and array/conversion integration uses Julia-style function parameter-type dispatch. | H-130; DL-01/DL-02; D-11r1 |
+| DD-037 | 2026-11-05 | Include parenthesized operators as magic-method names so operator overloads are readable and convenient to define. Complete grammar and indexing/control forms remain under discussion. | H-131; DL-01/DL-02/DL-15; D-11r2 |
+| DD-038 | 2026-11-05 | Plan compound UoMs for future physical-quantity calculations, without requiring immediate implementation; review the remaining decisions worth settling before the autonomous increment. | H-132; DL-01/DL-16; D-11r3 |
+| DD-039 | 2026-11-05 | Function inputs live around the call in its enclosing procedure/module-top-level scope; returning an existing input reference uses that lifetime without another snapshot mechanism. | H-133; DL-02/DL-03/DL-15; D-10r12 |
+| DD-040 | 2026-11-05 | UoMs support fresh definition and one-shot using selections with their conversions, not definition import. Partial selection excludes conversions involving omitted units; repeated using is disallowed. | H-134; DL-01; D-11r4; supersedes H-130's UoM-import choice |
+| DD-041 | 2026-11-05 | Parameter syntax controls automatic conversion: `amount (m)` disallows insertion and `amount (m*)` permits it. | H-135; DL-01/DL-02; D-11r4 |
+| DD-042 | 2026-11-05 | Discover conversion routes at compile time; choose a unique route, warn for unresolved alternatives, and allow a compiler option to make the warning an error. | H-136; DL-01/DL-02; D-11r4 |
+| DD-043 | 2026-11-05 | Source syntax can prioritize an indirect conversion route, illustrated by `amount (m*<-cm<-mm)`; direct conversion is preferred whenever available. | H-137/H-138; DL-01/DL-02; D-11r4 |
+
+| DD-044 | 2026-11-05 | Deliberately stress multiple modules, complex dependencies and deep calls to expose and fix design/implementation issues. | H-139; DL-14/DL-16 |
+| DD-045 | 2026-11-05 | After scanning/loading, incorporate module top-level semantics into the result program in encounter order, once per module; encounters do not immediately execute user code. | H-140; C-44/P-104; D-10r13 |
+| DD-046 | 2026-11-05 | Retain initial procedure inlining while generated size remains reasonable; shared machine-code fragments are a medium/long-term optimization. | H-141; DL-16; D-10r13 |
 
 Dates above are recording dates. Exact source-message timestamps were unavailable; the registry records that provenance limit.

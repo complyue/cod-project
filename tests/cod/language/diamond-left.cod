@@ -1,0 +1,8 @@
+symbol from "diamond-vocab.cod" @gain;
+symbol from "diamond-vocab.cod" @read;
+using symbol "std:io" @print;
+symbol @left;
+effect @gain = 3;
+using "diamond-shared.cod" @read;
+behave @print(behave @read());
+procedure @left()::i64 { perform @read() }

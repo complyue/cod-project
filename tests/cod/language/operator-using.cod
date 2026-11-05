@@ -1,0 +1,5 @@
+using symbol "std:io" @print;
+using "operator-library.cod" Position as P;
+using "operator-library.cod" (+);
+behave @print((P(8) + 4).value);
+behave @print((+)(P(8), 4).value);

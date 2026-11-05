@@ -4,6 +4,7 @@
 #include "lang_syntax.hh"
 
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <iterator>
@@ -43,11 +44,11 @@ struct Module {
   std::set<std::string> active_aliases;
   std::set<std::string> available_symbols;
   std::map<const Form *, Module *> dependencies;
-  std::map<std::string, Function> functions;
+  std::map<std::string, std::vector<Function>> functions;
+  std::map<std::string, Type> types;
   Locals globals;
   Environment exports;
   enum class State { registered, executing, complete } state = State::registered;
-  bool declarations_only = true;
   bool builtin = false;
 };
 struct Compilation {
@@ -66,9 +67,53 @@ class Compiler {
   size_t serial_ = 0;
   std::set<const Form *> active_calls_;
   std::vector<std::unique_ptr<Form>> imported_forms_;
+  struct Product {
+    Form *form;
+    Module *module;
+    std::vector<Parameter> fields;
+    enum State { unresolved, resolving, complete } state = unresolved;
+  };
+  std::vector<Product> products_;
+  std::ostringstream type_definitions_;
 
   std::string fresh(const char *prefix = "v") { return std::string(prefix) + std::to_string(serial_++); }
-  static std::string cpp_type(Type type) { return type == Type::boolean ? "bool" : "std::int64_t"; }
+  static std::string cpp_type(const Type &type) {
+    switch (type.kind) {
+    case Type::integer: return "std::int64_t";
+    case Type::boolean: return "bool";
+    case Type::float32: return "float";
+    case Type::float64: return "double";
+    case Type::product: return "Record" + std::to_string(type.identity);
+    case Type::void_type: return "void";
+    default: throw std::logic_error("unresolved native value type");
+    }
+  }
+  Type resolve(Type type, Module &module, const Location &at) {
+    if (type.kind == Type::named) {
+      const auto found = module.types.find(type.name);
+      if (found == module.types.end()) fail(at, "unavailable type '" + type.name + "'");
+      type = found->second;
+    }
+    if (type.kind == Type::product) {
+      auto &product = products_.at(type.identity);
+      if (product.state == Product::resolving)
+        fail(at, "recursive by-value product '" + type.name + "' has no finite layout");
+      if (product.state == Product::unresolved) {
+        product.state = Product::resolving;
+        std::set<std::string> fields;
+        for (const auto &field : product.form->parameters) {
+          if (!fields.insert(field.name).second) fail(field.at, "duplicate product field '" + field.name + "'");
+          product.fields.push_back({field.name, resolve(field.type, *product.module, field.at), field.at});
+        }
+        type_definitions_ << "struct " << cpp_type(type) << " {\n";
+        for (size_t i = 0; i < product.fields.size(); ++i)
+          type_definitions_ << "  " << cpp_type(product.fields[i].type) << " f" << i << ";\n";
+        type_definitions_ << "};\n";
+        product.state = Product::complete;
+      }
+    }
+    return type;
+  }
   std::string store(Type type) {
     const auto name = fresh("saved");
     storage_ << "  " << cpp_type(type) << " " << name << "{};\n";
@@ -111,29 +156,36 @@ class Compiler {
     const std::string source((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
     result.forms = Parser(source, canonical).parse();
     std::set<std::string> lexical_names;
+    std::set<std::string> lexical_selections;
     for (const auto &owned : result.forms) {
       auto &form = *owned;
       if (form.kind == Form::Kind::symbol) {
         if (result.symbols.contains(form.name) || result.symbol_aliases.contains(form.name))
           fail(form.at, "duplicate symbol name @" + form.name);
         new_symbol(result, form.name);
-      } else if (form.kind == Form::Kind::function || form.kind == Form::Kind::global) {
+      } else if (form.kind == Form::Kind::product) {
         if (!lexical_names.insert(form.name).second) fail(form.at, "duplicate lexical name '" + form.name + "'");
-        if (form.kind == Form::Kind::function) result.functions.emplace(form.name, Function{&form, &result});
-        else result.declarations_only = false;
+        const Type type{Type::product, result.path + "::" + form.name, products_.size()};
+        result.types.emplace(form.name, type);
+        products_.push_back({&form, &result, {}});
+      } else if (form.kind == Form::Kind::function || form.kind == Form::Kind::global) {
+        if (!lexical_names.insert(form.name).second &&
+            (form.kind != Form::Kind::function ||
+             (!result.functions.contains(form.name) && !lexical_selections.contains(form.name))))
+          fail(form.at, "duplicate lexical name '" + form.name + "'");
+        if (form.kind == Form::Kind::function) result.functions[form.name].push_back({&form, &result});
       } else if (form.kind == Form::Kind::symbol_from) {
-        result.declarations_only = false;
         if (result.symbols.contains(form.alias) || !result.symbol_aliases.emplace(form.alias, &form).second)
           fail(form.at, "duplicate symbol alias @" + form.alias);
       } else if (form.kind == Form::Kind::using_resource || form.kind == Form::Kind::import_resource) {
-        result.declarations_only = false;
         if (form.using_symbol && !result.symbols.contains(form.alias))
           result.symbol_aliases.try_emplace(form.alias, &form);
-        if (!form.symbolic && !lexical_names.insert(form.alias).second) {
-          fail(form.at, "duplicate lexical alias '" + form.alias + "'");
+        if (!form.symbolic) {
+          if (!lexical_names.insert(form.alias).second &&
+              !result.functions.contains(form.alias) && !lexical_selections.contains(form.alias))
+            fail(form.at, "duplicate lexical alias '" + form.alias + "'");
+          lexical_selections.insert(form.alias);
         }
-      } else {
-        result.declarations_only = false;
       }
     }
     for (const auto &owned : result.forms) {
@@ -320,6 +372,10 @@ class Compiler {
     std::ostringstream body;
     Value result;
     for (const auto &child : expr.children) result = expression(*child, module, env, locals, pure, body);
+    // Fresh native names already delimit lexical values; pure scopes have no
+    // dynamic resources to restore. Avoid native brace depth proportional to
+    // a deeply inlined pure call chain.
+    if (pure) { out << body.str(); return result; }
     return finish_scope(body.str(), result, out);
   }
   std::vector<Value> arguments(const Expression &expr, Module &module, Environment &env,
@@ -334,14 +390,32 @@ class Compiler {
     if (!active_calls_.insert(&form).second) fail(at, "recursive call is outside the first prototype");
     Locals locals;
     for (size_t i = 0; i < args.size(); ++i) {
-      require(args[i].type, form.parameters[i].type, at);
+      require(args[i].type, resolve(form.parameters[i].type, lexical, form.parameters[i].at), at);
       if (!locals.emplace(form.parameters[i].name, args[i]).second)
         fail(form.parameters[i].at, "duplicate parameter name");
     }
     auto result = block(*form.body, lexical, std::move(env), std::move(locals), pure, out);
     active_calls_.erase(&form);
-    if (form.result_type) require(result.type, *form.result_type, form.at);
+    if (form.result_type) require(result.type, resolve(*form.result_type, lexical, form.at), form.at);
     return result;
+  }
+  std::optional<Function> method(const std::string &name, Module &module,
+                                 const std::vector<Value> &args, const Location &at) {
+    const auto found = module.functions.find(name);
+    if (found == module.functions.end()) return {};
+    std::optional<Function> selected;
+    for (const auto &candidate : found->second) {
+      if (candidate.form->parameters.size() != args.size()) continue;
+      bool matches = true;
+      for (size_t i = 0; i < args.size(); ++i) {
+        const auto &parameter = candidate.form->parameters[i];
+        if (resolve(parameter.type, *candidate.lexical, parameter.at) != args[i].type) matches = false;
+      }
+      if (!matches) continue;
+      if (selected) fail(at, "ambiguous method '" + name + "' with identical argument types");
+      selected = candidate;
+    }
+    return selected;
   }
   Value invoke(const Expression &expr, Module &module, Environment &env, Locals &locals,
                bool pure, std::ostream &out) {
@@ -361,8 +435,11 @@ class Compiler {
         out << "std::printf(\"%lld\\n\", static_cast<long long>(" << args[0].code << "));\n";
       } else if (args[0].type == Type::boolean) {
         out << "std::puts(" << args[0].code << " ? \"true\" : \"false\");\n";
+      } else if (floating(args[0].type)) {
+        out << "std::printf(\"" << (args[0].type == Type::float32 ? "%.9g" : "%.17g")
+            << "\\n\", static_cast<double>(" << args[0].code << "));\n";
       } else {
-        fail(expr.at, "@print expects i64 or bool");
+        fail(expr.at, "@print expects a numeric scalar or bool");
       }
       return {};
     }
@@ -387,7 +464,35 @@ class Compiler {
       if (parsed.ec != std::errc{}) fail(expr.at, "integer literal is outside i64 range");
       return scalar(Type::integer, "INT64_C(" + std::to_string(value) + ")", out);
     }
+    case K::real: {
+      auto spelling = expr.text;
+      const auto type = spelling.ends_with("f32") ? Type::float32 : Type::float64;
+      if (spelling.ends_with("f32") || spelling.ends_with("f64")) spelling.resize(spelling.size() - 3);
+      double value{};
+      const auto parsed = std::from_chars(spelling.data(), spelling.data() + spelling.size(), value);
+      if (parsed.ec != std::errc{} || parsed.ptr != spelling.data() + spelling.size() || !std::isfinite(value) ||
+          (type == Type::float32 && !std::isfinite(static_cast<float>(value))))
+        fail(expr.at, "floating literal is outside " + type_name(type) + " range");
+      if (spelling.find_first_of(".eE") == std::string::npos) spelling += ".0";
+      return scalar(type, spelling + (type == Type::float32 ? "f" : ""), out);
+    }
     case K::boolean: return scalar(Type::boolean, expr.text, out);
+    case K::let: {
+      auto value = expression(*expr.children[0], module, env, locals, pure, out);
+      if (value.type == Type::void_type || value.type == Type::procedure)
+        fail(expr.at, "a lexical value requires a bits value");
+      if (!locals.emplace(expr.text, value).second) fail(expr.at, "duplicate lexical value '" + expr.text + "'");
+      return value;
+    }
+    case K::field: {
+      const auto value = expression(*expr.children[0], module, env, locals, pure, out);
+      if (value.type.kind != Type::product) fail(expr.at, "field access requires a product value");
+      const auto &fields = products_.at(value.type.identity).fields;
+      for (size_t i = 0; i < fields.size(); ++i)
+        if (fields[i].name == expr.text)
+          return scalar(fields[i].type, value.code + ".f" + std::to_string(i), out);
+      fail(expr.at, "no field '" + expr.text + "' in " + type_name(value.type));
+    }
     case K::name: {
       if (const auto local = locals.find(expr.text); local != locals.end()) return local->second;
       if (const auto global = module.globals.find(expr.text); global != module.globals.end()) return global->second;
@@ -404,10 +509,26 @@ class Compiler {
     }
     case K::block: return block(expr, module, env, locals, pure, out);
     case K::call: {
+      if (const auto found = module.types.find(expr.text); found != module.types.end()) {
+        const auto type = resolve(found->second, module, expr.at);
+        const auto args = arguments(expr, module, env, locals, pure, out);
+        const auto &fields = products_.at(type.identity).fields;
+        if (args.size() != fields.size()) fail(expr.at, "wrong field count for '" + expr.text + "'");
+        std::string values;
+        for (size_t i = 0; i < args.size(); ++i) {
+          require(args[i].type, fields[i].type, expr.at);
+          if (i) values += ", ";
+          values += args[i].code;
+        }
+        return scalar(type, cpp_type(type) + "{" + values + "}", out);
+      }
       const auto function = module.functions.find(expr.text);
       if (function == module.functions.end()) fail(expr.at, "unavailable lexical function '" + expr.text + "'");
       const auto args = arguments(expr, module, env, locals, pure, out);
-      return call(*function->second.form, *function->second.lexical, {}, args, true, expr.at, out);
+      auto selected = method(expr.text, module, args, expr.at);
+      if (!selected && function->second.size() == 1) selected = function->second.front();
+      if (!selected) fail(expr.at, "no matching method for '" + expr.text + "'");
+      return call(*selected->form, *selected->lexical, {}, args, true, expr.at, out);
     }
     case K::perform: case K::behave: return invoke(expr, module, env, locals, pure, out);
     case K::unary: {
@@ -415,6 +536,9 @@ class Compiler {
           expr.children[0]->text == "9223372036854775808")
         return scalar(Type::integer, "std::numeric_limits<std::int64_t>::min()", out);
       auto value = expression(*expr.children[0], module, env, locals, pure, out);
+      if (const auto selected = method(expr.text, module, {value}, expr.at))
+        return call(*selected->form, *selected->lexical, {}, {value}, true, expr.at, out);
+      if (expr.text == "-" && floating(value.type)) return scalar(value.type, "(-" + value.code + ")", out);
       require(value.type, expr.text == "!" ? Type::boolean : Type::integer, expr.at);
       return scalar(value.type, expr.text == "!" ? "(!" + value.code + ")" :
                                               "checked_sub(0, " + value.code + ")", out);
@@ -436,14 +560,20 @@ class Compiler {
         return {Type::boolean, result, {}, nullptr};
       }
       auto right = expression(*expr.children[1], module, env, locals, pure, out);
+      if (const auto selected = method(expr.text, module, {left, right}, expr.at))
+        return call(*selected->form, *selected->lexical, {}, {left, right}, true, expr.at, out);
       require(right.type, left.type, expr.at);
       if (expr.text == "==" || expr.text == "!=") {
-        if (left.type != Type::integer && left.type != Type::boolean) fail(expr.at, "equality requires scalar bits");
+        if (!numeric(left.type) && left.type != Type::boolean) fail(expr.at, "equality requires scalar bits");
         return scalar(Type::boolean, "(" + left.code + expr.text + right.code + ")", out);
       }
-      require(left.type, Type::integer, expr.at);
+      if (!numeric(left.type)) fail(expr.at, "arithmetic requires numeric operands");
       if (expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=")
         return scalar(Type::boolean, "(" + left.code + expr.text + right.code + ")", out);
+      if (floating(left.type)) {
+        if (expr.text == "%") fail(expr.at, "remainder requires integer operands");
+        return scalar(left.type, "(" + left.code + expr.text + right.code + ")", out);
+      }
       const std::map<std::string, std::string> names{{"+", "add"}, {"-", "sub"}, {"*", "mul"}, {"/", "div"}, {"%", "rem"}};
       return scalar(Type::integer, "checked_" + names.at(expr.text) + "(" + left.code + ", " + right.code + ")", out);
     }
@@ -468,11 +598,9 @@ class Compiler {
     fail(expr.at, "unsupported expression");
   }
   void execute_module(Module &module, const Environment &caller, const Location &at, std::ostream &out) {
-    if (module.state == Module::State::complete) {
-      if (!module.declarations_only) fail(at, "repeated execution encounter for '" + module.path +
-                                             "' is outside the first prototype; use its locally bound resources");
-      return;
-    }
+    // This composes runtime code after the complete module scan. A repeated
+    // encounter reuses the incorporated module's resources, never its effects.
+    if (module.state == Module::State::complete) return;
     if (module.state == Module::State::executing) fail(at, "cyclic module execution is outside the first prototype");
     module.state = Module::State::executing;
     execution_order_.push_back(module.path);
@@ -495,7 +623,7 @@ class Compiler {
       case Form::Kind::symbol:
         module.available_symbols.insert(form.name);
         break;
-      case Form::Kind::function: break;
+      case Form::Kind::function: case Form::Kind::product: break;
       case Form::Kind::symbol_from: {
         auto &source = *module.dependencies.at(&form);
         execute_module(source, env, form.at, body);
@@ -511,7 +639,7 @@ class Compiler {
       }
       case Form::Kind::global: {
         auto value = expression(*form.body, module, env, locals, false, body);
-        require(value.type, *form.result_type, form.at);
+        require(value.type, resolve(*form.result_type, module, form.at), form.at);
         const auto saved = store(value.type);
         body << saved << " = " << value.code << ";\n";
         value.code = saved;
@@ -549,12 +677,27 @@ class Compiler {
           if (form.kind == Form::Kind::import_resource)
             value = define_procedure(import_body(*value.procedure, form, module), module, env, body);
           bind(destination, std::move(value), module, env, form.at, body);
+        } else if (const auto type = source.types.find(form.name); type != source.types.end()) {
+          if (form.kind == Form::Kind::import_resource) fail(form.at, "types preserve identity through using");
+          if (module.functions.contains(form.alias) || module.globals.contains(form.alias) ||
+              !module.types.emplace(form.alias, type->second).second)
+            fail(form.at, "duplicate lexical alias '" + form.alias + "'");
         } else if (const auto function = source.functions.find(form.name); function != source.functions.end()) {
           if (form.kind == Form::Kind::import_resource)
             fail(form.at, "function-body import is outside the prototype; use 'using' for a lexical function");
-          module.functions.emplace(form.alias, function->second);
+          if (module.types.contains(form.alias) || module.globals.contains(form.alias))
+            fail(form.at, "duplicate lexical alias '" + form.alias + "'");
+          auto &methods = module.functions[form.alias];
+          for (const auto &candidate : function->second) {
+            bool existing = false;
+            for (const auto &current : methods)
+              if (current.form == candidate.form && current.lexical == candidate.lexical) existing = true;
+            if (!existing) methods.push_back(candidate);
+          }
         } else if (const auto value = source.globals.find(form.name); value != source.globals.end()) {
-          module.globals.emplace(form.alias, value->second);
+          if (module.types.contains(form.alias) || module.functions.contains(form.alias) ||
+              !module.globals.emplace(form.alias, value->second).second)
+            fail(form.at, "duplicate lexical alias '" + form.alias + "'");
         } else {
           fail(form.at, "unavailable module resource '" + form.name + "'");
         }
@@ -616,18 +759,18 @@ static std::int64_t checked_rem(std::int64_t a, std::int64_t b) {
   if (a == std::numeric_limits<std::int64_t>::min() && b == -1) return 0;
   return a % b;
 }
-struct Effect {
-  std::int64_t &slot;
-  std::int64_t saved;
-  Effect(std::int64_t &target, std::int64_t value) : slot(target), saved(target) { slot = value; }
+template<class T> struct Effect {
+  T &slot;
+  T saved;
+  Effect(T &target, T value) : slot(target), saved(target) { slot = value; }
   ~Effect() { slot = saved; }
   Effect(const Effect &) = delete;
   Effect &operator=(const Effect &) = delete;
 };
-struct Context {
 )CPP";
+    cpp << type_definitions_.str() << "struct Context {\n";
     for (const auto &[id, type] : symbol_types_)
-      if (type != Type::procedure) cpp << "  std::int64_t s" << id << "{};\n";
+      if (type != Type::procedure) cpp << "  " << cpp_type(type) << " s" << id << "{};\n";
     cpp << "};\nstatic thread_local Context ctx;\nint main() {\n" << storage_.str() << body.str()
         << "return 0;\n}\n";
     return {cpp.str(), scanned_, execution_order_};

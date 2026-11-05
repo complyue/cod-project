@@ -1,0 +1,2 @@
+type Position { value::i64; }
+function (+)(i::Position, step::i64)::Position { Position(i.value + step) }

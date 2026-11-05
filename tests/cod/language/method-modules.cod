@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+using "method-library.cod" score;
+using "method-other-library.cod" score;
+function score(x::f32)::f32 { x * 2.0f32 }
+behave @print(score(3));
+behave @print(score(3.0));
+behave @print(score(3.0f32));
+behave @print(score(true));

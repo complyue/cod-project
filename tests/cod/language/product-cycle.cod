@@ -1,0 +1,4 @@
+type A { value::B; }
+type B { value::A; }
+function read(a::A)::i64 { 1 }
+A(1);

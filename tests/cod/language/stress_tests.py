@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Measure native CoD composition on generated dependency/call graphs."""
+import datetime
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import time
+
+
+def run(executable, root, entry, expected, label):
+    generated = entry.with_suffix('.cc')
+    started = time.monotonic()
+    check = subprocess.run([str(executable), '--check', str(entry), '--emit-cpp', str(generated)],
+                           cwd=root, capture_output=True, text=True, timeout=120)
+    check_seconds = time.monotonic() - started
+    started = time.monotonic()
+    native = subprocess.run([str(executable), '--run', str(entry)], cwd=root,
+                            capture_output=True, text=True, timeout=120)
+    result = {'case': label, 'check_seconds': check_seconds,
+              'native_compile_link_run_seconds': time.monotonic() - started,
+              'generated_bytes': generated.stat().st_size if generated.exists() else None,
+              'check_exit': check.returncode, 'check_stdout': check.stdout, 'check_stderr': check.stderr,
+              'native_exit': native.returncode, 'stdout': native.stdout, 'stderr': native.stderr,
+              'expected_stdout': expected}
+    result['passed'] = (check.returncode == 0 and check.stdout == '' and check.stderr == ''
+                        and native.returncode == 0 and native.stdout == expected and native.stderr == '')
+    print(json.dumps(result), flush=True)
+    return result
+
+
+def main():
+    root = Path(__file__).resolve().parents[3]
+    executable = root / os.environ.get('COD_TEST_TOOLCHAIN', 'build') / 'bin/cod'
+    results = []
+    with tempfile.TemporaryDirectory(prefix='cod-composition-stress-') as scratch:
+        directory = Path(scratch)
+        depth = 128
+        for i in range(depth):
+            body = f'using "pure-{i+1}.cod" f as next;\n' if i + 1 < depth else ''
+            body += 'function f(x::i64)::i64 { ' + ('next(x + 1)' if i + 1 < depth else 'x + 1') + ' }\n'
+            (directory / f'pure-{i}.cod').write_text(body)
+        entry = directory / 'pure-main.cod'
+        entry.write_text('using symbol "std:io" @print;\nusing "pure-0.cod" f;\nbehave @print(f(0));\n')
+        results.append(run(executable, root, entry, f'{depth}\n', '128-module-pure-chain'))
+
+        depth = 160
+        lines = ['using symbol "std:io" @print;', 'symbol @base;', 'effect @base = 5;']
+        for i in range(depth):
+            lines.append(f'symbol @p{i};')
+            body = '@base + x' if i == 0 else f'behave @p{i-1}(x + 1)'
+            lines.append(f'procedure @p{i}(x::i64)::i64 {{ {body} }}')
+        lines += ['effect @base = 9;', f'behave @print(perform @p{depth-1}(0));',
+                  f'behave @print(behave @p{depth-1}(0));', 'behave @print(@base);']
+        entry = directory / 'procedure-main.cod'
+        entry.write_text('\n'.join(lines) + '\n')
+        results.append(run(executable, root, entry, f'{depth-1+5}\n{depth-1+9}\n9\n', '160-procedure-inline-chain'))
+
+        layers = 10
+        for level in range(layers, -1, -1):
+            for side in ('a', 'b'):
+                body = ''
+                if level < layers:
+                    body = (f'using "dag-{level+1}-a.cod" f as a;\n'
+                            f'using "dag-{level+1}-b.cod" f as b;\n')
+                body += 'function f(x::i64)::i64 { ' + ('a(x) + b(x)' if level < layers else 'x + 1') + ' }\n'
+                (directory / f'dag-{level}-{side}.cod').write_text(body)
+        entry = directory / 'dag-main.cod'
+        entry.write_text('using symbol "std:io" @print;\nusing "dag-0-a.cod" f;\nbehave @print(f(2));\n')
+        results.append(run(executable, root, entry, f'{3 * 2**layers}\n', 'layered-diamond-22-modules-2047-calls'))
+    if report := os.environ.get('COD_LANGUAGE_STRESS_REPORT'):
+        Path(report).write_text(json.dumps({'recorded_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                          'results': results}, indent=2) + '\n')
+    return 0 if all(r['passed'] for r in results) else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

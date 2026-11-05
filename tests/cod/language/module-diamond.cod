@@ -1,0 +1,5 @@
+using symbol "std:io" @print;
+using symbol "diamond-left.cod" @left;
+using symbol "diamond-right.cod" @right;
+behave @print(perform @left());
+behave @print(perform @right());

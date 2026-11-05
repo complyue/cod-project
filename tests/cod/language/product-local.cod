@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+type Pair { first::i64; second::i64; }
+function sum_pair(p::Pair)::i64 { let x = p.first; let y = p.second; x + y }
+behave @print(sum_pair(Pair(17,25)));

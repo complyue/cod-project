@@ -1,0 +1,4 @@
+type First { value::i64; }
+type Second { value::i64; }
+function read(p::First)::i64 { p.value }
+read(Second(3));

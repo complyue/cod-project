@@ -1,0 +1,1 @@
+type Position { index::i64; weight::f32; }

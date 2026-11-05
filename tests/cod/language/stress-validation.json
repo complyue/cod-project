@@ -1,0 +1,58 @@
+{
+  "recorded_utc": "2026-11-05T20:30:14.553009+00:00",
+  "results": [
+    {
+      "case": "128-module-pure-chain",
+      "check_seconds": 0.017227897013071924,
+      "native_compile_link_run_seconds": 0.14151197002502158,
+      "generated_bytes": 13348,
+      "check_exit": 0,
+      "check_stdout": "",
+      "check_stderr": "",
+      "native_exit": 0,
+      "stdout": "128\n",
+      "stderr": "",
+      "expected_stdout": "128\n",
+      "passed": true
+    },
+    {
+      "case": "160-procedure-inline-chain",
+      "check_seconds": 0.17124562099343166,
+      "native_compile_link_run_seconds": 0.4232291969819926,
+      "generated_bytes": 72837,
+      "check_exit": 0,
+      "check_stdout": "",
+      "check_stderr": "",
+      "native_exit": 0,
+      "stdout": "164\n168\n9\n",
+      "stderr": "",
+      "expected_stdout": "164\n168\n9\n",
+      "passed": true
+    },
+    {
+      "case": "layered-diamond-22-modules-2047-calls",
+      "check_seconds": 0.023868894029874355,
+      "native_compile_link_run_seconds": 0.5678865530062467,
+      "generated_bytes": 146935,
+      "check_exit": 0,
+      "check_stdout": "",
+      "check_stderr": "",
+      "native_exit": 0,
+      "stdout": "3072\n",
+      "stderr": "",
+      "expected_stdout": "3072\n",
+      "passed": true
+    }
+  ],
+  "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_STRESS_REPORT=build/validation/language-stress-initial.json python3 tests/cod/language/stress_tests.py",
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "3749e906107b616523a9b5edf41e2c24e1443335f3cf13d454fbe9918bee377c"
+  },
+  "source_sha256": {
+    "cod/lang_syntax.hh": "c7f102af4c8f6a1a4ad67dc527ff45588971fb09acd9d48499be78b591537cc9",
+    "cod/lang_frontend.hh": "ae73fbc584ca00414bdd987772a3623b219273d0644878055c107a2978bc0873",
+    "cod/main.cc": "72a873f870ba462b3a9bfe4f62c8b6def4833b8a1b0e99a819bf452a7e43a0a2",
+    "tests/cod/language/stress_tests.py": "45492acc24f82b3e73a3af464526172dda0add6a1b388ce23d474316066a373f"
+  }
+}

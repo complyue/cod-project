@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：220
+记录版本：226
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -128,16 +128,21 @@ Design authority
 | C-34 | 连续神经元动力学及其 AP 输出：连续 AP 来自同一持续演化状态，全局曲线可作为放电阶段输出函数；保留可能使能学习／泛化的机制，避免无需求的精确生理重建。 | C-33 的机制保留边界；P-82 候选价值衍生，P-83 约束 C-29 | H-93 确认源端连续性，H-95 明确目标；D-08 set204 的 RateDynamics/Model/IncomingConnectivity、D-09r2 S5.1。无需由多帧输出推定独立 AP 尾部对象或线性叠加；具体方程、恢复／能耗状态与参数未选。 |
 | C-35 | 模块定义一等名义符号；别名保留身份，不同来源／共存版本可区分。 | C-10；P-84 候选价值衍生 | H-96 确认局部语义；H-112 要求明确来源和本地别名；H-114 明确 identity 是 compile-time value，alias 仅在编译期存在。D-10r10、D-07r13 DL-14。身份字节格式、生成及持久协议未选。 |
 | C-36 | 每线程符号变量与 scoped effect；按值 capture，perform 临时安装，behave 使用当前绑定；按需 WPO 检查完整调用路径及直接访问布局。 | C-02；P-85 候选价值衍生，P-88/P-92 依赖 | H-96/H-97/H-102/H-104 确认语义边界：缺少必需变量是编译错误、不独立编译模块、读 @name、仅 effect 写。D-10r1；分析算法／TLS ABI 未选。 |
-| C-37 | lexical function 只有显式输入输出；dynamic procedure 必须以符号命名并可访问 effects；模块顶层 dynamic scope 为初始化程序。 | C-01；P-86 候选价值衍生，P-89 约束 | H-98/H-103 confirmed 局部规则；D-10r1、D-07r4 DL-02/DL-15。初始化组合、词法细节和完整类型规则待设计。 |
-| C-38 | 用实际 SNN 需求同步推进 CoD 语言与应用的设计、实现和验证。 | C-12；P-87 候选价值衍生，P-91/P-93 依赖 | H-96 确认方向；D-08 LanguageCoDesign205、D-07 DL-16。分步路线是待完善提案，数值方程和训练规则不自动确定。 |
+| C-37 | lexical function 只有显式输入输出；dynamic procedure 必须以符号命名并可访问 effects；模块顶层 dynamic scope 为初始化程序。 | C-01；P-86 候选价值衍生，P-89 约束 | H-98/H-103 confirmed 局部规则；D-10r1、D-07r4 DL-02/DL-15。初始化组合、词法细节和完整类型规则待设计。 H-124/H-127/H-129: regions are dynamic resources for procedures; functions may dereference the full input-reachable read-only graph throughout a nested call tree, with snapshot expiry at the outermost return. C-48/D-10r11 track this local scope. |
+| C-38 | 用实际 SNN 需求同步推进 CoD 语言与应用的设计、实现和验证。 | C-12；P-87 候选价值衍生，P-91/P-93 依赖 | H-96 确认方向；D-08 LanguageCoDesign205、D-07 DL-16。分步路线是待完善提案，数值方程和训练规则不自动确定。 H-122/H-123 limit the planned ten-hour run to language/runtime support, structured types and indexing; no SNN modeling/learning. Goal start awaits immediate design discussion. |
 | C-39 | 用户对象只有 stack/@region 载体；native heap 仅系统代码使用；capture 仅 bits/regional ptr。 | C-10；P-94 候选价值衍生，P-95 约束 | H-99/H-100 confirmed；D-10r1。无隐式用户 heap closure，区域对象不 copy/move；具体闭包表示／生命周期检查未选。 |
 | C-40 | 跨 region 引用的明确占位：独立区域间引用、生命周期及重载／版本场景逐步设计。 | C-03；P-96 依赖 | H-101 要求保留概念；D-10r1、D-07 DL-03/DL-08。无指针编码、注册表或第三 capture 类别选择。 |
 | C-41 | expression-oriented 语言方向及显式 void；符号读写作为表达式组合。 | C-10；P-97 候选价值衍生，P-98 约束 | H-104 的读写形式及结果方向；D-10r1、D-07 DL-15。H-111 确认 effect 返回新值；块结果及复合表达式顺序待定。 |
 | C-42 | 专门词汇表模块只声明符号并辅以注释，供模块共享身份。 | C-35；P-99 候选价值衍生 | H-105 给定惯用组织；D-10r1。注释不替代类型检查，不默认安装变量值或 procedure 实现。 |
 | C-43 | 外部 procedure 的 using 保留源定义；import 按源 body 在当前 lexical/dynamic scope 重新定义。 | C-10；P-100 候选价值衍生，P-101 依赖，P-102 约束 | H-105 confirmed 定义上下文差异；D-10r1。与 perform/behave 调用模式正交；H-115 允许 import body 的 alias 映射；H-116 确定 using/import "module" @src as @local，目标 symbol 必须预先存在。D-10r10；H-118 授权实现 H-117 的 symbol from 及 local as source-role 映射拼写，完整语法及边界政策仍待定。 |
-| C-44 | Complete declaration scanning/registration precedes entry-driven compilation; dependency top-level execution semantics are incorporated in encounter order. | C-10; P-103 candidate value path, P-104 constraint, P-105 dependency | H-106/H-107 confirm top-level declaration/expression categories, scan-only registration and phase/order boundary. Bits globals use literal/function-call initializers; effect/perform/behave run with module execution. H-109/H-110 confirm every cross-module reference as trigger and source-scope teardown, with using/import retaining selected effective resources. D-10r4, D-07r7, D-08 LanguageCoDesign208. Repeated/cyclic encounters and bits-global realization remain open. |
+| C-44 | Complete declaration scanning/registration precedes entry-driven compilation; dependency top-level execution semantics are incorporated in encounter order. | C-10; P-103 candidate value path, P-104 constraint, P-105 dependency | H-106/H-107 confirm top-level declaration/expression categories, scan-only registration and phase/order boundary. Bits globals use literal/function-call initializers; effect/perform/behave run with module execution. H-109/H-110 confirm every cross-module reference as trigger and source-scope teardown, with using/import retaining selected effective resources. D-10r4, D-07r7, D-08 LanguageCoDesign208. H-140 fixes once-only incorporation after scanning in encounter order; cyclic initialization and bits-global realization remain separate scope. D-10r13/D-07r18. |
 | C-45 | Explicit origin and category selection distinguishes a compile-time symbol alias from retaining a runtime effective resource. | C-35/C-43; P-106–P-108 | H-112 requests provenance/alias review. H-117 supplies `symbol from`; H-118 authorizes its bounded implementation in D-10r10. H-119/H-120 add combined using with source identity and require an existing same-name identity to match unless ordinary using explicitly selects a destination. H-121 authorizes the implemented bounded increment. The complete selection contract remains pending-human; no runtime namespace object introduced. |
 | C-46 | Procedure import translates source-body aliases at compile time; using/import installs the resulting procedure under an already known destination identity. | C-43/C-35/C-36; P-109–P-111 | H-114 confirms staging; H-115 permits alias maps and matching-name defaults; H-116 requires a preexisting destination. H-117 supplies local supplier `as` source-body role; H-118 authorizes the bounded implementation. H-120 requires explicit outer using destination selection for different identities, even when names match; H-121 authorizes implementation/validation; it does not alter H-115 body maps. Broader source-alias and mapping edge rules remain pending. D-10r10. |
+| C-47 | Strict branded scalar/index types, array-declared index domains and meaningful scalar arithmetic; compare newtype and UoM mechanisms. | C-10; P-112 value candidate, P-116 constraint | H-125 confirms the requirement; H-126 requests substantive comparison and does not select the agent's newtype-first proposal. D-11r4/D-07r17; arithmetic, domain/origin and bounds mechanisms remain pending. |
+| C-48 | A function reads the complete input-reachable regional graph as a read-only snapshot, including pointer dereference; nested functions share it until the outermost call returns. | C-37; P-114 value candidate, P-115 dependency, P-117 constraint | H-124/H-127/H-129 confirm the single-threaded resource/value boundary and callable/snapshot lifetime. D-10r12; no copied graph, runtime snapshot object or concurrent coherence mechanism selected. H-133 confirms ordinary calling-procedure lifetime for inputs and returned existing references, with no additional snapshot-lifetime mechanism. |
+| C-49 | UoMs are independently named compile-time entities with first-class type identities and identity-preserving local aliases; symbols do not represent them. | C-10; P-119 value candidate, P-120 constraint | H-128 confirms fresh same-name definitions may differ across modules and local renaming preserves selection. D-11r4; derived-unit equality, conversions, encoding and operator calculus remain open. H-134 specifies fresh definition and one-shot using selections with associated conversions, forbids repeated using and excludes conversions involving omitted units. It supersedes H-130 only on UoM definition import; pure formulas/dispatch remain. H-132 plans compound units for future physical quantities and defers their initial implementation. |
+| C-50 | Pure UoM/index conversion functions use Julia-style argument-type method dispatch to associate operations with array types. | C-10; P-121 candidate value path, P-122 dependency, P-123 constraint | H-130 confirms this syntax/dispatch direction and effect exclusion. D-11r4; H-135–H-138 specify parameter-controlled conversion, discovered routes, warning/error policy and direct-before-declared-indirect preference; general generic syntax/method specificity remain open. H-131 adds parenthesized operator-method naming; detailed eager/control/indexing elaboration remains proposed. |
+| C-51 | Parameter-declared UoM conversion acceptance and compile-time route selection: exact or convertible targets, source route preference and configurable ambiguity warnings. | C-50; P-124 value candidate, P-125 dependency, P-126/P-127 constraints | H-135 permits `m*` versus exact `m`; H-136 requires unique-path selection or warning with warnings-as-errors; H-137/H-138 require source-declared indirect paths after direct conversion preference. D-11r4. |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
 | GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
 
@@ -179,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 220，延续检查 K-01—K-219；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 226，延续检查 K-01—K-225；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -201,14 +206,17 @@ Design authority
 <a id="d-07"></a>
 ### D-07：领域语言讨论与设计决策跟踪
 
-- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 13；用该修订及包含它的 Git 提交定位。
-- 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-029。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
+- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 18；用该修订及包含它的 Git 提交定位。
+- 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-046。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
 - 人工依据：H-06 近期目标、H-07 跟踪授权、H-08/H-11 应用及分离；H-96 现在同步推进语言和 SNN 设计／实现／验证，取代当前范围内的笼统实施延后。H-97—H-121 为局部语义、惯用组织及语法建议依据。DD-002/H-07 历史不改写。
 - 当前资格：全文契约及未确认价值路径仍 pending-human；明确的人类命题按其本身范围 confirmed，不把新 WPO、存储或语法细节自动批准。K-214 记录有界原型证据；K-215 记录编译期身份／别名、import 映射和预先声明目标的细化；K-216 记录 symbol from 与局部符号 as 源 body 角色的语法建议；K-217 记录 H-118 授权的实现、构建和 CoD 组件测试；K-218 记录 using symbol 及省略 as 时的身份一致要求；K-219 记录 H-121 授权的实现、验证和实际测试证据。上述记录均不以未合格基线产生 continued 资格。
-- 验收／边界：Scope and invariants、DL-13—DL-16；先以符号、capture、调用路径、两帧 gather 的有界实例细化契约。H-106 确定先扫描全部依赖、后按入口编译触碰顺序编入执行语义；H-107 允许字面 bits／function 调用初始化 global，以及模块执行期的顶层 effect/perform/behave；未选完整 parser、类型系统、ABI、跨区表示、重复／循环触碰处理或神经元方程；构建／配置权限不扩大。
+- 验收／边界：Scope and invariants、DL-13—DL-16；先以符号、capture、调用路径、两帧 gather 的有界实例细化契约。H-106 确定先扫描全部依赖、后按入口编译触碰顺序编入执行语义；H-107 允许字面 bits／function 调用初始化 global，以及模块执行期的顶层 effect/perform/behave；未选完整 parser、类型系统、ABI、跨区表示、循环初始化处理或神经元方程；构建／配置权限不扩大。
 - 影响：D-01—D-06 状态不变；D-08 与 D-10 同步当前局部方向，无已合格后代因此失效。
 
 - 当前直接工作授权：H-108 要求在即时语义问题解决后提交推送并设 goal 推进首版按需编译运行原型；H-109–H-111 解决本轮提出的触发、scope 生命周期和 effect 结果问题。H-118 进一步授权更新已讨论的 symbol from、预先声明 procedure 目标及 import 映射实现，测试通过后提交推送。H-121 进一步要求实现、验证并提交推送 using symbol／identity guard 的本轮细化。此授权不将其余开放机制或全文自动批准。
+- Current planning: H-122/H-123 request a ten-hour goal after discussion and restrict it to language/runtime support. H-124/H-127/H-129 confirm regional function snapshots; H-125/H-126/H-128 require strict scalar identities, UoM comparison and independent unit identities. D-11r4 records the resolved H-133–H-138 choices. The bounded ten-hour goal runs from 2026-11-05T20:13:49Z through 2026-11-06T06:13:49Z; H-139–H-141 add complex composition, once-only module incorporation and measured initial inlining. No mechanism is approved by silence.
+- H-132/K-222 separate the compound-UoM roadmap from the initial run. D-07r16 LI-01–LI-03 record pending questions about returned regional references, imported conversion lexical bindings and automatic conversions during dispatch; proposals are not human decisions.
+- H-133–H-138/K-223 resolve the immediate review in D-07r17 LI-01–LI-04: ordinary caller lifetime, fresh-definition/one-shot UoM using, parameter-controlled conversion, compile-time discovery and direct-before-declared-indirect route choice. The bounded H-122/H-123 implementation goal can proceed under these local human decisions; full-document qualification is not inferred.
 <a id="d-08"></a>
 ### D-08：稳态循环激活 SNN 独立应用文档集
 
@@ -244,21 +252,39 @@ Design authority
 <a id="d-10"></a>
 ### D-10: Symbols, dynamic scope and callable kinds
 
-- File: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), design revision 10, all sections. Human propositions/proposals H-96–H-121 retain their individually recorded confirmation/proposal scopes; the complete implementation contract and candidate value paths remain pending-human.
+- File: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), design revision 13, all sections. Human propositions/proposals H-96–H-138 retain their individually recorded confirmation/proposal scopes; the complete implementation contract and candidate value paths remain pending-human.
 - Value paths: P-90 connects D-10 to C-10; P-84/P-94/P-97/P-100 explain nominal identity, storage, expressions and reuse through C-10/P-14/C-01; P-85 connects context-dependent operations to C-02; P-86 connects pure/effectful distinction to C-01; P-99 connects vocabulary practice to C-35; C-44/P-103 connects phase-separated module composition to C-10, with P-105 depending on the definition-context distinction. The proposed paths serve inspectable semantic programs and explicit environment interpretation, without importing a full continuation/effect calculus.
 - Dependencies/constraints: P-88/P-92/P-96/P-101 preserve symbol identity and multi-region concerns. P-89/P-95/P-98/P-102/P-104 record the explicit local callable, capture, write, reuse and module-phase constraints. Dependencies do not confer qualification.
 - Invariants: nominal identity across aliases/versions; per-thread bindings and scope restoration; captured-value perform/current-binding behave; lexical functions and symbol-named dynamic procedures; module initialization scope; complete declaration scan before entry-driven dependency execution incorporation in encounter order; demand-driven whole-program checking with missing bindings rejected during compilation; only stack/@region user storage and bits/regional-pointer captures; zero-cost regional relocation; bits globals initialized by literals or function calls and top-level effect/perform/behave evaluated with module execution, never by declaration scanning.
 - Acceptance: explain and eventually execute the semantic cases; reject invalid function effects, writes and missing requirements; preserve same-region lifetimes and immutable-A pull; distinguish registration from dynamic definition/capture and execution-incorporation order from scan order. Current [case records](../applications/steady-snn/research/cod-language-scope-cases.json) contain 25 specified/derived cases with selected [native prototype evidence](../tests/cod/language/validation.json). The 66 scalar/module source fixtures plus one frontend-only check do not validate the entire catalog, regional lifetimes or SNN learning.
-- Open/non-goals: concrete grammar/types, repeated/cyclic encounter rules, scope-result/evaluation rules, bits-global realization, symbol/TLS/closure ABI, pointer lifetimes, cross-region representation, cache protocol and native lowering. No independent module compilation, implicit user heap promotion or fully selected SNN dynamics.
-- Downstream: D-07r13 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign211/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
+- Open/non-goals: concrete grammar/types, cyclic initialization rules, scope-result/evaluation rules, bits-global realization, symbol/TLS/closure ABI, pointer lifetimes, cross-region representation, cache protocol and native lowering. No independent module compilation, implicit user heap promotion or fully selected SNN dynamics.
+- Downstream: D-07r14 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign211/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision3, is implementation documentation associated with D-10r10 under direct H-108/H-118/H-121. [validation.json](../tests/cod/language/validation.json) hashes sources/executable and records 66 source fixtures plus one frontend-only check, a passing source build and all four CoD test groups (language, evaluation, cache, workspace). Last-expression/numerical conventions and other experimental limitations are not permanent language decisions. Local-file identity is not resolved package-version identity; region/GADT/concurrency/full-simulator scopes remain open.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision4, describes the bounded H-122/H-123/H-139–H-141 checkpoint. [validation.json](../tests/cod/language/validation.json) records 85 source fixtures plus one frontend-only check and all four CoD component groups; [stress-validation.json](../tests/cod/language/stress-validation.json) records 128-module, 160-procedure and layered-DAG native checks. K-225 records actual scope and limits.
+
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
 
 
-The following relations apply at the scopes recorded in each row and the current D-07 revision 13, D-08 set211, D-09 revision2 and D-10 revision10 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
+- Current regional-access refinement: C-48/P-114/P-115/P-117, H-124/H-127/H-129 and K-220 specify dynamic region resources and pure input-reachable snapshot traversal, including nested-call lifetime. The scalar prototype has no implementation evidence for this new scope. D-11 treats index typing separately; no value-field-only restriction is accepted.
+
+- H-133/K-223 clarify existing input-reference results under the calling procedure/module scope; no new snapshot-lifetime machinery is needed. D-10r12 records this natural lifetime case without changing H-129 outer-call expiry.
+
+- H-139–H-141/K-224: D-10r13 incorporates each module once after scanning in encounter order; shared acyclic dependencies reuse resources. Deep-call and complex-graph acceptance measures initial inline lowering without requiring machine-code reuse.
+
+<a id="d-11"></a>
+### D-11: Scalar units and array index types
+
+- File: [ScalarUnitsAndIndexTypes.md](ScalarUnitsAndIndexTypes.md), discussion revision 4, all sections; complete implementation contract pending-human.
+- Value chain: C-47/P-112 derives strict scalar meanings from C-10/P-14/C-01; D-11/P-113 develops the arithmetic/indexing requirement. C-49/P-119 supplies the proposed compositional value of independent UoM identity. These formal value relationships remain candidates, not inferred full-design confirmation.
+- Human scope: H-123 requires structured types and consideration of scale-law index support; H-125 requires strict branded identities and array index types; H-126 requests comparison before selection; H-128 confirms independent first-class compile-time UoMs and local aliases, not symbols; H-130 supplies pure Julia-style conversion dispatch; H-134 specifies fresh UoM definitions and one-shot using bundles, replacing UoM import; H-131 adds parenthesized operator-method names; H-132 plans compound UoMs while deferring their implementation. P-116/P-120/P-123 record those explicit constraints.
+- Dependency: P-118 uses C-13 pool arithmetic as a concrete example. Neither the dependency nor the worked formulas select a new pool configuration or neural model. D-10r11 handles regional snapshots separately.
+- Invariants/non-goals: preserve unrelated identities and SoA storage; no user heap, per-value runtime tags, heap topology or new SNN modeling. Do not infer a bounds proof or origin equality from representation/measure equality. No full numeric hierarchy, dependent solver or GADT implementation is selected.
+- Acceptance: compare wrappers and UoM using forward/inverse pool formulas, typed arrays, generic arithmetic, literals, local/global domains, invalid types/ranges and runtime representation. Actual implementation must supply evidence; the analysis is not a test result.
+- Current bounded rules: H-133–H-138 and D-07r17 LI-01–LI-04 settle caller lifetime, unit selection, parameter annotations and conversion routes. C-51/P-124–P-127 record the user-controlled policy. Remaining grammar/representation details must stay within those rules. Compound-unit equality/inference is H-132 roadmap scope and does not block this run. K-220 registers the draft, K-221 records operator sugar and K-222 records the scope split and K-223 records the resolved local rules without self-qualification; the bounded ten-hour goal is authorized by H-122/H-123 after this review.
+
+The following relations apply at the scopes recorded in each row and the current D-07 revision 17, D-08 set211, D-09 revision2, D-10 revision12 and D-11 revision4 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
 
 | 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
 | --- | --- | --- | --- |
@@ -359,8 +385,8 @@ D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87
 | P-101 | C-43 depends-on | C-35 | Procedure reuse must distinguish symbol identities/aliases from definition contexts; D-10r1. Dependency proposal; destination-binding syntax remains open. |
 | P-102 | C-43 constrains | C-36 | H-105 confirmed: using retains source lexical/dynamic definition; import redefines the source body in receiving lexical/dynamic scope. H-97 invocation modes still apply to the resulting procedure; D-10r1 local scope. |
 | P-103 | C-44 derives-from | C-10 | Make declaration availability and execution/capture order explicit in language semantics; D-10r2 module section, D-07r5 DL-12/DL-14. H-106 supplies the mechanism; this formal value path remains pending-human. |
-| P-104 | C-44 constrains | C-36 | H-106/H-107 confirmed: top-level symbol/function/bits-global definitions, registered procedure bodies and effect/perform/behave expressions. Bits globals use literal or function-call initializers. All entry dependencies are scanned/loaded before entry execution compilation; dependency execution semantics are incorporated in encounter order. Initializers, dynamic definitions and top-level effects/calls execute with the module, not during scanning. H-109 confirms every cross-module reference as trigger; H-110 closes the source scope after execution and limits effective-resource transfer to using/import. D-10r4 local scope; repeated/cyclic encounter policy remains open. |
-| P-105 | C-44 depends-on | C-43 | Entry-driven composition must retain source versus receiving definition contexts for using/import; D-10r2. Dependency only; H-109/H-110 supply reference triggers and source-scope teardown. Repeated/cyclic encounter policy remains open. |
+| P-104 | C-44 constrains | C-36 | H-106/H-107 confirmed: top-level symbol/function/bits-global definitions, registered procedure bodies and effect/perform/behave expressions. Bits globals use literal or function-call initializers. All entry dependencies are scanned/loaded before entry execution compilation; dependency execution semantics are incorporated in encounter order. Initializers, dynamic definitions and top-level effects/calls execute with the module, not during scanning. H-109 confirms every cross-module reference as trigger; H-110 closes the source scope after execution and limits effective-resource transfer to using/import. D-10r4 local scope; H-140 requires once-only incorporation in encounter order after scanning; cyclic initialization remains open. D-10r13. |
+| P-105 | C-44 depends-on | C-43 | Entry-driven composition must retain source versus receiving definition contexts for using/import; D-10r2. Dependency only; H-109/H-110 supply reference triggers and source-scope teardown. H-140 fixes once-only module incorporation; cyclic initialization remains open. D-10r13. |
 | P-106 | C-45 derives-from | C-35 | Explicit source selection exposes nominal provenance while short local aliases preserve readable operations; H-120 makes abbreviated using require identity agreement, with explicit as for intentional different-identity destinations. D-10r10 origin/alias section. Candidate value path pending-human. |
 | P-107 | C-45 depends-on | C-43 | Naming a symbol identity must be distinguished from retaining or redefining a procedure resource; D-10r10. Dependency only; H-118 authorizes the bounded identity-only selector implementation, without qualifying a complete resource-selection contract. |
 | P-108 | C-45 depends-on | C-44 | Every source selection retains H-109/H-110 execution/teardown obligations; identity-only naming is not an initialization exemption. D-10r10. Combined using represents one source encounter rather than two sequential selections; this behavior is implemented and validated under H-121. No new repeated/cyclic encounter policy. |
@@ -369,6 +395,22 @@ D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87
 | P-111 | C-46 constrains | C-36 | H-113–H-121 local scope: symbolic values remain dynamically bound; import has a compile-time alias map and using/import requires an existing destination symbol. Derivation: gather captures after receiving identity resolution. H-120 also requires explicit outer using destination selection on identity mismatch. D-10r10; no ordinary symbolic assignment, identity unification or runtime alias lookup; H-115 body-map defaults remain unchanged. |
 
 C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录；P-34—P-41 的形式化关系保持 pending-human。H-58 的低密度过滤是候选办法，不因功能要求获确认而自动成为所选算法。
+| P-112 | C-47 derives-from | C-10 | Candidate: meaningful scalar identities and typed indexing make domain mistakes visible in typed programs rather than host numeric conventions. D-11r4; H-125 requirement, not full value-path confirmation. |
+| P-113 | D-11 derives-from | C-47 | Candidate: compare usable arithmetic and actual index formulas before choosing a mechanism, serving strict domain identity with lower caller burden. H-126 requests comparison; D-11r4 remains pending-human. |
+| P-114 | C-48 derives-from | C-37 | Candidate: pure computation over explicitly supplied complete structures keeps functions useful without granting dynamic resource effects. H-124/H-127/H-129 confirm local semantics; D-10r12 value-path qualification remains pending. |
+| P-115 | C-48 depends-on | C-39 | Snapshot traversal needs valid regional references and lifetimes, without copying/moving regional objects or introducing user heap storage. D-10r12 dependency; does not confer authority. |
+| P-116 | C-47 constrains | C-38 | H-123/H-125 local confirmed scope: the planned language/runtime increment includes structured types and strict array index meanings; H-126 keeps the arithmetic mechanism under discussion. No SNN modeling/learning. |
+| P-117 | C-48 constrains | C-36 | H-124/H-127/H-129 local confirmed scope: dynamic region operations belong to procedures; functions and nested functions can read the full snapshot graph but cannot call procedures/effects. Snapshot ends at outer return. D-10r12. |
+| P-118 | D-11 depends-on | C-13 | The static-pool formulas supply an arithmetic/indexing example; their application configuration and model authority do not follow from language validation. D-11r4 candidate dependency. |
+| P-119 | C-49 derives-from | C-10 | Candidate: independently identified compile-time UoMs preserve meaning across modules and aliases while allowing typed numerical composition. H-128 supplies identity semantics; full arithmetic/value path pending. H-132 retains compound units as future physical-quantity capability, deferring implementation without selecting the algebra. |
+| P-120 | C-49 constrains | C-47 | H-128 local confirmed rule: UoMs have their own first-class type identities, distinct same-name definitions are allowed, aliases preserve source identity, and symbols do not represent UoMs. Derived-expression equality is unselected. D-11r4. H-134 replaces H-130 UoM import with fresh definitions and one-shot using of selected units/conversions; omitted-unit conversions and repeated using are excluded. |
+| P-121 | C-50 derives-from | C-10 | Candidate: ordinary typed function methods make conversions and array access readable, composable pure program logic rather than host-language conversion operators. H-130 confirms the local syntax/dispatch direction; D-11r4 value path pending. H-131 supplies readable parenthesized operator naming within the same function-method direction; eager/control details remain proposed. |
+| P-122 | C-50 depends-on | C-49 | Method signatures must distinguish the independently identified source/target UoMs and preserve fresh-definition/one-shot using rules. D-11r4 dependency, not authority. |
+| P-123 | C-50 constrains | C-37 | H-130 local confirmed scope: UoM conversion formulas follow pure function semantics and cannot access effects or call procedures. Array/layout values must be explicit inputs under H-127/H-129 snapshots. D-11r4. |
+| P-124 | C-51 derives-from | C-50 | Candidate: declaration-site conversion policy preserves usable typed method composition without hard-coding automatic conversion globally. H-135–H-138 supply local behavior; D-11r4 value path remains proposed. |
+| P-125 | C-51 depends-on | C-49 | Compile-time routes use the selected conversion bundle and nominal UoM identities. H-134 selection is a prerequisite, not authority for arbitrary hidden conversions. D-11r4. |
+| P-126 | C-51 constrains | C-37 | H-135–H-138 operate within H-130/H-127/H-129 purity: inserted conversion functions cannot call procedures or fetch ambient region effects; available explicit inputs/snapshots govern evaluation. D-11r4. |
+| P-127 | C-51 constrains | C-47 | H-135–H-138 local scope: exact parameters do not convert; starred parameters may convert via selected formulas. Direct conversion is preferred, otherwise declared indirect routes, with unique discovered routes or configurable ambiguity warnings. Conversion does not merge unit identities. D-11r4. |
 
 ### 影响检索索引
 
@@ -428,6 +470,17 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 
 
 Additional reverse impact: C-45/C-46 -> P-106–P-111, D-10r10, D-07r13 DL-14/DL-15, native frontend/fixtures and reference3/validation; H-112–H-121. D-08 LanguageCoDesign211/README211 link this bounded language evidence; no neural model or storage contract is selected.
+**K-220 reverse coverage:** C-10/C-47/C-49 → P-112/P-113/P-119/P-120 → D-11r1 and D-07r14 DL-01/DD-033/DD-034. C-37/C-39/C-48 → P-114/P-115/P-117 → D-10r11 snapshot access and D-07r14 DL-02/DL-03/DL-15/DD-032/DD-035. C-38/P-116 and H-122/H-123 restrict the next run to language/runtime work; D-08's model contracts and earlier evidence are unchanged. C-13/P-118 provides the worked arithmetic only. No qualified descendant is invalidated or promoted. C-49/C-50 → P-120–P-123 → D-11r1 using/import, pure method dispatch and D-07r14/DD-036 under H-130.
+
+**K-221 reverse coverage:** H-131 → C-50/P-121, D-11r2 operator-method naming and D-07r15/DD-037. Existing C-47/C-49 identities, C-48/D-10r11 snapshot semantics and D-08 model contracts remain unchanged. Full documents stay pending-human; no source implementation claim.
+
+**K-222 reverse coverage:** H-132 → C-49/P-119 and C-38 planned-run scope → D-11r3 roadmap split, D-07r16/DD-038/LI-01–LI-03. D-10r11 snapshot lifetime and D-08 modeling contracts remain unchanged; result-reference policy is a pending question, not a revised snapshot rule.
+
+**K-223 reverse coverage:** H-133 → C-48/P-114/P-115/P-117 → D-10r12 and D-07r17/LI-01/DD-039. H-134 supersedes only H-130 UoM import through C-49/P-120/P-122 → D-11r4/LI-02/DD-040; procedure import remains unchanged. H-135–H-138 → C-51/P-124–P-127 → D-11r4 parameter/route rules and D-07r17/LI-03/LI-04/DD-041–DD-043. D-08 model contracts and H-132 compound deferral remain intact.
+
+
+**K-224 reverse coverage:** H-139–H-141 → C-44/P-103–P-105, D-10r13 and D-07r18/DD-044–DD-046. Repeated acyclic dependencies reuse incorporated resources; H-140 does not select cyclic-initialization behavior. H-141 retains inline lowering and measured size; no machine-code reuse framework is mandated. Current full-document status remains pending-human.
+
 ## 6. 人工确认事件（只追加）
 
 各事件的确认者为其来源对话中发出相应消息的**用户（人工决策者）**。H-01—H-05 的来源为初始化登记时的仓库任务对话；后续事件分别注明来源。没有独立签名或公开消息 URL 时如实标明，不推定 GitHub 登录身份，不虚构外部链接。已知的消息时间使用 UTC；时间不可得时只记录整理日期与该限制，不用整理时间冒充发言时间。
@@ -1852,6 +1905,230 @@ Human: this chat's user; independently verified name unavailable. Source: visibl
 
 Scope: Directly authorizes implementing and validating the immediately discussed H-119/H-120 combined using and identity-checked abbreviation, then committing and pushing. The bounded increment preserves source identity for combined using, permits same-identity reuse, rejects abbreviated distinct-identity destinations, and permits explicit ordinary self-as without merging identities. Existing capture/restoration and source-encounter semantics remain; import-body mapping and outer import rules are not extended. This does not approve the whole language or authorize build-configuration/toolchain changes.
 
+
+### H-122 — Ten-hour goal after discussing immediate decisions
+
+<a id="h-122"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user messages/replies in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> CoD语言和SNN激发模拟器应用的功能，两者结合起来，规划推进，你设goal自主推进10个小时。 先预估一下期间会不会有需要我参与决策的，有的话先跟我讨论确认好再设goal开始推进。
+
+Scope: Requests joint planning and a ten-hour autonomous goal after decisions needing human participation are discussed. Does not approve unspecified mechanisms or start the goal retroactively. H-123 narrows this run; D-07r14 DL-16.
+
+
+### H-123 — Language/runtime scope, structured regional storage and index conversions
+
+<a id="h-123"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user messages/replies in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> Complete simulator execution first; learning is a later increment (Recommended)
+>
+> 可以是region内静态分配了内存用，但是需要结构化的类型定义、处理能力，也是CoD语言推进的一部分。 另外考虑把连入集的scale law 相关下标转换机制作为CoD语言能力支持起来，你看如何？
+>
+> snn建模相关的业务不包含在这一次推进里，只做感觉重要编程便利性方面的CoD语言、运行时支持。
+
+Scope: Answers the three initial planning questions. The explicit final restriction excludes SNN modeling/business dynamics from this run, despite the broader wording of the selected execution-first answer. Requires structured type definition/processing and permits static regional allocation; requests assessment of scale-law indexing support. Does not approve an experimental neuron law, learning algorithm or every proposed array/numeric mechanism. D-07r14/D-11r1; C-38/P-116.
+
+
+### H-124 — Dynamic region resources and function value inputs
+
+<a id="h-124"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user messages/replies in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 我的思路： @region 都是 dynamic scoped 资源，所以只有 procedure 才能以显示或者隐式的方式完全自由操作各种region； function 只能引用经 deref 的 region 内 value 对象。 function 碰到指针类型的结构字段时如何处理，可能还需要进一步讨论设计。
+
+Scope: Regions are dynamic resources available to procedures; functions use dereferenced regional values. Leaves handling of pointer-bearing fields for discussion; this is not acceptance of the agent's entire earlier read-only-view proposal. H-127/H-129 subsequently specify traversal and snapshot lifetime. C-48/D-10r11.
+
+
+### H-125 — Strict branded indices and comparison of numeric mechanisms
+
+<a id="h-125"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user messages/replies in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 不仅是 nominal type，还要进一步做到 strict-branded-type，类似 Haskell 的 newtype 机制，这在灵活数组下标类型上非常关键。 一个数组可以声明专用下标类型，避免任意数值类型错用。 下标值可以自定与 scalar 数值的算数运算，结果还是类型正确的下标值。 这点需要探讨一下，是以 UoM 的语义实现下标类型，还是 Haskell newtype 类似的机制实现，比较设计利弊。
+
+Scope: Requires strict branded identity beyond the agent's record-only nominal proposal, array-declared index types and meaningful arithmetic with scalars. Explicitly requests UoM/newtype comparison; does not select one, a generic coercion mechanism, per-allocation generative types, affine roles or literal rules. C-47/D-11r1.
+
+
+### H-126 — Compare UoM potential before recommending the foundation
+
+<a id="h-126"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user messages/replies in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 你花点心思先对比一下利弊，我粗略感觉UoM路线更有潜力，Haskell的数值类型够强，但实用性上还是发现有些坑。
+
+Scope: Does not accept the agent's newtype-first recommendation. Requests a substantive practical comparison and identifies UoM as potentially stronger. D-11r1 evaluates actual formulas, heterogeneous arithmetic, generics, literals, origins and range limits. No final calculus or implementation scope is inferred.
+
+
+### H-127 — Functions traverse complete read-only regional snapshots
+
+<a id="h-127"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user messages/replies in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 跟下标类型不是一个事儿。 原则上 function 应该看到完整数据结构的只读 snapshot，遇到指针它们可以保持 pure 语境完成deref读取快照值，单线程模型下应该基本成立，因为 function 不可能内部调用 effects 去更新region。
+
+Scope: Specifies complete read-only structure access, including pointer dereference, within a pure function context under a single-threaded model. Separates this from index typing and rejects the agent's proposed immediate-value-fields-only boundary. Does not select copying, runtime freezing, locks, version counters or a concurrent coherence protocol. C-48/D-10r11; H-129 supplies exact nested-call lifetime.
+
+
+### H-128 — Independent compile-time UoM identity and aliases
+
+<a id="h-128"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user messages/replies in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 注意 UoM 应该是编译时的命名对象，有自己的identity，CoD程序从不同定义模块拿到的同名UoM要允许是不同对象，也最好能支持本地另取别名，有点像symbol的感觉，到应给予一等类型身份，不要直接拿symbol代表。
+
+Scope: Confirms independent named compile-time UoMs with first-class type identities; same-name definitions from different modules may be distinct, local renaming preserves the selected entity, and symbols must not represent UoMs. C-49/P-120/D-11r1. Does not decide derived-unit equivalence, conversions, storage encoding or numeric operator rules.
+
+
+### H-129 — Outermost function call defines snapshot lifetime
+
+<a id="h-129"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user messages/replies in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 对，procedure 可以调用 function，但 function 不可以调用 procedure； function 嵌套调用若干function期间认为它通过输入参数拿到的外部对象都是一个只读快照；顶层function调用结束后，这个快照作废。
+
+Scope: Confirms procedure-to-function calls and prohibits function-to-procedure calls. All nested functions share the read-only snapshot of external objects obtained through input parameters; it expires when the outermost function call returns. C-48/P-117/D-10r11 and D-07r14. Does not destroy the underlying region or require copying it. Concrete escaped-reference/output typing remains open.
+
+
+### H-130 — UoM using/import and pure Julia-style method dispatch
+
+<a id="h-130"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> UoM 也分 using/import 吧， using 保持原身份，import 复制定义到新本地身份；这跟 procedure 定义比较像，但 UoM 的转换公式什么的随 function 的 pure 语境，不允许触碰 effects 。 UoM 转换与数组类型的关联，走 Julia method 风格的函数参数类型 dispatch 语法，避免 C++/Python 什么的语法。
+
+Scope: Specifies UoM using as identity-preserving and import as copying a definition into a fresh local identity. Conversion formulas use the pure function context and cannot touch effects. Chooses Julia-style function parameter-type method dispatch for associating UoM conversions and array types, avoiding C++/Python-style interfaces. C-49/C-50, P-120–P-123, D-11r1 and D-07r14/DD-036. Does not adopt Julia's module keyword behavior, runtime method mutation or automatic promotion, and leaves exact syntax, dispatch specificity, imported external dependencies/method coverage and implicit index conversion open.
+
+
+### H-131 — Parenthesized operator names for readable overloads
+
+<a id="h-131"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 括号括起来的操作符作为magic method名称这种语法糖你也考虑上，让重载操作符在语法上好看好写
+
+Scope: Requests parenthesized operator names as magic-method syntax sugar for attractive, convenient overload definitions. C-50/P-121, D-11r2 and D-07r15/DD-037. This supplies the naming direction; the agent's concrete declaration examples, unary/binary elaboration, indexing name, precedence policy and higher-order operator behavior remain proposed. It does not permit pure functions to perform effects or request parser implementation/build/test operations in this turn.
+
+
+### H-132 — Compound UoM roadmap and immediate-decision review
+
+<a id="h-132"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 复合UoM你先规划上但是不急马上实现，将来各种物理量计算场景会有很多好处。 其它的看看还有哪些值得现在立即讨论确定的
+
+Scope: Requests planning compound UoMs for future physical-quantity calculations without immediate implementation, and reviewing the remaining matters worth deciding now. C-49/P-119, D-11r3 and D-07r16/DD-038. Keeps nominal unit identity/reuse and pure method/operator direction; does not select compound normalization, unit inference or the agent's answers to pending call/conversion questions. The ten-hour goal still follows the requested immediate discussion.
+
+
+### H-133 — Ordinary caller scope supplies function-input lifetime
+
+<a id="h-133"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user replies/messages in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> function 肯定是在某个 procedure (包括模块顶层）scope被调用的，传给它的输入也肯定在调用位置前后都活着，没问题吧？ 感觉你想多了
+
+Scope: Answers LI-01 by grounding function calls in their procedure/module-top-level scope and input lifetime around the call. Existing input-reachable reference results use that ordinary lifetime; no additional snapshot-lifetime mechanism is requested. H-129 snapshot expiry and regional storage invariants remain. C-48/D-10r12/D-07r17.
+
+
+### H-134 — Fresh UoMs and one-shot using bundles; no UoM import
+
+<a id="h-134"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user replies/messages in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 或许UoM只有using和新定义两种才对。 一次using多个UoM，应该是全套转换函数一体，真需要不同转换函数，更应该从头定义而不是import。 UoM不该允许重复using，一次using一整套；当然允许只using源模块中的一部分UoM，没有提到的连带转换函数也不带入。
+
+Scope: Replaces the UoM definition-import choice in H-130 with fresh definitions and using only. A using selection brings the selected unit set and associated conversions together; partial selection is allowed, omitted-unit conversions are excluded and repeated using is disallowed. Different formulas should come from a new definition. Procedure import and H-130 pure Julia-style dispatch are unaffected. C-49/P-120/D-11r4; LI-02 resolved by removing the disputed import mechanism.
+
+
+### H-135 — Parameter syntax controls automatic conversion
+
+<a id="h-135"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user replies/messages in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 语法上让CoD用户语言可以声明这个选择吧，不在CoD语言这里做死。 比如参数 `amount (m*)` 允许自动转换， `amount (m)` 不允许。
+
+Scope: Rejects a universal no-conversion policy in favor of declaration-site choice: starred target permits automatic conversion, unstarred target does not. Supplies illustrative parameter syntax. C-51/D-11r4 and LI-03; does not make different unit identities equal.
+
+
+### H-136 — Compile-time conversion paths and configurable ambiguity warning
+
+<a id="h-136"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user replies/messages in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 编译时有唯一转换路径就自动选择；多条转换路径的话，报警告，编译选项允许强制这种警告为错误
+
+Scope: Requires compile-time route discovery and automatic selection when unique. Multiple unresolved routes produce a warning, with a compiler option to promote it to an error; unconditional ambiguity rejection is not the default. C-51/D-11r4. H-137/H-138 subsequently specify source path preference and direct conversion priority.
+
+
+### H-137 — Source-declared conversion path preference
+
+<a id="h-137"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user replies/messages in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 用户语言应有语法去声明路径选择优先顺序，比如 `amount (m*<-cm<-mm)`
+
+Scope: Requires a source-language declaration for conversion path priority and gives the illustrated arrow form. C-51/D-11r4. H-138 supplies direct-before-indirect interpretation; this statement alone was not treated as selecting ranked predecessor alternatives.
+
+
+### H-138 — Direct conversion precedes the declared indirect path
+
+<a id="h-138"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user replies/messages in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 存在直接转换函数时首选直接转换，否则就按声明的间接转换路径走
+
+Scope: Clarifies H-137: prefer a direct conversion function whenever available; otherwise follow the declared indirect conversion path. The illustrated chain connects mm through cm to m. With no declaration H-136 discovery/ambiguity policy applies. C-51/P-127/D-11r4 and LI-04. Does not select runtime graph dispatch or prove different formula paths numerically equivalent.
+
+
+
+### H-139 — Complex-module and deep-call acceptance
+
+<a id="h-139"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible messages in `codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`. Recorded 2026-11-05; exact message UTC timestamp unavailable.
+
+> 刻意往多模块，复杂依赖关系，深调用栈的方向推一推，发现并解决语言设计和实现方面的问题
+
+Scope: Extends the active H-122/H-123 language/runtime goal with deliberate complex-dependency and deep-call stress. Does not authorize new SNN algorithms, toolchain changes or a particular optimization framework.
+
+
+### H-140 — Once-only module incorporation after scanning
+
+<a id="h-140"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible messages in `codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`. Recorded 2026-11-05; exact message UTC timestamp unavailable.
+
+> 不能是encounter立即执行啊喂！ 是扫描加载以后，按encounter顺序，编入结果程序，一个模块只能编入一次啊
+
+Scope: Clarifies H-106/H-109 and resolves repeated acyclic encounters: scan/load first, then incorporate execution semantics into the result program in encounter order, once per module. No immediate user-code execution during compiler encounters. C-44/P-104/D-10r13. Cyclic initialization and branch semantics are not selected.
+
+
+### H-141 — Initial procedure inlining with measured size
+
+<a id="h-141"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible messages in `codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`. Recorded 2026-11-05; exact message UTC timestamp unavailable.
+
+> 恐怕 WPO 会让 procedure inlining 成为必然处理路径吧，重用机器代码片段作为中远期优化目标，初期只要程序尺寸不是太夸张，就先这么着
+
+Scope: Accepts initial procedure expansion/inlining while size remains reasonable. Machine-code fragment reuse is a medium/long-term optimization, not an immediate goal. Measure complex/deep-call size before introducing reuse machinery; this is not a claim that WPO theoretically requires native inlining.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -4214,3 +4491,78 @@ Scope: Directly authorizes implementing and validating the immediately discussed
 - Evidence: one exact `cmake --build ./build` succeeded after source-only changes. `COD_TEST_TOOLCHAIN=build tests/cod/run-all.sh` passed all four groups:67 language checks (30 successful native programs, one expected native arithmetic failure,35 expected frontend rejections, one frontend-only check), six C++ evaluation checks, eight cache checks and workspace tests. Actual outputs, exits, source/executable hashes and compact build/suite records are in validation.json. Shared vocabulary/re-export aliases, source execution once, capture/current calls, rebinding/restoration, explicit self-as, mismatch before execution and equal-value/distinct-identity rejection are covered.
 - Operational boundary: the existing default build graph refreshed runtime configuration/outputs and a compiler-rt dummy object/libcxx_fuzzer step; no manual configure, bootstrap/install target, build configuration edit or toolchain mutation was invoked. No SNN training/simulation, regional source-language representation, concurrency or cross-platform/performance acceptance is claimed.
 - Scope/qualification: import-body maps, outer import destination policy and repeated-module execution policy remain unchanged; import symbol is diagnosed as unsupported. No qualified descendant is invalidated or automatically promoted. Full D-07/D-08/D-10 contracts and candidate formal value paths remain pending-human; D-GOV220 maintenance alone continues H-05. H-121 authorizes commit/push after validation.
+
+
+### K-220 — 2026-11-05: Scalar arithmetic comparison and regional function snapshots
+
+<a id="k-220"></a>
+
+- Agent assessment, not new human confirmation. Reviewed current charter §§1–4, 6, 12 and 14, D-07r13/D-10r10, relevant regional invariants and C-13's formula-based pool indexing. H-122–H-130 supply only their explicitly recorded requirements/decisions.
+- Coverage: registry220 →221; D-07r13 →r14 with DD-030–DD-036; D-10r10 →r11 for the regional snapshot contract; new D-11r1 for scalar units/index alternatives. Append C-47–C-50 and P-112–P-123. D-08 set211, D-09r2, source, tests, validation evidence, charter and AGENTS remain unchanged. Historical H/K/DD entries are preserved.
+- Value analysis: strict index identities serve C-10's explicit semantics by preventing accidental domain interchange. UoM may reduce caller/operator burden by deriving count/stride/offset relationships; a wrapper-only API may be simpler to check but needs additional arithmetic machinery. D-11 examines both and does not self-approve a foundation. H-128 independently confirms compile-time UoM identities and aliases; symbols are not their representation. H-130 confirms identity-preserving using, fresh-identity definition import, pure conversions and Julia-style argument-type dispatch. C-50/P-121–P-123 record its candidate value path, identity dependency and purity constraint. P-112/P-113/P-119 are candidate value paths; P-116/P-120 record scoped human constraints.
+- Regional contract: H-124/H-127/H-129 allow procedures to use dynamic regions and functions to read complete input-reachable graphs, including pointer dereference. The outermost function call and its nested function calls share one snapshot, expiring on outer return. This supersedes the agent's immediate-fields-only proposal, not a prior human rule. P-114 remains a proposed value path; P-115 records the storage/lifetime dependency and P-117 the explicit callable boundary. No runtime snapshot allocation or new pointer encoding is selected.
+- Sources/acceptance: consulted primary Haskell/GHC numeric/newtype/role documentation, the F# UoM specification, Kennedy's research mp-units' affine-space explanation and Julia's method/conversion documentation. Distinguish representation erasure, unit algebra, semantic origin and value bounds. Actual pool formulas supply a concrete comparison; no compiler implementation, benchmark or test result is claimed. The regional acceptance cases distinguish nested reads, subsequent mutation and outer-return expiration.
+- Work boundary: H-123 excludes SNN modeling/learning from the coming ten-hour run. Goal remains unstarted during discussion; no build, test script, bootstrap/configuration change, toolchain operation, commit or push performed in this documentation increment.
+- Qualification/impact: no qualified descendant is invalidated or promoted. D-07/D-10/D-11 complete contracts and candidate value paths remain pending-human; direct local human propositions retain their stated confirmation. D-GOV221 maintenance alone continues H-05. Existing scalar/module implementation evidence remains valid for its old scope and supplies no proof of the new types or snapshot behavior.
+
+
+### K-221 — 2026-11-05: Parenthesized operator method syntax
+
+<a id="k-221"></a>
+
+- Agent assessment under H-131; not human approval of every illustrative grammar detail. Reviewed current charter §1 principles, §6 effect/native boundaries, D-11r1, D-07r14, C-50/P-121–P-123 and the existing function-name/expression parser.
+- Coverage: registry221 →222; D-11r1 →r2, D-07r14 →r15/DD-037. Append H-131/K-221; preserve earlier human/agent events and decision rows. D-10r11, D-08 set211, source, tests and prior validation records remain unchanged.
+- Value path: C-50/P-121/C-10 connects readable operator definitions to the existing typed-function composition direction. H-131 supplies the parenthesized-name requirement. The draft uses ordinary pure method dispatch for eager operators, proposes arity distinction for unary/binary forms and preserves heterogeneous UoM result types. No new runtime dispatch structure or dynamic symbol binding is introduced.
+- Boundaries: concrete declaration syntax and `([])` remain illustrative; short-circuit/control expressions cannot be assumed to be eager calls, and write hooks remain subject to procedure-only effects. Fixed grammar grouping and operand evaluation are acceptance concerns, not proof that complete semantics have been selected. Higher-order operator values and custom precedence/token systems are not implicitly chosen.
+- Acceptance/implementation: record equivalent eager operator/explicit-call cases, arity resolution, index-domain rejection and preserved grouping/evaluation. The current parser accepts only an identifier as a function name; no operator-method implementation is claimed. Documentation only, with no build/test scripts or toolchain/configuration changes.
+- Qualification: full D-07/D-11 contracts remain pending-human; no previously unqualified baseline becomes continued. Existing H-124/H-127/H-129 snapshots and H-128/H-130 UoM identities/reuse remain intact. D-GOV222 maintenance alone continues H-05; the ten-hour goal has not started.
+
+
+### K-222 — 2026-11-05: Defer compound-unit implementation and bound the remaining review
+
+<a id="k-222"></a>
+
+- Agent assessment under H-132, not approval of remaining proposals. Reviewed current charter §1/§14, D-11r2/D-07r15, D-10r11 snapshot semantics and the existing integer runtime-failure path.
+- Coverage: registry222 →223; D-11r2 →r3 and D-07r15 →r16/DD-038/LI-01–LI-03. Append H-132/K-222; preserve all earlier human/agent events. D-10r11, D-08 set211, source, tests, prior evidence, charter and AGENTS remain unchanged.
+- Scope/value: C-49/P-119 retains future physical-quantity composition, while C-38's immediate run uses named UoMs and explicit pure methods to meet the typed-index need. Compound products/quotients/powers, normalization and inference are roadmap scope, not prerequisites or silently implemented machinery.
+- Immediate questions: existing regional references as function results after snapshot expiry; source versus receiving lexical helpers when importing UoM definitions; automatic conversion search versus explicit conversion/overload methods. D-07 LI-01–LI-03 contain concrete alternatives and agent recommendations. No answer is inferred from silence, ancestor decisions or the general request to proceed autonomously.
+- Acceptance/boundaries: typed product/array/index facilities and numerical gather fixtures remain the candidate validation path; SNN modeling/training and toolchain/configuration changes remain excluded. No new exception, dependent-proof, concurrency or general method-runtime framework is selected. Documentation only; no build or test script executed and no goal started while questions remain pending.
+- Qualification: full D-07/D-11 contracts remain pending-human and prior qualified scopes are neither invalidated nor expanded. Explicit H-132 scope is recorded directly; D-GOV223 maintenance alone continues H-05.
+
+
+### K-223 — 2026-11-05: Resolve caller lifetime, unit selection and conversion paths
+
+<a id="k-223"></a>
+
+- Agent assessment of explicit H-133–H-138. Reviewed current charter §1/§6 and the pending D-07r16/D-10r11/D-11r3 contracts. No human confirmation is inferred for the entire language or every illustrative syntax detail.
+- Coverage: registry223 →224; D-07r16 →r17/DD-039–DD-043/LI-01–LI-04; D-10r11 →r12; D-11r3 →r4. Append C-51/P-124–P-127, H-133–H-138 and K-223. Earlier history, D-08 set211, source, tests, charter and AGENTS are preserved.
+- Supersession: H-134 replaces H-130's UoM import choice only. Current rules use fresh definitions and one-shot using of the selected unit/conversion bundle, excluding conversions involving omitted units. Procedure using/import, lexical function purity and independent unit identity remain. The obsolete UoM-import helper-rebinding question no longer blocks implementation.
+- Lifetime: H-133 uses the ordinary calling procedure/module scope for live inputs and existing returned references; H-129 still ends the snapshot at outer return. No copy, snapshot token, region lock or additional lifetime mechanism is introduced for this case.
+- Conversion: H-135 chooses policy per parameter; H-136 discovers routes at compile time and warns on unresolved alternatives with optional warnings-as-errors. H-137/H-138 allow source-declared indirect routes but prefer direct conversion. C-51/P-124 serves declarative control through C-50; P-125 depends on selected identities, P-126/P-127 preserve purity and target meanings. Formal value-path qualification remains pending, while local human rules are explicit implementation inputs.
+- Bounded interpretations: using repetition is checked in a receiving module; another module can select its own bundle. Private implementation helpers do not expose additional conversion candidates. Direct or declared route priority resolves the choice before warning about remaining ambiguity. Warn-and-continue needs a reported deterministic fallback; no equivalence or optimal-rounding proof is implied. These details are reviewable prototype behavior, not unrecorded permanent type theory.
+- Acceptance: selected/omitted/repeated unit bundles, no UoM import, exact/starred parameters, direct priority, declared chains, unique discovered chains, warning and error-option behavior, pure converters, pointer-bearing nested snapshots and existing input-reference results. Static numeric/index/gather fixtures validate language/runtime behavior without SNN modeling or compound-unit algebra.
+- Authorization/status: H-122/H-123 authorize the ten-hour bounded implementation/validation goal after this review. The local decisions above resolve the immediate questions; no additional permission gate is introduced. Full D-07/D-10/D-11 contracts remain pending-human; direct task authorization does not self-qualify unrelated mechanisms. D-GOV224 maintenance alone continues H-05.
+
+
+### K-224 — 2026-11-05: Complex composition, once-only incorporation and initial inlining
+
+<a id="k-224"></a>
+
+- Agent assessment of explicit H-139–H-141 after reading charter §§1–4, C-44/P-103–P-105 and D-10 module composition. Registry224 →225, D-10r12 →r13, D-07r17 →r18/DD-044–DD-046. Earlier human/agent decision events are preserved.
+- H-140 resolves the repeated-encounter question and corrects the agent's misleading immediate-execution phrasing: incorporation follows scanning, is ordered by compilation encounters, and happens once per module. Emitted runtime initialization retains H-110 source-scope restoration and H-97 captured values. Diamond dependencies reuse the incorporated resources rather than rebinding the source under each caller.
+- H-139 expands acceptance to multi-module/deep-call programs. H-141 preserves simple inline WPO lowering while size is reasonable; a code-sharing architecture is not justified merely by anticipated deep calls. Measure native/generated size and compile/runtime costs.
+- Candidate value path C-44/P-103/C-10 still serves explicit staged semantics; P-104 records the human phase/order constraint and P-105 retains source/receiving definition contexts. Cyclic initialization remains unconfirmed and is diagnosed, not silently assigned semantics. Full D-07/D-10 contracts remain pending-human; direct task decisions permit their stated bounded implementation.
+- No application model, charter, AGENTS, bootstrap source or toolchain changes. D-11r4 remains current. D-GOV225 record maintenance alone continues H-05. Implementation/validation results are recorded separately when actually obtained.
+
+
+### K-225 — 2026-11-05: Typed bits, method dispatch and complex-module checkpoint
+
+<a id="k-225"></a>
+
+- Agent implementation/evidence assessment under H-122/H-123 and H-139–H-141; registry225 →226. D-10r13, D-07r18 and D-11r4 remain current. Reference3 →4 and native validation evidence updated. No full-document qualification, new charter rule or SNN model mechanism is implied.
+- Implemented: nominal bits products, nested field access and typed function/global/capture values; FP32/FP64 literals/arithmetic; immutable local bits expressions; exact parameter-type method dispatch; parenthesized eager operator names and source method selection. Product identities follow their defining module/declaration and survive aliases. Fields/units are not runtime string tags. These are bounded prototype forms under the structured-type/numeric/method requests, not a complete grammar or ADT/GADT system.
+- Composition: source parsing completes before native semantics are emitted. Every module is incorporated once in first-encounter order. Shared effectful sources preserve their original captures; source scopes restore bindings; behave reads the current caller. Typed effect restoration replaces integer-only slots. Pure scopes use fresh native names without redundant nesting; procedures remain inline with scope restoration.
+- Evidence: three exact source-only `cmake --build ./build` calls succeeded while developing this checkpoint. The final `COD_TEST_TOOLCHAIN=build tests/cod/run-all.sh` passes four groups: 86 language checks, six evaluation checks, eight cache checks and workspace checks. Expected diagnostic failures are frontend exit2, not native compiler rejection. Source/executable hashes and observable outputs are in validation.json.
+- Stress: 128-module pure chain emits 13,348 bytes of generated C++; 160-procedure inline chain emits 72,837 bytes and preserves captured/current values; layered diamonds with 2,047 expanded calls emit 146,935 bytes. Local compile/link/run times are approximately 0.14/0.42/0.57 seconds. These observations support H-141 initial inlining for these workloads, not a scalability theorem or native stack-depth claim.
+- Boundaries: UoM conversion implementation, static regional arrays, pure pointer traversal and numeric iteration remain goal work. No neural dynamics, general GADT, compound-unit algebra, cyclic-initialization policy, machine-code reuse framework, main build configuration or host toolchain change. Existing default build dependencies refreshed runtime sub-build outputs; no manual bootstrap/configure/install target was invoked.
+- Qualification: local human scope remains direct implementation authority; full D-07/D-10/D-11 contracts and unresolved formal derivation paths remain pending-human. D-GOV226 record maintenance alone continues H-05. The ten-hour goal remains active.

@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T18:22:47.717841+00:00",
+  "recorded_utc": "2026-11-05T20:31:33.127504+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
-  "passed": 67,
-  "total": 67,
+  "passed": 86,
+  "total": 86,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -1165,13 +1165,345 @@
       "passed": true
     },
     {
+      "fixture": "products.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/products.cod"
+      ],
+      "expected": {
+        "file": "products.cod",
+        "exit": 0,
+        "stdout": "2.5\n6\n-2.5\n"
+      },
+      "exit_code": 0,
+      "stdout": "2.5\n6\n-2.5\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "floating-captures.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/floating-captures.cod"
+      ],
+      "expected": {
+        "file": "floating-captures.cod",
+        "exit": 0,
+        "stdout": "1.25\n2.5\n2.5\n150.25\n"
+      },
+      "exit_code": 0,
+      "stdout": "1.25\n2.5\n2.5\n150.25\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "product-captures.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/product-captures.cod"
+      ],
+      "expected": {
+        "file": "product-captures.cod",
+        "exit": 0,
+        "stdout": "7\n9\n2.5\n"
+      },
+      "exit_code": 0,
+      "stdout": "7\n9\n2.5\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "product-alias.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/product-alias.cod"
+      ],
+      "expected": {
+        "file": "product-alias.cod",
+        "exit": 0,
+        "stdout": "0.75\n"
+      },
+      "exit_code": 0,
+      "stdout": "0.75\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "product-shapes.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/product-shapes.cod"
+      ],
+      "expected": {
+        "file": "product-shapes.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected "
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/product-shapes.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/product-shapes.cod::First, got /ws/EvtWorks/cod-project/tests/cod/language/product-shapes.cod::Second\n",
+      "passed": true
+    },
+    {
+      "fixture": "product-cycle.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/product-cycle.cod"
+      ],
+      "expected": {
+        "file": "product-cycle.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "recursive by-value product"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/product-cycle.cod:2:10: recursive by-value product '/ws/EvtWorks/cod-project/tests/cod/language/product-cycle.cod::A' has no finite layout\n",
+      "passed": true
+    },
+    {
+      "fixture": "product-field-error.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/product-field-error.cod"
+      ],
+      "expected": {
+        "file": "product-field-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "no field"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/product-field-error.cod:2:6: no field 'missing' in /ws/EvtWorks/cod-project/tests/cod/language/product-field-error.cod::A\n",
+      "passed": true
+    },
+    {
+      "fixture": "float-width-error.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/float-width-error.cod"
+      ],
+      "expected": {
+        "file": "float-width-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected f32, got f64"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/float-width-error.cod:2:1: expected f32, got f64\n",
+      "passed": true
+    },
+    {
+      "fixture": "float-range-error.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/float-range-error.cod"
+      ],
+      "expected": {
+        "file": "float-range-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "floating literal is outside f32 range"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/float-range-error.cod:1:1: floating literal is outside f32 range\n",
+      "passed": true
+    },
+    {
+      "fixture": "module-diamond.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-diamond.cod"
+      ],
+      "expected": {
+        "file": "module-diamond.cod",
+        "exit": 0,
+        "stdout": "101\n3\n7\n3\n3\n"
+      },
+      "exit_code": 0,
+      "stdout": "101\n3\n7\n3\n3\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "module-repeat.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-repeat.cod"
+      ],
+      "expected": {
+        "file": "module-repeat.cod",
+        "exit": 0,
+        "stdout": "101\n4\n8\n"
+      },
+      "exit_code": 0,
+      "stdout": "101\n4\n8\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "product-local.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/product-local.cod"
+      ],
+      "expected": {
+        "file": "product-local.cod",
+        "exit": 0,
+        "stdout": "42\n"
+      },
+      "exit_code": 0,
+      "stdout": "42\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "product-module-identity.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/product-module-identity.cod"
+      ],
+      "expected": {
+        "file": "product-module-identity.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected "
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/product-module-identity.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/product-library.cod::Position, got /ws/EvtWorks/cod-project/tests/cod/language/product-other-library.cod::Position\n",
+      "passed": true
+    },
+    {
+      "fixture": "methods.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/methods.cod"
+      ],
+      "expected": {
+        "file": "methods.cod",
+        "exit": 0,
+        "stdout": "8\n7.5\n15\n15\n-7\n"
+      },
+      "exit_code": 0,
+      "stdout": "8\n7.5\n15\n15\n-7\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "method-modules.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-modules.cod"
+      ],
+      "expected": {
+        "file": "method-modules.cod",
+        "exit": 0,
+        "stdout": "9\n12\n6\n7\n"
+      },
+      "exit_code": 0,
+      "stdout": "9\n12\n6\n7\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "operator-using.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/operator-using.cod"
+      ],
+      "expected": {
+        "file": "operator-using.cod",
+        "exit": 0,
+        "stdout": "12\n12\n"
+      },
+      "exit_code": 0,
+      "stdout": "12\n12\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "method-ambiguous.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-ambiguous.cod"
+      ],
+      "expected": {
+        "file": "method-ambiguous.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "ambiguous method"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-ambiguous.cod:3:1: ambiguous method 'f' with identical argument types\n",
+      "passed": true
+    },
+    {
+      "fixture": "method-no-match.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod"
+      ],
+      "expected": {
+        "file": "method-no-match.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "no matching method"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod:3:1: no matching method for 'f'\n",
+      "passed": true
+    },
+    {
+      "fixture": "operator-control.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/operator-control.cod"
+      ],
+      "expected": {
+        "file": "operator-control.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "short-circuit operators"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/operator-control.cod:1:11: short-circuit operators are control expressions\n",
+      "passed": true
+    },
+    {
       "fixture": "frontend-only",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-cpp",
-        "/tmp/cod-language-check-ir4gkhrw/program.cc"
+        "/tmp/cod-language-check-cka7ex0w/program.cc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -1181,25 +1513,32 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "5e96a0230c5c14cb4a4332aa013493c0091ce6a9ad36d4de918faccf97b7fbdc"
+    "sha256": "3749e906107b616523a9b5edf41e2c24e1443335f3cf13d454fbe9918bee377c"
   },
   "source_sha256": {
     "cod/main.cc": "72a873f870ba462b3a9bfe4f62c8b6def4833b8a1b0e99a819bf452a7e43a0a2",
-    "cod/lang_syntax.hh": "a79c86a3e75d96c6d0fd8267e49a7fc983860b88301bc635ebbfa01026f7c4fc",
-    "cod/lang_frontend.hh": "9955fc5069940b18e7fef91587175dd117beb0ca881011246a15b6a5afc06682",
+    "cod/lang_syntax.hh": "c7f102af4c8f6a1a4ad67dc527ff45588971fb09acd9d48499be78b591537cc9",
+    "cod/lang_frontend.hh": "ae73fbc584ca00414bdd987772a3623b219273d0644878055c107a2978bc0873",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "32f4716debf9373976a6c92cfc39920da526810ac838fce4267aa1d026e2cea2",
-    "tests/cod/language/cases.json": "aa6132b7aaad775e270f7303a26090468e4b23ac1169a47f41b79e5a739f38aa",
+    "tests/cod/language/cases.json": "6cf7b59832d8fa44c8b52d93a51c05228444ed67ee0a57b07ecf883d8c33e0f7",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
     "tests/cod/language/broken-dependency.cod": "6cd8716b5bdcd5e22a9deb4c3b308fcd0908c74b7d4ce0d1a3c30632955679d3",
     "tests/cod/language/builtin-body-import.cod": "673482f8e33208d9a242f2fbe7fdc032ba62996c343a5ed4ae1d8717263f4418",
     "tests/cod/language/destination-vocabulary.cod": "490d565b9a59f98f5fb958cd4f7de225845803c139c7e6a5d4824add0c03a68f",
+    "tests/cod/language/diamond-left.cod": "86975e2f1597f2d8050b1231064be1e3cba2a99a93ee79d4b8743d543c11efd8",
+    "tests/cod/language/diamond-right.cod": "d91168015b272a9d3d0f6803bcb9c9972708e6e1bd7f32d6764b3f74856b01f4",
+    "tests/cod/language/diamond-shared.cod": "6e0b21cbe0d3c227d5267070f1e2c4b5c3ea97cdcbe472d34131216044df8386",
+    "tests/cod/language/diamond-vocab.cod": "9f39d23f781ca32847181988a011de270c30ac07a136ceb9663d935706347a0b",
     "tests/cod/language/duplicate-map-role.cod": "c8cb6967e8bbd2c17f2604eb139ec04f3669f3a4b21904f4890e7962066464d7",
     "tests/cod/language/duplicate-symbol-alias.cod": "3788fe95e9db696d4e528291bd61994205e5f2551176012ecab7b4e623b6cc03",
     "tests/cod/language/early-alias.cod": "2760b0aa7d7131859f2e5fd2dfc4f6fa10fb8ab54eb12b720bbd51d894597177",
     "tests/cod/language/effect-result.cod": "e94e72e0553d921284838d2e006c30c5c4724ccdad4d2dd649ebf51650e2118a",
+    "tests/cod/language/float-range-error.cod": "731d4de618632486fba7c11dc9d70ae220675ca6cc8eabd8a710d50f70d874cf",
+    "tests/cod/language/float-width-error.cod": "4e9cfe886c7c19c3f8d5fdb27f412f238282564d1c9fbedecf8e77c7a965a977",
+    "tests/cod/language/floating-captures.cod": "8faccd326ef6e732b7014a4c6b65c6499638c56cee4a877a75b978539ffd8b71",
     "tests/cod/language/frame-model.cod": "5c29090333675934f6db3276e6a7b20e88faf9313d46e1a8b4dfbaaad986832f",
     "tests/cod/language/frame-vocabulary.cod": "7d33d85b670825c8de9290678b83822b833744c1b273aeff25d17c25fad17e17",
     "tests/cod/language/frame.cod": "78de75369c7e8d51f5d9a7b329b998450dfd3935767a7379f7664e2d179b3465",
@@ -1227,15 +1566,36 @@
     "tests/cod/language/mapping-shared-identity.cod": "41c6a5856061b9a632583abbb9545125d45edbec9a736a88cec2002bf897801b",
     "tests/cod/language/mapping-split-identity.cod": "8b7715bd33013c0ea3336576f4487d67d3f011e9db4ad35e89760eaf2b400d36",
     "tests/cod/language/math-source.cod": "df2a58e92944314c3da619bc32a76a95fac3239535e1433ae0c14679491739fb",
+    "tests/cod/language/method-ambiguous.cod": "62bbbbbfef3d672b05ffc18927ab1e07f38a74049d712f300ea14c2a49df8c93",
+    "tests/cod/language/method-library.cod": "dacca8fa54d12d51637d65c34fe4fae7ce82c26c9c0158815aa96b4a315efdb7",
+    "tests/cod/language/method-modules.cod": "10d0e79036423d708c2acc6e42ea99a48e369f41a899af2670a11ce87b82c19a",
+    "tests/cod/language/method-no-match.cod": "b5e740edc1f1fa8f219d18dc3bcc4ac25ccb5d8d88302d8bb7aa66999c0d724a",
+    "tests/cod/language/method-other-library.cod": "bfefe85ee3032f7ddf502e9dbddf7b817c10ef23eadd74431acbd05d9affa5a4",
+    "tests/cod/language/methods.cod": "220003c479460ac88538c0d7efc89c2f8041e3db1e9ab6327d97c56729c51c88",
     "tests/cod/language/missing-capture.cod": "0e59004b31863a174459b9c5aa0fcedd8a940c2ec4d42d5835cae7fa374ebb21",
     "tests/cod/language/missing-default-alias.cod": "6e9b09ddf5c872aac6b7c0ff04621d4df21dd2e895d4154d2df7394898e35d02",
     "tests/cod/language/missing-destination.cod": "e1d7a7a5fcaa81141baef5d3f3a240e5c20b5f16b97f5588cf13220071ed4622",
     "tests/cod/language/missing.cod": "fee64b75bd994840163e9d4837464559bd096a4e2b54aafe76894988afc0004f",
+    "tests/cod/language/module-diamond.cod": "d7c57a55265fb5c8050f8fbe8371670d8a958e4cf403252cd33fe8f8486aec25",
+    "tests/cod/language/module-repeat.cod": "ad18e6a92d5fa799a13008e0c2437084569b79e661428b4fe1dd6a09b9365a70",
+    "tests/cod/language/operator-control.cod": "f3ef905413996098ab7037d759a071969042fc07e7113102c13da474baa57257",
+    "tests/cod/language/operator-library.cod": "3b94be253e5924fe2783b5292ce9031051e91f6ae6c7cbf4b194d91db7349e38",
+    "tests/cod/language/operator-using.cod": "7defd4f6f75e3c9d9964c335ea4ea6d3e6a7913ce5918ce32662b244e424c3c7",
     "tests/cod/language/other-vocabulary.cod": "80817103481ee22506c050a6fcdc3ce82aefb15cebe6573d84d8a66f00aad547",
     "tests/cod/language/overflow.cod": "372077e05270e2852c8c3cf5e8d904bfa6f58d48242937b7f7560d60117fb1ea",
     "tests/cod/language/perform-without-caller.cod": "f31457d947a8a5b22b629778f68f67509b0679b617eeb71632934c1dd1a1727b",
     "tests/cod/language/plain-assignment.cod": "6832cc854107048ab81f0de5bddbfd78e70a7944f4a0a484d80b13578e1e3e4a",
     "tests/cod/language/procedure-rebinding.cod": "1c59095940344c6433d1cc359a51310a5dbd4d559bede957e58f1aab47a13c09",
+    "tests/cod/language/product-alias.cod": "855cc0f37cbcfe013aec0e918302921ee9c9adf81679d0fe6992ec599ad720dd",
+    "tests/cod/language/product-captures.cod": "2ff94ad31c6e5a85e51c380ed70700b441f116b53dff2b3b39506bbda8805761",
+    "tests/cod/language/product-cycle.cod": "d8a216df27fa251ac4e8ba9bf24193fb73a4c4f070caab241db64abe1f4770d0",
+    "tests/cod/language/product-field-error.cod": "570f426dd389197a2765aad76b4590305013263bc12c5487ac629b90e8692c92",
+    "tests/cod/language/product-library.cod": "a50ce9353fd26acbeb0cab28294e6d2b2dae3bea376aa640fe8752e20f5bd6f7",
+    "tests/cod/language/product-local.cod": "2b3daf5840cabd113d877c4fa0effc01f35c937e9c08619355fd7d7704d0aca9",
+    "tests/cod/language/product-module-identity.cod": "d355cf9c10f7ef4be7b4269b63b05f8598b52396afc4c64b1ae561dbbcef54df",
+    "tests/cod/language/product-other-library.cod": "6271a353553b396c6cf5f58d88b715a0ae21cc34050ad58e98d2538519b7812e",
+    "tests/cod/language/product-shapes.cod": "8558f873fab54b468015bc88b3a5b6f86e0278301d8a1df3fdffd21234865e12",
+    "tests/cod/language/products.cod": "acc964555c72fd747632fee63df9c50d39dd300ab96fa2995bb67e3bf9fd176f",
     "tests/cod/language/reimport-mapping.cod": "63db9239d209daa02025b3e6487883eb994ad368d6ad99eb0a2ab6ff7553654f",
     "tests/cod/language/reimport-provider.cod": "6b5d8a3a979934983cd02b85989c1595d2cab5a9c4efaa2acf41adc7f477e66b",
     "tests/cod/language/reversed-map.cod": "abbfc059feb0b7f012569289656ffe6a5f04b6232c3e9410c20d0c2cf2cdb387",
@@ -1270,31 +1630,31 @@
     "tests/cod/language/using-with-map.cod": "d1debe7352da93d7672302f1d8a8ee369df88d9054c9c6339e43cee2d46a78ee",
     "tests/cod/language/using.cod": "ba0c7ebd8f497265a994201e6ee5be9c04274df10f8447be98d1bf13649671a9",
     "tests/cod/language/value-as-procedure.cod": "257248681baab5224b537b000532a2c5eedde5f0b87d5f024f3807eebf13b7ab",
-    "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223"
+    "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223",
+    "tests/cod/language/stress_tests.py": "45492acc24f82b3e73a3af464526172dda0add6a1b388ce23d474316066a373f"
   },
-  "reference_revision": 3,
-  "status": "passed_bounded_native_prototype_and_cod_component_suite",
-  "baseline_commit": "1bcc1cc034d8d45ee74217a4fe150123af0ae48b",
+  "reference_revision": 4,
+  "status": "passed_typed_bits_methods_module_composition_checkpoint",
+  "baseline_commit": "ee6ced7a1d97ff39d4909a7c41070151672bf1f6",
   "authority": {
-    "design": "D-10 revision 10",
-    "request": "H-121",
-    "assessment": "K-219",
-    "scope": "Combined using, compile-time identity agreement and explicit destination selection; not full-language qualification."
+    "design": "D-10 revision 13; D-07 revision 18; D-11 revision 4",
+    "request": "H-122/H-123/H-139\u2013H-141",
+    "assessment": "K-225",
+    "scope": "Named bits products, FP32/FP64, exact argument dispatch and operator names, once-only module incorporation and inline-call stress; not full-language qualification."
   },
   "build": {
     "command": "cmake --build ./build",
     "exit_code": 0,
-    "source_build_count": 1,
+    "source_build_count": 3,
     "configuration_source_edits": false,
-    "observed_default_graph_behavior": "The existing default graph refreshed runtime sub-build configuration/outputs, a compiler-rt nsan dummy object, libcxx_fuzzer install step and compilation database. No manual configure, bootstrap or install target was invoked.",
+    "observed_default_graph_behavior": "The existing default build graph refreshed runtime sub-build configuration/outputs and its compilation database; no manual configure, bootstrap or install target was invoked.",
     "warnings": [
       "Existing LLVM OpenMPClause.h implicit-this-capture deprecation.",
-      "Existing runtimes CMake policy/deprecation warnings."
-    ],
-    "log_sha256": "5eac9b0c48e49789f1817d3501f9713b1037d8871da7d7bce6bccb9c67bcd8cc"
+      "Existing runtime CMake policy/deprecation warnings."
+    ]
   },
   "component_suite": {
-    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-using-validation.json tests/cod/run-all.sh",
+    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=build/validation/language-component.json tests/cod/run-all.sh",
     "exit_code": 0,
     "passed_groups": 4,
     "total_groups": 4,
@@ -1306,8 +1666,8 @@
       },
       {
         "name": "test_language.sh",
-        "passed": 67,
-        "total": 67
+        "passed": 86,
+        "total": 86
       },
       {
         "name": "test_cod_cache",
@@ -1319,26 +1679,26 @@
         "status": "passed"
       }
     ],
-    "log_sha256": "cb4a8abe4c30494aad0157e8706a73203e4880007e64f1d80b80230d626c9d9c",
+    "log_sha256": "ac4d0ca0f10e4e14379e643e41dca7102af15e9b4a55a18930be0b569fe3d6d0",
     "summary_lines": [
-      "\u2714 All CoD Evaluation tests passed! (6/6)",
-      "CoD language: 67/67 passed (build toolchain)",
-      "\u2714 All CoD cache tests passed! (8/8)",
+      "\u001b[0;32m\u2714 All CoD Evaluation tests passed! (6/6)\u001b[0m",
+      "CoD language: 86/86 passed (build toolchain)",
+      "\u001b[0;32m\u2714 All CoD cache tests passed! (8/8)\u001b[0m",
       "\u2714 All workspace tests passed!",
-      "\u2714 All CoD tests passed! (4/4)"
+      "\u001b[0;32m\u2714 All CoD tests passed! (4/4)\u001b[0m"
     ]
   },
   "limits": [
-    "The scalar two-target frame fixture is not a regional-array implementation or SNN model/training validation.",
-    "Linux build toolchain evidence only; no cross-platform, package-version, concurrency, pointer-lifetime or performance result.",
-    "Broader mapping and repeated/cyclic module policies remain outside the prototype.",
-    "66 source fixtures plus one frontend-only check; not a run of all 25 semantic catalog cases.",
-    "Outer import destination rules and import-body mapping retain their prior semantics; import symbol is unsupported."
+    "Linux system/build toolchain only.",
+    "Regional arrays, UoM conversions, general GADT, package-version identity and concurrency are not implemented in this checkpoint.",
+    "No SNN model or learning acceptance.",
+    "Cyclic initialization and recursive call policies remain outside this prototype.",
+    "Inline graph sizes and compile/link/run times are fixture observations; no native runtime stack-depth or broad performance claim."
   ],
   "check_breakdown": {
-    "native_success": 30,
+    "native_success": 40,
     "native_expected_runtime_failure": 1,
-    "expected_frontend_rejection": 35,
+    "expected_frontend_rejection": 44,
     "frontend_only_success": 1
   }
 }

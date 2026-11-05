@@ -23,7 +23,7 @@ struct Location {
                            std::to_string(at.column) + ": " + message);
 }
 
-enum class TokenKind { identifier, symbol, integer, string, punctuation, end };
+enum class TokenKind { identifier, symbol, integer, real, string, punctuation, end };
 struct Token {
   TokenKind kind;
   std::string text;
@@ -74,7 +74,26 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
     if (std::isdigit(static_cast<unsigned char>(c))) {
       while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor])))
         advance();
-      tokens.push_back({TokenKind::integer, source.substr(offset, cursor - offset), start});
+      bool real = false;
+      if (cursor + 1 < source.size() && source[cursor] == '.' &&
+          std::isdigit(static_cast<unsigned char>(source[cursor + 1]))) {
+        real = true;
+        advance();
+        while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor]))) advance();
+      }
+      if (cursor < source.size() && (source[cursor] == 'e' || source[cursor] == 'E')) {
+        real = true;
+        advance();
+        if (cursor < source.size() && (source[cursor] == '+' || source[cursor] == '-')) advance();
+        if (cursor == source.size() || !std::isdigit(static_cast<unsigned char>(source[cursor])))
+          fail(start, "expected exponent digits");
+        while (cursor < source.size() && std::isdigit(static_cast<unsigned char>(source[cursor]))) advance();
+      }
+      if (source.compare(cursor, 3, "f32") == 0 || source.compare(cursor, 3, "f64") == 0) {
+        real = true;
+        advance(); advance(); advance();
+      }
+      tokens.push_back({real ? TokenKind::real : TokenKind::integer, source.substr(offset, cursor - offset), start});
       continue;
     }
     if (c == '"') {
@@ -103,12 +122,12 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
     if (cursor + 1 < source.size()) {
       const auto pair = source.substr(cursor, 2);
       if (pair == "->" || pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" ||
-          pair == "&&" || pair == "||") {
+          pair == "&&" || pair == "||" || pair == "::" || pair == "<-") {
         punctuation = pair;
         advance();
       }
     }
-    if (std::string("(){};,:+-*/%<>=!").find(c) == std::string::npos && punctuation.size() != 2)
+    if (std::string("(){};,:.+-*/%<>=!").find(c) == std::string::npos && punctuation.size() != 2)
       fail(start, "unsupported character in CoD source");
     advance();
     tokens.push_back({TokenKind::punctuation, punctuation, start});
@@ -117,19 +136,32 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
   return tokens;
 }
 
-enum class Type { integer, boolean, void_type, procedure };
-inline std::string type_name(Type type) {
-  switch (type) {
+struct Type {
+  enum Kind { integer, boolean, void_type, procedure, float32, float64, named, product };
+  Kind kind;
+  std::string name;
+  size_t identity = 0;
+  Type(Kind kind = void_type, std::string name = {}, size_t identity = 0)
+      : kind(kind), name(std::move(name)), identity(identity) {}
+  bool operator==(const Type &) const = default;
+};
+inline bool floating(Type type) { return type.kind == Type::float32 || type.kind == Type::float64; }
+inline bool numeric(Type type) { return type == Type::integer || floating(type); }
+inline std::string type_name(const Type &type) {
+  switch (type.kind) {
   case Type::integer: return "i64";
   case Type::boolean: return "bool";
   case Type::void_type: return "void";
   case Type::procedure: return "procedure";
+  case Type::float32: return "f32";
+  case Type::float64: return "f64";
+  case Type::named: case Type::product: return type.name;
   }
   return "unknown";
 }
 
 struct Expression {
-  enum class Kind { integer, boolean, name, symbol, unary, binary, call, perform, behave, effect, block, conditional };
+  enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect, block, conditional, field, let };
   Kind kind;
   Location at;
   std::string text;
@@ -149,7 +181,7 @@ struct SymbolMapping {
   Location at;
 };
 struct Form {
-  enum class Kind { symbol, symbol_from, function, procedure, global, using_resource, import_resource, expression };
+  enum class Kind { symbol, symbol_from, function, procedure, product, global, using_resource, import_resource, expression };
   Kind kind;
   Location at;
   std::string name;
@@ -184,22 +216,33 @@ class Parser {
       fail(peek().at, kind == TokenKind::symbol ? "expected a symbol name" : "expected a lexical name");
     return tokens_[cursor_++];
   }
+  Token lexical_name() {
+    if (!take("(")) return name(TokenKind::identifier);
+    auto op = tokens_[cursor_++];
+    if (precedence(op.text) < 0 && op.text != "!") fail(op.at, "expected an operator name");
+    if (op.text == "&&" || op.text == "||") fail(op.at, "short-circuit operators are control expressions");
+    expect(")");
+    return op;
+  }
   void resource(Form &form, bool symbolic) {
     if (peek().kind != TokenKind::string) fail(peek().at, "expected a quoted module path");
     form.path = tokens_[cursor_++].text;
     form.symbolic = symbolic || peek().kind == TokenKind::symbol;
     const auto kind = form.symbolic ? TokenKind::symbol : TokenKind::identifier;
-    form.name = name(kind).text;
+    form.name = form.symbolic ? name(kind).text : lexical_name().text;
     form.explicit_alias = take("as");
-    form.alias = form.explicit_alias ? name(kind).text : form.name;
+    form.alias = form.explicit_alias ? (form.symbolic ? name(kind).text : lexical_name().text) : form.name;
   }
   Type parse_type() {
     auto token = name(TokenKind::identifier);
     if (token.text == "i64") return Type::integer;
     if (token.text == "bool") return Type::boolean;
     if (token.text == "void") return Type::void_type;
-    fail(token.at, "prototype supports i64, bool and void types");
+    if (token.text == "f32") return Type::float32;
+    if (token.text == "f64") return Type::float64;
+    return {Type::named, token.text};
   }
+  void type_separator() { if (!take("::")) expect(":"); }
   static int precedence(const std::string &op) {
     if (op == "||") return 1;
     if (op == "&&") return 2;
@@ -221,6 +264,12 @@ class Parser {
   }
   Expr primary() {
     auto token = peek();
+    if (take("let")) {
+      auto expr = make(Expression::Kind::let, name(TokenKind::identifier));
+      expect("=");
+      expr->children.push_back(expression());
+      return expr;
+    }
     if (take("effect")) {
       auto symbol = name(TokenKind::symbol);
       auto expr = make(Expression::Kind::effect, symbol);
@@ -247,6 +296,12 @@ class Parser {
       return expr;
     }
     if (is("{")) return block();
+    if (is("(") && cursor_ + 2 < tokens_.size() && tokens_[cursor_ + 2].text == ")" &&
+        (precedence(tokens_[cursor_ + 1].text) >= 0 || tokens_[cursor_ + 1].text == "!")) {
+      auto expr = make(Expression::Kind::call, lexical_name());
+      arguments(*expr);
+      return expr;
+    }
     if (take("(")) {
       auto expr = expression();
       expect(")");
@@ -254,12 +309,16 @@ class Parser {
     }
     if (take("-") || take("!")) {
       auto expr = make(Expression::Kind::unary, token);
-      expr->children.push_back(primary());
+      expr->children.push_back(expression(7));
       return expr;
     }
     if (token.kind == TokenKind::integer) {
       ++cursor_;
       return make(Expression::Kind::integer, token);
+    }
+    if (token.kind == TokenKind::real) {
+      ++cursor_;
+      return make(Expression::Kind::real, token);
     }
     if (token.kind == TokenKind::symbol) {
       ++cursor_;
@@ -278,6 +337,11 @@ class Parser {
   }
   Expr expression(int minimum = 0) {
     auto left = primary();
+    while (take(".")) {
+      auto member = make(Expression::Kind::field, name(TokenKind::identifier));
+      member->children.push_back(std::move(left));
+      left = std::move(member);
+    }
     while (precedence(peek().text) >= minimum) {
       auto op = tokens_[cursor_++];
       auto binary = make(Expression::Kind::binary, op);
@@ -316,16 +380,29 @@ public:
           form->name = name(TokenKind::symbol).text;
         }
         expect(";");
+      } else if (take("type")) {
+        form->kind = Form::Kind::product;
+        form->name = name(TokenKind::identifier).text;
+        expect("{");
+        while (!take("}")) {
+          auto field = name(TokenKind::identifier);
+          type_separator();
+          auto type = parse_type();
+          if (type == Type::void_type) fail(field.at, "a product field must have a value type");
+          form->parameters.push_back({field.text, type, field.at});
+          if (!is("}")) expect(";");
+        }
+        take(";");
       } else if (is("function") || is("procedure")) {
         const bool function = take("function");
         if (!function) expect("procedure");
         form->kind = function ? Form::Kind::function : Form::Kind::procedure;
-        form->name = name(function ? TokenKind::identifier : TokenKind::symbol).text;
+        form->name = function ? lexical_name().text : name(TokenKind::symbol).text;
         if (take("(")) {
           if (!take(")")) {
             do {
               auto param = name(TokenKind::identifier);
-              expect(":");
+              type_separator();
               const auto type = parse_type();
               if (type == Type::void_type) fail(param.at, "a parameter must have a value type");
               form->parameters.push_back({param.text, type, param.at});
@@ -335,21 +412,22 @@ public:
         } else if (function) {
           fail(peek().at, "a function requires a parameter list");
         }
-        if (take("->")) form->result_type = parse_type();
+        if (take("->") || take("::")) form->result_type = parse_type();
         form->body = block();
         take(";");
       } else if (take("global")) {
         form->kind = Form::Kind::global;
         form->name = name(TokenKind::identifier).text;
-        expect(":");
+        type_separator();
         form->result_type = parse_type();
         if (*form->result_type == Type::void_type) fail(start.at, "a bits global cannot be void");
         expect("=");
         form->body = expression();
         const auto kind = form->body->kind;
         const bool negative_literal = kind == Expression::Kind::unary && form->body->text == "-" &&
-                                      form->body->children.front()->kind == Expression::Kind::integer;
-        if (kind != Expression::Kind::integer && kind != Expression::Kind::boolean &&
+                                      (form->body->children.front()->kind == Expression::Kind::integer ||
+                                       form->body->children.front()->kind == Expression::Kind::real);
+        if (kind != Expression::Kind::integer && kind != Expression::Kind::real && kind != Expression::Kind::boolean &&
             kind != Expression::Kind::call && !negative_literal)
           fail(start.at, "a bits global initializer must be a bits literal or function call");
         expect(";");
@@ -376,6 +454,7 @@ public:
         }
         expect(";");
       } else {
+        if (is("let")) fail(peek().at, "module values require an explicit bits global declaration");
         form->kind = Form::Kind::expression;
         form->body = expression();
         expect(";");
