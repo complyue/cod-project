@@ -1,0 +1,7 @@
+using symbol "std:io" @print;
+symbol @p;
+symbol from "vocabulary.cod" @p as @foreign;
+procedure @foreign -> i64 { 900 }
+using "source.cod" @p as @p;
+behave @print(perform @foreign);
+behave @print(perform @p);

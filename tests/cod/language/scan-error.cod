@@ -1,4 +1,4 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 behave @print(999);
 using "broken-dependency.cod" incomplete;

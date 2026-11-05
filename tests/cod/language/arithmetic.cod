@@ -1,7 +1,7 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 symbol @assert;
-using "std:io" @assert;
+using "std:io" @assert as @assert;
 symbol @flag;
 function choose(x: i64) -> i64 { if (x < 0) { -x } else { x * 2 } }
 behave @print(0010);

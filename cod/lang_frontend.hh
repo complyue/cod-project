@@ -127,6 +127,8 @@ class Compiler {
           fail(form.at, "duplicate symbol alias @" + form.alias);
       } else if (form.kind == Form::Kind::using_resource || form.kind == Form::Kind::import_resource) {
         result.declarations_only = false;
+        if (form.using_symbol && !result.symbols.contains(form.alias))
+          result.symbol_aliases.try_emplace(form.alias, &form);
         if (!form.symbolic && !lexical_names.insert(form.alias).second) {
           fail(form.at, "duplicate lexical alias '" + form.alias + "'");
         }
@@ -149,10 +151,11 @@ class Compiler {
     if (const auto found = module.symbols.find(name); found != module.symbols.end()) return found->second;
     const auto alias = module.symbol_aliases.find(name);
     if (alias == module.symbol_aliases.end()) fail(at, "undeclared symbol @" + name);
-    if (!module.active_aliases.contains(name))
-      fail(at, "symbol alias @" + name + " requires its symbol from encounter first in this prototype");
-    if (!visiting.emplace(&module, name).second) fail(at, "cyclic symbol alias @" + name);
     auto *form = alias->second;
+    if (!module.active_aliases.contains(name))
+      fail(at, "symbol alias @" + name + " requires its " +
+                   (form->using_symbol ? "using symbol" : "symbol from") + " encounter first in this prototype");
+    if (!visiting.emplace(&module, name).second) fail(at, "cyclic symbol alias @" + name);
     const auto id = symbol(*module.dependencies.at(form), form->name, at, visiting);
     visiting.erase({&module, name});
     return id;
@@ -519,7 +522,7 @@ class Compiler {
         expression(*form.body, module, env, locals, false, body);
         break;
       case Form::Kind::using_resource: case Form::Kind::import_resource: {
-        if (form.symbolic && !module.available_symbols.contains(form.alias))
+        if (form.symbolic && !form.using_symbol && !module.available_symbols.contains(form.alias))
           fail(form.at, "procedure destination @" + form.alias + " must be declared before using/import");
         auto &source = *module.dependencies.at(&form);
         execute_module(source, env, form.at, body);
@@ -528,10 +531,23 @@ class Compiler {
           const auto resource = source.exports.find(source_id);
           if (resource == source.exports.end() || !resource->second.procedure)
             fail(form.at, "source resource @" + form.name + " has no procedure value; use symbol from for identity");
+          if (form.using_symbol) {
+            const auto alias = module.symbol_aliases.find(form.alias);
+            if (alias != module.symbol_aliases.end() && alias->second == &form) {
+              module.active_aliases.insert(form.alias);
+              module.available_symbols.insert(form.alias);
+            }
+          }
+          const auto destination = symbol(module, form.alias, form.at);
+          if (form.kind == Form::Kind::using_resource && (form.using_symbol || !form.explicit_alias) &&
+              destination != source_id)
+            fail(form.at, "symbol identity mismatch: source @" + form.name + " is " + symbol_names_[source_id] +
+                             ", local @" + form.alias + " is " + symbol_names_[destination] +
+                             "; write using \"" + form.path + "\" @" + form.name + " as @" + form.alias +
+                             "; to select that destination explicitly");
           auto value = resource->second;
           if (form.kind == Form::Kind::import_resource)
             value = define_procedure(import_body(*value.procedure, form, module), module, env, body);
-          const auto destination = symbol(module, form.alias, form.at);
           bind(destination, std::move(value), module, env, form.at, body);
         } else if (const auto function = source.functions.find(form.name); function != source.functions.end()) {
           if (form.kind == Form::Kind::import_resource)

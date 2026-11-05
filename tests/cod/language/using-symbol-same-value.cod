@@ -1,0 +1,3 @@
+symbol @local;
+using "std:io" @print as @local;
+using symbol "std:io" @print as @local;

@@ -1,0 +1,2 @@
+symbol from "other-vocabulary.cod" @x as @p;
+using "source.cod" @p;

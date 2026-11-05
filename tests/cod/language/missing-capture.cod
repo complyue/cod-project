@@ -1,5 +1,5 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 symbol @x;
 symbol @p;
 procedure @p -> i64 { @x }

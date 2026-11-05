@@ -1,0 +1,9 @@
+using symbol "std:io" @print;
+using symbol "std:io" @print as @echo;
+using symbol "std:io" @print;
+symbol @plus_one;
+symbol @result;
+procedure @plus_one(value: i64) -> i64 { value + 1 }
+behave @print(1);
+effect @result = { effect @echo = @plus_one; behave @print(4) };
+behave @echo(@result);

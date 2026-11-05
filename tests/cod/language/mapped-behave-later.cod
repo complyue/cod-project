@@ -1,5 +1,5 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 symbol @step;
 symbol @target;
 function helper() -> i64 { 9 }

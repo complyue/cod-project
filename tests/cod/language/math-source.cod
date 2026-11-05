@@ -1,5 +1,5 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 function seed() -> i64 { 20 * 2 }
 global base: i64 = seed();
 function add(x: i64) -> i64 { base + x }

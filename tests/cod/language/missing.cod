@@ -1,5 +1,5 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 symbol @missing;
 behave @print(111);
 behave @print(@missing);

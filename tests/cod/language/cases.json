@@ -269,5 +269,100 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "no importable body"
+  },
+  {
+    "file": "using-symbol-basic.cod",
+    "exit": 0,
+    "stdout": "1\n5\n"
+  },
+  {
+    "file": "using-shared-identity.cod",
+    "exit": 0,
+    "stdout": "1001\n401\n408\n8\n"
+  },
+  {
+    "file": "using-symbol-shared-identity.cod",
+    "exit": 0,
+    "stdout": "900\n1001\n401\n408\n8\n"
+  },
+  {
+    "file": "using-symbol-source.cod",
+    "exit": 0,
+    "stdout": "1001\n401\n408\n8\n"
+  },
+  {
+    "file": "using-symbol-renamed-shared.cod",
+    "exit": 0,
+    "stdout": "1001\n401\n"
+  },
+  {
+    "file": "using-explicit-self.cod",
+    "exit": 0,
+    "stdout": "1001\n900\n401\n"
+  },
+  {
+    "file": "using-symbol-reexport.cod",
+    "exit": 0,
+    "stdout": "1001\n401\n"
+  },
+  {
+    "file": "using-identity-mismatch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "write using \"source.cod\" @p as @p;"
+  },
+  {
+    "file": "using-symbol-identity-mismatch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol identity mismatch:"
+  },
+  {
+    "file": "using-alias-identity-mismatch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol identity mismatch:"
+  },
+  {
+    "file": "using-symbol-renamed-mismatch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "write using \"source.cod\" @p as @step;"
+  },
+  {
+    "file": "using-symbol-explicit-mismatch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol identity mismatch:"
+  },
+  {
+    "file": "using-symbol-same-value.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol identity mismatch:"
+  },
+  {
+    "file": "using-symbol-early.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "requires its using symbol encounter first"
+  },
+  {
+    "file": "using-symbol-no-procedure.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "has no procedure value"
+  },
+  {
+    "file": "using-symbol-with-map.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a symbol map requires an imported procedure"
+  },
+  {
+    "file": "import-symbol-unsupported.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "import symbol is outside the prototype"
   }
 ]

@@ -1,5 +1,5 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 symbol from "vocabulary.cod" @x;
 symbol from "vocabulary.cod" @p as @source_proc;
 procedure @source_proc -> i64 { 900 }

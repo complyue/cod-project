@@ -156,6 +156,8 @@ struct Form {
   std::string path;
   std::string alias;
   bool symbolic = false;
+  bool explicit_alias = false;
+  bool using_symbol = false;
   std::vector<SymbolMapping> mappings;
   std::vector<Parameter> parameters;
   std::optional<Type> result_type;
@@ -188,7 +190,8 @@ class Parser {
     form.symbolic = symbolic || peek().kind == TokenKind::symbol;
     const auto kind = form.symbolic ? TokenKind::symbol : TokenKind::identifier;
     form.name = name(kind).text;
-    form.alias = take("as") ? name(kind).text : form.name;
+    form.explicit_alias = take("as");
+    form.alias = form.explicit_alias ? name(kind).text : form.name;
   }
   Type parse_type() {
     auto token = name(TokenKind::identifier);
@@ -354,7 +357,11 @@ public:
         const bool using_resource = take("using");
         if (!using_resource) expect("import");
         form->kind = using_resource ? Form::Kind::using_resource : Form::Kind::import_resource;
-        resource(*form, false);
+        if (take("symbol")) {
+          if (!using_resource) fail(start.at, "import symbol is outside the prototype; declare its destination first");
+          form->using_symbol = true;
+        }
+        resource(*form, form->using_symbol);
         if (take("with")) {
           if (using_resource || !form->symbolic)
             fail(start.at, "a symbol map requires an imported procedure");

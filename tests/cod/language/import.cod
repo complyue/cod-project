@@ -1,7 +1,7 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 symbol @assert;
-using "std:io" @assert;
+using "std:io" @assert as @assert;
 symbol from "vocabulary.cod" @x;
 function helper() -> i64 { 9 }
 effect @x = 7;

@@ -1,14 +1,14 @@
 # CoD native source prototype
 
-Prototype reference revision: 2 · Recorded: 2026-11-05.
+Prototype reference revision: 3 · Recorded: 2026-11-05.
 
 ## Design authority
 
-- **Registry / scope:** implementation evidence associated with [D-10 revision 8](../../../design/DesignAuthorityRegistry.md#d-10), under the direct [H-108](../../../design/DesignAuthorityRegistry.md#h-108) prototype request and [H-118](../../../design/DesignAuthorityRegistry.md#h-118) symbol-syntax implementation request. This reference describes the runnable subset; it is not a qualified specification of the full language.
+- **Registry / scope:** implementation evidence associated with [D-10 revision 10](../../../design/DesignAuthorityRegistry.md#d-10), under the direct [H-108](../../../design/DesignAuthorityRegistry.md#h-108) prototype request and [H-118](../../../design/DesignAuthorityRegistry.md#h-118) symbol-syntax implementation request, refined by [H-121](../../../design/DesignAuthorityRegistry.md#h-121) for combined using and identity checks. This reference describes the runnable subset; it is not a qualified specification of the full language.
 - **Value lineage:** C-35/C-36/C-37 and P-84/P-85/P-86 connect identity, scoped interpretation and pure computation to inspectable programs; C-38/P-87 connects the fixture to application-driven validation. These candidate paths retain their registry status.
-- **Human baseline / invariants:** H-96–H-118 supply the local symbol, callable, module, capture and storage rules. Preserve definition-value `perform`, current-binding `behave`, scope restoration, complete scanning before execution composition, and compile-time missing-binding errors. User values have no host-heap lifetime.
+- **Human baseline / invariants:** H-96–H-121 supply the local symbol, callable, module, capture and storage rules. Preserve definition-value `perform`, current-binding `behave`, scope restoration, complete scanning before execution composition, and compile-time missing-binding errors. User values have no host-heap lifetime.
 - **Acceptance / non-goals:** actual source-to-native compilation and execution, scope/module examples, diagnostics before execution, and an exact-integer incoming gather. General regional allocation, ADT/GADT syntax, persistent closures, concurrency and neural learning are outside this milestone.
-- **Assessment:** [K-217](../../../design/DesignAuthorityRegistry.md#k-217) records implementation and measured evidence. The symbol-selection/map forms implement H-118; other experimental syntax, numerical conventions and unsupported edge cases do not settle the full language.
+- **Assessment:** [K-219](../../../design/DesignAuthorityRegistry.md#k-219) records implementation and measured evidence. The symbol-selection/map forms implement H-118; combined using and identity checks implement H-120/H-121; other experimental syntax, numerical conventions and unsupported edge cases do not settle the full language.
 
 ## Run
 
@@ -35,8 +35,7 @@ build/bin/cod --check tests/cod/language/using.cod --emit-cpp /tmp/cod-example.c
 ```text
 symbol @x;
 symbol @p;
-symbol @print;
-using "std:io" @print;
+using symbol "std:io" @print;
 function twice(value: i64) -> i64 { value * 2 }
 global seed: i64 = twice(3);
 effect @x = seed;
@@ -52,10 +51,11 @@ behave @print(behave @p);   // 9: current dynamic binding
 - `if (condition) { ... } else { ... }`, with matching branch result types. Blocks yield their last expression; an empty block yields `void`. Semicolons separate expressions and a trailing semicolon does not discard the last value.
 - Module-level `symbol`, `function`, `procedure`, immutable bits `global`, resource declarations and expressions. Global initializers must be bits literals or function calls. Local declarations, loops and arrays are not implemented.
 - `symbol @local;` declares a fresh identity. `symbol from "vocabulary.cod" @source as @local;` selects an existing source identity; omitting `as` retains its spelling. Neither provides an initial runtime value.
-- `using "module.cod" @resource as @local;` installs a source procedure with its definition/captures under an existing destination symbol. `import "module.cod" @resource as @local;` redefines its body in the receiving lexical/dynamic context and installs the result there. The destination must be declared or selected before the encounter, even when `as` is omitted. Its identity may differ from the source resource identity.
+- `using "module.cod" @resource as @local;` installs a source procedure with its definition/captures under an existing destination symbol. `import "module.cod" @resource as @local;` redefines its body in the receiving lexical/dynamic context and installs the result there. The destination must be declared or selected before the encounter, even when `as` is omitted. For ordinary using, omitting `as` requires the destination to share the source identity; a different identity requires explicit `as`, even `using "module.cod" @resource as @resource;`. The outer import rule remains unchanged.
+- `using symbol "module.cod" @resource as @local;` selects both the source identity and its procedure in one encounter; `as` is optional. An absent local name becomes an alias of the source identity. An existing name must resolve to that same identity; otherwise use ordinary `using` with an explicit destination. Equal procedure values or spellings do not establish identity equality.
 - `import "module.cod" @resource as @local with { @target as @tgt_neuron; };` supplies the receiving module’s `@target` identity for the source-body role `@tgt_neuron`. Unlisted body aliases use the same name in the receiving module. Translation precedes capture/checking, covers reads, writes and procedure calls, and creates no runtime alias map or extra local alias. `using` does not accept a body map.
 - Lexical functions and immutable globals can be selected with `using "module.cod" name;`. Function-body `import` is unsupported.
-- Synthetic system module `std:io` provides `@print` for one scalar and `@assert` for one boolean. These are procedures; functions cannot invoke them or other effects. Declare their destination symbols before `using`; built-ins have no source body to `import`.
+- Synthetic system module `std:io` provides `@print` for one scalar and `@assert` for one boolean. These are procedures; functions cannot invoke them or other effects. Use `using symbol "std:io" @print;`, or explicitly select an existing destination. Built-ins have no source body to `import`.
 
 Prototype expression evaluation is left-to-right; boolean operators short-circuit. Both conditional branches are checked. A symbolic write in a conditional logical operand requires an explicit nested scope. Arithmetic overflow and division by zero fail the native program with exit 70 rather than invoking C++ undefined behavior. These sequencing, block-result and numerical choices remain reviewable prototype conventions.
 
@@ -63,7 +63,7 @@ Prototype expression evaluation is left-to-right; boolean operators short-circui
 
 All dependency files are parsed before any execution is emitted. A syntax or required-binding error rejects the whole entry before any top-level print can run. Procedure registration during scanning does not capture values; capture occurs at its definition event in the resulting execution.
 
-Every `symbol from`, `using` and `import` encounter incorporates source execution. The source’s scope then restores its effects. Identity-only selection does not retain an incidental runtime value; selected procedures retain copied scalar captures. Imported aliases must have reached their `symbol from` encounter before use, including use in capture analysis. A body map does not rewrite source initialization or other existing procedures.
+Every `symbol from`, `using` and `import` encounter incorporates source execution. The source’s scope then restores its effects. Identity-only selection does not retain an incidental runtime value; selected procedures retain copied scalar captures. Imported aliases must have reached their `symbol from` or introducing `using symbol` encounter before use, including use in capture analysis. Combined using is one source encounter; matching an existing identity still installs the selected procedure. A body map does not rewrite source initialization or other existing procedures.
 
 Unknown local suppliers/source-body roles and duplicate mapping roles are diagnosed. Splitting aliases of one source identity across multiple receiving identities is outside the prototype; mapping them to one identity is supported. Broader mapping policy remains open.
 
@@ -75,7 +75,7 @@ The generated program uses fixed thread-local scalar binding slots and stack-bas
 
 ## Evidence
 
-[validation.json](validation.json) records exact commands, outputs, exit codes, source hashes and the validated executable hash for 49 source fixtures (23 successful native programs, one expected native arithmetic failure and 25 expected frontend rejections) plus one frontend-only check. It records the successful normal source build and complete CoD component suite: language, six C++ evaluation checks, eight cache checks and workspace checks.
+[validation.json](validation.json) records exact commands, outputs, exit codes, source hashes and the validated executable hash for 66 source fixtures (30 successful native programs, one expected native arithmetic failure and 35 expected frontend rejections) plus one frontend-only check. It records the successful normal source build and complete CoD component suite: language, six C++ evaluation checks, eight cache checks and workspace checks.
 
 The suite discovers [test_language.sh](../test_language.sh), which runs [run_tests.py](run_tests.py) against expected results in [cases.json](cases.json). To repeat the component suite with the existing build toolchain:
 
@@ -94,6 +94,9 @@ For the language group alone, use `COD_TEST_TOOLCHAIN=build tests/cod/test_langu
 | [identity-restore.cod](identity-restore.cod), [using-destination.cod](using-destination.cod), [using-vocabulary-destination.cod](using-vocabulary-destination.cod) | Identity selection retains no source value; fresh or vocabulary-selected destinations install procedures independently of the source identity |
 | [import-mapping.cod](import-mapping.cod), [import-default-identity.cod](import-default-identity.cod), [reimport-mapping.cod](reimport-mapping.cod) | Explicit supplier/role mapping, same-name receiving identities, receiving captures and reimported-body translation |
 | [mapping-effects.cod](mapping-effects.cod), [mapping-perform-call.cod](mapping-perform-call.cod), [mapped-behave-later.cod](mapped-behave-later.cod) | Mapped writes/calls, transitive capture requirements, restoration and later caller bindings for `behave` |
+| [using-symbol-basic.cod](using-symbol-basic.cod), [using-symbol-source.cod](using-symbol-source.cod) | Combined selection, renamed aliases sharing dynamic values, source initialization once, captured/current calls and restoration |
+| [using-shared-identity.cod](using-shared-identity.cod), [using-symbol-shared-identity.cod](using-symbol-shared-identity.cod), [using-symbol-reexport.cod](using-symbol-reexport.cod) | Shared vocabulary/re-export identity permits abbreviation and still installs the selected procedure |
+| [using-explicit-self.cod](using-explicit-self.cod), [using-identity-mismatch.cod](using-identity-mismatch.cod), [using-symbol-same-value.cod](using-symbol-same-value.cod) | Explicit self-`as` keeps identities distinct; omitted `as` and combined mismatches fail even when procedure values agree |
 | [frame.cod](frame.cod) | A = `[2,5]` produces B = `[15,14]`; reverse target traversal agrees, source A remains unchanged until both B values are ready, then publication exposes `[15,14]` |
 | Invalid fixtures | Missing binding/capture, effect access in a function, incompatible symbol types, plain assignment, broken dependency and premature alias use, undeclared destinations, invalid mapping names/direction and unsupported source resources fail with source-location diagnostics before execution |
 

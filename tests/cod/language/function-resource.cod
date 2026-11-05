@@ -1,4 +1,4 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 using "math-source.cod" add;
 behave @print(add(2));

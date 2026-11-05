@@ -1,5 +1,5 @@
 symbol @print;
-using "std:io" @print;
+using "std:io" @print as @print;
 symbol from "destination-vocabulary.cod" @step;
 using "source.cod" @p as @step;
 behave @print(perform @step);
