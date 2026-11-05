@@ -6,6 +6,8 @@ symbol @right;
 symbol @route;
 symbol @nested;
 symbol @branch;
+symbol @relay;
+symbol @chained;
 effect @x = 10;
 effect @y = 20;
 procedure @left()::i64 { @x }
@@ -29,6 +31,10 @@ procedure @branch(flag::bool)::i64 {
   };
   selected * 1000 + behave @route()
 }
+procedure @chained()::i64 {
+  effect @route = effect @relay = @left;
+  behave @route()
+}
 effect @x = 100;
 effect @y = 200;
 behave @print(perform @nested());
@@ -37,3 +43,5 @@ behave @print(perform @branch(true));
 behave @print(perform @branch(false));
 behave @print(behave @branch(true));
 behave @print(behave @route());
+behave @print(perform @chained());
+behave @print(behave @chained());

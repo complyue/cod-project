@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T23:12:37.255235+00:00",
+  "recorded_utc": "2026-11-05T23:16:16.273067+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -2037,10 +2037,10 @@
       "expected": {
         "file": "capture-scope-restore.cod",
         "exit": 0,
-        "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n"
+        "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n"
       },
       "exit_code": 0,
-      "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n",
+      "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n",
       "stderr": "",
       "passed": true
     },
@@ -2154,9 +2154,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-vlgdzu4l/program.ll",
+        "/tmp/cod-language-check-bfugiqa_/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-vlgdzu4l/program.bc"
+        "/tmp/cod-language-check-bfugiqa_/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2166,25 +2166,25 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "43d8d80a22cacdbee4a021dd64a3839da08139068341418dbbe3402b1c19b7f0"
+    "sha256": "14f2b4c996a9c11bd79a7ae6e66678357113dfb90a68a54b9918e1b1862eecbd"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "86d8266f2be6e0789cf64a8816dd0e6cc830cfd867345e01a394227d60664a10",
-    "cod/lang_frontend.hh": "0253b9cc0a6287cd91bfcdbe2fd0be1b285f51df24870dcd7e918b2d4fb2e7b2",
+    "cod/lang_frontend.hh": "091d18b44dda10999217684ad7bf4dcf538a5e99fac75409452c1bdd44f74c58",
     "cod/lang_llvm.hh": "c72c632d3bac0ecf9aa0365ff820f75012b65c6a79c74ba6f3dde39e52e34b4e",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "c16c4602b95f7052e9161950396ba181a81ae5b3ba9d98faa79b821554f1960d",
-    "tests/cod/language/cases.json": "16e945b64ae9f60a475eb3c83f731be5e2db75545042f75c3c9e01825d23c149",
+    "tests/cod/language/cases.json": "518da55285c57c8a38bb416b4f5b425172bab8974c55641adb8cbb1467ba84be",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
     "tests/cod/language/bounded-iteration.cod": "7b7228907eb4e81a5d2ff66f3c1a090dfe90f31167497111781f143b985f3d14",
     "tests/cod/language/broken-dependency.cod": "6cd8716b5bdcd5e22a9deb4c3b308fcd0908c74b7d4ce0d1a3c30632955679d3",
     "tests/cod/language/builtin-body-import.cod": "673482f8e33208d9a242f2fbe7fdc032ba62996c343a5ed4ae1d8717263f4418",
-    "tests/cod/language/capture-scope-restore.cod": "98f905210c324a27b4261685e5d23140ce40abf75b5281bad735f81b5e095f2d",
+    "tests/cod/language/capture-scope-restore.cod": "af55a4f1277ff9e21e9687e6837e2b92fca9058b5f299c2fcad8093ee7ea34b8",
     "tests/cod/language/cast-truncation.cod": "513b8b42b993f3408775af8542e18a84cc7317272636c33a385179ae8b5c7838",
     "tests/cod/language/destination-vocabulary.cod": "490d565b9a59f98f5fb958cd4f7de225845803c139c7e6a5d4824add0c03a68f",
     "tests/cod/language/diamond-left.cod": "86975e2f1597f2d8050b1231064be1e3cba2a99a93ee79d4b8743d543c11efd8",
@@ -2334,7 +2334,8 @@
     "tests/cod/language/value-as-procedure.cod": "257248681baab5224b537b000532a2c5eedde5f0b87d5f024f3807eebf13b7ab",
     "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223"
   },
-  "component_suite": {
+  "previous_component_suite": {
+    "commit": "100e73a7c5f0ab18fce6f69273c6932a6808b9c1",
     "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=build/validation/language-direct-values.json tests/cod/run-all.sh",
     "exit_code": 0,
     "passed_groups": 4,

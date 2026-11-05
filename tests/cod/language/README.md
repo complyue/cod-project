@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 11 · Recorded: 2026-11-05.
+Prototype reference revision: 12 · Recorded: 2026-11-05.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 11 · Recorded: 2026-11-05.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-232](../../../design/DesignAuthorityRegistry.md#k-232) records the current implementation, coverage and limits.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-233](../../../design/DesignAuthorityRegistry.md#k-233) records the current implementation, coverage and limits.
 
 ## Run
 
@@ -162,7 +162,7 @@ The generated program uses fixed thread-local typed binding slots and stack-base
 
 ## Evidence
 
-[validation.json](validation.json) records the latest checkpoint’s commands, outputs, exit codes, source/executable hashes and component-suite evidence. [stress-validation.json](stress-validation.json) records generated dependency/call-graph checks. [regional-validation.json](regional-validation.json) records native layout, complete-image relocation and compilation/process measurements from [regional_runtime_tests.py](regional_runtime_tests.py). The harness verifies LLVM artifact round-tripping and inspects the records/arrays created by LLVM execution through an independent layout view. It copies the complete region, releases the original, then checks sharing, a cycle and mutation through the relocated references. Measurements are local observations, not portability or full-language acceptance claims.
+[validation.json](validation.json) records the latest checkpoint’s commands, outputs, exit codes, source/executable hashes and the explicitly dated preceding component-suite evidence. [stress-validation.json](stress-validation.json) records generated dependency/call-graph checks. [regional-validation.json](regional-validation.json) records native layout, complete-image relocation and compilation/process measurements from [regional_runtime_tests.py](regional_runtime_tests.py). The harness verifies LLVM artifact round-tripping and inspects the records/arrays created by LLVM execution through an independent layout view. It copies the complete region, releases the original, then checks sharing, a cycle and mutation through the relocated references. Measurements are local observations, not portability or full-language acceptance claims.
 
 The suite discovers [test_language.sh](../test_language.sh), which runs [run_tests.py](run_tests.py) against expected results in [cases.json](cases.json). To repeat the component suite with the existing build toolchain:
 
@@ -176,7 +176,7 @@ Coverage is judged by the contracts below, not by the number of fixtures or a so
 
 | Contract and consequence | Key evidence |
 | --- | --- |
-| Effects select the right context and restore it; otherwise nested calls silently change caller behavior. | `scopes`, `transitive`, `capture-scope-restore`; unavailable captures/bindings rejected. |
+| Effects select the right context and restore it; otherwise nested calls silently change caller behavior. | `scopes`, `transitive`, `capture-scope-restore` including chained effect results; unavailable captures/bindings rejected. |
 | Module loading is separate from once-only execution; identities survive aliases and remain distinct from values. | `module-diamond`, resource-trigger fixtures, `import-mapping`, `using-symbol-reexport`, identity mismatch despite equal procedure values. |
 | Products/UoMs preserve identity, pure methods and deliberate conversion choice. | `products`, `methods`, selected unit bundles, exact/direct/declared routes, ambiguity warning/error, argument evaluated once. |
 | Control flow preserves order, short circuiting, iteration scopes and fold types. | `arithmetic`, rejected unscoped logical writes even to an equal value, `bounded-iteration`, `iteration-scope`, product/reference folds and invalid accumulator types. |

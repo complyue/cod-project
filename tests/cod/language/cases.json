@@ -641,7 +641,7 @@
   {
     "file": "capture-scope-restore.cod",
     "exit": 0,
-    "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n"
+    "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n"
   },
   {
     "file": "region-mutual.cod",

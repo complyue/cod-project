@@ -394,7 +394,7 @@ class Compiler {
 
   // Only used, externally supplied symbolic values become captures. A behave
   // dependency includes the selected callee's needs; perform supplies its own.
-  void collect(const Expression &expr, Module &module, CaptureState &state,
+  std::optional<Value> collect(const Expression &expr, Module &module, CaptureState &state,
                std::set<size_t> &needed, std::set<const Procedure *> &visiting) {
     using K = Expression::Kind;
     if (expr.kind == K::block || expr.kind == K::conditional) {
@@ -406,12 +406,17 @@ class Compiler {
         if (expr.kind == K::conditional) state.restore(mark);
       }
       state.restore(mark);
-      return;
+      return {};
     }
-    for (const auto &child : expr.children) collect(*child, module, state, needed, visiting);
+    std::optional<Value> produced;
+    for (const auto &child : expr.children) produced = collect(*child, module, state, needed, visiting);
     if (expr.kind == K::symbol || expr.kind == K::perform || expr.kind == K::behave) {
       const auto id = expression_symbol(expr, module);
       if (!state.provided.contains(id)) needed.insert(id);
+      if (expr.kind == K::symbol) {
+        const auto found = state.visible.find(id);
+        return found == state.visible.end() ? std::nullopt : std::optional<Value>(found->second);
+      }
       if (expr.kind == K::behave) {
         const auto callee = state.visible.find(id);
         if (callee != state.visible.end() && callee->second.procedure) {
@@ -427,13 +432,10 @@ class Compiler {
       }
     } else if (expr.kind == K::effect) {
       const auto id = expression_symbol(expr, module);
-      std::optional<Value> value;
-      if (expr.children[0]->kind == K::symbol) {
-        const auto source = expression_symbol(*expr.children[0], module);
-        if (const auto found = state.visible.find(source); found != state.visible.end()) value = found->second;
-      }
-      state.bind(id, std::move(value));
+      state.bind(id, produced);
+      return produced; // effect yields its bound value, including another procedure.
     }
+    return {};
   }
   Value define_procedure(Form &form, Module &lexical, const Environment &env) {
     auto proc = std::make_shared<Procedure>();
