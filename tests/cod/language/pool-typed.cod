@@ -1,0 +1,25 @@
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+using units "pool-units.cod" {ClassId, ClassSetId, GlobalSetId, LocalSlot, GlobalSlot, SetCount, SlotCount, SlotsPerSet};
+using "pool-layout.cod" Layout;
+using "pool-layout.cod" sets;
+using "pool-layout.cod" capacity;
+using "pool-layout.cod" class_set_begin;
+using "pool-layout.cod" class_slot_begin;
+using "pool-index.cod" locate;
+using "pool-index.cod" global_slot;
+global layout::Layout = Layout(16u32, 10u64);
+behave @print(scalar(class_set_begin(layout, ClassId(16u32))));
+behave @print(scalar(class_slot_begin(layout, ClassId(16u32))));
+behave @print(scalar(global_slot(layout, ClassId(15u32), ClassSetId(9u64), LocalSlot(18431u32))));
+for (j in 0u32 .. 16u32) {
+  let first = scalar(class_set_begin(layout, ClassId(j)));
+  let count = scalar(sets(layout, ClassId(j)));
+  for (which in 0u32 .. 3u32) {
+    let local = if (which == 0u32) { 0u64 } else { if (which == 1u32) { count / 2u64 } else { count - 1u64 } };
+    let found = locate(layout, GlobalSetId(first + local));
+    behave @assert(scalar(found.class_id) == j);
+    behave @assert(scalar(found.local) == local);
+  };
+};
+behave @print(true);

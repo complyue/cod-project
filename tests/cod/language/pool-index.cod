@@ -1,0 +1,18 @@
+using units "pool-units.cod" {ClassId, ClassSetId, GlobalSetId, LocalSlot, GlobalSlot, SetCount, SlotCount, SlotsPerSet};
+using "pool-layout.cod" Layout;
+using "pool-layout.cod" sets;
+using "pool-layout.cod" capacity;
+using "pool-layout.cod" class_set_begin;
+using "pool-layout.cod" class_slot_begin;
+type SetLocation { class_id::ClassId; local::ClassSetId; }
+function locate(layout::Layout, index (GlobalSetId))::SetLocation {
+  fold (j in 0u32 .. layout.classes, found = SetLocation(ClassId(0u32), ClassSetId(0u64))) {
+    let first = scalar(class_set_begin(layout, ClassId(j)));
+    if (scalar(index) >= first && scalar(index) < first + scalar(sets(layout, ClassId(j)))) {
+      SetLocation(ClassId(j), ClassSetId(scalar(index) - first))
+    } else { found }
+  }
+}
+function global_slot(layout::Layout, j (ClassId), set (ClassSetId), slot (LocalSlot))::GlobalSlot {
+  GlobalSlot(scalar(class_slot_begin(layout, j)) + scalar(set) * u64(scalar(capacity(j))) + u64(scalar(slot)))
+}

@@ -1,0 +1,3 @@
+unit A::i64;
+unit B::i64;
+for (i in A(0) .. B(3)) { i };

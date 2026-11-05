@@ -1,6 +1,6 @@
 # CoD native source prototype
 
-Prototype reference revision: 5 · Recorded: 2026-11-05.
+Prototype reference revision: 6 · Recorded: 2026-11-05.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 5 · Recorded: 2026-11-05.
 - **Value lineage:** C-35/C-36/C-37 and P-84/P-85/P-86 connect identity, scoped interpretation and pure computation to inspectable programs; C-38/P-87 connects the fixture to application-driven validation. These candidate paths retain their registry status.
 - **Human baseline / invariants:** H-96–H-121 supply the local symbol, callable, module, capture and storage rules. Preserve definition-value `perform`, current-binding `behave`, scope restoration, complete scanning before execution composition, and compile-time missing-binding errors. User values have no host-heap lifetime.
 - **Acceptance / non-goals:** actual source-to-native compilation and execution, scope/module examples, diagnostics before execution, and an exact-integer incoming gather. General regional allocation, sum/GADT syntax, persistent closures, concurrency and neural learning are outside this checkpoint. Named bits products, FP32/FP64 values and parameter-type methods are implemented.
-- **Assessment:** [K-226](../../../design/DesignAuthorityRegistry.md#k-226) records nominal units and conversion-path validation under H-128/H-130/H-134–H-138. [K-225](../../../design/DesignAuthorityRegistry.md#k-225) records this typed-value/method/composition checkpoint and actual validation. H-122/H-123 authorize this language/runtime increment; H-139–H-141 specify complex composition, once-only incorporation and initial inlining. K-224 records the current module contract. [K-219](../../../design/DesignAuthorityRegistry.md#k-219) records implementation and measured evidence. The symbol-selection/map forms implement H-118; combined using and identity checks implement H-120/H-121; other experimental syntax, numerical conventions and unsupported edge cases do not settle the full language.
+- **Assessment:** [K-227](../../../design/DesignAuthorityRegistry.md#k-227) records bounded iteration, compact integer widths, checked numeric casts and typed pool-index validation. [K-226](../../../design/DesignAuthorityRegistry.md#k-226) records nominal units and conversion-path validation under H-128/H-130/H-134–H-138. [K-225](../../../design/DesignAuthorityRegistry.md#k-225) records this typed-value/method/composition checkpoint and actual validation. H-122/H-123 authorize this language/runtime increment; H-139–H-141 specify complex composition, once-only incorporation and initial inlining. K-224 records the current module contract. [K-219](../../../design/DesignAuthorityRegistry.md#k-219) records implementation and measured evidence. The symbol-selection/map forms implement H-118; combined using and identity checks implement H-120/H-121; other experimental syntax, numerical conventions and unsupported edge cases do not settle the full language.
 
 ## Run
 
@@ -45,7 +45,7 @@ behave @print(perform @p);  // 6: definition-time value
 behave @print(behave @p);   // 9: current dynamic binding
 ```
 
-- Scalars `i64`, `f32`, `f64`, `bool` and `void`; decimal integers, floating literals with optional `f32`/`f64` suffix, `true`/`false`, arithmetic, comparisons, `!`, `&&` and `||`. Unsuffixed floating literals use `f64`; arithmetic does not implicitly mix widths. Floating operators use native IEEE arithmetic; signed integer arithmetic checks overflow.
+- Scalars `i64`, `u8`, `u32`, `u64`, `f32`, `f64`, `bool` and `void`; decimal integers, floating literals with optional `f32`/`f64` suffix, `true`/`false`, arithmetic, comparisons, `!`, `&&` and `||`. Unsuffixed floating literals use `f64`; arithmetic does not implicitly mix widths. Floating operators use native IEEE arithmetic; signed integer arithmetic checks overflow.
 - Lexically named functions with typed parameters and an optional result annotation; symbol-named procedures with the same scalar parameters/results. A no-argument procedure can omit its parameter list. Calls to functions use `name(...)`; procedure calls use `perform @name(...)` or `behave @name(...)`.
 - `effect @name = value` binds for the enclosing scope and yields that value. `@name` reads. Nested braces restore bindings on exit. Ordinary assignment is rejected.
 - `if (condition) { ... } else { ... }`, with matching branch result types. Blocks yield their last expression; an empty block yields `void`. Semicolons separate expressions and a trailing semicolon does not discard the last value.
@@ -98,6 +98,21 @@ A unit definition creates a distinct compile-time type identity over a numeric s
 `x (metres)` requires that identity; `x (metres*)` permits conversion. `x (metres*<-cm<-mm)` uses a direct conversion when available, otherwise the declared indirect route. Automatic graph search chooses a unique path. Multiple unresolved paths warn and continue using the shortest route with declaration-order tie breaking, reporting an alternative witness. `--warnings-as-errors` and `-Werror=unit-conversion` turn those warnings into errors. Paths use the call site's selected bundle; route names resolve where the parameter is defined. Exact argument-tuple methods are selected before conversion-enabled alternatives.
 
 Conversions are pure functions; they cannot read/write effects or invoke procedures. The original argument is evaluated once. Identity/route checks happen before native compilation, including when a preceding module initializer would print at runtime. The compiler does not enumerate cyclic walks or claim that distinct numeric formulas are equivalent.
+
+## Bounded iteration and numeric representations
+
+```text
+function sum(n::u32)::u64 {
+    fold (i in 0u32 .. n, total = 0u64) { total + u64(i) }
+}
+for (i in 0 .. 10) { behave @print(i); };
+```
+
+`for` is a void expression. `fold` returns its accumulator, initialized once and replaced by the body's value after each iteration. Ranges include the first endpoint and exclude the last; reversed/empty ranges execute zero times. Endpoints must share an integer type or one integer-backed UoM identity. Each iteration has its own dynamic scope, while procedure writes to regional storage will retain the regional mutation contract. These are native runtime loops, not compile-time iteration expansion. Product and unit accumulators retain their types.
+
+Unsigned literals use `u8`, `u32` or `u64` suffixes. Integer arithmetic checks overflow, including unsigned underflow; it does not silently wrap. Explicit `i64`, `u8`, `u32`, `u64`, `f32` and `f64` calls convert raw numeric values. Integer narrowing checks range. Float-to-integer conversion truncates toward zero, then checks the mathematical integer range before the native cast; NaN/infinity fail. Integer-to-float and float narrowing may round; finite floating overflow fails. Explicit floating casts may underflow to zero, while an out-of-range source literal is diagnosed. Scalar type names are reserved for type definitions and callable/type aliases.
+
+[pool-typed.cod](pool-typed.cod) composes separate unit, layout and index modules. It reproduces the documented `J=16, q=10` arithmetic candidate: 655,350 sets, 112,281,600 slots and final slot index 112,281,599. Boundary/median round-trips cover every class. Distinct class-local/global-set and local/global-slot types prevent accidental interchange; conversions requiring layout remain explicit pure functions. This fixture selects no neural law, final pool geometry, allocation policy or bounds proof for arbitrary caller values.
 
 ## Module and storage boundary
 

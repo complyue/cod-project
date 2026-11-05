@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+type Sum { total::f32; count::i64; }
+function accumulate(n::i64)::Sum {
+  fold (i in 0 .. n, result = Sum(0.0f32, 0)) {
+    Sum(result.total + 0.25f32, result.count + 1)
+  }
+}
+global result::Sum = accumulate(8);
+behave @print(result.total);
+behave @print(result.count);

@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+behave @print(u32(-0.5));
+behave @print(u8(255.75));
+behave @print(i64(-9223372036854775808.0));

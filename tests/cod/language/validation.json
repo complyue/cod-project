@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T20:48:04.006319+00:00",
+  "recorded_utc": "2026-11-05T21:02:07.379144+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
-  "passed": 109,
-  "total": 109,
+  "passed": 132,
+  "total": 132,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -1905,13 +1905,418 @@
       "passed": true
     },
     {
+      "fixture": "bounded-iteration.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/bounded-iteration.cod"
+      ],
+      "expected": {
+        "file": "bounded-iteration.cod",
+        "exit": 0,
+        "stdout": "499999500000\n0\n0\n10\n-2\n-1\n0\n1\n1\n"
+      },
+      "exit_code": 0,
+      "stdout": "499999500000\n0\n0\n10\n-2\n-1\n0\n1\n1\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "fold-products.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/fold-products.cod"
+      ],
+      "expected": {
+        "file": "fold-products.cod",
+        "exit": 0,
+        "stdout": "2\n8\n"
+      },
+      "exit_code": 0,
+      "stdout": "2\n8\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "fold-units.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/fold-units.cod"
+      ],
+      "expected": {
+        "file": "fold-units.cod",
+        "exit": 0,
+        "stdout": "7\n"
+      },
+      "exit_code": 0,
+      "stdout": "7\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "iteration-scope.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/iteration-scope.cod"
+      ],
+      "expected": {
+        "file": "iteration-scope.cod",
+        "exit": 0,
+        "stdout": "0\n1\n2\n9\n"
+      },
+      "exit_code": 0,
+      "stdout": "0\n1\n2\n9\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "fold-type-error.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/fold-type-error.cod"
+      ],
+      "expected": {
+        "file": "fold-type-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected i64, got f64"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/fold-type-error.cod:1:7: expected i64, got f64\n",
+      "passed": true
+    },
+    {
+      "fixture": "iteration-index-error.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/iteration-index-error.cod"
+      ],
+      "expected": {
+        "file": "iteration-index-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected "
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/iteration-index-error.cod:3:6: expected /ws/EvtWorks/cod-project/tests/cod/language/iteration-index-error.cod::A, got /ws/EvtWorks/cod-project/tests/cod/language/iteration-index-error.cod::B\n",
+      "passed": true
+    },
+    {
+      "fixture": "fold-import.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/fold-import.cod"
+      ],
+      "expected": {
+        "file": "fold-import.cod",
+        "exit": 0,
+        "stdout": "45\n"
+      },
+      "exit_code": 0,
+      "stdout": "45\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "numeric-widths.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/numeric-widths.cod"
+      ],
+      "expected": {
+        "file": "numeric-widths.cod",
+        "exit": 0,
+        "stdout": "255\n4294967295\n18446744073709551615\n255\n499500\n3\n-2\n2\n16777217\n16777216\n"
+      },
+      "exit_code": 0,
+      "stdout": "255\n4294967295\n18446744073709551615\n255\n499500\n3\n-2\n2\n16777217\n16777216\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "uint-overflow.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/uint-overflow.cod"
+      ],
+      "expected": {
+        "file": "uint-overflow.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "u8 addition overflow"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "u8 addition overflow\n",
+      "passed": true
+    },
+    {
+      "fixture": "uint-underflow.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/uint-underflow.cod"
+      ],
+      "expected": {
+        "file": "uint-underflow.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "u32 subtraction overflow"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "u32 subtraction overflow\n",
+      "passed": true
+    },
+    {
+      "fixture": "uint-literal-error.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/uint-literal-error.cod"
+      ],
+      "expected": {
+        "file": "uint-literal-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "outside u8 range"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/uint-literal-error.cod:1:1: integer literal is outside u8 range\n",
+      "passed": true
+    },
+    {
+      "fixture": "uint-cast-negative.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/uint-cast-negative.cod"
+      ],
+      "expected": {
+        "file": "uint-cast-negative.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "numeric conversion out of range"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "numeric conversion out of range\n",
+      "passed": true
+    },
+    {
+      "fixture": "uint-cast-overflow.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/uint-cast-overflow.cod"
+      ],
+      "expected": {
+        "file": "uint-cast-overflow.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "numeric conversion out of range"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "numeric conversion out of range\n",
+      "passed": true
+    },
+    {
+      "fixture": "float-cast-boundary.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/float-cast-boundary.cod"
+      ],
+      "expected": {
+        "file": "float-cast-boundary.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "numeric conversion out of range"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "numeric conversion out of range\n",
+      "passed": true
+    },
+    {
+      "fixture": "float-cast-unsigned-boundary.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/float-cast-unsigned-boundary.cod"
+      ],
+      "expected": {
+        "file": "float-cast-unsigned-boundary.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "numeric conversion out of range"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "numeric conversion out of range\n",
+      "passed": true
+    },
+    {
+      "fixture": "float-cast-nan.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/float-cast-nan.cod"
+      ],
+      "expected": {
+        "file": "float-cast-nan.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "numeric conversion out of range"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "numeric conversion out of range\n",
+      "passed": true
+    },
+    {
+      "fixture": "float-literal-underflow.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/float-literal-underflow.cod"
+      ],
+      "expected": {
+        "file": "float-literal-underflow.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "outside f32 range"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/float-literal-underflow.cod:1:1: floating literal is outside f32 range\n",
+      "passed": true
+    },
+    {
+      "fixture": "uint-loop-boundary.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/uint-loop-boundary.cod"
+      ],
+      "expected": {
+        "file": "uint-loop-boundary.cod",
+        "exit": 0,
+        "stdout": "1\n1\n"
+      },
+      "exit_code": 0,
+      "stdout": "1\n1\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "pool-typed.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/pool-typed.cod"
+      ],
+      "expected": {
+        "file": "pool-typed.cod",
+        "exit": 0,
+        "stdout": "655350\n112281600\n112281599\ntrue\n"
+      },
+      "exit_code": 0,
+      "stdout": "655350\n112281600\n112281599\ntrue\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "pool-index-type-error.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/pool-index-type-error.cod"
+      ],
+      "expected": {
+        "file": "pool-index-type-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected "
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/pool-index-type-error.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/pool-units.cod::ClassSetId, got /ws/EvtWorks/cod-project/tests/cod/language/pool-units.cod::GlobalSetId\n",
+      "passed": true
+    },
+    {
+      "fixture": "reserved-unit.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/reserved-unit.cod"
+      ],
+      "expected": {
+        "file": "reserved-unit.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "reserved scalar type name"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/reserved-unit.cod:1:1: reserved scalar type name 'u8'\n",
+      "passed": true
+    },
+    {
+      "fixture": "reserved-alias.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/reserved-alias.cod"
+      ],
+      "expected": {
+        "file": "reserved-alias.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "reserved scalar type name"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/reserved-alias.cod:1:34: reserved scalar type name 'f64'\n",
+      "passed": true
+    },
+    {
+      "fixture": "cast-truncation.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/cast-truncation.cod"
+      ],
+      "expected": {
+        "file": "cast-truncation.cod",
+        "exit": 0,
+        "stdout": "0\n255\n-9223372036854775808\n"
+      },
+      "exit_code": 0,
+      "stdout": "0\n255\n-9223372036854775808\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
       "fixture": "frontend-only",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-cpp",
-        "/tmp/cod-language-check-20gk13pv/program.cc"
+        "/tmp/cod-language-check-hfnz6xbb/program.cc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -1921,20 +2326,22 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "514de3ee054d0a2510621b8e70b740b594a483f02a798d5f22c2daefddff4300"
+    "sha256": "ed198a9ad49d0a18977492dbd8556079da895fe55b2426894fb5bbd5634cf891"
   },
   "source_sha256": {
     "cod/main.cc": "bcaa37e39665c6d70960f527bb2ee93c1868774adfd79d3a96c840651a4d39d3",
-    "cod/lang_syntax.hh": "1654d2c4600e0b156d483550fea0820dbf91eb5bbd6807a6575ffdba29575f7c",
-    "cod/lang_frontend.hh": "0310f4302937e7df45a1e8d6d1d87b716429bb706bdb96883f5c980109ffddc2",
+    "cod/lang_syntax.hh": "6ead956c1d0e20ea3b69cf6b1783112f6c9f0210bf547df50c99ab4e0d71d54a",
+    "cod/lang_frontend.hh": "3c51041a315030cc2a316f4bad8866213a55da9a59d7690ce38ae595f52a746e",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "a798caba7a860e0ebf14e0e28023c00f0e6dfce0dea55425f452c5ee7651e679",
-    "tests/cod/language/cases.json": "96b92cea9a0b27e4b0d9ed24da4919412ebd358f30b652f8842ab19b8567e581",
+    "tests/cod/language/cases.json": "b8da841a120c8beeba4af95cef6072c563dcb19b6d6a91bb6b29d75d4fd1cb98",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
+    "tests/cod/language/bounded-iteration.cod": "7b7228907eb4e81a5d2ff66f3c1a090dfe90f31167497111781f143b985f3d14",
     "tests/cod/language/broken-dependency.cod": "6cd8716b5bdcd5e22a9deb4c3b308fcd0908c74b7d4ce0d1a3c30632955679d3",
     "tests/cod/language/builtin-body-import.cod": "673482f8e33208d9a242f2fbe7fdc032ba62996c343a5ed4ae1d8717263f4418",
+    "tests/cod/language/cast-truncation.cod": "513b8b42b993f3408775af8542e18a84cc7317272636c33a385179ae8b5c7838",
     "tests/cod/language/destination-vocabulary.cod": "490d565b9a59f98f5fb958cd4f7de225845803c139c7e6a5d4824add0c03a68f",
     "tests/cod/language/diamond-left.cod": "86975e2f1597f2d8050b1231064be1e3cba2a99a93ee79d4b8743d543c11efd8",
     "tests/cod/language/diamond-right.cod": "d91168015b272a9d3d0f6803bcb9c9972708e6e1bd7f32d6764b3f74856b01f4",
@@ -1944,9 +2351,18 @@
     "tests/cod/language/duplicate-symbol-alias.cod": "3788fe95e9db696d4e528291bd61994205e5f2551176012ecab7b4e623b6cc03",
     "tests/cod/language/early-alias.cod": "2760b0aa7d7131859f2e5fd2dfc4f6fa10fb8ab54eb12b720bbd51d894597177",
     "tests/cod/language/effect-result.cod": "e94e72e0553d921284838d2e006c30c5c4724ccdad4d2dd649ebf51650e2118a",
+    "tests/cod/language/float-cast-boundary.cod": "bef6cf858853fd816d8a331c29fdbb8161070309395dabebbc5e9403f90c3041",
+    "tests/cod/language/float-cast-nan.cod": "cf6fee8f317970a70f3bc8d6fd6e6f68f58acbbf4f32acf867fde730a4ce3d05",
+    "tests/cod/language/float-cast-unsigned-boundary.cod": "617d0a2e5a7a11f8f43542e65570ef31c8a328a1529821ce15282124e7bbae4b",
+    "tests/cod/language/float-literal-underflow.cod": "a5399c716ef39b448fedbca80b41fba570fe1dd1993d09e386e59feece9cd7d5",
     "tests/cod/language/float-range-error.cod": "731d4de618632486fba7c11dc9d70ae220675ca6cc8eabd8a710d50f70d874cf",
     "tests/cod/language/float-width-error.cod": "4e9cfe886c7c19c3f8d5fdb27f412f238282564d1c9fbedecf8e77c7a965a977",
     "tests/cod/language/floating-captures.cod": "8faccd326ef6e732b7014a4c6b65c6499638c56cee4a877a75b978539ffd8b71",
+    "tests/cod/language/fold-import-source.cod": "bb7710f71bc5d69ca9769ac471a605471138bb85fcb354642084cd32b0950294",
+    "tests/cod/language/fold-import.cod": "7ca052d60028e403f219fdd2fd292055eecc1f2332101a843a7591c8ace9e3c9",
+    "tests/cod/language/fold-products.cod": "d68f0c7e1afaf2e6272dfa2ca98d06bf8b45fb4886965360c2b26dccd9ce4cca",
+    "tests/cod/language/fold-type-error.cod": "f136f1482ab60c9b840a2a7f46453af9db12ea1e99dea449be8f1b40ba9b86d3",
+    "tests/cod/language/fold-units.cod": "d01656d614558e2528c80051a8a37d4da913945f0f9b4617beb605b755e4a7d7",
     "tests/cod/language/frame-model.cod": "5c29090333675934f6db3276e6a7b20e88faf9313d46e1a8b4dfbaaad986832f",
     "tests/cod/language/frame-vocabulary.cod": "7d33d85b670825c8de9290678b83822b833744c1b273aeff25d17c25fad17e17",
     "tests/cod/language/frame.cod": "78de75369c7e8d51f5d9a7b329b998450dfd3935767a7379f7664e2d179b3465",
@@ -1962,6 +2378,8 @@
     "tests/cod/language/import-symbol-unsupported.cod": "cc1097a62eacf6ac890f842c9efde26bed52053452ea2516b182a66b66ab2823",
     "tests/cod/language/import.cod": "ca7a3d1627e417d87dc6727812807d5158822fc2131da30c96e27b15dee77858",
     "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
+    "tests/cod/language/iteration-index-error.cod": "f2a740829eae91e0cbacbd3f98ffde0b5dc777e2cc437865abbba9c996865ad6",
+    "tests/cod/language/iteration-scope.cod": "71b031eb4f41b504bf7c0d257d44bda6c4ee9e70cde09293e446e4168a1c99bf",
     "tests/cod/language/late-alias-destination.cod": "06f1595b32fd5061ef439baf47280df1e3150f8b9ce7ff1e7d3c94faa61e5c13",
     "tests/cod/language/late-destination.cod": "377d4955e208bcc19c15253cd5136ea1e2b395ac54253479225589b11eb079fc",
     "tests/cod/language/map-does-not-declare-local.cod": "e643ed531b7e5e9ff281ff3a3c9c520cd04654bcb561d6aa1870e73d328f9025",
@@ -1986,6 +2404,7 @@
     "tests/cod/language/missing.cod": "fee64b75bd994840163e9d4837464559bd096a4e2b54aafe76894988afc0004f",
     "tests/cod/language/module-diamond.cod": "d7c57a55265fb5c8050f8fbe8371670d8a958e4cf403252cd33fe8f8486aec25",
     "tests/cod/language/module-repeat.cod": "ad18e6a92d5fa799a13008e0c2437084569b79e661428b4fe1dd6a09b9365a70",
+    "tests/cod/language/numeric-widths.cod": "93aa98656d33b26633e1e3c5b4961a19ed5a96bcf04b112de36c8711b712146e",
     "tests/cod/language/operator-control.cod": "f3ef905413996098ab7037d759a071969042fc07e7113102c13da474baa57257",
     "tests/cod/language/operator-library.cod": "3b94be253e5924fe2783b5292ce9031051e91f6ae6c7cbf4b194d91db7349e38",
     "tests/cod/language/operator-using.cod": "7defd4f6f75e3c9d9964c335ea4ea6d3e6a7913ce5918ce32662b244e424c3c7",
@@ -1993,6 +2412,11 @@
     "tests/cod/language/overflow.cod": "372077e05270e2852c8c3cf5e8d904bfa6f58d48242937b7f7560d60117fb1ea",
     "tests/cod/language/perform-without-caller.cod": "f31457d947a8a5b22b629778f68f67509b0679b617eeb71632934c1dd1a1727b",
     "tests/cod/language/plain-assignment.cod": "6832cc854107048ab81f0de5bddbfd78e70a7944f4a0a484d80b13578e1e3e4a",
+    "tests/cod/language/pool-index-type-error.cod": "06927472cc8478794fec2adffba3479ba25641d37e97113b9a492d72040cd2fa",
+    "tests/cod/language/pool-index.cod": "ec0c7c35a2176e4c5c0e24156ee2a7a5f69a7a768d2fc1fccd3e6ed7b6296bca",
+    "tests/cod/language/pool-layout.cod": "3cc4466300349659b0d080a6364f2b8936a534aa1c3440b31a2c76610d147672",
+    "tests/cod/language/pool-typed.cod": "be349e069422a19967b247d78c1218b4f1cd703767925a460a4539e284f5232e",
+    "tests/cod/language/pool-units.cod": "7e98a99907eb5a1d546055ecdac548d129c3cafc17c8c5352179ed21388473c3",
     "tests/cod/language/procedure-rebinding.cod": "1c59095940344c6433d1cc359a51310a5dbd4d559bede957e58f1aab47a13c09",
     "tests/cod/language/product-alias.cod": "855cc0f37cbcfe013aec0e918302921ee9c9adf81679d0fe6992ec599ad720dd",
     "tests/cod/language/product-captures.cod": "2ff94ad31c6e5a85e51c380ed70700b441f116b53dff2b3b39506bbda8805761",
@@ -2006,6 +2430,8 @@
     "tests/cod/language/products.cod": "acc964555c72fd747632fee63df9c50d39dd300ab96fa2995bb67e3bf9fd176f",
     "tests/cod/language/reimport-mapping.cod": "63db9239d209daa02025b3e6487883eb994ad368d6ad99eb0a2ab6ff7553654f",
     "tests/cod/language/reimport-provider.cod": "6b5d8a3a979934983cd02b85989c1595d2cab5a9c4efaa2acf41adc7f477e66b",
+    "tests/cod/language/reserved-alias.cod": "ec35242de749d7edf680866f8b2c8ccd3ca68e11b8372e6dcdc800519d787349",
+    "tests/cod/language/reserved-unit.cod": "5f4aa6986e906a691a0e931d3fa28503909cf0032eaf2eef0342f1cdc9b6c3ca",
     "tests/cod/language/reversed-map.cod": "abbfc059feb0b7f012569289656ffe6a5f04b6232c3e9410c20d0c2cf2cdb387",
     "tests/cod/language/scan-error.cod": "f9ab5a964c3810e059417928e2a796b4a2a454614e5690c0f67cd0b63987a309",
     "tests/cod/language/scopes.cod": "648c3ac84fd66c17e2a296238a4e7111f0c98c2f5502cee66e1522c2961f90a0",
@@ -2014,6 +2440,12 @@
     "tests/cod/language/symbol-trigger.cod": "0cafe9db9cb7ad59da3d394b17e49e2b979257d4803f2cbcdab2911baf8e6e27",
     "tests/cod/language/transitive.cod": "48684d171a1623887cedf493e48a7b96c5995144210c7da864ec0c72effac32f",
     "tests/cod/language/type-error.cod": "2ff51f72fd633a71402c479cc5d91dfea5c540e22f15c67c9b886b5152572d0f",
+    "tests/cod/language/uint-cast-negative.cod": "98e09ece9c8e41a2027e50a6890e34bec52a075278e3db3df2c46f2f1ae5bff5",
+    "tests/cod/language/uint-cast-overflow.cod": "22fbf7e03ed2e5faab671378f2d0579a94c9dae293388702ba5752a4171aec29",
+    "tests/cod/language/uint-literal-error.cod": "7b04ba6b69e7330da3f9064a4a7ff09520fad7d76fc35277c1beb96d4ac2e32b",
+    "tests/cod/language/uint-loop-boundary.cod": "d0f3949617e591f2239530cbf3f7f6a053d793efadc7bbad4e922d685b4245db",
+    "tests/cod/language/uint-overflow.cod": "4bd351242c7e36d6bfb23ad79517b90dabe0dd6eb0d9e2e3f54f17f59eda8d14",
+    "tests/cod/language/uint-underflow.cod": "5a6ccb4f1a5b8515a615263e070dfcbf30c86be94e74d13d66bc3c2fd630f856",
     "tests/cod/language/units-ambiguous.cod": "a97921741942cf18b0e58e5c26a8ce8594489fd85e8f357998789679887c957e",
     "tests/cod/language/units-argument-once.cod": "0895ac1730443a6944a6e75cfedd95fd4536673a9b138e5094917f0578375249",
     "tests/cod/language/units-basic.cod": "ba7c2c4936400a4643a3eb428f7f383e01da429ea097f70662dec77c01dcdae4",
@@ -2065,29 +2497,22 @@
     "tests/cod/language/using.cod": "ba0c7ebd8f497265a994201e6ee5be9c04274df10f8447be98d1bf13649671a9",
     "tests/cod/language/value-as-procedure.cod": "257248681baab5224b537b000532a2c5eedde5f0b87d5f024f3807eebf13b7ab",
     "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223",
-    "tests/cod/language/stress_tests.py": "64f3e33348c97cd60fd60661f6d59c12fa3291dc375916cfd2e6e6cbdbd41f84"
-  },
-  "status": "passed_nominal_units_and_conversion_checkpoint",
-  "authority": {
-    "design": "D-11 revision 5; D-07 revision 19; D-10 revision 13",
-    "request": "H-122/H-123/H-128/H-130/H-134\u2013H-141",
-    "assessment": "K-226",
-    "scope": "Compile-time nominal units, one-shot selected bundles, pure conversions and direct/declared/discovered route behavior; bounded native prototype."
+    "tests/cod/language/stress_tests.py": "472869bec203daea0003431c5ed7962d6e77812e2aafd0e9db540395f631f59a"
   },
   "build": {
     "command": "cmake --build ./build",
     "exit_code": 0,
-    "source_build_count": 2,
+    "source_build_count": 3,
     "configuration_source_edits": false,
     "observed_default_graph_behavior": "The existing default build graph refreshed runtime sub-build configuration/outputs and its compilation database; no manual configure, bootstrap or install target was invoked.",
     "warnings": [
       "Existing LLVM OpenMPClause.h implicit-this-capture deprecation.",
       "Existing runtime CMake policy/deprecation warnings."
     ],
-    "log_sha256": "757cb8b61bb33d59f17d5024b56af24aa3561719ba6f7b45caccb5697eff185f"
+    "log_sha256": "a37879d1813fbb879a79546a8d08d2e8330bbb3bb47d5ce0263cf9292c49193e"
   },
   "component_suite": {
-    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=build/validation/language-unit-component.json tests/cod/run-all.sh",
+    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=build/validation/language-numeric-component.json tests/cod/run-all.sh",
     "exit_code": 0,
     "passed_groups": 4,
     "total_groups": 4,
@@ -2099,8 +2524,8 @@
       },
       {
         "name": "test_language.sh",
-        "passed": 109,
-        "total": 109
+        "passed": 132,
+        "total": 132
       },
       {
         "name": "test_cod_cache",
@@ -2112,10 +2537,10 @@
         "status": "passed"
       }
     ],
-    "log_sha256": "2e9a2f30ffb5c9a8c9a943d841dd26e66f167489959c0cbf19ce8c24233091d3",
+    "log_sha256": "c0ab27a125b95f0bf62b39d920c2ee9c86d562fa03a60161e3e40c61741149da",
     "summary_lines": [
       "\u001b[0;32m\u2714 All CoD Evaluation tests passed! (6/6)\u001b[0m",
-      "CoD language: 109/109 passed (build toolchain)",
+      "CoD language: 132/132 passed (build toolchain)",
       "\u001b[0;32m\u2714 All CoD cache tests passed! (8/8)\u001b[0m",
       "\u2714 All workspace tests passed!",
       "\u001b[0;32m\u2714 All CoD tests passed! (4/4)\u001b[0m"
@@ -2128,12 +2553,19 @@
     "Cyclic initialization and recursive call policies remain outside this prototype.",
     "Inline graph sizes and compile/link/run times are fixture observations; no native runtime stack-depth or broad performance claim."
   ],
-  "reference_revision": 5,
-  "baseline_commit": "93793998af355ae62d0cc19806f808d11e8542c9",
+  "reference_revision": 6,
+  "status": "passed_iteration_numeric_and_typed_pool_checkpoint",
+  "baseline_commit": "04727348e374fa0cd06b89c21222f1498ab3fb17",
+  "authority": {
+    "design": "D-07 revision 20; D-11 revision 6; D-10 revision 13",
+    "request": "H-122/H-123/H-125/H-128/H-139\u2013H-141",
+    "assessment": "K-227",
+    "scope": "Bounded native iteration, numeric representations/conversions and typed pool-index arithmetic; no neural model."
+  },
   "check_breakdown": {
-    "native_success": 53,
-    "native_expected_runtime_failure": 1,
-    "expected_frontend_rejection": 54,
+    "native_success": 62,
+    "native_expected_runtime_failure": 8,
+    "expected_frontend_rejection": 61,
     "frontend_only_success": 1
   }
 }

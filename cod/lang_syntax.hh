@@ -93,6 +93,10 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
         real = true;
         advance(); advance(); advance();
       }
+      if (!real && source.compare(cursor, 2, "u8") == 0) { advance(); advance(); }
+      else if (!real && (source.compare(cursor, 3, "u32") == 0 || source.compare(cursor, 3, "u64") == 0)) {
+        advance(); advance(); advance();
+      }
       tokens.push_back({real ? TokenKind::real : TokenKind::integer, source.substr(offset, cursor - offset), start});
       continue;
     }
@@ -122,7 +126,7 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
     if (cursor + 1 < source.size()) {
       const auto pair = source.substr(cursor, 2);
       if (pair == "->" || pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" ||
-          pair == "&&" || pair == "||" || pair == "::" || pair == "<-") {
+          pair == "&&" || pair == "||" || pair == "::" || pair == "<-" || pair == "..") {
         punctuation = pair;
         advance();
       }
@@ -137,7 +141,7 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
 }
 
 struct Type {
-  enum Kind { integer, boolean, void_type, procedure, float32, float64, named, product, unit };
+  enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64, named, product, unit };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -147,10 +151,16 @@ struct Type {
   bool operator==(const Type &) const = default;
 };
 inline bool floating(Type type) { return type.kind == Type::float32 || type.kind == Type::float64; }
-inline bool numeric(Type type) { return type == Type::integer || floating(type); }
+inline bool integral(Type type) {
+  return type == Type::integer || type == Type::uint8 || type == Type::uint32 || type == Type::uint64;
+}
+inline bool numeric(Type type) { return integral(type) || floating(type); }
 inline std::string type_name(const Type &type) {
   switch (type.kind) {
   case Type::integer: return "i64";
+  case Type::uint8: return "u8";
+  case Type::uint32: return "u32";
+  case Type::uint64: return "u64";
   case Type::boolean: return "bool";
   case Type::void_type: return "void";
   case Type::procedure: return "procedure";
@@ -162,12 +172,13 @@ inline std::string type_name(const Type &type) {
 }
 
 struct Expression {
-  enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect, block, conditional, field, let };
+  enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect, block, conditional, field, let, range_for, fold };
   Kind kind;
   Location at;
   std::string text;
   std::vector<std::unique_ptr<Expression>> children;
   std::optional<size_t> symbol_id;
+  std::string binding;
 };
 using Expr = std::unique_ptr<Expression>;
 
@@ -242,6 +253,9 @@ class Parser {
   Type parse_type() {
     auto token = name(TokenKind::identifier);
     if (token.text == "i64") return Type::integer;
+    if (token.text == "u8") return Type::uint8;
+    if (token.text == "u32") return Type::uint32;
+    if (token.text == "u64") return Type::uint64;
     if (token.text == "bool") return Type::boolean;
     if (token.text == "void") return Type::void_type;
     if (token.text == "f32") return Type::float32;
@@ -259,7 +273,7 @@ class Parser {
     return -1;
   }
   Expr make(Expression::Kind kind, const Token &token) {
-    return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}});
+    return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}});
   }
   void arguments(Expression &expr) {
     expect("(");
@@ -270,6 +284,27 @@ class Parser {
   }
   Expr primary() {
     auto token = peek();
+    if (is("for") || is("fold")) {
+      const bool fold = take("fold");
+      if (!fold) expect("for");
+      expect("(");
+      auto expr = make(fold ? Expression::Kind::fold : Expression::Kind::range_for,
+                       name(TokenKind::identifier));
+      expect("in");
+      expr->children.push_back(expression());
+      expect("..");
+      expr->children.push_back(expression());
+      if (fold) {
+        expect(",");
+        expr->binding = name(TokenKind::identifier).text;
+        if (expr->text == expr->binding) fail(expr->at, "range and accumulator names must differ");
+        expect("=");
+        expr->children.push_back(expression());
+      }
+      expect(")");
+      expr->children.push_back(block());
+      return expr;
+    }
     if (take("let")) {
       auto expr = make(Expression::Kind::let, name(TokenKind::identifier));
       expect("=");
@@ -402,7 +437,7 @@ public:
           type_separator();
           auto type = parse_type();
           if (type == Type::void_type) fail(field.at, "a product field must have a value type");
-          form->parameters.push_back({field.text, type, field.at});
+          form->parameters.push_back({field.text, type, field.at, false, {}});
           if (!is("}")) expect(";");
         }
         take(";");
@@ -417,7 +452,7 @@ public:
           if (!take(")")) {
             do {
               auto param = name(TokenKind::identifier);
-              Parameter parameter{param.text, Type::void_type, param.at};
+              Parameter parameter{param.text, Type::void_type, param.at, false, {}};
               if (take("(")) {
                 parameter.type = parse_type();
                 parameter.automatic_conversion = take("*");

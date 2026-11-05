@@ -1,0 +1,13 @@
+using symbol "std:io" @print;
+function sum(n::i64)::i64 { fold (i in 0 .. n, total = 0) { total + i } }
+function nested(n::i64)::i64 {
+  fold (i in 0 .. n, total = 0) {
+    total + fold (j in 0 .. i, inner = 0) { inner + j }
+  }
+}
+behave @print(sum(1000000));
+behave @print(sum(0));
+behave @print(sum(-1));
+behave @print(nested(5));
+for (i in -2 .. 2) { behave @print(i); };
+behave @print(fold (i in 9223372036854775806 .. 9223372036854775807, n = 0) { n + 1 });

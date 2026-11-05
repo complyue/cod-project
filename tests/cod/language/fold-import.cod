@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+symbol @count;
+import "fold-import-source.cod" @count;
+behave @print(behave @count(10));

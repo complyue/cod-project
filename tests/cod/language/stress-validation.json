@@ -1,11 +1,11 @@
 {
-  "recorded_utc": "2026-11-05T20:46:54.054366+00:00",
+  "recorded_utc": "2026-11-05T21:01:43.239065+00:00",
   "results": [
     {
       "case": "128-module-pure-chain",
-      "check_seconds": 0.023778145958203822,
-      "native_compile_link_run_seconds": 0.1390120079740882,
-      "generated_bytes": 13348,
+      "check_seconds": 0.022177819977514446,
+      "native_compile_link_run_seconds": 0.24368572398088872,
+      "generated_bytes": 14577,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -17,9 +17,9 @@
     },
     {
       "case": "160-procedure-inline-chain",
-      "check_seconds": 0.1841591449920088,
-      "native_compile_link_run_seconds": 0.41314168204553425,
-      "generated_bytes": 72837,
+      "check_seconds": 0.16759867599466816,
+      "native_compile_link_run_seconds": 0.48263180803041905,
+      "generated_bytes": 74066,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -31,9 +31,9 @@
     },
     {
       "case": "layered-diamond-22-modules-2047-calls",
-      "check_seconds": 0.020622865995392203,
-      "native_compile_link_run_seconds": 0.5309561419999227,
-      "generated_bytes": 146935,
+      "check_seconds": 0.01958537002792582,
+      "native_compile_link_run_seconds": 0.6562106810160913,
+      "generated_bytes": 148164,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -45,9 +45,9 @@
     },
     {
       "case": "16-unit-reexports-31-conversion-steps-with-cycle",
-      "check_seconds": 0.015482895018067211,
-      "native_compile_link_run_seconds": 0.11638010299066082,
-      "generated_bytes": 4345,
+      "check_seconds": 0.015983617980964482,
+      "native_compile_link_run_seconds": 0.23959956300677732,
+      "generated_bytes": 5574,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -58,15 +58,15 @@
       "passed": true
     }
   ],
-  "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_STRESS_REPORT=build/validation/language-stress-units.json python3 tests/cod/language/stress_tests.py",
+  "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_STRESS_REPORT=build/validation/language-stress-numeric.json python3 tests/cod/language/stress_tests.py",
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "514de3ee054d0a2510621b8e70b740b594a483f02a798d5f22c2daefddff4300"
+    "sha256": "ed198a9ad49d0a18977492dbd8556079da895fe55b2426894fb5bbd5634cf891"
   },
   "source_sha256": {
-    "cod/lang_syntax.hh": "1654d2c4600e0b156d483550fea0820dbf91eb5bbd6807a6575ffdba29575f7c",
-    "cod/lang_frontend.hh": "0310f4302937e7df45a1e8d6d1d87b716429bb706bdb96883f5c980109ffddc2",
+    "cod/lang_syntax.hh": "6ead956c1d0e20ea3b69cf6b1783112f6c9f0210bf547df50c99ab4e0d71d54a",
+    "cod/lang_frontend.hh": "3c51041a315030cc2a316f4bad8866213a55da9a59d7690ce38ae595f52a746e",
     "cod/main.cc": "bcaa37e39665c6d70960f527bb2ee93c1868774adfd79d3a96c840651a4d39d3",
-    "tests/cod/language/stress_tests.py": "64f3e33348c97cd60fd60661f6d59c12fa3291dc375916cfd2e6e6cbdbd41f84"
+    "tests/cod/language/stress_tests.py": "472869bec203daea0003431c5ed7962d6e77812e2aafd0e9db540395f631f59a"
   }
 }

@@ -71,22 +71,22 @@ def main():
         results.append(run(executable, root, entry, f'{3 * 2**layers}\n', 'layered-diamond-22-modules-2047-calls'))
 
         units = 32
-        names = ', '.join(f'u{i}' for i in range(units))
-        definitions = [f'unit u{i}::i64;' for i in range(units)]
-        definitions += [f'conversion function step{i}(x (u{i}))::u{i+1} {{ u{i+1}(scalar(x) + 1) }}'
+        names = ', '.join(f'unit{i}' for i in range(units))
+        definitions = [f'unit unit{i}::i64;' for i in range(units)]
+        definitions += [f'conversion function step{i}(x (unit{i}))::unit{i+1} {{ unit{i+1}(scalar(x) + 1) }}'
                         for i in range(units-1)]
-        definitions += ['conversion function back(x (u16))::u15 { u15(scalar(x) - 1) }']
+        definitions += ['conversion function back(x (unit16))::unit15 { unit15(scalar(x) - 1) }']
         (directory / 'unit-base.cod').write_text('\n'.join(definitions) + '\n')
         previous = 'unit-base.cod'
         for i in range(16):
             current = f'unit-layer-{i}.cod'
             (directory / current).write_text(f'using units "{previous}" {{{names}}};\n'
-                                             'function finish(x (u31*))::i64 { scalar(x) }\n')
+                                             'function finish(x (unit31*))::i64 { scalar(x) }\n')
             previous = current
         entry = directory / 'unit-main.cod'
         entry.write_text('using symbol "std:io" @print;\n'
                          f'using units "{previous}" {{{names}}};\n'
-                         f'using "{previous}" finish;\nbehave @print(finish(u0(1)));\n')
+                         f'using "{previous}" finish;\nbehave @print(finish(unit0(1)));\n')
         results.append(run(executable, root, entry, '32\n', '16-unit-reexports-31-conversion-steps-with-cycle'))
     if report := os.environ.get('COD_LANGUAGE_STRESS_REPORT'):
         Path(report).write_text(json.dumps({'recorded_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),

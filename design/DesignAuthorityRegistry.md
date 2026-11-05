@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：227
+记录版本：228
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 227，延续检查 K-01—K-226；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 228，延续检查 K-01—K-227；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -206,7 +206,7 @@ Design authority
 <a id="d-07"></a>
 ### D-07：领域语言讨论与设计决策跟踪
 
-- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 19；用该修订及包含它的 Git 提交定位。
+- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 20；用该修订及包含它的 Git 提交定位。
 - 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-046。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
 - 人工依据：H-06 近期目标、H-07 跟踪授权、H-08/H-11 应用及分离；H-96 现在同步推进语言和 SNN 设计／实现／验证，取代当前范围内的笼统实施延后。H-97—H-121 为局部语义、惯用组织及语法建议依据。DD-002/H-07 历史不改写。
 - 当前资格：全文契约及未确认价值路径仍 pending-human；明确的人类命题按其本身范围 confirmed，不把新 WPO、存储或语法细节自动批准。K-214 记录有界原型证据；K-215 记录编译期身份／别名、import 映射和预先声明目标的细化；K-216 记录 symbol from 与局部符号 as 源 body 角色的语法建议；K-217 记录 H-118 授权的实现、构建和 CoD 组件测试；K-218 记录 using symbol 及省略 as 时的身份一致要求；K-219 记录 H-121 授权的实现、验证和实际测试证据。上述记录均不以未合格基线产生 continued 资格。
@@ -263,7 +263,7 @@ Design authority
 - Downstream: D-07r14 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign211/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision5, describes the bounded H-122/H-123/H-139–H-141 checkpoint. [validation.json](../tests/cod/language/validation.json) records 108 source checks plus one frontend-only check and all four CoD component groups; [stress-validation.json](../tests/cod/language/stress-validation.json) records 128-module, 160-procedure and layered-DAG native checks. K-225 records actual scope and limits.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision6, describes the bounded H-122/H-123/H-139–H-141 checkpoint. [validation.json](../tests/cod/language/validation.json) records 131 source checks plus one frontend-only check and all four CoD component groups; [stress-validation.json](../tests/cod/language/stress-validation.json) records 128-module, 160-procedure and layered-DAG native checks. K-225 records actual scope and limits.
 
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
@@ -487,6 +487,9 @@ Additional reverse impact: C-45/C-46 -> P-106–P-111, D-10r10, D-07r13 DL-14/DL
 
 
 **K-226 reverse coverage:** C-47/C-49/C-50/C-51 and P-112/P-119/P-120–P-127 → D-11r5 bounded native conventions, D-07r19 and reference5/validation. Source unit aliases preserve identity; parameter conversion remains pure and controlled by selected bundles. D-08 and D-10r13 contracts remain unchanged.
+
+
+**K-227 reverse coverage:** C-38/P-116 and C-47/C-50/P-118/P-121 → D-07r20, D-11r6, reference6 and typed pool/numeric fixtures. H-123 supplies the scale-law indexing need; C-13 remains an arithmetic example rather than a selected application configuration. D-10r13 and all D-08 model contracts remain unchanged.
 
 ## 6. 人工确认事件（只追加）
 
@@ -4586,3 +4589,16 @@ Scope: Accepts initial procedure expansion/inlining while size remains reasonabl
 - Evidence: two exact source-only builds succeeded. The final component suite passes all four groups: 109 language checks, six evaluation checks, eight cache checks and workspace checks. Four generated stress cases pass, including 16 unit re-export modules, 31 conversion steps and a back-edge, with 4,345 bytes of native source for that case and approximately 0.12 seconds compile/link/run locally. validation.json and stress-validation.json retain commands, outputs and source/executable hashes.
 - Boundaries: static regional arrays, complete pointer-bearing snapshots and numeric iteration remain work in the active ten-hour goal. Compound units, general GADT, runtime method mutation, neural equations/training and native code-sharing infrastructure remain excluded. No main build configuration, bootstrap source, toolchain or regional-pointer implementation was changed.
 - Authority: direct local human decisions supply the bounded implementation scope; complete D-07/D-10/D-11 and formal candidate derivations remain pending-human. D-GOV227 maintenance alone continues H-05.
+
+
+### K-227 — 2026-11-05: Native iteration, numeric widths and typed pool indexing
+
+<a id="k-227"></a>
+
+- Agent implementation/evidence assessment under H-122/H-123/H-125/H-128/H-139–H-141. Charter §§1–4, D-07/D-11 bounded programming scope and the existing C-13 16-class arithmetic were reviewed. Registry227 →228; D-07r19 →r20, D-11r5 →r6, reference5 →6. No new human decision or application-model qualification is inferred.
+- Implemented: half-open native for/fold expressions, immutable typed accumulators and per-iteration dynamic scope; unsigned one-/four-/eight-byte scalars, explicit checked numeric casts and checked unsigned arithmetic. Unit-backed range endpoints retain their identity. These bounded conventions support ordinary loop/index calculations without heap topology or compound-unit algebra.
+- Precision: float-to-integer conversion truncates before testing representable integer bounds, avoids casting NaN/infinity/out-of-range values, and checks powers-of-two bounds without relying on rounded integer maxima. Explicit floating casts can round; source literals outside their supported range are diagnosed. Checks include u64/i64 boundaries, unsigned underflow, fractional truncation and representational rounding.
+- Multi-module fixture: separate unit/layout/index modules reproduce the documented J=16,q=10 calculation (655,350 sets,112,281,600 slots) and round-trip class boundaries/medians. Slot capacity widening is a declared pure conversion used by typed multiplication; layout-dependent conversions remain explicit functions. Wrong global versus class-local IDs are rejected. This verifies programming support, not final pool selection, general bounds proofs or neural dynamics.
+- Exposed/fixed issues: introducing scalar u8 collided with a generated user unit named u8. Such definitions/aliases now fail early with a reserved-name diagnostic, and the stress generator uses non-reserved unit names. Float-to-integer bounds are checked after truncation. Aggregate initialization warnings introduced in the preceding increment are removed; the final source build retains only existing upstream warnings.
+- Evidence: three exact source-only builds in this checkpoint; final full CoD suite passes four groups with 132 language checks, six evaluation checks, eight cache checks and workspace checks. All four graph stress cases pass after the collision fix. Native loops handle a million-step reduction and endpoint-near-limit cases without compile-time iteration expansion. validation.json/stress-validation.json hold actual commands, outputs and source/executable hashes.
+- Boundaries: regional arrays and pointer-bearing snapshot traversal remain active-goal work. The shilos regional specification and implementation have been inspected for that next step; no regional allocator/pointer semantics, bootstrap source, main configuration, toolchain or SNN model is modified here. Full contracts remain pending-human; D-GOV228 maintenance alone continues H-05.

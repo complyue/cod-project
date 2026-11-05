@@ -1,0 +1,10 @@
+unit ClassId::u32;
+unit ClassSetId::u64;
+unit GlobalSetId::u64;
+unit LocalSlot::u32;
+unit GlobalSlot::u64;
+unit SetCount::u64;
+unit SlotCount::u64;
+unit SlotsPerSet::u32;
+conversion function capacity_count(x (SlotsPerSet))::SlotCount { SlotCount(u64(scalar(x))) }
+function (*)(slots (SlotCount*), sets (SetCount))::SlotCount { SlotCount(scalar(slots) * scalar(sets)) }

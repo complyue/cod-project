@@ -86,10 +86,18 @@ class Compiler {
   bool warnings_as_errors_ = false;
   std::vector<std::string> warnings_;
 
+  static void require_user_type_name(const std::string &name, const Location &at) {
+    static const std::set<std::string> reserved{"i64", "u8", "u32", "u64", "f32", "f64", "bool", "void"};
+    if (reserved.contains(name)) fail(at, "reserved scalar type name '" + name + "'");
+  }
+
   std::string fresh(const char *prefix = "v") { return std::string(prefix) + std::to_string(serial_++); }
   static std::string cpp_type(const Type &type) {
     switch (type.kind) {
     case Type::integer: return "std::int64_t";
+    case Type::uint8: return "std::uint8_t";
+    case Type::uint32: return "std::uint32_t";
+    case Type::uint64: return "std::uint64_t";
     case Type::boolean: return "bool";
     case Type::float32: return "float";
     case Type::float64: return "double";
@@ -114,7 +122,7 @@ class Compiler {
         std::set<std::string> fields;
         for (const auto &field : product.form->parameters) {
           if (!fields.insert(field.name).second) fail(field.at, "duplicate product field '" + field.name + "'");
-          product.fields.push_back({field.name, resolve(field.type, *product.module, field.at), field.at});
+          product.fields.push_back({field.name, resolve(field.type, *product.module, field.at), field.at, false, {}});
         }
         type_definitions_ << "struct " << cpp_type(type) << " {\n";
         for (size_t i = 0; i < product.fields.size(); ++i)
@@ -175,10 +183,12 @@ class Compiler {
           fail(form.at, "duplicate symbol name @" + form.name);
         new_symbol(result, form.name);
       } else if (form.kind == Form::Kind::unit) {
+        require_user_type_name(form.name, form.at);
         if (!lexical_names.insert(form.name).second) fail(form.at, "duplicate lexical name '" + form.name + "'");
         result.types.emplace(form.name, Type{Type::unit, result.path + "::" + form.name,
                                             next_unit_++, form.result_type->kind});
       } else if (form.kind == Form::Kind::product) {
+        require_user_type_name(form.name, form.at);
         if (!lexical_names.insert(form.name).second) fail(form.at, "duplicate lexical name '" + form.name + "'");
         const Type type{Type::product, result.path + "::" + form.name, products_.size()};
         result.types.emplace(form.name, type);
@@ -189,13 +199,16 @@ class Compiler {
              (!result.functions.contains(form.name) && !lexical_selections.contains(form.name))))
           fail(form.at, "duplicate lexical name '" + form.name + "'");
         if (form.kind == Form::Kind::function) {
+          require_user_type_name(form.name, form.at);
           result.functions[form.name].push_back({&form, &result});
           if (form.conversion) result.conversions.push_back({&form, &result});
         }
       } else if (form.kind == Form::Kind::using_units) {
-        for (const auto &selection : form.units)
+        for (const auto &selection : form.units) {
+          require_user_type_name(selection.local, selection.at);
           if (!lexical_names.insert(selection.local).second)
             fail(selection.at, "duplicate lexical name '" + selection.local + "'");
+        }
       } else if (form.kind == Form::Kind::symbol_from) {
         if (result.symbols.contains(form.alias) || !result.symbol_aliases.emplace(form.alias, &form).second)
           fail(form.at, "duplicate symbol alias @" + form.alias);
@@ -250,7 +263,7 @@ class Compiler {
                          const std::map<std::string, std::string> &names,
                          std::map<size_t, size_t> &identities, std::set<std::string> &used) {
     auto expr = std::make_unique<Expression>(Expression{
-        source_expr.kind, source_expr.at, source_expr.text, {}, source_expr.symbol_id});
+        source_expr.kind, source_expr.at, source_expr.text, {}, source_expr.symbol_id, source_expr.binding});
     if (uses_symbol(expr->kind)) {
       used.insert(source_expr.text);
       const auto renamed = names.find(source_expr.text);
@@ -600,6 +613,8 @@ class Compiler {
         out << "if (!(" << args[0].code << ")) runtime_failure(\"CoD assertion failed\");\n";
       } else if (args[0].type == Type::integer) {
         out << "std::printf(\"%lld\\n\", static_cast<long long>(" << args[0].code << "));\n";
+      } else if (integral(args[0].type)) {
+        out << "std::printf(\"%llu\\n\", static_cast<unsigned long long>(" << args[0].code << "));\n";
       } else if (args[0].type == Type::boolean) {
         out << "std::puts(" << args[0].code << " ? \"true\" : \"false\");\n";
       } else if (floating(args[0].type)) {
@@ -632,9 +647,22 @@ class Compiler {
     using K = Expression::Kind;
     switch (expr.kind) {
     case K::integer: {
+      auto spelling = expr.text;
+      const auto type = spelling.ends_with("u8") ? Type::uint8 : spelling.ends_with("u32") ? Type::uint32 :
+                        spelling.ends_with("u64") ? Type::uint64 : Type::integer;
+      if (type != Type::integer) {
+        spelling.resize(spelling.size() - (type == Type::uint8 ? 2 : 3));
+        std::uint64_t value{};
+        const auto parsed = std::from_chars(spelling.data(), spelling.data() + spelling.size(), value);
+        if (parsed.ec != std::errc{} || parsed.ptr != spelling.data() + spelling.size() ||
+            (type == Type::uint8 && value > UINT8_MAX) || (type == Type::uint32 && value > UINT32_MAX))
+          fail(expr.at, "integer literal is outside " + type_name(type) + " range");
+        return scalar(type, "static_cast<" + cpp_type(type) + ">(UINT64_C(" + std::to_string(value) + "))", out);
+      }
       std::int64_t value{};
       const auto parsed = std::from_chars(expr.text.data(), expr.text.data() + expr.text.size(), value);
-      if (parsed.ec != std::errc{}) fail(expr.at, "integer literal is outside i64 range");
+      if (parsed.ec != std::errc{} || parsed.ptr != expr.text.data() + expr.text.size())
+        fail(expr.at, "integer literal is outside i64 range");
       return scalar(Type::integer, "INT64_C(" + std::to_string(value) + ")", out);
     }
     case K::real: {
@@ -644,7 +672,8 @@ class Compiler {
       double value{};
       const auto parsed = std::from_chars(spelling.data(), spelling.data() + spelling.size(), value);
       if (parsed.ec != std::errc{} || parsed.ptr != spelling.data() + spelling.size() || !std::isfinite(value) ||
-          (type == Type::float32 && !std::isfinite(static_cast<float>(value))))
+          (type == Type::float32 && (!std::isfinite(static_cast<float>(value)) ||
+                                    (value != 0 && static_cast<float>(value) == 0))))
         fail(expr.at, "floating literal is outside " + type_name(type) + " range");
       if (spelling.find_first_of(".eE") == std::string::npos) spelling += ".0";
       return scalar(type, spelling + (type == Type::float32 ? "f" : ""), out);
@@ -680,8 +709,45 @@ class Compiler {
       bind(expression_symbol(expr, module), value, module, env, expr.at, out);
       return value;
     }
+    case K::range_for: case K::fold: {
+      const auto first = expression(*expr.children[0], module, env, locals, pure, out);
+      const auto last = expression(*expr.children[1], module, env, locals, pure, out);
+      require(last.type, first.type, expr.at);
+      if (!integral(first.type) && !(first.type.kind == Type::unit && integral(first.type.representation)))
+        fail(expr.at, "a range requires integer endpoints or one integer-backed UoM identity");
+      const auto index = fresh("index");
+      auto inner_locals = locals;
+      inner_locals[expr.text] = {first.type, index, {}, nullptr};
+      Value accumulator;
+      if (expr.kind == K::fold) {
+        accumulator = expression(*expr.children[2], module, env, locals, pure, out);
+        if (accumulator.type == Type::void_type || accumulator.type == Type::procedure)
+          fail(expr.at, "a fold accumulator requires a bits value");
+        const auto name = fresh("accumulator");
+        out << cpp_type(accumulator.type) << " " << name << " = " << accumulator.code << ";\n";
+        accumulator.code = name;
+        inner_locals[expr.binding] = accumulator;
+      }
+      std::ostringstream body;
+      const auto next = block(*expr.children.back(), module, env, std::move(inner_locals), pure, body);
+      out << "for (" << cpp_type(first.type) << " " << index << " = " << first.code << "; "
+          << index << " < " << last.code << "; ++" << index << ") {\n" << body.str();
+      if (expr.kind == K::fold) {
+        require(next.type, accumulator.type, expr.at);
+        out << accumulator.code << " = " << next.code << ";\n";
+      }
+      out << "}\n";
+      return accumulator;
+    }
     case K::block: return block(expr, module, env, locals, pure, out);
     case K::call: {
+      static const std::map<std::string, Type> casts{{"i64", Type::integer}, {"u8", Type::uint8},
+          {"u32", Type::uint32}, {"u64", Type::uint64}, {"f32", Type::float32}, {"f64", Type::float64}};
+      if (const auto cast = casts.find(expr.text); cast != casts.end()) {
+        const auto args = arguments(expr, module, env, locals, pure, out);
+        if (args.size() != 1 || !numeric(args[0].type)) fail(expr.at, "numeric conversion requires one scalar value");
+        return scalar(cast->second, "checked_cast<" + cpp_type(cast->second) + ">(" + args[0].code + ")", out);
+      }
       if (const auto found = module.types.find(expr.text); found != module.types.end()) {
         const auto type = resolve(found->second, module, expr.at);
         const auto args = arguments(expr, module, env, locals, pure, out);
@@ -728,7 +794,7 @@ class Compiler {
       if (expr.text == "-" && floating(value.type)) return scalar(value.type, "(-" + value.code + ")", out);
       require(value.type, expr.text == "!" ? Type::boolean : Type::integer, expr.at);
       return scalar(value.type, expr.text == "!" ? "(!" + value.code + ")" :
-                                              "checked_sub(0, " + value.code + ")", out);
+                                              "checked_sub(INT64_C(0), " + value.code + ")", out);
     }
     case K::binary: {
       auto left = expression(*expr.children[0], module, env, locals, pure, out);
@@ -762,7 +828,7 @@ class Compiler {
         return scalar(left.type, "(" + left.code + expr.text + right.code + ")", out);
       }
       const std::map<std::string, std::string> names{{"+", "add"}, {"-", "sub"}, {"*", "mul"}, {"/", "div"}, {"%", "rem"}};
-      return scalar(Type::integer, "checked_" + names.at(expr.text) + "(" + left.code + ", " + right.code + ")", out);
+      return scalar(left.type, "checked_" + names.at(expr.text) + "(" + left.code + ", " + right.code + ")", out);
     }
     case K::conditional: {
       const auto condition = expression(*expr.children[0], module, env, locals, pure, out);
@@ -889,6 +955,7 @@ class Compiler {
             value = define_procedure(import_body(*value.procedure, form, module), module, env, body);
           bind(destination, std::move(value), module, env, form.at, body);
         } else if (const auto type = source.types.find(form.name); type != source.types.end()) {
+          require_user_type_name(form.alias, form.at);
           if (type->second.kind == Type::unit)
             fail(form.at, "select UoMs and their conversions together with using units");
           if (form.kind == Form::Kind::import_resource) fail(form.at, "types preserve identity through using");
@@ -896,6 +963,7 @@ class Compiler {
               !module.types.emplace(form.alias, type->second).second)
             fail(form.at, "duplicate lexical alias '" + form.alias + "'");
         } else if (const auto function = source.functions.find(form.name); function != source.functions.end()) {
+          require_user_type_name(form.alias, form.at);
           if (form.kind == Form::Kind::import_resource)
             fail(form.at, "function-body import is outside the prototype; use 'using' for a lexical function");
           if (module.types.contains(form.alias) || module.globals.contains(form.alias))
@@ -943,35 +1011,63 @@ public:
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <cmath>
+#include <type_traits>
+#include <utility>
 
 [[noreturn]] static void runtime_failure(const char *message) {
   std::fprintf(stderr, "%s\n", message);
   std::exit(70);
 }
-static std::int64_t checked_add(std::int64_t a, std::int64_t b) {
-  std::int64_t result;
-  if (__builtin_add_overflow(a, b, &result)) runtime_failure("i64 addition overflow");
+template<class T> [[noreturn]] static void integer_failure(const char *operation) {
+  const char *type = std::is_same_v<T, std::int64_t> ? "i64" :
+                     std::is_same_v<T, std::uint8_t> ? "u8" :
+                     std::is_same_v<T, std::uint32_t> ? "u32" : "u64";
+  char message[80];
+  std::snprintf(message, sizeof(message), "%s %s overflow", type, operation);
+  runtime_failure(message);
+}
+template<class T> static T checked_add(T a, T b) {
+  T result;
+  if (__builtin_add_overflow(a, b, &result)) integer_failure<T>("addition");
   return result;
 }
-static std::int64_t checked_sub(std::int64_t a, std::int64_t b) {
-  std::int64_t result;
-  if (__builtin_sub_overflow(a, b, &result)) runtime_failure("i64 subtraction overflow");
+template<class T> static T checked_sub(T a, T b) {
+  T result;
+  if (__builtin_sub_overflow(a, b, &result)) integer_failure<T>("subtraction");
   return result;
 }
-static std::int64_t checked_mul(std::int64_t a, std::int64_t b) {
-  std::int64_t result;
-  if (__builtin_mul_overflow(a, b, &result)) runtime_failure("i64 multiplication overflow");
+template<class T> static T checked_mul(T a, T b) {
+  T result;
+  if (__builtin_mul_overflow(a, b, &result)) integer_failure<T>("multiplication");
   return result;
 }
-static std::int64_t checked_div(std::int64_t a, std::int64_t b) {
+template<class T> static T checked_div(T a, T b) {
   if (b == 0) runtime_failure("division by zero");
-  if (a == std::numeric_limits<std::int64_t>::min() && b == -1) runtime_failure("i64 division overflow");
+  if constexpr (std::is_signed_v<T>)
+    if (a == std::numeric_limits<T>::min() && b == -1) integer_failure<T>("division");
   return a / b;
 }
-static std::int64_t checked_rem(std::int64_t a, std::int64_t b) {
+template<class T> static T checked_rem(T a, T b) {
   if (b == 0) runtime_failure("remainder by zero");
-  if (a == std::numeric_limits<std::int64_t>::min() && b == -1) return 0;
+  if constexpr (std::is_signed_v<T>)
+    if (a == std::numeric_limits<T>::min() && b == -1) return 0;
   return a % b;
+}
+template<class To, class From> static To checked_cast(From value) {
+  if constexpr (std::is_integral_v<To> && std::is_integral_v<From>) {
+    if (!std::in_range<To>(value)) runtime_failure("numeric conversion out of range");
+  } else if constexpr (std::is_integral_v<To>) {
+    const auto upper = std::ldexp(From(1), std::numeric_limits<To>::digits);
+    const auto lower = std::is_signed_v<To> ? -upper : From(0);
+    const auto truncated = std::trunc(value);
+    if (!std::isfinite(truncated) || truncated < lower || truncated >= upper)
+      runtime_failure("numeric conversion out of range");
+  }
+  const auto result = static_cast<To>(value);
+  if constexpr (std::is_floating_point_v<To> && std::is_floating_point_v<From>)
+    if (std::isfinite(value) && !std::isfinite(result)) runtime_failure("numeric conversion out of range");
+  return result;
 }
 template<class T> struct Effect {
   T &slot;

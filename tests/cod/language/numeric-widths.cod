@@ -1,0 +1,15 @@
+using symbol "std:io" @print;
+unit Slot::u32;
+function sum(lo (Slot), hi (Slot))::u64 {
+  fold (i in lo .. hi, sum = 0u64) { sum + u64(scalar(i)) }
+}
+behave @print(255u8);
+behave @print(4294967295u32);
+behave @print(18446744073709551615u64);
+behave @print(200u8 + 55u8);
+behave @print(sum(Slot(0u32), Slot(1000u32)));
+behave @print(f32(3));
+behave @print(i64(-2.75));
+behave @print(u32(2.75));
+behave @print(f64(16777217));
+behave @print(f32(16777217));

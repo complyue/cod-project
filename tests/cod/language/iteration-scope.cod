@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+symbol @value;
+symbol @read;
+effect @value = 9;
+procedure @read()::i64 { @value }
+for (i in 0 .. 3) {
+  effect @value = i;
+  behave @print(behave @read());
+};
+behave @print(@value);
