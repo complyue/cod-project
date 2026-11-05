@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：209
+记录版本：214
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -101,10 +101,10 @@ Design authority
 | C-07 | 提供智能体顺手的语义编辑能力。 | §10 | H-04；不指定 patch 协议、提交算法或自动执行权限。 |
 | C-08 | memory region 承载 IPC packet，总长度在包头，完整接收后调用入口对象的约定成员方法落地。 | §2—3、§6—7 的候选近期应用 | H-06；确认业务方向，不指定 framing ABI、方法分派、提交和重试协议。 |
 | C-09 | DBMR 支持本地 ontology 的检索、统计和 CRUD，日常不回收空间，按节奏重建载荷及 backing 文件压缩。 | §7 的候选近期应用 | H-06；不预定不可变版本、历史保留、并发或崩溃恢复算法。 |
-| C-10 | 现在开始领域语言设计，明确 sum/product ADT、方法调用和内存管理语义，跟踪讨论，稍后再实施。 | §2—6、§14 的候选设计范围 | H-06、H-07；确认讨论方向和时机，不追认助手建议或尚未生成的文档细节。 |
+| C-10 | 显式 ADT/GADT、方法和内存语义；以 SNN 需求同步推进语言及应用设计、实现和验证。 | §2—6、§14 的候选设计范围 | H-06/H-07 建立设计讨论，H-96 将协同开发纳入当前方向；原始决定保留，不将方向批准外推到全部机制。D-07r4、D-10r1。 |
 | C-11 | C/C++ 作为与其他语言运行时互操作的兼容接口。 | §6 的候选运行时边界 | H-06；不指定 C ABI、C++ wrapper、句柄和所有权协议。 |
 | C-12 | 首个讨论应用为稳态循环激活 SNN：每 CC 一个 region，交换 token 语义向量，目标几百到几万 CC。H-43 明确 CC 是语义呈现基本单元，CC 之间为非精确 replica，minicolumn／神经元的语义响应角色静态分配，不要求网络学习这些身份。当前 Flash 5120 维、每维 60+60；每 CC 按树莓派预算，节点 RAM 上限 16 GB，应用文档独立。 | §2—3、§6—7、§12 的候选应用 | H-08—H-13、H-27、H-43、H-46—H-48、H-52—H-59；静态语义身份不冻结连接权重或活动状态。三种语义轨迹在每 CC 的宽活动比例范围内运行，允许不同心智状态的典型占比不同；H-52 明确学习三相稳态吸引子及各种入口条件的预期收敛，单 token 自循环后逐渐淡出是中间目标；H-67 允许宽松半衰期尺度及 token 差异。H-53 明确单次随机激活、低噪音淡出与 DMN 检测后的噪音提升；H-54/H-55 增加互补正面输入的抵消、低活动增噪、残留先增长达峰再回落目标；H-56—H-58 以去噪窗口覆盖／路径检测状态并排除总激活比例，心流覆盖上限示例20%、DMN覆盖示例80%；H-59 要求正常循环状态均可由外部 token 驱使转向，失去该能力为 stale，重置是恢复候选；具体数值、动力学及算法待定。 H-61/H-62 记录阶段性无距离偏好与分阶段训练、静态批组的初步方案；immersion 保留为预期涌现而无专门训练目标。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-71 允许有用小循环保留较长上下文影响，不以主导响应淡出要求一切历史作用归零。 K-207 / D-08 set202 记录 H-71 实质研究完成并统一当前状态；H-86 经验比较、全部局部人工约束和 pending-human 范围保持，不新增实施资格。 |
-| C-13 | SNN 静态槽集总数以略大于神经元数为明确目标，优先按 scale law 形成便于算术寻址的固定拓扑；不要求保留旧场景连接容量。神经元指向当前集；每槽 4-byte 对端 ID / 1-byte FP8 权重并行数组，每集一个 owner ID。训练使用既存集合迁移，不通过堆分配维护槽拓扑。最小集 100 槽；少出边源的取舍与入边准入分开。 | C-12 的容量设计方向，训练提出容量需求；§2—3、§7 的候选细化 | H-13—H-19 为约束基线；H-18 取代精确 N 集限制。H-20 请求文献调研，H-21 暂定 alpha≈3 的 100/144 分级模板，并要求评估 target-owned 入边归属。H-16 的 source-owned 归属作为对照；入边方案未被全文批准。H-22 要求评估大入度与激活的生物证据，未选择新上限或整合机制。H-23 认为大入度可由较小典型入权重补偿是合理方向，并要求区分入／出度参数；不指定权重函数或更换暂定表。H-24 明确权重尺度属于训练策略，可作为超参数或动态规划，不是容量分配参数。H-25 继续暂定容量规则并转向语义维建模；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量；J 和精确配额待定。具体更新、源参与／重入、空闲管理和学习／迁移仍待决。 K-178 / CapacityPlanning、ConnectivityScalingResearch173 将明确的数组预算假设与 H-73/H-75/H-78 状态比较连接；容量配额、已算总额和需求先于辅助结构原则保持。 K-200 / CapacityPlanning195 将已记录的连接扫描算术纳入节点规划；RAM、保留度数、更新节奏和节点 CC 数分别约束可行性，不把全预留扫描当作强制算法或实测带宽。 K-202 / AdaptiveConnectivity、CapacityPlanning、ConnectivityScalingResearch197 精简 authority 摘要并直连独立 flow 文档；保留正文合同、来源、算术、开放选择及全部 H/K 历史，未授予实施资格。 |
+| C-13 | SNN 静态槽集总数以略大于神经元数为明确目标，优先按 scale law 形成便于算术寻址的固定拓扑；不要求保留旧场景连接容量。神经元指向当前集；每槽 4-byte 对端 ID / 1-byte FP8 权重并行数组，每集一个 owner ID。训练使用既存集合迁移，不通过堆分配维护槽拓扑。最小集 100 槽；少出边源的取舍与入边准入分开。 | C-12 的容量设计方向，训练提出容量需求；§2—3、§7 的候选细化 | H-13—H-19 为约束基线；H-18 取代精确 N 集限制。H-20 请求文献调研，H-21 暂定 alpha≈3 的 100/144 分级模板，并要求评估 target-owned 入边归属。H-16 的 source-owned 归属作为对照；H-94 确认 target-owned 入连及双帧拉取，具体布局／迁移方案未获全文批准。H-22 要求评估大入度与激活的生物证据，未选择新上限或整合机制。H-23 认为大入度可由较小典型入权重补偿是合理方向，并要求区分入／出度参数；不指定权重函数或更换暂定表。H-24 明确权重尺度属于训练策略，可作为超参数或动态规划，不是容量分配参数。H-25 继续暂定容量规则并转向语义维建模；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量；J 和精确配额待定。具体更新、源参与／重入、空闲管理和学习／迁移仍待决。 K-178 / CapacityPlanning、ConnectivityScalingResearch173 将明确的数组预算假设与 H-73/H-75/H-78 状态比较连接；容量配额、已算总额和需求先于辅助结构原则保持。 K-200 / CapacityPlanning195 将已记录的连接扫描算术纳入节点规划；RAM、保留度数、更新节奏和节点 CC 数分别约束可行性，不把全预留扫描当作强制算法或实测带宽。 K-202 / AdaptiveConnectivity、CapacityPlanning、ConnectivityScalingResearch197 精简 authority 摘要并直连独立 flow 文档；保留正文合同、来源、算术、开放选择及全部 H/K 历史，未授予实施资格。 |
 | C-14 | 每语义维分为正、负细胞群体，按身份区分极性，研究非负活动到有符号值的读出。H-27/H-35 的当前讨论限于 Flash 5120 维、每维 60+60；V4 Pro 人口比较暂不讨论。H-54 要求同维正负群体内在抵消（C-18）；上下文、幅度及预测语义需协调。 | C-12 的编码候选细化；P-27 候选价值链，P-28 容量依赖 | H-25/H-27 要求评估及计算，未确认整套编码／学习机制；H-26 请求人脑柱细胞数证据。614400 神经元是当前条件算术，未选定最终 checkpoint、连接池或生物对应。 H-75/AD-080 明确同一 minicolumn 内个体表示共享语义成分的不同上下文路径；不把这些身份归并为单一平均值或固定一细胞一条独占路径。 H-76/AD-082 指定 token 输入的预测选择：预测占比充分则强激活这些细胞，否则广范围低强度激活；阈值、强度与坐标校准待定。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-199 / SignedPopulationEncoding194 将预测输入分支的使用与有噪声下实际上下文匹配区分；保留 H-78/H-85 对照，不把自发就绪直接视为错误，不预选门限、噪音来源标签或额外状态。 |
 | C-15 | 以三相行为、入口收敛及有限 token 响应为目标的分阶段连接构建／学习：初步以直接激活链形成 DMN／token 循环，后期 flow 用 Hebbian；immersion 预期涌现，不主动训练。 | C-12 的学习方向；P-29 候选价值链、P-30 容量依赖；C-22 为构建方案，P-31 的等位机制范围已 rejected | H-61 细化 H-40/H-52 的方法分工并确认暂不加入物理距离偏好；H-41/H-42/H-43/H-50 的维号中立、等位拒绝、固定语义及无天然物理度量边界保留。H-52—H-59 的行为／噪音／检测／可转向性仍约束验收。H-62 仅初步倾向预先定组并要求比较，算法与正式价值链待定。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-79—H-81/AD-085—AD-087 明确 Hebbian/HTM 是 token 序列 flow 的学习方向，算法尚未选定；现授权初步设计并尽早讨论问题，不默认沿用 DMN/token 修补。 H-82/AD-088 以预测性预激活群与输入序列高度匹配作为 flow 直接训练验收；无需自主持续生成，生成算法另行设计。具体度量和学习规则仍待定。 H-83/AD-089 要求按序列长度验证：共享匹配片段允许多个预测，随上下文增长向训练序列收敛；不预设固定单候选或对每个未到达预测等量削弱。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 K-95 的 flow 初设分析与上下文分配候选保持 pending-human；H-85 明确预测正负并存／抵消留待实验；H-86 授权明显经验选项直接列为真实数据比较，不逐项询问。 K-98 将 flow 的预测改进与共享循环、fade-out 和外部可驱转性一起比较；未选归一化、图分区或关联更新公式。 K-127 / FlowLearning122 补充学习保留与替换证据的适用范围。 K-163 / FlowLearning158、SynapticIntegrationResearch158 明确 HTM 证据的扰动及人口缩放条件，不选择编码、门限或新状态。  K-174 / FlowLearning169 区分下一输入匹配与较长时域的关联统计；不把 successor representation 或 TD 机制加入模型。 K-179 / FlowLearning174 将直接定义的 rate/frame 学习与有条件的 spike-rule 降阶区分，不引入微观时序机制。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-188 / FlowLearning183、MR-S095 区分跨日表征漂移的任务读出与自身自然预激活；补偿模型所需目标误差反馈不等同实测突触学习，未预选补偿机制或冻结身份语义。 K-189 / FlowLearning184、MR-S096 区分已有关联的漂移维护与陌生转移学习；单细胞均值／方差调节不等同于 CC 活跃比例控制，不选择补偿机制。  K-195 / FlowLearning190、MR-S010 核查学习期间有效循环强度及持续可塑性的来源条件；自然预激活与后续行为按实际条件比较，不选择增益变量、学习门控或自主生成目标。  K-196 / FlowLearning191、SynapticIntegrationResearch191、MR-FC015 以同度／同权重和的条件汇集比较权重集中及源协方差；上下文输入分数不由容量或权重总量自动校准，不新增归一化、门限或元数据。  K-197 / FlowLearning192、MR-S049 深查实际离线批量学习及内部连续状态／二值输出区别；不将自主回放结果当在线 flow 或分级语义输出证据，未选状态、竞争或学习模式。 K-206 / FlowLearning201、MR-S044 细化预输入就绪度测量与生成输出的边界；保留 H-83 合理多候选，不将单一实际符号的分类计分直接变成本文验收。 |
 | C-16 | 在 CC 非精确 replica、语义角色静态分配的前提下研究语义群体位置与生物解剖拓扑的兼容；区分角色、胞体位置、轴突／树突接触机会和存储顺序。 | C-12 的候选拓扑研究，P-32 候选价值链，P-33 编码依赖 | H-42 请求研究，H-43 固定语义角色，H-44 优先解决位置映射冲突而非 1D/2D。H-46 明确 measured feature 与 minicolumn 非一一对应并不冲突；H-49 请求距离依据，H-50 明确现有语义组织无天然物理位置，H-51 要求至少 12 小时研究。群体交错、选择性可达等只作额外解剖假设下的条件比较，不是当前必选项；不松动 H-41/H-42 边界。 H-61 确认当前暂不加入物理距离倾向；解剖研究保留为参考，未来几何提案须有具体收益，非实现当前 SNN 的前置条件。K-78 记录此范围。 |
@@ -115,18 +115,30 @@ Design authority
 | C-21 | 对失去外部输入可转向性的 stale 状态考虑系统性重置恢复。 | C-20 的恢复候选；P-43 候选价值关系，P-44 状态语义依赖 | H-59 的“可能需要”提出候选，未选择必备重置策略。触发证据、CC／网络范围、活动／预测／连接／持久状态的影响与保留及恢复入口未选。 |
 | C-22 | 统一的 DMN/token 激活链构建与修补训练：观察下一步自然激活量，从理论上该激活而未激活的群体选足够比例补足；初建是现有支持不足的情形，持续迭代主要维护有用传播。 | C-15 的训练机制提案；P-45 候选价值链，P-46 容量依赖、P-47 固定语义编码依赖 | H-63 明确要求按修补方向调整；H-61 的链连接／多步闭合仍作机制候选，H-62 静态批组可作参考而非强制轨迹。预期目标、激活量口径、选取比例、教学辅助／边更新、衰减阶段和实现待定。 H-64/AD-061 要求全局考虑和逐步采样、避免前序目标重用造成意外捷径；C-23/P-48—P-51、K-80 记录待讨论的约束／检查方案。 H-65/AD-062—AD-064 固定每 epoch 的训练范围并给出近似宽度、主体增强、回返削弱的参数角色；K-81 区分循环时长、净增益和实际维持时间。 H-66/AD-065—AD-067 以保持回返为初步预期，要求仔细处理增强／削弱，并偏好每步或最多几步的 token 分布保持；K-82 将完整后继群体与修补子集的比例约束区分，细节仍 pending-human。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 H-79—H-81 将本构建／修补范围明确限定为 DMN 与单 token；flow 的 Hebbian/HTM 初步算法另行设计，不从本算法直接推广。  K-194 / TrainingStrategy189、MR-S098 深查嵌入网络的链传播、幅度保真及交叉激活证据；保留实际共同背景下的维护验收，不导入持续输入、同步、几何或细胞机制。 |
 | C-23 | 全链约束下逐步选择修补目标：每 epoch 确定维护范围，以近似宽度和主体增强／回返削弱参数规划进程，再利用正确自然激活并补足缺失候选。 | C-22 的候选规划约束；P-48 价值衍生，P-49 容量依赖、P-50 编码依赖、P-51 修补约束 | H-64 要求全局考虑／逐步采样及避免意外捷径；H-65 明确 DMN 全体范围、token 按向量比例选 minicolumn 细胞且每 epoch 选一次。参数数值、逐步与累计增益定义、时间标度、回返对及表示仍 pending-human，不预设全网协调器或永久神经元相位。 H-66 把语义保持时间范围收紧到每步或少数几步，P-50 记录编码约束；K-82 分析有限人口、链宽／圈长、闭环维持和净增益的耦合，窗口、容差及采样策略待定。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 H-71/C-26/P-61 明确小循环可有上下文价值；避免主动构造有害捷径不授权强力消除小循环。 |
-| C-24 | 个体神经元的离散时间 rate／有效活动动力学与自然传播终止：保留学习连接，活动可因支持不足或随机失败而停止；半衰期式目标宽松且 token 间可不同。 | C-15 的候选动力学细化；P-52 价值衍生，P-53 编码依赖、P-54 修补约束、P-59 容量依赖 | H-67 提议并要求深入讨论，H-68 明确自然断链不清权重，H-70 要求全程数值精度；实际变量、更新、噪音、步长、阈值及格式仍 pending-human。不默认聚合 minicolumn 或采用抑制性边。 H-71/C-26—C-28 开放小循环上下文、累积／定时衰减及 INT8/INT4 比较；相关细节仍待定。 H-75/AD-081 的 C-29 提议两帧轮换连入汇集，保留个体身份和明确帧边界；转移函数、相态及时间步仍待定。 H-78/AD-084 明确当前不决定预测／当前活动的状态表示，保留未来实现对照实验余地；不预设额外字段或实验框架。 K-165 / RateDynamics160 明确 rate 降阶已包含的波动与显式噪音的意义，不选择噪音律或适应时间常数。 K-166 / RateDynamics161 区分平均与 H-77 抵消的次序，不以 ensemble 平均替代当前快照或加入分布状态。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-172 / RateDynamics167 深查 population-rate 降阶条件；不以群体平均加速替代个体上下文身份或宣称 CPU 收益。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
+| C-24 | 个体神经元的离散时间 rate／有效活动动力学与自然传播终止：保留学习连接，活动可因支持不足或随机失败而停止；半衰期式目标宽松且 token 间可不同。 | C-15 的候选动力学细化；P-52 价值衍生，P-53 编码依赖、P-54 修补约束、P-59 容量依赖 | H-67 提议并要求深入讨论，H-68 明确自然断链不清权重，H-70 要求全程数值精度；实际变量、更新、噪音、步长、阈值及格式仍 pending-human。不默认聚合 minicolumn 或采用抑制性边。 H-71/C-26—C-28 开放小循环上下文、累积／定时衰减及 INT8/INT4 比较；相关细节仍待定。 H-94 正式确认 C-29 的两帧轮换连入拉取，保留个体身份和明确帧边界；转移函数、相态及时间步仍待定。 H-78/AD-084 明确当前不决定预测／当前活动的状态表示，保留未来实现对照实验余地；不预设额外字段或实验框架。 K-165 / RateDynamics160 明确 rate 降阶已包含的波动与显式噪音的意义，不选择噪音律或适应时间常数。 K-166 / RateDynamics161 区分平均与 H-77 抵消的次序，不以 ensemble 平均替代当前快照或加入分布状态。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-172 / RateDynamics167 深查 population-rate 降阶条件；不以群体平均加速替代个体上下文身份或宣称 CPU 收益。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
 | C-25 | 分数式神经元选取／参与：以可分贡献表达训练目标，与 rate 协作缓解整细胞计数的语义割裂。 | C-22 的候选目标表示；P-55 价值衍生，P-56 rate 依赖、P-57 编码依赖、P-58 进程约束 | H-69 初步提出方向；分数作为目标、概率、占空比或独立状态的含义待定。乘积足以决定后续行为时不预设双字段；共享身份与边的串扰不因分数化自动消失，完整契约 pending-human。 |
 | C-26 | 背景支持下的有用小循环上下文：大链构建避免主动制造有害捷径，同时保留能让较早输入影响后续输出的小循环。 | C-15 的行为方向细化；P-60 价值衍生、P-61 进程约束、P-62 动力学依赖 | H-71 明确不强力消除小循环并提出长上下文价值；主导响应淡出不等于擦除一切历史影响。具体识别、训练、容量／干扰和读出验收 pending-human。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-180 / ContextLoopsAndNumerics175、MR-S011/MR-S012 深查暂态读出、重复外部驱动与部分权重训练的条件；不导入变换、读出、学习规则或稀疏容量结论。  K-181 / ContextLoopsAndNumerics176、context-composition-analysis 明确固定总量下条件幅度界及可表示模式计数；MR-S013 的分布耦合证据不等于本模型容量。未选上限、编码或新增状态。  K-184 / ContextLoopsAndNumerics179、MR-S006 区分同噪音下有／无刺激的维持与外部噪音分组指定的选择性；不导入振荡、资源状态或模型时标。 K-193 / ContextLoopsAndNumerics188 核查连续吸引子记忆扩散的稳态、弱涨落及调谐缩放条件；连续 rate 或活动调节不自动满足它们，不导入记忆容量或噪音控制公式。 K-201 / ContextLoopsAndNumerics196、context-composition-analysis 的 balanced_drive_frame_scaling 将同维平衡驱动的组成收缩与帧间隔联系；保持净语义值不等于保持上下文，未把确定性例当作白噪音律或选取新的状态／调节机制。 |
 | C-27 | 累积／延后生效的衰减：保留跨小更新的衰减进度，可研究下一数值边界的未来触发。 | C-24 的时间／数值机制候选；P-63 价值衍生、P-64 表示／容量依赖 | H-71 要求深入比较，H-72 澄清可预计算下一次最小精度允许的变化；未确认计时器、残差、锚点、事件结构或具体衰减律。模型时间、输入到达、取消／重新计算和中间输出语义必须明确；pending-human。 K-97 的条件分析指出：有限下一边界时间可承载幅度进度，但无事件状态并非普遍充分；输入即使不改变 code 也可改变下一事件。时间戳精度／存储及真正省略的工作需比较，未选择新结构。  K-173 / ContextLoopsAndNumerics168 区分源变化稀疏与连入依赖／同维抵消传播的影响范围；不预设事件索引、缓存或重算算法。  K-198 / ContextLoopsAndNumerics193、MR-S002 核查 QSS 的总量化误差（包括滞回）趋零及观察时域条件；不把收敛结论当固定低精度任意时长保证，未选事件结构或滞回机制。 K-204 / ContextLoopsAndNumerics199、numeric-representation-arithmetic 的 directed_decay_rounding 区分向下取整避免停滞与保留衰减时间；有限归零不是半衰期／自然断链的充分证据，不选取整律或新状态。 |
 | C-28 | 按建模量选择 INT8/INT4、无符号／定点或浮点表示，分别论证存储、缩放、累加与动态更新精度。 | C-24 的候选数值细化；P-65 价值衍生、P-66 编码依赖、P-67 容量依赖、P-68 衰减约束 | H-71 授权整数替代研究，H-73 允许 FP16/FP32 神经元状态候选，H-70 精度要求保留；不确认全量替换或具体格式。静态槽算术是条件基线，字段／相态与元数据代价需明确；pending-human。 K-88 的条件权重算术区分动态范围、集体增益分辨率及训练存储；不按容量档位选权重尺度，不默认逐边高精度副本。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
-| C-29 | 两帧轮换的离散时间连入汇集：只读完整前帧，局部计算各目标后写入次帧，完成后交换。 | C-24 的执行语义候选；P-69 价值衍生、P-70 存储依赖 | H-75/AD-081 提议以快照简化更新，消除访问次序影响与逐边持久累积需求；临时求和仍存在。相态、抵消、输入、学习发布及时间步待定；不预设第三帧、双权重池或全网锁步，pending-human。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 K-167 / README162 澄清两帧单标量预算标签，数值和 H-78 选择空间不变。 |
+| C-29 | 两帧轮换的离散时间连入汇集：只读完整前帧，局部计算各目标后写入次帧，完成后交换。 | C-24 的已确认执行架构；P-69 局部价值衍生、P-70 存储依赖 | H-94 在 H-75/AD-081 基础上正式确认双帧连入拉取：整步只读 A，各目标拉取源 effect 后写 B，完成后统一发布；读取不推进或消耗源状态。该架构 confirmed；完整方程、相态、输入、学习发布及时间步仍待定。push queue／上游 scatter 属于设计变更；不预设第三帧、双权重池或全网锁步。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 K-167 / README162 澄清两帧单标量预算标签，数值和 H-78 选择空间不变。 |
 | C-30 | 以长方形场景研究四分的功能关系：局部模式、物体识别、具身空间、自我觉察及后两者反馈。 | C-12 的认知应用研究；P-71 候选价值链、P-75 概念动力学依赖 | H-87 给定探索前提，不证明意识或解剖对应；D-09r1 S1/S2，机制 pending-human。 |
 | C-31 | 概念本体由经验抽象形成的预期模型及连接支持的激活链吸引子承载；每个 CC 拥有完整概念动力学空间的非严格副本，感受输入形成位置偏向。 | C-12 的学习前提细化；P-72 候选价值链、P-81 约束 C-30 分组 | H-88/H-89 明确建模前提；token 身份与直接导入 LLM 权重不替代 SNN 习得；D-09r1 S1—S3。训练、覆盖检验、完整状态含义未选。 |
 | C-32 | 将 5120 维容量与稀疏参与、rate 值域、实用分辨率及时间复用共同研究，区分已学库、即时表达与协同推演容量。 | C-12 的容量研究；P-73 候选价值链 | H-89/H-90 提出足够性和稀疏／时间解释；不确认 7±2 的成因、固定槽数、普适健康比例或容量结论；D-09r1 S4/S8。 |
 | C-33 | 有限精度个体 rate 建模须研究相连神经元 spike 时机的协同效益，分别评价传播与学习，避免把平均精度当作时序信息。 | C-24 的时序研究；P-74 候选价值链、P-76 数值依赖 | H-91 排除 firing/silent 二值解释并要求研究；D-09r1 S5—S8。滤波、延迟、相位、历史字段及 STDP 均未选。 |
+| C-34 | 连续神经元动力学及其 AP 输出：连续 AP 来自同一持续演化状态，全局曲线可作为放电阶段输出函数；保留可能使能学习／泛化的机制，避免无需求的精确生理重建。 | C-33 的机制保留边界；P-82 候选价值衍生，P-83 约束 C-29 | H-93 确认源端连续性，H-95 明确目标；D-08 set204 的 RateDynamics/Model/IncomingConnectivity、D-09r2 S5.1。无需由多帧输出推定独立 AP 尾部对象或线性叠加；具体方程、恢复／能耗状态与参数未选。 |
+| C-35 | 模块定义一等名义符号；别名保留身份，不同来源／共存版本可区分。 | C-10；P-84 候选价值衍生 | H-96 确认局部语义；D-10r1、D-07r4 DL-14。身份字节格式、生成及持久协议未选。 |
+| C-36 | 每线程符号变量与 scoped effect；按值 capture，perform 临时安装，behave 使用当前绑定；按需 WPO 检查完整调用路径及直接访问布局。 | C-02；P-85 候选价值衍生，P-88/P-92 依赖 | H-96/H-97/H-102/H-104 确认语义边界：缺少必需变量是编译错误、不独立编译模块、读 @name、仅 effect 写。D-10r1；分析算法／TLS ABI 未选。 |
+| C-37 | lexical function 只有显式输入输出；dynamic procedure 必须以符号命名并可访问 effects；模块顶层 dynamic scope 为初始化程序。 | C-01；P-86 候选价值衍生，P-89 约束 | H-98/H-103 confirmed 局部规则；D-10r1、D-07r4 DL-02/DL-15。初始化组合、词法细节和完整类型规则待设计。 |
+| C-38 | 用实际 SNN 需求同步推进 CoD 语言与应用的设计、实现和验证。 | C-12；P-87 候选价值衍生，P-91/P-93 依赖 | H-96 确认方向；D-08 LanguageCoDesign205、D-07 DL-16。分步路线是待完善提案，数值方程和训练规则不自动确定。 |
+| C-39 | 用户对象只有 stack/@region 载体；native heap 仅系统代码使用；capture 仅 bits/regional ptr。 | C-10；P-94 候选价值衍生，P-95 约束 | H-99/H-100 confirmed；D-10r1。无隐式用户 heap closure，区域对象不 copy/move；具体闭包表示／生命周期检查未选。 |
+| C-40 | 跨 region 引用的明确占位：独立区域间引用、生命周期及重载／版本场景逐步设计。 | C-03；P-96 依赖 | H-101 要求保留概念；D-10r1、D-07 DL-03/DL-08。无指针编码、注册表或第三 capture 类别选择。 |
+| C-41 | expression-oriented 语言方向及显式 void；符号读写作为表达式组合。 | C-10；P-97 候选价值衍生，P-98 约束 | H-104 的读写形式及结果方向；D-10r1、D-07 DL-15。H-111 确认 effect 返回新值；块结果及复合表达式顺序待定。 |
+| C-42 | 专门词汇表模块只声明符号并辅以注释，供模块共享身份。 | C-35；P-99 候选价值衍生 | H-105 给定惯用组织；D-10r1。注释不替代类型检查，不默认安装变量值或 procedure 实现。 |
+| C-43 | 外部 procedure 的 using 保留源定义；import 按源 body 在当前 lexical/dynamic scope 重新定义。 | C-10；P-100 候选价值衍生，P-101 依赖，P-102 约束 | H-105 confirmed 定义上下文差异；D-10r1。与 perform/behave 调用模式正交；具体导入语法、目的符号及显式限定名处理待设计。 |
+| C-44 | Complete declaration scanning/registration precedes entry-driven compilation; dependency top-level execution semantics are incorporated in encounter order. | C-10; P-103 candidate value path, P-104 constraint, P-105 dependency | H-106/H-107 confirm top-level declaration/expression categories, scan-only registration and phase/order boundary. Bits globals use literal/function-call initializers; effect/perform/behave run with module execution. H-109/H-110 confirm every cross-module reference as trigger and source-scope teardown, with using/import retaining selected effective resources. D-10r4, D-07r7, D-08 LanguageCoDesign208. Repeated/cyclic encounters and bits-global realization remain open. |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
 | GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
+
 
 ## 4. 已确认的方向性价值链与关系边
 
@@ -165,7 +177,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 209，延续检查 K-01—K-208；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 214，延续检查 K-01—K-213；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -187,43 +199,60 @@ Design authority
 <a id="d-07"></a>
 ### D-07：领域语言讨论与设计决策跟踪
 
-- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 3；用该明确修订及包含它的 Git 提交定位。revision 2 的修订前内容摘要见 K-03。
-- 版本内容范围：G-01—G-05 记录语言／IPC／DBMR 方向；DL-01—DL-13 保留语言议题；DD-001—DD-004 保存方向和文档组织决定。DL-13 仅链接独立应用文档集 D-08；SNN 模型、容量和具体应用决定由 D-08 管理。
-- 人工依据：H-06 确认 C-08—C-11 的近期目标；H-07 选择设计和跟踪、实施延后；H-08 选择首个应用；H-11 要求应用文档独立。均不构成对全文、助手机制提案或候选衍生链的逐项批准。
-- 当前资格：文档实施契约及下列候选关系均为 `pending-human`；没有合格机制基线、没有 D-07 的 `continued` 记录。已经明确的目标和整理授权无需重新询问。
-- 范围／非目标／验收：文档的 “Scope and invariants” 与 DL-13；按选定部分确认语言契约，不要求先解决所有语言问题。
-- 影响：D-01—D-06 资格不变；D-08 接管应用详细讨论；现有代码仅提供实现证据，不选择或修改接口。
+- 文件：[DomainLanguageDesign.md](DomainLanguageDesign.md)，discussion revision 7；用该修订及包含它的 Git 提交定位。
+- 覆盖：G-01—G-07、DL-01—DL-16、DD-001—DD-019。D-10 承载符号／scope／callable 细化；D-08 LanguageCoDesign 承载应用侧实现验证路线。应用方程、容量及训练保持独立。
+- 人工依据：H-06 近期目标、H-07 跟踪授权、H-08/H-11 应用及分离；H-96 现在同步推进语言和 SNN 设计／实现／验证，取代当前范围内的笼统实施延后。H-97—H-111 为局部语义及惯用组织依据。DD-002/H-07 历史不改写。
+- 当前资格：全文契约及未确认价值路径仍 pending-human；明确的人类命题按其本身范围 confirmed，不把新 WPO、存储或语法细节自动批准。K-213 不是由未合格基线产生 continued 的事件。
+- 验收／边界：Scope and invariants、DL-13—DL-16；先以符号、capture、调用路径、两帧 gather 的有界实例细化契约。H-106 确定先扫描全部依赖、后按入口编译触碰顺序编入执行语义；H-107 允许字面 bits／function 调用初始化 global，以及模块执行期的顶层 effect/perform/behave；未选完整 parser、类型系统、ABI、跨区表示、重复／循环触碰处理或神经元方程；构建／配置权限不扩大。
+- 影响：D-01—D-06 状态不变；D-08 与 D-10 同步当前局部方向，无已合格后代因此失效。
 
+- 当前直接工作授权：H-108 要求在即时语义问题解决后提交推送并设 goal 推进首版按需编译运行原型；H-109–H-111 解决本轮提出的触发、scope 生命周期和 effect 结果问题。此授权不将其余开放机制或全文自动批准。
 <a id="d-08"></a>
 ### D-08：稳态循环激活 SNN 独立应用文档集
 
 - 补充导航覆盖：K-208 将 README 局部修订从202更新为203，仅增加 D-09 双语认知模型追踪入口及对应权威说明；原18份文档的技术内容不变，其余17份文档的修订保持。D-09 两份文件单独登记为 revision1，不将新研究冒充 D-08 的已确认合同。H-71 完成状态保持。
 
-- 当前覆盖：document-set revision202；H-71 十二小时实质研究已完成，实际区间及逐项范围见 [modeling-refinement-progress.json](../applications/steady-snn/research/modeling-refinement-progress.json)。研究包括独立 flow 学习、真实输入几何、活跃比例与语义幅度、上下文保持、数值精度、衰减／执行成本及来源适用边界；具体证据与开放选择见各文档和 K-207。ActivationRegimes 为202；AdaptiveConnectivity 为202；CapacityPlanning 为197；ConnectivityScalingResearch 为197；ContextLoopsAndNumerics 为202；Decisions 为202；FlowLearning 为202；IncomingConnectivity 为202；Model 为202；PhysicalDistancePreferenceResearch 为78；README 为202；RateDynamics 为202；SemanticCorticalMappingResearch 为32；SignedPopulationEncoding 为202；SpatialConnectivityResearch 为74；SynapticIntegrationResearch 为202；TokenEmbeddingStatistics 为30；TrainingStrategy 为202。共18份应用文档；H-78/H-85 保持对照空间，H-86 指导明显经验选项直接保留比较；D-08 仍 pending-human，研究完成不等于模型验证或实施资格。H-51 完成记录与人工决定历史保留。
-- 人工依据：H-08—H-12 确立应用、容量优先、HTM 参考、文档分离和单节点 16 GB；H-13—H-19 确立可变容量需求、静态分配、当前集引用、少数万级出边评估、五字节 SoA 槽、owner 数组、可多于 N 的集合和百槽下限。H-21/H-25 暂定 alpha≈3、100/144 分级、逐档集合数减半；target-owned 入边归属仍是评估提案，低出度取舍不自动转为低入度删除。H-22—H-24 区分输入数与兴奋性，接受条件权重补偿方向，将 weight scale 归训练而非容量参数。H-25—H-27 分别提出正负群体、人体柱规模调研及 Flash 60+60 计算；H-35 限定当前 Flash 人口。H-28 将 embedding 表单列节点共享，H-29 规定 SoA 默认与实证例外，H-30—H-32 规定非标准位宽独立讨论和包括 FP4 的二次幂 bit 标准宽度。H-34 要求需求先于辅助结构；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量。完整证据和评估范围保留于 H-08—H-39 及 AD-001—AD-032。
+- 协同开发范围：H-96–H-111；K-210 引入 LanguageCoDesign，K-213 将 README207/LanguageCoDesign207 → 208；其余17份技术文档版本不变。C-38/P-87 解释以应用验证语言的候选价值，P-91 依赖 C-29 的 confirmed 两帧 pull，P-93 使应用路线依赖 D-10r4。模型 procedure 只在扫描时注册；全部依赖扫描完成后按入口编译触碰顺序编入顶层执行语义，读取扫描状态不构成捕获。顶层 global 的字面 bits／function 调用取值及 effect/perform/behave 表达式在模块执行期生效。函数负责显式数值输入输出，符号 procedure 负责上下文及区域写入；using/import 各自保留来源／接收定义上下文。路线及25个语义案例仍是规范／候选，不是已运行编译器测试或 SNN 训练证据；完整实现契约仍 pending-human。
+- 当前覆盖：document-set revision208；H-71 十二小时实质研究已完成，实际区间及逐项范围见 [modeling-refinement-progress.json](../applications/steady-snn/research/modeling-refinement-progress.json)。研究包括独立 flow 学习、真实输入几何、活跃比例与语义幅度、上下文保持、数值精度、衰减／执行成本及来源适用边界；具体证据与开放选择见各文档和 K-207。ActivationRegimes 为202；AdaptiveConnectivity 为202；CapacityPlanning 为204；ConnectivityScalingResearch 为197；ContextLoopsAndNumerics 为204；Decisions 为202；FlowLearning 为202；IncomingConnectivity 为204；Model 为204；PhysicalDistancePreferenceResearch 为78；README 为208；RateDynamics 为204；SemanticCorticalMappingResearch 为32；SignedPopulationEncoding 为202；SpatialConnectivityResearch 为74；SynapticIntegrationResearch 为204；TokenEmbeddingStatistics 为30；TrainingStrategy 为202；LanguageCoDesign 为208。共19份技术应用文档（D-09 两版单独登记）；H-78/H-85 保持对照空间，H-86 指导明显经验选项直接保留比较；D-08 仍 pending-human，研究完成不等于模型验证或实施资格。H-51 完成记录与人工决定历史保留。
+- 人工依据：H-08—H-12 确立应用、容量优先、HTM 参考、文档分离和单节点 16 GB；H-13—H-19 确立可变容量需求、静态分配、当前集引用、少数万级出边评估、五字节 SoA 槽、owner 数组、可多于 N 的集合和百槽下限。H-21/H-25 暂定 alpha≈3、100/144 分级、逐档集合数减半；H-94 正式确认 target-owned 入连归属及双帧 pull，低出度取舍不自动转为低入度删除。H-22—H-24 区分输入数与兴奋性，接受条件权重补偿方向，将 weight scale 归训练而非容量参数。H-25—H-27 分别提出正负群体、人体柱规模调研及 Flash 60+60 计算；H-35 限定当前 Flash 人口。H-28 将 embedding 表单列节点共享，H-29 规定 SoA 默认与实证例外，H-30—H-32 规定非标准位宽独立讨论和包括 FP4 的二次幂 bit 标准宽度。H-34 要求需求先于辅助结构；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量。完整证据和评估范围保留于 H-08—H-39 及 AD-001—AD-032。
 - 当前学习范围：H-40 保留共活动及邻近优先方向，H-41 排除维号距离并提出跨 minicolumn 等机会方向，但未确定提议或保留边的概率契约，H-42 / AD-035 拒绝内部等位偏好。H-43 / AD-037 固定 CC 基本单元、非精确 replica 及语义角色。H-44 / AD-038 将语义分配的位置与解剖拓扑兼容置于 1D/2D 之前；交错和选择性可达仅为研究替代，布局集合中的平均对称与逐细胞等概率须区分，后者仅作为较强的条件分析。H-46 / AD-040 明确 feature 与 minicolumn 非双射并不冲突，故不以此要求交错或重编码。 H-52 / AD-046 指定三相稳态吸引子及各种入口条件的预期收敛为学习主目标，单 token 自循环激活并逐渐回归 DMN 为中间目标；H-67 将时间表述放宽为半衰期性质并允许 token 差异。 H-54 要求早期不建模显式抑制性连接，以同维正负群体固有抵消作用于活动；H-55 指定残留在噪音支持下先增强达峰再按 token 目标回落。 H-59 / AD-053 要求各正常状态的循环活动可受外部 token 驱使转向；不以循环本身判断失败。 H-66/AD-065—AD-067 初步预期尾头保持连接，并偏好每步维持 token 分布、最多几步有限偏离；强化／削弱策略全程细究，不采纳具体采样／增益算法。 H-68 明确自然断链是活动无法继续而非权重消除；H-69 提出分数选取配合 rate，H-70 要求数值精度细究。 H-71 指定有用小循环保留较长上下文价值，主链避免主动捷径不变；不强力消除小循环，主导淡出与历史影响分开。
 - 当前物理距离研究：H-50 / AD-044 明确神经元已经按语义向量组织，不具有天然物理位置。K-37 撤回 K-36 的软局部机会建议及“显式位置或有效接触表示”的预设选项；生物来源仍可作为研究资料。现无可代入距离核的物理度量；当前问题是生物邻近产生何种有用计算效果、是否能在现有语义组织内成立，而非默认增加几何、接触图或其它机制。H-51 / AD-045 要求修正文档后至少 12 小时深化研究；实际研究时间及来源证据单独记录，不以空等凑时长。
 - 当前行为／输入调查：H-45 / AD-039 指定 Flash-1017 实际输入表进行多维使用与 SSD 容量调查；不是最终部署选择；本地 SSD 实测的普通 127997 类型均用满 5120 个非零坐标，能量覆盖等完整指标见 TokenEmbeddingStatistics 及其紧凑证据。H-46—H-48 / AD-040—AD-042 要求每个 CC 内的激活比例处于宽范围，允许不同心智状态占比不同：无任务 DMN 的白噪音循环及负面语义缓慢漂移、任务 token 序列、沉浸状态的多维自主循环。语义负面不等于坐标负号；全网占比继承局部界限是同口径加权平均推论，不另选全局控制器。 H-53 / AD-047 明确每 token 按各维强度一次随机激活相应比例细胞，专注要求下全局白噪音显著降低，响应在低噪音中淡出；检测 DMN 后提升白噪音维持活动比例，DMN 缓慢向负面语义而非坐标负值收敛。 H-55 增加低活动比例触发增噪，不等待 DMN 检测；H-56—H-58 将总激活比例排除出分类，按柔性窗口的去噪覆盖／路径判别：DMN 广覆盖（示例80%以上）、沉浸小范围、心流小覆盖内跨群路径，超过示例20%即非心流。低密度神经元排除法仍是候选，不是已选去噪算法。 H-59 将 stale 定义为外部 token 均不能打破／驱转当前循环；可能需要系统重置恢复，尚未选择运行判据、触发或作用范围。
 - 候选价值链：P-25 将 D-08 衍生自 C-12，P-22 连接 C-12 与 C-01、V-01/V-02；P-26 解释有界连接容量，P-27 解释正负表示，P-29 让连接构建与学习服务三相、有限 token 响应及上下文预测，P-32 探索可解释的响应函数空间组织。P-23 是 packet 依赖，P-28/P-30 是容量依赖，P-33 是输入／输出编码依赖；依赖不授予资格。P-31 的等位机制范围被 H-42 拒绝，其它形式化价值关系仍 pending-human。 P-34 将 C-17 的注意／DMN 噪音调节功能衍生自 C-12 的行为目标；P-35 约束 C-15 的学习与比较条件。这两个形式化关系仍 pending-human，不扩大 H-53 对功能方向的确认。 C-18/P-36—P-38 记录内在抵消的业务价值、极性依赖与早期学习约束；C-19/P-39—P-41 记录窗口检测的价值、可观察活动依赖与调节／分类边界。新增形式化边保持 pending-human。 C-20/P-42 把输入可转向性连接到 C-12 的正常行为目标；C-21/P-43/P-44 分别记录重置候选的恢复价值和状态语义依赖，正式关系仍 pending-human。 C-24/P-52 与 C-25/P-55 分别记录动力学及分数维护目标的候选价值；P-53/P-56/P-57/P-59 是依赖，P-54/P-58 是约束；正式资格仍 pending-human。 C-26/P-60、C-27/P-63、C-28/P-65 分别解释有用上下文、保留衰减进度及数值取舍；P-61/P-68 为约束，P-62/P-64/P-66/P-67 为依赖；正式资格 pending-human。
 - 研究进度资料：[locality-evidence.json](../applications/steady-snn/research/locality-evidence.json) 分别记录原始来源、已读范围及应用推论；[locality-research-progress.json](../applications/steady-snn/research/locality-research-progress.json) 记录 H-51 的实际研究区间，排除纠错／设置及空等。二者是研究工作记录，不是新增合格设计；H-51 的完成时长以实际区间记录为依据。 K-38—K-73 的可读综合区分布线编码成本、解剖图预测、干预传播、持续活动、带符号动力学、功能分组、单次序列传播、树突联合计算、学习表征、脑预测和 Flash 输入统计；没有由证据条目数量推出完成时长，也没有选定机制。
 - 当前容量：Flash `5120*(60+60)`，N=614400。K-27/K-28 的待选候选为 J=15、A=311296、M=622573、S=106492416、540174772 bytes，以及 J=16、A=327680、M=655350、S=112281600、569251800 bytes；剩余分别为 8173（1.330241%）和 40950（6.665039%）。FP4 每 byte 两值为计算假设；指定数组无需数组间 padding。1323827200-byte 两字节 embedding 表仅按节点计费。空间维度讨论不新增辅助数组或改变这些预算。
-- 当前资格：pending-human，无合格实施基线。人工已确认的局部方向与约束不扩展为全文或详细机制批准。状态格式／相态、signed readout、整合／活动数值界限、三种语义轨迹的判据与算法、target ownership、最终配额、学习／迁移、消息及持久化仍按相应文档跟踪；本次没有新实施授权或后代资格升级。
+- 当前资格：pending-human，无合格实施基线。人工已确认的局部方向与约束不扩展为全文或详细机制批准。H-93/H-94 的源端连续性、target ownership 和双帧 pull 为已确认局部约束；状态格式／相态、signed readout、整合／活动数值界限、三种语义轨迹的判据与算法、最终配额、学习／迁移、消息及持久化仍按相应文档跟踪；本次没有新实施授权或后代资格升级。
 - 范围／不变量／验收：Model 的 SNN-01—SNN-03、SNN-05—SNN-06；CapacityPlanning 的 SNN-04 与资源验收；AdaptiveConnectivity 的 SNN-07 与迁移边界；ConnectivityScalingResearch 的尺度证据、静态预算及下标；IncomingConnectivity 的端点／执行边界；SynapticIntegrationResearch 的输入、兴奋性与训练权重尺度；SignedPopulationEncoding 的符号／上下文／相态与内在抵消；SpatialConnectivityResearch 的维度、排除区、概率测度、身份位置和比较条件；SemanticCorticalMappingResearch 的证据尺度、响应函数／状态／位置区分和编码边界；ActivationRegimes 的外部可转向性、stale／恢复边界和去噪覆盖／路径检测、残留增长／回落和局部活动口径、三状态吸引／收敛、单 token 响应、DMN 检测／噪音调节及全网加权平均边界；TokenEmbeddingStatistics 的张量来源、普通词表／控制码分组、浓度指标与采样范围；PhysicalDistancePreferenceResearch 的无天然物理度量边界、生物测量区分、计算作用及三状态适用条件；Decisions 的 AD-001—AD-092。保持 region relocation／生命周期、静态池、SoA、标准位宽和需求先于辅助结构原则。语义身份不得随容量迁移改变；若未来另经确认引入逻辑位置，迁移也须保持该位置，当前不预设位置；无性能或生物等价性承诺。 TrainingStrategy 明确阶段分工、批组／重叠比较、M/N 边数守恒、回环增益近似、输入入口、跨 token 干扰及未来 Hebbian 保持性；公式是列明假设下的分析，不是新实现契约。 H-63 修补验收进一步区分理论目标、自然响应与额外训练辅助；按预期衰减的响应不应被补回恒定宽度。 H-64 的全链约束／逐步采样分析区分宽度与强度、可用历史与回返许可、未来语义候选可行性、已有图可达与实际提前循环；结构机会不等同于动力学失败。 H-65 固定 epoch 范围和宽度／增强／削弱参数角色；分清范围比例与逐步语义、一次循环与持续时间、体内增长与跨圈净衰减。 H-66 将 token 分布保持收紧到每步或少数几步；K-82 区分连接闭合与有效再激活、完整后继与修补子集、目标群体与实际读出，并提出滚动窗口人口可行性和跨圈增益敏感性分析。 RateDynamics 的 C-24/C-25 分析单元级 rate、分数目标与有效贡献、半衰期／随机存活区分、自然终止／再激活、离散时标和多阶段数值误差；属于实质建模提案而非格式性延续。 ContextLoopsAndNumerics 比较历史对后续输出的作用、累积／未来触发语义、逐字段整数选择及条件内存／累加算术；研究活跃，未完成十二小时请求。 FlowLearning120 独立承载 flow 预激活匹配、上下文信用和初步算法比较；TrainingStrategy120 保留训练分工与 DMN/token 维护，K-125 未改正文机制。
 - 下游：D-07 DL-13 仅为案例入口；可复用语言需求须另行确认，D-01—D-07 不因应用提案而取得新资格。C-15 的受影响范围为 D-08 的 SNN-03/SNN-05/SNN-07；C-13 的容量机制和现有算术不变；C-14 的编码边界通过 P-33 约束候选 C-16；P-31 的共享位置范围失效，无已合格后代受损。 C-17/P-34/P-35 影响 D-08 的 ActivationRegimes、Model、Decisions 和 PhysicalDistancePreferenceResearch；没有已合格实施后代需失效。 C-18/C-19 影响 SignedPopulationEncoding、SynapticIntegrationResearch 及当前六文件的相应行为／检测范围；未选算法，无已合格实施后代。 C-20/C-21 影响 ActivationRegimes、Model、Decisions 和 PhysicalDistancePreferenceResearch 的输入响应与恢复候选范围，不改变区域、消息或持久化协议。 C-22/P-45—P-47 影响 TrainingStrategy 及当前七份同步到 revision74 的应用文档；无已合格后代失效，容量预算、编码所有权及语言／区域／消息／持久协议不变。 K-79 将同一八文件范围同步为持续修补方向，不使其它文档或已合格后代失效。 C-23/P-48—P-51 的候选范围为TrainingStrategy、Model、AdaptiveConnectivity、Decisions 的全链约束范围，保留其它十一文件修订与既有行为／容量／区域合同；没有合格后代因本次分析失效。 K-81 的 epoch 范围影响当前五个 revision76 文件；其它十份应用文档修订及已合格后代不变。 K-82 的回返／短时语义分析覆盖当前六个 revision77 文件；其余九份应用文档、容量预算及已合格后代不变。 K-83 新增 RateDynamics 并同步八份已有应用文档；影响 SNN-01—SNN-03/SNN-05/SNN-07 的时间、表示、训练及验收讨论。其余七份文档、既有容量算术假设及已合格后代不变；不授予实现资格。 K-84 新增 ContextLoopsAndNumerics 并同步七份已有文档，九份其它应用文档及容量基线不变；无已合格合同失效。
+
+- 最新范围：H-93—H-95 / K-209 将连续源状态、双帧 pull 与能力使能原则同步到七份 D-08 文档修订204；局部约束已确认，完整实现契约和未确认的上游正式关系不因此取得资格。
 
 ### D-09：SNN 认知模型双语设计进度
 
 <a id="d-09"></a>
 
-- 文件：[English](../applications/steady-snn/docs/CognitiveModelProgress.en.md)、[中文](../applications/steady-snn/docs/CognitiveModelProgress.zh-CN.md)，两版均为 revision1；S1—S9 全文，CM-01—CM-08、CQ-01—CQ-08、R01—R15 对齐。两版各自自然成文，冲突以本记录中的人工命题和待决边界为准。
-- 人工依据：H-87 四分／长方形探索前提；H-88 概念内容须由 SNN 学得；H-89 完整概念空间的近似副本与感受位置偏向；H-90 稀疏、值域、精度和时间复用研究；H-91 有限精度 rate 与 spike 时序协同；H-92 双语整理授权。它们是本次命题基线，不构成对成稿全文的追认。
+- 文件：[English](../applications/steady-snn/docs/CognitiveModelProgress.en.md)、[中文](../applications/steady-snn/docs/CognitiveModelProgress.zh-CN.md)，两版均为 revision2；S1—S9 全文（含 S5.1），CM-01—CM-08、CQ-01—CQ-08、R01—R15 对齐。两版各自自然成文，冲突以本记录中的人工命题和待决边界为准。
+- 人工依据：H-87 四分／长方形探索前提；H-88 概念内容须由 SNN 学得；H-89 完整概念空间的近似副本与感受位置偏向；H-90 稀疏、值域、精度和时间复用研究；H-91 有限精度 rate 与 spike 时序协同；H-92 双语整理授权；H-93/H-94 连续源状态及双帧 pull；H-95 能力使能原则。它们是本次命题基线，不构成对成稿全文的追认。
 - 候选价值链：D-09 经 P-77—P-80 衍生自 C-30—C-33；P-71—P-74 接到 C-12/C-24，再经既有 P-22/P-52/P-29 接 C-01/V-01/V-02。理由是把可解释的认知应用目标、预测学习、容量取舍和时序行为转成可比较的问题；不把 learned neural concepts 等同于纲领的形式 ontology 或已实现 GADT。
 - 依赖／约束：P-75 说明四分应用需要已学概念动力学，P-76 说明时序研究需要数值与状态语义，P-81 保留每 CC 完整概念库、排除按四分组硬切概念库的解释。依赖不授予资格。个体上下文身份、固定坐标、region／SoA、活动抵消及可驱转性保持；未选新增字段、几何、抑制边、更新或学习规则。
-- 当前状态：pending-human。文献与分析用于提出比较，未证明5k足够、认知自证成立或模型已训练成功；无合格实施基线。S8 的候选比较不授权当前运行实验。
+- 当前状态：完整契约 pending-human；H-93/H-94 的局部连续性与执行架构已 confirmed，H-95 的目标明确。文献与分析用于提出比较，未证明5k足够、认知自证成立或模型已训练成功；无合格实施基线。S8 的候选比较不授权当前运行实验。
 - 验收／待决：准确区分人工前提、分析判断、来源结论与候选；CQ-01—CQ-08 分别追踪读出充分性、关系绑定、抽象／副本习得、容量误差、时标、最小历史、学习归因及耦合可驱转性。需另行确认的选择及其后果均列在两版 S6/S8；当前仅完成记录，不请求重复确认原有前提。
-- 影响：D-08 的 Model、SignedPopulationEncoding、TrainingStrategy、FlowLearning、RateDynamics、SynapticIntegrationResearch、ActivationRegimes、IncomingConnectivity、CapacityPlanning、ContextLoopsAndNumerics 是相关后续评估对象，未被本文改写或升级。D-07 的可复用语言需求不随本应用研究自动扩大。无已合格后代失效；K-208 记录比较和范围。
+- 影响：D-08 的 Model、SignedPopulationEncoding、TrainingStrategy、FlowLearning、RateDynamics、SynapticIntegrationResearch、ActivationRegimes、IncomingConnectivity、CapacityPlanning、ContextLoopsAndNumerics 是相关后续评估对象，其中 K-209 列明的文档已同步局部架构约束，其他开放机制及整体资格未被升级。D-07 的可复用语言需求不随本应用研究自动扩大。无已合格后代失效；K-208/K-209 记录比较和范围。
 
-以下关系均为智能体整理的候选价值解释或依赖，适用 D-07 revision 3、D-08 document-set revision 84（各文件修订见 D-08 覆盖表）的列明范围，除 P-31 明确为 `rejected` 外，状态为 `pending-human`。C-08—C-15 的方向／评估／拒绝按人工事件限定；C-16 是 H-42/H-44 研究请求及 H-43 静态角色前提下的候选解释，形式化衍生关系未获确认；技术依赖不授予资格。
+<a id="d-10"></a>
+### D-10: Symbols, dynamic scope and callable kinds
+
+- File: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), design revision 4, all sections. Human propositions H-96–H-111 are locally confirmed at their stated scopes; the complete implementation contract and candidate value paths remain pending-human.
+- Value paths: P-90 connects D-10 to C-10; P-84/P-94/P-97/P-100 explain nominal identity, storage, expressions and reuse through C-10/P-14/C-01; P-85 connects context-dependent operations to C-02; P-86 connects pure/effectful distinction to C-01; P-99 connects vocabulary practice to C-35; C-44/P-103 connects phase-separated module composition to C-10, with P-105 depending on the definition-context distinction. The proposed paths serve inspectable semantic programs and explicit environment interpretation, without importing a full continuation/effect calculus.
+- Dependencies/constraints: P-88/P-92/P-96/P-101 preserve symbol identity and multi-region concerns. P-89/P-95/P-98/P-102/P-104 record the explicit local callable, capture, write, reuse and module-phase constraints. Dependencies do not confer qualification.
+- Invariants: nominal identity across aliases/versions; per-thread bindings and scope restoration; captured-value perform/current-binding behave; lexical functions and symbol-named dynamic procedures; module initialization scope; complete declaration scan before entry-driven dependency execution incorporation in encounter order; demand-driven whole-program checking with missing bindings rejected during compilation; only stack/@region user storage and bits/regional-pointer captures; zero-cost regional relocation; bits globals initialized by literals or function calls and top-level effect/perform/behave evaluated with module execution, never by declaration scanning.
+- Acceptance: explain and eventually execute the semantic cases; reject invalid function effects, writes and missing requirements; preserve same-region lifetimes and immutable-A pull; distinguish registration from dynamic definition/capture and execution-incorporation order from scan order. Current [case records](../applications/steady-snn/research/cod-language-scope-cases.json) contain 25 specified/derived cases and no execution evidence.
+- Open/non-goals: concrete grammar/types, repeated/cyclic encounter rules, scope-result/evaluation rules, bits-global realization, symbol/TLS/closure ABI, pointer lifetimes, cross-region representation, cache protocol and native lowering. No independent module compilation, implicit user heap promotion or fully selected SNN dynamics.
+- Downstream: D-07r7 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign208/README208. K-210 records registration and K-211–K-213 the module and readiness scope updates; no previously qualified D-10 baseline or affected qualified descendant exists.
+
+- Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. Work relies on the explicit request and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
+
+The following relations apply at the scopes recorded in each row and the current D-07 revision 7, D-08 set208, D-09 revision2 and D-10 revision4 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
 
 | 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
 | --- | --- | --- | --- |
@@ -284,8 +313,8 @@ Design authority
 | P-66 | C-28 depends-on | C-14 | 位宽、符号、尺度与相态须保持有符号语义分量和残差含义，不能由整数格式自动推导新编码；D-08 revision84 / SignedPopulationEncoding、ContextLoopsAndNumerics。pending-human，仅依赖。 |
 | P-67 | C-28 depends-on | C-13 | 端点 ID、权重、状态与可能新增元数据分别计费；INT4 权重不自动使五字节槽减半，累加宽度另论；D-08 revision84。容量基线与所有权不变，pending-human。 |
 | P-68 | C-28 constrains | C-27 | 衰减的计时边界与小数进度受量化、缩放及舍入影响；不能把反复舍入停滞或重设时间当作自然记忆；D-08 当前覆盖表所列修订。具体误差容差／调度规则 pending-human。 |
-| P-69 | C-29 derives-from | C-24 | 使一次神经转移只依赖同一前帧，避免目标访问顺序改写活动传播；低成本双状态数组配合现有入边布局，服务明确可复现的业务时间语义。D-08 当前覆盖表所列修订 / RateDynamics、IncomingConnectivity、Model；H-75 提议方向，完整机制与正式关系 pending-human。 K-113 / RateDynamics108 区分观察次序、模型时长、神经帧与学习曝光；不选事件队列、每 token 一帧或额外历史状态。 K-116 区分相同前帧快照与抵消前后不同数值转换边界；不增加帧或持久状态。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 |
-| P-70 | C-29 depends-on | C-13 | 连入集提供目标拥有的源 ID/权重遍历；双帧仅复制所需状态字段，静态 SoA、容量与区域约束保留。D-08 当前覆盖表所列修订；依赖不授予资格，不选择并行调度器、第三帧、事件索引或连接池副本。 K-108 / IncomingConnectivity103 从真实遍历／增长／迁移需求比较保留前缀的端点标记与计数，不预设辅助数组。 |
+| P-69 | C-29 derives-from | C-24 | 使一次神经转移只依赖同一前帧，避免目标访问顺序改写活动传播；低成本双状态数组配合现有入边布局，服务明确可复现的业务时间语义。D-08 当前覆盖表所列修订 / RateDynamics、IncomingConnectivity、Model；H-94 确认双帧拉取及避免无需求运行时复杂化的局部价值范围；该范围 confirmed。完整神经机制及尚未确认的上游价值链仍 pending-human。 K-113 / RateDynamics108 区分观察次序、模型时长、神经帧与学习曝光；不选事件队列、每 token 一帧或额外历史状态。 K-116 区分相同前帧快照与抵消前后不同数值转换边界；不增加帧或持久状态。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 |
+| P-70 | C-29 depends-on | C-13 | 连入集提供目标拥有的源 ID/权重遍历；双帧仅复制所需状态字段，静态 SoA、容量与区域约束保留。D-08 set204；H-94 确认下游入连归属与双帧 pull 的依赖，局部范围 confirmed。依赖不授予实施资格，不选择并行调度器、第三帧、事件索引或连接池副本。 K-108 / IncomingConnectivity103 从真实遍历／增长／迁移需求比较保留前缀的端点标记与计数，不预设辅助数组。 |
 
 D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87—H-92 只支持所列建模前提与整理范围，不自动确认正式价值链。
 
@@ -302,6 +331,30 @@ D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87
 | P-79 | D-09 derives-from | C-32 | 保留容量假设、证据边界和负荷／精度／时延比较；D-09r1 S4/S7/S8，H-92 授权整理，正式关系待确认。 |
 | P-80 | D-09 derives-from | C-33 | 明确时序协同的证据、降阶候选、信息损失与成本问题；D-09r1 S5—S8，H-92 授权整理，正式关系待确认。 |
 | P-81 | C-31 constrains | C-30 | 四组 CC 的分工不能解释为各自仅拥有一部分概念；每 CC 的完整近似副本及感受偏向是 H-89 的前提。D-09r1 S2/S3；正式约束登记待确认，不选择复制／同步算法。 |
+| P-82 | C-34 derives-from | C-33 | 连续状态保留 AP 之间对时序协同可能有用的历史；以学习／泛化价值决定机制保留和复杂度。D-08 set204、D-09r2 S5.1；H-93/H-95 确认命题与目的，本正式价值衍生作为 agent 候选登记，pending-human，不补批 P-74/P-52 等上游关系。 |
+| P-83 | C-34 constrains | C-29 | 下游读取源 effect 不推进、不消耗源状态，所有读取对应同一源时间视图；多帧 AP 不自动要求独立尾部队列或 push 传播。H-93/H-94 确认这一局部约束，confirmed；覆盖 D-08 set204 与 D-09r2 S5.1，具体状态／历史布局不在范围内。 |
+| P-84 | C-35 derives-from | C-10 | Distinct symbol identities make language composition unambiguous across aliases/origins/versions; D-10r1 identity section. User mechanism H-96; formal value path pending-human. |
+| P-85 | C-36 derives-from | C-02 | Explicit scoped bindings let the same operation run under captured or current interpretation context; D-10r1. Formal value path pending-human, not selection of a general effect calculus. |
+| P-86 | C-37 derives-from | C-01 | Separating pure computations from effectful execution keeps program dependencies inspectable; D-10r1 callable section. Formal value path pending-human. |
+| P-87 | C-38 derives-from | C-12 | Use real simulator operations to choose language features and validate meaning/cost together; H-96 direction, D-08 LanguageCoDesign205. Formal value path pending-human; no equation selected. |
+| P-88 | C-36 depends-on | C-35 | Capture/access requirements need stable symbol identities rather than spelling equality; D-10r1. Dependency proposal only. |
+| P-89 | C-37 constrains | C-36 | H-98/H-103 confirmed: functions cannot access symbolic effects or invoke procedures; procedures bind dynamically under symbols; module initialization is top-level dynamic scope. D-10r1 local scope, no full checker/grammar approval. |
+| P-90 | D-10 derives-from | C-10 | Give explicit symbol/callable semantics a focused contract and reviewable cases; D-10r1 all sections. Formal value path pending-human. |
+| P-91 | C-38 depends-on | C-29 | First frame example preserves the H-94 incoming-pull, immutable-A/B-publication contract; D-08 LanguageCoDesign205. Dependency does not qualify language implementation. |
+| P-92 | C-36 depends-on | C-03 | Captured regional values and current region contexts need valid owner/lifetime meaning; D-10r1. Dependency proposal, no cross-region representation selected. |
+| P-93 | D-08 depends-on | D-10 | LanguageCoDesign205 and README205 use scoped symbols/callables for the implementation plan; other application models do not acquire language-specific mechanisms automatically. |
+| P-94 | C-39 derives-from | C-10 | Explicit stack/region ownership makes user storage and captured value lifetimes part of language semantics; D-10r1. Human memory boundary H-99/H-100; formal value path pending-human. |
+| P-95 | C-39 constrains | C-36 | H-99/H-100 confirmed: user objects have stack/@region carriers; capture payloads are bits or regional pointers. No implicit user heap lifetime. D-10r1 local scope, representation remains open. |
+| P-96 | C-40 depends-on | C-03 | Cross-region references must account for independently managed regions and contexts; H-101 placeholder, D-10r1. Dependency proposal; no implementation contract. |
+| P-97 | C-41 derives-from | C-10 | Expression results and explicit void make computation/effect composition visible in types; H-104 direction, D-10r1. Formal value path pending-human. |
+| P-98 | C-41 constrains | C-36 | H-104 confirmed read/write forms: @name reads, effect @name = rhs is the only symbolic write; both are expressions. H-111 confirms the newly bound value as the effect result. Scope results and compound sequencing remain open. D-10r4. |
+| P-99 | C-42 derives-from | C-35 | A symbol-only vocabulary lets independent modules share nominal concepts without selecting implementations; H-105 practice, D-10r1. Formal value path pending-human. |
+| P-100 | C-43 derives-from | C-10 | Explicit using/import distinguishes preserving an existing definition from reusing a body under receiving meanings; H-105, D-10r1. Formal value path pending-human. |
+| P-101 | C-43 depends-on | C-35 | Procedure reuse must distinguish symbol identities/aliases from definition contexts; D-10r1. Dependency proposal; destination-binding syntax remains open. |
+| P-102 | C-43 constrains | C-36 | H-105 confirmed: using retains source lexical/dynamic definition; import redefines the source body in receiving lexical/dynamic scope. H-97 invocation modes still apply to the resulting procedure; D-10r1 local scope. |
+| P-103 | C-44 derives-from | C-10 | Make declaration availability and execution/capture order explicit in language semantics; D-10r2 module section, D-07r5 DL-12/DL-14. H-106 supplies the mechanism; this formal value path remains pending-human. |
+| P-104 | C-44 constrains | C-36 | H-106/H-107 confirmed: top-level symbol/function/bits-global definitions, registered procedure bodies and effect/perform/behave expressions. Bits globals use literal or function-call initializers. All entry dependencies are scanned/loaded before entry execution compilation; dependency execution semantics are incorporated in encounter order. Initializers, dynamic definitions and top-level effects/calls execute with the module, not during scanning. H-109 confirms every cross-module reference as trigger; H-110 closes the source scope after execution and limits effective-resource transfer to using/import. D-10r4 local scope; repeated/cyclic encounter policy remains open. |
+| P-105 | C-44 depends-on | C-43 | Entry-driven composition must retain source versus receiving definition contexts for using/import; D-10r2. Dependency only; exact encounter triggers and binding lifetimes remain open. |
 
 C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录；P-34—P-41 的形式化关系保持 pending-human。H-58 的低密度过滤是候选办法，不因功能要求获确认而自动成为所选算法。
 
@@ -333,7 +386,7 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | C-28 | P-65—P-68；D-08 ContextLoopsAndNumerics、RateDynamics、SignedPopulationEncoding、Model、Decisions；H-71/AD-075、H-73/AD-078、H-74/AD-079、H-70、K-84/K-85。影响逐字段表示、精度、缩放和累加；旧容量算术保持条件基线。 K-88 的条件权重算术区分动态范围、集体增益分辨率及训练存储；不按容量档位选权重尺度，不默认逐边高精度副本。 K-98 增加共享循环增益与固定随机权重长期响应的条件分析及 MR-S025/MR-S026 来源；仍无精度／学习策略选择。 K-101 将相同平均衰减下的个体失续／爆发、时间步及饱和行为列入条件比较；不选随机量子模型。 K-105 / ContextLoopsAndNumerics100 给出精确量化学习停滞和条件 Binomial 稳态；单步无偏不等于稳定的弱关联，宽权重只作计费比较。 K-116 / ContextLoopsAndNumerics111 记录中间舍入和最终写回的条件行为差别；格式与存储算法未选。 K-118 / ContextLoopsAndNumerics113、cancellation-properties-analysis 给出条件 L2 界和准确有理算例；未设误差容限。 K-121 / ContextLoopsAndNumerics116、context-composition-analysis 检查零语义和误差仍可丢失个体区别的条件例。 K-133 / ContextLoopsAndNumerics128、FlowLearning128 记录条件预测误差更新的存储结果。 K-134 补充有界更新条件算术及 MR-S017 的16位字长澄清。 K-147 / ContextLoopsAndNumerics142 区分短时二值视觉推理与持续 rate 行为，并核对整数阈值／移位的算术语义；不选格式、字段或部署优化。  K-150 / ContextLoopsAndNumerics145 区分低位宽存储、浮点源值、字节点积和 CPU 能力；未选内核、量化器或额外缓冲。  K-152 / ContextLoopsAndNumerics147 记录抵消公式先乘后除的条件下溢及公共比例求值，不引入余量字段或截断阈值。  K-153 / ContextLoopsAndNumerics148 用重复边的矩解释固定权重舍入，保持非负独立线性前提；未排除有用小循环。 K-154 / ContextLoopsAndNumerics149 将低位宽推理与完整持久学习成本分开，不将多变量突触模型暗作一字节槽位。 K-157 / ContextLoopsAndNumerics152、weight-update-precision-analysis 保留共享范围往返时未更新权重的精确失真比较，不引入缩放字段或高精度副本。 K-161 / FlowLearning156、weight-update-precision-analysis 区分码步长、有效权重步长及初态学习到达时间，不将谱松弛时间当作任务习得。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
 | C-29 | P-69/P-70；D-08 revision81 的 RateDynamics、IncomingConnectivity、Model、TrainingStrategy、SignedPopulationEncoding、ContextLoopsAndNumerics、README、Decisions；H-75/AD-081、K-86。影响快照、发布、相态含义与条件状态预算，无已合格合同失效。 K-108 / IncomingConnectivity103、AdaptiveConnectivity103 区分保留边与预留容量的访问、边界发布和条件成本；不选择计数或前缀布局。 K-110 区分完整帧隔离与反馈观察延迟；不引入第三帧或控制字段。 K-113 / RateDynamics108 保留完整帧并明确输入观察的顺序语义；无新调度器或缓冲表示。 K-116 / ContextLoopsAndNumerics111 记录中间舍入和最终写回的条件行为差别；格式与存储算法未选。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 K-167 / README162 澄清两帧单标量预算标签，数值和 H-78 选择空间不变。 |
 | C-30—C-33 | P-71—P-81；D-09r1 两版全文及 CQ-01—CQ-08。上游 C-12/C-24/C-28 变化须检查这些范围；D-08 相关章节仅为受影响的待评估对象，无自动资格升级。 |
-| D-09 | README203 导航；D-08 的编码、学习、容量、时序及输入可驱转性；D-07 需求仅可另行确认。H-87—H-92 与 K-208 是本次证据入口。 |
+| D-09 | README204 导航；D-08 的编码、学习、容量、时序及输入可驱转性；D-07 需求仅可另行确认。H-87—H-95 与 K-208/K-209 是本次证据入口。 |
 | GOV-01、GOV-02 | AGENTS 中委托规则、本记录及所有据其判断资格的文档条目。 |
 | D-01 / D-06 | D-01 的候选使用方 D-02、D-04、D-05；D-06 的候选使用方 D-05。 |
 
@@ -348,6 +401,18 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 
 
 
+
+
+反向补充（K-209）：C-29/P-69/P-70 → RateDynamics204、IncomingConnectivity204、Model204、README204、CapacityPlanning204、ContextLoopsAndNumerics204、SynapticIntegrationResearch204；C-34/P-82/P-83 → 同组文档的 authority 范围与 D-09r2 S5.1/S8。其余 D-08 文档中的 H-75 研究背景由 H-94 的已确认架构约束；既有数值、存储和学习开放项保持，历史事件不改写。
+
+
+**K-210 reverse coverage:** C-01/C-02/C-10 → C-35/C-36/C-37/C-39/C-41/C-43 through P-84/P-85/P-86/P-94/P-97/P-100 → D-10r1 (P-90) and D-07r4. C-35 → C-42 via P-99, with C-43 dependent via P-101. C-12 → C-38 via P-87 → D-08 LanguageCoDesign205/README205, dependent on C-29 and D-10 via P-91/P-93. C-03 → C-36/C-40 concerns via P-92/P-96. P-89/P-95/P-98/P-102 constrain the same callable/capture/expression/reuse scopes. H-96–H-105 provide exact local decisions; module initialization composition, typing, lifetimes, expression results, import details and native layout remain pending. D-01—D-06, D-09 and the other D-08 revisions are unaffected; no qualified descendant is invalidated.
+
+**K-211 reverse coverage:** C-10 → C-44 through P-103 → D-10r2 module scanning/composition, D-07r5 DL-12/DL-14/DD-014 and D-08 LanguageCoDesign206/README206. P-104 constrains C-36's definition/capture phase; P-105 depends on C-43's using/import distinction. H-106 refines H-103's initialization scope without changing function purity, capture categories or H-94 frame architecture. Encounter order is confirmed; precise triggers/repetition/cycles, scope lifetimes and literal bits global realization remain open. Earlier C-35–C-43 semantics and pending value paths carry into the stated current revisions; no full document or qualified descendant gains or loses authority by implication.
+
+**K-212 reverse coverage:** C-44/P-104's H-107 top-level expression/initializer refinement → D-10r3, D-07r6 DL-12/DL-14/DD-015 and D-08 LanguageCoDesign207/README207. C-37's function purity applies to function-call global initializers; C-36's effect/call rules apply to module execution; C-39's physical storage boundary remains an explicit dependency for bits-global realization. The P-103 value path and P-105 dependency keep their pending scope; no complete contract is newly qualified.
+
+**K-213 reverse coverage:** H-108 directly authorizes the C-38 language/application prototype milestone; H-109/H-110 refine C-44/P-104 through D-10r4 module composition and D-07r7 DL-14; H-111 refines C-41/P-98 expression results. D-08 LanguageCoDesign208/README208 link the bounded native prototype. Prior candidate value paths and full-contract pending status remain; local human semantics are not postponed for repeated confirmation.
 
 ## 6. 人工确认事件（只追加）
 
@@ -1457,6 +1522,212 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 > 把讨论要点和阶段性结论整理成设计进度追踪文档，中英文双语对照各一个文件，各自母语达意，严格避免直译，避免翻译腔。
 
 范围：授权创建 D-09r1 中英文各一份文件，保存讨论要点、阶段性判断与开放问题，语言各自自然成文；同时按仓库规则登记来源和导航。不是对尚未见到的成稿、候选关系或技术机制的全文确认，不授权实现、仿真、测试、自举、构建、提交或推送。
+
+### H-93 — 连续源神经元状态与多帧 AP 的建模边界
+
+<a id="h-93"></a>
+
+确认者：项目用户，未提供独立可核实姓名。来源：旁聊 `01a1abc5-3b7b-7f91-952b-c34ed990df10` 经用户明确授权发送到本聊天的交接摘录；本记录依据收到的引文和澄清摘要，未独立读取旁聊全文。消息日期为 2026-11-05（America/Los_Angeles），准确时刻未知，不换算为虚构 UTC 时间。
+
+> 源neuron的连续AP那显然独立就要正确建模，不能割裂开两个AP去考虑问题
+>
+> 这点ok了
+
+接受范围：同一源神经元为持续演化的状态系统，连续 AP 由此产生；全局曲线可简化放电阶段输出，不意味着各次 AP 动力学独立。上次 AP 完成时间可以概括恢复，额外历史须依机制论证。覆盖 D-08 set204 的连续源状态说明及 D-09r2 S5.1。
+
+纠正范围：撤回主聊天助手所说 “A new AP must not erase an older effect’s tail” 作为普遍约束及由此强制推出的独立尾部对象、队列或线性叠加。必须保留所选源端动力学和下游响应，不能让时间戳覆盖或数组复用意外改变其含义。这不排除经需求论证的生理历史，也不选择新状态字段、方程或学习规则。
+
+### H-94 — 正式确认双帧连入拉取及文档同步
+
+<a id="h-94"></a>
+
+确认者、旁聊来源及时间精度同 H-93；以下为授权交接中的用户原话。
+
+> 还有我们是按下游组织保存入连集合，所以模拟计算天然会是下游拉上游effects，而不会上游推effects给下游，你看下
+>
+> 2frame pull-based 计算模型没有正式立住？ 明确立住，这样以后就不会往 push-queue 什么的上面去想歪了吧
+>
+> 这两点澄清到主线程，让祂更新设计文档和心智，避免将来有往不必要的复杂方向上去想去走
+
+确认范围：C-29、P-69/P-70 的局部架构与简化价值，以及 P-83 的读取约束。下游拥有入连；整步读不可变 A，拉取源 effect，结合自身连续状态计算 B；完成后统一发布并交换。源／下游是边上的角色，读取不得推进或消耗源状态；派生或缓存 effect 均须保持一致源时间视图。单帧／多帧 AP 共用此架构。D-08 set204 的对应章节与 D-09r2 S5.1/S8 据此同步，H-75 的原始讨论证据保留；当前架构不再是未定候选。
+
+约束／排除：上游 scatter、push queue、出连遍历不是默认传播路径，改用它们须作为架构变更。多帧 AP 本身不要求尾部排队或逐边排程。将来额外延迟可兼容下游读取有界源历史，但不确认该字段、布局、队列或额外状态帧。未确认具体神经元方程、曲线归一化、帧率、延迟参数、学习规则、worker 调度、持久布局及完整文档／上游价值链。授权仅为文档和推理前提更新，不授权代码实现、仿真、构建、项目测试、提交或推送。
+
+### H-95 — 保留能力使能机制的设计目标
+
+<a id="h-95"></a>
+
+确认者：本聊天用户，未提供独立可核实姓名。来源：本聊天可见原文；按当前客户端日期 2026-11-05（America/Los_Angeles）登记，准确消息时刻未知。
+
+> 要明确一个设计方向性原则目标： 我们不是追求重现单神经元的精确生理模型重建，而是探索SNN建模在知识学习、概念泛化等能力的涌现上，不要误用或者裁掉对这些能力起关键使能作用的生理机制。
+
+范围：C-34 的设计目的、D-08 set204 的 RateDynamics 连续状态章节、D-09r2 S5.1。保留可能使能目标能力的机制，以作用和需求论证复杂度；不把精确生理重建本身设为目标。该原则不证明某机制确实不可缺少。用户提出的 10 kHz 扫描、恢复时间戳和可切换单／多帧 AP 属于待细化方案；本条不将助手提出的曲线样本、归一化、公式、队列或状态布局视为人工确认。
+
+### H-96 — Joint SNN/language development and nominal dynamic symbols
+
+<a id="h-96"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> 按snn spike模拟器的需求，分析规划cod语言的初步特性，两者同步推进设计、实现、验证。
+>
+> CoD语言除了之前已经说的 GADT、sum/prod type，其实还有一个 Whole Program Optimization 实现 Dynamic Scoping 的设想，我现在跟你说一下：
+>
+> CoD模块可以定义一等符号，比如 `symbol @tgt_neuron` ，其它模块可以import这种符号来用，import可以用本地别名；符号与 fully-qualified-variable-name 相比，主要是有严格的身份，当不同来源（比如同一包的多版本共存）的包编译进一个程序时，互相之间依然能清晰区分。
+>
+> CoD程序可以使用符号访问变量，使用即声明，有效域是当前线程；CoD按需编译时，收集所有符号变量的声明，组织成程序的ThreadLocal内存区，提供直接读写访问；CoD语言提供原语，可以 `effect @tgt_neuron={}` 设置当前程序scope的符号变量值，scope生命周期结束后恢复其旧值。 当符号变量值是procedure（而非function）时，可以 `perform @sym_proc`  在该procedure定义时的 lexical scope + dynamic scope 下执行其过程体，或者 `behave @sym_proc` 在该procedure定义时的 lexical scope，但是当前的 cynamic scope 下执行其过程体。
+
+Scope: Confirms the joint-development direction C-38 and local C-35/C-36 symbol/binding/call-mode proposal. H-07/DD-002 remain historical; blanket development deferral no longer describes the coordinated work. Does not select complete type rules, identity encoding, closure/TLS layout, compilation backend, SNN equations or bootstrap changes. D-07r4/D-10r1 and D-08 LanguageCoDesign205.
+
+### H-97 — Capture used effect values
+
+<a id="h-97"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> 应该把它用到的都capture下来value。 然后通过 perform 调用时，在它的执行scope内临时恢复captured value；通过 behave 调用时，不做处理，尊重 dynamic binding
+
+Scope: Reply to the question whether definition-time @x = 1 followed by later value 2 should be captured by binding or by value. Confirms value capture and temporary installation/restoration under perform; behave does not install captures. Capture set follows usage, not a snapshot of all TLS. Reference value capture is not a deep copy of its referent. Analysis and representation remain open.
+
+### H-98 — Function/procedure effect boundary
+
+<a id="h-98"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> 这也意味着CoD需要明确区分 procedure vs function： function 只能有输入输出，不能 perform/behave； procedure 才可以访问这些 effects。
+
+Scope: C-37/P-89 local constraint confirmed: functions have explicit inputs/outputs and no effect access or procedure invocation; procedures may access effects. Does not require procedures to return void or choose method/type syntax.
+
+### H-99 — User storage carriers
+
+<a id="h-99"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> CoD只有系统程序部分使用宿主原生 heap，用户程序只有 stack 和 @region 两种内存载体，没有 malloc 生命周期的内存对象。
+
+Scope: C-39/P-95 local boundary confirmed: only system code uses host heap; user objects use stack/@region. No implicit heap promotion of user closures. TLS implementation machinery is not a third user allocation carrier. Exact representations/lifetime checks remain open.
+
+### H-100 — Capture categories
+
+<a id="h-100"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> capture 就只有 bits 和 regional ptr 两种可能性。
+
+Scope: C-39/P-95 confirmed capture forms: bits and regional pointers. Does not authorize arbitrary host handles, native heap pointers, escaping stack references or copying regional objects as additional capture categories.
+
+### H-101 — Cross-region reference placeholder
+
+<a id="h-101"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> 跨region的ptr引用大概存在更复杂的设计场景，你留好占位概念，逐步深化设计。
+
+Scope: C-40 placeholder and progressive design requested; keep cross-region ownership/lifetime/version scenarios visible. Does not choose global_ptr as language capture, a registry, encoding or a third capture form.
+
+### H-102 — Whole-program caller-path binding checks
+
+<a id="h-102"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> 这点在编译调用路径时检查，调用栈路径上如果缺少所需的变量，是程序编译错误。 注意 CoD 是按需 WPO 编译，不会独立编译一个模块，整个调用者栈是已知的。
+
+Scope: Reply to the reusable-procedure/unbound-effect question. C-36: check required variables when compiling the demanded caller paths; absence is a compilation error. Modules are not independently compiled. Preserve H-97 capture/current modes. No runtime missing-capture fallback or rejection based solely on isolated module text is selected; exact path analysis remains open.
+
+### H-103 — Definition scopes and module initialization
+
+<a id="h-103"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> 另外 function 是 lexical scoping 定义的， procedure 是 dynamic scoping 定义的且必须使用符号名而不是字面名。 模块顶层的 dynamic scope 就是模块初始化程序。
+
+Scope: C-37/P-89 local rules confirmed: lexical function definitions; dynamic, symbol-named procedures; top-level dynamic scope is module initialization. H-96 body lexical context and H-97 call modes remain. Module initialization nesting/order/lifetime and final declaration grammar are not selected.
+
+### H-104 — Symbolic expressions and void
+
+<a id="h-104"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> 符号变量读取是直接 `@var_name` ，写入必须使用  `effect @var_name=xxx` 关键字，都是 expression 有值作为 evaluation result。 CoD好像不需要 statement，只有expression，但是有特殊的 `void` 类型，用于显式不给有意义的返回值。
+
+Scope: C-41/P-98: direct symbolic reads, effect-only writes, both expressions. User proposes an expression-only language direction and explicit void for no meaningful return. Exact write-expression result, block result and compound evaluation order remain open. Together with H-96 scope restoration, a procedure-local effect restores under both perform and behave; ordinary write-through assignment is not a separate mechanism.
+
+### H-105 — Vocabulary modules and using/import definitions
+
+<a id="h-105"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable. This date is not presented as the original message time.
+
+> 习惯用法上，一共有专门的 CoD “词汇表” 模块，只定义若干symbol，辅以注释说明。 另外引入外部模块的 procedure 要区分 using/import 两个关键词： using 直接引用在源模块的 lexical/dynamic scope 下定义的 procedure； import 相当于在当前模块的 lexical/dynamic scope 下按源body重新定义一遍。
+
+Scope: C-42/C-43/P-102: customary symbol-only vocabulary with comments; using refers to the source definition, import redefines its body in receiving lexical/dynamic scopes. Definition choice is separate from perform/behave invocation. Symbol aliases retain identity. Concrete syntax, destination-symbol selection, explicit qualifications/private references and initialization composition remain open; neither body duplication in machine code nor runtime hot loading is required.
+
+### H-106 — Module declaration scanning and entry-driven execution composition
+
+<a id="h-106"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable.
+
+> 模块顶层只允许 symbol, function, 和 “字面bits类型的 global var” 定义，`procedure @proc_name {}` 这种顶层定义只注册，不在第一遍扫描模块时产生执行语义；然后入口模块的所有依赖模块全部扫描加载后，开始编入入口模块的执行语义，期间按其触碰顺序逐个编入依赖模块的顶层执行语义到结果程序。
+
+Scope: C-44/P-104, D-10r2 module section, D-07r5 DL-12/DL-14/DD-014 and D-08 LanguageCoDesign206. Ordinary top-level definitions are symbols, functions and literal bits globals. Top-level procedure declarations are registration-only during the first scan. Complete scanning/loading of all entry dependencies precedes compilation of entry execution semantics; dependency top-level execution semantics are incorporated into the result in encounter order. This refines H-103, retaining module initialization as dynamic scope while separating declaration registration from the later execution semantics. It preserves H-97 capture and H-102 call-path checking; scanning alone supplies neither a dynamic binding nor capture values. It does not authorize running user initialization effects in the compiler, equate scan order with execution order, choose encounter triggers/repetition/cycle/branch behavior, define scope lifetime, or settle literal bits globals' mutability/sharing/storage. Formal P-103 value lineage remains pending-human; no complete compiler contract is approved.
+
+### H-107 — Global initializers and top-level execution expressions
+
+<a id="h-107"></a>
+
+Human: the user of this chat; no independently verified name. Source: visible user message in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`), transcribed below. Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp is unavailable.
+
+> 补充： 模块顶层全局变量取值必须是字面bits或者function调用； `effect @var_name=xxx` 也是允许的，也可以 perform/behave，其执行行为在模块执行时发生。
+
+Scope: refines H-106's top-level forms in C-44/P-104, D-10r3, D-07r6 DL-12/DL-14/DD-015 and D-08 LanguageCoDesign207. Bits globals obtain their initial values from bits literals or function calls; top-level effect/perform/behave expressions are permitted. Their execution belongs to module execution, while scanning registers/retains definitions and expressions without invoking them. Function initializers retain H-98 purity; procedure calls are a separately allowed top-level expression form rather than function-call initializers. No global mutability, sharing, physical storage, precise encounter trigger or scope lifetime is selected. H-106's complete-scan-before-entry-compilation and encounter-order incorporation remain; original human history is preserved.
+
+### H-108 — Review, checkpoint and autonomous native prototype
+
+<a id="h-108"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message/reply in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 仔细看看还有哪些值得立即和我讨论确认的点，没有的话提交推送一版，然后设goal自主推进到第一版原型程序能够按需编译运行
+
+Scope: Direct authorization to review immediate decisions and, once no immediate unresolved issue remains, commit/push the checkpoint and create a goal to autonomously reach a first on-demand compiled/runnable prototype. This does not approve every pending full-language mechanism, alter charter governance or request a toolchain/bootstrap change.
+
+### H-109 — Every cross-module reference triggers execution
+
+<a id="h-109"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message/reply in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> Every cross-module reference triggers source-module execution
+
+Scope: Reply to whether vocabulary-symbol references/body import could avoid source execution while using/globals/functions trigger it. The user rejects that exemption: every reference kind triggers source execution semantics. Preserve the complete scan and later entry-driven compilation phases; this is not execution during scanning. Repeated/cyclic encounter policy is not selected.
+
+### H-110 — Source-module scope teardown and explicit resource transfer
+
+<a id="h-110"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message/reply in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 只有 using/import 把其它模块的 effective resources 带入当前模块；源模块toplevel是个scope，执行完成后scope也就析构了
+
+Scope: Reply to whether source effects remain around the rest of entry execution. The source top-level scope ends after its execution; only using/import bring effective resources into the current module. Ambient source effects are restored. Retaining a selected procedure preserves its legal captures, not the destroyed source stack. This does not choose a native export-table or closure layout.
+
+### H-111 — Effect expression returns the newly bound value
+
+<a id="h-111"></a>
+
+Human: this chat's user; independently verified name unavailable. Source: visible user message/reply in this conversation (`codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`). Recorded on client date 2026-11-05 (America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> Return the newly bound value
+
+Scope: Reply to the result of effect @x = 3. The expression yields 3, the new value, not the previous value or void. Enclosing-scope restoration still applies. Block-result and compound-evaluation rules are separate.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -3684,3 +3955,61 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 - Reconciliation: D-09 uses the user's latest finite-precision rate premise; active support counts are illustrative, not binary neuronal states. It separates vector readout from contextual state, stored repertoire from simultaneous reasoning, and propagation from learning. Four-aspect groups do not partition concept ownership. Sources support limited claims; no biological identity, 5k sufficiency, seven-item mechanism, or trained SNN success is inferred.
 - Downstream and open scope: CQ-01—CQ-08 identify affected D-08 coding, training, timing, capacity and behavior scopes. No existing implementation contract is replaced, no qualified descendant is invalidated, and no new fields, numerical rules or algorithms are activated. D-08 and D-09 remain pending-human; the paired documents are reviewable research trackers.
 - Validation scope: documentation consistency, paired identifiers/references, local links, append-only history and diff whitespace; no code, build configuration, project tests, neural simulation, toolchain change, commit or push.
+
+### K-209 — 2026-11-05: Continuous source dynamics and confirmed two-frame pull
+
+<a id="k-209"></a>
+
+- Agent reconciliation of the user-authorized side-chat handoff, not a new human decision. Evidence: H-93/H-94 (mediated excerpts with provenance) and H-95 (visible main-chat statement). Current charter §§1–3.3/7.1/8.1/12 checked in context; C-12/C-13/C-24/C-29/C-33 and P-22/P-25/P-52/P-69/P-70 reviewed. Charter, AGENTS and all prior H/K events remain unchanged.
+- Coverage: D-08 set202 plus README203 navigation → set204; RateDynamics202, IncomingConnectivity202, Model202, README203, CapacityPlanning197, ContextLoopsAndNumerics202 and SynapticIntegrationResearch202 → 204. Other eleven D-08 documents retain their revisions. D-09 paired revision1 → 2, adding S5.1 and the S8 architecture status. Registry209 → 210. Pre-edit registry SHA-256 `0c79920f2bf6ee406292f9bc56fcfa3dda4a4d557c850700e223f3e9ebceea6a`.
+- Baseline comparison: H-75 was a proposal; H-94 now explicitly confirms two-frame target-owned pull. H-93 requires continuous source state and withdraws the assistant's universal independent-tail preservation requirement. A single-/multi-frame output function does not mandate push queues, per-edge scheduling or waveform superposition. Reads must share one source-time view and have no source-side mutation. H-95 makes capability preservation the reason to retain mechanisms or add complexity.
+- Value lineage: C-29/P-69 makes temporal transitions independent of destination traversal; P-70 identifies incoming ownership as a dependency. Those local H-94 scopes are confirmed. New C-34 records the confirmed continuity/goal propositions; P-83 records the confirmed constraint on reads. P-82 is an agent-proposed value derivation to C-33, still pending-human. Existing candidate paths through C-24/C-15/C-12 to C-01/V-01/V-02 are preserved, not retrospectively approved. Formal dependencies do not grant implementation authority.
+- Acceptance and open scope: documents state immutable A, destination-owned incoming traversal, B publication after the full step, non-consuming source reads and shared architecture for single-/multi-frame output. A different propagation architecture requires a design change. Equations, parameters, normalization, additional delays/history, learning rules and state layout remain open. Bounded source history is a compatibility observation only. Numerical budget assumptions and existing arithmetic are unchanged.
+- Downstream: the seven D-08 files and both D-09 language versions now use these constraints; the reverse index names affected scopes. Old H-75/AD-081 records remain historical evidence. D-08/D-09 complete implementation contracts remain pending-human despite confirmed local architecture; no qualified descendant is invalidated. Only D-GOV210 record maintenance continues H-05. No code, build, test, simulation, configuration, toolchain, commit or push operation is included.
+- Review: check diff whitespace, local document links and anchors, matching bilingual section IDs, revision coverage, preserved earlier H/K history, and absence of current proposal wording for the confirmed architecture in the revised files.
+
+### K-210 — 2026-11-05: SNN-driven language development and scoped symbolic execution
+
+<a id="k-210"></a>
+
+- Agent design-record assessment, not a human confirmation of the complete drafts. Current charter §§1–3, 4.1–4.3, 5, 6.1–6.3 checked in context, along with C-01/C-02/C-03/C-10/C-12/C-29, P-14/P-16/P-22/P-25/P-69/P-70 and H-06/H-07/H-94. Charter and AGENTS unchanged. Pre-edit registry SHA-256 `07152f7fcd05b92c6c3207c25a13cb7db3dad3e95f48e5fe990da044868f1f91`.
+- Coverage: registry210 → 211; D-07 discussion3 → 4, DL-01–DL-16/DD-001–DD-013; new D-10 revision1; D-08 set204 → 205, README204 → 205 plus new LanguageCoDesign205, totaling19 technical application documents. Other17 D-08 documents and D-09r2 remain at their existing revisions. The current README also corrects D-09 navigation to its already recorded revision2. H-96–H-105, C-35–C-43 and P-84–P-102 registered with reverse references.
+- Cumulative authority comparison: H-96 explicitly changes development timing from H-07's earlier deferral to coordinated design/implementation/validation. H-97–H-105 establish local semantic/storage/module rules; all earlier H/K events and DD-001–DD-004 remain intact. No previous full technical contract is silently continued or newly qualified. Candidate type/representation/checker/initialization mechanisms remain pending-human; only D-GOV211 maintenance continues H-05.
+- Value alignment: nominal symbols, explicit callable effects and storage carriers serve inspectable typed intent and context-dependent interpretation through C-10/C-01/C-02. Real incoming-gather/frame operations motivate a bounded language slice via C-12/C-29. Vocabulary and using/import make shared identities and definition contexts explicit. Formal new value paths remain proposals; dependency edges and existing C++ code grant no extra authority. Business program intent stays distinct from execution state and native code; native addresses/TLS offsets do not become durable semantic identities.
+- Semantic boundaries: value captures, perform installation/restoration, current-binding behave; lexical functions and dynamically symbol-named procedures; module initialization scope; demand-driven whole-program caller-path compilation with missing bindings rejected; reads @name and writes only effect; expression/void direction; user stack/@region and bits/regional-pointer captures; explicit cross-region placeholder. using retains source definition/captures; import redefines source body in receiving contexts. All call modes preserve the body's own scoped-effect restoration. Initial draft write-through/increment examples were corrected before registration to avoid an unrequested ordinary assignment mechanism.
+- Proposed sequence/acceptance: identity and call paths, one complete immutable-A/incoming-gather/B-publication step, small inspectable typed program core, native specialization, then joint model behavior and broader composition. Sixteen JSON cases specify expected traces and invalid cases; the two-neuron exact-integer fixture checks data-flow meaning, not a neural equation. They are not executed compiler tests, a simulated SNN or evidence of learned behavior.
+- Open scope: binding types, expression results/order, module initialization composition, exact using/import rebinding details, capture/region lifetimes, persistent code/symbol identity, TLS/cache/native lowering and cross-region representation. New scenarios do not mandate a dynamic dictionary, user heap, general continuation calculus, push queue, new per-neuron metadata or selected neuronal dynamics. Unrelated qualified work remains unaffected.
+- Validation scope: document/case consistency, JSON structure, local links/anchors, revision/count coverage, preserved H/K/DD history and diff whitespace. No product code, build/configuration, project test, bootstrap/toolchain, commit or push action. Existing dirty application/model records preserved; no new permission request is needed merely to document the explicit human choices.
+
+### K-211 — 2026-11-05: Register declarations before composing module execution
+
+<a id="k-211"></a>
+
+- Agent design-record assessment, not a human approval of complete drafts. Current charter §§1–3.3/4.1–4.3/5/6.1–6.3 checked in context; C-10/C-36/C-37/C-39/C-43, P-14/P-85/P-89/P-95/P-102 and H-97/H-99/H-102–H-105 reviewed. Pre-edit registry SHA-256 `8993815740fca41d578292ae4ad39353bcd5a4fb727a858fa79ae8eeee0fa544`. Charter and AGENTS unchanged.
+- Coverage: registry211 → 212; D-10r1 → r2; D-07r4 → r5, adding DD-014; D-08 set205 → 206, LanguageCoDesign/README205 → 206. Other17 technical application documents and D-09r2 are unchanged. H-106/C-44/P-103–P-105 registered; current authority blocks, coverage and reverse references synchronized.
+- Human-baseline comparison: H-103 made module initialization the top-level dynamic scope but left composition unspecified. H-106 now fixes declaration restrictions, complete scanning before execution compilation, scan-only procedure registration and entry-compilation encounter order for dependency execution semantics. Earlier H-96–H-105 and all prior H/K/DD history remain. This is a new confirmed local proposition, not an agent resolution of an open choice or continuation-based qualification of an unqualified full contract.
+- Preserved value chain: explicit declaration availability and effect ordering serve C-10/P-14/C-01 and context-dependent interpretation C-36/P-85/C-02. The proposed P-103 value path remains pending-human; P-104 records only H-106's explicit constraint, while P-105 is a dependency. Scan order cannot implicitly select runtime handlers, consistent with charter §6.1; compiling the program does not execute its effects, consistent with §§3.2/5/6.3. Function purity, bits/regional-pointer captures, regional lifetime rules and the SNN two-frame pull architecture remain intact.
+- Acceptance/evidence: four new case specifications distinguish complete scan/registration, differing scan/encounter orders, dynamic definition/capture events and allowed top-level categories. CS-14 is reconciled with the new phase rule; 20 cases in total, execution_evidence remains null. The examples do not choose a precise encounter trigger, once-per-process initialization, cycle handling, branch traversal, module-scope lifetime, or literal-global storage/mutation rules.
+- Remaining scope: define those encounter/lifetime/global details in relation to existing callable/storage invariants before depending on them in implementation. Current entry/dependency order is no longer recorded as wholly unspecified. D-07/D-08/D-10 complete contracts remain pending-human; no qualified descendant is invalidated. D-GOV212 record maintenance alone continues H-05.
+- Validation: documentation links/anchors, JSON cases, revision coverage, preserved H-01–H-105/K-00–K-210/DD-001–DD-013, unchanged unrelated dirty files and diff whitespace. No product code, build, project test, bootstrap/configuration/toolchain, commit or push operation.
+
+### K-212 — 2026-11-05: Execute module expressions after declaration registration
+
+<a id="k-212"></a>
+
+- Agent record assessment of the explicit H-107 supplement. The current charter §§3.2–3.3/5/6.1–6.3 and H-98/H-99/H-102/H-106 were checked in the same review context. Pre-edit registry SHA-256 `229da3819635dbb0c3773c1604b6dc2f018f1d61940d404fa41a7985e591d9cd`. Charter/AGENTS and H-01–H-106/K-00–K-211/DD-001–DD-014 are preserved.
+- Coverage: registry212 → 213; D-10r2 → r3; D-07r5 → r6 with DD-015; D-08 set206 → 207, LanguageCoDesign/README206 → 207. Other17 technical application documents and D-09r2 unchanged. Current C-44/P-104, authority blocks and reverse references now include H-107.
+- Contract comparison: H-107 permits computed bits globals through function calls and explicit top-level effect/perform/behave. The first scan retains these expressions without executing them; their semantics enter module execution through H-106's entry-driven composition. This resolves the local top-level-form boundary, not global mutation/storage or encounter/scope mechanics. Procedure capture remains an execution definition event, and pure function initialization does not authorize effect access within functions.
+- Value/qualification: C-44/P-103 → C-10/P-14/C-01 preserves explicit staging and observable execution order; C-36/C-37 retain effect and purity boundaries. P-104's local rule is human-confirmed; the formal value path and complete D-07/D-08/D-10 contracts remain pending-human. No qualified descendant invalidated; only D-GOV213 record maintenance continues H-05.
+- Acceptance/evidence: CS-20 records the expanded top-level categories; CS-21/CS-22 specify module-execution effects/calls and literal/function-call bits initializers. Total22 specified/derived cases, no compiler execution or neural simulation claimed. Document links/anchors, JSON, revision coverage, append-only evidence and whitespace are checked. No product code, build/configuration, project test, bootstrap/toolchain, commit or push action.
+
+### K-213 — 2026-11-05: Immediate prototype decisions and direct development request
+
+<a id="k-213"></a>
+
+- Agent review under H-108. Current charter §§1–3/4.1–4.3/5/6.1–6.3, callable/storage rules and H-96–H-107 checked; existing cod driver compile/link/run facilities and active build cache inspected read-only. No charter, AGENTS or build configuration change.
+- Coverage: registry213 → 214; D-10r3 → r4; D-07r6 → r7, DD-016–DD-019; D-08 set207 → 208, README/LanguageCoDesign207 → 208. Other17 technical application documents and D-09r2 unchanged. H-108–H-111 appended; prior H/K/DD history retained.
+- Human decisions: the review surfaced reference triggers, source-scope lifetime and effect results. H-109 selects every cross-module reference, including vocabulary and import. H-110 destroys the source top-level scope on completion; only using/import bring effective resources into the receiver. H-111 selects the newly bound value as effect result. Earlier candidate alternatives are not active semantics; perform/behave and using/import distinctions remain.
+- Preserved value: module identity, pure computation, explicit context and legal captures serve the C-10/C-01/C-02 goals already discussed with the user; the runnable prototype tests that language path for C-38's application-driven development. P-98/P-104 now include the exact local human decisions. Other proposed paths/full-contract scopes stay pending-human; direct H-108 implementation authorization does not silently qualify every draft mechanism.
+- Prototype boundary: real CoD source/dependencies, whole-program checking, native executable compilation and execution, scalar bits, functions/procedures, scope/capture/resource transfer and compile-time diagnostics. Reuse existing system compiler/linker facilities. A small integer incoming-gather fixture relates this to SNN execution without choosing dynamics. General ADT/GADT surface language, persistent/escaping closures, cross-region references, concurrency and unrestricted recursive module execution are outside the first acceptance; unsupported forms must be diagnosed.
+- Evidence/operations: 25 reviewable case specifications, including source-scope restoration and new-value expression result; no compiler execution claimed at this checkpoint. Repository main and origin/main were both dec3dadeb8b1b5a430b04fa7840ac72fdbdc03d7 during review. Checkpoint commit/push and subsequent goal are explicitly requested by H-108 after these decisions. D-GOV214 record maintenance alone continues H-05; no unrelated qualified scope is invalidated.

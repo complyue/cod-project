@@ -1,0 +1,522 @@
+{
+  "schema_version": 1,
+  "status": "specified_not_executed",
+  "recorded_date": "2026-11-05",
+  "design_documents": [
+    "../../../design/SymbolicDynamicScope.md",
+    "../docs/LanguageCoDesign.md"
+  ],
+  "purpose": "Reviewable language semantics and SNN execution expectations for joint development.",
+  "execution_evidence": null,
+  "cases": [
+    {
+      "id": "CS-01",
+      "status": "specified",
+      "topic": "alias identity",
+      "setup": "Export @s; import it as @a and @b from the same declaration.",
+      "steps": [
+        "Bind @a to 3.",
+        "Read @b."
+      ],
+      "expected": [
+        3
+      ],
+      "basis": [
+        "H-96"
+      ]
+    },
+    {
+      "id": "CS-02",
+      "status": "specified",
+      "topic": "distinct package origins",
+      "setup": "Two coexisting package origins each declare the same textual symbol name.",
+      "steps": [
+        "Bind the first symbol to 3.",
+        "Bind the second symbol to 8.",
+        "Read both."
+      ],
+      "expected": [
+        3,
+        8
+      ],
+      "basis": [
+        "H-96"
+      ]
+    },
+    {
+      "id": "CS-03",
+      "status": "specified",
+      "topic": "nested restoration",
+      "setup": "@x is 1.",
+      "steps": [
+        "Enter outer scope; effect @x = 2.",
+        "Enter inner scope; effect @x = 3.",
+        "Leave inner scope.",
+        "Leave outer scope."
+      ],
+      "expected_observations": [
+        2,
+        3,
+        2,
+        1
+      ],
+      "basis": [
+        "H-96"
+      ],
+      "note": "Structured early-return/unwind paths require the same restoration; exact failure syntax is not selected."
+    },
+    {
+      "id": "CS-04",
+      "status": "specified",
+      "topic": "capture by value and invocation mode",
+      "setup": "Evaluate effect @x = 1, then define procedure @p whose body reads @x.",
+      "steps": [
+        "Evaluate effect @x = 2 in the caller scope.",
+        "perform @p.",
+        "Read caller @x.",
+        "behave @p."
+      ],
+      "expected_observations": [
+        1,
+        2,
+        2
+      ],
+      "basis": [
+        "H-97",
+        "H-104"
+      ]
+    },
+    {
+      "id": "CS-05",
+      "status": "derived",
+      "topic": "temporary scalar writes",
+      "setup": "@p captures @x = 1; its body evaluates effect @x = @x + 1, then reads @x. Caller @x is 7.",
+      "steps": [
+        "perform @p.",
+        "perform @p.",
+        "Read caller @x.",
+        "behave @p.",
+        "behave @p.",
+        "Read caller @x."
+      ],
+      "expected_observations": [
+        2,
+        2,
+        7,
+        8,
+        8,
+        7
+      ],
+      "basis": [
+        "H-96",
+        "H-97",
+        "H-104"
+      ],
+      "derivation": "Each perform installs the original capture; behave starts with the current caller binding. Both modes restore the body-local effect on return; no write-through assignment exists."
+    },
+    {
+      "id": "CS-06",
+      "status": "specified",
+      "topic": "lexical scope preserved",
+      "setup": "@p refers to a definition-site lexical constant 4 and effect @x captured at 1; caller has an unrelated same-spelling lexical constant 9 and @x = 7.",
+      "steps": [
+        "perform @p and observe the lexical constant and @x.",
+        "behave @p and observe the lexical constant and @x."
+      ],
+      "expected_observations": [
+        [
+          4,
+          1
+        ],
+        [
+          4,
+          7
+        ]
+      ],
+      "basis": [
+        "H-96",
+        "H-97",
+        "H-103"
+      ]
+    },
+    {
+      "id": "CS-07",
+      "status": "derived",
+      "topic": "transitive behave dependency",
+      "setup": "@q reads @gain and was defined at @gain = 5. @p executes behave @q and is defined with the source @q binding and @gain = 2. Caller retains that @q and has @gain = 9.",
+      "steps": [
+        "perform @p.",
+        "behave @p.",
+        "perform @q."
+      ],
+      "expected_observations": [
+        2,
+        9,
+        5
+      ],
+      "basis": [
+        "H-97",
+        "H-102"
+      ],
+      "note": "A required-symbol analysis must account for q through behave; it cannot inspect only direct names in p."
+    },
+    {
+      "id": "CS-08",
+      "status": "specified",
+      "topic": "function effect exclusion",
+      "reject_in_function": [
+        "Read @symbol.",
+        "Establish effect @symbol = value.",
+        "perform a procedure.",
+        "behave a procedure.",
+        "Call a helper that executes such effects."
+      ],
+      "basis": [
+        "H-98"
+      ],
+      "note": "Diagnostic spelling and the internal effect-summary representation are proposed implementation work."
+    },
+    {
+      "id": "CS-09",
+      "status": "specified",
+      "topic": "carriers and captures",
+      "allowed_capture_categories": [
+        "bits",
+        "regional pointer"
+      ],
+      "reject": [
+        "Native heap pointer as a third capture kind.",
+        "Stack pointer captured as an escaping reference.",
+        "Implicit heap boxing of a user closure to extend its lifetime.",
+        "Copy/move of a regional object as a capture."
+      ],
+      "basis": [
+        "H-99",
+        "H-100"
+      ],
+      "note": "Cross-region references remain a placeholder under H-101; no encoding or exception to the two capture forms is selected."
+    },
+    {
+      "id": "CS-10",
+      "status": "specified",
+      "topic": "thread binding isolation",
+      "setup": "Two threads explicitly establish different values of the same imported symbol, 3 and 8.",
+      "expected_observations_by_thread": {
+        "first": 3,
+        "second": 8
+      },
+      "basis": [
+        "H-96"
+      ],
+      "note": "This does not choose thread creation inheritance or task/fiber semantics."
+    },
+    {
+      "id": "CS-11",
+      "status": "proposed",
+      "topic": "binding/type diagnostics",
+      "cases": [
+        "One symbol used as incompatible value types.",
+        "A write through an immutable frame-A view.",
+        "A frame/region reference retained past its valid lifetime."
+      ],
+      "expected": "A specified static diagnostic or explicit checked boundary; exact rules remain to be qualified.",
+      "note": "Required-binding absence is separately specified as a compile-time error in CS-13; these representation/type details remain proposals."
+    },
+    {
+      "id": "CS-12",
+      "status": "derived",
+      "topic": "immutable source frame",
+      "fixture": {
+        "A": [
+          2,
+          5
+        ],
+        "incoming": [
+          {
+            "target": 0,
+            "source": 1,
+            "weight": 3
+          },
+          {
+            "target": 1,
+            "source": 0,
+            "weight": 7
+          }
+        ],
+        "operation": "B[target] = weight * A[source]"
+      },
+      "expected_B_forward": [
+        15,
+        14
+      ],
+      "expected_B_reverse": [
+        15,
+        14
+      ],
+      "basis": [
+        "H-94"
+      ],
+      "note": "Hand-derived exact-integer data-flow fixture, not an adopted neuron equation, simulation or training result. Source reads must also leave A unchanged."
+    },
+    {
+      "id": "CS-13",
+      "status": "specified",
+      "topic": "demanded whole-program binding checks",
+      "setup": "Compile a demanded entry with its module initialization and caller paths; do not compile modules independently.",
+      "cases": [
+        {
+          "path": "behave @p reaches a read of @x with an active binding.",
+          "expected": "Binding requirement satisfied."
+        },
+        {
+          "path": "behave @p reaches a read of @x with no supplying scope.",
+          "expected": "Compilation error."
+        },
+        {
+          "path": "perform @p requires a captured @x that its definition path could not supply.",
+          "expected": "Compilation error; no fallback to caller @x."
+        },
+        {
+          "path": "One reachable branch supplies @x and another reaches its required use without it.",
+          "expected": "Compilation error on the uncovered path."
+        }
+      ],
+      "basis": [
+        "H-97",
+        "H-102"
+      ],
+      "note": "Algorithm, diagnostics and recursion summarization remain implementation design; no runtime unbound-value policy is selected."
+    },
+    {
+      "id": "CS-14",
+      "status": "specified",
+      "topic": "definition scopes and names",
+      "cases": [
+        "A function definition is lexical.",
+        "A procedure definition uses a symbol and belongs to dynamic scope.",
+        "A bare-name procedure definition is not a second allowed procedure mechanism.",
+        "Module top-level dynamic scope is its initialization procedure."
+      ],
+      "basis": [
+        "H-103",
+        "H-106"
+      ],
+      "note": "Module execution scope closes after top-level execution; only using/import bring effective resources into the receiver. Scanning itself does not execute initialization; repeated/cyclic encounters remain open."
+    },
+    {
+      "id": "CS-15",
+      "status": "specified_direction",
+      "topic": "expressions and void",
+      "cases": [
+        "Read a symbol with @name.",
+        "Write a symbol only with effect @name = rhs.",
+        "Reject plain or compound assignment as an alternate symbolic write.",
+        "Compose evaluation as expressions, using void for explicitly no meaningful returned value.",
+        "effect @x = 3 evaluates to 3, the newly bound value."
+      ],
+      "basis": [
+        "H-104",
+        "H-111"
+      ],
+      "open_details": [
+        "Scope-result selection and compound-expression evaluation order.",
+        "Final expression grammar."
+      ]
+    },
+    {
+      "id": "CS-16",
+      "status": "derived",
+      "topic": "vocabulary and procedure definition reuse",
+      "setup": "A shared vocabulary declares @x with comments. A source procedure body uses an unqualified lexical helper and @x. Source helper result is 4 and definition capture is 1; receiving helper result is 9 and import definition capture is 7. Later caller @x is 8.",
+      "expected_results": {
+        "using_then_perform": [
+          4,
+          1
+        ],
+        "using_then_behave": [
+          4,
+          8
+        ],
+        "import_then_perform": [
+          9,
+          7
+        ],
+        "import_then_behave": [
+          9,
+          8
+        ]
+      },
+      "basis": [
+        "H-96",
+        "H-97",
+        "H-103",
+        "H-105"
+      ],
+      "note": "using retains the source definition; import redefines its body in receiving scopes. A symbol alias alone does not create a fresh symbol or recapture a procedure. Binding/declaration syntax is not selected."
+    },
+    {
+      "id": "CS-17",
+      "status": "specified",
+      "topic": "complete declaration scan without procedure execution",
+      "setup": "An entry depends on A and B, each with symbols/functions/literal bits globals and a registered procedure body.",
+      "expected": [
+        "All dependency modules are scanned/loaded before entry execution semantics are compiled.",
+        "Scanning procedure @p records the definition/body without invoking it, installing its dynamic binding or capturing values."
+      ],
+      "basis": [
+        "H-106"
+      ]
+    },
+    {
+      "id": "CS-18",
+      "status": "specified",
+      "topic": "dependency execution incorporation follows encounter order",
+      "setup": "Scan/load A, B and C; subsequent entry execution compilation encounters B then A, each once, and does not encounter C.",
+      "expected_dependency_execution_incorporation_order": [
+        "B",
+        "A"
+      ],
+      "expected": "Scan order does not establish execution order; C scanning alone contributes no top-level execution semantics.",
+      "basis": [
+        "H-106"
+      ],
+      "limits": "No repeated/cyclic encounters or branch-ordering policy is assumed. Every kind of cross-module reference is an encounter trigger under H-109."
+    },
+    {
+      "id": "CS-19",
+      "status": "derived",
+      "topic": "registered body versus dynamic definition event",
+      "setup": "Register a procedure body that uses @x during scanning; its demanded definition/call paths are compiled later.",
+      "expected": [
+        "Scanning does not snapshot a scanner-side @x value.",
+        "Capture refers to the definition event in the resulting execution semantics.",
+        "A required value missing on the applicable compiled path is a compilation error, despite successful declaration registration."
+      ],
+      "basis": [
+        "H-97",
+        "H-102",
+        "H-106"
+      ]
+    },
+    {
+      "id": "CS-20",
+      "status": "specified",
+      "topic": "module top-level categories",
+      "allowed_ordinary_definitions": [
+        "symbol",
+        "function",
+        "bits global variable initialized by a bits literal or function call"
+      ],
+      "procedure_rule": "A top-level procedure @name body is registered during scanning without execution semantics.",
+      "excluded": "Arbitrary top-level effect evaluation is not enabled during scanning.",
+      "open_details": [
+        "Literal grammar, mutability/sharing and physical realization of bits globals.",
+        "Repeated/cyclic encounters and global realization; source module scope ends after its top-level execution."
+      ],
+      "basis": [
+        "H-106",
+        "H-107"
+      ],
+      "allowed_execution_expressions": [
+        "effect @name = rhs",
+        "perform @procedure",
+        "behave @procedure"
+      ]
+    },
+    {
+      "id": "CS-21",
+      "status": "specified",
+      "topic": "top-level effects and procedure calls execute with the module",
+      "setup": "A module contains effect @x = value and perform/behave expressions targeting registered procedure definitions.",
+      "expected": [
+        "The forms are allowed at module top level.",
+        "The scan retains expressions without installing @x, invoking procedures or capturing values.",
+        "Their behavior belongs to module execution in the resulting program; ordinary scoped binding and call-mode rules apply."
+      ],
+      "basis": [
+        "H-96",
+        "H-97",
+        "H-106",
+        "H-107"
+      ]
+    },
+    {
+      "id": "CS-22",
+      "status": "specified",
+      "topic": "bits global initializer forms",
+      "allowed": [
+        "Bits literal.",
+        "Function call producing the required bits value."
+      ],
+      "not_authorized_as_a_function_initializer": "A perform/behave procedure invocation; those are separately permitted top-level execution expressions.",
+      "expected": [
+        "Scan records a function-call initializer without evaluating it.",
+        "Initializer evaluation belongs to module execution and the called function retains its pure input/output contract."
+      ],
+      "basis": [
+        "H-98",
+        "H-106",
+        "H-107"
+      ],
+      "limits": "Global mutability, sharing, physical storage and final declaration syntax remain open."
+    },
+    {
+      "id": "CS-23",
+      "status": "specified",
+      "topic": "every cross-module reference triggers execution semantics",
+      "reference_kinds": [
+        "Vocabulary symbol reference",
+        "using a procedure",
+        "importing a procedure body",
+        "Source function reference",
+        "Source global reference"
+      ],
+      "expected": "Each kind triggers source-module execution-semantics incorporation during entry-driven compilation; scan-time loading alone does not execute it.",
+      "basis": [
+        "H-106",
+        "H-109"
+      ],
+      "limits": "Repeated encounters and cycles are not fixed by this case."
+    },
+    {
+      "id": "CS-24",
+      "status": "derived",
+      "topic": "source scope closes while using retains selected captures",
+      "setup": "Caller has @x = 7. Source top-level scope binds @x = 1 and defines @p reading it; using brings @p into the receiver.",
+      "steps": [
+        "Finish source top-level execution.",
+        "Read caller @x.",
+        "perform @p.",
+        "behave @p."
+      ],
+      "expected_observations": [
+        7,
+        1,
+        7
+      ],
+      "basis": [
+        "H-97",
+        "H-105",
+        "H-110"
+      ],
+      "note": "Only selected effective resources transfer through using/import. Source scoped bindings are restored; retained captures are values, not dangling stack references."
+    },
+    {
+      "id": "CS-25",
+      "status": "specified",
+      "topic": "effect returns newly bound value",
+      "expression": "effect @x = 3",
+      "expected_expression_result": 3,
+      "expected_following_read": 3,
+      "basis": [
+        "H-111"
+      ],
+      "note": "The result does not extend the binding lifetime beyond the enclosing scope."
+    }
+  ],
+  "limits": [
+    "No compiler/runtime implementation or test execution claimed.",
+    "Candidate type/lifetime, initialization-composition and expression-result rules remain separate from confirmed user semantics. Missing required bindings are compilation errors.",
+    "No package-identity byte format, TLS ABI, cross-region pointer representation or neural model is selected."
+  ]
+}

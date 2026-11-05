@@ -1,22 +1,22 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 3
+Discussion revision: 7
 
 Recorded: 2026-10-22
 
-Current discussion: 2026-10-23
+Current discussion: 2026-11-05
 
-Phase: design discussion; implementation deferred by the user.
+Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
 - **Registry:** [D-07](DesignAuthorityRegistry.md#d-07), which controls qualification and scope.
-- **Revision / covered scope:** discussion revision 3, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
+- **Revision / covered scope:** discussion revision 7, all sections of this language tracker. Goals record human direction; topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
 - **Value lineage:** candidate P-12–P-18 connect the packet, database, language and interoperability concepts C-08–C-11 and this document to C-01, C-02, C-05 and C-06. Explicit language semantics should preserve inspectable business intent; regional transport and deferred reclamation should serve efficient persistent semantics; source tools should keep that semantics readable. These proposed derivations are not yet qualified implementation authority.
 - **Dependencies:** P-19–P-21 identify C-03, C-04 and C-02: multiple regions/domains, semantic levels and environment-specific effects. P-24 records application C-12 as an external example for DL-13; its model and resource choices are scoped to D-08. Existing C++ designs are reference material with their own registry status.
-- **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. No language syntax, ABI, storage protocol or implementation contract is adopted by this revision.
-- **Human baseline:** H-06 supplies the near-term goals; H-07 chooses language design and discussion tracking now, with development later; H-08 selects the first application; H-11 requires its own document set. These events do not approve the generated document's detailed proposals.
-- **Continuity:** no qualified implementation baseline for D-07. K-02 and K-03 record discussion maintenance through revision 3, retaining `pending-human`; registry maintenance follows the same event records.
+- **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. H-96–H-111 supply the local symbol, callable, storage and expression directions linked below; a complete grammar, ABI, storage protocol and implementation contract remain open.
+- **Human baseline:** H-06 supplies the near-term goals; H-07 establishes discussion tracking; H-08 selects the first application; H-11 requires its own document set. [H-96–H-111](DesignAuthorityRegistry.md#h-96) direct coordinated development and define the scoped language propositions in [D-10](SymbolicDynamicScope.md). They do not approve every proposed implementation detail.
+- **Continuity:** no qualified implementation baseline for D-07. K-02/K-03 record the earlier discussion baseline; [K-213](DesignAuthorityRegistry.md#k-213) records revision 7, the prototype request and resolved immediate semantics. The full contract remains `pending-human`; this is not continuity-based qualification of an unqualified design.
 
 ## Confirmed direction
 
@@ -28,7 +28,9 @@ These are summaries of the user's statements, not inferred approval of the prece
 | G-02 | Use DBMR as the local ontology database, supporting business retrieval, statistics and CRUD. Ordinary operations do not reclaim space; periodically rebuild its payload and backing file for compaction. | DL-06–DL-09 |
 | G-03 | Give the domain language explicit ADT semantics, including sum/product types, method invocation and memory management. | DL-01–DL-03 |
 | G-04 | Provide C/C++ compatibility interfaces for interoperability with other language runtimes. | DL-11 |
-| G-05 | Begin language design now, keep a discussion/decision document, and start implementation when the timing is appropriate. | All topics; DL-12, DL-13 |
+| G-05 | Advance language and SNN design, implementation and validation together, using simulator requirements to choose useful initial language features. | H-96; DL-12–DL-16 |
+| G-06 | Nominal symbols, thread-scoped effects, captured/current procedure invocation, lexical functions and dynamically symbol-bound procedures, with whole-program call-path checking. | H-96–H-98, H-102–H-104; DL-02, DL-14, DL-15 |
+| G-07 | User storage is stack or `@region`; captures are bits or regional pointers. Keep cross-region references as a concept for progressive design. | H-99–H-101; DL-03, DL-08, DL-15 |
 
 “Only record” has not yet settled whether updates append immutable versions or mutate existing objects while allocation remains monotonic. It does not by itself require logging every read. “Apply” has not yet specified a durability guarantee, retry protocol or native method-pointer representation.
 
@@ -38,7 +40,7 @@ The discussion joins language semantics, IPC entry execution, DBMR operations an
 
 The governing context is [the charter](RegionalSemanticPlatformCharter.md), especially §§2–8, 11–14, with the human-confirmation limits recorded under D-00. Repository rules require zero-cost whole-region relocation, region-only allocation for regional objects, no regional copy/move semantics, and explicit region-aware references and lifetimes. A language proposal must explain how it preserves these constraints. They do not imply that object-by-object compaction is free.
 
-This discussion does not authorize code development, toolchain changes, builds or tests. It does not select a concrete parser, type theory, transport, transaction model, concurrent collector, wire ABI, query language or code-generation dependency. The scope of the first language version is open; broader GADT, kind-level and multi-domain goals remain in view when choosing a smaller initial scope.
+H-96 puts coordinated language/application development in scope. Each implemented increment needs a bounded contract grounded in the recorded human decisions; the direction does not select all mechanisms or authorize toolchain/configuration changes. Build and test operations retain the repository rules. It does not select a concrete parser, type theory, transport, transaction model, concurrent collector, wire ABI, query language or code-generation dependency. The scope of the first language version is open; broader GADT, kind-level and multi-domain goals remain in view when choosing a smaller initial scope.
 
 `apply`, `Result`, `execution_context` and similar names below are explanatory notation, not chosen syntax or API names. A C++ runtime, generated C++ or a reference interpreter are implementation candidates. C++ compatibility does not determine the domain language's semantics.
 
@@ -46,7 +48,7 @@ This discussion does not authorize code development, toolchain changes, builds o
 
 **Status vocabulary:** `open` means discussion is needed; `proposed` means a candidate answer is recorded; `confirmed` requires an explicit human decision for the stated scope/revision; `superseded` preserves an older decision and links its replacement. Topic progress and implementation qualification are separate: a topic can contain a useful proposal while its design authority remains `pending-human`.
 
-All thirteen language topics are currently **open**, with proposals where indicated. DL-13 links the separately maintained first application.
+The sixteen topics contain confirmed local propositions and open implementation/design questions. DL-14/DL-15 link the current symbol, callable and storage decisions; DL-16 links the application-owned development plan. Topic completion does not follow from a direction alone.
 
 | Topic | Decision to reach | Related topics |
 | --- | --- | --- |
@@ -63,6 +65,9 @@ All thirteen language topics are currently **open**, with proposals where indica
 | [DL-11](#dl-11) | C/C++ and foreign-runtime interfaces | DL-02, DL-03, DL-04 |
 | [DL-12](#dl-12) | Initial implementation scope and execution strategy | DL-01, DL-02, DL-10, DL-11 |
 | [DL-13](#dl-13) | Worked examples, acceptance and development timing | All topics |
+| [DL-14](#dl-14) | Symbols, dynamic bindings and whole-program call-path checking | DL-02, DL-08, DL-12 |
+| [DL-15](#dl-15) | Callable kinds, expression results, storage and captures | DL-01–DL-03, DL-14 |
+| [DL-16](#dl-16) | Paired language/SNN implementation and validation increments | DL-12–DL-15 |
 
 ## Topic records
 
@@ -83,6 +88,8 @@ All thirteen language topics are currently **open**, with proposals where indica
 <a id="dl-02"></a>
 ### DL-02 — Methods, effects and entry execution
 
+**Confirmed local direction:** functions are lexical and limited to explicit inputs/outputs; procedures are dynamically defined under symbol names and may access effects. `perform` installs captured values temporarily; `behave` uses current dynamic bindings. Module top-level dynamic scope is module initialization. H-96–H-111 and [D-10](SymbolicDynamicScope.md) supply the exact scope; method syntax and dispatch remain open.
+
 **Question:** What is a method's meaning, and how does the receiver select and execute the entry object's designated method?
 
 - Specify receiver binding, arguments/results, dispatch, method identity/version and access to the execution context. Decide whether definitions travel with a packet, are imported, or are resolved from already loaded definitions.
@@ -95,6 +102,8 @@ All thirteen language topics are currently **open**, with proposals where indica
 
 <a id="dl-03"></a>
 ### DL-03 — Regions, ownership and lifetimes
+
+**Confirmed local direction:** user objects have only stack and `@region` carriers; only system code uses the native heap. Capture payloads are bits or regional pointers. There is no implicit heap promotion of user closures or regional-object copying. C-40 reserves cross-region references without choosing their representation or extending capture categories. H-99–H-101; [capture and lifetime discussion](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime).
 
 **Question:** Which region owns every value and reference throughout packet application, querying and persistence?
 
@@ -220,7 +229,8 @@ All thirteen language topics are currently **open**, with proposals where indica
 - Compare a checked semantic representation with a reference interpreter, generated C++ and direct LLVM lowering. Identify their development cost and what each can validate.
 - Decide which typed representation, checking rules and handler interfaces are shared. Any layout, validator, traversal or compactor generation should follow one defined type contract rather than diverging handwritten descriptions.
 - Bound syntax, ADT/GADT features, effects, query primitives and FFI for an initial version. Distinguish deliberate omissions from restrictions that would prevent multi-domain integration or later type/kind work.
-- Keep program intent separate from native code and caches. Choose AOT/JIT and specialization only with an explicit dependency/version and lifetime contract.
+- H-106 separates complete dependency scanning/registration from entry-driven compilation of execution semantics. Top-level procedure declarations do not execute during scanning; dependency execution semantics are incorporated in encounter order.
+- Keep program intent separate from native code and caches. H-96/H-102 specify demand-driven whole-program compilation, with the complete caller paths available and no independent module compilation. Collect required symbolic variables, check binding availability/types, then lay out direct per-thread access. Concrete lowering, specialization and cache dependencies remain to be specified; this does not select machine-code JIT.
 
 **Proposal to discuss:** a small semantic core and reference execution path, with C++ supplying runtime primitives; native optimization follows evidence from a working business flow. No backend or new dependency is selected.
 
@@ -245,7 +255,38 @@ Candidate observations to agree during discussion:
 
 This first local example is a possible intermediate milestone. The charter's broader validation target includes two independent domains, explicit integration and two effects interpretations; a single-domain demonstration alone would not establish that target. Decide when to add the second domain and integration example rather than dropping them implicitly.
 
-**Development boundary:** implementation remains deferred. When the user chooses to begin a bounded portion, record its explicit decisions, value derivation, invariants, interfaces, non-goals and acceptance criteria as a qualified contract. Unrelated open topics need not all be solved first, but the selected portion's dependencies and unresolved limits must be clear. Build and test authorization remains governed by repository rules.
+**Development boundary:** H-96 explicitly places joint development in scope. The [paired development plan](../applications/steady-snn/docs/LanguageCoDesign.md) proposes a small symbol/call-path core followed by one complete incoming-gather frame. Record each implemented portion's explicit decisions, value derivation, invariants, interfaces, non-goals and acceptance criteria as a qualified contract. Unrelated open topics need not all be solved first, but the selected portion's dependencies and unresolved limits must be clear. Build and test authorization remains governed by repository rules.
+
+<a id="dl-14"></a>
+### DL-14 — Symbols and dynamic call paths
+
+**Confirmed:** module-defined symbols have strict identity, imported aliases retain it, and independent origins/versions remain distinct. Symbol-variable use declares the per-thread variable. Reads use `@name`; writes use `effect @name = value`, restoring on scope exit. Procedures capture used effect values; `perform` temporarily installs them, `behave` retains current bindings. Demand-driven WPO checks required bindings over caller paths; missing values are compilation errors, not runtime fallback.
+
+**Confirmed module practice:** vocabulary modules declare symbols with comments. `using` retains an external procedure's source definition; `import` redefines its body in the current module's lexical/dynamic scopes. This definition choice is separate from `perform`/`behave`. H-105; D-10.
+
+**Confirmed module phases:** H-106/H-107 permit symbol/function definitions and bits globals initialized by literals or function calls, plus top-level `effect`/`perform`/`behave` expressions. Procedure definitions register during scanning; neither their definition semantics nor global initializers/top-level expressions execute during that scan. All entry dependencies are scanned/loaded before entry execution is compiled; dependencies then contribute top-level execution semantics in encounter order.
+
+**Confirmed immediate review:** every cross-module reference triggers module execution semantics (H-109). Its top-level scope ends when execution finishes; only `using`/`import` bring effective resources into the receiver (H-110). `effect` yields the newly bound value (H-111).
+
+**Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, repeated/cyclic encounters, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 4.
+
+**Decision evidence:** alias/version separation, nested effects, both call modes, transitive `behave` dependencies, a reachable path missing a required binding, scan-time absence of effects/captures and an encounter order different from dependency scan order. No independent module compiler is presumed.
+
+<a id="dl-15"></a>
+### DL-15 — Callable definitions, expressions and storage
+
+**Confirmed:** functions are lexically defined and use explicit inputs/outputs; procedures are dynamically defined with symbol names and may access effects. Module initialization is the top-level dynamic scope. Symbol reads/writes are expressions; the current direction uses expressions with a special `void` type for deliberately returning no meaningful value. User storage is stack or `@region`, with bits/regional-pointer captures and no native-heap object lifetime. Cross-region references remain an explicit design placeholder.
+
+**Open:** expression sequencing and scope results, procedure/capture representation and lifetime checking, the first regional GADT construction contract, and cross-region scenarios. A scope-local `effect` restores on exit under either call mode; `behave` does not make rebinding permanent. No `malloc` closure, raw stack reference capture or user-visible host address is inferred.
+
+**Decision evidence:** lexical function lookup versus dynamic procedure rebinding, effect access rejected in functions, expression result typing, scope restoration, and capture/lifetime examples. H-98–H-104, D-10.
+
+<a id="dl-16"></a>
+### DL-16 — Language and SNN development together
+
+H-96 establishes joint development; H-108 requests a checkpoint/push and an autonomous goal for the first demand-compiled runnable prototype after reviewing immediate choices. H-109–H-111 resolve that review; [D-10's first-prototype boundary](SymbolicDynamicScope.md#first-native-prototype-boundary) identifies the milestone. The application-owned [LanguageCoDesign](../applications/steady-snn/docs/LanguageCoDesign.md) proposes increments from nominal symbols and call modes to one immutable-A/incoming-gather/B-publication step, then a small checked program representation and native specialization. H-94's target-owned two-frame pull is the application boundary; it does not fix neuronal equations or training algorithms.
+
+Numerical source evaluation and integration motivate pure functions with explicit inputs. Target/frame context, selected randomness, regional writes and publication motivate procedures. Each increment needs semantic examples and actual execution evidence before optimization or SNN learning success can be claimed. The [case file](../applications/steady-snn/research/cod-language-scope-cases.json) currently specifies expectations only; no language compiler or simulation has executed it.
 
 ## Implementation evidence to account for
 
@@ -262,7 +303,7 @@ The [memory-region design](MemoryRegionAndRegionalTypes.md), [CoD driver design]
 
 ## Discussion order and decision history
 
-Application design proceeds in its separate document set, linked from DL-13. Language decisions remain open; application proposals become reusable language requirements only through an explicit scope and value decision.
+Application design proceeds in its separate document set, linked from DL-13. Language decisions are recorded at their confirmed scope; application proposals become reusable language requirements only through an explicit scope and value decision.
 
 For each discussion, update the relevant topic's current answer and append a decision entry. A useful entry contains the proposition and scope, alternatives and trade-off, human statement/source, affected topic and relationship IDs, revision coverage and remaining questions. Registry H-events hold confirmation evidence; an assistant proposal stays a proposal until explicitly decided. Replace decisions with linked new entries instead of erasing their history.
 
@@ -272,5 +313,20 @@ For each discussion, update the relevant topic's current answer and append a dec
 | DD-002 | 2026-10-22 | Start language design and maintain this discussion tracker; defer implementation until the user chooses the appropriate point. No generated mechanism proposal is thereby approved. | H-07; goal G-05 |
 | DD-003 | 2026-10-23 | Select steady recurrent SNN activation as the first application to discuss. The application document set owns its model and acceptance questions. | H-08; DL-13; D-08 |
 | DD-004 | 2026-10-23 | Keep application design in a separate document set; retain an example link and reusable language topics here. | H-11; DL-13; D-08 |
+| DD-005 | 2026-11-05 | Advance language/SNN design, implementation and validation together; introduce nominal symbols, scoped per-thread effects, WPO and two procedure invocation modes. Supersedes DD-002's development deferral for this coordinated direction; detailed mechanisms remain scoped. | H-96; DL-12–DL-16; D-10 |
+| DD-006 | 2026-11-05 | Capture used effect values; `perform` temporarily installs them and `behave` respects current dynamic bindings. | H-97; DL-14 |
+| DD-007 | 2026-11-05 | Functions use explicit inputs/outputs and cannot access effects or invoke procedures; procedures own effect access. | H-98; DL-02, DL-15 |
+| DD-008 | 2026-11-05 | User storage is stack/`@region`; captures are bits/regional pointers. Native heap belongs only to system code. | H-99/H-100; DL-03, DL-15 |
+| DD-009 | 2026-11-05 | Keep a cross-region reference placeholder and progressively develop its scenarios; no representation selected. | H-101; DL-03, DL-08 |
+| DD-010 | 2026-11-05 | Check missing required bindings as compilation errors over demanded whole-program caller paths; do not compile modules independently. | H-102; DL-12, DL-14 |
+| DD-011 | 2026-11-05 | Functions are lexically defined; procedures are dynamically defined under symbols. Module initialization is the top-level dynamic scope. | H-103; DL-14, DL-15 |
+| DD-012 | 2026-11-05 | Read with `@name`, write only with `effect`; both are expressions. Pursue an expression-oriented language with explicit `void`; detailed expression-result rules remain open. | H-104; DL-15 |
+| DD-013 | 2026-11-05 | Vocabulary modules contain symbols and comments; `using` retains a source procedure definition, while `import` redefines its body in the receiving lexical/dynamic context. | H-105; DL-14; D-10 |
+| DD-014 | 2026-11-05 | Limit ordinary top-level definitions to symbols, functions and literal bits globals; register top-level procedures without scan-time execution. Scan/load all entry dependencies first, then compile entry execution and dependency top-level execution semantics in encounter order. | H-106; DL-12/DL-14; D-10r2 |
+| DD-015 | 2026-11-05 | Bits global initializers must be bits literals or function calls. Top-level effect/perform/behave expressions are permitted; their execution belongs to module execution, preserving scan-only registration and entry-driven composition. | H-107; DL-12/DL-14; D-10r3 |
+| DD-016 | 2026-11-05 | Review immediate choices, then checkpoint/push and pursue an autonomous goal to a prototype that compiles and runs on demand. This is implementation authorization, not approval of all open language mechanisms. | H-108; DL-16 |
+| DD-017 | 2026-11-05 | Every kind of cross-module reference triggers source-module execution semantics, including vocabulary symbols and imported bodies. | H-109; DL-14 |
+| DD-018 | 2026-11-05 | Source-module top-level scope ends after execution; only using/import bring effective resources into the current module. Source effects do not stay ambient in the receiver. | H-110; DL-14 |
+| DD-019 | 2026-11-05 | An effect expression evaluates to its newly bound value. | H-111; DL-15 |
 
 Dates above are recording dates. Exact source-message timestamps were unavailable; the registry records that provenance limit.

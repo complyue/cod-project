@@ -1,6 +1,6 @@
 # SNN cognitive model design progress
 
-Revision 1 · 2026-11-02 · Discussion and research synthesis
+Revision 2 · 2026-11-05 · Discussion and research synthesis
 
 [中文版](CognitiveModelProgress.zh-CN.md)
 
@@ -10,12 +10,13 @@ The rectangle scenario connects these questions to perception, bodily orientatio
 
 ## Design authority
 
-- **Registry and coverage:** [D-09](../../../design/DesignAuthorityRegistry.md#d-09), revision 1, both language versions in full; `pending-human`. Shared section, question, and reference IDs support comparison; neither language has independent design authority.
+- **Registry and coverage:** [D-09](../../../design/DesignAuthorityRegistry.md#d-09), revision 2, both language versions in full; `pending-human`. Shared section, question, and reference IDs support comparison; neither language has independent design authority.
 - **Value lineage:** C-30–C-33 and P-71–P-81 connect this investigation to C-12 and C-24, then through the existing candidate application paths to C-01/V-01/V-02. The value is to make conceptual learning, capacity limits, and temporal cooperation explicit enough to evaluate. The new formal relationships remain pending confirmation.
-- **Human baseline:** [H-87–H-92](../../../design/DesignAuthorityRegistry.md#h-87) record the user's scenario, modeling premises, corrections, research request, and authorization to produce this tracker. H-43's fixed coordinate roles and H-75's contextual cell identities remain relevant. These statements do not approve the complete document or a detailed mechanism.
+- **Human baseline:** [H-87–H-92](../../../design/DesignAuthorityRegistry.md#h-87) record the user's scenario, modeling premises, corrections, research request, and authorization to produce this tracker. H-43's fixed coordinate roles and H-75's contextual cell identities remain relevant. These statements do not approve the complete document; the additional scoped confirmations are listed below.
 - **Constraints and non-goals:** preserve individual contextual cells, fixed semantic coordinates, one resident CC per region, regional relocation, static connection storage, active-rate cancellation, and external steerability. No new physical-distance prior, inhibitory synapses, persistent state fields, encoder, update rule, or implementation is selected.
 - **Acceptance for this revision:** preserve the scoped human premises; separate them from provisional reasoning and published evidence; give each unresolved question an observable comparison or decision requirement. Section S8 tracks these obligations.
-- **Assessment:** [K-208](../../../design/DesignAuthorityRegistry.md#k-208) registers new research scope. It does not continue a previously qualified cognitive-model contract. D-08's technical baseline remains pending-human.
+- **Confirmed local scope:** H-93/H-94 establish continuous source dynamics and two-frame incoming pull; H-95 states the capability-preservation objective. C-29/P-69/P-70 and C-34/P-82/P-83 link these constraints to temporal modeling. They do not settle equations, numerical parameters or state layout. [K-209](../../../design/DesignAuthorityRegistry.md#k-209) records this revision; S5.1 and S8 distinguish the confirmed boundaries from open choices.
+- **Initial assessment:** [K-208](../../../design/DesignAuthorityRegistry.md#k-208) registers new research scope. It does not continue a previously qualified cognitive-model contract. D-08's technical baseline remains pending-human.
 
 <a id="s1"></a>
 ## S1 Current premises and conclusions
@@ -92,7 +93,18 @@ A useful candidate is causal filtering of rate histories followed by a nonlinear
 
 For a simplified current-based input, `Var(Σ w_i a_i) = Σ w_i² Var(a_i) + 2Σ_{i<k} w_i w_k Cov(a_i,a_k)`. Individual means do not determine the joint terms, and generally `E[F(I)] ≠ F(E[I])`. This explains one source of loss during averaging; it does not prescribe a covariance matrix or establish that second-order statistics are sufficient.
 
-The choices must be assessed jointly: rate meaning and averaging window, update interval, integration and recovery times, retained history, delays, numerical formats, and learning credit. Rate-model reductions have operating limits, including low-noise regimes with spike locking [R14]. That boundary matters to the intended low-noise flow regime. The two-frame proposal determines snapshot consistency; it does not establish temporal coincidence or retain arbitrary delays.
+The choices must be assessed jointly: rate meaning and averaging window, update interval, integration and recovery times, retained history, delays, numerical formats, and learning credit. Rate-model reductions have operating limits, including low-noise regimes with spike locking [R14]. That boundary matters to the intended low-noise flow regime. The confirmed two-frame architecture determines snapshot consistency; it does not establish temporal coincidence or retain arbitrary delays.
+
+### S5.1 Continuous neurons and the confirmed pull architecture
+<a id="s5-1"></a>
+
+The objective is to preserve physiological mechanisms that may enable knowledge learning, concept generalization and coordinated computation. Reconstructing a single neuron's physiology in full is not an independent goal (H-95). Complexity needs a reason tied to those capabilities.
+
+H-93 confirms that successive APs arise from one continuously evolving source-neuron state. A global curve can approximate the output during firing without making successive APs independent. The last AP completion time may summarize recovery; any additional history must be justified by the selected mechanism. There is no general requirement to construct separate AP objects, retain their tails in queues or add those tails linearly.
+
+H-94 confirms the execution architecture: each destination traverses its own incoming connections, pulls source effects from immutable frame A, computes its next state into B, and publishes B only when the step is complete. Source and destination are roles on edges, not different cell categories. Reading an effect does not advance or consume source state. Derived and cached effects must describe the same source-time view for every reader. Single-frame and multi-frame AP output share this architecture.
+
+Upstream scatter, outgoing traversal and push queues are not default transmission mechanisms; adopting them would change the confirmed design. Additional conduction delay could, if later selected, be supported by downstream reads of bounded source history. This compatibility observation selects no history layout or extra network frames. The 10 kHz scan, refractory formula, AP duration, curve normalization, neuron equation and learning rules remain open. Implementation must preserve the chosen source dynamics and downstream response without accidentally changing them through timestamp replacement or buffer reuse.
 
 ## S6 Candidate mechanisms and their costs
 <a id="s6"></a>
@@ -140,6 +152,7 @@ The references below support particular observations or modeling methods. They d
 | Concept content and abstraction | Learning responsibility established; acquisition mechanism open. | Generalization to new situations and distinguishable practical predictions. |
 | Capacity | Variables and analytical distinctions identified. | A load–precision–latency comparison with a declared task and error measure. |
 | Temporal cooperation | Relevant literature and candidate reductions identified. | Matched-rate comparisons that expose what each retained state can and cannot distinguish. |
+| Source continuity and execution | H-93/H-94 confirmed: continuous neuron state and two-frame incoming pull. | Specify equations and justified state within these boundaries; keep all source reads consistent. |
 | Training and implementation | No mechanism qualified; no SNN validation results in this tracker. | A scoped design decision, justified state/cost choices, and the applicable execution authorization. |
 
 | Question | Decision or comparison needed | Affected scope |

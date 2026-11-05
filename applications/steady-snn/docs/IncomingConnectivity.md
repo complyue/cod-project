@@ -1,21 +1,22 @@
 # Steady recurrent SNN: target-owned incoming connection sets
 
-Document-set revision: 202 · Recorded: 2026-10-28 · Topic: SNN-07 · Proposal under discussion.
+Document-set revision: 204 · Recorded: 2026-11-05 · Topic: SNN-07 · Incoming ownership and two-frame pull confirmed; remaining details under discussion.
 
 ## Design authority
 
-- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 202, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 204, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Confirmed local scope:** [H-93](../../../design/DesignAuthorityRegistry.md#h-93) confirms continuous source-neuron dynamics; [H-94](../../../design/DesignAuthorityRegistry.md#h-94) confirms target-owned incoming pull from immutable frame A into frame B, followed by complete-frame publication. C-29/P-69/P-70 and C-34/P-82/P-83 track the scope and dependencies. [K-209](../../../design/DesignAuthorityRegistry.md#k-209) reconciles this revision. Acceptance: reads do not advance source state, all targets see the same source-time view, and single-/multi-frame AP output uses this architecture. Equations, state layout, curve normalization and extra delays remain open; the complete document is not thereby qualified.
 - **Value lineage:** C-13/P-26 serves bounded adaptive storage; C-29/P-69 gives incoming gather an order-independent frame transition. P-70 is its storage dependency, not implementation authority. P-25/P-22 connect the application through C-12 to C-01 and V-01/V-02; the registry controls each relationship's scope.
 - **Invariants / non-goals:** fixed pools, parallel four-byte endpoint IDs and one-byte weights, per-neuron regional references, per-set owner IDs, regional relocation and lifetime rules. No heap growth, selected learning rule, complete HTM model or measured CPU performance follows from this proposal. Multi-field data defaults to SoA; AoS requires an access-pattern-specific cache rationale and empirical evidence (H-29). Standard field widths are 1, 2, 4, 8, 16, 32, ... bits (`8 * 2^n`, integer n with a positive whole-number bit count); FP4 is standard. Other widths require separate packing/alignment discussion (H-30–H-32). Consider auxiliary structures only after clear business requirements lead to an implementation-algorithm discussion; no preset auxiliary storage (H-34). Pool sizing targets M slightly above N with simple static indexing; J and final quotas remain open (H-38/H-39).
 - **Acceptance:** preserve the intended directed edges and weights; account for incoming class demand, update ordering, packed-state writes, migration and any routing index. Evaluate CPU cost and useful task behavior before implementation.
-- **Human baseline:** H-13—H-39 supply the scoped static pool, layout, SoA and sizing constraints; H-21 requests incoming ownership evaluation. H-75 proposes two frames; H-73 allows wider state; H-76/H-77 specify input/cancellation. Exact layout and execution remain unqualified. The linked registry retains exact evidence and exclusions.
+- **Human baseline:** H-13—H-39 supply the scoped static pool, layout, SoA and sizing constraints; H-21 requests incoming ownership evaluation. H-94 confirms two-frame incoming pull; H-73 allows wider state; H-76/H-77 specify input/cancellation. Detailed layout and neural transition remain unqualified; incoming ownership and the two-frame pull boundary are confirmed. The linked registry retains exact evidence and exclusions.
 - **Current assessment:** [K-108](../../../design/DesignAuthorityRegistry.md#k-108) derives retained-prefix comparison candidates from gather, learning and migration requirements. Counts and endpoint markers remain unselected; no auxiliary allowance enters the current budget. This is an agent assessment, not human confirmation or qualification. [K-207](../../../design/DesignAuthorityRegistry.md#k-207) records completion of the H-71 research pass; [progress](../research/modeling-refinement-progress.json) records its scope and substantive work.
 
-## Recommendation and physical layout
+## Incoming ownership and physical layout
 
-Use target-owned incoming sets as the preferred proposal for a synchronous, gather-based simulation. A target owns its incoming weights; each slot identifies the presynaptic source. This changes how a directed edge is stored, not its direction or meaning.
+H-94 confirms target-owned incoming sets and two-frame pull as the simulation architecture. A target owns its incoming weights; each slot identifies the presynaptic source. This changes how a directed edge is stored, not its direction or meaning.
 
-| Item | Source-owned reference | Target-owned proposal |
+| Item | Source-owned reference | Target-owned architecture |
 | --- | --- | --- |
 | Neuron's current-set reference | Its outgoing set | Its incoming set |
 | Four-byte slot array | Target neuron IDs | Source neuron IDs |
@@ -65,7 +66,9 @@ Each target's source IDs and weights are traversed consecutively. Its accumulato
 
 All workers read the same prior-state snapshot. Publishing next state at the step boundary avoids accidental dependence on traversal order. Packed FP4 requires an additional detail: two neurons share a byte, so write partitions must respect byte/word boundaries or use a separate packing phase. Exclusive ownership of a neuron alone does not prevent packed writes from racing.
 
-H-75 proposes implementing this semantic update with **two alternating state frames**. Read only the completed frame while filling the other, then exchange their roles. The incoming sum is a temporary local quantity, not a persistent per-edge accumulator. H-73 permits FP16/FP32 state, avoiding packed-state write concerns for those candidates. [RateDynamics](RateDynamics.md#two-alternating-frames-with-incoming-gather) records consistent polarity cancellation, one-shot input and publication boundaries. H-76 consults preceding predictive state for token recruitment; H-77 specifies minicolumn-wide net cancellation and proportional retention before publication. No third whole-CC frame, duplicate connection pool, outgoing index or global inter-CC barrier is implied.
+H-94 confirms implementing this semantic update with **two alternating state frames**. Read only the completed frame while filling the other, then exchange their roles. The incoming sum is a temporary local quantity, not a persistent per-edge accumulator. H-73 permits FP16/FP32 state, avoiding packed-state write concerns for those candidates. [RateDynamics](RateDynamics.md#two-alternating-frames-with-incoming-gather) records consistent polarity cancellation, one-shot input and publication boundaries. H-76 consults preceding predictive state for token recruitment; H-77 specifies minicolumn-wide net cancellation and proportional retention before publication. No third whole-CC frame, duplicate connection pool, outgoing index or global inter-CC barrier is implied.
+
+An effect read is side-effect-free: it does not advance the source neuron, consume its output or depend on how many destinations read it. H-93 requires one continuous source state across successive APs. A shared single-/multi-frame output function can be evaluated from the immutable snapshot without introducing per-AP tail queues. [Continuous source dynamics](RateDynamics.md#continuous-source-dynamics-and-ap-output) specifies the boundary and the unselected bounded-history option for future delays.
 
 Source-state reads are indirect and may be scattered. FP4/FP8 decoding, accumulation precision and the transition remain explicit costs and semantic choices. An immutable snapshot does not alone guarantee bit-identical floating-point reductions across implementations; summation order and precision must also be defined if required.
 
@@ -105,7 +108,7 @@ For the worked 15-class Flash 60+60 candidate, incoming ownership preserves the 
 
 This includes reserved sets and slots. Region headers and algorithm-dependent storage are outside the named-array sum; no auxiliary structures or storage allowances are prescribed.
 
-The formula above assumes one FP4 state array. For H-75's two-frame proposal, replacing only `N/2` by `2*N*sizeof(state_value)` gives these exact conditional named-array totals:
+The formula above assumes one FP4 state array. For the H-94 two-frame architecture, replacing only `N/2` by `2*N*sizeof(state_value)` gives these exact conditional named-array totals:
 
 | Candidate pool | Two FP16 state frames | Two FP32 state frames |
 | --- | ---: | ---: |
@@ -126,7 +129,7 @@ An unassigned incoming set can represent no retained internal inputs; it does no
 
 ## Decisions still open
 
-- Finalize H-75's two-frame incoming-gather proposal and its state/transition semantics. Event-driven propagation would need a demonstrated unmet requirement before adding its supporting structures.
+- Define state/transition semantics within the confirmed H-94 two-frame incoming-pull architecture. Switching to upstream scatter, outgoing traversal or push queues is a design change, not an implementation default.
 - Define incoming-set admission and useful underfilling separately from outgoing influence and suppression.
 - Specify point-neuron versus branch/segment integration, input timing, inhibition and gain/threshold regulation; compare degree-dependent background activation and task selectivity. These are open under H-22. Define precision, step boundaries, learning and migration publication, and budget any additional state.
 - Validate per-class incoming demand, outgoing hub formation, migration traffic and CPU bandwidth under an explicit task and update rate.

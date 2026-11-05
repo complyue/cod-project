@@ -1,19 +1,24 @@
 # Steady recurrent SNN: application design
 
-Document-set baseline: 202 · Document revision: 203 · Recorded: 2026-11-02 · Phase: discussion, implementation deferred.
+Document-set baseline: 208 · Document revision: 208 · Recorded: 2026-11-05 · Phase: coordinated language/SNN design and development planning.
 
 ## Design authority
 
-- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 203, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 208, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Confirmed local scope:** [H-93](../../../design/DesignAuthorityRegistry.md#h-93) confirms continuous source-neuron dynamics; [H-94](../../../design/DesignAuthorityRegistry.md#h-94) confirms target-owned incoming pull from immutable frame A into frame B, followed by complete-frame publication. C-29/P-69/P-70 and C-34/P-82/P-83 track the scope and dependencies. [K-209](../../../design/DesignAuthorityRegistry.md#k-209) reconciles this revision. Acceptance: reads do not advance source state, all targets see the same source-time view, and single-/multi-frame AP output uses this architecture. Equations, state layout, curve normalization and extra delays remain open; the complete document is not thereby qualified.
 - **Value lineage:** P-25 derives this document set from application C-12; P-22 connects the application to C-01 and V-01/V-02 through explicit semantic behavior. C-13/P-26 serves bounded storage, C-14/P-27 contextual semantic encoding, C-15/P-29 learning, C-17/P-34 activity support, and C-26—C-29 useful context, numerical evolution and consistent frame execution. Dependencies do not grant authority.
 - **Invariants / non-goals:** one resident CC per region; fixed semantic roles and individual contextual identities; regional relocation/lifetime rules; static SoA connections and no heap topology. No physical-distance prior, explicit inhibitory synapses, complete neural transition, language syntax, implementation or measured performance is selected.
 - **Acceptance:** keep human constraints, conditional arithmetic, evidence and proposals distinguishable. Assess the required semantic behavior, useful context, fading, prediction, activity envelope, steerability and actual resource costs under a subsequently selected contract.
 - **Human baseline:** D-08 and H-08—H-86 retain the exact scoped statements. H-11 separates application documents; H-34/H-74 require a demonstrated value for additional structures; H-75—H-77 give contextual-cell, frame, input and active-cancellation directions. H-79—H-84 distinguish flow learning, prediction assessment and generation. H-78/H-85 defer readiness choices; H-86 delegates obvious empirical alternatives to real-data comparisons without repeated questions.
 - **Current assessment:** [K-190](../../../design/DesignAuthorityRegistry.md#k-190) makes the existing empirical comparisons incremental: identify a behavioral or resource question, compare relevant alternatives, and distinguish direct numerical conversion from acquisition under candidate arithmetic. No alternative is selected; D-08 stays pending-human. [K-207](../../../design/DesignAuthorityRegistry.md#k-207) records completion of the H-71 research pass; [progress](../research/modeling-refinement-progress.json) records its scope and substantive work.
 
-**Navigation assessment:** [K-208](../../../design/DesignAuthorityRegistry.md#k-208) covers revision 203's links to the separately registered [cognitive-model tracker](CognitiveModelProgress.en.md) and [中文版本](CognitiveModelProgress.zh-CN.md), D-09 revision 1. Its new research premises and open mechanisms do not qualify D-08 or change this technical baseline.
+**Related design scope:** the [cognitive-model tracker](CognitiveModelProgress.en.md) and [中文版本](CognitiveModelProgress.zh-CN.md) are separately registered as D-09 revision 2. [K-213](../../../design/DesignAuthorityRegistry.md#k-213) covers the [language/SNN development plan](LanguageCoDesign.md), under H-96–H-111. Joint development is in scope; proposed implementation details and the complete application contract remain pending-human.
 
 This document set owns the application's model, resource planning and decisions. CoD's [language tracker](../../../design/DomainLanguageDesign.md) owns reusable language semantics. An application proposal becomes a language requirement only through an explicit design decision.
+
+## Joint language and simulator development
+
+[LanguageCoDesign](LanguageCoDesign.md) links the confirmed two-frame pull architecture to useful initial CoD features. Pure lexical functions compute source effects and target values from explicit inputs; symbol-named dynamic procedures supply context and perform regional writes/publication. After scanning all dependency declarations, demand-driven whole-program compilation starts from the entry, incorporates dependency execution semantics in encounter order, and checks required bindings along the resulting caller paths. The plan progresses from scope/capture examples to a complete frame, checked program representation and native execution. Its [semantic cases](../research/cod-language-scope-cases.json) are specifications, not executed compiler or simulation evidence.
 
 ## Model and operating goals
 
@@ -37,7 +42,7 @@ Normal recurrence remains steerable by external tokens. Repetition alone is not 
 
 ## Dynamics and training boundaries
 
-The simple execution proposal is [two alternating state frames](RateDynamics.md#two-alternating-frames-with-incoming-gather): incoming gathers read a complete preceding snapshot, write the next frame, and publish it when finished. Each cell retains its own rate/activity value. The noise level stays consistent within the transition. This selects neither a frame duration nor a whole-network lockstep schedule, and does not require a second weight pool.
+The H-94 confirmed execution architecture is [two alternating state frames](RateDynamics.md#two-alternating-frames-with-incoming-gather): incoming gathers read a complete preceding snapshot, write the next frame, and publish it when finished. Each cell retains its own rate/activity value. The noise level stays consistent within the transition. This selects neither a frame duration nor a whole-network lockstep schedule, and does not require a second weight pool.
 
 H-77 specifies minicolumn-wide active-rate cancellation: calculate the positive/negative total difference, remove the losing polarity's active rates, and proportionally retain the surviving cells' rates. There is no positive/negative cell-index pairing. Cancellation preserves the provisional surviving composition; added drive can change that composition even when the aggregate signed value remains fixed.
 
@@ -62,7 +67,7 @@ Attention substantially reduces background noise. Low activity can trigger incre
 
 The per-node RAM ceiling is **16 GB**. A CC should fit a Raspberry Pi-sized resource budget; the CC count per node and update rate remain unspecified. The embedding table occupies 1,323,827,200 bytes shared once per node, and is excluded from per-CC totals.
 
-Connections use static capacity classes with formula-friendly indexing. Each participating neuron references its current set; each set has an owner ID. Each slot contains a four-byte endpoint ID and a one-byte weight in separate arrays. Target-owned incoming sets are the preferred gather proposal under evaluation. Training may migrate a neuron to another preallocated class; no heap allocation maintains the topology. Weight scale belongs to training and representation semantics, not the capacity-distribution law.
+Connections use static capacity classes with formula-friendly indexing. Each participating neuron references its current set; each set has an owner ID. Each slot contains a four-byte endpoint ID and a one-byte weight in separate arrays. H-94 confirms target-owned incoming sets and two-frame pull. Training may migrate a neuron to another preallocated class; no heap allocation maintains the topology. Weight scale belongs to training and representation semantics, not the capacity-distribution law.
 
 The provisional alpha-near-3 template has a 100-slot minimum, doubles capacity every other class, and halves set population at each adjacent class. Total sets should slightly exceed neuron count. Neither class count is mandatory, and no older total connection capacity must be preserved.
 
@@ -104,7 +109,8 @@ Prediction assessment must occur before the observed token changes state or weig
 
 | Document | Scope |
 | --- | --- |
-| [Cognitive model progress — English](CognitiveModelProgress.en.md) / [认知模型设计进度 — 中文](CognitiveModelProgress.zh-CN.md) | Four-aspect scene, learned concepts, full-repertoire CC replicas, capacity, temporal cooperation, and open decisions; D-09 revision 1. |
+| [Cognitive model progress — English](CognitiveModelProgress.en.md) / [认知模型设计进度 — 中文](CognitiveModelProgress.zh-CN.md) | Four-aspect scene, learned concepts, full-repertoire CC replicas, capacity, temporal cooperation, and open decisions; D-09 revision 2. |
+| [Language/SNN development](LanguageCoDesign.md) | Paired language features, target/frame context, whole-program scope checking and bounded implementation/validation increments. |
 | [Model](Model.md) | CC/minicolumn roles, signed coding, phases, embedding/messages, regions and persistence. |
 | [Activation regimes](ActivationRegimes.md) | Per-CC activity, DMN/flow/immersion, detection, noise feedback, residual behavior and steerability. |
 | [Training strategy](TrainingStrategy.md) | Training division and DMN/token activation-chain construction and repair. |

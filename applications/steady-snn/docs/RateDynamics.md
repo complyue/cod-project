@@ -1,14 +1,15 @@
 # Steady recurrent SNN: fractional recruitment, rate dynamics and natural fading
 
-Document-set revision: 202 · Recorded: 2026-10-28 · Topics: SNN-01/SNN-02/SNN-03/SNN-05/SNN-07 · Design discussion.
+Document-set revision: 204 · Recorded: 2026-11-05 · Topics: SNN-01/SNN-02/SNN-03/SNN-05/SNN-07 · Design discussion.
 
 ## Design authority
 
-- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 202, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), document revision 204, all sections; `pending-human`. There is no qualified application implementation baseline.
+- **Confirmed local scope:** [H-93](../../../design/DesignAuthorityRegistry.md#h-93) confirms continuous source-neuron dynamics; [H-94](../../../design/DesignAuthorityRegistry.md#h-94) confirms target-owned incoming pull from immutable frame A into frame B, followed by complete-frame publication. C-29/P-69/P-70 and C-34/P-82/P-83 track the scope and dependencies. [K-209](../../../design/DesignAuthorityRegistry.md#k-209) reconciles this revision. Acceptance: reads do not advance source state, all targets see the same source-time view, and single-/multi-frame AP output uses this architecture. Equations, state layout, curve normalization and extra delays remain open; the complete document is not thereby qualified.
 - **Value lineage:** C-24/P-52 makes temporal semantic behavior explicit; C-25/P-55 expresses fractional maintenance targets; C-29/P-69 makes transitions independent of destination traversal order. P-53/P-56/P-57/P-59/P-70 are dependencies, not authority. P-25/P-22 connect the application through C-12 to C-01 and V-01/V-02; the registry controls each relationship's scope.
 - **Invariants / non-goals:** preserve fixed signed semantic roles, the current Flash 60+60 population, static SoA connection storage, intrinsic polarity cancellation, the early absence of explicit inhibitory synapses, per-CC activity regulation and external steerability. No population collapse, per-token runtime mask, additional persistent field, heap topology or biological equivalence is selected. Requirements precede auxiliary structures.
 - **Acceptance:** assess semantic proportions and amplitude separately; timely token fading and natural cessation in individual responses; controlled noise and later reactivation; correct coverage/flow behavior; sensitivity to time discretization and numerical precision; retained connection semantics and actual resource costs. Numerical tolerances and protocols remain open.
-- **Human baseline:** H-65—H-70 supply maintenance, near-step fidelity, loose timing, natural cessation and fractional/numeric scope; H-75 proposes frames, H-76/H-77 specify input/cancellation, H-78 defers state representation. The linked registry retains exact evidence and exclusions. H-79—H-81 reserve Hebbian/HTM for flow and request its separate initial algorithm design. H-84 excludes the explicit broad weak generation fallback from learning.
+- **Human baseline:** H-65—H-70 supply maintenance, near-step fidelity, loose timing, natural cessation and fractional/numeric scope; H-94 confirms two-frame incoming pull; H-76/H-77 specify input/cancellation, H-78 defers state representation. The linked registry retains exact evidence and exclusions. H-79—H-81 reserve Hebbian/HTM for flow and request its separate initial algorithm design. H-84 excludes the explicit broad weak generation fallback from learning.
 - **Current assessment:** [K-185](../../../design/DesignAuthorityRegistry.md#k-185) distinguishes positive-kick mean and variance under frame refinement. Existing reduction, numeric and contextual-retention comparisons remain applicable. No noise law, transition or additional field is selected; [K-207](../../../design/DesignAuthorityRegistry.md#k-207) records completion of the H-71 research pass; empirical choices remain open.
 
 ## Working direction and the distinction it makes
@@ -122,7 +123,7 @@ Under H-86, compare frame-aligned ordered observations with explicitly ordered i
 
 ### Two alternating frames with incoming gather
 
-H-75 proposes two alternating frames: every next-frame activation is computed from the same previous-frame snapshot. This is the preferred execution direction for discussion. Its value chain is direct: incoming slots already gather each neuron's causes; an immutable source frame makes that transition independent of which destination is visited first; a separate destination frame costs little compared with connectivity. No per-edge accumulated activity or event queue is required by this scheme.
+H-94 confirms two alternating frames with target-owned incoming pull: every next-frame state is computed from the same completed previous-frame snapshot. This is the selected execution architecture. Its value chain is direct: incoming slots already gather each neuron's causes; an immutable source frame makes that transition independent of which destination is visited first; a separate destination frame costs little compared with connectivity. No per-edge accumulated activity or event queue is required by this scheme.
 
 ```text
 read frame A; write frame B
@@ -133,7 +134,7 @@ finish the frame's intrinsic cancellation and other defined local operations
 publish B; exchange the roles of A and B
 ```
 
-This is a transition outline, not a chosen equation, instruction schedule or implementation. A destination's sum is temporary arithmetic, not persistent network state. The next frame is fully defined, including inactive values, so stale contents of the recycled buffer do not become state. One owner per destination avoids concurrent scatter additions; no new reverse connectivity index is needed.
+The read-A/write-B/publication boundary is confirmed; the displayed weighted sum is illustrative, and the neural equation, worker schedule and field layout remain open. A destination's sum is temporary arithmetic, not persistent network state. The next frame is fully defined, including inactive values, so stale contents of the recycled buffer do not become state. One owner per destination avoids concurrent scatter additions; no new reverse connectivity index is needed.
 
 The distinction is observable even in two neurons. With unit reciprocal edges and initial `(1,0)`, a snapshot update gives `(0,1)`. Updating the first neuron in place and then the second gives `(0,0)`; reversing that order gives `(1,1)`. The snapshot preserves the intended one-transition causality. It does not assert bit-identical sums across different reduction orders.
 
@@ -142,6 +143,16 @@ Intrinsic positive/negative cancellation must use a consistent stage. H-77 speci
 Canceling each partial incoming contribution is not equivalent to combining them before proportional cancellation: it can change the surviving contextual pattern even when the net coordinate agrees. The chosen transition must define when recurrent drive, token input and background contributions are combined and canceled. Two-frame publication supplies a consistent boundary; it does not make arbitrary rearrangements within that transition equivalent.
 
 For N=614400, two frames of one FP16 value cost **2457600 bytes (2.34375 MiB)**; FP32 costs **4915200 bytes (4.6875 MiB)**. These are exactly two state arrays, with the existing connection arrays single. They do not include independently required fields that have not yet been specified. A per-CC frame boundary also does not require all CCs in the distributed network to run in global lockstep.
+
+### Continuous source dynamics and AP output
+
+H-95 sets the purpose: preserve mechanisms that may enable knowledge learning, concept generalization and coordinated computation, without making exact single-neuron physiological reconstruction an independent goal. H-93 requires successive APs to arise from one continuously evolving neuron state. Here continuous means state evolution across successive APs, not a requirement to solve a continuous-time differential equation or reproduce a membrane waveform.
+
+A shared AP curve may be a simplified output function of that state during firing. Switching between one-frame and multi-frame output changes that function and its duration, not the two-frame pull architecture. Source and destination are roles of the same neuron on different edges. Reading a source effect must neither advance nor consume its state. The effect can be derived from A or cached for that same source-time view; every destination must observe that view consistently.
+
+The last AP completion time is a possible recovery summary. Any additional adaptation, energy or transmission state must follow from the chosen mechanism and its observable requirements. Successive APs are not presumed to be independent waveform objects with separately queued tails. Multi-frame output alone requires neither push queues, outgoing-edge traversal, per-edge scheduling nor linear superposition. Timestamp replacement or buffer reuse must not accidentally alter the selected continuous-state dynamics or downstream response.
+
+Upstream scatter or push-based propagation would change the confirmed architecture and requires a design change. If additional conduction delay is later selected, downstream pull could read bounded source history; this is a compatibility option, not approval of history fields, queues or extra whole-network state frames. The 10 kHz scan, recovery formula, AP duration, curve shape, normalization, learning rule and physical relationship between AP output and postsynaptic response remain separate design questions.
 
 ### What a frame value means
 
@@ -161,7 +172,7 @@ Compare how predictive alternatives evolve between token observations as well as
 
 The future comparison should use the same behavioral goals and account for each candidate's actual state and work. Relevant observations are prediction-guided versus broad token entry, the effects of cancellation on the next response, isolated-token fading with useful retained context, and external steerability under the specified noise conditions. Parameters need comparable meanings rather than merely identical numeric values. No extra persistent field is justified solely by naming a candidate.
 
-With a first-order discrete transition, all persistent neuronal information needed for the next step resides in A. Any chosen self-retention can read A[i] directly; there is no need to reconstruct intervening spike-by-spike accumulation. A direct frame-to-frame map and a leaky relaxation are different modeling choices, however. The rate interpretation alone does not require adding an independent membrane leak, timer or filtered state. Below is one illustrative relaxation vocabulary, not an additional mandatory layer on top of the two-frame proposal.
+With a first-order discrete transition, all persistent neuronal information needed for the next step resides in A. Any chosen self-retention can read A[i] directly; there is no need to reconstruct intervening spike-by-spike accumulation. A direct frame-to-frame map and a leaky relaxation are different modeling choices, however. The rate interpretation alone does not require adding an independent membrane leak, timer or filtered state. Below is one illustrative relaxation vocabulary, not an additional mandatory layer on top of the confirmed two-frame architecture.
 
 An illustrative rate-relaxation vocabulary is:
 
