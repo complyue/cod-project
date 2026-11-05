@@ -793,6 +793,10 @@ class Compiler {
   Value call_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
                           bool pure) {
     using K = Expression::Kind;
+    if (expr.children.size() == 2 && binary_precedence(expr.text) >= 0)
+      return binary_expression(expr, module, env, locals, pure);
+    if (expr.children.size() == 1 && (expr.text == "-" || expr.text == "!"))
+      return unary_expression(expr, module, env, locals, pure);
     if (expr.text == "region") {
       if (pure) fail(expr.at, "a function cannot create a region resource");
       const auto args = arguments(expr, module, env, locals, pure);
@@ -912,6 +916,20 @@ class Compiler {
     }
     if (!selected) fail(expr.at, "no matching method for '" + expr.text + "'");
     return call_method(*selected, args, expr.at);
+  }
+  Value unary_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
+                         bool pure) {
+    using K = Expression::Kind;
+    if (expr.text == "-" && expr.children[0]->kind == K::integer &&
+        expr.children[0]->text == "9223372036854775808")
+      return scalar(Type::integer, ir_.bits(Type::integer, UINT64_C(1) << 63));
+    auto value = expression(*expr.children[0], module, env, locals, pure);
+    if (const auto selected = method(expr.text, module, {value}, expr.at))
+      return call_method(*selected, {value}, expr.at);
+    if (expr.text == "-" && floating(value.type))
+      return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
+    require(value.type, expr.text == "!" ? Type::boolean : Type::integer, expr.at);
+    return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
   }
   Value binary_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
                           bool pure) {
@@ -1060,18 +1078,7 @@ class Compiler {
     case K::block: return block(expr, module, env, locals, pure);
     case K::call: return call_expression(expr, module, env, locals, pure);
     case K::perform: case K::behave: return invoke(expr, module, env, locals, pure);
-    case K::unary: {
-      if (expr.text == "-" && expr.children[0]->kind == K::integer &&
-          expr.children[0]->text == "9223372036854775808")
-        return scalar(Type::integer, ir_.bits(Type::integer, UINT64_C(1) << 63));
-      auto value = expression(*expr.children[0], module, env, locals, pure);
-      if (const auto selected = method(expr.text, module, {value}, expr.at))
-        return call_method(*selected, {value}, expr.at);
-      if (expr.text == "-" && floating(value.type))
-        return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
-      require(value.type, expr.text == "!" ? Type::boolean : Type::integer, expr.at);
-      return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
-    }
+    case K::unary: return unary_expression(expr, module, env, locals, pure);
     case K::binary: return binary_expression(expr, module, env, locals, pure);
     case K::conditional: return conditional_expression(expr, module, env, locals, pure);
     }

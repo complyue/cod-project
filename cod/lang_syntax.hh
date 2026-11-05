@@ -225,6 +225,16 @@ struct Form {
   Expr body;
 };
 
+inline int binary_precedence(const std::string &op) {
+  if (op == "||") return 1;
+  if (op == "&&") return 2;
+  if (op == "==" || op == "!=") return 3;
+  if (op == "<" || op == ">" || op == "<=" || op == ">=") return 4;
+  if (op == "+" || op == "-") return 5;
+  if (op == "*" || op == "/" || op == "%") return 6;
+  return -1;
+}
+
 class Parser {
   std::vector<Token> tokens_;
   size_t cursor_ = 0;
@@ -248,7 +258,7 @@ class Parser {
   Token lexical_name() {
     if (!take("(")) return name(TokenKind::identifier);
     auto op = tokens_[cursor_++];
-    if (precedence(op.text) < 0 && op.text != "!") fail(op.at, "expected an operator name");
+    if (binary_precedence(op.text) < 0 && op.text != "!") fail(op.at, "expected an operator name");
     if (op.text == "&&" || op.text == "||") fail(op.at, "short-circuit operators are control expressions");
     expect(")");
     return op;
@@ -283,15 +293,6 @@ class Parser {
     return {Type::named, token.text};
   }
   void type_separator() { if (!take("::")) expect(":"); }
-  static int precedence(const std::string &op) {
-    if (op == "||") return 1;
-    if (op == "&&") return 2;
-    if (op == "==" || op == "!=") return 3;
-    if (op == "<" || op == ">" || op == "<=" || op == ">=") return 4;
-    if (op == "+" || op == "-") return 5;
-    if (op == "*" || op == "/" || op == "%") return 6;
-    return -1;
-  }
   Expr make(Expression::Kind kind, const Token &token) {
     return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}});
   }
@@ -365,7 +366,7 @@ class Parser {
     }
     if (is("{")) return block();
     if (is("(") && cursor_ + 2 < tokens_.size() && tokens_[cursor_ + 2].text == ")" &&
-        (precedence(tokens_[cursor_ + 1].text) >= 0 || tokens_[cursor_ + 1].text == "!")) {
+        (binary_precedence(tokens_[cursor_ + 1].text) >= 0 || tokens_[cursor_ + 1].text == "!")) {
       auto expr = make(Expression::Kind::call, lexical_name());
       arguments(*expr);
       return expr;
@@ -419,11 +420,11 @@ class Parser {
         left = std::move(index);
       } else break;
     }
-    while (precedence(peek().text) >= minimum) {
+    while (binary_precedence(peek().text) >= minimum) {
       auto op = tokens_[cursor_++];
       auto binary = make(Expression::Kind::binary, op);
       binary->children.push_back(std::move(left));
-      binary->children.push_back(expression(precedence(op.text) + 1));
+      binary->children.push_back(expression(binary_precedence(op.text) + 1));
       left = std::move(binary);
     }
     return left;

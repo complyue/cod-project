@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T23:34:37.925511+00:00",
+  "recorded_utc": "2026-11-05T23:42:29.295733+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -943,10 +943,10 @@
       "expected": {
         "file": "methods.cod",
         "exit": 0,
-        "stdout": "8\n7.5\n15\n15\n-7\n"
+        "stdout": "8\n7.5\n15\n15\n-7\n5\ntrue\n"
       },
       "exit_code": 0,
-      "stdout": "8\n7.5\n15\n15\n-7\n",
+      "stdout": "8\n7.5\n15\n15\n-7\n5\ntrue\n",
       "stderr": "",
       "passed": true
     },
@@ -2172,9 +2172,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-33ion9jf/program.ll",
+        "/tmp/cod-language-check-pafnago5/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-33ion9jf/program.bc"
+        "/tmp/cod-language-check-pafnago5/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2184,18 +2184,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "b5c3407c34d2e5c4a8d7e82d58e0245bdeed8c98a79cd96b569e032ba985e1d6"
+    "sha256": "02f141ed6f06aad0568d1fd2568ff26ffae842076756a46512664b6dac5104ae"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
-    "cod/lang_syntax.hh": "86d8266f2be6e0789cf64a8816dd0e6cc830cfd867345e01a394227d60664a10",
-    "cod/lang_frontend.hh": "47bc359dfb173d85a6ea21d2c5c04b225fc2a1f3af7e39fa19f34846b2d31987",
+    "cod/lang_syntax.hh": "4de1a54e8bea0b85283e827aa4079678c6bf66a8220896fce118e03c334f058e",
+    "cod/lang_frontend.hh": "18c92e5740f81bdf9692743f8f049656748d67e6dec926e92c05cdc03777ab3e",
     "cod/lang_llvm.hh": "c72c632d3bac0ecf9aa0365ff820f75012b65c6a79c74ba6f3dde39e52e34b4e",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "c16c4602b95f7052e9161950396ba181a81ae5b3ba9d98faa79b821554f1960d",
-    "tests/cod/language/cases.json": "a4210b3aadda0b5f7f7974c34f4293b89b4afd9db624c9f54352d607b0472c3d",
+    "tests/cod/language/cases.json": "db04c561a7c38f8397c7c511e6cbba41b71b367ad2e4e7d5da1971b0c3794861",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2246,7 +2246,7 @@
     "tests/cod/language/method-modules.cod": "10d0e79036423d708c2acc6e42ea99a48e369f41a899af2670a11ce87b82c19a",
     "tests/cod/language/method-no-match.cod": "b5e740edc1f1fa8f219d18dc3bcc4ac25ccb5d8d88302d8bb7aa66999c0d724a",
     "tests/cod/language/method-other-library.cod": "bfefe85ee3032f7ddf502e9dbddf7b817c10ef23eadd74431acbd05d9affa5a4",
-    "tests/cod/language/methods.cod": "220003c479460ac88538c0d7efc89c2f8041e3db1e9ab6327d97c56729c51c88",
+    "tests/cod/language/methods.cod": "4205246c8412b10cd3cd3c3a01a12b42262e0007412f0d6c2c34bcbd7b5bade4",
     "tests/cod/language/missing-capture.cod": "0e59004b31863a174459b9c5aa0fcedd8a940c2ec4d42d5835cae7fa374ebb21",
     "tests/cod/language/missing-default-alias.cod": "6e9b09ddf5c872aac6b7c0ff04621d4df21dd2e895d4154d2df7394898e35d02",
     "tests/cod/language/module-diamond.cod": "d7c57a55265fb5c8050f8fbe8371670d8a958e4cf403252cd33fe8f8486aec25",

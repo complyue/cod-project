@@ -292,7 +292,7 @@
   {
     "file": "methods.cod",
     "exit": 0,
-    "stdout": "8\n7.5\n15\n15\n-7\n"
+    "stdout": "8\n7.5\n15\n15\n-7\n5\ntrue\n"
   },
   {
     "file": "method-modules.cod",

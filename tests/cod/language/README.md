@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 14 · Recorded: 2026-11-05.
+Prototype reference revision: 15 · Recorded: 2026-11-05.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 14 · Recorded: 2026-11-05.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-235](../../../design/DesignAuthorityRegistry.md#k-235) records the current implementation, coverage and limits.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-236](../../../design/DesignAuthorityRegistry.md#k-236) records the current implementation, coverage and limits.
 
 ## Run
 
@@ -76,7 +76,7 @@ function inspect(p::Position)::i64 {
 
 Products are nominal bits types identified by the defining module/declaration; equal field shapes do not make them interchangeable. Positional construction checks field count/types. Nested products, field reads, function inputs/results, bits globals and bits effect captures are supported. `using "module" Position as P` preserves identity. Recursive by-value layouts are rejected. These products contain bits fields; they are not implicitly regional objects.
 
-`let` binds an immutable lexical value inside an expression scope; module values use typed `global` declarations. Parameter annotations accept `:` or `::`; results accept `->` or `::`. Methods dispatch on the complete argument-type tuple. Selected function sets from multiple modules can share a local method name; duplicate identical matches are diagnosed when demanded. Operator methods use names such as `(+)`; `p + 1` and `(+)(p, 1)` select the same user-defined method. Unary/binary arities are distinct. Short-circuit operators remain control expressions.
+`let` binds an immutable lexical value inside an expression scope; module values use typed `global` declarations. Parameter annotations accept `:` or `::`; results accept `->` or `::`. Methods dispatch on the complete argument-type tuple. Selected function sets from multiple modules can share a local method name; duplicate identical matches are diagnosed when demanded. Operator methods use names such as `(+)`; `p + 1` and `(+)(p, 1)` select the same user-defined method. Supported eager unary/binary operator calls share the corresponding prefix/infix lowering, including scalar operations such as `(+)(2, 3)` and `(!)(false)`. Explicit calls remain valid function-call global initializers. Unary/binary arities are distinct. Short-circuit operators remain control expressions.
 
 Demanded function/procedure calls are inlined into LLVM control flow. The semantic checker carries LLVM values directly for expressions, captures and region owners. Typed TLS slots hold active effects; SSA values retain captures and values to restore on scope exit. Machine-code reuse is deferred. [stress_tests.py](stress_tests.py) checks deep and shared dependency graphs and records IR/bitcode size and compile/link/run time, including 512 modules and 1,000 procedure specializations. LLVM's standard optimization pipeline handles native optimization; no custom optimizer or backend abstraction is used.
 
