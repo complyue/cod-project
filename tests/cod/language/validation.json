@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T22:46:19.445184+00:00",
+  "recorded_utc": "2026-11-05T23:12:37.255235+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
-  "passed": 122,
-  "total": 122,
+  "passed": 123,
+  "total": 123,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -2130,15 +2130,33 @@
       "passed": true
     },
     {
+      "fixture": "logical-unscoped-effect.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/logical-unscoped-effect.cod"
+      ],
+      "expected": {
+        "file": "logical-unscoped-effect.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "conditional rebinding in a logical operand needs an explicit scope"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/logical-unscoped-effect.cod:3:7: conditional rebinding in a logical operand needs an explicit scope\n",
+      "passed": true
+    },
+    {
       "fixture": "frontend-only",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-ktidk8e_/program.ll",
+        "/tmp/cod-language-check-vlgdzu4l/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-ktidk8e_/program.bc"
+        "/tmp/cod-language-check-vlgdzu4l/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2148,18 +2166,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "158716bc0d35f12343228d930caf56c27ec4a26a08217c38232c58a00e531165"
+    "sha256": "43d8d80a22cacdbee4a021dd64a3839da08139068341418dbbe3402b1c19b7f0"
   },
   "source_sha256": {
-    "cod/main.cc": "01fe80cbbe5bb365861a797c8fc3ddc1e0c7fb17ad0081dcfac8ddef46b940c6",
+    "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "86d8266f2be6e0789cf64a8816dd0e6cc830cfd867345e01a394227d60664a10",
-    "cod/lang_frontend.hh": "2826f6c5e403f1e0dc105df39341aeccfd7b6c71ce56cd0358d4441b1deb668c",
-    "cod/lang_llvm.hh": "a4e83b38939e7f94d844c8918409cfd7a96a36bb46efa131977d4de176790ff3",
+    "cod/lang_frontend.hh": "0253b9cc0a6287cd91bfcdbe2fd0be1b285f51df24870dcd7e918b2d4fb2e7b2",
+    "cod/lang_llvm.hh": "c72c632d3bac0ecf9aa0365ff820f75012b65c6a79c74ba6f3dde39e52e34b4e",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "c16c4602b95f7052e9161950396ba181a81ae5b3ba9d98faa79b821554f1960d",
-    "tests/cod/language/cases.json": "08f8c0fee110ed3001df2f5b29e6a7c313e6fc75d0a20a699025d324dc756260",
+    "tests/cod/language/cases.json": "16e945b64ae9f60a475eb3c83f731be5e2db75545042f75c3c9e01825d23c149",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2196,6 +2214,7 @@
     "tests/cod/language/iteration-index-error.cod": "f2a740829eae91e0cbacbd3f98ffde0b5dc777e2cc437865abbba9c996865ad6",
     "tests/cod/language/iteration-scope.cod": "71b031eb4f41b504bf7c0d257d44bda6c4ee9e70cde09293e446e4168a1c99bf",
     "tests/cod/language/late-alias-destination.cod": "06f1595b32fd5061ef439baf47280df1e3150f8b9ce7ff1e7d3c94faa61e5c13",
+    "tests/cod/language/logical-unscoped-effect.cod": "d44ef2717a820b3cc53d3b182e8ab9e3168f186dd408c672527e4991d676da06",
     "tests/cod/language/mapped-behave-later.cod": "552889d87d8eeef003dcdcc5e89da080447e9c74a414d7f31b7f2ebc8b35512d",
     "tests/cod/language/mapped-effects-model.cod": "3cc20044e1cd9fbaf5c92ac6ed048ab923da475d3e555887f8c3b91628bd4ccd",
     "tests/cod/language/mapped-perform-model.cod": "8bb222d131f6d17d7e9f45d18f094502d4ed3f58f0b38c23fe49291c6fe4cbde",
@@ -2316,10 +2335,9 @@
     "tests/cod/language/vocabulary.cod": "eba3e67c30f0ebaf5c68479886f99be7d80e1557e74d4b513bac4e136bccf223"
   },
   "component_suite": {
-    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=build/validation/language-llvm-final.json tests/cod/run-all.sh",
+    "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=build/validation/language-direct-values.json tests/cod/run-all.sh",
     "exit_code": 0,
     "passed_groups": 4,
-    "total_groups": 4,
-    "log_sha256": "8fa06282f4d8885dba62804ea69e068e45fb4cd090fb243a293f26caaba1d611"
+    "log_sha256": "239e94c50bf7464c6fb62040295e200ea527e3379920498e7ca3d12d014172b7"
   }
 }

@@ -36,7 +36,6 @@ class LLVMEmission {
   llvm::Function *entry_ = nullptr;
   llvm::IntegerType *pointer_integer_ = nullptr;
   llvm::StructType *array_header_ = nullptr;
-  std::map<std::string, llvm::Value *> values_;
   std::map<size_t, llvm::StructType *> records_;
   std::map<size_t, std::vector<Type>> fields_;
   std::map<size_t, llvm::GlobalVariable *> slots_;
@@ -51,11 +50,6 @@ class LLVMEmission {
   llvm::Type *void_type() { return llvm::Type::getVoidTy(context()); }
   llvm::IntegerType *i64() { return llvm::Type::getInt64Ty(context()); }
   llvm::PointerType *pointer_type() { return llvm::PointerType::getUnqual(context()); }
-  llvm::Value *value(const std::string &name) {
-    const auto found = values_.find(name);
-    if (found == values_.end()) throw std::logic_error("LLVM value not emitted: " + name);
-    return found->second;
-  }
   static Type representation(Type type) {
     return type.kind == Type::unit ? Type(type.representation) : type;
   }
@@ -93,7 +87,8 @@ class LLVMEmission {
     auto *absolute = b().CreateUnaryIntrinsic(llvm::Intrinsic::fabs, number);
     return b().CreateFCmpOLT(absolute, infinity);
   }
-  llvm::Value *binary_value(Type type, const std::string &op, llvm::Value *left, llvm::Value *right) {
+public:
+  llvm::Value *binary(Type type, const std::string &op, llvm::Value *left, llvm::Value *right) {
     if (floating(representation(type))) {
       if (op == "+") return b().CreateFAdd(left, right);
       if (op == "-") return b().CreateFSub(left, right);
@@ -159,7 +154,6 @@ public:
     entry_ = llvm::Function::Create(llvm::FunctionType::get(llvm::Type::getInt32Ty(context()), false),
                                      llvm::GlobalValue::ExternalLinkage, "main", *module_);
     builder_ = std::make_unique<llvm::IRBuilder<>>(llvm::BasicBlock::Create(context(), "entry", entry_));
-    values_.emplace("null", integer(i64(), 0));
   }
   llvm::Type *type_of(Type type) {
     type = representation(type);
@@ -191,13 +185,6 @@ public:
     record_type(type)->setBody(native);
     fields_[type.identity] = fields;
   }
-  void bind(const std::string &name, llvm::Value *native) {
-    if (!native) throw std::logic_error("missing LLVM lowering for " + name);
-    values_[name] = native;
-  }
-  void alias(const std::string &name, const std::string &source) {
-    bind(name, value(source));
-  }
   llvm::Value *bits(Type type, uint64_t bits) {
     return integer(llvm::cast<llvm::IntegerType>(type_of(type)), bits);
   }
@@ -207,11 +194,11 @@ public:
   llvm::Value *read_symbol(size_t id, Type type) {
     return b().CreateLoad(type_of(type), slot(id, type));
   }
-  void effect(size_t id, Type type, const std::string &source) {
+  void effect(size_t id, Type type, llvm::Value *source) {
     if (type == Type::region || type == Type::procedure) return;
     auto *address = slot(id, type);
     cleanups_.push_back({address, b().CreateLoad(type_of(type), address)});
-    b().CreateStore(value(source), address);
+    b().CreateStore(source, address);
   }
   size_t scope() const { return cleanups_.size(); }
   void restore(size_t mark) {
@@ -222,16 +209,16 @@ public:
       else call_runtime("cod_lang_region_free", void_type(), {cleanup.address});
     }
   }
-  llvm::Value *product(Type type, const std::vector<std::string> &args) {
+  llvm::Value *product(Type type, const std::vector<llvm::Value *> &args) {
     llvm::Value *result = llvm::Constant::getNullValue(type_of(type));
-    for (size_t i = 0; i < args.size(); ++i) result = b().CreateInsertValue(result, value(args[i]), unsigned(i));
+    for (size_t i = 0; i < args.size(); ++i) result = b().CreateInsertValue(result, args[i], unsigned(i));
     return result;
   }
-  llvm::Value *field(const std::string &source, size_t field) {
-    return b().CreateExtractValue(value(source), unsigned(field));
+  llvm::Value *field(llvm::Value *source, size_t field) {
+    return b().CreateExtractValue(source, unsigned(field));
   }
-  void print(Type type, const std::string &source) {
-    auto *number = value(source);
+  void print(Type type, llvm::Value *source) {
+    auto *number = source;
     std::string suffix;
     if (type == Type::boolean) {
       suffix = "bool";
@@ -245,29 +232,23 @@ public:
     }
     call_runtime("cod_lang_print_" + suffix, void_type(), {number});
   }
-  void assert_value(const std::string &source) {
-    require(value(source), "CoD assertion failed");
+  void assert_value(llvm::Value *source) {
+    require(source, "CoD assertion failed");
   }
-  llvm::Value *binary(Type type, const std::string &op, const std::string &left, const std::string &right) {
-    return binary_value(type, op, value(left), value(right));
-  }
-  llvm::Value *unary(Type type, const std::string &op, const std::string &source) {
-    auto *number = value(source);
+  llvm::Value *unary(Type type, const std::string &op, llvm::Value *source) {
+    auto *number = source;
     if (op == "!") return b().CreateNot(number);
     if (floating(representation(type))) return b().CreateFNeg(number);
-    return binary_value(type, "-", llvm::Constant::getNullValue(number->getType()), number);
+    return binary(type, "-", llvm::Constant::getNullValue(number->getType()), number);
   }
-  llvm::Value *reference_equal(const std::string &op, const std::string &left, const std::string &right,
+  llvm::Value *reference_equal(const std::string &op, llvm::Value *left, llvm::Value *right,
                                 bool different_regions) {
-    auto *a = value(left), *c = value(right);
+    auto *a = left, *c = right;
     auto *equal = different_regions ? b().CreateAnd(b().CreateICmpEQ(a, integer(i64(), 0)),
                                                     b().CreateICmpEQ(c, integer(i64(), 0))) : b().CreateICmpEQ(a, c);
     return op == "==" ? equal : b().CreateNot(equal);
   }
-  llvm::Value *cast(Type from, Type to, const std::string &source) {
-    return cast_value(from, to, value(source));
-  }
-  llvm::Value *cast_value(Type from, Type to, llvm::Value *number) {
+  llvm::Value *cast(Type from, Type to, llvm::Value *number) {
     from = representation(from);
     to = representation(to);
     if (from == to) return number;
@@ -314,30 +295,29 @@ public:
     llvm::BasicBlock *otherwise = nullptr, *merge = nullptr, *first_end = nullptr;
     llvm::Value *first_value = nullptr;
   };
-  Branch branch(const std::string &condition, bool invert = false) {
+  Branch branch(llvm::Value *condition, bool invert = false) {
     auto *yes = llvm::BasicBlock::Create(context(), "then", entry_);
     auto *no = llvm::BasicBlock::Create(context(), "else", entry_);
     auto *merge = llvm::BasicBlock::Create(context(), "merge", entry_);
-    auto *test = value(condition);
+    auto *test = condition;
     b().CreateCondBr(invert ? b().CreateNot(test) : test, yes, no);
     b().SetInsertPoint(yes);
     return {no, merge, nullptr, nullptr};
   }
-  void otherwise(Branch &branch, const std::string &first = {}) {
+  void otherwise(Branch &branch, llvm::Value *first = nullptr) {
     branch.first_end = b().GetInsertBlock();
-    if (!first.empty()) branch.first_value = value(first);
+    branch.first_value = first;
     b().CreateBr(branch.merge);
     b().SetInsertPoint(branch.otherwise);
   }
-  llvm::Value *merge(Branch &branch, Type type, const std::string &second = {}) {
+  llvm::Value *merge(Branch &branch, Type type, llvm::Value *second = nullptr) {
     auto *second_end = b().GetInsertBlock();
-    auto *second_value = second.empty() ? nullptr : value(second);
     b().CreateBr(branch.merge);
     b().SetInsertPoint(branch.merge);
     if (type == Type::void_type) return nullptr;
     auto *result = b().CreatePHI(type_of(type), 2);
     result->addIncoming(branch.first_value, branch.first_end);
-    result->addIncoming(second_value, second_end);
+    result->addIncoming(second, second_end);
     return result;
   }
 
@@ -345,8 +325,7 @@ public:
     llvm::BasicBlock *header = nullptr, *exit = nullptr;
     llvm::PHINode *index = nullptr, *accumulator = nullptr;
   };
-  Loop loop(Type index_type, const std::string &index_name, const std::string &first, const std::string &last,
-            Type accumulator_type, const std::string &accumulator_name = {}, const std::string &initial = {}) {
+  Loop loop(Type index_type, llvm::Value *first, llvm::Value *last, llvm::Value *initial = nullptr) {
     auto *before = b().GetInsertBlock();
     auto *header = llvm::BasicBlock::Create(context(), "loop", entry_);
     auto *body = llvm::BasicBlock::Create(context(), "body", entry_);
@@ -354,26 +333,23 @@ public:
     b().CreateBr(header);
     b().SetInsertPoint(header);
     auto *index = b().CreatePHI(type_of(index_type), 2, "index");
-    index->addIncoming(value(first), before);
-    bind(index_name, index);
+    index->addIncoming(first, before);
     llvm::PHINode *accumulator = nullptr;
-    if (!accumulator_name.empty()) {
-      auto *start = value(initial);
-      accumulator = b().CreatePHI(type_of(accumulator_type), 2, "accumulator");
-      accumulator->addIncoming(start, before);
-      bind(accumulator_name, accumulator);
+    if (initial) {
+      accumulator = b().CreatePHI(initial->getType(), 2, "accumulator");
+      accumulator->addIncoming(initial, before);
     }
-    auto *condition = signed_integer(index_type) ? b().CreateICmpSLT(index, value(last)) :
-                                                  b().CreateICmpULT(index, value(last));
+    auto *condition = signed_integer(index_type) ? b().CreateICmpSLT(index, last) :
+                                                  b().CreateICmpULT(index, last);
     b().CreateCondBr(condition, body, exit);
     b().SetInsertPoint(body);
     return {header, exit, index, accumulator};
   }
-  void end_loop(Loop &loop, const std::string &next = {}) {
+  void end_loop(Loop &loop, llvm::Value *next = nullptr) {
     auto *end = b().GetInsertBlock();
     auto *index = b().CreateAdd(loop.index, integer(llvm::cast<llvm::IntegerType>(loop.index->getType()), 1));
     loop.index->addIncoming(index, end);
-    if (loop.accumulator) loop.accumulator->addIncoming(value(next), end);
+    if (loop.accumulator) loop.accumulator->addIncoming(next, end);
     b().CreateBr(loop.header);
     b().SetInsertPoint(loop.exit);
   }
@@ -382,17 +358,17 @@ private:
   llvm::Value *address(llvm::Value *region, llvm::Value *offset) {
     return b().CreateGEP(llvm::Type::getInt8Ty(context()), region, offset);
   }
-  llvm::Value *checked_address(const std::string &owner, const std::string &offset) {
-    auto *position = value(offset);
+  llvm::Value *checked_address(llvm::Value *owner, llvm::Value *offset) {
+    auto *position = offset;
     require(b().CreateICmpNE(position, integer(i64(), 0)), "null regional reference");
-    return address(value(owner), position);
+    return address(owner, position);
   }
   llvm::Value *offset_of(llvm::Value *region, llvm::Value *target) {
     auto *offset = b().CreateSub(b().CreatePtrToInt(target, pointer_integer_), b().CreatePtrToInt(region, pointer_integer_));
     return b().CreateZExtOrTrunc(offset, i64());
   }
-  llvm::Value *allocate(const std::string &owner, llvm::Value *bytes, uint64_t alignment) {
-    return call_runtime("cod_lang_region_alloc", i64(), {value(owner), bytes, integer(i64(), alignment)});
+  llvm::Value *allocate(llvm::Value *owner, llvm::Value *bytes, uint64_t alignment) {
+    return call_runtime("cod_lang_region_alloc", i64(), {owner, bytes, integer(i64(), alignment)});
   }
   void store_reference(llvm::Value *region, llvm::Value *field, llvm::Value *offset) {
     auto *target = address(region, offset);
@@ -406,45 +382,45 @@ private:
     auto *offset = offset_of(region, target);
     return b().CreateSelect(b().CreateICmpEQ(relative, integer(pointer_integer_, 0)), integer(i64(), 0), offset);
   }
-  llvm::Value *array_address(const std::string &owner, const std::string &array,
-                              Type index_type, const std::string &index, Type element) {
+  llvm::Value *array_address(llvm::Value *owner, llvm::Value *array,
+                              Type index_type, llvm::Value *index, Type element) {
     auto *header = checked_address(owner, array);
     auto *length = b().CreateLoad(i64(), b().CreateStructGEP(array_header_, header, 1));
-    auto *position = cast_value(index_type, Type::uint64, value(index));
+    auto *position = cast(index_type, Type::uint64, index);
     require(b().CreateICmpULT(position, length), "regional array index out of bounds");
-    auto *offset = read_reference(value(owner), b().CreateStructGEP(array_header_, header, 0));
-    return b().CreateGEP(type_of(element), address(value(owner), offset), position);
+    auto *offset = read_reference(owner, b().CreateStructGEP(array_header_, header, 0));
+    return b().CreateGEP(type_of(element), address(owner, offset), position);
   }
 
 public:
-  llvm::Value *region_new(Type capacity_type, const std::string &capacity) {
-    auto *bytes = cast_value(capacity_type, Type::uint64, value(capacity));
+  llvm::Value *region_new(Type capacity_type, llvm::Value *capacity) {
+    auto *bytes = cast(capacity_type, Type::uint64, capacity);
     auto *region = call_runtime("cod_lang_region_new", pointer_type(), {bytes});
     cleanups_.push_back({region, nullptr});
     return region;
   }
-  llvm::Value *region_size(const std::string &owner, bool capacity) {
-    return call_runtime(capacity ? "cod_lang_region_capacity" : "cod_lang_region_used", i64(), {value(owner)});
+  llvm::Value *region_size(llvm::Value *owner, bool capacity) {
+    return call_runtime(capacity ? "cod_lang_region_capacity" : "cod_lang_region_used", i64(), {owner});
   }
-  llvm::Value *record_new(const std::string &owner, Type type, const std::vector<std::string> &args) {
+  llvm::Value *record_new(llvm::Value *owner, Type type, const std::vector<llvm::Value *> &args) {
     auto *record = record_type(type);
     const auto &layout = module_->getDataLayout();
     auto *offset = allocate(owner, integer(i64(), layout.getTypeAllocSize(record).getFixedValue()), layout.getABITypeAlign(record).value());
-    auto *storage = address(value(owner), offset);
+    auto *storage = address(owner, offset);
     const auto &fields = fields_.at(type.identity);
     for (size_t i = 0; i < args.size(); ++i) {
       auto *field = b().CreateStructGEP(record, storage, unsigned(i));
-      if (fields[i].kind == Type::reference) store_reference(value(owner), field, value(args[i]));
-      else b().CreateStore(value(args[i]), field);
+      if (fields[i].kind == Type::reference) store_reference(owner, field, args[i]);
+      else b().CreateStore(args[i], field);
     }
     return offset;
   }
-  llvm::Value *array_new(const std::string &owner, Type element, Type count_type,
-                          const std::string &count, const std::string &initial) {
+  llvm::Value *array_new(llvm::Value *owner, Type element, Type count_type,
+                          llvm::Value *count, llvm::Value *initial) {
     const auto &layout = module_->getDataLayout();
-    auto *length = cast_value(count_type, Type::uint64, value(count));
+    auto *length = cast(count_type, Type::uint64, count);
     auto *offset = allocate(owner, integer(i64(), layout.getTypeAllocSize(array_header_).getFixedValue()), layout.getABITypeAlign(array_header_).value());
-    auto *header = address(value(owner), offset);
+    auto *header = address(owner, offset);
     auto *pointer_field = b().CreateStructGEP(array_header_, header, 0);
     b().CreateStore(integer(pointer_integer_, 0), pointer_field);
     b().CreateStore(length, b().CreateStructGEP(array_header_, header, 1));
@@ -453,52 +429,52 @@ public:
     b().CreateCondBr(b().CreateICmpNE(length, integer(i64(), 0)), allocate_block, done);
     b().SetInsertPoint(allocate_block);
     auto *element_type = type_of(element);
-    auto *bytes = binary_value(Type::uint64, "*", length, integer(i64(), layout.getTypeAllocSize(element_type).getFixedValue()));
+    auto *bytes = binary(Type::uint64, "*", length, integer(i64(), layout.getTypeAllocSize(element_type).getFixedValue()));
     auto *data_offset = allocate(owner, bytes, layout.getABITypeAlign(element_type).value());
-    auto *data = address(value(owner), data_offset);
-    store_reference(value(owner), pointer_field, data_offset);
+    auto *data = address(owner, data_offset);
+    store_reference(owner, pointer_field, data_offset);
     auto *before = b().GetInsertBlock();
     auto *fill = llvm::BasicBlock::Create(context(), "array.fill", entry_);
     b().CreateBr(fill);
     b().SetInsertPoint(fill);
     auto *index = b().CreatePHI(i64(), 2);
     index->addIncoming(integer(i64(), 0), before);
-    b().CreateStore(value(initial), b().CreateGEP(element_type, data, index));
+    b().CreateStore(initial, b().CreateGEP(element_type, data, index));
     auto *next = b().CreateAdd(index, integer(i64(), 1));
     index->addIncoming(next, fill);
     b().CreateCondBr(b().CreateICmpULT(next, length), fill, done);
     b().SetInsertPoint(done);
     return offset;
   }
-  llvm::Value *dereference(const std::string &owner, const std::string &source, Type type) {
+  llvm::Value *dereference(llvm::Value *owner, llvm::Value *source, Type type) {
     return b().CreateLoad(type_of(type), checked_address(owner, source));
   }
-  llvm::Value *regional_field(const std::string &owner, const std::string &source,
+  llvm::Value *regional_field(llvm::Value *owner, llvm::Value *source,
                                Type record, size_t index, Type field_type) {
     auto *field = b().CreateStructGEP(record_type(record), checked_address(owner, source), unsigned(index));
-    return field_type.kind == Type::reference ? read_reference(value(owner), field) : b().CreateLoad(type_of(field_type), field);
+    return field_type.kind == Type::reference ? read_reference(owner, field) : b().CreateLoad(type_of(field_type), field);
   }
-  void set_field(const std::string &owner, const std::string &source, Type record,
-                 size_t index, Type field_type, const std::string &input) {
+  void set_field(llvm::Value *owner, llvm::Value *source, Type record,
+                 size_t index, Type field_type, llvm::Value *input) {
     auto *field = b().CreateStructGEP(record_type(record), checked_address(owner, source), unsigned(index));
-    if (field_type.kind == Type::reference) store_reference(value(owner), field, value(input));
-    else b().CreateStore(value(input), field);
+    if (field_type.kind == Type::reference) store_reference(owner, field, input);
+    else b().CreateStore(input, field);
   }
-  llvm::Value *array_length(const std::string &owner, const std::string &source) {
+  llvm::Value *array_length(llvm::Value *owner, llvm::Value *source) {
     return b().CreateLoad(i64(), b().CreateStructGEP(array_header_, checked_address(owner, source), 1));
   }
-  llvm::Value *array_element(const std::string &owner, const std::string &source, Type index_type,
-                              const std::string &index, Type element, bool reference) {
+  llvm::Value *array_element(llvm::Value *owner, llvm::Value *source, Type index_type,
+                              llvm::Value *index, Type element, bool reference) {
     auto *location = array_address(owner, source, index_type, index, element);
-    return reference ? offset_of(value(owner), location) : b().CreateLoad(type_of(element), location);
+    return reference ? offset_of(owner, location) : b().CreateLoad(type_of(element), location);
   }
-  llvm::Value *array_store(const std::string &owner, const std::string &source, Type index_type,
-                            const std::string &index, Type element, const std::string &input) {
-    b().CreateStore(value(input), array_address(owner, source, index_type, index, element));
-    return value(input);
+  llvm::Value *array_store(llvm::Value *owner, llvm::Value *source, Type index_type,
+                            llvm::Value *index, Type element, llvm::Value *input) {
+    b().CreateStore(input, array_address(owner, source, index_type, index, element));
+    return input;
   }
-  void scalar_store(const std::string &owner, const std::string &source, const std::string &input) {
-    b().CreateStore(value(input), checked_address(owner, source));
+  void scalar_store(llvm::Value *owner, llvm::Value *source, llvm::Value *input) {
+    b().CreateStore(input, checked_address(owner, source));
   }
 
   std::pair<std::string, std::string> finish() {

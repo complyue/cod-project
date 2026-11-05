@@ -20,7 +20,7 @@ struct Module;
 struct Procedure;
 struct Value {
   Type type = Type::void_type;
-  std::string code; // SSA value handle; procedure bindings are compile-time metadata.
+  llvm::Value *native = nullptr; // Procedure bindings are compile-time metadata.
   std::shared_ptr<Procedure> procedure;
   Module *owner = nullptr;
   std::optional<size_t> region_id = {};
@@ -73,7 +73,6 @@ class Compiler {
   std::map<size_t, Type> symbol_types_;
   std::vector<std::string> scanned_;
   std::vector<std::string> execution_order_;
-  size_t serial_ = 0;
   std::set<const Form *> active_calls_;
   std::vector<std::unique_ptr<Form>> imported_forms_;
   struct Product {
@@ -90,7 +89,7 @@ class Compiler {
     bool resolved = false;
   };
   std::vector<Array> arrays_;
-  struct Region { std::string owner; bool active = true; };
+  struct Region { llvm::Value *owner; bool active = true; };
   std::vector<Region> regions_;
   bool regional_runtime_ = false;
   size_t next_unit_ = 0;
@@ -103,13 +102,12 @@ class Compiler {
     if (reserved.contains(name)) fail(at, "reserved scalar type name '" + name + "'");
   }
 
-  std::string fresh(const char *prefix = "v") { return std::string(prefix) + std::to_string(serial_++); }
   static Type reference(Type target) {
     Type type{Type::reference};
     type.target = std::make_shared<Type>(std::move(target));
     return type;
   }
-  std::string region_name(const Value &value, const Location &at) {
+  llvm::Value *region_pointer(const Value &value, const Location &at) {
     if (!value.region_id || !regions_.at(*value.region_id).active)
       fail(at, "regional value requires a live owning region in this caller scope");
     return regions_.at(*value.region_id).owner;
@@ -173,9 +171,7 @@ class Compiler {
     return type;
   }
   Value scalar(Type type, llvm::Value *native, std::optional<size_t> region_id = {}) {
-    const auto name = fresh();
-    ir_.bind(name, native);
-    return {type, name, {}, nullptr, region_id};
+    return {type, native, {}, nullptr, region_id};
   }
   static void require(Type actual, Type expected, const Location &at) {
     if (actual != expected)
@@ -349,7 +345,7 @@ class Compiler {
   Value read_symbol(size_t id, const Environment &env, const Location &at) {
     const auto found = env.find(id);
     if (found == env.end()) fail(at, "missing required binding " + symbol_names_[id]);
-    if (found->second.region_id) region_name(found->second, at);
+    if (found->second.region_id) region_pointer(found->second, at);
     if (found->second.type == Type::procedure || found->second.type == Type::region) return found->second;
     const auto type = found->second.type;
     return scalar(type, ir_.read_symbol(id, type), found->second.region_id);
@@ -358,9 +354,9 @@ class Compiler {
     if (value.type == Type::void_type) fail(at, "a symbol cannot be bound to void");
     if (value.type.kind == Type::regional || value.type.kind == Type::array || value.type == Type::null_ref)
       fail(at, "bind bits or a typed regional reference, not a dereferenced regional object");
-    if (value.region_id) region_name(value, at);
+    if (value.region_id) region_pointer(value, at);
     fix_type(id, value.type, at);
-    ir_.effect(id, value.type, value.code);
+    ir_.effect(id, value.type, value.native);
     value.owner = &owner;
     env[id] = std::move(value);
   }
@@ -451,9 +447,7 @@ class Compiler {
       if (found == env.end()) continue; // A perform path must later prove the capture exists.
       auto value = found->second;
       if (value.type != Type::procedure && value.type != Type::region) {
-        value.code = fresh("capture");
-
-        ir_.bind(value.code, ir_.read_symbol(id, value.type));
+        value.native = ir_.read_symbol(id, value.type);
       }
       proc->captures.emplace(id, std::move(value));
     }
@@ -484,7 +478,7 @@ class Compiler {
     Locals locals;
     for (size_t i = 0; i < args.size(); ++i) {
       require(args[i].type, resolve(form.parameters[i].type, lexical, form.parameters[i].at), at);
-      if (args[i].region_id) region_name(args[i], at);
+      if (args[i].region_id) region_pointer(args[i], at);
       if (pure && args[i].type == Type::region) fail(at, "a function reads input snapshots, not region resources");
       if (!locals.emplace(form.parameters[i].name, args[i]).second)
         fail(form.parameters[i].at, "duplicate parameter name");
@@ -673,7 +667,7 @@ class Compiler {
   Type array_type(const Value &value, const Location &at) {
     const auto type = value.type.kind == Type::reference ? *value.type.target : value.type;
     if (type.kind != Type::array) fail(at, "expected a regional array");
-    region_name(value, at);
+    region_pointer(value, at);
     return type;
   }
   Value array_element(Value array, Value index, const Location &at, bool as_reference = false) {
@@ -681,7 +675,7 @@ class Compiler {
     const auto &layout = arrays_.at(type.identity);
     require(index.type, layout.index, at);
     const auto result_type = as_reference ? reference(layout.element) : layout.element;
-    return scalar(result_type, ir_.array_element(region_name(array, at), array.code, index.type, index.code, layout.element, as_reference), as_reference ? array.region_id : std::nullopt);
+    return scalar(result_type, ir_.array_element(region_pointer(array, at), array.native, index.type, index.native, layout.element, as_reference), as_reference ? array.region_id : std::nullopt);
   }
   Value invoke(const Expression &expr, Module &module, Environment &env, Locals &locals,
                bool pure) {
@@ -696,11 +690,11 @@ class Compiler {
       if (args.size() != 1) fail(expr.at, "@" + proc->builtin + " expects one argument");
       if (proc->builtin == "assert") {
         require(args[0].type, Type::boolean, expr.at);
-        ir_.assert_value(args[0].code);
+        ir_.assert_value(args[0].native);
       } else {
         if (!numeric(args[0].type) && args[0].type != Type::boolean)
           fail(expr.at, "@print expects a numeric scalar or bool");
-        ir_.print(args[0].type, args[0].code);
+        ir_.print(args[0].type, args[0].native);
       }
       return {};
     }
@@ -728,7 +722,7 @@ class Compiler {
     if (pure) fail(expr.at, "a function cannot allocate regional storage");
     auto owner = expression(*expr.children[0], module, env, locals, pure);
     require(owner.type, Type::region, expr.at);
-    region_name(owner, expr.at);
+    region_pointer(owner, expr.at);
     auto type = resolve({Type::named, expr.text}, module, expr.at);
     if (type.kind != Type::array && type.kind != Type::regional)
       fail(expr.at, "alloc requires a regional type or regional array");
@@ -752,12 +746,12 @@ class Compiler {
 
       }
     }
-    std::vector<std::string> native_args;
-    for (const auto &arg : args) native_args.push_back(arg.code);
+    std::vector<llvm::Value *> native_args;
+    for (const auto &arg : args) native_args.push_back(arg.native);
     auto *native = type.kind == Type::array ?
-        ir_.array_new(region_name(owner, expr.at), arrays_.at(type.identity).element,
-                      args[0].type, args[0].code, args[1].code) :
-        ir_.record_new(region_name(owner, expr.at), type, native_args);
+        ir_.array_new(region_pointer(owner, expr.at), arrays_.at(type.identity).element,
+                      args[0].type, args[0].native, args[1].native) :
+        ir_.record_new(region_pointer(owner, expr.at), type, native_args);
     return scalar(reference(type), native, owner.region_id);
   }
   Value loop_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
@@ -768,24 +762,21 @@ class Compiler {
     require(last.type, first.type, expr.at);
     if (!integral(first.type) && !(first.type.kind == Type::unit && integral(first.type.representation)))
       fail(expr.at, "a range requires integer endpoints or one integer-backed UoM identity");
-    const auto index = fresh("index");
-    auto inner_locals = locals;
-    inner_locals[expr.text] = {first.type, index, {}, nullptr};
     Value accumulator;
-    std::string initial;
     if (expr.kind == K::fold) {
       accumulator = expression(*expr.children[2], module, env, locals, pure);
       if (accumulator.type == Type::void_type || accumulator.type == Type::procedure ||
           accumulator.type == Type::region || accumulator.type == Type::null_ref ||
           accumulator.type.kind == Type::array || accumulator.type.kind == Type::regional)
         fail(expr.at, "a fold accumulator requires a bits value");
-      const auto name = fresh("accumulator");
-
-      initial = accumulator.code;
-      accumulator.code = name;
+    }
+    auto native_loop = ir_.loop(first.type, first.native, last.native, accumulator.native);
+    auto inner_locals = locals;
+    inner_locals[expr.text] = {first.type, native_loop.index, {}, nullptr};
+    if (expr.kind == K::fold) {
+      accumulator.native = native_loop.accumulator;
       inner_locals[expr.binding] = accumulator;
     }
-    auto native_loop = ir_.loop(first.type, index, first.code, last.code, accumulator.type, accumulator.code, initial);
 
     const auto next = block(*expr.children.back(), module, env, std::move(inner_locals), pure);
 
@@ -793,10 +784,8 @@ class Compiler {
       require(next.type, accumulator.type, expr.at);
       if (next.region_id != accumulator.region_id)
         fail(expr.at, "a fold reference must retain its owning region");
-
     }
-
-    ir_.end_loop(native_loop, next.code);
+    ir_.end_loop(native_loop, next.native);
     return accumulator;
   }
   Value call_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
@@ -807,10 +796,9 @@ class Compiler {
       const auto args = arguments(expr, module, env, locals, pure);
       if (args.size() != 1 || !integral(args[0].type)) fail(expr.at, "region requires an integer byte capacity");
       regional_runtime_ = true;
-      const auto owner = fresh("region");
+      auto *owner = ir_.region_new(args[0].type, args[0].native);
       const auto id = regions_.size();
       regions_.push_back({owner, true});
-      ir_.bind(owner, ir_.region_new(args[0].type, args[0].code));
 
       return {Type::region, owner, {}, nullptr, id};
     }
@@ -819,24 +807,24 @@ class Compiler {
       const auto args = arguments(expr, module, env, locals, pure);
       if (args.size() != 1) fail(expr.at, "region size requires one resource");
       require(args[0].type, Type::region, expr.at);
-      return scalar(Type::uint64, ir_.region_size(region_name(args[0], expr.at), expr.text == "capacity_bytes"));
+      return scalar(Type::uint64, ir_.region_size(region_pointer(args[0], expr.at), expr.text == "capacity_bytes"));
     }
     if (expr.text == "deref") {
       const auto args = arguments(expr, module, env, locals, pure);
       if (args.size() != 1 || args[0].type.kind != Type::reference)
         fail(expr.at, "deref requires a typed regional reference");
       const auto type = resolve(*args[0].type.target, module, expr.at);
-      region_name(args[0], expr.at);
+      region_pointer(args[0], expr.at);
       if (type.kind == Type::array || type.kind == Type::regional)
-        return {type, args[0].code, {}, nullptr, args[0].region_id};
-      return scalar(type, ir_.dereference(region_name(args[0], expr.at), args[0].code, type));
+        return {type, args[0].native, {}, nullptr, args[0].region_id};
+      return scalar(type, ir_.dereference(region_pointer(args[0], expr.at), args[0].native, type));
     }
     if (expr.text == "len" || expr.text == "ref_at") {
       const auto args = arguments(expr, module, env, locals, pure);
       if (args.size() != (expr.text == "len" ? 1u : 2u)) fail(expr.at, "wrong array argument count");
       if (expr.text == "ref_at") return array_element(args[0], args[1], expr.at, true);
       array_type(args[0], expr.at);
-      return scalar(Type::uint64, ir_.array_length(region_name(args[0], expr.at), args[0].code));
+      return scalar(Type::uint64, ir_.array_length(region_pointer(args[0], expr.at), args[0].native));
     }
     if (expr.text == "store") {
       if (pure) fail(expr.at, "a function cannot modify regional storage");
@@ -845,7 +833,7 @@ class Compiler {
           (numeric(*args[0].type.target) || *args[0].type.target == Type::boolean || args[0].type.target->kind == Type::unit)) {
         require(args[1].type, *args[0].type.target, expr.at);
 
-        ir_.scalar_store(region_name(args[0], expr.at), args[0].code, args[1].code);
+        ir_.scalar_store(region_pointer(args[0], expr.at), args[0].native, args[1].native);
         return args[1];
       }
       if (args.size() != 3) fail(expr.at, "store requires an array/index/value or scalar reference/value");
@@ -853,7 +841,7 @@ class Compiler {
       const auto &layout = arrays_.at(type.identity);
       require(args[1].type, layout.index, expr.at);
       require(args[2].type, layout.element, expr.at);
-      return scalar(layout.element, ir_.array_store(region_name(args[0], expr.at), args[0].code, args[1].type, args[1].code, layout.element, args[2].code));
+      return scalar(layout.element, ir_.array_store(region_pointer(args[0], expr.at), args[0].native, args[1].type, args[1].native, layout.element, args[2].native));
     }
     if (expr.text == "setfield") {
       if (pure) fail(expr.at, "a function cannot modify regional storage");
@@ -872,11 +860,11 @@ class Compiler {
         require(value.type, field, expr.at);
         if (value.region_id && value.region_id != object.region_id)
           fail(expr.at, "cross-region reference fields are outside this prototype");
-        region_name(object, expr.at);
+        region_pointer(object, expr.at);
 
         if (field.kind == Type::reference) value.region_id = object.region_id;
 
-        ir_.set_field(region_name(object, expr.at), object.code, type, i, field, value.code);
+        ir_.set_field(region_pointer(object, expr.at), object.native, type, i, field, value.native);
         return value;
       }
       fail(expr.at, "no such regional field '" + expr.children[1]->text + "'");
@@ -886,7 +874,7 @@ class Compiler {
     if (const auto cast = casts.find(expr.text); cast != casts.end()) {
       const auto args = arguments(expr, module, env, locals, pure);
       if (args.size() != 1 || !numeric(args[0].type)) fail(expr.at, "numeric conversion requires one scalar value");
-      return scalar(cast->second, ir_.cast(args[0].type, cast->second, args[0].code));
+      return scalar(cast->second, ir_.cast(args[0].type, cast->second, args[0].native));
     }
     if (const auto found = module.types.find(expr.text); found != module.types.end()) {
       const auto type = resolve(found->second, module, expr.at);
@@ -896,14 +884,14 @@ class Compiler {
       if (type.kind == Type::unit) {
         if (args.size() != 1) fail(expr.at, "a UoM constructor requires one scalar value");
         require(args[0].type, type.representation, expr.at);
-        return {type, args[0].code, {}, nullptr};
+        return {type, args[0].native, {}, nullptr};
       }
       const auto &fields = products_.at(type.identity).fields;
       if (args.size() != fields.size()) fail(expr.at, "wrong field count for '" + expr.text + "'");
 
       for (size_t i = 0; i < args.size(); ++i) require(args[i].type, fields[i].type, expr.at);
-      std::vector<std::string> native_args;
-      for (const auto &arg : args) native_args.push_back(arg.code);
+      std::vector<llvm::Value *> native_args;
+      for (const auto &arg : args) native_args.push_back(arg.native);
       return scalar(type, ir_.product(type, native_args));
     }
     const auto function = module.functions.find(expr.text);
@@ -911,7 +899,7 @@ class Compiler {
       const auto args = arguments(expr, module, env, locals, pure);
       if (args.size() != 1 || args[0].type.kind != Type::unit)
         fail(expr.at, "scalar requires one UoM value");
-      return {args[0].type.representation, args[0].code, {}, nullptr};
+      return {args[0].type.representation, args[0].native, {}, nullptr};
     }
     if (function == module.functions.end()) fail(expr.at, "unavailable lexical function '" + expr.text + "'");
     const auto args = arguments(expr, module, env, locals, pure);
@@ -931,15 +919,14 @@ class Compiler {
       auto right_env = env;
       auto right_locals = locals;
 
-      auto native_branch = ir_.branch(left.code, expr.text == "||");
+      const auto native_scope = ir_.scope();
+      auto native_branch = ir_.branch(left.native, expr.text == "||");
       const auto right = expression(*expr.children[1], module, right_env, right_locals, pure);
       require(right.type, Type::boolean, expr.at);
-      if (right_env != env) fail(expr.at, "conditional rebinding in a logical operand needs an explicit scope");
-      const auto result = fresh("logical");
-      ir_.otherwise(native_branch, right.code);
-      ir_.bind(result, ir_.merge(native_branch, Type::boolean, left.code));
-
-      return {Type::boolean, result, {}, nullptr};
+      if (right_env != env || ir_.scope() != native_scope)
+        fail(expr.at, "conditional rebinding in a logical operand needs an explicit scope");
+      ir_.otherwise(native_branch, right.native);
+      return scalar(Type::boolean, ir_.merge(native_branch, Type::boolean, left.native));
     }
     auto right = expression(*expr.children[1], module, env, locals, pure);
     if (const auto selected = method(expr.text, module, {left, right}, expr.at))
@@ -948,32 +935,28 @@ class Compiler {
         (left.type.kind == Type::reference || left.type == Type::null_ref) &&
         (right.type.kind == Type::reference || right.type == Type::null_ref)) {
       if (left.type != Type::null_ref && right.type != Type::null_ref) require(right.type, left.type, expr.at);
-      return scalar(Type::boolean, ir_.reference_equal(expr.text, left.code, right.code,
+      return scalar(Type::boolean, ir_.reference_equal(expr.text, left.native, right.native,
                       left.region_id && right.region_id && left.region_id != right.region_id));
     }
     require(right.type, left.type, expr.at);
     if (expr.text == "==" || expr.text == "!=") {
       if (!numeric(left.type) && left.type != Type::boolean) fail(expr.at, "equality requires scalar bits");
-      return scalar(Type::boolean, ir_.binary(left.type, expr.text, left.code, right.code));
+      return scalar(Type::boolean, ir_.binary(left.type, expr.text, left.native, right.native));
     }
     if (!numeric(left.type)) fail(expr.at, "arithmetic requires numeric operands");
     if (expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=")
-      return scalar(Type::boolean, ir_.binary(left.type, expr.text, left.code, right.code));
-    if (floating(left.type)) {
-      if (expr.text == "%") fail(expr.at, "remainder requires integer operands");
-      return scalar(left.type, ir_.binary(left.type, expr.text, left.code, right.code));
-    }
-
-    return scalar(left.type, ir_.binary(left.type, expr.text, left.code, right.code));
+      return scalar(Type::boolean, ir_.binary(left.type, expr.text, left.native, right.native));
+    if (floating(left.type) && expr.text == "%") fail(expr.at, "remainder requires integer operands");
+    return scalar(left.type, ir_.binary(left.type, expr.text, left.native, right.native));
   }
   Value conditional_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
                           bool pure) {
     const auto condition = expression(*expr.children[0], module, env, locals, pure);
     require(condition.type, Type::boolean, expr.at);
 
-    auto native_branch = ir_.branch(condition.code);
+    auto native_branch = ir_.branch(condition.native);
     auto first = block(*expr.children[1], module, env, locals, pure);
-    ir_.otherwise(native_branch, first.code);
+    ir_.otherwise(native_branch, first.native);
     auto second = block(*expr.children[2], module, env, locals, pure);
     if (first.type == Type::null_ref && second.type.kind == Type::reference) {
       first.type = second.type;
@@ -984,21 +967,16 @@ class Compiler {
     }
     require(second.type, first.type, expr.at);
     if (first.region_id != second.region_id) fail(expr.at, "conditional references require one owning region");
-    auto *native = ir_.merge(native_branch, first.type, second.code);
-    if (first.type == Type::void_type || first.type == Type::region || first.type == Type::null_ref) {
-
+    auto *native = ir_.merge(native_branch, first.type, second.native);
+    if (first.type == Type::void_type || first.type == Type::region || first.type == Type::null_ref)
       return first;
-    }
-    const auto result = fresh("choice");
-    ir_.bind(result, native);
-
-    return {first.type, result, {}, nullptr, first.region_id};
+    return scalar(first.type, native, first.region_id);
   }
   Value expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
                    bool pure) {
     using K = Expression::Kind;
     switch (expr.kind) {
-    case K::null_ref: return {Type::null_ref, "null", {}, nullptr};
+    case K::null_ref: return scalar(Type::null_ref, ir_.bits(Type::null_ref, 0));
     case K::integer: {
       auto spelling = expr.text;
       const auto type = spelling.ends_with("u8") ? Type::uint8 : spelling.ends_with("u32") ? Type::uint32 :
@@ -1049,10 +1027,10 @@ class Compiler {
       for (size_t i = 0; i < fields.size(); ++i) {
         if (fields[i].name != expr.text) continue;
         if (value.type.kind == Type::product)
-          return scalar(fields[i].type, ir_.field(value.code, i));
+          return scalar(fields[i].type, ir_.field(value.native, i));
         if (fields[i].type.kind == Type::reference)
-          return scalar(fields[i].type, ir_.regional_field(region_name(value, expr.at), value.code, value.type, i, fields[i].type), value.region_id);
-        return scalar(fields[i].type, ir_.regional_field(region_name(value, expr.at), value.code, value.type, i, fields[i].type));
+          return scalar(fields[i].type, ir_.regional_field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type), value.region_id);
+        return scalar(fields[i].type, ir_.regional_field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type));
       }
       fail(expr.at, "no field '" + expr.text + "' in " + type_name(value.type));
     }
@@ -1088,9 +1066,9 @@ class Compiler {
       if (const auto selected = method(expr.text, module, {value}, expr.at))
         return call_method(*selected, {value}, expr.at);
       if (expr.text == "-" && floating(value.type))
-        return scalar(value.type, ir_.unary(value.type, expr.text, value.code));
+        return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
       require(value.type, expr.text == "!" ? Type::boolean : Type::integer, expr.at);
-      return scalar(value.type, ir_.unary(value.type, expr.text, value.code));
+      return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
     }
     case K::binary: return binary_expression(expr, module, env, locals, pure);
     case K::conditional: return conditional_expression(expr, module, env, locals, pure);
@@ -1168,10 +1146,6 @@ class Compiler {
         if (value.region_id || value.type.kind == Type::reference || value.type == Type::region)
           fail(form.at, "module globals contain bits values, not regional resources or references");
         require(value.type, resolve(*form.result_type, module, form.at), form.at);
-        const auto saved = fresh("capture");
-
-        ir_.alias(saved, value.code);
-        value.code = saved;
         module.globals.emplace(form.name, std::move(value));
         break;
       }
@@ -1242,9 +1216,7 @@ class Compiler {
       if (current.owner != &module) continue;
       auto value = current;
       if (value.type != Type::procedure && value.type != Type::region) {
-        value.code = fresh("capture");
-
-        ir_.bind(value.code, ir_.read_symbol(id, value.type));
+        value.native = ir_.read_symbol(id, value.type);
       }
       module.exports.emplace(id, std::move(value));
     }

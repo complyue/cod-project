@@ -1,11 +1,11 @@
 {
-  "recorded_utc": "2026-11-05T22:48:36.866864+00:00",
+  "recorded_utc": "2026-11-05T23:12:02.401404+00:00",
   "results": [
     {
       "case": "512-module-pure-chain",
       "backend": "llvm",
-      "check_seconds": 0.04215992399258539,
-      "native_compile_link_run_seconds": 0.17393797100521624,
+      "check_seconds": 0.041995458013843745,
+      "native_compile_link_run_seconds": 0.17603611201047897,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -20,8 +20,8 @@
     {
       "case": "1000-procedure-inline-chain",
       "backend": "llvm",
-      "check_seconds": 0.6132622289587744,
-      "native_compile_link_run_seconds": 0.8051755880005658,
+      "check_seconds": 0.6544696110067889,
+      "native_compile_link_run_seconds": 0.8228978770202957,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -36,8 +36,8 @@
     {
       "case": "layered-diamond-22-modules-2047-calls",
       "backend": "llvm",
-      "check_seconds": 0.047205558978021145,
-      "native_compile_link_run_seconds": 0.1906632210011594,
+      "check_seconds": 0.048073518031742424,
+      "native_compile_link_run_seconds": 0.19174300698796287,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -52,8 +52,8 @@
     {
       "case": "16-unit-reexports-31-conversion-steps-with-cycle",
       "backend": "llvm",
-      "check_seconds": 0.016870966996066272,
-      "native_compile_link_run_seconds": 0.13675224501639605,
+      "check_seconds": 0.015386849001515657,
+      "native_compile_link_run_seconds": 0.13505291199544445,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",
@@ -68,8 +68,8 @@
     {
       "case": "96-module-regional-snapshot-chain",
       "backend": "llvm",
-      "check_seconds": 0.02233806997537613,
-      "native_compile_link_run_seconds": 1.6089382910286076,
+      "check_seconds": 0.02128116099629551,
+      "native_compile_link_run_seconds": 1.667621976986993,
       "check_exit": 0,
       "check_stdout": "",
       "check_stderr": "",

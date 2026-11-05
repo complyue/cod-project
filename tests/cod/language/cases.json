@@ -667,5 +667,11 @@
     "file": "float-boundary-rounding.cod",
     "exit": 0,
     "stdout": "1.40129846e-45\n3.40282347e+38\n4.9406564584124654e-324\n"
+  },
+  {
+    "file": "logical-unscoped-effect.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "conditional rebinding in a logical operand needs an explicit scope"
   }
 ]

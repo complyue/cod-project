@@ -1,0 +1,3 @@
+symbol @flag;
+effect @flag = true;
+false && effect @flag = true;

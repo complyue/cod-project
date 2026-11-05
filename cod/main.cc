@@ -71,11 +71,11 @@ struct CodReplConfig {
   std::chrono::hours cache_max_age = std::chrono::hours(24 * 7); // 1 week
 };
 
-// Resolves and uses the toolchain bundled with the running CoD executable.
 struct LanguageEmission {
   std::optional<fs::path> ir, bitcode, runtime;
 };
 
+// Resolves and uses the toolchain bundled with the running CoD executable.
 class CodTool {
 private:
   std::string executable_path_;
