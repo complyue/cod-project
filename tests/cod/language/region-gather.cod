@@ -14,6 +14,7 @@ using "pool-index.cod" locate;
 using "pool-index.cod" global_slot;
 using symbol "region-gather-step.cod" @step;
 global layout::Layout = Layout(4u32, 1u64);
+global trace_values::bool = true;
 symbol @arena;
 symbol @a;
 symbol @b;
@@ -22,6 +23,15 @@ symbol @weights;
 symbol @graph;
 function checksum(frame::Frame)::f32 {
   fold (n in Neuron(0u32) .. Neuron(u32(len(frame))), total = 0.0f32) { total + frame[n] }
+}
+symbol @emit_frame;
+procedure @emit_frame(frame::Frame)::void {
+  behave @print(checksum(frame));
+  if (trace_values) {
+    for (n in Neuron(0u32) .. Neuron(u32(len(frame)))) {
+      behave @print(frame[n]);
+    }
+  } else {};
 }
 effect @arena = region(32768u64);
 effect @a = alloc @arena Frame(scalar(class_set_begin(layout, ClassId(4u32))), 0.0f32);
@@ -33,18 +43,19 @@ for (n in 0u32 .. u32(len(@a))) {
   store(@a, Neuron(n), f32(n + 1u32));
   let position = locate(layout, GlobalSetId(u64(n)));
   for (j in 0u32 .. scalar(capacity(position.class_id))) {
-    store(@sources, global_slot(layout, position.class_id, position.local, LocalSlot(j)),
-          Neuron((n + j) % u32(len(@a))));
+    let slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
+    store(@sources, slot, Neuron((n + j) % u32(len(@a))));
+    store(@weights, slot, u8(1u32 + (n + j) % 4u32));
   };
 };
-behave @print(checksum(deref(@a)));
+behave @emit_frame(deref(@a));
 for (frame in 0u32 .. 4u32) {
   if (frame % 2u32 == 0u32) {
     behave @step(deref(@a), @b, deref(@graph), layout);
-    behave @print(checksum(deref(@b)));
+    behave @emit_frame(deref(@b));
   } else {
     behave @step(deref(@b), @a, deref(@graph), layout);
-    behave @print(checksum(deref(@a)));
+    behave @emit_frame(deref(@a));
   };
 };
 behave @assert(used_bytes(@arena) < 12000u64);

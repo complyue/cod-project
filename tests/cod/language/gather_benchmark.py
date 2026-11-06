@@ -73,6 +73,8 @@ def main():
     source = fixture.read_text()
     source = re.sub(r'"([^"\n]+\.cod)"', lambda m: json.dumps(str(directory / m[1])), source)
     source = source.replace('Layout(4u32, 1u64)', f'Layout({classes}u32, {top_count}u64)')
+    source = source.replace('global trace_values::bool = true;', 'global trace_values::bool = false;')
+    source = source.replace('u8(1u32 + (n + j) % 4u32)', '1u8')
     source = source.replace('ClassId(4u32)', f'ClassId({classes}u32)')
     source = source.replace('region(32768u64)', f'region({payload + 4096}u64)')
     source = source.replace('frame in 0u32 .. 4u32', f'frame in 0u32 .. {frames}u32')

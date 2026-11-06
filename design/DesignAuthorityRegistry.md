@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：238
+记录版本：239
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 238，延续检查 K-01—K-237；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 239，延续检查 K-01—K-238；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -4755,3 +4755,13 @@ Scope: Remove unnecessary implementation/test complexity as work advances. Apply
 - The existing five composition cases now emit each program once, link that bitcode with its emitted native services, execute it and measure the executable and `.text` section. This removes redundant frontend emission from the stress path. Per-phase commands, timings, results and source hashes are recorded; the normal language corpus retains coverage of the `--run` driver.
 - Initial measurements showed constant folding reduced the fixed-input 512-module arithmetic case to 454 bytes of `.text`. The same case/depth now receives loop-varying inputs through 512 modular-arithmetic steps; an independent modular-exponentiation formula supplies the expected checksum. No extra stress case is added. This measures retained computation without adding a benchmark framework or changing a neural-model equation.
 - Evidence: `cmake --build ./build` and all five updated cases passed. The pure-chain executable is 31,808 bytes with 15,398 bytes of `.text`; its observed frontend and native link phases take about 0.051 and 0.650 seconds locally. The 96-module regional traversal executable is 86,728 bytes with 6,630 bytes of `.text`. Fixed-input procedure/DAG/conversion cases still permit constant folding; all sizes include only the tested workload, not a universal upper bound. Executable files include debug metadata from the system-service compilation. No unrelated component or numeric/relocation suite is claimed rerun. The pointer-format decision remains pending and the ten-hour goal remains active.
+
+
+<a id="k-238"></a>
+
+### K-238 — 2026-11-06: Per-target weighted A/B gather evidence
+
+- Agent validation assessment under H-122/H-123/H-144/H-145. Charter §§1–4 and the existing D-10r15 snapshot/region boundary remain governing. Registry238 →239; reference16 →17 records more discriminating evidence within the existing fixture. D-07r22/D-10r15/D-11r7 contracts and full pending-human qualification remain unchanged; D-GOV239 maintenance alone continues H-05.
+- The small gather fixture checks all 15 target values and the checksum in the initial frame and four A/B updates. Source indices and one-byte weights vary by target and slot, so an aggregate sum or uniform weight cannot hide incorrect target assignment or weight indexing. Expected values come from separate Python arithmetic with explicit capacities `[100]*8+[144]*4+[200]*2+[288]` and FP32 rounding after multiplication, division and addition. This is the same arithmetic facility check, not a selected SNN equation.
+- The scale harness retains uniform weights and checksum-only output, using the same gather kernel without per-target print costs. Fresh evidence covers 693,504 slots/eight updates and 112,281,600 slots/one uniform-input update. Regional occupation remains 3,500,416 and 566,650,928 bytes respectively; separate four-byte source and one-byte weight arrays retain their representation. Full-pool arithmetic rows do not establish a neuron count.
+- Evidence: source-only `cmake --build ./build` passed, all 124 language checks passed, and both scale runs match independent FP32 checksums. No entry fixture, compiler/runtime mechanism, build configuration or toolchain was added. The language and gather reports carry fresh commands/results or measurements and matching source hashes; older stress, relocation, numeric and component records retain their original timestamps/scope. The shared zero-distance pointer compatibility choice remains pending; the ten-hour goal remains active.

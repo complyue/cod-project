@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T23:42:29.295733+00:00",
+  "recorded_utc": "2026-11-06T00:06:45.657243+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -2020,10 +2020,10 @@
       "expected": {
         "file": "region-gather.cod",
         "exit": 0,
-        "stdout": "120\n64.7070312\n34.8680573\n18.7906551\n10.1264286\n"
+        "stdout": "120\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n160.972656\n7.55859375\n7.59765625\n7.67578125\n7.79296875\n7.94921875\n7.98828125\n7.94921875\n7.890625\n11.3085938\n11.2851562\n11.2382812\n11.1679688\n15.5664062\n15.5273438\n22.4765625\n216.20079\n10.2282104\n10.2425842\n10.2704773\n10.3629456\n10.4837952\n10.5405426\n10.5371857\n10.5330658\n15.1953125\n15.1811218\n15.1538391\n15.1152954\n21.0447693\n21.0139465\n30.297699\n290.403137\n13.7314701\n13.7507114\n13.7887783\n13.9150391\n14.081461\n14.1588583\n14.1564178\n14.1529665\n20.4158382\n20.3966007\n20.3589592\n20.3042297\n28.2694607\n28.2273731\n40.6949806\n390.072388\n18.4442062\n18.4700947\n18.5212955\n18.6909924\n18.9146194\n19.0185795\n19.0152378\n19.0104847\n27.4227047\n27.3968201\n27.34618\n27.2726173\n37.9716492\n37.9150848\n54.6618118\n"
       },
       "exit_code": 0,
-      "stdout": "120\n64.7070312\n34.8680573\n18.7906551\n10.1264286\n",
+      "stdout": "120\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n160.972656\n7.55859375\n7.59765625\n7.67578125\n7.79296875\n7.94921875\n7.98828125\n7.94921875\n7.890625\n11.3085938\n11.2851562\n11.2382812\n11.1679688\n15.5664062\n15.5273438\n22.4765625\n216.20079\n10.2282104\n10.2425842\n10.2704773\n10.3629456\n10.4837952\n10.5405426\n10.5371857\n10.5330658\n15.1953125\n15.1811218\n15.1538391\n15.1152954\n21.0447693\n21.0139465\n30.297699\n290.403137\n13.7314701\n13.7507114\n13.7887783\n13.9150391\n14.081461\n14.1588583\n14.1564178\n14.1529665\n20.4158382\n20.3966007\n20.3589592\n20.3042297\n28.2694607\n28.2273731\n40.6949806\n390.072388\n18.4442062\n18.4700947\n18.5212955\n18.6909924\n18.9146194\n19.0185795\n19.0152378\n19.0104847\n27.4227047\n27.3968201\n27.34618\n27.2726173\n37.9716492\n37.9150848\n54.6618118\n",
       "stderr": "",
       "passed": true
     },
@@ -2172,9 +2172,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-pafnago5/program.ll",
+        "/tmp/cod-language-check-chm4at55/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-pafnago5/program.bc"
+        "/tmp/cod-language-check-chm4at55/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2195,7 +2195,7 @@
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "c16c4602b95f7052e9161950396ba181a81ae5b3ba9d98faa79b821554f1960d",
-    "tests/cod/language/cases.json": "db04c561a7c38f8397c7c511e6cbba41b71b367ad2e4e7d5da1971b0c3794861",
+    "tests/cod/language/cases.json": "d83efacd861eba300e3d8a9409ba4bdde85b6ea145dcc44774462420d14e2473",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2283,7 +2283,7 @@
     "tests/cod/language/region-gather-kernel.cod": "f3d5868d99a975bc967996f3c612ba7201b9a2678efe95798f35ae316c855383",
     "tests/cod/language/region-gather-step.cod": "54b9c141fc31e4a47cd0b08bb024f93a6bd1d3e3cb344dc606708d8493b550ff",
     "tests/cod/language/region-gather-types.cod": "920b1230d8931573030e7643bf27dda8157999f5b128914e155fae8d8d21c0e5",
-    "tests/cod/language/region-gather.cod": "81a8dd42844209444e04c8af2dd9c62c515e3ca5b8b81e3c060848456cfe85be",
+    "tests/cod/language/region-gather.cod": "e458732efc7c669d178866be6b531c0fd51b0ebc0cfe29305ac8e221d46fe154",
     "tests/cod/language/region-index-error.cod": "621509247dfe2f6c1f9820649b872815e5b2e819d1a004155e55287f5b95b16d",
     "tests/cod/language/region-module-behave.cod": "73ac25098ea5e651e81cdaf67e337bcf075cf44aa47316b2fd39b557e5f924a9",
     "tests/cod/language/region-module-perform.cod": "549c6f1b7ca2e636d23fc5b88bcdca4d83073a44ed343dac600ff0faba0f947c",
