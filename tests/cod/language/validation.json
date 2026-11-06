@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T08:01:38.730391+00:00",
+  "recorded_utc": "2026-11-06T08:18:09.881616+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -1973,11 +1973,14 @@
         "file": "region-capacity.cod",
         "exit": 70,
         "stdout": "",
-        "stderr_contains": "bad_alloc"
+        "stderr_contains": [
+          "region-capacity.cod:4:14:",
+          "bad_alloc"
+        ]
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "std::bad_alloc\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-capacity.cod:4:14: std::bad_alloc\n",
       "passed": true
     },
     {
@@ -2042,10 +2045,10 @@
       "expected": {
         "file": "region-parent-allocation.cod",
         "exit": 0,
-        "stdout": "19\n"
+        "stdout": "19\n25\n19\n105\n25\n"
       },
       "exit_code": 0,
-      "stdout": "19\n",
+      "stdout": "19\n25\n19\n105\n25\n",
       "stderr": "",
       "passed": true
     },
@@ -2301,9 +2304,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-85ti7ybk/program.ll",
+        "/tmp/cod-language-check-s2_3w45h/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-85ti7ybk/program.bc"
+        "/tmp/cod-language-check-s2_3w45h/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2313,18 +2316,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "1f0615abbc3281bdbb6b26e51d3e8a7210feca1fcbe8604969ed687bf331cf96"
+    "sha256": "e337a366e2dae7e7f3e77e0e2d375678b6b9b4947521ffb379fe312cb0ceafa6"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
     "cod/lang_frontend.hh": "fa98ded71322bb8f758d196f6f84522e9a052578865fdf0164d6fa3e2d4dd205",
-    "cod/lang_llvm.hh": "d0129f1e110f466baaaf0aeb127578684a9cc2c47285b8ad4424fbe71261f871",
-    "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
+    "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "b4abccf532697cf6253bea64f1f35e3622466c88087bb78acd430d1a0a9740c5",
+    "tests/cod/language/cases.json": "fd9d4c70fbd86a4ad302d683de25832574775c94ce6625827566536bfe9f7706",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2420,7 +2423,7 @@
     "tests/cod/language/region-module-perform.cod": "549c6f1b7ca2e636d23fc5b88bcdca4d83073a44ed343dac600ff0faba0f947c",
     "tests/cod/language/region-mutual.cod": "e3b8be5b951df88b5b5c89a86ad313d621d7dcb52aa79a9c64c4cbf1aa4be1e3",
     "tests/cod/language/region-null.cod": "b5cc7c1ae39d81ba5f8a20c43ae5097861483196e3d9dcd3d03c861ea5d8b6cc",
-    "tests/cod/language/region-parent-allocation.cod": "effdc8eb2b961eebf8bd279c220448eb6adf8e155b3b77d9044f888a7bbbe5c0",
+    "tests/cod/language/region-parent-allocation.cod": "6dce8d3c570b302201e4de0a2b1c2aaab1cb2c57fb7d72435589ca2babdc02ec",
     "tests/cod/language/region-pure-create.cod": "9a90ec5289971823c15e3241280b4cf8b08bc1ae92c959e622b3f44dd14d0c37",
     "tests/cod/language/region-pure-write.cod": "b4ba89db775c6bf015175c73894b8a43b310607a9b26ec97dd5ad8d400855368",
     "tests/cod/language/region-records.cod": "b14807bb488e49f0f1a2d2ad48d2ce27294ae23afb6744fa18a99e74a3aeffc0",

@@ -12,7 +12,8 @@ inline std::string native_runtime_source(bool regions) {
 #include <cstdlib>
 #include <limits>
 
-[[noreturn]] static void runtime_failure(const char *message) {
+[[noreturn]] static void runtime_failure(const char *message, const char *context = nullptr) {
+  if (context) std::fprintf(stderr, "%s: ", context);
   std::fprintf(stderr, "%s\n", message);
   std::exit(70);
 }
@@ -41,26 +42,26 @@ struct CoDRegionRoot {
 using CoDRegion = shilos::memory_region<CoDRegionRoot>;
 using CoDRegionOwner = shilos::auto_region<CoDRegionRoot>;
 
-static std::size_t region_capacity(std::uint64_t bytes) {
+static std::size_t region_capacity(std::uint64_t bytes, const char *context) {
   if (bytes < sizeof(CoDRegionRoot) || bytes > std::numeric_limits<std::size_t>::max() - sizeof(CoDRegion))
-    runtime_failure("region capacity out of range");
+    runtime_failure("region capacity out of range", context);
   return static_cast<std::size_t>(bytes);
 }
 )CPP";
   source += R"CPP(
 extern "C" {
-void *cod_lang_region_new(std::uint64_t capacity) {
-  try { return CoDRegion::alloc_region(region_capacity(capacity)); }
-  catch (const std::exception &error) { runtime_failure(error.what()); }
+void *cod_lang_region_new(std::uint64_t capacity, const char *context) {
+  try { return CoDRegion::alloc_region(region_capacity(capacity, context)); }
+  catch (const std::exception &error) { runtime_failure(error.what(), context); }
 }
 void cod_lang_region_free(void *region) { CoDRegion::free_region(static_cast<CoDRegion *>(region)); }
-std::uint64_t cod_lang_region_alloc(void *owner, std::uint64_t bytes, std::uint64_t alignment) {
+std::uint64_t cod_lang_region_alloc(void *owner, std::uint64_t bytes, std::uint64_t alignment, const char *context) {
   auto &region = *static_cast<CoDRegion *>(owner);
   try {
     if (bytes > std::numeric_limits<std::size_t>::max()) throw std::bad_alloc();
     auto *storage = region.allocate(static_cast<std::size_t>(bytes), static_cast<std::size_t>(alignment));
     return static_cast<std::uint64_t>(static_cast<std::byte *>(storage) - reinterpret_cast<std::byte *>(&region));
-  } catch (const std::exception &error) { runtime_failure(error.what()); }
+  } catch (const std::exception &error) { runtime_failure(error.what(), context); }
 }
 std::uint64_t cod_lang_region_used(void *region) { return static_cast<CoDRegion *>(region)->occupation(); }
 std::uint64_t cod_lang_region_capacity(void *region) { return static_cast<CoDRegion *>(region)->capacity(); }

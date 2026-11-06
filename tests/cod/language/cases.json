@@ -625,7 +625,10 @@
     "file": "region-capacity.cod",
     "exit": 70,
     "stdout": "",
-    "stderr_contains": "bad_alloc"
+    "stderr_contains": [
+      "region-capacity.cod:4:14:",
+      "bad_alloc"
+    ]
   },
   {
     "file": "region-module-behave.cod",
@@ -646,7 +649,7 @@
   {
     "file": "region-parent-allocation.cod",
     "exit": 0,
-    "stdout": "19\n"
+    "stdout": "19\n25\n19\n105\n25\n"
   },
   {
     "file": "region-gather.cod",

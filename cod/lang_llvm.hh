@@ -52,6 +52,10 @@ class LLVMEmission {
   llvm::Type *void_type() { return llvm::Type::getVoidTy(context()); }
   llvm::IntegerType *i64() { return llvm::Type::getInt64Ty(context()); }
   llvm::PointerType *pointer_type() { return llvm::PointerType::getUnqual(context()); }
+  llvm::Value *source_context() {
+    if (source_location_) return b().CreateGlobalString(location_text(*source_location_));
+    return llvm::ConstantPointerNull::get(pointer_type());
+  }
   static Type representation(Type type) {
     return type.kind == Type::unit ? Type(type.representation) : type;
   }
@@ -394,7 +398,7 @@ private:
     return b().CreateZExtOrTrunc(offset, i64());
   }
   llvm::Value *allocate(llvm::Value *owner, llvm::Value *bytes, uint64_t alignment) {
-    return call_runtime("cod_lang_region_alloc", i64(), {owner, bytes, integer(i64(), alignment)});
+    return call_runtime("cod_lang_region_alloc", i64(), {owner, bytes, integer(i64(), alignment), source_context()});
   }
   void store_reference(llvm::Value *region, llvm::Value *field, llvm::Value *offset) {
     auto *target = address(region, offset);
@@ -421,7 +425,7 @@ private:
 public:
   llvm::Value *region_new(Type capacity_type, llvm::Value *capacity) {
     auto *bytes = cast(capacity_type, Type::uint64, capacity);
-    auto *region = call_runtime("cod_lang_region_new", pointer_type(), {bytes});
+    auto *region = call_runtime("cod_lang_region_new", pointer_type(), {bytes, source_context()});
     cleanups_.push_back({region, nullptr});
     return region;
   }
