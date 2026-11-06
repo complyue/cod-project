@@ -695,7 +695,7 @@
   {
     "file": "region-factory-import.cod",
     "exit": 0,
-    "stdout": "115\n206\n"
+    "stdout": "115\n206\n7\n9\n11\n"
   },
   {
     "file": "region-empty.cod",

@@ -1,5 +1,9 @@
 regional type Node { score::i64; next::ref<Node>; }
-symbol @arena;
+symbol from "region-factory-vocabulary.cod" @arena;
 symbol @make;
+symbol @initial;
+symbol @read;
 function adjust(x::i64)::i64 { x + 1 }
+effect @initial = alloc @arena Node(7, null);
+procedure @read()::ref<Node> { @initial }
 procedure @make(x::i64)::ref<Node> { alloc @arena Node(adjust(x), null) }
