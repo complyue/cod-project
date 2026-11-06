@@ -3,5 +3,7 @@ using "std:io" @print as @print;
 symbol @x;
 symbol @p;
 procedure @p -> i64 { @x }
+symbol @wrapper;
+procedure @wrapper -> i64 { perform @p }
 effect @x = 9;
-behave @print(perform @p);
+behave @print(behave @wrapper);

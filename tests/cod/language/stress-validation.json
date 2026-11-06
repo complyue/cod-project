@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T00:17:27.051404+00:00",
+  "recorded_utc": "2026-11-06T06:43:57.405384+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "results": [
     {
@@ -11,15 +11,15 @@
           "command": [
             "/ws/EvtWorks/cod-project/build/bin/cod",
             "--check",
-            "/tmp/cod-composition-stress-dlh4xkkl/pure-main.cod",
+            "/tmp/cod-composition-stress-28h349az/pure-main.cod",
             "--emit-llvm",
-            "/tmp/cod-composition-stress-dlh4xkkl/pure-main.ll",
+            "/tmp/cod-composition-stress-28h349az/pure-main.ll",
             "--emit-bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/pure-main.bc",
+            "/tmp/cod-composition-stress-28h349az/pure-main.bc",
             "--emit-runtime",
-            "/tmp/cod-composition-stress-dlh4xkkl/pure-main.cc"
+            "/tmp/cod-composition-stress-28h349az/pure-main.cc"
           ],
-          "seconds": 0.05291683098766953,
+          "seconds": 0.04664352297550067,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
@@ -33,23 +33,23 @@
             "-stdlib=libc++",
             "-fuse-ld=lld",
             "-I/ws/EvtWorks/cod-project/include",
-            "/tmp/cod-composition-stress-dlh4xkkl/pure-main.bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/pure-main.cc",
+            "/tmp/cod-composition-stress-28h349az/pure-main.bc",
+            "/tmp/cod-composition-stress-28h349az/pure-main.cc",
             "-o",
-            "/tmp/cod-composition-stress-dlh4xkkl/pure-main.native",
+            "/tmp/cod-composition-stress-28h349az/pure-main.native",
             "-L/ws/EvtWorks/cod-project/build/lib",
             "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
           ],
-          "seconds": 0.676617675984744,
+          "seconds": 0.648377983015962,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
         },
         "run": {
           "command": [
-            "/tmp/cod-composition-stress-dlh4xkkl/pure-main.native"
+            "/tmp/cod-composition-stress-28h349az/pure-main.native"
           ],
-          "seconds": 0.0013874330325052142,
+          "seconds": 0.0014399659703485668,
           "exit_code": 0,
           "stdout": "140104863131\n",
           "stderr": ""
@@ -59,11 +59,11 @@
             "/ws/EvtWorks/cod-project/build/bin/llvm-size",
             "--format=sysv",
             "--radix=10",
-            "/tmp/cod-composition-stress-dlh4xkkl/pure-main.native"
+            "/tmp/cod-composition-stress-28h349az/pure-main.native"
           ],
-          "seconds": 0.007447489013429731,
+          "seconds": 0.008301071997266263,
           "exit_code": 0,
-          "stdout": "/tmp/cod-composition-stress-dlh4xkkl/pure-main.native  :\nsection                 size    addr\n.interp                   28     680\n.note.ABI-tag             32     708\n.dynsym                  264     744\n.gnu.version              22    1008\n.gnu.version_r            48    1032\n.gnu.hash                 28    1080\n.dynstr                  311    1108\n.rela.dyn                216    1424\n.rela.plt                120    1640\n.rodata                   66    1760\n.eh_frame_hdr             84    1828\n.eh_frame                264    1912\n.text                  15398    6272\n.init                     23   21672\n.fini                      9   21696\n.plt                      96   21712\n.fini_array                8   25904\n.init_array                8   25912\n.dynamic                 512   25920\n.got                      48   26432\n.relro_padding          2192   26480\n.data                     16   30576\n.tm_clone_table            0   30592\n.got.plt                  64   30592\n.bss                       1   30656\n.comment                 240       0\n.debug_loclists          134       0\n.debug_abbrev            576       0\n.debug_info             3814       0\n.debug_rnglists           24       0\n.debug_str_offsets       888       0\n.debug_str              2369       0\n.debug_addr              176       0\n.debug_line              254       0\n.debug_line_str          402       0\nTotal                  28735\n\n\n",
+          "stdout": "/tmp/cod-composition-stress-28h349az/pure-main.native  :\nsection                 size    addr\n.interp                   28     680\n.note.ABI-tag             32     708\n.dynsym                  264     744\n.gnu.version              22    1008\n.gnu.version_r            48    1032\n.gnu.hash                 28    1080\n.dynstr                  311    1108\n.rela.dyn                216    1424\n.rela.plt                120    1640\n.rodata                   66    1760\n.eh_frame_hdr             84    1828\n.eh_frame                264    1912\n.text                  15398    6272\n.init                     23   21672\n.fini                      9   21696\n.plt                      96   21712\n.fini_array                8   25904\n.init_array                8   25912\n.dynamic                 512   25920\n.got                      48   26432\n.relro_padding          2192   26480\n.data                     16   30576\n.tm_clone_table            0   30592\n.got.plt                  64   30592\n.bss                       1   30656\n.comment                 240       0\n.debug_loclists          134       0\n.debug_abbrev            576       0\n.debug_info             3814       0\n.debug_rnglists           24       0\n.debug_str_offsets       888       0\n.debug_str              2369       0\n.debug_addr              176       0\n.debug_line              254       0\n.debug_line_str          402       0\nTotal                  28735\n\n\n",
           "stderr": ""
         }
       },
@@ -72,7 +72,18 @@
       "bitcode_bytes": 124532,
       "native_executable_bytes": 31808,
       "native_text_bytes": 15398,
-      "passed": true
+      "passed": true,
+      "leaf_error": {
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/tmp/cod-composition-stress-28h349az/pure-main.cod"
+        ],
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-composition-stress-28h349az/pure-511.cod:1:27: a function cannot read symbolic effects\n/tmp/cod-composition-stress-28h349az/pure-510.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-28h349az/pure-511.cod:1:1\n/tmp/cod-composition-stress-28h349az/pure-509.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-28h349az/pure-510.cod:2:1\n/tmp/cod-composition-stress-28h349az/pure-508.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-28h349az/pure-509.cod:2:1\n/tmp/cod-composition-stress-28h349az/pure-507.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-28h349az/pure-508.cod:2:1\nnote: 504 intervening calls omitted\n/tmp/cod-composition-stress-28h349az/pure-2.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-28h349az/pure-3.cod:2:1\n/tmp/cod-composition-stress-28h349az/pure-1.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-28h349az/pure-2.cod:2:1\n/tmp/cod-composition-stress-28h349az/pure-0.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-28h349az/pure-1.cod:2:1\n/tmp/cod-composition-stress-28h349az/pure-main.cod:3:69: note: in call to function 'f' defined at /tmp/cod-composition-stress-28h349az/pure-0.cod:2:1\n",
+        "passed": true
+      }
     },
     {
       "case": "1000-procedure-inline-chain",
@@ -82,15 +93,15 @@
           "command": [
             "/ws/EvtWorks/cod-project/build/bin/cod",
             "--check",
-            "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.cod",
+            "/tmp/cod-composition-stress-28h349az/procedure-main.cod",
             "--emit-llvm",
-            "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.ll",
+            "/tmp/cod-composition-stress-28h349az/procedure-main.ll",
             "--emit-bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.bc",
+            "/tmp/cod-composition-stress-28h349az/procedure-main.bc",
             "--emit-runtime",
-            "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.cc"
+            "/tmp/cod-composition-stress-28h349az/procedure-main.cc"
           ],
-          "seconds": 0.6820990690030158,
+          "seconds": 0.6787287799525075,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
@@ -104,23 +115,23 @@
             "-stdlib=libc++",
             "-fuse-ld=lld",
             "-I/ws/EvtWorks/cod-project/include",
-            "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.cc",
+            "/tmp/cod-composition-stress-28h349az/procedure-main.bc",
+            "/tmp/cod-composition-stress-28h349az/procedure-main.cc",
             "-o",
-            "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.native",
+            "/tmp/cod-composition-stress-28h349az/procedure-main.native",
             "-L/ws/EvtWorks/cod-project/build/lib",
             "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
           ],
-          "seconds": 0.12016897299326956,
+          "seconds": 0.12018047895980999,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
         },
         "run": {
           "command": [
-            "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.native"
+            "/tmp/cod-composition-stress-28h349az/procedure-main.native"
           ],
-          "seconds": 0.0014285899815149605,
+          "seconds": 0.0011989189661107957,
           "exit_code": 0,
           "stdout": "1004\n1008\n9\n",
           "stderr": ""
@@ -130,11 +141,11 @@
             "/ws/EvtWorks/cod-project/build/bin/llvm-size",
             "--format=sysv",
             "--radix=10",
-            "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.native"
+            "/tmp/cod-composition-stress-28h349az/procedure-main.native"
           ],
-          "seconds": 0.007575411000289023,
+          "seconds": 0.008143493032548577,
           "exit_code": 0,
-          "stdout": "/tmp/cod-composition-stress-dlh4xkkl/procedure-main.native  :\nsection                size    addr\n.interp                  28     736\n.note.ABI-tag            32     764\n.dynsym                 288     800\n.gnu.version             24    1088\n.gnu.version_r           80    1112\n.gnu.hash                28    1192\n.dynstr                 357    1220\n.rela.dyn               216    1584\n.rela.plt               120    1800\n.rodata                  44    1920\n.eh_frame_hdr            84    1964\n.eh_frame               256    2048\n.text                   550    6400\n.init                    23    6952\n.fini                     9    6976\n.plt                     96    6992\n.tbss                     1    7088\n.fini_array               8   11184\n.init_array               8   11192\n.dynamic                528   11200\n.got                     48   11728\n.relro_padding          512   11776\n.data                    16   15872\n.tm_clone_table           0   15888\n.got.plt                 64   15888\n.bss                      1   15952\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           576       0\n.debug_info            3814       0\n.debug_rnglists          24       0\n.debug_str_offsets      888       0\n.debug_str             2374       0\n.debug_addr             176       0\n.debug_line             254       0\n.debug_line_str         407       0\nTotal                 12308\n\n\n",
+          "stdout": "/tmp/cod-composition-stress-28h349az/procedure-main.native  :\nsection                size    addr\n.interp                  28     736\n.note.ABI-tag            32     764\n.dynsym                 288     800\n.gnu.version             24    1088\n.gnu.version_r           80    1112\n.gnu.hash                28    1192\n.dynstr                 357    1220\n.rela.dyn               216    1584\n.rela.plt               120    1800\n.rodata                  44    1920\n.eh_frame_hdr            84    1964\n.eh_frame               256    2048\n.text                   550    6400\n.init                    23    6952\n.fini                     9    6976\n.plt                     96    6992\n.tbss                     1    7088\n.fini_array               8   11184\n.init_array               8   11192\n.dynamic                528   11200\n.got                     48   11728\n.relro_padding          512   11776\n.data                    16   15872\n.tm_clone_table           0   15888\n.got.plt                 64   15888\n.bss                      1   15952\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           576       0\n.debug_info            3814       0\n.debug_rnglists          24       0\n.debug_str_offsets      888       0\n.debug_str             2374       0\n.debug_addr             176       0\n.debug_line             254       0\n.debug_line_str         407       0\nTotal                 12308\n\n\n",
           "stderr": ""
         }
       },
@@ -153,15 +164,15 @@
           "command": [
             "/ws/EvtWorks/cod-project/build/bin/cod",
             "--check",
-            "/tmp/cod-composition-stress-dlh4xkkl/dag-main.cod",
+            "/tmp/cod-composition-stress-28h349az/dag-main.cod",
             "--emit-llvm",
-            "/tmp/cod-composition-stress-dlh4xkkl/dag-main.ll",
+            "/tmp/cod-composition-stress-28h349az/dag-main.ll",
             "--emit-bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/dag-main.bc",
+            "/tmp/cod-composition-stress-28h349az/dag-main.bc",
             "--emit-runtime",
-            "/tmp/cod-composition-stress-dlh4xkkl/dag-main.cc"
+            "/tmp/cod-composition-stress-28h349az/dag-main.cc"
           ],
-          "seconds": 0.046358535008039325,
+          "seconds": 0.05289181001717225,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
@@ -175,23 +186,23 @@
             "-stdlib=libc++",
             "-fuse-ld=lld",
             "-I/ws/EvtWorks/cod-project/include",
-            "/tmp/cod-composition-stress-dlh4xkkl/dag-main.bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/dag-main.cc",
+            "/tmp/cod-composition-stress-28h349az/dag-main.bc",
+            "/tmp/cod-composition-stress-28h349az/dag-main.cc",
             "-o",
-            "/tmp/cod-composition-stress-dlh4xkkl/dag-main.native",
+            "/tmp/cod-composition-stress-28h349az/dag-main.native",
             "-L/ws/EvtWorks/cod-project/build/lib",
             "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
           ],
-          "seconds": 0.11427193501731381,
+          "seconds": 0.11608135001733899,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
         },
         "run": {
           "command": [
-            "/tmp/cod-composition-stress-dlh4xkkl/dag-main.native"
+            "/tmp/cod-composition-stress-28h349az/dag-main.native"
           ],
-          "seconds": 0.0011867930297739804,
+          "seconds": 0.001323434989899397,
           "exit_code": 0,
           "stdout": "3072\n",
           "stderr": ""
@@ -201,11 +212,11 @@
             "/ws/EvtWorks/cod-project/build/bin/llvm-size",
             "--format=sysv",
             "--radix=10",
-            "/tmp/cod-composition-stress-dlh4xkkl/dag-main.native"
+            "/tmp/cod-composition-stress-28h349az/dag-main.native"
           ],
-          "seconds": 0.009357799019198865,
+          "seconds": 0.007890054024755955,
           "exit_code": 0,
-          "stdout": "/tmp/cod-composition-stress-dlh4xkkl/dag-main.native  :\nsection                size    addr\n.interp                  28     680\n.note.ABI-tag            32     708\n.dynsym                 264     744\n.gnu.version             22    1008\n.gnu.version_r           48    1032\n.gnu.hash                28    1080\n.dynstr                 311    1108\n.rela.dyn               216    1424\n.rela.plt               120    1640\n.rodata                  44    1760\n.eh_frame_hdr            84    1804\n.eh_frame               240    1888\n.text                   454    6224\n.init                    23    6680\n.fini                     9    6704\n.plt                     96    6720\n.fini_array               8   10912\n.init_array               8   10920\n.dynamic                512   10928\n.got                     48   11440\n.relro_padding          800   11488\n.data                    16   15584\n.tm_clone_table           0   15600\n.got.plt                 64   15600\n.bss                      1   15664\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           576       0\n.debug_info            3814       0\n.debug_rnglists          24       0\n.debug_str_offsets      888       0\n.debug_str             2368       0\n.debug_addr             176       0\n.debug_line             254       0\n.debug_line_str         401       0\nTotal                 12351\n\n\n",
+          "stdout": "/tmp/cod-composition-stress-28h349az/dag-main.native  :\nsection                size    addr\n.interp                  28     680\n.note.ABI-tag            32     708\n.dynsym                 264     744\n.gnu.version             22    1008\n.gnu.version_r           48    1032\n.gnu.hash                28    1080\n.dynstr                 311    1108\n.rela.dyn               216    1424\n.rela.plt               120    1640\n.rodata                  44    1760\n.eh_frame_hdr            84    1804\n.eh_frame               240    1888\n.text                   454    6224\n.init                    23    6680\n.fini                     9    6704\n.plt                     96    6720\n.fini_array               8   10912\n.init_array               8   10920\n.dynamic                512   10928\n.got                     48   11440\n.relro_padding          800   11488\n.data                    16   15584\n.tm_clone_table           0   15600\n.got.plt                 64   15600\n.bss                      1   15664\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           576       0\n.debug_info            3814       0\n.debug_rnglists          24       0\n.debug_str_offsets      888       0\n.debug_str             2368       0\n.debug_addr             176       0\n.debug_line             254       0\n.debug_line_str         401       0\nTotal                 12351\n\n\n",
           "stderr": ""
         }
       },
@@ -224,15 +235,15 @@
           "command": [
             "/ws/EvtWorks/cod-project/build/bin/cod",
             "--check",
-            "/tmp/cod-composition-stress-dlh4xkkl/unit-main.cod",
+            "/tmp/cod-composition-stress-28h349az/unit-main.cod",
             "--emit-llvm",
-            "/tmp/cod-composition-stress-dlh4xkkl/unit-main.ll",
+            "/tmp/cod-composition-stress-28h349az/unit-main.ll",
             "--emit-bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/unit-main.bc",
+            "/tmp/cod-composition-stress-28h349az/unit-main.bc",
             "--emit-runtime",
-            "/tmp/cod-composition-stress-dlh4xkkl/unit-main.cc"
+            "/tmp/cod-composition-stress-28h349az/unit-main.cc"
           ],
-          "seconds": 0.016672687022946775,
+          "seconds": 0.01623696298338473,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
@@ -246,23 +257,23 @@
             "-stdlib=libc++",
             "-fuse-ld=lld",
             "-I/ws/EvtWorks/cod-project/include",
-            "/tmp/cod-composition-stress-dlh4xkkl/unit-main.bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/unit-main.cc",
+            "/tmp/cod-composition-stress-28h349az/unit-main.bc",
+            "/tmp/cod-composition-stress-28h349az/unit-main.cc",
             "-o",
-            "/tmp/cod-composition-stress-dlh4xkkl/unit-main.native",
+            "/tmp/cod-composition-stress-28h349az/unit-main.native",
             "-L/ws/EvtWorks/cod-project/build/lib",
             "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
           ],
-          "seconds": 0.09082156501244754,
+          "seconds": 0.09836522798286751,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
         },
         "run": {
           "command": [
-            "/tmp/cod-composition-stress-dlh4xkkl/unit-main.native"
+            "/tmp/cod-composition-stress-28h349az/unit-main.native"
           ],
-          "seconds": 0.0012257270282134414,
+          "seconds": 0.00123933597933501,
           "exit_code": 0,
           "stdout": "32\n",
           "stderr": ""
@@ -272,11 +283,11 @@
             "/ws/EvtWorks/cod-project/build/bin/llvm-size",
             "--format=sysv",
             "--radix=10",
-            "/tmp/cod-composition-stress-dlh4xkkl/unit-main.native"
+            "/tmp/cod-composition-stress-28h349az/unit-main.native"
           ],
-          "seconds": 0.008184661972336471,
+          "seconds": 0.008417331031523645,
           "exit_code": 0,
-          "stdout": "/tmp/cod-composition-stress-dlh4xkkl/unit-main.native  :\nsection                size    addr\n.interp                  28     680\n.note.ABI-tag            32     708\n.dynsym                 264     744\n.gnu.version             22    1008\n.gnu.version_r           48    1032\n.gnu.hash                28    1080\n.dynstr                 311    1108\n.rela.dyn               216    1424\n.rela.plt               120    1640\n.rodata                  44    1760\n.eh_frame_hdr            84    1804\n.eh_frame               240    1888\n.text                   454    6224\n.init                    23    6680\n.fini                     9    6704\n.plt                     96    6720\n.fini_array               8   10912\n.init_array               8   10920\n.dynamic                512   10928\n.got                     48   11440\n.relro_padding          800   11488\n.data                    16   15584\n.tm_clone_table           0   15600\n.got.plt                 64   15600\n.bss                      1   15664\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           576       0\n.debug_info            3814       0\n.debug_rnglists          24       0\n.debug_str_offsets      888       0\n.debug_str             2369       0\n.debug_addr             176       0\n.debug_line             254       0\n.debug_line_str         402       0\nTotal                 12353\n\n\n",
+          "stdout": "/tmp/cod-composition-stress-28h349az/unit-main.native  :\nsection                size    addr\n.interp                  28     680\n.note.ABI-tag            32     708\n.dynsym                 264     744\n.gnu.version             22    1008\n.gnu.version_r           48    1032\n.gnu.hash                28    1080\n.dynstr                 311    1108\n.rela.dyn               216    1424\n.rela.plt               120    1640\n.rodata                  44    1760\n.eh_frame_hdr            84    1804\n.eh_frame               240    1888\n.text                   454    6224\n.init                    23    6680\n.fini                     9    6704\n.plt                     96    6720\n.fini_array               8   10912\n.init_array               8   10920\n.dynamic                512   10928\n.got                     48   11440\n.relro_padding          800   11488\n.data                    16   15584\n.tm_clone_table           0   15600\n.got.plt                 64   15600\n.bss                      1   15664\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           576       0\n.debug_info            3814       0\n.debug_rnglists          24       0\n.debug_str_offsets      888       0\n.debug_str             2369       0\n.debug_addr             176       0\n.debug_line             254       0\n.debug_line_str         402       0\nTotal                 12353\n\n\n",
           "stderr": ""
         }
       },
@@ -295,15 +306,15 @@
           "command": [
             "/ws/EvtWorks/cod-project/build/bin/cod",
             "--check",
-            "/tmp/cod-composition-stress-dlh4xkkl/regional-main.cod",
+            "/tmp/cod-composition-stress-28h349az/regional-main.cod",
             "--emit-llvm",
-            "/tmp/cod-composition-stress-dlh4xkkl/regional-main.ll",
+            "/tmp/cod-composition-stress-28h349az/regional-main.ll",
             "--emit-bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/regional-main.bc",
+            "/tmp/cod-composition-stress-28h349az/regional-main.bc",
             "--emit-runtime",
-            "/tmp/cod-composition-stress-dlh4xkkl/regional-main.cc"
+            "/tmp/cod-composition-stress-28h349az/regional-main.cc"
           ],
-          "seconds": 0.025396397977601737,
+          "seconds": 0.02794727694708854,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
@@ -317,23 +328,23 @@
             "-stdlib=libc++",
             "-fuse-ld=lld",
             "-I/ws/EvtWorks/cod-project/include",
-            "/tmp/cod-composition-stress-dlh4xkkl/regional-main.bc",
-            "/tmp/cod-composition-stress-dlh4xkkl/regional-main.cc",
+            "/tmp/cod-composition-stress-28h349az/regional-main.bc",
+            "/tmp/cod-composition-stress-28h349az/regional-main.cc",
             "-o",
-            "/tmp/cod-composition-stress-dlh4xkkl/regional-main.native",
+            "/tmp/cod-composition-stress-28h349az/regional-main.native",
             "-L/ws/EvtWorks/cod-project/build/lib",
             "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
           ],
-          "seconds": 1.4826391160022467,
+          "seconds": 1.6339717369992286,
           "exit_code": 0,
           "stdout": "",
           "stderr": ""
         },
         "run": {
           "command": [
-            "/tmp/cod-composition-stress-dlh4xkkl/regional-main.native"
+            "/tmp/cod-composition-stress-28h349az/regional-main.native"
           ],
-          "seconds": 0.001904921024106443,
+          "seconds": 0.00130020099459216,
           "exit_code": 0,
           "stdout": "11\n29\n",
           "stderr": ""
@@ -343,11 +354,11 @@
             "/ws/EvtWorks/cod-project/build/bin/llvm-size",
             "--format=sysv",
             "--radix=10",
-            "/tmp/cod-composition-stress-dlh4xkkl/regional-main.native"
+            "/tmp/cod-composition-stress-28h349az/regional-main.native"
           ],
-          "seconds": 0.009319037024397403,
+          "seconds": 0.008221641008276492,
           "exit_code": 0,
-          "stdout": "/tmp/cod-composition-stress-dlh4xkkl/regional-main.native  :\nsection                 size    addr\n.interp                   28     736\n.note.ABI-tag             32     764\n.dynsym                  552     800\n.gnu.version              46    1352\n.gnu.version_r            80    1400\n.gnu.hash                 28    1480\n.dynstr                  536    1508\n.rela.dyn                312    2048\n.rela.plt                288    2360\n.rodata                  113    2648\n.gcc_except_table         56    2764\n.eh_frame_hdr            124    2820\n.eh_frame                440    2944\n.text                   6630    7488\n.init                     23   14120\n.fini                      9   14144\n.plt                     208   14160\n.tbss                     16   14368\n.fini_array                8   18464\n.init_array                8   18472\n.dynamic                 528   18480\n.got                      64   19008\n.relro_padding          1408   19072\n.data                     32   23168\n.tm_clone_table            0   23200\n.got.plt                 120   23200\n.bss                       1   23320\n.comment                 240       0\n.debug_loclists          794       0\n.debug_abbrev           2321       0\n.debug_info            22584       0\n.debug_rnglists          143       0\n.debug_str_offsets      4724       0\n.debug_str             36453       0\n.debug_addr              336       0\n.debug_line              905       0\n.debug_line_str         1505       0\nTotal                  81695\n\n\n",
+          "stdout": "/tmp/cod-composition-stress-28h349az/regional-main.native  :\nsection                 size    addr\n.interp                   28     736\n.note.ABI-tag             32     764\n.dynsym                  552     800\n.gnu.version              46    1352\n.gnu.version_r            80    1400\n.gnu.hash                 28    1480\n.dynstr                  536    1508\n.rela.dyn                312    2048\n.rela.plt                288    2360\n.rodata                  113    2648\n.gcc_except_table         56    2764\n.eh_frame_hdr            124    2820\n.eh_frame                440    2944\n.text                   6630    7488\n.init                     23   14120\n.fini                      9   14144\n.plt                     208   14160\n.tbss                     16   14368\n.fini_array                8   18464\n.init_array                8   18472\n.dynamic                 528   18480\n.got                      64   19008\n.relro_padding          1408   19072\n.data                     32   23168\n.tm_clone_table            0   23200\n.got.plt                 120   23200\n.bss                       1   23320\n.comment                 240       0\n.debug_loclists          794       0\n.debug_abbrev           2321       0\n.debug_info            22584       0\n.debug_rnglists          143       0\n.debug_str_offsets      4724       0\n.debug_str             36453       0\n.debug_addr              336       0\n.debug_line              905       0\n.debug_line_str         1505       0\nTotal                  81695\n\n\n",
           "stderr": ""
         }
       },
@@ -366,11 +377,11 @@
     "The ordinary language corpus separately exercises the --run driver path."
   ],
   "source_sha256": {
-    "cod/lang_syntax.hh": "4de1a54e8bea0b85283e827aa4079678c6bf66a8220896fce118e03c334f058e",
-    "cod/lang_frontend.hh": "1ff2a135764f36ef84a3708823bed5a47573d4d9fce0be1d505a2f8ceda3c29d",
+    "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
+    "cod/lang_frontend.hh": "3f9fb58827297d690e122f99ca150e16a09005af848575242bbcf1c80bcc965d",
     "cod/lang_llvm.hh": "6021883aa15ad2c55d0438f7508d273a52a38d3549b7345aeece4504f81f0e30",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
-    "tests/cod/language/stress_tests.py": "ba197b15320c9c3fa6da9f504d74e4387995b5c5514a3d3321561cd6858a5caf"
+    "tests/cod/language/stress_tests.py": "3d012977e89ec40150040758ee2f530e0f8ac3aff68eb1afbff395d577a9df9d"
   }
 }

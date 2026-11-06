@@ -18,9 +18,12 @@ struct Location {
   unsigned column = 1;
 };
 
+inline std::string location_text(const Location &at) {
+  return at.file + ":" + std::to_string(at.line) + ":" + std::to_string(at.column);
+}
+
 [[noreturn]] inline void fail(const Location &at, const std::string &message) {
-  throw std::runtime_error(at.file + ":" + std::to_string(at.line) + ":" +
-                           std::to_string(at.column) + ": " + message);
+  throw std::runtime_error(location_text(at) + ": " + message);
 }
 
 enum class TokenKind { identifier, symbol, integer, real, string, punctuation, end };

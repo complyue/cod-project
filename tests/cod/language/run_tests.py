@@ -34,8 +34,11 @@ def main():
     for case in cases:
         command = [str(executable), "--run", str(directory / case["file"]), *case.get("args", [])]
         result = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=60)
+        diagnostics = case.get("stderr_contains", "")
+        if isinstance(diagnostics, str):
+            diagnostics = [diagnostics]
         passed = (result.returncode == case["exit"] and result.stdout == case["stdout"]
-                  and case.get("stderr_contains", "") in result.stderr
+                  and all(message in result.stderr for message in diagnostics)
                   and (case["exit"] != 0 or result.stderr == "" or
                        (case.get("stderr_contains") and all("[-Wunit-conversion]" in line
                                                           for line in result.stderr.splitlines()))))

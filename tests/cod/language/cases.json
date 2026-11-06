@@ -54,7 +54,7 @@
     "file": "missing-capture.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "unavailable definition-time capture"
+    "stderr_contains": ["unavailable definition-time capture", "in call to procedure '@wrapper'"]
   },
   {
     "file": "impure-function.cod",

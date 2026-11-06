@@ -74,6 +74,8 @@ class Compiler {
   std::vector<std::string> scanned_;
   std::vector<std::string> execution_order_;
   std::set<const Form *> active_calls_;
+  struct CallSite { const Form *form; Location at; };
+  std::vector<CallSite> call_path_;
   std::vector<std::unique_ptr<Form>> imported_forms_;
   struct Product {
     Form *form;
@@ -475,6 +477,7 @@ class Compiler {
   }
   Value call(Form &form, Module &lexical, Environment env, const std::vector<Value> &args,
              bool pure, const Location &at) {
+    call_path_.push_back({&form, at});
     if (args.size() != form.parameters.size()) fail(at, "wrong argument count for '" + form.name + "'");
     if (!active_calls_.insert(&form).second) fail(at, "recursive call is outside the first prototype");
     Locals locals;
@@ -488,6 +491,7 @@ class Compiler {
     auto result = block(*form.body, lexical, std::move(env), std::move(locals), pure);
     active_calls_.erase(&form);
     if (form.result_type) require(result.type, resolve(*form.result_type, lexical, form.at), form.at);
+    call_path_.pop_back();
     return result;
   }
   struct Conversion {
@@ -655,8 +659,7 @@ class Compiler {
       const auto message = "ambiguous unit conversion; selected " + describe(route.steps) +
                            "; alternative " + describe(route.alternative) + " [-Wunit-conversion]";
       if (warnings_as_errors_) fail(at, "warning treated as error: " + message);
-      warnings_.push_back(at.file + ":" + std::to_string(at.line) + ":" + std::to_string(at.column) +
-                          ": warning: " + message);
+      warnings_.push_back(location_text(at) + ": warning: " + message);
     }
     for (const auto &step : route.steps)
       value = call(*step.form, *step.lexical, {}, {value}, true, at);
@@ -1240,7 +1243,25 @@ public:
     auto &module = load(entry.string(), {entry.string()});
     // All source files have been parsed before any execution semantics are lowered.
 
-    execute_module(module, {}, {module.path});
+    try {
+      execute_module(module, {}, {module.path});
+    } catch (const std::runtime_error &error) {
+      // Successful calls pop their sites. An error leaves the demanded path
+      // intact, so format it once without copying a growing message on unwind.
+      std::string message = error.what();
+      for (size_t depth = 0; depth < call_path_.size(); ++depth) {
+        if (depth == 4 && call_path_.size() > 8) {
+          message += "\nnote: " + std::to_string(call_path_.size() - 8) + " intervening calls omitted";
+          depth = call_path_.size() - 4;
+        }
+        const auto &site = call_path_[call_path_.size() - 1 - depth];
+        const bool procedure = site.form->kind == Form::Kind::procedure;
+        message += "\n" + location_text(site.at) + ": note: in call to " +
+            (procedure ? "procedure '@" : "function '") + site.form->name +
+            "' defined at " + location_text(site.form->at);
+      }
+      throw std::runtime_error(message);
+    }
     auto [llvm_ir, bitcode] = ir_.finish();
     return {scanned_, execution_order_, warnings_, std::move(llvm_ir), std::move(bitcode), regional_runtime_};
   }

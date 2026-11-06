@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T06:37:09.749219+00:00",
+  "recorded_utc": "2026-11-06T06:44:24.414724+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -189,11 +189,14 @@
         "file": "missing-capture.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "unavailable definition-time capture"
+        "stderr_contains": [
+          "unavailable definition-time capture",
+          "in call to procedure '@wrapper'"
+        ]
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod:7:23: perform requires an unavailable definition-time capture /ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod::@x\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod:7:37: perform requires an unavailable definition-time capture /ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod::@x\n/ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod:9:22: note: in call to procedure '@wrapper' defined at /ws/EvtWorks/cod-project/tests/cod/language/missing-capture.cod:7:1\n",
       "passed": true
     },
     {
@@ -211,7 +214,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/impure-function.cod:3:25: a function cannot read symbolic effects\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/impure-function.cod:3:25: a function cannot read symbolic effects\n/ws/EvtWorks/cod-project/tests/cod/language/impure-function.cod:4:22: note: in call to function 'bad' defined at /ws/EvtWorks/cod-project/tests/cod/language/impure-function.cod:3:1\n",
       "passed": true
     },
     {
@@ -318,7 +321,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/source.cod:7:40: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@x\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/source.cod:7:40: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@x\n/ws/EvtWorks/cod-project/tests/cod/language/behave-without-caller.cod:5:22: note: in call to procedure '@p' defined at /ws/EvtWorks/cod-project/tests/cod/language/source.cod:7:1\n",
       "passed": true
     },
     {
@@ -895,7 +898,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/float-width-error.cod:2:1: expected f32, got f64\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/float-width-error.cod:2:1: expected f32, got f64\n/ws/EvtWorks/cod-project/tests/cod/language/float-width-error.cod:2:1: note: in call to function 'read' defined at /ws/EvtWorks/cod-project/tests/cod/language/float-width-error.cod:1:1\n",
       "passed": true
     },
     {
@@ -948,7 +951,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/product-module-identity.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/product-library.cod::Position, got /ws/EvtWorks/cod-project/tests/cod/language/product-other-library.cod::Position\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/product-module-identity.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/product-library.cod::Position, got /ws/EvtWorks/cod-project/tests/cod/language/product-other-library.cod::Position\n/ws/EvtWorks/cod-project/tests/cod/language/product-module-identity.cod:3:1: note: in call to function 'read' defined at /ws/EvtWorks/cod-project/tests/cod/language/product-library.cod:2:1\n",
       "passed": true
     },
     {
@@ -1088,7 +1091,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-exact-reject.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::cm\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-exact-reject.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::cm\n/ws/EvtWorks/cod-project/tests/cod/language/units-exact-reject.cod:3:1: note: in call to function 'exact' defined at /ws/EvtWorks/cod-project/tests/cod/language/units-exact-reject.cod:2:1\n",
       "passed": true
     },
     {
@@ -1106,7 +1109,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-omitted-route.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::mm\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-omitted-route.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::mm\n/ws/EvtWorks/cod-project/tests/cod/language/units-omitted-route.cod:3:1: note: in call to function 'distance' defined at /ws/EvtWorks/cod-project/tests/cod/language/units-omitted-route.cod:2:1\n",
       "passed": true
     },
     {
@@ -1160,7 +1163,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-identity.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-other.cod::m\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-identity.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-other.cod::m\n/ws/EvtWorks/cod-project/tests/cod/language/units-identity.cod:4:1: note: in call to function 'exact' defined at /ws/EvtWorks/cod-project/tests/cod/language/units-identity.cod:3:1\n",
       "passed": true
     },
     {
@@ -1229,7 +1232,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-impure.cod:5:55: a function cannot read symbolic effects\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-impure.cod:5:55: a function cannot read symbolic effects\n/ws/EvtWorks/cod-project/tests/cod/language/units-impure.cod:7:1: note: in call to function 'convert' defined at /ws/EvtWorks/cod-project/tests/cod/language/units-impure.cod:5:1\n",
       "passed": true
     },
     {
@@ -1373,7 +1376,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod:7:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod::c, got /ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod::a\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod:7:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod::c, got /ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod::a\n/ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod:7:1: note: in call to function 'consume' defined at /ws/EvtWorks/cod-project/tests/cod/language/units-cycle-no-route.cod:6:1\n",
       "passed": true
     },
     {
@@ -1812,7 +1815,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-pure-write.cod:4:32: a function cannot modify regional storage\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-pure-write.cod:4:32: a function cannot modify regional storage\n/ws/EvtWorks/cod-project/tests/cod/language/region-pure-write.cod:7:1: note: in call to function 'bad' defined at /ws/EvtWorks/cod-project/tests/cod/language/region-pure-write.cod:4:1\n",
       "passed": true
     },
     {
@@ -1830,7 +1833,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-pure-create.cod:1:18: a function cannot create a region resource\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-pure-create.cod:1:18: a function cannot create a region resource\n/ws/EvtWorks/cod-project/tests/cod/language/region-pure-create.cod:2:1: note: in call to function 'bad' defined at /ws/EvtWorks/cod-project/tests/cod/language/region-pure-create.cod:1:1\n",
       "passed": true
     },
     {
@@ -1884,7 +1887,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:4:32: regional result would outlive its owning scope\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:4:32: regional result would outlive its owning scope\n/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:5:8: note: in call to procedure '@make' defined at /ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:4:1\n",
       "passed": true
     },
     {
@@ -2190,9 +2193,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-rm52ezwv/program.ll",
+        "/tmp/cod-language-check-suwneh6k/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-rm52ezwv/program.bc"
+        "/tmp/cod-language-check-suwneh6k/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2202,18 +2205,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "ac3d457113551d2faa9d60f0ee5b3ed101d2fe860493a3e6c72614dd9e6cf2a0"
+    "sha256": "007cc3eca44319c9533e04f498d02c3b4b7a95db7a6802f367a600172c768ee8"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
-    "cod/lang_syntax.hh": "6d0e253188cb27a3b7a0167846de8d26d09624f5d0a8b10fb6d497199f092c0b",
-    "cod/lang_frontend.hh": "1ff2a135764f36ef84a3708823bed5a47573d4d9fce0be1d505a2f8ceda3c29d",
+    "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
+    "cod/lang_frontend.hh": "3f9fb58827297d690e122f99ca150e16a09005af848575242bbcf1c80bcc965d",
     "cod/lang_llvm.hh": "6021883aa15ad2c55d0438f7508d273a52a38d3549b7345aeece4504f81f0e30",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
-    "tests/cod/language/run_tests.py": "c16c4602b95f7052e9161950396ba181a81ae5b3ba9d98faa79b821554f1960d",
-    "tests/cod/language/cases.json": "71b41ab8734f2ee2994f2a0ceb6d04f011fe932220cd2bdb19b943d67cb127d2",
+    "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
+    "tests/cod/language/cases.json": "9434fae55ba2a8086b1b3120add9cf98de3093eaf5099b6c9881fd2eba91f981",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2265,7 +2268,7 @@
     "tests/cod/language/method-no-match.cod": "b5e740edc1f1fa8f219d18dc3bcc4ac25ccb5d8d88302d8bb7aa66999c0d724a",
     "tests/cod/language/method-other-library.cod": "bfefe85ee3032f7ddf502e9dbddf7b817c10ef23eadd74431acbd05d9affa5a4",
     "tests/cod/language/methods.cod": "4205246c8412b10cd3cd3c3a01a12b42262e0007412f0d6c2c34bcbd7b5bade4",
-    "tests/cod/language/missing-capture.cod": "0e59004b31863a174459b9c5aa0fcedd8a940c2ec4d42d5835cae7fa374ebb21",
+    "tests/cod/language/missing-capture.cod": "98c668f838778e8bc8b652cee4bf12b652ac677f9d153eed64c2bffa90355e07",
     "tests/cod/language/missing-default-alias.cod": "6e9b09ddf5c872aac6b7c0ff04621d4df21dd2e895d4154d2df7394898e35d02",
     "tests/cod/language/module-diamond.cod": "d7c57a55265fb5c8050f8fbe8371670d8a958e4cf403252cd33fe8f8486aec25",
     "tests/cod/language/numeric-widths.cod": "93aa98656d33b26633e1e3c5b4961a19ed5a96bcf04b112de36c8711b712146e",

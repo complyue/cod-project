@@ -71,6 +71,22 @@ def main():
         factor = pow(16807, depth, 2147483647)
         expected = sum(seed * factor % 2147483647 for seed in range(1, 129))
         results.append(run(executable, root, entry, f'{expected}\n', '512-module-pure-chain-loop-inputs'))
+        # Reuse the same demanded chain to check that a leaf error identifies
+        # both the failing definition and the entry call, without 512 notes.
+        (directory / f'pure-{depth-1}.cod').write_text('function f(x::u64)::u64 { @missing }\n')
+        command = [str(executable), '--check', str(entry)]
+        diagnostic = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=120)
+        diagnostic_passed = (diagnostic.returncode == 2 and diagnostic.stdout == ''
+                             and 'a function cannot read symbolic effects' in diagnostic.stderr
+                             and f'pure-{depth-1}.cod:1:' in diagnostic.stderr
+                             and 'pure-main.cod:3:' in diagnostic.stderr
+                             and diagnostic.stderr.count(': note: in call to function ') == 8
+                             and f'{depth-8} intervening calls omitted' in diagnostic.stderr)
+        results[-1]['leaf_error'] = {'command': command, 'exit_code': diagnostic.returncode,
+                                     'stdout': diagnostic.stdout, 'stderr': diagnostic.stderr,
+                                     'passed': diagnostic_passed}
+        results[-1]['passed'] &= diagnostic_passed
+        print(json.dumps({'case': 'deep-leaf-diagnostic', 'passed': diagnostic_passed}), flush=True)
 
         depth = 1000
         lines = ['using symbol "std:io" @print;', 'symbol @base;', 'effect @base = 5;']
