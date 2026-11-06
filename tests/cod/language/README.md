@@ -1,14 +1,14 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 24 · Recorded: 2026-11-05.
+Prototype reference revision: 25 · Recorded: 2026-11-05.
 
 ## Design authority
 
-- **Registry / scope:** implementation reference for [D-10r16](../../../design/DesignAuthorityRegistry.md#d-10), D-07r22 and D-11r8. The complete design contracts remain pending-human; this reference describes the bounded implementation.
+- **Registry / scope:** implementation reference for [D-10r16](../../../design/DesignAuthorityRegistry.md#d-10), D-07r22 and D-11r9. The complete design contracts remain pending-human; this reference describes the bounded implementation.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation. H-147 continues the work for ten active hours, excluding waiting.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-245](../../../design/DesignAuthorityRegistry.md#k-245) records source-located execution checks and current validation scope; earlier evidence retains its own revision and timestamp.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-246](../../../design/DesignAuthorityRegistry.md#k-246) records diagnostic-size evidence and the pending conversion-sequencing review; earlier evidence retains its own revision and timestamp.
 
 ## Run
 
@@ -97,7 +97,7 @@ A unit definition creates a distinct compile-time type identity over a numeric s
 
 `x (metres)` requires that identity; `x (metres*)` permits conversion. `x (metres*<-cm<-mm)` uses a direct conversion when available, otherwise the declared indirect route. Automatic graph search chooses a unique path. Multiple unresolved paths warn and continue using the shortest route with declaration-order tie breaking, reporting an alternative witness. `--warnings-as-errors` and `-Werror=unit-conversion` turn those warnings into errors. Paths use the call site's selected bundle; route names resolve where the parameter is defined. Exact argument-tuple methods are selected before conversion-enabled alternatives.
 
-Conversions are pure functions; they cannot read/write effects or invoke procedures. The original argument is evaluated once. Identity/route checks happen before native compilation, including when a preceding module initializer would print at runtime. The compiler does not enumerate cyclic walks or claim that distinct numeric formulas are equivalent.
+Conversions are pure functions; they cannot read/write effects or invoke procedures. The original argument is evaluated once. Current calls evaluate all original arguments left to right, then perform selected conversions left to right. A later argument’s effects can therefore precede a failing earlier conversion; [the sequencing decision](../../../design/ScalarUnitsAndIndexTypes.md#open-sequencing-decision-arguments-and-automatic-conversions) is pending human review. Identity/route checks happen before native compilation, including when a preceding module initializer would print at runtime. The compiler does not enumerate cyclic walks or claim that distinct numeric formulas are equivalent.
 
 ## Bounded iteration and numeric representations
 
