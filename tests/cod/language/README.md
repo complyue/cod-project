@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 48 · Recorded: 2026-11-06.
+Prototype reference revision: 49 · Recorded: 2026-11-06.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 48 · Recorded: 2026-11-06.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation. H-147 continues the work for ten active hours, excluding waiting. H-148 requires per-argument conversion before the next argument. H-149 permits nested local shadowing and requires unique declarations within each scope.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-271](../../../design/DesignAuthorityRegistry.md#k-271) records the pending lexical-keyword question; [K-270](../../../design/DesignAuthorityRegistry.md#k-270) records independent narrow-array access and maximum-index coverage; each evidence file retains its timestamp and source hashes. This checkpoint does not complete H-147’s ten-active-hour goal.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-272](../../../design/DesignAuthorityRegistry.md#k-272) records current-parser composition and source-hash verification; the lexical-keyword question remains pending under [K-271](../../../design/DesignAuthorityRegistry.md#k-271); each evidence file retains its timestamp and source hashes. This checkpoint does not complete H-147’s ten-active-hour goal.
 
 ## Run
 
