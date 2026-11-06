@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T09:48:17.032349+00:00",
+  "recorded_utc": "2026-11-06T09:56:06.058325+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -1056,11 +1056,16 @@
         "file": "method-no-match.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "no matching method"
+        "stderr_contains": [
+          "no matching method 'f' for supplied argument types (bool): 3 available candidates",
+          "method-no-match.cod:3:1: note: candidate function 'f'",
+          "method-library.cod:1:1: note: candidate function 'score'",
+          "method-library.cod:2:1: note: candidate function 'score'"
+        ]
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod:3:1: no matching method for 'f'\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod:5:1: no matching method 'f' for supplied argument types (bool): 3 available candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod:3:1: note: candidate function 'f'\n/ws/EvtWorks/cod-project/tests/cod/language/method-library.cod:1:1: note: candidate function 'score'\n/ws/EvtWorks/cod-project/tests/cod/language/method-library.cod:2:1: note: candidate function 'score'\n",
       "passed": true
     },
     {
@@ -2308,9 +2313,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-hdfyxnf3/program.ll",
+        "/tmp/cod-language-check-3mkd666_/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-hdfyxnf3/program.bc"
+        "/tmp/cod-language-check-3mkd666_/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2320,18 +2325,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "7adb179e186b28a08e1e5ee4c7a46d93023a32c174b0a34b19b7f20c1df664b2"
+    "sha256": "f8911ad5d6e2fb9cce83e758487944325f7c3a99c83593bf6ea4c97f0ac4cd4a"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
-    "cod/lang_frontend.hh": "88208ba691cfa7d49b05c37a3355c5d5e85810728ac37a2ffcfd909f31627bfd",
+    "cod/lang_frontend.hh": "0988e2ad0b0c48b683ee0cce557556dfdf0eb1217aca2def2683d15f89ef541e",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "5ba2a162f68a0d0e8e17aa83375f8f8729793749e2559df873ec401c48da04c4",
+    "tests/cod/language/cases.json": "ac05696a1c7c5387d051a4c26af9c502ac761f75d1abade18ca81833fd92350b",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2381,7 +2386,7 @@
     "tests/cod/language/method-ambiguous.cod": "0539ca28165b1d5adbc09b54f26f48e84b12ae2d96657ba8ef5f7c40998a3e0c",
     "tests/cod/language/method-library.cod": "dacca8fa54d12d51637d65c34fe4fae7ce82c26c9c0158815aa96b4a315efdb7",
     "tests/cod/language/method-modules.cod": "10d0e79036423d708c2acc6e42ea99a48e369f41a899af2670a11ce87b82c19a",
-    "tests/cod/language/method-no-match.cod": "b5e740edc1f1fa8f219d18dc3bcc4ac25ccb5d8d88302d8bb7aa66999c0d724a",
+    "tests/cod/language/method-no-match.cod": "db367e9d32ad890d25abc8ebd46aa964ab1923f35cc62ae4f5e00702a19e3579",
     "tests/cod/language/method-other-library.cod": "bfefe85ee3032f7ddf502e9dbddf7b817c10ef23eadd74431acbd05d9affa5a4",
     "tests/cod/language/methods.cod": "4205246c8412b10cd3cd3c3a01a12b42262e0007412f0d6c2c34bcbd7b5bade4",
     "tests/cod/language/missing-capture.cod": "98c668f838778e8bc8b652cee4bf12b652ac677f9d153eed64c2bffa90355e07",

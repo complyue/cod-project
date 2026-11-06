@@ -333,7 +333,12 @@
     "file": "method-no-match.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "no matching method"
+    "stderr_contains": [
+      "no matching method 'f' for supplied argument types (bool): 3 available candidates",
+      "method-no-match.cod:3:1: note: candidate function 'f'",
+      "method-library.cod:1:1: note: candidate function 'score'",
+      "method-library.cod:2:1: note: candidate function 'score'"
+    ]
   },
   {
     "file": "operator-control.cod",

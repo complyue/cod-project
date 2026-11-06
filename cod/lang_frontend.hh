@@ -625,6 +625,23 @@ class Compiler {
     }
     return result;
   }
+  [[noreturn]] static void method_failure(const std::string &name, const std::vector<Value> &args,
+                                         const std::vector<Function> &candidates, const Location &at,
+                                         bool ambiguous) {
+    std::string message = (ambiguous ? "ambiguous method '" : "no matching method '") + name +
+                          "' for supplied argument types (";
+    for (size_t i = 0; i < args.size(); ++i)
+      message += (i ? ", " : "") + type_name(args[i].type);
+    message += "): " + std::to_string(candidates.size()) + (ambiguous ? " matching" : " available") + " candidates";
+    const auto shown = std::min<size_t>(candidates.size(), 4);
+    for (size_t i = 0; i < shown; ++i) {
+      const auto &form = *candidates[i].form;
+      message += "\n" + location_text(form.at) + ": note: candidate function '" + form.name + "'";
+    }
+    if (shown < candidates.size())
+      message += "\nnote: " + std::to_string(candidates.size() - shown) + " additional candidates omitted";
+    fail(at, message);
+  }
   std::optional<MethodMatch> method(const std::string &name, Module &module,
                                     const std::vector<Value> &args, const Location &at) {
     const auto found = module.functions.find(name);
@@ -632,18 +649,9 @@ class Compiler {
     std::vector<MethodMatch> exact, converted;
     const auto reject_ambiguity = [&](const std::vector<MethodMatch> &matches) {
       if (matches.size() < 2) return;
-      std::string message = "ambiguous method '" + name + "' for supplied argument types (";
-      for (size_t i = 0; i < args.size(); ++i)
-        message += (i ? ", " : "") + type_name(args[i].type);
-      message += "): " + std::to_string(matches.size()) + " matching candidates";
-      const auto shown = std::min<size_t>(matches.size(), 4);
-      for (size_t i = 0; i < shown; ++i) {
-        const auto &form = *matches[i].function.form;
-        message += "\n" + location_text(form.at) + ": note: candidate function '" + form.name + "'";
-      }
-      if (shown < matches.size())
-        message += "\nnote: " + std::to_string(matches.size() - shown) + " additional candidates omitted";
-      fail(at, message);
+      std::vector<Function> candidates;
+      for (const auto &match : matches) candidates.push_back(match.function);
+      method_failure(name, args, candidates, at, true);
     };
     for (const auto &candidate : found->second) {
       if (candidate.form->parameters.size() != args.size()) continue;
@@ -963,7 +971,7 @@ class Compiler {
       const auto &candidate = function->second.front();
       return call(*candidate.form, *candidate.lexical, {}, args, true, expr.at);
     }
-    if (!selected) fail(expr.at, "no matching method for '" + expr.text + "'");
+    if (!selected) method_failure(expr.text, args, function->second, expr.at, false);
     return call_method(*selected, args, expr.at, points);
   }
   Value unary_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
