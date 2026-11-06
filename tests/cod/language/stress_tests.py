@@ -89,16 +89,25 @@ def main():
         print(json.dumps({'case': 'deep-leaf-diagnostic', 'passed': diagnostic_passed}), flush=True)
 
         depth = 1000
-        lines = ['using symbol "std:io" @print;', 'symbol @base;', 'effect @base = 5;']
+        (directory / 'operation-vocabulary.cod').write_text('symbol @base;\n')
+        (directory / 'operation-leaf.cod').write_text(
+            'symbol from "operation-vocabulary.cod" @base;\n'
+            'type Argument { value::i64; }\n'
+            'procedure (+)(value::Argument, delta::i64)::i64 { value.value + delta + @base }\n')
+        lines = ['using symbol "std:io" @print;',
+                 'symbol from "operation-vocabulary.cod" @base;',
+                 'using "operation-leaf.cod" Argument;', 'using "operation-leaf.cod" (+);',
+                 'effect @base = 5;']
         for i in range(depth):
             lines.append(f'symbol @p{i};')
-            body = '@base + x' if i == 0 else f'behave @p{i-1}(x + 1)'
+            body = 'Argument(x) + 0' if i == 0 else f'behave @p{i-1}(x + 1)'
             lines.append(f'procedure @p{i}(x::i64)::i64 {{ {body} }}')
         lines += ['effect @base = 9;', f'behave @print(perform @p{depth-1}(0));',
                   f'behave @print(behave @p{depth-1}(0));', 'behave @print(@base);']
         entry = directory / 'procedure-main.cod'
         entry.write_text('\n'.join(lines) + '\n')
-        results.append(run(executable, root, entry, f'{depth-1+5}\n{depth-1+9}\n9\n', '1000-procedure-inline-chain'))
+        results.append(run(executable, root, entry, f'{depth-1+5}\n{depth-1+9}\n9\n',
+                           '1000-procedure-inline-chain-with-operation-leaf'))
 
         layers = 10
         for level in range(layers, -1, -1):
