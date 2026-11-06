@@ -1,3 +1,5 @@
-symbol @x;
-effect @x = 1;
-effect @x = true;
+using symbol "std:io" @print;
+symbol from "units-procedure-source.cod" @distance as @x;
+unit normalized::f64;
+behave @print(99);
+effect @x = normalized(1.0);

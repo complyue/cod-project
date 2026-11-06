@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 37 · Recorded: 2026-11-06.
+Prototype reference revision: 38 · Recorded: 2026-11-06.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 37 · Recorded: 2026-11-06.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation. H-147 continues the work for ten active hours, excluding waiting. H-148 requires per-argument conversion before the next argument.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-260](../../../design/DesignAuthorityRegistry.md#k-260) records argument/conversion snapshot boundaries; earlier evidence retains its own revision and timestamp.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-261](../../../design/DesignAuthorityRegistry.md#k-261) records origin-aware symbol type-conflict diagnostics; earlier evidence retains its own revision and timestamp.
 
 ## Run
 
@@ -47,7 +47,7 @@ behave @print(behave @p);   // 9: current dynamic binding
 
 - Scalars `i64`, `u8`, `u32`, `u64`, `f32`, `f64`, `bool` and `void`; decimal integers, floating literals with optional `f32`/`f64` suffix, `true`/`false`, arithmetic, comparisons, `!`, `&&` and `||`. Unsuffixed floating literals use `f64`; arithmetic does not implicitly mix widths. Floating operators use native IEEE arithmetic; signed integer arithmetic checks overflow.
 - Lexically named functions with typed parameters and an optional result annotation; symbol-named procedures with the same scalar parameters/results. A no-argument procedure can omit its parameter list. Calls to functions use `name(...)`; procedure calls use `perform @name(...)` or `behave @name(...)`.
-- `effect @name = value` binds for the enclosing scope and yields that value. `@name` reads. Nested braces restore bindings on exit. Ordinary assignment is rejected.
+- `effect @name = value` binds for the enclosing scope and yields that value. `@name` reads. Nested braces restore bindings on exit. Ordinary assignment is rejected. The prototype assigns one value type to each symbol identity across the program. A conflicting binding reports the symbol and both types, including nominal module origins even when local aliases have the same spelling.
 - `if (condition) { ... } else { ... }`, with matching branch result types. Blocks yield their last expression; an empty block yields `void`. Semicolons separate expressions and a trailing semicolon does not discard the last value.
 - Module-level `symbol`, `function`, `procedure`, immutable bits `global`, resource declarations and expressions. Global initializers must be bits literals or function calls; procedure-only primitives such as `store`, `setfield` and region-resource operations cannot be the initializer’s outer call. Local immutable `let` bindings, bounded loops and declared regional arrays support numerical kernels.
 - `symbol @local;` declares a fresh identity. `symbol from "vocabulary.cod" @source as @local;` selects an existing source identity; omitting `as` retains its spelling. Neither provides an initial runtime value. Symbol tokens such as `@effect` are distinct from lexical keywords; quoted module paths are neither keywords nor operators.

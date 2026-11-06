@@ -75,7 +75,12 @@
     "file": "type-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "incompatible value types"
+    "stderr_contains": [
+      "incompatible value types for",
+      "units-procedure-source.cod::@distance",
+      "units-procedure-source.cod::normalized, got ",
+      "type-error.cod::normalized"
+    ]
   },
   {
     "file": "plain-assignment.cod",

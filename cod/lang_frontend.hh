@@ -349,7 +349,8 @@ class Compiler {
   void fix_type(size_t id, Type type, const Location &at) {
     const auto [found, added] = symbol_types_.emplace(id, type);
     if (!added && found->second != type)
-      fail(at, "incompatible value types for " + symbol_names_[id]);
+      fail(at, "incompatible value types for " + symbol_names_[id] +
+                   ": expected " + type_name(found->second) + ", got " + type_name(type));
   }
   Value read_symbol(size_t id, const Environment &env, const Location &at) {
     const auto found = env.find(id);
