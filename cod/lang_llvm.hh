@@ -301,6 +301,26 @@ public:
     llvm::BasicBlock *otherwise = nullptr, *merge = nullptr, *first_end = nullptr;
     llvm::Value *first_value = nullptr;
   };
+  struct ConversionPoint {
+    llvm::BasicBlock *before, *after;
+  };
+  ConversionPoint conversion_point() {
+    auto *before = b().GetInsertBlock();
+    auto *after = llvm::BasicBlock::Create(context(), "argument.next", entry_);
+    b().CreateBr(after);
+    b().SetInsertPoint(after);
+    return {before, after};
+  }
+  llvm::IRBuilderBase::InsertPoint begin_conversion(const ConversionPoint &point) {
+    auto resume = b().saveIP();
+    point.before->getTerminator()->eraseFromParent();
+    b().SetInsertPoint(point.before);
+    return resume;
+  }
+  void end_conversion(const ConversionPoint &point, llvm::IRBuilderBase::InsertPoint resume) {
+    b().CreateBr(point.after);
+    b().restoreIP(resume);
+  }
   Branch branch(llvm::Value *condition, bool invert = false) {
     auto *yes = llvm::BasicBlock::Create(context(), "then", entry_);
     auto *no = llvm::BasicBlock::Create(context(), "else", entry_);

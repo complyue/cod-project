@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+using units "units-sequencing-library.cod" {raw, normalized};
+using "units-sequencing-library.cod" (+);
+raw(0u64) + { behave @print(99); 1u64 };

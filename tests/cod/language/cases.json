@@ -54,7 +54,10 @@
     "file": "missing-capture.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": ["unavailable definition-time capture", "in call to procedure '@wrapper'"]
+    "stderr_contains": [
+      "unavailable definition-time capture",
+      "in call to procedure '@wrapper'"
+    ]
   },
   {
     "file": "impure-function.cod",
@@ -434,7 +437,7 @@
   {
     "file": "units-argument-once.cod",
     "exit": 0,
-    "stdout": "123\n2.5\n"
+    "stdout": "123\n2.5\n11\n21\n7\n11\n22\n7\n11\n23\n7\n"
   },
   {
     "file": "units-shorter-route.cod",
@@ -685,5 +688,23 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "duplicate lexical name 'cm_to_m'"
+  },
+  {
+    "file": "units-function-order.cod",
+    "exit": 70,
+    "stdout": "",
+    "stderr_contains": "units-sequencing-library.cod:5:11: division by zero"
+  },
+  {
+    "file": "units-procedure-order.cod",
+    "exit": 70,
+    "stdout": "",
+    "stderr_contains": "units-sequencing-library.cod:5:11: division by zero"
+  },
+  {
+    "file": "units-operator-order.cod",
+    "exit": 70,
+    "stdout": "",
+    "stderr_contains": "units-sequencing-library.cod:5:11: division by zero"
   }
 ]

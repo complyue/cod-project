@@ -470,10 +470,25 @@ class Compiler {
     return result;
   }
   std::vector<Value> arguments(const Expression &expr, Module &module, Environment &env,
-                               Locals &locals, bool pure) {
+                               Locals &locals, bool pure,
+                               std::vector<LLVMEmission::ConversionPoint> *points = nullptr) {
     std::vector<Value> values;
-    for (const auto &arg : expr.children) values.push_back(expression(*arg, module, env, locals, pure));
+    for (const auto &arg : expr.children) {
+      values.push_back(expression(*arg, module, env, locals, pure));
+      if (points) points->push_back(ir_.conversion_point());
+    }
     return values;
+  }
+  static bool converting_parameters(const Form &form) {
+    return std::any_of(form.parameters.begin(), form.parameters.end(),
+                       [](const Parameter &parameter) { return parameter.automatic_conversion; });
+  }
+  bool converting_method(const std::string &name, const Module &module, size_t arity) {
+    const auto found = module.functions.find(name);
+    if (arity < 2 || found == module.functions.end()) return false;
+    return std::any_of(found->second.begin(), found->second.end(), [&](const Function &function) {
+      return function.form->parameters.size() == arity && converting_parameters(*function.form);
+    });
   }
   Value call(Form &form, Module &lexical, Environment env, const std::vector<Value> &args,
              bool pure, const Location &at) {
@@ -648,7 +663,9 @@ class Compiler {
     }
     return candidates.front();
   }
-  Value converted(Value value, const Route &route, const Location &at) {
+  Value converted(Value value, const Route &route, const Location &at,
+                  const LLVMEmission::ConversionPoint *point = nullptr) {
+    if (route.steps.empty()) return value;
     if (!route.alternative.empty()) {
       auto describe = [&](const std::vector<Function> &path) {
         std::string result = type_name(value.type);
@@ -661,12 +678,18 @@ class Compiler {
       if (warnings_as_errors_) fail(at, "warning treated as error: " + message);
       warnings_.push_back(location_text(at) + ": warning: " + message);
     }
+    // Dispatch needs every argument's type, but a selected conversion executes
+    // immediately after its own argument, before any later argument effects.
+    const auto resume = point ? std::optional(ir_.begin_conversion(*point)) : std::nullopt;
     for (const auto &step : route.steps)
       value = call(*step.form, *step.lexical, {}, {value}, true, at);
+    if (resume) ir_.end_conversion(*point, *resume);
     return value;
   }
-  Value call_method(const MethodMatch &match, std::vector<Value> args, const Location &at) {
-    for (size_t i = 0; i < args.size(); ++i) args[i] = converted(args[i], match.routes[i], at);
+  Value call_method(const MethodMatch &match, std::vector<Value> args, const Location &at,
+                    const std::vector<LLVMEmission::ConversionPoint> &points = {}) {
+    for (size_t i = 0; i < args.size(); ++i)
+      args[i] = converted(args[i], match.routes[i], at, points.empty() ? nullptr : &points[i]);
     return call(*match.function.form, *match.function.lexical, {}, args, true, at);
   }
   Type array_type(const Value &value, const Location &at) {
@@ -690,7 +713,9 @@ class Compiler {
     if (found == env.end()) fail(expr.at, "missing required procedure binding " + symbol_names_[id]);
     if (!found->second.procedure) fail(expr.at, "perform/behave requires a procedure value");
     const auto proc = found->second.procedure; // Resolve before arguments/capture installation.
-    auto args = arguments(expr, module, env, locals, pure);
+    std::vector<LLVMEmission::ConversionPoint> points;
+    const bool convert_arguments = expr.children.size() > 1 && proc->form && converting_parameters(*proc->form);
+    auto args = arguments(expr, module, env, locals, pure, convert_arguments ? &points : nullptr);
     if (!proc->builtin.empty()) {
       if (args.size() != 1) fail(expr.at, "@" + proc->builtin + " expects one argument");
       if (proc->builtin == "assert") {
@@ -706,7 +731,7 @@ class Compiler {
     if (args.size() == proc->form->parameters.size()) {
       for (size_t i = 0; i < args.size(); ++i) {
         if (const auto path = route(args[i].type, proc->form->parameters[i], *proc->lexical, module, expr.at))
-          args[i] = converted(args[i], *path, expr.at);
+          args[i] = converted(args[i], *path, expr.at, points.empty() ? nullptr : &points[i]);
       }
     }
     const auto native_scope = ir_.scope();
@@ -911,14 +936,16 @@ class Compiler {
       return {args[0].type.representation, args[0].native, {}, nullptr};
     }
     if (function == module.functions.end()) fail(expr.at, "unavailable lexical function '" + expr.text + "'");
-    const auto args = arguments(expr, module, env, locals, pure);
+    std::vector<LLVMEmission::ConversionPoint> points;
+    const auto args = arguments(expr, module, env, locals, pure,
+                                converting_method(expr.text, module, expr.children.size()) ? &points : nullptr);
     auto selected = method(expr.text, module, args, expr.at);
     if (!selected && function->second.size() == 1) {
       const auto &candidate = function->second.front();
       return call(*candidate.form, *candidate.lexical, {}, args, true, expr.at);
     }
     if (!selected) fail(expr.at, "no matching method for '" + expr.text + "'");
-    return call_method(*selected, args, expr.at);
+    return call_method(*selected, args, expr.at, points);
   }
   Value unary_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
                          bool pure) {
@@ -951,9 +978,12 @@ class Compiler {
       ir_.otherwise(native_branch, right.native);
       return scalar(Type::boolean, ir_.merge(native_branch, Type::boolean, left.native));
     }
+    std::vector<LLVMEmission::ConversionPoint> points;
+    if (converting_method(expr.text, module, 2)) points.push_back(ir_.conversion_point());
     auto right = expression(*expr.children[1], module, env, locals, pure);
+    if (!points.empty()) points.push_back(ir_.conversion_point());
     if (const auto selected = method(expr.text, module, {left, right}, expr.at))
-      return call_method(*selected, {left, right}, expr.at);
+      return call_method(*selected, {left, right}, expr.at, points);
     if ((expr.text == "==" || expr.text == "!=") &&
         (left.type.kind == Type::reference || left.type == Type::null_ref) &&
         (right.type.kind == Type::reference || right.type == Type::null_ref)) {

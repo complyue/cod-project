@@ -4,3 +4,13 @@ symbol @emit;
 procedure @emit()::cm { behave @print(123); cm(250.0) }
 function consume(x (m*))::f64 { scalar(x) }
 behave @print(consume(behave @emit()));
+
+using units "units-sequencing-library.cod" {raw, normalized};
+using "units-sequencing-library.cod" combine;
+using "units-sequencing-library.cod" (+);
+using symbol "units-sequencing-library.cod" @combine;
+symbol @raw;
+procedure @raw()::raw { behave @print(11); raw(2u64) }
+behave @print(combine(behave @raw(), { behave @print(21); 3u64 }));
+behave @print(perform @combine(behave @raw(), { behave @print(22); 3u64 }));
+behave @print((+)(behave @raw(), { behave @print(23); 3u64 }));

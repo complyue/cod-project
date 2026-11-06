@@ -1,0 +1,13 @@
+unit raw::u64;
+unit normalized::u64;
+conversion function normalize(x (raw))::normalized {
+  normalized(if (scalar(x) == 0u64) {
+    10u64 / scalar(x)
+  } else {
+    fold (i in 0u64 .. scalar(x), sum = 0u64) { sum + 2u64 }
+  })
+}
+function combine(x (normalized*), y::u64)::u64 { scalar(x) + y }
+function (+)(x (normalized*), y::u64)::u64 { scalar(x) + y }
+symbol @combine;
+procedure @combine(x (normalized*), y::u64)::u64 { scalar(x) + y }

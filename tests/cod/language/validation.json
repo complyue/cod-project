@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T06:47:49.267844+00:00",
+  "recorded_utc": "2026-11-06T07:10:06.995874+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
-  "passed": 125,
-  "total": 125,
+  "passed": 128,
+  "total": 128,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -1389,10 +1389,10 @@
       "expected": {
         "file": "units-argument-once.cod",
         "exit": 0,
-        "stdout": "123\n2.5\n"
+        "stdout": "123\n2.5\n11\n21\n7\n11\n22\n7\n11\n23\n7\n"
       },
       "exit_code": 0,
-      "stdout": "123\n2.5\n",
+      "stdout": "123\n2.5\n11\n21\n7\n11\n22\n7\n11\n23\n7\n",
       "stderr": "",
       "passed": true
     },
@@ -2187,15 +2187,69 @@
       "passed": true
     },
     {
+      "fixture": "units-function-order.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-function-order.cod"
+      ],
+      "expected": {
+        "file": "units-function-order.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "units-sequencing-library.cod:5:11: division by zero"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-sequencing-library.cod:5:11: division by zero\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-procedure-order.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-procedure-order.cod"
+      ],
+      "expected": {
+        "file": "units-procedure-order.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "units-sequencing-library.cod:5:11: division by zero"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-sequencing-library.cod:5:11: division by zero\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-operator-order.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-operator-order.cod"
+      ],
+      "expected": {
+        "file": "units-operator-order.cod",
+        "exit": 70,
+        "stdout": "",
+        "stderr_contains": "units-sequencing-library.cod:5:11: division by zero"
+      },
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-sequencing-library.cod:5:11: division by zero\n",
+      "passed": true
+    },
+    {
       "fixture": "frontend-only",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-03lh31gj/program.ll",
+        "/tmp/cod-language-check-z5wmdxse/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-03lh31gj/program.bc"
+        "/tmp/cod-language-check-z5wmdxse/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2205,18 +2259,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "ec8317f9f49b87518bbc10831f9dc667252b54a08addec94a914ee13b8066c8d"
+    "sha256": "40d8eb3517b3b83d9d9ebf18daff280efb971235455c692a09738754c8c8200e"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
-    "cod/lang_frontend.hh": "262af964d410fca6d9c3fc059c55edf5f2601c95c6909afd0cbecfa8603f84bd",
-    "cod/lang_llvm.hh": "d43d38862ef8a1b97aa2985301f915a9a31ce5525ea5eae9129c48e40851fa6c",
+    "cod/lang_frontend.hh": "aade3787c9da7fd549080e2fc66c8a0efb3c560f12a5b8f32814c7f28b750f22",
+    "cod/lang_llvm.hh": "d0129f1e110f466baaaf0aeb127578684a9cc2c47285b8ad4424fbe71261f871",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "863b36134b19e13e24502fed7c5bd00d9d63e0baf97c7b50d737519573f781e8",
+    "tests/cod/language/cases.json": "89a935aeb0e3e4f1c02bd0785e923691dab10a3846ec1f5c49da7b2f582cdfa9",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2335,7 +2389,7 @@
     "tests/cod/language/uint-overflow.cod": "4bd351242c7e36d6bfb23ad79517b90dabe0dd6eb0d9e2e3f54f17f59eda8d14",
     "tests/cod/language/uint-underflow.cod": "5a6ccb4f1a5b8515a615263e070dfcbf30c86be94e74d13d66bc3c2fd630f856",
     "tests/cod/language/units-ambiguous.cod": "a97921741942cf18b0e58e5c26a8ce8594489fd85e8f357998789679887c957e",
-    "tests/cod/language/units-argument-once.cod": "0895ac1730443a6944a6e75cfedd95fd4536673a9b138e5094917f0578375249",
+    "tests/cod/language/units-argument-once.cod": "5669b040f8379c262742e70f4536ba975e89735de07ef090a722e66d812dbe4f",
     "tests/cod/language/units-basic.cod": "ba7c2c4936400a4643a3eb428f7f383e01da429ea097f70662dec77c01dcdae4",
     "tests/cod/language/units-cycle-no-route.cod": "f6ca6aa414d327b2dd52638c915b07adc934cff54f183bd0611791d51f62974b",
     "tests/cod/language/units-declared.cod": "eddcf25e33ed850c50e03c774414f9751353dfe89628fde2a99c25b8d157f200",
@@ -2345,19 +2399,23 @@
     "tests/cod/language/units-exact-before-route.cod": "11196a88543c766ccf33f763bfa7f14e943ab4dca702d4027f9adb8cf7c340c2",
     "tests/cod/language/units-exact-overload.cod": "b13f1a674f0c594babc34169562e3b3a956fed5d328e14cbccd09649cee8799f",
     "tests/cod/language/units-exact-reject.cod": "5dea7f2bb91a1b1712f4c8c8331d66c05f7bdf40373a058cf5d6376d2a7086f1",
+    "tests/cod/language/units-function-order.cod": "d2adfdf25d56689b91068ac4a4783723bf7bc36bec5325b65df38175dd7005c6",
     "tests/cod/language/units-identity.cod": "b2893ee3cfd3a82b45dc3ab5aa5e0c721f04cdf3efff7ac63239a04a47a68fa4",
     "tests/cod/language/units-import.cod": "5cdcede49a4b8c7485e46f97df02eccd49f49fb814b6163ef0dc5b2ab7a2e7a9",
     "tests/cod/language/units-impure.cod": "9d9e240d3fe902fdcbc6b91dce3e5243ab6c9d6dec8a5e9a4e7df7bf99d7207c",
     "tests/cod/language/units-library.cod": "ee31d7f7feedf7110e4a11eeb410130332512876350251cbb95b71c3b2d694ee",
     "tests/cod/language/units-name-collision.cod": "936a7e2dcf1e6f73945f8aecd0bc4166e47be202c6e2e527ba5b05044b3a712d",
     "tests/cod/language/units-omitted-route.cod": "c11b491afa766071e785b90e7ae1fcb0e7fa49adb98b0ee2a9727570be927ebb",
+    "tests/cod/language/units-operator-order.cod": "e0b0b87072e7133cc16b93ee08b1a4202252997f12dd399391fa3117684b069c",
     "tests/cod/language/units-other.cod": "5c752de7165b858fd48d9f06e6570726df006b4de3b11ec5cdabeb905538418d",
     "tests/cod/language/units-priority.cod": "c8fe73918c4bfc4960c2db5c7aef00eba3e609e27172abfdfc38c96395525650",
     "tests/cod/language/units-private-helper.cod": "fbc8fcf187fe6b48a15d1c02ee01e3bd875977f258af27c6e479014d183703d6",
     "tests/cod/language/units-private-library.cod": "32f8e0ae3d123d020110ce1e3e5c1b74436f7f31edac4fa712799d58ad6238bd",
+    "tests/cod/language/units-procedure-order.cod": "b65dce2a7a352d22e11714a80487045197f9c10e1ab22d84ac70f3ec79ce777c",
     "tests/cod/language/units-procedure.cod": "b9b143f893ffb41ea08ae9dc93ff0240c7363fee02d3466c6300fcb7aab9ff6a",
     "tests/cod/language/units-reexport.cod": "4c61b14fdb27185bef9cc1bebf40ab30da57d2d3f0f7e412347849a09645c2ac",
     "tests/cod/language/units-repeated.cod": "0117bfe5d0cec83b85dd41193fd9463feebe64d0cac162283ddade376b8cb615",
+    "tests/cod/language/units-sequencing-library.cod": "80ac032047fbd4b9da169f477985f2e7114cd2fb8b084e2521d62f433402844a",
     "tests/cod/language/units-shorter-route.cod": "e11b5c3e0f166013237bb4e101285e352b1fe02b0b270f6e5960852d4108cd9e",
     "tests/cod/language/units-unavailable-overload.cod": "a25a93a072990a7100ed711cd258c941f38f63bb80926f38002926fa75007636",
     "tests/cod/language/unknown-map-local.cod": "fcbc91d5eb564e16f02d7967aa684d9e749daf3a4819993460472b3e602d6ff1",
