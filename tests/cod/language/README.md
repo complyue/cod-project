@@ -1,14 +1,14 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 20 · Recorded: 2026-11-05.
+Prototype reference revision: 21 · Recorded: 2026-11-05.
 
 ## Design authority
 
-- **Registry / scope:** implementation reference for [D-10r15](../../../design/DesignAuthorityRegistry.md#d-10), D-07r22 and D-11r8. The complete design contracts remain pending-human; this reference describes the bounded implementation.
+- **Registry / scope:** implementation reference for [D-10r16](../../../design/DesignAuthorityRegistry.md#d-10), D-07r22 and D-11r8. The complete design contracts remain pending-human; this reference describes the bounded implementation.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
-- **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification.
+- **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-241](../../../design/DesignAuthorityRegistry.md#k-241) records the current implementation, coverage and limits.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-242](../../../design/DesignAuthorityRegistry.md#k-242) records the current implementation, coverage and limits.
 
 ## Run
 
@@ -134,7 +134,7 @@ Regions use the existing shilos region allocation/release operations with a fixe
 
 `ref<T>` is a typed regional reference; `deref` produces a bits value or a noncopying regional view. Record fields use `.field`, arrays use `[index]`, and `len` returns `u64`. `ref_at(array, index)` returns an existing scalar-element reference. Array access requires the declared index identity. Bounds and null dereferences have runtime diagnostics; `deref` checks a regional reference even if its resulting view is unused. `null` is inferred from regional reference fields and conditional joins. This syntax is the bounded executable prototype, not a settled storage ABI or complete pointer language.
 
-Known pointer-format defect: a reference field at byte zero of a record cannot currently point back to that same record. The field-relative displacement becomes zero, which shilos interprets as null; the write silently reads back as null. Other nonzero-distance cycles are covered by relocation evidence. A shared shilos/CoD encoding repair and its reader-compatibility rule are pending human decision; this case is not accepted functionality. [The pending decision review](../../../design/DesignAuthorityRegistry.md#k-241) records the byte-level alternatives, affected writers/readers and compatibility limits.
+Accepted known issue ([H-146](../../../design/DesignAuthorityRegistry.md#h-146)): assigning a record to its first pointer field produces field-relative displacement zero, so the field reads back as null. The current encoding and behavior are retained without a new store diagnostic. Future intrinsic object fields are expected to resolve this limitation; their definition, layout and compatibility rules remain open. Other nonzero-distance cycles are covered by relocation evidence.
 
 Procedures may use `store(array, index, value)`, `store(scalar_ref, value)` and `setfield(record_ref, field, value)`. Their stored results survive dynamic-scope restoration. `effect` only changes a binding and restores that binding on scope exit. `used_bytes` and `capacity_bytes` inspect a region resource from a procedure. Capacity includes the native region header; allocation requests specify payload bytes.
 
