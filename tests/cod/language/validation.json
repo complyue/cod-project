@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T10:35:08.214780+00:00",
+  "recorded_utc": "2026-11-06T12:54:03.912851+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
-  "passed": 131,
-  "total": 131,
+  "passed": 132,
+  "total": 132,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -1508,11 +1508,29 @@
       "expected": {
         "file": "iteration-scope.cod",
         "exit": 0,
-        "stdout": "0\n1\n2\n9\n"
+        "stdout": "0\n1\n2\n90\n123\nfalse\ntrue\n9\n41\n7\n"
       },
       "exit_code": 0,
-      "stdout": "0\n1\n2\n9\n",
+      "stdout": "0\n1\n2\n90\n123\nfalse\ntrue\n9\n41\n7\n",
       "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "local-duplicate.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/local-duplicate.cod"
+      ],
+      "expected": {
+        "file": "local-duplicate.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "duplicate lexical value 'n'"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/local-duplicate.cod:3:24: duplicate lexical value 'n'\n/ws/EvtWorks/cod-project/tests/cod/language/local-duplicate.cod:6:1: note: in call to function 'duplicate' defined at /ws/EvtWorks/cod-project/tests/cod/language/local-duplicate.cod:2:1\n",
       "passed": true
     },
     {
@@ -2318,9 +2336,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-0n9zug64/program.ll",
+        "/tmp/cod-language-check-1vrp3jj9/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-0n9zug64/program.bc"
+        "/tmp/cod-language-check-1vrp3jj9/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2330,18 +2348,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "978ca6086e2c98a003b3c7bfaf48fbcf7c3fe17db9b9e6aaf5a61f39603b890d"
+    "sha256": "676148bd6754ad5e6e49038c8561390715bbe112b06fdd61ee6856c43d0e3af6"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
-    "cod/lang_frontend.hh": "c365171456a0014396274ac14eaf4d43340cd28eeddfa3f48b4181dd2631c4ae",
+    "cod/lang_frontend.hh": "0a885c5669969f602856ad29458a4b96ad68d4245346e5b331d3f1d2174026fa",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "b54629f94a5f883909bcd3c368148be977fd046e05ada741dda6a048edc30103",
+    "tests/cod/language/cases.json": "d9e44bcd86491b5bde303aece8e9b09b443657939dbf3674fca953501523b46e",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2377,8 +2395,9 @@
     "tests/cod/language/import.cod": "ca7a3d1627e417d87dc6727812807d5158822fc2131da30c96e27b15dee77858",
     "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
     "tests/cod/language/iteration-index-error.cod": "f2a740829eae91e0cbacbd3f98ffde0b5dc777e2cc437865abbba9c996865ad6",
-    "tests/cod/language/iteration-scope.cod": "69ea431ba27f0e3c8656f76e7bc22694171aea1c89e50410d3c45fb0d40bc6c4",
+    "tests/cod/language/iteration-scope.cod": "76992c1d8d940b60ca84f2171e6e77cc0c9b6ffa1ad57de43dc9fd047c40066c",
     "tests/cod/language/late-alias-destination.cod": "06f1595b32fd5061ef439baf47280df1e3150f8b9ce7ff1e7d3c94faa61e5c13",
+    "tests/cod/language/local-duplicate.cod": "24f3d346ab7863a22ae97835f85c1c4e45f90d35f360a6590c0f8fc47103b46d",
     "tests/cod/language/logical-unscoped-effect.cod": "d44ef2717a820b3cc53d3b182e8ab9e3168f186dd408c672527e4991d676da06",
     "tests/cod/language/mapped-behave-later.cod": "552889d87d8eeef003dcdcc5e89da080447e9c74a414d7f31b7f2ebc8b35512d",
     "tests/cod/language/mapped-effects-model.cod": "3cc20044e1cd9fbaf5c92ac6ed048ab923da475d3e555887f8c3b91628bd4ccd",

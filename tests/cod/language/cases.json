@@ -484,7 +484,13 @@
   {
     "file": "iteration-scope.cod",
     "exit": 0,
-    "stdout": "0\n1\n2\n9\n"
+    "stdout": "0\n1\n2\n90\n123\nfalse\ntrue\n9\n41\n7\n"
+  },
+  {
+    "file": "local-duplicate.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "duplicate lexical value 'n'"
   },
   {
     "file": "fold-type-error.cod",

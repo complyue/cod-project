@@ -28,7 +28,17 @@ struct Value {
   bool operator==(const Value &) const = default;
 };
 using Environment = std::map<size_t, Value>;
-using Locals = std::map<std::string, Value>;
+struct Locals {
+  std::map<std::string, Value> visible;
+  std::set<std::string> declared;
+
+  Locals nested() const { return {visible, {}}; }
+  bool declare(const std::string &name, Value value) {
+    if (!declared.insert(name).second) return false;
+    visible.insert_or_assign(name, std::move(value));
+    return true;
+  }
+};
 struct Function {
   Form *form;
   Module *lexical;
@@ -54,7 +64,7 @@ struct Module {
   std::vector<Function> conversions;
   std::set<Module *> unit_sources;
   std::set<size_t> selected_units;
-  Locals globals;
+  std::map<std::string, Value> globals;
   Environment exports;
   enum class State { registered, executing, complete } state = State::registered;
   bool builtin = false;
@@ -510,7 +520,7 @@ class Compiler {
       require(args[i].type, resolve(form.parameters[i].type, lexical, form.parameters[i].at), at);
       if (args[i].region_id) region_pointer(args[i], at);
       if (pure && args[i].type == Type::region) fail(at, "a function reads input snapshots, not region resources");
-      if (!locals.emplace(form.parameters[i].name, args[i]).second)
+      if (!locals.declare(form.parameters[i].name, args[i]))
         fail(form.parameters[i].at, "duplicate parameter name");
     }
     auto result = block(*form.body, lexical, std::move(env), std::move(locals), pure);
@@ -832,11 +842,11 @@ class Compiler {
         fail(expr.at, "a fold accumulator requires a bits value");
     }
     auto native_loop = ir_.loop(first.type, first.native, last.native, accumulator.native);
-    auto inner_locals = locals;
-    inner_locals[expr.text] = {first.type, native_loop.index, {}, nullptr};
+    auto inner_locals = locals.nested();
+    inner_locals.declare(expr.text, {first.type, native_loop.index, {}, nullptr});
     if (expr.kind == K::fold) {
       accumulator.native = native_loop.accumulator;
-      inner_locals[expr.binding] = accumulator;
+      inner_locals.declare(expr.binding, accumulator);
     }
 
     const auto next = block(*expr.children.back(), module, env, std::move(inner_locals), pure,
@@ -997,7 +1007,7 @@ class Compiler {
     if (expr.text == "&&" || expr.text == "||") {
       require(left.type, Type::boolean, expr.at);
       auto right_env = env;
-      auto right_locals = locals;
+      auto right_locals = locals.nested();
 
       const auto native_scope = ir_.scope();
       auto native_branch = ir_.branch(left.native, expr.text == "||");
@@ -1038,9 +1048,9 @@ class Compiler {
     require(condition.type, Type::boolean, expr.at);
 
     auto native_branch = ir_.branch(condition.native);
-    auto first = block(*expr.children[1], module, env, locals, pure);
+    auto first = block(*expr.children[1], module, env, locals.nested(), pure);
     ir_.otherwise(native_branch, first.native);
-    auto second = block(*expr.children[2], module, env, locals, pure);
+    auto second = block(*expr.children[2], module, env, locals.nested(), pure);
     if (first.type == Type::null_ref && second.type.kind == Type::reference) {
       first.type = second.type;
       first.region_id = second.region_id;
@@ -1100,7 +1110,7 @@ class Compiler {
       auto value = expression(*expr.children[0], module, env, locals, pure);
       if (value.type == Type::void_type || value.type == Type::procedure)
         fail(expr.at, "a lexical value requires a bits value");
-      if (!locals.emplace(expr.text, value).second) fail(expr.at, "duplicate lexical value '" + expr.text + "'");
+      if (!locals.declare(expr.text, value)) fail(expr.at, "duplicate lexical value '" + expr.text + "'");
       return value;
     }
     case K::field: {
@@ -1124,7 +1134,7 @@ class Compiler {
       return array_element(array, index, expr.at);
     }
     case K::name: {
-      if (const auto local = locals.find(expr.text); local != locals.end()) return local->second;
+      if (const auto local = locals.visible.find(expr.text); local != locals.visible.end()) return local->second;
       if (const auto global = module.globals.find(expr.text); global != module.globals.end()) return global->second;
       fail(expr.at, "unavailable lexical value '" + expr.text + "'");
     }
@@ -1139,7 +1149,7 @@ class Compiler {
     }
     case K::allocate: return allocate_expression(expr, module, env, locals, pure);
     case K::range_for: case K::fold: return loop_expression(expr, module, env, locals, pure);
-    case K::block: return block(expr, module, env, locals, pure);
+    case K::block: return block(expr, module, env, locals.nested(), pure);
     case K::call: return call_expression(expr, module, env, locals, pure);
     case K::perform: case K::behave: return invoke(expr, module, env, locals, pure);
     case K::unary: return unary_expression(expr, module, env, locals, pure);

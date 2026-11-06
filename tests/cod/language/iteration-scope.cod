@@ -5,11 +5,30 @@ symbol @arena;
 array Values[u32]::i64;
 effect @value = 9;
 procedure @read()::i64 { @value }
-for (i in 0 .. 3) {
-  effect @value = i;
-  effect @arena = region(128u64);
-  let values = alloc @arena Values(2u64, behave @read());
-  behave @print(values[0u32]);
-  values
+{
+  let i = 90;
+  let values = 123;
+  for (i in 0 .. 3) {
+    effect @value = i;
+    effect @arena = region(128u64);
+    let values = alloc @arena Values(2u64, behave @read());
+    behave @print(values[0u32]);
+    values
+  };
+  behave @print(i);
+  behave @print(values);
+  let flag = true;
+  behave @print(true && (let flag = !flag));
+  behave @print(flag);
 };
 behave @print(@value);
+
+function nested(n::i64)::i64 {
+  let value = { let n = n + 1; n };
+  let sum = 10;
+  let total = fold (n in 0 .. 3, sum = sum) { sum + n };
+  let branch = if (n > 0) { let n = n + 2; n } else { let n = n - 2; n };
+  value + total + branch + n + sum
+}
+behave @print(nested(5));
+behave @print(nested(-5));
