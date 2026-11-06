@@ -4,10 +4,13 @@
 #include "lang_syntax.hh"
 #include "lang_llvm.hh"
 
+#include <llvm/ADT/ImmutableMap.h>
+
 #include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -25,10 +28,21 @@ struct Value {
   std::shared_ptr<Procedure> procedure;
   Module *owner = nullptr;
   std::optional<size_t> region_id = {};
-  bool captured = false;
 };
-struct Environment : std::map<size_t, Value> {
+using Bindings = llvm::ImmutableMap<size_t, const Value *>;
+struct Environment {
+  Bindings bindings{nullptr};
+  Bindings captured_bindings{nullptr};
   bool captured_context = false;
+
+  const Value *lookup(size_t id) const {
+    const auto found = bindings.lookup(id);
+    return found ? *found : nullptr;
+  }
+  bool captured(size_t id, const Value *value) const {
+    const auto found = captured_bindings.lookup(id);
+    return found && *found == value;
+  }
 };
 struct Locals {
   std::map<std::string, Value> visible;
@@ -66,7 +80,7 @@ struct Module {
   std::set<Module *> unit_sources;
   std::set<size_t> selected_units;
   std::map<std::string, Value> globals;
-  Environment exports;
+  std::map<size_t, Value> exports;
   enum class State { registered, executing, complete } state = State::registered;
   bool builtin = false;
 };
@@ -80,6 +94,10 @@ struct Compilation {
 };
 
 class Compiler {
+  // Shared compiler snapshots retain binding values until lowering finishes.
+  // The factory outlives every map; none of this storage enters the program.
+  Bindings::Factory binding_factory_{false};
+  std::deque<Value> binding_values_;
   std::map<std::string, std::unique_ptr<Module>> modules_;
   std::vector<std::string> symbol_names_;
   std::map<size_t, Type> symbol_types_;
@@ -369,13 +387,13 @@ class Compiler {
                    ": expected " + type_name(found->second) + ", got " + type_name(type));
   }
   Value read_symbol(size_t id, const Environment &env, const Location &at) {
-    const auto found = env.find(id);
-    if (found == env.end()) fail(at, (env.captured_context
+    const auto *found = env.lookup(id);
+    if (!found) fail(at, (env.captured_context
         ? "perform requires an unavailable definition-time capture " : "missing required binding ") + symbol_names_[id]);
-    if (found->second.region_id) region_pointer(found->second, at);
-    if (found->second.type == Type::procedure || found->second.type == Type::region) return found->second;
-    const auto type = found->second.type;
-    return scalar(type, found->second.captured ? found->second.native : ir_.read_symbol(id, type), found->second.region_id);
+    if (found->region_id) region_pointer(*found, at);
+    if (found->type == Type::procedure || found->type == Type::region) return *found;
+    const auto type = found->type;
+    return scalar(type, env.captured(id, found) ? found->native : ir_.read_symbol(id, type), found->region_id);
   }
   void bind(size_t id, Value value, Module &owner, Environment &env, const Location &at) {
     if (value.type == Type::void_type) fail(at, "a symbol cannot be bound to void");
@@ -385,8 +403,8 @@ class Compiler {
     fix_type(id, value.type, at);
     ir_.effect(id, value.type, value.native);
     value.owner = &owner;
-    value.captured = false;
-    env[id] = std::move(value);
+    binding_values_.push_back(std::move(value));
+    env.bindings = binding_factory_.add(env.bindings, id, &binding_values_.back());
   }
 
   void resolve_procedure_symbols(Expression &expr, Module &module) {
@@ -404,7 +422,7 @@ class Compiler {
     // Only demanded reads generate native uses, after typed method selection.
     proc->captures = env;
     proc->captures.captured_context = true;
-    for (auto &[id, value] : proc->captures) value.captured = true;
+    proc->captures.captured_bindings = env.bindings;
     return {Type::procedure, {}, std::move(proc), &lexical};
   }
   Value block(const Expression &expr, Module &module, Environment env, Locals locals,
@@ -690,11 +708,11 @@ class Compiler {
                bool pure) {
     if (pure) fail(expr.at, "a function cannot invoke a procedure");
     const auto id = expression_symbol(expr, module);
-    const auto found = env.find(id);
-    if (found == env.end()) fail(expr.at, (env.captured_context
+    const auto *found = env.lookup(id);
+    if (!found) fail(expr.at, (env.captured_context
         ? "perform requires an unavailable definition-time capture " : "missing required procedure binding ") + symbol_names_[id]);
-    if (!found->second.procedure) fail(expr.at, "perform/behave requires a procedure value");
-    const auto proc = found->second.procedure; // Resolve before arguments/capture installation.
+    if (!found->procedure) fail(expr.at, "perform/behave requires a procedure value");
+    const auto proc = found->procedure; // Resolve before arguments/capture installation.
     std::vector<LLVMEmission::ConversionPoint> points;
     const bool convert_arguments = expr.children.size() > 1 && proc->form && converting_parameters(*proc->form);
     auto args = arguments(expr, module, env, locals, pure, convert_arguments ? &points : nullptr);
@@ -1260,9 +1278,9 @@ class Compiler {
       }
       }
     }
-    for (const auto &[id, current] : env) {
-      if (current.owner != &module) continue;
-      auto value = current;
+    for (const auto &[id, current] : env.bindings) {
+      if (current->owner != &module) continue;
+      auto value = *current;
       if (value.type != Type::procedure && value.type != Type::region) {
         value.native = ir_.read_symbol(id, value.type);
       }
