@@ -26,7 +26,7 @@ behave @print((len)(B(8)));
 behave @print(len(@values));
 behave @print(saved.value);
 behave @print(pure(B(5)).value);
-behave @print(@len);
+behave @print((@len));
 behave @print(perform @run(3));
 behave @print(deref(@cell).value);
 behave @print(behave @run(3));

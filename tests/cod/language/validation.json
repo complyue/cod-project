@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T17:48:19.731840+00:00",
+  "recorded_utc": "2026-11-06T18:24:40.798389+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
-  "passed": 137,
-  "total": 137,
+  "passed": 138,
+  "total": 138,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -1043,6 +1043,24 @@
       "exit_code": 0,
       "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n",
       "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "intrinsic-symbol-name.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/intrinsic-symbol-name.cod"
+      ],
+      "expected": {
+        "file": "intrinsic-symbol-name.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "expected an operator or intrinsic name"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/intrinsic-symbol-name.cod:1:11: expected an operator or intrinsic name\n",
       "passed": true
     },
     {
@@ -2425,9 +2443,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-wbiyya1g/program.ll",
+        "/tmp/cod-language-check-zn8rl7ix/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-wbiyya1g/program.bc"
+        "/tmp/cod-language-check-zn8rl7ix/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2437,18 +2455,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "c70f74fe78bc70bda28df77cf37524a37f264b703ac2f59793cc6f4a283a00fa"
+    "sha256": "4d4a97315a35d083c0b871a9d0ed4b296831d7740c23b6e3a22d3b35798cbfc8"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
-    "cod/lang_syntax.hh": "8fb3a8f703460db17894d21407c3270e14d8eed800676da4a74520bdc420496b",
-    "cod/lang_frontend.hh": "d8d9f8aec4e83bee8b2408962992fa70bc3726ca5c2369ec31210050c1df7942",
+    "cod/lang_syntax.hh": "4ba13797797ba94471badccd7a5ec514fc10615e8bcc3a99b6316d2fdd713e44",
+    "cod/lang_frontend.hh": "aa9254e25c856a58f1ccc837d74e2838f9e9d123f10fe876c9cb30d9019ed9db",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "931a6ca013373dc2eed868a8d0f0ffc5bc6cdf90f0ecd58e040689daa479e5c9",
+    "tests/cod/language/cases.json": "c4338c14746c8fbcbcf3ab04aed705757dd401a221a1989a6ca125e4f7c2ce91",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9d3f5f799775585e4e14c3161fbab6397dda6c8e2c474e06531994a899f91602",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2484,9 +2502,10 @@
     "tests/cod/language/import.cod": "ca7a3d1627e417d87dc6727812807d5158822fc2131da30c96e27b15dee77858",
     "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
     "tests/cod/language/intrinsic-library.cod": "d68bc75d7358041b08602f54998d919379a02d107210dd7097b027bb207a5043",
-    "tests/cod/language/intrinsic-overloads.cod": "a55aced9281df42db473e8c2a2c487e4f8e851650c40e426a9d3e1152106b2f6",
+    "tests/cod/language/intrinsic-overloads.cod": "04d33e1b243e782463f7d0c2cccbff54213392e48e3a4cee56470a9bb156e385",
     "tests/cod/language/intrinsic-pure-error.cod": "08e9dc0862d1405c8db88e79e6c44d519a47d5a42f40a2eea493c9813bd81bf2",
     "tests/cod/language/intrinsic-reserved-name.cod": "9112140a1f4aba26a09bfc87cd3cabe7190feba7a3e4fddbb5ff93ffbf75c88e",
+    "tests/cod/language/intrinsic-symbol-name.cod": "bd1c4b85009063784368c53cfb9efb606f2e8dd76cbc6a728551753aeab2b738",
     "tests/cod/language/iteration-index-error.cod": "f2a740829eae91e0cbacbd3f98ffde0b5dc777e2cc437865abbba9c996865ad6",
     "tests/cod/language/iteration-scope.cod": "7757eda05f1538f64d7e233cc7a4f4a09de6a51e20767d38f7824b9ad391f536",
     "tests/cod/language/late-alias-destination.cod": "06f1595b32fd5061ef439baf47280df1e3150f8b9ce7ff1e7d3c94faa61e5c13",

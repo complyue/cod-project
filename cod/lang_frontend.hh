@@ -570,6 +570,10 @@ class Compiler {
     }
     return result;
   }
+  static std::string callable_name(const Form &form) {
+    if (form.operation) return "(" + form.name + ")";
+    return form.kind == Form::Kind::procedure ? "@" + form.name : form.name;
+  }
   [[noreturn]] static void method_failure(const std::string &name, const std::vector<Value> &args,
                                          const std::vector<Method> &candidates, const Location &at,
                                          bool ambiguous) {
@@ -581,7 +585,8 @@ class Compiler {
     const auto shown = std::min<size_t>(candidates.size(), 4);
     for (size_t i = 0; i < shown; ++i) {
       const auto &form = *candidates[i].form;
-      message += "\n" + location_text(form.at) + ": note: candidate function '" + form.name + "'";
+      message += "\n" + location_text(form.at) + ": note: candidate " +
+                 (form.kind == Form::Kind::procedure ? "procedure '" : "function '") + callable_name(form) + "'";
     }
     if (shown < candidates.size())
       message += "\nnote: " + std::to_string(candidates.size() - shown) + " additional candidates omitted";
@@ -1288,10 +1293,8 @@ public:
         }
         const auto &site = call_path_[call_path_.size() - 1 - depth];
         const bool procedure = site.form->kind == Form::Kind::procedure;
-        const auto name = site.form->operation ? "(" + site.form->name + ")" :
-                          procedure ? "@" + site.form->name : site.form->name;
         message += "\n" + location_text(site.at) + ": note: in call to " +
-            (procedure ? "procedure '" : "function '") + name +
+            (procedure ? "procedure '" : "function '") + callable_name(*site.form) +
             "' defined at " + location_text(site.form->at);
       }
       throw std::runtime_error(message);
