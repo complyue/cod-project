@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 40 · Recorded: 2026-11-06.
+Prototype reference revision: 41 · Recorded: 2026-11-06.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 40 · Recorded: 2026-11-06.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation. H-147 continues the work for ten active hours, excluding waiting. H-148 requires per-argument conversion before the next argument. H-149 permits nested local shadowing and requires unique declarations within each scope.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-263](../../../design/DesignAuthorityRegistry.md#k-263) records H-149’s lexical scope implementation; each evidence file retains its timestamp and source hashes. This checkpoint does not complete H-147’s ten-active-hour goal.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-264](../../../design/DesignAuthorityRegistry.md#k-264) records the conditional-binding checker and its validation; each evidence file retains its timestamp and source hashes. This checkpoint does not complete H-147’s ten-active-hour goal.
 
 ## Run
 
@@ -57,7 +57,7 @@ behave @print(behave @p);   // 9: current dynamic binding
 - Lexical functions and immutable globals can be selected with `using "module.cod" name;`. Function-body `import` is unsupported.
 - Synthetic system module `std:io` provides `@print` for one scalar and `@assert` for one boolean. These are procedures; functions cannot invoke them or other effects. Use `using symbol "std:io" @print;`, or explicitly select an existing destination. Built-ins have no source body to `import`.
 
-Prototype expression evaluation is left-to-right; boolean operators short-circuit. Both conditional branches are checked. A symbolic write in a conditional logical operand requires an explicit nested scope. Integer arithmetic overflow and integer division by zero fail the native program with exit 70 before LLVM can evaluate an invalid operation. LLVM-emitted checks include the offending CoD expression’s file, line and column; nested calls restore the enclosing expression’s location. Native allocation-service errors include the allocating expression’s location before the allocator message. This embeds diagnostic text without requiring source files at runtime or providing source-level debugging. These sequencing, block-result and numerical choices remain reviewable prototype conventions.
+Prototype expression evaluation is left-to-right; boolean operators short-circuit. Both conditional branches are checked. A symbolic write in a conditional logical operand requires an explicit nested scope, including assignment of the same scalar or region resource again. Integer arithmetic overflow and integer division by zero fail the native program with exit 70 before LLVM can evaluate an invalid operation. LLVM-emitted checks include the offending CoD expression’s file, line and column; nested calls restore the enclosing expression’s location. Native allocation-service errors include the allocating expression’s location before the allocator message. This embeds diagnostic text without requiring source files at runtime or providing source-level debugging. These sequencing, block-result and numerical choices remain reviewable prototype conventions.
 
 ## Typed values and methods
 
@@ -183,7 +183,7 @@ Coverage is judged by the contracts below, not by the number of fixtures or a so
 | Effects select the right context and restore it; otherwise nested calls silently change caller behavior. | `scopes`, `transitive`, `capture-scope-restore` including chained effect results; unavailable captures/bindings rejected. |
 | Module loading is separate from once-only execution; identities survive aliases and remain distinct from values. | `module-diamond`, resource-trigger fixtures, `import-mapping`, `using-symbol-reexport`, identity mismatch despite equal procedure values. |
 | Products/UoMs preserve identity, pure methods and deliberate conversion choice. | `products`, `methods`, selected unit bundles, exact/direct/declared routes, ambiguity warning/error, argument evaluated once. |
-| Control flow preserves order, short circuiting, iteration scopes and fold types. | `arithmetic`, rejected unscoped logical writes even to an equal value, `bounded-iteration`, `iteration-scope` with nested local shadowing and a discarded iteration-local reference, rejected same-scope redeclaration, product/reference folds and invalid accumulator types. |
+| Control flow preserves order, short circuiting, iteration scopes and fold types. | `arithmetic`, rejected unscoped logical writes even to an equal scalar/resource, `bounded-iteration`, `iteration-scope` with nested local shadowing and a discarded iteration-local reference, rejected same-scope redeclaration, product/reference folds and invalid accumulator types. |
 | Pure calls read input-reachable data while procedures own mutation and region lifetime. | `products` with regional nested-product storage, `region-records`, `region-capture` across independent owners, module `perform`/`behave`, returned parent references and fold construction, nested-region bits results, rejected writes/escapes/cross-region fields. |
 | Regional storage actually relocates without pointer repair. | LLVM artifact/relocation harness: sharing and cycle survive freeing the original; array mutation follows the relocated references. |
 | Numeric representation and typed SoA indexing produce the intended arithmetic. | Named overflow/cast/precision boundaries, small independent numeric sample, `region-gather` and one full-pool measurement. |

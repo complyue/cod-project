@@ -25,7 +25,6 @@ struct Value {
   std::shared_ptr<Procedure> procedure;
   Module *owner = nullptr;
   std::optional<size_t> region_id = {};
-  bool operator==(const Value &) const = default;
 };
 using Environment = std::map<size_t, Value>;
 struct Locals {
@@ -109,6 +108,7 @@ class Compiler {
   LLVMEmission ir_;
   bool warnings_as_errors_ = false;
   std::vector<std::string> warnings_;
+  bool scope_rebound_ = false; // Includes bindings with no native TLS slot.
 
   static void require_user_type_name(const std::string &name, const Location &at) {
     static const std::set<std::string> reserved{"i64", "u8", "u32", "u64", "f32", "f64", "bool", "void", "region", "ref"};
@@ -477,6 +477,7 @@ class Compiler {
   }
   Value block(const Expression &expr, Module &module, Environment env, Locals locals,
               bool pure, bool discard_result = false) {
+    const auto rebound = llvm::SaveAndRestore(scope_rebound_, false);
     const auto region_begin = regions_.size();
     const auto native_scope = ir_.scope();
 
@@ -1008,12 +1009,13 @@ class Compiler {
       require(left.type, Type::boolean, expr.at);
       auto right_env = env;
       auto right_locals = locals.nested();
+      const auto rebound = llvm::SaveAndRestore(scope_rebound_, false);
 
       const auto native_scope = ir_.scope();
       auto native_branch = ir_.branch(left.native, expr.text == "||");
       const auto right = expression(*expr.children[1], module, right_env, right_locals, pure);
       require(right.type, Type::boolean, expr.at);
-      if (right_env != env || ir_.scope() != native_scope)
+      if (scope_rebound_ || ir_.scope() != native_scope)
         fail(expr.at, "conditional rebinding in a logical operand needs an explicit scope");
       ir_.otherwise(native_branch, right.native);
       return scalar(Type::boolean, ir_.merge(native_branch, Type::boolean, left.native));
@@ -1145,6 +1147,7 @@ class Compiler {
       if (pure) fail(expr.at, "a function cannot establish effects");
       auto value = expression(*expr.children[0], module, env, locals, pure);
       bind(expression_symbol(expr, module), value, module, env, expr.at);
+      scope_rebound_ = true;
       return value;
     }
     case K::allocate: return allocate_expression(expr, module, env, locals, pure);
