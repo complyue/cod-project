@@ -465,12 +465,13 @@ class Compiler {
     return {Type::procedure, {}, std::move(proc), &lexical};
   }
   Value block(const Expression &expr, Module &module, Environment env, Locals locals,
-              bool pure) {
+              bool pure, bool discard_result = false) {
     const auto region_begin = regions_.size();
     const auto native_scope = ir_.scope();
 
     Value result;
     for (const auto &child : expr.children) result = expression(*child, module, env, locals, pure);
+    if (discard_result) result = {};
     close_regions(region_begin, result, expr.at);
     ir_.restore(native_scope);
     if (result.type == Type::procedure) fail(expr.at, "procedure-valued scope results are not supported");
@@ -837,7 +838,8 @@ class Compiler {
       inner_locals[expr.binding] = accumulator;
     }
 
-    const auto next = block(*expr.children.back(), module, env, std::move(inner_locals), pure);
+    const auto next = block(*expr.children.back(), module, env, std::move(inner_locals), pure,
+                            expr.kind == K::range_for);
 
     if (expr.kind == K::fold) {
       require(next.type, accumulator.type, expr.at);

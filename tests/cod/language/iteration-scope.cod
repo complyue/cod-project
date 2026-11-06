@@ -1,10 +1,15 @@
 using symbol "std:io" @print;
 symbol @value;
 symbol @read;
+symbol @arena;
+array Values[u32]::i64;
 effect @value = 9;
 procedure @read()::i64 { @value }
 for (i in 0 .. 3) {
   effect @value = i;
-  behave @print(behave @read());
+  effect @arena = region(128u64);
+  let values = alloc @arena Values(2u64, behave @read());
+  behave @print(values[0u32]);
+  values
 };
 behave @print(@value);

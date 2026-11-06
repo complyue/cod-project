@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 35 · Recorded: 2026-11-06.
+Prototype reference revision: 36 · Recorded: 2026-11-06.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 35 · Recorded: 2026-11-06.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation. H-147 continues the work for ten active hours, excluding waiting. H-148 requires per-argument conversion before the next argument.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-258](../../../design/DesignAuthorityRegistry.md#k-258) records declaration-aware overload failure diagnostics; earlier evidence retains its own revision and timestamp.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-259](../../../design/DesignAuthorityRegistry.md#k-259) records discarded loop-body results with per-iteration region cleanup; earlier evidence retains its own revision and timestamp.
 
 ## Run
 
@@ -110,7 +110,7 @@ function sum(n::u32)::u64 {
 for (i in 0 .. 10) { behave @print(i); };
 ```
 
-`for` is a void expression. `fold` returns its accumulator, initialized once and replaced by the body's value after each iteration. Ranges include the first endpoint and exclude the last; reversed/empty ranges execute zero times. Endpoints must share an integer type or one integer-backed UoM identity. Each iteration has its own dynamic scope, while procedure writes to regional storage persist until the owning region ends. These are native runtime loops, not compile-time iteration expansion. Product and unit accumulators retain their types.
+`for` is a void expression: its body is evaluated for effects, and its final value is discarded before the iteration scope closes. A reference to iteration-local storage may therefore be the final body expression without escaping that scope. `fold` returns its accumulator, initialized once and replaced by the body's value after each iteration. Ranges include the first endpoint and exclude the last; reversed/empty ranges execute zero times. Endpoints must share an integer type or one integer-backed UoM identity. Each iteration has its own dynamic scope, while procedure writes to regional storage persist until the owning region ends. These are native runtime loops, not compile-time iteration expansion. Product and unit accumulators retain their types.
 
 Local name shadowing remains under review: the prototype rejects a `let` that duplicates a visible local, while loop bindings can shadow outer locals. The [open naming rule](../../../design/SymbolicDynamicScope.md#local-value-shadowing) records the alternatives and pending human decision; no new rule is selected.
 
@@ -183,7 +183,7 @@ Coverage is judged by the contracts below, not by the number of fixtures or a so
 | Effects select the right context and restore it; otherwise nested calls silently change caller behavior. | `scopes`, `transitive`, `capture-scope-restore` including chained effect results; unavailable captures/bindings rejected. |
 | Module loading is separate from once-only execution; identities survive aliases and remain distinct from values. | `module-diamond`, resource-trigger fixtures, `import-mapping`, `using-symbol-reexport`, identity mismatch despite equal procedure values. |
 | Products/UoMs preserve identity, pure methods and deliberate conversion choice. | `products`, `methods`, selected unit bundles, exact/direct/declared routes, ambiguity warning/error, argument evaluated once. |
-| Control flow preserves order, short circuiting, iteration scopes and fold types. | `arithmetic`, rejected unscoped logical writes even to an equal value, `bounded-iteration`, `iteration-scope`, product/reference folds and invalid accumulator types. |
+| Control flow preserves order, short circuiting, iteration scopes and fold types. | `arithmetic`, rejected unscoped logical writes even to an equal value, `bounded-iteration`, `iteration-scope` with a discarded iteration-local reference, product/reference folds and invalid accumulator types. |
 | Pure calls read input-reachable data while procedures own mutation and region lifetime. | `products` with regional nested-product storage, `region-records`, `region-capture` across independent owners, module `perform`/`behave`, returned parent references and fold construction, nested-region bits results, rejected writes/escapes/cross-region fields. |
 | Regional storage actually relocates without pointer repair. | LLVM artifact/relocation harness: sharing and cycle survive freeing the original; array mutation follows the relocated references. |
 | Numeric representation and typed SoA indexing produce the intended arithmetic. | Named overflow/cast/precision boundaries, small independent numeric sample, `region-gather` and one full-pool measurement. |

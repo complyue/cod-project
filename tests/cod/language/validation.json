@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T09:56:06.058325+00:00",
+  "recorded_utc": "2026-11-06T10:08:07.164394+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -2313,9 +2313,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-3mkd666_/program.ll",
+        "/tmp/cod-language-check-9j_zh1vp/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-3mkd666_/program.bc"
+        "/tmp/cod-language-check-9j_zh1vp/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2325,12 +2325,12 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "f8911ad5d6e2fb9cce83e758487944325f7c3a99c83593bf6ea4c97f0ac4cd4a"
+    "sha256": "0deb6a5ae9e6d7b4f26af89137a40f440fa4ce1c0ca18b7b543db4f1ba96bfad"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
-    "cod/lang_frontend.hh": "0988e2ad0b0c48b683ee0cce557556dfdf0eb1217aca2def2683d15f89ef541e",
+    "cod/lang_frontend.hh": "c730a0b78bbf919fef6c0ac8e738d469e7c80b0818460ea5f84be0180f246e67",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
@@ -2372,7 +2372,7 @@
     "tests/cod/language/import.cod": "ca7a3d1627e417d87dc6727812807d5158822fc2131da30c96e27b15dee77858",
     "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
     "tests/cod/language/iteration-index-error.cod": "f2a740829eae91e0cbacbd3f98ffde0b5dc777e2cc437865abbba9c996865ad6",
-    "tests/cod/language/iteration-scope.cod": "71b031eb4f41b504bf7c0d257d44bda6c4ee9e70cde09293e446e4168a1c99bf",
+    "tests/cod/language/iteration-scope.cod": "69ea431ba27f0e3c8656f76e7bc22694171aea1c89e50410d3c45fb0d40bc6c4",
     "tests/cod/language/late-alias-destination.cod": "06f1595b32fd5061ef439baf47280df1e3150f8b9ce7ff1e7d3c94faa61e5c13",
     "tests/cod/language/logical-unscoped-effect.cod": "d44ef2717a820b3cc53d3b182e8ab9e3168f186dd408c672527e4991d676da06",
     "tests/cod/language/mapped-behave-later.cod": "552889d87d8eeef003dcdcc5e89da080447e9c74a414d7f31b7f2ebc8b35512d",
