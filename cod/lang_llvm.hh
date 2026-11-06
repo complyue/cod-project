@@ -433,21 +433,16 @@ public:
     auto *data_offset = allocate(owner, bytes, layout.getABITypeAlign(element_type).value());
     auto *data = address(owner, data_offset);
     store_reference(owner, pointer_field, data_offset);
-    auto *before = b().GetInsertBlock();
-    auto *fill = llvm::BasicBlock::Create(context(), "array.fill", entry_);
-    b().CreateBr(fill);
-    b().SetInsertPoint(fill);
-    auto *index = b().CreatePHI(i64(), 2);
-    index->addIncoming(integer(i64(), 0), before);
-    b().CreateStore(initial, b().CreateGEP(element_type, data, index));
-    auto *next = b().CreateAdd(index, integer(i64(), 1));
-    index->addIncoming(next, fill);
-    b().CreateCondBr(b().CreateICmpULT(next, length), fill, done);
+    auto fill = loop(Type::uint64, integer(i64(), 0), length);
+    b().CreateStore(initial, b().CreateGEP(element_type, data, fill.index));
+    end_loop(fill);
+    b().CreateBr(done);
     b().SetInsertPoint(done);
     return offset;
   }
   llvm::Value *dereference(llvm::Value *owner, llvm::Value *source, Type type) {
-    return b().CreateLoad(type_of(type), checked_address(owner, source));
+    auto *storage = checked_address(owner, source);
+    return type.kind == Type::array || type.kind == Type::regional ? source : b().CreateLoad(type_of(type), storage);
   }
   llvm::Value *regional_field(llvm::Value *owner, llvm::Value *source,
                                Type record, size_t index, Type field_type) {

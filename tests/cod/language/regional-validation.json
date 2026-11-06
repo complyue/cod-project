@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-05T23:12:00.320691+00:00",
+  "recorded_utc": "2026-11-06T00:13:57.576973+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "passed": true,
@@ -12,19 +12,19 @@
     "array_header_bytes": 16,
     "record_bytes": 24
   },
-  "frontend_seconds": 0.018647992983460426,
-  "native_compile_link_seconds": 1.6693748960387893,
-  "native_process_seconds": 0.0013826389913447201,
-  "llvm_ir_bytes": 16304,
-  "bitcode_bytes": 5876,
+  "frontend_seconds": 0.01976596296299249,
+  "native_compile_link_seconds": 1.6190869039855897,
+  "native_process_seconds": 0.0013494789600372314,
+  "llvm_ir_bytes": 19659,
+  "bitcode_bytes": 6740,
   "notes": [
     "The CoD program creates the inspected records, array, sharing and cycle through LLVM IR.",
     "The release hook copies the whole image, frees the original, then checks references and mutation.",
     "Only system services and the independent layout/relocation check use C++."
   ],
   "source_sha256": {
-    "cod/lang_frontend.hh": "0253b9cc0a6287cd91bfcdbe2fd0be1b285f51df24870dcd7e918b2d4fb2e7b2",
-    "cod/lang_llvm.hh": "c72c632d3bac0ecf9aa0365ff820f75012b65c6a79c74ba6f3dde39e52e34b4e",
+    "cod/lang_frontend.hh": "1ff2a135764f36ef84a3708823bed5a47573d4d9fce0be1d505a2f8ceda3c29d",
+    "cod/lang_llvm.hh": "6021883aa15ad2c55d0438f7508d273a52a38d3549b7345aeece4504f81f0e30",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/language/region-records.cod": "b14807bb488e49f0f1a2d2ad48d2ce27294ae23afb6744fa18a99e74a3aeffc0",

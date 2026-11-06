@@ -820,10 +820,10 @@ class Compiler {
       if (args.size() != 1 || args[0].type.kind != Type::reference)
         fail(expr.at, "deref requires a typed regional reference");
       const auto type = resolve(*args[0].type.target, module, expr.at);
-      region_pointer(args[0], expr.at);
+      auto *native = ir_.dereference(region_pointer(args[0], expr.at), args[0].native, type);
       if (type.kind == Type::array || type.kind == Type::regional)
-        return {type, args[0].native, {}, nullptr, args[0].region_id};
-      return scalar(type, ir_.dereference(region_pointer(args[0], expr.at), args[0].native, type));
+        return {type, native, {}, nullptr, args[0].region_id};
+      return scalar(type, native);
     }
     if (expr.text == "len" || expr.text == "ref_at") {
       const auto args = arguments(expr, module, env, locals, pure);

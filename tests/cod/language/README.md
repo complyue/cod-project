@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 17 · Recorded: 2026-11-05.
+Prototype reference revision: 18 · Recorded: 2026-11-05.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 17 · Recorded: 2026-11-05.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-238](../../../design/DesignAuthorityRegistry.md#k-238) records the current implementation, coverage and limits.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-239](../../../design/DesignAuthorityRegistry.md#k-239) records the current implementation, coverage and limits.
 
 ## Run
 
@@ -57,7 +57,7 @@ behave @print(behave @p);   // 9: current dynamic binding
 - Lexical functions and immutable globals can be selected with `using "module.cod" name;`. Function-body `import` is unsupported.
 - Synthetic system module `std:io` provides `@print` for one scalar and `@assert` for one boolean. These are procedures; functions cannot invoke them or other effects. Use `using symbol "std:io" @print;`, or explicitly select an existing destination. Built-ins have no source body to `import`.
 
-Prototype expression evaluation is left-to-right; boolean operators short-circuit. Both conditional branches are checked. A symbolic write in a conditional logical operand requires an explicit nested scope. Arithmetic overflow and division by zero fail the native program with exit 70 before LLVM can evaluate an invalid operation. These sequencing, block-result and numerical choices remain reviewable prototype conventions.
+Prototype expression evaluation is left-to-right; boolean operators short-circuit. Both conditional branches are checked. A symbolic write in a conditional logical operand requires an explicit nested scope. Integer arithmetic overflow and integer division by zero fail the native program with exit 70 before LLVM can evaluate an invalid operation. These sequencing, block-result and numerical choices remain reviewable prototype conventions.
 
 ## Typed values and methods
 
@@ -132,7 +132,7 @@ function total(a::Rates)::f32 {
 
 Regions use the existing shilos region allocation/release operations with a fixed payload capacity. `alloc @arena` creates an array or regional record; allocations persist until region teardown. Regional records cannot be stack-constructed or copied/moved. Arrays store contiguous scalar elements with a declared index type; related arrays may share that type. Separate source-ID and weight arrays occupy four and one bytes per element respectively. Product fields use parallel arrays, rather than a hidden array-of-records representation.
 
-`ref<T>` is a typed regional reference; `deref` produces a bits value or a noncopying regional view. Record fields use `.field`, arrays use `[index]`, and `len` returns `u64`. `ref_at(array, index)` returns an existing scalar-element reference. Array access requires the declared index identity; bounds and null dereferences have runtime diagnostics. `null` is inferred from regional reference fields and conditional joins. This syntax is the bounded executable prototype, not a settled storage ABI or complete pointer language.
+`ref<T>` is a typed regional reference; `deref` produces a bits value or a noncopying regional view. Record fields use `.field`, arrays use `[index]`, and `len` returns `u64`. `ref_at(array, index)` returns an existing scalar-element reference. Array access requires the declared index identity. Bounds and null dereferences have runtime diagnostics; `deref` checks a regional reference even if its resulting view is unused. `null` is inferred from regional reference fields and conditional joins. This syntax is the bounded executable prototype, not a settled storage ABI or complete pointer language.
 
 Known pointer-format defect: a reference field at byte zero of a record cannot currently point back to that same record. The field-relative displacement becomes zero, which shilos interprets as null; the write silently reads back as null. Other nonzero-distance cycles are covered by relocation evidence. A shared shilos/CoD encoding repair and its reader-compatibility rule are pending human decision; this case is not accepted functionality.
 

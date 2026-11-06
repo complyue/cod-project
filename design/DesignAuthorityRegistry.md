@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：239
+记录版本：240
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 239，延续检查 K-01—K-238；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 240，延续检查 K-01—K-239；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -4765,3 +4765,13 @@ Scope: Remove unnecessary implementation/test complexity as work advances. Apply
 - The small gather fixture checks all 15 target values and the checksum in the initial frame and four A/B updates. Source indices and one-byte weights vary by target and slot, so an aggregate sum or uniform weight cannot hide incorrect target assignment or weight indexing. Expected values come from separate Python arithmetic with explicit capacities `[100]*8+[144]*4+[200]*2+[288]` and FP32 rounding after multiplication, division and addition. This is the same arithmetic facility check, not a selected SNN equation.
 - The scale harness retains uniform weights and checksum-only output, using the same gather kernel without per-target print costs. Fresh evidence covers 693,504 slots/eight updates and 112,281,600 slots/one uniform-input update. Regional occupation remains 3,500,416 and 566,650,928 bytes respectively; separate four-byte source and one-byte weight arrays retain their representation. Full-pool arithmetic rows do not establish a neuron count.
 - Evidence: source-only `cmake --build ./build` passed, all 124 language checks passed, and both scale runs match independent FP32 checksums. No entry fixture, compiler/runtime mechanism, build configuration or toolchain was added. The language and gather reports carry fresh commands/results or measurements and matching source hashes; older stress, relocation, numeric and component records retain their original timestamps/scope. The shared zero-distance pointer compatibility choice remains pending; the ten-hour goal remains active.
+
+
+<a id="k-239"></a>
+
+### K-239 — 2026-11-06: Checked regional views and shared native loop construction
+
+- Agent implementation assessment under H-122/H-123/H-124/H-127/H-129/H-133/H-143–H-145. Reviewed charter §§1–4, D-10r15's pure input-reachable snapshot contract and D-01's allocation/relocation protocols. Registry239 →240; reference17 →18 records the bounded implementation repair and clarifies that integer overflow/division checks do not describe IEEE floating arithmetic. Complete D-07/D-10/D-11 contracts remain pending-human; D-GOV240 maintenance alone continues H-05.
+- A native reproducer passed `deref` of a null regional record to a function that ignored its fields and returned 7. The view-producing branch bypassed the existing null check. Scalar loads and noncopying record/array views now share one checked dereference path, so the null error occurs even when the view is unused. This preserves the documented null-dereference diagnostic and input-object boundary; it adds no snapshot copy, regional pointer format or lifetime mechanism.
+- The existing `region-null` fixture now passes the resulting view to a function that ignores its fields, exposing the bypass without a new entry case. Local record and array probes both exit 70 with `null regional reference` and no output after the repair. The separate zero-distance self-reference encoding defect remains unresolved and is not masked or repaired here.
+- Array initialization reuses the native bounded-loop builder, removing its duplicate PHI/backedge construction. Allocation order, empty-array handling, element layout and region ownership remain unchanged. The source-only `cmake --build ./build` passes; all 124 language checks and the LLVM textual/bitcode verification plus complete-image relocation check pass. The relocated image remains 120 bytes with a 40-byte region header, 16-byte array header and 24-byte record. Fresh commands/results and source hashes are in validation.json and regional-validation.json. Other scale/composition/numeric/component records retain their recorded revisions and are not claimed rerun. No toolchain, main configuration, bootstrap source or SNN model changes; the ten-hour goal remains active.
