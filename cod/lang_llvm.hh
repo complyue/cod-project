@@ -13,6 +13,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Support/SaveAndRestore.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/TargetParser/Host.h>
 
@@ -39,6 +40,7 @@ class LLVMEmission {
   std::map<size_t, llvm::StructType *> records_;
   std::map<size_t, std::vector<Type>> fields_;
   std::map<size_t, llvm::GlobalVariable *> slots_;
+  const Location *source_location_ = nullptr;
   struct Cleanup {
     llvm::Value *address;
     llvm::Value *saved; // nullptr identifies a region resource to release.
@@ -78,7 +80,8 @@ class LLVMEmission {
     auto *bad = llvm::BasicBlock::Create(context(), "failure", entry_);
     b().CreateCondBr(condition, good, bad);
     b().SetInsertPoint(bad);
-    call_runtime("cod_lang_fail", void_type(), {b().CreateGlobalString(message)});
+    const auto diagnostic = source_location_ ? location_text(*source_location_) + ": " + message : message;
+    call_runtime("cod_lang_fail", void_type(), {b().CreateGlobalString(diagnostic)});
     b().CreateUnreachable();
     b().SetInsertPoint(good);
   }
@@ -135,6 +138,9 @@ public:
   }
 
 public:
+  auto source_location(const Location &at) {
+    return llvm::SaveAndRestore<const Location *>(source_location_, &at);
+  }
   LLVMEmission() {
     context_ = std::make_unique<llvm::LLVMContext>();
     module_ = std::make_unique<llvm::Module>("cod.program", context());

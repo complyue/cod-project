@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：245
+记录版本：246
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 245，延续检查 K-01—K-244；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 246，延续检查 K-01—K-245；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -263,7 +263,7 @@ Design authority
 - Downstream: D-07r22 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign212/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision23, describes the bounded H-122/H-123/H-139–H-147 checkpoint; K-243/K-244 record token-kind parsing and demanded-call diagnostics. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision24, describes the bounded H-122/H-123/H-139–H-147 checkpoint; K-243–K-245 record token-kind parsing and source/call diagnostics. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
 
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
@@ -4853,3 +4853,13 @@ Scope: Continue the existing language/runtime work for ten additional hours of a
 - Baseline `4f3c30e` reports the leaf error location but no demanded call path. The compiler retains call-site metadata while checking, removes it after successful calls, and formats it once if checking fails. Diagnostics show up to eight caller/definition locations, retaining both ends of longer paths with an omitted-call count. Existing recursion, purity, capture and type errors keep their primary messages. A shared location formatter serves errors, warnings and call notes; generated LLVM execution and regional formats are unchanged.
 - Coverage reuses the missing-capture fixture through one wrapper and the existing 512-module stress chain with an invalid leaf after its successful native run. The latter checks the primary purity error, leaf/entry locations and a bounded eight-note trace. No new graph generator or runtime tracing machinery is introduced.
 - Validation: `cmake --build ./build` succeeds; all 125 language checks and all five existing composition stress cases pass. The 512-call error retains eight caller notes and reports 504 omitted calls. Current `validation.json` and `stress-validation.json` record the runs. Other previously recorded measurements retain their own hashes and dates; no unrelated runtime/layout or SNN claim is made.
+
+
+<a id="k-245"></a>
+
+### K-245 — 2026-11-06: Source locations for emitted execution checks
+
+- Agent implementation refinement under the same H-123/H-139/H-143–H-145/H-147 scope as K-244, preserving charter §1's readable/checkable source interaction and D-10r16's bounded native prototype. Registry245 →246; reference23 →24. Existing arithmetic, conversion, bounds, null and assertion checks need to identify the source expression responsible for failure. Adding that location to existing failure text changes no arithmetic, invocation, storage or error-exit contract. It does not select a runtime stack/debugger protocol or qualify the full pending D-10 design. D-GOV246 maintenance alone continues H-05.
+- Baseline `87ca2d2`: native failure messages identify the check but not its CoD source. Expression lowering now scopes the current source location with LLVM's existing `SaveAndRestore` utility; emitted check strings include file/line/column. Nested lowering restores the outer location, so a bounds check after an index-computing call points at the indexing expression rather than the helper body. No additional runtime state or service signature is introduced. Native allocation-service exceptions keep their existing messages; diagnostics do not require the source file to remain present at execution.
+- Coverage strengthens the existing overflow and array-bounds fixtures: one fails inside a pure helper, the other after an index helper returns, requiring the appropriate source locations. No new fixture or modeling behavior is added.
+- Validation: `cmake --build ./build` succeeds and all 125 language checks pass. The retained cases diagnose `overflow.cod:4:9` inside the helper and `region-bounds.cod:7:8` at the indexing expression after its helper returns. `validation.json` records actual output and source hashes. Other evidence retains its recorded source/version scope.

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T06:44:24.414724+00:00",
+  "recorded_utc": "2026-11-06T06:47:49.267844+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -282,11 +282,11 @@
         "file": "overflow.cod",
         "exit": 70,
         "stdout": "",
-        "stderr_contains": "i64 addition overflow"
+        "stderr_contains": "overflow.cod:4:9: i64 addition overflow"
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "i64 addition overflow\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/overflow.cod:4:9: i64 addition overflow\n",
       "passed": true
     },
     {
@@ -1551,7 +1551,7 @@
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "u8 addition overflow\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/uint-overflow.cod:1:7: u8 addition overflow\n",
       "passed": true
     },
     {
@@ -1569,7 +1569,7 @@
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "u32 subtraction overflow\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/uint-underflow.cod:1:6: u32 subtraction overflow\n",
       "passed": true
     },
     {
@@ -1605,7 +1605,7 @@
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "numeric conversion out of range\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/uint-cast-negative.cod:1:1: numeric conversion out of range\n",
       "passed": true
     },
     {
@@ -1623,7 +1623,7 @@
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "numeric conversion out of range\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/uint-cast-overflow.cod:1:1: numeric conversion out of range\n",
       "passed": true
     },
     {
@@ -1641,7 +1641,7 @@
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "numeric conversion out of range\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/float-cast-boundary.cod:1:1: numeric conversion out of range\n",
       "passed": true
     },
     {
@@ -1659,7 +1659,7 @@
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "numeric conversion out of range\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/float-cast-unsigned-boundary.cod:1:1: numeric conversion out of range\n",
       "passed": true
     },
     {
@@ -1677,7 +1677,7 @@
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "numeric conversion out of range\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/float-cast-nan.cod:1:1: numeric conversion out of range\n",
       "passed": true
     },
     {
@@ -1919,11 +1919,11 @@
         "file": "region-bounds.cod",
         "exit": 70,
         "stdout": "",
-        "stderr_contains": "regional array index out of bounds"
+        "stderr_contains": "region-bounds.cod:7:8: regional array index out of bounds"
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "regional array index out of bounds\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-bounds.cod:7:8: regional array index out of bounds\n",
       "passed": true
     },
     {
@@ -1941,7 +1941,7 @@
       },
       "exit_code": 70,
       "stdout": "",
-      "stderr": "null regional reference\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-null.cod:7:9: null regional reference\n",
       "passed": true
     },
     {
@@ -2193,9 +2193,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-suwneh6k/program.ll",
+        "/tmp/cod-language-check-03lh31gj/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-suwneh6k/program.bc"
+        "/tmp/cod-language-check-03lh31gj/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2205,18 +2205,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "007cc3eca44319c9533e04f498d02c3b4b7a95db7a6802f367a600172c768ee8"
+    "sha256": "ec8317f9f49b87518bbc10831f9dc667252b54a08addec94a914ee13b8066c8d"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
-    "cod/lang_frontend.hh": "3f9fb58827297d690e122f99ca150e16a09005af848575242bbcf1c80bcc965d",
-    "cod/lang_llvm.hh": "6021883aa15ad2c55d0438f7508d273a52a38d3549b7345aeece4504f81f0e30",
+    "cod/lang_frontend.hh": "262af964d410fca6d9c3fc059c55edf5f2601c95c6909afd0cbecfa8603f84bd",
+    "cod/lang_llvm.hh": "d43d38862ef8a1b97aa2985301f915a9a31ce5525ea5eae9129c48e40851fa6c",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "9434fae55ba2a8086b1b3120add9cf98de3093eaf5099b6c9881fd2eba91f981",
+    "tests/cod/language/cases.json": "863b36134b19e13e24502fed7c5bd00d9d63e0baf97c7b50d737519573f781e8",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2276,7 +2276,7 @@
     "tests/cod/language/operator-library.cod": "3b94be253e5924fe2783b5292ce9031051e91f6ae6c7cbf4b194d91db7349e38",
     "tests/cod/language/operator-using.cod": "7defd4f6f75e3c9d9964c335ea4ea6d3e6a7913ce5918ce32662b244e424c3c7",
     "tests/cod/language/other-vocabulary.cod": "80817103481ee22506c050a6fcdc3ce82aefb15cebe6573d84d8a66f00aad547",
-    "tests/cod/language/overflow.cod": "372077e05270e2852c8c3cf5e8d904bfa6f58d48242937b7f7560d60117fb1ea",
+    "tests/cod/language/overflow.cod": "174ed5d6401791539ff91cf081662ee6e1f25de2662cff4dc46512d8ad25f11d",
     "tests/cod/language/perform-without-caller.cod": "f31457d947a8a5b22b629778f68f67509b0679b617eeb71632934c1dd1a1727b",
     "tests/cod/language/plain-assignment.cod": "6832cc854107048ab81f0de5bddbfd78e70a7944f4a0a484d80b13578e1e3e4a",
     "tests/cod/language/pool-index.cod": "ec0c7c35a2176e4c5c0e24156ee2a7a5f69a7a768d2fc1fccd3e6ed7b6296bca",
@@ -2294,7 +2294,7 @@
     "tests/cod/language/products.cod": "fc200917186dd1fca71a72163bb37089d8f5a0e600f1c62c8e561956e103be1b",
     "tests/cod/language/quoted-operator.cod": "7795a820a739a7b5a94148c7060f8252a8355e96019d8f756926b49dd5dbd63d",
     "tests/cod/language/region-arrays.cod": "3c37ca84cf5647de6956fdf309ee62614242733b6721ae5bfe7516bc260ff924",
-    "tests/cod/language/region-bounds.cod": "0836e7152c34485384fc4b72c0b77dd6774977f4af073804b31ce2b84758df38",
+    "tests/cod/language/region-bounds.cod": "8f4f63ef440e70a46644cf219fabf5d7d1f4afacc8c397a31e5b952ea53c56e7",
     "tests/cod/language/region-capacity.cod": "7205497704fa1ab6a25353c90b9cda7320f095855bdd5ef83b5301e8a7ab613d",
     "tests/cod/language/region-capture.cod": "40133895371604dd4e4d441bd4154804527720ab18055775784c6179b0aaf4cb",
     "tests/cod/language/region-cross-pointer.cod": "fa66513068945c510b063548bde6c9a8f9ea4b90569a089e5dca6640b39cf316",

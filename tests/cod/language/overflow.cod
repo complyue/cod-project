@@ -1,3 +1,6 @@
 symbol @print;
 using "std:io" @print as @print;
-behave @print(9223372036854775807 + 1);
+function increment(value::i64)::i64 {
+  value + 1
+}
+behave @print(increment(9223372036854775807));

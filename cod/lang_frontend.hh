@@ -997,6 +997,7 @@ class Compiler {
   }
   Value expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
                    bool pure) {
+    const auto location = ir_.source_location(expr.at);
     using K = Expression::Kind;
     switch (expr.kind) {
     case K::null_ref: return scalar(Type::null_ref, ir_.bits(Type::null_ref, 0));
