@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_utc": "2026-11-06T00:07:00.653360+00:00",
+  "recorded_utc": "2026-11-06T00:17:59.237731+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "passed": true,
@@ -25,12 +25,12 @@
   "element_payload_bytes": 3500280,
   "region_occupation_bytes": 3500416,
   "non_element_bytes": 136,
-  "frontend_seconds": 0.021513313986361027,
-  "native_compile_link_seconds": 1.5987599369836971,
-  "native_process_seconds": 0.06919483502861112,
-  "llvm_ir_bytes": 141436,
-  "bitcode_bytes": 32252,
-  "native_executable_bytes": 87304,
+  "frontend_seconds": 0.021752613014541566,
+  "native_compile_link_seconds": 1.6094846869818866,
+  "native_process_seconds": 0.07002358901081607,
+  "llvm_ir_bytes": 146658,
+  "bitcode_bytes": 33588,
+  "native_executable_bytes": 87352,
   "notes": [
     "Timing includes initialization, process startup and printed checksums.",
     "Only the system runtime has C++ debug information; CoD code is directly emitted LLVM IR.",
@@ -47,8 +47,8 @@
     "tests/cod/language/pool-layout.cod": "3cc4466300349659b0d080a6364f2b8936a534aa1c3440b31a2c76610d147672",
     "tests/cod/language/pool-typed.cod": "be349e069422a19967b247d78c1218b4f1cd703767925a460a4539e284f5232e",
     "tests/cod/language/pool-units.cod": "7e98a99907eb5a1d546055ecdac548d129c3cafc17c8c5352179ed21388473c3",
-    "cod/lang_frontend.hh": "18c92e5740f81bdf9692743f8f049656748d67e6dec926e92c05cdc03777ab3e",
-    "cod/lang_llvm.hh": "c72c632d3bac0ecf9aa0365ff820f75012b65c6a79c74ba6f3dde39e52e34b4e",
+    "cod/lang_frontend.hh": "1ff2a135764f36ef84a3708823bed5a47573d4d9fce0be1d505a2f8ceda3c29d",
+    "cod/lang_llvm.hh": "6021883aa15ad2c55d0438f7508d273a52a38d3549b7345aeece4504f81f0e30",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "tests/cod/language/gather_benchmark.py": "2107996b99219d3565924590c24d3e2868b734aaedb70c03357b5a8022e77c83"
   }

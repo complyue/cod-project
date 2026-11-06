@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：240
+记录版本：241
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 240，延续检查 K-01—K-239；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 241，延续检查 K-01—K-240；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -283,17 +283,17 @@ Design authority
 
 ### D-11: Scalar units and array index types
 
-- File: [ScalarUnitsAndIndexTypes.md](ScalarUnitsAndIndexTypes.md), discussion revision 7, all sections; complete implementation contract pending-human.
+- File: [ScalarUnitsAndIndexTypes.md](ScalarUnitsAndIndexTypes.md), discussion revision 8, all sections; complete implementation contract pending-human.
 - Value chain: C-47/P-112 derives strict scalar meanings from C-10/P-14/C-01; D-11/P-113 develops the arithmetic/indexing requirement. C-49/P-119 supplies the proposed compositional value of independent UoM identity. These formal value relationships remain candidates, not inferred full-design confirmation.
 - Human scope: H-123 requires structured types and consideration of scale-law index support; H-125 requires strict branded identities and array index types; H-126 requests comparison before selection; H-128 confirms independent first-class compile-time UoMs and local aliases, not symbols; H-130 supplies pure Julia-style conversion dispatch; H-134 specifies fresh UoM definitions and one-shot using bundles, replacing UoM import; H-131 adds parenthesized operator-method names; H-132 plans compound UoMs while deferring their implementation. P-116/P-120/P-123 record those explicit constraints.
-- Dependency: P-118 uses C-13 pool arithmetic as a concrete example. Neither the dependency nor the worked formulas select a new pool configuration or neural model. D-10r14 handles regional snapshots separately.
+- Dependency: P-118 uses C-13 pool arithmetic as a concrete example. Neither the dependency nor the worked formulas select a new pool configuration or neural model. D-10r15 handles regional snapshots separately.
 - Invariants/non-goals: preserve unrelated identities and SoA storage; no user heap, per-value runtime tags, heap topology or new SNN modeling. Do not infer a bounds proof or origin equality from representation/measure equality. No full numeric hierarchy, dependent solver or GADT implementation is selected.
 - Acceptance: compare wrappers and UoM using forward/inverse pool formulas, typed arrays, generic arithmetic, literals, local/global domains, invalid types/ranges and runtime representation. Actual implementation must supply evidence; the analysis is not a test result.
 - Current bounded rules: H-133–H-138 and D-07r17 LI-01–LI-04 settle caller lifetime, unit selection, parameter annotations and conversion routes. C-51/P-124–P-127 record the user-controlled policy. Remaining grammar/representation details must stay within those rules. Compound-unit equality/inference is H-132 roadmap scope and does not block this run. K-220 registers the draft, K-221 records operator sugar and K-222 records the scope split and K-223 records the resolved local rules without self-qualification; the bounded ten-hour goal is authorized by H-122/H-123 after this review.
 
-- Current implementation evidence: K-226/K-227 cover nominal units, routes, numeric carriers and typed pool formulas; K-228–K-230 cover real SoA arrays, full-pool storage, snapshots and numeric boundary/candidate-selection repairs. Reference10 and its linked evidence remain bounded implementation records, not qualification of the complete pending contract.
+- Current implementation evidence: K-226/K-227 cover nominal units, routes, numeric carriers and typed pool formulas; K-228–K-230 cover real SoA arrays, full-pool storage, snapshots and numeric boundary/candidate-selection repairs. K-240/reference19 aligns the operator-support wording and records combined LLVM validation. These remain bounded implementation records, not qualification of the complete pending contract.
 
-The following relations apply at the scopes recorded in each row and the current D-07 revision22, D-08 set212, D-09 revision2, D-10 revision15 and D-11 revision7 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
+The following relations apply at the scopes recorded in each row and the current D-07 revision22, D-08 set212, D-09 revision2, D-10 revision15 and D-11 revision8 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
 
 | 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
 | --- | --- | --- | --- |
@@ -4775,3 +4775,13 @@ Scope: Remove unnecessary implementation/test complexity as work advances. Apply
 - A native reproducer passed `deref` of a null regional record to a function that ignored its fields and returned 7. The view-producing branch bypassed the existing null check. Scalar loads and noncopying record/array views now share one checked dereference path, so the null error occurs even when the view is unused. This preserves the documented null-dereference diagnostic and input-object boundary; it adds no snapshot copy, regional pointer format or lifetime mechanism.
 - The existing `region-null` fixture now passes the resulting view to a function that ignores its fields, exposing the bypass without a new entry case. Local record and array probes both exit 70 with `null regional reference` and no output after the repair. The separate zero-distance self-reference encoding defect remains unresolved and is not masked or repaired here.
 - Array initialization reuses the native bounded-loop builder, removing its duplicate PHI/backedge construction. Allocation order, empty-array handling, element layout and region ownership remain unchanged. The source-only `cmake --build ./build` passes; all 124 language checks and the LLVM textual/bitcode verification plus complete-image relocation check pass. The relocated image remains 120 bytes with a 40-byte region header, 16-byte array header and 24-byte record. Fresh commands/results and source hashes are in validation.json and regional-validation.json. Other scale/composition/numeric/component records retain their recorded revisions and are not claimed rerun. No toolchain, main configuration, bootstrap source or SNN model changes; the ten-hour goal remains active.
+
+
+<a id="k-240"></a>
+
+### K-240 — 2026-11-06: Combined LLVM acceptance evidence and UoM reference alignment
+
+- Agent evidence/editorial assessment under H-122/H-123/H-130/H-131/H-139/H-143–H-145. Reviewed charter §§1–4 and D-11's confirmed local identity/conversion/operator constraints. Registry240 →241, D-11r7 →r8, reference18 →19. The D-11 correction removes the obsolete assertion that the parser only accepts identifier function names and scopes overflow checking to integer arithmetic; it preserves the confirmed H-131 eager-operator relation and all deferred grammar choices. Full D-11 and related contracts remain pending-human; no unconfirmed design is qualified through editorial continuity. D-GOV241 maintenance alone continues H-05.
+- After the shared native loop and checked-view changes in e3d49fc, the existing five composition cases, independent 22-FP32/19-u64 numeric sample and both gather scales pass again. No cases or mechanisms are added. All six language/runtime evidence files now match the current compiler and fixture hashes; validation.json's preceding four-group component run remains explicitly dated historical evidence.
+- Measured pure-chain `.text` remains 15,398 bytes for the 512-module loop-input workload, and the 96-module regional snapshot chain remains 6,630 bytes. The 693,504-slot/eight-update and 112,281,600-slot/one-update cases retain their independent checksums and occupied sizes of 3,500,416 and 566,650,928 bytes. These are measured workload properties, not universal optimization or neural-throughput claims.
+- Type-resolution and source-reference review found no further required code change in this checkpoint. The sole LLVM path, zero-cost relocation, pure snapshot boundary, independent UoM identities and source-selected conversion behavior remain the bounded scope. This evidence does not resolve the shared zero-distance self-reference defect or approve a pointer-format/reader-compatibility policy. That decision remains pending and the ten-hour goal stays active. No build configuration, toolchain, source comment policy, SNN model or human confirmation history changes.
