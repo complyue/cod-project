@@ -261,6 +261,17 @@ class Parser {
       fail(peek().at, kind == TokenKind::symbol ? "expected a symbol name" : "expected a lexical name");
     return tokens_[cursor_++];
   }
+  Token value_name() {
+    auto token = name(TokenKind::identifier);
+    const auto &text = token.text;
+    // primary() gives these names expression syntax instead of lexical lookup.
+    if (text == "true" || text == "false" || text == "null" || text == "alloc" ||
+        text == "for" || text == "fold" || text == "let" || text == "effect" ||
+        text == "perform" || text == "behave" || text == "if" || text == "procedure" ||
+        text == "function" || text == "global" || text == "symbol")
+      fail(token.at, "reserved expression name '" + text + "' cannot declare a lexical value");
+    return token;
+  }
   Token lexical_name() {
     if (!take("(")) return name(TokenKind::identifier);
     auto op = tokens_[cursor_++];
@@ -334,14 +345,14 @@ class Parser {
       if (!fold) expect("for");
       expect("(");
       auto expr = make(fold ? Expression::Kind::fold : Expression::Kind::range_for,
-                       name(TokenKind::identifier));
+                       value_name());
       expect("in");
       expr->children.push_back(expression());
       expect("..");
       expr->children.push_back(expression());
       if (fold) {
         expect(",");
-        expr->binding = name(TokenKind::identifier).text;
+        expr->binding = value_name().text;
         if (expr->text == expr->binding) fail(expr->at, "range and accumulator names must differ");
         expect("=");
         expr->children.push_back(expression());
@@ -351,7 +362,7 @@ class Parser {
       return expr;
     }
     if (take("let")) {
-      auto expr = make(Expression::Kind::let, name(TokenKind::identifier));
+      auto expr = make(Expression::Kind::let, value_name());
       expect("=");
       expr->children.push_back(expression());
       return expr;
@@ -516,7 +527,7 @@ public:
         if (take("(")) {
           if (!take(")")) {
             do {
-              auto param = name(TokenKind::identifier);
+              auto param = value_name();
               Parameter parameter{param.text, Type::void_type, param.at, false, {}};
               if (take("(")) {
                 parameter.type = parse_type();

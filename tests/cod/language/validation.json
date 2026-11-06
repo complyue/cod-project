@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T14:18:46.168044+00:00",
+  "recorded_utc": "2026-11-06T15:07:47.025990+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
-  "passed": 133,
-  "total": 133,
+  "passed": 134,
+  "total": 134,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -1534,6 +1534,24 @@
       "passed": true
     },
     {
+      "fixture": "local-reserved-name.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/local-reserved-name.cod"
+      ],
+      "expected": {
+        "file": "local-reserved-name.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "reserved expression name 'true' cannot declare a lexical value"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/local-reserved-name.cod:3:19: reserved expression name 'true' cannot declare a lexical value\n",
+      "passed": true
+    },
+    {
       "fixture": "fold-type-error.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -2354,9 +2372,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-hoafs10f/program.ll",
+        "/tmp/cod-language-check-iexvy4ds/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-hoafs10f/program.bc"
+        "/tmp/cod-language-check-iexvy4ds/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2366,18 +2384,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "b98966fae420ae06b2e42023447d11c1669f6dbc835a526946c372c83680645f"
+    "sha256": "841cca2078b6afa6a9bdb6950048b1bd82d080f821fc555c5f60a7921fc712f1"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
-    "cod/lang_syntax.hh": "3f7d14866a37d0efa1c0d792f32587e68e303dba6a742dd762145cd857825fd1",
+    "cod/lang_syntax.hh": "0202a4ff48fcf63a684d85ae2fd1b58922e83cc2991a61a208ffdbc4a1ddc758",
     "cod/lang_frontend.hh": "124766b46e2a1b493d90ac3cd58133d3d8e18fbbebdef07f3bc45c38c9a18af4",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "819ca55bfb4ca25870d307b2927a84e66aa34a25143e69c51fadb45e962296b2",
+    "tests/cod/language/cases.json": "ea9f2098e2e345ed7b950de0f6a35fcbf905b72ef13d0f2b9c64f916a7a06b14",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2413,9 +2431,10 @@
     "tests/cod/language/import.cod": "ca7a3d1627e417d87dc6727812807d5158822fc2131da30c96e27b15dee77858",
     "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
     "tests/cod/language/iteration-index-error.cod": "f2a740829eae91e0cbacbd3f98ffde0b5dc777e2cc437865abbba9c996865ad6",
-    "tests/cod/language/iteration-scope.cod": "76992c1d8d940b60ca84f2171e6e77cc0c9b6ffa1ad57de43dc9fd047c40066c",
+    "tests/cod/language/iteration-scope.cod": "7757eda05f1538f64d7e233cc7a4f4a09de6a51e20767d38f7824b9ad391f536",
     "tests/cod/language/late-alias-destination.cod": "06f1595b32fd5061ef439baf47280df1e3150f8b9ce7ff1e7d3c94faa61e5c13",
     "tests/cod/language/local-duplicate.cod": "24f3d346ab7863a22ae97835f85c1c4e45f90d35f360a6590c0f8fc47103b46d",
+    "tests/cod/language/local-reserved-name.cod": "595ab6ee14c78a3fa168b3cb6f311d7de05cf37eab65380dc2598a6de040cae2",
     "tests/cod/language/logical-unscoped-effect.cod": "d44ef2717a820b3cc53d3b182e8ab9e3168f186dd408c672527e4991d676da06",
     "tests/cod/language/logical-unscoped-region.cod": "d8bc594b80a7191e4d18f123db266b69a0fe6cdf858c61b9f395bb6a1907bf94",
     "tests/cod/language/mapped-behave-later.cod": "552889d87d8eeef003dcdcc5e89da080447e9c74a414d7f31b7f2ebc8b35512d",
@@ -2455,7 +2474,7 @@
     "tests/cod/language/product-library.cod": "a50ce9353fd26acbeb0cab28294e6d2b2dae3bea376aa640fe8752e20f5bd6f7",
     "tests/cod/language/product-module-identity.cod": "d355cf9c10f7ef4be7b4269b63b05f8598b52396afc4c64b1ae561dbbcef54df",
     "tests/cod/language/product-other-library.cod": "6271a353553b396c6cf5f58d88b715a0ae21cc34050ad58e98d2538519b7812e",
-    "tests/cod/language/products.cod": "fc200917186dd1fca71a72163bb37089d8f5a0e600f1c62c8e561956e103be1b",
+    "tests/cod/language/products.cod": "d948bf467c42dc8b69e7d15abd769b37dcf73d203ed60dad6bcf8e0f1ecce1ed",
     "tests/cod/language/quoted-operator.cod": "7795a820a739a7b5a94148c7060f8252a8355e96019d8f756926b49dd5dbd63d",
     "tests/cod/language/region-arrays.cod": "e030f937d95f075a4b0fc9ce069925eb91024135ec42b1c3b2c53ec4b1a18f9c",
     "tests/cod/language/region-bounds.cod": "8f4f63ef440e70a46644cf219fabf5d7d1f4afacc8c397a31e5b952ea53c56e7",

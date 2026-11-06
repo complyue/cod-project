@@ -23,12 +23,12 @@ procedure @read()::i64 { @value }
 };
 behave @print(@value);
 
-function nested(n::i64)::i64 {
-  let value = { let n = n + 1; n };
+function nested(in::i64)::i64 {
+  let value = { let in = in + 1; in };
   let sum = 10;
-  let total = fold (n in 0 .. 3, sum = sum) { sum + n };
-  let branch = if (n > 0) { let n = n + 2; n } else { let n = n - 2; n };
-  value + total + branch + n + sum
+  let total = fold (in in 0 .. 3, sum = sum) { sum + in };
+  let branch = if (in > 0) { let in = in + 2; in } else { let in = in - 2; in };
+  value + total + branch + in + sum
 }
 behave @print(nested(5));
 behave @print(nested(-5));

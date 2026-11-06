@@ -1,14 +1,14 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
 type Pair { x::f32; count::i64; }
-type Box { pair::Pair; enabled::bool; }
+type Box { pair::Pair; true::bool; }
 function double(p::Pair)::Pair { Pair(p.x * 2.0f32, p.count * 2) }
-function metric(b::Box)::f32 { if (b.enabled) { -b.pair.x } else { 0.0f32 } }
+function metric(b::Box)::f32 { if (b.true) { -b.pair.x } else { 0.0f32 } }
 global b::Box = Box(double(Pair(1.25f32, 3)), true);
 behave @print(b.pair.x);
 behave @print(b.pair.count);
 behave @print(metric(b));
-behave @assert(b.enabled);
+behave @assert(b.true);
 
 regional type Envelope { content::Box; next::ref<Envelope>; }
 function contents(e::Envelope)::Box { e.content }
@@ -23,5 +23,5 @@ setfield(@envelope, next, @envelope);
   setfield(@envelope, content, Box(Pair(4.0f32, 9), false));
   behave @print(saved.pair.count);
   behave @print(through(deref(@envelope)));
-  behave @print(contents(deref(@envelope)).enabled);
+  behave @print(contents(deref(@envelope)).true);
 };

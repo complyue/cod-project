@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+behave @print(99);
+function identity(true::bool)::bool { true }
+behave @print(identity(false));

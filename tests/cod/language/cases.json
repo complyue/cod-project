@@ -493,6 +493,12 @@
     "stderr_contains": "duplicate lexical value 'n'"
   },
   {
+    "file": "local-reserved-name.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "reserved expression name 'true' cannot declare a lexical value"
+  },
+  {
     "file": "fold-type-error.cod",
     "exit": 2,
     "stdout": "",
