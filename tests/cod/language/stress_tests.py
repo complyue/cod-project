@@ -108,6 +108,23 @@ def main():
         entry.write_text('\n'.join(lines) + '\n')
         results.append(run(executable, root, entry, f'{depth-1+5}\n{depth-1+9}\n9\n',
                            '1000-procedure-inline-chain-with-operation-leaf'))
+        (directory / 'operation-leaf.cod').write_text(
+            'symbol @missing;\n'
+            'type Argument { value::i64; }\n'
+            'procedure (+)(value::Argument, delta::i64)::i64 { @missing }\n')
+        command = [str(executable), '--check', str(entry)]
+        diagnostic = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=120)
+        diagnostic_passed = (diagnostic.returncode == 2 and diagnostic.stdout == ''
+                             and 'perform requires an unavailable definition-time capture' in diagnostic.stderr
+                             and 'operation-leaf.cod:3:' in diagnostic.stderr
+                             and 'procedure-main.cod:' in diagnostic.stderr
+                             and diagnostic.stderr.count(': note: in call to procedure ') == 8
+                             and f'{depth+1-8} intervening calls omitted' in diagnostic.stderr)
+        results[-1]['leaf_error'] = {'command': command, 'exit_code': diagnostic.returncode,
+                                     'stdout': diagnostic.stdout, 'stderr': diagnostic.stderr,
+                                     'passed': diagnostic_passed}
+        results[-1]['passed'] &= diagnostic_passed
+        print(json.dumps({'case': 'deep-operation-binding-failure', 'passed': diagnostic_passed}), flush=True)
 
         layers = 10
         for level in range(layers, -1, -1):
