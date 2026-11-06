@@ -586,7 +586,7 @@
   {
     "file": "region-records.cod",
     "exit": 0,
-    "stdout": "5.25\n10.25\ntrue\n"
+    "stdout": "5.5\n10.5\ntrue\n"
   },
   {
     "file": "region-capture.cod",

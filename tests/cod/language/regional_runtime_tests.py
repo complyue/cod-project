@@ -57,7 +57,7 @@ extern "C" void cod_lang_region_free(void *owner) {
   assert(head->value == 3.0f && tail->value == 7.0f);
   assert(head->next.get() == tail && tail->next.get() == head);
   assert(head->data.get() == values && tail->data.get() == values);
-  assert(values->size == 2 && values->data.get()[0] == 0.25f);
+  assert(values->size == 2 && values->data.get()[0] == 0.5f);
   auto *mutable_values = reinterpret_cast<Values *>(base + values_offset);
   mutable_values->data.get()[1] = 7.5f;
   assert(tail->data->data.get()[1] == 7.5f);
@@ -108,7 +108,7 @@ def main():
         _, compile_seconds = checked(command, root)
         output, process_seconds = checked([executable], root)
         lines = output.splitlines()
-        if lines[:-1] != ["5.25", "10.25", "true"]:
+        if lines[:-1] != ["5.5", "10.5", "true"]:
             raise RuntimeError("The source fixture did not retain its expected result: " + output)
         evidence = {"schema_version": 2, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "platform": platform.platform(), "toolchain": mode, "passed": True,
