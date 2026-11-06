@@ -23,5 +23,9 @@ behave @print(cell(deref(@first)) == cell(deref(@values)));
 behave @print(perform @read());
 behave @print(behave @read());
 behave @print(sum(deref(@first), deref(@values)));
-store(cell(deref(@values)), 17);
-behave @print(sum(deref(@first), deref(@values)));
+{
+  let second = @values;
+  # The later argument rebinds @values; the outer write still targets second's region.
+  store(cell(deref(@values)), store(effect @values = @first, 0u32, 17));
+  behave @print(sum(deref(@first), deref(second)));
+};

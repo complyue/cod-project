@@ -591,7 +591,7 @@
   {
     "file": "region-capture.cod",
     "exit": 0,
-    "stdout": "8\n8\n11\nfalse\nfalse\n8\n13\n21\n25\n"
+    "stdout": "8\n8\n11\nfalse\nfalse\n8\n13\n21\n34\n"
   },
   {
     "file": "region-pure-write.cod",
