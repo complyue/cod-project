@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "recorded_utc": "2026-11-06T00:17:25.312143+00:00",
+  "recorded_utc": "2026-11-06T10:51:41.151779+00:00",
   "toolchain": "build",
   "backend": "llvm",
   "passed": true,
   "seed": "0xC0D2026",
   "f32_samples": 22,
   "u64_samples": 19,
-  "native_compile_link_run_seconds": 1.6412507169879973,
+  "native_compile_link_run_seconds": 1.5742648100131191,
   "generated_cod_sha256": "d7b066c95f5564567eb7be8dc49223b0f7f3073ee26c251b217a938a62bb3f4a",
   "observed_trace_sha256": "42c28a127c0e54f3a7a603b4dba5e15c954f640c2be04390d2625b1c77ed8527",
   "notes": [
@@ -16,9 +16,9 @@
     "This validates arithmetic and regional input access, not a neural model."
   ],
   "source_sha256": {
-    "cod/lang_frontend.hh": "1ff2a135764f36ef84a3708823bed5a47573d4d9fce0be1d505a2f8ceda3c29d",
-    "cod/lang_llvm.hh": "6021883aa15ad2c55d0438f7508d273a52a38d3549b7345aeece4504f81f0e30",
-    "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
+    "cod/lang_frontend.hh": "c365171456a0014396274ac14eaf4d43340cd28eeddfa3f48b4181dd2631c4ae",
+    "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "tests/cod/language/numeric_properties.py": "b2662a4815b8539c90a35b37028e935892df7076408a78e92ddc23b3104f94c5"
   }
 }

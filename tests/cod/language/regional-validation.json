@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T08:14:58.252979+00:00",
+  "recorded_utc": "2026-11-06T10:51:42.689609+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "passed": true,
@@ -12,9 +12,9 @@
     "array_header_bytes": 16,
     "record_bytes": 24
   },
-  "frontend_seconds": 0.014899643021635711,
-  "native_compile_link_seconds": 1.5424728890066035,
-  "native_process_seconds": 0.0012300799717195332,
+  "frontend_seconds": 0.018209558038506657,
+  "native_compile_link_seconds": 1.448699559958186,
+  "native_process_seconds": 0.0012866859906353056,
   "llvm_ir_bytes": 21509,
   "bitcode_bytes": 8380,
   "notes": [
@@ -23,7 +23,7 @@
     "Only system services and the independent layout/relocation check use C++."
   ],
   "source_sha256": {
-    "cod/lang_frontend.hh": "fa98ded71322bb8f758d196f6f84522e9a052578865fdf0164d6fa3e2d4dd205",
+    "cod/lang_frontend.hh": "c365171456a0014396274ac14eaf4d43340cd28eeddfa3f48b4181dd2631c4ae",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
