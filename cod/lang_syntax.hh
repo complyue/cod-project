@@ -303,10 +303,20 @@ class Parser {
   Expr make(Expression::Kind kind, const Token &token) {
     return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}});
   }
+  Token field_name() {
+    if (!take("(")) return name(TokenKind::identifier);
+    auto field = field_name();
+    expect(")");
+    return field;
+  }
   void arguments(Expression &expr) {
     expect("(");
     if (!take(")")) {
-      do { expr.children.push_back(expression()); } while (take(","));
+      do {
+        if (expr.kind == Expression::Kind::call && expr.text == "setfield" && expr.children.size() == 1)
+          expr.children.push_back(make(Expression::Kind::name, field_name()));
+        else expr.children.push_back(expression());
+      } while (take(","));
       expect(")");
     }
   }

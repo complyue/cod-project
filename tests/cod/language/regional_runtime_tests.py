@@ -120,7 +120,7 @@ def main():
                               "The release hook copies the whole image, frees the original, then checks references and mutation.",
                               "Only system services and the independent layout/relocation check use C++."],
                     "source_sha256": {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-                                      for path in [root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
+                                      for path in [root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
                                                    root / "cod/lang_native_runtime.hh", root / "include/shilos/region.hh",
                                                    directory / "region-records.cod", Path(__file__).resolve()]}}
         if report := os.environ.get("COD_REGIONAL_REPORT"):

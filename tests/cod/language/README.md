@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 41 · Recorded: 2026-11-06.
+Prototype reference revision: 42 · Recorded: 2026-11-06.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 41 · Recorded: 2026-11-06.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation. H-147 continues the work for ten active hours, excluding waiting. H-148 requires per-argument conversion before the next argument. H-149 permits nested local shadowing and requires unique declarations within each scope.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-264](../../../design/DesignAuthorityRegistry.md#k-264) records the conditional-binding checker and its validation; each evidence file retains its timestamp and source hashes. This checkpoint does not complete H-147’s ten-active-hour goal.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-265](../../../design/DesignAuthorityRegistry.md#k-265) records field-selector parsing and its validation; each evidence file retains its timestamp and source hashes. This checkpoint does not complete H-147’s ten-active-hour goal.
 
 ## Run
 
@@ -140,7 +140,7 @@ Regions use the existing shilos region allocation/release operations with a fixe
 
 Accepted known issue ([H-146](../../../design/DesignAuthorityRegistry.md#h-146)): assigning a record to its first pointer field produces field-relative displacement zero, so the field reads back as null. The current encoding and behavior are retained without a new store diagnostic. Future intrinsic object fields are expected to resolve this limitation; their definition, layout and compatibility rules remain open. Other nonzero-distance cycles are covered by relocation evidence.
 
-Procedures may use `store(array, index, value)`, `store(scalar_ref, value)` and `setfield(record_ref, field, value)`. Their stored results survive dynamic-scope restoration. `effect` only changes a binding and restores that binding on scope exit. `used_bytes` and `capacity_bytes` inspect a region resource from a procedure. Capacity includes the native region header; allocation requests specify payload bytes.
+Procedures may use `store(array, index, value)`, `store(scalar_ref, value)` and `setfield(record_ref, field, value)`. The `field` selector names a declared field, as `.field` does; it is not evaluated as an expression. Field names such as `effect` or `true` retain their identifier meaning in this position, including inside parentheses. Stored results survive dynamic-scope restoration. `effect` only changes a binding and restores that binding on scope exit. `used_bytes` and `capacity_bytes` inspect a region resource from a procedure. Capacity includes the native region header; allocation requests specify payload bytes.
 
 A function and its nested function calls may read every object reachable through their explicit inputs, including reference fields. They cannot allocate, mutate storage, access effect bindings or call procedures. This enforces the single-threaded read-only snapshot without copying a graph or introducing snapshot state. Argument expressions run in the caller before this interval: a copied bits argument keeps its evaluated value, while a regional view exposes storage after all argument expressions and conversions finish. An existing input reference may be returned to the calling procedure; a subsequent outer function call observes intervening procedure writes. Pointer captures preserve the reference value, not the pointed-to contents. Explicit inputs may come from separate live regions: equal relative offsets do not make references equal, and returned references retain their original owner. This does not permit a stored cross-region field.
 

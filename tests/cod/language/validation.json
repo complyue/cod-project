@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T13:17:13.382940+00:00",
+  "recorded_utc": "2026-11-06T13:27:17.649687+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -2354,9 +2354,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-naagio_m/program.ll",
+        "/tmp/cod-language-check-kzz3l628/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-naagio_m/program.bc"
+        "/tmp/cod-language-check-kzz3l628/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2366,11 +2366,11 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "34a673598629fab97e46ed4818ece5a06fd875f47ee7d85b5dedc4dc1a1262f7"
+    "sha256": "b98966fae420ae06b2e42023447d11c1669f6dbc835a526946c372c83680645f"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
-    "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
+    "cod/lang_syntax.hh": "3f7d14866a37d0efa1c0d792f32587e68e303dba6a742dd762145cd857825fd1",
     "cod/lang_frontend.hh": "124766b46e2a1b493d90ac3cd58133d3d8e18fbbebdef07f3bc45c38c9a18af4",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
@@ -2478,7 +2478,7 @@
     "tests/cod/language/region-parent-allocation.cod": "6dce8d3c570b302201e4de0a2b1c2aaab1cb2c57fb7d72435589ca2babdc02ec",
     "tests/cod/language/region-pure-create.cod": "9a90ec5289971823c15e3241280b4cf8b08bc1ae92c959e622b3f44dd14d0c37",
     "tests/cod/language/region-pure-write.cod": "b4ba89db775c6bf015175c73894b8a43b310607a9b26ec97dd5ad8d400855368",
-    "tests/cod/language/region-records.cod": "b14807bb488e49f0f1a2d2ad48d2ce27294ae23afb6744fa18a99e74a3aeffc0",
+    "tests/cod/language/region-records.cod": "48a24b1ef74ecf6ae5f6db462aa356707f6d3dffb2bdecdb8d5674d84995d150",
     "tests/cod/language/region-reference-fold.cod": "4ee3be7b9fc412793ac92e094e504cfba126a45593a61dfe1d8fb1d1be99b58d",
     "tests/cod/language/region-source.cod": "106d573f178351690e72c62678ab66bdc1827a3c5acdbbfc54acfb30b71df7ec",
     "tests/cod/language/region-stack-error.cod": "eafbc150726f8a5463f26a37cfed688a23533378e38c8a0fa8db518900901f1d",
