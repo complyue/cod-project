@@ -500,6 +500,7 @@ class Compiler {
   Value call(Form &form, Module &lexical, Environment env, const std::vector<Value> &args,
              bool pure, const Location &at) {
     call_path_.push_back({&form, at});
+    if (form.conversion) conversion({&form, &lexical});
     if (args.size() != form.parameters.size()) fail(at, "wrong argument count for '" + form.name + "'");
     if (!active_calls_.insert(&form).second) fail(at, "recursive call is outside the first prototype");
     Locals locals;

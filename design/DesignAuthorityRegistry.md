@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：249
+记录版本：250
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 249，延续检查 K-01—K-248；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 250，延续检查 K-01—K-249；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -263,7 +263,7 @@ Design authority
 - Downstream: D-07r22 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign212/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision27, describes the bounded H-122/H-123/H-139–H-148 checkpoint; K-243–K-248 record parsing, diagnostics, argument conversion order and initializer-call checking. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision28, describes the bounded H-122/H-123/H-139–H-148 checkpoint; K-243–K-249 record parsing, diagnostics, conversion sequencing/signatures and initializer-call checking. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
 
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
@@ -4908,3 +4908,12 @@ Scope: Select per-argument evaluation/conversion in left-to-right order. A faile
 - Baseline `1f9f833` accepts `global result::i64 = store(@values, 0u32, 7)` and prints `7` both for the global and the mutated array element. The parser's call-shape check alone does not establish a function call. The semantic checker now rejects procedure-only primitives at that initializer boundary. A shared primitive classification also supplies the existing pure-function diagnostics, removing four repeated guards while preserving their messages. Ordinary module expressions and caller-side argument evaluation keep their existing rules.
 - One rejection fixture includes a preceding top-level print and requires compilation to fail without output. Existing literal, product, operator and lexical-function global initializers remain accepted examples. A separate focused probe of H-148 composes two converted parameters, a conditional argument and an outer loop, producing the independently expected `267`, `487`, `667` values with one source-argument evaluation per iteration; no additional fixture is retained for that already-covered composition.
 - Validation: `cmake --build ./build` succeeds and all 129 language checks pass, recorded in the current `validation.json`. The original store-initializer probe now exits 2 with empty stdout and the initializer-kind diagnostic. No regional encoding, allocation protocol, toolchain/configuration or SNN change.
+
+
+<a id="k-249"></a>
+
+### K-249 — 2026-11-06: Use one signature check for automatic and direct conversions
+
+- Agent consistency repair under H-123/H-130/H-134–H-138/H-143–H-148, with charter §§1–4 and D-11r10's typed pure conversion boundary. Registry249 →250; reference27 →28. C-50/C-51 conversion declarations have the same meaning whether selected by automatic routing or named explicitly. The existing bounded unary-UoM signature rule is checked on both demanded paths; there is no new dispatch, identity, route or numeric policy. Full D-11 stays pending-human; D-GOV250 maintenance continues H-05.
+- Baseline `9f7126a` runs `conversion function bad(x::i64)::i64 { x + 1 }` through a direct `bad(1)` call and prints `2`, while using that declaration in route discovery rejects its non-UoM endpoints. The direct-call checker now reuses the existing conversion-signature check. It preserves on-demand checking and the normal call-context diagnostic; unused bodies are not made eagerly executable or independently compiled.
+- One direct-call rejection fixture checks the missing path and requires no preceding top-level output. Existing successful explicit conversion calls, automatic paths, route choices and purity failures remain in the language corpus. Validation: `cmake --build ./build` succeeds and all 130 language checks pass; current `validation.json` records the run. No runtime format, bootstrap/configuration or SNN change.

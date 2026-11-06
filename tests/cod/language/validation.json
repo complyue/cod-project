@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T07:25:56.626106+00:00",
+  "recorded_utc": "2026-11-06T07:53:02.380394+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
-  "passed": 129,
-  "total": 129,
+  "passed": 130,
+  "total": 130,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -2223,6 +2223,24 @@
       "passed": true
     },
     {
+      "fixture": "units-conversion-signature.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-conversion-signature.cod"
+      ],
+      "expected": {
+        "file": "units-conversion-signature.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "a conversion function must connect UoM types"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-conversion-signature.cod:2:1: a conversion function must connect UoM types\n/ws/EvtWorks/cod-project/tests/cod/language/units-conversion-signature.cod:4:15: note: in call to function 'bad' defined at /ws/EvtWorks/cod-project/tests/cod/language/units-conversion-signature.cod:2:1\n",
+      "passed": true
+    },
+    {
       "fixture": "units-procedure-order.cod",
       "command": [
         "/ws/EvtWorks/cod-project/build/bin/cod",
@@ -2265,9 +2283,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-fqlafme3/program.ll",
+        "/tmp/cod-language-check-epmlsi1_/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-fqlafme3/program.bc"
+        "/tmp/cod-language-check-epmlsi1_/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2277,18 +2295,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "b3e52c159c125a6fd7e81ca793d554fc41a4ef72ca93e1d61a16f7d8565bb92b"
+    "sha256": "e7921056753cff28ef0322304455e200352aaba17dbf69616457ee5051a89658"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
-    "cod/lang_frontend.hh": "de419086998cc544f06caf647c96dc8a26b444e24684dc50bebd5e5eeca6e08c",
+    "cod/lang_frontend.hh": "b90833cc026698d4172e0efd88aad8fdbc3c2e4988303156d58a2eb91fd5fccc",
     "cod/lang_llvm.hh": "d0129f1e110f466baaaf0aeb127578684a9cc2c47285b8ad4424fbe71261f871",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "9c32c18de51a051c0bcc9d56b6d8168dcdc18018587f82686f39d500af2b8d14",
+    "tests/cod/language/cases.json": "c5b3c8a51495b6577decf4ab48bca44fc77ac41dab415478065d2cf507cc25f4",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2410,6 +2428,7 @@
     "tests/cod/language/units-ambiguous.cod": "a97921741942cf18b0e58e5c26a8ce8594489fd85e8f357998789679887c957e",
     "tests/cod/language/units-argument-once.cod": "5669b040f8379c262742e70f4536ba975e89735de07ef090a722e66d812dbe4f",
     "tests/cod/language/units-basic.cod": "ba7c2c4936400a4643a3eb428f7f383e01da429ea097f70662dec77c01dcdae4",
+    "tests/cod/language/units-conversion-signature.cod": "bde32ce511047ab06ef11dcbf562895c31e5ae159f7c758a2e5bc57486f856a5",
     "tests/cod/language/units-cycle-no-route.cod": "f6ca6aa414d327b2dd52638c915b07adc934cff54f183bd0611791d51f62974b",
     "tests/cod/language/units-declared.cod": "eddcf25e33ed850c50e03c774414f9751353dfe89628fde2a99c25b8d157f200",
     "tests/cod/language/units-direct-ambiguous.cod": "b8341ca666101845a55c55c583bc98e11ab861accb80a2a267b56595cc1bbdd3",

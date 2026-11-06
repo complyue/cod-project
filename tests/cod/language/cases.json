@@ -702,6 +702,12 @@
     "stderr_contains": "units-sequencing-library.cod:5:11: division by zero"
   },
   {
+    "file": "units-conversion-signature.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a conversion function must connect UoM types"
+  },
+  {
     "file": "units-procedure-order.cod",
     "exit": 70,
     "stdout": "",
