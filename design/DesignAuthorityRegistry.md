@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：237
+记录版本：238
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 237，延续检查 K-01—K-236；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 238，延续检查 K-01—K-237；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -263,7 +263,7 @@ Design authority
 - Downstream: D-07r22 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign212/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision15, describes the bounded H-122/H-123/H-139–H-145 checkpoint. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision16, describes the bounded H-122/H-123/H-139–H-145 checkpoint. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
 
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
@@ -4745,3 +4745,13 @@ Scope: Remove unnecessary implementation/test complexity as work advances. Apply
 - Agent implementation assessment under H-130/H-131 and the H-122/H-123/H-145 increment. Reviewed charter §§1–4 and D-11r7's parenthesized operator-name/call-equivalence scope. Registry236 →237; reference14 →15 records implementation behavior. No new operator, fixity, higher-order function value or conversion policy is introduced; complete D-07/D-10/D-11 contracts remain pending-human. D-GOV237 maintenance alone continues H-05.
 - A native reproducer accepted ordinary scalar addition but rejected `(+)(2, 3)` when the module's declared overload accepted a product. Explicit supported eager unary/binary calls now use the existing prefix/infix dispatch and LLVM lowering, including intrinsic scalar operations. The operator spelling/precedence table is shared rather than duplicated. Explicit-call syntax is retained for the existing global-initializer rule; short-circuit operator calls remain rejected.
 - Evidence: the exact source-only build passed, the reproducer prints 5, all 124 language checks pass, and the five deep-composition cases pass. The existing methods fixture adds a scalar operator-call global initializer and a unary scalar call; no new entry fixture is added. Fresh source hashes and outputs are in validation.json and stress-validation.json. No numerical law, regional encoding, allocation protocol, application model or build configuration changed. The pointer self-reference compatibility decision remains pending and the ten-hour goal remains active.
+
+
+<a id="k-237"></a>
+
+### K-237 — 2026-11-06: Native size evidence for initial inlining
+
+- Agent validation assessment under H-139/H-141/H-143–H-145. Charter §§1–4 and the D-10r15 initial-inline scope remain governing. Registry237 →238; reference15 →16 describes measured executable/code size. No language, runtime ABI, optimizer or code-sharing mechanism changes. Full pending-human contracts retain their status; D-GOV238 maintenance alone continues H-05.
+- The existing five composition cases now emit each program once, link that bitcode with its emitted native services, execute it and measure the executable and `.text` section. This removes redundant frontend emission from the stress path. Per-phase commands, timings, results and source hashes are recorded; the normal language corpus retains coverage of the `--run` driver.
+- Initial measurements showed constant folding reduced the fixed-input 512-module arithmetic case to 454 bytes of `.text`. The same case/depth now receives loop-varying inputs through 512 modular-arithmetic steps; an independent modular-exponentiation formula supplies the expected checksum. No extra stress case is added. This measures retained computation without adding a benchmark framework or changing a neural-model equation.
+- Evidence: `cmake --build ./build` and all five updated cases passed. The pure-chain executable is 31,808 bytes with 15,398 bytes of `.text`; its observed frontend and native link phases take about 0.051 and 0.650 seconds locally. The 96-module regional traversal executable is 86,728 bytes with 6,630 bytes of `.text`. Fixed-input procedure/DAG/conversion cases still permit constant folding; all sizes include only the tested workload, not a universal upper bound. Executable files include debug metadata from the system-service compilation. No unrelated component or numeric/relocation suite is claimed rerun. The pointer-format decision remains pending and the ten-hour goal remains active.

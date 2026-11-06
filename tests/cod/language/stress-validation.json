@@ -1,85 +1,376 @@
 {
-  "recorded_utc": "2026-11-05T23:42:02.713410+00:00",
+  "schema_version": 2,
+  "recorded_utc": "2026-11-05T23:58:02.221561+00:00",
+  "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "results": [
     {
-      "case": "512-module-pure-chain",
+      "case": "512-module-pure-chain-loop-inputs",
       "backend": "llvm",
-      "check_seconds": 0.03570937202312052,
-      "native_compile_link_run_seconds": 0.19491887598996982,
-      "check_exit": 0,
-      "check_stdout": "",
-      "check_stderr": "",
-      "native_exit": 0,
-      "stdout": "512\n",
-      "stderr": "",
-      "expected_stdout": "512\n",
-      "llvm_ir_bytes": 266021,
-      "bitcode_bytes": 66404,
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-16mpps7g/pure-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-16mpps7g/pure-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-16mpps7g/pure-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-16mpps7g/pure-main.cc"
+          ],
+          "seconds": 0.05125684500671923,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-16mpps7g/pure-main.bc",
+            "/tmp/cod-composition-stress-16mpps7g/pure-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-16mpps7g/pure-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 0.6502167919534259,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-16mpps7g/pure-main.native"
+          ],
+          "seconds": 0.002187591977417469,
+          "exit_code": 0,
+          "stdout": "140104863131\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-16mpps7g/pure-main.native"
+          ],
+          "seconds": 0.008267422032076865,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-16mpps7g/pure-main.native  :\nsection                 size    addr\n.interp                   28     680\n.note.ABI-tag             32     708\n.dynsym                  264     744\n.gnu.version              22    1008\n.gnu.version_r            48    1032\n.gnu.hash                 28    1080\n.dynstr                  311    1108\n.rela.dyn                216    1424\n.rela.plt                120    1640\n.rodata                   66    1760\n.eh_frame_hdr             84    1828\n.eh_frame                264    1912\n.text                  15398    6272\n.init                     23   21672\n.fini                      9   21696\n.plt                      96   21712\n.fini_array                8   25904\n.init_array                8   25912\n.dynamic                 512   25920\n.got                      48   26432\n.relro_padding          2192   26480\n.data                     16   30576\n.tm_clone_table            0   30592\n.got.plt                  64   30592\n.bss                       1   30656\n.comment                 240       0\n.debug_loclists          134       0\n.debug_abbrev            576       0\n.debug_info             3814       0\n.debug_rnglists           24       0\n.debug_str_offsets       888       0\n.debug_str              2369       0\n.debug_addr              176       0\n.debug_line              254       0\n.debug_line_str          402       0\nTotal                  28735\n\n\n",
+          "stderr": ""
+        }
+      },
+      "expected_stdout": "140104863131\n",
+      "llvm_ir_bytes": 461373,
+      "bitcode_bytes": 124532,
+      "native_executable_bytes": 31808,
+      "native_text_bytes": 15398,
       "passed": true
     },
     {
       "case": "1000-procedure-inline-chain",
       "backend": "llvm",
-      "check_seconds": 0.6419326640316285,
-      "native_compile_link_run_seconds": 0.824499785027001,
-      "check_exit": 0,
-      "check_stdout": "",
-      "check_stderr": "",
-      "native_exit": 0,
-      "stdout": "1004\n1008\n9\n",
-      "stderr": "",
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-16mpps7g/procedure-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-16mpps7g/procedure-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-16mpps7g/procedure-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-16mpps7g/procedure-main.cc"
+          ],
+          "seconds": 0.6416949579725042,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-16mpps7g/procedure-main.bc",
+            "/tmp/cod-composition-stress-16mpps7g/procedure-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-16mpps7g/procedure-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 0.11763525096466765,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-16mpps7g/procedure-main.native"
+          ],
+          "seconds": 0.0011829999857582152,
+          "exit_code": 0,
+          "stdout": "1004\n1008\n9\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-16mpps7g/procedure-main.native"
+          ],
+          "seconds": 0.010011194972321391,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-16mpps7g/procedure-main.native  :\nsection                size    addr\n.interp                  28     736\n.note.ABI-tag            32     764\n.dynsym                 288     800\n.gnu.version             24    1088\n.gnu.version_r           80    1112\n.gnu.hash                28    1192\n.dynstr                 357    1220\n.rela.dyn               216    1584\n.rela.plt               120    1800\n.rodata                  44    1920\n.eh_frame_hdr            84    1964\n.eh_frame               256    2048\n.text                   550    6400\n.init                    23    6952\n.fini                     9    6976\n.plt                     96    6992\n.tbss                     1    7088\n.fini_array               8   11184\n.init_array               8   11192\n.dynamic                528   11200\n.got                     48   11728\n.relro_padding          512   11776\n.data                    16   15872\n.tm_clone_table           0   15888\n.got.plt                 64   15888\n.bss                      1   15952\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           576       0\n.debug_info            3814       0\n.debug_rnglists          24       0\n.debug_str_offsets      888       0\n.debug_str             2374       0\n.debug_addr             176       0\n.debug_line             254       0\n.debug_line_str         407       0\nTotal                 12308\n\n\n",
+          "stderr": ""
+        }
+      },
       "expected_stdout": "1004\n1008\n9\n",
       "llvm_ir_bytes": 1098752,
       "bitcode_bytes": 267396,
+      "native_executable_bytes": 17264,
+      "native_text_bytes": 550,
       "passed": true
     },
     {
       "case": "layered-diamond-22-modules-2047-calls",
       "backend": "llvm",
-      "check_seconds": 0.05120499897748232,
-      "native_compile_link_run_seconds": 0.18568168295314535,
-      "check_exit": 0,
-      "check_stdout": "",
-      "check_stderr": "",
-      "native_exit": 0,
-      "stdout": "3072\n",
-      "stderr": "",
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-16mpps7g/dag-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-16mpps7g/dag-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-16mpps7g/dag-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-16mpps7g/dag-main.cc"
+          ],
+          "seconds": 0.04719324305187911,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-16mpps7g/dag-main.bc",
+            "/tmp/cod-composition-stress-16mpps7g/dag-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-16mpps7g/dag-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 0.10864292603218928,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-16mpps7g/dag-main.native"
+          ],
+          "seconds": 0.0012814559740945697,
+          "exit_code": 0,
+          "stdout": "3072\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-16mpps7g/dag-main.native"
+          ],
+          "seconds": 0.01268308301223442,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-16mpps7g/dag-main.native  :\nsection                size    addr\n.interp                  28     680\n.note.ABI-tag            32     708\n.dynsym                 264     744\n.gnu.version             22    1008\n.gnu.version_r           48    1032\n.gnu.hash                28    1080\n.dynstr                 311    1108\n.rela.dyn               216    1424\n.rela.plt               120    1640\n.rodata                  44    1760\n.eh_frame_hdr            84    1804\n.eh_frame               240    1888\n.text                   454    6224\n.init                    23    6680\n.fini                     9    6704\n.plt                     96    6720\n.fini_array               8   10912\n.init_array               8   10920\n.dynamic                512   10928\n.got                     48   11440\n.relro_padding          800   11488\n.data                    16   15584\n.tm_clone_table           0   15600\n.got.plt                 64   15600\n.bss                      1   15664\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           576       0\n.debug_info            3814       0\n.debug_rnglists          24       0\n.debug_str_offsets      888       0\n.debug_str             2368       0\n.debug_addr             176       0\n.debug_line             254       0\n.debug_line_str         401       0\nTotal                 12351\n\n\n",
+          "stderr": ""
+        }
+      },
       "expected_stdout": "3072\n",
       "llvm_ir_bytes": 1078595,
       "bitcode_bytes": 268764,
+      "native_executable_bytes": 16816,
+      "native_text_bytes": 454,
       "passed": true
     },
     {
       "case": "16-unit-reexports-31-conversion-steps-with-cycle",
       "backend": "llvm",
-      "check_seconds": 0.015654777991585433,
-      "native_compile_link_run_seconds": 0.14090127497911453,
-      "check_exit": 0,
-      "check_stdout": "",
-      "check_stderr": "",
-      "native_exit": 0,
-      "stdout": "32\n",
-      "stderr": "",
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-16mpps7g/unit-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-16mpps7g/unit-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-16mpps7g/unit-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-16mpps7g/unit-main.cc"
+          ],
+          "seconds": 0.016151379968505353,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-16mpps7g/unit-main.bc",
+            "/tmp/cod-composition-stress-16mpps7g/unit-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-16mpps7g/unit-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 0.0940866069868207,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-16mpps7g/unit-main.native"
+          ],
+          "seconds": 0.001347361016087234,
+          "exit_code": 0,
+          "stdout": "32\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-16mpps7g/unit-main.native"
+          ],
+          "seconds": 0.008508550003170967,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-16mpps7g/unit-main.native  :\nsection                size    addr\n.interp                  28     680\n.note.ABI-tag            32     708\n.dynsym                 264     744\n.gnu.version             22    1008\n.gnu.version_r           48    1032\n.gnu.hash                28    1080\n.dynstr                 311    1108\n.rela.dyn               216    1424\n.rela.plt               120    1640\n.rodata                  44    1760\n.eh_frame_hdr            84    1804\n.eh_frame               240    1888\n.text                   454    6224\n.init                    23    6680\n.fini                     9    6704\n.plt                     96    6720\n.fini_array               8   10912\n.init_array               8   10920\n.dynamic                512   10928\n.got                     48   11440\n.relro_padding          800   11488\n.data                    16   15584\n.tm_clone_table           0   15600\n.got.plt                 64   15600\n.bss                      1   15664\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           576       0\n.debug_info            3814       0\n.debug_rnglists          24       0\n.debug_str_offsets      888       0\n.debug_str             2369       0\n.debug_addr             176       0\n.debug_line             254       0\n.debug_line_str         402       0\nTotal                 12353\n\n\n",
+          "stderr": ""
+        }
+      },
       "expected_stdout": "32\n",
       "llvm_ir_bytes": 16124,
       "bitcode_bytes": 6236,
+      "native_executable_bytes": 16816,
+      "native_text_bytes": 454,
       "passed": true
     },
     {
       "case": "96-module-regional-snapshot-chain",
       "backend": "llvm",
-      "check_seconds": 0.022569653985556215,
-      "native_compile_link_run_seconds": 1.672382588032633,
-      "check_exit": 0,
-      "check_stdout": "",
-      "check_stderr": "",
-      "native_exit": 0,
-      "stdout": "11\n29\n",
-      "stderr": "",
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-16mpps7g/regional-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-16mpps7g/regional-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-16mpps7g/regional-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-16mpps7g/regional-main.cc"
+          ],
+          "seconds": 0.025422002014238387,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-16mpps7g/regional-main.bc",
+            "/tmp/cod-composition-stress-16mpps7g/regional-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-16mpps7g/regional-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 1.5143696239683777,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-16mpps7g/regional-main.native"
+          ],
+          "seconds": 0.0012758959783241153,
+          "exit_code": 0,
+          "stdout": "11\n29\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-16mpps7g/regional-main.native"
+          ],
+          "seconds": 0.010785700986161828,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-16mpps7g/regional-main.native  :\nsection                 size    addr\n.interp                   28     736\n.note.ABI-tag             32     764\n.dynsym                  552     800\n.gnu.version              46    1352\n.gnu.version_r            80    1400\n.gnu.hash                 28    1480\n.dynstr                  536    1508\n.rela.dyn                312    2048\n.rela.plt                288    2360\n.rodata                  113    2648\n.gcc_except_table         56    2764\n.eh_frame_hdr            124    2820\n.eh_frame                440    2944\n.text                   6630    7488\n.init                     23   14120\n.fini                      9   14144\n.plt                     208   14160\n.tbss                     16   14368\n.fini_array                8   18464\n.init_array                8   18472\n.dynamic                 528   18480\n.got                      64   19008\n.relro_padding          1408   19072\n.data                     32   23168\n.tm_clone_table            0   23200\n.got.plt                 120   23200\n.bss                       1   23320\n.comment                 240       0\n.debug_loclists          794       0\n.debug_abbrev           2321       0\n.debug_info            22584       0\n.debug_rnglists          143       0\n.debug_str_offsets      4724       0\n.debug_str             36453       0\n.debug_addr              336       0\n.debug_line              905       0\n.debug_line_str         1505       0\nTotal                  81695\n\n\n",
+          "stderr": ""
+        }
+      },
       "expected_stdout": "11\n29\n",
       "llvm_ir_bytes": 155292,
       "bitcode_bytes": 31388,
+      "native_executable_bytes": 86728,
+      "native_text_bytes": 6630,
       "passed": true
     }
-  ]
+  ],
+  "notes": [
+    "Each demanded program is checked/emitted once, then linked with its emitted native services.",
+    "Executable size includes debug metadata from the C++ system services; .text is recorded separately.",
+    "The pure chain uses loop-varying inputs; other fixed-input cases permit constant folding. Sizes are not worst-case bounds.",
+    "The ordinary language corpus separately exercises the --run driver path."
+  ],
+  "source_sha256": {
+    "cod/lang_syntax.hh": "4de1a54e8bea0b85283e827aa4079678c6bf66a8220896fce118e03c334f058e",
+    "cod/lang_frontend.hh": "18c92e5740f81bdf9692743f8f049656748d67e6dec926e92c05cdc03777ab3e",
+    "cod/lang_llvm.hh": "c72c632d3bac0ecf9aa0365ff820f75012b65c6a79c74ba6f3dde39e52e34b4e",
+    "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
+    "tests/cod/language/stress_tests.py": "ba197b15320c9c3fa6da9f504d74e4387995b5c5514a3d3321561cd6858a5caf"
+  }
 }
