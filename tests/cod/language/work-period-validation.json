@@ -1,0 +1,619 @@
+{
+  "schema_version": 1,
+  "status": "passed: scoped acceptance and active-work target",
+  "recorded_utc": "2026-11-06T19:40:47.147917+00:00",
+  "scope": "H-147 continuation of the approved CoD language/runtime increment; H-160 defers new user-required design choices to the end-of-period review.",
+  "baseline_commit": "0e453815d99d40b2986bf7feb7366855a48ab1ff",
+  "implementation_head": "51440df3f596797d21fb89528e10e3991c5268e5",
+  "compiler": {
+    "path": "build/bin/cod",
+    "sha256": "2396107e627d885e668af1067555fa2c16900e961dc9397d7cb801f653019fd5"
+  },
+  "build": {
+    "command": "cmake --build ./build",
+    "source_build_log": "build/validation/shared-binding-snapshots-build.log",
+    "source_build_log_sha256": "785c0a5291c92039e8ae77802a395b2f7256e06c1a460ece041b528b7df98614",
+    "observed_completion": [
+      "[11/12] Building CXX object tools/cod/cod/CMakeFiles/cod.dir/main.cc.o",
+      "[12/12] Linking CXX executable bin/cod"
+    ],
+    "note": "The ordinary default build also invokes its existing runtime utility steps. No configure, bootstrap, install or clean command was requested.",
+    "compile_database": {
+      "file": "cod/main.cc",
+      "compiler": "/ws/EvtWorks/cod-project/build/cod/bin/clang++",
+      "language_standard": "-std=c++20",
+      "active_directory": "/ws/EvtWorks/cod-project/build"
+    }
+  },
+  "acceptance": [
+    {
+      "path": "tests/cod/language/validation.json",
+      "recorded_utc": "2026-11-06T19:01:20.643256+00:00",
+      "passed": true,
+      "source_inputs_checked": 184,
+      "mismatches": [],
+      "sha256": "0b7e72f2128e6779c12c5f59fb083f28737a8a47ae364225b3a6a5bf643ffc94"
+    },
+    {
+      "path": "tests/cod/language/stress-validation.json",
+      "recorded_utc": "2026-11-06T19:13:27.373860+00:00",
+      "passed": true,
+      "source_inputs_checked": 6,
+      "mismatches": [],
+      "sha256": "311960f74ab601201a42bd4b55796b4a0c947c18c516ef16752f268fd9431de1"
+    },
+    {
+      "path": "tests/cod/language/numeric-validation.json",
+      "recorded_utc": "2026-11-06T19:01:25.477312+00:00",
+      "passed": true,
+      "source_inputs_checked": 6,
+      "mismatches": [],
+      "sha256": "59df36c2140f87e5877c2cf57bab8334aac3092eec77d1c1beca7f59b78c526c"
+    },
+    {
+      "path": "tests/cod/language/regional-validation.json",
+      "recorded_utc": "2026-11-06T19:01:27.148585+00:00",
+      "passed": true,
+      "source_inputs_checked": 7,
+      "mismatches": [],
+      "sha256": "483789246933c438625690487089bc49c1151c8d10d0c3b2325216686194fd48"
+    },
+    {
+      "path": "tests/cod/language/gather-validation.json",
+      "recorded_utc": "2026-11-06T19:01:30.843369+00:00",
+      "passed": true,
+      "source_inputs_checked": 14,
+      "mismatches": [],
+      "sha256": "2decc2b9b8ffb4d783620acde075bbe7224597acdc5bf4510fa516aeb7c9feaa"
+    },
+    {
+      "path": "tests/cod/language/gather-full-pool-validation.json",
+      "recorded_utc": "2026-11-06T19:01:36.292153+00:00",
+      "passed": true,
+      "source_inputs_checked": 14,
+      "mismatches": [],
+      "sha256": "9fdbd9192f44d64cd0ef726a819dc3fae8c4b901319f480b0ec263e17ad98c15"
+    }
+  ],
+  "coverage": [
+    {
+      "property": "Stable symbol identity, alias selection and once-only post-scan module incorporation",
+      "evidence": [
+        "identity.cod",
+        "module-diamond.cod",
+        "using-symbol-reexport.cod",
+        "early-alias.cod"
+      ]
+    },
+    {
+      "property": "Definition-time value capture versus current binding, including procedure-valued bindings",
+      "evidence": [
+        "capture-scope-restore.cod",
+        "intrinsic-overloads.cod",
+        "stress-validation.json:1000-procedure-inline-chain-with-operation-leaf"
+      ]
+    },
+    {
+      "property": "Pure function call trees and read-only regional input snapshots",
+      "evidence": [
+        "impure-function.cod",
+        "intrinsic-pure-error.cod",
+        "region-pure-write.cod",
+        "region-pure-create.cod",
+        "stress-validation.json:96-module-regional-import-snapshot-chain"
+      ]
+    },
+    {
+      "property": "Nominal UoM identity, explicit bundles and conversion-route policy",
+      "evidence": [
+        "units-procedure.cod",
+        "units-identity.cod",
+        "units-priority.cod",
+        "units-ambiguous.cod",
+        "units-exact-before-route.cod",
+        "stress-validation.json:16-unit-reexports-31-conversion-steps-with-cycle"
+      ]
+    },
+    {
+      "property": "Argument effects and conversion order",
+      "evidence": [
+        "units-argument-once.cod",
+        "units-function-order.cod",
+        "units-procedure-order.cod",
+        "units-operator-order.cod"
+      ]
+    },
+    {
+      "property": "Intrinsic token categories and mixed callable kinds",
+      "evidence": [
+        "intrinsic-overloads.cod",
+        "intrinsic-symbol-name.cod",
+        "intrinsic-reserved-name.cod",
+        "intrinsic-pure-error.cod"
+      ]
+    },
+    {
+      "property": "Local declarations and nested scope boundaries",
+      "evidence": [
+        "iteration-scope.cod",
+        "local-duplicate.cod",
+        "local-reserved-name.cod",
+        "logical-unscoped-effect.cod"
+      ]
+    },
+    {
+      "property": "Regional ownership, typed indices and relocation",
+      "evidence": [
+        "region-index-error.cod",
+        "region-escape.cod",
+        "region-cross-pointer.cod",
+        "region-factory-import.cod",
+        "regional-validation.json"
+      ]
+    },
+    {
+      "property": "Numeric behavior and SoA indexing/gather execution",
+      "evidence": [
+        "numeric-validation.json",
+        "pool-typed.cod",
+        "gather-validation.json",
+        "gather-full-pool-validation.json"
+      ]
+    }
+  ],
+  "optimization_parity": {
+    "recorded_utc": "2026-11-06T19:02:36.918965+00:00",
+    "compiler_sha256": "2396107e627d885e668af1067555fa2c16900e961dc9397d7cb801f653019fd5",
+    "frontend_sha256": "21024a501cbe45ef06151d6ab8f97423e40265dc544100597f162559196644d0",
+    "passed": true,
+    "results": [
+      {
+        "case": "intrinsic-overloads.cod",
+        "optimization": "O0",
+        "passed": true,
+        "exit": 0,
+        "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n",
+        "stderr": ""
+      },
+      {
+        "case": "intrinsic-overloads.cod",
+        "optimization": "O2",
+        "passed": true,
+        "exit": 0,
+        "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n",
+        "stderr": ""
+      },
+      {
+        "case": "capture-scope-restore.cod",
+        "optimization": "O0",
+        "passed": true,
+        "exit": 0,
+        "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n",
+        "stderr": ""
+      },
+      {
+        "case": "capture-scope-restore.cod",
+        "optimization": "O2",
+        "passed": true,
+        "exit": 0,
+        "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n",
+        "stderr": ""
+      }
+    ]
+  },
+  "constraints": {
+    "llvm_only": "CoD business logic still lowers directly to LLVM IR/bitcode; C++ is the small native system-service implementation.",
+    "regional_invariants": "No shared region header implementation or pointer encoding changed during this period. H-146 remains the known first-field self-reference-to-null behavior.",
+    "user_storage": "Compiler snapshot sharing is compiler metadata, not user heap allocation, a runtime closure or an extended regional lifetime.",
+    "snn_scope": "Structured values, index conversion and SoA gather arithmetic are programming/runtime validation. No SNN model equation or learning policy was selected.",
+    "tools": "No new external dependency or host toolchain was introduced for this period.",
+    "tests": "Existing representative fixtures were strengthened; separate source, composition, numeric, regional and gather checks serve distinct observable properties."
+  },
+  "limits": [
+    "These records prove the bounded prototype on the recorded Linux host, not general GADT, persistence, concurrency, package-version or cross-region support.",
+    "The preceding full component-suite entry in validation.json is explicitly historical and is not represented as a fresh component-suite run.",
+    "Compiler RSS and timing are individual local measurements, not general throughput guarantees or SNN memory claims.",
+    "Shared design drafts in this checkout include other chats' actor/graph-region work and are not included in this implementation/evidence publication.",
+    "Accepted lexical declarations using some primary module-form words still have a top-level call ambiguity. The reproduced naming boundary is recorded for human selection rather than silently changing the keyword policy."
+  ],
+  "deferred_review": {
+    "recorded_utc": "2026-11-06T19:32:19.117485+00:00",
+    "status": "discussion preparation only; no accepted contract or implementation authorization",
+    "authority": "H-160 defers new user-required decisions until after the active-work period. H-154 requires effectful procedure overloads but does not select assignment/lvalue syntax.",
+    "near_term_decision": {
+      "topic": "Assignment syntax over regional storage",
+      "existing_capability": "Procedural store(array,index,value), store(scalar_ref,value), and setfield(record_ref,field,value) already perform persistent writes and return the stored value. Parenthesized value-argument operations can dispatch to procedures under current bindings.",
+      "candidate_a": "Define array-element and regional-field assignment as source sugar for the existing write operations. Do not add a first-class assignable-location object or a separate assignment method family.",
+      "candidate_b": "Give assignment its own compiler operation and overload family. Its operand/reference and field-selection contracts would need explicit design before implementation.",
+      "recommendation": "Prefer candidate A if the next requirement is only more convenient regional writes. Candidate B needs a demonstrated behavior that existing write dispatch cannot express.",
+      "shared_constraints": [
+        "A symbolic variable still changes only via effect; @x = value remains invalid.",
+        "Writes remain procedural and obey the existing owning-region lifetime.",
+        "The left-hand receiver/index and right-hand expression must each execute once in a specified order.",
+        "Preserve each selected argument conversion before evaluating the next argument.",
+        "Field syntax must not silently introduce field-name runtime values or metadata."
+      ],
+      "not_selected": [
+        "Assignment precedence, associativity and expression result grammar",
+        "Compound assignment behavior",
+        "Destructuring or generic first-class lvalues"
+      ]
+    },
+    "keep_deferred_without_a_use_case": [
+      {
+        "topic": "setfield overload selectors",
+        "reason": "The native selector is a compile-time declared field name, not an existing runtime argument type. Ordinary procedure wrappers handle current examples; no field-token type, generic reflection layer or runtime selector is justified yet."
+      },
+      {
+        "topic": "Intrinsic procedure-body import and explicit perform syntax",
+        "reason": "Ordinary source procedures already provide native-signature delegation and captured/current execution where needed. Extra intrinsic syntax is not required by the demonstrated workloads."
+      }
+    ],
+    "excluded_work": [
+      "No new user question during the remaining period",
+      "No source-language semantic change based on this note",
+      "No SNN dynamics or learning policy",
+      "No region-ownership, actor or cross-region mechanism"
+    ],
+    "naming_boundary": {
+      "status": "pending human choice; current behavior reproduced, no grammar change",
+      "evidence": "build/validation/contextual-top-level-name-review.json",
+      "observed": "function type(x::i64)::i64 { x + 1 } and function using(...) are accepted; calls inside @print arguments check successfully, but type(7); and using(7); at module top level are consumed as declaration/resource syntax and fail.",
+      "candidate_a": "Reserve primary module-form words type, regional, unit, array, using, import and conversion against ordinary declarations. Keep field selectors and @symbol tokens contextual.",
+      "candidate_b": "Keep those names contextual and distinguish a top-level call from its declaration form by grammar/lookahead.",
+      "recommendation": "Candidate A gives a consistent small keyword set and early declaration diagnostics. Candidate B preserves currently accepted nested uses but requires a contextual module grammar.",
+      "authority": "H-153 requires a reserved keyword set but does not confirm this expanded inventory; H-160 defers the new choice."
+    }
+  },
+  "active_work": {
+    "target_seconds": 36000,
+    "credited_seconds": 36041,
+    "exclusive_wait_and_overhead_seconds": 1139.9633549999996,
+    "uncredited_inter_interval_gaps_seconds": 10264.184561999999,
+    "method": "Credit active review/implementation intervals; subtract exclusive command/tool waiting and omit idle/user-wait gaps. Background command time counts only while independent work is being done. No wall-clock deadline.",
+    "local_ledger": "build/validation/language-runtime-active-work.json",
+    "intervals": [
+      {
+        "start": "2026-11-06T06:30:02+00:00",
+        "end": "2026-11-06T06:41:18.885835+00:00",
+        "active_seconds": 646,
+        "excluded_seconds": 30.885835000000043
+      },
+      {
+        "start": "2026-11-06T06:41:18.885835+00:00",
+        "end": "2026-11-06T06:51:04.741255+00:00",
+        "active_seconds": 565,
+        "excluded_seconds": 20.85541999999998
+      },
+      {
+        "start": "2026-11-06T06:51:04.741255+00:00",
+        "end": "2026-11-06T07:17:30.023611+00:00",
+        "active_seconds": 1555,
+        "excluded_seconds": 30.282355999999936
+      },
+      {
+        "start": "2026-11-06T07:17:49+00:00",
+        "end": "2026-11-06T08:04:06.443907+00:00",
+        "active_seconds": 2717,
+        "excluded_seconds": 60.443906999999854
+      },
+      {
+        "start": "2026-11-06T08:04:41.628874+00:00",
+        "end": "2026-11-06T08:27:38.176367+00:00",
+        "active_seconds": 1341,
+        "excluded_seconds": 35.54749300000003
+      },
+      {
+        "start": "2026-11-06T08:27:56.385628+00:00",
+        "end": "2026-11-06T09:01:01.207052+00:00",
+        "active_seconds": 1939,
+        "excluded_seconds": 45.82142399999998
+      },
+      {
+        "start": "2026-11-06T09:01:23.651130+00:00",
+        "end": "2026-11-06T09:24:27.586187+00:00",
+        "active_seconds": 1353,
+        "excluded_seconds": 30.935056999999915
+      },
+      {
+        "start": "2026-11-06T09:25:24.181667+00:00",
+        "end": "2026-11-06T09:50:19.396493+00:00",
+        "active_seconds": 1460,
+        "excluded_seconds": 35.2148259999999
+      },
+      {
+        "start": "2026-11-06T09:50:49.996684+00:00",
+        "end": "2026-11-06T10:13:10.631096+00:00",
+        "active_seconds": 1295,
+        "excluded_seconds": 45.63441200000011
+      },
+      {
+        "start": "2026-11-06T10:13:58.849135+00:00",
+        "end": "2026-11-06T10:29:22.799258+00:00",
+        "active_seconds": 903,
+        "excluded_seconds": 20.950122999999962
+      },
+      {
+        "start": "2026-11-06T10:30:13.409300+00:00",
+        "end": "2026-11-06T10:43:58.937318+00:00",
+        "active_seconds": 800,
+        "excluded_seconds": 25.528017999999975
+      },
+      {
+        "start": "2026-11-06T10:50:46.486194+00:00",
+        "end": "2026-11-06T10:57:30.004625+00:00",
+        "active_seconds": 378,
+        "excluded_seconds": 25.51843100000002
+      },
+      {
+        "start": "2026-11-06T12:47:55.871481+00:00",
+        "end": "2026-11-06T13:00:08.381191+00:00",
+        "active_seconds": 707,
+        "excluded_seconds": 25.50971000000004
+      },
+      {
+        "start": "2026-11-06T13:00:26.952014+00:00",
+        "end": "2026-11-06T13:19:17.767276+00:00",
+        "active_seconds": 1100,
+        "excluded_seconds": 30.815262000000075
+      },
+      {
+        "start": "2026-11-06T13:20:07.822155+00:00",
+        "end": "2026-11-06T13:30:41.176996+00:00",
+        "active_seconds": 613,
+        "excluded_seconds": 20.354840999999965
+      },
+      {
+        "start": "2026-11-06T13:31:27.982285+00:00",
+        "end": "2026-11-06T13:36:19.134224+00:00",
+        "active_seconds": 271,
+        "excluded_seconds": 20.151939000000027
+      },
+      {
+        "start": "2026-11-06T13:37:07.286948+00:00",
+        "end": "2026-11-06T13:44:36.165993+00:00",
+        "active_seconds": 428,
+        "excluded_seconds": 20.87904500000002
+      },
+      {
+        "start": "2026-11-06T13:50:37.770461+00:00",
+        "end": "2026-11-06T13:56:47.574655+00:00",
+        "active_seconds": 349,
+        "excluded_seconds": 20.804193999999995
+      },
+      {
+        "start": "2026-11-06T13:57:05.229195+00:00",
+        "end": "2026-11-06T14:15:50.785858+00:00",
+        "active_seconds": 1095,
+        "excluded_seconds": 30.55666300000007
+      },
+      {
+        "start": "2026-11-06T14:16:07.855093+00:00",
+        "end": "2026-11-06T14:29:18.904010+00:00",
+        "active_seconds": 761,
+        "excluded_seconds": 30.04891699999996
+      },
+      {
+        "start": "2026-11-06T14:30:14.990925+00:00",
+        "end": "2026-11-06T14:36:46.673455+00:00",
+        "active_seconds": 366,
+        "excluded_seconds": 25.682529999999986
+      },
+      {
+        "start": "2026-11-06T15:02:34+00:00",
+        "end": "2026-11-06T15:13:01.896329+00:00",
+        "active_seconds": 597,
+        "excluded_seconds": 30.896329000000037
+      },
+      {
+        "start": "2026-11-06T15:18:48.598526+00:00",
+        "end": "2026-11-06T15:29:33.523830+00:00",
+        "active_seconds": 614,
+        "excluded_seconds": 30.925303999999983
+      },
+      {
+        "start": "2026-11-06T15:29:57.104528+00:00",
+        "end": "2026-11-06T15:37:08.061084+00:00",
+        "active_seconds": 405,
+        "excluded_seconds": 25.956555999999978
+      },
+      {
+        "start": "2026-11-06T15:37:47.766570+00:00",
+        "end": "2026-11-06T15:47:51.645911+00:00",
+        "active_seconds": 573,
+        "excluded_seconds": 30.879340999999954
+      },
+      {
+        "start": "2026-11-06T15:48:48.048279+00:00",
+        "end": "2026-11-06T16:21:50.146193+00:00",
+        "active_seconds": 1937,
+        "excluded_seconds": 45.097913999999946
+      },
+      {
+        "start": "2026-11-06T16:22:28.607619+00:00",
+        "end": "2026-11-06T16:37:14.620067+00:00",
+        "active_seconds": 856,
+        "excluded_seconds": 30.01244799999995
+      },
+      {
+        "start": "2026-11-06T16:40:35.870920+00:00",
+        "end": "2026-11-06T17:22:33.134363+00:00",
+        "active_seconds": 2457,
+        "excluded_seconds": 60.263442999999825
+      },
+      {
+        "start": "2026-11-06T17:22:33.134363+00:00",
+        "end": "2026-11-06T18:20:46.542408+00:00",
+        "active_seconds": 3418,
+        "excluded_seconds": 75.40804500000013
+      },
+      {
+        "start": "2026-11-06T18:20:46.542408+00:00",
+        "end": "2026-11-06T18:31:28.163721+00:00",
+        "active_seconds": 611,
+        "excluded_seconds": 30.621312999999986
+      },
+      {
+        "start": "2026-11-06T18:31:28.163721+00:00",
+        "end": "2026-11-06T18:32:51.665262+00:00",
+        "active_seconds": 73,
+        "excluded_seconds": 10.501541000000003
+      },
+      {
+        "start": "2026-11-06T18:33:29.174459+00:00",
+        "end": "2026-11-06T18:48:05.295768+00:00",
+        "active_seconds": 841,
+        "excluded_seconds": 35.121309
+      },
+      {
+        "start": "2026-11-06T18:48:22.540237+00:00",
+        "end": "2026-11-06T19:13:25.384828+00:00",
+        "active_seconds": 1442,
+        "excluded_seconds": 60.84459100000004
+      },
+      {
+        "start": "2026-11-06T19:13:25.384828+00:00",
+        "end": "2026-11-06T19:23:20.144682+00:00",
+        "active_seconds": 574,
+        "excluded_seconds": 20.75985400000002
+      },
+      {
+        "start": "2026-11-06T19:23:45.892953+00:00",
+        "end": "2026-11-06T19:40:47.147917+00:00",
+        "active_seconds": 1001,
+        "excluded_seconds": 20.254963999999973
+      }
+    ],
+    "accounting_verified": "Credits sum exactly; intervals are nonoverlapping and credit no more than their duration. Waiting and idle gaps are not credited."
+  },
+  "scope_audit": {
+    "recorded_utc": "2026-11-06T19:19:34.427390+00:00",
+    "baseline": "0e453815d99d40b2986bf7feb7366855a48ab1ff",
+    "head": "51440df3f596797d21fb89528e10e3991c5268e5",
+    "restricted_build_config_paths_changed": [],
+    "shared_region_paths_changed": [],
+    "changed_implementation_paths": [
+      "cod/lang_frontend.hh",
+      "cod/lang_llvm.hh",
+      "cod/lang_native_runtime.hh",
+      "cod/lang_syntax.hh"
+    ],
+    "registry_duplicate_anchors": [],
+    "scope": "Read-only current-state audit for active language/runtime period; no completion claim. Shared design drafts retain their local pending scope."
+  },
+  "publication": {
+    "implementation_and_acceptance_head": "51440df3f596797d21fb89528e10e3991c5268e5",
+    "remote_tracking_ref": "origin/main",
+    "ahead_behind": "0\t0",
+    "local_shared_drafts": [
+      "design/DesignAuthorityRegistry.md",
+      "design/DomainLanguageDesign.md",
+      "design/ScalarUnitsAndIndexTypes.md",
+      "design/SymbolicDynamicScope.md",
+      "tests/cod/language/README.md",
+      "design/GlobalVariablesDoneRight.md",
+      "design/GraphGrainedMemoryManagement.md"
+    ],
+    "note": "The shared drafts remain local and retain their pending design scope; this report does not approve or publish them."
+  },
+  "documents_review": {
+    "local_link_targets_exist": true,
+    "authority_anchor_targets_exist": true,
+    "full_design_qualification": "pending-human; passing implementation checks do not qualify full D-07/D-10/D-11 contracts",
+    "draft_hashes": {
+      "design/DesignAuthorityRegistry.md": "c43a3ac32f044d336ab0409356e4e3ff97d6d0fd80479784f03612538b41bed4",
+      "design/DomainLanguageDesign.md": "591d956b90530dda4e26162b9386dea8b37eb433fd4b9eb5265706dfce0df1ca",
+      "design/ScalarUnitsAndIndexTypes.md": "1b33c72fc2a5d272eb7d83417d0b596007f18fa18364127c48e2c79b292ebd7d",
+      "design/SymbolicDynamicScope.md": "13e175584f5d2282d6474d44be6d32c5049cfe26be36a0987df4cc6c6fdb9d0f",
+      "tests/cod/language/README.md": "5adbcb0dcc14aacffd540b3b1c4c334efe50c6258c5dc1587fb235fdd3e852e0",
+      "design/GlobalVariablesDoneRight.md": "198922a57cdc46f6010eebef13c1ee472e3edcfa0d6bafe8bdfc89c54d06bd04",
+      "design/GraphGrainedMemoryManagement.md": "2064ed38b476f649c713bcebd2410d0e6b4dbfb94d430fa4508e4e73b085fbfd"
+    },
+    "current_local_revisions": {
+      "registry": 290,
+      "D-07": 27,
+      "D-10": 31,
+      "D-11": 12,
+      "prototype_reference": 61
+    },
+    "boundary_record": "K-288 records the naming ambiguity as pending; no new policy is implemented.",
+    "completion_record": "K-289 records bounded acceptance and active-work completion; no pending choice is activated."
+  },
+  "known_naming_boundary": {
+    "recorded_utc": "2026-11-06T19:30:53.781802+00:00",
+    "scope": "Read-only naming-boundary probe. No grammar or reserved-word policy change selected under H-160.",
+    "results": [
+      {
+        "name": "type",
+        "position": "nested-call",
+        "source": "using symbol \"std:io\" @print;\nfunction type(x::i64)::i64 { x + 1 }\nbehave @print(type(7));\n",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/tmp/cod-contextual-name-review-bd8px534/type-nested-call.cod"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "name": "type",
+        "position": "top-level-call",
+        "source": "using symbol \"std:io\" @print;\nfunction type(x::i64)::i64 { x + 1 }\ntype(7);\n",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/tmp/cod-contextual-name-review-bd8px534/type-top-level-call.cod"
+        ],
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-contextual-name-review-bd8px534/type-top-level-call.cod:3:5: expected a lexical name\n"
+      },
+      {
+        "name": "using",
+        "position": "nested-call",
+        "source": "using symbol \"std:io\" @print;\nfunction using(x::i64)::i64 { x + 1 }\nbehave @print(using(7));\n",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/tmp/cod-contextual-name-review-bd8px534/using-nested-call.cod"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "name": "using",
+        "position": "top-level-call",
+        "source": "using symbol \"std:io\" @print;\nfunction using(x::i64)::i64 { x + 1 }\nusing(7);\n",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/tmp/cod-contextual-name-review-bd8px534/using-top-level-call.cod"
+        ],
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-contextual-name-review-bd8px534/using-top-level-call.cod:3:6: expected a quoted module path\n"
+      }
+    ],
+    "finding": "These names are accepted declarations and nested calls, but the same call spelling at module top level is consumed as a declaration/import form. A future policy choice is needed between consistently contextual parsing and expanding the reserved-word set; neither is implemented here.",
+    "syntax_sha256": "4ba13797797ba94471badccd7a5ec514fc10615e8bcc3a99b6316d2fdd713e44"
+  },
+  "first_field_self_reference": {
+    "recorded_utc": "2026-11-06T19:35:35.427290+00:00",
+    "authority": "H-146 accepted known limitation; preserve first pointer field self-reference reading as null without a store diagnostic.",
+    "command": [
+      "/ws/EvtWorks/cod-project/build/bin/cod",
+      "--run",
+      "/ws/EvtWorks/cod-project/build/validation/regional-self-reference.cod"
+    ],
+    "source": "using symbol \"std:io\" @print;\nregional type Node { next::ref<Node>; value::i64; }\nsymbol @arena;\nsymbol @node;\neffect @arena = region(128u64);\neffect @node = alloc @arena Node(null, 7);\nsetfield(@node, next, @node);\nbehave @print(deref(@node).next == @node);\nbehave @print(deref(@node).next == null);\n",
+    "source_sha256": "197a5e408e2254a555c8225bff5af2b4d7a9c4a2d23f984574b15d6993c2fe5f",
+    "compiler_sha256": "2396107e627d885e668af1067555fa2c16900e961dc9397d7cb801f653019fd5",
+    "exit_code": 0,
+    "stdout": "false\ntrue\n",
+    "stderr": "",
+    "expected_stdout": "false\ntrue\n",
+    "passed": true
+  }
+}
