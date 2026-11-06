@@ -134,25 +134,46 @@ def main():
 
         (directory / 'regional-types.cod').write_text(
             'regional type Node { value::f32; next::ref<Node>; }\n')
+        (directory / 'regional-vocabulary.cod').write_text('symbol @root;\n')
+        (directory / 'regional-body.cod').write_text(
+            'using "regional-types.cod" Node;\n'
+            'symbol from "regional-vocabulary.cod" @root as @input;\n'
+            'symbol @walk;\nfunction find(node::Node)::ref<Node> { node.next }\n'
+            'procedure @walk()::ref<Node> { find(deref(@input)) }\n')
         depth = 96
         for i in range(depth):
             body = 'using "regional-types.cod" Node;\n'
+            body += ('symbol from "regional-vocabulary.cod" @root;\n'
+                     f'symbol @node{i};\neffect @node{i} = @root;\nsymbol @walk;\n')
             if i + 1 < depth:
                 body += f'using "regional-{i+1}.cod" find as next;\n'
             body += 'function find(node::Node)::ref<Node> { '
             body += ('next(deref(node.next))' if i + 1 < depth else 'node.next') + ' }\n'
+            source = f'regional-{i+1}.cod' if i + 1 < depth else 'regional-body.cod'
+            role = f'node{i+1}' if i + 1 < depth else 'input'
+            body += f'import "{source}" @walk as @walk with {{ @node{i} as @{role}; }};\n'
             (directory / f'regional-{i}.cod').write_text(body)
         entry = directory / 'regional-main.cod'
         entry.write_text('using symbol "std:io" @print;\nusing "regional-types.cod" Node;\n'
-                         'using "regional-0.cod" find;\nsymbol @arena;\nsymbol @head;\nsymbol @tail;\n'
+                         'symbol from "regional-vocabulary.cod" @root as @head;\n'
+                         'symbol @arena;\nsymbol @tail;\nsymbol @alternate;\n'
                          'effect @arena = region(16384u64);\n'
                          'effect @tail = alloc @arena Node(11.0f32, null);\n'
                          f'effect @head = fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'
                          '  alloc @arena Node(f32(i), node)\n};\n'
+                         'using "regional-0.cod" find;\nusing symbol "regional-0.cod" @walk;\n'
+                         'symbol from "regional-0.cod" @node0 as @selected;\n'
                          'behave @print(deref(find(deref(@head))).value);\n'
                          'setfield(@tail, value, 29.0f32);\n'
-                         'behave @print(deref(find(deref(@head))).value);\n')
-        results.append(run(executable, root, entry, '11\n29\n', '96-module-regional-snapshot-chain'))
+                         'behave @print(deref(find(deref(@head))).value);\n'
+                         'effect @arena = region(4096u64);\n'
+                         'effect @alternate = alloc @arena Node(47.0f32, null);\n'
+                         'setfield(@alternate, next, @alternate);\n'
+                         'effect @selected = @alternate;\n'
+                         'behave @print(deref(perform @walk()).value);\n'
+                         'behave @print(deref(behave @walk()).value);\n')
+        results.append(run(executable, root, entry, '11\n29\n29\n47\n',
+                           '96-module-regional-import-snapshot-chain'))
     if report := os.environ.get('COD_LANGUAGE_STRESS_REPORT'):
         sources = [root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh', root / 'cod/lang_llvm.hh',
                    root / 'cod/lang_native_runtime.hh', root / 'include/shilos/region.hh', Path(__file__).resolve()]
