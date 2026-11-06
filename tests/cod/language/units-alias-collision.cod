@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+behave @print(99);
+using units "units-library.cod" {m, cm};
+using units "units-other.cod" {m as cm_to_m};

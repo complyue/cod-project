@@ -1131,6 +1131,12 @@ class Compiler {
     auto &methods = module.functions[alias];
     if (std::find(methods.begin(), methods.end(), function) == methods.end()) methods.push_back(function);
   }
+  static void select_type(Module &module, Type type, const std::string &alias, const Location &at) {
+    require_user_type_name(alias, at);
+    if (module.functions.contains(alias) || module.globals.contains(alias) ||
+        !module.types.emplace(alias, std::move(type)).second)
+      fail(at, "duplicate lexical alias '" + alias + "'");
+  }
   void execute_module(Module &module, const Environment &caller, const Location &at) {
     // This composes runtime code after the complete module scan. A repeated
     // encounter reuses the incorporated module's resources, never its effects.
@@ -1172,8 +1178,7 @@ class Compiler {
           if (!module.selected_units.insert(type.identity).second)
             fail(selection.at, "repeated using of UoM identity " + type_name(type));
           selected.insert(type.identity);
-          if (!module.types.emplace(selection.local, type).second)
-            fail(selection.at, "duplicate lexical alias '" + selection.local + "'");
+          select_type(module, type, selection.local, selection.at);
         }
         for (const auto &function : source.conversions) {
           const auto edge = conversion(function);
@@ -1239,13 +1244,10 @@ class Compiler {
             value = define_procedure(import_body(*value.procedure, form, module), module, env);
           bind(destination, std::move(value), module, env, form.at);
         } else if (const auto type = source.types.find(form.name); type != source.types.end()) {
-          require_user_type_name(form.alias, form.at);
           if (type->second.kind == Type::unit)
             fail(form.at, "select UoMs and their conversions together with using units");
           if (form.kind == Form::Kind::import_resource) fail(form.at, "types preserve identity through using");
-          if (module.functions.contains(form.alias) || module.globals.contains(form.alias) ||
-              !module.types.emplace(form.alias, type->second).second)
-            fail(form.at, "duplicate lexical alias '" + form.alias + "'");
+          select_type(module, type->second, form.alias, form.at);
         } else if (const auto function = source.functions.find(form.name); function != source.functions.end()) {
           require_user_type_name(form.alias, form.at);
           if (form.kind == Form::Kind::import_resource)

@@ -696,6 +696,12 @@
     "stderr_contains": "duplicate lexical name 'cm_to_m'"
   },
   {
+    "file": "units-alias-collision.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "duplicate lexical alias 'cm_to_m'"
+  },
+  {
     "file": "units-function-order.cod",
     "exit": 70,
     "stdout": "",
