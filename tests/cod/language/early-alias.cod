@@ -1,2 +1,3 @@
-effect @x = 3;
+symbol @read;
+procedure @read()::i64 { @x }
 symbol from "vocabulary.cod" @x;

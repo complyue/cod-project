@@ -1,5 +1,6 @@
 symbol @bias;
 symbol @missing;
+symbol @raw_store;
 type Box { value::i64; }
 regional type Cell { value::i64; }
 function twice(value::i64)::i64 { value * 2 }
@@ -14,3 +15,4 @@ function (+)(value::Box, step::i64)::Box { Box(value.value + step) }
 procedure (+)(cell::ref<Cell>, step::i64)::i64 {
   setfield(cell, value, deref(cell).value + step + @bias)
 }
+procedure @raw_store(target::ref<f32>, value::f32)::f32 { store(target, value) }

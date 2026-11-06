@@ -327,7 +327,7 @@
   {
     "file": "intrinsic-overloads.cod",
     "exit": 0,
-    "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n"
+    "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n"
   },
   {
     "file": "intrinsic-pure-error.cod",

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T17:12:36.519919+00:00",
+  "recorded_utc": "2026-11-06T17:48:19.731840+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -379,7 +379,7 @@
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/early-alias.cod:1:8: symbol alias @x requires its symbol from encounter first in this prototype\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/early-alias.cod:2:26: symbol alias @x requires its symbol from encounter first in this prototype\n",
       "passed": true
     },
     {
@@ -1038,10 +1038,10 @@
       "expected": {
         "file": "intrinsic-overloads.cod",
         "exit": 0,
-        "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n"
+        "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n"
       },
       "exit_code": 0,
-      "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n",
+      "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n",
       "stderr": "",
       "passed": true
     },
@@ -2425,9 +2425,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-8_nncjdf/program.ll",
+        "/tmp/cod-language-check-wbiyya1g/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-8_nncjdf/program.bc"
+        "/tmp/cod-language-check-wbiyya1g/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2437,18 +2437,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "398d5f995b6ebe58ae2425d33b566660dd08c988adb746ef16010b85c9665d17"
+    "sha256": "c70f74fe78bc70bda28df77cf37524a37f264b703ac2f59793cc6f4a283a00fa"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "8fb3a8f703460db17894d21407c3270e14d8eed800676da4a74520bdc420496b",
-    "cod/lang_frontend.hh": "b345e20ac020e90509a0676376bfac80fa12161c0451abdaec602df916c22d54",
+    "cod/lang_frontend.hh": "d8d9f8aec4e83bee8b2408962992fa70bc3726ca5c2369ec31210050c1df7942",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "d35b91243571982ee7186550085eed9d78646e9742d32277f5d119570fc96e5a",
+    "tests/cod/language/cases.json": "931a6ca013373dc2eed868a8d0f0ffc5bc6cdf90f0ecd58e040689daa479e5c9",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9d3f5f799775585e4e14c3161fbab6397dda6c8e2c474e06531994a899f91602",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2463,7 +2463,7 @@
     "tests/cod/language/diamond-shared.cod": "6e0b21cbe0d3c227d5267070f1e2c4b5c3ea97cdcbe472d34131216044df8386",
     "tests/cod/language/diamond-vocab.cod": "9f39d23f781ca32847181988a011de270c30ac07a136ceb9663d935706347a0b",
     "tests/cod/language/duplicate-map-role.cod": "c8cb6967e8bbd2c17f2604eb139ec04f3669f3a4b21904f4890e7962066464d7",
-    "tests/cod/language/early-alias.cod": "2760b0aa7d7131859f2e5fd2dfc4f6fa10fb8ab54eb12b720bbd51d894597177",
+    "tests/cod/language/early-alias.cod": "5b7d293f6a66c1e5837459278e8e60b392c07ee75d3d9defb7d3782c4b1825bf",
     "tests/cod/language/float-boundary-rounding.cod": "a65c3d14a9a0c5ed02103674282f16be54d8990becd449173957846b60e978f4",
     "tests/cod/language/float-cast-boundary.cod": "bef6cf858853fd816d8a331c29fdbb8161070309395dabebbc5e9403f90c3041",
     "tests/cod/language/float-cast-nan.cod": "cf6fee8f317970a70f3bc8d6fd6e6f68f58acbbf4f32acf867fde730a4ce3d05",
@@ -2483,8 +2483,8 @@
     "tests/cod/language/import-mapping.cod": "0e80d08ae7e5b39210e25b3ffb569efba657b8a5026d343d7042d32c1cf6d349",
     "tests/cod/language/import.cod": "ca7a3d1627e417d87dc6727812807d5158822fc2131da30c96e27b15dee77858",
     "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
-    "tests/cod/language/intrinsic-library.cod": "41e9730fd837228f407ad3be017774e5e6582e577317d1d652035569ae558d47",
-    "tests/cod/language/intrinsic-overloads.cod": "8383dc7820ca59a6a012b0889c87fe6e140ee57f270c222b82f9f4a807d974bf",
+    "tests/cod/language/intrinsic-library.cod": "d68bc75d7358041b08602f54998d919379a02d107210dd7097b027bb207a5043",
+    "tests/cod/language/intrinsic-overloads.cod": "a55aced9281df42db473e8c2a2c487e4f8e851650c40e426a9d3e1152106b2f6",
     "tests/cod/language/intrinsic-pure-error.cod": "08e9dc0862d1405c8db88e79e6c44d519a47d5a42f40a2eea493c9813bd81bf2",
     "tests/cod/language/intrinsic-reserved-name.cod": "9112140a1f4aba26a09bfc87cd3cabe7190feba7a3e4fddbb5ff93ffbf75c88e",
     "tests/cod/language/iteration-index-error.cod": "f2a740829eae91e0cbacbd3f98ffde0b5dc777e2cc437865abbba9c996865ad6",
@@ -2519,7 +2519,7 @@
     "tests/cod/language/overflow.cod": "174ed5d6401791539ff91cf081662ee6e1f25de2662cff4dc46512d8ad25f11d",
     "tests/cod/language/perform-without-caller.cod": "f31457d947a8a5b22b629778f68f67509b0679b617eeb71632934c1dd1a1727b",
     "tests/cod/language/plain-assignment.cod": "6832cc854107048ab81f0de5bddbfd78e70a7944f4a0a484d80b13578e1e3e4a",
-    "tests/cod/language/pool-index.cod": "ec0c7c35a2176e4c5c0e24156ee2a7a5f69a7a768d2fc1fccd3e6ed7b6296bca",
+    "tests/cod/language/pool-index.cod": "759fe8b8a7995bd0dcb2824489302190d750a66a377c7d748d81c3de3d247315",
     "tests/cod/language/pool-layout.cod": "3cc4466300349659b0d080a6364f2b8936a534aa1c3440b31a2c76610d147672",
     "tests/cod/language/pool-typed.cod": "be349e069422a19967b247d78c1218b4f1cd703767925a460a4539e284f5232e",
     "tests/cod/language/pool-units.cod": "7e98a99907eb5a1d546055ecdac548d129c3cafc17c8c5352179ed21388473c3",

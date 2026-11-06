@@ -33,3 +33,14 @@ behave @print(behave @run(3));
 behave @print(deref(@cell).value);
 behave @print(@cell + 1);
 behave @print((B(5) + 1).value);
+
+using symbol "intrinsic-library.cod" @raw_store;
+array Rates[u32]::f32;
+symbol @rates;
+effect @rates = alloc @arena Rates(1u64, 0.0f32);
+procedure (store)(target::ref<f32>, value::f32)::f32 {
+  behave @raw_store(target, if (value < 0.0f32) { 0.0f32 } else { value })
+}
+behave @print(store(ref_at(@rates, 0u32), -2.0f32));
+behave @print(store(ref_at(@rates, 0u32), 0.25f32));
+behave @print(@rates[0u32]);

@@ -389,7 +389,13 @@ class Compiler {
     env[id] = std::move(value);
   }
 
+  void resolve_procedure_symbols(Expression &expr, Module &module) {
+    if (uses_symbol(expr.kind) && !expr.symbol_id)
+      expr.symbol_id = symbol(module, expr.text, expr.at);
+    for (const auto &child : expr.children) resolve_procedure_symbols(*child, module);
+  }
   Value define_procedure(Form &form, Module &lexical, const Environment &env) {
+    resolve_procedure_symbols(*form.body, lexical);
     auto proc = std::make_shared<Procedure>();
     proc->form = &form;
     proc->lexical = &lexical;
