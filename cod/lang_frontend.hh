@@ -991,9 +991,12 @@ class Compiler {
   Value unary_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
                          bool pure) {
     using K = Expression::Kind;
-    if (expr.text == "-" && expr.children[0]->kind == K::integer &&
-        expr.children[0]->text == "9223372036854775808")
-      return scalar(Type::integer, ir_.bits(Type::integer, UINT64_C(1) << 63));
+    if (expr.text == "-" && expr.children[0]->kind == K::integer) {
+      std::string_view magnitude = expr.children[0]->text;
+      while (magnitude.starts_with('0')) magnitude.remove_prefix(1);
+      if (magnitude == "9223372036854775808")
+        return scalar(Type::integer, ir_.bits(Type::integer, UINT64_C(1) << 63));
+    }
     auto value = expression(*expr.children[0], module, env, locals, pure);
     if (const auto selected = method(expr.text, module, {value}, expr.at))
       return call_method(*selected, {value}, expr.at);

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T15:28:36.787866+00:00",
+  "recorded_utc": "2026-11-06T15:34:52.951118+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -2372,9 +2372,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-u7jhwvo5/program.ll",
+        "/tmp/cod-language-check-dk1qyp4a/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-u7jhwvo5/program.bc"
+        "/tmp/cod-language-check-dk1qyp4a/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2384,12 +2384,12 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "841cca2078b6afa6a9bdb6950048b1bd82d080f821fc555c5f60a7921fc712f1"
+    "sha256": "db535be370cdc32ebc8d4b8d0bfd6e39fdd6b8ad89fcc560276b87a002db0a19"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "0202a4ff48fcf63a684d85ae2fd1b58922e83cc2991a61a208ffdbc4a1ddc758",
-    "cod/lang_frontend.hh": "124766b46e2a1b493d90ac3cd58133d3d8e18fbbebdef07f3bc45c38c9a18af4",
+    "cod/lang_frontend.hh": "fc6a80c796d2e36b3604092c5ff2298cd0132564cf0d86e7bdf525019e53c519",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
@@ -2397,7 +2397,7 @@
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
     "tests/cod/language/cases.json": "c39365840c9679f61750a3d502224f04d832bef37edc9f6a3606b89681eebfe0",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
-    "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
+    "tests/cod/language/arithmetic.cod": "9d3f5f799775585e4e14c3161fbab6397dda6c8e2c474e06531994a899f91602",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
     "tests/cod/language/bounded-iteration.cod": "7b7228907eb4e81a5d2ff66f3c1a090dfe90f31167497111781f143b985f3d14",
     "tests/cod/language/broken-dependency.cod": "6cd8716b5bdcd5e22a9deb4c3b308fcd0908c74b7d4ce0d1a3c30632955679d3",
