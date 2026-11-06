@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "recorded_utc": "2026-11-06T15:57:46.935899+00:00",
+  "recorded_utc": "2026-11-06T17:14:14.353287+00:00",
   "toolchain": "build",
   "backend": "llvm",
   "passed": true,
   "seed": "0xC0D2026",
   "f32_samples": 22,
   "u64_samples": 19,
-  "native_compile_link_run_seconds": 1.7055561820161529,
+  "native_compile_link_run_seconds": 1.8166303610196337,
   "generated_cod_sha256": "d7b066c95f5564567eb7be8dc49223b0f7f3073ee26c251b217a938a62bb3f4a",
   "observed_trace_sha256": "42c28a127c0e54f3a7a603b4dba5e15c954f640c2be04390d2625b1c77ed8527",
   "notes": [
@@ -16,8 +16,8 @@
     "This validates arithmetic and regional input access, not a neural model."
   ],
   "source_sha256": {
-    "cod/lang_syntax.hh": "0202a4ff48fcf63a684d85ae2fd1b58922e83cc2991a61a208ffdbc4a1ddc758",
-    "cod/lang_frontend.hh": "fc6a80c796d2e36b3604092c5ff2298cd0132564cf0d86e7bdf525019e53c519",
+    "cod/lang_syntax.hh": "8fb3a8f703460db17894d21407c3270e14d8eed800676da4a74520bdc420496b",
+    "cod/lang_frontend.hh": "b345e20ac020e90509a0676376bfac80fa12161c0451abdaec602df916c22d54",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",

@@ -7,6 +7,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -219,6 +220,8 @@ struct Form {
   bool explicit_alias = false;
   bool using_symbol = false;
   bool conversion = false;
+  bool operation = false;
+  bool alias_operation = false;
   bool regional = false;
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
@@ -236,6 +239,20 @@ inline int binary_precedence(const std::string &op) {
   if (op == "+" || op == "-") return 5;
   if (op == "*" || op == "/" || op == "%") return 6;
   return -1;
+}
+
+inline bool intrinsic_name(std::string_view name) {
+  return name == "region" || name == "used_bytes" || name == "capacity_bytes" ||
+         name == "deref" || name == "len" || name == "ref_at" || name == "store" ||
+         name == "setfield" || name == "scalar" || name == "i64" || name == "u8" ||
+         name == "u32" || name == "u64" || name == "f32" || name == "f64";
+}
+
+inline bool expression_keyword(std::string_view name) {
+  return name == "true" || name == "false" || name == "null" || name == "alloc" ||
+         name == "for" || name == "fold" || name == "let" || name == "effect" ||
+         name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
+         name == "function" || name == "global" || name == "symbol";
 }
 
 class Parser {
@@ -261,22 +278,26 @@ class Parser {
       fail(peek().at, kind == TokenKind::symbol ? "expected a symbol name" : "expected a lexical name");
     return tokens_[cursor_++];
   }
-  Token value_name() {
+  Token ordinary_name() {
     auto token = name(TokenKind::identifier);
-    const auto &text = token.text;
-    // primary() gives these names expression syntax instead of lexical lookup.
-    if (text == "true" || text == "false" || text == "null" || text == "alloc" ||
-        text == "for" || text == "fold" || text == "let" || text == "effect" ||
-        text == "perform" || text == "behave" || text == "if" || text == "procedure" ||
-        text == "function" || text == "global" || text == "symbol")
-      fail(token.at, "reserved expression name '" + text + "' cannot declare a lexical value");
+    if (expression_keyword(token.text) || intrinsic_name(token.text) ||
+        token.text == "bool" || token.text == "void" || token.text == "ref")
+      fail(token.at, "reserved keyword '" + token.text + "' cannot be used as an ordinary name");
     return token;
   }
-  Token lexical_name() {
-    if (!take("(")) return name(TokenKind::identifier);
+  Token value_name() {
+    if (expression_keyword(peek().text))
+      fail(peek().at, "reserved expression name '" + peek().text + "' cannot declare a lexical value");
+    return ordinary_name();
+  }
+  Token lexical_name(bool *operation = nullptr) {
+    const bool parenthesized = take("(");
+    if (operation) *operation = parenthesized;
+    if (!parenthesized) return ordinary_name();
     auto op = tokens_[cursor_++];
-    if (op.kind != TokenKind::punctuation || (binary_precedence(op.text) < 0 && op.text != "!"))
-      fail(op.at, "expected an operator name");
+    if (!intrinsic_name(op.text) &&
+        (op.kind != TokenKind::punctuation || (binary_precedence(op.text) < 0 && op.text != "!")))
+      fail(op.at, "expected an operator or intrinsic name");
     if (op.text == "&&" || op.text == "||") fail(op.at, "short-circuit operators are control expressions");
     expect(")");
     return op;
@@ -286,9 +307,10 @@ class Parser {
     form.path = tokens_[cursor_++].text;
     form.symbolic = symbolic || peek().kind == TokenKind::symbol;
     const auto kind = form.symbolic ? TokenKind::symbol : TokenKind::identifier;
-    form.name = form.symbolic ? name(kind).text : lexical_name().text;
+    form.name = form.symbolic ? name(kind).text : lexical_name(&form.operation).text;
     form.explicit_alias = take("as");
-    form.alias = form.explicit_alias ? (form.symbolic ? name(kind).text : lexical_name().text) : form.name;
+    form.alias = form.explicit_alias ? (form.symbolic ? name(kind).text : lexical_name(&form.alias_operation).text) : form.name;
+    if (!form.explicit_alias) form.alias_operation = form.operation;
   }
   Type parse_type() {
     auto token = name(TokenKind::identifier);
@@ -394,7 +416,8 @@ class Parser {
     }
     if (is("{")) return block();
     if (is("(") && cursor_ + 2 < tokens_.size() && tokens_[cursor_ + 2].text == ")" &&
-        (binary_precedence(tokens_[cursor_ + 1].text) >= 0 || tokens_[cursor_ + 1].text == "!")) {
+        (binary_precedence(tokens_[cursor_ + 1].text) >= 0 || tokens_[cursor_ + 1].text == "!" ||
+         intrinsic_name(tokens_[cursor_ + 1].text))) {
       auto expr = make(Expression::Kind::call, lexical_name());
       arguments(*expr);
       return expr;
@@ -488,14 +511,14 @@ public:
         expect(";");
       } else if (take("unit")) {
         form->kind = Form::Kind::unit;
-        form->name = name(TokenKind::identifier).text;
+        form->name = ordinary_name().text;
         type_separator();
         form->result_type = parse_type();
         if (!numeric(*form->result_type)) fail(start.at, "a unit requires a scalar numeric representation");
         expect(";");
       } else if (take("array")) {
         form->kind = Form::Kind::array;
-        form->name = name(TokenKind::identifier).text;
+        form->name = ordinary_name().text;
         expect("[");
         form->index_type = parse_type();
         expect("]");
@@ -506,7 +529,7 @@ public:
         form->regional = take("regional");
         expect("type");
         form->kind = Form::Kind::product;
-        form->name = name(TokenKind::identifier).text;
+        form->name = ordinary_name().text;
         expect("{");
         while (!take("}")) {
           auto field = name(TokenKind::identifier);
@@ -523,7 +546,8 @@ public:
         const bool function = take("function");
         if (!function) expect("procedure");
         form->kind = function ? Form::Kind::function : Form::Kind::procedure;
-        form->name = function ? lexical_name().text : name(TokenKind::symbol).text;
+        if (function || is("(")) form->name = lexical_name(&form->operation).text;
+        else form->name = name(TokenKind::symbol).text;
         if (take("(")) {
           if (!take(")")) {
             do {
@@ -553,7 +577,7 @@ public:
         take(";");
       } else if (take("global")) {
         form->kind = Form::Kind::global;
-        form->name = name(TokenKind::identifier).text;
+        form->name = ordinary_name().text;
         type_separator();
         form->result_type = parse_type();
         if (*form->result_type == Type::void_type) fail(start.at, "a bits global cannot be void");

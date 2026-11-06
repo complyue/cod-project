@@ -1,0 +1,35 @@
+using symbol "std:io" @print;
+symbol from "intrinsic-library.cod" @bias;
+using "intrinsic-library.cod" Box as B;
+using "intrinsic-library.cod" Cell as C;
+using "intrinsic-library.cod" (len);
+using "intrinsic-library.cod" (store);
+using "intrinsic-library.cod" (+);
+function twice(value::i64)::i64 { value * 1000 }
+function pure(value::B)::B { store(value, 4) }
+global saved::B = store(B(5), 4);
+array Values[u32]::i64;
+symbol @arena;
+symbol @values;
+symbol @cell;
+symbol @run;
+symbol @len;
+effect @len = 99;
+effect @arena = region(4096u64);
+effect @values = alloc @arena Values(3u64, 0);
+effect @cell = alloc @arena C(2);
+effect @bias = 1;
+procedure @run(value::i64)::i64 { store(@cell, value) + i64(len(value)) }
+effect @bias = 2;
+behave @print(len(B(7)));
+behave @print((len)(B(8)));
+behave @print(len(@values));
+behave @print(saved.value);
+behave @print(pure(B(5)).value);
+behave @print(@len);
+behave @print(perform @run(3));
+behave @print(deref(@cell).value);
+behave @print(behave @run(3));
+behave @print(deref(@cell).value);
+behave @print(@cell + 1);
+behave @print((B(5) + 1).value);

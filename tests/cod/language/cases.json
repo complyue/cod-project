@@ -325,6 +325,23 @@
     "stdout": "12\n12\n"
   },
   {
+    "file": "intrinsic-overloads.cod",
+    "exit": 0,
+    "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n"
+  },
+  {
+    "file": "intrinsic-pure-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a function cannot invoke a procedure overload"
+  },
+  {
+    "file": "intrinsic-reserved-name.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "reserved keyword 'len'"
+  },
+  {
     "file": "method-ambiguous.cod",
     "exit": 2,
     "stdout": "",

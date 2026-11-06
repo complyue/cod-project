@@ -8,6 +8,6 @@ conversion function normalize(x (raw))::normalized {
   })
 }
 function combine(x (normalized*), y::u64)::u64 { scalar(x) + y }
-function (+)(x (normalized*), y::u64)::u64 { scalar(x) + y }
+procedure (+)(x (normalized*), y::u64)::u64 { scalar(x) + y }
 symbol @combine;
 procedure @combine(x (normalized*), y::u64)::u64 { scalar(x) + y }

@@ -1,0 +1,16 @@
+symbol @bias;
+symbol @missing;
+type Box { value::i64; }
+regional type Cell { value::i64; }
+function twice(value::i64)::i64 { value * 2 }
+function (len)(value::Box)::u64 { u64(value.value) }
+procedure (len)(value::i64)::u64 { u64(value + @bias) }
+procedure (len)(value::bool)::u64 { u64(@missing) }
+function (store)(value::Box, amount::i64)::Box { Box(value.value + amount) }
+procedure (store)(cell::ref<Cell>, amount::i64)::i64 {
+  setfield(cell, value, twice(amount) + @bias)
+}
+function (+)(value::Box, step::i64)::Box { Box(value.value + step) }
+procedure (+)(cell::ref<Cell>, step::i64)::i64 {
+  setfield(cell, value, deref(cell).value + step + @bias)
+}

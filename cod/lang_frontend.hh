@@ -25,8 +25,11 @@ struct Value {
   std::shared_ptr<Procedure> procedure;
   Module *owner = nullptr;
   std::optional<size_t> region_id = {};
+  bool captured = false;
 };
-using Environment = std::map<size_t, Value>;
+struct Environment : std::map<size_t, Value> {
+  bool captured_context = false;
+};
 struct Locals {
   std::map<std::string, Value> visible;
   std::set<std::string> declared;
@@ -38,17 +41,16 @@ struct Locals {
     return true;
   }
 };
-struct Function {
+struct Method {
   Form *form;
   Module *lexical;
-  bool operator==(const Function &) const = default;
+  bool operator==(const Method &) const = default;
 };
 struct Procedure {
   Form *form = nullptr;
   Module *lexical = nullptr;
   std::string builtin;
   Environment captures;
-  std::set<size_t> requirements;
 };
 struct Module {
   std::string path;
@@ -58,9 +60,9 @@ struct Module {
   std::set<std::string> active_aliases;
   std::set<std::string> available_symbols;
   std::map<const Form *, Module *> dependencies;
-  std::map<std::string, std::vector<Function>> functions;
+  std::map<std::string, std::vector<Method>> methods;
   std::map<std::string, Type> types;
-  std::vector<Function> conversions;
+  std::vector<Method> conversions;
   std::set<Module *> unit_sources;
   std::set<size_t> selected_units;
   std::map<std::string, Value> globals;
@@ -113,6 +115,8 @@ class Compiler {
   static void require_user_type_name(const std::string &name, const Location &at) {
     static const std::set<std::string> reserved{"i64", "u8", "u32", "u64", "f32", "f64", "bool", "void", "region", "ref"};
     if (reserved.contains(name)) fail(at, "reserved scalar type name '" + name + "'");
+    if (intrinsic_name(name) || expression_keyword(name))
+      fail(at, "reserved keyword '" + name + "' cannot be used as an ordinary name");
   }
   static std::string_view procedure_operation(std::string_view name) {
     if (name == "region") return "create a region resource";
@@ -247,14 +251,16 @@ class Compiler {
         const Type type{form.regional ? Type::regional : Type::product, result.path + "::" + form.name, products_.size()};
         result.types.emplace(form.name, type);
         products_.push_back({&form, &result, {}});
-      } else if (form.kind == Form::Kind::function || form.kind == Form::Kind::global) {
+      } else if (form.kind == Form::Kind::function || (form.kind == Form::Kind::procedure && form.operation) || form.kind == Form::Kind::global) {
         if (!lexical_names.insert(form.name).second &&
-            (form.kind != Form::Kind::function ||
-             (!result.functions.contains(form.name) && !lexical_selections.contains(form.name))))
+            (form.kind == Form::Kind::global ||
+             (!result.methods.contains(form.name) && !lexical_selections.contains(form.name))))
           fail(form.at, "duplicate lexical name '" + form.name + "'");
-        if (form.kind == Form::Kind::function) {
-          require_user_type_name(form.name, form.at);
-          result.functions[form.name].push_back({&form, &result});
+        if (form.kind != Form::Kind::global) {
+          if (!form.operation) require_user_type_name(form.name, form.at);
+          if (form.operation && form.name == "setfield")
+            fail(form.at, "setfield overloads need a compile-time field-selector contract; outside this prototype");
+          result.methods[form.name].push_back({&form, &result});
           if (form.conversion) result.conversions.push_back({&form, &result});
         }
       } else if (form.kind == Form::Kind::using_units) {
@@ -271,7 +277,7 @@ class Compiler {
           result.symbol_aliases.try_emplace(form.alias, &form);
         if (!form.symbolic) {
           if (!lexical_names.insert(form.alias).second &&
-              !result.functions.contains(form.alias) && !lexical_selections.contains(form.alias))
+              !result.methods.contains(form.alias) && !lexical_selections.contains(form.alias))
             fail(form.at, "duplicate lexical alias '" + form.alias + "'");
           lexical_selections.insert(form.alias);
         }
@@ -364,11 +370,12 @@ class Compiler {
   }
   Value read_symbol(size_t id, const Environment &env, const Location &at) {
     const auto found = env.find(id);
-    if (found == env.end()) fail(at, "missing required binding " + symbol_names_[id]);
+    if (found == env.end()) fail(at, (env.captured_context
+        ? "perform requires an unavailable definition-time capture " : "missing required binding ") + symbol_names_[id]);
     if (found->second.region_id) region_pointer(found->second, at);
     if (found->second.type == Type::procedure || found->second.type == Type::region) return found->second;
     const auto type = found->second.type;
-    return scalar(type, ir_.read_symbol(id, type), found->second.region_id);
+    return scalar(type, found->second.captured ? found->second.native : ir_.read_symbol(id, type), found->second.region_id);
   }
   void bind(size_t id, Value value, Module &owner, Environment &env, const Location &at) {
     if (value.type == Type::void_type) fail(at, "a symbol cannot be bound to void");
@@ -378,101 +385,20 @@ class Compiler {
     fix_type(id, value.type, at);
     ir_.effect(id, value.type, value.native);
     value.owner = &owner;
+    value.captured = false;
     env[id] = std::move(value);
   }
 
-  // Capture analysis restores only bindings changed in a nested scope. Copying
-  // the entire environment at each call makes deep inline chains needlessly
-  // expensive, even when their bodies only read one dynamic value.
-  struct CaptureState {
-    Environment visible;
-    std::set<size_t> provided;
-    struct Change {
-      size_t id;
-      std::optional<Value> previous;
-      bool newly_provided;
-    };
-    std::vector<Change> changes;
-
-    void bind(size_t id, std::optional<Value> value) {
-      const auto found = visible.find(id);
-      changes.push_back({id, found == visible.end() ? std::nullopt : std::optional<Value>(found->second),
-                         provided.insert(id).second});
-      if (value) visible[id] = std::move(*value);
-      else visible.erase(id);
-    }
-    void restore(size_t mark) {
-      while (changes.size() > mark) {
-        auto change = std::move(changes.back());
-        changes.pop_back();
-        if (change.previous) visible[change.id] = std::move(*change.previous);
-        else visible.erase(change.id);
-        if (change.newly_provided) provided.erase(change.id);
-      }
-    }
-  };
-
-  // Only used, externally supplied symbolic values become captures. A behave
-  // dependency includes the selected callee's needs; perform supplies its own.
-  std::optional<Value> collect(const Expression &expr, Module &module, CaptureState &state,
-               std::set<size_t> &needed, std::set<const Procedure *> &visiting) {
-    using K = Expression::Kind;
-    if (expr.kind == K::block || expr.kind == K::conditional) {
-      if (expr.kind == K::conditional) collect(*expr.children[0], module, state, needed, visiting);
-      const size_t begin = expr.kind == K::conditional ? 1 : 0;
-      const auto mark = state.changes.size();
-      for (size_t i = begin; i < expr.children.size(); ++i) {
-        collect(*expr.children[i], module, state, needed, visiting);
-        if (expr.kind == K::conditional) state.restore(mark);
-      }
-      state.restore(mark);
-      return {};
-    }
-    std::optional<Value> produced;
-    for (const auto &child : expr.children) produced = collect(*child, module, state, needed, visiting);
-    if (expr.kind == K::symbol || expr.kind == K::perform || expr.kind == K::behave) {
-      const auto id = expression_symbol(expr, module);
-      if (!state.provided.contains(id)) needed.insert(id);
-      if (expr.kind == K::symbol) {
-        const auto found = state.visible.find(id);
-        return found == state.visible.end() ? std::nullopt : std::optional<Value>(found->second);
-      }
-      if (expr.kind == K::behave) {
-        const auto callee = state.visible.find(id);
-        if (callee != state.visible.end() && callee->second.procedure) {
-          // Own the selected procedure while nested effects can replace its binding.
-          const auto proc = callee->second.procedure;
-          if (proc->form && visiting.insert(proc.get()).second) {
-            const auto mark = state.changes.size();
-            collect(*proc->form->body, *proc->lexical, state, needed, visiting);
-            state.restore(mark);
-            visiting.erase(proc.get());
-          }
-        }
-      }
-    } else if (expr.kind == K::effect) {
-      const auto id = expression_symbol(expr, module);
-      state.bind(id, produced);
-      return produced; // effect yields its bound value, including another procedure.
-    }
-    return {};
-  }
   Value define_procedure(Form &form, Module &lexical, const Environment &env) {
     auto proc = std::make_shared<Procedure>();
     proc->form = &form;
     proc->lexical = &lexical;
-    CaptureState state{env, {}, {}};
-    std::set<const Procedure *> visiting;
-    collect(*form.body, lexical, state, proc->requirements, visiting);
-    for (const auto id : proc->requirements) {
-      const auto found = env.find(id);
-      if (found == env.end()) continue; // A perform path must later prove the capture exists.
-      auto value = found->second;
-      if (value.type != Type::procedure && value.type != Type::region) {
-        value.native = ir_.read_symbol(id, value.type);
-      }
-      proc->captures.emplace(id, std::move(value));
-    }
+    // This is compiler metadata, not a runtime closure or a retained region.
+    // SSA values already represent each binding's value at its definition.
+    // Only demanded reads generate native uses, after typed method selection.
+    proc->captures = env;
+    proc->captures.captured_context = true;
+    for (auto &[id, value] : proc->captures) value.captured = true;
     return {Type::procedure, {}, std::move(proc), &lexical};
   }
   Value block(const Expression &expr, Module &module, Environment env, Locals locals,
@@ -504,9 +430,9 @@ class Compiler {
                        [](const Parameter &parameter) { return parameter.automatic_conversion; });
   }
   bool converting_method(const std::string &name, const Module &module, size_t arity) {
-    const auto found = module.functions.find(name);
-    if (arity < 2 || found == module.functions.end()) return false;
-    return std::any_of(found->second.begin(), found->second.end(), [&](const Function &function) {
+    const auto found = module.methods.find(name);
+    if (arity < 2 || found == module.methods.end()) return false;
+    return std::any_of(found->second.begin(), found->second.end(), [&](const Method &function) {
       return function.form->parameters.size() == arity && converting_parameters(*function.form);
     });
   }
@@ -531,18 +457,18 @@ class Compiler {
     return result;
   }
   struct Conversion {
-    Function function;
+    Method function;
     Type source, target;
   };
   struct Route {
-    std::vector<Function> steps;
-    std::vector<Function> alternative;
+    std::vector<Method> steps;
+    std::vector<Method> alternative;
   };
   struct MethodMatch {
-    Function function;
+    Method function;
     std::vector<Route> routes;
   };
-  Conversion conversion(Function function) {
+  Conversion conversion(Method function) {
     auto &form = *function.form;
     if (form.parameters.size() != 1 || !form.result_type || form.parameters[0].automatic_conversion)
       fail(form.at, "a conversion function requires one exact UoM input and an explicit UoM result");
@@ -557,10 +483,10 @@ class Compiler {
     for (const auto &function : module.conversions) result.push_back(conversion(function));
     return result;
   }
-  static std::optional<std::vector<Function>> shortest_route(
+  static std::optional<std::vector<Method>> shortest_route(
       const std::vector<Conversion> &graph, Type source, Type target,
-      const std::optional<Function> &excluded = {}) {
-    struct Step { size_t unit; std::vector<Function> path; };
+      const std::optional<Method> &excluded = {}) {
+    struct Step { size_t unit; std::vector<Method> path; };
     std::queue<Step> pending;
     std::set<size_t> visited{source.identity};
     pending.push({source.identity, {}});
@@ -606,7 +532,7 @@ class Compiler {
       for (size_t i = 1; i < declared.size(); ++i) if (declared[i] == actual) start = i;
       if (start == declared.size()) return {};
       for (size_t i = start; i > 0; --i) {
-        std::optional<Function> selected, alternative;
+        std::optional<Method> selected, alternative;
         for (const auto &edge : graph) {
           if (edge.source != declared[i] || edge.target != declared[i-1]) continue;
           if (!selected) selected = edge.function;
@@ -639,7 +565,7 @@ class Compiler {
     return result;
   }
   [[noreturn]] static void method_failure(const std::string &name, const std::vector<Value> &args,
-                                         const std::vector<Function> &candidates, const Location &at,
+                                         const std::vector<Method> &candidates, const Location &at,
                                          bool ambiguous) {
     std::string message = (ambiguous ? "ambiguous method '" : "no matching method '") + name +
                           "' for supplied argument types (";
@@ -657,12 +583,12 @@ class Compiler {
   }
   std::optional<MethodMatch> method(const std::string &name, Module &module,
                                     const std::vector<Value> &args, const Location &at) {
-    const auto found = module.functions.find(name);
-    if (found == module.functions.end()) return {};
+    const auto found = module.methods.find(name);
+    if (found == module.methods.end()) return {};
     std::vector<MethodMatch> exact, converted;
     const auto reject_ambiguity = [&](const std::vector<MethodMatch> &matches) {
       if (matches.size() < 2) return;
-      std::vector<Function> candidates;
+      std::vector<Method> candidates;
       for (const auto &match : matches) candidates.push_back(match.function);
       method_failure(name, args, candidates, at, true);
     };
@@ -709,7 +635,7 @@ class Compiler {
                   const LLVMEmission::ConversionPoint *point = nullptr) {
     if (route.steps.empty()) return value;
     if (!route.alternative.empty()) {
-      auto describe = [&](const std::vector<Function> &path) {
+      auto describe = [&](const std::vector<Method> &path) {
         std::string result = type_name(value.type);
         for (const auto &step : path)
           result += " --" + step.form->name + "--> " + type_name(conversion(step).target);
@@ -729,10 +655,12 @@ class Compiler {
     return value;
   }
   Value call_method(const MethodMatch &match, std::vector<Value> args, const Location &at,
-                    const std::vector<LLVMEmission::ConversionPoint> &points = {}) {
+                    const Environment &env, bool pure, const std::vector<LLVMEmission::ConversionPoint> &points = {}) {
     for (size_t i = 0; i < args.size(); ++i)
       args[i] = converted(args[i], match.routes[i], at, points.empty() ? nullptr : &points[i]);
-    return call(*match.function.form, *match.function.lexical, {}, args, true, at);
+    const bool function = match.function.form->kind == Form::Kind::function;
+    if (!function && pure) fail(at, "a function cannot invoke a procedure overload");
+    return call(*match.function.form, *match.function.lexical, function ? Environment{} : env, args, function, at);
   }
   Type array_type(const Value &value, const Location &at) {
     const auto type = value.type.kind == Type::reference ? *value.type.target : value.type;
@@ -752,7 +680,8 @@ class Compiler {
     if (pure) fail(expr.at, "a function cannot invoke a procedure");
     const auto id = expression_symbol(expr, module);
     const auto found = env.find(id);
-    if (found == env.end()) fail(expr.at, "missing required procedure binding " + symbol_names_[id]);
+    if (found == env.end()) fail(expr.at, (env.captured_context
+        ? "perform requires an unavailable definition-time capture " : "missing required procedure binding ") + symbol_names_[id]);
     if (!found->second.procedure) fail(expr.at, "perform/behave requires a procedure value");
     const auto proc = found->second.procedure; // Resolve before arguments/capture installation.
     std::vector<LLVMEmission::ConversionPoint> points;
@@ -778,13 +707,7 @@ class Compiler {
     }
     const auto native_scope = ir_.scope();
 
-    auto call_env = env;
-    if (expr.kind == Expression::Kind::perform) {
-      for (const auto required : proc->requirements)
-        if (!proc->captures.contains(required))
-          fail(expr.at, "perform requires an unavailable definition-time capture " + symbol_names_[required]);
-      for (const auto &[capture, value] : proc->captures) bind(capture, value, *proc->lexical, call_env, expr.at);
-    }
+    auto call_env = expr.kind == Expression::Kind::perform ? proc->captures : env;
     auto result = call(*proc->form, *proc->lexical, std::move(call_env), args, false, expr.at);
     ir_.restore(native_scope);
     return result;
@@ -862,16 +785,30 @@ class Compiler {
     return accumulator;
   }
   Value call_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
-                          bool pure) {
+                          bool pure, bool function_result = false) {
     using K = Expression::Kind;
-    const auto operation = procedure_operation(expr.text);
-    if (pure && !operation.empty()) fail(expr.at, "a function cannot " + std::string(operation));
     if (expr.children.size() == 2 && binary_precedence(expr.text) >= 0)
-      return binary_expression(expr, module, env, locals, pure);
+      return binary_expression(expr, module, env, locals, pure, function_result);
     if (expr.children.size() == 1 && (expr.text == "-" || expr.text == "!"))
-      return unary_expression(expr, module, env, locals, pure);
+      return unary_expression(expr, module, env, locals, pure, function_result);
+    std::vector<LLVMEmission::ConversionPoint> points;
+    std::optional<std::vector<Value>> evaluated;
+    const auto values = [&]() -> const std::vector<Value> & {
+      if (!evaluated) evaluated = arguments(expr, module, env, locals, pure,
+          converting_method(expr.text, module, expr.children.size()) ? &points : nullptr);
+      return *evaluated;
+    };
+    if (intrinsic_name(expr.text) && expr.text != "setfield") {
+      const auto &args = values();
+      if (const auto selected = method(expr.text, module, args, expr.at))
+        return call_method(*selected, args, expr.at, env, pure || function_result, points);
+    }
+    const auto operation = procedure_operation(expr.text);
+    if (function_result && !operation.empty())
+      fail(expr.at, "a bits global initializer requires a pure function, not a procedure-only operation");
+    if (pure && !operation.empty()) fail(expr.at, "a function cannot " + std::string(operation));
     if (expr.text == "region") {
-      const auto args = arguments(expr, module, env, locals, pure);
+      const auto &args = values();
       if (args.size() != 1 || !integral(args[0].type)) fail(expr.at, "region requires an integer byte capacity");
       regional_runtime_ = true;
       auto *owner = ir_.region_new(args[0].type, args[0].native);
@@ -881,13 +818,13 @@ class Compiler {
       return {Type::region, owner, {}, nullptr, id};
     }
     if (expr.text == "used_bytes" || expr.text == "capacity_bytes") {
-      const auto args = arguments(expr, module, env, locals, pure);
+      const auto &args = values();
       if (args.size() != 1) fail(expr.at, "region size requires one resource");
       require(args[0].type, Type::region, expr.at);
       return scalar(Type::uint64, ir_.region_size(region_pointer(args[0], expr.at), expr.text == "capacity_bytes"));
     }
     if (expr.text == "deref") {
-      const auto args = arguments(expr, module, env, locals, pure);
+      const auto &args = values();
       if (args.size() != 1 || args[0].type.kind != Type::reference)
         fail(expr.at, "deref requires a typed regional reference");
       const auto type = resolve(*args[0].type.target, module, expr.at);
@@ -897,14 +834,14 @@ class Compiler {
       return scalar(type, native);
     }
     if (expr.text == "len" || expr.text == "ref_at") {
-      const auto args = arguments(expr, module, env, locals, pure);
+      const auto &args = values();
       if (args.size() != (expr.text == "len" ? 1u : 2u)) fail(expr.at, "wrong array argument count");
       if (expr.text == "ref_at") return array_element(args[0], args[1], expr.at, true);
       array_type(args[0], expr.at);
       return scalar(Type::uint64, ir_.array_length(region_pointer(args[0], expr.at), args[0].native));
     }
     if (expr.text == "store") {
-      const auto args = arguments(expr, module, env, locals, pure);
+      const auto &args = values();
       if (args.size() == 2 && args[0].type.kind == Type::reference &&
           (numeric(*args[0].type.target) || *args[0].type.target == Type::boolean || args[0].type.target->kind == Type::unit)) {
         require(args[1].type, *args[0].type.target, expr.at);
@@ -947,7 +884,7 @@ class Compiler {
     static const std::map<std::string, Type> casts{{"i64", Type::integer}, {"u8", Type::uint8},
         {"u32", Type::uint32}, {"u64", Type::uint64}, {"f32", Type::float32}, {"f64", Type::float64}};
     if (const auto cast = casts.find(expr.text); cast != casts.end()) {
-      const auto args = arguments(expr, module, env, locals, pure);
+      const auto &args = values();
       if (args.size() != 1 || !numeric(args[0].type)) fail(expr.at, "numeric conversion requires one scalar value");
       return scalar(cast->second, ir_.cast(args[0].type, cast->second, args[0].native));
     }
@@ -955,7 +892,7 @@ class Compiler {
       const auto type = resolve(found->second, module, expr.at);
       if (type.kind == Type::regional || type.kind == Type::array)
         fail(expr.at, "regional objects require alloc in a region resource");
-      const auto args = arguments(expr, module, env, locals, pure);
+      const auto &args = values();
       if (type.kind == Type::unit) {
         if (args.size() != 1) fail(expr.at, "a UoM constructor requires one scalar value");
         require(args[0].type, type.representation, expr.at);
@@ -969,27 +906,25 @@ class Compiler {
       for (const auto &arg : args) native_args.push_back(arg.native);
       return scalar(type, ir_.product(type, native_args));
     }
-    const auto function = module.functions.find(expr.text);
-    if (expr.text == "scalar" && function == module.functions.end()) {
-      const auto args = arguments(expr, module, env, locals, pure);
+    const auto function = module.methods.find(expr.text);
+    if (expr.text == "scalar") {
+      const auto &args = values();
       if (args.size() != 1 || args[0].type.kind != Type::unit)
         fail(expr.at, "scalar requires one UoM value");
       return {args[0].type.representation, args[0].native, {}, nullptr};
     }
-    if (function == module.functions.end()) fail(expr.at, "unavailable lexical function '" + expr.text + "'");
-    std::vector<LLVMEmission::ConversionPoint> points;
-    const auto args = arguments(expr, module, env, locals, pure,
-                                converting_method(expr.text, module, expr.children.size()) ? &points : nullptr);
+    if (function == module.methods.end()) fail(expr.at, "unavailable lexical function '" + expr.text + "'");
+    const auto &args = values();
     auto selected = method(expr.text, module, args, expr.at);
     if (!selected && function->second.size() == 1) {
       const auto &candidate = function->second.front();
       return call(*candidate.form, *candidate.lexical, {}, args, true, expr.at);
     }
     if (!selected) method_failure(expr.text, args, function->second, expr.at, false);
-    return call_method(*selected, args, expr.at, points);
+    return call_method(*selected, args, expr.at, env, pure || function_result, points);
   }
   Value unary_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
-                         bool pure) {
+                         bool pure, bool function_result = false) {
     using K = Expression::Kind;
     if (expr.text == "-" && expr.children[0]->kind == K::integer) {
       std::string_view magnitude = expr.children[0]->text;
@@ -999,14 +934,14 @@ class Compiler {
     }
     auto value = expression(*expr.children[0], module, env, locals, pure);
     if (const auto selected = method(expr.text, module, {value}, expr.at))
-      return call_method(*selected, {value}, expr.at);
+      return call_method(*selected, {value}, expr.at, env, pure || function_result);
     if (expr.text == "-" && floating(value.type))
       return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
     require(value.type, expr.text == "!" ? Type::boolean : Type::integer, expr.at);
     return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
   }
   Value binary_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
-                          bool pure) {
+                          bool pure, bool function_result = false) {
     auto left = expression(*expr.children[0], module, env, locals, pure);
     if (expr.text == "&&" || expr.text == "||") {
       require(left.type, Type::boolean, expr.at);
@@ -1028,7 +963,7 @@ class Compiler {
     auto right = expression(*expr.children[1], module, env, locals, pure);
     if (!points.empty()) points.push_back(ir_.conversion_point());
     if (const auto selected = method(expr.text, module, {left, right}, expr.at))
-      return call_method(*selected, {left, right}, expr.at, points);
+      return call_method(*selected, {left, right}, expr.at, env, pure || function_result, points);
     if ((expr.text == "==" || expr.text == "!=") &&
         (left.type.kind == Type::reference || left.type == Type::null_ref) &&
         (right.type.kind == Type::reference || right.type == Type::null_ref)) {
@@ -1164,16 +1099,21 @@ class Compiler {
     }
     fail(expr.at, "unsupported expression");
   }
-  static void select_function(Module &module, Function function, const std::string &alias, const Location &at) {
-    require_user_type_name(alias, at);
+  static void select_method(Module &module, Method function, const std::string &alias, const Location &at) {
+    if (alias == "setfield")
+      fail(at, "setfield overloads need a compile-time field-selector contract; outside this prototype");
+    if (function.form->kind == Form::Kind::procedure && !intrinsic_name(alias) &&
+        binary_precedence(alias) < 0 && alias != "!")
+      fail(at, "a procedure overload requires an operator or intrinsic destination");
+    if (!intrinsic_name(alias)) require_user_type_name(alias, at);
     if (module.types.contains(alias) || module.globals.contains(alias))
       fail(at, "duplicate lexical alias '" + alias + "'");
-    auto &methods = module.functions[alias];
+    auto &methods = module.methods[alias];
     if (std::find(methods.begin(), methods.end(), function) == methods.end()) methods.push_back(function);
   }
   static void select_type(Module &module, Type type, const std::string &alias, const Location &at) {
     require_user_type_name(alias, at);
-    if (module.functions.contains(alias) || module.globals.contains(alias) ||
+    if (module.methods.contains(alias) || module.globals.contains(alias) ||
         !module.types.emplace(alias, std::move(type)).second)
       fail(at, "duplicate lexical alias '" + alias + "'");
   }
@@ -1224,7 +1164,7 @@ class Compiler {
           const auto edge = conversion(function);
           if (!selected.contains(edge.source.identity) || !selected.contains(edge.target.identity)) continue;
           module.conversions.push_back(function);
-          select_function(module, function, function.form->name, form.at);
+          select_method(module, function, function.form->name, form.at);
         }
         break;
       }
@@ -1237,15 +1177,18 @@ class Compiler {
         break;
       }
       case Form::Kind::procedure: {
+        if (form.operation) break;
         const auto id = symbol(module, form.name, form.at);
         bind(id, define_procedure(form, module, env), module, env, form.at);
         break;
       }
       case Form::Kind::global: {
-        if (module.functions.contains(form.name)) fail(form.at, "duplicate lexical name '" + form.name + "'");
-        if (form.body->kind == Expression::Kind::call && !procedure_operation(form.body->text).empty())
-          fail(form.body->at, "a bits global initializer requires a pure function, not a procedure-only operation");
-        auto value = expression(*form.body, module, env, locals, false);
+        if (module.methods.contains(form.name)) fail(form.at, "duplicate lexical name '" + form.name + "'");
+        auto value = form.body->kind == Expression::Kind::call
+            ? call_expression(*form.body, module, env, locals, false, true)
+            : form.body->kind == Expression::Kind::unary
+            ? unary_expression(*form.body, module, env, locals, false, true)
+            : expression(*form.body, module, env, locals, false);
         if (value.region_id || value.type.kind == Type::reference || value.type == Type::region)
           fail(form.at, "module globals contain bits values, not regional resources or references");
         require(value.type, resolve(*form.result_type, module, form.at), form.at);
@@ -1284,17 +1227,19 @@ class Compiler {
             value = define_procedure(import_body(*value.procedure, form, module), module, env);
           bind(destination, std::move(value), module, env, form.at);
         } else if (const auto type = source.types.find(form.name); type != source.types.end()) {
+          if (form.alias_operation) fail(form.at, "an operation name requires a callable overload");
           if (type->second.kind == Type::unit)
             fail(form.at, "select UoMs and their conversions together with using units");
           if (form.kind == Form::Kind::import_resource) fail(form.at, "types preserve identity through using");
           select_type(module, type->second, form.alias, form.at);
-        } else if (const auto function = source.functions.find(form.name); function != source.functions.end()) {
-          require_user_type_name(form.alias, form.at);
+        } else if (const auto function = source.methods.find(form.name); function != source.methods.end()) {
+          if (!form.alias_operation) require_user_type_name(form.alias, form.at);
           if (form.kind == Form::Kind::import_resource)
             fail(form.at, "function-body import is outside the prototype; use 'using' for a lexical function");
-          for (const auto &candidate : function->second) select_function(module, candidate, form.alias, form.at);
+          for (const auto &candidate : function->second) select_method(module, candidate, form.alias, form.at);
         } else if (const auto value = source.globals.find(form.name); value != source.globals.end()) {
-          if (module.types.contains(form.alias) || module.functions.contains(form.alias) ||
+          if (form.alias_operation) fail(form.at, "an operation name requires a callable overload");
+          if (module.types.contains(form.alias) || module.methods.contains(form.alias) ||
               !module.globals.emplace(form.alias, value->second).second)
             fail(form.at, "duplicate lexical alias '" + form.alias + "'");
         } else {
@@ -1337,8 +1282,10 @@ public:
         }
         const auto &site = call_path_[call_path_.size() - 1 - depth];
         const bool procedure = site.form->kind == Form::Kind::procedure;
+        const auto name = site.form->operation ? "(" + site.form->name + ")" :
+                          procedure ? "@" + site.form->name : site.form->name;
         message += "\n" + location_text(site.at) + ": note: in call to " +
-            (procedure ? "procedure '@" : "function '") + site.form->name +
+            (procedure ? "procedure '" : "function '") + name +
             "' defined at " + location_text(site.form->at);
       }
       throw std::runtime_error(message);
