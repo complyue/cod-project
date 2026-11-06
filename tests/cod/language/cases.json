@@ -323,7 +323,11 @@
     "file": "method-ambiguous.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "ambiguous method"
+    "stderr_contains": [
+      "ambiguous method 'f' for supplied argument types (i64): 2 matching candidates",
+      "method-ambiguous.cod:3:1: note: candidate function 'f'",
+      "method-library.cod:1:1: note: candidate function 'score'"
+    ]
   },
   {
     "file": "method-no-match.cod",

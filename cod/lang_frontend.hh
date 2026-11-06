@@ -630,6 +630,21 @@ class Compiler {
     const auto found = module.functions.find(name);
     if (found == module.functions.end()) return {};
     std::vector<MethodMatch> exact, converted;
+    const auto reject_ambiguity = [&](const std::vector<MethodMatch> &matches) {
+      if (matches.size() < 2) return;
+      std::string message = "ambiguous method '" + name + "' for supplied argument types (";
+      for (size_t i = 0; i < args.size(); ++i)
+        message += (i ? ", " : "") + type_name(args[i].type);
+      message += "): " + std::to_string(matches.size()) + " matching candidates";
+      const auto shown = std::min<size_t>(matches.size(), 4);
+      for (size_t i = 0; i < shown; ++i) {
+        const auto &form = *matches[i].function.form;
+        message += "\n" + location_text(form.at) + ": note: candidate function '" + form.name + "'";
+      }
+      if (shown < matches.size())
+        message += "\nnote: " + std::to_string(matches.size() - shown) + " additional candidates omitted";
+      fail(at, message);
+    };
     for (const auto &candidate : found->second) {
       if (candidate.form->parameters.size() != args.size()) continue;
       bool matches = true;
@@ -642,7 +657,7 @@ class Compiler {
       }
       if (matches) exact.push_back({candidate, std::vector<Route>(args.size())});
     }
-    if (exact.size() > 1) fail(at, "ambiguous method '" + name + "' for supplied argument types");
+    reject_ambiguity(exact);
     if (!exact.empty()) return exact.front();
     for (const auto &candidate : found->second) {
       if (candidate.form->parameters.size() != args.size()) continue;
@@ -655,7 +670,7 @@ class Compiler {
       }
       if (matches) converted.push_back(std::move(match));
     }
-    if (converted.size() > 1) fail(at, "ambiguous method '" + name + "' for supplied argument types");
+    reject_ambiguity(converted);
     if (converted.empty()) {
       // A missing edge makes an overload inapplicable. Preserve the detailed
       // diagnostic for an unambiguous declaration after considering alternatives.
