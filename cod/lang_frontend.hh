@@ -647,18 +647,16 @@ class Compiler {
     for (const auto &candidate : found->second) {
       if (candidate.form->parameters.size() != args.size()) continue;
       MethodMatch match{candidate, {}};
-      bool matches = true, needs_conversion = false;
+      bool matches = true;
       for (size_t i = 0; i < args.size(); ++i) {
         auto path = route(args[i].type, candidate.form->parameters[i], *candidate.lexical, module, at, false);
         if (!path) { matches = false; break; }
-        needs_conversion = needs_conversion || !path->steps.empty();
         match.routes.push_back(std::move(*path));
       }
-      if (matches) (needs_conversion ? converted : exact).push_back(std::move(match));
+      if (matches) converted.push_back(std::move(match));
     }
-    const auto &candidates = exact.empty() ? converted : exact;
-    if (candidates.size() > 1) fail(at, "ambiguous method '" + name + "' for supplied argument types");
-    if (candidates.empty()) {
+    if (converted.size() > 1) fail(at, "ambiguous method '" + name + "' for supplied argument types");
+    if (converted.empty()) {
       // A missing edge makes an overload inapplicable. Preserve the detailed
       // diagnostic for an unambiguous declaration after considering alternatives.
       if (found->second.size() == 1) {
@@ -669,7 +667,7 @@ class Compiler {
       }
       return {};
     }
-    return candidates.front();
+    return converted.front();
   }
   Value converted(Value value, const Route &route, const Location &at,
                   const LLVMEmission::ConversionPoint *point = nullptr) {

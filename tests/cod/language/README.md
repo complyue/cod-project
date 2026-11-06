@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 30 · Recorded: 2026-11-06.
+Prototype reference revision: 31 · Recorded: 2026-11-06.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 30 · Recorded: 2026-11-06.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation. H-147 continues the work for ten active hours, excluding waiting. H-148 requires per-argument conversion before the next argument.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-251](../../../design/DesignAuthorityRegistry.md#k-251) records located allocation failures, parent-region construction and current implementation evidence; earlier evidence retains its own revision and timestamp.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-253](../../../design/DesignAuthorityRegistry.md#k-253) records simplified method-candidate selection and current implementation evidence; earlier evidence retains its own revision and timestamp.
 
 ## Run
 
@@ -109,6 +109,8 @@ for (i in 0 .. 10) { behave @print(i); };
 ```
 
 `for` is a void expression. `fold` returns its accumulator, initialized once and replaced by the body's value after each iteration. Ranges include the first endpoint and exclude the last; reversed/empty ranges execute zero times. Endpoints must share an integer type or one integer-backed UoM identity. Each iteration has its own dynamic scope, while procedure writes to regional storage persist until the owning region ends. These are native runtime loops, not compile-time iteration expansion. Product and unit accumulators retain their types.
+
+Local name shadowing remains under review: the prototype rejects a `let` that duplicates a visible local, while loop bindings can shadow outer locals. The choice between nested-scope shadowing, successive same-scope bindings and rejecting all shadowing has been raised for human decision; no new rule is selected.
 
 Unsigned literals use `u8`, `u32` or `u64` suffixes. Integer arithmetic checks overflow, including unsigned underflow; it does not silently wrap. Explicit `i64`, `u8`, `u32`, `u64`, `f32` and `f64` calls convert raw numeric values. Integer narrowing checks range. Float-to-integer conversion truncates toward zero, then checks the mathematical integer range before the native cast; NaN/infinity fail. Integer-to-float and float narrowing may round; finite floating overflow fails. Explicit floating casts may underflow to zero, while an out-of-range source literal is diagnosed. Floating literal validation uses its declared precision, including representable subnormals and values near rounding boundaries. Scalar type names are reserved for type definitions and callable/type aliases.
 
