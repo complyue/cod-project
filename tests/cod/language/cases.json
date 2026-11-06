@@ -307,7 +307,10 @@
     "file": "product-module-identity.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "expected "
+    "stderr_contains": [
+      "product-library.cod::Position, got ",
+      "product-other-library.cod::Position"
+    ]
   },
   {
     "file": "methods.cod",
@@ -383,13 +386,19 @@
     "file": "units-exact-reject.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "expected "
+    "stderr_contains": [
+      "units-library.cod::m, got ",
+      "units-library.cod::cm"
+    ]
   },
   {
     "file": "units-omitted-route.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "expected "
+    "stderr_contains": [
+      "units-library.cod::m, got ",
+      "units-library.cod::mm"
+    ]
   },
   {
     "file": "units-repeated.cod",
@@ -407,7 +416,10 @@
     "file": "units-identity.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "expected "
+    "stderr_contains": [
+      "units-library.cod::m, got ",
+      "units-other.cod::m"
+    ]
   },
   {
     "file": "units-direct.cod",
@@ -475,7 +487,10 @@
     "file": "units-cycle-no-route.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "expected "
+    "stderr_contains": [
+      "units-cycle-no-route.cod::c, got ",
+      "units-cycle-no-route.cod::a"
+    ]
   },
   {
     "file": "units-argument-once.cod",
@@ -531,7 +546,10 @@
     "file": "iteration-index-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "expected "
+    "stderr_contains": [
+      "iteration-index-error.cod::A, got ",
+      "iteration-index-error.cod::B"
+    ]
   },
   {
     "file": "numeric-widths.cod",
@@ -644,7 +662,10 @@
     "file": "region-index-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "expected "
+    "stderr_contains": [
+      "region-index-error.cod::Neuron, got ",
+      "region-index-error.cod::Slot"
+    ]
   },
   {
     "file": "region-escape.cod",

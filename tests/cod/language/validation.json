@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T18:24:40.798389+00:00",
+  "recorded_utc": "2026-11-06T18:45:37.520925+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -970,7 +970,10 @@
         "file": "product-module-identity.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "expected "
+        "stderr_contains": [
+          "product-library.cod::Position, got ",
+          "product-other-library.cod::Position"
+        ]
       },
       "exit_code": 2,
       "stdout": "",
@@ -1190,7 +1193,10 @@
         "file": "units-exact-reject.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "expected "
+        "stderr_contains": [
+          "units-library.cod::m, got ",
+          "units-library.cod::cm"
+        ]
       },
       "exit_code": 2,
       "stdout": "",
@@ -1208,7 +1214,10 @@
         "file": "units-omitted-route.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "expected "
+        "stderr_contains": [
+          "units-library.cod::m, got ",
+          "units-library.cod::mm"
+        ]
       },
       "exit_code": 2,
       "stdout": "",
@@ -1262,7 +1271,10 @@
         "file": "units-identity.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "expected "
+        "stderr_contains": [
+          "units-library.cod::m, got ",
+          "units-other.cod::m"
+        ]
       },
       "exit_code": 2,
       "stdout": "",
@@ -1475,7 +1487,10 @@
         "file": "units-cycle-no-route.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "expected "
+        "stderr_contains": [
+          "units-cycle-no-route.cod::c, got ",
+          "units-cycle-no-route.cod::a"
+        ]
       },
       "exit_code": 2,
       "stdout": "",
@@ -1651,7 +1666,10 @@
         "file": "iteration-index-error.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "expected "
+        "stderr_contains": [
+          "iteration-index-error.cod::A, got ",
+          "iteration-index-error.cod::B"
+        ]
       },
       "exit_code": 2,
       "stdout": "",
@@ -2004,7 +2022,10 @@
         "file": "region-index-error.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "expected "
+        "stderr_contains": [
+          "region-index-error.cod::Neuron, got ",
+          "region-index-error.cod::Slot"
+        ]
       },
       "exit_code": 2,
       "stdout": "",
@@ -2443,9 +2464,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-zn8rl7ix/program.ll",
+        "/tmp/cod-language-check-_cnnjng6/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-zn8rl7ix/program.bc"
+        "/tmp/cod-language-check-_cnnjng6/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2466,7 +2487,7 @@
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "c4338c14746c8fbcbcf3ab04aed705757dd401a221a1989a6ca125e4f7c2ce91",
+    "tests/cod/language/cases.json": "4870e2fed1bd90be8d8254bdc65e99bfb6c519c79262cb875a5f0584c33b033e",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9d3f5f799775585e4e14c3161fbab6397dda6c8e2c474e06531994a899f91602",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
