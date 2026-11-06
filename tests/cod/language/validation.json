@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T08:38:41.771566+00:00",
+  "recorded_utc": "2026-11-06T09:07:33.366282+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
@@ -1263,10 +1263,10 @@
       "expected": {
         "file": "units-procedure.cod",
         "exit": 0,
-        "stdout": "6\n9\n"
+        "stdout": "7\n114\n1028\n12\n115\n1029\n"
       },
       "exit_code": 0,
-      "stdout": "6\n9\n",
+      "stdout": "7\n114\n1028\n12\n115\n1029\n",
       "stderr": "",
       "passed": true
     },
@@ -2304,9 +2304,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-cxbgh_dn/program.ll",
+        "/tmp/cod-language-check-u9kolx82/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-cxbgh_dn/program.bc"
+        "/tmp/cod-language-check-u9kolx82/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2327,7 +2327,7 @@
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "fd9d4c70fbd86a4ad302d683de25832574775c94ce6625827566536bfe9f7706",
+    "tests/cod/language/cases.json": "32b6e7604b63de1e52970825523f2a1d5dd8a219942ed4871bacc66fcfc4c3fd",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2472,7 +2472,9 @@
     "tests/cod/language/units-private-helper.cod": "fbc8fcf187fe6b48a15d1c02ee01e3bd875977f258af27c6e479014d183703d6",
     "tests/cod/language/units-private-library.cod": "32f8e0ae3d123d020110ce1e3e5c1b74436f7f31edac4fa712799d58ad6238bd",
     "tests/cod/language/units-procedure-order.cod": "b65dce2a7a352d22e11714a80487045197f9c10e1ab22d84ac70f3ec79ce777c",
-    "tests/cod/language/units-procedure.cod": "b9b143f893ffb41ea08ae9dc93ff0240c7363fee02d3466c6300fcb7aab9ff6a",
+    "tests/cod/language/units-procedure-receiver.cod": "3526e904ec4f255b8a52f93fa11a912c2ea3ff3ae7e01d210d859cd0a3f7006a",
+    "tests/cod/language/units-procedure-source.cod": "b4b6ea1f578f4cd475c28c4ae7a67e4e6a95d6859835fc25f9041c49fc3b1f14",
+    "tests/cod/language/units-procedure.cod": "bba06bd65b90188e4a6f4f7f0a10bf257d24d56b914f7e707439d212c3708253",
     "tests/cod/language/units-reexport.cod": "4c61b14fdb27185bef9cc1bebf40ab30da57d2d3f0f7e412347849a09645c2ac",
     "tests/cod/language/units-repeated.cod": "0117bfe5d0cec83b85dd41193fd9463feebe64d0cac162283ddade376b8cb615",
     "tests/cod/language/units-sequencing-library.cod": "80ac032047fbd4b9da169f477985f2e7114cd2fb8b084e2521d62f433402844a",

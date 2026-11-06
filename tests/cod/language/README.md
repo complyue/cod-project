@@ -1,6 +1,6 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 32 · Recorded: 2026-11-06.
+Prototype reference revision: 33 · Recorded: 2026-11-06.
 
 ## Design authority
 
@@ -8,7 +8,7 @@ Prototype reference revision: 32 · Recorded: 2026-11-06.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation. H-147 continues the work for ten active hours, excluding waiting. H-148 requires per-argument conversion before the next argument.
 - **Invariants / non-goals:** preserve captured `perform`, caller-bound `behave`, restoration, once-only post-scan module incorporation, compile-time missing-binding errors and region-only user storage. No general GADT, cross-region fields, persistent closures, concurrency or SNN dynamics/training is claimed.
-- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-254](../../../design/DesignAuthorityRegistry.md#k-254) reconciles the tracker and reference with the current implementation and scoped evidence; earlier evidence retains its own revision and timestamp.
+- **Acceptance / evidence:** execute actual native CoD programs; reject invalid types/bindings/purity/lifetimes before execution; preserve region sharing/cycles through relocation; compare typed SoA arithmetic with an independent reference. [K-255](../../../design/DesignAuthorityRegistry.md#k-255) records composed unit/procedure redefinition evidence; earlier evidence retains its own revision and timestamp.
 
 ## Run
 
@@ -96,6 +96,8 @@ A unit definition creates a distinct compile-time type identity over a numeric s
 `using units "units-library.cod" {m as metres, cm, mm};` selects one bundle of units and associated conversion methods. Repeated selections from the same source, duplicate identities through re-exports, and UoM import are rejected. Omitted-unit conversions are unavailable to automatic search, while source-bound private helper calls retain their lexical meaning. Selected conversion functions share the ordinary lexical method namespace: they can join an overload set but cannot collide with a global value or type name. Type aliases obey that same namespace rule, including aliases introduced by a later unit bundle.
 
 `x (metres)` requires that identity; `x (metres*)` permits conversion. `x (metres*<-cm<-mm)` uses a direct conversion when available, otherwise the declared indirect route. Automatic graph search chooses a unique path. Multiple unresolved paths warn and continue using the shortest route with declaration-order tie breaking, reporting an alternative witness. `--warnings-as-errors` and `-Werror=unit-conversion` turn those warnings into errors. Paths use the call site's selected bundle; route names resolve where the parameter is defined. Exact argument-tuple methods are selected before conversion-enabled alternatives.
+
+[units-procedure.cod](units-procedure.cod) composes a source definition and two receiver-context procedure redefinitions. Each module defines distinct same-named units and pure conversion/helper functions. Ordinary `using` retains the source types and captures; procedure `import` checks parameter/result types and body names in the receiver, with explicit symbol maps for its effects. The fixture checks all three definitions under captured `perform` and current-binding `behave`. It imports procedure bodies, not UoM definitions.
 
 A `conversion function` requires one exact UoM parameter and an explicit UoM result; both automatic routing and direct calls enforce that signature. Conversions are pure functions; they cannot read/write effects or invoke procedures. The original argument is evaluated once. Calls evaluate each argument and complete its selected conversion before evaluating the next argument, under [H-148](../../../design/DesignAuthorityRegistry.md#h-148). A failing conversion prevents later argument effects. Functions, procedures and overloaded operator spellings share this order. Identity/route checks happen before native compilation, including when a preceding module initializer would print at runtime. The compiler does not enumerate cyclic walks or claim that distinct numeric formulas are equivalent.
 

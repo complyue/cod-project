@@ -1,9 +1,24 @@
 using symbol "std:io" @print;
-using units "units-library.cod" {m, cm};
-symbol @distance;
-symbol @read;
-effect @distance = m(4.0);
-procedure @read(x (m*))::f64 { scalar(@distance) + scalar(x) }
-effect @distance = m(7.0);
-behave @print(perform @read(cm(200.0)));
-behave @print(behave @read(cm(200.0)));
+using units "units-procedure-source.cod" {raw as SourceRaw, normalized as SourceN};
+using units "units-procedure-receiver.cod" {raw as ReceiverRaw, normalized as ReceiverN};
+symbol from "units-procedure-source.cod" @distance as @source_distance;
+symbol from "units-procedure-receiver.cod" @receiver_distance;
+using symbol "units-procedure-source.cod" @read as @source_read;
+using symbol "units-procedure-receiver.cod" @receiver_read;
+unit raw::f64;
+unit normalized::f64;
+conversion function normalize(x (raw))::normalized { normalized(scalar(x) / 25.0) }
+function adjust(x::f64)::f64 { x + 1000.0 }
+symbol @entry_distance;
+symbol @entry_read;
+effect @entry_distance = normalized(20.0);
+import "units-procedure-receiver.cod" @receiver_read as @entry_read with { @entry_distance as @receiver_distance; };
+effect @source_distance = SourceN(9.0);
+effect @receiver_distance = ReceiverN(11.0);
+effect @entry_distance = normalized(21.0);
+behave @print(perform @source_read(SourceRaw(200.0)));
+behave @print(perform @receiver_read(ReceiverRaw(200.0)));
+behave @print(perform @entry_read(raw(200.0)));
+behave @print(behave @source_read(SourceRaw(200.0)));
+behave @print(behave @receiver_read(ReceiverRaw(200.0)));
+behave @print(behave @entry_read(raw(200.0)));

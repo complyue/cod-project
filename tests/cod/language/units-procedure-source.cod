@@ -1,0 +1,8 @@
+unit raw::f64;
+unit normalized::f64;
+conversion function normalize(x (raw))::normalized { normalized(scalar(x) / 100.0) }
+function adjust(x::f64)::f64 { x + 1.0 }
+symbol @distance;
+symbol @read;
+effect @distance = normalized(4.0);
+procedure @read(x (normalized*))::f64 { adjust(scalar(@distance) + scalar(x)) }

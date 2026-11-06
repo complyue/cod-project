@@ -396,7 +396,7 @@
   {
     "file": "units-procedure.cod",
     "exit": 0,
-    "stdout": "6\n9\n"
+    "stdout": "7\n114\n1028\n12\n115\n1029\n"
   },
   {
     "file": "units-exact-overload.cod",
