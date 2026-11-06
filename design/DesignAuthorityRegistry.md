@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：241
+记录版本：242
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 241，延续检查 K-01—K-240；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 242，延续检查 K-01—K-241；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -270,7 +270,7 @@ Design authority
 
 
 - H-143–H-145/K-231: D-10r15/reference10 use a single direct LLVM IR path and contract-focused tests. Generated C++ language lowering and backend selection are removed; native system services remain C++. H-143 supplies the local choice; no full pending contract is promoted.
-- K-232/reference11: LLVM values flow directly through the checker; redundant generated-name storage is removed without changing scoped semantics. A first-field self-reference has zero stored displacement and currently becomes null in both shilos and CoD; the encoding/reader-compatibility choice is pending human response. No regional representation change is activated. D-01 and D-10 remain pending-human; existing nonzero-distance relocation evidence does not cover this defect.
+- K-232/reference11: LLVM values flow directly through the checker; redundant generated-name storage is removed without changing scoped semantics. A first-field self-reference has zero stored displacement and currently becomes null in both shilos and CoD; the encoding/reader-compatibility choice is pending human response. No regional representation change is activated. D-01 and D-10 remain pending-human; existing nonzero-distance relocation evidence does not cover this defect. K-241/reference20 records the concrete encoding and older-reader consequences; all proposed representation/compatibility choices remain unapproved.
 
 - Current regional-access refinement: C-48/P-114/P-115/P-117, H-124/H-127/H-129 and K-220 specify dynamic region resources and pure input-reachable snapshot traversal, including nested-call lifetime. K-228–K-230 record regional traversal, returned references, mutation between pure calls and native relocation evidence for the bounded subset. D-11 treats index typing separately; no value-field-only restriction is accepted.
 
@@ -4785,3 +4785,22 @@ Scope: Remove unnecessary implementation/test complexity as work advances. Apply
 - After the shared native loop and checked-view changes in e3d49fc, the existing five composition cases, independent 22-FP32/19-u64 numeric sample and both gather scales pass again. No cases or mechanisms are added. All six language/runtime evidence files now match the current compiler and fixture hashes; validation.json's preceding four-group component run remains explicitly dated historical evidence.
 - Measured pure-chain `.text` remains 15,398 bytes for the 512-module loop-input workload, and the 96-module regional snapshot chain remains 6,630 bytes. The 693,504-slot/eight-update and 112,281,600-slot/one-update cases retain their independent checksums and occupied sizes of 3,500,416 and 566,650,928 bytes. These are measured workload properties, not universal optimization or neural-throughput claims.
 - Type-resolution and source-reference review found no further required code change in this checkpoint. The sole LLVM path, zero-cost relocation, pure snapshot boundary, independent UoM identities and source-selected conversion behavior remain the bounded scope. This evidence does not resolve the shared zero-distance self-reference defect or approve a pointer-format/reader-compatibility policy. That decision remains pending and the ten-hour goal stays active. No build configuration, toolchain, source comment policy, SNN model or human confirmation history changes.
+
+
+<a id="k-241"></a>
+
+### K-241 — 2026-11-06: Pending self-reference encoding decision and valid pointer coverage
+
+- Agent implementation-boundary review under H-122/H-123/H-124/H-127/H-129/H-133/H-144/H-145. Reviewed charter §§2–4, the D-01 representation/lifetime protocols and C-05/P-01/P-02's candidate storage value chain. Registry241 →242; reference19 →20 links this review. Preserving graph identity through whole-region relocation serves the existing storage purpose; the human scope does not select a new byte encoding or reader-deployment policy. D-01/D-10 and all proposed choices below retain pending-human status. D-GOV242 maintenance alone continues H-05.
+- Source baseline: `f0d3945`. [region.hh](../include/shilos/region.hh) stores one `intptr_t` displacement measured from the pointer field; zero is null. A record whose first field points to that record has a valid target at displacement zero, making that assignment indistinguishable from null. [lang_llvm.hh](../cod/lang_llvm.hh) mirrors this format in `store_reference`/`read_reference`; its transient references instead use region-base offsets. `global_ptr` also uses a region-base offset, so its own null token is not the collision.
+- Reader boundary: the region header contains root UUID, capacity, occupation and root offset. [dbmr.hh](../include/shilos/dbmr.hh) validates those bounds, root alignment and `RT::TYPE_UUID`; it has no independent pointer-format version field. A new pointer token alone therefore gives an older reader no automatic rejection condition. Changing the CoD runtime root UUID would identify that one root schema, not every user-defined shilos root.
+
+| Pending option | Representation and implementation consequence | Compatibility / acceptance consequence |
+| --- | --- | --- |
+| Shared self-reference marker | Retain zero for null and ordinary nonzero displacements; encode a nonnull zero displacement as `INTPTR_MIN`. Decode the marker as the pointer field's own address. This preserves pointer width and relocation without added per-object storage. It requires an explicit valid-region/displacement bound that makes the marker unavailable as an ordinary distance; current creation/loading paths do not establish that bound as a contract. | Updated readers can read prior images within the stated bound. Current readers treat the marker as an ordinary negative displacement and do not resolve the self-reference. Approval must specify coordinated reader/writer deployment or an explicit schema rejection/migration policy; that choice is not silently supplied by the marker. |
+| Keep the encoding and diagnose the CoD store | Check a nonnull target's zero field-relative displacement before storing it. Preserve existing pointer bytes and layouts. | Prevents silent loss in the prototype but leaves first-field self-references unsupported. This is a capability limitation requiring explicit acceptance; it is not a completed shared encoding repair. |
+
+- An extent bound such as total region capacity at most `INTPTR_MAX` would exclude `INTPTR_MIN` from distances between valid in-region objects. It is a proposed precondition, not an existing accepted maximum. The raw-pointer writer also needs to distinguish a genuine reserved-distance collision from the self-reference case. No bound, marker, header field or deployment requirement is activated here. Replacing the null token or biasing all ordinary displacements would require broader image reinterpretation; neither is selected.
+- A stored zero that already lost a self-reference cannot be recovered by a new decoder: it has the same bytes as a genuine null. Reconstruction would require external object knowledge. This identifies an information loss in the representation, not evidence that any user database has suffered it.
+- The shared repair's concrete source surface is the four `regional_ptr` global/raw constructors and assignments, its mutable/const `get`, the two `memory_region::create_*_to` writers, `global_ptr::set`, and LLVM's two stored-reference helpers. Null initialization/clear and `global_ptr`'s base-relative representation can retain their current bytes. Allocation/load bounds and reader compatibility need the chosen policy. Acceptance must check first-field self-reference in both C++ and CoD, null/ordinary references, and a relocated image after the original is released; compatibility claims need evidence for the chosen reader policy. These are review requirements, not implemented candidate results.
+- Independent cleanup: removed the 27-line duplicate `test_pointer_semantics` case from `tests/shilos/src/test_regional_types.cc`; it instantiated a regional pointer on the stack, contrary to the region-only invariant. Existing `test_pointer_conversions` and `test_scalar_and_record_pointer_fields` in `test_memory_regions.cc` cover raw/global assignment, regional-to-global conversion, reads, null clearing, const access and cross-region rejection through region-resident fields. `cmake --build ./build` and `COD_TEST_TOOLCHAIN=build tests/shilos/run-all.sh` pass; all four shilos executables pass. No runtime encoding, allocator, test-build configuration or toolchain source changes. The previously recorded language/runtime evidence remains current; no unrelated suite is rerun for this deletion. The goal stays active and the pending human choice is unchanged.

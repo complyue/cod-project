@@ -236,32 +236,6 @@ void test_regional_dict() {
   // Automatic cleanup via RAII
 }
 
-void test_pointer_semantics() {
-  std::cout << "=== Testing pointer semantics ===" << std::endl;
-
-  // Create memory region with capacity
-  auto_region<TestRoot> region(1024 * 1024); // 1MB capacity
-
-  // Test regional_ptr with intern_str factory function
-  auto str_obj = intern_str(*region, std::string_view("test string"));
-  regional_ptr<regional_str> rptr;
-  rptr = str_obj.get(); // Assign raw pointer to regional_ptr
-
-  assert(rptr != nullptr);
-  assert(rptr->size() == 11);
-  assert(std::string_view(*rptr) == "test string");
-
-  // Test global_ptr - use cast_ptr method to create from regional_ptr
-  auto gptr = region->cast_ptr(rptr);
-  assert(gptr != nullptr);
-  assert(gptr->size() == 11);
-  assert(std::string_view(*gptr) == "test string");
-
-  std::cout << "pointer semantics tests passed!" << std::endl;
-
-  // Automatic cleanup via RAII
-}
-
 int main() {
   std::cout << "Starting regional types test suite..." << std::endl;
 
@@ -271,7 +245,6 @@ int main() {
     test_regional_lifo();
     test_regional_vector();
     test_regional_dict();
-    test_pointer_semantics();
 
     std::cout << std::endl << "✅ All regional types tests passed!" << std::endl;
     return 0;
