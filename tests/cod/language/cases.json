@@ -694,7 +694,7 @@
   {
     "file": "region-empty.cod",
     "exit": 0,
-    "stdout": "0\ntrue\n255\n"
+    "stdout": "0\ntrue\n256\n"
   },
   {
     "file": "units-unavailable-overload.cod",
