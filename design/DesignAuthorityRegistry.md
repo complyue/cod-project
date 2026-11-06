@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：243
+记录版本：244
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -184,7 +184,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 243，延续检查 K-01—K-242；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 244，延续检查 K-01—K-243；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -263,7 +263,7 @@ Design authority
 - Downstream: D-07r22 DL-02/DL-03/DL-12–DL-16 and D-08 LanguageCoDesign212/README211. K-210 records registration, K-211–K-213 the module/readiness scope and K-214 bounded native evidence and K-215 symbol-origin/destination refinement and K-216 vocabulary/map spelling review; K-217 records H-118 implementation and passing component tests; K-218 records the H-119/H-120 using shorthand/identity refinement; K-219 records its H-121 implementation and validation; no previously qualified D-10 baseline or affected qualified descendant exists.
 
 - Direct implementation authorization: H-108 requests checkpoint/push and a goal to the first runnable on-demand prototype after the immediate review. H-109–H-111 settle that review: every cross-module reference triggers source execution, source scope closes and only using/import bring effective resources into the receiver, effect yields the newly bound value. The first-prototype section scopes native compilation and scalar/module checks; complete language mechanisms and full-document qualification remain pending. H-118 directly authorizes implementing the discussed symbol selectors, destination declarations and import maps, running tests and committing/pushing after success. H-121 authorizes implementing/validating the using shorthand and identity guard, then committing/pushing. Work relies on these explicit requests and confirmed local semantics, not a delegated no-charter shortcut for the whole draft.
-- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision21, describes the bounded H-122/H-123/H-139–H-146 checkpoint. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
+- Prototype evidence / reference: [tests/cod/language/README.md](../tests/cod/language/README.md), reference revision22, describes the bounded H-122/H-123/H-139–H-147 checkpoint; K-243 records the token-kind parser repair. [validation.json](../tests/cod/language/validation.json) records the current native source checks; [stress-validation.json](../tests/cod/language/stress-validation.json) covers 512 modules, 1,000 nested procedures, shared DAGs, conversion re-exports and regional snapshots. K-228–K-233 record regional storage, deep inline compilation, representation, numeric evidence, direct LLVM values and nested effect captures. Full-document qualification is not implied.
 
 - Current implementation boundary: H-112–H-121 and C-45/C-46 cover source identities, compile-time aliases, predeclared ordinary destinations, import body translation, combined using and identity agreement in D-10r10/D-07r13. `symbol from` retains identity only. `using symbol` introduces a missing source alias or reuses an equal identity and installs the procedure in one source encounter. Ordinary using without as requires equality; explicit as permits a distinct predeclared destination, even with unchanged spelling. The parser retains explicit-as presence, and mismatches identify both origins and show the explicit destination form. Renamed combined forms preserve identity; equal procedure values do not bypass checking. Import-body and outer import destination rules are unchanged; import symbol remains unsupported. K-219 records actual acceptance; no qualified descendant is invalidated.
 
@@ -2194,6 +2194,16 @@ Human/source: this chat's user, replying to the pending regional-pointer questio
 > 暂时保持这样，记为已知问题：首个指针指向自己会实际上变成null。 预期未来版本引入固有字段后会解决。
 
 Scope: Preserve the current encoding and behavior for this increment, explicitly documenting that a first pointer field assigned its enclosing object reads back as null. This resolves K-232/K-241's immediate decision by accepting the existing limitation, rather than selecting either a shared marker or a new store diagnostic. Future intrinsic fields are the expected resolution. Their contents, layout, representation and compatibility policy are not specified or authorized for implementation by this statement. This is a bounded human acceptance of the known issue, not full qualification of D-01/D-10 or a claim that the defect has been fixed.
+
+### H-147 — Ten additional active work hours
+
+<a id="h-147"></a>
+
+Human/source: this chat's user in `codex://threads/01a14005-1edf-70d1-adcf-c091e8652c75`. Recorded 2026-11-06 UTC (client date 2026-11-05, America/Los_Angeles); exact message UTC timestamp unavailable.
+
+> 继续10个小时的工作，只算工作时间，不算等待时间
+
+Scope: Continue the existing language/runtime work for ten additional hours of active work. Exclude waiting rather than closing at a fixed wall-clock deadline. Preserve H-123's exclusion of SNN modeling, H-143's single LLVM path, H-144/H-145's lean validation/debt reduction and H-146's accepted temporary self-reference limitation. This renews work authorization, not approval of new language mechanisms or full qualification of pending designs. Keep separate accounting from the preceding completed goal.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -4823,3 +4833,13 @@ Scope: Preserve the current encoding and behavior for this increment, explicitly
 - Human-decision reconciliation after review of charter §§2–4, D-01's regional representation and D-10's snapshot/lifetime boundary. Registry242 →243, D-10r15 →r16, reference20 →21. H-146 directly accepts the existing first-field self-reference-to-null limitation for this increment; it is no longer an unresolved acceptance decision. The value of accurate graph semantics remains, with this temporary implementation exception made explicit rather than hidden. Full D-01/D-10 contracts remain pending-human; D-GOV243 maintenance alone continues H-05.
 - Preserve the field-relative encoding and current runtime behavior. Neither K-241's marker alternative nor its store-diagnostic alternative is adopted. Future intrinsic fields remain a named design direction without chosen fields, sizes, layout, code or migration policy. D-10 and the prototype reference state this boundary; the registry's current-status index is updated while prior human/agent history remains intact.
 - Documentation-only reconciliation: no compiler, runtime, test, build configuration or toolchain change. Existing native reproduction of `false` for self equality and `true` for null equality remains the known-issue evidence. Previously validated implementation results retain their exact scope and timestamps; no tests are rerun merely for the documentation change. This resolves the recorded blocker and does not claim the known defect itself is repaired.
+
+
+<a id="k-243"></a>
+
+### K-243 — 2026-11-06: Active-work continuation and token-kind parsing
+
+- Agent implementation review under H-112–H-121 and H-143–H-147, after checking charter §§1–4, D-10r16's identity/syntax boundaries and the current prototype reference. Registry243 →244; reference21 →22. Preserve the existing separation between lexical syntax and symbol identity: `@effect` denotes its declared symbol rather than the `effect` keyword. Quoted module paths are data tokens, not language operators or keywords. This repairs recognition of existing token categories; it does not choose a broader reserved-identifier policy or change symbol identity, module incorporation, storage or invocation semantics. Full D-10 remains pending-human. D-GOV244 maintenance alone continues H-05.
+- Baseline `0e45381`: `symbol @effect; effect @effect = 3; behave @print(@effect);` failed during parsing, while `behave @print(1 "+" 2);` was accepted. Keyword/delimiter matching and operator recognition compared spelling without consistently checking token kind. The parser now checks the relevant categories. The existing `scopes.cod` exercises the keyword-spelled symbol throughout capture, rebinding and restoration; one negative quoted-operator case checks that string data cannot become syntax. Other scope expectations are unchanged.
+- H-147 starts a separate goal with an active-work ledger under `build/validation/language-runtime-active-work.json`. Waiting and idle intervals do not count toward the 36,000-second target. The previous goal's history is retained. No bootstrap, toolchain, region encoding or SNN model change.
+- Validation: the required `cmake --build ./build` succeeds and `COD_TEST_TOOLCHAIN=build tests/cod/test_language.sh` passes all 125 checks, recorded in `tests/cod/language/validation.json`. A direct native probe also loads a dependency whose quoted path is exactly `symbol` and prints the expected `3`. Earlier stress, numeric, relocation and scale reports remain evidence for their recorded source hashes; they are not relabeled as fresh runs.

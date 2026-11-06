@@ -1,0 +1,2 @@
+using symbol "std:io" @print;
+behave @print(1 "+" 2);

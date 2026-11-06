@@ -240,7 +240,10 @@ class Parser {
   size_t cursor_ = 0;
 
   const Token &peek() const { return tokens_[cursor_]; }
-  bool is(const std::string &text) const { return peek().text == text; }
+  bool is(const std::string &text) const {
+    return (peek().kind == TokenKind::identifier || peek().kind == TokenKind::punctuation) &&
+           peek().text == text;
+  }
   bool take(const std::string &text) {
     if (!is(text)) return false;
     ++cursor_;
@@ -258,7 +261,8 @@ class Parser {
   Token lexical_name() {
     if (!take("(")) return name(TokenKind::identifier);
     auto op = tokens_[cursor_++];
-    if (binary_precedence(op.text) < 0 && op.text != "!") fail(op.at, "expected an operator name");
+    if (op.kind != TokenKind::punctuation || (binary_precedence(op.text) < 0 && op.text != "!"))
+      fail(op.at, "expected an operator name");
     if (op.text == "&&" || op.text == "||") fail(op.at, "short-circuit operators are control expressions");
     expect(")");
     return op;
@@ -420,7 +424,7 @@ class Parser {
         left = std::move(index);
       } else break;
     }
-    while (binary_precedence(peek().text) >= minimum) {
+    while (peek().kind == TokenKind::punctuation && binary_precedence(peek().text) >= minimum) {
       auto op = tokens_[cursor_++];
       auto binary = make(Expression::Kind::binary, op);
       binary->children.push_back(std::move(left));

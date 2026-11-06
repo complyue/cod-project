@@ -5,6 +5,12 @@
     "stdout": "1\n7\n2\n2\n8\n8\n6\n9\n6\n"
   },
   {
+    "file": "quoted-operator.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected ')'"
+  },
+  {
     "file": "using.cod",
     "exit": 0,
     "stdout": "1001\n401\n408\n"
