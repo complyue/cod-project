@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "recorded_utc": "2026-11-06T10:51:54.902299+00:00",
+  "recorded_utc": "2026-11-06T13:34:28.664029+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "passed": true,
@@ -18,9 +18,9 @@
   "element_payload_bytes": 566650800,
   "region_occupation_bytes": 566650928,
   "non_element_bytes": 128,
-  "frontend_seconds": 0.022260238998569548,
-  "native_compile_link_seconds": 1.4646715029957704,
-  "native_process_seconds": 3.4474562979885377,
+  "frontend_seconds": 0.021703946986235678,
+  "native_compile_link_seconds": 1.5418408929836005,
+  "native_process_seconds": 3.474741502024699,
   "llvm_ir_bytes": 171418,
   "bitcode_bytes": 41668,
   "native_executable_bytes": 90528,
@@ -40,9 +40,11 @@
     "tests/cod/language/pool-layout.cod": "3cc4466300349659b0d080a6364f2b8936a534aa1c3440b31a2c76610d147672",
     "tests/cod/language/pool-typed.cod": "be349e069422a19967b247d78c1218b4f1cd703767925a460a4539e284f5232e",
     "tests/cod/language/pool-units.cod": "7e98a99907eb5a1d546055ecdac548d129c3cafc17c8c5352179ed21388473c3",
-    "cod/lang_frontend.hh": "c365171456a0014396274ac14eaf4d43340cd28eeddfa3f48b4181dd2631c4ae",
+    "cod/lang_syntax.hh": "3f7d14866a37d0efa1c0d792f32587e68e303dba6a742dd762145cd857825fd1",
+    "cod/lang_frontend.hh": "124766b46e2a1b493d90ac3cd58133d3d8e18fbbebdef07f3bc45c38c9a18af4",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
-    "tests/cod/language/gather_benchmark.py": "2107996b99219d3565924590c24d3e2868b734aaedb70c03357b5a8022e77c83"
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
+    "tests/cod/language/gather_benchmark.py": "e619c61cba78c9c4113a71a603bb7a718fd368731ef9d4d090334ae116ab91f3"
   }
 }

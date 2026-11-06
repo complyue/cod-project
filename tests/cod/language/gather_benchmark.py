@@ -115,7 +115,9 @@ def main():
                     'source_sha256': {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
                                       for p in [*sorted(directory.glob('region-gather*.cod')),
                                                 *sorted(directory.glob('pool-*.cod')),
-                                                root / 'cod/lang_frontend.hh', root / 'cod/lang_llvm.hh', root / 'cod/lang_native_runtime.hh',
+                                                root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh',
+                                                root / 'cod/lang_llvm.hh', root / 'cod/lang_native_runtime.hh',
+                                                root / 'include/shilos/region.hh',
                                                 Path(__file__).resolve()]}}
         if report := os.environ.get('COD_GATHER_REPORT'):
             Path(report).write_text(json.dumps(evidence, indent=2) + '\n')

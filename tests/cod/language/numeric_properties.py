@@ -83,8 +83,9 @@ def main():
                               'Includes signed zero, subnormals, precision-boundary values and large unsigned integers.',
                               'This validates arithmetic and regional input access, not a neural model.'],
                     'source_sha256': {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
-                                      for p in [root / 'cod/lang_frontend.hh',
+                                      for p in [root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh',
                                                 root / 'cod/lang_llvm.hh', root / 'cod/lang_native_runtime.hh',
+                                                root / 'include/shilos/region.hh',
                                                 Path(__file__).resolve()]}}
         if report := os.environ.get('COD_NUMERIC_REPORT'):
             Path(report).write_text(json.dumps(evidence, indent=2) + '\n')
