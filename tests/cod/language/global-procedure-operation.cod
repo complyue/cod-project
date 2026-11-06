@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+array Values[u32]::i64;
+symbol @arena;
+symbol @values;
+effect @arena = region(128u64);
+effect @values = alloc @arena Values(1u64, 0);
+behave @print(99);
+global result::i64 = store(@values, 0u32, 7);

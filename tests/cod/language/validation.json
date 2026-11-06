@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T07:10:06.995874+00:00",
+  "recorded_utc": "2026-11-06T07:25:56.626106+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
-  "passed": 128,
-  "total": 128,
+  "passed": 129,
+  "total": 129,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -176,6 +176,24 @@
       "exit_code": 0,
       "stdout": "888\n40\n",
       "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "global-procedure-operation.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/global-procedure-operation.cod"
+      ],
+      "expected": {
+        "file": "global-procedure-operation.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "a bits global initializer requires a pure function"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/global-procedure-operation.cod:8:22: a bits global initializer requires a pure function, not a procedure-only operation\n",
       "passed": true
     },
     {
@@ -2247,9 +2265,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-z5wmdxse/program.ll",
+        "/tmp/cod-language-check-fqlafme3/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-z5wmdxse/program.bc"
+        "/tmp/cod-language-check-fqlafme3/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2259,18 +2277,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "40d8eb3517b3b83d9d9ebf18daff280efb971235455c692a09738754c8c8200e"
+    "sha256": "b3e52c159c125a6fd7e81ca793d554fc41a4ef72ca93e1d61a16f7d8565bb92b"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "cb3d6e75278effad7a3684e09d2a1706e21d8bf5fe1ce3772f4e82ec95653b60",
-    "cod/lang_frontend.hh": "aade3787c9da7fd549080e2fc66c8a0efb3c560f12a5b8f32814c7f28b750f22",
+    "cod/lang_frontend.hh": "de419086998cc544f06caf647c96dc8a26b444e24684dc50bebd5e5eeca6e08c",
     "cod/lang_llvm.hh": "d0129f1e110f466baaaf0aeb127578684a9cc2c47285b8ad4424fbe71261f871",
     "cod/lang_native_runtime.hh": "ad3c23aade17ea145189d1771bf0e7875414e545a3b5b82d0834791894f9c6b6",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "89a935aeb0e3e4f1c02bd0785e923691dab10a3846ec1f5c49da7b2f582cdfa9",
+    "tests/cod/language/cases.json": "9c32c18de51a051c0bcc9d56b6d8168dcdc18018587f82686f39d500af2b8d14",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9fe173499374b9b891068e9163e44a90392fdeffd366a4bab0a98404a6c806a5",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2296,6 +2314,7 @@
     "tests/cod/language/fold-products.cod": "d68f0c7e1afaf2e6272dfa2ca98d06bf8b45fb4886965360c2b26dccd9ce4cca",
     "tests/cod/language/fold-type-error.cod": "f136f1482ab60c9b840a2a7f46453af9db12ea1e99dea449be8f1b40ba9b86d3",
     "tests/cod/language/function-resource.cod": "3869a9fca1bf84313df85a2825b0d9ffcc8ba6460dbac97085e6be0f03ab760f",
+    "tests/cod/language/global-procedure-operation.cod": "c36d2daf1a6e326423e29879fcbaea7f498b510db238f3f80a775560a43b8cae",
     "tests/cod/language/global-resource.cod": "694886af24edd9a94b35ec238bd37bc7785fbfa5be752d09bb2245c24c199c44",
     "tests/cod/language/identity-provider.cod": "94023cd5972927eb2b347f08b0bbacecd96326d8d2aef5a450ed793d34247eb6",
     "tests/cod/language/identity-restore.cod": "a70e45ae17c7ea21909ae5fb2dd6982c64f7348795daf51e489aaae652f95d06",

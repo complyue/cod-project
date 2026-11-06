@@ -13,6 +13,7 @@
 #include <map>
 #include <queue>
 #include <set>
+#include <string_view>
 
 namespace cod::language {
 
@@ -102,6 +103,12 @@ class Compiler {
   static void require_user_type_name(const std::string &name, const Location &at) {
     static const std::set<std::string> reserved{"i64", "u8", "u32", "u64", "f32", "f64", "bool", "void", "region", "ref"};
     if (reserved.contains(name)) fail(at, "reserved scalar type name '" + name + "'");
+  }
+  static std::string_view procedure_operation(std::string_view name) {
+    if (name == "region") return "create a region resource";
+    if (name == "used_bytes" || name == "capacity_bytes") return "inspect a region resource";
+    if (name == "store" || name == "setfield") return "modify regional storage";
+    return {};
   }
 
   static Type reference(Type target) {
@@ -821,12 +828,13 @@ class Compiler {
   Value call_expression(const Expression &expr, Module &module, Environment &env, Locals &locals,
                           bool pure) {
     using K = Expression::Kind;
+    const auto operation = procedure_operation(expr.text);
+    if (pure && !operation.empty()) fail(expr.at, "a function cannot " + std::string(operation));
     if (expr.children.size() == 2 && binary_precedence(expr.text) >= 0)
       return binary_expression(expr, module, env, locals, pure);
     if (expr.children.size() == 1 && (expr.text == "-" || expr.text == "!"))
       return unary_expression(expr, module, env, locals, pure);
     if (expr.text == "region") {
-      if (pure) fail(expr.at, "a function cannot create a region resource");
       const auto args = arguments(expr, module, env, locals, pure);
       if (args.size() != 1 || !integral(args[0].type)) fail(expr.at, "region requires an integer byte capacity");
       regional_runtime_ = true;
@@ -837,7 +845,6 @@ class Compiler {
       return {Type::region, owner, {}, nullptr, id};
     }
     if (expr.text == "used_bytes" || expr.text == "capacity_bytes") {
-      if (pure) fail(expr.at, "a function cannot inspect a region resource");
       const auto args = arguments(expr, module, env, locals, pure);
       if (args.size() != 1) fail(expr.at, "region size requires one resource");
       require(args[0].type, Type::region, expr.at);
@@ -861,7 +868,6 @@ class Compiler {
       return scalar(Type::uint64, ir_.array_length(region_pointer(args[0], expr.at), args[0].native));
     }
     if (expr.text == "store") {
-      if (pure) fail(expr.at, "a function cannot modify regional storage");
       const auto args = arguments(expr, module, env, locals, pure);
       if (args.size() == 2 && args[0].type.kind == Type::reference &&
           (numeric(*args[0].type.target) || *args[0].type.target == Type::boolean || args[0].type.target->kind == Type::unit)) {
@@ -878,7 +884,6 @@ class Compiler {
       return scalar(layout.element, ir_.array_store(region_pointer(args[0], expr.at), args[0].native, args[1].type, args[1].native, layout.element, args[2].native));
     }
     if (expr.text == "setfield") {
-      if (pure) fail(expr.at, "a function cannot modify regional storage");
       if (expr.children.size() != 3 || expr.children[1]->kind != K::name)
         fail(expr.at, "setfield requires a reference, field name and value");
       const auto object = expression(*expr.children[0], module, env, locals, pure);
@@ -1192,6 +1197,8 @@ class Compiler {
       }
       case Form::Kind::global: {
         if (module.functions.contains(form.name)) fail(form.at, "duplicate lexical name '" + form.name + "'");
+        if (form.body->kind == Expression::Kind::call && !procedure_operation(form.body->text).empty())
+          fail(form.body->at, "a bits global initializer requires a pure function, not a procedure-only operation");
         auto value = expression(*form.body, module, env, locals, false);
         if (value.region_id || value.type.kind == Type::reference || value.type == Type::region)
           fail(form.at, "module globals contain bits values, not regional resources or references");

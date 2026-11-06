@@ -51,6 +51,12 @@
     "stdout": "888\n40\n"
   },
   {
+    "file": "global-procedure-operation.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a bits global initializer requires a pure function"
+  },
+  {
     "file": "missing-capture.cod",
     "exit": 2,
     "stdout": "",
