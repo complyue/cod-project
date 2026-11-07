@@ -1,10 +1,10 @@
 # CoD Dynamic Bindings Vision and Implementation Tracker
 
-Design revision 1 · 2026-11-06
+Design revision 2 · 2026-11-06
 
 ## Design authority
 
-- **Registry and scope** [D-12](DesignAuthorityRegistry.md#d-12), revision 1, all sections. This is a vision and evidence tracker. The candidate value path and open designs are `pending-human`.
+- **Registry and scope** [D-12](DesignAuthorityRegistry.md#d-12), revision 2, all sections. This is a vision and evidence tracker. The candidate value path and open designs are `pending-human`. [K-293](DesignAuthorityRegistry.md#k-293) records the implementation-readiness review requested by H-165; its proposed Actor milestone is not an implementation contract.
 - **Value lineage** P-134 proposes that inspectable, typed execution context serves C-10’s explicit language semantics and the charter’s separation of program, execution instance and environment. P-135 depends on D-10 for binding, call and lifetime semantics. C-52/H-151 supplies the actor direction. [Charter](RegionalSemanticPlatformCharter.md) · [D-10](SymbolicDynamicScope.md)
 - **Human baseline** H-96–H-104 and H-113/H-114 cover nominal symbols, scoped effects, callable kinds, capture and whole-program binding checks. H-127/H-129/H-133 cover regional snapshot access and caller lifetimes. H-151/H-152 cover the actor direction, the `Mainbox<WorkPkg>` example and region holding and transfer as a design priority. [H-96](DesignAuthorityRegistry.md#h-96) · [H-127](DesignAuthorityRegistry.md#h-127) · [H-151](DesignAuthorityRegistry.md#h-151) · [H-152](DesignAuthorityRegistry.md#h-152)
 - **Invariants and acceptance** Preserve symbol identity, restoration, function purity and regional lifetimes. Use native traces and rejection cases to track the synchronous prototype. Treat the actor type, isolation and region transfer cases below as acceptance targets for open design work. [K-278](DesignAuthorityRegistry.md#k-278)
@@ -13,13 +13,13 @@ Design revision 1 · 2026-11-06
 
 “Global Variables Done Right” is CoD’s vision for dynamically scoped execution context. At the language level, a symbol such as `@gain` works like a named register. Its identity is fixed, and its value comes from the active execution context. `effect @gain = value` installs a scoped binding and yields the value. Leaving that scope restores the prior binding. Procedures can use these registers across calls, while pure functions compute from explicit inputs and lexical constants. [Symbol identity and bindings](SymbolicDynamicScope.md#symbol-identity-variable-identity-and-compiled-location) · [Callable kinds](SymbolicDynamicScope.md#functions-and-procedures)
 
-`perform` uses the selected procedure’s captured bindings. `behave` runs it with the current bindings. If a reader is defined with `@gain = 1` and the caller later binds `@gain = 7`, `perform` reads `1` and `behave` reads `7`. Both leave the caller’s binding at `7`. A regional reference capture preserves the reference and its owning region. Later reads see the referent’s current contents, and writes through it survive binding restoration. [Capture semantics](SymbolicDynamicScope.md#captured-values-and-call-behavior) · [Regional lifetimes](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime)
+`perform` uses the selected procedure’s captured bindings. `behave` runs it with the current bindings. If a reader is defined with `@gain = 1` and the caller later binds `@gain = 7`, `perform` reads `1` and `behave` reads `7`. Both leave the caller’s binding at `7`. A regional reference capture preserves the reference value and its owner association; it neither freezes the referent nor extends the region’s lifetime. Later reads see the referent’s current contents, and writes through it survive binding restoration. [Capture semantics](SymbolicDynamicScope.md#captured-values-and-call-behavior) · [Regional lifetimes](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime)
 
 This gives user programs an ISA-like way to design execution protocols. In the supported whole-program model, CoD resolves the selected callee and checks the required bindings, types and live regional references along the demanded call paths. The program defines what those values mean and what sequence of operations is valid for the domain. For example, a simulation step can bind its source and destination frame references. The program is responsible for reading frame A, writing frame B and swapping their roles only after the update completes. [Whole-program checking](SymbolicDynamicScope.md#call-path-binding-checks) · [Application validation plan](../applications/steady-snn/docs/LanguageCoDesign.md)
 
 ## Synchronous implementation
 
-The current prototype lowers known calls directly to LLVM. Typed thread-local slots carry active runtime effect values. The compiler specializes procedure identities and regional owners along known paths. These are implementation choices for the synchronous entry model. [Frontend](../cod/lang_frontend.hh) · [LLVM lowering](../cod/lang_llvm.hh) · [Prototype reference](../tests/cod/language/README.md)
+The current prototype lowers known calls directly to LLVM. Typed thread-local slots support scoped effect writes, while WPO retains captured bindings as native values along demanded paths. Procedure identities and regional owners are compiler metadata. These mechanisms serve synchronous entry execution; they do not provide suspended Actor execution state or runtime procedure closures. [Frontend](../cod/lang_frontend.hh) · [LLVM lowering](../cod/lang_llvm.hh) · [Prototype reference](../tests/cod/language/README.md)
 
 | Contract | Recorded native evidence |
 | --- | --- |
@@ -29,7 +29,7 @@ The current prototype lowers known calls directly to LLVM. Typed thread-local sl
 | Pure functions and regional lifetimes | Functions reject ambient effects. Regional captures observe referent writes, and calls requiring expired regions are rejected. [Purity rejection](../tests/cod/language/impure-function.cod) · [Regional capture](../tests/cod/language/region-capture.cod) · [Expired capture rejection](../tests/cod/language/region-module-perform.cod) |
 | Specialization across deep paths | The recorded stress suite includes 1,000 procedure specializations and a 96-module regional chain with procedure redefinition. [Composition evidence](../tests/cod/language/stress-validation.json) |
 
-The recorded language run on 2026-11-06 passed 134 of 134 checks. The evidence files retain their own source hashes, traces and recording times. Update this tracker when the supported boundary, a relevant failure or its acceptance evidence changes. [Language validation](../tests/cod/language/validation.json) · [Regional layout and relocation](../tests/cod/language/regional-validation.json)
+The current language acceptance record passes 140 of 140 checks and the composition record passes five cases, with source hashes recorded in [assignment-validation.json](../tests/cod/language/assignment-validation.json). These are synchronous-language results, not Actor acceptance. The regional evidence retains its own earlier inputs and run scope. [Language validation](../tests/cod/language/validation.json) · [Regional layout and relocation](../tests/cod/language/regional-validation.json)
 
 ## Actor direction and region holding
 
@@ -40,3 +40,39 @@ The recorded language run on 2026-11-06 passed 134 of 134 checks. The evidence f
 | Process and mailbox semantics | Deliver a supported payload, reject an incompatible payload and demonstrate independent dynamic bindings in two processes. |
 | Region holding and transfer | Specify legal holders and references at each delivery stage and account for rejected and abandoned deliveries. An exclusive handoff must preserve graph sharing, reject stale sender access and allow receipt after the sender’s scope exits. |
 | Work package interpretation | Define how a user-specified root selects an admitted protocol and how the receiver provides its effects. Exercise the same work package with two receiver contexts. |
+
+## Actor implementation readiness
+
+The source review at `2bac3b9` finds reusable regional allocation, nominal payload types, typed effect bindings, pure input traversal and direct LLVM lowering. It finds no Actor process, mailbox, send/receive or scheduler implementation in the CoD frontend/runtime. The following gaps determine the work; adding a queue alone would not close them.
+
+| Existing boundary | Consequence for an Actor increment |
+| --- | --- |
+| `Type` and `Form` in `lang_syntax.hh` have no process/mailbox forms. | `Mainbox<WorkPkg>` is an illustrative design spelling. A built-in mailbox type constructor could provide the required payload parameter without first implementing a general GADT/generics system; that is a proposal. |
+| `Compiler::Region` records a native owner and a scope-active flag; `close_regions` ends lexical lifetimes. `LLVMEmission::restore` frees regions at scope exit. | Queued delivery requires holding the region beyond the sender’s scope, cancelling the sender’s cleanup after successful handoff and rejecting stale access through every alias/capture. Conditional send outcomes need control-flow-aware ownership treatment. |
+| `Procedure::captures` is compiler metadata; demanded bodies are inlined. LLVM emission currently starts in one `main` entry. | An asynchronously invoked receiver needs a checked entry boundary. WPO can check a statically selected receiver body with its declared inputs/effects without knowing the runtime message order. Existing synchronous inlining does not itself supply that boundary. |
+| Effect storage uses native TLS. | Two Actors sharing a worker do not automatically get separate effect contexts. A receiver entry must establish its own context and restore the worker’s previous context; suspending inside a handler would require preserving additional state. |
+| `cod_lang_fail` exits the native program with status 70. | Actor-local failure, supervision and recovery are not present. The first milestone must state its error boundary rather than imply that one failed handler leaves other Actors running. |
+
+### Proposed first executable milestone
+
+The smallest useful candidate is two logical Actors in one native process, driven by one worker, with queued delivery and handlers that run to completion. This exercises asynchronous delivery without requiring mid-handler suspension, worker migration or a general runtime closure representation. A language process is not thereby defined to be an OS process or a permanently assigned native thread.
+
+Use one declared regional work-package protocol, with receiver handlers known to WPO. The mailbox carries the graph and its typed entry reference; the receiving handler supplies the dynamic bindings. Merely placing a sender procedure value in a queue cannot transfer the compiler’s captured environment or its region lifetimes. A runtime envelope can hold system bookkeeping separately from the regional payload; this is not permission to add physical cross-region pointers to user records. Concrete syntax and envelope layout remain open.
+
+Exclusive whole-region handoff is the recommended first ownership candidate because it preserves internal graph sharing without concurrent mutation by a sender. It can reuse the existing offset encoding and allocator pairing. In one address space, moving a system owner need not move any payload bytes. Wire transport remains a separate packet/ABI task; zero pointer repair does not mean zero transport cost. The [holding analysis](GraphGrainedMemoryManagement.md#actor-holding-and-transfer-review) defines the candidate’s lifecycle and alternatives.
+
+With exclusive access and serial handlers, a pure function can continue using the existing nested-call snapshot rule: another Actor cannot mutate the transferred graph during that call. Allowing shared mutable regional inputs would reopen that premise and needs a separate contract.
+
+### Work that can proceed and decisions before implementation
+
+The code map, dependency analysis, candidate lifecycle traces and a lean acceptance specification can be completed autonomously under H-165. Reproduced defects within the confirmed synchronous contract can be repaired within existing authorization. The review has not established an independent synchronous defect that warrants speculative refactoring. Production Actor syntax, ownership transitions and delivery defaults require a bounded confirmed contract under `AGENTS.md`.
+
+| Decision | Recommended initial scope | Material alternative |
+| --- | --- | --- |
+| Region handoff and rejection | Exclusive transfer on successful admission; a rejected send leaves the sender responsible and able to retry. Reads/writes through old aliases are forbidden after successful transfer. | Always consume at the send attempt and return a new owner on rejection; or support copying/shared immutable mail. Each changes caller control flow or lifetime rules. |
+| Execution and dynamic context | One worker; one handler completes before another starts; receiver-selected handlers and bindings; no ambient sender-context inheritance. | Suspension within a handler or transferred procedure captures require state materialization and additional lifetime rules. |
+| Delivery and shutdown | Nonblocking admission to a bounded FIFO mailbox; explicit rejection when full/closed; closed-mailbox pending regions are released by their current holder. Fatal runtime errors retain the whole-process boundary for the first milestone. | Blocking send, draining on close or Actor-local recovery changes scheduling, backpressure or recovery obligations. |
+
+These are proposals to review together, not selected semantics. Configurable queue capacity is a resource parameter; FIFO order, failure results, cleanup responsibility and context inheritance are observable contracts. A minimal type/syntax proposal must make those contracts expressible before implementation, including the success/rejection ownership split. The intended value paths remain P-131/P-132/P-134, with P-133/P-135 and the confirmed C-53 graph boundary as dependencies/constraints.
+
+After those choices are confirmed, a bounded implementation can cover typed mailbox construction, enqueue/dequeue, receiver entry lowering, dynamic-context installation and region transfer/release, followed by native validation. The acceptance trace should send a shared/cyclic graph, end the sender scope before receipt, run the same protocol under two receiver bindings, and account for one release. A rejection trace should cover full/closed admission and retry or disposal. Static rejection cases should cover a wrong payload type and stale aliases/captures, including conditional paths. These few scenarios cover the central contracts without a test-count target. Parallel workers, cross-process/network transport, supervision, persistence and arbitrary suspended computations are later increments. No SNN dynamics or learning changes are required.

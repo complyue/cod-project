@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：293
+记录版本：294
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -143,7 +143,7 @@ Design authority
 | C-49 | UoMs are independently named compile-time entities with first-class type identities and identity-preserving local aliases; symbols do not represent them. | C-10; P-119 value candidate, P-120 constraint | H-128 confirms fresh same-name definitions may differ across modules and local renaming preserves selection. D-11r4; derived-unit equality, conversions, encoding and operator calculus remain open. H-134 specifies fresh definition and one-shot using selections with associated conversions, forbids repeated using and excludes conversions involving omitted units. It supersedes H-130 only on UoM definition import; pure formulas/dispatch remain. H-132 plans compound units for future physical quantities and defers their initial implementation. |
 | C-50 | Pure UoM/index conversion functions use Julia-style argument-type method dispatch to associate operations with array types. | C-10; P-121 candidate value path, P-122 dependency, P-123 constraint | H-130 confirms this syntax/dispatch direction and effect exclusion. D-11r4; H-135–H-138 specify parameter-controlled conversion, discovered routes, warning/error policy and direct-before-declared-indirect preference; general generic syntax/method specificity remain open. H-131 adds parenthesized operator-method naming; detailed eager/control/indexing elaboration remains proposed. |
 | C-51 | Parameter-declared UoM conversion acceptance and compile-time route selection: exact or convertible targets, source route preference and configurable ambiguity warnings. | C-50; P-124 value candidate, P-125 dependency, P-126–P-128 constraints | H-135 permits `m*` versus exact `m`; H-136 requires unique-path selection or warning with warnings-as-errors; H-137/H-138 require source-declared indirect paths after direct conversion preference. H-148/P-128 requires per-argument conversion before later argument effects. D-11r10. |
-| C-52 | Actor model concurrency with processes, mailboxes and a type parameter for the mail payload. | §3.2、§4.1、§6.1；P-131/P-132 candidate value paths, P-133 regional transfer dependency | H-151 confirms the direction in D-10r22. H-152 supplies the `Mainbox<WorkPkg>` example and prioritizes region holding and transfer in D-10r23. The detailed contracts remain open. |
+| C-52 | Actor model concurrency with processes, mailboxes and a type parameter for the mail payload. | §3.2、§4.1、§6.1；P-131/P-132 candidate value paths, P-133 regional transfer dependency | H-151 confirms the direction in D-10r22. H-152 supplies the `Mainbox<WorkPkg>` example and prioritizes region holding and transfer in D-10r23. The detailed contracts remain open. H-165/K-293 map the source boundaries and proposed execution/holding milestone in D-12r2/D-13r2; no Actor implementation is qualified. |
 | C-53 | One region per graph of objects connected by direct pointers. Each CoD pointer edge stays inside its region. | H-156/H-157 and P-140; related candidate value paths P-138/P-139 | Confirmed local graph boundary in D-13r1, D-10r25 and D-07r26. Construction, holding and transfer remain open. |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
 | GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
@@ -186,7 +186,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 293，延续检查 K-01—K-292；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
+- 当前记录维护范围：记录版本 294，延续检查 K-01—K-293；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；AGENTS 内容不变。
 
 ### 待补确认的现有技术设计
 
@@ -287,18 +287,18 @@ Design authority
 <a id="d-12"></a>
 ### D-12: CoD dynamic bindings vision and implementation tracker
 
-- **Contract/status:** [GlobalVariablesDoneRight.md](GlobalVariablesDoneRight.md), revision 1, all sections. H-152 requests the vision and tracker. The document records the implemented subset and design gaps. Its candidate value path and open designs remain `pending-human`.
-- **Lineage and dependency:** P-134 connects inspectable execution context to C-10 and the charter’s separation of program, execution and interpretation. P-135 depends on D-10r23 for the binding, lifetime and actor scope. H-96–H-104, H-113/H-114, H-127/H-129/H-133 and H-151/H-152 retain their recorded local scopes.
-- **Invariants and acceptance:** preserve nominal identity, scope restoration, purity and regional lifetime checks. Link native execution and rejection evidence to the synchronous subset. Track typed process/mailbox semantics, region holding/transfer and work-package interpretation as pending design and acceptance targets. K-278 records the scope and current evidence.
+- **Contract/status:** [GlobalVariablesDoneRight.md](GlobalVariablesDoneRight.md), revision 2, all sections. H-152 requests the vision and tracker. The document records the implemented subset and design gaps. Its candidate value path and open designs remain `pending-human`.
+- **Lineage and dependency:** P-134 connects inspectable execution context to C-10 and the charter’s separation of program, execution and interpretation. P-135 depends on D-10r34 for the current binding, lifetime and actor scope. H-96–H-104, H-113/H-114, H-127/H-129/H-133 and H-151/H-152 retain their recorded local scopes.
+- **Invariants and acceptance:** preserve nominal identity, scope restoration, purity and regional lifetime checks. Link native execution and rejection evidence to the synchronous subset. Track typed process/mailbox semantics, region holding/transfer and work-package interpretation as pending design and acceptance targets. K-278 records the initial scope/evidence. H-165/K-293 add the source-backed implementation-readiness review, candidate first milestone and explicit decision gates. No Actor implementation contract is qualified.
 
 <a id="d-13"></a>
 ### D-13: CoD regional memory vision and implementation tracker
 
-- **Contract/status:** [GraphGrainedMemoryManagement.md](GraphGrainedMemoryManagement.md), revision 1, all sections. H-156/H-157 confirm the graph boundary and request a draft. The complete design and candidate value paths remain `pending-human`.
+- **Contract/status:** [GraphGrainedMemoryManagement.md](GraphGrainedMemoryManagement.md), revision 2, all sections. H-156/H-157 confirm the graph boundary and request a draft. The complete design and candidate value paths remain `pending-human`.
 - **Lineage and dependencies:** P-138/P-139 propose value through C-01/C-05. P-140 records the confirmed C-53 constraint on C-40. P-141/P-142 record D-01 and D-10 dependencies. Charter §§2–4 and 7 distinguish storage, business identity, resolved addresses and whole-image relocation.
-- **Invariants and acceptance:** preserve region-local pointer edges, region-scoped lifetime and whole-image relocation. Track bounded native evidence and distinguish the open construction, logical identity and transfer acceptance targets. K-280 records coverage and affected contracts.
+- **Invariants and acceptance:** preserve region-local pointer edges, region-scoped lifetime and whole-image relocation. Track bounded native evidence and distinguish the open construction, logical identity and transfer acceptance targets. K-280 records the initial coverage and affected contracts. H-165/K-293 add the proposed exclusive-handoff lifecycle, alias/capture invalidation and conditional-admission cases; holding and transfer remain pending-human.
 
-The following relations apply at the scopes recorded in each row and the current D-07 revision26, D-08 set213, D-09 revision2, D-10 revision25, D-11 revision11, D-12 revision1 and D-13 revision1 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104/P-140 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
+The following relations apply at the scopes recorded in each row and the current D-07 revision28, D-08 set213, D-09 revision2, D-10 revision34, D-11 revision13, D-12 revision2 and D-13 revision2 coverage. P-31 remains rejected. P-69/P-70/P-83 retain their confirmed H-94 local scope; P-89/P-95/P-98/P-102/P-104/P-140 record explicit human constraints only. Other proposed value paths/dependencies remain pending-human. Formal dependency edges never confer design authority.
 
 | 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
 | --- | --- | --- | --- |
@@ -432,15 +432,15 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-132 | C-52 derives-from | C-02 | Candidate, D-10r22 actor section: receiver-selected handlers let the same task protocol operate in different execution environments. Charter §6.1. Formal edge `pending-human`. |
 | P-133 | C-52 depends-on | C-39 | Candidate regional-mail scope, D-10r22 actor section: delivery and disposal must preserve lifetimes, relocation and region-only allocation, including when a sender has reachable references. Charter §§2 and 4.1/4.3 and D-01 representation constraints. Transfer rules `pending-human`. |
 | P-134 | D-12 derives-from | C-10 | Candidate, D-12r1: the register analogy and native evidence connect explicit typed execution context to inspectable language behavior and the charter’s separation of program, execution and environment in §§1, 3.2 and 6.1. Formal edge `pending-human`. |
-| P-135 | D-12 depends-on | D-10 | D-12r1 tracks D-10r23’s binding, call, storage and actor scope. Changes to those contracts or their evidence require review of the corresponding tracker entries. Dependency recorded as `pending-human`. |
+| P-135 | D-12 depends-on | D-10 | D-12r2 tracks D-10r34’s binding, call, storage and actor scope. K-293 maps the synchronous implementation to pending Actor entry/context requirements. Changes to those contracts or their evidence require review of the corresponding tracker entries. Dependency recorded as `pending-human`. |
 
 | P-136 | C-41 constrains | C-37 | H-153 local confirmed direction: reserve keywords against ordinary names and use parenthesized intrinsic operation names for overload declarations. D-10r24; precise keyword inventory and broader control-form overloading remain open. |
 | P-137 | C-37 constrains | C-41 | H-154/H-155 local confirmed scope: effectful operation overloads use procedures; one operation may contain function and procedure overloads distinguished by parameter types. Function purity and pure conversion formulas remain. D-10r26/H-158 keeps compiler operation representation separate from CoD symbols; H-159 selects current-binding invocation. Broader binding-set and syntax extensions remain pending. |
 | P-138 | D-13 derives-from | C-01 | Candidate, D-13r1: a graph’s direct edges stay with its region and its business associations remain explicit across lifetime and relocation boundaries. Charter §§2–4. Formal edge `pending-human`. |
 | P-139 | D-13 derives-from | C-05 | Candidate, D-13r1: whole-image relocation preserves internal edges and supports structured, efficient reload. Charter §7.1. Formal edge `pending-human`. |
 | P-140 | C-53 constrains | C-40 | Confirmed local H-156/H-157 scope: one direct-pointer graph per region, with logical business associations across regions. D-13r1, D-10r25 and D-07r26. Business resolution and storage transfer protocols remain open. |
-| P-141 | D-13 depends-on | D-01 | D-13r1 tracks the regional representation, allocator symmetry and lifetime constraints of D-01. Dependency `pending-human`. |
-| P-142 | D-13 depends-on | D-10 | D-13r1 uses D-10r25’s language-level lifetime and Actor model scope for references, captures and region holding and transfer. Dependency `pending-human`. |
+| P-141 | D-13 depends-on | D-01 | D-13r2 tracks the regional representation, allocator symmetry and lifetime constraints of D-01. Dependency `pending-human`. |
+| P-142 | D-13 depends-on | D-10 | D-13r2 uses D-10r34’s language-level lifetime and Actor model scope for references, captures and region holding and transfer; K-293 adds candidate lifecycle obligations without selecting a transfer mechanism. Dependency `pending-human`. |
 
 ### 影响检索索引
 
@@ -2407,6 +2407,16 @@ Human/source: the same user's subsequent clarification in the same chat. Recorde
 > 用 ([]=)(array,index,value) 作为数组元素 overload 名
 
 Scope: names the indexed-assignment family `([]=)` with the H-163 operand tuple. It is separate from `(=)` and `(store)`; the earlier generic assignment-family choice does not make indexed assignment an alias of either. It does not select record-field selector types, indexing-read overloads or a new regional pointer representation.
+
+### H-165 — Publish the documentation and assess autonomous Actor progress
+
+<a id="h-165"></a>
+
+Human/source: the user in the current CoD project chat, without an independently verified name. Recorded 2026-11-07 UTC; client date 2026-11-06 (America/Los_Angeles). Exact source-message timestamp unavailable; the statement below is transcribed from the current request.
+
+> 提交推送。 然后看看Actor model方面的设计，你能自主推进到什么程度
+
+Scope: authorizes committing/pushing the remaining documentation and reviewing the Actor design to assess autonomous progress. It does not choose exclusive/shared/copied delivery, ownership on rejection, scheduling, context inheritance, mailbox shutdown, source syntax or a new timed goal. D-12r2/D-13r2 and K-293 record the assessment as pending proposals under the existing H-151/H-152/H-156/H-157 constraints.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -5517,3 +5527,13 @@ Scope: names the indexed-assignment family `([]=)` with the H-163 operand tuple.
 - Agent evidence/editorial assessment under H-161–H-164 with H-143–H-145. Registry292 →293; D-07r27 →28 (DD-057/DD-058), D-10r33 →34, D-11r12 →13, prototype reference63 →64. Charter §§1/3/6/10/14 and candidate value/dependency paths remain unchanged. This records explicit user choices, their existing callable/index constraints and current evidence; it adds no new language policy. D-GOV293 maintenance continues H-05; complete product designs remain pending-human.
 - Exactly `cmake --build ./build` succeeds. The source corpus passes140/140 and all five composition families pass with the current source hashes. The existing mixed-operation fixture checks explicit/infix indexed calls, current/captured dynamic bindings, persistent writes, a pure container-result method and once-only argument order. Two new permanent rejection cases cover reserved module declarations and a failing index conversion before RHS effects. Three compact focused checks confirm reserved unit aliases, assignment purity and nominal index mismatch. `tests/cod/language/assignment-validation.json` records these results and the current compiler hash; previous numeric/regional/gather/work-period evidence keeps its own timestamps/inputs and is not relabeled fresh.
 - The final contract distinguishes `(=)`, `([]=)` and `(store)`. Visible methods supply the new operation behavior; a body may call existing regional writes explicitly. No new lvalue object, field-selector type, physical pointer representation, hidden heap carrier, native assignment default, bootstrap/toolchain change or SNN model is selected. Bare symbolic rebinding still requires `effect`; record-field assignment remains a separate design item. Interleaved actor/graph-region drafts are preserved.
+
+<a id="k-293"></a>
+
+### K-293 — 2026-11-07: Assess Actor implementation readiness and region holding
+
+- Agent source/design review under H-165. Registry293 →294; D-12r1 →2 and D-13r1 →2. Reviewed charter §§1–4, 6.1–6.2, 7.1 and 14, D-10r34, D-01 lifetime/allocator protocols, C-52/C-53, H-151/H-152/H-156/H-157 and P-131–P-135/P-138–P-142. Candidate value paths remain inspectable typed intent, receiver-specific interpretation and whole-region lifetime/relocation. These scopes were not qualified baselines, so the review does not manufacture continued product authority. D-GOV294 record maintenance alone continues H-05. Human events and K-00–K-292 remain append-only.
+- Published the previously interleaved design records and the two vision trackers as `2bac3b9` on main before the Actor review. The source at that revision has nominal regional types, synchronous LLVM lowering and scope cleanup, but no process/mailbox/send/receive implementation. `Compiler::Region`, `close_regions` and `LLVMEmission::restore` establish the lexical owner/cleanup boundary; `Procedure::captures` remains compiler metadata; TLS slots do not supply independent Actor contexts; the native runtime failure path exits the whole program. These observations are source evidence, not runtime Actor acceptance.
+- D-12r2 proposes a small first milestone: two logical Actors, one worker, typed queued regional mail, WPO-known receiver entries and handlers that run to completion. The decision table explicitly leaves exclusive handoff/rejection behavior, execution/context rules and admission/shutdown/failure rules for human confirmation. D-13r2 distinguishes holding from access, lays out the candidate send/queue/receipt/disposal responsibilities and examines aliases, capture/effect restoration, conditional admission and later return of an allocation. It selects no owner-state representation, generation counter, borrow syntax, field layout, queue algorithm or new cross-region pointer facility.
+- The plan separates autonomous code mapping, draft lifecycle/acceptance work and repairs within already confirmed contracts from production Actor semantics. It does not restart H-147 or authorize bootstrap changes. The receiver entry is a WPO checking boundary, not an exemption from type/effect checks. Pure snapshots retain their existing premise only when the chosen access model excludes concurrent mutation. No general runtime closure, transport, persistence, supervision or SNN modeling increment is implied.
+- D-12r2 also clarifies that a captured regional reference does not retain its region, distinguishes TLS writes from captured native values, and links the actual 140-source/five-composition evidence from the prior syntax increment. The relation-table coverage preamble is aligned with the already indexed D-07/D-10/D-11 revisions and new D-12/D-13 revisions. No fresh code build, test suite or Actor experiment was run; checks cover document links, scope/status consistency, preserved decision history and whitespace. D-10 and other product contracts retain their revisions and qualification; no qualified Actor descendant exists to invalidate.

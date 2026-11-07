@@ -1,10 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 1 · 2026-11-06
+Design revision 2 · 2026-11-06
 
 ## Design authority
 
-- **Registry and scope** [D-13](DesignAuthorityRegistry.md#d-13), revision 1, all sections. The local graph boundary is confirmed. The full design and candidate value paths are `pending-human`.
+- **Registry and scope** [D-13](DesignAuthorityRegistry.md#d-13), revision 2, all sections. The local graph boundary is confirmed. The full design and candidate value paths are `pending-human`. [K-293](DesignAuthorityRegistry.md#k-293) records the holding/transfer review requested by H-165; its exclusive-handoff lifecycle is a proposal.
 - **Value lineage** P-138/P-139 propose that region-grained storage serves inspectable regional graphs (C-01) and efficient structured semantic units (C-05). P-140 records the confirmed language constraint on C-40. P-141/P-142 record dependencies on the regional representation and language contracts. [Charter](RegionalSemanticPlatformCharter.md) · [Regional types](MemoryRegionAndRegionalTypes.md) · [Language design](SymbolicDynamicScope.md)
 - **Human baseline** H-99/H-100 govern user storage and captures. H-156 defines one direct-pointer graph per region. H-157 restricts inter-region relationships to the business level. H-151/H-152 supply the Actor model direction and make region holding and transfer a design priority. [Graph and language decisions](DesignAuthorityRegistry.md#h-156) · [Actor decisions](DesignAuthorityRegistry.md#h-151)
 - **Invariants and acceptance** Keep every CoD pointer edge within its region and preserve whole-region lifetime and relocation. Track native evidence separately from the open construction, holding and transfer rules. [K-280](DesignAuthorityRegistry.md#k-280)
@@ -40,3 +40,25 @@ The current encoding has an accepted temporary limitation. Assigning an object t
 | Region holding and transfer | Define who can access and release a region during construction, send, queueing, receipt and disposal. For exclusive handoff, check that the sender’s aliases cannot be used after transfer, the receiver can consume the graph after the sender’s scope ends, and failed delivery has one release responsibility. |
 
 The [dynamic bindings tracker](GlobalVariablesDoneRight.md) follows the execution-context side of the same actor example. The two trackers meet at the mailbox, where the receiver supplies the bindings and the region contract governs the package’s storage.
+
+## Actor holding and transfer review
+
+**Holding keeps storage alive; access permission determines who may read or mutate it.** A captured reference is not a holder. The current CoD compiler associates each reference with a scoped region owner and rejects use after that owner’s lifetime; its captures do not extend lifetime. The host `auto_region` is movable, but that alone supplies neither CoD alias invalidation nor a successful/rejected-send rule. Moving the host owner is distinct from moving or copying any regional object.
+
+For the exclusive-handoff candidate, one region has one release responsibility at each stage. The table describes obligations, not a selected public API or an added runtime state field.
+
+| Stage | Holder and access under the candidate |
+| --- | --- |
+| Constructing | Sender holds the region and may access its graph through live references. The declared payload root must belong to this region. |
+| Admission rejected | Proposed rule: sender remains holder; its references remain usable. The mailbox has acquired no release responsibility. |
+| Admission accepted / queued | Mailbox/runtime holds the region; sender loses access through ordinary values, dynamic bindings and captures. Sender scope exit must not free it. |
+| Receiving | The receiver acquires holding and access. Queue removal must not release the payload before its handler finishes. |
+| Completed or abandoned | The current holder releases the region exactly once or explicitly transfers it again. Queue closure and rejected delivery are different stages and must not share an ambiguous cleanup rule. |
+
+Invalidation should be reasoned about for the region as a whole, since all direct pointer edges stay inside it under H-156/H-157. Revoking only the root variable leaves aliases to interior nodes usable. `perform` must not restore an old captured alias into validity; `effect` restoration must not resurrect sender access. If the same allocation later returns to the sender, address equality alone is insufficient to revalidate earlier references. A fresh receipt/access contract is needed; no generation counter, borrow syntax or runtime reference table is selected here.
+
+Conditional admission is a compiler-design case, not just a queue return code. If a send succeeds only on one branch, the later join cannot unconditionally treat the sender as still owning the graph. Rejection that preserves the owner and rejection that returns a new owner have different source and checking consequences. Loops and forwarding must also account for which region remains held. These examples belong in the ownership contract before changing `Compiler::Region`, cleanup emission or accepted reference programs.
+
+Physical relocation remains independent of holding transfer. Same-address-space handoff can pass a system owner and the root’s region-relative location without repairing internal edges. Copying an entire supported image can preserve its offsets but costs bytes and creates another lifetime; read-only sharing requires a shared lifetime and a stable-content rule. Neither copying nor sharing is implicitly included in exclusive transfer. A queue’s system envelope is not a user regional object and does not create a language-level cross-region pointer permission.
+
+The proposed first milestone and decision table are in [Actor implementation readiness](GlobalVariablesDoneRight.md#actor-implementation-readiness). Existing allocator symmetry, region-only allocation, pointer encoding and H-146’s temporary first-field self-reference limitation remain unchanged. No actor ownership extension has been implemented or validated by the synchronous relocation evidence.
