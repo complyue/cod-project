@@ -133,7 +133,7 @@ class Compiler {
   static void require_user_type_name(const std::string &name, const Location &at) {
     static const std::set<std::string> reserved{"i64", "u8", "u32", "u64", "f32", "f64", "bool", "void", "region", "ref"};
     if (reserved.contains(name)) fail(at, "reserved scalar type name '" + name + "'");
-    if (intrinsic_name(name) || expression_keyword(name))
+    if (intrinsic_name(name) || expression_keyword(name) || module_keyword(name))
       fail(at, "reserved keyword '" + name + "' cannot be used as an ordinary name");
   }
   static std::string_view procedure_operation(std::string_view name) {
@@ -942,7 +942,11 @@ class Compiler {
         fail(expr.at, "scalar requires one UoM value");
       return {args[0].type.representation, args[0].native, {}, nullptr};
     }
-    if (function == module.methods.end()) fail(expr.at, "unavailable lexical function '" + expr.text + "'");
+    if (function == module.methods.end()) {
+      if (expr.text == "=" || expr.text == "[]=")
+        fail(expr.at, "unavailable operation overload '(" + expr.text + ")'");
+      fail(expr.at, "unavailable lexical function '" + expr.text + "'");
+    }
     const auto &args = values();
     auto selected = method(expr.text, module, args, expr.at);
     if (!selected && function->second.size() == 1) {
@@ -1132,7 +1136,7 @@ class Compiler {
     if (alias == "setfield")
       fail(at, "setfield overloads need a compile-time field-selector contract; outside this prototype");
     if (function.form->kind == Form::Kind::procedure && !intrinsic_name(alias) &&
-        binary_precedence(alias) < 0 && alias != "!")
+        binary_precedence(alias) < 0 && alias != "!" && alias != "=" && alias != "[]=")
       fail(at, "a procedure overload requires an operator or intrinsic destination");
     if (!intrinsic_name(alias)) require_user_type_name(alias, at);
     if (module.types.contains(alias) || module.globals.contains(alias))

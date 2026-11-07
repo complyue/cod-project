@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-06T19:01:20.643256+00:00",
+  "recorded_utc": "2026-11-07T05:14:22.387465+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
-  "passed": 138,
-  "total": 138,
+  "passed": 140,
+  "total": 140,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -1041,11 +1041,32 @@
       "expected": {
         "file": "intrinsic-overloads.cod",
         "exit": 0,
-        "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n"
+        "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n4\n11\n12\n12\n24\n6\n11\n12\n22\n22\n101\n102\n103\n32\n32\n"
       },
       "exit_code": 0,
-      "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n",
+      "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n4\n11\n12\n12\n24\n6\n11\n12\n22\n22\n101\n102\n103\n32\n32\n",
       "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "indexed-assignment-order.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/indexed-assignment-order.cod"
+      ],
+      "expected": {
+        "file": "indexed-assignment-order.cod",
+        "exit": 70,
+        "stdout": "11\n22\n",
+        "stderr_contains": [
+          "indexed-assignment-order.cod:5:",
+          "division by zero"
+        ]
+      },
+      "exit_code": 70,
+      "stdout": "11\n22\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/indexed-assignment-order.cod:5:65: division by zero\n",
       "passed": true
     },
     {
@@ -1100,6 +1121,24 @@
       "exit_code": 2,
       "stdout": "",
       "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/intrinsic-reserved-name.cod:1:10: reserved keyword 'len' cannot be used as an ordinary name\n",
+      "passed": true
+    },
+    {
+      "fixture": "module-reserved-name.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-reserved-name.cod"
+      ],
+      "expected": {
+        "file": "module-reserved-name.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "reserved keyword 'type' cannot be used as an ordinary name"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/module-reserved-name.cod:3:10: reserved keyword 'type' cannot be used as an ordinary name\n",
       "passed": true
     },
     {
@@ -2464,9 +2503,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-znblg25y/program.ll",
+        "/tmp/cod-language-check-o_mh_ba8/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-znblg25y/program.bc"
+        "/tmp/cod-language-check-o_mh_ba8/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2476,18 +2515,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "2396107e627d885e668af1067555fa2c16900e961dc9397d7cb801f653019fd5"
+    "sha256": "2b13dd973f96c6481e8ea167e6c58b4f4d793109e2608227ba2f371a42a07c31"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
-    "cod/lang_syntax.hh": "4ba13797797ba94471badccd7a5ec514fc10615e8bcc3a99b6316d2fdd713e44",
-    "cod/lang_frontend.hh": "21024a501cbe45ef06151d6ab8f97423e40265dc544100597f162559196644d0",
+    "cod/lang_syntax.hh": "5340c3093130f6ec3907f335a4b1704d87d93cf809332f45aeb360a1a59d73c5",
+    "cod/lang_frontend.hh": "4369e9cd185b19b04b00892be5d782c34ff4177e77028e30f55ca33125a0501b",
     "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "4870e2fed1bd90be8d8254bdc65e99bfb6c519c79262cb875a5f0584c33b033e",
+    "tests/cod/language/cases.json": "af5b5cb1170c1d4372a1e0c72257284bc14a97b5a8499ccae5aad3ecd9be7816",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9d3f5f799775585e4e14c3161fbab6397dda6c8e2c474e06531994a899f91602",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2522,8 +2561,9 @@
     "tests/cod/language/import-mapping.cod": "0e80d08ae7e5b39210e25b3ffb569efba657b8a5026d343d7042d32c1cf6d349",
     "tests/cod/language/import.cod": "ca7a3d1627e417d87dc6727812807d5158822fc2131da30c96e27b15dee77858",
     "tests/cod/language/impure-function.cod": "f3b787ad0fb202623aa592f726fc5702f72594013aa262acf94430713ed5049b",
-    "tests/cod/language/intrinsic-library.cod": "d68bc75d7358041b08602f54998d919379a02d107210dd7097b027bb207a5043",
-    "tests/cod/language/intrinsic-overloads.cod": "04d33e1b243e782463f7d0c2cccbff54213392e48e3a4cee56470a9bb156e385",
+    "tests/cod/language/indexed-assignment-order.cod": "5dd250459da1224f20f0bbc62a7d183a9712f21e72c96b17dc17ca82a5709000",
+    "tests/cod/language/intrinsic-library.cod": "46ddcef2683fff561e5a31da35947154d8423019b553f3843ac076758d624e4f",
+    "tests/cod/language/intrinsic-overloads.cod": "42a4c084875a41b4f41cc4240721d3075cb75eb4817a688b8bc642330f6df045",
     "tests/cod/language/intrinsic-pure-error.cod": "08e9dc0862d1405c8db88e79e6c44d519a47d5a42f40a2eea493c9813bd81bf2",
     "tests/cod/language/intrinsic-reserved-name.cod": "9112140a1f4aba26a09bfc87cd3cabe7190feba7a3e4fddbb5ff93ffbf75c88e",
     "tests/cod/language/intrinsic-symbol-name.cod": "bd1c4b85009063784368c53cfb9efb606f2e8dd76cbc6a728551753aeab2b738",
@@ -2551,6 +2591,7 @@
     "tests/cod/language/missing-capture.cod": "98c668f838778e8bc8b652cee4bf12b652ac677f9d153eed64c2bffa90355e07",
     "tests/cod/language/missing-default-alias.cod": "6e9b09ddf5c872aac6b7c0ff04621d4df21dd2e895d4154d2df7394898e35d02",
     "tests/cod/language/module-diamond.cod": "d7c57a55265fb5c8050f8fbe8371670d8a958e4cf403252cd33fe8f8486aec25",
+    "tests/cod/language/module-reserved-name.cod": "02316589163a8e445363673f6f896aebf8e3dd1b6102e20e9f4301b9b6cc8e4a",
     "tests/cod/language/numeric-widths.cod": "93aa98656d33b26633e1e3c5b4961a19ed5a96bcf04b112de36c8711b712146e",
     "tests/cod/language/operator-control.cod": "f3ef905413996098ab7037d759a071969042fc07e7113102c13da474baa57257",
     "tests/cod/language/operator-library.cod": "3b94be253e5924fe2783b5292ce9031051e91f6ae6c7cbf4b194d91db7349e38",

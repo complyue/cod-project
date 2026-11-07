@@ -3,11 +3,23 @@ symbol @missing;
 symbol @raw_store;
 type Box { value::i64; }
 regional type Cell { value::i64; }
+unit Index::u32;
+array Scores[Index]::i64;
 function twice(value::i64)::i64 { value * 2 }
 function (len)(value::Box)::u64 { u64(value.value) }
 procedure (len)(value::i64)::u64 { u64(value + @bias) }
 procedure (len)(value::bool)::u64 { u64(@missing) }
 function (store)(value::Box, amount::i64)::Box { Box(value.value + amount) }
+function (=)(value::Box, amount::i64)::Box { Box(amount) }
+procedure (=)(cell::ref<Cell>, amount::i64)::i64 {
+  setfield(cell, value, amount + @bias)
+}
+function ([]=)(value::Box, index::Index, amount::i64)::Box {
+  Box(value.value + i64(scalar(index)) + amount)
+}
+procedure ([]=)(values::ref<Scores>, index::Index, amount::i64)::i64 {
+  store(values, index, amount + @bias)
+}
 procedure (store)(cell::ref<Cell>, amount::i64)::i64 {
   setfield(cell, value, twice(amount) + @bias)
 }

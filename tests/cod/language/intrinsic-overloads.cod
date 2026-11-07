@@ -5,6 +5,10 @@ using "intrinsic-library.cod" Cell as C;
 using "intrinsic-library.cod" (len);
 using "intrinsic-library.cod" (store);
 using "intrinsic-library.cod" (+);
+using "intrinsic-library.cod" (=);
+using units "intrinsic-library.cod" {Index};
+using "intrinsic-library.cod" Scores;
+using "intrinsic-library.cod" ([]=);
 function twice(value::i64)::i64 { value * 1000 }
 function pure(value::B)::B { store(value, 4) }
 global saved::B = store(B(5), 4);
@@ -18,8 +22,14 @@ effect @len = 99;
 effect @arena = region(4096u64);
 effect @values = alloc @arena Values(3u64, 0);
 effect @cell = alloc @arena C(2);
+symbol @scores;
+effect @scores = alloc @arena Scores(2u64, 0);
 effect @bias = 1;
 procedure @run(value::i64)::i64 { store(@cell, value) + i64(len(value)) }
+symbol @assign;
+procedure @assign(value::i64)::i64 { (=)(@cell, value) }
+symbol @indexed_assign;
+procedure @indexed_assign(value::i64)::i64 { @scores[Index(0u32)] = value }
 effect @bias = 2;
 behave @print(len(B(7)));
 behave @print((len)(B(8)));
@@ -44,3 +54,20 @@ procedure (store)(target::ref<f32>, value::f32)::f32 {
 behave @print(store(ref_at(@rates, 0u32), -2.0f32));
 behave @print(store(ref_at(@rates, 0u32), 0.25f32));
 behave @print(@rates[0u32]);
+
+behave @print((=)(B(5), 4).value);
+behave @print(perform @assign(10));
+behave @print(behave @assign(10));
+behave @print(deref(@cell).value);
+type FieldNames { type::i64; using::i64; }
+symbol @using;
+effect @using = 7;
+behave @print(FieldNames(8, 9).type + FieldNames(8, 9).using + @using);
+function rewrite(value::B)::B { value[Index(1u32)] = 3 }
+behave @print(rewrite(B(2)).value);
+behave @print(perform @indexed_assign(10));
+behave @print(behave @indexed_assign(10));
+behave @print(([]=)(@scores, Index(1u32), 20));
+behave @print(@scores[Index(1u32)]);
+behave @print(({ behave @print(101); @scores })[{ behave @print(102); Index(0u32) }] = { behave @print(103); 30 });
+behave @print(@scores[Index(0u32)]);

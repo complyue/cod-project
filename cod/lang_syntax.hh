@@ -255,14 +255,21 @@ inline bool expression_keyword(std::string_view name) {
          name == "function" || name == "global" || name == "symbol";
 }
 
+inline bool module_keyword(std::string_view name) {
+  return name == "type" || name == "regional" || name == "unit" || name == "array" ||
+         name == "using" || name == "import" || name == "conversion";
+}
+
 class Parser {
   std::vector<Token> tokens_;
   size_t cursor_ = 0;
 
   const Token &peek() const { return tokens_[cursor_]; }
-  bool is(const std::string &text) const {
-    return (peek().kind == TokenKind::identifier || peek().kind == TokenKind::punctuation) &&
-           peek().text == text;
+  bool is(const std::string &text, size_t ahead = 0) const {
+    if (cursor_ + ahead >= tokens_.size()) return false;
+    const auto &token = tokens_[cursor_ + ahead];
+    return (token.kind == TokenKind::identifier || token.kind == TokenKind::punctuation) &&
+           token.text == text;
   }
   bool take(const std::string &text) {
     if (!is(text)) return false;
@@ -280,7 +287,7 @@ class Parser {
   }
   Token ordinary_name() {
     auto token = name(TokenKind::identifier);
-    if (expression_keyword(token.text) || intrinsic_name(token.text) ||
+    if (expression_keyword(token.text) || module_keyword(token.text) || intrinsic_name(token.text) ||
         token.text == "bool" || token.text == "void" || token.text == "ref")
       fail(token.at, "reserved keyword '" + token.text + "' cannot be used as an ordinary name");
     return token;
@@ -293,14 +300,18 @@ class Parser {
   static bool operation_token(const Token &token) {
     return (token.kind == TokenKind::identifier && intrinsic_name(token.text)) ||
            (token.kind == TokenKind::punctuation &&
-            (binary_precedence(token.text) >= 0 || token.text == "!"));
+            (binary_precedence(token.text) >= 0 || token.text == "!" || token.text == "="));
   }
   Token lexical_name(bool *operation = nullptr) {
     const bool parenthesized = take("(");
     if (operation) *operation = parenthesized;
     if (!parenthesized) return ordinary_name();
     auto op = tokens_[cursor_++];
-    if (!operation_token(op))
+    if (op.kind == TokenKind::punctuation && op.text == "[") {
+      expect("]");
+      expect("=");
+      op.text = "[]=";
+    } else if (!operation_token(op))
       fail(op.at, "expected an operator or intrinsic name");
     if (op.text == "&&" || op.text == "||") fail(op.at, "short-circuit operators are control expressions");
     expect(")");
@@ -419,9 +430,8 @@ class Parser {
       return expr;
     }
     if (is("{")) return block();
-    if (is("(") && cursor_ + 2 < tokens_.size() &&
-        tokens_[cursor_ + 2].kind == TokenKind::punctuation && tokens_[cursor_ + 2].text == ")" &&
-        operation_token(tokens_[cursor_ + 1])) {
+    if (is("(") && ((is(")", 2) && operation_token(tokens_[cursor_ + 1])) ||
+        (is("[", 1) && is("]", 2) && is("=", 3) && is(")", 4)))) {
       auto expr = make(Expression::Kind::call, lexical_name());
       arguments(*expr);
       return expr;
@@ -481,6 +491,13 @@ class Parser {
       binary->children.push_back(std::move(left));
       binary->children.push_back(expression(binary_precedence(op.text) + 1));
       left = std::move(binary);
+    }
+    if (minimum == 0 && left->kind == Expression::Kind::index && is("=")) {
+      auto assignment = make(Expression::Kind::call, expect("="));
+      assignment->text = "[]=";
+      assignment->children = std::move(left->children);
+      assignment->children.push_back(expression());
+      return assignment;
     }
     return left;
   }

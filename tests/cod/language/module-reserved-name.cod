@@ -1,0 +1,3 @@
+using symbol "std:io" @print;
+behave @print(99);
+function type(value::i64)::i64 { value }

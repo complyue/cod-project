@@ -330,7 +330,16 @@
   {
     "file": "intrinsic-overloads.cod",
     "exit": 0,
-    "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n"
+    "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n4\n11\n12\n12\n24\n6\n11\n12\n22\n22\n101\n102\n103\n32\n32\n"
+  },
+  {
+    "file": "indexed-assignment-order.cod",
+    "exit": 70,
+    "stdout": "11\n22\n",
+    "stderr_contains": [
+      "indexed-assignment-order.cod:5:",
+      "division by zero"
+    ]
   },
   {
     "file": "intrinsic-symbol-name.cod",
@@ -349,6 +358,12 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "reserved keyword 'len'"
+  },
+  {
+    "file": "module-reserved-name.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "reserved keyword 'type' cannot be used as an ordinary name"
   },
   {
     "file": "method-ambiguous.cod",
