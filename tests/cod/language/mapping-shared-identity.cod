@@ -1,7 +1,6 @@
-symbol @print;
-using "std:io" @print as @print;
-symbol @step;
-symbol @left;
-effect @left = 3;
+using symbol "std:io" @print;
+symbol @step :: proc() -> i64;
+symbol @left :: i64;
+effect @left <- 3;
 import "aliased-body-model.cod" @p as @step with { @left as @a; @left as @b; };
 behave @print(perform @step);

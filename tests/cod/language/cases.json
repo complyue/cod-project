@@ -89,6 +89,12 @@
     "stderr_contains": "expected ';'"
   },
   {
+    "file": "effect-equals.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbolic bindings require 'effect @name <- value', not '='"
+  },
+  {
     "file": "scan-error.cod",
     "exit": 2,
     "stdout": "",
@@ -98,7 +104,7 @@
     "file": "overflow.cod",
     "exit": 70,
     "stdout": "",
-    "stderr_contains": "overflow.cod:4:9: i64 addition overflow"
+    "stderr_contains": "overflow.cod:3:9: i64 addition overflow"
   },
   {
     "file": "perform-without-caller.cod",
@@ -727,32 +733,14 @@
   },
   {
     "file": "region-owner-move.cod",
-    "exit": 0,
-    "stdout": "7\n9\ntrue\n11\n9\n"
-  },
-  {
-    "file": "region-owner-reuse.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "whole-region binding is empty"
+    "stderr_contains": "cannot transfer ownership out of a dynamic region binding"
   },
   {
     "file": "region-owner-capture.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "whole-region binding is empty"
-  },
-  {
-    "file": "region-owner-branch.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "whole-region binding is empty"
-  },
-  {
-    "file": "region-owner-loop.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "a repeated loop cannot consume an outer region owner"
+    "exit": 0,
+    "stdout": ""
   },
   {
     "file": "region-owner-lexical.cod",
@@ -852,5 +840,46 @@
     "exit": 70,
     "stdout": "",
     "stderr_contains": "units-sequencing-library.cod:5:11: division by zero"
+  },
+  {
+    "file": "procedure-declarations.cod",
+    "exit": 0,
+    "stdout": "21\n11\n21\n11\n21\n22\n32\n42\n62\n30\n"
+  },
+  {
+    "file": "procedure-signature-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "expected proc(bool) -> i64",
+      "got proc(i64) -> i64"
+    ]
+  },
+  {
+    "file": "procedure-declaration-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "incompatible value types for",
+      "procedure-vocabulary.cod::@dispatch"
+    ]
+  },
+  {
+    "file": "procedure-pure-call.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a function cannot invoke a procedure"
+  },
+  {
+    "file": "procedure-lexical-perform.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected a symbol name"
+  },
+  {
+    "file": "symbol-type-required.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a symbol declaration requires an explicit type"
   }
 ]

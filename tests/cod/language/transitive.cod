@@ -1,13 +1,12 @@
-symbol @print;
-using "std:io" @print as @print;
-symbol @gain;
-symbol @q;
-symbol @p;
-effect @gain = 5;
+using symbol "std:io" @print;
+symbol @gain :: i64;
+symbol @q :: proc() -> i64;
+symbol @p :: proc() -> i64;
+effect @gain <- 5;
 procedure @q -> i64 { @gain }
-effect @gain = 2;
+effect @gain <- 2;
 procedure @p -> i64 { behave @q }
-effect @gain = 9;
+effect @gain <- 9;
 behave @print(perform @p);
 behave @print(behave @p);
 behave @print(perform @q);

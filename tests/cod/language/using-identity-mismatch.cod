@@ -1,4 +1,4 @@
 using symbol "std:io" @print;
-symbol @p;
+symbol @p :: proc() -> i64;
 behave @print(-1);
 using "source.cod" @p;

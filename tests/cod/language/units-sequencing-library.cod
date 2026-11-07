@@ -9,5 +9,5 @@ conversion function normalize(x (raw))::normalized {
 }
 function combine(x (normalized*), y::u64)::u64 { scalar(x) + y }
 procedure (+)(x (normalized*), y::u64)::u64 { scalar(x) + y }
-symbol @combine;
+symbol @combine :: proc(normalized, u64) -> u64;
 procedure @combine(x (normalized*), y::u64)::u64 { scalar(x) + y }

@@ -1,2 +1,2 @@
-symbol @print;
+symbol @print :: i64;
 import "std:io" @print;

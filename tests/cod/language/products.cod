@@ -13,10 +13,10 @@ behave @assert(b.true);
 regional type Envelope { content::Box; next::ref<Envelope>; }
 function contents(e::Envelope)::Box { e.content }
 function through(e::Envelope)::i64 { contents(deref(e.next)).pair.count }
-symbol @arena;
-symbol @envelope;
-effect @arena = region(1024u64);
-effect @envelope = alloc @arena Envelope(b, null);
+symbol @arena :: region;
+symbol @envelope :: ref<Envelope>;
+effect @arena <- region(1024u64);
+effect @envelope <- alloc @arena Envelope(b, null);
 setfield(@envelope, next, @envelope);
 {
   let saved = contents(deref(@envelope));

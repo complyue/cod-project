@@ -1,4 +1,4 @@
 array Values[u32]::f32;
-symbol @arena;
-effect @arena = region(128u64);
+symbol @arena :: region;
+effect @arena <- region(128u64);
 alloc @arena Values(1000u64, 0.0f32);

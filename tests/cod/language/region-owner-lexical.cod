@@ -1,3 +1,3 @@
-symbol @a;
-effect @a = region(4096u64);
+symbol @a :: region;
+effect @a <- region(4096u64);
 { let owner = @a; used_bytes(owner) };

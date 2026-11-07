@@ -1,2 +1,2 @@
-symbol @step;
+symbol @step :: i64;
 using "identity-provider.cod" @x as @step;

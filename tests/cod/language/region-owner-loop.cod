@@ -1,4 +1,0 @@
-symbol @a;
-symbol @b;
-effect @a = region(4096u64);
-for (i in 0..2) { effect @b = @a; {} };

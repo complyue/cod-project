@@ -94,7 +94,7 @@ def main():
         scratch = Path(temporary)
         entry, ir, bitcode, runtime = [scratch / name for name in ("main.cod", "main.ll", "main.bc", "runtime.cc")]
         entry.write_text((directory / "region-records.cod").read_text() +
-                         "\nsetfield(@tail, next, @head);\nsymbol @moved;\neffect @moved = @arena;\n")
+                         "\nsetfield(@tail, next, @head);\n")
         _, frontend_seconds = checked([toolchain / "bin/cod", "--check", entry,
                                        "--emit-llvm", ir, "--emit-bc", bitcode, "--emit-runtime", runtime], root)
         roundtrip = scratch / "roundtrip.bc"

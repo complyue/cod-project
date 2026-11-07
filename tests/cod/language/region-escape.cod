@@ -1,5 +1,5 @@
 array Values[u32]::f32;
-symbol @arena;
-symbol @make;
-procedure @make()::ref<Values> { effect @arena = region(4096u64); alloc @arena Values(1u64, 0.0f32) }
+symbol @arena :: region;
+symbol @make :: proc() -> ref<Values>;
+procedure @make()::ref<Values> { effect @arena <- region(4096u64); alloc @arena Values(1u64, 0.0f32) }
 behave @make();

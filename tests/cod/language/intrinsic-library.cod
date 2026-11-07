@@ -1,6 +1,6 @@
-symbol @bias;
-symbol @missing;
-symbol @raw_store;
+symbol @bias :: i64;
+symbol @missing :: i64;
+symbol @raw_store :: proc(ref<f32>, f32) -> f32;
 type Box { value::i64; }
 regional type Cell { value::i64; }
 unit Index::u32;

@@ -1,1 +1,1 @@
-symbol @step;
+symbol @step :: proc() -> i64;

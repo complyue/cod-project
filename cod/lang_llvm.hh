@@ -206,7 +206,7 @@ public:
     return b().CreateLoad(type_of(type), slot(id, type));
   }
   void effect(size_t id, Type type, llvm::Value *source) {
-    if (type == Type::region || type == Type::procedure) return;
+    if (type == Type::region || type.kind == Type::procedure) return;
     auto *address = slot(id, type);
     cleanups_.push_back({address, b().CreateLoad(type_of(type), address)});
     b().CreateStore(source, address);
@@ -428,16 +428,12 @@ public:
     auto *bytes = cast(capacity_type, Type::uint64, capacity);
     return call_runtime("cod_lang_region_new", pointer_type(), {bytes, source_context()});
   }
-  llvm::Value *hold_region(llvm::Value *region, bool module_lifetime) {
+  void hold_region(llvm::Value *region, bool module_lifetime) {
     llvm::IRBuilder<> allocations(&entry_->getEntryBlock(), entry_->getEntryBlock().begin());
     auto *slot = allocations.CreateAlloca(pointer_type(), nullptr, "region.owner");
     b().CreateStore(region, slot);
     if (module_lifetime) module_regions_.push_back(slot);
     else cleanups_.push_back({slot, nullptr});
-    return slot;
-  }
-  void consume_region(llvm::Value *slot) {
-    b().CreateStore(llvm::ConstantPointerNull::get(pointer_type()), slot);
   }
   llvm::Value *region_size(llvm::Value *owner, bool capacity) {
     return call_runtime(capacity ? "cod_lang_region_capacity" : "cod_lang_region_used", i64(), {owner});

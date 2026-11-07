@@ -1,2 +1,2 @@
-symbol @step;
+symbol @step :: proc() -> i64;
 import "source.cod" @p as @step;

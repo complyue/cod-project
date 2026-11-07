@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "recorded_utc": "2026-11-06T19:01:25.477312+00:00",
+  "recorded_utc": "2026-11-07T13:43:32.304404+00:00",
   "toolchain": "build",
   "backend": "llvm",
   "passed": true,
   "seed": "0xC0D2026",
   "f32_samples": 22,
   "u64_samples": 19,
-  "native_compile_link_run_seconds": 1.621215849998407,
-  "generated_cod_sha256": "d7b066c95f5564567eb7be8dc49223b0f7f3073ee26c251b217a938a62bb3f4a",
+  "native_compile_link_run_seconds": 1.709511952009052,
+  "generated_cod_sha256": "3c86bc0485a5bea2700403f2cb6b8799fe5d65dbd826c68ccb7f34ca51faed2b",
   "observed_trace_sha256": "42c28a127c0e54f3a7a603b4dba5e15c954f640c2be04390d2625b1c77ed8527",
   "notes": [
     "FP32 reference rounds after every arithmetic operation.",
@@ -16,11 +16,11 @@
     "This validates arithmetic and regional input access, not a neural model."
   ],
   "source_sha256": {
-    "cod/lang_syntax.hh": "4ba13797797ba94471badccd7a5ec514fc10615e8bcc3a99b6316d2fdd713e44",
-    "cod/lang_frontend.hh": "21024a501cbe45ef06151d6ab8f97423e40265dc544100597f162559196644d0",
-    "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
+    "cod/lang_syntax.hh": "4bc954a94b148a48ebfbbfc199e9e4bc9e376798b8a5d66447bff385e8d63786",
+    "cod/lang_frontend.hh": "c486328a704bff350c10f63021105e8df17357071748f02013d8fc07f82f090a",
+    "cod/lang_llvm.hh": "cb72b1057c1e5c3ba2c01cabf50b8ffc98d96a3302862fce44b229b960a474ef",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
-    "tests/cod/language/numeric_properties.py": "b9a6e9a3fec9bc137abf42bd42fe633b6107724852ebdc7a41b92efda8f81b24"
+    "tests/cod/language/numeric_properties.py": "708c093e88d54a5a5983033f765a2e650929fe94ff33fef002c02fd8e40d4406"
   }
 }

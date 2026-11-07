@@ -1,6 +1,5 @@
-symbol @print;
-using "std:io" @print as @print;
+using symbol "std:io" @print;
 symbol from "vocabulary.cod" @x;
-symbol @token;
-effect @x = 99;
+symbol @token :: i64;
+effect @x <- 99;
 behave @print(777);

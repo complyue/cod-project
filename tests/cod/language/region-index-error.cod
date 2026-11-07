@@ -1,8 +1,8 @@
 unit Neuron::u32;
 unit Slot::u32;
 array Values[Neuron]::f32;
-symbol @arena;
-symbol @values;
-effect @arena = region(4096u64);
-effect @values = alloc @arena Values(1u64, 0.0f32);
+symbol @arena :: region;
+symbol @values :: ref<Values>;
+effect @arena <- region(4096u64);
+effect @values <- alloc @arena Values(1u64, 0.0f32);
 @values[Slot(0u32)];

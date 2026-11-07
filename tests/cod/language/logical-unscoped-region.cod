@@ -1,3 +1,3 @@
-symbol @arena;
-effect @arena = region(128u64);
-true && (capacity_bytes(effect @arena = @arena) > 0u64);
+symbol @arena :: region;
+effect @arena <- region(128u64);
+true && (capacity_bytes(effect @arena <- region(128u64)) > 0u64);

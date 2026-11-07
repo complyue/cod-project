@@ -15,16 +15,16 @@ using "pool-index.cod" global_slot;
 using symbol "region-gather-step.cod" @step;
 global layout::Layout = Layout(4u32, 1u64);
 global trace_values::bool = true;
-symbol @arena;
-symbol @a;
-symbol @b;
-symbol @sources;
-symbol @weights;
-symbol @graph;
+symbol @arena :: region;
+symbol @a :: ref<Frame>;
+symbol @b :: ref<Frame>;
+symbol @sources :: ref<Sources>;
+symbol @weights :: ref<Weights>;
+symbol @graph :: ref<Incoming>;
 function checksum(frame::Frame)::f32 {
   fold (n in Neuron(0u32) .. Neuron(u32(len(frame))), total = 0.0f32) { total + frame[n] }
 }
-symbol @emit_frame;
+symbol @emit_frame :: proc(Frame) -> void;
 procedure @emit_frame(frame::Frame)::void {
   behave @print(checksum(frame));
   if (trace_values) {
@@ -33,12 +33,12 @@ procedure @emit_frame(frame::Frame)::void {
     }
   } else {};
 }
-effect @arena = region(32768u64);
-effect @a = alloc @arena Frame(scalar(class_set_begin(layout, ClassId(4u32))), 0.0f32);
-effect @b = alloc @arena Frame(len(@a), 0.0f32);
-effect @sources = alloc @arena Sources(scalar(class_slot_begin(layout, ClassId(4u32))), Neuron(0u32));
-effect @weights = alloc @arena Weights(len(@sources), 1u8);
-effect @graph = alloc @arena Incoming(@sources, @weights);
+effect @arena <- region(32768u64);
+effect @a <- alloc @arena Frame(scalar(class_set_begin(layout, ClassId(4u32))), 0.0f32);
+effect @b <- alloc @arena Frame(len(@a), 0.0f32);
+effect @sources <- alloc @arena Sources(scalar(class_slot_begin(layout, ClassId(4u32))), Neuron(0u32));
+effect @weights <- alloc @arena Weights(len(@sources), 1u8);
+effect @graph <- alloc @arena Incoming(@sources, @weights);
 for (n in 0u32 .. u32(len(@a))) {
   store(@a, Neuron(n), f32(n + 1u32));
   let position = locate(layout, GlobalSetId(u64(n)));

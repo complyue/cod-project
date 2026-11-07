@@ -1,14 +1,12 @@
-symbol @print;
-using "std:io" @print as @print;
-symbol @assert;
-using "std:io" @assert as @assert;
-symbol @flag;
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+symbol @flag :: bool;
 function choose(x: i64) -> i64 { if (x < 0) { -x } else { x * 2 } }
 behave @print(0010);
 behave @print(choose(-7));
 behave @print(choose(4));
 behave @print(-009223372036854775808);
-effect @flag = true;
-behave @print(false && { effect @flag = false; true });
-behave @print(true || { effect @flag = false; false });
+effect @flag <- true;
+behave @print(false && { effect @flag <- false; true });
+behave @print(true || { effect @flag <- false; false });
 behave @assert(@flag);

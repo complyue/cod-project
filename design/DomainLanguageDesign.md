@@ -1,18 +1,27 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 30
+Discussion revision: 36
 
 Recorded: 2026-10-22
 
-Current discussion: 2026-11-06
+Current discussion: 2026-11-07
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
+- **Implemented callable/resource subset:** [H-188/H-189](DesignAuthorityRegistry.md#h-188) authorizes implementation/validation and selects current dynamic bindings for direct lexical procedure calls. [K-305](DesignAuthorityRegistry.md#k-305) records typed/grouped symbols, `proc(T, ...) -> RT` signatures, lexical procedures, combined symbolic declarations, captured-value-preserving installation and rejection of ownership extraction from dynamic resources. [Native evidence](../tests/cod/language/typed-procedure-validation.json) covers this subset. General optional sums, ordinary-owner syntax and packet transfer remain separate design work; full-contract qualification is unchanged.
+
+- **Ownership and callable design:** [H-182–H-184/K-302](DesignAuthorityRegistry.md#h-182) add the pending fresh/writable-optional resource-source proposal, require a coordinated ownership-language design, and permit lexical as well as symbolic procedures. Every symbol definition must declare its type, including procedure types. H-185 keeps perform/behave calls symbolic and direct procedure calls lexical. [D-14](RegionalOwnership.md) is the pending ownership draft; [D-10](SymbolicDynamicScope.md) records the confirmed naming/type direction and remaining grammar choices.
+
+- **Direct resource types and optional domain values:** [H-181/K-301](DesignAuthorityRegistry.md#h-181) confirms that region-valued symbolic bindings cannot be consumed or emptied by moving ownership out. They support shadowing with owner preservation. WPO requires a supplied binding at each demanded use, so a direct region-reference type needs no implicit `Maybe`. Explicit `symbol @x :: Maybe<SomeRegion>` remains allowed for business optionality; the declaration alone supplies no value. This supersedes H-169’s effect-to-effect consuming direction and settles H-178’s no-transfer-out question. Typed symbols and dynamic-resource no-extraction are implemented; general optional sums remain design work.
+
+- **Current capture/resource clarification:** [H-180/K-300](DesignAuthorityRegistry.md#h-180) separates packet transfer from region-backed effect resources and reaffirms capture of used dynamic values at definition. `perform` temporarily shadows those identities; hidden resource owners stay alive and intact. `behave` uses current bindings. H-176’s identity-only interpretation is superseded. H-177/H-179 ordinary ownership and consuming dynamic installation remain distinct from replay.
+
+- **Current syntax and analysis:** [K-296](DesignAuthorityRegistry.md#k-296) records H-172’s exclusive effect arrow and H-173’s proposed dynamic-value restriction. The syntax is implemented; the type restriction remains a discussion item.
 - **Current implementation evidence:** [K-295](DesignAuthorityRegistry.md#k-295) records the bounded module-lifetime and effect-held owner increment under H-166/H-169/H-171. Mailbox result syntax and Actor execution remain design proposals.
 - **Registry:** [D-07](DesignAuthorityRegistry.md#d-07), which controls qualification and scope.
-- **Revision / covered scope:** discussion revision 30, all sections of this language tracker. Goals record human direction. Topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
+- **Revision / covered scope:** discussion revision 36, all sections of this language tracker. Goals record human direction. Topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
 - **Value lineage:** candidate P-12–P-18 connect the packet, database, language and interoperability concepts C-08–C-11 and this document to C-01, C-02, C-05 and C-06. Explicit language semantics should preserve inspectable business intent; regional transport and deferred reclamation should serve efficient persistent semantics; source tools should keep that semantics readable. These proposed derivations are not yet qualified implementation authority.
 - **Dependencies:** P-19–P-21 identify C-03, C-04 and C-02: multiple regions/domains, semantic levels and environment-specific effects. P-24 records application C-12 as an external example for DL-13; its model and resource choices are scoped to D-08. Existing C++ designs are reference material with their own registry status.
 - **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. H-96–H-164 retain their recorded local scopes for symbols, callables, storage, snapshots, scalar identities and the current work period; a complete grammar, ABI, storage protocol and implementation contract remain open.
@@ -23,6 +32,8 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Confirmed direction
 
+Cross-process send/receive of regional packets and region-backed resources shared through dynamic context are distinct scenarios under H-180. They share storage/lifetime invariants, but capture replay, resource installation and packet consumption are different operations. Neither scenario defines the other’s access or cleanup contract.
+
 These are summaries of the user's statements, not inferred approval of the preceding assistant's recommendations. The original statements and their provenance are recorded in [H-06](DesignAuthorityRegistry.md#h-06), [H-07](DesignAuthorityRegistry.md#h-07).
 
 | Goal | Confirmed direction | Discussion coverage |
@@ -32,7 +43,7 @@ These are summaries of the user's statements, not inferred approval of the prece
 | G-03 | Give the domain language explicit ADT semantics, including sum/product types, method invocation and memory management. | DL-01–DL-03 |
 | G-04 | Provide C/C++ compatibility interfaces for interoperability with other language runtimes. | DL-11 |
 | G-05 | Advance language and SNN design, implementation and validation together, using simulator requirements to choose useful initial language features. | H-96; DL-12–DL-16 |
-| G-06 | Nominal symbols, thread-scoped effects, captured/current procedure invocation, lexical functions and dynamically symbol-bound procedures, with whole-program call-path checking. | H-96–H-98, H-102–H-104; DL-02, DL-14, DL-15 |
+| G-06 | Nominal symbols, thread-scoped effects, captured/current procedure invocation, lexical functions and lexical or symbol-bound procedures, with whole-program call-path checking. | H-96–H-98, H-102–H-104, H-180; DL-02, DL-14, DL-15 |
 | G-07 | User storage is stack or `@region`. Captures are bits or regional pointers. Each region contains one direct-pointer graph. Relationships between regions are logical business associations. | H-99/H-100/H-156/H-157; DL-03, DL-08, DL-15 |
 
 “Only record” has not yet settled whether updates append immutable versions or mutate existing objects while allocation remains monotonic. It does not by itself require logging every read. “Apply” has not yet specified a durability guarantee, retry protocol or native method-pointer representation.
@@ -93,7 +104,7 @@ The sixteen topics contain confirmed local propositions and open implementation/
 <a id="dl-02"></a>
 ### DL-02 — Methods, effects and entry execution
 
-**Confirmed local direction:** functions are lexical and limited to explicit inputs/outputs; procedures are dynamically defined under symbol names and may access effects. `perform` installs captured values temporarily; `behave` uses current dynamic bindings. Module top-level dynamic scope is module initialization. H-96–H-111 and [D-10](SymbolicDynamicScope.md) supply the exact scope; method syntax and dispatch remain open.
+**Confirmed local direction:** functions are lexical and limited to explicit inputs/outputs; procedures may use ordinary lexical names or symbolic dynamic bindings and may access effects in either case under H-184. `perform` installs captured values temporarily; `behave` uses current dynamic bindings. Module top-level scopes survive initialization until process exit under H-166. H-180 requires captured replay to preserve both captured and shadowed regional ownership. H-96–H-111 and [D-10](SymbolicDynamicScope.md) supply the exact scope; method syntax and dispatch remain open.
 
 **Question:** What is a method's meaning, and how does the receiver select and execute the entry object's designated method?
 
@@ -108,7 +119,9 @@ The sixteen topics contain confirmed local propositions and open implementation/
 <a id="dl-03"></a>
 ### DL-03 — Regions, ownership and lifetimes
 
-**Confirmed local direction:** user objects are confined to stack and `@region`. The native heap is reserved for system code. Capture payloads are bits or regional pointers. Each region holds one direct-pointer graph, and all of its pointer edges stay inside that region. H-99/H-100/H-156/H-157. [Capture and lifetime discussion](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime)
+H-182 proposes fresh resource construction or a writable optional source for effect installation. H-183 requires defining the ownership language as a coherent whole before assigning behavior to “ordinary owner” categories. [RegionalOwnership](RegionalOwnership.md), D-14r1, examines construction, expression categories, writable-place syntax, optionality, source post-state and cleanup as one draft. Existing lifetime directions remain, but the proposed mechanism is not an implementation contract.
+
+**Confirmed local direction:** user objects are confined to stack and `@region`. The native heap is reserved for system code. H-180 reaffirms capture of permitted dynamic values; resource capture/replay does not copy the graph or consume ownership. H-173/H-175’s complete allowed-type/interior-pointer boundary remains under review. H-177 allows ordinary owning handles. Each region holds one direct-pointer graph, and all of its pointer edges stay inside that region. H-99/H-100/H-156/H-157. [Capture and lifetime discussion](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime)
 
 **Regional access:** H-124 makes regions dynamically scoped resources operated on by procedures. H-127/H-129 permit a function to read the complete reachable structure, including pointer dereferences, through its explicit input values. The outermost function call and its nested function calls share one read-only snapshot; it expires when that outer call returns. Procedures may call functions; functions cannot call procedures. This is a single-threaded semantic read boundary, not graph copying, region freezing or permission for effects inside a function. See [D-10 storage semantics](SymbolicDynamicScope.md#storage-carriers-capture-types-and-lifetime).
 
@@ -267,7 +280,7 @@ This first local example is a possible intermediate milestone. The charter's bro
 <a id="dl-14"></a>
 ### DL-14 — Symbols and dynamic call paths
 
-**Confirmed:** module-defined symbols have strict identity, imported aliases retain it, and independent origins/versions remain distinct. Symbol-variable use declares the per-thread variable. Reads use `@name`; writes use `effect @name = value`, restoring on scope exit. Procedures capture used effect values; `perform` temporarily installs them, `behave` retains current bindings. Demand-driven WPO checks required bindings over caller paths; missing values are compilation errors, not runtime fallback.
+**Confirmed:** module-defined symbols have strict identity, imported aliases retain it, and independent origins/versions remain distinct. Symbol-variable use declares the per-thread variable. Reads use `@name`; writes use `effect @name <- value`, restoring on scope exit. Procedures capture used effect values; `perform` temporarily installs them, `behave` retains current bindings. Demand-driven WPO checks required bindings over caller paths; missing values are compilation errors, not runtime fallback.
 
 **Confirmed module practice:** vocabulary modules declare symbols with comments. `using` retains an external procedure's source definition; `import` redefines its body in the current module's lexical/dynamic scopes. This definition choice is separate from `perform`/`behave`. H-105; D-10.
 
@@ -275,7 +288,7 @@ This first local example is a possible intermediate milestone. The charter's bro
 
 **Confirmed immediate review:** every cross-module reference triggers module execution semantics (H-109). Its top-level scope remains alive until process exit (H-166); `using`/`import` retain H-110’s explicit selection of effective resources. Initialization completion is not resource destruction. `effect` yields the newly bound value (H-111).
 
-**Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, cyclic initialization, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 13.
+**Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, cyclic initialization, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 41.
 
 **Origin/alias review:** H-112 requires explicit provenance and local aliases. H-113 excludes lexical symbolic variables and ordinary assignment. H-114 makes identities compile-time values and aliases compile-time names; runtime values bind under identities. H-115 permits an import-body alias map with matching-name defaults. H-116 requires a preexisting local destination symbol for `using/import "module" @source as @local`. [D-10's relationship model](SymbolicDynamicScope.md#symbol-origins-aliases-and-dynamic-values) separates identity selection, procedure-value installation and body translation. H-117 proposes `symbol from "module" @source as @local` and `with { @local as @source_role; }`, read as supplying a local symbol for the source body’s role. H-118 authorizes implementing these discussed forms. The compiler separates identity selection from procedure installation and resolves each imported body’s aliases before capture analysis. Broader mapping edge policies remain open; unsupported cases receive explicit diagnostics.
 
@@ -286,7 +299,7 @@ This first local example is a possible intermediate milestone. The charter's bro
 <a id="dl-15"></a>
 ### DL-15 — Callable definitions, expressions and storage
 
-**Confirmed:** functions are lexically defined and use explicit inputs/outputs. Procedures are dynamically defined with symbol names and may access effects. Module initialization is the top-level dynamic scope. Symbol reads and writes are expressions, and `void` indicates a result with no meaningful value. User storage is stack or `@region`, with bits or regional-pointer captures. Physical references stay within their region. Business associations between regions follow H-157.
+**Confirmed:** functions are lexically defined and use explicit inputs/outputs. H-184 permits procedures with ordinary lexical names or symbolic dynamic bindings; both may access effects. Existing lexical procedures may be installed under typed symbols without redefining their bodies or captures. H-186/H-187 allows `proc @p(...) -> RT { ... }` to declare the symbol and procedure together. Explicit procedure types use `proc(T1, T2) -> RT`. H-189 gives direct lexical calls current dynamic bindings; symbolic perform alone replays captured values. Module initialization is the top-level dynamic scope. Symbol reads and writes are expressions, and `void` indicates a result with no meaningful value. User storage is stack or regions, with ordinary owners and region-backed dynamic resources as separate uses. H-180 reaffirms dynamic-value capture; shadowing preserves owners and does not release hidden regions. Physical references stay within their region. Business associations between regions follow H-157.
 
 **Open:** expression sequencing and scope results, procedure/capture representation and lifetime checking, the first regional GADT construction contract, and business protocols for logical relationships between regions. A scope-local `effect` restores on exit under either call mode; `behave` does not make rebinding permanent. No `malloc` closure, raw stack reference capture or user-visible host address is inferred.
 
@@ -403,5 +416,21 @@ For each discussion, update the relevant topic's current answer and append a dec
 | DD-059 | 2026-11-06 | Entry and dependency module top-level scopes end at process exit. | H-166; supersedes H-110’s teardown timing; D-10r35 |
 | DD-060 | 2026-11-06 | Analyze effect-only whole-region holding and static post-send emptiness; intrinsic mailbox feedback covers local send errors, not delivery confirmation. | H-167/H-168; D-12r3/D-13r3; uniqueness and local-error ownership remain open |
 | DD-061 | 2026-11-06 | Moving a whole-region owner with `effect @b = @a` empties the source binding. Analyze a returned-region sum for local send errors; exact sum and binding-presence syntax remain proposals. | H-169/H-170; D-13r4 |
+| DD-062 | 2026-11-07 | Use only `effect @name <- rhs` for dynamic binding; preserve typed transfer/copy behavior, scope restoration and expression results. | H-172; D-10r37 |
+| DD-063 | 2026-11-07 | Investigate limiting dynamic bindings to owning-region resources, bits values and statically known procedures; analyze remaining lexical/capture lifetimes and branch precision before adoption. | H-173/H-174; proposal pending-human; D-13r5 |
+
+| DD-064 | 2026-11-07 | Procedures capture required dynamic-variable symbol identities, never definition-time values or binding frames; current bindings supply runtime values. H-175 proposes rejecting interior-pointer capture and deriving ambient views from the current owner. | H-175/H-176; D-10r38/D-13r6; H-97 value-capture semantics superseded, call-spelling/API details open |
+| DD-065 | 2026-11-07 | Ordinary variables may own whole regions, preserving unique ownership and allowing runtime-created user regions to be constructed, edited and ultimately sent. | H-175/H-177; supersedes H-167’s effect-only placement premise; D-13r6; owning-return/root/mailbox interfaces not yet implemented |
+| DD-066 | 2026-11-07 | Keep cross-process regional packets separate from region-backed dynamic resources. Capture used dynamic values at definition; perform shadows them temporarily without losing ownership or destroying hidden/captured regions, then restores caller lookup. | H-180; supersedes H-176 identity-only capture; D-10r39/D-13r9; ordinary owner installation remains consuming under H-179 |
+
+| DD-067 | 2026-11-07 | Dynamic regional resources cannot be consumed out of symbolic bindings; shadowing preserves owners. WPO checks supplied bindings independently of value type. Direct region references need no implicit Maybe, while explicit Maybe<SomeRegion> remains valid domain modeling. | H-181; D-10r40/D-13r10; supersedes H-169 consuming effect moves, confirms H-178 boundary; typed symbol and sum syntax not yet implemented |
+
+| DD-068 | 2026-11-07 | Analyze fresh regional construction or writable optional storage as effect initializer sources; all optionality forms need coherent semantics, and new region construction needs dedicated syntax/semantics. | H-182; proposal pending-human; D-14r1 |
+| DD-069 | 2026-11-07 | Design ownership jointly across syntax, semantics and practical use; ordinary-owner terminology is not an already defined source construct or an implicit moved-out policy. | H-183; D-14r1; no source-category choice confirmed |
+| DD-070 | 2026-11-07 | Permit lexical and symbolic procedure definitions and installing an existing lexical procedure as an effect. Require explicit types on each symbol definition, including procedure types, with grouped declarations. | H-184; D-10r41; supersedes H-103 symbol-only restriction; procedure-type grammar and complete direct-call effect contract remain open |
+
+| DD-071 | 2026-11-07 | perform/behave target only symbols and make dynamic calls; direct procedure calls use lexical lookup. Do not admit perform p or behave p for ordinary names. | H-185; D-10r41; captured/current semantics of symbolic calls remain |
 
 Dates above are recording dates. Exact source-message timestamps were unavailable; the registry records that provenance limit.
+
+| DD-072 | 2026-11-07 | Typed/grouped symbols, explicit proc signatures and lexical/symbolic declarations are implemented under H-188. A missing symbolic proc identity is declared together with its signature. Direct lexical calls use the caller dynamic context; perform restores captures. Dynamic region extraction is rejected. | H-184–H-189; K-305; D-10r44; native evidence retains its exact scope. |

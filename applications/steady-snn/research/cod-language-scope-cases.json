@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "status": "specified_with_selected_native_evidence",
-  "recorded_date": "2026-11-06",
+  "status": "specified_with_selected_native_evidence_and_capture_category_review",
+  "recorded_date": "2026-11-07",
   "design_authority": {
     "registry": "../../../design/DesignAuthorityRegistry.md#d-08",
-    "revision": 215,
+    "revision": 220,
     "scope": "This 25-case catalog and its evidence map; the complete design contract remains pending-human.",
     "parents": [
       "C-38/P-87: application-driven language value",
@@ -12,10 +12,10 @@
       "P-93: dependency on D-10 language semantics"
     ],
     "rationale": "Concrete application cases make scoped language behavior and its native evidence reviewable without selecting neuron dynamics.",
-    "invariants_and_non_goals": "Preserve symbol identity, captured/current call modes, regional lifetimes and once-only post-scan module incorporation. No new neuron law, cyclic initialization rule, package identity format, concurrency protocol or persistent ABI.",
+    "invariants_and_non_goals": "Preserve symbol identity, definition-time dynamic-value capture for perform, current-binding behave, owner-preserving resource shadowing, regional lifetimes and once-only post-scan module incorporation. Packet transfer and effect-resource construction are distinct. Full capture-category/interior-pointer rules remain under review; no neuron law, concurrency protocol or persistent ABI is selected.",
     "acceptance": "Keep confirmed local semantics distinct from open proposals; link only the execution evidence actually obtained and retain its limits.",
-    "human_baseline": "H-96-H-121 supply local symbols/callables/modules; H-123 limits the increment to language/runtime support; H-140 confirms once-only module incorporation; H-148 confirms per-argument conversion sequencing. H-166 supersedes source-module initialization-return teardown with process-lifetime top-level scopes.",
-    "assessment": "../../../design/DesignAuthorityRegistry.md#k-295"
+    "human_baseline": "H-96-H-121 supply local symbols/callables/modules; H-123 limits the increment to language/runtime support; H-140 confirms once-only module incorporation; H-148 confirms per-argument conversion sequencing. H-166 supersedes source-module initialization-return teardown with process-lifetime top-level scopes. H-172 confirms effect @name <- rhs as the sole binding syntax; H-173 requests analysis, not implementation, of a narrower dynamic value set. H-176 supersedes definition-time dynamic value capture with required compile-time symbol identities; H-177 permits ordinary lexical region owners without duplicating ownership. H-180 corrects H-176: procedures capture used definition-time dynamic values for temporary perform shadows without consuming or destroying captured/hidden owners. It separates packet transfer from effect-resource construction. H-184 permits lexical and symbolic procedures, assignment of an existing lexical procedure as an effect and mandatory types on each symbol definition. The earlier symbolic-only procedure restriction is superseded. H-185 fixes perform/behave as symbol-only dynamic calls and direct procedure calls as lexical.",
+    "assessment": "../../../design/DesignAuthorityRegistry.md#k-305"
   },
   "design_documents": [
     "../../../design/SymbolicDynamicScope.md",
@@ -73,6 +73,14 @@
       ],
       "CS-18": [
         "module-diamond.cod"
+      ],
+      "CS-14": [
+        "procedure-declarations.cod",
+        "procedure-signature-error.cod",
+        "procedure-declaration-error.cod",
+        "procedure-pure-call.cod",
+        "procedure-lexical-perform.cod",
+        "symbol-type-required.cod"
       ]
     },
     "partial_coverage_notes": [
@@ -129,8 +137,8 @@
       "topic": "nested restoration",
       "setup": "@x is 1.",
       "steps": [
-        "Enter outer scope; effect @x = 2.",
-        "Enter inner scope; effect @x = 3.",
+        "Enter outer scope; effect @x <- 2.",
+        "Enter inner scope; effect @x <- 3.",
         "Leave inner scope.",
         "Leave outer scope."
       ],
@@ -149,9 +157,9 @@
       "id": "CS-04",
       "status": "specified",
       "topic": "capture by value and invocation mode",
-      "setup": "Evaluate effect @x = 1, then define procedure @p whose body reads @x.",
+      "setup": "Evaluate effect @x <- 1, then define procedure @p whose body reads @x.",
       "steps": [
-        "Evaluate effect @x = 2 in the caller scope.",
+        "Evaluate effect @x <- 2 in the caller scope.",
         "perform @p.",
         "Read caller @x.",
         "behave @p."
@@ -163,14 +171,15 @@
       ],
       "basis": [
         "H-97",
-        "H-104"
+        "H-104",
+        "H-180"
       ]
     },
     {
       "id": "CS-05",
       "status": "derived",
       "topic": "temporary scalar writes",
-      "setup": "@p captures @x = 1; its body evaluates effect @x = @x + 1, then reads @x. Caller @x is 7.",
+      "setup": "@p captures @x = 1; its body evaluates effect @x <- @x + 1, then reads @x. Caller @x is 7.",
       "steps": [
         "perform @p.",
         "perform @p.",
@@ -190,7 +199,8 @@
       "basis": [
         "H-96",
         "H-97",
-        "H-104"
+        "H-104",
+        "H-180"
       ],
       "derivation": "Each perform installs the original capture; behave starts with the current caller binding. Both modes restore the body-local effect on return; no write-through assignment exists."
     },
@@ -216,7 +226,8 @@
       "basis": [
         "H-96",
         "H-97",
-        "H-103"
+        "H-103",
+        "H-180"
       ]
     },
     {
@@ -236,7 +247,8 @@
       ],
       "basis": [
         "H-97",
-        "H-102"
+        "H-102",
+        "H-180"
       ],
       "note": "A required-symbol analysis must account for q through behave; it cannot inspect only direct names in p."
     },
@@ -246,7 +258,7 @@
       "topic": "function effect exclusion",
       "reject_in_function": [
         "Read @symbol.",
-        "Establish effect @symbol = value.",
+        "Establish effect @symbol <- value.",
         "perform a procedure.",
         "behave a procedure.",
         "Call a helper that executes such effects."
@@ -258,7 +270,7 @@
     },
     {
       "id": "CS-09",
-      "status": "specified",
+      "status": "pending_capture_category_review",
       "topic": "carriers and captures",
       "allowed_capture_categories": [
         "bits",
@@ -274,7 +286,8 @@
         "H-99",
         "H-100"
       ],
-      "note": "Cross-region references remain a placeholder under H-101; no encoding or exception to the two capture forms is selected."
+      "note": "Cross-region references remain a placeholder under H-101; no encoding or exception to the two capture forms is selected.",
+      "current_contract_notice": "H-180 reaffirms capture of permitted dynamic values and preservation of captured/hidden regional owners. H-173/H-175’s narrower allowed-type/interior-pointer proposal is still under review, so the earlier category list below does not settle that boundary. No implicit heap closure or regional-object copy/move is permitted."
     },
     {
       "id": "CS-10",
@@ -363,27 +376,40 @@
       ],
       "basis": [
         "H-97",
-        "H-102"
+        "H-102",
+        "H-180"
       ],
       "note": "Algorithm, diagnostics and recursion summarization remain implementation design; no runtime unbound-value policy is selected."
     },
     {
       "id": "CS-14",
-      "status": "specified",
+      "status": "implemented_with_native_evidence",
       "topic": "definition scopes and names",
       "cases": [
-        "A function definition is lexical.",
-        "A procedure definition uses a symbol and belongs to dynamic scope.",
-        "A bare-name procedure definition is not a second allowed procedure mechanism.",
-        "Module top-level dynamic scope is its initialization procedure."
+        "A function definition is lexical and pure.",
+        "A procedure may have an ordinary lexical name or a symbolic dynamic binding.",
+        "Either procedure form remains effectful; a function cannot call it.",
+        "An existing lexical procedure may be installed as a symbolic effect without redefining its body or captures.",
+        "Every symbol definition carries a declared type, including procedure types.",
+        "Module top-level dynamic scope lasts until process exit.",
+        "perform/behave target only symbols; direct procedure calls use lexical lookup.",
+        "A symbolic proc declaration introduces a typed identity when none was declared/imported.",
+        "Direct lexical procedure calls use the caller current dynamic bindings."
       ],
       "basis": [
         "H-103",
         "H-106",
         "H-140",
-        "H-166"
+        "H-166",
+        "H-184",
+        "H-185",
+        "H-186",
+        "H-187",
+        "H-188",
+        "H-189"
       ],
-      "note": "Entry and dependency top-level scopes stay alive until process exit. Initialization executes once after scanning, in encounter order; using/import select effective resources. Cyclic initialization remains open."
+      "note": "Entry and dependency top-level scopes stay alive until process exit. Initialization executes once after scanning, in encounter order; using/import select effective resources. Cyclic initialization remains open.",
+      "execution_evidence": "../../../tests/cod/language/typed-procedure-validation.json"
     },
     {
       "id": "CS-15",
@@ -391,10 +417,10 @@
       "topic": "expressions and void",
       "cases": [
         "Read a symbol with @name.",
-        "Write a symbol only with effect @name = rhs.",
+        "Write a symbol only with effect @name <- rhs.",
         "Reject plain or compound assignment as an alternate symbolic write.",
         "Compose evaluation as expressions, using void for explicitly no meaningful returned value.",
-        "effect @x = 3 evaluates to 3, the newly bound value.",
+        "effect @x <- 3 evaluates to 3, the newly bound value.",
         "Evaluate a call argument once and complete its selected automatic conversion before evaluating the next argument; an earlier conversion failure prevents later argument effects."
       ],
       "basis": [
@@ -438,7 +464,8 @@
         "H-114",
         "H-115",
         "H-117",
-        "H-118"
+        "H-118",
+        "H-180"
       ],
       "note": "using retains the source definition; import redefines its body in receiving scopes. A symbol alias alone creates neither a fresh identity nor a new procedure capture. The executable selectors/import maps are documented in the prototype reference; broader grammar qualification remains open."
     },
@@ -473,7 +500,7 @@
     },
     {
       "id": "CS-19",
-      "status": "derived",
+      "status": "specified",
       "topic": "registered body versus dynamic definition event",
       "setup": "Register a procedure body that uses @x during scanning; its demanded definition/call paths are compiled later.",
       "expected": [
@@ -484,7 +511,8 @@
       "basis": [
         "H-97",
         "H-102",
-        "H-106"
+        "H-106",
+        "H-180"
       ]
     },
     {
@@ -509,7 +537,7 @@
         "H-166"
       ],
       "allowed_execution_expressions": [
-        "effect @name = rhs",
+        "effect @name <- rhs",
         "perform @procedure",
         "behave @procedure"
       ]
@@ -518,7 +546,7 @@
       "id": "CS-21",
       "status": "specified",
       "topic": "top-level effects and procedure calls execute with the module",
-      "setup": "A module contains effect @x = value and perform/behave expressions targeting registered procedure definitions.",
+      "setup": "A module contains effect @x <- value and perform/behave expressions targeting registered procedure definitions.",
       "expected": [
         "The forms are allowed at module top level.",
         "The scan retains expressions without installing @x, invoking procedures or capturing values.",
@@ -590,7 +618,8 @@
         "H-97",
         "H-105",
         "H-110",
-        "H-166"
+        "H-166",
+        "H-180"
       ],
       "note": "Only selected effective resources transfer through using/import. A source top-level scope and its still-held regions survive initialization until process exit. The scalar observations concern caller/source binding selection, not scope destruction. Captures do not prolong a separately ended nested region. The source-module regional capture now executes after initialization in region-module-perform.cod; nested-region escape remains a separate rejection case. These selected checks do not claim execution of the complete catalog.",
       "lifetime_expectation": "A source-module procedure may use a region still held by its module top level after initialization. Transfer/release can independently invalidate such access; process-lifetime scope does not preserve a consumed owner."
@@ -599,7 +628,7 @@
       "id": "CS-25",
       "status": "specified",
       "topic": "effect returns newly bound value",
-      "expression": "effect @x = 3",
+      "expression": "effect @x <- 3",
       "expected_expression_result": 3,
       "expected_following_read": 3,
       "basis": [

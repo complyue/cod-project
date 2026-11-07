@@ -1,9 +1,8 @@
-symbol @print;
-using "std:io" @print as @print;
+using symbol "std:io" @print;
 symbol from "vocabulary.cod" @x as @a;
 symbol from "vocabulary.cod" @x as @b;
 symbol from "other-vocabulary.cod" @x as @other;
-effect @a = 3;
-effect @other = 8;
+effect @a <- 3;
+effect @other <- 8;
 behave @print(@b);
 behave @print(@other);

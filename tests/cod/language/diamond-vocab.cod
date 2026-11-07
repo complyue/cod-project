@@ -1,2 +1,2 @@
-symbol @gain;
-symbol @read;
+symbol @gain :: i64;
+symbol @read :: proc() -> i64;

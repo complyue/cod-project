@@ -9,13 +9,13 @@ unit raw::f64;
 unit normalized::f64;
 conversion function normalize(x (raw))::normalized { normalized(scalar(x) / 25.0) }
 function adjust(x::f64)::f64 { x + 1000.0 }
-symbol @entry_distance;
-symbol @entry_read;
-effect @entry_distance = normalized(20.0);
+symbol @entry_distance :: normalized;
+symbol @entry_read :: proc(normalized) -> f64;
+effect @entry_distance <- normalized(20.0);
 import "units-procedure-receiver.cod" @receiver_read as @entry_read with { @entry_distance as @receiver_distance; };
-effect @source_distance = SourceN(9.0);
-effect @receiver_distance = ReceiverN(11.0);
-effect @entry_distance = normalized(21.0);
+effect @source_distance <- SourceN(9.0);
+effect @receiver_distance <- ReceiverN(11.0);
+effect @entry_distance <- normalized(21.0);
 behave @print(perform @source_read(SourceRaw(200.0)));
 behave @print(perform @receiver_read(ReceiverRaw(200.0)));
 behave @print(perform @entry_read(raw(200.0)));

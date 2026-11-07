@@ -1,4 +1,4 @@
-symbol @step;
-symbol @left;
-symbol @right;
+symbol @step :: proc() -> i64;
+symbol @left :: i64;
+symbol @right :: i64;
 import "aliased-body-model.cod" @p as @step with { @left as @a; @right as @b; };

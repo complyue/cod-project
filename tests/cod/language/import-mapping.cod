@@ -1,11 +1,10 @@
-symbol @print;
-using "std:io" @print as @print;
-symbol @step;
-symbol @target;
+using symbol "std:io" @print;
+symbol @step :: proc() -> i64;
+symbol @target :: i64;
 function helper() -> i64 { 9 }
-effect @target = 7;
+effect @target <- 7;
 import "source.cod" @p as @step with { @target as @x; };
-effect @target = 8;
+effect @target <- 8;
 behave @print(perform @step);
 behave @print(behave @step);
 behave @print(@target);

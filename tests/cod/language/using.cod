@@ -1,13 +1,11 @@
-symbol @print;
-using "std:io" @print as @print;
-symbol @assert;
-using "std:io" @assert as @assert;
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
 symbol from "vocabulary.cod" @x;
 function helper() -> i64 { 9 }
-effect @x = 7;
-symbol @p;
+effect @x <- 7;
+symbol @p :: proc() -> i64;
 using "source.cod" @p as @p;
 behave @assert(@x == 7);
-effect @x = 8;
+effect @x <- 8;
 behave @print(perform @p);
 behave @print(behave @p);

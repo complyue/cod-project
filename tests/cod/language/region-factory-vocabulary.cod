@@ -1,1 +1,1 @@
-symbol @arena;
+symbol @arena :: region;

@@ -81,6 +81,7 @@ struct Module {
   std::set<Module *> unit_sources;
   std::set<size_t> selected_units;
   std::map<std::string, Value> globals;
+  std::map<const Form *, Value> procedures;
   std::map<size_t, Value> exports;
   enum class State { registered, executing, complete } state = State::registered;
   bool builtin = false;
@@ -102,6 +103,7 @@ class Compiler {
   std::map<std::string, std::unique_ptr<Module>> modules_;
   std::vector<std::string> symbol_names_;
   std::map<size_t, Type> symbol_types_;
+  std::map<size_t, Method> symbol_declarations_;
   std::vector<std::string> scanned_;
   std::vector<std::string> execution_order_;
   std::set<const Form *> active_calls_;
@@ -125,7 +127,7 @@ class Compiler {
   enum class Presence { empty, owned, conditional };
   struct Region { llvm::Value *owner; Presence access = Presence::owned; };
   std::vector<Region> regions_;
-  struct Holding { size_t region; llvm::Value *slot; bool module_lifetime; Presence state = Presence::owned; };
+  struct Holding { size_t region; bool module_lifetime; Presence state = Presence::owned; };
   std::vector<Holding> holdings_;
   bool module_top_level_ = false;
   bool region_initializer_ = false;
@@ -200,9 +202,18 @@ class Compiler {
   }
   Type resolve(Type type, Module &module, const Location &at) {
     type = resolve_name(type, module, at);
+    if (type.kind == Type::procedure) {
+      if (!type.target) fail(at, "a procedure type requires its parameter and result signature");
+      for (auto &parameter : type.parameters) {
+        parameter = resolve(parameter, module, at);
+        if (parameter == Type::void_type) fail(at, "a procedure parameter must have a value type");
+      }
+      type.target = std::make_shared<Type>(resolve(*type.target, module, at));
+      return type;
+    }
     if (type.kind == Type::reference) {
       auto target = resolve_name(*type.target, module, at);
-      if (target.kind == Type::reference || target == Type::region || target == Type::void_type)
+      if (target.kind == Type::reference || target == Type::region || target == Type::void_type || target.kind == Type::procedure)
         fail(at, "a regional reference requires a bits or regional target type");
       if (target.kind != Type::regional) target = resolve(target, module, at);
       regional_runtime_ = true;
@@ -231,6 +242,7 @@ class Compiler {
         for (const auto &field : product.form->parameters) {
           if (!fields.insert(field.name).second) fail(field.at, "duplicate product field '" + field.name + "'");
           const auto field_type = resolve(field.type, *product.module, field.at);
+          if (field_type.kind == Type::procedure) fail(field.at, "procedure fields are outside the prototype");
           if (field_type == Type::region || field_type.kind == Type::regional || field_type.kind == Type::array ||
               (field_type.kind == Type::reference && type.kind != Type::regional))
             fail(field.at, "regional fields require an explicit regional type and reference fields");
@@ -286,7 +298,10 @@ class Compiler {
       if (form.kind == Form::Kind::symbol) {
         if (result.symbols.contains(form.name) || result.symbol_aliases.contains(form.name))
           fail(form.at, "duplicate symbol name @" + form.name);
-        new_symbol(result, form.name);
+        symbol_declarations_.emplace(new_symbol(result, form.name), Method{&form, &result});
+      } else if (form.kind == Form::Kind::procedure && form.symbolic) {
+        if (!result.symbols.contains(form.name) && !result.symbol_aliases.contains(form.name))
+          symbol_declarations_.emplace(new_symbol(result, form.name), Method{&form, &result});
       } else if (form.kind == Form::Kind::unit) {
         require_user_type_name(form.name, form.at);
         if (!lexical_names.insert(form.name).second) fail(form.at, "duplicate lexical name '" + form.name + "'");
@@ -303,7 +318,7 @@ class Compiler {
         const Type type{form.regional ? Type::regional : Type::product, result.path + "::" + form.name, products_.size()};
         result.types.emplace(form.name, type);
         products_.push_back({&form, &result, {}});
-      } else if (form.kind == Form::Kind::function || (form.kind == Form::Kind::procedure && form.operation) || form.kind == Form::Kind::global) {
+      } else if (form.kind == Form::Kind::function || (form.kind == Form::Kind::procedure && !form.symbolic) || form.kind == Form::Kind::global) {
         if (!lexical_names.insert(form.name).second &&
             (form.kind == Form::Kind::global ||
              (!result.methods.contains(form.name) && !lexical_selections.contains(form.name))))
@@ -402,6 +417,7 @@ class Compiler {
     form->kind = Form::Kind::procedure;
     form->at = selection.at;
     form->name = selection.alias;
+    form->symbolic = true;
     form->parameters = source.form->parameters;
     form->result_type = source.form->result_type;
     std::map<size_t, size_t> identities;
@@ -414,7 +430,25 @@ class Compiler {
     imported_forms_.push_back(std::move(form));
     return result;
   }
+  Type procedure_type(const Form &form, Module &module) {
+    Type type{Type::procedure};
+    for (const auto &parameter : form.parameters)
+      type.parameters.push_back(resolve(parameter.type, module, parameter.at));
+    type.target = std::make_shared<Type>(resolve(*form.result_type, module, form.at));
+    return type;
+  }
+  void declare_symbol_type(size_t id) {
+    if (symbol_types_.contains(id)) return;
+    const auto declaration = symbol_declarations_.find(id);
+    if (declaration == symbol_declarations_.end()) return; // Compiler-provided intrinsic family.
+    const auto &[form, module] = declaration->second;
+    auto type = form->kind == Form::Kind::symbol ? resolve(*form->result_type, *module, form->at)
+                                               : procedure_type(*form, *module);
+    if (type == Type::void_type) fail(form->at, "a symbol cannot have void type");
+    symbol_types_.emplace(id, std::move(type));
+  }
   void fix_type(size_t id, Type type, const Location &at) {
+    declare_symbol_type(id);
     const auto [found, added] = symbol_types_.emplace(id, type);
     if (!added && found->second != type)
       fail(at, "incompatible value types for " + symbol_names_[id] +
@@ -425,7 +459,7 @@ class Compiler {
     if (!found) fail(at, (env.captured_context
         ? "perform requires an unavailable definition-time capture " : "missing required binding ") + symbol_names_[id]);
     if (found->region_id) region_pointer(*found, at);
-    if (found->type == Type::procedure || found->type == Type::region) return *found;
+    if (found->type.kind == Type::procedure || found->type == Type::region) return *found;
     const auto type = found->type;
     return scalar(type, env.captured(id, found) ? found->native : ir_.read_symbol(id, type), found->region_id);
   }
@@ -434,15 +468,26 @@ class Compiler {
     if (value.type.kind == Type::regional || value.type.kind == Type::array || value.type == Type::null_ref)
       fail(at, "bind bits or a typed regional reference, not a dereferenced regional object");
     if (value.region_id) region_pointer(value, at);
+    declare_symbol_type(id);
+    if (value.procedure && !value.procedure->builtin.empty()) {
+      const auto declared = symbol_types_.find(id);
+      if (declared != symbol_types_.end() && declared->second.kind == Type::procedure && declared->second.target) {
+        const auto &type = declared->second;
+        if (type.parameters.size() != 1 || *type.target != Type::void_type ||
+            (value.procedure->builtin == "assert" ? type.parameters[0] != Type::boolean :
+             !numeric(type.parameters[0]) && type.parameters[0] != Type::boolean))
+          fail(at, "signature is incompatible with intrinsic @" + value.procedure->builtin);
+        value.type = type;
+      }
+    }
     fix_type(id, value.type, at);
     if (value.type == Type::region) {
       if (value.holding_id) {
-        auto &source = holdings_.at(*value.holding_id);
-        ir_.consume_region(source.slot);
-        source.state = Presence::empty;
+        fail(at, "cannot transfer ownership out of a dynamic region binding; use a new resource to shadow it");
       }
       value.holding_id = holdings_.size();
-      holdings_.push_back({*value.region_id, ir_.hold_region(value.native, module_top_level_), module_top_level_});
+      ir_.hold_region(value.native, module_top_level_);
+      holdings_.push_back({*value.region_id, module_top_level_});
     }
     ir_.effect(id, value.type, value.native);
     value.owner = &owner;
@@ -467,7 +512,7 @@ class Compiler {
     proc->captures = env;
     proc->captures.captured_context = true;
     proc->captures.captured_bindings = env.bindings;
-    return {Type::procedure, {}, std::move(proc), &lexical};
+    return {procedure_type(form, lexical), {}, std::move(proc), &lexical};
   }
   Value block(const Expression &expr, Module &module, Environment env, Locals locals,
               bool pure, bool discard_result = false) {
@@ -482,7 +527,7 @@ class Compiler {
     if (discard_result) result = {};
     close_holdings(holding_begin, result, expr.at);
     ir_.restore(native_scope);
-    if (result.type == Type::procedure) fail(expr.at, "procedure-valued scope results are not supported");
+    if (result.type.kind == Type::procedure) fail(expr.at, "procedure-valued scope results are not supported");
     return result;
   }
   std::vector<Value> arguments(const Expression &expr, Module &module, Environment &env,
@@ -639,7 +684,7 @@ class Compiler {
   }
   static std::string callable_name(const Form &form) {
     if (form.operation) return "(" + form.name + ")";
-    return form.kind == Form::Kind::procedure ? "@" + form.name : form.name;
+    return form.symbolic ? "@" + form.name : form.name;
   }
   [[noreturn]] static void method_failure(const std::string &name, const std::vector<Value> &args,
                                          const std::vector<Method> &candidates, const Location &at,
@@ -737,7 +782,10 @@ class Compiler {
     for (size_t i = 0; i < args.size(); ++i)
       args[i] = converted(args[i], match.routes[i], at, points.empty() ? nullptr : &points[i]);
     const bool function = match.function.form->kind == Form::Kind::function;
-    if (!function && pure) fail(at, "a function cannot invoke a procedure overload");
+    if (!function && pure) fail(at, match.function.form->operation
+        ? "a function cannot invoke a procedure overload" : "a function cannot invoke a procedure");
+    // Lexical procedures and operation overloads use the caller's dynamic
+    // environment. Only symbolic perform installs definition-time captures.
     return call(*match.function.form, *match.function.lexical, function ? Environment{} : env, args, function, at);
   }
   Type array_type(const Value &value, const Location &at) {
@@ -761,12 +809,14 @@ class Compiler {
     if (!found) fail(expr.at, (env.captured_context
         ? "perform requires an unavailable definition-time capture " : "missing required procedure binding ") + symbol_names_[id]);
     if (!found->procedure) fail(expr.at, "perform/behave requires a procedure value");
-    const auto proc = found->procedure; // Resolve before arguments/capture installation.
+    const auto value = *found;
+    const auto proc = value.procedure; // Resolve before arguments/capture installation.
     std::vector<LLVMEmission::ConversionPoint> points;
     const bool convert_arguments = expr.children.size() > 1 && proc->form && converting_parameters(*proc->form);
     auto args = arguments(expr, module, env, locals, pure, convert_arguments ? &points : nullptr);
     if (!proc->builtin.empty()) {
       if (args.size() != 1) fail(expr.at, "@" + proc->builtin + " expects one argument");
+      if (value.type.target) require(args[0].type, value.type.parameters[0], expr.at);
       if (proc->builtin == "assert") {
         require(args[0].type, Type::boolean, expr.at);
         ir_.assert_value(args[0].native);
@@ -838,7 +888,7 @@ class Compiler {
     Value accumulator;
     if (expr.kind == K::fold) {
       accumulator = expression(*expr.children[2], module, env, locals, pure);
-      if (accumulator.type == Type::void_type || accumulator.type == Type::procedure ||
+      if (accumulator.type == Type::void_type || accumulator.type.kind == Type::procedure ||
           accumulator.type == Type::region || accumulator.type == Type::null_ref ||
           accumulator.type.kind == Type::array || accumulator.type.kind == Type::regional)
         fail(expr.at, "a fold accumulator requires a bits value");
@@ -1021,7 +1071,7 @@ class Compiler {
     auto selected = method(expr.text, module, args, expr.at);
     if (!selected && function->second.size() == 1) {
       const auto &candidate = function->second.front();
-      return call(*candidate.form, *candidate.lexical, {}, args, true, expr.at);
+      return call_method({candidate, std::vector<Route>(args.size())}, args, expr.at, env, pure || function_result, points);
     }
     if (!selected) method_failure(expr.text, args, function->second, expr.at, false);
     return call_method(*selected, args, expr.at, env, pure || function_result, points);
@@ -1159,7 +1209,7 @@ class Compiler {
       auto value = expression(*expr.children[0], module, env, locals, pure);
       if (value.type == Type::region)
         fail(expr.at, "whole-region resources require effect bindings, not lexical values");
-      if (value.type == Type::void_type || value.type == Type::procedure)
+      if (value.type == Type::void_type || value.type.kind == Type::procedure)
         fail(expr.at, "a lexical value requires a bits value");
       if (!locals.declare(expr.text, value)) fail(expr.at, "duplicate lexical value '" + expr.text + "'");
       return value;
@@ -1187,6 +1237,15 @@ class Compiler {
     case K::name: {
       if (const auto local = locals.visible.find(expr.text); local != locals.visible.end()) return local->second;
       if (const auto global = module.globals.find(expr.text); global != module.globals.end()) return global->second;
+      if (const auto methods = module.methods.find(expr.text); methods != module.methods.end()) {
+        if (methods->second.size() != 1) fail(expr.at, "a procedure value requires an unambiguous lexical declaration");
+        const auto &method = methods->second.front();
+        if (method.form->kind == Form::Kind::procedure && !method.form->operation) {
+          const auto value = method.lexical->procedures.find(method.form);
+          if (value == method.lexical->procedures.end()) fail(expr.at, "lexical procedure used before its definition");
+          return value->second;
+        }
+      }
       fail(expr.at, "unavailable lexical value '" + expr.text + "'");
     }
     case K::symbol:
@@ -1215,7 +1274,7 @@ class Compiler {
   static void select_method(Module &module, Method function, const std::string &alias, const Location &at) {
     if (alias == "setfield")
       fail(at, "setfield overloads need a compile-time field-selector contract; outside this prototype");
-    if (function.form->kind == Form::Kind::procedure && !intrinsic_name(alias) &&
+    if (function.form->kind == Form::Kind::procedure && function.form->operation && !intrinsic_name(alias) &&
         binary_precedence(alias) < 0 && alias != "!" && alias != "=" && alias != "[]=")
       fail(at, "a procedure overload requires an operator or intrinsic destination");
     if (!intrinsic_name(alias)) require_user_type_name(alias, at);
@@ -1257,6 +1316,7 @@ class Compiler {
       auto &form = *owned;
       switch (form.kind) {
       case Form::Kind::symbol:
+        declare_symbol_type(symbol(module, form.name, form.at));
         module.available_symbols.insert(form.name);
         break;
       case Form::Kind::function: case Form::Kind::product: case Form::Kind::array: case Form::Kind::unit: break;
@@ -1292,8 +1352,14 @@ class Compiler {
       }
       case Form::Kind::procedure: {
         if (form.operation) break;
-        const auto id = symbol(module, form.name, form.at);
-        bind(id, define_procedure(form, module, env), module, env, form.at);
+        auto value = define_procedure(form, module, env);
+        if (form.symbolic) {
+          const auto id = symbol(module, form.name, form.at);
+          module.available_symbols.insert(form.name);
+          bind(id, std::move(value), module, env, form.at);
+        } else {
+          module.procedures.emplace(&form, std::move(value));
+        }
         break;
       }
       case Form::Kind::global: {
@@ -1366,7 +1432,7 @@ class Compiler {
     for (const auto &[id, current] : env.bindings) {
       if (current->owner != &module) continue;
       auto value = *current;
-      if (value.type != Type::procedure && value.type != Type::region) {
+      if (value.type.kind != Type::procedure && value.type != Type::region) {
         value.native = ir_.read_symbol(id, value.type);
       }
       module.exports.emplace(id, std::move(value));

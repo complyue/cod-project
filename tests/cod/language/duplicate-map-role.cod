@@ -1,4 +1,4 @@
-symbol @step;
-symbol @target;
+symbol @step :: proc() -> i64;
+symbol @target :: i64;
 function helper() -> i64 { 9 }
 import "source.cod" @p as @step with { @target as @x; @target as @x; };

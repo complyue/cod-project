@@ -1,1 +1,1 @@
-symbol @x;
+symbol @x :: i64;

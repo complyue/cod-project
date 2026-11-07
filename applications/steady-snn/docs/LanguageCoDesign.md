@@ -1,15 +1,20 @@
 # SNN-driven CoD language development and validation
 
-Document-set baseline: 215 · Document revision: 215 · Recorded: 2026-11-06.
+Document-set baseline: 220 · Document revision: 220 · Recorded: 2026-11-07.
 
 ## Design authority
 
-- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), this document revision 215, all sections; complete implementation contract `pending-human`.
+- **Callable/type dependency:** [K-305](../../../design/DesignAuthorityRegistry.md#k-305) records native typed/grouped symbols, explicit procedure signatures, lexical and combined symbolic declarations, and capture-preserving installation. Direct lexical calls use current bindings. [Current evidence](../../../tests/cod/language/typed-procedure-validation.json) covers these language facilities and dynamic-resource shadowing/no-extraction. No neural model, layout or learning rule follows; the broader ownership language remains under design.
+
+- **Capture/resource clarification:** [H-180/K-300](../../../design/DesignAuthorityRegistry.md#h-180) reaffirms definition-time dynamic-value capture for perform and current-binding behave. Temporary regional-resource shadows preserve both owners and do not copy or freeze the graph. Packet transport and effect-resource construction are distinct. Existing captured/current traces remain relevant; ordinary owners and the full allowed-type/root interfaces remain incomplete. No neural model, layout or training choice changes.
+
+- **Syntax and resource-context review:** [K-296](../../../design/DesignAuthorityRegistry.md#k-296) applies H-172’s `effect @name <- rhs` spelling. H-173’s owner/bits/procedure-only dynamic context is a proposal; frame-view and target-view bindings below remain subject to that discussion. No neural-model change or new borrow/root-access syntax is selected.
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), this document revision 220, all sections; complete implementation contract `pending-human`.
 - **Value lineage:** C-38/P-87 uses a real SNN workload to develop useful language features and assess their cost. P-25/P-22 connect the application to the charter's typed semantic programs. P-91 depends on the confirmed C-29 pull architecture; P-93 depends on the separately specified [D-10 language contract](../../../design/SymbolicDynamicScope.md). Dependencies do not grant qualification.
 - **Human baseline:** H-93/H-94 govern continuous source state and target-owned two-frame pull; H-95 ties model mechanisms to learning/generalization. H-96 requests joint development. The individually scoped H-97–H-121 records specify capture, purity, storage, demand-checked module/call behavior and symbol selectors/import maps. H-123 limits the current increment to programming facilities and runtime support. H-140 makes module incorporation once-only after scanning; H-143–H-145 require one LLVM path, focused tests and simplification. H-148 requires each argument’s conversion to finish before the next argument is evaluated.
 - **Invariants / non-goals:** retain regional lifetimes, static SoA connectivity, non-consuming source reads and common source-time views. No user heap lifetime or implicit heap closure is introduced. No push queue, new neuron equation, selected training rule, frame rate or auxiliary per-edge state follows from language development.
 - **Acceptance:** each increment demonstrates both a language property and a simulator property using the same stated semantics. Diagnostic arithmetic is distinct from evidence of learned neural behavior.
-- **Module-lifetime alignment:** [H-166/K-294](../../../design/DesignAuthorityRegistry.md#h-166) keeps every incorporated module top-level scope alive until process exit. [K-295](../../../design/DesignAuthorityRegistry.md#k-295) records native source-module storage surviving initialization, with effect-held owner moves checked separately from binding lookup. This revision changes language-integration expectations only, not SNN dynamics or training.
+- **Module-lifetime alignment:** [H-166/K-294](../../../design/DesignAuthorityRegistry.md#h-166) keeps every incorporated module top-level scope alive until process exit. [K-295](../../../design/DesignAuthorityRegistry.md#k-295) records native source-module storage surviving initialization, with the historical move behavior superseded by H-181 no-extraction and current shadowing checks. This revision changes language-integration expectations only, not SNN dynamics or training.
 - **Current assessment:** [K-252](../../../design/DesignAuthorityRegistry.md#k-252) reconciles revision 213 and the semantic catalog with confirmed module/call rules and actual evidence. The native records below identify their own implementation scope; new mechanisms still require qualification within their bounded increment.
 
 ## The first useful execution path
@@ -45,13 +50,13 @@ The following describes expression evaluation order and scope lifetime; it is se
 ```text
 procedure @step_cc(cc, model_time):
     begin scope
-        effect @read_frame  = immutable view of A
-        effect @write_frame = exclusive destination view of B
-        effect @model_time  = model_time
+        effect @read_frame <- immutable view of A
+        effect @write_frame <- exclusive destination view of B
+        effect @model_time <- model_time
 
         for each target neuron:
             begin scope
-                effect @tgt_neuron = target identity/view
+                effect @tgt_neuron <- target identity/view
                 behave @update_target
             end scope
 
@@ -62,7 +67,7 @@ procedure @step_cc(cc, model_time):
 
 `behave` deliberately gives `@update_target` the current target and frame. Its numerical functions receive the relevant snapshots and parameters explicitly. An accidental `perform` could restore the target/frame captured when that procedure was defined. The demanded whole-program call paths must supply the required bindings: `behave` uses the active target/frame context, while `perform` requires the appropriate captured values. Missing required values are compilation errors. Module initialization is part of those paths, not an independently compiled module with an unknown caller.
 
-`@step_cc` and `@update_target` are dynamic procedure bindings; numerical helpers such as `source_effect` are lexical functions. Reads use `@name`, writes use `effect @name = value`, and operations participate in expression evaluation. A frame-publication operation can have a `void` result when it intentionally returns no meaningful value. Publishing and the write operation on regional arrays remain explicit effectful operations; symbolic rebinding alone does not define regional-object mutation.
+`@step_cc` and `@update_target` are dynamic procedure bindings; numerical helpers such as `source_effect` are lexical functions. Reads use `@name`, writes use `effect @name <- value`, and operations participate in expression evaluation. A frame-publication operation can have a `void` result when it intentionally returns no meaningful value. Publishing and the write operation on regional arrays remain explicit effectful operations; symbolic rebinding alone does not define regional-object mutation.
 
 For an operation needing fixed model configuration **and** the current target, lexical capture or explicit arguments can carry that configuration while `behave` supplies the dynamic execution context. `perform` is appropriate when the operation intentionally requires its captured dynamic values. It must not silently mix captured and current values according to convenience.
 
@@ -87,8 +92,8 @@ These increments form a proposed implementation order, not a request to settle t
 
 The [semantic case file](../research/cod-language-scope-cases.json) records these initial expectations:
 
-- A procedure created with `@x = 1` still observes 1 through `perform` after the caller evaluates `effect @x = 2`. `behave` observes 2.
-- With a captured scalar 1 and caller scalar 7, a procedure evaluating `effect @x = @x + 1` then reading `@x` observes 2 on each `perform` and 8 on each `behave`. Its local effect restores on return; the caller remains 7 throughout.
+- A procedure created with `@x = 1` still observes 1 through `perform` after the caller evaluates `effect @x <- 2`. `behave` observes 2.
+- With a captured scalar 1 and caller scalar 7, a procedure evaluating `effect @x <- @x + 1` then reading `@x` observes 2 on each `perform` and 8 on each `behave`. Its local effect restores on return; the caller remains 7 throughout.
 - An imported alias accesses the original symbol. An identically spelled declaration from a distinct package origin has another binding.
 - A demanded call path missing a required binding is rejected during compilation; no module is independently compiled. Procedure definitions use symbols, while lexical function lookup remains independent of caller spellings.
 - Scanning all model/vocabulary dependencies causes no procedure activation or capture. Dependency execution-semantics incorporation follows first encounters during entry compilation, once per module, even when their order differs from scan order.

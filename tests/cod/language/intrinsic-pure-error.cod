@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 symbol from "intrinsic-library.cod" @bias;
 using "intrinsic-library.cod" (len);
-effect @bias = 2;
+effect @bias <- 2;
 function wrong(value::i64)::u64 { len(value) }
 behave @print(wrong(3));

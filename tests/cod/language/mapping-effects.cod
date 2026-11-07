@@ -1,13 +1,12 @@
-symbol @print;
-using "std:io" @print as @print;
-symbol @step;
-symbol @cell;
-symbol @helper;
+using symbol "std:io" @print;
+symbol @step :: proc() -> i64;
+symbol @cell :: i64;
+symbol @helper :: proc() -> i64;
 procedure @helper -> i64 { @cell * 10 }
-effect @cell = 5;
+effect @cell <- 5;
 import "mapped-effects-model.cod" @update as @step
     with { @cell as @target; @helper as @next; };
-effect @cell = 9;
+effect @cell <- 9;
 behave @print(perform @step);
 behave @print(behave @step);
 behave @print(@cell);

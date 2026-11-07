@@ -1,5 +1,5 @@
-symbol @middle;
-symbol @value;
+symbol @middle :: proc() -> i64;
+symbol @value :: i64;
 function helper() -> i64 { 9 }
-effect @value = 7;
+effect @value <- 7;
 import "source.cod" @p as @middle with { @value as @x; };

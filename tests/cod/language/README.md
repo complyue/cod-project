@@ -1,11 +1,18 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 66 · Recorded: 2026-11-06.
+Prototype reference revision: 72 · Recorded: 2026-11-07.
 
 ## Design authority
 
-- **Registry / scope:** implementation reference for [D-10r36](../../../design/DesignAuthorityRegistry.md#d-10), the existing D-07 language/runtime increment and D-11r13. The complete design contracts remain pending-human; this reference describes the bounded implementation. [K-290](../../../design/DesignAuthorityRegistry.md#k-290) records H-161’s reserved module words and H-162’s distinct assignment family; [K-291](../../../design/DesignAuthorityRegistry.md#k-291) records H-163/H-164’s indexed `([]=)` syntax. [K-292](../../../design/DesignAuthorityRegistry.md#k-292) records the preceding indexed-assignment acceptance; each evidence record retains its own run/input scope.
-- **Module and ownership scope:** [K-295](../../../design/DesignAuthorityRegistry.md#k-295) records H-166’s process-lifetime module regions and H-167/H-169’s effect-held owner moves, with 146 source checks, five composition cases and the relocation/release harness passing. [Actor-foundation evidence](actor-foundation-validation.json) identifies the bounded implementation. Mailbox operations and ownership-bearing result sums remain design work under H-168/H-170.
+- **Implemented typed callables:** [K-305](../../../design/DesignAuthorityRegistry.md#k-305) records H-184–H-189 typed/grouped symbols, lexical procedures, direct symbolic `proc` declarations and explicit procedure signatures. Direct lexical calls use current dynamic bindings. Installing a lexical procedure as an effect retains its captures. [Validation](typed-procedure-validation.json) records the native checks. The broader [ownership-language draft](../../../design/RegionalOwnership.md) remains pending.
+
+- **Dynamic resources:** H-181 ownership extraction from symbolic region bindings is rejected. Fresh resources may shadow existing resources; captured perform preserves both owners. General Maybe sums, ordinary-owner acquisition and packet transfer are not implemented.
+
+- **Capture/resource contract:** H-180 definition-time values are used by symbolic perform; symbolic behave and lexical direct calls use the caller context. The native resource-capture fixture verifies that a captured region and a distinct currently bound region both remain usable around replay. Capturing a resource neither copies its graph nor extends its lifetime.
+
+- **Current syntax:** [H-172/K-296](../../../design/DesignAuthorityRegistry.md#h-172) requires `effect @name <- rhs`; the equals spelling is rejected. The proposed H-173 restriction on dynamic value types is not enabled. [Syntax and lifetime evidence](effect-arrow-validation.json) records this boundary and current branch-analysis limits.
+- **Registry / scope:** implementation reference for [D-10r44](../../../design/DesignAuthorityRegistry.md#d-10), the existing D-07 language/runtime increment and D-11r13. The complete design contracts remain pending-human; this reference describes the bounded implementation. [K-290](../../../design/DesignAuthorityRegistry.md#k-290) records H-161’s reserved module words and H-162’s distinct assignment family; [K-291](../../../design/DesignAuthorityRegistry.md#k-291) records H-163/H-164’s indexed `([]=)` syntax. [K-292](../../../design/DesignAuthorityRegistry.md#k-292) records the preceding indexed-assignment acceptance; each evidence record retains its own run/input scope.
+- **Module and ownership scope:** module-owned regions survive initialization and are released at process exit. K-305 records current no-extraction/shadowing behavior. [Actor-foundation evidence](actor-foundation-validation.json) preserves the earlier implementation run and does not authorize consuming dynamic resources. Mailbox operations and owning sums remain design work.
 - **Value lineage:** C-02 supplies LLVM native execution; C-35–C-37/P-84–P-86 track nominal identity, scoped effects and pure computation through C-10. Formal candidate derivations retain their registry status.
 - **Human baseline:** H-96–H-141 supply the local symbol, callable, module, storage, snapshot and UoM rules; H-122/H-123 authorize this language/runtime increment. [H-143](../../../design/DesignAuthorityRegistry.md#h-143) selects one direct LLVM path. H-144/H-145 require contract-focused tests and ongoing simplification. H-146 accepts the temporary first-field self-reference limitation. H-147 continues the work for ten active hours, excluding waiting. H-148 requires per-argument conversion before the next argument. H-149 permits nested local shadowing and requires unique declarations within each scope. H-150 rejects reserved expression names in lexical value declarations.
 - **Operation baseline:** H-153–H-155 require reserved ordinary names, parenthesized intrinsic overload declarations and function/procedure overloads under one operation. H-158 keeps intrinsic representation separate from CoD symbols; H-159 selects current-binding procedure invocation. H-160 defers new decisions to the work-period review. [K-282](../../../design/DesignAuthorityRegistry.md#k-282) records the bounded implementation; [K-283](../../../design/DesignAuthorityRegistry.md#k-283) records definition-time identity resolution and composed native-wrapper/index examples. [K-284](../../../design/DesignAuthorityRegistry.md#k-284) records token-category separation and callable-kind diagnostics. [K-285](../../../design/DesignAuthorityRegistry.md#k-285) aligns the UoM document with the same callable boundary while preserving pure conversions. [K-286](../../../design/DesignAuthorityRegistry.md#k-286) records current cross-document scope and refreshed numeric/regional/gather evidence. [K-287](../../../design/DesignAuthorityRegistry.md#k-287) records shared compiler binding snapshots and their measured metadata cost.
@@ -35,28 +42,27 @@ build/bin/cod --check tests/cod/language/using.cod --emit-llvm /tmp/cod-example.
 ## Supported source forms
 
 ```text
-symbol @x;
-symbol @p;
+symbol x :: i64, p :: proc() -> i64;
 using symbol "std:io" @print;
 function twice(value: i64) -> i64 { value * 2 }
 global seed: i64 = twice(3);
-effect @x = seed;
-procedure @p -> i64 { @x }
-effect @x = 9;
+effect @x <- seed;
+proc @p() -> i64 { @x }
+effect @x <- 9;
 behave @print(perform @p);  // 6: definition-time value
 behave @print(behave @p);   // 9: current dynamic binding
 ```
 
 - Scalars `i64`, `u8`, `u32`, `u64`, `f32`, `f64`, `bool` and `void`; decimal integers with optional leading zeroes, floating literals with optional `f32`/`f64` suffix, `true`/`false`, arithmetic, comparisons, `!`, `&&` and `||`. Unsuffixed floating literals use `f64`; arithmetic does not implicitly mix widths. Floating operators use native IEEE arithmetic; signed integer arithmetic checks overflow.
-- Lexically named functions with typed parameters and an optional result annotation; symbol-named procedures support the same typed values and regional references. A no-argument procedure can omit its parameter list. Calls to functions use `name(...)`; symbol-named procedure calls use `perform @name(...)` or `behave @name(...)`. Operator/intrinsic procedure overloads use operation syntax and current bindings.
-- `effect @name = value` binds for the enclosing scope and yields that value. `@name` reads. Nested braces restore bindings on exit. Ordinary `@name = value` rebinding is rejected. The prototype assigns one value type to each symbol identity across the program. A conflicting binding reports the symbol and both types, including nominal module origins even when local aliases have the same spelling.
+- Lexical functions and procedures have typed parameters. Procedures use `proc` or `procedure` and require an explicit result type. `proc p(x::i64) -> i64 { ... }` defines a lexical procedure; `proc @p(x::i64) -> i64 { ... }` defines a symbolic procedure, declaring its typed identity if absent. A no-argument procedure may omit its parameter list. `p(...)` uses lexical lookup and current dynamic bindings; `perform @p(...)` restores captures and `behave @p(...)` uses current bindings. Functions cannot call procedures. Operation overloads also use current bindings.
+- `effect @name <- value` binds for the enclosing scope and yields that value. `@name` reads. Nested braces restore bindings on exit. Ordinary `@name = value` rebinding is rejected. Each symbol declares one value type, checked before binding; procedure types include parameter and result types. A conflicting binding reports the symbol and both types, including nominal module origins even when local aliases have the same spelling.
 - `if (condition) { ... } else { ... }`, with matching branch result types. Blocks yield their last expression; an empty block yields `void`. Semicolons separate expressions and a trailing semicolon does not discard the last value.
 - Module-level `symbol`, `function`, `procedure`, immutable bits `global`, resource declarations and expressions. Global initializers must be bits literals or function calls. Their selected outer callable must be pure, including for overloaded operation spellings; native mutation and region-resource primitives remain procedural. Local immutable `let` bindings, bounded loops and declared regional arrays support numerical kernels.
-- `symbol @local;` declares a fresh identity. `symbol from "vocabulary.cod" @source as @local;` selects an existing source identity; omitting `as` retains its spelling. Neither provides an initial runtime value. Symbol tokens such as `@effect` are distinct from lexical keywords; quoted module paths are neither keywords nor operators.
+- `symbol local :: T;` (also `symbol @local :: T;`) declares a fresh typed identity; grouped declarations require a type on each name. `proc(T1, T2) -> RT` denotes a procedure signature. `symbol from "vocabulary.cod" @source as @local;` preserves the source identity and type. A standalone symbol declaration/selection supplies no runtime value.
 - `using "module.cod" @resource as @local;` installs a source procedure with its definition/captures under an existing destination symbol. `import "module.cod" @resource as @local;` redefines its body in the receiving lexical/dynamic context and installs the result there. The destination must be declared or selected before the encounter, even when `as` is omitted. For ordinary using, omitting `as` requires the destination to share the source identity; a different identity requires explicit `as`, even `using "module.cod" @resource as @resource;`. The outer import rule remains unchanged.
 - `using symbol "module.cod" @resource as @local;` selects both the source identity and its procedure in one encounter; `as` is optional. An absent local name becomes an alias of the source identity. An existing name must resolve to that same identity; otherwise use ordinary `using` with an explicit destination. Equal procedure values or spellings do not establish identity equality.
 - `import "module.cod" @resource as @local with { @target as @tgt_neuron; };` supplies the receiving module’s `@target` identity for the source-body role `@tgt_neuron`. Unlisted body aliases use the same name in the receiving module. Translation precedes capture/checking, covers reads, writes and procedure calls, and creates no runtime alias map or extra local alias. `using` does not accept a body map.
-- Lexical functions and immutable globals can be selected with `using "module.cod" name;`. Function-body `import` is unsupported.
+- Lexical functions, lexical procedures and immutable globals can be selected with `using "module.cod" name;`. Lexically selected body `import` is unsupported; symbolic procedure import retains its receiving-context rule.
 - Synthetic system module `std:io` provides `@print` for one scalar and `@assert` for one boolean. These are procedures; functions cannot invoke them or other effects. Use `using symbol "std:io" @print;`, or explicitly select an existing destination. Built-ins have no source body to `import`.
 
 Prototype expression evaluation is left-to-right; boolean operators short-circuit. Both conditional branches are checked. A symbolic write in a conditional logical operand requires an explicit nested scope, including assignment of the same scalar or region resource again. Integer arithmetic overflow and integer division by zero fail the native program with exit 70 before LLVM can evaluate an invalid operation. LLVM-emitted checks include the offending CoD expression’s file, line and column; nested calls restore the enclosing expression’s location. Native allocation-service errors include the allocating expression’s location before the allocator message. This embeds diagnostic text without requiring source files at runtime or providing source-level debugging. These sequencing, block-result and numerical choices remain reviewable prototype conventions.
@@ -92,7 +98,7 @@ The regional composition case redefines one procedure body through 96 modules, m
 
 Calls dispatch on argument types across both kinds. A function cannot call a selected procedure overload; the checker does not substitute a different pure method. Exact matches precede conversion-enabled alternatives, and equal matches remain ambiguous. Arguments execute once with each selected conversion before the next argument. A procedural operation uses current dynamic bindings, including the captured context of an enclosing ordinary `perform`. Pure UoM conversions retain their function-only rule.
 
-`using "intrinsic-library.cod" (len);` selects the source method set with its lexical definitions. Procedural overloads require an operator/intrinsic destination, preserving the separate symbol-named procedure interface. Applicable user methods precede the native primitive fallback. `len(array)` therefore retains native array behavior when the selected methods apply to other types. `(len)(value)` is the explicit-call spelling.
+`using "intrinsic-library.cod" (len);` selects the source method set with its lexical definitions. Operation overloads require an operator/intrinsic destination; ordinary lexical procedures retain ordinary-name selection and symbolic procedures retain symbol selection. Applicable user methods precede the native primitive fallback. `len(array)` therefore retains native array behavior when the selected methods apply to other types. `(len)(value)` is the explicit-call spelling.
 
 A source-module helper can retain native fallback while the caller overloads the same primitive signature. In the regression example, an ordinary source procedure `@raw_store` calls `store(ref<f32>, f32)` in its own module, and the receiving module's procedural `(store)` overload delegates to it with `behave @raw_store(...)`. The helper retains its source lexical method table. This uses the existing module/procedure rules and requires no primitive-bypass syntax or intrinsic symbol identity.
 
@@ -150,10 +156,10 @@ Unsigned literals use `u8`, `u32` or `u64` suffixes. Integer arithmetic checks o
 unit Neuron::u32;
 array Rates[Neuron]::f32;
 regional type Node { value::f32; next::ref<Node>; rates::ref<Rates>; }
-symbol @arena;
-symbol @rates;
-effect @arena = region(4096u64);
-effect @rates = alloc @arena Rates(4u64, 0.5f32);
+symbol @arena :: region;
+symbol @rates :: ref<Rates>;
+effect @arena <- region(4096u64);
+effect @rates <- alloc @arena Rates(4u64, 0.5f32);
 store(@rates, Neuron(1u32), 2.0f32);
 function total(a::Rates)::f32 {
   fold (i in Neuron(0u32) .. Neuron(u32(len(a))), sum = 0.0f32) { sum + a[i] }
@@ -180,13 +186,11 @@ The optional `gather_benchmark.py --full-pool` case exercises all 112,281,600 sl
 
 ## Whole-region ownership
 
-A whole-region owner must be held by an effect binding. Native acquisition is `effect @arena = region(capacity)`. `effect @destination = @arena` moves the owner: `@arena` becomes empty, and reads of that consumed binding are compile errors. Ordinary lexical values, parameters, products and regional fields cannot hold whole owners. Interior references retain their ordinary function-input and capture roles.
+Fresh resources are acquired with `effect @arena <- region(bytes)`. The owning scope releases them; module-owned regions remain live until process exit. A whole-region value cannot be extracted from a dynamic binding: `effect @other <- @arena` and self-transfer are compile errors. A fresh binding may shadow an existing resource while preserving the hidden owner's lifetime.
 
-Moving a local owner does not relocate the graph or invalidate interior references while the same region remains locally owned. Closing the destination scope releases that region. A captured whole owner, unlike an interior reference, remains tied to its binding: `perform` cannot restore a consumed owner. Rebinding a symbol to a fresh region leaves an unrelated outer owner available on scope exit; moving the outer owner into a nested binding leaves that outer frame empty after return. The result of an `effect` is the new binding, so nested owner moves also transfer exactly once.
+`perform` can temporarily expose a captured region while another region is bound to the same identity. Both owners survive replay, and the caller's binding is restored. The `region-owner-capture` fixture checks this; `region-owner-move` checks extraction rejection. The native relocation/release harness verifies layout and allocator symmetry independently.
 
-Branches and short-circuit expressions merge ownership facts. A use must be owned on every path. A repeated or dynamically bounded loop cannot consume an owner acquired outside it; per-iteration acquisition and transfer are supported. Statically empty and single-iteration ranges retain their proven behavior. These checks are conservative and do not introduce a runtime presence query or general affine type system.
-
-[region-owner-move.cod](region-owner-move.cod) covers local moves, interior captures, fresh shadowing, procedure consumption, conditional/short-circuit cleanup and per-iteration acquisition. The rejection fixtures cover reuse after a call, captured-owner resurrection, conditional consumption, repeated outer-owner use and lexical owners. [region-module-perform.cod](region-module-perform.cod) reads source-module storage after initialization. The relocation harness moves its owner and requires one non-null release. No mailbox, send/receive, optional-owner matching or Actor scheduler is implemented.
+Lifetime analysis still checks local-resource escape and joins of regional references. Ordinary owning variables, ownership-bearing results, optional extraction and mailbox transport remain unimplemented while their source-language contract is designed. Historical move/branch reports retain their original scope and are not current acceptance evidence. The proposed narrower set of dynamic value categories remains under review.
 
 ## Module and storage boundary
 

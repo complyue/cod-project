@@ -1,7 +1,7 @@
 regional type Node { value::i64; next::ref<Node>; }
 function consume(node::Node)::i64 { 7 }
-symbol @arena;
-symbol @node;
-effect @arena = region(4096u64);
-effect @node = alloc @arena Node(1, null);
+symbol @arena :: region;
+symbol @node :: ref<Node>;
+effect @arena <- region(4096u64);
+effect @node <- alloc @arena Node(1, null);
 consume(deref(deref(@node).next));

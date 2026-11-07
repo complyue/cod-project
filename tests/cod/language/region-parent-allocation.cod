@@ -1,24 +1,24 @@
 using symbol "std:io" @print;
 array Values[u32]::i64;
-symbol @arena;
-symbol @values;
-symbol @first;
-symbol @create;
-symbol @grow;
+symbol @arena :: region;
+symbol @values :: ref<Values>;
+symbol @first :: ref<Values>;
+symbol @create :: proc() -> ref<Values>;
+symbol @grow :: proc(ref<Values>) -> ref<Values>;
 procedure @create()::ref<Values> { alloc @arena Values(2u64, 19) }
 procedure @grow(first::ref<Values>)::ref<Values> {
   fold (i in 0 .. 4, previous = first) { alloc @arena Values(2u64, previous[0u32] + i) }
 }
-effect @arena = region(4096u64);
-effect @values = behave @create();
+effect @arena <- region(4096u64);
+effect @values <- behave @create();
 behave @print(@values[1u32]);
-effect @first = @values;
-effect @values = behave @grow(@values);
+effect @first <- @values;
+effect @values <- behave @grow(@values);
 behave @print(@values[1u32]);
 behave @print(@first[1u32]);
 behave @print({
-  effect @arena = region(512u64);
-  effect @values = behave @grow(alloc @arena Values(2u64, 99));
+  effect @arena <- region(512u64);
+  effect @values <- behave @grow(alloc @arena Values(2u64, 99));
   @values[1u32]
 });
 behave @print(@values[1u32]);

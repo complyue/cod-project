@@ -152,11 +152,12 @@ struct Type {
   size_t identity = 0;
   Kind representation = void_type;
   std::shared_ptr<Type> target;
+  std::vector<Type> parameters;
   Type(Kind kind = void_type, std::string name = {}, size_t identity = 0, Kind representation = void_type)
       : kind(kind), name(std::move(name)), identity(identity), representation(representation) {}
   bool operator==(const Type &other) const {
     return kind == other.kind && name == other.name && identity == other.identity &&
-           representation == other.representation &&
+           representation == other.representation && parameters == other.parameters &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
   }
 };
@@ -173,7 +174,13 @@ inline std::string type_name(const Type &type) {
   case Type::uint64: return "u64";
   case Type::boolean: return "bool";
   case Type::void_type: return "void";
-  case Type::procedure: return "procedure";
+  case Type::procedure: {
+    if (!type.target) return "intrinsic procedure family";
+    std::string result = "proc(";
+    for (size_t i = 0; i < type.parameters.size(); ++i)
+      result += (i ? ", " : "") + type_name(type.parameters[i]);
+    return result + ") -> " + type_name(*type.target);
+  }
   case Type::float32: return "f32";
   case Type::float64: return "f64";
   case Type::named: case Type::product: case Type::unit: case Type::regional: case Type::array: return type.name;
@@ -252,7 +259,7 @@ inline bool expression_keyword(std::string_view name) {
   return name == "true" || name == "false" || name == "null" || name == "alloc" ||
          name == "for" || name == "fold" || name == "let" || name == "effect" ||
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
-         name == "function" || name == "global" || name == "symbol";
+         name == "function" || name == "proc" || name == "global" || name == "symbol";
 }
 
 inline bool module_keyword(std::string_view name) {
@@ -329,6 +336,17 @@ class Parser {
   }
   Type parse_type() {
     auto token = name(TokenKind::identifier);
+    if (token.text == "proc" || token.text == "procedure") {
+      Type type{Type::procedure};
+      expect("(");
+      if (!take(")")) {
+        do { type.parameters.push_back(parse_type()); } while (take(","));
+        expect(")");
+      }
+      expect("->");
+      type.target = std::make_shared<Type>(parse_type());
+      return type;
+    }
     if (token.text == "ref") {
       expect("<");
       Type type{Type::reference};
@@ -407,7 +425,8 @@ class Parser {
     if (take("effect")) {
       auto symbol = name(TokenKind::symbol);
       auto expr = make(Expression::Kind::effect, symbol);
-      expect("=");
+      if (is("=")) fail(peek().at, "symbolic bindings require 'effect @name <- value', not '='");
+      expect("<-");
       expr->children.push_back(expression());
       return expr;
     }
@@ -462,7 +481,7 @@ class Parser {
       ++cursor_;
       if (token.text == "null") return make(Expression::Kind::null_ref, token);
       if (token.text == "true" || token.text == "false") return make(Expression::Kind::boolean, token);
-      if (token.text == "procedure" || token.text == "function" || token.text == "global" || token.text == "symbol")
+      if (token.text == "procedure" || token.text == "proc" || token.text == "function" || token.text == "global" || token.text == "symbol")
         fail(token.at, "prototype declarations belong at module top level");
       auto expr = make(is("(") ? Expression::Kind::call : Expression::Kind::name, token);
       if (is("(")) arguments(*expr);
@@ -526,8 +545,19 @@ public:
           form->kind = Form::Kind::symbol_from;
           resource(*form, true);
         } else {
-          form->kind = Form::Kind::symbol;
-          form->name = name(TokenKind::symbol).text;
+          do {
+            auto declaration = std::make_unique<Form>();
+            declaration->kind = Form::Kind::symbol;
+            const auto token = name(peek().kind == TokenKind::symbol ? TokenKind::symbol : TokenKind::identifier);
+            declaration->name = token.text;
+            declaration->at = token.at;
+            if (!is("::") && !is(":")) fail(peek().at, "a symbol declaration requires an explicit type");
+            type_separator();
+            declaration->result_type = parse_type();
+            forms.push_back(std::move(declaration));
+          } while (take(","));
+          expect(";");
+          continue;
         }
         expect(";");
       } else if (take("unit")) {
@@ -561,14 +591,14 @@ public:
           if (!is("}")) expect(";");
         }
         take(";");
-      } else if (is("function") || is("procedure") || is("conversion")) {
+      } else if (is("function") || is("procedure") || is("proc") || is("conversion")) {
         form->conversion = take("conversion");
         if (form->conversion && !is("function")) fail(peek().at, "conversion requires a pure function");
         const bool function = take("function");
-        if (!function) expect("procedure");
+        if (!function && !take("proc")) expect("procedure");
         form->kind = function ? Form::Kind::function : Form::Kind::procedure;
-        if (function || is("(")) form->name = lexical_name(&form->operation).text;
-        else form->name = name(TokenKind::symbol).text;
+        form->symbolic = !function && peek().kind == TokenKind::symbol;
+        form->name = form->symbolic ? name(TokenKind::symbol).text : lexical_name(&form->operation).text;
         if (take("(")) {
           if (!take(")")) {
             do {
@@ -594,6 +624,7 @@ public:
           fail(peek().at, "a function requires a parameter list");
         }
         if (take("->") || take("::")) form->result_type = parse_type();
+        if (!function && !form->result_type) fail(form->at, "a procedure declaration requires an explicit result type");
         form->body = block();
         take(";");
       } else if (take("global")) {

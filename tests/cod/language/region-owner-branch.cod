@@ -1,5 +1,0 @@
-symbol @a;
-symbol @b;
-effect @a = region(4096u64);
-if (used_bytes(@a) > 0u64) { effect @b = @a; {} } else { {} };
-used_bytes(@a);

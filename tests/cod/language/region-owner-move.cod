@@ -1,36 +1,3 @@
-using symbol "std:io" @print;
-array Values[u32]::i64;
-symbol @a;
-symbol @b;
-symbol @c;
-symbol @values;
-symbol @inspect;
-symbol @consume;
-effect @a = region(4096u64);
-effect @values = alloc @a Values(1u64, 7);
-procedure @inspect()::i64 { @values[0u32] }
-effect @b = @a;
-behave @print(perform @inspect());
-store(@values, 0u32, 9);
-behave @print(perform @inspect());
-effect @a = region(4096u64);
-effect @values = alloc @a Values(1u64, 11);
-{
-  effect @a = region(4096u64);
-  effect @c = @a;
-  behave @print(capacity_bytes(@c) > 0u64);
-};
-behave @print(@values[0u32]);
-procedure @consume() { effect @c = @a; {} }
-behave @consume();
-for (i in 0..2) {
-  effect @a = region(4096u64);
-  effect @values = alloc @a Values(1u64, i);
-  if (i == 0) { behave @consume() } else { {} };
-};
-for (i in 0..2) {
-  effect @a = region(4096u64);
-  (i == 0) || { behave @consume(); true };
-};
-effect @c = effect @a = @b;
-behave @print(perform @inspect());
+symbol a :: region, b :: region;
+effect @a <- region(4096u64);
+effect @b <- @a;

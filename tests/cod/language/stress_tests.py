@@ -89,7 +89,7 @@ def main():
         print(json.dumps({'case': 'deep-leaf-diagnostic', 'passed': diagnostic_passed}), flush=True)
 
         depth = 1000
-        (directory / 'operation-vocabulary.cod').write_text('symbol @base;\n')
+        (directory / 'operation-vocabulary.cod').write_text('symbol @base :: i64;\n')
         (directory / 'operation-leaf.cod').write_text(
             'symbol from "operation-vocabulary.cod" @base;\n'
             'type Argument { value::i64; }\n'
@@ -97,19 +97,19 @@ def main():
         lines = ['using symbol "std:io" @print;',
                  'symbol from "operation-vocabulary.cod" @base;',
                  'using "operation-leaf.cod" Argument;', 'using "operation-leaf.cod" (+);',
-                 'effect @base = 5;']
+                 'effect @base <- 5;']
         for i in range(depth):
-            lines.append(f'symbol @p{i};')
+            lines.append(f'symbol @p{i} :: proc(i64) -> i64;')
             body = 'Argument(x) + 0' if i == 0 else f'behave @p{i-1}(x + 1)'
             lines.append(f'procedure @p{i}(x::i64)::i64 {{ {body} }}')
-        lines += ['effect @base = 9;', f'behave @print(perform @p{depth-1}(0));',
+        lines += ['effect @base <- 9;', f'behave @print(perform @p{depth-1}(0));',
                   f'behave @print(behave @p{depth-1}(0));', 'behave @print(@base);']
         entry = directory / 'procedure-main.cod'
         entry.write_text('\n'.join(lines) + '\n')
         results.append(run(executable, root, entry, f'{depth-1+5}\n{depth-1+9}\n9\n',
                            '1000-procedure-inline-chain-with-operation-leaf'))
         (directory / 'operation-leaf.cod').write_text(
-            'symbol @missing;\n'
+            'symbol @missing :: i64;\n'
             'type Argument { value::i64; }\n'
             'procedure (+)(value::Argument, delta::i64)::i64 { @missing }\n')
         command = [str(executable), '--check', str(entry)]
@@ -160,17 +160,17 @@ def main():
 
         (directory / 'regional-types.cod').write_text(
             'regional type Node { value::f32; next::ref<Node>; }\n')
-        (directory / 'regional-vocabulary.cod').write_text('symbol @root;\n')
+        (directory / 'regional-vocabulary.cod').write_text('using "regional-types.cod" Node;\nsymbol @root :: ref<Node>;\n')
         (directory / 'regional-body.cod').write_text(
             'using "regional-types.cod" Node;\n'
             'symbol from "regional-vocabulary.cod" @root as @input;\n'
-            'symbol @walk;\nfunction find(node::Node)::ref<Node> { node.next }\n'
+            'symbol @walk :: proc() -> ref<Node>;\nfunction find(node::Node)::ref<Node> { node.next }\n'
             'procedure @walk()::ref<Node> { find(deref(@input)) }\n')
         depth = 96
         for i in range(depth):
             body = 'using "regional-types.cod" Node;\n'
             body += ('symbol from "regional-vocabulary.cod" @root;\n'
-                     f'symbol @node{i};\neffect @node{i} = @root;\nsymbol @walk;\n')
+                     f'symbol @node{i} :: ref<Node>;\neffect @node{i} <- @root;\nsymbol @walk :: proc() -> ref<Node>;\n')
             if i + 1 < depth:
                 body += f'using "regional-{i+1}.cod" find as next;\n'
             body += 'function find(node::Node)::ref<Node> { '
@@ -182,20 +182,20 @@ def main():
         entry = directory / 'regional-main.cod'
         entry.write_text('using symbol "std:io" @print;\nusing "regional-types.cod" Node;\n'
                          'symbol from "regional-vocabulary.cod" @root as @head;\n'
-                         'symbol @arena;\nsymbol @tail;\nsymbol @alternate;\n'
-                         'effect @arena = region(16384u64);\n'
-                         'effect @tail = alloc @arena Node(11.0f32, null);\n'
-                         f'effect @head = fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'
+                         'symbol @arena :: region;\nsymbol @tail :: ref<Node>;\nsymbol @alternate :: ref<Node>;\n'
+                         'effect @arena <- region(16384u64);\n'
+                         'effect @tail <- alloc @arena Node(11.0f32, null);\n'
+                         f'effect @head <- fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'
                          '  alloc @arena Node(f32(i), node)\n};\n'
                          'using "regional-0.cod" find;\nusing symbol "regional-0.cod" @walk;\n'
                          'symbol from "regional-0.cod" @node0 as @selected;\n'
                          'behave @print(deref(find(deref(@head))).value);\n'
                          'setfield(@tail, value, 29.0f32);\n'
                          'behave @print(deref(find(deref(@head))).value);\n'
-                         'effect @arena = region(4096u64);\n'
-                         'effect @alternate = alloc @arena Node(47.0f32, null);\n'
+                         'effect @arena <- region(4096u64);\n'
+                         'effect @alternate <- alloc @arena Node(47.0f32, null);\n'
                          'setfield(@alternate, next, @alternate);\n'
-                         'effect @selected = @alternate;\n'
+                         'effect @selected <- @alternate;\n'
                          'behave @print(deref(perform @walk()).value);\n'
                          'behave @print(deref(behave @walk()).value);\n')
         results.append(run(executable, root, entry, '11\n29\n29\n47\n',

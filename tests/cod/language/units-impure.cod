@@ -1,7 +1,7 @@
 unit a::i64;
 unit b::i64;
-symbol @offset;
-effect @offset = 1;
+symbol @offset :: i64;
+effect @offset <- 1;
 conversion function convert(x (a))::b { b(scalar(x) + @offset) }
 function exact(x (b*))::i64 { scalar(x) }
 exact(a(1));
