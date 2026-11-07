@@ -1,0 +1,7 @@
+symbol @a;
+symbol @b;
+symbol @consume;
+effect @a = region(4096u64);
+procedure @consume() { effect @b = @a; {} }
+behave @consume();
+used_bytes(@a);

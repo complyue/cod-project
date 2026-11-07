@@ -35,6 +35,10 @@ struct Node {
   Node(Node &&) = delete;
 };
 extern "C" void cod_lang_region_free(void *owner) {
+  if (!owner) return;
+  static bool released = false;
+  assert(!released);
+  released = true;
   auto &original = *static_cast<CoDRegion *>(owner);
   CoDRegionOwner relocated(8192);
   // Reproduce only allocation offsets with the same public allocator/layout.
@@ -89,7 +93,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="cod-regional-layout-") as temporary:
         scratch = Path(temporary)
         entry, ir, bitcode, runtime = [scratch / name for name in ("main.cod", "main.ll", "main.bc", "runtime.cc")]
-        entry.write_text((directory / "region-records.cod").read_text() + "\nsetfield(@tail, next, @head);\n")
+        entry.write_text((directory / "region-records.cod").read_text() +
+                         "\nsetfield(@tail, next, @head);\nsymbol @moved;\neffect @moved = @arena;\n")
         _, frontend_seconds = checked([toolchain / "bin/cod", "--check", entry,
                                        "--emit-llvm", ir, "--emit-bc", bitcode, "--emit-runtime", runtime], root)
         roundtrip = scratch / "roundtrip.bc"
@@ -117,6 +122,7 @@ def main():
                     "native_process_seconds": process_seconds, "llvm_ir_bytes": ir.stat().st_size,
                     "bitcode_bytes": bitcode.stat().st_size,
                     "notes": ["The CoD program creates the inspected records, array, sharing and cycle through LLVM IR.",
+                              "The region owner moves to another effect binding; the release hook requires one non-null release.",
                               "The release hook copies the whole image, frees the original, then checks references and mutation.",
                               "Only system services and the independent layout/relocation check use C++."],
                     "source_sha256": {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()

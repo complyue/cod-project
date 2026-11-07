@@ -11,7 +11,7 @@ function total(a::Rates)::f32 {
 function choose(a::Rates, i (Neuron))::ref<f32> { ref_at(a, i) }
 function read(p::ref<f32>)::f32 { deref(p) }
 effect @arena = region(4096u64);
-behave @assert(true && { effect @arena = @arena; capacity_bytes(@arena) > 0u64 });
+behave @assert(true && { effect @arena = region(128u64); capacity_bytes(@arena) > 0u64 });
 effect @rates = alloc @arena Rates(4u64, 0.5f32);
 store(@rates, Neuron(1u32), 2.0f32);
 behave @print(total(deref(@rates)));

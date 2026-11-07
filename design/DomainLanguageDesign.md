@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 28
+Discussion revision: 30
 
 Recorded: 2026-10-22
 
@@ -10,13 +10,15 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
+- **Current implementation evidence:** [K-295](DesignAuthorityRegistry.md#k-295) records the bounded module-lifetime and effect-held owner increment under H-166/H-169/H-171. Mailbox result syntax and Actor execution remain design proposals.
 - **Registry:** [D-07](DesignAuthorityRegistry.md#d-07), which controls qualification and scope.
-- **Revision / covered scope:** discussion revision 28, all sections of this language tracker. Goals record human direction. Topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
+- **Revision / covered scope:** discussion revision 30, all sections of this language tracker. Goals record human direction. Topic proposals and candidate acceptance criteria remain `pending-human`. The application has a separate D-08 document set.
 - **Value lineage:** candidate P-12–P-18 connect the packet, database, language and interoperability concepts C-08–C-11 and this document to C-01, C-02, C-05 and C-06. Explicit language semantics should preserve inspectable business intent; regional transport and deferred reclamation should serve efficient persistent semantics; source tools should keep that semantics readable. These proposed derivations are not yet qualified implementation authority.
 - **Dependencies:** P-19–P-21 identify C-03, C-04 and C-02: multiple regions/domains, semantic levels and environment-specific effects. P-24 records application C-12 as an external example for DL-13; its model and resource choices are scoped to D-08. Existing C++ designs are reference material with their own registry status.
 - **Contract boundaries:** see “Scope and invariants”; candidate acceptance and implementation boundaries are in DL-13. H-96–H-164 retain their recorded local scopes for symbols, callables, storage, snapshots, scalar identities and the current work period; a complete grammar, ABI, storage protocol and implementation contract remain open.
 - **Human baseline:** H-06 supplies the near-term goals; H-07 establishes discussion tracking; H-08 selects the first application; H-11 requires its own document set. [H-96–H-121](DesignAuthorityRegistry.md#h-96) direct coordinated development and define the scoped language propositions in [D-10](SymbolicDynamicScope.md). H-122/H-123 bound the language/runtime increment to useful language/runtime support; H-124/H-127/H-129 specify regional snapshot access, and H-125/H-126/H-128 require strict scalar identities and a substantive UoM comparison. They do not approve every proposed implementation detail.
 - **Regional graph boundary:** [H-156/H-157](DesignAuthorityRegistry.md#h-156) cover one direct-pointer graph per region and logical business relationships between regions. C-53/P-140 records the constraint. [K-280](DesignAuthorityRegistry.md#k-280) reconciles G-07 and DL-03/DL-08/DL-15 with D-10r25 and the [regional memory tracker](GraphGrainedMemoryManagement.md).
+- **Module lifetime and Actor review:** H-166 retains entry/dependency top-level scopes until process exit; H-167 supplies effect-held region ownership for feasibility analysis; H-168 supplies intrinsic mailboxes and local-error-only send feedback. [K-294](DesignAuthorityRegistry.md#k-294) records revision 29 and the affected implementation/evidence scopes.
 - **Current assessment:** [K-292](DesignAuthorityRegistry.md#k-292) records revision 28: H-161 reserves primary module words, H-162 selects `(=)`, and H-163/H-164 select indexed assignment through `([]=)(array, index, value)`. [K-286](DesignAuthorityRegistry.md#k-286) records revision 27 and the confirmed intrinsic/procedure overload boundary, with pending syntax choices deferred under H-160. [K-273](DesignAuthorityRegistry.md#k-273) records revision 25: H-149’s nested-only shadowing and H-150’s reserved expression-name rule are included in the immediate decisions and linked to D-10r21. H-146’s known pointer limitation, H-148’s argument order and H-147’s active-work scope retain their recorded boundaries. H-143–H-145 govern the sole LLVM path, contract-focused tests and simplification. The prior scoped decisions and implementation evidence remain in the append-only registry. D-07 has no qualified full-contract baseline; this reconciliation does not confer continuity-based qualification.
 
 ## Confirmed direction
@@ -271,7 +273,7 @@ This first local example is a possible intermediate milestone. The charter's bro
 
 **Confirmed module phases:** H-106/H-107 permit symbol/function definitions and bits globals initialized by literals or function calls, plus top-level `effect`/`perform`/`behave` expressions. Procedure definitions register during scanning; neither their definition semantics nor global initializers/top-level expressions execute during that scan. All entry dependencies are scanned/loaded before entry execution is compiled; dependencies then contribute top-level execution semantics in encounter order.
 
-**Confirmed immediate review:** every cross-module reference triggers module execution semantics (H-109). Its top-level scope ends when execution finishes; only `using`/`import` bring effective resources into the receiver (H-110). `effect` yields the newly bound value (H-111).
+**Confirmed immediate review:** every cross-module reference triggers module execution semantics (H-109). Its top-level scope remains alive until process exit (H-166); `using`/`import` retain H-110’s explicit selection of effective resources. Initialization completion is not resource destruction. `effect` yields the newly bound value (H-111).
 
 **Open:** symbol identity encoding, typed-use reconciliation, precise capture/dependency analysis, cyclic initialization, bits-global realization and native layout/caching. These details are tracked in [SymbolicDynamicScope](SymbolicDynamicScope.md), D-10 revision 13.
 
@@ -398,5 +400,8 @@ For each discussion, update the relevant topic's current answer and append a dec
 | DD-056 | 2026-11-06 | Defer new user-required choices until a consolidated review after this active-work period; continue confirmed work autonomously. | H-160; DL-16 |
 | DD-057 | 2026-11-06 | Reserve `type`, `regional`, `unit`, `array`, `using`, `import` and `conversion` against ordinary declarations/aliases; retain field and symbol meanings. | H-161; DL-01/DL-15; D-10r34 |
 | DD-058 | 2026-11-06 | Use a distinct `(=)` family; indexed assignment supplies the original container, index and value to the separate `([]=)` family. | H-162–H-164; DL-01/DL-02/DL-16; D-10r34/D-11r13 |
+| DD-059 | 2026-11-06 | Entry and dependency module top-level scopes end at process exit. | H-166; supersedes H-110’s teardown timing; D-10r35 |
+| DD-060 | 2026-11-06 | Analyze effect-only whole-region holding and static post-send emptiness; intrinsic mailbox feedback covers local send errors, not delivery confirmation. | H-167/H-168; D-12r3/D-13r3; uniqueness and local-error ownership remain open |
+| DD-061 | 2026-11-06 | Moving a whole-region owner with `effect @b = @a` empties the source binding. Analyze a returned-region sum for local send errors; exact sum and binding-presence syntax remain proposals. | H-169/H-170; D-13r4 |
 
 Dates above are recording dates. Exact source-message timestamps were unavailable; the registry records that provenance limit.

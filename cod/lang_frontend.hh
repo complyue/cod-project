@@ -28,6 +28,7 @@ struct Value {
   std::shared_ptr<Procedure> procedure;
   Module *owner = nullptr;
   std::optional<size_t> region_id = {};
+  std::optional<size_t> holding_id = {};
 };
 using Bindings = llvm::ImmutableMap<size_t, const Value *>;
 struct Environment {
@@ -121,8 +122,13 @@ class Compiler {
     bool resolved = false;
   };
   std::vector<Array> arrays_;
-  struct Region { llvm::Value *owner; bool active = true; };
+  enum class Presence { empty, owned, conditional };
+  struct Region { llvm::Value *owner; Presence access = Presence::owned; };
   std::vector<Region> regions_;
+  struct Holding { size_t region; llvm::Value *slot; bool module_lifetime; Presence state = Presence::owned; };
+  std::vector<Holding> holdings_;
+  bool module_top_level_ = false;
+  bool region_initializer_ = false;
   bool regional_runtime_ = false;
   size_t next_unit_ = 0;
   LLVMEmission ir_;
@@ -149,14 +155,42 @@ class Compiler {
     return type;
   }
   llvm::Value *region_pointer(const Value &value, const Location &at) {
-    if (!value.region_id || !regions_.at(*value.region_id).active)
+    if (value.holding_id && holdings_.at(*value.holding_id).state != Presence::owned)
+      fail(at, "whole-region binding is empty or not owned on every path");
+    if (!value.region_id || regions_.at(*value.region_id).access != Presence::owned)
       fail(at, "regional value requires a live owning region in this caller scope");
     return regions_.at(*value.region_id).owner;
   }
-  void close_regions(size_t begin, const Value &result, const Location &at) {
-    if (result.region_id && *result.region_id >= begin)
-      fail(at, "regional result would outlive its owning scope");
-    for (size_t i = begin; i < regions_.size(); ++i) regions_[i].active = false;
+  void close_holdings(size_t begin, const Value &result, const Location &at) {
+    for (size_t i = begin; i < holdings_.size(); ++i) {
+      auto &holding = holdings_[i];
+      if (holding.module_lifetime || holding.state == Presence::empty) continue;
+      if (result.region_id == holding.region)
+        fail(at, "regional result would outlive its owning scope");
+      regions_[holding.region].access = holding.state == Presence::owned ? Presence::empty : Presence::conditional;
+      holding.state = Presence::empty;
+    }
+  }
+  struct Ownership {
+    std::vector<Presence> regions, holdings;
+  };
+  Ownership ownership() const {
+    Ownership result;
+    for (const auto &region : regions_) result.regions.push_back(region.access);
+    for (const auto &holding : holdings_) result.holdings.push_back(holding.state);
+    return result;
+  }
+  void restore_ownership(const Ownership &state) {
+    for (size_t i = 0; i < regions_.size(); ++i)
+      regions_[i].access = i < state.regions.size() ? state.regions[i] : Presence::empty;
+    for (size_t i = 0; i < holdings_.size(); ++i)
+      holdings_[i].state = i < state.holdings.size() ? state.holdings[i] : Presence::empty;
+  }
+  void merge_ownership(const Ownership &other) {
+    for (size_t i = 0; i < other.regions.size(); ++i)
+      if (regions_[i].access != other.regions[i]) regions_[i].access = Presence::conditional;
+    for (size_t i = 0; i < other.holdings.size(); ++i)
+      if (holdings_[i].state != other.holdings[i]) holdings_[i].state = Presence::conditional;
   }
   Type resolve_name(Type type, Module &module, const Location &at) {
     if (type.kind != Type::named) return type;
@@ -395,16 +429,26 @@ class Compiler {
     const auto type = found->type;
     return scalar(type, env.captured(id, found) ? found->native : ir_.read_symbol(id, type), found->region_id);
   }
-  void bind(size_t id, Value value, Module &owner, Environment &env, const Location &at) {
+  Value bind(size_t id, Value value, Module &owner, Environment &env, const Location &at) {
     if (value.type == Type::void_type) fail(at, "a symbol cannot be bound to void");
     if (value.type.kind == Type::regional || value.type.kind == Type::array || value.type == Type::null_ref)
       fail(at, "bind bits or a typed regional reference, not a dereferenced regional object");
     if (value.region_id) region_pointer(value, at);
     fix_type(id, value.type, at);
+    if (value.type == Type::region) {
+      if (value.holding_id) {
+        auto &source = holdings_.at(*value.holding_id);
+        ir_.consume_region(source.slot);
+        source.state = Presence::empty;
+      }
+      value.holding_id = holdings_.size();
+      holdings_.push_back({*value.region_id, ir_.hold_region(value.native, module_top_level_), module_top_level_});
+    }
     ir_.effect(id, value.type, value.native);
     value.owner = &owner;
     binding_values_.push_back(std::move(value));
     env.bindings = binding_factory_.add(env.bindings, id, &binding_values_.back());
+    return binding_values_.back();
   }
 
   void resolve_procedure_symbols(Expression &expr, Module &module) {
@@ -427,14 +471,16 @@ class Compiler {
   }
   Value block(const Expression &expr, Module &module, Environment env, Locals locals,
               bool pure, bool discard_result = false) {
+    const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
+    const auto region_initializer = llvm::SaveAndRestore(region_initializer_, false);
     const auto rebound = llvm::SaveAndRestore(scope_rebound_, false);
-    const auto region_begin = regions_.size();
+    const auto holding_begin = holdings_.size();
     const auto native_scope = ir_.scope();
 
     Value result;
     for (const auto &child : expr.children) result = expression(*child, module, env, locals, pure);
     if (discard_result) result = {};
-    close_regions(region_begin, result, expr.at);
+    close_holdings(holding_begin, result, expr.at);
     ir_.restore(native_scope);
     if (result.type == Type::procedure) fail(expr.at, "procedure-valued scope results are not supported");
     return result;
@@ -442,6 +488,7 @@ class Compiler {
   std::vector<Value> arguments(const Expression &expr, Module &module, Environment &env,
                                Locals &locals, bool pure,
                                std::vector<LLVMEmission::ConversionPoint> *points = nullptr) {
+    const auto region_initializer = llvm::SaveAndRestore(region_initializer_, false);
     std::vector<Value> values;
     for (const auto &arg : expr.children) {
       values.push_back(expression(*arg, module, env, locals, pure));
@@ -471,6 +518,8 @@ class Compiler {
       require(args[i].type, resolve(form.parameters[i].type, lexical, form.parameters[i].at), at);
       if (args[i].region_id) region_pointer(args[i], at);
       if (pure && args[i].type == Type::region) fail(at, "a function reads input snapshots, not region resources");
+      if (args[i].type == Type::region)
+        fail(at, "whole-region resources require effect bindings, not lexical parameters");
       if (!locals.declare(form.parameters[i].name, args[i]))
         fail(form.parameters[i].at, "duplicate parameter name");
     }
@@ -794,6 +843,7 @@ class Compiler {
           accumulator.type.kind == Type::array || accumulator.type.kind == Type::regional)
         fail(expr.at, "a fold accumulator requires a bits value");
     }
+    const auto before = ownership();
     auto native_loop = ir_.loop(first.type, first.native, last.native, accumulator.native);
     auto inner_locals = locals.nested();
     inner_locals.declare(expr.text, {first.type, native_loop.index, {}, nullptr});
@@ -804,6 +854,25 @@ class Compiler {
 
     const auto next = block(*expr.children.back(), module, env, std::move(inner_locals), pure,
                             expr.kind == K::range_for);
+
+    bool empty = false, at_most_once = false;
+    const auto *start = llvm::dyn_cast<llvm::ConstantInt>(first.native);
+    const auto *end = llvm::dyn_cast<llvm::ConstantInt>(last.native);
+    if (start && end) {
+      const auto representation = first.type.kind == Type::unit ? first.type.representation : first.type.kind;
+      const auto width = start->getBitWidth() + 1;
+      const auto distance = representation == Type::integer
+          ? end->getValue().sext(width) - start->getValue().sext(width)
+          : end->getValue().zext(width) - start->getValue().zext(width);
+      empty = distance.sle(0);
+      at_most_once = distance.sle(1);
+    }
+    if (empty) restore_ownership(before);
+    else if (!at_most_once) {
+      for (size_t i = 0; i < before.holdings.size(); ++i)
+        if (holdings_[i].state != before.holdings[i])
+          fail(expr.at, "a repeated loop cannot consume an outer region owner; acquire the region within each iteration");
+    }
 
     if (expr.kind == K::fold) {
       require(next.type, accumulator.type, expr.at);
@@ -840,9 +909,10 @@ class Compiler {
       const auto &args = values();
       if (args.size() != 1 || !integral(args[0].type)) fail(expr.at, "region requires an integer byte capacity");
       regional_runtime_ = true;
+      if (!region_initializer_) fail(expr.at, "a new region must be acquired by an effect binding");
       auto *owner = ir_.region_new(args[0].type, args[0].native);
       const auto id = regions_.size();
-      regions_.push_back({owner, true});
+      regions_.push_back({owner});
 
       return {Type::region, owner, {}, nullptr, id};
     }
@@ -983,11 +1053,13 @@ class Compiler {
       const auto rebound = llvm::SaveAndRestore(scope_rebound_, false);
 
       const auto native_scope = ir_.scope();
+      const auto skipped = ownership();
       auto native_branch = ir_.branch(left.native, expr.text == "||");
       const auto right = expression(*expr.children[1], module, right_env, right_locals, pure);
       require(right.type, Type::boolean, expr.at);
       if (scope_rebound_ || ir_.scope() != native_scope)
         fail(expr.at, "conditional rebinding in a logical operand needs an explicit scope");
+      merge_ownership(skipped);
       ir_.otherwise(native_branch, right.native);
       return scalar(Type::boolean, ir_.merge(native_branch, Type::boolean, left.native));
     }
@@ -1020,10 +1092,14 @@ class Compiler {
     const auto condition = expression(*expr.children[0], module, env, locals, pure);
     require(condition.type, Type::boolean, expr.at);
 
+    const auto before = ownership();
     auto native_branch = ir_.branch(condition.native);
     auto first = block(*expr.children[1], module, env, locals.nested(), pure);
+    const auto first_ownership = ownership();
+    restore_ownership(before);
     ir_.otherwise(native_branch, first.native);
     auto second = block(*expr.children[2], module, env, locals.nested(), pure);
+    merge_ownership(first_ownership);
     if (first.type == Type::null_ref && second.type.kind == Type::reference) {
       first.type = second.type;
       first.region_id = second.region_id;
@@ -1081,6 +1157,8 @@ class Compiler {
     case K::boolean: return scalar(Type::boolean, ir_.bits(Type::boolean, expr.text == "true"));
     case K::let: {
       auto value = expression(*expr.children[0], module, env, locals, pure);
+      if (value.type == Type::region)
+        fail(expr.at, "whole-region resources require effect bindings, not lexical values");
       if (value.type == Type::void_type || value.type == Type::procedure)
         fail(expr.at, "a lexical value requires a bits value");
       if (!locals.declare(expr.text, value)) fail(expr.at, "duplicate lexical value '" + expr.text + "'");
@@ -1116,8 +1194,10 @@ class Compiler {
       return read_symbol(expression_symbol(expr, module), env, expr.at);
     case K::effect: {
       if (pure) fail(expr.at, "a function cannot establish effects");
+      const auto region_initializer = llvm::SaveAndRestore(region_initializer_,
+          expr.children[0]->kind == K::call && expr.children[0]->text == "region");
       auto value = expression(*expr.children[0], module, env, locals, pure);
-      bind(expression_symbol(expr, module), value, module, env, expr.at);
+      value = bind(expression_symbol(expr, module), value, module, env, expr.at);
       scope_rebound_ = true;
       return value;
     }
@@ -1155,7 +1235,8 @@ class Compiler {
     // encounter reuses the incorporated module's resources, never its effects.
     if (module.state == Module::State::complete) return;
     if (module.state == Module::State::executing) fail(at, "cyclic module execution is outside the first prototype");
-    const auto region_begin = regions_.size();
+    const auto module_scope = llvm::SaveAndRestore(module_top_level_, true);
+    const auto holding_begin = holdings_.size();
     module.state = Module::State::executing;
     execution_order_.push_back(module.path);
     if (module.builtin) {
@@ -1291,7 +1372,7 @@ class Compiler {
       module.exports.emplace(id, std::move(value));
     }
 
-    close_regions(region_begin, {}, at);
+    close_holdings(holding_begin, {}, at);
     ir_.restore(native_scope);
     module.state = Module::State::complete;
   }

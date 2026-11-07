@@ -1,0 +1,7 @@
+symbol @a;
+symbol @b;
+symbol @inspect;
+effect @a = region(4096u64);
+procedure @inspect()::u64 { used_bytes(@a) }
+effect @b = @a;
+perform @inspect();

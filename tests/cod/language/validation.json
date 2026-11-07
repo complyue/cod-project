@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "recorded_utc": "2026-11-07T05:14:22.387465+00:00",
+  "recorded_utc": "2026-11-07T07:05:14.706461+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "backend": "llvm",
-  "passed": 140,
-  "total": 140,
+  "passed": 146,
+  "total": 146,
   "results": [
     {
       "fixture": "scopes.cod",
@@ -2190,13 +2190,119 @@
       ],
       "expected": {
         "file": "region-module-perform.cod",
+        "exit": 0,
+        "stdout": "7\n"
+      },
+      "exit_code": 0,
+      "stdout": "7\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "region-owner-move.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-move.cod"
+      ],
+      "expected": {
+        "file": "region-owner-move.cod",
+        "exit": 0,
+        "stdout": "7\n9\ntrue\n11\n9\n"
+      },
+      "exit_code": 0,
+      "stdout": "7\n9\ntrue\n11\n9\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "region-owner-reuse.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-reuse.cod"
+      ],
+      "expected": {
+        "file": "region-owner-reuse.cod",
         "exit": 2,
         "stdout": "",
-        "stderr_contains": "live owning region"
+        "stderr_contains": "whole-region binding is empty"
       },
       "exit_code": 2,
       "stdout": "",
-      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-source.cod:7:26: regional value requires a live owning region in this caller scope\n/ws/EvtWorks/cod-project/tests/cod/language/region-module-perform.cod:2:9: note: in call to procedure '@read' defined at /ws/EvtWorks/cod-project/tests/cod/language/region-source.cod:7:1\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-reuse.cod:7:12: whole-region binding is empty or not owned on every path\n",
+      "passed": true
+    },
+    {
+      "fixture": "region-owner-capture.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-capture.cod"
+      ],
+      "expected": {
+        "file": "region-owner-capture.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "whole-region binding is empty"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-capture.cod:5:40: whole-region binding is empty or not owned on every path\n/ws/EvtWorks/cod-project/tests/cod/language/region-owner-capture.cod:7:9: note: in call to procedure '@inspect' defined at /ws/EvtWorks/cod-project/tests/cod/language/region-owner-capture.cod:5:1\n",
+      "passed": true
+    },
+    {
+      "fixture": "region-owner-branch.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-branch.cod"
+      ],
+      "expected": {
+        "file": "region-owner-branch.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "whole-region binding is empty"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-branch.cod:5:12: whole-region binding is empty or not owned on every path\n",
+      "passed": true
+    },
+    {
+      "fixture": "region-owner-loop.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-loop.cod"
+      ],
+      "expected": {
+        "file": "region-owner-loop.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "a repeated loop cannot consume an outer region owner"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-loop.cod:4:6: a repeated loop cannot consume an outer region owner; acquire the region within each iteration\n",
+      "passed": true
+    },
+    {
+      "fixture": "region-owner-lexical.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-lexical.cod"
+      ],
+      "expected": {
+        "file": "region-owner-lexical.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "whole-region resources require effect bindings, not lexical values"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-lexical.cod:3:7: whole-region resources require effect bindings, not lexical values\n",
       "passed": true
     },
     {
@@ -2503,9 +2609,9 @@
         "--check",
         "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
         "--emit-llvm",
-        "/tmp/cod-language-check-o_mh_ba8/program.ll",
+        "/tmp/cod-language-check-_u63ose8/program.ll",
         "--emit-bc",
-        "/tmp/cod-language-check-o_mh_ba8/program.bc"
+        "/tmp/cod-language-check-_u63ose8/program.bc"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -2515,18 +2621,18 @@
   ],
   "executable": {
     "path": "build/bin/cod",
-    "sha256": "2b13dd973f96c6481e8ea167e6c58b4f4d793109e2608227ba2f371a42a07c31"
+    "sha256": "6aedb4b63eedf31b0b647a5b3baa0ed263c283e454eae8e989aafe9ad665b97f"
   },
   "source_sha256": {
     "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
     "cod/lang_syntax.hh": "5340c3093130f6ec3907f335a4b1704d87d93cf809332f45aeb360a1a59d73c5",
-    "cod/lang_frontend.hh": "4369e9cd185b19b04b00892be5d782c34ff4177e77028e30f55ca33125a0501b",
-    "cod/lang_llvm.hh": "d372489566ed820d1bc7e6e371e189c8a20d83cc4ca4582fb67ac9b4b232ca8b",
+    "cod/lang_frontend.hh": "3ac528e7303fb6fa79a91c3b9fc6010884281cd85a5042496b5e1327a854dd88",
+    "cod/lang_llvm.hh": "29e6fc61cc5c9e95acf980219870699180734a678c5aa3381f924bd673d4422f",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
-    "tests/cod/language/cases.json": "af5b5cb1170c1d4372a1e0c72257284bc14a97b5a8499ccae5aad3ecd9be7816",
+    "tests/cod/language/cases.json": "f5abdfb965682a5998f0bce9a0702d5f3cb09d786d3158d082ee53ec85f8fa98",
     "tests/cod/language/aliased-body-model.cod": "4b0ce57403bfe6a5a6c881f5b43c2b48364f12b12b4b31465d7bc9901df6e713",
     "tests/cod/language/arithmetic.cod": "9d3f5f799775585e4e14c3161fbab6397dda6c8e2c474e06531994a899f91602",
     "tests/cod/language/behave-without-caller.cod": "69c1ccd0fc3977d7a56ae11f515c909a711bf1973fe78cd627a3dd6ac6574755",
@@ -2614,7 +2720,7 @@
     "tests/cod/language/product-other-library.cod": "6271a353553b396c6cf5f58d88b715a0ae21cc34050ad58e98d2538519b7812e",
     "tests/cod/language/products.cod": "d948bf467c42dc8b69e7d15abd769b37dcf73d203ed60dad6bcf8e0f1ecce1ed",
     "tests/cod/language/quoted-operator.cod": "7795a820a739a7b5a94148c7060f8252a8355e96019d8f756926b49dd5dbd63d",
-    "tests/cod/language/region-arrays.cod": "e030f937d95f075a4b0fc9ce069925eb91024135ec42b1c3b2c53ec4b1a18f9c",
+    "tests/cod/language/region-arrays.cod": "1441b7e30d2a9316327ac3bb8a79e13d911df9f1076262204db90b5eff959fa7",
     "tests/cod/language/region-bounds.cod": "8f4f63ef440e70a46644cf219fabf5d7d1f4afacc8c397a31e5b952ea53c56e7",
     "tests/cod/language/region-capacity.cod": "7205497704fa1ab6a25353c90b9cda7320f095855bdd5ef83b5301e8a7ab613d",
     "tests/cod/language/region-capture.cod": "5eb919c2071fbdda057635254d090357f5f198ceab528b046968cccfe03e4a5f",
@@ -2630,9 +2736,15 @@
     "tests/cod/language/region-gather.cod": "e458732efc7c669d178866be6b531c0fd51b0ebc0cfe29305ac8e221d46fe154",
     "tests/cod/language/region-index-error.cod": "621509247dfe2f6c1f9820649b872815e5b2e819d1a004155e55287f5b95b16d",
     "tests/cod/language/region-module-behave.cod": "73ac25098ea5e651e81cdaf67e337bcf075cf44aa47316b2fd39b557e5f924a9",
-    "tests/cod/language/region-module-perform.cod": "549c6f1b7ca2e636d23fc5b88bcdca4d83073a44ed343dac600ff0faba0f947c",
+    "tests/cod/language/region-module-perform.cod": "2c4954eb336d30365a0965aa8cbb9331505569ae810c8794f00ac5159cee63a0",
     "tests/cod/language/region-mutual.cod": "e3b8be5b951df88b5b5c89a86ad313d621d7dcb52aa79a9c64c4cbf1aa4be1e3",
     "tests/cod/language/region-null.cod": "b5cc7c1ae39d81ba5f8a20c43ae5097861483196e3d9dcd3d03c861ea5d8b6cc",
+    "tests/cod/language/region-owner-branch.cod": "2d536a480b31841cdc45e30afb71f87ad54135648ae633eaf8e9d87e72e39224",
+    "tests/cod/language/region-owner-capture.cod": "31eeb35fbf025190ee226ab0e99c82ab01b78789595b030976254400155083e8",
+    "tests/cod/language/region-owner-lexical.cod": "bb66d7415def7b7a15be305642f2f577383bf12a79c419f1b26f466708500a5d",
+    "tests/cod/language/region-owner-loop.cod": "f51f47ab345a3b1513f45a9aba21233ac89476c95296fc041d7d308425d66862",
+    "tests/cod/language/region-owner-move.cod": "5599414f6e97920492995ea5f1f175f3930aa600ba4b310aba969a3acd12b9d4",
+    "tests/cod/language/region-owner-reuse.cod": "f4d4cef7f80d4a8704bd9fd33edffe5ecb6a023626c5482b5d3cff4b0a9a1fa8",
     "tests/cod/language/region-parent-allocation.cod": "6dce8d3c570b302201e4de0a2b1c2aaab1cb2c57fb7d72435589ca2babdc02ec",
     "tests/cod/language/region-pure-create.cod": "9a90ec5289971823c15e3241280b4cf8b08bc1ae92c959e622b3f44dd14d0c37",
     "tests/cod/language/region-pure-write.cod": "b4ba89db775c6bf015175c73894b8a43b310607a9b26ec97dd5ad8d400855368",

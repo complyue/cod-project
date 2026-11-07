@@ -1,14 +1,15 @@
 # SNN-driven CoD language development and validation
 
-Document-set baseline: 213 · Document revision: 213 · Recorded: 2026-11-06.
+Document-set baseline: 215 · Document revision: 215 · Recorded: 2026-11-06.
 
 ## Design authority
 
-- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), this document revision 213, all sections; complete implementation contract `pending-human`.
+- **Registry / scope:** [D-08](../../../design/DesignAuthorityRegistry.md#d-08), this document revision 215, all sections; complete implementation contract `pending-human`.
 - **Value lineage:** C-38/P-87 uses a real SNN workload to develop useful language features and assess their cost. P-25/P-22 connect the application to the charter's typed semantic programs. P-91 depends on the confirmed C-29 pull architecture; P-93 depends on the separately specified [D-10 language contract](../../../design/SymbolicDynamicScope.md). Dependencies do not grant qualification.
 - **Human baseline:** H-93/H-94 govern continuous source state and target-owned two-frame pull; H-95 ties model mechanisms to learning/generalization. H-96 requests joint development. The individually scoped H-97–H-121 records specify capture, purity, storage, demand-checked module/call behavior and symbol selectors/import maps. H-123 limits the current increment to programming facilities and runtime support. H-140 makes module incorporation once-only after scanning; H-143–H-145 require one LLVM path, focused tests and simplification. H-148 requires each argument’s conversion to finish before the next argument is evaluated.
 - **Invariants / non-goals:** retain regional lifetimes, static SoA connectivity, non-consuming source reads and common source-time views. No user heap lifetime or implicit heap closure is introduced. No push queue, new neuron equation, selected training rule, frame rate or auxiliary per-edge state follows from language development.
 - **Acceptance:** each increment demonstrates both a language property and a simulator property using the same stated semantics. Diagnostic arithmetic is distinct from evidence of learned neural behavior.
+- **Module-lifetime alignment:** [H-166/K-294](../../../design/DesignAuthorityRegistry.md#h-166) keeps every incorporated module top-level scope alive until process exit. [K-295](../../../design/DesignAuthorityRegistry.md#k-295) records native source-module storage surviving initialization, with effect-held owner moves checked separately from binding lookup. This revision changes language-integration expectations only, not SNN dynamics or training.
 - **Current assessment:** [K-252](../../../design/DesignAuthorityRegistry.md#k-252) reconciles revision 213 and the semantic catalog with confirmed module/call rules and actual evidence. The native records below identify their own implementation scope; new mechanisms still require qualification within their bounded increment.
 
 ## The first useful execution path
@@ -35,7 +36,7 @@ All simulator entry dependencies are scanned/loaded before execution semantics a
 
 Module-level bits model constants can use literal or pure-function initializers. The module can also establish defaults through `effect` and invoke setup operations through `perform`/`behave` during its execution. The initial dependency scan retains those expressions without running model setup or capturing a target/frame. Their scopes must still supply the bindings checked on the demanded paths.
 
-Every cross-module reference triggers source execution semantics, including vocabulary references and `import`. The source top-level scope closes after its execution, so its effects do not remain ambient in the simulator entry. Operations must be brought into the receiver through `using`/`import`; `using` preserves source captures, while `import` defines against receiving context.
+Every cross-module reference triggers source execution semantics, including vocabulary references and `import`. The source top-level scope stays alive until process exit under H-166. Scope retention does not itself select every source binding into the simulator entry; the explicit resource-selection rule remains separate. Operations must be brought into the receiver through `using`/`import`; `using` preserves source captures, while `import` defines against receiving context.
 
 ## Binding context in the target loop
 

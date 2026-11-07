@@ -43,9 +43,10 @@ class LLVMEmission {
   const Location *source_location_ = nullptr;
   struct Cleanup {
     llvm::Value *address;
-    llvm::Value *saved; // nullptr identifies a region resource to release.
+    llvm::Value *saved; // nullptr identifies a region-owner slot to release.
   };
   std::vector<Cleanup> cleanups_;
+  std::vector<llvm::Value *> module_regions_;
 
   llvm::LLVMContext &context() { return *context_; }
   llvm::IRBuilder<> &b() { return *builder_; }
@@ -216,7 +217,7 @@ public:
       auto cleanup = cleanups_.back();
       cleanups_.pop_back();
       if (cleanup.saved) b().CreateStore(cleanup.saved, cleanup.address);
-      else call_runtime("cod_lang_region_free", void_type(), {cleanup.address});
+      else call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), cleanup.address)});
     }
   }
   llvm::Value *product(Type type, const std::vector<llvm::Value *> &args) {
@@ -425,9 +426,18 @@ private:
 public:
   llvm::Value *region_new(Type capacity_type, llvm::Value *capacity) {
     auto *bytes = cast(capacity_type, Type::uint64, capacity);
-    auto *region = call_runtime("cod_lang_region_new", pointer_type(), {bytes, source_context()});
-    cleanups_.push_back({region, nullptr});
-    return region;
+    return call_runtime("cod_lang_region_new", pointer_type(), {bytes, source_context()});
+  }
+  llvm::Value *hold_region(llvm::Value *region, bool module_lifetime) {
+    llvm::IRBuilder<> allocations(&entry_->getEntryBlock(), entry_->getEntryBlock().begin());
+    auto *slot = allocations.CreateAlloca(pointer_type(), nullptr, "region.owner");
+    b().CreateStore(region, slot);
+    if (module_lifetime) module_regions_.push_back(slot);
+    else cleanups_.push_back({slot, nullptr});
+    return slot;
+  }
+  void consume_region(llvm::Value *slot) {
+    b().CreateStore(llvm::ConstantPointerNull::get(pointer_type()), slot);
   }
   llvm::Value *region_size(llvm::Value *owner, bool capacity) {
     return call_runtime(capacity ? "cod_lang_region_capacity" : "cod_lang_region_used", i64(), {owner});
@@ -504,6 +514,8 @@ public:
 
   std::pair<std::string, std::string> finish() {
     if (!cleanups_.empty()) throw std::logic_error("unclosed LLVM resource scope");
+    for (auto region = module_regions_.rbegin(); region != module_regions_.rend(); ++region)
+      call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), *region)});
     b().CreateRet(integer(llvm::Type::getInt32Ty(context()), 0));
     std::string errors;
     llvm::raw_string_ostream diagnostics(errors);

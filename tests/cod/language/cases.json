@@ -722,9 +722,43 @@
   },
   {
     "file": "region-module-perform.cod",
+    "exit": 0,
+    "stdout": "7\n"
+  },
+  {
+    "file": "region-owner-move.cod",
+    "exit": 0,
+    "stdout": "7\n9\ntrue\n11\n9\n"
+  },
+  {
+    "file": "region-owner-reuse.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "live owning region"
+    "stderr_contains": "whole-region binding is empty"
+  },
+  {
+    "file": "region-owner-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "whole-region binding is empty"
+  },
+  {
+    "file": "region-owner-branch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "whole-region binding is empty"
+  },
+  {
+    "file": "region-owner-loop.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a repeated loop cannot consume an outer region owner"
+  },
+  {
+    "file": "region-owner-lexical.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "whole-region resources require effect bindings, not lexical values"
   },
   {
     "file": "region-reference-fold.cod",

@@ -1,2 +1,3 @@
+using symbol "std:io" @print;
 using symbol "region-source.cod" @read;
-perform @read();
+behave @print(perform @read());

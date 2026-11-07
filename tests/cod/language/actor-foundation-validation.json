@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-07T07:09:34.857791+00:00",
+  "scope": "H-166 process-lifetime module scopes; H-167/H-169 effect-held whole-region ownership and consuming local moves. H-171 autonomous foundation increment.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0
+  },
+  "toolchain": "build",
+  "backend": "llvm",
+  "validation": [
+    {
+      "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=tests/cod/language/validation.json python3 tests/cod/language/run_tests.py",
+      "report": "validation.json",
+      "sha256": "2ed12bb147bb4cf3a364c86449620b3a57b0e661ce3882c74e160d249480c058",
+      "passed": 146,
+      "total": 146
+    },
+    {
+      "command": "COD_TEST_TOOLCHAIN=build COD_LANGUAGE_STRESS_REPORT=tests/cod/language/stress-validation.json python3 tests/cod/language/stress_tests.py",
+      "report": "stress-validation.json",
+      "sha256": "4b9a3609482f435fff416287adbdab79d0b952322be05f62052418c8ca1dc226",
+      "passed": 5,
+      "total": 5
+    },
+    {
+      "command": "COD_TEST_TOOLCHAIN=build COD_REGIONAL_REPORT=tests/cod/language/regional-validation.json python3 tests/cod/language/regional_runtime_tests.py",
+      "report": "regional-validation.json",
+      "sha256": "eb02207215db4682cf0a6699d24cc6af29165ae16a9fcdf2791521f3b7f18277",
+      "passed": true,
+      "layout": {
+        "relocation_passed": true,
+        "relocated_bytes": 120,
+        "region_header_bytes": 40,
+        "array_header_bytes": 16,
+        "record_bytes": 24
+      }
+    }
+  ],
+  "coverage": {
+    "module_lifetime": [
+      "region-module-perform.cod",
+      "region-module-behave.cod",
+      "module-diamond.cod",
+      "region-factory-import.cod"
+    ],
+    "local_transfer_and_cleanup": [
+      "region-owner-move.cod",
+      "regional_runtime_tests.py"
+    ],
+    "empty_capture_branch_loop_and_carrier_rejection": [
+      "region-owner-reuse.cod",
+      "region-owner-capture.cod",
+      "region-owner-branch.cod",
+      "region-owner-loop.cod",
+      "region-owner-lexical.cod"
+    ],
+    "nested_lifetime_and_pointer_boundary": [
+      "region-escape.cod",
+      "region-cross-pointer.cod"
+    ]
+  },
+  "limits": [
+    "No mailbox runtime, send/receive implementation, Actor scheduler, transport or owning-result sum is validated.",
+    "Owner presence checks are conservative at joins; repeated/dynamic loops cannot consume an outer owner. Per-iteration acquisition is supported.",
+    "Whole owners require effect bindings; ordinary lexical parameters/locals cannot hold them. Interior references may remain usable after a local owner move while the region is live.",
+    "Normal program-exit cleanup does not define Actor shutdown, failure recovery or user destructor ordering.",
+    "Prior numeric, gather, component and timed-work records retain their original run scopes; no SNN dynamics or learning result is claimed."
+  ],
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "6aedb4b63eedf31b0b647a5b3baa0ed263c283e454eae8e989aafe9ad665b97f"
+  },
+  "source_sha256": {
+    "cod/lang_syntax.hh": "5340c3093130f6ec3907f335a4b1704d87d93cf809332f45aeb360a1a59d73c5",
+    "cod/lang_frontend.hh": "3ac528e7303fb6fa79a91c3b9fc6010884281cd85a5042496b5e1327a854dd88",
+    "cod/lang_llvm.hh": "29e6fc61cc5c9e95acf980219870699180734a678c5aa3381f924bd673d4422f",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
+    "tests/cod/language/cases.json": "f5abdfb965682a5998f0bce9a0702d5f3cb09d786d3158d082ee53ec85f8fa98"
+  }
+}

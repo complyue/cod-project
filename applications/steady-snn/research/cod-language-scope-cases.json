@@ -4,7 +4,7 @@
   "recorded_date": "2026-11-06",
   "design_authority": {
     "registry": "../../../design/DesignAuthorityRegistry.md#d-08",
-    "revision": 213,
+    "revision": 215,
     "scope": "This 25-case catalog and its evidence map; the complete design contract remains pending-human.",
     "parents": [
       "C-38/P-87: application-driven language value",
@@ -14,8 +14,8 @@
     "rationale": "Concrete application cases make scoped language behavior and its native evidence reviewable without selecting neuron dynamics.",
     "invariants_and_non_goals": "Preserve symbol identity, captured/current call modes, regional lifetimes and once-only post-scan module incorporation. No new neuron law, cyclic initialization rule, package identity format, concurrency protocol or persistent ABI.",
     "acceptance": "Keep confirmed local semantics distinct from open proposals; link only the execution evidence actually obtained and retain its limits.",
-    "human_baseline": "H-96-H-121 supply local symbols/callables/modules; H-123 limits the increment to language/runtime support; H-140 confirms once-only module incorporation; H-148 confirms per-argument conversion sequencing.",
-    "assessment": "../../../design/DesignAuthorityRegistry.md#k-252"
+    "human_baseline": "H-96-H-121 supply local symbols/callables/modules; H-123 limits the increment to language/runtime support; H-140 confirms once-only module incorporation; H-148 confirms per-argument conversion sequencing. H-166 supersedes source-module initialization-return teardown with process-lifetime top-level scopes.",
+    "assessment": "../../../design/DesignAuthorityRegistry.md#k-295"
   },
   "design_documents": [
     "../../../design/SymbolicDynamicScope.md",
@@ -380,9 +380,10 @@
       "basis": [
         "H-103",
         "H-106",
-        "H-140"
+        "H-140",
+        "H-166"
       ],
-      "note": "The source module scope closes after top-level execution; using/import retain selected effective resources. After scanning, repeated acyclic encounters reuse the module incorporated at its first encounter. Cyclic initialization remains open."
+      "note": "Entry and dependency top-level scopes stay alive until process exit. Initialization executes once after scanning, in encounter order; using/import select effective resources. Cyclic initialization remains open."
     },
     {
       "id": "CS-15",
@@ -499,12 +500,13 @@
       "excluded": "Arbitrary top-level effect evaluation is not enabled during scanning.",
       "open_details": [
         "Literal grammar, mutability/sharing and physical realization of bits globals.",
-        "Cyclic initialization, branch ordering and global realization; repeated acyclic encounters incorporate each module once, and the source scope ends after its top-level execution."
+        "Cyclic initialization, branch ordering and global realization. Repeated acyclic encounters incorporate each module once; incorporated module top-level scopes remain alive until process exit under H-166."
       ],
       "basis": [
         "H-106",
         "H-107",
-        "H-140"
+        "H-140",
+        "H-166"
       ],
       "allowed_execution_expressions": [
         "effect @name = rhs",
@@ -571,7 +573,7 @@
     {
       "id": "CS-24",
       "status": "derived",
-      "topic": "source scope closes while using retains selected captures",
+      "topic": "process-lifetime source scope with explicit selected captures",
       "setup": "Caller has @x = 7. Source top-level scope binds @x = 1 and defines @p reading it; using brings @p into the receiver.",
       "steps": [
         "Finish source top-level execution.",
@@ -587,9 +589,11 @@
       "basis": [
         "H-97",
         "H-105",
-        "H-110"
+        "H-110",
+        "H-166"
       ],
-      "note": "Only selected effective resources transfer through using/import. Source scoped bindings are restored; retained captures are values, not dangling stack references."
+      "note": "Only selected effective resources transfer through using/import. A source top-level scope and its still-held regions survive initialization until process exit. The scalar observations concern caller/source binding selection, not scope destruction. Captures do not prolong a separately ended nested region. The source-module regional capture now executes after initialization in region-module-perform.cod; nested-region escape remains a separate rejection case. These selected checks do not claim execution of the complete catalog.",
+      "lifetime_expectation": "A source-module procedure may use a region still held by its module top level after initialization. Transfer/release can independently invalidate such access; process-lifetime scope does not preserve a consumed owner."
     },
     {
       "id": "CS-25",
