@@ -130,7 +130,7 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
     if (cursor + 1 < source.size()) {
       const auto pair = source.substr(cursor, 2);
       if (pair == "->" || pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" ||
-          pair == "&&" || pair == "||" || pair == "::" || pair == "<-" || pair == "..") {
+          pair == "&&" || pair == "||" || pair == "::" || pair == "<-" || pair == "<:" || pair == "..") {
         punctuation = pair;
         advance();
       }
@@ -146,7 +146,7 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
 
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
-              named, product, unit, region, regional, array, reference, null_ref };
+              named, unit, region, regional, array, reference, null_ref, abstract_type };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -183,7 +183,8 @@ inline std::string type_name(const Type &type) {
   }
   case Type::float32: return "f32";
   case Type::float64: return "f64";
-  case Type::named: case Type::product: case Type::unit: case Type::regional: case Type::array: return type.name;
+  case Type::named: case Type::unit: case Type::regional: case Type::array:
+  case Type::abstract_type: return type.name;
   case Type::region: return "region";
   case Type::reference: return "ref<" + type_name(*type.target) + ">";
   case Type::null_ref: return "null";
@@ -217,7 +218,8 @@ struct SymbolMapping {
   Location at;
 };
 struct Form {
-  enum class Kind { symbol, symbol_from, function, procedure, product, array, unit, using_units, global, using_resource, import_resource, expression };
+  enum class Kind { symbol, symbol_from, function, procedure, data, array, unit, using_units, global,
+                    using_resource, import_resource, mixin_resource, export_resource, expression, abstract_type, conformance };
   Kind kind;
   Location at;
   std::string name;
@@ -226,15 +228,16 @@ struct Form {
   bool symbolic = false;
   bool explicit_alias = false;
   bool using_symbol = false;
+  bool exporting = false;
   bool conversion = false;
   bool operation = false;
   bool alias_operation = false;
-  bool regional = false;
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
   std::optional<Type> result_type;
   std::optional<Type> index_type;
+  std::optional<Type> parent_type;
   Expr body;
 };
 
@@ -263,8 +266,8 @@ inline bool expression_keyword(std::string_view name) {
 }
 
 inline bool module_keyword(std::string_view name) {
-  return name == "type" || name == "regional" || name == "unit" || name == "array" ||
-         name == "using" || name == "import" || name == "conversion";
+  return name == "type" || name == "data" || name == "regional" || name == "unit" || name == "array" ||
+         name == "using" || name == "import" || name == "mixin" || name == "export" || name == "conversion";
 }
 
 class Parser {
@@ -389,7 +392,9 @@ class Parser {
   Expr primary() {
     auto token = peek();
     if (take("alloc")) {
-      auto owner = make(Expression::Kind::symbol, name(TokenKind::symbol));
+      const bool symbolic = peek().kind == TokenKind::symbol;
+      auto owner = make(symbolic ? Expression::Kind::symbol : Expression::Kind::name,
+                        symbolic ? name(TokenKind::symbol) : value_name());
       auto expr = make(Expression::Kind::allocate, name(TokenKind::identifier));
       expr->children.push_back(std::move(owner));
       arguments(*expr);
@@ -540,6 +545,18 @@ public:
       auto start = peek();
       auto form = std::make_unique<Form>();
       form->at = start.at;
+      if (take("export")) {
+        if (is("import")) {
+          form->exporting = true;
+        } else {
+          form->kind = Form::Kind::export_resource;
+          form->symbolic = peek().kind == TokenKind::symbol;
+          form->name = form->symbolic ? name(TokenKind::symbol).text : lexical_name(&form->operation).text;
+          expect(";");
+          forms.push_back(std::move(form));
+          continue;
+        }
+      }
       if (take("symbol")) {
         if (take("from")) {
           form->kind = Form::Kind::symbol_from;
@@ -576,11 +593,23 @@ public:
         type_separator();
         form->result_type = parse_type();
         expect(";");
-      } else if (is("type") || is("regional")) {
-        form->regional = take("regional");
-        expect("type");
-        form->kind = Form::Kind::product;
+      } else if (is("type") || is("data") || is("regional")) {
+        if (is("regional")) fail(start.at, "regional type is not a declaration; use data for a regional representation");
+        const bool data = take("data");
+        if (!data) expect("type");
+        form->kind = Form::Kind::data;
         form->name = ordinary_name().text;
+        if (take("<:")) form->parent_type = parse_type();
+        if (!is("{")) {
+          if (data && !form->parent_type)
+            fail(start.at, "a head-only data declaration requires an abstract parent");
+          form->kind = data ? Form::Kind::conformance : Form::Kind::abstract_type;
+          expect(";");
+          forms.push_back(std::move(form));
+          continue;
+        }
+        if (!data)
+          fail(start.at, "abstract type declarations have no body; use data for a representation");
         expect("{");
         while (!take("}")) {
           auto field = name(TokenKind::identifier);
@@ -643,12 +672,14 @@ public:
             kind != Expression::Kind::call && !negative_literal)
           fail(start.at, "a bits global initializer must be a bits literal or function call");
         expect(";");
-      } else if (is("using") || is("import")) {
+      } else if (is("using") || is("import") || is("mixin")) {
         const bool using_resource = take("using");
-        if (!using_resource) expect("import");
-        form->kind = using_resource ? Form::Kind::using_resource : Form::Kind::import_resource;
+        const bool importing = !using_resource && take("import");
+        if (!using_resource && !importing) expect("mixin");
+        form->kind = using_resource ? Form::Kind::using_resource :
+                     importing ? Form::Kind::import_resource : Form::Kind::mixin_resource;
         if (take("units")) {
-          if (!using_resource) fail(start.at, "UoMs support fresh definitions and using, not import");
+          if (!using_resource) fail(start.at, "UoMs support fresh definitions and using, not import or mixin");
           form->kind = Form::Kind::using_units;
           form->path = name(TokenKind::string).text;
           expect("{");
@@ -663,13 +694,13 @@ public:
           continue;
         }
         if (take("symbol")) {
-          if (!using_resource) fail(start.at, "import symbol is outside the prototype; declare its destination first");
+          if (!using_resource) fail(start.at, "combined symbol selection requires using; declare its destination first");
           form->using_symbol = true;
         }
         resource(*form, form->using_symbol);
         if (take("with")) {
-          if (using_resource || !form->symbolic)
-            fail(start.at, "a symbol map requires an imported procedure");
+          if (form->kind != Form::Kind::mixin_resource)
+            fail(start.at, "a symbol map requires a mixed-in procedure");
           expect("{");
           while (!take("}")) {
             auto local = name(TokenKind::symbol);

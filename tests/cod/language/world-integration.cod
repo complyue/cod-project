@@ -1,0 +1,7 @@
+using "world-first.cod" First;
+using "world-vocabulary.cod" First;
+using "world-vocabulary.cod" First as FirstAlias;
+using "world-second.cod" score as zipped;
+export import "world-vocabulary.cod" relay;
+export score;
+export zipped;

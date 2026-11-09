@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T10:08:03.749515+00:00",
+  "registry_record": "K-328",
+  "toolchain": "build",
+  "backend": "llvm",
+  "scope": "Scope-bound dynamic resources, preserved no-extraction/escape checks and captured/hidden owner lifetimes.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "log": "build/validation/language-20261108-owner-liveness-build.log",
+    "sha256": "d2cb19392fd957ead73532a59d1e1cfbdddc613cd4307129a7f8f80b1b52bf20"
+  },
+  "acceptance": {
+    "passed": 15,
+    "total": 15,
+    "fixtures": [
+      "bounded-iteration.cod",
+      "fold-products.cod",
+      "iteration-scope.cod",
+      "region-escape.cod",
+      "region-owner-move.cod",
+      "region-owner-capture.cod",
+      "region-owner-lexical.cod",
+      "region-reference-fold.cod",
+      "logical-unscoped-effect.cod",
+      "logical-unscoped-region.cod",
+      "function-cross-region.cod",
+      "abstract-types.cod",
+      "pool-view-escape.cod",
+      "fold-view-owner.cod",
+      "frontend-only"
+    ],
+    "llvm_artifact_roundtrip": true,
+    "relocated_graph": {
+      "relocation_passed": true,
+      "relocated_bytes": 120,
+      "region_header_bytes": 40,
+      "array_header_bytes": 16,
+      "record_bytes": 24
+    },
+    "pool": {
+      "relocation_passed": true,
+      "relocated_bytes": 152,
+      "slots": 4,
+      "cod_reuse_laps": 10000,
+      "bounded_occupation": true,
+      "relocated_free_chain": [
+        3,
+        1,
+        4
+      ],
+      "independent_native_reuse_passed": true
+    },
+    "resources": {
+      "owners_acquired": 2,
+      "owners_released": 2,
+      "release_order": [
+        1,
+        0
+      ],
+      "live_resource_reads": 6,
+      "captured_and_hidden_owners_survive_replay": true
+    }
+  },
+  "limits": [
+    "Only effect-owned resources are implemented; this is not consuming ordinary-owner path analysis.",
+    "Compiler lifetime metadata changes; runtime cleanup, region layout and pointer encoding do not.",
+    "Relocated images are checked independently in native code; CoD execution does not resume after relocation.",
+    "Broader prior validation retains its recorded compiler revision."
+  ],
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "eb4e62de70b7414683d3634eb09906386106d35024ecf10c0efa62939ea9866d"
+  },
+  "source_sha256": {
+    "cod/lang_syntax.hh": "89da95f12a36d9e033dc944a53ccecdce4b675ce675d42d3a03145fb96d52082",
+    "cod/lang_frontend.hh": "5aafa48072adc8b5c073aead5a95ab61aecba7dacdc9bb822de1aada12a0f9c1",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
+    "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
+    "tests/cod/language/cases.json": "ddd7f9e4966e7a8c45fb30737cfd6d1224a4d1fe14b837e9d5abcc020e4bbc6d",
+    "tests/cod/language/regional_runtime_tests.py": "ac5d5ebbafef25cfb56cc0ea4428f358abb29e2b163c3bba55e0f5433cdd67b5",
+    "tests/cod/language/bounded-iteration.cod": "7b7228907eb4e81a5d2ff66f3c1a090dfe90f31167497111781f143b985f3d14",
+    "tests/cod/language/fold-products.cod": "056d76cc91de4185df34380aef52c588874287ba42ce40b4a5520324fa786f49",
+    "tests/cod/language/iteration-scope.cod": "aa544f2a013d4bfc331fcd7d53f925f0fa8c64cc44b107bcbffc2f3c837b8d8e",
+    "tests/cod/language/region-escape.cod": "2665f8c55f198cc3961ee94ad4c4c661a0df0df1539bef5b58ac7f7d599cb98e",
+    "tests/cod/language/region-owner-move.cod": "72d9ca787445d2160c7bdf04caa2d6b34bfcf9f01a1b74340a46d40f281f09e9",
+    "tests/cod/language/region-owner-capture.cod": "1ed3ec6833f468aa5ec5fffd8f6adf80c53859d4fcbc7aff5fe96686b4adf0e3",
+    "tests/cod/language/region-owner-lexical.cod": "831b7b22ccb250e8f67cd919eeb1219a6ddd782ea3cda812ee77e0d77ffb7ed6",
+    "tests/cod/language/region-reference-fold.cod": "069f715f638a0c253909397935d7621e29149c22da57edda6900d205eeb159e1",
+    "tests/cod/language/logical-unscoped-effect.cod": "d9263d97a5077c194fc26e5031ae059f3c1b32c57f38dce9d378530e425cd23a",
+    "tests/cod/language/logical-unscoped-region.cod": "1fd99402d340938ff1fadfa43dc437b1e6d32303b8dfacbaa8ad083fc89519e5",
+    "tests/cod/language/function-cross-region.cod": "dbb02fe9accf4459ce5835b1a0153066cf1f800f413ebbfdcf09c5fa8597132d",
+    "tests/cod/language/abstract-types.cod": "220da2b68c1c36dad7875b4a6b158b2f6ad3b1c5156620afb7a9477d9d98c9ab",
+    "tests/cod/language/pool-view-escape.cod": "c4ed00396489e3a15e3fd5b8efaa48a5dc4f7d844eb52740fe08f85fe48ceb51",
+    "tests/cod/language/fold-view-owner.cod": "f6e99c9cdc20456b4d1dffc1b03d9d9a0cb4f0a757e72c99e63524becf8e059e",
+    "tests/cod/language/region-records.cod": "540cb59b7c1da0e0fb499f80c25f12e04e61f9fe163fcd3e343febdf4500a690",
+    "tests/cod/language/region-pool.cod": "4eb7e3597c0ade47b8624a429811500e50f5be3f6cf1ef684208492bf4fd359d",
+    "tests/cod/language/reusable-pool.cod": "1ef7a3cf0b36b4df8eab6b092587d955b8231dc511352420016123e57214eb1a",
+    "tests/cod/language/pool-interface.cod": "8a69db7ca21cc351b96c2a64ef97e29669f905d1f7c846772c6ad5b910a07eaf",
+    "tests/cod/language/pool-adapter.cod": "a6ec7edd979434dfd152efa29022d0a73c0ba4ef080f9300d89d198982eb92e4"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-owner-liveness-validation.json": "a7453093f3d254814926b5636bbd8d88a3e2298dbde3320a114d66f745e14717",
+    "build/validation/language-20261108-owner-liveness-regional.json": "a79ee8a60e107f587fe105f3774e7571d21d9b23adbe2ecdd7240c4eada2d532"
+  }
+}

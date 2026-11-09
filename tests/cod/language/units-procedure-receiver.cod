@@ -5,4 +5,11 @@ function adjust(x::f64)::f64 { x + 100.0 }
 symbol @receiver_distance :: normalized;
 symbol @receiver_read :: proc(normalized) -> f64;
 effect @receiver_distance <- normalized(10.0);
-import "units-procedure-source.cod" @read as @receiver_read with { @receiver_distance as @distance; };
+mixin "units-procedure-source.cod" @read as @receiver_read with { @receiver_distance as @distance; };
+
+export @receiver_distance;
+export @receiver_read;
+export adjust;
+export normalize;
+export normalized;
+export raw;

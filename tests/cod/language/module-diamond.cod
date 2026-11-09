@@ -1,5 +1,9 @@
 using symbol "std:io" @print;
 using symbol "diamond-left.cod" @left;
 using symbol "diamond-right.cod" @right;
+symbol from "diamond-vocab.cod" @gain;
+effect @gain <- 99;
 behave @print(perform @left());
 behave @print(perform @right());
+using symbol "diamond-left.cod" @read as @forwarded;
+behave @print(perform @forwarded());

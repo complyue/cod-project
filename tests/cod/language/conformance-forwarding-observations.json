@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T17:46:20.683802+00:00",
+  "registry_record": "K-345",
+  "toolchain": "build",
+  "compiler_sha256": "3150370e26f4fb8a1164acb5942e3458b2fa1464f7be82723e173a8a24a4156b",
+  "purpose": "Observe how abstract parameter admission interacts with caller-selected implementations and adapter-visible conformance; do not approve a new forwarding policy.",
+  "sources": {
+    "core.cod": "type Entity;\ntype Weighted <: Entity;\nfunction score(x::Entity)::i64 { 1 }\nfunction score(x::Weighted)::i64 { 2 }\nfunction relay(x::Entity)::i64 { score(x) }\nfunction nested(x::Entity)::i64 { relay(x) }\nfunction relay_weighted(x::Weighted)::i64 { score(x) }\n",
+    "data.cod": "data Node { value::i64; }\n",
+    "adapter.cod": "import \"data.cod\" Node;\nusing \"core.cod\" Weighted;\ndata Node <: Weighted;\n",
+    "main.cod": "using symbol \"std:io\" @print;\nusing \"reexport.cod\" Packet as Node;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{ let x = deref(alloc @arena Node(7));\nbehave @print(score(x));\nbehave @print(relay(x));\nbehave @print(nested(x));\nbehave @print(relay_weighted(x));\n};\n",
+    "reexport.cod": "using \"adapter.cod\" Node as Packet;\n",
+    "exact.cod": "import \"adapter.cod\" Node;\nfunction score(x::Node)::i64 { 7 }\n",
+    "exact-main.cod": "using symbol \"std:io\" @print;\nusing \"exact.cod\" Node;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{ let x = deref(alloc @arena Node(7));\nbehave @print(score(x));\nbehave @print(relay(x));\nbehave @print(nested(x));\nbehave @print(relay_weighted(x));\n};\n",
+    "unselected-main.cod": "using \"data.cod\" Node;\nusing \"core.cod\" relay;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{ relay(deref(alloc @arena Node(7))) };\n"
+  },
+  "results": [
+    {
+      "entry": "main.cod",
+      "exit_code": 0,
+      "stdout": "2\n1\n1\n2\n",
+      "stderr": ""
+    },
+    {
+      "entry": "exact-main.cod",
+      "exit_code": 0,
+      "stdout": "7\n7\n7\n7\n",
+      "stderr": ""
+    },
+    {
+      "entry": "unselected-main.cod",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "<probe>/unselected-main.cod:5:3: expected <probe>/core.cod::Entity, got <probe>/data.cod::Node\n<probe>/unselected-main.cod:5:3: note: required interface is not established in module '<probe>/unselected-main.cod'\n<probe>/unselected-main.cod:5:3: note: in call to function 'relay' defined at <probe>/core.cod:5:1\n"
+    }
+  ],
+  "interpretation": {
+    "main.cod": "The adapter declares Node <: Weighted <: Entity. Type selection through a re-exported Packet alias preserves identity and brings methods. Direct score=2; Entity relay=1; nested Entity relay=1; Weighted relay=2.",
+    "exact-main.cod": "A concrete Node extension of the same source score family yields7 through all four paths. Concrete type identity survives Entity admission even though the stronger abstract conformance does not.",
+    "unselected-main.cod": "Selecting the original Node without its adapter rejects the Entity call. No interface relation is inferred from field shape or the method body."
+  },
+  "mechanism": "Value retains its concrete type and one admitted_interface. Parameter/result admission replaces that interface; source lookup otherwise consults the source module conformances. Caller method views carry bodies, not additional conformance facts.",
+  "raw_report": {
+    "path": "build/validation/language-20261108-conformance-forwarding.json",
+    "sha256": "01b527f686cae5531d12025f5a91a2550b49d0b4fb8b47e0bc6624fe208d8ea6"
+  },
+  "source_sha256": {
+    "cod/lang_frontend.hh": "0ebd704360ca58194b9441ab6ac3d153481f863d293b2e98205d6672d26cf716",
+    "cod/lang_syntax.hh": "f4601a5186be865b600fff5863cddfe12210afb76893b9ba4db33a787cfa48d7",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518"
+  },
+  "limits": [
+    "Observed outputs are not a final dispatch contract. Retaining argument-associated conformance versus imposing a declared-interface ceiling requires design review.",
+    "No compiler, runtime, permanent fixture, main build or broad suite change.",
+    "No ambient/global conformance table, interface runtime wrapper, module namespace or owning-transfer feature is introduced."
+  ]
+}

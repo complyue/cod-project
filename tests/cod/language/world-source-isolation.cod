@@ -1,0 +1,10 @@
+using "world-integration.cod" relay;
+using "world-first.cod" local_score;
+using "world-second.cod" second;
+symbol @arena::region;
+effect @arena <- region(4096u64);
+{
+  let b = second(@arena);
+  relay(b);
+  local_score(b);
+};

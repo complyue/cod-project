@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "registry_record": "K-395",
+  "recorded_utc": "2026-11-09T12:14:00.165593+00:00",
+  "toolchain": "build",
+  "compiler_sha256": "d0eb4f237975e5cbabbbcc4a4c59c5c68dcb1cffa7b38083c736719e2d66d33f",
+  "recording": "Commands were invoked directly during the audit; observed outputs transcribed from tool results, not rerun for reporting.",
+  "passed": 3,
+  "total": 3,
+  "results": [
+    {
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "/tmp/cod-world-tls-audit/entry.cod",
+        "--emit-llvm",
+        "/tmp/cod-world-tls-audit/entry.ll"
+      ],
+      "exit_code": 0,
+      "stdout": "16\n22\n33\n",
+      "stderr": "",
+      "passed": true,
+      "checks": [
+        "source module captures11 and22 before pointee mutation",
+        "current caller values33",
+        "same-symbol aliases share the active reference",
+        "loop shadowing/restoration",
+        "captured regional reference observes authorized pointee mutation16 without copying the region",
+        "second source and caller remain22 and33"
+      ]
+    },
+    {
+      "command": [
+        "build/bin/cod",
+        "--check",
+        "/tmp/cod-world-tls-audit/missing.cod"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-world-tls-audit/first.cod:9:23: missing required binding /tmp/cod-world-tls-audit/vocabulary.cod::@state\n/tmp/cod-world-tls-audit/missing.cod:11:8: note: in call to procedure '@read' defined at /tmp/cod-world-tls-audit/first.cod:9:1\n",
+      "passed": true,
+      "checks": [
+        "source initialization does not silently supply caller dynamic bindings"
+      ]
+    },
+    {
+      "command": [
+        "build/bin/cod",
+        "--check",
+        "/tmp/cod-world-tls-audit/wrong-type.cod"
+      ],
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-world-tls-audit/wrong-type.cod:14:8: incompatible value types for /tmp/cod-world-tls-audit/vocabulary.cod::@state: expected ref</tmp/cod-world-tls-audit/vocabulary.cod::Words>, got ref</tmp/cod-world-tls-audit/wrong-type.cod::OtherWords>\n",
+      "passed": true,
+      "checks": [
+        "same representation does not replace nominal type identity"
+      ]
+    }
+  ],
+  "llvm_ir": {
+    "path": "/tmp/cod-world-tls-audit/entry.ll",
+    "sha256": "c9fa460daa62ab357d269a4e60ba3ca7e6897537ce934c28cb25d180b5a72c33",
+    "pointer_tls_definitions": [
+      "@effect.6 = internal thread_local global ptr null",
+      "@effect.7 = internal thread_local global ptr null"
+    ],
+    "native_data_symbols": 2,
+    "effect_value_cells": 8,
+    "scope": "Two shared data symbol IDs across vocabulary/source/receiver worlds and aliases. Region/procedure bindings remain statically specialized; this does not claim a public runtime TLS ABI."
+  },
+  "open_dependency_observation": {
+    "command": [
+      "build/bin/cod",
+      "--run",
+      "/tmp/cod-world-dependency-audit/entry.cod"
+    ],
+    "exit_code": 0,
+    "stdout": "22\n11\n",
+    "stderr": "",
+    "accepted_contract": false,
+    "question": "When importing an already adapted helper, preserve A dependency identity unless explicitly adapted, or retarget through common ancestry to independently selected B?",
+    "status": "rejected by H-253; final implementation evidence in world-conflict-validation.json",
+    "note": "H230/H232 specify separate extension identities and using/import adaptation, but not replacement between sibling extensions. The compiler currently matches common origins in this unmatched case."
+  },
+  "source_sha256": {
+    "cod/main.cc": "bac9eb6590d4190e95cca3198706a1ec6c156c25601accb06c40d24398ea4043",
+    "cod/lang_frontend.hh": "2a5e0e5d126e0169df0e3743b89bdaf2b77da731b420a0dc8fc91c5688263d8c",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "a27b2a2da2549766dace7843974d8032e137ea97712f531f7ee235da39ae4ed4",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "/tmp/cod-world-tls-audit/wrong-type.cod": "067b29bc8dbb27bdaa87497d83f31a2e517a7ca19e64094cd76d560eeae23264",
+    "/tmp/cod-world-tls-audit/missing.cod": "dfa5c108d6c94c70cb177b8be6ce1d7814109b6e43283077d3facfec48bc4132",
+    "/tmp/cod-world-tls-audit/entry.cod": "50e172ee9b72fe40bfb45ca16961ac00112ee7fc71bc47c66df75d62de660945",
+    "/tmp/cod-world-tls-audit/second.cod": "e390025d862362d64683d6ab68892603c18704bb2e5b89ae6348ffc3c2f82779",
+    "/tmp/cod-world-tls-audit/first.cod": "c27c0255e2761848a19ecb017b548e33d9243082d0990e2f84bbbeb0b1c52111",
+    "/tmp/cod-world-tls-audit/vocabulary.cod": "eabcc71eabea7e69c04b79caa64821766e4516c48a3152d59f6532234c974b3c",
+    "/tmp/cod-world-dependency-audit/entry.cod": "5324ac17693714ac8bd32d2e20ea34a40e94e9ca196495505f9d357fef350274",
+    "/tmp/cod-world-dependency-audit/selected.cod": "f5c27f3364d9b5befc43c8e7e1a6ecdef4cbdecdcc42cf0c14129e4ad4957f4d",
+    "tests/cod/language/method-view-library.cod": "60322c00509a5aa0731c330744363630935bd40c1f27900bb142d638509a0b5d",
+    "tests/cod/language/method-view-first.cod": "29e07c9bd9683ec4f10a8c16f2901630d55b54b512543aed99d3a41d1ba9cba8",
+    "tests/cod/language/method-view-second.cod": "9510ba2ab3b1523bb8bd45a33918abae4c69d4bedaf011fc529798f1f74c3128"
+  },
+  "scratch_sources": {
+    "/tmp/cod-world-tls-audit/wrong-type.cod": "using symbol \"std:io\" @assert;\nusing symbol \"std:io\" @print;\nusing \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state;\nsymbol from \"vocabulary.cod\" @state as @same_state;\nsymbol from \"vocabulary.cod\" @bias;\nsymbol first::proc() -> i64, second::proc() -> i64, view::proc() -> ref<Words>;\nusing \"first.cod\" @read as @first;\nusing \"second.cod\" @read as @second;\nusing \"first.cod\" @view as @view;\narray OtherWords[u32]::i64;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @state <- alloc @arena OtherWords(1u64, 30);\n",
+    "/tmp/cod-world-tls-audit/missing.cod": "using symbol \"std:io\" @assert;\nusing symbol \"std:io\" @print;\nusing \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state;\nsymbol from \"vocabulary.cod\" @state as @same_state;\nsymbol from \"vocabulary.cod\" @bias;\nsymbol first::proc() -> i64, second::proc() -> i64, view::proc() -> ref<Words>;\nusing \"first.cod\" @read as @first;\nusing \"second.cod\" @read as @second;\nusing \"first.cod\" @view as @view;\nbehave @first();\n",
+    "/tmp/cod-world-tls-audit/entry.cod": "using symbol \"std:io\" @assert;\nusing symbol \"std:io\" @print;\nusing \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state;\nsymbol from \"vocabulary.cod\" @state as @same_state;\nsymbol from \"vocabulary.cod\" @bias;\nsymbol first::proc() -> i64, second::proc() -> i64, view::proc() -> ref<Words>;\nusing \"first.cod\" @read as @first;\nusing \"second.cod\" @read as @second;\nusing \"first.cod\" @view as @view;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @state <- alloc @arena Words(1u64, 30);\neffect @bias <- 3;\nbehave @assert(perform @first() == 11);\nbehave @assert(perform @second() == 22);\nbehave @assert(behave @first() == 33);\nbehave @assert(behave @second() == 33);\nfor (i in 0u32 .. 3u32) {\n  effect @state <- alloc @arena Words(1u64, 40 + i64(i));\n  effect @bias <- 4;\n  behave @assert(@same_state[0u32] == 40 + i64(i));\n  behave @assert(behave @first() == 44 + i64(i));\n  behave @assert(perform @first() == 11);\n  behave @assert(perform @second() == 22);\n};\nbehave @assert(behave @first() == 33);\nbehave @assert(@same_state[0u32] == 30);\n{\n  let captured_view = perform @view();\n  store(captured_view, 0u32, 15);\n  behave @assert(perform @first() == 16);\n  behave @assert(perform @second() == 22);\n  behave @assert(behave @first() == 33);\n};\nbehave @print(perform @first());\nbehave @print(perform @second());\nbehave @print(behave @first());\n",
+    "/tmp/cod-world-tls-audit/second.cod": "using \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state as @data;\nsymbol from \"vocabulary.cod\" @bias as @level;\nsymbol from \"vocabulary.cod\" @read;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @data <- alloc @arena Words(1u64, 20);\neffect @level <- 2;\nproc @read() -> i64 { @data[0u32] + @level }\nproc @view() -> ref<Words> { @data }\nexport @read;\nexport @view;\n",
+    "/tmp/cod-world-tls-audit/first.cod": "using \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state as @data;\nsymbol from \"vocabulary.cod\" @bias as @level;\nsymbol from \"vocabulary.cod\" @read;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @data <- alloc @arena Words(1u64, 10);\neffect @level <- 1;\nproc @read() -> i64 { @data[0u32] + @level }\nproc @view() -> ref<Words> { @data }\nexport @read;\nexport @view;\n",
+    "/tmp/cod-world-tls-audit/vocabulary.cod": "array Words[u32]::i64;\nsymbol state::ref<Words>, bias::i64, read::proc() -> i64;\nexport Words;\nexport @state;\nexport @bias;\nexport @read;\n",
+    "/tmp/cod-world-dependency-audit/entry.cod": "using symbol \"std:io\" @print;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" create;\nimport \"selected.cod\" through as twice;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod\" score as other;\nsymbol arena::region;\neffect @arena <- region(4096u64);\n{ let x = create(@arena); behave @print(twice(x)); behave @print(other(x)); };\n",
+    "/tmp/cod-world-dependency-audit/selected.cod": "export import \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod\" through;\n"
+  },
+  "limits": [
+    "This initial TLS observation preceded the H-253 code increment; its compiler hash is retained.",
+    "No test scripts, full-suite or relocation rerun.",
+    "The recorded22/11 dependency behavior was subsequently rejected by H-253 and is not an acceptance result.",
+    "RTTI remains reserved for human discussion."
+  ]
+}

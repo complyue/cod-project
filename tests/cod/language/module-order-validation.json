@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T21:10:53.679683+00:00",
+  "registry_record": "K-358",
+  "toolchain": "build",
+  "compiler_sha256": "c16d406c5cd5dbb57467cba75be97cf5e3b51c846c5054b1a6ae0348404b8de5",
+  "scope": "Symbolic export import in a diamond preserves once-only incorporation and source captures; local method declaration order does not choose between applicable specializations.",
+  "focused": {
+    "passed": 8,
+    "total": 8,
+    "fixtures": [
+      "module-diamond.cod",
+      "region-module-behave.cod",
+      "region-module-perform.cod",
+      "module-exports.cod",
+      "module-private-resource.cod",
+      "module-private-symbol.cod",
+      "module-selection.cod",
+      "frontend-only"
+    ]
+  },
+  "diamond": {
+    "fixture": "module-diamond.cod",
+    "expected": {
+      "file": "module-diamond.cod",
+      "exit": 0,
+      "stdout": "101\n3\n7\n3\n3\n3\n"
+    },
+    "exit_code": 0,
+    "stdout": "101\n3\n7\n3\n3\n3\n",
+    "stderr": "",
+    "passed": true
+  },
+  "generated_checks": {
+    "recorded_utc": "2026-11-08T21:08:39.750231+00:00",
+    "compiler_sha256": "c16d406c5cd5dbb57467cba75be97cf5e3b51c846c5054b1a6ae0348404b8de5",
+    "sources": {
+      "intersection-012.cod": "using symbol \"std:io\" @print;\ntype Parent; type Child <: Parent; data Node <: Child { value::i64; }\nsymbol arena::region; effect @arena <- region(4096u64);\n{let n=deref(alloc @arena Node(7)); behave @print(choose(n,n));};\nfunction choose(a::Parent,b::Child)::i64 {1}\nfunction choose(a::Child,b::Parent)::i64 {2}\nfunction choose(a::Child,b::Child)::i64 {3}\n",
+      "intersection-021.cod": "using symbol \"std:io\" @print;\ntype Parent; type Child <: Parent; data Node <: Child { value::i64; }\nsymbol arena::region; effect @arena <- region(4096u64);\n{let n=deref(alloc @arena Node(7)); behave @print(choose(n,n));};\nfunction choose(a::Parent,b::Child)::i64 {1}\nfunction choose(a::Child,b::Child)::i64 {3}\nfunction choose(a::Child,b::Parent)::i64 {2}\n",
+      "intersection-102.cod": "using symbol \"std:io\" @print;\ntype Parent; type Child <: Parent; data Node <: Child { value::i64; }\nsymbol arena::region; effect @arena <- region(4096u64);\n{let n=deref(alloc @arena Node(7)); behave @print(choose(n,n));};\nfunction choose(a::Child,b::Parent)::i64 {2}\nfunction choose(a::Parent,b::Child)::i64 {1}\nfunction choose(a::Child,b::Child)::i64 {3}\n",
+      "intersection-120.cod": "using symbol \"std:io\" @print;\ntype Parent; type Child <: Parent; data Node <: Child { value::i64; }\nsymbol arena::region; effect @arena <- region(4096u64);\n{let n=deref(alloc @arena Node(7)); behave @print(choose(n,n));};\nfunction choose(a::Child,b::Parent)::i64 {2}\nfunction choose(a::Child,b::Child)::i64 {3}\nfunction choose(a::Parent,b::Child)::i64 {1}\n",
+      "intersection-201.cod": "using symbol \"std:io\" @print;\ntype Parent; type Child <: Parent; data Node <: Child { value::i64; }\nsymbol arena::region; effect @arena <- region(4096u64);\n{let n=deref(alloc @arena Node(7)); behave @print(choose(n,n));};\nfunction choose(a::Child,b::Child)::i64 {3}\nfunction choose(a::Parent,b::Child)::i64 {1}\nfunction choose(a::Child,b::Parent)::i64 {2}\n",
+      "intersection-210.cod": "using symbol \"std:io\" @print;\ntype Parent; type Child <: Parent; data Node <: Child { value::i64; }\nsymbol arena::region; effect @arena <- region(4096u64);\n{let n=deref(alloc @arena Node(7)); behave @print(choose(n,n));};\nfunction choose(a::Child,b::Child)::i64 {3}\nfunction choose(a::Child,b::Parent)::i64 {2}\nfunction choose(a::Parent,b::Child)::i64 {1}\n",
+      "ambiguous-01.cod": "using symbol \"std:io\" @print;\ntype Parent; type Child <: Parent; data Node <: Child { value::i64; }\nsymbol arena::region; effect @arena <- region(4096u64);\n{let n=deref(alloc @arena Node(7)); behave @print(choose(n,n));};\nfunction choose(a::Parent,b::Child)::i64 {1}\nfunction choose(a::Child,b::Parent)::i64 {2}\n",
+      "ambiguous-10.cod": "using symbol \"std:io\" @print;\ntype Parent; type Child <: Parent; data Node <: Child { value::i64; }\nsymbol arena::region; effect @arena <- region(4096u64);\n{let n=deref(alloc @arena Node(7)); behave @print(choose(n,n));};\nfunction choose(a::Child,b::Parent)::i64 {2}\nfunction choose(a::Parent,b::Child)::i64 {1}\n"
+    },
+    "results": [
+      {
+        "case": "intersection-012",
+        "exit_code": 0,
+        "stdout": "3\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "intersection-021",
+        "exit_code": 0,
+        "stdout": "3\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "intersection-102",
+        "exit_code": 0,
+        "stdout": "3\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "intersection-120",
+        "exit_code": 0,
+        "stdout": "3\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "intersection-201",
+        "exit_code": 0,
+        "stdout": "3\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "intersection-210",
+        "exit_code": 0,
+        "stdout": "3\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "ambiguous-01",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/ambiguous-01.cod:4:51: ambiguous method 'choose' for supplied argument types (<probe>/ambiguous-01.cod::Node, <probe>/ambiguous-01.cod::Node): 2 matching candidates\n<probe>/ambiguous-01.cod:4:51: note: method lookup uses module '<probe>/ambiguous-01.cod'\n<probe>/ambiguous-01.cod:4:51: note: argument 1 guarantees <probe>/ambiguous-01.cod::Child\n<probe>/ambiguous-01.cod:4:51: note: argument 2 guarantees <probe>/ambiguous-01.cod::Child\n<probe>/ambiguous-01.cod:5:1: note: candidate function 'choose' (Parent, Child) -> i64\n<probe>/ambiguous-01.cod:6:1: note: candidate function 'choose' (Child, Parent) -> i64\n",
+        "passed": true
+      },
+      {
+        "case": "ambiguous-10",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/ambiguous-10.cod:4:51: ambiguous method 'choose' for supplied argument types (<probe>/ambiguous-10.cod::Node, <probe>/ambiguous-10.cod::Node): 2 matching candidates\n<probe>/ambiguous-10.cod:4:51: note: method lookup uses module '<probe>/ambiguous-10.cod'\n<probe>/ambiguous-10.cod:4:51: note: argument 1 guarantees <probe>/ambiguous-10.cod::Child\n<probe>/ambiguous-10.cod:4:51: note: argument 2 guarantees <probe>/ambiguous-10.cod::Child\n<probe>/ambiguous-10.cod:5:1: note: candidate function 'choose' (Child, Parent) -> i64\n<probe>/ambiguous-10.cod:6:1: note: candidate function 'choose' (Parent, Child) -> i64\n",
+        "passed": true
+      },
+      {
+        "case": "scan-before-once-only-composition",
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/module-diamond.cod\n[CoD scan] std:io\n[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/diamond-left.cod\n[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/diamond-vocab.cod\n[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/diamond-shared.cod\n[CoD scan] /ws/EvtWorks/cod-project/tests/cod/language/diamond-right.cod\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/module-diamond.cod\n[CoD execution semantics] std:io\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/diamond-left.cod\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/diamond-vocab.cod\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/diamond-shared.cod\n[CoD execution semantics] /ws/EvtWorks/cod-project/tests/cod/language/diamond-right.cod\n",
+        "scanned": [
+          "/ws/EvtWorks/cod-project/tests/cod/language/module-diamond.cod",
+          "std:io",
+          "/ws/EvtWorks/cod-project/tests/cod/language/diamond-left.cod",
+          "/ws/EvtWorks/cod-project/tests/cod/language/diamond-vocab.cod",
+          "/ws/EvtWorks/cod-project/tests/cod/language/diamond-shared.cod",
+          "/ws/EvtWorks/cod-project/tests/cod/language/diamond-right.cod"
+        ],
+        "incorporated": [
+          "/ws/EvtWorks/cod-project/tests/cod/language/module-diamond.cod",
+          "std:io",
+          "/ws/EvtWorks/cod-project/tests/cod/language/diamond-left.cod",
+          "/ws/EvtWorks/cod-project/tests/cod/language/diamond-vocab.cod",
+          "/ws/EvtWorks/cod-project/tests/cod/language/diamond-shared.cod",
+          "/ws/EvtWorks/cod-project/tests/cod/language/diamond-right.cod"
+        ],
+        "passed": true
+      }
+    ]
+  },
+  "source_review": {
+    "load_registration": "cod/lang_frontend.hh:364",
+    "recursive_dependency_load": "cod/lang_frontend.hh:460",
+    "compile_load_then_execute": "cod/lang_frontend.hh:1910",
+    "observation": "Compiler::compile calls load before execute_module; the verbose trace is a report of those collected lists, not itself an execution-time trace. --check produces no program stdout."
+  },
+  "source_sha256": {
+    "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
+    "cod/lang_frontend.hh": "662510eaf0bbac8d13e59b76f0c85bd1fbd9cffe31b1f3d726e1358de937d19b",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "tests/cod/language/module-diamond.cod": "62d14f7619e20812694fe973e3d94a107097a8e0ddeacfd75806ce447b005496",
+    "tests/cod/language/diamond-left.cod": "4cd5346e099a52a37a6ab4f11cb070cda451f7a04a4602888dde43105c806401",
+    "tests/cod/language/diamond-right.cod": "53bcaf0db8e0ec7d0d1457c17e52b4ffaa11c942c4a6e2152c95dc38cb8a21d7",
+    "tests/cod/language/diamond-shared.cod": "fac3ac1a78a3d49b764431e6dd5019d12f84b4c30189eee73f12088d38ace3c7",
+    "tests/cod/language/diamond-vocab.cod": "0af5a1aa7e4a5d33e2adf92978e2b4c1d1c8aefddec4a5e0bd9db4f2b2ebb4c3",
+    "tests/cod/language/cases.json": "d68337d8c72b592f22d474c824ed3da11c4b196b6d4f8ab89dc26a9371f23952"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-symbolic-export-diamond-focused.json": "f2854b37d77c03efdb857d0ba22580a7c6a88e5e95d2b97c0ef5d8684ae9b54d",
+    "build/validation/language-20261108-order-composition.json": "386641e38ba0dafb6f2d6e0896303efdaa607cb09ba0044aa841aa84baaff689",
+    "build/validation/language-20261108-symbolic-export-diamond-build.log": "1f3d16f02a6177838bd9b70d057b6c9af4ae41562104c6896588480e85d5dd65"
+  },
+  "limits": [
+    "Compiler/runtime unchanged from K-356; no new language policy or permanent case.",
+    "The six successful permutations hold imports/types/conformance fixed and place local method definitions after the call. This does not hoist source selections or conformance declarations.",
+    "Both crossed-specialization orders without an intersection reject; runtime error recovery is not exercised.",
+    "The observed diamond has matching scan/incorporation traversal order; cyclic initialization and broader encounter rules are not selected.",
+    "No full-suite or fresh relocation/performance claim."
+  ]
+}

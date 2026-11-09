@@ -1,3 +1,25 @@
+using symbol "std:io" @assert;
+data Cell { value::i64; }
 symbol @a :: region;
+function forward(arena::region) -> region { let view = arena; view }
+function repeat(arena::region, count::u32) -> region {
+  fold (i in 0u32 .. count, view = arena) { forward(view) }
+}
+function create(arena::region, value::i64) -> Cell {
+  deref(alloc arena Cell(value))
+}
+proc inspect(arena::region) -> u64 { capacity_bytes(forward(arena)) }
 effect @a <- region(4096u64);
-{ let owner = @a; used_bytes(owner) };
+{
+  let view = forward(@a);
+  let capacity = inspect(view);
+  let cell = create(repeat(view, 3u32), 7);
+  {
+    effect @a <- region(8192u64);
+    behave @assert(capacity_bytes(@a) > capacity);
+    behave @assert(inspect(repeat(view, 0u32)) == capacity);
+    setfield(cell, value, 9);
+  };
+  behave @assert(inspect(view) == capacity);
+  behave @assert(cell.value == 9);
+};

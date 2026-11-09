@@ -1,12 +1,11 @@
 using symbol "std:io" @print;
 symbol from "intrinsic-library.cod" @bias;
-using "intrinsic-library.cod" Box as B;
 using "intrinsic-library.cod" Cell as C;
 using "intrinsic-library.cod" (len);
 using "intrinsic-library.cod" (store);
 using "intrinsic-library.cod" (+);
 using "intrinsic-library.cod" (=);
-using units "intrinsic-library.cod" {Index};
+using units "intrinsic-library.cod" {Box as B, Index};
 using "intrinsic-library.cod" Scores;
 using "intrinsic-library.cod" ([]=);
 function twice(value::i64)::i64 { value * 1000 }
@@ -34,15 +33,15 @@ effect @bias <- 2;
 behave @print(len(B(7)));
 behave @print((len)(B(8)));
 behave @print(len(@values));
-behave @print(saved.value);
-behave @print(pure(B(5)).value);
+behave @print(scalar(saved));
+behave @print(scalar(pure(B(5))));
 behave @print((@len));
 behave @print(perform @run(3));
 behave @print(deref(@cell).value);
 behave @print(behave @run(3));
 behave @print(deref(@cell).value);
 behave @print(@cell + 1);
-behave @print((B(5) + 1).value);
+behave @print(scalar(B(5) + 1));
 
 using symbol "intrinsic-library.cod" @raw_store;
 array Rates[u32]::f32;
@@ -55,16 +54,16 @@ behave @print(store(ref_at(@rates, 0u32), -2.0f32));
 behave @print(store(ref_at(@rates, 0u32), 0.25f32));
 behave @print(@rates[0u32]);
 
-behave @print((=)(B(5), 4).value);
+behave @print(scalar((=)(B(5), 4)));
 behave @print(perform @assign(10));
 behave @print(behave @assign(10));
 behave @print(deref(@cell).value);
-type FieldNames { type::i64; using::i64; }
+data FieldNames { type::i64; using::i64; }
 symbol @using :: i64;
 effect @using <- 7;
-behave @print(FieldNames(8, 9).type + FieldNames(8, 9).using + @using);
+behave @print(deref(alloc @arena FieldNames(8, 9)).type + deref(alloc @arena FieldNames(8, 9)).using + @using);
 function rewrite(value::B)::B { value[Index(1u32)] = 3 }
-behave @print(rewrite(B(2)).value);
+behave @print(scalar(rewrite(B(2))));
 behave @print(perform @indexed_assign(10));
 behave @print(behave @indexed_assign(10));
 behave @print(([]=)(@scores, Index(1u32), 20));

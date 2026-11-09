@@ -1,0 +1,60 @@
+{
+  "recorded_utc": "2026-11-08T21:14:05.061188+00:00",
+  "compiler_sha256": "c16d406c5cd5dbb57467cba75be97cf5e3b51c846c5054b1a6ae0348404b8de5",
+  "scope": "Observed existing body-bearing methods only; no standalone head syntax or proposed contract was executed.",
+  "sources": {
+    "procedure": {
+      "base.cod": "type Parent; data Child <: Parent {value::i64;}\nfunction score(x::Parent)::i64 {1}\nfunction relay(x::Parent)::i64 {score(x)}\nfunction create(arena::region)::Child {deref(alloc arena Child(0))}\nexport Parent; export Child; export score; export relay; export create;\n",
+      "adapter.cod": "using \"base.cod\" Child; import \"base.cod\" score;\nproc score(x::Child)::i64 {7}\nexport score; export import \"base.cod\" relay;\n",
+      "direct.cod": "using symbol \"std:io\" @print;\nusing \"base.cod\" Child;\nsymbol arena::region; effect @arena <- region(4096u64);\nusing \"adapter.cod\" score;\nbehave @print(score(create(@arena)));\n",
+      "helper.cod": "using symbol \"std:io\" @print;\nusing \"base.cod\" Child;\nsymbol arena::region; effect @arena <- region(4096u64);\nusing \"adapter.cod\" relay;\nbehave @print(relay(create(@arena)));\n"
+    },
+    "result": {
+      "base.cod": "type Parent; data Child <: Parent {value::i64;}\nfunction score(x::Parent)::i64 {1}\nfunction relay(x::Parent)::i64 {score(x)}\nfunction create(arena::region)::Child {deref(alloc arena Child(0))}\nexport Parent; export Child; export score; export relay; export create;\n",
+      "adapter.cod": "using \"base.cod\" Child; import \"base.cod\" score;\nfunction score(x::Child)::bool {true}\nexport score; export import \"base.cod\" relay;\n",
+      "direct.cod": "using symbol \"std:io\" @print;\nusing \"base.cod\" Child;\nsymbol arena::region; effect @arena <- region(4096u64);\nusing \"adapter.cod\" score;\nbehave @print(score(create(@arena)));\n",
+      "helper.cod": "using symbol \"std:io\" @print;\nusing \"base.cod\" Child;\nsymbol arena::region; effect @arena <- region(4096u64);\nusing \"adapter.cod\" relay;\nbehave @print(relay(create(@arena)));\n"
+    }
+  },
+  "results": [
+    {
+      "case": "procedure/direct.cod",
+      "exit_code": 0,
+      "stdout": "7\n",
+      "stderr": "",
+      "matches_existing_contract": true
+    },
+    {
+      "case": "procedure/helper.cod",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "<probe>/procedure/base.cod:3:33: a function cannot invoke a procedure\n<probe>/procedure/adapter.cod:2:1: note: selected procedure 'score' declared here\n<probe>/procedure/helper.cod:5:15: note: in call to function 'relay' defined at <probe>/procedure/base.cod:3:1\n",
+      "matches_existing_contract": true
+    },
+    {
+      "case": "result/direct.cod",
+      "exit_code": 0,
+      "stdout": "true\n",
+      "stderr": "",
+      "matches_existing_contract": true
+    },
+    {
+      "case": "result/helper.cod",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "<probe>/result/base.cod:3:1: expected i64, got bool\n<probe>/result/helper.cod:5:15: note: in call to function 'relay' defined at <probe>/result/base.cod:3:1\n",
+      "matches_existing_contract": true
+    }
+  ],
+  "registry_record": "K-359",
+  "limits": [
+    "These sources have bodies. No proposed standalone declaration is parsed, compiled or validated.",
+    "Direct concrete overload selection has its own result/kind; existing function and result checks still reject incompatible use by a constrained helper.",
+    "This does not approve declaration-only heads, stronger interface contracts, inherited-head matching, covariance or abstract overrides."
+  ],
+  "source_sha256": {
+    "cod/lang_frontend.hh": "662510eaf0bbac8d13e59b76f0c85bd1fbd9cffe31b1f3d726e1358de937d19b",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518"
+  }
+}

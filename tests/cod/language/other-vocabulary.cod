@@ -1,1 +1,3 @@
 symbol @x :: i64;
+
+export @x;

@@ -1,31 +1,20 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
-using units "pool-units.cod" {ClassId, GlobalSetId, GlobalSlot, LocalSlot};
+using units "pool-units.cod" {ClassId, ClassSetId};
 using units "region-gather-types.cod" {Neuron};
 using "region-gather-types.cod" Frame;
-using "region-gather-types.cod" Sources;
-using "region-gather-types.cod" Weights;
-using "region-gather-types.cod" Incoming;
 using "pool-layout.cod" Layout;
-using "pool-layout.cod" capacity;
 using "pool-layout.cod" class_set_begin;
-using "pool-layout.cod" class_slot_begin;
-using "pool-index.cod" locate;
-using "pool-index.cod" global_slot;
-using symbol "region-gather-step.cod" @step;
-global layout::Layout = Layout(4u32, 1u64);
+using "pool-index.cod" SetLocation;
+using "region-gather-kernel.cod" create_graph;
+using "region-gather-step.cod" step;
 global trace_values::bool = true;
+global weighted::bool = true;
 symbol @arena :: region;
-symbol @a :: ref<Frame>;
-symbol @b :: ref<Frame>;
-symbol @sources :: ref<Sources>;
-symbol @weights :: ref<Weights>;
-symbol @graph :: ref<Incoming>;
 function checksum(frame::Frame)::f32 {
   fold (n in Neuron(0u32) .. Neuron(u32(len(frame))), total = 0.0f32) { total + frame[n] }
 }
-symbol @emit_frame :: proc(Frame) -> void;
-procedure @emit_frame(frame::Frame)::void {
+proc emit_frame(frame::Frame) -> void {
   behave @print(checksum(frame));
   if (trace_values) {
     for (n in Neuron(0u32) .. Neuron(u32(len(frame)))) {
@@ -34,28 +23,25 @@ procedure @emit_frame(frame::Frame)::void {
   } else {};
 }
 effect @arena <- region(32768u64);
-effect @a <- alloc @arena Frame(scalar(class_set_begin(layout, ClassId(4u32))), 0.0f32);
-effect @b <- alloc @arena Frame(len(@a), 0.0f32);
-effect @sources <- alloc @arena Sources(scalar(class_slot_begin(layout, ClassId(4u32))), Neuron(0u32));
-effect @weights <- alloc @arena Weights(len(@sources), 1u8);
-effect @graph <- alloc @arena Incoming(@sources, @weights);
-for (n in 0u32 .. u32(len(@a))) {
-  store(@a, Neuron(n), f32(n + 1u32));
-  let position = locate(layout, GlobalSetId(u64(n)));
-  for (j in 0u32 .. scalar(capacity(position.class_id))) {
-    let slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
-    store(@sources, slot, Neuron((n + j) % u32(len(@a))));
-    store(@weights, slot, u8(1u32 + (n + j) % 4u32));
+{
+  let arena = @arena;
+  let layout = deref(alloc arena Layout(4u32, 1u64));
+  let location = alloc arena SetLocation(ClassId(0u32), ClassSetId(0u64));
+  let a = alloc arena Frame(scalar(class_set_begin(layout, ClassId(layout.classes))), 0.0f32);
+  let b = alloc arena Frame(len(a), 0.0f32);
+  let graph = create_graph(arena, layout, u32(len(a)), location, weighted);
+  for (n in 0u32 .. u32(len(a))) {
+    store(a, Neuron(n), f32(n + 1u32));
   };
-};
-behave @emit_frame(deref(@a));
-for (frame in 0u32 .. 4u32) {
-  if (frame % 2u32 == 0u32) {
-    behave @step(deref(@a), @b, deref(@graph), layout);
-    behave @emit_frame(deref(@b));
-  } else {
-    behave @step(deref(@b), @a, deref(@graph), layout);
-    behave @emit_frame(deref(@a));
+  emit_frame(deref(a));
+  for (frame in 0u32 .. 4u32) {
+    if (frame % 2u32 == 0u32) {
+      step(deref(a), b, graph, layout, location);
+      emit_frame(deref(b));
+    } else {
+      step(deref(b), a, graph, layout, location);
+      emit_frame(deref(a));
+    };
   };
+  behave @assert(used_bytes(@arena) < 12000u64);
 };
-behave @assert(used_bytes(@arena) < 12000u64);

@@ -1,0 +1,12 @@
+export import "reusable-pool.cod" Pool;
+using "pool-interface.cod" SlotStore;
+using "pool-interface.cod" ReusableSlotStore;
+data Pool <: ReusableSlotStore;
+using units "reusable-pool.cod" {Slot};
+export import "pool-algorithms.cod" replace;
+export import "pool-algorithms.cod" peek;
+export import "pool-algorithms.cod" locate;
+
+export ReusableSlotStore;
+export Slot;
+export SlotStore;

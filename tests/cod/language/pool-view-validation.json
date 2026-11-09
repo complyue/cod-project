@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T09:37:18.467412+00:00",
+  "registry_record": "K-325",
+  "toolchain": "build",
+  "backend": "llvm",
+  "scope": "Mutable regional record views, explicit abstract pool adapter, returned aliases, bounded reuse and native lifetime/relocation checks.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "log": "build/validation/language-20261108-pool-view-build.log",
+    "sha256": "785c0a5291c92039e8ae77802a395b2f7256e06c1a460ece041b528b7df98614"
+  },
+  "acceptance": {
+    "focused_initial": {
+      "passed": 8,
+      "total": 9,
+      "fixture_issue": "Escape fixture initially used a prohibited module-level let; moved binding into a lexical block to reach the intended lifetime check."
+    },
+    "escape_recheck": {
+      "passed": 2,
+      "total": 2,
+      "compiler_unchanged": true,
+      "diagnostic": "/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod:8:17: regional result would outlive its owning scope\n"
+    },
+    "regional_record_layout": {
+      "relocation_passed": true,
+      "relocated_bytes": 120,
+      "region_header_bytes": 40,
+      "array_header_bytes": 16,
+      "record_bytes": 24
+    },
+    "pool": {
+      "relocation_passed": true,
+      "relocated_bytes": 152,
+      "slots": 4,
+      "cod_reuse_laps": 10000,
+      "bounded_occupation": true,
+      "relocated_free_chain": [
+        3,
+        1,
+        4
+      ],
+      "independent_native_reuse_passed": true
+    },
+    "resources": {
+      "owners_acquired": 2,
+      "owners_released": 2,
+      "release_order": [
+        1,
+        0
+      ],
+      "live_resource_reads": 6,
+      "captured_and_hidden_owners_survive_replay": true
+    }
+  },
+  "limits": [
+    "No typed whole-region handles, ordinary owners, const qualifiers or general assignment/transfer/mailbox implementation.",
+    "Pool slot release is a user-library membership operation; lifetime validity of library item identities remains its caller contract.",
+    "Independent C++ reuses the relocated image; CoD execution is not resumed on that image.",
+    "The complete language/composition report from K-324 retains its earlier compiler revision."
+  ],
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "f7cd46cc58ce029a96c65eab75f8d9bd283934590f7099f6b47c760bbf719e2b"
+  },
+  "source_sha256": {
+    "cod/lang_syntax.hh": "89da95f12a36d9e033dc944a53ccecdce4b675ce675d42d3a03145fb96d52082",
+    "cod/lang_frontend.hh": "85620c68d571f7d67b15777ababd561abf6df7a5e9dd73736787b5c289623ac0",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
+    "tests/cod/language/cases.json": "ed4fbc7718ab49443c1e17dac36117b7fa69e1f53af8b5bf72cbd186f11c0766",
+    "tests/cod/language/reusable-pool.cod": "1ef7a3cf0b36b4df8eab6b092587d955b8231dc511352420016123e57214eb1a",
+    "tests/cod/language/pool-interface.cod": "8a69db7ca21cc351b96c2a64ef97e29669f905d1f7c846772c6ad5b910a07eaf",
+    "tests/cod/language/pool-adapter.cod": "a6ec7edd979434dfd152efa29022d0a73c0ba4ef080f9300d89d198982eb92e4",
+    "tests/cod/language/region-pool.cod": "4eb7e3597c0ade47b8624a429811500e50f5be3f6cf1ef684208492bf4fd359d",
+    "tests/cod/language/pool-view-escape.cod": "c4ed00396489e3a15e3fd5b8efaa48a5dc4f7d844eb52740fe08f85fe48ceb51",
+    "tests/cod/language/function-cross-region.cod": "dbb02fe9accf4459ce5835b1a0153066cf1f800f413ebbfdcf09c5fa8597132d",
+    "tests/cod/language/regional_runtime_tests.py": "ac5d5ebbafef25cfb56cc0ea4428f358abb29e2b163c3bba55e0f5433cdd67b5"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-pool-view-validation.json": "b33db1ca631fdf5d825b6ca995fe1dff1f751ac092acff77e6cce2740ee4c86b",
+    "build/validation/language-20261108-pool-view-recheck.json": "c02075b43106fb1286bec6a68a83a756af787852ad1262baaa7c92485af1cbc9",
+    "build/validation/language-20261108-pool-view-regional.json": "f9536063d9ed87b6e1b70dbfee3f1b7684804642c68dbe5dac304a6156cfa982"
+  }
+}

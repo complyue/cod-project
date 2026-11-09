@@ -1,0 +1,344 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T21:30:03.068349+00:00",
+  "registry_record": "K-361",
+  "toolchain": "build",
+  "scope": "Treat setfield field selectors as labels when determining imported callable dependencies; keep real value-expression calls context dependent.",
+  "compiler_sha256": "4e9fbdc16fdd3504ba02274b94ddb4d6d16834ef77b5df69b752676ed1ebdf45",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "warning": "Existing deprecated-this-capture warning in llvm-project/clang/include/clang/AST/OpenMPClause.h; no LLVM source changed."
+  },
+  "before": {
+    "compiler_sha256": "c16d406c5cd5dbb57467cba75be97cf5e3b51c846c5054b1a6ae0348404b8de5",
+    "selector_only": {
+      "name": "selector-only",
+      "sources": {
+        "base.cod": "data Record { value::i64; }\nfunction value(x::i64)::i64 { x }\nfunction reset(record::Record)::i64 { setfield(record, value, 7); record.value }\nexport Record; export value; export reset;\n",
+        "first.cod": "export import \"base.cod\" reset;\n",
+        "second.cod": "export import \"base.cod\" reset;\n",
+        "entry.cod": "using symbol \"std:io\" @print;\nusing \"base.cod\" Record;\nusing \"first.cod\" reset;\nusing \"second.cod\" reset;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nbehave @print(reset(deref(alloc @arena Record(1))));\n"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "$SCRATCH/selector-only/entry.cod:7:15: ambiguous method 'reset' for supplied argument types ($SCRATCH/selector-only/base.cod::Record): 2 matching candidates\n$SCRATCH/selector-only/entry.cod:7:15: note: method lookup uses module '$SCRATCH/selector-only/entry.cod'\n$SCRATCH/selector-only/base.cod:3:1: note: candidate function 'reset' (Record) -> i64; implementation context '$SCRATCH/selector-only/first.cod'\n$SCRATCH/selector-only/base.cod:3:1: note: candidate function 'reset' (Record) -> i64; implementation context '$SCRATCH/selector-only/second.cod'\n",
+      "expected_exit": 0,
+      "expected_stdout": "7\n",
+      "stderr_contains": [],
+      "passed": false,
+      "elapsed_seconds": 0.01471270201727748
+    },
+    "controls_passed": 2
+  },
+  "focused": {
+    "passed": 11,
+    "total": 11,
+    "results": [
+      {
+        "fixture": "method-modules.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-modules.cod"
+        ],
+        "expected": {
+          "file": "method-modules.cod",
+          "exit": 0,
+          "stdout": "9\n12\n6\n7\n8\n8\n5\n8\n"
+        },
+        "exit_code": 0,
+        "stdout": "9\n12\n6\n7\n8\n8\n5\n8\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "method-ambiguous.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-ambiguous.cod"
+        ],
+        "expected": {
+          "file": "method-ambiguous.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "ambiguous method 'f' for supplied argument types (i64): 2 matching candidates",
+            "method-ambiguous.cod:3:1: note: candidate function 'f'",
+            "method-library.cod:1:1: note: candidate function 'score'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-ambiguous.cod:5:1: ambiguous method 'f' for supplied argument types (i64): 2 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-ambiguous.cod:5:1: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-ambiguous.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-ambiguous.cod:3:1: note: candidate function 'f' (i64) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-library.cod:1:1: note: candidate function 'score' (i64) -> i64\n",
+        "passed": true
+      },
+      {
+        "fixture": "method-no-match.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod"
+        ],
+        "expected": {
+          "file": "method-no-match.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "no matching method 'f' for supplied argument types (bool): 4 available candidates",
+            "method-no-match.cod:3:1: note: candidate function 'f'",
+            "method-library.cod:1:1: note: candidate function 'score'",
+            "method-library.cod:2:1: note: candidate function 'score'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod:5:1: no matching method 'f' for supplied argument types (bool): 4 available candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod:5:1: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-no-match.cod:3:1: note: candidate function 'f' (f32) -> f32\n/ws/EvtWorks/cod-project/tests/cod/language/method-library.cod:1:1: note: candidate function 'score' (i64) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-library.cod:2:1: note: candidate function 'score' (f64) -> f64\n/ws/EvtWorks/cod-project/tests/cod/language/method-library.cod:5:1: note: candidate function 'score' (Counter) -> i64\n",
+        "passed": true
+      },
+      {
+        "fixture": "region-records.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/region-records.cod"
+        ],
+        "expected": {
+          "file": "region-records.cod",
+          "exit": 0,
+          "stdout": "5.5\n10.5\ntrue\n"
+        },
+        "exit_code": 0,
+        "stdout": "5.5\n10.5\ntrue\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "function-memory.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/function-memory.cod"
+        ],
+        "expected": {
+          "file": "function-memory.cod",
+          "exit": 0,
+          "stdout": "1\n2\n4\n405\n99\n7\n"
+        },
+        "exit_code": 0,
+        "stdout": "1\n2\n4\n405\n99\n7\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "method-using-extension.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-using-extension.cod"
+        ],
+        "expected": {
+          "file": "method-using-extension.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": "extending selected callable 'local_score' requires import rather than using"
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-using-extension.cod:2:1: extending selected callable 'local_score' requires import rather than using\n",
+        "passed": true
+      },
+      {
+        "fixture": "method-context-selection.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-context-selection.cod"
+        ],
+        "expected": {
+          "file": "method-context-selection.cod",
+          "exit": 0,
+          "stdout": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n"
+        },
+        "exit_code": 0,
+        "stdout": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "method-views.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-views.cod"
+        ],
+        "expected": {
+          "file": "method-views.cod",
+          "exit": 0,
+          "stdout": "14\n22\n25\n2\n19\n"
+        },
+        "exit_code": 0,
+        "stdout": "14\n22\n25\n2\n19\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "method-view-ambiguous.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod"
+        ],
+        "expected": {
+          "file": "method-view-ambiguous.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "ambiguous method 'through'",
+            "method-view-library.cod:5:1: note: candidate function 'through'",
+            "method-view-first.cod'",
+            "method-view-second.cod'",
+            "implementation context"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: ambiguous method 'through' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 2 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod'\n",
+        "passed": true
+      },
+      {
+        "fixture": "method-name-ambiguous.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-name-ambiguous.cod"
+        ],
+        "expected": {
+          "file": "method-name-ambiguous.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "ambiguous implicit callable 'score'",
+            "method-view-library.cod:4:1: note: original callable family 'score'",
+            "method-view-shadow.cod:2:1: note: original callable family 'score'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-name-ambiguous.cod:5:1: ambiguous implicit callable 'score'; select its family with explicit using/import as\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:4:1: note: original callable family 'score'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-shadow.cod:2:1: note: original callable family 'score'\n",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
+          "--emit-llvm",
+          "/tmp/cod-language-check-8akg1rkm/program.ll",
+          "--emit-bc",
+          "/tmp/cod-language-check-8akg1rkm/program.bc"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ]
+  },
+  "composition": {
+    "passed": 3,
+    "total": 3,
+    "results": [
+      {
+        "name": "selector-only",
+        "sources": {
+          "base.cod": "data Record { value::i64; }\nfunction value(x::i64)::i64 { x }\nfunction reset(record::Record)::i64 { setfield(record, value, 7); record.value }\nexport Record; export value; export reset;\n",
+          "first.cod": "export import \"base.cod\" reset;\n",
+          "second.cod": "export import \"base.cod\" reset;\n",
+          "entry.cod": "using symbol \"std:io\" @print;\nusing \"base.cod\" Record;\nusing \"first.cod\" reset;\nusing \"second.cod\" reset;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nbehave @print(reset(deref(alloc @arena Record(1))));\n"
+        },
+        "exit_code": 0,
+        "stdout": "7\n",
+        "stderr": "",
+        "expected_exit": 0,
+        "expected_stdout": "7\n",
+        "stderr_contains": [],
+        "passed": true,
+        "elapsed_seconds": 1.57282263005618
+      },
+      {
+        "name": "value-dependency",
+        "sources": {
+          "base.cod": "type Entity;\ndata Record { value::i64; }\nfunction selected(x::Entity)::i64 { 3 }\nfunction reset(record::Record)::i64 { setfield(record, value, selected(record)); record.value }\nexport Entity; export Record; export selected; export reset;\n",
+          "first.cod": "import \"base.cod\" Record;\nusing \"base.cod\" Entity;\ndata Record <: Entity;\nimport \"base.cod\" selected;\nfunction selected(x::Record)::i64 { 11 }\nexport import \"base.cod\" reset;\n",
+          "second.cod": "import \"base.cod\" Record;\nusing \"base.cod\" Entity;\ndata Record <: Entity;\nimport \"base.cod\" selected;\nfunction selected(x::Record)::i64 { 23 }\nexport import \"base.cod\" reset;\n",
+          "entry.cod": "using symbol \"std:io\" @print;\nusing \"base.cod\" Record;\nusing \"first.cod\" reset as first;\nusing \"second.cod\" reset as second;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\nlet record = deref(alloc @arena Record(1));\nbehave @print(first(record));\nbehave @print(second(record));\n};\n"
+        },
+        "exit_code": 0,
+        "stdout": "11\n23\n",
+        "stderr": "",
+        "expected_exit": 0,
+        "expected_stdout": "11\n23\n",
+        "stderr_contains": [],
+        "passed": true,
+        "elapsed_seconds": 1.5454193260520697
+      },
+      {
+        "name": "value-dependency-union",
+        "sources": {
+          "base.cod": "type Entity;\ndata Record { value::i64; }\nfunction selected(x::Entity)::i64 { 3 }\nfunction reset(record::Record)::i64 { setfield(record, value, selected(record)); record.value }\nexport Entity; export Record; export selected; export reset;\n",
+          "first.cod": "import \"base.cod\" Record;\nusing \"base.cod\" Entity;\ndata Record <: Entity;\nimport \"base.cod\" selected;\nfunction selected(x::Record)::i64 { 11 }\nexport import \"base.cod\" reset;\n",
+          "second.cod": "import \"base.cod\" Record;\nusing \"base.cod\" Entity;\ndata Record <: Entity;\nimport \"base.cod\" selected;\nfunction selected(x::Record)::i64 { 23 }\nexport import \"base.cod\" reset;\n",
+          "entry.cod": "using symbol \"std:io\" @print;\nusing \"base.cod\" Record;\nusing \"first.cod\" reset;\nusing \"second.cod\" reset;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\nlet record = deref(alloc @arena Record(1));\nbehave @print(reset(record));\nbehave @print(reset(record));\n};\n"
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "$SCRATCH/value-dependency-union/entry.cod:9:15: ambiguous method 'reset' for supplied argument types ($SCRATCH/value-dependency-union/base.cod::Record): 2 matching candidates\n$SCRATCH/value-dependency-union/entry.cod:9:15: note: method lookup uses module '$SCRATCH/value-dependency-union/entry.cod'\n$SCRATCH/value-dependency-union/base.cod:4:1: note: candidate function 'reset' (Record) -> i64; implementation context '$SCRATCH/value-dependency-union/first.cod'\n$SCRATCH/value-dependency-union/base.cod:4:1: note: candidate function 'reset' (Record) -> i64; implementation context '$SCRATCH/value-dependency-union/second.cod'\n",
+        "expected_exit": 2,
+        "expected_stdout": "",
+        "stderr_contains": [
+          "ambiguous method 'reset'"
+        ],
+        "passed": true,
+        "elapsed_seconds": 0.014288526959717274
+      }
+    ]
+  },
+  "source_sha256": {
+    "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_frontend.hh": "a9922a14f02609ca2571c7d410c7a3504d06185a75fa9611516355efad64014b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/cases.json": "3c5704c9f89e81e6646582412a1aadc8400e087ebc52f13fb2ec61440cef0c8f",
+    "tests/cod/language/method-extension.cod": "1dbd2c0127cb2d5eba9a17e467ab330fc0785a6b52dd8b324f94280576a2c3ad",
+    "tests/cod/language/method-library.cod": "a7a2b7c08f8e577e8128112e2e18c9878984c22498c0b0346e07b857a306655f",
+    "tests/cod/language/method-modules.cod": "47865c012f4cb1232b055da11d10aafcd1728ca6890ea4fbf5f6b4459e3663fe"
+  },
+  "raw_evidence": [
+    {
+      "path": "build/validation/language-20261108-field-selector-before.json",
+      "sha256": "53e77d0897b8ea6afeb33ee84a1d6c116f140b0db277709138bf823096531fe3"
+    },
+    {
+      "path": "build/validation/language-20261108-field-selector-after.json",
+      "sha256": "2bce5089cf01c08de1d84b47147d4f80a1fe5a15ab84333c5e7315e003bb2c1e"
+    },
+    {
+      "path": "build/validation/language-20261108-field-selector-focused.json",
+      "sha256": "cd66cda5b1fa81af37db408933f2fb20a8aaffb8ca939a53cbb127a6507115e6"
+    },
+    {
+      "path": "build/validation/language-20261108-field-selector-build.log",
+      "sha256": "d2cb19392fd957ead73532a59d1e1cfbdddc613cd4307129a7f8f80b1b52bf20"
+    }
+  ],
+  "limits": [
+    "Existing method-modules fixture is extended; no new permanent case.",
+    "No field layout, pointer encoding, allocation/ownership rule, procedure capture or overload policy changes.",
+    "Earlier full-suite, borrowed-context and relocation reports retain their source/compiler scope.",
+    "No bootstrap/configuration/toolchain source changes, SNN changes, commit or push."
+  ]
+}

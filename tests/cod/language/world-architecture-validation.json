@@ -1,0 +1,517 @@
+{
+  "schema_version": 1,
+  "registry_record": "K-396",
+  "recorded_utc": "2026-11-09T14:35:33.427028+00:00",
+  "goal": "H-245 independent module worlds and flat runtime TLS architecture",
+  "status": "passed",
+  "toolchain": "build",
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "28a59fef75d4a240037d5ef1103e938ffdc0081c3532f402b3152fb136cfa290"
+  },
+  "prior_turn_classification": "progress",
+  "completion_proven": true,
+  "inherited_evidence": {
+    "path": "tests/cod/language/world-conflict-validation.json",
+    "sha256": "6a48adcf1dc44c11d9ec8eab3ad56e9f4f730262949bbea2311b5312c21da029",
+    "passed": 27,
+    "total": 27,
+    "repository_inputs_verified": 56,
+    "embedded_scratch_inputs_verified": 77,
+    "build": {
+      "command": "cmake --build ./build",
+      "exit_code": 0,
+      "note": "Source-only frontend changes; existing default graph ran runtimes dependencies. No configuration edits or explicit bootstrap targets."
+    }
+  },
+  "supplemental_passed": 15,
+  "supplemental_total": 15,
+  "combined_passed": 42,
+  "combined_total": 42,
+  "requirements": [
+    {
+      "requirement": "Receiver-only module construction; foreign-world editing impossible at compile time and runtime",
+      "status": "verified",
+      "source": [
+        "cod/lang_frontend.hh: Module / ModuleWorld; dependency; select_callable; select_type; select_associated_methods"
+      ],
+      "evidence": [
+        "K395: world-source-isolation.cod",
+        "supplemental: type-audit/isolation.cod"
+      ],
+      "assessment": "Selection reads const source worlds and writes receiver-owned containers. Callable bodies/identities can be shared without sharing mutable selection tables. Generated runtime operations access values/bindings, not module-world editing APIs."
+    },
+    {
+      "requirement": "Identity-centered information, local merge and multiple aliases",
+      "status": "verified",
+      "source": [
+        "cod/lang_frontend.hh: CallableIdentity; ModuleWorld.callables/imported_callables; merge_callable; extend_imported_callable; select_type"
+      ],
+      "evidence": [
+        "K395: world-composition.cod; method-context-selection.cod",
+        "supplemental: type-audit/entry.cod; alias-audit/union.cod"
+      ],
+      "assessment": "Aliases select canonical records. Same-type conformance information from separate adapters is visible through either receiver alias; its source helper remains isolated. Local union identities do not replace separately saved identities."
+    },
+    {
+      "requirement": "Explicit exported identity/alias boundaries and onward publication",
+      "status": "verified",
+      "source": [
+        "cod/lang_frontend.hh: PublishedIdentity; published; publish; publish_declarations; select_associated_methods"
+      ],
+      "evidence": [
+        "K395: world-export-alias.cod",
+        "supplemental: module-exports.cod; module-private-{resource,reexport,associated,symbol,unit}.cod; module-selection.cod"
+      ],
+      "assessment": "Source selections read the public identity map independently of local lookup. Private resources and unexported selections reject; associated methods do not bypass export privacy."
+    },
+    {
+      "requirement": "Separate module worlds and flattened typed runtime TLS",
+      "status": "verified",
+      "source": [
+        "cod/lang_frontend.hh: ModuleWorld versus Environment; symbol_types_; fix_type",
+        "cod/lang_llvm.hh: slot; effect; read_symbol; restore"
+      ],
+      "evidence": [
+        "K395: cross-world TLS native trace and two thread_local ptr declarations",
+        "supplemental: identity.cod; type-error.cod"
+      ],
+      "assessment": "Symbol identity indexes native TLS independently of module aliases and declared type identity. WPO validates declared types and availability. Runtime changes/restores pointer cells; statically known region/procedure associations specialize to native values and checked compile-time call metadata."
+    },
+    {
+      "requirement": "Compatible values from independent worlds; capture-by-value/current execution and restoration",
+      "status": "verified",
+      "source": [
+        "cod/lang_frontend.hh: define_procedure; bind; read_symbol; invoke; block",
+        "cod/lang_llvm.hh: effect; restore"
+      ],
+      "evidence": [
+        "K395: tls-audit/entry.cod = 16,22,33; capture-scope-restore.cod; tls-audit/missing.cod; tls-audit/wrong-type.cod",
+        "supplemental: behave-without-caller.cod"
+      ],
+      "assessment": "Two module-owned source values share vocabulary types/symbols. Captured and current calls, repeated loop shadowing/restoration and later referent mutation are exercised. Capture preserves a reference value rather than copying its referent; no foreign method-world mutation results."
+    },
+    {
+      "requirement": "Regional scope, hidden/captured owners and invalid-access rejection",
+      "status": "verified",
+      "source": [
+        "cod/lang_frontend.hh: holdings_; region_pointer; bind; close_holdings; execute_module",
+        "cod/lang_llvm.hh: hold_region; restore; finish"
+      ],
+      "evidence": [
+        "K395: region-owner-capture.cod; cross-world TLS probe; region-pool.cod",
+        "supplemental: region-escape.cod; region-owner-move.cod"
+      ],
+      "assessment": "Owners are tracked separately from binding visibility. Module owners remain until normal program exit; inner owners use scope cleanup. Hiding/replaying captures does not free/extract the original resource. Escaping views and extraction from a dynamic region binding reject."
+    },
+    {
+      "requirement": "Vocabulary shared typed-symbol, abstract/data-type and method identities",
+      "status": "verified",
+      "source": [
+        "cod/lang_frontend.hh: symbol_declarations_; symbol_types_; select_type; select_associated_methods"
+      ],
+      "evidence": [
+        "K395: world-composition.cod; abstract-forwarding.cod; module-diamond.cod; cross-world TLS vocabulary",
+        "supplemental: type-audit/vocabulary.cod; type-audit/entry.cod"
+      ],
+      "assessment": "Vocabulary selection preserves identities in independently constructed worlds. Distinct same-spelled symbols/types stay distinct. Abstract method dispatch and local explicit conformance use the selected identity information."
+    },
+    {
+      "requirement": "Internal callable construction and coherent conflict handling",
+      "status": "verified",
+      "source": [
+        "cod/lang_frontend.hh: ImplementationContext; lookup_methods; selected_method; typed method selection"
+      ],
+      "evidence": [
+        "K395: method-context-selection.cod; method-dependency-conflict.cod; method-nested-conflict.cod; 64-module imported/frozen paths"
+      ],
+      "assessment": "Compiler interpretation contexts stay internal. Using preserves source context, import composes receiver-selected information, and inherited/sibling conflicts reject per H253 rather than selecting a winner by common origin. Direct aliases remain distinct."
+    },
+    {
+      "requirement": "Multi-alias extension warning and opt-in error",
+      "status": "verified",
+      "source": [
+        "cod/lang_frontend.hh: check_method_extensions; warn",
+        "cod/main.cc: -Werror=multi-alias-extension; --warnings-as-errors"
+      ],
+      "evidence": [
+        "K395: method-context-selection.cod default warning and -Werror=multi-alias-extension; unit warning category independence"
+      ],
+      "assessment": "Declarations through multiple aliases of one identity warn, without forbidding multiple aliases. The targeted option promotes that warning to an error."
+    },
+    {
+      "requirement": "Coordinated design, supersession and authority history",
+      "status": "verified",
+      "source": [
+        "design/ModuleWorlds.md r12",
+        "design/GlobalVariablesDoneRight.md r21",
+        "design/DomainLanguageDesign.md r105",
+        "design/SymbolicDynamicScope.md r85",
+        "design/ScalarUnitsAndIndexTypes.md r26",
+        "design/RegionalOwnership.md r30",
+        "design/DesignAuthorityRegistry.md Registry397/K396",
+        "tests/cod/language/README.md prototype148"
+      ],
+      "evidence": [
+        "Registry H245 correction, H253 supersession and K396 audit; current document links/revisions; append-only history comparison"
+      ],
+      "assessment": "The architecture implementation is complete; full product-document qualification remains pending-human. No RTTI, ownership or conflict-arbitration choice is inferred. D13 reviewed without changes."
+    },
+    {
+      "requirement": "Build/test authorization, existing build/LLVM path and unrelated work",
+      "status": "verified",
+      "source": [
+        "K395 build record",
+        "current compiler/source hashes; pre-audit source snapshot; git diff for configuration paths"
+      ],
+      "evidence": [
+        "cmake --build ./build exited0 after final source edit; current audit changes documentation/evidence only"
+      ],
+      "assessment": "No test scripts or new build/configuration commands executed in this audit. Prior default build graph ran its existing runtimes dependencies; no explicit bootstrap/toolchain targets or configuration edits. Unrelated work remains uncommitted and untouched by this audit."
+    }
+  ],
+  "supplemental_results": [
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/identity.cod"
+      ],
+      "expected": {
+        "file": "identity.cod",
+        "exit": 0,
+        "stdout": "3\n8\n"
+      },
+      "exit_code": 0,
+      "stdout": "3\n8\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/type-error.cod"
+      ],
+      "expected": {
+        "file": "type-error.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "incompatible value types for",
+          "units-procedure-source.cod::@distance",
+          "units-procedure-source.cod::normalized, got ",
+          "type-error.cod::normalized"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/type-error.cod:5:8: incompatible value types for /ws/EvtWorks/cod-project/tests/cod/language/units-procedure-source.cod::@distance: expected /ws/EvtWorks/cod-project/tests/cod/language/units-procedure-source.cod::normalized, got /ws/EvtWorks/cod-project/tests/cod/language/type-error.cod::normalized\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/behave-without-caller.cod"
+      ],
+      "expected": {
+        "file": "behave-without-caller.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "missing required binding"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/source.cod:6:40: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@x\n/ws/EvtWorks/cod-project/tests/cod/language/behave-without-caller.cod:4:22: note: in call to procedure '@p' defined at /ws/EvtWorks/cod-project/tests/cod/language/source.cod:6:1\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod"
+      ],
+      "expected": {
+        "file": "region-escape.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "outlive its owning scope",
+          "region-escape.cod:4:46: note: the escaping value depends on this region acquisition"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:4:27: regional result would outlive its owning scope\n/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:4:46: note: the escaping value depends on this region acquisition\n/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:5:8: note: in call to procedure '@make' defined at /ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:4:1\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-move.cod"
+      ],
+      "expected": {
+        "file": "region-owner-move.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "cannot transfer ownership out of a dynamic region binding",
+          "region-owner-move.cod:3:14: note: the non-extractable region was acquired here"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-move.cod:4:8: cannot transfer ownership out of a dynamic region binding; use a new resource to shadow it\n/ws/EvtWorks/cod-project/tests/cod/language/region-owner-move.cod:3:14: note: the non-extractable region was acquired here\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-exports.cod"
+      ],
+      "expected": {
+        "file": "module-exports.cod",
+        "exit": 0,
+        "stdout": "9\n9\n"
+      },
+      "exit_code": 0,
+      "stdout": "9\n9\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-private-resource.cod"
+      ],
+      "expected": {
+        "file": "module-private-resource.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "does not export 'helper'"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/module-private-resource.cod:1:1: module '/ws/EvtWorks/cod-project/tests/cod/language/module-export-library.cod' does not export 'helper'\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-private-reexport.cod"
+      ],
+      "expected": {
+        "file": "module-private-reexport.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "does not export 'private_read'"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/module-private-reexport.cod:1:1: module '/ws/EvtWorks/cod-project/tests/cod/language/module-export-adapter.cod' does not export 'private_read'\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-private-associated.cod"
+      ],
+      "expected": {
+        "file": "module-private-associated.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "unavailable lexical function 'helper'"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/module-private-associated.cod:4:1: unavailable lexical function 'helper'\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-private-symbol.cod"
+      ],
+      "expected": {
+        "file": "module-private-symbol.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "does not export '@secret'"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/module-private-symbol.cod:1:1: module '/ws/EvtWorks/cod-project/tests/cod/language/module-export-library.cod' does not export '@secret'\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-private-unit.cod"
+      ],
+      "expected": {
+        "file": "module-private-unit.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "does not export 'PrivateUnit'"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/module-private-unit.cod:1:42: module '/ws/EvtWorks/cod-project/tests/cod/language/module-export-library.cod' does not export 'PrivateUnit'\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-selection.cod"
+      ],
+      "expected": {
+        "file": "module-selection.cod",
+        "exit": 0,
+        "stdout": "1001\n401\n408\n907\n908\n1.25\n21\n11\n21\n26\n112\n122\n122\n"
+      },
+      "exit_code": 0,
+      "stdout": "1001\n401\n408\n907\n908\n1.25\n21\n11\n21\n26\n112\n122\n122\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-type-audit/entry.cod"
+      ],
+      "expected": {
+        "file": "/tmp/cod-world-type-audit/entry.cod",
+        "exit": 0,
+        "stdout": "11\n22\n11\n22\n"
+      },
+      "exit_code": 0,
+      "stdout": "11\n22\n11\n22\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-type-audit/isolation.cod"
+      ],
+      "expected": {
+        "file": "/tmp/cod-world-type-audit/isolation.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "required interface is not established in module '/tmp/cod-world-type-audit/left.cod'",
+          "available value guarantee is /tmp/cod-world-type-audit/vocabulary.cod::Left"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-world-type-audit/left.cod:5:45: expected /tmp/cod-world-type-audit/vocabulary.cod::Right, got /tmp/cod-world-type-audit/vocabulary.cod::Record\n/tmp/cod-world-type-audit/left.cod:5:45: note: required interface is not established in module '/tmp/cod-world-type-audit/left.cod'\n/tmp/cod-world-type-audit/left.cod:5:45: note: available value guarantee is /tmp/cod-world-type-audit/vocabulary.cod::Left\n/tmp/cod-world-type-audit/left.cod:5:45: note: in call to function 'right' defined at /tmp/cod-world-type-audit/vocabulary.cod:4:1\n/tmp/cod-world-type-audit/isolation.cod:6:1: note: in call to function 'source_check' defined at /tmp/cod-world-type-audit/left.cod:5:1\n",
+      "passed": true,
+      "expectation_correction": {
+        "previous_contains": "no matching method 'right'",
+        "reason": "The interface-specific rejection is the intended source-isolation result; the original checker expected a generic method-lookup wording."
+      }
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-alias-audit/union.cod"
+      ],
+      "expected": {
+        "file": "/tmp/cod-world-alias-audit/union.cod",
+        "exit": 0,
+        "stdout": "7\n"
+      },
+      "exit_code": 0,
+      "stdout": "7\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "source_sha256": {
+    "cod/main.cc": "bac9eb6590d4190e95cca3198706a1ec6c156c25601accb06c40d24398ea4043",
+    "cod/lang_frontend.hh": "d3b17d7a9182c4946a4c088bffc846afc58acddf94e500ff460820e1dbb66057",
+    "cod/lang_llvm.hh": "a27b2a2da2549766dace7843974d8032e137ea97712f531f7ee235da39ae4ed4",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/identity.cod": "ad3026443f0feb47c1c726e8a132712ed0f3b94250f8749996cb03332a2de476",
+    "tests/cod/language/vocabulary.cod": "a449821c30d7e38ba0baec1ef32facc7ca8a98d4b553509b71f378757f62ee1a",
+    "tests/cod/language/other-vocabulary.cod": "8cefa4c529c390f18927c49aeb25bbe9928049934fc0db20b9f0b7cdc3c364f8",
+    "tests/cod/language/type-error.cod": "d1cb0b95fefa87f3123187ddead3ee021b65660da7d3248ae35d699d5344b4bb",
+    "tests/cod/language/units-procedure-source.cod": "b11ef79f1812b0fbc9426da93528bbcd31b32299b64b278e327021d5dc1de3f1",
+    "tests/cod/language/behave-without-caller.cod": "d4ea5df489907e187937110ea4c4faefc3c45eaa181aed78d2d0acc9cfab4fce",
+    "tests/cod/language/source.cod": "8f1e3089f7adbadb02f90cb843d837380b029e314c1c2f5717c0557380c3883b",
+    "tests/cod/language/region-escape.cod": "98ec7a347dd61d6843be91b43acd4f6a7f813c112259aa9a9c3fc45371cee5a9",
+    "tests/cod/language/region-owner-move.cod": "921a57d4709b6b75bf524d615d4207db9826ba7c424b18271fb2effc380d6655",
+    "tests/cod/language/module-exports.cod": "7710bc2669451acfd0a7228c2be110c8387544253dac92eb3c8e14548be6fb5d",
+    "tests/cod/language/module-export-adapter.cod": "965eecb86c8a59f06f158adc4c2131e142b3163f1ab7e13fbf0ff9ecaf4c4e5e",
+    "tests/cod/language/module-export-library.cod": "e050bbc549b197bd387d83d74eff45a267c44db47dd52e108319d14f46a01c88",
+    "tests/cod/language/module-private-resource.cod": "66d4f9f56e244e1570d30979cebbec7ea11fa9a80a765236f523c8169abb8dd5",
+    "tests/cod/language/module-private-reexport.cod": "1e7413296039437aa8ef5d7d0a3ecb987bd21ccadc7a8353b62c0698ca042248",
+    "tests/cod/language/module-private-associated.cod": "4f7119aa553efc0f2904b878d237aeae9b4034d0511805516e10bcc7bf17cae0",
+    "tests/cod/language/module-private-symbol.cod": "11b9d0b772d8a682616eb22419173b8ed3993ef53594cc201d6cf1c6d2e7c5d0",
+    "tests/cod/language/module-private-unit.cod": "416d57df571fa0999f689ccc72dfe9c43d1a1d1ad8d9146cdacd7fd3ab966e2f",
+    "tests/cod/language/module-selection.cod": "93c413b552d4d153905cc0ecf9e7048162ab516963dc0a946f31c8ead1c04b1f",
+    "tests/cod/language/product-library.cod": "aa3cf9d5267257d87bdc9eba0ed859785a5c99ab150ac1ac0932329d35286d15",
+    "tests/cod/language/procedure-vocabulary.cod": "739ad71a8712d69bbaf7e71884fd989635b64e948b3fc1e9e79dcbe555571e3d",
+    "tests/cod/language/procedure-library.cod": "774d8aaf353836592434645fd5953c19d528b96d94faee786ca5086a0c863058",
+    "tests/cod/language/mixin-lexical-provider.cod": "1e6ce1eeb929f486e1d83b56b9e897a673b025b158fd59d0093fb5a4d240ba53",
+    "/tmp/cod-world-type-audit/entry.cod": "480da47bba91989ef80ee32c71a4b8f9b5e68f580cf8eeda91a6abc79e1f4294",
+    "/tmp/cod-world-type-audit/left.cod": "7af46426c216f094c3a29280a7f04c9ee92ae6bab40e70d86b02e793e534dcb7",
+    "/tmp/cod-world-type-audit/vocabulary.cod": "3882ad9c484536cd6748638556bd69e71872830c15a59082571bcd4c840ef699",
+    "/tmp/cod-world-type-audit/right.cod": "18fff42593aa65402440c4754ad0c3932bbc63f9970267e88c41768a3fc756d9",
+    "/tmp/cod-world-type-audit/isolation.cod": "88bdb7d4651764464d8f8d9035f5dc3d0d53c541207117848797e2949542b31e",
+    "/tmp/cod-world-alias-audit/union.cod": "a439a7c931231aed842a1f8b7b6294650e932d722995889504e68ad7a991bbaf",
+    "/tmp/cod-world-alias-audit/base.cod": "4c9f461f6018e9238f19264f79970810be0733e467b4ead514b4c3d50c06b708",
+    "/tmp/cod-world-alias-audit/other.cod": "396ec6a6089920497253264aa2da18cbd619e637fe4ebf507ac9f9c983a9134b"
+  },
+  "scratch_sources": {
+    "/tmp/cod-world-type-audit/entry.cod": "using symbol \"std:io\" @print;\nusing \"left.cod\" Record as A;\nusing \"right.cod\" Record as B;\nusing \"vocabulary.cod\" left;\nusing \"vocabulary.cod\" right;\nsymbol arena::region;\neffect @arena <- region(4096u64);\n{ let a = deref(alloc @arena A(5)); let b = deref(alloc @arena B(6)); behave @print(left(a)); behave @print(right(a)); behave @print(left(b)); behave @print(right(b)); };\n",
+    "/tmp/cod-world-type-audit/left.cod": "import \"vocabulary.cod\" Record;\nusing \"vocabulary.cod\" Left;\nusing \"vocabulary.cod\" right;\ndata Record <: Left;\nfunction source_check(arena::region)::i64 { right(deref(alloc arena Record(5))) }\nexport Record; export source_check;\n",
+    "/tmp/cod-world-type-audit/vocabulary.cod": "type Left; type Right;\ndata Record { value::i64; }\nfunction left(x::Left)::i64 { 11 }\nfunction right(x::Right)::i64 { 22 }\nexport Left; export Right; export Record; export left; export right;\n",
+    "/tmp/cod-world-type-audit/right.cod": "import \"vocabulary.cod\" Record;\nusing \"vocabulary.cod\" Right;\ndata Record <: Right;\nexport Record;\n",
+    "/tmp/cod-world-type-audit/isolation.cod": "using \"left.cod\" Record as A;\nusing \"right.cod\" Record as B;\nusing \"left.cod\" source_check;\nsymbol arena::region;\neffect @arena <- region(4096u64);\nsource_check(@arena);\n",
+    "/tmp/cod-world-alias-audit/union.cod": "using symbol \"std:io\" @print;\nimport \"base.cod\" score;\nfunction score(x::bool)::i64 { 7 }\nimport \"base.cod\" score as saved;\nusing \"other.cod\" score;\nbehave @print(saved(true));\n",
+    "/tmp/cod-world-alias-audit/base.cod": "function score(x::i64)::i64 { x + 1 }\nfunction relay(x::i64)::i64 { score(x) }\nexport score; export relay;\n",
+    "/tmp/cod-world-alias-audit/other.cod": "import \"base.cod\" score;\nfunction score(x::bool)::i64 { 99 }\nexport score;\n"
+  },
+  "limits": [
+    "Architecture acceptance applies to the current WPO native prototype; it is not full-language or Actor/mailbox acceptance.",
+    "Native data effects use pointer-valued TLS; statically known region/procedure associations are specialized. No generic runtime closure/world ABI or RTTI decision is claimed.",
+    "No full language/deep/relocation suite rerun; their existing reports retain older compiler revisions.",
+    "Full product-document/value-path qualification remains pending-human; implementation acceptance is an agent assessment under scoped user decisions.",
+    "Future arbitration syntax, unrelated-family union extension, local value/call naming, standalone signatures, general qualifiers/ordinary owners and mailbox lifecycle remain separate."
+  ],
+  "document_validation": {
+    "registry_revision": 397,
+    "continuity_record": "K-396",
+    "prior_human_records": "H-01–H-253 byte-preserved",
+    "prior_continuity_records": "K-00–K-395 byte-preserved",
+    "local_document_links": "all checked targets exist",
+    "git_diff_check": "passed",
+    "configuration_path_diff": "empty",
+    "source_changes_in_final_audit": false
+  },
+  "document_sha256": {
+    "design/DesignAuthorityRegistry.md": "0959ba27d4d963da3f327754477abb493f6d124f6a276a88e6a237580a9b5875",
+    "design/ModuleWorlds.md": "aa5858bcb542bd65bdb08b5cc71bba3fa6497c813fbfa4c57ecc717248d7c568",
+    "design/GlobalVariablesDoneRight.md": "8974826feda56ed3ff7c2e52746153b4e02b5506c7d519cb8bad4eeddec118c4",
+    "design/DomainLanguageDesign.md": "f98e4ddc42936f3e780ae2cf495bbe8d8697d786fb49e6719cebc629b0410074",
+    "design/SymbolicDynamicScope.md": "37d73c7bb76d525de6f24fd66935284cdec7279c84b3183705160d1580c73c7c",
+    "design/ScalarUnitsAndIndexTypes.md": "364f67086a73823744494f637edae49f194c2a6d43cb6c71d46020908b3bb47d",
+    "design/RegionalOwnership.md": "d96e156cc57ebcbbebc38f6e46279992f6d4ea30dfd53814ff58f9bd77182905",
+    "tests/cod/language/README.md": "5550f4ca5b70c74c3b67f2a4fbce7bba4ffacd2b9eaee136c9a09b5b4946c9d1"
+  }
+}

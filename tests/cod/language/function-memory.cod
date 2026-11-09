@@ -1,0 +1,40 @@
+using symbol "std:io" @print;
+array Values[u32]::i64;
+symbol arena :: region, values :: ref<Values>, selected :: ref<i64>;
+
+function tick(values::Values) -> i64 {
+  let old = values[0u32];
+  store(values, 0u32, old + 1);
+  values[0u32]
+}
+function cell(values::Values) -> ref<i64> { ref_at(values, 0u32) }
+function add_two(values::Values) -> i64 {
+  store(cell(values), deref(cell(values)) + 2)
+}
+function ([]=)(values::ref<Values>, index::u32, value::i64) -> i64 {
+  store(values, index, value)
+}
+function update(values::ref<Values>) -> ref<i64> {
+  values[0u32] = 41;
+  cell(deref(values))
+}
+function observe(values::Values) -> i64 {
+  let before = values[0u32];
+  tick(values);
+  before * 100 + values[0u32]
+}
+function through_alias(writer::Values, reader::Values) -> i64 {
+  store(writer, 0u32, 7);
+  reader[0u32]
+}
+
+effect @arena <- region(4096u64);
+effect @values <- alloc @arena Values(1u64, 0);
+behave @print(tick(deref(@values)));
+behave @print(tick(deref(@values)));
+behave @print(add_two(deref(@values)));
+behave @print(observe(deref(@values)));
+effect @selected <- update(@values);
+store(@selected, 99);
+behave @print(@values[0u32]);
+behave @print(through_alias(deref(@values), deref(@values)));

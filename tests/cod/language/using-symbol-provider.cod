@@ -1,1 +1,3 @@
 using symbol "source.cod" @p;
+
+export @p;

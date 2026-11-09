@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T21:23:43.763331+00:00",
+  "registry_record": "K-360",
+  "toolchain": "build",
+  "scope": "Existing borrowed-value checks composed with using-preserved/import-adapted ordinary helper implementations. No new language or lifetime policy.",
+  "compiler_sha256": "c16d406c5cd5dbb57467cba75be97cf5e3b51c846c5054b1a6ae0348404b8de5",
+  "source_sha256": {
+    "cod/lang_frontend.hh": "662510eaf0bbac8d13e59b76f0c85bd1fbd9cffe31b1f3d726e1358de937d19b",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518"
+  },
+  "passed": 5,
+  "total": 5,
+  "modules": {
+    "model.cod": "type Entity;\ntype Weighted <: Entity;\ntype Alternate <: Entity;\ndata Node { value::i64; next::ref<Node>; }\nfunction rank(x::Entity)::i64 { 1 }\nfunction rank(x::Weighted)::i64 { 2 }\nexport Entity; export Weighted; export Alternate; export Node; export rank;\n",
+    "weighted.cod": "export import \"model.cod\" Node;\nusing \"model.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::Weighted {\n let tail = alloc arena Node(30, null);\n let middle = alloc arena Node(20, tail);\n deref(alloc arena Node(10, middle))\n}\nexport create;\n",
+    "alternate.cod": "export import \"model.cod\" Node;\nusing \"model.cod\" Alternate;\ndata Node <: Alternate;\nfunction create(arena::region)::Alternate { deref(alloc arena Node(90, null)) }\nexport create;\n",
+    "helpers.cod": "using \"model.cod\" Entity;\nusing \"model.cod\" rank;\nusing \"weighted.cod\" create as left;\nusing \"alternate.cod\" create as right;\nfunction choose(arena::region, choice::bool)::Entity {\n if (choice) { left(arena) } else { right(arena) }\n}\nfunction reverse(arena::region, choice::bool)::Entity {\n if (choice) { right(arena) } else { left(arena) }\n}\nfunction walk(node::Entity, steps::u32)::Entity {\n fold (i in 0u32 .. steps, current = node) {\n  if (current.next == null) { current } else { deref(current.next) }\n }\n}\nfunction score_choice(arena::region, choice::bool)::i64 { rank(choose(arena, choice)) }\nfunction score_walk(node::Entity, steps::u32)::i64 { rank(walk(node, steps)) }\nexport choose; export reverse; export walk; export score_choice; export score_walk;\n",
+    "adapted.cod": "using \"model.cod\" Node;\nimport \"model.cod\" rank;\nfunction rank(x::Node)::i64 { x.value }\nexport import \"helpers.cod\" score_choice;\nexport import \"helpers.cod\" score_walk;\n"
+  },
+  "results": [
+    {
+      "name": "borrowed_join_and_fold",
+      "source": "using symbol \"std:io\" @print;\nsymbol @arena::region;\neffect @arena <- region(16384u64);\nusing \"helpers.cod\" choose;\nusing \"helpers.cod\" reverse;\nusing \"helpers.cod\" walk;\nusing \"helpers.cod\" score_choice as frozen_choice;\nusing \"helpers.cod\" score_walk as frozen_walk;\nusing \"adapted.cod\" score_choice as adapted_choice;\nusing \"adapted.cod\" score_walk as adapted_walk;\nusing \"weighted.cod\" create;\nbehave @print(choose(@arena, true).value);\nbehave @print(choose(@arena, false).value);\nbehave @print(reverse(@arena, true).value);\nbehave @print(reverse(@arena, false).value);\nbehave @print(frozen_choice(@arena, true));\nbehave @print(frozen_choice(@arena, false));\nbehave @print(adapted_choice(@arena, true));\nbehave @print(adapted_choice(@arena, false));\n{\n let node = create(@arena);\n behave @print(walk(node, 0u32).value);\n behave @print(walk(node, 1u32).value);\n behave @print(walk(node, 2u32).value);\n behave @print(walk(node, 9u32).value);\n behave @print(frozen_walk(node, 3u32));\n behave @print(adapted_walk(node, 1u32));\n let tail = walk(node, 3u32);\n setfield(tail, value, 71);\n behave @print(adapted_walk(node, 3u32));\n};\n",
+      "exit_code": 0,
+      "stdout": "10\n90\n90\n10\n1\n1\n10\n90\n10\n20\n30\n30\n2\n20\n71\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "expected_stdout": "10\n90\n90\n10\n1\n1\n10\n90\n10\n20\n30\n30\n2\n20\n71\n",
+      "stderr_contains": [],
+      "passed": true
+    },
+    {
+      "name": "joined_narrow_rejected",
+      "source": "using symbol \"std:io\" @print;\nsymbol @arena::region;\neffect @arena <- region(16384u64);\nusing \"helpers.cod\" choose;\nusing \"model.cod\" Weighted;\nfunction narrow(arena::region)::Weighted { choose(arena, true) }\nnarrow(@arena);\n",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "$SCRATCH/joined_narrow_rejected.cod:6:1: expected $SCRATCH/model.cod::Weighted, got $SCRATCH/model.cod::Node\n$SCRATCH/joined_narrow_rejected.cod:6:1: note: required interface is not established in module '$SCRATCH/joined_narrow_rejected.cod'\n$SCRATCH/joined_narrow_rejected.cod:6:1: note: available value guarantee is $SCRATCH/model.cod::Entity\n$SCRATCH/joined_narrow_rejected.cod:7:1: note: in call to function 'narrow' defined at $SCRATCH/joined_narrow_rejected.cod:6:1\n",
+      "expected_exit": 2,
+      "expected_stdout": "",
+      "stderr_contains": [
+        "required interface is not established",
+        "available value guarantee is"
+      ],
+      "passed": true
+    },
+    {
+      "name": "foreign_branch_owner",
+      "source": "using symbol \"std:io\" @print;\nsymbol @arena::region;\neffect @arena <- region(16384u64);\nusing \"helpers.cod\" choose;\nusing \"model.cod\" Entity;\nsymbol @other::region;\neffect @other <- region(4096u64);\nfunction pick(first::region, second::region, choice::bool)::Entity {\n if (choice) { choose(first, true) } else { choose(second, true) }\n}\npick(@arena, @other, true);\n",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "$SCRATCH/foreign_branch_owner.cod:9:2: conditional references require one owning region\n$SCRATCH/foreign_branch_owner.cod:3:18: note: first branch result's region acquired here\n$SCRATCH/foreign_branch_owner.cod:7:18: note: second branch result's region acquired here\n$SCRATCH/foreign_branch_owner.cod:11:1: note: in call to function 'pick' defined at $SCRATCH/foreign_branch_owner.cod:8:1\n",
+      "expected_exit": 2,
+      "expected_stdout": "",
+      "stderr_contains": [
+        "conditional references require one owning region",
+        "first branch result's region acquired here",
+        "second branch result's region acquired here"
+      ],
+      "passed": true
+    },
+    {
+      "name": "imported_view_escape",
+      "source": "using symbol \"std:io\" @print;\nsymbol @arena::region;\neffect @arena <- region(16384u64);\nusing \"weighted.cod\" create;\nusing \"helpers.cod\" walk;\nusing \"model.cod\" Entity;\nsymbol @inner::region;\nproc escape() -> Entity {\n effect @inner <- region(4096u64);\n walk(create(@inner), 2u32)\n}\nescape();\n",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "$SCRATCH/imported_view_escape.cod:8:25: regional result would outlive its owning scope\n$SCRATCH/imported_view_escape.cod:9:19: note: the escaping value depends on this region acquisition\n$SCRATCH/imported_view_escape.cod:12:1: note: in call to procedure 'escape' defined at $SCRATCH/imported_view_escape.cod:8:1\n",
+      "expected_exit": 2,
+      "expected_stdout": "",
+      "stderr_contains": [
+        "regional result would outlive its owning scope",
+        "the escaping value depends on this region acquisition"
+      ],
+      "passed": true
+    },
+    {
+      "name": "no_unrelated_conformance",
+      "source": "using symbol \"std:io\" @print;\nsymbol @arena::region;\neffect @arena <- region(16384u64);\nusing \"model.cod\" Node;\nusing \"model.cod\" rank;\nusing \"helpers.cod\" choose;\nchoose(@arena, true);\nrank(deref(alloc @arena Node(3, null)));\n",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "$SCRATCH/no_unrelated_conformance.cod:8:1: no matching method 'rank' for supplied argument types ($SCRATCH/model.cod::Node): 2 available candidates\n$SCRATCH/no_unrelated_conformance.cod:8:1: note: method lookup uses module '$SCRATCH/no_unrelated_conformance.cod'\n$SCRATCH/model.cod:5:1: note: candidate function 'rank' (Entity) -> i64\n$SCRATCH/model.cod:6:1: note: candidate function 'rank' (Weighted) -> i64\n",
+      "expected_exit": 2,
+      "expected_stdout": "",
+      "stderr_contains": [
+        "no matching method 'rank'"
+      ],
+      "passed": true
+    }
+  ],
+  "raw_evidence": {
+    "path": "build/validation/language-20261108-borrowed-context-probes.json",
+    "sha256": "150b4720c088f71af56972c06f8c00503cdd363112317b65580e0901cbd69692"
+  },
+  "limits": [
+    "No compiler, runtime or permanent fixture change; no new build or full-suite/relocation run claimed.",
+    "Concrete identity and justified interface facts are compile-time evidence, not runtime interface objects.",
+    "Owning construction/transfer, const-place syntax and standalone method heads remain pending.",
+    "Generated modules are preserved here as probe inputs; they do not increase the permanent fixture suite."
+  ]
+}

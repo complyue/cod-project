@@ -1,0 +1,410 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T22:27:05.716705+00:00",
+  "registry_record": "K-369",
+  "toolchain": "build",
+  "compiler_sha256": "28cd222c0c7f21a4c2abe502cd33c672b9022386e206a5433ab7c52eed8b8128",
+  "scope": "Discard provably unrelated conformance metadata from fold invariants while retaining explicit facts for the accumulator and possible intra-region referents.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0
+  },
+  "before": {
+    "compiler_sha256": "266ad6155615c736a93c98b718b3db31b1dfe62854dab76685982afbc796ec8e",
+    "observations": [
+      {
+        "name": "baseline",
+        "sources": {
+          "model.cod": "type Entity;\ntype Weighted <: Entity;\ndata Node { value::i64; }\nexport Entity; export Weighted; export Node;\n",
+          "first.cod": "import \"model.cod\" Node;\nusing \"model.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(3) }\nexport create;\n",
+          "next.cod": "import \"model.cod\" Node;\nusing \"model.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(7) }\nexport create;\n",
+          "entry.cod": "using symbol \"std:io\" @print;\nusing \"first.cod\" create as first;\nusing \"next.cod\" create as next;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n let node = fold (i in 0u32 .. 3u32, node = first(@arena)) { next(@arena) };\n behave @print(deref(node).value);\n};\n"
+        },
+        "exit_code": 0,
+        "stdout": "7\n",
+        "stderr": "",
+        "expected_exit": 0,
+        "expected_stdout": "7\n",
+        "passed": true,
+        "elapsed_seconds": 1.487504350952804
+      },
+      {
+        "name": "private-unrelated",
+        "sources": {
+          "model.cod": "type Entity;\ntype Weighted <: Entity;\ndata Node { value::i64; }\nexport Entity; export Weighted; export Node;\n",
+          "first.cod": "import \"model.cod\" Node;\nusing \"model.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(3) }\nexport create;\ndata Unrelated <: Weighted { debug::i64; }\n",
+          "next.cod": "import \"model.cod\" Node;\nusing \"model.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(7) }\nexport create;\n",
+          "entry.cod": "using symbol \"std:io\" @print;\nusing \"first.cod\" create as first;\nusing \"next.cod\" create as next;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n let node = fold (i in 0u32 .. 3u32, node = first(@arena)) { next(@arena) };\n behave @print(deref(node).value);\n};\n"
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "$SCRATCH/private-unrelated/entry.cod:7:19: a fold result must retain established conformance $SCRATCH/private-unrelated/first.cod::Unrelated <: $SCRATCH/private-unrelated/model.cod::Weighted\n",
+        "expected_exit": 0,
+        "expected_stdout": "7\n",
+        "passed": false,
+        "elapsed_seconds": 0.014525478007271886
+      }
+    ],
+    "existing_fixture": {
+      "recorded_utc": "2026-11-08T22:23:17.551172+00:00",
+      "compiler_sha256": "266ad6155615c736a93c98b718b3db31b1dfe62854dab76685982afbc796ec8e",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-forwarding.cod:24:25: a fold result must retain established conformance /ws/EvtWorks/cod-project/tests/cod/language/abstract-adapter.cod::PrivateMarker <: /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted\n"
+    }
+  },
+  "after": [
+    {
+      "name": "baseline",
+      "sources": {
+        "model.cod": "type Entity;\ntype Weighted <: Entity;\ndata Node { value::i64; }\nexport Entity; export Weighted; export Node;\n",
+        "first.cod": "import \"model.cod\" Node;\nusing \"model.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(3) }\nexport create;\n",
+        "next.cod": "import \"model.cod\" Node;\nusing \"model.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(7) }\nexport create;\n",
+        "entry.cod": "using symbol \"std:io\" @print;\nusing \"first.cod\" create as first;\nusing \"next.cod\" create as next;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n let node = fold (i in 0u32 .. 3u32, node = first(@arena)) { next(@arena) };\n behave @print(deref(node).value);\n};\n"
+      },
+      "exit_code": 0,
+      "stdout": "7\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "expected_stdout": "7\n",
+      "passed": true,
+      "elapsed_seconds": 1.5335820489563048
+    },
+    {
+      "name": "private-unrelated",
+      "sources": {
+        "model.cod": "type Entity;\ntype Weighted <: Entity;\ndata Node { value::i64; }\nexport Entity; export Weighted; export Node;\n",
+        "first.cod": "import \"model.cod\" Node;\nusing \"model.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(3) }\nexport create;\ndata Unrelated <: Weighted { debug::i64; }\n",
+        "next.cod": "import \"model.cod\" Node;\nusing \"model.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(7) }\nexport create;\n",
+        "entry.cod": "using symbol \"std:io\" @print;\nusing \"first.cod\" create as first;\nusing \"next.cod\" create as next;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n let node = fold (i in 0u32 .. 3u32, node = first(@arena)) { next(@arena) };\n behave @print(deref(node).value);\n};\n"
+      },
+      "exit_code": 0,
+      "stdout": "7\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "expected_stdout": "7\n",
+      "passed": true,
+      "elapsed_seconds": 1.545824812958017
+    }
+  ],
+  "referent_graph_checks": [
+    {
+      "name": "reachable-cycle-preserved",
+      "sources": {
+        "model.cod": "type Entity;\ntype Weighted <: Entity;\ntype Alternate <: Entity;\ndata Leaf { value::i64; next::ref<Leaf>; }\ndata Box { item::ref<Leaf>; }\nfunction rank(x::Entity)::i64 { 1 }\nfunction rank(x::Weighted)::i64 { 2 }\nexport Entity; export Weighted; export Alternate; export Leaf; export Box; export rank;\n",
+        "first.cod": "import \"model.cod\" Leaf;\nusing \"model.cod\" Box;\nusing \"model.cod\" Weighted;\ndata Leaf <: Weighted;\ndata PrivateMarker <: Weighted { ignored::i64; }\nfunction create(arena::region)::ref<Box> {\n let leaf = alloc arena Leaf(3, null);\n setfield(leaf, next, leaf);\n alloc arena Box(leaf)\n}\nexport create;\n",
+        "next.cod": "import \"model.cod\" Leaf;\nusing \"model.cod\" Box;\nusing \"model.cod\" Weighted;\ndata Leaf <: Weighted;\n\nfunction create(arena::region)::ref<Box> {\n let leaf = alloc arena Leaf(7, null);\n setfield(leaf, next, leaf);\n alloc arena Box(leaf)\n}\nexport create;\n",
+        "entry.cod": "using symbol \"std:io\" @print;\nusing \"model.cod\" rank;\nusing \"first.cod\" create as first;\nusing \"next.cod\" create as next;\nsymbol @arena::region;\neffect @arena <- region(8192u64);\n{\n let box = fold (i in 0u32 .. 3u32, current = first(@arena)) { next(@arena) };\n let leaf = deref(deref(box).item);\n behave @print(leaf.value);\n behave @print(rank(deref(leaf.next)));\n};\n"
+      },
+      "exit_code": 0,
+      "stdout": "7\n2\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "expected_stdout": "7\n2\n",
+      "stderr_contains": "",
+      "passed": true,
+      "elapsed_seconds": 1.4737301380373538
+    },
+    {
+      "name": "reachable-interface-loss",
+      "sources": {
+        "model.cod": "type Entity;\ntype Weighted <: Entity;\ntype Alternate <: Entity;\ndata Leaf { value::i64; next::ref<Leaf>; }\ndata Box { item::ref<Leaf>; }\nfunction rank(x::Entity)::i64 { 1 }\nfunction rank(x::Weighted)::i64 { 2 }\nexport Entity; export Weighted; export Alternate; export Leaf; export Box; export rank;\n",
+        "first.cod": "import \"model.cod\" Leaf;\nusing \"model.cod\" Box;\nusing \"model.cod\" Weighted;\ndata Leaf <: Weighted;\n\nfunction create(arena::region)::ref<Box> {\n let leaf = alloc arena Leaf(3, null);\n setfield(leaf, next, leaf);\n alloc arena Box(leaf)\n}\nexport create;\n",
+        "next.cod": "import \"model.cod\" Leaf;\nusing \"model.cod\" Box;\nusing \"model.cod\" Alternate;\ndata Leaf <: Alternate;\n\nfunction create(arena::region)::ref<Box> {\n let leaf = alloc arena Leaf(7, null);\n setfield(leaf, next, leaf);\n alloc arena Box(leaf)\n}\nexport create;\n",
+        "entry.cod": "using symbol \"std:io\" @print;\nusing \"model.cod\" rank;\nusing \"first.cod\" create as first;\nusing \"next.cod\" create as next;\nsymbol @arena::region;\neffect @arena <- region(8192u64);\n{\n let box = fold (i in 0u32 .. 3u32, current = first(@arena)) { next(@arena) };\n let leaf = deref(deref(box).item);\n behave @print(leaf.value);\n behave @print(rank(deref(leaf.next)));\n};\n"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "$SCRATCH/reachable-interface-loss/entry.cod:8:18: a fold result must retain established conformance $SCRATCH/reachable-interface-loss/model.cod::Leaf <: $SCRATCH/reachable-interface-loss/model.cod::Weighted\n",
+      "expected_exit": 2,
+      "expected_stdout": "",
+      "stderr_contains": "fold result must retain established conformance",
+      "passed": true,
+      "elapsed_seconds": 0.014585561002604663
+    },
+    {
+      "name": "opaque-layout-undemanded",
+      "sources": {
+        "entry.cod": "using symbol \"std:io\" @print;\ndata Opaque { unavailable::MissingType; }\ndata Box { item::ref<Opaque>; }\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n let box = fold (i in 0u32 .. 3u32, current = alloc @arena Box(null)) { current };\n behave @print(deref(box).item == null);\n};\n"
+      },
+      "exit_code": 0,
+      "stdout": "true\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "expected_stdout": "true\n",
+      "stderr_contains": "",
+      "passed": true,
+      "elapsed_seconds": 1.4659561509033665
+    }
+  ],
+  "focused": {
+    "passed": 12,
+    "total": 12,
+    "results": [
+      {
+        "fixture": "fold-products.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/fold-products.cod"
+        ],
+        "expected": {
+          "file": "fold-products.cod",
+          "exit": 0,
+          "stdout": "2\n8\n10\n12\n21\n"
+        },
+        "exit_code": 0,
+        "stdout": "2\n8\n10\n12\n21\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "region-cross-pointer.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/region-cross-pointer.cod"
+        ],
+        "expected": {
+          "file": "region-cross-pointer.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "cross-region reference fields",
+            "region-cross-pointer.cod:6:19: note: destination object's region acquired here",
+            "region-cross-pointer.cod:5:18: note: referenced target's region acquired here"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-cross-pointer.cod:8:15: cross-region reference fields are outside this prototype\n/ws/EvtWorks/cod-project/tests/cod/language/region-cross-pointer.cod:6:19: note: destination object's region acquired here\n/ws/EvtWorks/cod-project/tests/cod/language/region-cross-pointer.cod:5:18: note: referenced target's region acquired here\n",
+        "passed": true
+      },
+      {
+        "fixture": "region-reference-fold.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/region-reference-fold.cod"
+        ],
+        "expected": {
+          "file": "region-reference-fold.cod",
+          "exit": 0,
+          "stdout": "1\n2\n3\n-1\n-1\n2\n"
+        },
+        "exit_code": 0,
+        "stdout": "1\n2\n3\n-1\n-1\n2\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "region-mutual.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/region-mutual.cod"
+        ],
+        "expected": {
+          "file": "region-mutual.cod",
+          "exit": 0,
+          "stdout": "17\n29\n2.5\n"
+        },
+        "exit_code": 0,
+        "stdout": "17\n29\n2.5\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "function-cross-region.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/function-cross-region.cod"
+        ],
+        "expected": {
+          "file": "function-cross-region.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "cross-region reference fields",
+            "function-cross-region.cod:6:18: note: destination object's region acquired here",
+            "function-cross-region.cod:7:19: note: referenced target's region acquired here"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/function-cross-region.cod:4:3: cross-region reference fields are outside this prototype\n/ws/EvtWorks/cod-project/tests/cod/language/function-cross-region.cod:6:18: note: destination object's region acquired here\n/ws/EvtWorks/cod-project/tests/cod/language/function-cross-region.cod:7:19: note: referenced target's region acquired here\n/ws/EvtWorks/cod-project/tests/cod/language/function-cross-region.cod:9:1: note: in call to function 'link' defined at /ws/EvtWorks/cod-project/tests/cod/language/function-cross-region.cod:3:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-types.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-types.cod"
+        ],
+        "expected": {
+          "file": "abstract-types.cod",
+          "exit": 0,
+          "stdout": "17\n17\n4\n5\n17\n17\n1\n17\n29\n29\n17\n17\n3\n3\n19.5\n19.5\n"
+        },
+        "exit_code": 0,
+        "stdout": "17\n17\n4\n5\n17\n17\n1\n17\n29\n29\n17\n17\n3\n3\n19.5\n19.5\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-forwarding.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-forwarding.cod"
+        ],
+        "expected": {
+          "file": "abstract-forwarding.cod",
+          "exit": 0,
+          "stdout": "2\n2\n2\n2\n2\n2\n2\n2\n2\n1\n1\n"
+        },
+        "exit_code": 0,
+        "stdout": "2\n2\n2\n2\n2\n2\n2\n2\n2\n1\n1\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-join-narrowing.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod"
+        ],
+        "expected": {
+          "file": "abstract-join-narrowing.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "::Weighted, got",
+            "in call to function 'narrow'",
+            "required interface is not established in module",
+            "available value guarantee is",
+            "::Entity",
+            "abstract-join-narrowing.cod'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted, got /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1: note: required interface is not established in module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1: note: available value guarantee is /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Entity\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:9:1: note: in call to function 'narrow' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "pool-view-escape.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod"
+        ],
+        "expected": {
+          "file": "pool-view-escape.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "regional result would outlive its owning scope",
+            "pool-view-escape.cod:9:22: note: the escaping value depends on this region acquisition"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod:8:17: regional result would outlive its owning scope\n/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod:9:22: note: the escaping value depends on this region acquisition\n",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-fold-invariant.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod"
+        ],
+        "expected": {
+          "file": "abstract-fold-invariant.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "a fold result must retain established conformance",
+            "::Sample <: ",
+            "::Weighted",
+            "in call to function 'lose'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:5:9: a fold result must retain established conformance /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample <: /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:9:1: note: in call to function 'lose' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:4:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "fold-view-owner.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/fold-view-owner.cod"
+        ],
+        "expected": {
+          "file": "fold-view-owner.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "a fold reference must retain its owning region",
+            "fold-view-owner.cod:6:18: note: initial accumulator's region acquired here",
+            "fold-view-owner.cod:7:19: note: iteration result's region acquired here"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/fold-view-owner.cod:3:9: a fold reference must retain its owning region\n/ws/EvtWorks/cod-project/tests/cod/language/fold-view-owner.cod:6:18: note: initial accumulator's region acquired here\n/ws/EvtWorks/cod-project/tests/cod/language/fold-view-owner.cod:7:19: note: iteration result's region acquired here\n/ws/EvtWorks/cod-project/tests/cod/language/fold-view-owner.cod:8:1: note: in call to function 'change_owner' defined at /ws/EvtWorks/cod-project/tests/cod/language/fold-view-owner.cod:2:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
+          "--emit-llvm",
+          "/tmp/cod-language-check-c3j70gzy/program.ll",
+          "--emit-bc",
+          "/tmp/cod-language-check-c3j70gzy/program.bc"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ]
+  },
+  "source_sha256": {
+    "cod/lang_frontend.hh": "bb9d24f92afae9b15880672f73724b27dc95c684532d9c478c7b13e708472d42",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
+    "tests/cod/language/abstract-adapter.cod": "29f75de9b918d382e98b0cabd170b6a09d88abd7001010feb69951d297752d44",
+    "tests/cod/language/abstract-second-adapter.cod": "ebf4fe53c96f2357dbdfbac651d7f4bd170c6da1d9bee449884d45ffbfaee56e",
+    "tests/cod/language/abstract-forwarding.cod": "3f67ccd9a2c05c562f415984ae7f5a0c9808a8dcb8f9c83a9b3684d9daec2feb",
+    "tests/cod/language/cases.json": "26bf512b52ee38a644a8535ba8aa2af25ffa999dc297931696d7310dfc277010",
+    "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24"
+  },
+  "raw_evidence": {
+    "build/validation/language-20261108-fold-context-before.json": "82c1f7a2c60123ec6a895bde409d8269a387f53f54905aff62cb9a66348bb717",
+    "build/validation/language-20261108-fold-fact-fixture-before.json": "556ff7ee1b6f2d6f5288b27ed2ecfe92358f7f74af92e73b98a32ae72bef720e",
+    "build/validation/language-20261108-fold-context-after.json": "e78cf4742dcd81be244a5a8ca690c4a4589d06f0b099eb4a120485d430c547ff",
+    "build/validation/language-20261108-fold-graph.json": "501bcddc4f9d5a6ef1b67d3f9e902a50861a513019f852e8fdc28ee416a9dca2",
+    "build/validation/language-20261108-fold-fact-focused.json": "4dd32eca20b2d1b611baf3512f15823f18cf8846f206e08bd589639331d3766b",
+    "build/validation/language-20261108-fold-fact-build.log": "785c0a5291c92039e8ae77802a395b2f7256e06c1a460ece041b528b7df98614",
+    "build/validation/language-20261108-fold-fact-focused.log": "2d11310b290244d95e237e5e721beb38aaf181aa9ea702a12d2aee238a0de2ef"
+  },
+  "limits": [
+    "No new conformance is inferred; this filters explicit compile-time facts only. Concrete types, region owners and retained interface checks are unchanged.",
+    "Type traversal uses already-resolved layouts and a visited set for recursive types. If a referenced layout is unknown, all initial facts remain conservatively retained; no declaration/layout is forced merely to filter metadata.",
+    "Existing forwarding/adapters were strengthened; the permanent source suite remains183 checks. An initial selector-only invocation named region-pool, which is a separate native harness case; it ran no source tests and the corrected12-check selection passed.",
+    "K-368 full183/183 plus5/5 composition and K-365 native relocation records retain their previous compiler/source revisions. No fresh full/composition/relocation claim.",
+    "No runtime/pointer encoding/allocator/configuration/toolchain or SNN change; pending ownership/method/view policies remain open."
+  ]
+}

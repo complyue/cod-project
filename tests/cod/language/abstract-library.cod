@@ -1,0 +1,53 @@
+using units "units-library.cod" {m, cm, mm};
+type Entity;
+type Weighted <: Entity;
+type Alternate <: Entity;
+type Separate;
+function rank(x::Entity)::i64 { 1 }
+function rank(x::Weighted)::i64 { 2 }
+function relay(x::Weighted, choose::bool)::Weighted {
+  if (choose) { x } else { x }
+}
+function upcast(x::Weighted)::Entity { relay(x, true) }
+function through(x::Weighted)::i64 { rank(relay(x, false)) }
+function choose_sibling(left::Weighted, right::Alternate, choice::bool)::Entity {
+  if (choice) { left } else { right }
+}
+function narrow_sibling(left::Weighted, right::Alternate, choice::bool)::Weighted {
+  choose_sibling(left, right, choice)
+}
+function repeat(x::Weighted, steps::u32)::Weighted {
+  fold (i in 0u32 .. steps, current = x) { relay(current, true) }
+}
+function unfinished(x::Entity)::i64 { missing_implementation(x) }
+function paired(left::Weighted, right::Weighted)::i64 { 3 }
+function paired(left::Entity, right::Weighted)::i64 { 1 }
+function paired(left::Weighted, right::Entity)::i64 { 2 }
+function pair_context(left::Weighted, right::Weighted)::i64 { paired(left, right) }
+function adapted(x::Weighted, amount (m*))::f64 { scalar(amount) + f64(rank(x)) }
+function adapted(x::Entity, amount (m*))::f64 { scalar(amount) + 1.0 }
+function unit_context(x::Weighted, amount (mm))::f64 { adapted(x, amount) }
+function rank_entity(x::Entity)::i64 { rank(x) }
+function nested_entity(x::Entity)::i64 { rank_entity(x) }
+
+export Alternate;
+export Entity;
+export Separate;
+export Weighted;
+export adapted;
+export choose_sibling;
+export cm;
+export m;
+export mm;
+export narrow_sibling;
+export nested_entity;
+export pair_context;
+export paired;
+export rank;
+export rank_entity;
+export relay;
+export repeat;
+export through;
+export unfinished;
+export unit_context;
+export upcast;

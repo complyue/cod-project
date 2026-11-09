@@ -1,2 +1,4 @@
-type A { value::i64; }
-A(1).missing;
+data A { value::i64; }
+symbol @arena::region;
+effect @arena <- region(1024u64);
+deref(alloc @arena A(1)).missing;

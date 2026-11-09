@@ -176,7 +176,7 @@ public:
   std::vector<std::string> buildCompilerArgs(const CodReplConfig &config) const;
   bool compileAndRun(const CodReplConfig &config, const std::string &submission) const;
   int compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
-                      const LanguageEmission &emission, bool warnings_as_errors) const;
+                      const LanguageEmission &emission, const cod::language::WarningOptions &warnings) const;
   void runRepl(const CodReplConfig &config) const;
 };
 
@@ -194,7 +194,9 @@ static void printUsage(const char *prog_name) {
             << "  --emit-llvm FILE    Save directly emitted textual LLVM IR\n"
             << "  --emit-bc FILE      Save directly emitted LLVM bitcode\n"
             << "  --emit-runtime FILE Save native system services for external linking\n"
-            << "  --warnings-as-errors  Reject ambiguous CoD unit conversions\n"
+            << "  --warnings-as-errors  Treat all CoD language warnings as errors\n"
+            << "  -Werror=unit-conversion       Reject ambiguous unit conversion paths\n"
+            << "  -Werror=multi-alias-extension Reject overload declarations through multiple aliases\n"
             << "  -h, --help          Show this help message\n"
             << "  --no-cache          Disable build cache\n"
             << "  --force-rebuild     Force rebuild (ignore cache)\n"
@@ -623,9 +625,9 @@ std::vector<std::string> CodTool::buildCompilerArgs(const CodReplConfig &config)
 }
 
 int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
-                            const LanguageEmission &emission, bool warnings_as_errors) const {
+                            const LanguageEmission &emission, const cod::language::WarningOptions &warnings) const {
   try {
-    const auto compilation = cod::language::Compiler{warnings_as_errors}.compile(fs::absolute(entry));
+    const auto compilation = cod::language::Compiler{warnings}.compile(fs::absolute(entry));
     for (const auto &warning : compilation.warnings) std::cerr << warning << '\n';
     if (config.verbose) {
       for (const auto &module : compilation.scanned_modules)
@@ -834,7 +836,7 @@ int main(int argc, const char **argv) {
   std::optional<fs::path> language_entry;
   LanguageEmission emission;
   bool check_only = false;
-  bool warnings_as_errors = false;
+  cod::language::WarningOptions warnings;
 
   // Parse command line arguments
   for (int i = 1; i < argc; ++i) {
@@ -862,8 +864,12 @@ int main(int argc, const char **argv) {
       }
       language_entry = fs::absolute(argv[++i]);
       check_only = arg == "--check";
-    } else if (arg == "--warnings-as-errors" || arg == "-Werror=unit-conversion") {
-      warnings_as_errors = true;
+    } else if (arg == "--warnings-as-errors") {
+      warnings.as_errors = true;
+    } else if (arg == "-Werror=unit-conversion") {
+      warnings.errors.insert(cod::language::Warning::unit_conversion);
+    } else if (arg == "-Werror=multi-alias-extension") {
+      warnings.errors.insert(cod::language::Warning::multi_alias_extension);
     } else if (arg == "--emit-llvm" || arg == "--emit-bc" || arg == "--emit-runtime") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires a path\n";
@@ -913,10 +919,10 @@ int main(int argc, const char **argv) {
       return 1;
     }
     if (config.project_root.empty()) config.project_root = language_entry->parent_path();
-    return CodTool{}.compileLanguage(config, *language_entry, check_only, emission, warnings_as_errors);
+    return CodTool{}.compileLanguage(config, *language_entry, check_only, emission, warnings);
   }
-  if (warnings_as_errors) {
-    std::cerr << "Error: --warnings-as-errors requires --run or --check\n";
+  if (warnings.as_errors || !warnings.errors.empty()) {
+    std::cerr << "Error: CoD warning options require --run or --check\n";
     return 1;
   }
   if (emission.ir || emission.bitcode || emission.runtime) {

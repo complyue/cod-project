@@ -4,7 +4,7 @@ symbol from "vocabulary.cod" @x;
 function helper() -> i64 { 9 }
 effect @x <- 7;
 symbol @p :: proc() -> i64;
-import "source.cod" @p;
+mixin "source.cod" @p;
 behave @assert(@x == 7);
 effect @x <- 8;
 behave @print(perform @p);

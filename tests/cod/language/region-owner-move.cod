@@ -1,3 +1,4 @@
 symbol a :: region, b :: region;
+function forward(arena::region) -> region { let view = arena; view }
 effect @a <- region(4096u64);
-effect @b <- @a;
+effect @b <- forward(@a);

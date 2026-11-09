@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T21:43:19.457672+00:00",
+  "registry_record": "K-363",
+  "kind": "Pending compound-selection review; observations are not approved expected behavior",
+  "compiler_sha256": "4e9fbdc16fdd3504ba02274b94ddb4d6d16834ef77b5df69b752676ed1ebdf45",
+  "source_sha256": {
+    "cod/lang_frontend.hh": "a9922a14f02609ca2571c7d410c7a3504d06185a75fa9611516355efad64014b"
+  },
+  "without_fallback": {
+    "sources": {
+      "base.cod": "type Entity;\ndata First <: Entity { value::i64; }\ndata Second <: Entity { value::i64; }\nfunction score(x::First)::i64 { 1 }\nfunction score(x::Second)::i64 { 2 }\nfunction relay(x::Entity)::i64 { score(x) }\nexport Entity; export First; export Second; export score; export relay;\n"
+    },
+    "results": [
+      {
+        "alias": "all",
+        "integration": "using \"base.cod\" First;\nusing \"base.cod\" score as all;\nexport import \"base.cod\" relay;\n",
+        "entry": "using symbol \"std:io\" @print;\nusing \"base.cod\" Second;\nusing \"integration.cod\" relay as adapted;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nbehave @print(adapted(deref(alloc @arena Second(9))));\n",
+        "exit_code": 0,
+        "stdout": "2\n",
+        "stderr": ""
+      },
+      {
+        "alias": "zipped",
+        "integration": "using \"base.cod\" First;\nusing \"base.cod\" score as zipped;\nexport import \"base.cod\" relay;\n",
+        "entry": "using symbol \"std:io\" @print;\nusing \"base.cod\" Second;\nusing \"integration.cod\" relay as adapted;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nbehave @print(adapted(deref(alloc @arena Second(9))));\n",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "$SCRATCH/base.cod:6:34: expected $SCRATCH/base.cod::First, got $SCRATCH/base.cod::Second\n$SCRATCH/base.cod:6:34: note: in call to function 'score' defined at $SCRATCH/base.cod:4:1\n$SCRATCH/entry.cod:6:15: note: in call to function 'relay' defined at $SCRATCH/base.cod:6:1\n"
+      },
+      {
+        "alias": "score",
+        "integration": "using \"base.cod\" First;\nusing \"base.cod\" score as score;\nexport import \"base.cod\" relay;\n",
+        "entry": "using symbol \"std:io\" @print;\nusing \"base.cod\" Second;\nusing \"integration.cod\" relay as adapted;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nbehave @print(adapted(deref(alloc @arena Second(9))));\n",
+        "exit_code": 0,
+        "stdout": "2\n",
+        "stderr": ""
+      }
+    ]
+  },
+  "with_fallback": {
+    "sources": {
+      "base.cod": "type Entity;\ndata First <: Entity { value::i64; }\ndata Second <: Entity { value::i64; }\nfunction score(x::Entity)::i64 { 0 }\nfunction score(x::First)::i64 { 1 }\nfunction score(x::Second)::i64 { 2 }\nfunction relay(x::Entity)::i64 { score(x) }\nexport Entity; export First; export Second; export score; export relay;\n"
+    },
+    "results": [
+      {
+        "alias": "all",
+        "integration": "using \"base.cod\" First;\nusing \"base.cod\" score as all;\nexport import \"base.cod\" relay;\n",
+        "entry": "using symbol \"std:io\" @print;\nusing \"base.cod\" Second;\nusing \"integration.cod\" relay as adapted;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nbehave @print(adapted(deref(alloc @arena Second(9))));\n",
+        "exit_code": 0,
+        "stdout": "2\n",
+        "stderr": ""
+      },
+      {
+        "alias": "zipped",
+        "integration": "using \"base.cod\" First;\nusing \"base.cod\" score as zipped;\nexport import \"base.cod\" relay;\n",
+        "entry": "using symbol \"std:io\" @print;\nusing \"base.cod\" Second;\nusing \"integration.cod\" relay as adapted;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nbehave @print(adapted(deref(alloc @arena Second(9))));\n",
+        "exit_code": 0,
+        "stdout": "0\n",
+        "stderr": ""
+      }
+    ]
+  },
+  "raw_evidence": [
+    {
+      "path": "build/validation/language-20261108-method-facets-observations.json",
+      "sha256": "732b03b5dae2efd7d08875511650a9ba1f745ef7cf3751a0fcc78fa7ef01d0f8"
+    },
+    {
+      "path": "build/validation/language-20261108-method-facets-fallback.json",
+      "sha256": "e2a23f50f64b869a3ffe7a3415775b5afba24832d181f1398736603f6a41613d"
+    }
+  ],
+  "finding": "Unequal associated/full method subsets share a source callable identity; dependency lookup keeps the first alias in name order rather than reconciling those subsets. Renaming all to zipped changes rejection or result.",
+  "implemented_workaround": "Explicitly select the full family under score, shadowing the implicit score subset; the native control returns2.",
+  "pending_choice": "Combine visible subsets for one identity during dependency resolution, or require one explicit selection view when same-identity subsets differ. Distinct extension identities keep their confirmed separation.",
+  "limits": [
+    "No compiler or language policy change; no new permanent test case.",
+    "This narrows the known limitation of compound dependency views; it does not invalidate simple1,7,1 and2/14 evidence.",
+    "No claim that current green focused checks cover this mixed partial/full selection case."
+  ]
+}

@@ -1,0 +1,741 @@
+{
+  "schema_version": 1,
+  "registry_record": "K-395",
+  "recorded_utc": "2026-11-09T12:29:22.869852+00:00",
+  "toolchain": "build",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "note": "Source-only frontend changes; existing default graph ran runtimes dependencies. No configuration edits or explicit bootstrap targets."
+  },
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "28a59fef75d4a240037d5ef1103e938ffdc0081c3532f402b3152fb136cfa290"
+  },
+  "passed": 27,
+  "total": 27,
+  "results": [
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/module-diamond.cod"
+      ],
+      "expected": {
+        "file": "module-diamond.cod",
+        "exit": 0,
+        "stdout": "101\n3\n7\n3\n3\n3\n"
+      },
+      "exit_code": 0,
+      "stdout": "101\n3\n7\n3\n3\n3\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/methods.cod"
+      ],
+      "expected": {
+        "file": "methods.cod",
+        "exit": 0,
+        "stdout": "8\n7.5\n15\n15\n-7\n5\ntrue\n"
+      },
+      "exit_code": 0,
+      "stdout": "8\n7.5\n15\n15\n-7\n5\ntrue\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-modules.cod"
+      ],
+      "expected": {
+        "file": "method-modules.cod",
+        "exit": 0,
+        "stdout": "9\n12\n6\n7\n8\n8\n5\n8\n"
+      },
+      "exit_code": 0,
+      "stdout": "9\n12\n6\n7\n8\n8\n5\n8\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-aliased-bundle.cod"
+      ],
+      "expected": {
+        "file": "units-aliased-bundle.cod",
+        "exit": 0,
+        "stdout": "2.5\n1.5\n4\n6\n"
+      },
+      "exit_code": 0,
+      "stdout": "2.5\n1.5\n4\n6\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-capture.cod"
+      ],
+      "expected": {
+        "file": "region-owner-capture.cod",
+        "exit": 0,
+        "stdout": ""
+      },
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/capture-scope-restore.cod"
+      ],
+      "expected": {
+        "file": "capture-scope-restore.cod",
+        "exit": 0,
+        "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n"
+      },
+      "exit_code": 0,
+      "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/abstract-forwarding.cod"
+      ],
+      "expected": {
+        "file": "abstract-forwarding.cod",
+        "exit": 0,
+        "stdout": "2\n2\n2\n2\n2\n2\n2\n2\n2\n1\n1\n"
+      },
+      "exit_code": 0,
+      "stdout": "2\n2\n2\n2\n2\n2\n2\n2\n2\n1\n1\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod"
+      ],
+      "expected": {
+        "file": "abstract-ambiguous.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "ambiguous method 'choose'",
+          "method lookup uses module",
+          "candidate function 'choose' (Entity, Weighted) -> i64",
+          "candidate function 'choose' (Weighted, Entity) -> i64",
+          "abstract-ambiguous.cod'"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: ambiguous method 'choose' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample, /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample): 2 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: note: argument 2 guarantees /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:4:1: note: candidate function 'choose' (Entity, Weighted) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:5:1: note: candidate function 'choose' (Weighted, Entity) -> i64\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-context-selection.cod"
+      ],
+      "expected": {
+        "file": "method-context-selection.cod",
+        "exit": 0,
+        "stdout": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n",
+        "stderr_contains": [
+          "overloads declared through multiple aliases of one callable identity",
+          "[-Wmulti-alias-extension]",
+          "note: alias 'score' adds overloads here",
+          "note: alias 'score_alias' adds overloads here"
+        ]
+      },
+      "exit_code": 0,
+      "stdout": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-context-library.cod:4:1: warning: overloads declared through multiple aliases of one callable identity: 'score' 'score_alias' [-Wmulti-alias-extension]\n/ws/EvtWorks/cod-project/tests/cod/language/method-context-library.cod:3:1: note: alias 'score' adds overloads here\n/ws/EvtWorks/cod-project/tests/cod/language/method-context-library.cod:4:1: note: alias 'score_alias' adds overloads here\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-context-selection.cod",
+        "-Werror=multi-alias-extension"
+      ],
+      "expected": {
+        "file": "method-context-selection.cod",
+        "args": [
+          "-Werror=multi-alias-extension"
+        ],
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "warning treated as error: overloads declared through multiple aliases of one callable identity",
+          "[-Wmulti-alias-extension]"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-context-library.cod:4:1: warning treated as error: overloads declared through multiple aliases of one callable identity: 'score' 'score_alias' [-Wmulti-alias-extension]\n/ws/EvtWorks/cod-project/tests/cod/language/method-context-library.cod:3:1: note: alias 'score' adds overloads here\n/ws/EvtWorks/cod-project/tests/cod/language/method-context-library.cod:4:1: note: alias 'score_alias' adds overloads here\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-views.cod"
+      ],
+      "expected": {
+        "file": "method-views.cod",
+        "exit": 0,
+        "stdout": "14\n22\n25\n2\n19\n"
+      },
+      "exit_code": 0,
+      "stdout": "14\n22\n25\n2\n19\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod"
+      ],
+      "expected": {
+        "file": "method-view-ambiguous.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "ambiguous method 'through'",
+          "method-view-library.cod:5:1: note: candidate function 'through'",
+          "method-view-first.cod'",
+          "method-view-second.cod'",
+          "implementation context"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: ambiguous method 'through' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 2 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod'\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-dependency-conflict.cod"
+      ],
+      "expected": {
+        "file": "method-dependency-conflict.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "ambiguous method 'score'",
+          "method-view-first.cod:2:1: note: candidate",
+          "method-view-second.cod:2:1: note: candidate"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: ambiguous method 'score' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 3 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:4:1: note: candidate function 'score' (Metric) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: note: in call to function 'private_bridge' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:1\n/ws/EvtWorks/cod-project/tests/cod/language/method-dependency-conflict.cod:6:1: note: in call to function 'through' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/world-composition.cod"
+      ],
+      "expected": {
+        "file": "world-composition.cod",
+        "exit": 0,
+        "stdout": ""
+      },
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/world-source-isolation.cod"
+      ],
+      "expected": {
+        "file": "world-source-isolation.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "::First, got "
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/world-first.cod:3:40: expected /ws/EvtWorks/cod-project/tests/cod/language/world-vocabulary.cod::First, got /ws/EvtWorks/cod-project/tests/cod/language/world-vocabulary.cod::Second\n/ws/EvtWorks/cod-project/tests/cod/language/world-first.cod:3:40: note: in call to function 'score' defined at /ws/EvtWorks/cod-project/tests/cod/language/world-vocabulary.cod:4:1\n/ws/EvtWorks/cod-project/tests/cod/language/world-source-isolation.cod:9:3: note: in call to function 'local_score' defined at /ws/EvtWorks/cod-project/tests/cod/language/world-first.cod:3:1\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/world-export-alias.cod"
+      ],
+      "expected": {
+        "file": "world-export-alias.cod",
+        "exit": 0,
+        "stdout": ""
+      },
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-tls-audit/entry.cod",
+        "--emit-llvm",
+        "/tmp/cod-world-tls-audit/entry.ll"
+      ],
+      "expected": {
+        "exit": 0,
+        "stdout": "16\n22\n33\n",
+        "stderr_contains": []
+      },
+      "exit_code": 0,
+      "stdout": "16\n22\n33\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-tls-audit/missing.cod"
+      ],
+      "expected": {
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "missing required binding"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-world-tls-audit/first.cod:9:23: missing required binding /tmp/cod-world-tls-audit/vocabulary.cod::@state\n/tmp/cod-world-tls-audit/missing.cod:11:8: note: in call to procedure '@read' defined at /tmp/cod-world-tls-audit/first.cod:9:1\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-tls-audit/wrong-type.cod"
+      ],
+      "expected": {
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "incompatible value types",
+          "OtherWords"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-world-tls-audit/wrong-type.cod:14:8: incompatible value types for /tmp/cod-world-tls-audit/vocabulary.cod::@state: expected ref</tmp/cod-world-tls-audit/vocabulary.cod::Words>, got ref</tmp/cod-world-tls-audit/wrong-type.cod::OtherWords>\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-dependency-audit/entry.cod"
+      ],
+      "expected": {
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "ambiguous method 'score'",
+          "method-view-first.cod:2:1",
+          "method-view-second.cod:2:1"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: ambiguous method 'score' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 3 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:4:1: note: candidate function 'score' (Metric) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: note: in call to function 'private_bridge' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:1\n/tmp/cod-world-dependency-audit/entry.cod:7:41: note: in call to function 'through' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-dependency-audit/frozen.cod"
+      ],
+      "expected": {
+        "exit": 0,
+        "stdout": "14\n11\n",
+        "stderr_contains": []
+      },
+      "exit_code": 0,
+      "stdout": "14\n11\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-context-audit/deep/entry.cod"
+      ],
+      "expected": {
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "ambiguous method 'score'",
+          "method-view-first.cod:2:1",
+          "method-view-second.cod:2:1"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: ambiguous method 'score' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 3 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:4:1: note: candidate function 'score' (Metric) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: note: in call to function 'private_bridge' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:1\n/tmp/cod-world-context-audit/deep/level0.cod:3:34: note: in call to function 'through' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1\n/tmp/cod-world-context-audit/deep/level1.cod:3:34: note: in call to function 'walk0' defined at /tmp/cod-world-context-audit/deep/level0.cod:3:1\n/tmp/cod-world-context-audit/deep/level2.cod:3:34: note: in call to function 'walk1' defined at /tmp/cod-world-context-audit/deep/level1.cod:3:1\nnote: 58 intervening calls omitted\n/tmp/cod-world-context-audit/deep/level61.cod:3:35: note: in call to function 'walk60' defined at /tmp/cod-world-context-audit/deep/level60.cod:3:1\n/tmp/cod-world-context-audit/deep/level62.cod:3:35: note: in call to function 'walk61' defined at /tmp/cod-world-context-audit/deep/level61.cod:3:1\n/tmp/cod-world-context-audit/deep/level63.cod:3:35: note: in call to function 'walk62' defined at /tmp/cod-world-context-audit/deep/level62.cod:3:1\n/tmp/cod-world-context-audit/deep/entry.cod:7:41: note: in call to function 'walk63' defined at /tmp/cod-world-context-audit/deep/level63.cod:3:1\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-context-audit/deep/frozen.cod"
+      ],
+      "expected": {
+        "exit": 0,
+        "stdout": "14\n11\n",
+        "stderr_contains": []
+      },
+      "exit_code": 0,
+      "stdout": "14\n11\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/region-pool.cod"
+      ],
+      "expected": {
+        "exit": 0,
+        "stdout": "152\n",
+        "stderr_contains": []
+      },
+      "exit_code": 0,
+      "stdout": "152\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod",
+        "-Werror=multi-alias-extension"
+      ],
+      "expected": {
+        "exit": 0,
+        "stdout": "11\n",
+        "stderr_contains": [
+          "[-Wunit-conversion]"
+        ]
+      },
+      "exit_code": 0,
+      "stdout": "11\n",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod:11:15: warning: ambiguous unit conversion; selected /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::start --a--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::left --b--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::target; alternative /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::start --c--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::right --d--> /ws/EvtWorks/cod-project/tests/cod/language/units-ambiguous.cod::target [-Wunit-conversion]\n",
+      "passed": true
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/tmp/cod-world-dependency-audit/nested.cod"
+      ],
+      "expected": {
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "ambiguous method 'through'",
+          "method-view-second.cod",
+          "in call to function 'outer'"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-world-dependency-audit/outer.cod:3:34: ambiguous method 'through' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 2 matching candidates\n/tmp/cod-world-dependency-audit/outer.cod:3:34: note: method lookup uses module '/tmp/cod-world-dependency-audit/outer.cod'\n/tmp/cod-world-dependency-audit/outer.cod:3:34: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/tmp/cod-world-dependency-audit/nested.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod'\n/tmp/cod-world-dependency-audit/nested.cod:7:15: note: in call to function 'outer' defined at /tmp/cod-world-dependency-audit/outer.cod:3:1\n",
+      "passed": true,
+      "note": "The original probe assertion asked for A in the displayed context. The source helper body is shared, and diagnostics show its source definition plus receiving contexts; the observed conflict outcome is correct. A permanent run-wrapper fixture also includes A in its call stack."
+    },
+    {
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--check",
+        "/ws/EvtWorks/cod-project/tests/cod/language/method-nested-conflict.cod"
+      ],
+      "expected": {
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "ambiguous method 'through'",
+          "method-view-second.cod",
+          "method-view-first.cod:3:1"
+        ]
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod:3:36: ambiguous method 'through' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 2 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod:3:36: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod:3:36: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/ws/EvtWorks/cod-project/tests/cod/language/method-nested-conflict.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-nested-conflict.cod:5:1: note: in call to function 'run' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod:3:1\n",
+      "passed": true,
+      "recording": "Observed direct tool result transcribed without rerunning the command."
+    }
+  ],
+  "source_sha256": {
+    "cod/main.cc": "bac9eb6590d4190e95cca3198706a1ec6c156c25601accb06c40d24398ea4043",
+    "cod/lang_frontend.hh": "d3b17d7a9182c4946a4c088bffc846afc58acddf94e500ff460820e1dbb66057",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "a27b2a2da2549766dace7843974d8032e137ea97712f531f7ee235da39ae4ed4",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/cases.json": "6e942291f402057fb8750c4b8c94aeb155e791af4673927c72f6c8cea5b7c894",
+    "tests/cod/language/run_tests.py": "94333b2fe240771999c433119258516f33cf38627ae9c0c349fa116655afafa5",
+    "tests/cod/language/module-diamond.cod": "62d14f7619e20812694fe973e3d94a107097a8e0ddeacfd75806ce447b005496",
+    "tests/cod/language/diamond-left.cod": "4cd5346e099a52a37a6ab4f11cb070cda451f7a04a4602888dde43105c806401",
+    "tests/cod/language/diamond-shared.cod": "fac3ac1a78a3d49b764431e6dd5019d12f84b4c30189eee73f12088d38ace3c7",
+    "tests/cod/language/diamond-right.cod": "53bcaf0db8e0ec7d0d1457c17e52b4ffaa11c942c4a6e2152c95dc38cb8a21d7",
+    "tests/cod/language/methods.cod": "c7b4f07b881e80a3860b08f3673796fd11f5cbcec4d2cc577ed77e543a202e35",
+    "tests/cod/language/method-modules.cod": "47865c012f4cb1232b055da11d10aafcd1728ca6890ea4fbf5f6b4459e3663fe",
+    "tests/cod/language/method-extension.cod": "1dbd2c0127cb2d5eba9a17e467ab330fc0785a6b52dd8b324f94280576a2c3ad",
+    "tests/cod/language/method-library.cod": "a7a2b7c08f8e577e8128112e2e18c9878984c22498c0b0346e07b857a306655f",
+    "tests/cod/language/method-other-library.cod": "a0140920c198fce0c0d349820c2ff2da7b6381c6461eba56f5cf55c91c594719",
+    "tests/cod/language/mixin-lexical-provider.cod": "1e6ce1eeb929f486e1d83b56b9e897a673b025b158fd59d0093fb5a4d240ba53",
+    "tests/cod/language/units-aliased-bundle.cod": "8d2a53d84ed751004aafa24c8fa675764965b593d5ef9c0232de3d90cfe94fc0",
+    "tests/cod/language/units-reexport.cod": "ebcf34532c8df2e3f399f05661e723a021d2c0eba86b4eb8932c76b070872bf5",
+    "tests/cod/language/units-library.cod": "72a6f682a2000dcd04165ac940e41af634e656ed657af9f825b32fb388c6cb41",
+    "tests/cod/language/region-owner-capture.cod": "7bae16a957e0b3af4c0bed80d088ab30690ae1c8602dc900377858cf1f8a2ccc",
+    "tests/cod/language/capture-scope-restore.cod": "9400f6b60703b00a14790c58ef3650a78d920dff0e036f3b3c46f42b4cdb606b",
+    "tests/cod/language/abstract-forwarding.cod": "3f67ccd9a2c05c562f415984ae7f5a0c9808a8dcb8f9c83a9b3684d9daec2feb",
+    "tests/cod/language/abstract-data.cod": "718fe48cd8d8b9fe657be0ae3c736ba746ad7def28466153a58ce393d053879a",
+    "tests/cod/language/abstract-library.cod": "660890215065afe2b41b5933cbee814749f3d2dc67d05ff5a9722d841bbdc0fc",
+    "tests/cod/language/abstract-adapter.cod": "29f75de9b918d382e98b0cabd170b6a09d88abd7001010feb69951d297752d44",
+    "tests/cod/language/abstract-second-adapter.cod": "ebf4fe53c96f2357dbdfbac651d7f4bd170c6da1d9bee449884d45ffbfaee56e",
+    "tests/cod/language/abstract-alternate-factory.cod": "41b8f38c07f0b9e67604acb107d03f5776f3900964f8b1812fdff2ba003d861a",
+    "tests/cod/language/abstract-ambiguous.cod": "d2b8d33e4c8052ab1c6785173c342aac49110536807674fb6700928c62923347",
+    "tests/cod/language/method-context-selection.cod": "ec2c0f6daddda331997fe102b1abb0df133140659756ffe9d2c1aea65117efc5",
+    "tests/cod/language/method-view-library.cod": "60322c00509a5aa0731c330744363630935bd40c1f27900bb142d638509a0b5d",
+    "tests/cod/language/method-view-first.cod": "29e07c9bd9683ec4f10a8c16f2901630d55b54b512543aed99d3a41d1ba9cba8",
+    "tests/cod/language/method-context-reexport.cod": "a7db1b18fa8f85b01816518b9b111ea1a63fd951124c289ab56de0f453a3d5f0",
+    "tests/cod/language/method-context-library.cod": "9c166eb9a3acd477a01dd35b02da372146981b7a18c61a031d6477e257f1ff73",
+    "tests/cod/language/method-view-second.cod": "9510ba2ab3b1523bb8bd45a33918abae4c69d4bedaf011fc529798f1f74c3128",
+    "tests/cod/language/method-views.cod": "c4eef1acad9b86605b66885782f20ba89a2a91dc8021a9e7024d3f05a6647e5d",
+    "tests/cod/language/method-view-shadow.cod": "243678dbcd7d3581ef3164a5561b6183584f0fad68a00b14a5ca1b2899b05fd6",
+    "tests/cod/language/method-view-ambiguous.cod": "51b2dde1c3312a8b2fc451755813e91b0585baa3f879c360a0d92e49d364db8d",
+    "tests/cod/language/method-dependency-conflict.cod": "546f63ad0da3fe3e98ddb1ca29298a372631350d761c16356e1e82421b64b670",
+    "tests/cod/language/world-composition.cod": "39e7375a6e4ca6a0c7f89b52bcdc5ff58a623220c7a47880a61a167b48a00080",
+    "tests/cod/language/world-integration.cod": "13ea289bdf2298255a51962a493e5d65824536e71a6c0fbdfe9325a76b1c0760",
+    "tests/cod/language/world-first.cod": "f3eafc7d293d207e407432ed31d3bffd78de1d493faff9e58c3ac40dcc5e278f",
+    "tests/cod/language/world-vocabulary.cod": "75d8c85ea7e1033fedb33c5b39997e7803bf647f5e5c017bb819450e4c68ee14",
+    "tests/cod/language/world-second.cod": "de85df787fa0680289eabfab22685e01814f05a7e6f2973ca1bcef80b307f309",
+    "tests/cod/language/world-source-isolation.cod": "ee8d26919103ba55a54f1e6447213be29b76c73f354654768b8b15720806c5c7",
+    "tests/cod/language/world-export-alias.cod": "1d476980042155b201bf0b9e406084851c2916e83bb1324a33b8726674dadce8",
+    "tests/cod/language/module-export-shadow.cod": "a11e70b0dd9ef1348bb4f993f14a86b31d87eda86542e64e0580e3833acca689",
+    "tests/cod/language/module-export-library.cod": "e050bbc549b197bd387d83d74eff45a267c44db47dd52e108319d14f46a01c88",
+    "tests/cod/language/module-export-context-shadow.cod": "fe53ca474818733f0073c7637c2b494f513d9f68f539f1df6ad2f2715519e70b",
+    "/tmp/cod-world-tls-audit/entry.cod": "50e172ee9b72fe40bfb45ca16961ac00112ee7fc71bc47c66df75d62de660945",
+    "/tmp/cod-world-tls-audit/vocabulary.cod": "eabcc71eabea7e69c04b79caa64821766e4516c48a3152d59f6532234c974b3c",
+    "/tmp/cod-world-tls-audit/first.cod": "c27c0255e2761848a19ecb017b548e33d9243082d0990e2f84bbbeb0b1c52111",
+    "/tmp/cod-world-tls-audit/second.cod": "e390025d862362d64683d6ab68892603c18704bb2e5b89ae6348ffc3c2f82779",
+    "/tmp/cod-world-tls-audit/missing.cod": "dfa5c108d6c94c70cb177b8be6ce1d7814109b6e43283077d3facfec48bc4132",
+    "/tmp/cod-world-tls-audit/wrong-type.cod": "067b29bc8dbb27bdaa87497d83f31a2e517a7ca19e64094cd76d560eeae23264",
+    "/tmp/cod-world-dependency-audit/entry.cod": "5324ac17693714ac8bd32d2e20ea34a40e94e9ca196495505f9d357fef350274",
+    "/tmp/cod-world-dependency-audit/selected.cod": "f5c27f3364d9b5befc43c8e7e1a6ecdef4cbdecdcc42cf0c14129e4ad4957f4d",
+    "/tmp/cod-world-dependency-audit/frozen.cod": "bcfe270789361e1a450ee3e70663cef1f15667567fc839f671987db578ef0a09",
+    "/tmp/cod-world-context-audit/deep/entry.cod": "3a14382bc19f22bee8162b948b93d3514bb7806e743fffd13b148369c268226a",
+    "/tmp/cod-world-context-audit/deep/level63.cod": "ad47ff409b05da70d8b7a9f15a26060bcaf35c896db8654903dbd5bffc18dcb7",
+    "/tmp/cod-world-context-audit/deep/level62.cod": "74abd39b2eab1edf3d653f83bc668a6641626611e2bf728b2941daf69b3deea3",
+    "/tmp/cod-world-context-audit/deep/level61.cod": "d5b990fe8516bed0ddcec378eda603570d174c15788ea5f622319fd9c428ff8a",
+    "/tmp/cod-world-context-audit/deep/level60.cod": "508cb06678ce25b1a6f82b172fa9c9b982cbd90f214d0d9b2a4378d5b1419ccf",
+    "/tmp/cod-world-context-audit/deep/level59.cod": "de5c5aefdc6acc14f2d4833f6b5f52e5d8d409c9096482d240dca58370474f51",
+    "/tmp/cod-world-context-audit/deep/level58.cod": "c6f02ccb4e447758771d9dcd34ab458ece6c10a86159b47eeb55e5fedd9d2338",
+    "/tmp/cod-world-context-audit/deep/level57.cod": "118bb126e790d8017c2aa17fa0d4fa698108b247e9dac0a6c0520b586034cb56",
+    "/tmp/cod-world-context-audit/deep/level56.cod": "ef1983cfb05cb0bcf6412b3267d4ee7fbbed620e83283c74eccd7002d18f470d",
+    "/tmp/cod-world-context-audit/deep/level55.cod": "951b4126e70fa9de0d6dd4d361d307ff9542fecef510642d3db31c407d24cbad",
+    "/tmp/cod-world-context-audit/deep/level54.cod": "9bae2ea91bcbce0423a83fae4fe0fe835d22b32bed6c7f515dfcb875a92e1eec",
+    "/tmp/cod-world-context-audit/deep/level53.cod": "fc8d5a4ab9acf49d1fb058125d3c7dfcfaf8ef2266eb17d49cf7206688913c1c",
+    "/tmp/cod-world-context-audit/deep/level52.cod": "26fc4c9275a5cb953574809310f3cae7fff1530254165e5b9cde89bc9be7e414",
+    "/tmp/cod-world-context-audit/deep/level51.cod": "5abca764064c416895e3c4cdb03687d1bbc1ffbe05a4be30e2420a30db67b16c",
+    "/tmp/cod-world-context-audit/deep/level50.cod": "fba7a3d0fc41678dc28d6a93cca8c64c3725f738f8796a21c0c97024fc84bf81",
+    "/tmp/cod-world-context-audit/deep/level49.cod": "40157a8de7149a80275874c7cb87e12c13a8706c5d549423804841c4bd4ee709",
+    "/tmp/cod-world-context-audit/deep/level48.cod": "15fce744742fb6ab05356b035daa0663b097074712f7dd8e19939fd107b79ed4",
+    "/tmp/cod-world-context-audit/deep/level47.cod": "2c9e50e37e0499a46d09f9cba77fdf9f67d8d0e34bce33d8d493d72c0c6a77d0",
+    "/tmp/cod-world-context-audit/deep/level46.cod": "d42443836cb459ecd9cea54aef733bd92ca50d1cd9dac186894b83bcf37e6bce",
+    "/tmp/cod-world-context-audit/deep/level45.cod": "1c907c5eb7c2ef308575eb7652582ac87c230e5df9282ee91691a51b9837c306",
+    "/tmp/cod-world-context-audit/deep/level44.cod": "4ce1f765b48cee76aaa72a3c3a2a9e4c7b73ee4e1a3626fe0647d7dc65508e67",
+    "/tmp/cod-world-context-audit/deep/level43.cod": "e92ef270e5e78ff06470b7ed98e4f246f697982eb2920e6a9ab7965b0e48bc3a",
+    "/tmp/cod-world-context-audit/deep/level42.cod": "5e9dc561b215793e58e66f70a52683a2f4d12109717a6021dcae8c64477b2f58",
+    "/tmp/cod-world-context-audit/deep/level41.cod": "96ba07481570997fb63211dfc9915a7471e6c24bc503cb8d18dd04de045c6c81",
+    "/tmp/cod-world-context-audit/deep/level40.cod": "667a0a641fa173a32c259546a2879af66c91dad151c35350174cb3b549e2247b",
+    "/tmp/cod-world-context-audit/deep/level39.cod": "942930af800b8dcd25df59e8a4a4f21ba482497093779a89971becb6cbf4c1ca",
+    "/tmp/cod-world-context-audit/deep/level38.cod": "bc788f690fb8656062e0b2977426ecd891d705b8523aca600c2e09cc6bedefd8",
+    "/tmp/cod-world-context-audit/deep/level37.cod": "5db18975b531e52152e1aa1eec086a569a8dd6a8a48531d8f4cb92dcfcbb6632",
+    "/tmp/cod-world-context-audit/deep/level36.cod": "f59fd7a2529a2fa7e6d46132eb9c4b5931cfd763d7df71adb97ee588956ff6e2",
+    "/tmp/cod-world-context-audit/deep/level35.cod": "516baa1e5c3b9e33533f5cec9e67e795f28d535462567498bc2e6e86b2000858",
+    "/tmp/cod-world-context-audit/deep/level34.cod": "7439c289ed485c33e73dfa2da53c44aa3a9886af1ab7fe95a7ca9c9c69d5d35a",
+    "/tmp/cod-world-context-audit/deep/level33.cod": "8b3d38f9313c0ff0fdb83bc67793d4d30993eab23e17d4460afcc19cab9a047f",
+    "/tmp/cod-world-context-audit/deep/level32.cod": "17d22bce7e7f92f6806738260956f3009ea995138878a6f2b3a4086d5594174e",
+    "/tmp/cod-world-context-audit/deep/level31.cod": "6f1774dda8da5e84164b9a63005d96a94db98d208d968dfeeaebf0baa7c47ca0",
+    "/tmp/cod-world-context-audit/deep/level30.cod": "86e4baa799d8fd21b2c6d3cc00fd1cff95f6bf063fd59aca7a7f4d5f6c182604",
+    "/tmp/cod-world-context-audit/deep/level29.cod": "1d347c94cffcbb19f1095d5b48f39a957e1073ff058a30a56b930e08c277da3d",
+    "/tmp/cod-world-context-audit/deep/level28.cod": "27ab03d31a2a89a0bc62b2dd5c9b35e37709de1a8033f4d08fe92e74e76ffac7",
+    "/tmp/cod-world-context-audit/deep/level27.cod": "2c1ba014dd71d36bb69741224858d0e8530f8c4bfea4811bb9b46316ecf665ff",
+    "/tmp/cod-world-context-audit/deep/level26.cod": "ceeca4c608eb189cf82b554299442032a27f6afd7906e673001bcfd82eaca637",
+    "/tmp/cod-world-context-audit/deep/level25.cod": "861a7154f197ee36f1e407211a89324f25b8a094b8e5690b16c48d723b55bf61",
+    "/tmp/cod-world-context-audit/deep/level24.cod": "7ed801486003c30c6e3659fa48de4f70de2144ea7d3807180876b5a99841c10d",
+    "/tmp/cod-world-context-audit/deep/level23.cod": "0c17a11b052125a8d30131d428bc7a93a5cc7786ec4919ba8bc838b35c116712",
+    "/tmp/cod-world-context-audit/deep/level22.cod": "9a51075cee76b2d94cd44873002435ef173f1a7dc37f711ab8ad04981c884595",
+    "/tmp/cod-world-context-audit/deep/level21.cod": "44b32265a694e2829c80628eee33be8cdb2bb21e8c61dfe482f3f2f2e7538fcf",
+    "/tmp/cod-world-context-audit/deep/level20.cod": "2a2ee1bc3f6146cd624b4fb898b038e8244f84e055ab6fc67931635641a09f5c",
+    "/tmp/cod-world-context-audit/deep/level19.cod": "6ca46ce7b958bac57d5f51c72ebdc73fca7accb68b516a521883862bc7c9cc01",
+    "/tmp/cod-world-context-audit/deep/level18.cod": "463766f0870c51b50b9df564272986f4b0bea115b29e9d9753901394a277c309",
+    "/tmp/cod-world-context-audit/deep/level17.cod": "434778119a7f9045832c08175e3e056bf8dac5300e4e901153b2b38c542bbfd4",
+    "/tmp/cod-world-context-audit/deep/level16.cod": "46713b43c77261d4a42b9ab8b77f336d387e3249ba49714de7bd92d3fdfa1cce",
+    "/tmp/cod-world-context-audit/deep/level15.cod": "2ff8cfc3b231d8d2ddd12a2d023c13160c086873165426e0b031409ce794f7ae",
+    "/tmp/cod-world-context-audit/deep/level14.cod": "015fff949ddd92e099ea74b718c333c4662850c8be9e59a4d61c37e63a3301d1",
+    "/tmp/cod-world-context-audit/deep/level13.cod": "20f7f2bcf8086bd1325c5284a1f0df52f55bd29acea5be46d01247dda3b70cc3",
+    "/tmp/cod-world-context-audit/deep/level12.cod": "859f0630c6504c6b0e69f181f0fe51323d6dc74895ab7481b8375788be9de169",
+    "/tmp/cod-world-context-audit/deep/level11.cod": "0368d9ee5e03f9f7a48dc40c256b56217a100d0fda05f6c002df589f804bdbc7",
+    "/tmp/cod-world-context-audit/deep/level10.cod": "60a9ab5d2b0442b452441f91387954d67a68a352c1b4ea985aabbad0110c5452",
+    "/tmp/cod-world-context-audit/deep/level9.cod": "ad22f11a325a4ee735c6d2e538d397e101c2f71757efe32029110d31ef06506d",
+    "/tmp/cod-world-context-audit/deep/level8.cod": "02f74a716f0542fe75a777aabf891d3b593a97a9987a2f0aacb8df4bd27f12af",
+    "/tmp/cod-world-context-audit/deep/level7.cod": "cb8aece8e1dc98bddd5bad1f7bbb110a6383bb0d9dcc48273dd3c9d6b530b7c4",
+    "/tmp/cod-world-context-audit/deep/level6.cod": "f98f7a262008f452a9f2db6fbe612e50e5e9167899e70107ce3e547f98c40688",
+    "/tmp/cod-world-context-audit/deep/level5.cod": "6c632e6e67848eb0bdc07309a99e1cc914556cf0a1ddeecc0d5d5d653e162390",
+    "/tmp/cod-world-context-audit/deep/level4.cod": "bc1bb984ea58fe56b83be6dc64118bd2e16e7c5306f54dbc96ff718d5f2e4693",
+    "/tmp/cod-world-context-audit/deep/level3.cod": "bf485247c53a82f5b2240ee02bf4774f9eeb081a38e7a9f325e2c1f2c8eb5055",
+    "/tmp/cod-world-context-audit/deep/level2.cod": "def44ed39a1b854276b2de27605f3da4a81c4a446cfef15e9247ea95afd0d546",
+    "/tmp/cod-world-context-audit/deep/level1.cod": "753987f88f67d57f1cb035108dd1852f6a8e61f9ef69ac6f7a1a0890786f1de7",
+    "/tmp/cod-world-context-audit/deep/level0.cod": "5899b9d834fd3d0b9e71677cf09c812052b32f86e510065045ffb00f2ac850fb",
+    "/tmp/cod-world-context-audit/deep/frozen.cod": "e246ad7897046f3a32c375cb43a64ab65d8a3fbe17262836c7a8edb765e47778",
+    "tests/cod/language/region-pool.cod": "c04012856224f02bcc123719d2285a0816c1a5b249b5557d45cdad6ce5d3d693",
+    "tests/cod/language/reusable-pool.cod": "8c419916470087e496abd65158752e85faa713cb6342baa0df8e3b02575451e8",
+    "tests/cod/language/pool-interface.cod": "1af6f14226c1268bb300b3094e4eea152f4666d1d345e522e1b480e84bf29b60",
+    "tests/cod/language/pool-adapter.cod": "41b97211645bfaf87197be96eca737d5e2e6e48670bd504d2f2c99031fd116ff",
+    "tests/cod/language/pool-algorithms.cod": "df24fc171b75242e7473d95617ba46007b0756f88155f89b0a72171ff4cbf690",
+    "tests/cod/language/units-ambiguous.cod": "a97921741942cf18b0e58e5c26a8ce8594489fd85e8f357998789679887c957e",
+    "/tmp/cod-world-dependency-audit/nested.cod": "8e697e024acc4b3a76150e25d10253d60d35aad3a04fe55723584e8364dd73f6",
+    "/tmp/cod-world-dependency-audit/outer.cod": "ddba4d76b5c696350ec8949e37683e27901470bd07bb8f838add582c5fa4c329",
+    "tests/cod/language/method-nested-conflict.cod": "1c6c247904d551c8d5f1f39988c1331c14abdc2959dbd2627a0c746034be4d24"
+  },
+  "scratch_sources": {
+    "/tmp/cod-world-tls-audit/entry.cod": "using symbol \"std:io\" @assert;\nusing symbol \"std:io\" @print;\nusing \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state;\nsymbol from \"vocabulary.cod\" @state as @same_state;\nsymbol from \"vocabulary.cod\" @bias;\nsymbol first::proc() -> i64, second::proc() -> i64, view::proc() -> ref<Words>;\nusing \"first.cod\" @read as @first;\nusing \"second.cod\" @read as @second;\nusing \"first.cod\" @view as @view;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @state <- alloc @arena Words(1u64, 30);\neffect @bias <- 3;\nbehave @assert(perform @first() == 11);\nbehave @assert(perform @second() == 22);\nbehave @assert(behave @first() == 33);\nbehave @assert(behave @second() == 33);\nfor (i in 0u32 .. 3u32) {\n  effect @state <- alloc @arena Words(1u64, 40 + i64(i));\n  effect @bias <- 4;\n  behave @assert(@same_state[0u32] == 40 + i64(i));\n  behave @assert(behave @first() == 44 + i64(i));\n  behave @assert(perform @first() == 11);\n  behave @assert(perform @second() == 22);\n};\nbehave @assert(behave @first() == 33);\nbehave @assert(@same_state[0u32] == 30);\n{\n  let captured_view = perform @view();\n  store(captured_view, 0u32, 15);\n  behave @assert(perform @first() == 16);\n  behave @assert(perform @second() == 22);\n  behave @assert(behave @first() == 33);\n};\nbehave @print(perform @first());\nbehave @print(perform @second());\nbehave @print(behave @first());\n",
+    "/tmp/cod-world-tls-audit/vocabulary.cod": "array Words[u32]::i64;\nsymbol state::ref<Words>, bias::i64, read::proc() -> i64;\nexport Words;\nexport @state;\nexport @bias;\nexport @read;\n",
+    "/tmp/cod-world-tls-audit/first.cod": "using \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state as @data;\nsymbol from \"vocabulary.cod\" @bias as @level;\nsymbol from \"vocabulary.cod\" @read;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @data <- alloc @arena Words(1u64, 10);\neffect @level <- 1;\nproc @read() -> i64 { @data[0u32] + @level }\nproc @view() -> ref<Words> { @data }\nexport @read;\nexport @view;\n",
+    "/tmp/cod-world-tls-audit/second.cod": "using \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state as @data;\nsymbol from \"vocabulary.cod\" @bias as @level;\nsymbol from \"vocabulary.cod\" @read;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @data <- alloc @arena Words(1u64, 20);\neffect @level <- 2;\nproc @read() -> i64 { @data[0u32] + @level }\nproc @view() -> ref<Words> { @data }\nexport @read;\nexport @view;\n",
+    "/tmp/cod-world-tls-audit/missing.cod": "using symbol \"std:io\" @assert;\nusing symbol \"std:io\" @print;\nusing \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state;\nsymbol from \"vocabulary.cod\" @state as @same_state;\nsymbol from \"vocabulary.cod\" @bias;\nsymbol first::proc() -> i64, second::proc() -> i64, view::proc() -> ref<Words>;\nusing \"first.cod\" @read as @first;\nusing \"second.cod\" @read as @second;\nusing \"first.cod\" @view as @view;\nbehave @first();\n",
+    "/tmp/cod-world-tls-audit/wrong-type.cod": "using symbol \"std:io\" @assert;\nusing symbol \"std:io\" @print;\nusing \"vocabulary.cod\" Words;\nsymbol from \"vocabulary.cod\" @state;\nsymbol from \"vocabulary.cod\" @state as @same_state;\nsymbol from \"vocabulary.cod\" @bias;\nsymbol first::proc() -> i64, second::proc() -> i64, view::proc() -> ref<Words>;\nusing \"first.cod\" @read as @first;\nusing \"second.cod\" @read as @second;\nusing \"first.cod\" @view as @view;\narray OtherWords[u32]::i64;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @state <- alloc @arena OtherWords(1u64, 30);\n",
+    "/tmp/cod-world-dependency-audit/entry.cod": "using symbol \"std:io\" @print;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" create;\nimport \"selected.cod\" through as twice;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod\" score as other;\nsymbol arena::region;\neffect @arena <- region(4096u64);\n{ let x = create(@arena); behave @print(twice(x)); behave @print(other(x)); };\n",
+    "/tmp/cod-world-dependency-audit/selected.cod": "export import \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod\" through;\n",
+    "/tmp/cod-world-dependency-audit/frozen.cod": "using symbol \"std:io\" @print;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" create;\nusing \"selected.cod\" through as twice;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod\" score as other;\nsymbol arena::region;\neffect @arena <- region(4096u64);\n{ let x = create(@arena); behave @print(twice(x)); behave @print(other(x)); };\n",
+    "/tmp/cod-world-context-audit/deep/entry.cod": "using symbol \"std:io\" @print;\nimport \"level63.cod\" Sample;\nimport \"level63.cod\" walk63;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod\" score as other;\nsymbol arena::region;\neffect @arena <- region(4096u64);\n{ let x = create(@arena); behave @print(walk63(x)); behave @print(other(x)); };\n",
+    "/tmp/cod-world-context-audit/deep/level63.cod": "export import \"level62.cod\" Sample;\nimport \"level62.cod\" walk62 as prior;\nfunction walk63(x::Sample)::i64 { prior(x) }\nexport walk63;\n",
+    "/tmp/cod-world-context-audit/deep/level62.cod": "export import \"level61.cod\" Sample;\nimport \"level61.cod\" walk61 as prior;\nfunction walk62(x::Sample)::i64 { prior(x) }\nexport walk62;\n",
+    "/tmp/cod-world-context-audit/deep/level61.cod": "export import \"level60.cod\" Sample;\nimport \"level60.cod\" walk60 as prior;\nfunction walk61(x::Sample)::i64 { prior(x) }\nexport walk61;\n",
+    "/tmp/cod-world-context-audit/deep/level60.cod": "export import \"level59.cod\" Sample;\nimport \"level59.cod\" walk59 as prior;\nfunction walk60(x::Sample)::i64 { prior(x) }\nexport walk60;\n",
+    "/tmp/cod-world-context-audit/deep/level59.cod": "export import \"level58.cod\" Sample;\nimport \"level58.cod\" walk58 as prior;\nfunction walk59(x::Sample)::i64 { prior(x) }\nexport walk59;\n",
+    "/tmp/cod-world-context-audit/deep/level58.cod": "export import \"level57.cod\" Sample;\nimport \"level57.cod\" walk57 as prior;\nfunction walk58(x::Sample)::i64 { prior(x) }\nexport walk58;\n",
+    "/tmp/cod-world-context-audit/deep/level57.cod": "export import \"level56.cod\" Sample;\nimport \"level56.cod\" walk56 as prior;\nfunction walk57(x::Sample)::i64 { prior(x) }\nexport walk57;\n",
+    "/tmp/cod-world-context-audit/deep/level56.cod": "export import \"level55.cod\" Sample;\nimport \"level55.cod\" walk55 as prior;\nfunction walk56(x::Sample)::i64 { prior(x) }\nexport walk56;\n",
+    "/tmp/cod-world-context-audit/deep/level55.cod": "export import \"level54.cod\" Sample;\nimport \"level54.cod\" walk54 as prior;\nfunction walk55(x::Sample)::i64 { prior(x) }\nexport walk55;\n",
+    "/tmp/cod-world-context-audit/deep/level54.cod": "export import \"level53.cod\" Sample;\nimport \"level53.cod\" walk53 as prior;\nfunction walk54(x::Sample)::i64 { prior(x) }\nexport walk54;\n",
+    "/tmp/cod-world-context-audit/deep/level53.cod": "export import \"level52.cod\" Sample;\nimport \"level52.cod\" walk52 as prior;\nfunction walk53(x::Sample)::i64 { prior(x) }\nexport walk53;\n",
+    "/tmp/cod-world-context-audit/deep/level52.cod": "export import \"level51.cod\" Sample;\nimport \"level51.cod\" walk51 as prior;\nfunction walk52(x::Sample)::i64 { prior(x) }\nexport walk52;\n",
+    "/tmp/cod-world-context-audit/deep/level51.cod": "export import \"level50.cod\" Sample;\nimport \"level50.cod\" walk50 as prior;\nfunction walk51(x::Sample)::i64 { prior(x) }\nexport walk51;\n",
+    "/tmp/cod-world-context-audit/deep/level50.cod": "export import \"level49.cod\" Sample;\nimport \"level49.cod\" walk49 as prior;\nfunction walk50(x::Sample)::i64 { prior(x) }\nexport walk50;\n",
+    "/tmp/cod-world-context-audit/deep/level49.cod": "export import \"level48.cod\" Sample;\nimport \"level48.cod\" walk48 as prior;\nfunction walk49(x::Sample)::i64 { prior(x) }\nexport walk49;\n",
+    "/tmp/cod-world-context-audit/deep/level48.cod": "export import \"level47.cod\" Sample;\nimport \"level47.cod\" walk47 as prior;\nfunction walk48(x::Sample)::i64 { prior(x) }\nexport walk48;\n",
+    "/tmp/cod-world-context-audit/deep/level47.cod": "export import \"level46.cod\" Sample;\nimport \"level46.cod\" walk46 as prior;\nfunction walk47(x::Sample)::i64 { prior(x) }\nexport walk47;\n",
+    "/tmp/cod-world-context-audit/deep/level46.cod": "export import \"level45.cod\" Sample;\nimport \"level45.cod\" walk45 as prior;\nfunction walk46(x::Sample)::i64 { prior(x) }\nexport walk46;\n",
+    "/tmp/cod-world-context-audit/deep/level45.cod": "export import \"level44.cod\" Sample;\nimport \"level44.cod\" walk44 as prior;\nfunction walk45(x::Sample)::i64 { prior(x) }\nexport walk45;\n",
+    "/tmp/cod-world-context-audit/deep/level44.cod": "export import \"level43.cod\" Sample;\nimport \"level43.cod\" walk43 as prior;\nfunction walk44(x::Sample)::i64 { prior(x) }\nexport walk44;\n",
+    "/tmp/cod-world-context-audit/deep/level43.cod": "export import \"level42.cod\" Sample;\nimport \"level42.cod\" walk42 as prior;\nfunction walk43(x::Sample)::i64 { prior(x) }\nexport walk43;\n",
+    "/tmp/cod-world-context-audit/deep/level42.cod": "export import \"level41.cod\" Sample;\nimport \"level41.cod\" walk41 as prior;\nfunction walk42(x::Sample)::i64 { prior(x) }\nexport walk42;\n",
+    "/tmp/cod-world-context-audit/deep/level41.cod": "export import \"level40.cod\" Sample;\nimport \"level40.cod\" walk40 as prior;\nfunction walk41(x::Sample)::i64 { prior(x) }\nexport walk41;\n",
+    "/tmp/cod-world-context-audit/deep/level40.cod": "export import \"level39.cod\" Sample;\nimport \"level39.cod\" walk39 as prior;\nfunction walk40(x::Sample)::i64 { prior(x) }\nexport walk40;\n",
+    "/tmp/cod-world-context-audit/deep/level39.cod": "export import \"level38.cod\" Sample;\nimport \"level38.cod\" walk38 as prior;\nfunction walk39(x::Sample)::i64 { prior(x) }\nexport walk39;\n",
+    "/tmp/cod-world-context-audit/deep/level38.cod": "export import \"level37.cod\" Sample;\nimport \"level37.cod\" walk37 as prior;\nfunction walk38(x::Sample)::i64 { prior(x) }\nexport walk38;\n",
+    "/tmp/cod-world-context-audit/deep/level37.cod": "export import \"level36.cod\" Sample;\nimport \"level36.cod\" walk36 as prior;\nfunction walk37(x::Sample)::i64 { prior(x) }\nexport walk37;\n",
+    "/tmp/cod-world-context-audit/deep/level36.cod": "export import \"level35.cod\" Sample;\nimport \"level35.cod\" walk35 as prior;\nfunction walk36(x::Sample)::i64 { prior(x) }\nexport walk36;\n",
+    "/tmp/cod-world-context-audit/deep/level35.cod": "export import \"level34.cod\" Sample;\nimport \"level34.cod\" walk34 as prior;\nfunction walk35(x::Sample)::i64 { prior(x) }\nexport walk35;\n",
+    "/tmp/cod-world-context-audit/deep/level34.cod": "export import \"level33.cod\" Sample;\nimport \"level33.cod\" walk33 as prior;\nfunction walk34(x::Sample)::i64 { prior(x) }\nexport walk34;\n",
+    "/tmp/cod-world-context-audit/deep/level33.cod": "export import \"level32.cod\" Sample;\nimport \"level32.cod\" walk32 as prior;\nfunction walk33(x::Sample)::i64 { prior(x) }\nexport walk33;\n",
+    "/tmp/cod-world-context-audit/deep/level32.cod": "export import \"level31.cod\" Sample;\nimport \"level31.cod\" walk31 as prior;\nfunction walk32(x::Sample)::i64 { prior(x) }\nexport walk32;\n",
+    "/tmp/cod-world-context-audit/deep/level31.cod": "export import \"level30.cod\" Sample;\nimport \"level30.cod\" walk30 as prior;\nfunction walk31(x::Sample)::i64 { prior(x) }\nexport walk31;\n",
+    "/tmp/cod-world-context-audit/deep/level30.cod": "export import \"level29.cod\" Sample;\nimport \"level29.cod\" walk29 as prior;\nfunction walk30(x::Sample)::i64 { prior(x) }\nexport walk30;\n",
+    "/tmp/cod-world-context-audit/deep/level29.cod": "export import \"level28.cod\" Sample;\nimport \"level28.cod\" walk28 as prior;\nfunction walk29(x::Sample)::i64 { prior(x) }\nexport walk29;\n",
+    "/tmp/cod-world-context-audit/deep/level28.cod": "export import \"level27.cod\" Sample;\nimport \"level27.cod\" walk27 as prior;\nfunction walk28(x::Sample)::i64 { prior(x) }\nexport walk28;\n",
+    "/tmp/cod-world-context-audit/deep/level27.cod": "export import \"level26.cod\" Sample;\nimport \"level26.cod\" walk26 as prior;\nfunction walk27(x::Sample)::i64 { prior(x) }\nexport walk27;\n",
+    "/tmp/cod-world-context-audit/deep/level26.cod": "export import \"level25.cod\" Sample;\nimport \"level25.cod\" walk25 as prior;\nfunction walk26(x::Sample)::i64 { prior(x) }\nexport walk26;\n",
+    "/tmp/cod-world-context-audit/deep/level25.cod": "export import \"level24.cod\" Sample;\nimport \"level24.cod\" walk24 as prior;\nfunction walk25(x::Sample)::i64 { prior(x) }\nexport walk25;\n",
+    "/tmp/cod-world-context-audit/deep/level24.cod": "export import \"level23.cod\" Sample;\nimport \"level23.cod\" walk23 as prior;\nfunction walk24(x::Sample)::i64 { prior(x) }\nexport walk24;\n",
+    "/tmp/cod-world-context-audit/deep/level23.cod": "export import \"level22.cod\" Sample;\nimport \"level22.cod\" walk22 as prior;\nfunction walk23(x::Sample)::i64 { prior(x) }\nexport walk23;\n",
+    "/tmp/cod-world-context-audit/deep/level22.cod": "export import \"level21.cod\" Sample;\nimport \"level21.cod\" walk21 as prior;\nfunction walk22(x::Sample)::i64 { prior(x) }\nexport walk22;\n",
+    "/tmp/cod-world-context-audit/deep/level21.cod": "export import \"level20.cod\" Sample;\nimport \"level20.cod\" walk20 as prior;\nfunction walk21(x::Sample)::i64 { prior(x) }\nexport walk21;\n",
+    "/tmp/cod-world-context-audit/deep/level20.cod": "export import \"level19.cod\" Sample;\nimport \"level19.cod\" walk19 as prior;\nfunction walk20(x::Sample)::i64 { prior(x) }\nexport walk20;\n",
+    "/tmp/cod-world-context-audit/deep/level19.cod": "export import \"level18.cod\" Sample;\nimport \"level18.cod\" walk18 as prior;\nfunction walk19(x::Sample)::i64 { prior(x) }\nexport walk19;\n",
+    "/tmp/cod-world-context-audit/deep/level18.cod": "export import \"level17.cod\" Sample;\nimport \"level17.cod\" walk17 as prior;\nfunction walk18(x::Sample)::i64 { prior(x) }\nexport walk18;\n",
+    "/tmp/cod-world-context-audit/deep/level17.cod": "export import \"level16.cod\" Sample;\nimport \"level16.cod\" walk16 as prior;\nfunction walk17(x::Sample)::i64 { prior(x) }\nexport walk17;\n",
+    "/tmp/cod-world-context-audit/deep/level16.cod": "export import \"level15.cod\" Sample;\nimport \"level15.cod\" walk15 as prior;\nfunction walk16(x::Sample)::i64 { prior(x) }\nexport walk16;\n",
+    "/tmp/cod-world-context-audit/deep/level15.cod": "export import \"level14.cod\" Sample;\nimport \"level14.cod\" walk14 as prior;\nfunction walk15(x::Sample)::i64 { prior(x) }\nexport walk15;\n",
+    "/tmp/cod-world-context-audit/deep/level14.cod": "export import \"level13.cod\" Sample;\nimport \"level13.cod\" walk13 as prior;\nfunction walk14(x::Sample)::i64 { prior(x) }\nexport walk14;\n",
+    "/tmp/cod-world-context-audit/deep/level13.cod": "export import \"level12.cod\" Sample;\nimport \"level12.cod\" walk12 as prior;\nfunction walk13(x::Sample)::i64 { prior(x) }\nexport walk13;\n",
+    "/tmp/cod-world-context-audit/deep/level12.cod": "export import \"level11.cod\" Sample;\nimport \"level11.cod\" walk11 as prior;\nfunction walk12(x::Sample)::i64 { prior(x) }\nexport walk12;\n",
+    "/tmp/cod-world-context-audit/deep/level11.cod": "export import \"level10.cod\" Sample;\nimport \"level10.cod\" walk10 as prior;\nfunction walk11(x::Sample)::i64 { prior(x) }\nexport walk11;\n",
+    "/tmp/cod-world-context-audit/deep/level10.cod": "export import \"level9.cod\" Sample;\nimport \"level9.cod\" walk9 as prior;\nfunction walk10(x::Sample)::i64 { prior(x) }\nexport walk10;\n",
+    "/tmp/cod-world-context-audit/deep/level9.cod": "export import \"level8.cod\" Sample;\nimport \"level8.cod\" walk8 as prior;\nfunction walk9(x::Sample)::i64 { prior(x) }\nexport walk9;\n",
+    "/tmp/cod-world-context-audit/deep/level8.cod": "export import \"level7.cod\" Sample;\nimport \"level7.cod\" walk7 as prior;\nfunction walk8(x::Sample)::i64 { prior(x) }\nexport walk8;\n",
+    "/tmp/cod-world-context-audit/deep/level7.cod": "export import \"level6.cod\" Sample;\nimport \"level6.cod\" walk6 as prior;\nfunction walk7(x::Sample)::i64 { prior(x) }\nexport walk7;\n",
+    "/tmp/cod-world-context-audit/deep/level6.cod": "export import \"level5.cod\" Sample;\nimport \"level5.cod\" walk5 as prior;\nfunction walk6(x::Sample)::i64 { prior(x) }\nexport walk6;\n",
+    "/tmp/cod-world-context-audit/deep/level5.cod": "export import \"level4.cod\" Sample;\nimport \"level4.cod\" walk4 as prior;\nfunction walk5(x::Sample)::i64 { prior(x) }\nexport walk5;\n",
+    "/tmp/cod-world-context-audit/deep/level4.cod": "export import \"level3.cod\" Sample;\nimport \"level3.cod\" walk3 as prior;\nfunction walk4(x::Sample)::i64 { prior(x) }\nexport walk4;\n",
+    "/tmp/cod-world-context-audit/deep/level3.cod": "export import \"level2.cod\" Sample;\nimport \"level2.cod\" walk2 as prior;\nfunction walk3(x::Sample)::i64 { prior(x) }\nexport walk3;\n",
+    "/tmp/cod-world-context-audit/deep/level2.cod": "export import \"level1.cod\" Sample;\nimport \"level1.cod\" walk1 as prior;\nfunction walk2(x::Sample)::i64 { prior(x) }\nexport walk2;\n",
+    "/tmp/cod-world-context-audit/deep/level1.cod": "export import \"level0.cod\" Sample;\nimport \"level0.cod\" walk0 as prior;\nfunction walk1(x::Sample)::i64 { prior(x) }\nexport walk1;\n",
+    "/tmp/cod-world-context-audit/deep/level0.cod": "export import \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod\" Sample;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod\" through as prior;\nfunction walk0(x::Sample)::i64 { prior(x) }\nexport walk0;\n",
+    "/tmp/cod-world-context-audit/deep/frozen.cod": "using symbol \"std:io\" @print;\nimport \"level63.cod\" Sample;\nusing \"level63.cod\" walk63;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod\" score as other;\nsymbol arena::region;\neffect @arena <- region(4096u64);\n{ let x = create(@arena); behave @print(walk63(x)); behave @print(other(x)); };\n",
+    "/tmp/cod-world-dependency-audit/nested.cod": "using symbol \"std:io\" @print;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" create;\nimport \"outer.cod\" outer;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod\" through as other;\nsymbol arena::region;\neffect @arena <- region(4096u64);\nbehave @print(outer(create(@arena)));\n",
+    "/tmp/cod-world-dependency-audit/outer.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod\" through;\nfunction outer(x::Metric)::i64 { through(x) }\nexport outer;\n"
+  },
+  "tls_ir": {
+    "sha256": "c9fa460daa62ab357d269a4e60ba3ca7e6897537ce934c28cb25d180b5a72c33",
+    "shared_data_symbol_slots": [
+      "@effect.6 = internal thread_local global ptr null",
+      "@effect.7 = internal thread_local global ptr null"
+    ],
+    "slot_count": 2
+  },
+  "scope": "H253 imported-dependency overload conflicts, distinct nested interpretations, using/direct-alias preservation, deep imports, identity-local composition, typed TLS/capture/restoration and pool reuse.",
+  "limits": [
+    "No full test scripts or relocation suite rerun.",
+    "No new conflict arbitration syntax or RTTI.",
+    "Broader language qualifier/owner/mailbox features remain separate."
+  ]
+}

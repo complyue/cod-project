@@ -1,0 +1,1 @@
+using "module-export-adapter.cod" private_read;

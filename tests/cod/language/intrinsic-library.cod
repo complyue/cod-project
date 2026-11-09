@@ -1,21 +1,21 @@
 symbol @bias :: i64;
 symbol @missing :: i64;
 symbol @raw_store :: proc(ref<f32>, f32) -> f32;
-type Box { value::i64; }
-regional type Cell { value::i64; }
+unit Box::i64;
+data Cell { value::i64; }
 unit Index::u32;
 array Scores[Index]::i64;
 function twice(value::i64)::i64 { value * 2 }
-function (len)(value::Box)::u64 { u64(value.value) }
+function (len)(value::Box)::u64 { u64(scalar(value)) }
 procedure (len)(value::i64)::u64 { u64(value + @bias) }
 procedure (len)(value::bool)::u64 { u64(@missing) }
-function (store)(value::Box, amount::i64)::Box { Box(value.value + amount) }
+function (store)(value::Box, amount::i64)::Box { Box(scalar(value) + amount) }
 function (=)(value::Box, amount::i64)::Box { Box(amount) }
 procedure (=)(cell::ref<Cell>, amount::i64)::i64 {
   setfield(cell, value, amount + @bias)
 }
 function ([]=)(value::Box, index::Index, amount::i64)::Box {
-  Box(value.value + i64(scalar(index)) + amount)
+  Box(scalar(value) + i64(scalar(index)) + amount)
 }
 procedure ([]=)(values::ref<Scores>, index::Index, amount::i64)::i64 {
   store(values, index, amount + @bias)
@@ -23,8 +23,22 @@ procedure ([]=)(values::ref<Scores>, index::Index, amount::i64)::i64 {
 procedure (store)(cell::ref<Cell>, amount::i64)::i64 {
   setfield(cell, value, twice(amount) + @bias)
 }
-function (+)(value::Box, step::i64)::Box { Box(value.value + step) }
+function (+)(value::Box, step::i64)::Box { Box(scalar(value) + step) }
 procedure (+)(cell::ref<Cell>, step::i64)::i64 {
   setfield(cell, value, deref(cell).value + step + @bias)
 }
 procedure @raw_store(target::ref<f32>, value::f32)::f32 { store(target, value) }
+
+export (+);
+export (=);
+export ([]=);
+export (len);
+export (store);
+export @bias;
+export @missing;
+export @raw_store;
+export Box;
+export Cell;
+export Index;
+export Scores;
+export twice;

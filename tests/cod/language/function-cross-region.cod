@@ -1,0 +1,9 @@
+data Node { value::i64; next::ref<Node>; }
+symbol first :: region, second :: region, node :: ref<Node>;
+function link(node::Node, child::ref<Node>) -> ref<Node> {
+  setfield(node, next, child)
+}
+effect @first <- region(4096u64);
+effect @second <- region(4096u64);
+effect @node <- alloc @first Node(1, null);
+link(deref(@node), alloc @second Node(2, null));

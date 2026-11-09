@@ -1,3 +1,6 @@
 // Shared identities; this module establishes no dynamic values.
 symbol @x :: i64;
 symbol @p :: proc() -> i64;
+
+export @p;
+export @x;

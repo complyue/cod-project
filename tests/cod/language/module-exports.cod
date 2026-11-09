@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+using "module-export-adapter.cod" Payload;
+using "module-export-adapter.cod" public_read;
+symbol @arena::region;
+effect @arena <- region(4096u64);
+{
+  let packet = create(@arena);
+  behave @print(read(packet));
+  behave @print(public_read(packet));
+};

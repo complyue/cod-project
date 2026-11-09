@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-regional type Node { value::i64; next::ref<Node>; }
+data Node { value::i64; next::ref<Node>; }
 symbol @arena :: region;
 symbol @tail :: ref<Node>;
 symbol @middle :: ref<Node>;

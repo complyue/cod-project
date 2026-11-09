@@ -3,3 +3,7 @@ symbol from "vocabulary.cod" @x;
 symbol @token :: i64;
 effect @x <- 99;
 behave @print(777);
+
+export @print;
+export @token;
+export @x;

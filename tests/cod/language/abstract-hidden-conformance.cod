@@ -1,0 +1,5 @@
+using "abstract-adapter.cod" rank;
+using "abstract-data.cod" Sample;
+symbol @arena::region;
+effect @arena <- region(1024u64);
+rank(deref(alloc @arena Sample(1)));

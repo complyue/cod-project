@@ -1,0 +1,33 @@
+using symbol "std:io" @assert;
+using symbol "std:io" @print;
+using units "reusable-pool.cod" {Slot};
+using "reusable-pool.cod" (==);
+using "pool-adapter.cod" Pool;
+symbol arena :: region;
+effect @arena <- region(8192u64);
+{
+  let pool = create(@arena, 4u32);
+  let occupation = used_bytes(@arena);
+  for (i in 0u32 .. 4u32) {
+    behave @assert(acquire(pool, i64(i) + 10) == Slot(i));
+  };
+  behave @assert(empty(pool));
+  behave @assert(acquire(pool, 999) == end_slot(pool));
+  behave @assert(read(pool, Slot(3u32)) == 13);
+  for (lap in 0u32 .. 10000u32) {
+    behave @assert(replace(pool, Slot(3u32), i64(lap)) == Slot(3u32));
+    behave @assert(replace(pool, Slot(1u32), -i64(lap)) == Slot(1u32));
+  };
+  let live_cell = locate(pool, Slot(3u32));
+  store(live_cell, 9998);
+  behave @assert(peek(pool, Slot(3u32)) == 9998);
+  store(live_cell, 9999);
+  behave @assert(peek(pool, Slot(3u32)) == 9999);
+  behave @assert(peek(pool, Slot(1u32)) == -9999);
+  behave @assert(used_bytes(@arena) == occupation);
+  // Preserve both live data and a nontrivial free chain for image relocation.
+  release(pool, Slot(1u32));
+  release(pool, Slot(3u32));
+  behave @assert(!empty(pool));
+  behave @print(used_bytes(@arena));
+};

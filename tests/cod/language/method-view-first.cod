@@ -1,0 +1,6 @@
+export import "method-view-library.cod" Sample;
+function score(x::Sample)::i64 { 7 }
+function run(arena::region)::i64 { through(create(arena)) }
+
+export run;
+export score;

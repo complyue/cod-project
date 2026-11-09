@@ -1,0 +1,376 @@
+{
+  "schema_version": 1,
+  "recorded_date": "2026-11-09",
+  "client_timezone": "America/Los_Angeles",
+  "registry_record": "K-391",
+  "scope": "Receiver-owned identity records, local/public aliases, read-only source selection, existing runtime binding/lifetime behavior",
+  "compiler": "build/bin/cod",
+  "compiler_sha256": "7a242cdfe1af512f60faaeddd8fe2781c8774f67310f0deb6f0cb765f2084236",
+  "source_sha256": {
+    "cod/lang_frontend.hh": "6e99c45a2e612e8273b5767ca7b02cfff401298f45d924d2666c5c0838d34c98",
+    "cod/lang_llvm.hh": "a27b2a2da2549766dace7843974d8032e137ea97712f531f7ee235da39ae4ed4",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3"
+  },
+  "fixture_sha256": {
+    "tests/cod/language/behave-without-caller.cod": "d4ea5df489907e187937110ea4c4faefc3c45eaa181aed78d2d0acc9cfab4fce",
+    "tests/cod/language/capture-scope-restore.cod": "9400f6b60703b00a14790c58ef3650a78d920dff0e036f3b3c46f42b4cdb606b",
+    "tests/cod/language/diamond-left.cod": "4cd5346e099a52a37a6ab4f11cb070cda451f7a04a4602888dde43105c806401",
+    "tests/cod/language/diamond-right.cod": "53bcaf0db8e0ec7d0d1457c17e52b4ffaa11c942c4a6e2152c95dc38cb8a21d7",
+    "tests/cod/language/diamond-shared.cod": "fac3ac1a78a3d49b764431e6dd5019d12f84b4c30189eee73f12088d38ace3c7",
+    "tests/cod/language/diamond-vocab.cod": "0af5a1aa7e4a5d33e2adf92978e2b4c1d1c8aefddec4a5e0bd9db4f2b2ebb4c3",
+    "tests/cod/language/global-resource.cod": "f621ca3f72105cc45ef8f315e1d46da96424d121fe6270905cd4ceeb5888b372",
+    "tests/cod/language/identity.cod": "ad3026443f0feb47c1c726e8a132712ed0f3b94250f8749996cb03332a2de476",
+    "tests/cod/language/math-source.cod": "56a196280305e27ddf1c4542d8ecf74bb78b99752166a31ce3164b17efab7114",
+    "tests/cod/language/method-context-library.cod": "a5abc602c0c56ea11038d8dc41a3b99c82d6ac8dd1efe4549a39b7db3e91bff2",
+    "tests/cod/language/method-context-reexport.cod": "df889eb0818de3664b9fa3833fec00e40c07068724ab049a67eae91439b4ee81",
+    "tests/cod/language/method-context-selection.cod": "987b07994a386e12ee37904532e172fbd323a02e36eb0129466d16a26f9bedac",
+    "tests/cod/language/method-library.cod": "a7a2b7c08f8e577e8128112e2e18c9878984c22498c0b0346e07b857a306655f",
+    "tests/cod/language/method-name-ambiguous.cod": "034b24b96e5cd5c5530072e62dde903532cbdf114d0f0fbc65a43ad2dce6d609",
+    "tests/cod/language/method-view-first.cod": "29e07c9bd9683ec4f10a8c16f2901630d55b54b512543aed99d3a41d1ba9cba8",
+    "tests/cod/language/method-view-library.cod": "60322c00509a5aa0731c330744363630935bd40c1f27900bb142d638509a0b5d",
+    "tests/cod/language/method-view-shadow.cod": "243678dbcd7d3581ef3164a5561b6183584f0fad68a00b14a5ca1b2899b05fd6",
+    "tests/cod/language/mixin-lexical-provider.cod": "1e6ce1eeb929f486e1d83b56b9e897a673b025b158fd59d0093fb5a4d240ba53",
+    "tests/cod/language/module-diamond.cod": "62d14f7619e20812694fe973e3d94a107097a8e0ddeacfd75806ce447b005496",
+    "tests/cod/language/module-export-adapter.cod": "965eecb86c8a59f06f158adc4c2131e142b3163f1ab7e13fbf0ff9ecaf4c4e5e",
+    "tests/cod/language/module-export-context-shadow.cod": "fe53ca474818733f0073c7637c2b494f513d9f68f539f1df6ad2f2715519e70b",
+    "tests/cod/language/module-export-library.cod": "e050bbc549b197bd387d83d74eff45a267c44db47dd52e108319d14f46a01c88",
+    "tests/cod/language/module-export-shadow.cod": "a11e70b0dd9ef1348bb4f993f14a86b31d87eda86542e64e0580e3833acca689",
+    "tests/cod/language/module-private-reexport.cod": "1e7413296039437aa8ef5d7d0a3ecb987bd21ccadc7a8353b62c0698ca042248",
+    "tests/cod/language/module-selection.cod": "93c413b552d4d153905cc0ecf9e7048162ab516963dc0a946f31c8ead1c04b1f",
+    "tests/cod/language/other-vocabulary.cod": "8cefa4c529c390f18927c49aeb25bbe9928049934fc0db20b9f0b7cdc3c364f8",
+    "tests/cod/language/procedure-library.cod": "774d8aaf353836592434645fd5953c19d528b96d94faee786ca5086a0c863058",
+    "tests/cod/language/procedure-vocabulary.cod": "739ad71a8712d69bbaf7e71884fd989635b64e948b3fc1e9e79dcbe555571e3d",
+    "tests/cod/language/product-library.cod": "aa3cf9d5267257d87bdc9eba0ed859785a5c99ab150ac1ac0932329d35286d15",
+    "tests/cod/language/region-escape.cod": "98ec7a347dd61d6843be91b43acd4f6a7f813c112259aa9a9c3fc45371cee5a9",
+    "tests/cod/language/region-module-behave.cod": "a7dcbc9e68091a007fce96bff945395dc8740298e5968fffd3386b61c8749581",
+    "tests/cod/language/region-owner-capture.cod": "7bae16a957e0b3af4c0bed80d088ab30690ae1c8602dc900377858cf1f8a2ccc",
+    "tests/cod/language/region-source.cod": "4e7352bc40d3de0d5147071d325716daa73067e0d250571ec63d31784b544045",
+    "tests/cod/language/source.cod": "8f1e3089f7adbadb02f90cb843d837380b029e314c1c2f5717c0557380c3883b",
+    "tests/cod/language/type-error.cod": "d1cb0b95fefa87f3123187ddead3ee021b65660da7d3248ae35d699d5344b4bb",
+    "tests/cod/language/units-aliased-bundle.cod": "8d2a53d84ed751004aafa24c8fa675764965b593d5ef9c0232de3d90cfe94fc0",
+    "tests/cod/language/units-library.cod": "72a6f682a2000dcd04165ac940e41af634e656ed657af9f825b32fb388c6cb41",
+    "tests/cod/language/units-procedure-source.cod": "b11ef79f1812b0fbc9426da93528bbcd31b32299b64b278e327021d5dc1de3f1",
+    "tests/cod/language/units-reexport.cod": "ebcf34532c8df2e3f399f05661e723a021d2c0eba86b4eb8932c76b070872bf5",
+    "tests/cod/language/vocabulary.cod": "a449821c30d7e38ba0baec1ef32facc7ca8a98d4b553509b71f378757f62ee1a",
+    "tests/cod/language/world-composition.cod": "39e7375a6e4ca6a0c7f89b52bcdc5ff58a623220c7a47880a61a167b48a00080",
+    "tests/cod/language/world-export-alias.cod": "1d476980042155b201bf0b9e406084851c2916e83bb1324a33b8726674dadce8",
+    "tests/cod/language/world-first.cod": "f3eafc7d293d207e407432ed31d3bffd78de1d493faff9e58c3ac40dcc5e278f",
+    "tests/cod/language/world-integration.cod": "13ea289bdf2298255a51962a493e5d65824536e71a6c0fbdfe9325a76b1c0760",
+    "tests/cod/language/world-second.cod": "de85df787fa0680289eabfab22685e01814f05a7e6f2973ca1bcef80b307f309",
+    "tests/cod/language/world-source-isolation.cod": "ee8d26919103ba55a54f1e6447213be29b76c73f354654768b8b15720806c5c7",
+    "tests/cod/language/world-vocabulary.cod": "75d8c85ea7e1033fedb33c5b39997e7803bf647f5e5c017bb819450e4c68ee14"
+  },
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "note": "Normal build also ran existing runtimes dependencies; no build configuration/toolchain files were edited."
+  },
+  "toolchain": "build",
+  "passed": 11,
+  "total": 11,
+  "results": [
+    {
+      "fixture": "world-composition.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/world-composition.cod"
+      ],
+      "exit_code": 0,
+      "output": "",
+      "expected": {
+        "file": "world-composition.cod",
+        "exit": 0,
+        "stdout": ""
+      },
+      "passed": true
+    },
+    {
+      "fixture": "world-source-isolation.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/world-source-isolation.cod"
+      ],
+      "exit_code": 2,
+      "output": "/ws/EvtWorks/cod-project/tests/cod/language/world-first.cod:3:40: expected /ws/EvtWorks/cod-project/tests/cod/language/world-vocabulary.cod::First, got /ws/EvtWorks/cod-project/tests/cod/language/world-vocabulary.cod::Second\n/ws/EvtWorks/cod-project/tests/cod/language/world-first.cod:3:40: note: in call to function 'score' defined at /ws/EvtWorks/cod-project/tests/cod/language/world-vocabulary.cod:4:1\n/ws/EvtWorks/cod-project/tests/cod/language/world-source-isolation.cod:9:3: note: in call to function 'local_score' defined at /ws/EvtWorks/cod-project/tests/cod/language/world-first.cod:3:1\n",
+      "expected": {
+        "file": "world-source-isolation.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "::First, got "
+      },
+      "passed": true
+    },
+    {
+      "fixture": "world-export-alias.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/world-export-alias.cod"
+      ],
+      "exit_code": 0,
+      "output": "",
+      "expected": {
+        "file": "world-export-alias.cod",
+        "exit": 0,
+        "stdout": ""
+      },
+      "passed": true
+    },
+    {
+      "fixture": "module-selection.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/module-selection.cod"
+      ],
+      "exit_code": 0,
+      "output": "1001\n401\n408\n907\n908\n1.25\n21\n11\n21\n26\n112\n122\n122\n",
+      "expected": {
+        "file": "module-selection.cod",
+        "exit": 0,
+        "stdout": "1001\n401\n408\n907\n908\n1.25\n21\n11\n21\n26\n112\n122\n122\n"
+      },
+      "passed": true
+    },
+    {
+      "fixture": "module-private-reexport.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/module-private-reexport.cod"
+      ],
+      "exit_code": 2,
+      "output": "/ws/EvtWorks/cod-project/tests/cod/language/module-private-reexport.cod:1:1: module '/ws/EvtWorks/cod-project/tests/cod/language/module-export-adapter.cod' does not export 'private_read'\n",
+      "expected": {
+        "file": "module-private-reexport.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "does not export 'private_read'"
+      },
+      "passed": true
+    },
+    {
+      "fixture": "region-owner-capture.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/region-owner-capture.cod"
+      ],
+      "exit_code": 0,
+      "output": "",
+      "expected": {
+        "file": "region-owner-capture.cod",
+        "exit": 0,
+        "stdout": ""
+      },
+      "passed": true
+    },
+    {
+      "fixture": "global-resource.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/global-resource.cod"
+      ],
+      "exit_code": 0,
+      "output": "888\n40\n",
+      "expected": {
+        "file": "global-resource.cod",
+        "exit": 0,
+        "stdout": "888\n40\n"
+      },
+      "passed": true
+    },
+    {
+      "fixture": "method-context-selection.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/method-context-selection.cod"
+      ],
+      "exit_code": 0,
+      "output": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n",
+      "expected": {
+        "file": "method-context-selection.cod",
+        "exit": 0,
+        "stdout": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n"
+      },
+      "passed": true
+    },
+    {
+      "fixture": "units-aliased-bundle.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/units-aliased-bundle.cod"
+      ],
+      "exit_code": 0,
+      "output": "2.5\n1.5\n4\n6\n",
+      "expected": {
+        "file": "units-aliased-bundle.cod",
+        "exit": 0,
+        "stdout": "2.5\n1.5\n4\n6\n"
+      },
+      "passed": true
+    },
+    {
+      "fixture": "module-diamond.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/module-diamond.cod"
+      ],
+      "exit_code": 0,
+      "output": "101\n3\n7\n3\n3\n3\n",
+      "expected": {
+        "file": "module-diamond.cod",
+        "exit": 0,
+        "stdout": "101\n3\n7\n3\n3\n3\n"
+      },
+      "passed": true
+    },
+    {
+      "fixture": "method-name-ambiguous.cod",
+      "command": [
+        "build/bin/cod",
+        "--run",
+        "tests/cod/language/method-name-ambiguous.cod"
+      ],
+      "exit_code": 2,
+      "output": "/ws/EvtWorks/cod-project/tests/cod/language/method-name-ambiguous.cod:5:1: ambiguous implicit callable 'score'; select its family with explicit using/import as\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:4:1: note: original callable family 'score'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-shadow.cod:2:1: note: original callable family 'score'\n",
+      "expected": {
+        "file": "method-name-ambiguous.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": [
+          "ambiguous implicit callable 'score'",
+          "method-view-library.cod:4:1: note: original callable family 'score'",
+          "method-view-shadow.cod:2:1: note: original callable family 'score'"
+        ]
+      },
+      "passed": true
+    }
+  ],
+  "tls_inspection": {
+    "ir_sha256": "d9d67bb9399a87d27ec3a0dc2a02b5d5e728a3c495b15ad8ab6c1f3bb27ec651",
+    "pointer_slots": [
+      "@effect.3 = internal thread_local global ptr null"
+    ],
+    "shared_symbol_has_one_flat_slot": true
+  },
+  "implementation": {
+    "removed": [
+      "MethodSelection and per-alias method vectors",
+      "lookup-time MethodWorld reconstruction",
+      "public_names visibility flags and public_associated repair metadata",
+      "require_export/check_exports source-name re-resolution",
+      "recursive cross-module symbol-alias lookup"
+    ],
+    "retained_for_semantics": [
+      "Identity-indexed information merge with exact method deduplication",
+      "Receiver-local virtual union membership by identity",
+      "Separate local and published alias maps",
+      "Read-only lexical/source module views and immutable shared procedure values",
+      "Captured/current binding and region lifetime checks"
+    ]
+  },
+  "limitations": [
+    "Focused direct compiler invocations only; full language/stress/relocation scripts were not run.",
+    "Grouped/per-signature exports and export-as source syntax are not introduced; existing selectors can rename before explicit export.",
+    "Remaining callable-context/extension questions and complete goal acceptance are not resolved by this evidence.",
+    "No cross-module world editor, runtime method-table mutation mechanism, or new regional representation."
+  ],
+  "tls_acceptance_audit": {
+    "scope": "Distinct/shared symbols, regional value from another module world, nominal type mismatch, demanded unbound symbol rejection, captured/current restoration and region escape rejection",
+    "passed": 6,
+    "total": 6,
+    "results": [
+      {
+        "file": "identity.cod",
+        "command": "COD_TEST_TOOLCHAIN=build build/bin/cod --run tests/cod/language/identity.cod",
+        "exit_code": 0,
+        "combined_output": "3\n8\n",
+        "expected": {
+          "file": "identity.cod",
+          "exit": 0,
+          "stdout": "3\n8\n"
+        },
+        "passed": true
+      },
+      {
+        "file": "region-module-behave.cod",
+        "command": "COD_TEST_TOOLCHAIN=build build/bin/cod --run tests/cod/language/region-module-behave.cod",
+        "exit_code": 0,
+        "combined_output": "23\n",
+        "expected": {
+          "file": "region-module-behave.cod",
+          "exit": 0,
+          "stdout": "23\n"
+        },
+        "passed": true
+      },
+      {
+        "file": "type-error.cod",
+        "command": "COD_TEST_TOOLCHAIN=build build/bin/cod --run tests/cod/language/type-error.cod",
+        "exit_code": 2,
+        "combined_output": "/ws/EvtWorks/cod-project/tests/cod/language/type-error.cod:5:8: incompatible value types for /ws/EvtWorks/cod-project/tests/cod/language/units-procedure-source.cod::@distance: expected /ws/EvtWorks/cod-project/tests/cod/language/units-procedure-source.cod::normalized, got /ws/EvtWorks/cod-project/tests/cod/language/type-error.cod::normalized\n",
+        "expected": {
+          "file": "type-error.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "incompatible value types for",
+            "units-procedure-source.cod::@distance",
+            "units-procedure-source.cod::normalized, got ",
+            "type-error.cod::normalized"
+          ]
+        },
+        "passed": true
+      },
+      {
+        "file": "behave-without-caller.cod",
+        "command": "COD_TEST_TOOLCHAIN=build build/bin/cod --run tests/cod/language/behave-without-caller.cod",
+        "exit_code": 2,
+        "combined_output": "/ws/EvtWorks/cod-project/tests/cod/language/source.cod:6:40: missing required binding /ws/EvtWorks/cod-project/tests/cod/language/vocabulary.cod::@x\n/ws/EvtWorks/cod-project/tests/cod/language/behave-without-caller.cod:4:22: note: in call to procedure '@p' defined at /ws/EvtWorks/cod-project/tests/cod/language/source.cod:6:1\n",
+        "expected": {
+          "file": "behave-without-caller.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": "missing required binding"
+        },
+        "passed": true
+      },
+      {
+        "file": "region-escape.cod",
+        "command": "COD_TEST_TOOLCHAIN=build build/bin/cod --run tests/cod/language/region-escape.cod",
+        "exit_code": 2,
+        "combined_output": "/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:4:27: regional result would outlive its owning scope\n/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:4:46: note: the escaping value depends on this region acquisition\n/ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:5:8: note: in call to procedure '@make' defined at /ws/EvtWorks/cod-project/tests/cod/language/region-escape.cod:4:1\n",
+        "expected": {
+          "file": "region-escape.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "outlive its owning scope",
+            "region-escape.cod:4:46: note: the escaping value depends on this region acquisition"
+          ]
+        },
+        "passed": true
+      },
+      {
+        "file": "capture-scope-restore.cod",
+        "command": "COD_TEST_TOOLCHAIN=build build/bin/cod --run tests/cod/language/capture-scope-restore.cod",
+        "exit_code": 0,
+        "combined_output": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n",
+        "expected": {
+          "file": "capture-scope-restore.cod",
+          "exit": 0,
+          "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n"
+        },
+        "passed": true
+      }
+    ]
+  }
+}

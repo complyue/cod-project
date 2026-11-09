@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T17:37:53.549309+00:00",
+  "registry_record": "K-344",
+  "human_decisions": [
+    "H-166",
+    "H-180",
+    "H-184",
+    "H-185",
+    "H-189",
+    "H-200",
+    "H-202",
+    "H-203",
+    "H-225"
+  ],
+  "toolchain": "build",
+  "compiler_sha256": "3150370e26f4fb8a1164acb5942e3458b2fa1464f7be82723e173a8a24a4156b",
+  "scope": "Allocation-owner provenance of a result-only associated procedure through current and captured dynamic calls.",
+  "sources": {
+    "factory.cod": "data Node { value::i64; next::ref<Node>; }\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nproc create(value::i64) -> ref<Node> { alloc @arena Node(value, null) }\n",
+    "valid.cod": "using symbol \"std:io\" @assert;\nusing \"factory.cod\" Node;\nsymbol from \"factory.cod\" @arena;\nsymbol @factory::proc(i64) -> ref<Node>;\neffect @factory <- create;\neffect @arena <- region(8192u64);\n{\n  let baseline = used_bytes(@arena);\n  let survivor = {\n    effect @arena <- region(4096u64);\n    let direct = create(11);\n    let current = behave @factory(13);\n    behave @assert(deref(direct).value == 11);\n    behave @assert(deref(current).value == 13);\n    setfield(direct, next, current);\n    behave @assert(deref(deref(direct).next).value == 13);\n    perform @factory(7)\n  };\n  behave @assert(deref(survivor).value == 7);\n  setfield(survivor, value, 17);\n  let again = perform @factory(19);\n  setfield(survivor, next, again);\n  behave @assert(deref(deref(survivor).next).value == 19);\n  behave @assert(used_bytes(@arena) == baseline);\n};\n",
+    "direct-escape.cod": "using \"factory.cod\" Node;\nsymbol from \"factory.cod\" @arena;\nsymbol @factory::proc(i64) -> ref<Node>;\neffect @factory <- create;\n{ let escaped = { effect @arena <- region(4096u64); create(11) }; deref(escaped) };\n",
+    "behave-escape.cod": "using \"factory.cod\" Node;\nsymbol from \"factory.cod\" @arena;\nsymbol @factory::proc(i64) -> ref<Node>;\neffect @factory <- create;\n{ let escaped = { effect @arena <- region(4096u64); behave @factory(11) }; deref(escaped) };\n"
+  },
+  "results": [
+    {
+      "entry": "valid.cod",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "entry": "direct-escape.cod",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "<probe>/direct-escape.cod:5:17: regional result would outlive its owning scope\n<probe>/direct-escape.cod:5:36: note: the escaping value depends on this region acquisition\n",
+      "passed": true
+    },
+    {
+      "entry": "behave-escape.cod",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "<probe>/behave-escape.cod:5:17: regional result would outlive its owning scope\n<probe>/behave-escape.cod:5:36: note: the escaping value depends on this region acquisition\n",
+      "passed": true
+    }
+  ],
+  "interpretation": [
+    "Selecting Node brings create(value::i64) -> ref<Node> without a separate callable selection.",
+    "Direct and behave calls allocate in the current inner region; their results can be linked within that owner but cannot escape its scope.",
+    "Perform uses the source procedure capture. Its result survives an unrelated inner resource scope, remains editable and can link to a later object allocated in the same captured region.",
+    "The hidden caller region retains its initial used_bytes value. The baseline includes the native region header, so this is compared with the measured initial value rather than zero."
+  ],
+  "source_sha256": {
+    "cod/lang_frontend.hh": "0ebd704360ca58194b9441ab6ac3d153481f863d293b2e98205d6672d26cf716",
+    "cod/lang_syntax.hh": "f4601a5186be865b600fff5863cddfe12210afb76893b9ba4db33a787cfa48d7",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df"
+  },
+  "raw_report": {
+    "path": "build/validation/language-20261108-factory-lifetimes.json",
+    "sha256": "5d85a8d6994e00b2541c2d3ecbdfc576128d1973abce110d268baae6047e36a8"
+  },
+  "limits": [
+    "Three temporary entries only; no permanent regression fixture, compiler, runtime or build configuration change.",
+    "The first probe incorrectly expected used_bytes of an empty region to be zero. Only that oracle was corrected; the initial run is retained in build/validation/language-20261108-factory-lifetimes-initial.json.",
+    "This verifies existing effect-held owners and borrowed results, not ordinary owning factories, typed make, general qualifiers or mailbox transfer.",
+    "No main build or full component run was repeated; K-342 identifies this compiler and K-341 identifies the last full 170-check report."
+  ]
+}

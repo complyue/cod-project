@@ -1,0 +1,302 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T17:00:02.966411+00:00",
+  "registry_record": "K-341",
+  "human_decisions": [
+    "H-225",
+    "H-226",
+    "H-227"
+  ],
+  "toolchain": "build",
+  "compiler_sha256": "fc0440b7ac28e0303c186ba4ae2610c1800f95baaf025289cc36f1479ac0943e",
+  "scope": "Source-visible associated signatures and implicit name priority; caller-selected ordinary implementations under stable callable identities; lexical compiler-operation views.",
+  "component": {
+    "passed": 170,
+    "total": 170,
+    "distinct_fixture_files": 168,
+    "selected_results": [
+      {
+        "fixture": "operator-using.cod",
+        "exit_code": 0,
+        "stdout": "12\n12\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "intrinsic-overloads.cod",
+        "exit_code": 0,
+        "stdout": "7\n8\n3\n9\n9\n99\n11\n7\n13\n8\n11\n6\n0\n0.25\n0.25\n4\n11\n12\n12\n24\n6\n11\n12\n22\n22\n101\n102\n103\n32\n32\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "function-memory.cod",
+        "exit_code": 0,
+        "stdout": "1\n2\n4\n405\n99\n7\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-types.cod",
+        "exit_code": 0,
+        "stdout": "17\n17\n4\n5\n17\n17\n1\n17\n29\n17\n17\n3\n3\n19.5\n19.5\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-hidden-conformance.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod:5:1: no matching method 'rank' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample): 2 available candidates\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod:5:1: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:6:1: note: candidate function 'rank' (Entity) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:7:1: note: candidate function 'rank' (Weighted) -> i64\n",
+        "passed": true
+      },
+      {
+        "fixture": "method-using-extension.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-using-extension.cod:2:1: extending selected callable 'local_score' requires import rather than using\n",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-join-narrowing.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:16:1: expected /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted, got /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:16:1: note: required interface is not established in module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:16:1: note: available value guarantee is /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Entity\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:7:3: note: in call to function 'narrow_sibling' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:16:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-fold-invariant.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:23:9: expected /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted, got /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:23:9: note: required interface is not established in module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:23:9: note: available value guarantee is /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Entity\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:5:1: note: in call to function 'forget_in_fold' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:22:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "method-views.cod",
+        "exit_code": 0,
+        "stdout": "14\n22\n25\n2\n19\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "method-view-ambiguous.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: ambiguous method 'score' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 3 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:4:1: note: candidate function 'score' (Metric) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: note: in call to function 'through' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "method-name-ambiguous.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-name-ambiguous.cod:5:1: ambiguous implicit callable 'score'; select its family with explicit using/import as\n",
+        "passed": true
+      }
+    ]
+  },
+  "composition": [
+    {
+      "case": "512-module-pure-chain-loop-inputs",
+      "passed": true,
+      "check_seconds": 0.08469980902737007,
+      "stdout": "140104863131\n",
+      "llvm_ir_bytes": 518554
+    },
+    {
+      "case": "1000-procedure-inline-chain-with-operation-leaf",
+      "passed": true,
+      "check_seconds": 0.08522543305298313,
+      "stdout": "1004\n1008\n9\n",
+      "llvm_ir_bytes": 1184316
+    },
+    {
+      "case": "layered-diamond-22-modules-2047-calls",
+      "passed": true,
+      "check_seconds": 0.06354670994915068,
+      "stdout": "3072\n",
+      "llvm_ir_bytes": 1192204
+    },
+    {
+      "case": "16-unit-reexports-31-conversion-steps-with-cycle",
+      "passed": true,
+      "check_seconds": 0.020031876978464425,
+      "stdout": "32\n",
+      "llvm_ir_bytes": 17922
+    },
+    {
+      "case": "96-level-regional-borrow-mixin-and-nominal-dispatch-chain",
+      "passed": true,
+      "check_seconds": 0.07367460598470643,
+      "stdout": "95\n4560\n11\n29\n29\n47\n",
+      "llvm_ir_bytes": 606415
+    }
+  ],
+  "native": {
+    "passed": true,
+    "llvm_artifact_roundtrip": true,
+    "graph": {
+      "relocation_passed": true,
+      "relocated_bytes": 120,
+      "region_header_bytes": 40,
+      "array_header_bytes": 16,
+      "record_bytes": 24
+    },
+    "pool": {
+      "relocation_passed": true,
+      "relocated_bytes": 152,
+      "slots": 4,
+      "cod_reuse_laps": 10000,
+      "bounded_occupation": true,
+      "relocated_free_chain": [
+        3,
+        1,
+        4
+      ],
+      "independent_native_reuse_passed": true
+    },
+    "owners": {
+      "owners_acquired": 4,
+      "owners_released": 4,
+      "release_order": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "live_resource_reads": 18,
+      "loop_iterations": 3,
+      "untaken_branch_acquires_nothing": true,
+      "captured_and_hidden_owners_survive_replay": true
+    }
+  },
+  "generic_pool": {
+    "sources": {
+      "operations.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" SlotStore;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nfunction lookup(pool::SlotStore, slot::Slot)::i64 { missing_pool_implementation(pool, slot) }\n",
+      "algorithm.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" SlotStore;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nusing \"operations.cod\" lookup;\nfunction total(pool::SlotStore, count::u32)::i64 { fold (i in 0u32 .. count, sum = 0) { sum + lookup(pool, Slot(i)) } }\n",
+      "adapter.cod": "import \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" Pool;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" SlotStore;\ndata Pool <: SlotStore;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" read;\nimport \"operations.cod\" lookup;\nfunction lookup(pool::Pool, slot::Slot)::i64 { read(pool, slot) }\nfunction adapter_total(pool::SlotStore, count::u32)::i64 { fold (i in 0u32 .. count, sum = 0) { sum + lookup(pool, Slot(i)) } }\n",
+      "direct.cod": "using symbol \"std:io\" @print;\nusing \"adapter.cod\" Pool;\nusing \"adapter.cod\" lookup;\nusing \"adapter.cod\" adapter_total;\nusing \"algorithm.cod\" total;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" create;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" acquire;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n  let pool = create(@arena, 2u32);\n  acquire(pool, 7);\n  acquire(pool, 11);\n  behave @print(lookup(pool, Slot(0u32)) + lookup(pool, Slot(1u32)));\n  behave @print(adapter_total(pool, 2u32));\n};\n",
+      "generic.cod": "using symbol \"std:io\" @print;\nusing \"adapter.cod\" Pool;\nusing \"adapter.cod\" lookup;\nusing \"adapter.cod\" adapter_total;\nusing \"algorithm.cod\" total;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" create;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" acquire;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n  let pool = create(@arena, 2u32);\n  acquire(pool, 7);\n  acquire(pool, 11);\n  behave @print(total(pool, 2u32));\n};\n"
+    },
+    "results": [
+      {
+        "entry": "direct.cod",
+        "exit_code": 0,
+        "stdout": "18\n18\n",
+        "stderr": ""
+      },
+      {
+        "entry": "generic.cod",
+        "exit_code": 0,
+        "stdout": "18\n",
+        "stderr": ""
+      }
+    ]
+  },
+  "boundary_probes": {
+    "sources": {
+      "hidden.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nfunction score(x::bool)::i64 { 9 }\nsymbol @r::region;\neffect @r <- region(4096u64);\nscore(create(@r));\n",
+      "extension-conflict.cod": "import \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-shadow.cod\" Sample as Same;\nfunction score(x::bool)::i64 { 9 }\n",
+      "units.cod": "unit m::f64;\nunit cm::f64;\nfunction divisor(x::i64)::f64 { 1.0 }\nconversion function to_m(x(cm))::m { m(scalar(x) / divisor(x)) }\nfunction amount(x(m*))::f64 { scalar(x) }\n",
+      "conversion.cod": "using symbol \"std:io\" @print;\nusing units \"units.cod\" {m, cm};\nusing \"units.cod\" amount;\nimport \"units.cod\" divisor;\nfunction divisor(x(cm))::f64 { 100.0 }\nbehave @print(amount(cm(200.0)));\n",
+      "conversion-procedure.cod": "using units \"units.cod\" {m, cm};\nusing \"units.cod\" amount;\nimport \"units.cod\" divisor;\nprocedure divisor(x(cm))::f64 { 100.0 }\namount(cm(200.0));\n"
+    },
+    "results": [
+      {
+        "entry": "hidden.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/hidden.cod:5:1: expected bool, got /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample\n<probe>/hidden.cod:5:1: note: in call to function 'score' defined at <probe>/hidden.cod:2:1\n",
+        "expected": {
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": "expected bool"
+        },
+        "passed": true
+      },
+      {
+        "entry": "extension-conflict.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/extension-conflict.cod:3:1: ambiguous implicit callable 'score'; select its family with explicit using/import as\n",
+        "expected": {
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": "ambiguous implicit callable 'score'"
+        },
+        "passed": true
+      },
+      {
+        "entry": "conversion.cod",
+        "exit_code": 0,
+        "stdout": "2\n",
+        "stderr": "",
+        "expected": {
+          "exit": 0,
+          "stdout": "2\n",
+          "stderr_contains": ""
+        },
+        "passed": true
+      },
+      {
+        "entry": "conversion-procedure.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/units.cod:4:52: a function cannot invoke a procedure\n<probe>/conversion-procedure.cod:5:1: note: in call to function 'to_m' defined at <probe>/units.cod:4:1\n",
+        "expected": {
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": "a function cannot invoke a procedure"
+        },
+        "passed": true
+      }
+    ]
+  },
+  "source_sha256": {
+    "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
+    "cod/lang_syntax.hh": "f4601a5186be865b600fff5863cddfe12210afb76893b9ba4db33a787cfa48d7",
+    "cod/lang_frontend.hh": "98528e8e6d6f37af64035d999fc480459b0b376d7625c6900a201c0674aedce4",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/cases.json": "c3af737ac4dcc2831c52897ee599813e373bb419ac8ef2115856ad61f6ad5319",
+    "tests/cod/language/method-name-ambiguous.cod": "034b24b96e5cd5c5530072e62dde903532cbdf114d0f0fbc65a43ad2dce6d609",
+    "tests/cod/language/method-view-ambiguous.cod": "51b2dde1c3312a8b2fc451755813e91b0585baa3f879c360a0d92e49d364db8d",
+    "tests/cod/language/method-view-first.cod": "99e49d87ce14af5a4a60a1b9c18a6d011e76e2fba3949fe24d8ec84bdefd4ffd",
+    "tests/cod/language/method-view-library.cod": "b99d4a6caaa9f575c253ceb6d33bfb1734ac96499001c33f2283f8c1e1a30a29",
+    "tests/cod/language/method-view-second.cod": "076acb7e1dc83b33e3e780e38eff3e5ca6cee4ca027591ed109f8853f1648d1f",
+    "tests/cod/language/method-view-shadow.cod": "b8a17bf6d4da3f34634f4b87b31bb976fc1fce74207791ef10e408e60190172b",
+    "tests/cod/language/method-views.cod": "c4eef1acad9b86605b66885782f20ba89a2a91dc8021a9e7024d3f05a6647e5d"
+  },
+  "raw_evidence": [
+    {
+      "path": "build/validation/language-20261108-associated-final-build.log",
+      "sha256": "110db2b5344d57f5add7a0fbb1d338e8879760e34fc0b13bd20978b4ace009a3"
+    },
+    {
+      "path": "build/validation/language-20261108-associated-final.json",
+      "sha256": "aedf8a363ccd6e2d3e336fc72d8ec79a26f7a9064ce8825ef04710f413dd3a08"
+    },
+    {
+      "path": "build/validation/language-20261108-associated-final-stress.json",
+      "sha256": "00c8712c2802d137105382d14639c7d5e0645ba4930fa6f1f33d8cd17eaeeb1c"
+    },
+    {
+      "path": "build/validation/language-20261108-associated-final-native.json",
+      "sha256": "884958b7173ded75afb00b280d85687ddd9b31d1e05e1e045c2b70143485c278"
+    },
+    {
+      "path": "build/validation/language-20261108-caller-pool.json",
+      "sha256": "2fb22a8b186cba03365ffd9130072c9c83a3a8db4eace2519dcc04cb772eb3d4"
+    },
+    {
+      "path": "build/validation/language-20261108-method-boundaries.json",
+      "sha256": "d2c1b80ceb9bcd2a6ddb2ad9cf02f31e455beb9de30436feb5e84b6f9374688b"
+    }
+  ],
+  "limits": [
+    "Standalone abstract signatures, generic root-policy/owned/const source forms, ordinary ownership moves and mailbox operations remain unfinished.",
+    "Compiler operation/intrinsic candidates remain lexical; UoM one-shot selection and conversion sequencing remain unchanged.",
+    "Caller implementations do not globally publish conformance or replace source callable identity.",
+    "Separate equally specific selected implementations remain ambiguous within one effective call path.",
+    "Historical method-context observations retain their original compiler and are not rewritten as current acceptance."
+  ]
+}

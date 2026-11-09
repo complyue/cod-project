@@ -1,10 +1,29 @@
 using symbol "std:io" @print;
-type Sum { total::f32; count::i64; }
-function accumulate(n::i64)::Sum {
-  fold (i in 0 .. n, result = Sum(0.0f32, 0)) {
-    Sum(result.total + 0.25f32, result.count + 1)
+data Sum { total::f32; count::i64; }
+function accumulate(n::i64, result::Sum)::Sum {
+  fold (i in 0 .. n, current = result) {
+    setfield(current, total, current.total + 0.25f32);
+    setfield(current, count, current.count + 1);
+    current
   }
 }
-global result::Sum = accumulate(8);
-behave @print(result.total);
-behave @print(result.count);
+array Values[u32]::i64;
+function alternate(first::Values, second::Values, steps::u32)::Values {
+  fold (i in 0u32 .. steps, target = first) {
+    store(target, 0u32, target[0u32] + 1);
+    if (i % 2u32 == 0u32) { second } else { first }
+  }
+}
+symbol @arena::region;
+effect @arena <- region(1024u64);
+{
+  let result = accumulate(8, deref(alloc @arena Sum(0.0f32, 0)));
+  behave @print(result.total);
+  behave @print(result.count);
+  let first = deref(alloc @arena Values(1u64, 10));
+  let second = deref(alloc @arena Values(1u64, 20));
+  behave @print(alternate(first, second, 0u32)[0u32]);
+  let final = alternate(first, second, 3u32);
+  behave @print(first[0u32]);
+  behave @print(final[0u32]);
+};

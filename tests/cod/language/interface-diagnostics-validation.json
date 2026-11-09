@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T09:59:55.965465+00:00",
+  "registry_record": "K-327",
+  "toolchain": "build",
+  "backend": "llvm",
+  "scope": "Method lookup context, declared candidate signatures and retained abstract guarantees in compiler diagnostics.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "log": "build/validation/language-20261108-interface-diagnostics-final-build.log",
+    "sha256": "d2cb19392fd957ead73532a59d1e1cfbdddc613cd4307129a7f8f80b1b52bf20"
+  },
+  "acceptance": {
+    "passed": 9,
+    "total": 9,
+    "fixtures": [
+      "method-ambiguous.cod",
+      "method-no-match.cod",
+      "units-unavailable-overload.cod",
+      "abstract-types.cod",
+      "abstract-hidden-conformance.cod",
+      "abstract-ambiguous.cod",
+      "abstract-join-narrowing.cod",
+      "abstract-fold-invariant.cod",
+      "frontend-only"
+    ],
+    "diagnostics": {
+      "abstract-hidden-conformance.cod": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod:5:1: no matching method 'rank' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample): 2 available candidates\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod:5:1: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:5:1: note: candidate function 'rank' (Entity) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:6:1: note: candidate function 'rank' (Weighted) -> i64\n",
+      "abstract-ambiguous.cod": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: ambiguous method 'choose' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample, /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample): 2 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:4:1: note: candidate function 'choose' (Entity, Weighted) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:5:1: note: candidate function 'choose' (Weighted, Entity) -> i64\n",
+      "abstract-join-narrowing.cod": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:15:1: expected /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted, got /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:15:1: note: required interface is not established in module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:15:1: note: available value guarantee is /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Entity\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:7:3: note: in call to function 'narrow_sibling' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:15:1\n",
+      "abstract-fold-invariant.cod": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:22:9: expected /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted, got /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:22:9: note: required interface is not established in module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:22:9: note: available value guarantee is /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Entity\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:5:1: note: in call to function 'forget_in_fold' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:21:1\n"
+    }
+  },
+  "limits": [
+    "Diagnostics expose existing compile-time context; no dispatch, conformance or permission policy is changed.",
+    "Candidate annotations retain declaration spelling rather than triggering extra resolution during error reporting.",
+    "Broader prior validation retains its recorded compiler revision."
+  ],
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "fb557f8a44ac1fbfa8a1cafa59b5f5580c400bda6a4e2316f67b028d25797c40"
+  },
+  "source_sha256": {
+    "cod/lang_syntax.hh": "89da95f12a36d9e033dc944a53ccecdce4b675ce675d42d3a03145fb96d52082",
+    "cod/lang_frontend.hh": "f68500d59e378aa5859c682daff32d3d2ccfd642a36484b01134fa97d3020c29",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/cases.json": "ddd7f9e4966e7a8c45fb30737cfd6d1224a4d1fe14b837e9d5abcc020e4bbc6d",
+    "tests/cod/language/abstract-library.cod": "563ceec7b4a9b337cc5b0ed6593f14d2a0e545e91ad7bb970437dd3cfde8d5d7",
+    "tests/cod/language/abstract-hidden-conformance.cod": "11d8823acba60b9e029e7d1b620f3fc82ead871c3e6e20760c5e9f69bf3c7ca2",
+    "tests/cod/language/abstract-ambiguous.cod": "d2b8d33e4c8052ab1c6785173c342aac49110536807674fb6700928c62923347",
+    "tests/cod/language/abstract-join-narrowing.cod": "fe73d39c8b06667a97a9b76005e730ce56d76e1374405337c5670064c02fa531",
+    "tests/cod/language/abstract-fold-invariant.cod": "0c3eaf68085b47ea18a619d1de2f1510c3f7ce6a9d8e3c42c075a61c10329b9c"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-interface-diagnostics-final-validation.json": "43f6c90d469fe62d663c6d529ccef439b61dc22e858b0f5cdc590d03620d548b"
+  }
+}

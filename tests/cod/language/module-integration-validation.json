@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T09:25:29.977030+00:00",
+  "registry_record": "K-324",
+  "toolchain": "build",
+  "backend": "llvm",
+  "scope": "Transitive import extensions, nominal common-parent joins, deep inherited dispatch and current language integration.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "log": "build/validation/language-20261108-common-parent-build.log",
+    "sha256": "40c0d3447ed6ef3317ce93ccff53e5ee94dd1bda070601e92294d58118022771"
+  },
+  "acceptance": {
+    "language": {
+      "passed": 164,
+      "total": 164
+    },
+    "focused": {
+      "passed": 10,
+      "total": 10
+    },
+    "composition": [
+      {
+        "case": "512-module-pure-chain-loop-inputs",
+        "passed": true,
+        "stdout": "140104863131\n",
+        "check_seconds": 0.04773536103311926,
+        "native_text_bytes": 15398
+      },
+      {
+        "case": "1000-procedure-inline-chain-with-operation-leaf",
+        "passed": true,
+        "stdout": "1004\n1008\n9\n",
+        "check_seconds": 0.07577105902601033,
+        "native_text_bytes": 550
+      },
+      {
+        "case": "layered-diamond-22-modules-2047-calls",
+        "passed": true,
+        "stdout": "3072\n",
+        "check_seconds": 0.05800637201173231,
+        "native_text_bytes": 454
+      },
+      {
+        "case": "16-unit-reexports-31-conversion-steps-with-cycle",
+        "passed": true,
+        "stdout": "32\n",
+        "check_seconds": 0.016418058017734438,
+        "native_text_bytes": 454
+      },
+      {
+        "case": "96-level-regional-mixin-and-nominal-dispatch-chain",
+        "passed": true,
+        "stdout": "95\n4560\n11\n29\n29\n47\n",
+        "check_seconds": 0.04530892800539732,
+        "native_text_bytes": 14905
+      }
+    ],
+    "representative_outputs": {
+      "method-modules.cod": "9\n12\n6\n7\n8\n8\n5\n",
+      "abstract-types.cod": "17\n2\n4\n5\n17\n17\n1\n17\n29\n"
+    },
+    "narrowing_diagnostic": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:15:1: expected /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted, got /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:7:3: note: in call to function 'narrow_sibling' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:15:1\n"
+  },
+  "limits": [
+    "Automatic associated-method selection and implicit name tiers remain unfinished.",
+    "Unrelated merged-family extension, cross-alias grants and full extension publication are not selected by this increment.",
+    "Common-parent evidence is compile-time only; concrete data type and one-owner conditional-reference requirements still apply.",
+    "No const/owned/make/reference-assignment/ordinary-transfer/mailbox acceptance is claimed."
+  ],
+  "source_sha256": {
+    "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
+    "cod/lang_syntax.hh": "89da95f12a36d9e033dc944a53ccecdce4b675ce675d42d3a03145fb96d52082",
+    "cod/lang_frontend.hh": "2e2430613a1a38ea2be1d43abd6eddb69c24a9d1a404694106cf5d4de11646a2",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
+    "tests/cod/language/cases.json": "6658bf0b7b7a7200952eb555469e818632ccbbc9c84702d6c542302cb72b4d3a",
+    "tests/cod/language/method-modules.cod": "e5444e613cc9a3230d61fabde3f9db3f71f8af78b8b6f264522536e0bc31612b",
+    "tests/cod/language/method-extension.cod": "408e7688268320f221716eacd58f1a6e4ba9f9e517d2abde0a0c1e83fa981e76",
+    "tests/cod/language/abstract-library.cod": "80de3be1fabae81313b6cc218333a19824bec254f82eedc74bc1fb1ed59d5009",
+    "tests/cod/language/abstract-second-adapter.cod": "1342877b73ca3f4b022c4a9722b40cfe4cde7920f93757b83ceee67c48bbddab",
+    "tests/cod/language/abstract-types.cod": "848b79035c47747b578edbcd86e873d37e971680ae459f934ffc7f42cf2c4ad9",
+    "tests/cod/language/abstract-join-narrowing.cod": "fe73d39c8b06667a97a9b76005e730ce56d76e1374405337c5670064c02fa531",
+    "tests/cod/language/stress_tests.py": "b947166011535a3a012d86ea15f920b269e044fd44cce57cba8e14301dd71224"
+  },
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "9cfd7509be8b008c024eed40e56772bb2f2aea4a792d60839d3e75d24b72516a"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-module-integration-validation.json": "5c35f0375e6822a087e41bf6501855349ccd18c57e99c53080eff1b05d834709",
+    "build/validation/language-20261108-common-parent-validation.json": "0af96d4a0572d10429a1bac08061455f55ccb865797028612d6981efedd260af",
+    "build/validation/language-20261108-common-parent-stress.json": "02434a34e1c0c1c5c20e439ed01ccefe9267be58f1755a2294affc9456f014ee"
+  },
+  "pre_fix_diagnostics": {
+    "build/validation/language-20261108-method-provenance-before.log": {
+      "exit_code": 2,
+      "sha256": "af1aae95a8954653ffe236d815e16db05c3cb594a66d1bfa57dd6de74dcea02d",
+      "text": "/ws/EvtWorks/cod-project/tests/cod/language/method-modules.cod:5:1: extending a merged source method set is outside this prototype\n"
+    },
+    "build/validation/language-20261108-common-parent-before.log": {
+      "exit_code": 2,
+      "sha256": "ea686cf0920387e77d6d8824e59e32c17073db917781e2e6024a33db487251b7",
+      "text": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:12:1: expected /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Entity, got /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-types.cod:29:17: note: in call to function 'choose_sibling' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:12:1\n"
+    }
+  }
+}

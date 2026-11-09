@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T11:44:16.084574+00:00",
+  "purpose": "Observe demanded implementation visibility for an interface-only algorithm over the existing regional pool.",
+  "toolchain": "build",
+  "compiler_sha256": "3cc158734a2a187e73b30fc7f0e93cff4a5eeca13ff10eca28888b48899aa211",
+  "source_sha256": {
+    "cod/lang_frontend.hh": "76900e78f1aec5136d262c3bc3e0f3fb3199c3af0de2af7f1655d9f3c55b4029",
+    "tests/cod/language/pool-interface.cod": "8a69db7ca21cc351b96c2a64ef97e29669f905d1f7c846772c6ad5b910a07eaf",
+    "tests/cod/language/reusable-pool.cod": "64491e2d16abf7e94d3c4bd751c0512ea702dfaa9c6c838d0c2b1a69e659b6ed"
+  },
+  "sources": {
+    "operations.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" SlotStore;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nfunction lookup(pool::SlotStore, slot::Slot)::i64 { missing_pool_implementation(pool, slot) }\n",
+    "algorithm.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" SlotStore;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nusing \"operations.cod\" lookup;\nfunction total(pool::SlotStore, count::u32)::i64 { fold (i in 0u32 .. count, sum = 0) { sum + lookup(pool, Slot(i)) } }\n",
+    "adapter.cod": "import \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" Pool;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" SlotStore;\ndata Pool <: SlotStore;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" read;\nimport \"operations.cod\" lookup;\nfunction lookup(pool::Pool, slot::Slot)::i64 { read(pool, slot) }\nfunction adapter_total(pool::SlotStore, count::u32)::i64 { fold (i in 0u32 .. count, sum = 0) { sum + lookup(pool, Slot(i)) } }\n",
+    "direct.cod": "using symbol \"std:io\" @print;\nusing \"adapter.cod\" Pool;\nusing \"adapter.cod\" lookup;\nusing \"adapter.cod\" adapter_total;\nusing \"algorithm.cod\" total;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" create;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" acquire;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n  let pool = create(@arena, 2u32);\n  acquire(pool, 7);\n  acquire(pool, 11);\n  behave @print(lookup(pool, Slot(0u32)) + lookup(pool, Slot(1u32)));\n  behave @print(adapter_total(pool, 2u32));\n};\n",
+    "generic.cod": "using symbol \"std:io\" @print;\nusing \"adapter.cod\" Pool;\nusing \"adapter.cod\" lookup;\nusing \"adapter.cod\" adapter_total;\nusing \"algorithm.cod\" total;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" create;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/reusable-pool.cod\" acquire;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n  let pool = create(@arena, 2u32);\n  acquire(pool, 7);\n  acquire(pool, 11);\n  behave @print(total(pool, 2u32));\n};\n"
+  },
+  "results": [
+    {
+      "entry": "direct.cod",
+      "mode": "--run",
+      "exit_code": 0,
+      "stdout": "18\n18\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "entry": "generic.cod",
+      "mode": "--check",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "<probe>/operations.cod:3:53: unavailable lexical function 'missing_pool_implementation'\n<probe>/algorithm.cod:4:95: note: in call to function 'lookup' defined at <probe>/operations.cod:3:1\n<probe>/generic.cod:15:17: note: in call to function 'total' defined at <probe>/algorithm.cod:4:1\n",
+      "passed": true
+    }
+  ],
+  "limits": [
+    "The operation body deliberately references a missing implementation to exercise existing demand checking; standalone abstract method declarations remain unimplemented.",
+    "The adapter-local total is an observation of current lookup behavior, not the proposed replacement for reusable interface-only algorithms.",
+    "No implicit-method, publication, runtime-dispatch or ownership policy is implemented."
+  ],
+  "registry_record": "K-337",
+  "raw_report": {
+    "path": "build/validation/language-20261108-pool-method-context-probes.json",
+    "sha256": "3785ba65c7024696d461f0e2e00127ca9174188087c8d04ba4091f2ff0c2fb3a"
+  }
+}

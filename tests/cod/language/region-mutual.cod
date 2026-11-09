@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-regional type Left { value::i64; right::ref<Right>; }
-regional type Right { value::f32; left::ref<Left>; }
+data Left { value::i64; right::ref<Right>; }
+data Right { value::f32; left::ref<Left>; }
 symbol @arena :: region;
 symbol @left :: ref<Left>;
 symbol @right :: ref<Right>;

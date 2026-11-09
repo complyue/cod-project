@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T04:08:33.642217+00:00",
+  "registry_record": "K-311",
+  "design_scope": "H-197/H-198; D-10r47/D-14r8",
+  "toolchain": "build",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "configuration_edits": false
+  },
+  "acceptance": {
+    "language": {
+      "passed": 152,
+      "total": 152,
+      "report": "validation.json"
+    },
+    "composition": {
+      "passed": 5,
+      "total": 5,
+      "report": "stress-validation.json"
+    },
+    "regional": {
+      "passed": true,
+      "report": "pool-validation.json",
+      "cases": [
+        "record/cycle relocation",
+        "function-based pool reuse and independent relocation",
+        "captured/hidden owner lifetime"
+      ]
+    }
+  },
+  "focused_sources": [
+    "function-memory.cod",
+    "global-memory-operation.cod",
+    "function-effect-write.cod",
+    "function-cross-region.cod",
+    "reusable-pool.cod"
+  ],
+  "contract": [
+    "Functions may mutate explicit regional inputs and invoke function memory overloads.",
+    "Dynamic reads/writes, perform/behave and selected procedure calls remain rejected.",
+    "Aliasing, cross-region field restrictions and regional reference provenance remain enforced.",
+    "Ordinary functions use mutable-state semantics; const-function is a future separate design."
+  ],
+  "limits": [
+    "Typed make, ordinary region owners and owning/borrowed whole-region argument/result types remain unimplemented pending their source contract.",
+    "Mailbox send is permitted by the language direction for explicit arguments, but no native transport is implemented.",
+    "Plain type still denotes bits products in this prototype; region-only user type migration remains outstanding.",
+    "No const-function mode or automatic read-only snapshot guarantee is provided.",
+    "Post-relocation pool reuse is performed by the independent C++ checker, not resumed CoD code."
+  ],
+  "source_and_report_sha256": {
+    "cod/lang_frontend.hh": "0b871136953b0d0ba599390031bb6165ef46fc830ee6032bbce4222514ac7ec1",
+    "cod/lang_syntax.hh": "4bc954a94b148a48ebfbbfc199e9e4bc9e376798b8a5d66447bff385e8d63786",
+    "cod/lang_llvm.hh": "cb72b1057c1e5c3ba2c01cabf50b8ffc98d96a3302862fce44b229b960a474ef",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/validation.json": "6bc58142f6ae0a3c6a5d95ed272e7c893d54b81289a868fbd0bc7cc656e7a1cb",
+    "tests/cod/language/stress-validation.json": "90389a1304d1b59b27d22e29a86023ba4c7188736b0485584e3579a9b2a6fc64",
+    "tests/cod/language/pool-validation.json": "6f304ce9cffe07863d6e110c30ec270a0640b986161d84525d02d738d53f96cd"
+  }
+}

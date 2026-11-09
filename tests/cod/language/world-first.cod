@@ -1,0 +1,7 @@
+using "world-vocabulary.cod" Entity;
+using "world-vocabulary.cod" First;
+function local_score(x::Entity)::i64 { score(x) }
+export First;
+export score;
+export first;
+export local_score;

@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T20:50:29.943877+00:00",
+  "registry_record": "K-356",
+  "toolchain": "build",
+  "compiler_sha256": "c16d406c5cd5dbb57467cba75be97cf5e3b51c846c5054b1a6ae0348404b8de5",
+  "scope": "Expose selected implementation contexts and selected procedure declarations in diagnostics; verify typed procedure values preserve captures and implementation context across eight forwarding modules.",
+  "focused": {
+    "passed": 11,
+    "total": 11,
+    "fixtures": [
+      "method-modules.cod",
+      "intrinsic-pure-error.cod",
+      "method-ambiguous.cod",
+      "method-no-match.cod",
+      "procedure-pure-call.cod",
+      "abstract-ambiguous.cod",
+      "method-context-selection.cod",
+      "method-views.cod",
+      "method-view-ambiguous.cod",
+      "method-name-ambiguous.cod",
+      "frontend-only"
+    ]
+  },
+  "composition": {
+    "recorded_utc": "2026-11-08T20:49:07.554825+00:00",
+    "compiler_sha256": "c16d406c5cd5dbb57467cba75be97cf5e3b51c846c5054b1a6ae0348404b8de5",
+    "sources": {
+      "typed-forwarding": {
+        "router.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nsymbol task::proc(Metric)->i64;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {effect @task <- p; perform @task(x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {effect @task <- p; behave @task(x)}\nexport captured; export current;\n",
+        "level0.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"router.cod\" captured as inner_captured;\nusing \"router.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level1.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level0.cod\" captured as inner_captured;\nusing \"level0.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level2.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level1.cod\" captured as inner_captured;\nusing \"level1.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level3.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level2.cod\" captured as inner_captured;\nusing \"level2.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level4.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level3.cod\" captured as inner_captured;\nusing \"level3.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level5.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level4.cod\" captured as inner_captured;\nusing \"level4.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level6.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level5.cod\" captured as inner_captured;\nusing \"level5.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level7.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level6.cod\" captured as inner_captured;\nusing \"level6.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "main.cod": "using symbol \"std:io\" @print;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-context-reexport.cod\" frozen_proc;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-context-reexport.cod\" adapted_proc;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nsymbol from \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" @bias;\nusing \"level7.cod\" captured;\nusing \"level7.cod\" current;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @bias <- 5;\n{let x=create(@arena);\nbehave @print(captured(frozen_proc,x));\nbehave @print(current(frozen_proc,x));\nbehave @print(captured(adapted_proc,x));\nbehave @print(current(adapted_proc,x));\nbehave @print(@bias);\n};\n"
+      },
+      "selected-procedure-boundary": {
+        "adapter.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" score;\nproc score(x::Sample)::i64 {7}\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" through;\n",
+        "main.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nusing \"adapter.cod\" through;\nsymbol arena::region; effect @arena <- region(4096u64);\nthrough(create(@arena));\n"
+      },
+      "selected-context-ambiguity": {
+        "method-view-ambiguous.cod": "using \"method-view-first.cod\" Sample;\nusing \"method-view-second.cod\" Sample as SameSample;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nthrough(create(@arena));\n"
+      }
+    },
+    "results": [
+      {
+        "case": "typed-forwarding",
+        "exit_code": 0,
+        "stdout": "2\n6\n8\n12\n5\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "selected-procedure-boundary",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: a function cannot invoke a procedure\n<probe>/selected-procedure-boundary/adapter.cod:3:1: note: selected procedure 'score' declared here\n<probe>/selected-procedure-boundary/main.cod:4:1: note: in call to function 'through' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1\n",
+        "passed": true
+      },
+      {
+        "case": "selected-context-ambiguity",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: ambiguous method 'through' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 2 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1: note: candidate function 'through' (Metric) -> i64; implementation context '/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod'\n",
+        "passed": true
+      }
+    ]
+  },
+  "before_purity_diagnostic": {
+    "recorded_utc": "2026-11-08T20:47:59.803421+00:00",
+    "compiler_sha256": "53784486e7c895ec4cadfecd2f160ae58a4672ba0017042934d2c7c40555bf4d",
+    "sources": {
+      "adapter.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" score;\nproc score(x::Sample)::i64 {7}\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" through;\n",
+      "main.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nusing \"adapter.cod\" through;\nsymbol arena::region; effect @arena <- region(4096u64);\nthrough(create(@arena));\n"
+    },
+    "result": {
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: a function cannot invoke a procedure\n<probe>/main.cod:4:1: note: in call to function 'through' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1\n"
+    }
+  },
+  "source_sha256": {
+    "cod/lang_frontend.hh": "662510eaf0bbac8d13e59b76f0c85bd1fbd9cffe31b1f3d726e1358de937d19b",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/method-context-library.cod": "c3a35f21f31141b13a12a44e779cf37174d3d7fa50dff82b1601444a9ba1031a",
+    "tests/cod/language/method-context-reexport.cod": "df889eb0818de3664b9fa3833fec00e40c07068724ab049a67eae91439b4ee81",
+    "tests/cod/language/method-view-library.cod": "dc0c0d63b1e8a8ffb986328d744d0badfcd54c9a70f6c7b4f140a36ca4814353",
+    "tests/cod/language/method-view-ambiguous.cod": "51b2dde1c3312a8b2fc451755813e91b0585baa3f879c360a0d92e49d364db8d",
+    "tests/cod/language/cases.json": "e7749cf5afa7013e6b3b01679ce0ea0080a8879085be57523a794a78a9de5bf7"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-method-context-diagnostics-focused.json": "93466c28a0ddd49d034ec050d0a6e85c853f0b479633e635612432fc8bf5e047",
+    "build/validation/language-20261108-procedure-context-final.json": "60a8e2a1182a7b8c4e8106b3aaae9c5839313cb3b16481094b0b0bd98fb5425f",
+    "build/validation/language-20261108-purity-context-before.json": "487d597e182d49881f5199a224aee765dcf1c98a4e20b71df2d4fcc10f66ecec",
+    "build/validation/language-20261108-method-context-diagnostics-build.log": "b22883a230e8340e564d4e5d3c0177cef0e0ec8a9051d73f3a15550cded84a63"
+  },
+  "limits": [
+    "Diagnostic-only compiler edits: acceptance/rejection, dispatch and runtime behavior are unchanged.",
+    "The earlier183/183 full report remains at K-355; this report is the current11-check focused scope and three composition checks.",
+    "Typed procedure forwarding is exercised through eight wrappers, not arbitrary runtime procedure alternatives.",
+    "No fresh relocation/performance claim or new ownership, qualifier, mailbox or compound-context policy."
+  ]
+}

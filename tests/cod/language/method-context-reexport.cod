@@ -1,0 +1,11 @@
+using "method-context-library.cod" frozen;
+using "method-context-library.cod" adapted;
+using "method-context-library.cod" score_alias as renamed_score;
+export renamed_score;
+
+export adapted;
+export frozen;
+using "method-context-library.cod" frozen_proc;
+using "method-context-library.cod" adapted_proc;
+export frozen_proc;
+export adapted_proc;

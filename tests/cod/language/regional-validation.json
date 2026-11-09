@@ -1,9 +1,13 @@
 {
-  "schema_version": 2,
-  "recorded_utc": "2026-11-07T13:43:32.326796+00:00",
+  "schema_version": 4,
+  "recorded_utc": "2026-11-08T23:45:11.062435+00:00",
   "platform": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
   "toolchain": "build",
   "passed": true,
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "6015b7aa040f4196b6a3ae3580a648c9479cc20eb2b72880b91cee997a68e688"
+  },
   "llvm_artifact_roundtrip": true,
   "layout": {
     "relocation_passed": true,
@@ -12,24 +16,77 @@
     "array_header_bytes": 16,
     "record_bytes": 24
   },
-  "frontend_seconds": 0.01628576498478651,
-  "native_compile_link_seconds": 1.6841269879951142,
-  "native_process_seconds": 0.0014420300140045583,
+  "frontend_seconds": 0.017238697968423367,
+  "native_compile_link_seconds": 1.6221700260648504,
+  "native_process_seconds": 0.0013219329994171858,
   "llvm_ir_bytes": 26516,
   "bitcode_bytes": 9580,
+  "pool": {
+    "layout": {
+      "relocation_passed": true,
+      "relocated_bytes": 152,
+      "slots": 4,
+      "cod_reuse_laps": 10000,
+      "bounded_occupation": true,
+      "relocated_free_chain": [
+        3,
+        1,
+        4
+      ],
+      "independent_native_reuse_passed": true
+    },
+    "frontend_seconds": 0.01839277194812894,
+    "native_compile_link_seconds": 1.5577981390524656,
+    "native_process_seconds": 0.001239416073076427,
+    "llvm_ir_bytes": 91250,
+    "bitcode_bytes": 24752
+  },
+  "resources": {
+    "layout": {
+      "owners_acquired": 4,
+      "owners_released": 4,
+      "release_order": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "live_resource_reads": 18,
+      "loop_iterations": 3,
+      "untaken_branch_acquires_nothing": true,
+      "captured_and_hidden_owners_survive_replay": true
+    },
+    "frontend_seconds": 0.013527211034670472,
+    "native_compile_link_seconds": 1.4451596399303526,
+    "native_process_seconds": 0.0018749700393527746,
+    "llvm_ir_bytes": 9479,
+    "bitcode_bytes": 5716
+  },
   "notes": [
     "The CoD program creates the inspected records, array, sharing and cycle through LLVM IR.",
-    "The region owner moves to another effect binding; the release hook requires one non-null release.",
-    "The release hook copies the whole image, frees the original, then checks references and mutation.",
-    "Only system services and the independent layout/relocation check use C++."
+    "Each relocation program retains one module-lifetime dynamic region; its hook checks one non-null release.",
+    "The hooks copy each whole image and free its original before inspecting relocated references.",
+    "The CoD pool uses mutable record views through explicit adapter conformance and reuses slots for 10000 laps without allocation.",
+    "Abstract calls preserve the owner of returned payload references; alias writes are observed by later pool reads.",
+    "An independent C++ check traverses and reuses the relocated free list; no CoD code resumes after relocation.",
+    "Slot release is a user-library membership change. Returning a live slot exactly once is its caller precondition.",
+    "The existing resource-capture fixture is instrumented at allocation/read/release boundaries, with no compiler changes.",
+    "Three loop iterations preserve captured/hidden owners, restore the outer binding and release each inner owner before the next acquisition.",
+    "An untaken branch acquires no owner; the module owner releases last. Allocation-address reuse is allowed after release."
   ],
   "source_sha256": {
-    "cod/lang_syntax.hh": "4bc954a94b148a48ebfbbfc199e9e4bc9e376798b8a5d66447bff385e8d63786",
-    "cod/lang_frontend.hh": "c486328a704bff350c10f63021105e8df17357071748f02013d8fc07f82f090a",
-    "cod/lang_llvm.hh": "cb72b1057c1e5c3ba2c01cabf50b8ffc98d96a3302862fce44b229b960a474ef",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_frontend.hh": "2ace336fcb08dd07e14b68ce3b92120a7383559fb92259bf8d7f7a13370265dd",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
     "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
     "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
-    "tests/cod/language/region-records.cod": "b2b519d501edcebc53cf48c568a30bfadd9ef5fbc75722eaaeb9fc4aa0635c25",
-    "tests/cod/language/regional_runtime_tests.py": "52d1bfd42f25289d1267ec00a7c0b28eb5855fd5dd79df0bd45a49d2831b3a0e"
+    "tests/cod/language/region-records.cod": "540cb59b7c1da0e0fb499f80c25f12e04e61f9fe163fcd3e343febdf4500a690",
+    "tests/cod/language/region-pool.cod": "c04012856224f02bcc123719d2285a0816c1a5b249b5557d45cdad6ce5d3d693",
+    "tests/cod/language/reusable-pool.cod": "8c419916470087e496abd65158752e85faa713cb6342baa0df8e3b02575451e8",
+    "tests/cod/language/pool-interface.cod": "1af6f14226c1268bb300b3094e4eea152f4666d1d345e522e1b480e84bf29b60",
+    "tests/cod/language/pool-adapter.cod": "41b97211645bfaf87197be96eca737d5e2e6e48670bd504d2f2c99031fd116ff",
+    "tests/cod/language/pool-algorithms.cod": "df24fc171b75242e7473d95617ba46007b0756f88155f89b0a72171ff4cbf690",
+    "tests/cod/language/region-owner-capture.cod": "7bae16a957e0b3af4c0bed80d088ab30690ae1c8602dc900377858cf1f8a2ccc",
+    "tests/cod/language/regional_runtime_tests.py": "89701cf465fa758af04e322015756919dc38a8efe6655ec24f88e7af5598ec84"
   }
 }

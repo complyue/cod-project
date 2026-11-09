@@ -37,11 +37,13 @@ def main():
         diagnostics = case.get("stderr_contains", "")
         if isinstance(diagnostics, str):
             diagnostics = [diagnostics]
+        expected_warnings = case.get("stderr_contains") and all(
+            "[-Wunit-conversion]" in line or "[-Wmulti-alias-extension]" in line
+            or (": note:" in line and any(message in line for message in diagnostics if message))
+            for line in result.stderr.splitlines())
         passed = (result.returncode == case["exit"] and result.stdout == case["stdout"]
                   and all(message in result.stderr for message in diagnostics)
-                  and (case["exit"] != 0 or result.stderr == "" or
-                       (case.get("stderr_contains") and all("[-Wunit-conversion]" in line
-                                                          for line in result.stderr.splitlines()))))
+                  and (case["exit"] != 0 or result.stderr == "" or expected_warnings))
         results.append({"fixture": case["file"], "command": command, "expected": case,
                         "exit_code": result.returncode, "stdout": result.stdout,
                         "stderr": result.stderr, "passed": passed})

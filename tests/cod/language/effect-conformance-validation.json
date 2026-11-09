@@ -1,0 +1,412 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T21:50:45.146230+00:00",
+  "registry_record": "K-364",
+  "toolchain": "build",
+  "scope": "Preserve the selected reference binding's compile-time conformance facts on symbolic reads and captured/current calls; do not retain old facts across rebinding.",
+  "compiler_sha256": "266ad6155615c736a93c98b718b3db31b1dfe62854dab76685982afbc796ec8e",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "warning": "Existing deprecated-this-capture warning in the LLVM OpenMP header; LLVM sources unchanged."
+  },
+  "before": {
+    "schema_version": 1,
+    "recorded_utc": "2026-11-08T21:47:13.021122+00:00",
+    "phase": "before",
+    "compiler_sha256": "4e9fbdc16fdd3504ba02274b94ddb4d6d16834ef77b5df69b752676ed1ebdf45",
+    "source_sha256": {
+      "cod/lang_frontend.hh": "a9922a14f02609ca2571c7d410c7a3504d06185a75fa9611516355efad64014b",
+      "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+      "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518"
+    },
+    "sources": {
+      "base.cod": "type Entity;\ntype Weighted <: Entity;\ntype Alternate <: Entity;\ndata Node { value::i64; }\nfunction rank(x::Entity)::i64 { 1 }\nfunction rank(x::Weighted)::i64 { 2 }\nexport Node; export Entity; export Weighted; export Alternate; export rank;\n",
+      "weighted.cod": "import \"base.cod\" Node;\nusing \"base.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(7) }\nexport create;\n",
+      "alternate.cod": "import \"base.cod\" Node;\nusing \"base.cod\" Alternate;\ndata Node <: Alternate;\nfunction create(arena::region)::ref<Node> { alloc arena Node(9) }\nexport create;\n"
+    },
+    "results": [
+      {
+        "name": "direct-reference",
+        "source": "using symbol \"std:io\" @print;\nusing \"base.cod\" Node;\nusing \"base.cod\" rank;\nusing \"weighted.cod\" create as weighted;\nusing \"alternate.cod\" create as alternate;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nbehave @print(rank(deref(weighted(@arena))));\n",
+        "exit_code": 0,
+        "stdout": "2\n",
+        "stderr": "",
+        "expected_exit": 0,
+        "expected_stdout": "2\n",
+        "stderr_contains": [],
+        "passed": true
+      },
+      {
+        "name": "symbolic-reference",
+        "source": "using symbol \"std:io\" @print;\nusing \"base.cod\" Node;\nusing \"base.cod\" rank;\nusing \"weighted.cod\" create as weighted;\nusing \"alternate.cod\" create as alternate;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nsymbol @node::ref<Node>;\neffect @node <- weighted(@arena);\nbehave @print(rank(deref(@node)));\n",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "$SCRATCH/symbolic-reference.cod:10:15: no matching method 'rank' for supplied argument types ($SCRATCH/base.cod::Node): 2 available candidates\n$SCRATCH/symbolic-reference.cod:10:15: note: method lookup uses module '$SCRATCH/symbolic-reference.cod'\n$SCRATCH/base.cod:5:1: note: candidate function 'rank' (Entity) -> i64\n$SCRATCH/base.cod:6:1: note: candidate function 'rank' (Weighted) -> i64\n",
+        "expected_exit": 0,
+        "expected_stdout": "2\n",
+        "stderr_contains": [],
+        "passed": false
+      },
+      {
+        "name": "capture-and-current",
+        "source": "using symbol \"std:io\" @print;\nusing \"base.cod\" Node;\nusing \"base.cod\" rank;\nusing \"weighted.cod\" create as weighted;\nusing \"alternate.cod\" create as alternate;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nsymbol @node::ref<Node>;\neffect @node <- weighted(@arena);\nproc @inspect() -> i64 { rank(deref(@node)) }\neffect @node <- alternate(@arena);\nbehave @print(perform @inspect());\nbehave @print(behave @inspect());\nbehave @print(rank(deref(@node)));\n",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "$SCRATCH/capture-and-current.cod:10:26: no matching method 'rank' for supplied argument types ($SCRATCH/base.cod::Node): 2 available candidates\n$SCRATCH/capture-and-current.cod:10:26: note: method lookup uses module '$SCRATCH/capture-and-current.cod'\n$SCRATCH/base.cod:5:1: note: candidate function 'rank' (Entity) -> i64\n$SCRATCH/base.cod:6:1: note: candidate function 'rank' (Weighted) -> i64\n$SCRATCH/capture-and-current.cod:12:23: note: in call to procedure '@inspect' defined at $SCRATCH/capture-and-current.cod:10:1\n",
+        "expected_exit": 0,
+        "expected_stdout": "2\n1\n1\n",
+        "stderr_contains": [],
+        "passed": false
+      },
+      {
+        "name": "no-fact-after-rebinding",
+        "source": "using symbol \"std:io\" @print;\nusing \"base.cod\" Node;\nusing \"base.cod\" rank;\nusing \"weighted.cod\" create as weighted;\nusing \"alternate.cod\" create as alternate;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nusing \"base.cod\" Weighted;\nsymbol @node::ref<Node>;\nfunction narrow(x::Weighted)::i64 { 2 }\neffect @node <- weighted(@arena);\neffect @node <- alternate(@arena);\nnarrow(deref(@node));\n",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "$SCRATCH/no-fact-after-rebinding.cod:13:1: expected $SCRATCH/base.cod::Weighted, got $SCRATCH/base.cod::Node\n$SCRATCH/no-fact-after-rebinding.cod:13:1: note: required interface is not established in module '$SCRATCH/no-fact-after-rebinding.cod'\n$SCRATCH/no-fact-after-rebinding.cod:13:1: note: in call to function 'narrow' defined at $SCRATCH/no-fact-after-rebinding.cod:10:1\n",
+        "expected_exit": 2,
+        "expected_stdout": "",
+        "stderr_contains": [
+          "required interface is not established"
+        ],
+        "passed": true
+      }
+    ],
+    "passed": 2,
+    "total": 4
+  },
+  "after": {
+    "schema_version": 1,
+    "recorded_utc": "2026-11-08T21:48:59.675500+00:00",
+    "phase": "after",
+    "compiler_sha256": "266ad6155615c736a93c98b718b3db31b1dfe62854dab76685982afbc796ec8e",
+    "source_sha256": {
+      "cod/lang_frontend.hh": "544a32ba5f86a17bf193ff5da62708726516d41af5a465b696cdfdbde94c09b3",
+      "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+      "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518"
+    },
+    "sources": {
+      "base.cod": "type Entity;\ntype Weighted <: Entity;\ntype Alternate <: Entity;\ndata Node { value::i64; }\nfunction rank(x::Entity)::i64 { 1 }\nfunction rank(x::Weighted)::i64 { 2 }\nexport Node; export Entity; export Weighted; export Alternate; export rank;\n",
+      "weighted.cod": "import \"base.cod\" Node;\nusing \"base.cod\" Weighted;\ndata Node <: Weighted;\nfunction create(arena::region)::ref<Node> { alloc arena Node(7) }\nexport create;\n",
+      "alternate.cod": "import \"base.cod\" Node;\nusing \"base.cod\" Alternate;\ndata Node <: Alternate;\nfunction create(arena::region)::ref<Node> { alloc arena Node(9) }\nexport create;\n"
+    },
+    "results": [
+      {
+        "name": "direct-reference",
+        "source": "using symbol \"std:io\" @print;\nusing \"base.cod\" Node;\nusing \"base.cod\" rank;\nusing \"weighted.cod\" create as weighted;\nusing \"alternate.cod\" create as alternate;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nbehave @print(rank(deref(weighted(@arena))));\n",
+        "exit_code": 0,
+        "stdout": "2\n",
+        "stderr": "",
+        "expected_exit": 0,
+        "expected_stdout": "2\n",
+        "stderr_contains": [],
+        "passed": true
+      },
+      {
+        "name": "symbolic-reference",
+        "source": "using symbol \"std:io\" @print;\nusing \"base.cod\" Node;\nusing \"base.cod\" rank;\nusing \"weighted.cod\" create as weighted;\nusing \"alternate.cod\" create as alternate;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nsymbol @node::ref<Node>;\neffect @node <- weighted(@arena);\nbehave @print(rank(deref(@node)));\n",
+        "exit_code": 0,
+        "stdout": "2\n",
+        "stderr": "",
+        "expected_exit": 0,
+        "expected_stdout": "2\n",
+        "stderr_contains": [],
+        "passed": true
+      },
+      {
+        "name": "capture-and-current",
+        "source": "using symbol \"std:io\" @print;\nusing \"base.cod\" Node;\nusing \"base.cod\" rank;\nusing \"weighted.cod\" create as weighted;\nusing \"alternate.cod\" create as alternate;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nsymbol @node::ref<Node>;\neffect @node <- weighted(@arena);\nproc @inspect() -> i64 { rank(deref(@node)) }\neffect @node <- alternate(@arena);\nbehave @print(perform @inspect());\nbehave @print(behave @inspect());\nbehave @print(rank(deref(@node)));\n",
+        "exit_code": 0,
+        "stdout": "2\n1\n1\n",
+        "stderr": "",
+        "expected_exit": 0,
+        "expected_stdout": "2\n1\n1\n",
+        "stderr_contains": [],
+        "passed": true
+      },
+      {
+        "name": "no-fact-after-rebinding",
+        "source": "using symbol \"std:io\" @print;\nusing \"base.cod\" Node;\nusing \"base.cod\" rank;\nusing \"weighted.cod\" create as weighted;\nusing \"alternate.cod\" create as alternate;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nusing \"base.cod\" Weighted;\nsymbol @node::ref<Node>;\nfunction narrow(x::Weighted)::i64 { 2 }\neffect @node <- weighted(@arena);\neffect @node <- alternate(@arena);\nnarrow(deref(@node));\n",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "$SCRATCH/no-fact-after-rebinding.cod:13:1: expected $SCRATCH/base.cod::Weighted, got $SCRATCH/base.cod::Node\n$SCRATCH/no-fact-after-rebinding.cod:13:1: note: required interface is not established in module '$SCRATCH/no-fact-after-rebinding.cod'\n$SCRATCH/no-fact-after-rebinding.cod:13:1: note: available value guarantee is $SCRATCH/base.cod::Alternate\n$SCRATCH/no-fact-after-rebinding.cod:13:1: note: in call to function 'narrow' defined at $SCRATCH/no-fact-after-rebinding.cod:10:1\n",
+        "expected_exit": 2,
+        "expected_stdout": "",
+        "stderr_contains": [
+          "required interface is not established"
+        ],
+        "passed": true
+      }
+    ],
+    "passed": 4,
+    "total": 4
+  },
+  "focused": {
+    "passed": 12,
+    "total": 12,
+    "results": [
+      {
+        "fixture": "region-capture.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/region-capture.cod"
+        ],
+        "expected": {
+          "file": "region-capture.cod",
+          "exit": 0,
+          "stdout": "8\n8\n11\nfalse\nfalse\n8\n13\n21\n34\n"
+        },
+        "exit_code": 0,
+        "stdout": "8\n8\n11\nfalse\nfalse\n8\n13\n21\n34\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "region-module-behave.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/region-module-behave.cod"
+        ],
+        "expected": {
+          "file": "region-module-behave.cod",
+          "exit": 0,
+          "stdout": "23\n"
+        },
+        "exit_code": 0,
+        "stdout": "23\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "region-module-perform.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/region-module-perform.cod"
+        ],
+        "expected": {
+          "file": "region-module-perform.cod",
+          "exit": 0,
+          "stdout": "7\n"
+        },
+        "exit_code": 0,
+        "stdout": "7\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "region-owner-capture.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/region-owner-capture.cod"
+        ],
+        "expected": {
+          "file": "region-owner-capture.cod",
+          "exit": 0,
+          "stdout": ""
+        },
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "capture-scope-restore.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/capture-scope-restore.cod"
+        ],
+        "expected": {
+          "file": "capture-scope-restore.cod",
+          "exit": 0,
+          "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n"
+        },
+        "exit_code": 0,
+        "stdout": "10020010\n100200100\n20010\n10010\n200100\n100\n10\n100\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-types.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-types.cod"
+        ],
+        "expected": {
+          "file": "abstract-types.cod",
+          "exit": 0,
+          "stdout": "17\n17\n4\n5\n17\n17\n1\n17\n29\n29\n17\n17\n3\n3\n19.5\n19.5\n"
+        },
+        "exit_code": 0,
+        "stdout": "17\n17\n4\n5\n17\n17\n1\n17\n29\n29\n17\n17\n3\n3\n19.5\n19.5\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-forwarding.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-forwarding.cod"
+        ],
+        "expected": {
+          "file": "abstract-forwarding.cod",
+          "exit": 0,
+          "stdout": "2\n2\n2\n2\n2\n2\n2\n2\n1\n1\n"
+        },
+        "exit_code": 0,
+        "stdout": "2\n2\n2\n2\n2\n2\n2\n2\n1\n1\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-hidden-conformance.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod"
+        ],
+        "expected": {
+          "file": "abstract-hidden-conformance.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "no matching method 'rank'",
+            "method lookup uses module",
+            "candidate function 'rank' (Entity) -> i64",
+            "candidate function 'rank' (Weighted) -> i64",
+            "abstract-hidden-conformance.cod'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod:5:1: no matching method 'rank' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample): 2 available candidates\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod:5:1: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:6:1: note: candidate function 'rank' (Entity) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:7:1: note: candidate function 'rank' (Weighted) -> i64\n",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-join-narrowing.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod"
+        ],
+        "expected": {
+          "file": "abstract-join-narrowing.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "::Weighted, got",
+            "in call to function 'narrow'",
+            "required interface is not established in module",
+            "available value guarantee is",
+            "::Entity",
+            "abstract-join-narrowing.cod'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted, got /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1: note: required interface is not established in module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1: note: available value guarantee is /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Entity\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:9:1: note: in call to function 'narrow' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-fold-invariant.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod"
+        ],
+        "expected": {
+          "file": "abstract-fold-invariant.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "a fold result must retain established conformance",
+            "::Sample <: ",
+            "::Weighted",
+            "in call to function 'lose'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:5:9: a fold result must retain established conformance /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample <: /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:9:1: note: in call to function 'lose' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:4:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "method-context-selection.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-context-selection.cod"
+        ],
+        "expected": {
+          "file": "method-context-selection.cod",
+          "exit": 0,
+          "stdout": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n"
+        },
+        "exit_code": 0,
+        "stdout": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
+          "--emit-llvm",
+          "/tmp/cod-language-check-wo19oke3/program.ll",
+          "--emit-bc",
+          "/tmp/cod-language-check-wo19oke3/program.bc"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ]
+  },
+  "source_sha256": {
+    "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_frontend.hh": "544a32ba5f86a17bf193ff5da62708726516d41af5a465b696cdfdbde94c09b3",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/cases.json": "54eb9b886d2382ac84712b055235080f0e7b7ee921b8de9a11ccc79a0242ebf8",
+    "tests/cod/language/abstract-adapter.cod": "4af10301df2a5b31707f82f1f7ef1bc636933ceddaae6297a448ee575395a88e",
+    "tests/cod/language/abstract-alternate-factory.cod": "41b8f38c07f0b9e67604acb107d03f5776f3900964f8b1812fdff2ba003d861a",
+    "tests/cod/language/abstract-forwarding.cod": "92818a02aaf20d08f5a7a34dbb6cb9343c0ac2ae40c245308828728069a86dae"
+  },
+  "negative_control": "The rejected post-rebind Weighted requirement reports Alternate as the available guarantee.",
+  "raw_evidence": [
+    {
+      "path": "build/validation/language-20261108-effect-conformance-before.json",
+      "sha256": "2617fda32983b3d9e4b2de4270efe8bd7d0d3230dbc1fec05d13196b1aaba6e3"
+    },
+    {
+      "path": "build/validation/language-20261108-effect-conformance-after.json",
+      "sha256": "66aa4b69ac2a5c0ded5bdaec338d8fcc7763e5e03642a3959d4dd8ac993d0d79"
+    },
+    {
+      "path": "build/validation/language-20261108-effect-conformance-focused.json",
+      "sha256": "f877f7c2c2e8951dfd6c883766ada34cd0ee991f02b1b940bdb50aba07aa55bd"
+    },
+    {
+      "path": "build/validation/language-20261108-effect-conformance-build.log",
+      "sha256": "785c0a5291c92039e8ae77802a395b2f7256e06c1a460ece041b528b7df98614"
+    }
+  ],
+  "limits": [
+    "Existing abstract-forwarding fixture is strengthened without adding a permanent case.",
+    "Supported typed-reference prototype behavior only; no new final-language permission for dynamic interior references.",
+    "No runtime representation, allocation, pointer encoding or ownership/capture lifetime change.",
+    "Known method-subset alias-order defect and value/call namespace review remain unresolved.",
+    "Earlier full-suite and native relocation reports retain their recorded compiler/source scope."
+  ]
+}

@@ -1,0 +1,9 @@
+using symbol "std:io" @assert;
+using "module-export-shadow.cod" read as published_read;
+using "module-export-context-shadow.cod" through as published_through;
+using "module-export-library.cod" create as packet;
+using "method-view-library.cod" create as sample;
+symbol @arena::region;
+effect @arena <- region(4096u64);
+behave @assert(published_read(packet(@arena)) == 9);
+behave @assert(published_through(sample(@arena)) == 14);

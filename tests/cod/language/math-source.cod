@@ -3,3 +3,8 @@ function seed() -> i64 { 20 * 2 }
 global base: i64 = seed();
 function add(x: i64) -> i64 { base + x }
 behave @print(888);
+
+export @print;
+export add;
+export base;
+export seed;

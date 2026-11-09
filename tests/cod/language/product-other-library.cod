@@ -1,1 +1,3 @@
-type Position { index::i64; weight::f32; }
+data Position { index::i64; weight::f32; }
+
+export Position;

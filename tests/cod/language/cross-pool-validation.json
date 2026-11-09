@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T22:57:14.990189+00:00",
+  "compiler_sha256": "6015b7aa040f4196b6a3ae3580a648c9479cc20eb2b72880b91cee997a68e688",
+  "source_sha256": {
+    "cod/lang_frontend.hh": "2ace336fcb08dd07e14b68ce3b92120a7383559fb92259bf8d7f7a13370265dd",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "tests/cod/language/pool-interface.cod": "1af6f14226c1268bb300b3094e4eea152f4666d1d345e522e1b480e84bf29b60",
+    "tests/cod/language/pool-algorithms.cod": "df24fc171b75242e7473d95617ba46007b0756f88155f89b0a72171ff4cbf690",
+    "tests/cod/language/pool-adapter.cod": "41b97211645bfaf87197be96eca737d5e2e6e48670bd504d2f2c99031fd116ff",
+    "tests/cod/language/reusable-pool.cod": "8c419916470087e496abd65158752e85faa713cb6342baa0df8e3b02575451e8"
+  },
+  "sources": {
+    "single.cod": "using units \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" {Slot};\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" read;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" cell;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" acquire;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" release;\narray OneSlot[Slot]::i64;\ndata Single { available::bool; payload::ref<OneSlot>; }\nfunction create_single(arena::region)::Single { deref(alloc arena Single(false, alloc arena OneSlot(1u64, 5))) }\nfunction read(pool::Single, slot::Slot)::i64 { deref(pool.payload)[slot] }\nfunction cell(pool::Single, slot::Slot)::ref<i64> { ref_at(pool.payload, slot) }\nfunction acquire(pool::Single, value::i64)::Slot {\n  if (pool.available) { setfield(pool, available, false); store(pool.payload, Slot(0u32), value); Slot(0u32) }\n  else { Slot(1u32) }\n}\nfunction release(pool::Single, slot::Slot)::void { setfield(pool, available, true); {} }\nexport Single; export create_single; export read; export cell; export acquire; export release;\n",
+    "single-adapter.cod": "export import \"single.cod\" Single;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" ReusableSlotStore;\ndata Single <: ReusableSlotStore;\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/pool-algorithms.cod\" replace;\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/pool-algorithms.cod\" peek;\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/pool-algorithms.cod\" locate;\n",
+    "copy.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" SlotStore;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" {Slot};\nfunction copy_into(destination::SlotStore, to::Slot, source::SlotStore, from::Slot)::ref<i64> {\n let target = cell(destination, to);\n store(target, read(source, from));\n target\n}\nfunction copy_keep_source(destination::SlotStore, to::Slot, source::SlotStore, from::Slot)::ref<i64> {\n copy_into(destination, to, source, from);\n cell(source, from)\n}\nexport copy_into; export copy_keep_source;\n",
+    "integration.cod": "export import \"/ws/EvtWorks/cod-project/tests/cod/language/pool-adapter.cod\" Pool;\nexport import \"single-adapter.cod\" Single;\nexport import \"copy.cod\" copy_into;\nexport import \"copy.cod\" copy_keep_source;\n",
+    "main.cod": "using symbol \"std:io\" @print;\nusing symbol \"std:io\" @assert;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" SlotStore;\nusing \"integration.cod\" Pool;\nusing \"integration.cod\" Single;\nusing \"integration.cod\" copy_into;\nusing \"integration.cod\" copy_keep_source;\nsymbol @source::region, @destination::region, @scratch::region;\neffect @source <- region(4096u64);\neffect @destination <- region(4096u64);\nproc transient_destination(source::SlotStore)::ref<i64> {\n effect @scratch <- region(4096u64);\n let destination = create_single(@scratch);\n copy_keep_source(destination, Slot(0u32), source, Slot(1u32))\n}\n{\n let pool = create(@source, 2u32);\n acquire(pool, 7);\n acquire(pool, 11);\n let single = create_single(@destination);\n let source_bytes = used_bytes(@source);\n let destination_bytes = used_bytes(@destination);\n let first = copy_into(single, Slot(0u32), pool, Slot(1u32));\n behave @print(deref(first));\n store(first, 31);\n behave @print(read(single, Slot(0u32)));\n behave @print(read(pool, Slot(1u32)));\n let second = copy_into(pool, Slot(0u32), single, Slot(0u32));\n behave @print(deref(second));\n store(second, 41);\n behave @print(read(pool, Slot(0u32)));\n behave @print(read(single, Slot(0u32)));\n let source_view = transient_destination(pool);\n store(source_view, 61);\n behave @print(read(pool, Slot(1u32)));\n behave @print(read(single, Slot(0u32)));\n behave @assert(used_bytes(@source) == source_bytes);\n behave @assert(used_bytes(@destination) == destination_bytes);\n};\n",
+    "escape.cod": "using symbol \"std:io\" @print;\nusing symbol \"std:io\" @assert;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" SlotStore;\nusing \"integration.cod\" Pool;\nusing \"integration.cod\" Single;\nusing \"integration.cod\" copy_into;\nusing \"integration.cod\" copy_keep_source;\nsymbol @source::region, @destination::region, @scratch::region;\neffect @source <- region(4096u64);\neffect @destination <- region(4096u64);\nproc escaped_destination(source::SlotStore)::ref<i64> {\n effect @scratch <- region(4096u64);\n let destination = create_single(@scratch);\n copy_into(destination, Slot(0u32), source, Slot(1u32))\n}\nescaped_destination(create(@source, 2u32));\n"
+  },
+  "results": [
+    {
+      "entry": "main.cod",
+      "mode": "--run",
+      "exit_code": 0,
+      "stdout": "11\n31\n11\n31\n41\n31\n61\n31\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "expected_stdout": "11\n31\n11\n31\n41\n31\n61\n31\n",
+      "required_diagnostic": "",
+      "seconds": 1.5676932210335508,
+      "passed": true
+    },
+    {
+      "entry": "escape.cod",
+      "mode": "--check",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "$SCRATCH/escape.cod:12:55: regional result would outlive its owning scope\n$SCRATCH/escape.cod:13:21: note: the escaping value depends on this region acquisition\n$SCRATCH/escape.cod:17:1: note: in call to procedure 'escaped_destination' defined at $SCRATCH/escape.cod:12:1\n",
+      "expected_exit": 2,
+      "expected_stdout": "",
+      "required_diagnostic": "regional result would outlive its owning scope",
+      "seconds": 0.020220816950313747,
+      "passed": true
+    }
+  ],
+  "registry_record": "K-374",
+  "toolchain": "build",
+  "scope": "One source algorithm combines selected read/cell implementations for two concrete pool layouts in distinct regions; returned scalar views retain the chosen owner.",
+  "raw_report": {
+    "path": "build/validation/language-20261108-cross-pool.json",
+    "sha256": "2d247f4d4183c0721fb930d937660a2ed5a978ce8f3d7ca8c34c88322b46d36a"
+  },
+  "limits": [
+    "No compiler/runtime/permanent fixture change; no additional build or repeated component/native suite.",
+    "This uses ordinary explicit-memory function calls and scalar load/store. It does not implement ordinary assignment/transfer operators, graph cloning, owner movement, const qualifiers, make or mailbox.",
+    "Single is the existing one-slot probe layout, with its caller preconditions retained; no new allocator or slot-liveness policy.",
+    "The positive program checks payload behavior, source-versus-destination reference provenance and unchanged occupation of both persistent regions. It does not instrument region-release counts or resume CoD after relocation."
+  ]
+}

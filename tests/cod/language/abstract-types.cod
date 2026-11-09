@@ -1,0 +1,45 @@
+using "abstract-library.cod" narrow_sibling;
+using symbol "std:io" @print;
+using "abstract-second-adapter.cod" Sample as Point;
+using "abstract-library.cod" Entity;
+using "abstract-library.cod" Weighted;
+using "abstract-library.cod" Separate;
+import "abstract-library.cod" rank;
+using "abstract-library.cod" relay;
+using "abstract-library.cod" upcast;
+import "abstract-library.cod" through;
+using "abstract-library.cod" choose_sibling;
+using "abstract-library.cod" repeat;
+using "abstract-library.cod" paired as combine;
+using "abstract-library.cod" pair_context;
+import "abstract-library.cod" adapted;
+import "abstract-library.cod" unit_context;
+using units "units-library.cod" {m, cm, mm};
+function rank(x::Point)::i64 { x.value }
+function reversed(x::Weighted)::i64 { 4 }
+function reversed(x::Entity)::i64 { 3 }
+function separate(x::Separate)::i64 { 5 }
+data Local <: Entity { value::i64; }
+symbol @arena::region;
+effect @arena <- region(4096u64);
+{
+  let point = deref(alloc @arena Point(17));
+  let alternate = deref(alloc @arena Point(29));
+  behave @print(rank(point));
+  behave @print(through(point));
+  behave @print(reversed(relay(point, false)));
+  behave @print(separate(point));
+  behave @print(rank(upcast(point)));
+  behave @print(relay(point, true).value);
+  let local = deref(alloc @arena Local(9));
+  behave @print(rank(local));
+  behave @print(choose_sibling(point, alternate, true).value);
+  behave @print(choose_sibling(point, alternate, false).value);
+  behave @print(narrow_sibling(point, alternate, false).value);
+  behave @print(repeat(point, 0u32).value);
+  behave @print(repeat(point, 3u32).value);
+  behave @print(combine(point, alternate));
+  behave @print(pair_context(point, alternate));
+  behave @print(adapted(point, mm(2500.0)));
+  behave @print(unit_context(point, mm(2500.0)));
+};

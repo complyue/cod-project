@@ -2,3 +2,7 @@ symbol from "vocabulary.cod" @x as @a;
 symbol from "vocabulary.cod" @x as @b;
 symbol @p :: proc() -> i64;
 procedure @p -> i64 { @a + @b }
+
+export @a;
+export @b;
+export @p;

@@ -11,3 +11,10 @@ function combine(x (normalized*), y::u64)::u64 { scalar(x) + y }
 procedure (+)(x (normalized*), y::u64)::u64 { scalar(x) + y }
 symbol @combine :: proc(normalized, u64) -> u64;
 procedure @combine(x (normalized*), y::u64)::u64 { scalar(x) + y }
+
+export (+);
+export @combine;
+export combine;
+export normalize;
+export normalized;
+export raw;

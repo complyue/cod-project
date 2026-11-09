@@ -1,10 +1,12 @@
 using symbol "std:io" @print;
-type Pair { x::i64; y::f64; }
-symbol @pair :: Pair;
-symbol @read :: proc() -> Pair;
-effect @pair <- Pair(7, 1.5);
-procedure @read()::Pair { @pair }
-effect @pair <- Pair(9, 2.5);
-behave @print((perform @read()).x);
-behave @print((behave @read()).x);
-behave @print(@pair.y);
+data Pair { x::i64; y::f64; }
+symbol @arena::region;
+symbol @pair::ref<Pair>;
+symbol @read::proc() -> ref<Pair>;
+effect @arena <- region(1024u64);
+effect @pair <- alloc @arena Pair(7, 1.5);
+procedure @read()::ref<Pair> { @pair }
+effect @pair <- alloc @arena Pair(9, 2.5);
+behave @print(deref(perform @read()).x);
+behave @print(deref(behave @read()).x);
+behave @print(deref(@pair).y);

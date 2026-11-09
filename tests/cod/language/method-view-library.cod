@@ -1,0 +1,25 @@
+type Metric;
+data Sample <: Metric { value::i64; }
+function create(arena::region)::Sample { deref(alloc arena Sample(3)) }
+function score(x::Metric)::i64 { 1 }
+function through(x::Metric)::i64 { private_bridge(x) + private_bridge(x) }
+function pointer_value(x::ref<Sample>)::i64 { deref(x).value }
+function unused(x::Unavailable)::i64 { missing_implementation(x) }
+function (len)(x::Sample)::i64 { x.value }
+
+export (len);
+export Metric;
+export Sample;
+export create;
+export pointer_value;
+export score;
+export through;
+export unused;
+
+symbol @bias::i64;
+effect @bias <- 1;
+proc scored(x::Metric)::i64 { private_bridge(x) + @bias }
+export @bias;
+export scored;
+
+function private_bridge(x::Metric)::i64 { score(x) }

@@ -1,0 +1,1 @@
+type OldProduct { value::i64; }

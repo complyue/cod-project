@@ -1,0 +1,18 @@
+using symbol "std:io" @assert;
+using "world-integration.cod" score as joined;
+using "world-integration.cod" zipped;
+using "world-integration.cod" relay;
+using "world-first.cod" first;
+using "world-second.cod" second;
+symbol @arena::region;
+effect @arena <- region(4096u64);
+{
+  let a = first(@arena);
+  let b = second(@arena);
+  behave @assert(joined(a) == 1);
+  behave @assert(joined(b) == 2);
+  behave @assert(zipped(a) == 1);
+  behave @assert(zipped(b) == 2);
+  behave @assert(relay(a) == 1);
+  behave @assert(relay(b) == 2);
+};

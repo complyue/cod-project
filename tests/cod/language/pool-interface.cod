@@ -1,0 +1,19 @@
+unit Slot::u32;
+function (==)(a (Slot), b (Slot))::bool { scalar(a) == scalar(b) }
+type SlotStore;
+type ReusableSlotStore <: SlotStore;
+
+// Demand-checked placeholders until standalone method declarations are available.
+function read(pool::SlotStore, slot::Slot)::i64 { missing_pool_read(pool, slot) }
+function cell(pool::SlotStore, slot::Slot)::ref<i64> { missing_pool_cell(pool, slot) }
+function acquire(pool::ReusableSlotStore, value::i64)::Slot { missing_pool_acquire(pool, value) }
+function release(pool::ReusableSlotStore, slot::Slot)::void { missing_pool_release(pool, slot) }
+
+export Slot;
+export (==);
+export ReusableSlotStore;
+export SlotStore;
+export read;
+export cell;
+export acquire;
+export release;

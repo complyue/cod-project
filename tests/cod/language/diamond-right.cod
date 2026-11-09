@@ -6,3 +6,8 @@ effect @gain <- 7;
 using "diamond-shared.cod" @read;
 behave @print(behave @read());
 procedure @right()::i64 { perform @read() }
+
+export @gain;
+export @print;
+export @read;
+export @right;

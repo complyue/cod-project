@@ -51,10 +51,9 @@
     "stdout": "888\n40\n"
   },
   {
-    "file": "global-procedure-operation.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "a bits global initializer requires a pure function"
+    "file": "global-memory-operation.cod",
+    "exit": 0,
+    "stdout": "99\n7\n7\n"
   },
   {
     "file": "missing-capture.cod",
@@ -196,7 +195,7 @@
     "file": "using-with-map.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "a symbol map requires an imported procedure"
+    "stderr_contains": "a symbol map requires a mixed-in procedure"
   },
   {
     "file": "missing-default-alias.cod",
@@ -225,7 +224,7 @@
     "file": "builtin-body-import.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "no importable body"
+    "stderr_contains": "no mixin body"
   },
   {
     "file": "using-symbol-shared-identity.cod",
@@ -263,7 +262,7 @@
   {
     "file": "products.cod",
     "exit": 0,
-    "stdout": "2.5\n6\n-2.5\n6\n9\nfalse\n"
+    "stdout": "2.5\n6\n-2.5\n7\n9\nfalse\n"
   },
   {
     "file": "floating-captures.cod",
@@ -284,7 +283,7 @@
     "file": "product-cycle.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "recursive by-value product"
+    "stderr_contains": "data object fields currently require explicit ref<T> references"
   },
   {
     "file": "product-field-error.cod",
@@ -307,7 +306,7 @@
   {
     "file": "module-diamond.cod",
     "exit": 0,
-    "stdout": "101\n3\n7\n3\n3\n"
+    "stdout": "101\n3\n7\n3\n3\n3\n"
   },
   {
     "file": "product-module-identity.cod",
@@ -326,7 +325,7 @@
   {
     "file": "method-modules.cod",
     "exit": 0,
-    "stdout": "9\n12\n6\n7\n"
+    "stdout": "9\n12\n6\n7\n8\n8\n5\n8\n"
   },
   {
     "file": "operator-using.cod",
@@ -386,7 +385,7 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": [
-      "no matching method 'f' for supplied argument types (bool): 3 available candidates",
+      "no matching method 'f' for supplied argument types (bool): 4 available candidates",
       "method-no-match.cod:3:1: note: candidate function 'f'",
       "method-library.cod:1:1: note: candidate function 'score'",
       "method-library.cod:2:1: note: candidate function 'score'"
@@ -402,6 +401,17 @@
     "file": "units-basic.cod",
     "exit": 0,
     "stdout": "2.5\n1.25\n4\n5\n"
+  },
+  {
+    "file": "units-aliased-bundle.cod",
+    "exit": 0,
+    "stdout": "2.5\n1.5\n4\n6\n"
+  },
+  {
+    "file": "units-private-conversion.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "unavailable lexical function 'cm_to_m'"
   },
   {
     "file": "units-exact-reject.cod",
@@ -538,7 +548,7 @@
   {
     "file": "fold-products.cod",
     "exit": 0,
-    "stdout": "2\n8\n"
+    "stdout": "2\n8\n10\n12\n21\n"
   },
   {
     "file": "iteration-scope.cod",
@@ -662,16 +672,15 @@
     "stdout": "8\n8\n11\nfalse\nfalse\n8\n13\n21\n34\n"
   },
   {
-    "file": "region-pure-write.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "function cannot modify regional storage"
+    "file": "function-memory.cod",
+    "exit": 0,
+    "stdout": "1\n2\n4\n405\n99\n7\n"
   },
   {
-    "file": "region-pure-create.cod",
+    "file": "region-unheld-create.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "function cannot create a region"
+    "stderr_contains": "a new region must be acquired by an effect binding"
   },
   {
     "file": "region-stack-error.cod",
@@ -692,13 +701,20 @@
     "file": "region-escape.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "outlive its owning scope"
+    "stderr_contains": [
+      "outlive its owning scope",
+      "region-escape.cod:4:46: note: the escaping value depends on this region acquisition"
+    ]
   },
   {
     "file": "region-cross-pointer.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "cross-region reference fields"
+    "stderr_contains": [
+      "cross-region reference fields",
+      "region-cross-pointer.cod:6:19: note: destination object's region acquired here",
+      "region-cross-pointer.cod:5:18: note: referenced target's region acquired here"
+    ]
   },
   {
     "file": "region-bounds.cod",
@@ -735,7 +751,10 @@
     "file": "region-owner-move.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "cannot transfer ownership out of a dynamic region binding"
+    "stderr_contains": [
+      "cannot transfer ownership out of a dynamic region binding",
+      "region-owner-move.cod:3:14: note: the non-extractable region was acquired here"
+    ]
   },
   {
     "file": "region-owner-capture.cod",
@@ -744,9 +763,8 @@
   },
   {
     "file": "region-owner-lexical.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "whole-region resources require effect bindings, not lexical values"
+    "exit": 0,
+    "stdout": ""
   },
   {
     "file": "region-reference-fold.cod",
@@ -807,15 +825,19 @@
   },
   {
     "file": "units-name-collision.cod",
+    "exit": 0,
+    "stdout": "99\n7\n2.5\n"
+  },
+  {
+    "file": "units-method-shadow.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "duplicate lexical name 'cm_to_m'"
+    "stderr_contains": "expected bool, got"
   },
   {
     "file": "units-alias-collision.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "duplicate lexical alias 'cm_to_m'"
+    "exit": 0,
+    "stdout": "99\n2\n2.5\n"
   },
   {
     "file": "units-function-order.cod",
@@ -868,7 +890,10 @@
     "file": "procedure-pure-call.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "a function cannot invoke a procedure"
+    "stderr_contains": [
+      "a function cannot invoke a procedure",
+      "procedure-pure-call.cod:3:1: note: selected procedure 'read' declared here"
+    ]
   },
   {
     "file": "procedure-lexical-perform.cod",
@@ -881,5 +906,276 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "a symbol declaration requires an explicit type"
+  },
+  {
+    "file": "function-effect-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a function cannot establish effects"
+  },
+  {
+    "file": "function-cross-region.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "cross-region reference fields",
+      "function-cross-region.cod:6:18: note: destination object's region acquired here",
+      "function-cross-region.cod:7:19: note: referenced target's region acquired here"
+    ]
+  },
+  {
+    "file": "module-export-shadow.cod",
+    "exit": 0,
+    "stdout": ""
+  },
+  {
+    "file": "module-export-context-shadow.cod",
+    "exit": 0,
+    "stdout": ""
+  },
+  {
+    "file": "module-exports.cod",
+    "exit": 0,
+    "stdout": "9\n9\n"
+  },
+  {
+    "file": "module-private-resource.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "does not export 'helper'"
+  },
+  {
+    "file": "module-private-reexport.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "does not export 'private_read'"
+  },
+  {
+    "file": "module-private-associated.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "unavailable lexical function 'helper'"
+  },
+  {
+    "file": "module-private-symbol.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "does not export '@secret'"
+  },
+  {
+    "file": "module-private-unit.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "does not export 'PrivateUnit'"
+  },
+  {
+    "file": "module-selection.cod",
+    "exit": 0,
+    "stdout": "1001\n401\n408\n907\n908\n1.25\n21\n11\n21\n26\n112\n122\n122\n"
+  },
+  {
+    "file": "import-body-map.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a symbol map requires a mixed-in procedure"
+  },
+  {
+    "file": "abstract-types.cod",
+    "exit": 0,
+    "stdout": "17\n17\n4\n5\n17\n17\n1\n17\n29\n29\n17\n17\n3\n3\n19.5\n19.5\n"
+  },
+  {
+    "file": "abstract-forwarding.cod",
+    "exit": 0,
+    "stdout": "2\n2\n2\n2\n2\n2\n2\n2\n2\n1\n1\n"
+  },
+  {
+    "file": "abstract-using-extension.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "declaring external data conformance requires import"
+  },
+  {
+    "file": "abstract-hidden-conformance.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "no matching method 'rank'",
+      "method lookup uses module",
+      "candidate function 'rank' (Entity) -> i64",
+      "candidate function 'rank' (Weighted) -> i64",
+      "abstract-hidden-conformance.cod'"
+    ]
+  },
+  {
+    "file": "abstract-ambiguous.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "ambiguous method 'choose'",
+      "method lookup uses module",
+      "candidate function 'choose' (Entity, Weighted) -> i64",
+      "candidate function 'choose' (Weighted, Entity) -> i64",
+      "abstract-ambiguous.cod'"
+    ]
+  },
+  {
+    "file": "abstract-missing-body.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "unavailable lexical function 'missing_implementation'"
+  },
+  {
+    "file": "abstract-cycle.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cyclic abstract type inheritance"
+  },
+  {
+    "file": "abstract-body.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "abstract type declarations have no body; use data for a representation"
+  },
+  {
+    "file": "mixin-type.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "mixin requires a procedure body, not a type definition"
+  },
+  {
+    "file": "method-using-extension.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "extending selected callable 'local_score' requires import rather than using"
+  },
+  {
+    "file": "abstract-join-narrowing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "::Weighted, got",
+      "in call to function 'narrow'",
+      "required interface is not established in module",
+      "available value guarantee is",
+      "::Entity",
+      "abstract-join-narrowing.cod'"
+    ]
+  },
+  {
+    "file": "pool-view-escape.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional result would outlive its owning scope",
+      "pool-view-escape.cod:9:22: note: the escaping value depends on this region acquisition"
+    ]
+  },
+  {
+    "file": "abstract-fold-invariant.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "a fold result must retain established conformance",
+      "::Sample <: ",
+      "::Weighted",
+      "in call to function 'lose'"
+    ]
+  },
+  {
+    "file": "fold-view-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "a fold reference must retain its owning region",
+      "fold-view-owner.cod:6:18: note: initial accumulator's region acquired here",
+      "fold-view-owner.cod:7:19: note: iteration result's region acquired here"
+    ]
+  },
+  {
+    "file": "method-context-selection.cod",
+    "exit": 0,
+    "stdout": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n",
+    "stderr_contains": [
+      "overloads declared through multiple aliases of one callable identity",
+      "[-Wmulti-alias-extension]",
+      "note: alias 'score' adds overloads here",
+      "note: alias 'score_alias' adds overloads here"
+    ]
+  },
+  {
+    "file": "method-context-selection.cod",
+    "args": [
+      "-Werror=multi-alias-extension"
+    ],
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "warning treated as error: overloads declared through multiple aliases of one callable identity",
+      "[-Wmulti-alias-extension]"
+    ]
+  },
+  {
+    "file": "method-views.cod",
+    "exit": 0,
+    "stdout": "14\n22\n25\n2\n19\n"
+  },
+  {
+    "file": "method-view-ambiguous.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "ambiguous method 'through'",
+      "method-view-library.cod:5:1: note: candidate function 'through'",
+      "method-view-first.cod'",
+      "method-view-second.cod'",
+      "implementation context"
+    ]
+  },
+  {
+    "file": "method-dependency-conflict.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "ambiguous method 'score'",
+      "method-view-first.cod:2:1: note: candidate",
+      "method-view-second.cod:2:1: note: candidate"
+    ]
+  },
+  {
+    "file": "method-nested-conflict.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "ambiguous method 'through'",
+      "method-view-second.cod",
+      "method-view-first.cod:3:1"
+    ]
+  },
+  {
+    "file": "method-name-ambiguous.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "ambiguous implicit callable 'score'",
+      "method-view-library.cod:4:1: note: original callable family 'score'",
+      "method-view-shadow.cod:2:1: note: original callable family 'score'"
+    ]
+  },
+  {
+    "file": "world-composition.cod",
+    "exit": 0,
+    "stdout": ""
+  },
+  {
+    "file": "world-source-isolation.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "::First, got "
+  },
+  {
+    "file": "world-export-alias.cod",
+    "exit": 0,
+    "stdout": ""
   }
 ]

@@ -3,10 +3,19 @@ using units "region-gather-types.cod" {Neuron};
 using "region-gather-types.cod" Frame;
 using "region-gather-types.cod" Incoming;
 using "pool-layout.cod" Layout;
+using "pool-index.cod" SetLocation;
 using "region-gather-kernel.cod" gather;
-symbol from "region-gather-types.cod" @step;
-procedure @step(input::Frame, output::ref<Frame>, graph::Incoming, layout::Layout)::void {
+function step(input::Frame, output::ref<Frame>, graph::Incoming, layout::Layout, location::ref<SetLocation>)::void {
   for (n in 0u32 .. u32(len(input))) {
-    store(output, Neuron(n), gather(input, graph, layout, GlobalSetId(u64(n))));
+    store(output, Neuron(n), gather(input, graph, layout, GlobalSetId(u64(n)), location));
   }
 }
+
+export Frame;
+export GlobalSetId;
+export Incoming;
+export Layout;
+export Neuron;
+export SetLocation;
+export gather;
+export step;

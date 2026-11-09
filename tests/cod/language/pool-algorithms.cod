@@ -1,0 +1,14 @@
+using "pool-interface.cod" SlotStore;
+using "pool-interface.cod" ReusableSlotStore;
+using units "pool-interface.cod" {Slot};
+
+function replace(pool::ReusableSlotStore, slot::Slot, value::i64)::Slot {
+  release(pool, slot);
+  acquire(pool, value)
+}
+function peek(pool::SlotStore, slot::Slot)::i64 { read(pool, slot) }
+function locate(pool::ReusableSlotStore, slot::Slot)::ref<i64> { cell(pool, slot) }
+
+export replace;
+export peek;
+export locate;

@@ -1,0 +1,5 @@
+using "method-view-library.cod" Sample;
+using "method-view-shadow.cod" Sample as SameSample;
+symbol @arena::region;
+effect @arena <- region(4096u64);
+score(create(@arena));

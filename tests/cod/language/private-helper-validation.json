@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T21:04:10.839853+00:00",
+  "registry_record": "K-357",
+  "toolchain": "build",
+  "compiler_sha256": "c16d406c5cd5dbb57467cba75be97cf5e3b51c846c5054b1a6ae0348404b8de5",
+  "scope": "Private helper bodies retain lexical identity while selected ordinary implementation contexts propagate through them; receiver spelling does not replace a source private helper.",
+  "focused": {
+    "passed": 9,
+    "total": 9,
+    "fixtures": [
+      "method-modules.cod",
+      "method-ambiguous.cod",
+      "method-no-match.cod",
+      "method-using-extension.cod",
+      "method-context-selection.cod",
+      "method-views.cod",
+      "method-view-ambiguous.cod",
+      "method-name-ambiguous.cod",
+      "frontend-only"
+    ]
+  },
+  "composition": {
+    "recorded_utc": "2026-11-08T21:03:12.736554+00:00",
+    "compiler_sha256": "c16d406c5cd5dbb57467cba75be97cf5e3b51c846c5054b1a6ae0348404b8de5",
+    "sources": {
+      "typed-private-forwarding": {
+        "router.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nsymbol task::proc(Metric)->i64;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {effect @task <- p; perform @task(x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {effect @task <- p; behave @task(x)}\nexport captured; export current;\n",
+        "level0.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"router.cod\" captured as inner_captured;\nusing \"router.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level1.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level0.cod\" captured as inner_captured;\nusing \"level0.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level2.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level1.cod\" captured as inner_captured;\nusing \"level1.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level3.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level2.cod\" captured as inner_captured;\nusing \"level2.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level4.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level3.cod\" captured as inner_captured;\nusing \"level3.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level5.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level4.cod\" captured as inner_captured;\nusing \"level4.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level6.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level5.cod\" captured as inner_captured;\nusing \"level5.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "level7.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Metric;\nusing \"level6.cod\" captured as inner_captured;\nusing \"level6.cod\" current as inner_current;\nproc captured(p::proc(Metric)->i64,x::Metric)->i64 {inner_captured(p,x)}\nproc current(p::proc(Metric)->i64,x::Metric)->i64 {inner_current(p,x)}\nexport captured; export current;\n",
+        "main.cod": "using symbol \"std:io\" @print;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-context-reexport.cod\" frozen_proc;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-context-reexport.cod\" adapted_proc;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nsymbol from \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" @bias;\nusing \"level7.cod\" captured;\nusing \"level7.cod\" current;\nsymbol arena::region;\neffect @arena <- region(4096u64);\neffect @bias <- 5;\n{let x=create(@arena);\nbehave @print(captured(frozen_proc,x));\nbehave @print(current(frozen_proc,x));\nbehave @print(captured(adapted_proc,x));\nbehave @print(current(adapted_proc,x));\nbehave @print(@bias);\n};\n"
+      },
+      "private-selected-procedure": {
+        "adapter.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" score;\nproc score(x::Sample)::i64 {7}\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" through;\n",
+        "main.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" Sample;\nusing \"adapter.cod\" through;\nsymbol arena::region; effect @arena <- region(4096u64);\nthrough(create(@arena));\n"
+      },
+      "method-view-library.cod-private": {
+        "main.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod\" private_bridge;\n"
+      },
+      "method-context-library.cod-private": {
+        "main.cod": "using \"/ws/EvtWorks/cod-project/tests/cod/language/method-context-library.cod\" private_bridge;\n"
+      }
+    },
+    "results": [
+      {
+        "case": "typed-private-forwarding",
+        "exit_code": 0,
+        "stdout": "2\n6\n8\n12\n5\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "private-selected-procedure",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:43: a function cannot invoke a procedure\n<probe>/private-selected-procedure/adapter.cod:3:1: note: selected procedure 'score' declared here\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: note: in call to function 'private_bridge' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:25:1\n<probe>/private-selected-procedure/main.cod:4:1: note: in call to function 'through' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1\n",
+        "passed": true
+      },
+      {
+        "case": "method-view-library.cod-private",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/method-view-library.cod-private/main.cod:1:1: module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod' does not export 'private_bridge'\n",
+        "passed": true
+      },
+      {
+        "case": "method-context-library.cod-private",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/method-context-library.cod-private/main.cod:1:1: module '/ws/EvtWorks/cod-project/tests/cod/language/method-context-library.cod' does not export 'private_bridge'\n",
+        "passed": true
+      }
+    ]
+  },
+  "source_sha256": {
+    "cod/lang_frontend.hh": "662510eaf0bbac8d13e59b76f0c85bd1fbd9cffe31b1f3d726e1358de937d19b",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "tests/cod/language/method-view-library.cod": "60322c00509a5aa0731c330744363630935bd40c1f27900bb142d638509a0b5d",
+    "tests/cod/language/method-context-library.cod": "a5abc602c0c56ea11038d8dc41a3b99c82d6ac8dd1efe4549a39b7db3e91bff2",
+    "tests/cod/language/method-context-selection.cod": "987b07994a386e12ee37904532e172fbd323a02e36eb0129466d16a26f9bedac",
+    "tests/cod/language/method-context-reexport.cod": "df889eb0818de3664b9fa3833fec00e40c07068724ab049a67eae91439b4ee81",
+    "tests/cod/language/cases.json": "e7749cf5afa7013e6b3b01679ce0ea0080a8879085be57523a794a78a9de5bf7"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-private-helper-final-focused.json": "d6e0b4f30d65b21fd352cf42834e86d37df8fddf13b13f59e2579b50d17f033f",
+    "build/validation/language-20261108-private-helper-final-composition.json": "f5a8dc8e9a3a757dba25adda08c6f7318f69d708b6b14e7032080121dbd34a32",
+    "build/validation/language-20261108-private-helper-final-build.log": "ee6a848427be5fa63ae02be78a17aea31efcf22ee378fb73e5d858107dc34f4f"
+  },
+  "limits": [
+    "Compiler is unchanged from K-356; only two existing CoD fixture modules and documentation/evidence are revised.",
+    "Full183-check evidence remains K-355; K-356 typed forwarding retains its earlier fixture graph.",
+    "No new alias/publication policy, full ownership workflow or native relocation/performance claim."
+  ],
+  "earlier_observation": {
+    "path": "build/validation/language-20261108-private-helper-initial-evidence.json",
+    "sha256": "b07545a33460aacff8a5ee5bb4498bbdd8c2072b2659509cd021b8577a76e3fa",
+    "scope": "Initial private helper was traversed only by through; the typed-procedure probe was an independent control. Final scored and through both call the private bridge, and the final reports exercise that combined path."
+  }
+}

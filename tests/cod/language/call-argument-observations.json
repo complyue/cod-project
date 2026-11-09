@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T23:06:00.671844+00:00",
+  "compiler_sha256": "6015b7aa040f4196b6a3ae3580a648c9479cc20eb2b72880b91cee997a68e688",
+  "source_sha256": {
+    "cod/lang_frontend.hh": "2ace336fcb08dd07e14b68ce3b92120a7383559fb92259bf8d7f7a13370265dd",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "tests/cod/language/procedure-library.cod": "774d8aaf353836592434645fd5953c19d528b96d94faee786ca5086a0c863058",
+    "tests/cod/language/procedure-vocabulary.cod": "739ad71a8712d69bbaf7e71884fd989635b64e948b3fc1e9e79dcbe555571e3d"
+  },
+  "source": "using symbol \"std:io\" @print;\nsymbol from \"/ws/EvtWorks/cod-project/tests/cod/language/procedure-vocabulary.cod\" @bias;\nsymbol from \"/ws/EvtWorks/cod-project/tests/cod/language/procedure-vocabulary.cod\" @dispatch as @selected;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/procedure-library.cod\" read;\neffect @bias <- 20;\nproc alternate(value::i64)->i64 { @bias * 100 + value }\nfunction argument_value(unused::proc(i64)->i64, value::i64)::i64 { value }\neffect @selected <- read;\neffect @bias <- 30;\nbehave @print(perform @selected(effect @bias <- 31));\nbehave @print(@bias);\nbehave @print(behave @selected(effect @bias <- 32));\nbehave @print(@bias);\nbehave @print(perform @selected(argument_value(effect @selected <- alternate, effect @bias <- 33)));\nbehave @print(@bias);\nbehave @print(behave @selected(1));\nbehave @print(perform @selected(1));\neffect @selected <- read;\nbehave @print(behave @selected(argument_value(effect @selected <- alternate, effect @bias <- 34)));\nbehave @print(behave @selected(1));\nbehave @print(@bias);\n",
+  "result": {
+    "exit_code": 0,
+    "stdout": "41\n31\n64\n32\n43\n33\n3301\n2001\n68\n3401\n34\n",
+    "stderr": "",
+    "expected_stdout": "41\n31\n64\n32\n43\n33\n3301\n2001\n68\n3401\n34\n",
+    "seconds": 0.14329129294492304,
+    "passed": true
+  },
+  "registry_record": "K-375",
+  "toolchain": "build",
+  "kind": "Current implementation observation, not a new human-confirmed evaluation-order contract",
+  "scope": "Symbolic callee selection versus argument-side rebinding, captured/current invocation and the post-call caller environment.",
+  "raw_report": {
+    "path": "build/validation/language-20261108-call-arguments.json",
+    "sha256": "c397cdafb91e48d4559682925190e9952a861d6110326ba1999e738c20422623"
+  },
+  "interpretation": [
+    "The exported read procedure captures bias10; an alternate procedure captures bias20.",
+    "Calls whose argument changes bias31/32 produce41/64 under perform/behave, while caller bias remains31/32.",
+    "When an argument also rebinds the callee symbol, the already-selected read body still runs: captured result43 or current result68.",
+    "Later calls see alternate: behave yields3301 or3401, while perform yields2001. Argument bindings remain after the earlier call."
+  ],
+  "limits": [
+    "One generated native program with eleven checked output lines. No compiler/runtime/permanent fixture change, build or repeated suite.",
+    "H-97/H-111/H-148 supplies value capture, effect results and per-argument conversion ordering; it does not explicitly settle the callee-versus-argument timing distinction. The observation does not manufacture that confirmation.",
+    "The unused typed procedure argument exercises evaluation/forwarding only; no direct lexical callback invocation or runtime higher-order dispatch is claimed."
+  ]
+}

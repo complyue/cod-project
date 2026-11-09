@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "registry_record": "K-352",
+  "recorded_utc": "2026-11-08T20:00:44.650636+00:00",
+  "compiler_sha256": "6a0f2f8ee2126676cdbc4d5b5721a1adbdc850b1aeb64d28abb2f8557f67ed61",
+  "scope": "One interface-only pool algorithm source, concrete storage extensions and adapter-selected helper contexts; borrowed payload results and whole-image relocation.",
+  "native": {
+    "passed": true,
+    "llvm_artifact_roundtrip": true,
+    "layout": {
+      "relocation_passed": true,
+      "relocated_bytes": 120,
+      "region_header_bytes": 40,
+      "array_header_bytes": 16,
+      "record_bytes": 24
+    },
+    "pool": {
+      "layout": {
+        "relocation_passed": true,
+        "relocated_bytes": 152,
+        "slots": 4,
+        "cod_reuse_laps": 10000,
+        "bounded_occupation": true,
+        "relocated_free_chain": [
+          3,
+          1,
+          4
+        ],
+        "independent_native_reuse_passed": true
+      },
+      "frontend_seconds": 0.01931900007184595,
+      "native_compile_link_seconds": 1.508631436037831,
+      "native_process_seconds": 0.0015546450158581138,
+      "llvm_ir_bytes": 91250,
+      "bitcode_bytes": 24752
+    },
+    "resources": {
+      "layout": {
+        "owners_acquired": 4,
+        "owners_released": 4,
+        "release_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "live_resource_reads": 18,
+        "loop_iterations": 3,
+        "untaken_branch_acquires_nothing": true,
+        "captured_and_hidden_owners_survive_replay": true
+      },
+      "frontend_seconds": 0.02309074392542243,
+      "native_compile_link_seconds": 1.495760403922759,
+      "native_process_seconds": 0.001354705891571939,
+      "llvm_ir_bytes": 9068,
+      "bitcode_bytes": 5676
+    }
+  },
+  "lifetime": {
+    "passed": 2,
+    "total": 2,
+    "results": [
+      {
+        "fixture": "pool-view-escape.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod:8:17: regional result would outlive its owning scope\n/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod:9:22: note: the escaping value depends on this region acquisition\n",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ]
+  },
+  "composition": {
+    "recorded_utc": "2026-11-08T19:56:28.022912+00:00",
+    "compiler_sha256": "6a0f2f8ee2126676cdbc4d5b5721a1adbdc850b1aeb64d28abb2f8557f67ed61",
+    "sources": {
+      "single.cod": "using units \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" {Slot};\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" read;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" cell;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" acquire;\nimport \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" release;\narray OneSlot[Slot]::i64;\ndata Single { available::bool; payload::ref<OneSlot>; }\nfunction create_single(arena::region)::Single { deref(alloc arena Single(false, alloc arena OneSlot(1u64, 5))) }\nfunction read(pool::Single, slot::Slot)::i64 { deref(pool.payload)[slot] }\nfunction cell(pool::Single, slot::Slot)::ref<i64> { ref_at(pool.payload, slot) }\nfunction acquire(pool::Single, value::i64)::Slot {\n  if (pool.available) { setfield(pool, available, false); store(pool.payload, Slot(0u32), value); Slot(0u32) }\n  else { Slot(1u32) }\n}\nfunction release(pool::Single, slot::Slot)::void { setfield(pool, available, true); {} }\nexport Single; export create_single; export read; export cell; export acquire; export release;\n",
+      "adapter.cod": "export import \"single.cod\" Single;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" ReusableSlotStore;\ndata Single <: ReusableSlotStore;\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/pool-algorithms.cod\" replace;\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/pool-algorithms.cod\" peek;\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/pool-algorithms.cod\" locate;\n",
+      "main.cod": "using symbol \"std:io\" @print;\nusing symbol \"std:io\" @assert;\nusing units \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" (==);\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-adapter.cod\" Pool;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-adapter.cod\" replace as replace_pool;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-adapter.cod\" peek as peek_pool;\nusing \"adapter.cod\" Single;\nusing \"adapter.cod\" replace as replace_single;\nusing \"adapter.cod\" peek as peek_single;\nusing \"adapter.cod\" locate as locate_single;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\n{\n  let pool = create(@arena, 2u32);\n  acquire(pool, 7);\n  acquire(pool, 11);\n  let single = create_single(@arena);\n  let occupied = used_bytes(@arena);\n  behave @assert(replace_pool(pool, Slot(1u32), 13) == Slot(1u32));\n  behave @assert(replace_single(single, Slot(0u32), 6) == Slot(0u32));\n  behave @print(peek_pool(pool, Slot(1u32)));\n  behave @print(peek_single(single, Slot(0u32)));\n  store(locate_single(single, Slot(0u32)), 9);\n  behave @print(peek_single(single, Slot(0u32)));\n  behave @print(peek_pool(pool, Slot(1u32)));\n  behave @assert(used_bytes(@arena) == occupied);\n};\n",
+      "frozen.cod": "using units \"/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod\" {Slot};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-adapter.cod\" Pool;\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/pool-algorithms.cod\" peek as frozen_peek;\nsymbol @arena::region;\neffect @arena <- region(4096u64);\nfrozen_peek(create(@arena, 1u32), Slot(0u32));\n"
+    },
+    "results": [
+      {
+        "entry": "main.cod",
+        "mode": "--run",
+        "exit_code": 0,
+        "stdout": "13\n6\n9\n13\n",
+        "stderr": "",
+        "expected_exit": 0,
+        "expected_stdout": "13\n6\n9\n13\n",
+        "required_diagnostic": "",
+        "passed": true
+      },
+      {
+        "entry": "frozen.cod",
+        "mode": "--check",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod:7:51: unavailable lexical function 'missing_pool_read'\n/ws/EvtWorks/cod-project/tests/cod/language/pool-algorithms.cod:9:51: note: in call to function 'read' defined at /ws/EvtWorks/cod-project/tests/cod/language/pool-interface.cod:7:1\n<probe>/frozen.cod:6:1: note: in call to function 'peek' defined at /ws/EvtWorks/cod-project/tests/cod/language/pool-algorithms.cod:9:1\n",
+        "expected_exit": 2,
+        "expected_stdout": "",
+        "required_diagnostic": "unavailable lexical function 'missing_pool_read'",
+        "passed": true
+      }
+    ]
+  },
+  "source_sha256": {
+    "cod/lang_frontend.hh": "d4629ac3c4c30ce2dae8927f46615a6e640f2dbf0437f2d0493a339440b0f20b",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "tests/cod/language/pool-interface.cod": "1af6f14226c1268bb300b3094e4eea152f4666d1d345e522e1b480e84bf29b60",
+    "tests/cod/language/pool-algorithms.cod": "df24fc171b75242e7473d95617ba46007b0756f88155f89b0a72171ff4cbf690",
+    "tests/cod/language/reusable-pool.cod": "8c419916470087e496abd65158752e85faa713cb6342baa0df8e3b02575451e8",
+    "tests/cod/language/pool-adapter.cod": "41b97211645bfaf87197be96eca737d5e2e6e48670bd504d2f2c99031fd116ff",
+    "tests/cod/language/region-pool.cod": "c04012856224f02bcc123719d2285a0816c1a5b249b5557d45cdad6ce5d3d693",
+    "tests/cod/language/pool-view-escape.cod": "c4ed00396489e3a15e3fd5b8efaa48a5dc4f7d844eb52740fe08f85fe48ceb51",
+    "tests/cod/language/regional_runtime_tests.py": "f46c54e9a833823910fdbec4b243fd5ca0b497273ebda077e356318296a8c81b"
+  },
+  "raw_reports": {
+    "native": {
+      "path": "build/validation/language-20261108-pool-algorithms-native.json",
+      "sha256": "89aad6e084f1b574c02e85b0d3113d1c0b50ce482e02a5160e693ace4debb252"
+    },
+    "lifetime": {
+      "path": "build/validation/language-20261108-pool-algorithms-lifetime.json",
+      "sha256": "531082a11e7c15c547d7fb58a2cf18e01bcb5cc45faee3469d6622d3d336c4ec"
+    },
+    "composition": {
+      "path": "build/validation/language-20261108-pool-algorithms-composition.json",
+      "sha256": "3f9252bcaebebb5ea34b1cd564b464e12d82c874b01604178accde5eeccfb6f0"
+    }
+  },
+  "limits": [
+    "The compiler binary and LLVM/runtime sources are unchanged from K-351; the modified source programs and native harness source inventory have their own evidence.",
+    "The last full component checkpoint remains 180/180 at its recorded fixture revision. This increment validates the changed pool paths and does not relabel that checkpoint as a new full run.",
+    "Interface fallback bodies deliberately demand unavailable helpers if selected. They are scaffolding for the current body-bearing syntax, not implementation or confirmation of standalone method declarations.",
+    "The temporary Single layout has one slot; release is called only for that occupied slot. The program exercises adapter selection and shared algorithms, not a general validated storage-library API.",
+    "Native CoD performs reuse and payload updates before relocation. An independent C++ harness validates the relocated image and free-chain reuse; CoD does not resume after relocation.",
+    "No ordinary whole-region owner/const/assignment, graph-transfer, sum, mailbox, runtime method dictionary or SNN modeling feature is added."
+  ]
+}

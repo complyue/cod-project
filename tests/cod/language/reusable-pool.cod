@@ -1,0 +1,65 @@
+// Stable typed slots; returning a slot changes membership, not object lifetime.
+// A Slot is valid only for this pool and until its next release. Callers must
+// return an acquired slot exactly once and stop using it after release.
+using units "pool-interface.cod" {Slot};
+using "pool-interface.cod" (==);
+import "pool-interface.cod" read;
+import "pool-interface.cod" cell;
+import "pool-interface.cod" acquire;
+import "pool-interface.cod" release;
+array Payloads[Slot]::i64;
+array Links[Slot]::Slot;
+data Pool { head::Slot; payloads::ref<Payloads>; links::ref<Links>; }
+
+function end_slot(pool::Pool)::Slot { Slot(u32(len(pool.payloads))) }
+function empty(pool::Pool)::bool { pool.head == end_slot(pool) }
+function read(pool::Pool, slot::Slot)::i64 { deref(pool.payloads)[slot] }
+function cell(pool::Pool, slot::Slot)::ref<i64> { ref_at(pool.payloads, slot) }
+
+function initialize(pool::Pool) -> void {
+  for (i in 0u32 .. scalar(end_slot(pool))) {
+    store(pool.links, Slot(i), Slot(i + 1u32));
+  };
+  setfield(pool, head, Slot(0u32));
+  {}
+}
+
+function create(arena::region, capacity::u32) -> Pool {
+  let payloads = alloc arena Payloads(u64(capacity), 0);
+  let links = alloc arena Links(u64(capacity), Slot(0u32));
+  let pool = deref(alloc arena Pool(Slot(0u32), payloads, links));
+  initialize(pool);
+  pool
+}
+
+// Exhaustion returns the capacity sentinel without modifying the pool.
+function acquire(pool::Pool, value::i64) -> Slot {
+  let slot = pool.head;
+  if (slot == end_slot(pool)) {
+    slot
+  } else {
+    setfield(pool, head, deref(pool.links)[slot]);
+    store(pool.payloads, slot, value);
+    slot
+  }
+}
+
+function release(pool::Pool, slot::Slot) -> void {
+  store(pool.links, slot, pool.head);
+  setfield(pool, head, slot);
+  {}
+}
+
+export (==);
+export Links;
+export Payloads;
+export Pool;
+export Slot;
+export acquire;
+export cell;
+export create;
+export empty;
+export end_slot;
+export initialize;
+export read;
+export release;

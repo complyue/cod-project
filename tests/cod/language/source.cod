@@ -5,3 +5,8 @@ function helper() -> i64 { 4 }
 effect @x <- 1;
 procedure @p -> i64 { helper() * 100 + @x }
 behave @print(1001);
+
+export @p;
+export @print;
+export @x;
+export helper;

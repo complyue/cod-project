@@ -4,17 +4,40 @@ using "pool-layout.cod" sets;
 using "pool-layout.cod" capacity;
 using "pool-layout.cod" class_set_begin;
 using "pool-layout.cod" class_slot_begin;
-type SetLocation { class_id::ClassId; local::ClassSetId; }
+data SetLocation { class_id::ClassId; local::ClassSetId; }
 function (u64)(count (SlotsPerSet))::u64 { u64(scalar(count)) }
 function (u64)(index (LocalSlot))::u64 { u64(scalar(index)) }
-function locate(layout::Layout, index (GlobalSetId))::SetLocation {
-  fold (j in 0u32 .. layout.classes, found = SetLocation(ClassId(0u32), ClassSetId(0u64))) {
+function locate(layout::Layout, index (GlobalSetId), found::ref<SetLocation>)::SetLocation {
+  setfield(found, class_id, ClassId(0u32));
+  setfield(found, local, ClassSetId(0u64));
+  for (j in 0u32 .. layout.classes) {
     let first = scalar(class_set_begin(layout, ClassId(j)));
     if (scalar(index) >= first && scalar(index) < first + scalar(sets(layout, ClassId(j)))) {
-      SetLocation(ClassId(j), ClassSetId(scalar(index) - first))
-    } else { found }
-  }
+      setfield(found, class_id, ClassId(j));
+      setfield(found, local, ClassSetId(scalar(index) - first));
+      {}
+    } else {};
+  };
+  deref(found)
 }
 function global_slot(layout::Layout, j (ClassId), set (ClassSetId), slot (LocalSlot))::GlobalSlot {
   GlobalSlot(scalar(class_slot_begin(layout, j)) + scalar(set) * u64(capacity(j)) + u64(slot))
 }
+
+export (u64);
+export ClassId;
+export ClassSetId;
+export GlobalSetId;
+export GlobalSlot;
+export Layout;
+export LocalSlot;
+export SetCount;
+export SetLocation;
+export SlotCount;
+export SlotsPerSet;
+export capacity;
+export class_set_begin;
+export class_slot_begin;
+export global_slot;
+export locate;
+export sets;

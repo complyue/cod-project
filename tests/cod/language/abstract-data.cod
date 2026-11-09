@@ -1,0 +1,23 @@
+data Sample { value::i64; }
+data Bundle { item::ref<Sample>; }
+function view(sample::ref<Sample>)::Sample { deref(sample) }
+function item(bundle::ref<Bundle>)::Sample { deref(deref(bundle).item) }
+function maybe_view(sample::ref<Sample>, keep::bool)::ref<Sample> {
+  if (keep) { sample } else { null }
+}
+using "abstract-library.cod" rank_entity;
+function observe_maybe(sample::ref<Sample>, keep::bool)::i64 {
+  rank_entity(deref(maybe_view(sample, keep)))
+}
+function same_type(sample::Sample, arena::region)::i64 {
+  rank_entity(deref(alloc arena Sample(sample.value + 1)))
+}
+
+export Bundle;
+export Sample;
+export item;
+export maybe_view;
+export observe_maybe;
+export rank_entity;
+export same_type;
+export view;

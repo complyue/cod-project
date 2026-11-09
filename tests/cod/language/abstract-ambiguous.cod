@@ -1,0 +1,11 @@
+using "abstract-adapter.cod" Sample;
+using "abstract-library.cod" Entity;
+using "abstract-library.cod" Weighted;
+function choose(a::Entity, b::Weighted)::i64 { 1 }
+function choose(a::Weighted, b::Entity)::i64 { 2 }
+symbol @arena::region;
+effect @arena <- region(1024u64);
+{
+  let point = deref(alloc @arena Sample(1));
+  choose(point, point);
+};

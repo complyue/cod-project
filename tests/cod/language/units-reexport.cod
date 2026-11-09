@@ -1,1 +1,11 @@
 using units "units-library.cod" {m as metres, cm, mm};
+using "units-library.cod" cm_to_m as to_metres;
+using "units-library.cod" cm_to_m as centimetres_to_metres;
+
+export cm;
+export metres;
+export mm;
+export to_metres;
+export centimetres_to_metres;
+export mm_to_cm;
+export m_to_cm;

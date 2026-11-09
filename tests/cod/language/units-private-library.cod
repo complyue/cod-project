@@ -5,3 +5,11 @@ function factor()::f64 { 100.0 }
 conversion function to_half(x (m))::half { half(scalar(x) * 2.0) }
 conversion function half_to_cm(x (half))::cm { cm(scalar(x) * factor() / 2.0) }
 conversion function to_cm(x (m))::cm { half_to_cm(to_half(x)) }
+
+export cm;
+export factor;
+export half;
+export half_to_cm;
+export m;
+export to_cm;
+export to_half;

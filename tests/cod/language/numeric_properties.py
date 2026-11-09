@@ -39,7 +39,7 @@ def main():
     integers += [(0, 0), (2 ** 32 - 1, 2 ** 32), (2 ** 63 - 1, 1)]
     lines = ['using symbol "std:io" @print;', 'unit Slot::u32;',
              'array Floats[Slot]::f32;', 'array Integers[Slot]::u64;',
-             'type Sample { a::f32; b::f32; }',
+             'data Sample { a::f32; b::f32; }',
              'function blend(s::Sample)::f32 { (s.a * s.b + s.a) / s.b }',
              'function blend(a::u64, b::u64)::u64 { a * b + a }',
              'symbol @arena :: region;', 'symbol @fa :: ref<Floats>;', 'symbol @fb :: ref<Floats>;', 'symbol @ia :: ref<Integers>;', 'symbol @ib :: ref<Integers>;',
@@ -54,7 +54,7 @@ def main():
     for i, (a, b) in enumerate(integers):
         lines += [f'store(@ia, Slot({i}u32), {a}u64);', f'store(@ib, Slot({i}u32), {b}u64);']
     lines += [f'for (i in Slot(0u32) .. Slot({len(floats)}u32)) {{',
-              '  behave @print(blend(Sample(@fa[i], @fb[i])));', '};',
+              '  behave @print(blend(deref(alloc @arena Sample(@fa[i], @fb[i]))));', '};',
               f'for (i in Slot(0u32) .. Slot({len(integers)}u32)) {{',
               '  behave @print(blend(@ia[i], @ib[i]));', '};']
     source = '\n'.join(lines) + '\n'

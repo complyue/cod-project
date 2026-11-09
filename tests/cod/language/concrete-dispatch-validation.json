@@ -1,0 +1,940 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T18:32:55.412102+00:00",
+  "registry_record": "K-348",
+  "toolchain": "build",
+  "compiler_sha256": "c3267702e61ce80690576a094d5c28bcd21538bd6b11c0d319f0204d40855983",
+  "scope": "Concrete-data dispatch preserves established explicit conformance through abstract constraints, references, fields, nullable views and nested calls. The pre-export canonical callable implementation remains; H-230/H-231 are not implemented by this checkpoint.",
+  "full": {
+    "passed": 171,
+    "total": 171
+  },
+  "focused": {
+    "passed": 11,
+    "total": 11,
+    "results": [
+      {
+        "fixture": "function-memory.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/function-memory.cod"
+        ],
+        "expected": {
+          "file": "function-memory.cod",
+          "exit": 0,
+          "stdout": "1\n2\n4\n405\n99\n7\n"
+        },
+        "exit_code": 0,
+        "stdout": "1\n2\n4\n405\n99\n7\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-types.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-types.cod"
+        ],
+        "expected": {
+          "file": "abstract-types.cod",
+          "exit": 0,
+          "stdout": "17\n17\n4\n5\n17\n17\n1\n17\n29\n29\n17\n17\n3\n3\n19.5\n19.5\n"
+        },
+        "exit_code": 0,
+        "stdout": "17\n17\n4\n5\n17\n17\n1\n17\n29\n29\n17\n17\n3\n3\n19.5\n19.5\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-forwarding.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-forwarding.cod"
+        ],
+        "expected": {
+          "file": "abstract-forwarding.cod",
+          "exit": 0,
+          "stdout": "2\n2\n2\n2\n2\n2\n2\n"
+        },
+        "exit_code": 0,
+        "stdout": "2\n2\n2\n2\n2\n2\n2\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-hidden-conformance.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod"
+        ],
+        "expected": {
+          "file": "abstract-hidden-conformance.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "no matching method 'rank'",
+            "method lookup uses module",
+            "candidate function 'rank' (Entity) -> i64",
+            "candidate function 'rank' (Weighted) -> i64",
+            "abstract-hidden-conformance.cod'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod:5:1: no matching method 'rank' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample): 2 available candidates\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod:5:1: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-hidden-conformance.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:6:1: note: candidate function 'rank' (Entity) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod:7:1: note: candidate function 'rank' (Weighted) -> i64\n",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-ambiguous.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod"
+        ],
+        "expected": {
+          "file": "abstract-ambiguous.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "ambiguous method 'choose'",
+            "method lookup uses module",
+            "candidate function 'choose' (Entity, Weighted) -> i64",
+            "candidate function 'choose' (Weighted, Entity) -> i64",
+            "abstract-ambiguous.cod'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: ambiguous method 'choose' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample, /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample): 2 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:10:3: note: argument 2 guarantees /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:4:1: note: candidate function 'choose' (Entity, Weighted) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-ambiguous.cod:5:1: note: candidate function 'choose' (Weighted, Entity) -> i64\n",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-join-narrowing.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod"
+        ],
+        "expected": {
+          "file": "abstract-join-narrowing.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "::Weighted, got",
+            "in call to function 'narrow'",
+            "required interface is not established in module",
+            "available value guarantee is",
+            "::Entity",
+            "abstract-join-narrowing.cod'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1: expected /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted, got /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1: note: required interface is not established in module '/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1: note: available value guarantee is /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Entity\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:9:1: note: in call to function 'narrow' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-join-narrowing.cod:4:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "pool-view-escape.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod"
+        ],
+        "expected": {
+          "file": "pool-view-escape.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "regional result would outlive its owning scope",
+            "pool-view-escape.cod:9:22: note: the escaping value depends on this region acquisition"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod:8:17: regional result would outlive its owning scope\n/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod:9:22: note: the escaping value depends on this region acquisition\n",
+        "passed": true
+      },
+      {
+        "fixture": "abstract-fold-invariant.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod"
+        ],
+        "expected": {
+          "file": "abstract-fold-invariant.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "a fold result must retain established conformance",
+            "::Sample <: ",
+            "::Weighted",
+            "in call to function 'lose'"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:5:9: a fold result must retain established conformance /ws/EvtWorks/cod-project/tests/cod/language/abstract-data.cod::Sample <: /ws/EvtWorks/cod-project/tests/cod/language/abstract-library.cod::Weighted\n/ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:9:1: note: in call to function 'lose' defined at /ws/EvtWorks/cod-project/tests/cod/language/abstract-fold-invariant.cod:4:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "method-views.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-views.cod"
+        ],
+        "expected": {
+          "file": "method-views.cod",
+          "exit": 0,
+          "stdout": "14\n22\n25\n2\n19\n"
+        },
+        "exit_code": 0,
+        "stdout": "14\n22\n25\n2\n19\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "method-view-ambiguous.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod"
+        ],
+        "expected": {
+          "file": "method-view-ambiguous.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": "ambiguous method 'score'"
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: ambiguous method 'score' for supplied argument types (/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Sample): 3 matching candidates\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: note: method lookup uses module '/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod'\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:36: note: argument 1 guarantees /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod::Metric\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:4:1: note: candidate function 'score' (Metric) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-first.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-second.cod:2:1: note: candidate function 'score' (Sample) -> i64\n/ws/EvtWorks/cod-project/tests/cod/language/method-view-ambiguous.cod:5:1: note: in call to function 'through' defined at /ws/EvtWorks/cod-project/tests/cod/language/method-view-library.cod:5:1\n",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
+          "--emit-llvm",
+          "/tmp/cod-language-check-wgbwhx_k/program.ll",
+          "--emit-bc",
+          "/tmp/cod-language-check-wgbwhx_k/program.bc"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ]
+  },
+  "composition": [
+    {
+      "case": "512-module-pure-chain-loop-inputs",
+      "backend": "llvm",
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-x_4wx9fj/pure-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-x_4wx9fj/pure-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/pure-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-x_4wx9fj/pure-main.cc"
+          ],
+          "seconds": 0.08392960100900382,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-x_4wx9fj/pure-main.bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/pure-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-x_4wx9fj/pure-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 0.7550336009589955,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-x_4wx9fj/pure-main.native"
+          ],
+          "seconds": 0.0014147480251267552,
+          "exit_code": 0,
+          "stdout": "140104863131\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-x_4wx9fj/pure-main.native"
+          ],
+          "seconds": 0.011789527954533696,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-x_4wx9fj/pure-main.native  :\nsection                 size    addr\n.interp                   28     680\n.note.ABI-tag             32     708\n.dynsym                  264     744\n.gnu.version              22    1008\n.gnu.version_r            48    1032\n.gnu.hash                 28    1080\n.dynstr                  311    1108\n.rela.dyn                216    1424\n.rela.plt                120    1640\n.rodata                  123    1760\n.eh_frame_hdr             84    1884\n.eh_frame                264    1968\n.text                  15398    6336\n.init                     23   21736\n.fini                      9   21760\n.plt                      96   21776\n.fini_array                8   25968\n.init_array                8   25976\n.dynamic                 512   25984\n.got                      48   26496\n.relro_padding          2128   26544\n.data                     16   30640\n.tm_clone_table            0   30656\n.got.plt                  64   30656\n.bss                       1   30720\n.comment                 240       0\n.debug_loclists          134       0\n.debug_abbrev            604       0\n.debug_info             3831       0\n.debug_rnglists           24       0\n.debug_str_offsets       892       0\n.debug_str              2380       0\n.debug_addr              176       0\n.debug_line              256       0\n.debug_line_str          402       0\nTotal                  28790\n\n\n",
+          "stderr": ""
+        }
+      },
+      "expected_stdout": "140104863131\n",
+      "llvm_ir_bytes": 518554,
+      "bitcode_bytes": 204940,
+      "native_executable_bytes": 31944,
+      "native_text_bytes": 15398,
+      "passed": true,
+      "leaf_error": {
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/tmp/cod-composition-stress-x_4wx9fj/pure-main.cod"
+        ],
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-composition-stress-x_4wx9fj/pure-511.cod:1:27: a function cannot read symbolic effects\n/tmp/cod-composition-stress-x_4wx9fj/pure-510.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-x_4wx9fj/pure-511.cod:1:1\n/tmp/cod-composition-stress-x_4wx9fj/pure-509.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-x_4wx9fj/pure-510.cod:2:1\n/tmp/cod-composition-stress-x_4wx9fj/pure-508.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-x_4wx9fj/pure-509.cod:2:1\n/tmp/cod-composition-stress-x_4wx9fj/pure-507.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-x_4wx9fj/pure-508.cod:2:1\nnote: 504 intervening calls omitted\n/tmp/cod-composition-stress-x_4wx9fj/pure-2.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-x_4wx9fj/pure-3.cod:2:1\n/tmp/cod-composition-stress-x_4wx9fj/pure-1.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-x_4wx9fj/pure-2.cod:2:1\n/tmp/cod-composition-stress-x_4wx9fj/pure-0.cod:2:27: note: in call to function 'f' defined at /tmp/cod-composition-stress-x_4wx9fj/pure-1.cod:2:1\n/tmp/cod-composition-stress-x_4wx9fj/pure-main.cod:3:69: note: in call to function 'f' defined at /tmp/cod-composition-stress-x_4wx9fj/pure-0.cod:2:1\n",
+        "passed": true
+      }
+    },
+    {
+      "case": "1000-procedure-inline-chain-with-operation-leaf",
+      "backend": "llvm",
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cc"
+          ],
+          "seconds": 0.08018564409576356,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 0.12424419797025621,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.native"
+          ],
+          "seconds": 0.0014160799328237772,
+          "exit_code": 0,
+          "stdout": "1004\n1008\n9\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.native"
+          ],
+          "seconds": 0.008044357993640006,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.native  :\nsection                size    addr\n.interp                  28     736\n.note.ABI-tag            32     764\n.dynsym                 288     800\n.gnu.version             24    1088\n.gnu.version_r           80    1112\n.gnu.hash                28    1192\n.dynstr                 357    1220\n.rela.dyn               216    1584\n.rela.plt               120    1800\n.rodata                  44    1920\n.eh_frame_hdr            84    1964\n.eh_frame               256    2048\n.text                   550    6400\n.init                    23    6952\n.fini                     9    6976\n.plt                     96    6992\n.tbss                     1    7088\n.fini_array               8   11184\n.init_array               8   11192\n.dynamic                528   11200\n.got                     48   11728\n.relro_padding          512   11776\n.data                    16   15872\n.tm_clone_table           0   15888\n.got.plt                 64   15888\n.bss                      1   15952\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           604       0\n.debug_info            3831       0\n.debug_rnglists          24       0\n.debug_str_offsets      892       0\n.debug_str             2385       0\n.debug_addr             176       0\n.debug_line             256       0\n.debug_line_str         407       0\nTotal                 12370\n\n\n",
+          "stderr": ""
+        }
+      },
+      "expected_stdout": "1004\n1008\n9\n",
+      "llvm_ir_bytes": 1184316,
+      "bitcode_bytes": 348100,
+      "native_executable_bytes": 17336,
+      "native_text_bytes": 550,
+      "passed": true,
+      "leaf_error": {
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod"
+        ],
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-composition-stress-x_4wx9fj/operation-leaf.cod:3:51: perform requires an unavailable definition-time capture /tmp/cod-composition-stress-x_4wx9fj/operation-leaf.cod::@missing\n/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:7:42: note: in call to procedure '(+)' defined at /tmp/cod-composition-stress-x_4wx9fj/operation-leaf.cod:3:1\n/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:9:37: note: in call to procedure '@p0' defined at /tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:7:1\n/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:11:37: note: in call to procedure '@p1' defined at /tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:9:1\n/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:13:37: note: in call to procedure '@p2' defined at /tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:11:1\nnote: 993 intervening calls omitted\n/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:2001:39: note: in call to procedure '@p996' defined at /tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:1999:1\n/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:2003:39: note: in call to procedure '@p997' defined at /tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:2001:1\n/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:2005:39: note: in call to procedure '@p998' defined at /tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:2003:1\n/tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:2007:23: note: in call to procedure '@p999' defined at /tmp/cod-composition-stress-x_4wx9fj/procedure-main.cod:2005:1\n",
+        "passed": true
+      }
+    },
+    {
+      "case": "layered-diamond-22-modules-2047-calls",
+      "backend": "llvm",
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-x_4wx9fj/dag-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-x_4wx9fj/dag-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/dag-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-x_4wx9fj/dag-main.cc"
+          ],
+          "seconds": 0.06390450394246727,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-x_4wx9fj/dag-main.bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/dag-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-x_4wx9fj/dag-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 0.12601633206941187,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-x_4wx9fj/dag-main.native"
+          ],
+          "seconds": 0.0015438629779964685,
+          "exit_code": 0,
+          "stdout": "3072\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-x_4wx9fj/dag-main.native"
+          ],
+          "seconds": 0.008627571980468929,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-x_4wx9fj/dag-main.native  :\nsection                size    addr\n.interp                  28     680\n.note.ABI-tag            32     708\n.dynsym                 264     744\n.gnu.version             22    1008\n.gnu.version_r           48    1032\n.gnu.hash                28    1080\n.dynstr                 311    1108\n.rela.dyn               216    1424\n.rela.plt               120    1640\n.rodata                  44    1760\n.eh_frame_hdr            84    1804\n.eh_frame               240    1888\n.text                   454    6224\n.init                    23    6680\n.fini                     9    6704\n.plt                     96    6720\n.fini_array               8   10912\n.init_array               8   10920\n.dynamic                512   10928\n.got                     48   11440\n.relro_padding          800   11488\n.data                    16   15584\n.tm_clone_table           0   15600\n.got.plt                 64   15600\n.bss                      1   15664\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           604       0\n.debug_info            3831       0\n.debug_rnglists          24       0\n.debug_str_offsets      892       0\n.debug_str             2379       0\n.debug_addr             176       0\n.debug_line             256       0\n.debug_line_str         401       0\nTotal                 12413\n\n\n",
+          "stderr": ""
+        }
+      },
+      "expected_stdout": "3072\n",
+      "llvm_ir_bytes": 1192204,
+      "bitcode_bytes": 270368,
+      "native_executable_bytes": 16888,
+      "native_text_bytes": 454,
+      "passed": true
+    },
+    {
+      "case": "16-unit-reexports-31-conversion-steps-with-cycle",
+      "backend": "llvm",
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-x_4wx9fj/unit-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-x_4wx9fj/unit-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/unit-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-x_4wx9fj/unit-main.cc"
+          ],
+          "seconds": 0.016745790024288,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-x_4wx9fj/unit-main.bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/unit-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-x_4wx9fj/unit-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 0.09544787602499127,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-x_4wx9fj/unit-main.native"
+          ],
+          "seconds": 0.0012591840932145715,
+          "exit_code": 0,
+          "stdout": "32\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-x_4wx9fj/unit-main.native"
+          ],
+          "seconds": 0.007626808015629649,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-x_4wx9fj/unit-main.native  :\nsection                size    addr\n.interp                  28     680\n.note.ABI-tag            32     708\n.dynsym                 264     744\n.gnu.version             22    1008\n.gnu.version_r           48    1032\n.gnu.hash                28    1080\n.dynstr                 311    1108\n.rela.dyn               216    1424\n.rela.plt               120    1640\n.rodata                  44    1760\n.eh_frame_hdr            84    1804\n.eh_frame               240    1888\n.text                   454    6224\n.init                    23    6680\n.fini                     9    6704\n.plt                     96    6720\n.fini_array               8   10912\n.init_array               8   10920\n.dynamic                512   10928\n.got                     48   11440\n.relro_padding          800   11488\n.data                    16   15584\n.tm_clone_table           0   15600\n.got.plt                 64   15600\n.bss                      1   15664\n.comment                240       0\n.debug_loclists         134       0\n.debug_abbrev           604       0\n.debug_info            3831       0\n.debug_rnglists          24       0\n.debug_str_offsets      892       0\n.debug_str             2380       0\n.debug_addr             176       0\n.debug_line             256       0\n.debug_line_str         402       0\nTotal                 12415\n\n\n",
+          "stderr": ""
+        }
+      },
+      "expected_stdout": "32\n",
+      "llvm_ir_bytes": 17922,
+      "bitcode_bytes": 8672,
+      "native_executable_bytes": 16888,
+      "native_text_bytes": 454,
+      "passed": true
+    },
+    {
+      "case": "96-level-regional-borrow-mixin-and-nominal-dispatch-chain",
+      "backend": "llvm",
+      "phases": {
+        "check": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/cod",
+            "--check",
+            "/tmp/cod-composition-stress-x_4wx9fj/regional-main.cod",
+            "--emit-llvm",
+            "/tmp/cod-composition-stress-x_4wx9fj/regional-main.ll",
+            "--emit-bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/regional-main.bc",
+            "--emit-runtime",
+            "/tmp/cod-composition-stress-x_4wx9fj/regional-main.cc"
+          ],
+          "seconds": 0.1373583630193025,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "compile_link": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/clang++",
+            "-std=c++20",
+            "-O2",
+            "-g",
+            "-stdlib=libc++",
+            "-fuse-ld=lld",
+            "-I/ws/EvtWorks/cod-project/include",
+            "/tmp/cod-composition-stress-x_4wx9fj/regional-main.bc",
+            "/tmp/cod-composition-stress-x_4wx9fj/regional-main.cc",
+            "-o",
+            "/tmp/cod-composition-stress-x_4wx9fj/regional-main.native",
+            "-L/ws/EvtWorks/cod-project/build/lib",
+            "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib"
+          ],
+          "seconds": 1.8795952190412208,
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "run": {
+          "command": [
+            "/tmp/cod-composition-stress-x_4wx9fj/regional-main.native"
+          ],
+          "seconds": 0.0015167009551078081,
+          "exit_code": 0,
+          "stdout": "95\n4560\n11\n29\n29\n47\n192\n288\n-96\n",
+          "stderr": ""
+        },
+        "size": {
+          "command": [
+            "/ws/EvtWorks/cod-project/build/bin/llvm-size",
+            "--format=sysv",
+            "--radix=10",
+            "/tmp/cod-composition-stress-x_4wx9fj/regional-main.native"
+          ],
+          "seconds": 0.009260168997570872,
+          "exit_code": 0,
+          "stdout": "/tmp/cod-composition-stress-x_4wx9fj/regional-main.native  :\nsection                 size    addr\n.interp                   28     736\n.note.ABI-tag             32     764\n.dynsym                  552     800\n.gnu.version              46    1352\n.gnu.version_r            80    1400\n.gnu.hash                 28    1480\n.dynstr                  536    1508\n.rela.dyn                312    2048\n.rela.plt                288    2360\n.rodata                 9733    2648\n.gcc_except_table         60   12384\n.eh_frame_hdr            124   12444\n.eh_frame                488   12568\n.text                  15129   17152\n.init                     23   32284\n.fini                      9   32308\n.plt                     208   32320\n.tbss                     32   32528\n.fini_array                8   36624\n.init_array                8   36632\n.dynamic                 528   36640\n.got                      64   37168\n.relro_padding          3728   37232\n.data                     32   41328\n.tm_clone_table            0   41360\n.got.plt                 120   41360\n.bss                       1   41480\n.comment                 240       0\n.debug_loclists          891       0\n.debug_abbrev           2321       0\n.debug_info            22673       0\n.debug_rnglists          143       0\n.debug_str_offsets      4728       0\n.debug_str             36467       0\n.debug_addr              352       0\n.debug_line              925       0\n.debug_line_str         1505       0\nTotal                 102442\n\n\n",
+          "stderr": ""
+        }
+      },
+      "expected_stdout": "95\n4560\n11\n29\n29\n47\n192\n288\n-96\n",
+      "llvm_ir_bytes": 833185,
+      "bitcode_bytes": 211848,
+      "native_executable_bytes": 105192,
+      "native_text_bytes": 15129,
+      "passed": true,
+      "implementation_conflict": {
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/tmp/cod-composition-stress-x_4wx9fj/regional-main.cod"
+        ],
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-composition-stress-x_4wx9fj/regional-95.cod:9:44: ambiguous method 'weigh' for supplied argument types (/tmp/cod-composition-stress-x_4wx9fj/regional-types.cod::Node): 3 matching candidates\n/tmp/cod-composition-stress-x_4wx9fj/regional-95.cod:9:44: note: method lookup uses module '/tmp/cod-composition-stress-x_4wx9fj/regional-95.cod'\n/tmp/cod-composition-stress-x_4wx9fj/regional-95.cod:9:44: note: argument 1 guarantees /tmp/cod-composition-stress-x_4wx9fj/regional-interface-0.cod::Link\n/tmp/cod-composition-stress-x_4wx9fj/regional-rank.cod:2:1: note: candidate function 'score' (Link) -> i64\n/tmp/cod-composition-stress-x_4wx9fj/regional-rank-first.cod:3:1: note: candidate function 'weight' (Node) -> i64\n/tmp/cod-composition-stress-x_4wx9fj/regional-rank-second.cod:3:1: note: candidate function 'weight' (Node) -> i64\n/tmp/cod-composition-stress-x_4wx9fj/regional-94.cod:14:44: note: in call to function 'shared_measure' defined at /tmp/cod-composition-stress-x_4wx9fj/regional-95.cod:9:1\n/tmp/cod-composition-stress-x_4wx9fj/regional-93.cod:14:44: note: in call to function 'shared_measure' defined at /tmp/cod-composition-stress-x_4wx9fj/regional-94.cod:14:1\n/tmp/cod-composition-stress-x_4wx9fj/regional-92.cod:14:44: note: in call to function 'shared_measure' defined at /tmp/cod-composition-stress-x_4wx9fj/regional-93.cod:14:1\n/tmp/cod-composition-stress-x_4wx9fj/regional-91.cod:14:44: note: in call to function 'shared_measure' defined at /tmp/cod-composition-stress-x_4wx9fj/regional-92.cod:14:1\nnote: 88 intervening calls omitted\n/tmp/cod-composition-stress-x_4wx9fj/regional-2.cod:14:44: note: in call to function 'shared_measure' defined at /tmp/cod-composition-stress-x_4wx9fj/regional-3.cod:14:1\n/tmp/cod-composition-stress-x_4wx9fj/regional-1.cod:14:44: note: in call to function 'shared_measure' defined at /tmp/cod-composition-stress-x_4wx9fj/regional-2.cod:14:1\n/tmp/cod-composition-stress-x_4wx9fj/regional-0.cod:14:44: note: in call to function 'shared_measure' defined at /tmp/cod-composition-stress-x_4wx9fj/regional-1.cod:14:1\n/tmp/cod-composition-stress-x_4wx9fj/regional-main.cod:47:1: note: in call to function 'shared_measure' defined at /tmp/cod-composition-stress-x_4wx9fj/regional-0.cod:14:1\n",
+        "passed": true
+      }
+    }
+  ],
+  "native": {
+    "passed": true,
+    "llvm_artifact_roundtrip": true,
+    "layout": {
+      "relocation_passed": true,
+      "relocated_bytes": 120,
+      "region_header_bytes": 40,
+      "array_header_bytes": 16,
+      "record_bytes": 24
+    },
+    "pool": {
+      "layout": {
+        "relocation_passed": true,
+        "relocated_bytes": 152,
+        "slots": 4,
+        "cod_reuse_laps": 10000,
+        "bounded_occupation": true,
+        "relocated_free_chain": [
+          3,
+          1,
+          4
+        ],
+        "independent_native_reuse_passed": true
+      },
+      "frontend_seconds": 0.01743710890877992,
+      "native_compile_link_seconds": 1.623461531009525,
+      "native_process_seconds": 0.0012256110785529017,
+      "llvm_ir_bytes": 91250,
+      "bitcode_bytes": 24752
+    },
+    "resources": {
+      "layout": {
+        "owners_acquired": 4,
+        "owners_released": 4,
+        "release_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "live_resource_reads": 18,
+        "loop_iterations": 3,
+        "untaken_branch_acquires_nothing": true,
+        "captured_and_hidden_owners_survive_replay": true
+      },
+      "frontend_seconds": 0.015797776053659618,
+      "native_compile_link_seconds": 1.524551942013204,
+      "native_process_seconds": 0.0012731699971482158,
+      "llvm_ir_bytes": 9068,
+      "bitcode_bytes": 5676
+    }
+  },
+  "source_sha256": {
+    "cod/main.cc": "0764af4233509ee8482a9ab582ccd2e5268b99718663b0f94105ea87815f0a0b",
+    "cod/lang_syntax.hh": "f4601a5186be865b600fff5863cddfe12210afb76893b9ba4db33a787cfa48d7",
+    "cod/lang_frontend.hh": "6852bbab3004b99d2a1db783c3e14cb63b2b034c04e18d8299e0892e71bf8fda",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
+    "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
+    "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
+    "tests/cod/language/cases.json": "09315e450b000545483f858883dc5fcee63c577bbed7a0b0ddc880219e3acbdc",
+    "tests/cod/language/abstract-adapter.cod": "88d3fc171b2e0dc3a04c951a9b53a4f107cb198526af22553ed3600705786373",
+    "tests/cod/language/abstract-alternate-factory.cod": "ef01b096a5c3884c4c4bf7b83508fcce388095dcceb0e2edacec0ae3b17e4d78",
+    "tests/cod/language/abstract-ambiguous.cod": "d2b8d33e4c8052ab1c6785173c342aac49110536807674fb6700928c62923347",
+    "tests/cod/language/abstract-body.cod": "75b6c563dd85a35ddb4fb9a7b4c3557c852f451a9f9da84f9334b3b92410a62f",
+    "tests/cod/language/abstract-cycle.cod": "c66c418385666bee05036c4f8e68793066e45775cf2868601626e0e4c46306af",
+    "tests/cod/language/abstract-data.cod": "eb32e3bc9e1505068347be6395a1bead679bef07fadea844b92d8e611a3707b5",
+    "tests/cod/language/abstract-fold-invariant.cod": "be8a1081a38e731d9f3aaa98ffe550ca7caed2f846f9dfc2e616be8900e692fd",
+    "tests/cod/language/abstract-forwarding.cod": "16c93ecab125f4191308cc3f108b3101f28961990e112231274061208691b2c8",
+    "tests/cod/language/abstract-hidden-conformance.cod": "11d8823acba60b9e029e7d1b620f3fc82ead871c3e6e20760c5e9f69bf3c7ca2",
+    "tests/cod/language/abstract-join-narrowing.cod": "c6d77db3a830a4c5ec3c04b7aeb5208db8023dfd756ec9891b1a013e243941ec",
+    "tests/cod/language/abstract-library.cod": "b714be199809fb29ad2ffb1a5e5e5b104830f01b0186bcf9beada9eed04c0f1e",
+    "tests/cod/language/abstract-missing-body.cod": "d7d7aec17b68b5ac0a4c171ca42946285d8fbb206a392083d70b6942c30a117a",
+    "tests/cod/language/abstract-second-adapter.cod": "1342877b73ca3f4b022c4a9722b40cfe4cde7920f93757b83ceee67c48bbddab",
+    "tests/cod/language/abstract-types.cod": "1349f8619c925e9688021271260f531ff32d2b1e8ad80dadb4d1a16d2e35d5a6",
+    "tests/cod/language/abstract-using-extension.cod": "6817e199b0ecea8094cf9690d53a1ba3cfd92b18d22267a0bcfe58f8a603bd72",
+    "tests/cod/language/aliased-body-model.cod": "b07dab5e57555e2d49fb3d700fb495238b13df0c38020ff557e5a668a6e6a4c7",
+    "tests/cod/language/arithmetic.cod": "4d535bf4184015863852ab3a47e03969b28221491de2e71d5b349009d1979e28",
+    "tests/cod/language/behave-without-caller.cod": "d4ea5df489907e187937110ea4c4faefc3c45eaa181aed78d2d0acc9cfab4fce",
+    "tests/cod/language/bounded-iteration.cod": "7b7228907eb4e81a5d2ff66f3c1a090dfe90f31167497111781f143b985f3d14",
+    "tests/cod/language/broken-dependency.cod": "6cd8716b5bdcd5e22a9deb4c3b308fcd0908c74b7d4ce0d1a3c30632955679d3",
+    "tests/cod/language/builtin-body-import.cod": "4b50efa1a0fdc81400edf5c30db6618dcaf7e22ce9195b97723981efb5a50db9",
+    "tests/cod/language/capture-scope-restore.cod": "9400f6b60703b00a14790c58ef3650a78d920dff0e036f3b3c46f42b4cdb606b",
+    "tests/cod/language/cast-truncation.cod": "513b8b42b993f3408775af8542e18a84cc7317272636c33a385179ae8b5c7838",
+    "tests/cod/language/destination-vocabulary.cod": "bd49ee00daa3e51cf35e8ed4c653ed77763ce134bcf825cbbcda8d708817abbf",
+    "tests/cod/language/diamond-left.cod": "05403fa9c0c0df2e18ee9aedda6c89ac3555fb49fad6c66a5001cdf8e5271469",
+    "tests/cod/language/diamond-right.cod": "0f82e918a0095cc39173d0c13a73797af073773afb88eabdd531018b9a4e47e5",
+    "tests/cod/language/diamond-shared.cod": "6e0b21cbe0d3c227d5267070f1e2c4b5c3ea97cdcbe472d34131216044df8386",
+    "tests/cod/language/diamond-vocab.cod": "244f5b90ece01c0c7de37f0f0e2e98a46d3c74270e8cd415d44b2dff6b326b25",
+    "tests/cod/language/duplicate-map-role.cod": "e48e3b4150eed299c4aaa20620a37818898babfff7031b817658f8d886a873ef",
+    "tests/cod/language/early-alias.cod": "21385aee810bda609df0bd5aeb052619d71b437181ce3b33a63481487d34a88b",
+    "tests/cod/language/effect-equals.cod": "33daf00b563d7ea3ba33d5d5065a60474b48cf47aad34ec56c8e7ddeea3c9d96",
+    "tests/cod/language/float-boundary-rounding.cod": "a65c3d14a9a0c5ed02103674282f16be54d8990becd449173957846b60e978f4",
+    "tests/cod/language/float-cast-boundary.cod": "bef6cf858853fd816d8a331c29fdbb8161070309395dabebbc5e9403f90c3041",
+    "tests/cod/language/float-cast-nan.cod": "cf6fee8f317970a70f3bc8d6fd6e6f68f58acbbf4f32acf867fde730a4ce3d05",
+    "tests/cod/language/float-cast-unsigned-boundary.cod": "617d0a2e5a7a11f8f43542e65570ef31c8a328a1529821ce15282124e7bbae4b",
+    "tests/cod/language/float-range-error.cod": "731d4de618632486fba7c11dc9d70ae220675ca6cc8eabd8a710d50f70d874cf",
+    "tests/cod/language/float-width-error.cod": "4e9cfe886c7c19c3f8d5fdb27f412f238282564d1c9fbedecf8e77c7a965a977",
+    "tests/cod/language/floating-captures.cod": "926dd5d6133fe3031022c0a7721747c7d0acec0d4646194cff9f9fe5633f4500",
+    "tests/cod/language/fold-products.cod": "056d76cc91de4185df34380aef52c588874287ba42ce40b4a5520324fa786f49",
+    "tests/cod/language/fold-type-error.cod": "f136f1482ab60c9b840a2a7f46453af9db12ea1e99dea449be8f1b40ba9b86d3",
+    "tests/cod/language/fold-view-owner.cod": "f6e99c9cdc20456b4d1dffc1b03d9d9a0cb4f0a757e72c99e63524becf8e059e",
+    "tests/cod/language/function-cross-region.cod": "dbb02fe9accf4459ce5835b1a0153066cf1f800f413ebbfdcf09c5fa8597132d",
+    "tests/cod/language/function-effect-write.cod": "1602db104c1f299bc7c1a60eb468c91f3d8f915a4b99b4403f18a414c0f5cd89",
+    "tests/cod/language/function-memory.cod": "6164b82cc2c9b4cbd8e908a0555e18c996c3973c3eb345b8277178f4981d19d1",
+    "tests/cod/language/function-resource.cod": "c2d0f8d81d916fca85cc6c306298542fe497a66f137485647e31f8c7a6475b89",
+    "tests/cod/language/global-memory-operation.cod": "2246bdb2f4857ef3965fd2f02c9600a6c252b4027159aa5cc07f56c268e0571a",
+    "tests/cod/language/global-resource.cod": "f621ca3f72105cc45ef8f315e1d46da96424d121fe6270905cd4ceeb5888b372",
+    "tests/cod/language/identity-provider.cod": "d105bb54e441f601cb1bec6cdaa9375bceb78b81e37d2bd4c1be84cd88d20373",
+    "tests/cod/language/identity-restore.cod": "7933ba8077a2725b853c2f80ae8fa54ea6ba1224f2dcbfbed72c2c86b4d5730c",
+    "tests/cod/language/identity.cod": "ad3026443f0feb47c1c726e8a132712ed0f3b94250f8749996cb03332a2de476",
+    "tests/cod/language/import-body-map.cod": "2c36d86fd7ca162b682449c313838086ea147a2a3d31d16a69ad2c53b2f5e3e1",
+    "tests/cod/language/import-default-identity.cod": "b2dbe990e91d7e6fa9979d069dbba06c8a794c8d4b95b2c18620c2ced9ef2c58",
+    "tests/cod/language/import-mapping.cod": "b7c5c5f4335bf05e10cd45413317c863efbd4179e0b671105fb80a47e875383c",
+    "tests/cod/language/import.cod": "bd329459380d40d187dd51632ce508b02fc19b1ec27d58f57a1a7705e5f7b8df",
+    "tests/cod/language/impure-function.cod": "aaf6954ed121de3b8c6b115e246e5851937d0baa728640849c7de4195651323a",
+    "tests/cod/language/indexed-assignment-order.cod": "5c4dc3ec944a2e1bf5bff257f0cb3300ff03c05ee5181351b1da5298d49f5d37",
+    "tests/cod/language/intrinsic-library.cod": "d867d084aeaaa4eb86f080eaa14cc6397d88186f77bdb663351fed890054e1c9",
+    "tests/cod/language/intrinsic-overloads.cod": "76e04f55d8b9e424cda5645614c003d62c08433a255ef72f4b87d334993caf6b",
+    "tests/cod/language/intrinsic-pure-error.cod": "9bda9fe9d2b5186887d89da3a500638a680a1951ac1eb68454c4e1e30bcebc63",
+    "tests/cod/language/intrinsic-reserved-name.cod": "9112140a1f4aba26a09bfc87cd3cabe7190feba7a3e4fddbb5ff93ffbf75c88e",
+    "tests/cod/language/intrinsic-symbol-name.cod": "bd1c4b85009063784368c53cfb9efb606f2e8dd76cbc6a728551753aeab2b738",
+    "tests/cod/language/iteration-index-error.cod": "f2a740829eae91e0cbacbd3f98ffde0b5dc777e2cc437865abbba9c996865ad6",
+    "tests/cod/language/iteration-scope.cod": "aa544f2a013d4bfc331fcd7d53f925f0fa8c64cc44b107bcbffc2f3c837b8d8e",
+    "tests/cod/language/late-alias-destination.cod": "06f1595b32fd5061ef439baf47280df1e3150f8b9ce7ff1e7d3c94faa61e5c13",
+    "tests/cod/language/local-duplicate.cod": "24f3d346ab7863a22ae97835f85c1c4e45f90d35f360a6590c0f8fc47103b46d",
+    "tests/cod/language/local-reserved-name.cod": "595ab6ee14c78a3fa168b3cb6f311d7de05cf37eab65380dc2598a6de040cae2",
+    "tests/cod/language/logical-unscoped-effect.cod": "d9263d97a5077c194fc26e5031ae059f3c1b32c57f38dce9d378530e425cd23a",
+    "tests/cod/language/logical-unscoped-region.cod": "1fd99402d340938ff1fadfa43dc437b1e6d32303b8dfacbaa8ad083fc89519e5",
+    "tests/cod/language/mapped-behave-later.cod": "49a03770d00ad9f2e1a5ab23da382699134d05f6f2868734e4d6029e2372c7a0",
+    "tests/cod/language/mapped-effects-model.cod": "e745cf8ebd528dcaf149c4ac72f1283493a4823fdac3546dbfc28407388c24d6",
+    "tests/cod/language/mapped-perform-model.cod": "46cb58f516394be324b06474786bb684ed553fcfa9c3d5bf0a131e83d4ea5c64",
+    "tests/cod/language/mapping-effects.cod": "fa238f60473ef8c258d0139a8f6b7914414da21e4c07e363197209a8475411e1",
+    "tests/cod/language/mapping-perform-call.cod": "c5933191cc5a6f84036a5374e5dc4eaeeec5ee776f43650aeed7233f179b2126",
+    "tests/cod/language/mapping-shared-identity.cod": "1dce0c8366867c002cfd5ee8671af7c56a0c8c85a62993fab2f9b07c5af24c3b",
+    "tests/cod/language/mapping-split-identity.cod": "0eef2a5cd0242a0e1ebc8586bac586050ba77e7307d3dabc4ed7a9a5ba2dc02d",
+    "tests/cod/language/math-source.cod": "5d3029f30583e31a131c0e4f5ae12c8db6fd98ea667908fd23b224acea7291da",
+    "tests/cod/language/method-ambiguous.cod": "2981abc025ace4031dc6dfccb3d62552562be95a981b2f1d7926c84d984cea3f",
+    "tests/cod/language/method-extension.cod": "408e7688268320f221716eacd58f1a6e4ba9f9e517d2abde0a0c1e83fa981e76",
+    "tests/cod/language/method-library.cod": "dacca8fa54d12d51637d65c34fe4fae7ce82c26c9c0158815aa96b4a315efdb7",
+    "tests/cod/language/method-modules.cod": "e5444e613cc9a3230d61fabde3f9db3f71f8af78b8b6f264522536e0bc31612b",
+    "tests/cod/language/method-name-ambiguous.cod": "034b24b96e5cd5c5530072e62dde903532cbdf114d0f0fbc65a43ad2dce6d609",
+    "tests/cod/language/method-no-match.cod": "db367e9d32ad890d25abc8ebd46aa964ab1923f35cc62ae4f5e00702a19e3579",
+    "tests/cod/language/method-other-library.cod": "bfefe85ee3032f7ddf502e9dbddf7b817c10ef23eadd74431acbd05d9affa5a4",
+    "tests/cod/language/method-using-extension.cod": "e51c09cc8da0459f446543a96fca5f89b244eef3afef3f3227b6387d2d47a738",
+    "tests/cod/language/method-view-ambiguous.cod": "51b2dde1c3312a8b2fc451755813e91b0585baa3f879c360a0d92e49d364db8d",
+    "tests/cod/language/method-view-first.cod": "99e49d87ce14af5a4a60a1b9c18a6d011e76e2fba3949fe24d8ec84bdefd4ffd",
+    "tests/cod/language/method-view-library.cod": "b99d4a6caaa9f575c253ceb6d33bfb1734ac96499001c33f2283f8c1e1a30a29",
+    "tests/cod/language/method-view-second.cod": "076acb7e1dc83b33e3e780e38eff3e5ca6cee4ca027591ed109f8853f1648d1f",
+    "tests/cod/language/method-view-shadow.cod": "b8a17bf6d4da3f34634f4b87b31bb976fc1fce74207791ef10e408e60190172b",
+    "tests/cod/language/method-views.cod": "c4eef1acad9b86605b66885782f20ba89a2a91dc8021a9e7024d3f05a6647e5d",
+    "tests/cod/language/methods.cod": "c7b4f07b881e80a3860b08f3673796fd11f5cbcec4d2cc577ed77e543a202e35",
+    "tests/cod/language/missing-capture.cod": "6bfe3442fff1225de77fbc8cea34adfbce0449e5a24cb11e82922afce93f0e85",
+    "tests/cod/language/missing-default-alias.cod": "928adaefdcd6748750ebff3d74ae198c51ab08b88e7c2a7ebca9816f2f056138",
+    "tests/cod/language/mixin-lexical-provider.cod": "acb54227bd66c09b24945f6b1dc9166426b57730093def267aab75a60da1ff47",
+    "tests/cod/language/mixin-type.cod": "9142a305c3cff97c16e8b0b9a230f6df6a70f6e55d348af41f1e935ebd048203",
+    "tests/cod/language/module-diamond.cod": "d7c57a55265fb5c8050f8fbe8371670d8a958e4cf403252cd33fe8f8486aec25",
+    "tests/cod/language/module-reserved-name.cod": "02316589163a8e445363673f6f896aebf8e3dd1b6102e20e9f4301b9b6cc8e4a",
+    "tests/cod/language/module-selection.cod": "93c413b552d4d153905cc0ecf9e7048162ab516963dc0a946f31c8ead1c04b1f",
+    "tests/cod/language/numeric-widths.cod": "93aa98656d33b26633e1e3c5b4961a19ed5a96bcf04b112de36c8711b712146e",
+    "tests/cod/language/operator-control.cod": "f3ef905413996098ab7037d759a071969042fc07e7113102c13da474baa57257",
+    "tests/cod/language/operator-library.cod": "062013143be94acbcff4c432d28b3cb3f12402d0eb4ba0ac520b4051a7f6303f",
+    "tests/cod/language/operator-using.cod": "7974e168271548b03fb627433000d392532e6cc0474ce31843eacfe3d11bb912",
+    "tests/cod/language/other-vocabulary.cod": "9a0a0a5e4abcd0dc876474adee2fd8c7f76ee8f1d9b366f9ea6ad23e62000675",
+    "tests/cod/language/overflow.cod": "d0d0e1a3c4a703c48c454d1700cf38d439abb327b4b1a11061cf1c3c47a4b826",
+    "tests/cod/language/perform-without-caller.cod": "7b48153167b01e0cbe4bc9313e50e2d155c926530935a8085783685bcbe20068",
+    "tests/cod/language/plain-assignment.cod": "800bf2232d87f47282d7e592f1cb7719ca8fee09cdd9860559fe3b3d00c1a634",
+    "tests/cod/language/pool-adapter.cod": "4dc8fd6b7e8dcfc28248f4abf106582cd1080207fbafd880db0305eb95aa285a",
+    "tests/cod/language/pool-index.cod": "8d4b59f80dd68572b1a149298255466ee38687842c27285b1b7c2bcfac9ac04b",
+    "tests/cod/language/pool-interface.cod": "8a69db7ca21cc351b96c2a64ef97e29669f905d1f7c846772c6ad5b910a07eaf",
+    "tests/cod/language/pool-layout.cod": "35687acc23c890947e2005c772371c16193f2dc0a368e5aafd80556e19ca6254",
+    "tests/cod/language/pool-typed.cod": "1a76509d09033e221ac6d16db60a99c91f65f5ad77e29401701ebae9b9a6c4e1",
+    "tests/cod/language/pool-units.cod": "7e98a99907eb5a1d546055ecdac548d129c3cafc17c8c5352179ed21388473c3",
+    "tests/cod/language/pool-view-escape.cod": "c4ed00396489e3a15e3fd5b8efaa48a5dc4f7d844eb52740fe08f85fe48ceb51",
+    "tests/cod/language/procedure-declaration-error.cod": "c84db8719e1c94a2ccf04440caad090883b37107433d985381e0f4b345b7b16c",
+    "tests/cod/language/procedure-declarations.cod": "54cbaf4bb2f7714329af14b5ceb66a0a767890a38906494366ced9a1124d9ece",
+    "tests/cod/language/procedure-lexical-perform.cod": "2aa176a7790ca529593dd95306cabf338b3fc3a56de52abf8a65f51b7b101717",
+    "tests/cod/language/procedure-library.cod": "f7d96d837f38044ab981e15a772cce402644fb2ba90e300623359a9d5840c39b",
+    "tests/cod/language/procedure-pure-call.cod": "8ecbe30a60ecc2025e254cc697267ec4118aaf036af2d2a04e3f611d474408f6",
+    "tests/cod/language/procedure-rebinding.cod": "22ca6818a93d98b7689751cfa8b58065f72ed99962d97e25ae0ef85be97abce6",
+    "tests/cod/language/procedure-signature-error.cod": "b3b53727dace4c762293204c968b3ea9508c0664d44449a2df7865f52f7bab74",
+    "tests/cod/language/procedure-vocabulary.cod": "12a9bbfaab1c071da4d077ff55e8dc4e047c3bf720eebc516712ad922a4388a1",
+    "tests/cod/language/product-alias.cod": "ad23ae6f9392ede4ae708944f4d98ae89ba33b814dea123aa36a19fab95debfe",
+    "tests/cod/language/product-captures.cod": "136652f75774c9beaf099449fa04353c3046023170fb683d0ce12aec2b08139c",
+    "tests/cod/language/product-cycle.cod": "51c81cd7e84f514fa569c841c1381baa4da8f1af5c65f8e5ea804b840cdfbcb5",
+    "tests/cod/language/product-field-error.cod": "699862c9dfb2b7efab96d74b6f8f37f32d391dc70f850222f93a97668e5616ce",
+    "tests/cod/language/product-library.cod": "92770a1d5b37c4091aad5060d2e26bbc59f13594e79c4d73c2c45b6f15660235",
+    "tests/cod/language/product-module-identity.cod": "e026cbe6c23ddda9c9cca7ce1b6056ad19ecb15d6530af4ae20a9c06fb320e78",
+    "tests/cod/language/product-other-library.cod": "91c8b1f933e75f02dd0d649618d35fef0bca298d2cf21128fa5514eb168b44db",
+    "tests/cod/language/products.cod": "d9acb5b36f2fc60bf395f38c971f881c19a9c3cb12babcb4bfaa55447aa54364",
+    "tests/cod/language/quoted-operator.cod": "7795a820a739a7b5a94148c7060f8252a8355e96019d8f756926b49dd5dbd63d",
+    "tests/cod/language/region-arrays.cod": "7484262a1bbce92ad3572f80fb1b125868332b10b5b5d932141e43cf09686037",
+    "tests/cod/language/region-bounds.cod": "833b68653b10f19d8951f743ddbcdb1bc7a88fd0192320bd4c1bf2fd6919ffe7",
+    "tests/cod/language/region-capacity.cod": "c97515c6da5dec4ffbedcff3f40fefa6a09ec39fed23b8e991e93500fcca703f",
+    "tests/cod/language/region-capture.cod": "5ca9315c33a640aa3eb2ae917cfb85b76b169c8753fd1b58a59f964f14949301",
+    "tests/cod/language/region-cross-pointer.cod": "9451b526040375bf66fb91b503f4074ab9759e8942374ab0ee739b569ef3ab77",
+    "tests/cod/language/region-empty.cod": "7ccdfa4d5c7a4ddbb83c04fc7647852301e472d3e0b1550f4f7e334441694635",
+    "tests/cod/language/region-escape.cod": "98ec7a347dd61d6843be91b43acd4f6a7f813c112259aa9a9c3fc45371cee5a9",
+    "tests/cod/language/region-factory-import.cod": "89fbf6fb5b834529fae7101f1c5a8b52d079f4151cea14ebcabe7593978e91cc",
+    "tests/cod/language/region-factory-source.cod": "400cf4e0dfab6e24c330e3a08d21aa5c84ec7c7b933d798c34df7addcfa9f87b",
+    "tests/cod/language/region-factory-vocabulary.cod": "a1130097248c5fb4e5a2931701e38bce3458d2d0ba547f980655a573b23cb91d",
+    "tests/cod/language/region-gather-kernel.cod": "ad4affbd604d19d7a0ef6a8680cbba3944fcee01db7c42c4fe0a0b67728cd6f6",
+    "tests/cod/language/region-gather-step.cod": "c54fed3e3ab5d3b4b2a9bba40e0beabee91be012556cf02eedb15a5570e4bd62",
+    "tests/cod/language/region-gather-types.cod": "94af4e8913a4c6324f4fa12ffea956025fd568544b7bb827e83b83ec3a7a577c",
+    "tests/cod/language/region-gather.cod": "ac91110c3b3ddd5cb920e738edbabdd0c13c0daa93f417910fc8b3e2879bb780",
+    "tests/cod/language/region-index-error.cod": "141ade398668b8e7c195a2da33a736e6c563e0968bb94fbd4c2ad2780586564c",
+    "tests/cod/language/region-module-behave.cod": "a7dcbc9e68091a007fce96bff945395dc8740298e5968fffd3386b61c8749581",
+    "tests/cod/language/region-module-perform.cod": "2c4954eb336d30365a0965aa8cbb9331505569ae810c8794f00ac5159cee63a0",
+    "tests/cod/language/region-mutual.cod": "ea990d652f36312ad9be6e636479c661e4eb57d75e885af2f97cdb852b7bc06e",
+    "tests/cod/language/region-null.cod": "e7152a90081bda165ff9cde2c31c7980fee7c7e40af3d88ee3f8aa0971a9f80f",
+    "tests/cod/language/region-owner-capture.cod": "19b7aea7110c14e9f4647318f9f8c394ba0dd4f6999b4d9484e35f96a05fbe15",
+    "tests/cod/language/region-owner-lexical.cod": "8617c01a6cef0c920f6229d828a1e4bfd7133015ec2e468d015636430cf7b1af",
+    "tests/cod/language/region-owner-move.cod": "921a57d4709b6b75bf524d615d4207db9826ba7c424b18271fb2effc380d6655",
+    "tests/cod/language/region-parent-allocation.cod": "a39c9e9358a363dce95f5153bac0160d5602a97a3fb9d1fd51368287654ced67",
+    "tests/cod/language/region-pool.cod": "c04012856224f02bcc123719d2285a0816c1a5b249b5557d45cdad6ce5d3d693",
+    "tests/cod/language/region-records.cod": "540cb59b7c1da0e0fb499f80c25f12e04e61f9fe163fcd3e343febdf4500a690",
+    "tests/cod/language/region-reference-fold.cod": "069f715f638a0c253909397935d7621e29149c22da57edda6900d205eeb159e1",
+    "tests/cod/language/region-source.cod": "8c77461b1a0d7719cfcd7c0d469c234fb038af0083ad7ecfb53533caa4f0d3f1",
+    "tests/cod/language/region-stack-error.cod": "ef664a0996b53e736d5fc1bb9aebd979a13fa9dd10539c187ad2c6f95f9e820f",
+    "tests/cod/language/region-unheld-create.cod": "9a90ec5289971823c15e3241280b4cf8b08bc1ae92c959e622b3f44dd14d0c37",
+    "tests/cod/language/reimport-mapping.cod": "dca4f451cbf6fb72442f4b26af8e540e2902171125fb519668e83859b21b91ec",
+    "tests/cod/language/reimport-provider.cod": "56e6bb90d1808959f04407ee134571df7d97583066f8984f2bc1c07e91928ded",
+    "tests/cod/language/reserved-alias.cod": "ec35242de749d7edf680866f8b2c8ccd3ca68e11b8372e6dcdc800519d787349",
+    "tests/cod/language/reusable-pool.cod": "64491e2d16abf7e94d3c4bd751c0512ea702dfaa9c6c838d0c2b1a69e659b6ed",
+    "tests/cod/language/scan-error.cod": "c63bfcca9e3956e142437c4802191d1eca9080d36cc9b085a3e172055eb9c7f4",
+    "tests/cod/language/scopes.cod": "7f07b8f3b79eff614f09a06968901439fb5697397fd5e72293e0b3b039e55c04",
+    "tests/cod/language/source.cod": "c3d93478ae8e2414b7bcadcc0b67d4316df7cd58a774fe0cf16e9ff45321e9e7",
+    "tests/cod/language/symbol-source.cod": "e1f8d7e117394ce3d348f014fc485bee4287205e47771bb80cf5b6e1a0c8ae6a",
+    "tests/cod/language/symbol-trigger.cod": "406b8b4c2abd3b86602f80739375470dd23ec90fe39045ee4b7c8cfe5a12f558",
+    "tests/cod/language/symbol-type-required.cod": "cbe13e043a5d459554dd6e9955d0af794f8846c7b1f22ef843e91bd466cc3a6d",
+    "tests/cod/language/transitive.cod": "bfdcd95ca0be9628132601749263e3da514c010c5dffaf165392b1059093547b",
+    "tests/cod/language/type-error.cod": "d1cb0b95fefa87f3123187ddead3ee021b65660da7d3248ae35d699d5344b4bb",
+    "tests/cod/language/uint-cast-negative.cod": "98e09ece9c8e41a2027e50a6890e34bec52a075278e3db3df2c46f2f1ae5bff5",
+    "tests/cod/language/uint-cast-overflow.cod": "22fbf7e03ed2e5faab671378f2d0579a94c9dae293388702ba5752a4171aec29",
+    "tests/cod/language/uint-literal-error.cod": "7b04ba6b69e7330da3f9064a4a7ff09520fad7d76fc35277c1beb96d4ac2e32b",
+    "tests/cod/language/uint-loop-boundary.cod": "d0f3949617e591f2239530cbf3f7f6a053d793efadc7bbad4e922d685b4245db",
+    "tests/cod/language/uint-overflow.cod": "4bd351242c7e36d6bfb23ad79517b90dabe0dd6eb0d9e2e3f54f17f59eda8d14",
+    "tests/cod/language/uint-underflow.cod": "5a6ccb4f1a5b8515a615263e070dfcbf30c86be94e74d13d66bc3c2fd630f856",
+    "tests/cod/language/units-alias-collision.cod": "7e5998720fe59ce8c3748ee727165d72fe1e0d491f972ffef6ec266bb03f8b2d",
+    "tests/cod/language/units-ambiguous.cod": "a97921741942cf18b0e58e5c26a8ce8594489fd85e8f357998789679887c957e",
+    "tests/cod/language/units-argument-once.cod": "e9441df8b10f6198a25b24dbf800a495ba6f92552b758fa76c32ca7599b95a93",
+    "tests/cod/language/units-basic.cod": "ba7c2c4936400a4643a3eb428f7f383e01da429ea097f70662dec77c01dcdae4",
+    "tests/cod/language/units-conversion-signature.cod": "bde32ce511047ab06ef11dcbf562895c31e5ae159f7c758a2e5bc57486f856a5",
+    "tests/cod/language/units-cycle-no-route.cod": "f6ca6aa414d327b2dd52638c915b07adc934cff54f183bd0611791d51f62974b",
+    "tests/cod/language/units-declared.cod": "eddcf25e33ed850c50e03c774414f9751353dfe89628fde2a99c25b8d157f200",
+    "tests/cod/language/units-direct-ambiguous.cod": "b8341ca666101845a55c55c583bc98e11ab861accb80a2a267b56595cc1bbdd3",
+    "tests/cod/language/units-direct.cod": "61a118f79fd129234a1cb9de9bcb391c3e7e5906f4e584bf3da3f3a542364b98",
+    "tests/cod/language/units-duplicate-identity.cod": "1968bc03a65280f7a73d94e95969bd5090bad040b411fc50003574f4e73d87f3",
+    "tests/cod/language/units-exact-before-route.cod": "11196a88543c766ccf33f763bfa7f14e943ab4dca702d4027f9adb8cf7c340c2",
+    "tests/cod/language/units-exact-overload.cod": "b13f1a674f0c594babc34169562e3b3a956fed5d328e14cbccd09649cee8799f",
+    "tests/cod/language/units-exact-reject.cod": "5dea7f2bb91a1b1712f4c8c8331d66c05f7bdf40373a058cf5d6376d2a7086f1",
+    "tests/cod/language/units-function-order.cod": "d2adfdf25d56689b91068ac4a4783723bf7bc36bec5325b65df38175dd7005c6",
+    "tests/cod/language/units-identity.cod": "b2893ee3cfd3a82b45dc3ab5aa5e0c721f04cdf3efff7ac63239a04a47a68fa4",
+    "tests/cod/language/units-import.cod": "5cdcede49a4b8c7485e46f97df02eccd49f49fb814b6163ef0dc5b2ab7a2e7a9",
+    "tests/cod/language/units-impure.cod": "cfa3fb24f86ac4eeb8bccbc285a92ef56d36ac55f0c53071b60f4731c24782c6",
+    "tests/cod/language/units-library.cod": "ee31d7f7feedf7110e4a11eeb410130332512876350251cbb95b71c3b2d694ee",
+    "tests/cod/language/units-name-collision.cod": "936a7e2dcf1e6f73945f8aecd0bc4166e47be202c6e2e527ba5b05044b3a712d",
+    "tests/cod/language/units-omitted-route.cod": "c11b491afa766071e785b90e7ae1fcb0e7fa49adb98b0ee2a9727570be927ebb",
+    "tests/cod/language/units-operator-order.cod": "e0b0b87072e7133cc16b93ee08b1a4202252997f12dd399391fa3117684b069c",
+    "tests/cod/language/units-other.cod": "5c752de7165b858fd48d9f06e6570726df006b4de3b11ec5cdabeb905538418d",
+    "tests/cod/language/units-priority.cod": "c8fe73918c4bfc4960c2db5c7aef00eba3e609e27172abfdfc38c96395525650",
+    "tests/cod/language/units-private-helper.cod": "fbc8fcf187fe6b48a15d1c02ee01e3bd875977f258af27c6e479014d183703d6",
+    "tests/cod/language/units-private-library.cod": "32f8e0ae3d123d020110ce1e3e5c1b74436f7f31edac4fa712799d58ad6238bd",
+    "tests/cod/language/units-procedure-order.cod": "b65dce2a7a352d22e11714a80487045197f9c10e1ab22d84ac70f3ec79ce777c",
+    "tests/cod/language/units-procedure-receiver.cod": "1ce790eb76ac3bc4d90d3c6babb0b1c2ebb28ee4f7a4828e21c969c8d7d72485",
+    "tests/cod/language/units-procedure-source.cod": "6bef594ff1c2f380e46bc18f46da2c178d4730bdf40c46c7336038a9b577d233",
+    "tests/cod/language/units-procedure.cod": "bfc3bb5a894bcf257d994dae83e777b1dd92a8bde94c192f7c1109fe22efc8fc",
+    "tests/cod/language/units-reexport.cod": "4c61b14fdb27185bef9cc1bebf40ab30da57d2d3f0f7e412347849a09645c2ac",
+    "tests/cod/language/units-repeated.cod": "0117bfe5d0cec83b85dd41193fd9463feebe64d0cac162283ddade376b8cb615",
+    "tests/cod/language/units-sequencing-library.cod": "0491037df54e61f3269569dcaab487457e6b2ebb16eff140d3147c68cf932af7",
+    "tests/cod/language/units-shorter-route.cod": "e11b5c3e0f166013237bb4e101285e352b1fe02b0b270f6e5960852d4108cd9e",
+    "tests/cod/language/units-unavailable-overload.cod": "a25a93a072990a7100ed711cd258c941f38f63bb80926f38002926fa75007636",
+    "tests/cod/language/unknown-map-local.cod": "bc9445627278c7dfdb61cf8840f4c814b52891f4b4493abd3e8ab12723367e5c",
+    "tests/cod/language/unknown-map-role.cod": "b29f99da9e9ee8cef17f2b9e42fc45612baccd9f166ebe93196ddbca0e86c996",
+    "tests/cod/language/using-explicit-self.cod": "b2848bdd7574aa8587c752618385bcda58d457e394bc93bcb417e03c4d3ae1a8",
+    "tests/cod/language/using-identity-mismatch.cod": "3307206498a4d258cbca6563cac6be78d4cac658d792f0d9c56b62bd51e67d80",
+    "tests/cod/language/using-symbol-identity-mismatch.cod": "0d4739e2b0277cd636117c54d82b631fbc45a65d3bc519a21ef48744ddc53eb3",
+    "tests/cod/language/using-symbol-provider.cod": "6abc0953f9e3da560d2cf3a595d248237e45ff243c72d541195e48ffbbd155d2",
+    "tests/cod/language/using-symbol-reexport.cod": "b0edf01a7650dd5fc3d139cd252803dbfbe99d750ab2c01353256d4f1fb12a5f",
+    "tests/cod/language/using-symbol-same-value.cod": "775d8ab88208fbf2cfb1f63d738320a31cda56c09fe7a159aad73cc28b3aa0c4",
+    "tests/cod/language/using-symbol-shared-identity.cod": "d5b9cfce55f0436be6eb772d0c4bd71aebf6b0ef1a8e115d36c7f484c268b592",
+    "tests/cod/language/using-vocabulary-destination.cod": "7570c4556d5d86df2b7f76db450ad711746a146d71ce26ebbd311ca8cab40f25",
+    "tests/cod/language/using-with-map.cod": "15a53edfb5764fb7fdf5ad555a900664024498223bbd1599252b5ecf0c38c58a",
+    "tests/cod/language/using.cod": "d5dd81fa9512e065905d324eedf3d63bce2963cc0742f647e7b3ea56bd2aa73d",
+    "tests/cod/language/value-as-procedure.cod": "fb9717da8e0bdf61626da13b5fcd811c3ffeba2f080031d97ed329e0262247ed",
+    "tests/cod/language/vocabulary.cod": "146f3e60a3495c81d0a440d060d3bec095d7b8749b6407e77de12320c1f2d41c"
+  },
+  "raw_evidence": {
+    "focused": {
+      "path": "build/validation/language-20261108-concrete-dispatch-final-focused.json",
+      "sha256": "53c3aed1767f58e3dcb84a669af9d23b09a10e42e2b39d72dee0485e1ee7b25b"
+    },
+    "full": {
+      "path": "build/validation/language-20261108-concrete-dispatch-final-full.json",
+      "sha256": "409d1e491cfbc35fbed070a5c61ecec9e00db2343010fd59b3d38f45df3dba33"
+    },
+    "stress": {
+      "path": "build/validation/language-20261108-concrete-dispatch-final-stress.json",
+      "sha256": "aec6e01669831f61277ceea46975f37d760a2ca76791a30d9c6ca0abcbcd753b"
+    },
+    "native": {
+      "path": "build/validation/language-20261108-concrete-dispatch-final-native.json",
+      "sha256": "26dc5dcac5264574e212fe73b25427d7a3002b82f43d59dd8a79d30e7acc629f"
+    }
+  },
+  "limits": [
+    "Only justified selected conformance propagates. Branch results need common proof; a fold retains its initial guarantees.",
+    "Concrete argument types establish a scoped call context, including newly allocated instances of that same concrete type; unrelated caller types are not published as ambient interface claims.",
+    "No runtime interface object, new region layout, pointer encoding or ownership policy is introduced.",
+    "Distinct extension-module callable identities, local union identities and private-by-default explicit exports require the separate H-230/H-231 implementation increment.",
+    "This is bounded language/runtime validation, not complete language, ownership, mailbox or ten-hour goal acceptance."
+  ]
+}

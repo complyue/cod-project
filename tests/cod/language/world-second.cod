@@ -1,0 +1,4 @@
+using "world-vocabulary.cod" Second;
+export Second;
+export score;
+export second;

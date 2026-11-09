@@ -1,0 +1,5 @@
+import "method-view-first.cod" run;
+using "method-view-second.cod" through as other;
+symbol arena::region;
+effect @arena <- region(4096u64);
+run(@arena);

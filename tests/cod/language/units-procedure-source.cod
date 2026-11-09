@@ -6,3 +6,10 @@ symbol @distance :: normalized;
 symbol @read :: proc(normalized) -> f64;
 effect @distance <- normalized(4.0);
 procedure @read(x (normalized*))::f64 { adjust(scalar(@distance) + scalar(x)) }
+
+export @distance;
+export @read;
+export adjust;
+export normalize;
+export normalized;
+export raw;

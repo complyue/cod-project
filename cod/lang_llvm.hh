@@ -71,11 +71,10 @@ class LLVMEmission {
     auto function = module_->getOrInsertFunction(name, llvm::FunctionType::get(result, types, false));
     return b().CreateCall(function, args);
   }
-  llvm::Value *slot(size_t id, Type type) {
+  llvm::Value *slot(size_t id) {
     if (const auto found = slots_.find(id); found != slots_.end()) return found->second;
-    auto *native = type_of(type);
-    auto *global = new llvm::GlobalVariable(*module_, native, false, llvm::GlobalValue::InternalLinkage,
-        llvm::Constant::getNullValue(native), "effect." + std::to_string(id));
+    auto *global = new llvm::GlobalVariable(*module_, pointer_type(), false, llvm::GlobalValue::InternalLinkage,
+        llvm::ConstantPointerNull::get(pointer_type()), "effect." + std::to_string(id));
     global->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);
     slots_.emplace(id, global);
     return global;
@@ -178,7 +177,6 @@ public:
     case Type::float64: return llvm::Type::getDoubleTy(context());
     case Type::region: return pointer_type();
     case Type::void_type: return void_type();
-    case Type::product: return record_type(type);
     default: throw std::logic_error("unresolved LLVM type");
     }
   }
@@ -203,13 +201,21 @@ public:
     return llvm::ConstantFP::get(type_of(type), spelling);
   }
   llvm::Value *read_symbol(size_t id, Type type) {
-    return b().CreateLoad(type_of(type), slot(id, type));
+    auto *value = b().CreateLoad(pointer_type(), slot(id));
+    return b().CreateLoad(type_of(type), value);
   }
   void effect(size_t id, Type type, llvm::Value *source) {
     if (type == Type::region || type.kind == Type::procedure) return;
-    auto *address = slot(id, type);
-    cleanups_.push_back({address, b().CreateLoad(type_of(type), address)});
-    b().CreateStore(source, address);
+    // WPO checks the symbol's type and binding availability. TLS carries only
+    // its current pointer; the binding's value and capture semantics are separate.
+    // Calls are inlined and non-recursive. One cell per emitted binding site in
+    // the entry block avoids allocating more stack storage on every loop lap.
+    llvm::IRBuilder<> storage(&entry_->getEntryBlock(), entry_->getEntryBlock().begin());
+    auto *value = storage.CreateAlloca(type_of(type), nullptr, "effect.value");
+    b().CreateStore(source, value);
+    auto *address = slot(id);
+    cleanups_.push_back({address, b().CreateLoad(pointer_type(), address)});
+    b().CreateStore(value, address);
   }
   size_t scope() const { return cleanups_.size(); }
   void restore(size_t mark) {
@@ -219,14 +225,6 @@ public:
       if (cleanup.saved) b().CreateStore(cleanup.saved, cleanup.address);
       else call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), cleanup.address)});
     }
-  }
-  llvm::Value *product(Type type, const std::vector<llvm::Value *> &args) {
-    llvm::Value *result = llvm::Constant::getNullValue(type_of(type));
-    for (size_t i = 0; i < args.size(); ++i) result = b().CreateInsertValue(result, args[i], unsigned(i));
-    return result;
-  }
-  llvm::Value *field(llvm::Value *source, size_t field) {
-    return b().CreateExtractValue(source, unsigned(field));
   }
   void print(Type type, llvm::Value *source) {
     auto *number = source;

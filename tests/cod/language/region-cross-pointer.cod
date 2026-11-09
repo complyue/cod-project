@@ -1,4 +1,4 @@
-regional type Node { value::i64; next::ref<Node>; }
+data Node { value::i64; next::ref<Node>; }
 symbol @first :: region;
 symbol @second :: region;
 symbol @node :: ref<Node>;

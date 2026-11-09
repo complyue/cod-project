@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T20:40:49.769289+00:00",
+  "registry_record": "K-355",
+  "toolchain": "build",
+  "compiler_sha256": "53784486e7c895ec4cadfecd2f160ae58a4672ba0017042934d2c7c40555bf4d",
+  "scope": "Source-bound unit constructors do not create distinct imported helper implementations; argument expressions retain real callable dependencies. Full component validation also covers the implicit unit-name repair.",
+  "full_component": {
+    "passed": 183,
+    "total": 183,
+    "distinct_fixtures": 181,
+    "warning_as_error_invocations": 1,
+    "frontend_llvm_bitcode": true
+  },
+  "focused": {
+    "passed": 15,
+    "total": 15,
+    "fixtures": [
+      "method-modules.cod",
+      "method-ambiguous.cod",
+      "method-no-match.cod",
+      "units-aliased-bundle.cod",
+      "units-method-shadow.cod",
+      "module-export-shadow.cod",
+      "module-export-context-shadow.cod",
+      "module-exports.cod",
+      "abstract-types.cod",
+      "method-using-extension.cod",
+      "method-context-selection.cod",
+      "method-views.cod",
+      "method-view-ambiguous.cod",
+      "method-name-ambiguous.cod",
+      "frontend-only"
+    ]
+  },
+  "composition": {
+    "recorded_utc": "2026-11-08T20:38:30.332040+00:00",
+    "compiler_sha256": "53784486e7c895ec4cadfecd2f160ae58a4672ba0017042934d2c7c40555bf4d",
+    "sources": {
+      "constructor-only": {
+        "base.cod": "unit Length::f64;\nfunction length(x::f64)::Length {Length(x)}\nexport Length; export length;\n",
+        "left.cod": "export import \"base.cod\" length;\n",
+        "right.cod": "export import \"base.cod\" length;\n",
+        "main.cod": "using symbol \"std:io\" @print;\nusing \"left.cod\" length;\nusing \"right.cod\" length;\nbehave @print(scalar(length(3.5)));\n"
+      },
+      "contextual": {
+        "base.cod": "unit Length::f64; type Metric; data Sample <: Metric {value::f64;}\nfunction scale(x::Metric)::f64 {1.0}\nfunction length(x::Sample)::Length {Length(scale(x))}\nfunction create(arena::region)::Sample {deref(alloc arena Sample(3.5))}\nexport Sample; export scale; export length; export create;\n",
+        "left.cod": "using \"base.cod\" Sample; import \"base.cod\" scale; function scale(x::Sample)::f64 {2.0} export import \"base.cod\" length;\n",
+        "right.cod": "using \"base.cod\" Sample; import \"base.cod\" scale; function scale(x::Sample)::f64 {3.0} export import \"base.cod\" length;\n",
+        "main.cod": "using symbol \"std:io\" @print; using \"base.cod\" Sample;\nusing \"left.cod\" length as left; using \"right.cod\" length as right;\nsymbol @arena::region; effect @arena <- region(4096u64);\n{let x=create(@arena); behave @print(scalar(left(x))); behave @print(scalar(right(x)));};\n",
+        "union.cod": "using symbol \"std:io\" @print; using \"base.cod\" Sample;\nusing \"left.cod\" length; using \"right.cod\" length;\nsymbol @arena::region; effect @arena <- region(4096u64);\n{let x=create(@arena); behave @print(scalar(length(x)));};\n"
+      }
+    },
+    "results": [
+      {
+        "case": "constructor-only",
+        "exit_code": 0,
+        "stdout": "3.5\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "contextual-constructor-argument",
+        "exit_code": 0,
+        "stdout": "2\n3\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "case": "contextual-union",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/contextual-union/union.cod:4:45: ambiguous method 'length' for supplied argument types (<probe>/contextual-union/base.cod::Sample): 2 matching candidates\n<probe>/contextual-union/union.cod:4:45: note: method lookup uses module '<probe>/contextual-union/union.cod'\n<probe>/contextual-union/union.cod:4:45: note: argument 1 guarantees <probe>/contextual-union/base.cod::Metric\n<probe>/contextual-union/base.cod:3:1: note: candidate function 'length' (Sample) -> Length\n<probe>/contextual-union/base.cod:3:1: note: candidate function 'length' (Sample) -> Length\n",
+        "passed": true
+      }
+    ]
+  },
+  "before_fix": {
+    "recorded_utc": "2026-11-08T20:36:52.220317+00:00",
+    "compiler_sha256": "9000a91b798f6763fb379ec2f0d8d36e677818e60dda36d118beec4804d74f1c",
+    "sources": {
+      "base.cod": "unit Length::f64;\nfunction length(x::f64)::Length {Length(x)}\nexport Length; export length;\n",
+      "left.cod": "export import \"base.cod\" length;\n",
+      "right.cod": "export import \"base.cod\" length;\n",
+      "main.cod": "using symbol \"std:io\" @print;\nusing \"left.cod\" length;\nusing \"right.cod\" length;\nbehave @print(scalar(length(3.5)));\n"
+    },
+    "result": {
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "<probe>/main.cod:4:22: ambiguous method 'length' for supplied argument types (f64): 2 matching candidates\n<probe>/main.cod:4:22: note: method lookup uses module '<probe>/main.cod'\n<probe>/base.cod:2:1: note: candidate function 'length' (f64) -> Length\n<probe>/base.cod:2:1: note: candidate function 'length' (f64) -> Length\n"
+    }
+  },
+  "source_sha256": {
+    "cod/lang_frontend.hh": "a145648f9c03389f80860af74ec8ecaeee19be6404fe40bc01f1d7940a9abc25",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/method-library.cod": "12dd8feb3e5f29a2cc4832781fdfef545630888aa25a401b842c7a90795003c4",
+    "tests/cod/language/cases.json": "eb93e86ecdc31a3d3f1b213d3b8ab0bf654bd8380748e9b22d8d773af2f81dbd"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-module-unit-full.json": "ca73e380bad2e9d25c08f5f6bc35a0b27fabc1a437335a6e03445b0d5c8bf1f7",
+    "build/validation/language-20261108-constructor-view-focused.json": "ee8e74b241e69649d5b36217f90626910739b9c7e2cb675233a071f170a07331",
+    "build/validation/language-20261108-constructor-view-before.json": "76f75e90b0e332b61c9ad4609702fb7415b2eef17dc20553d814fb2bb732d23d",
+    "build/validation/language-20261108-constructor-view-composition.json": "2210d1135a446ab4f5a9fec91f4a738924fedad21d8a20b32e5fca58d3be5f3c",
+    "build/validation/language-20261108-constructor-view-build.log": "d2cb19392fd957ead73532a59d1e1cfbdddc613cd4307129a7f8f80b1b52bf20"
+  },
+  "limits": [
+    "Context-sensitive duplicate source bodies remain distinct; the observed conflicting union rejects without selecting a broader union policy.",
+    "No new native relocation or performance measurements; pool relocation evidence remains at K-352.",
+    "No changes to LLVM emission, regional representation/ownership, bootstrap/configuration/toolchains or SNN modeling.",
+    "Whole-language and ownership/mailbox contracts remain incomplete."
+  ]
+}

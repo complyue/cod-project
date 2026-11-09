@@ -1,8 +1,20 @@
 using symbol "std:io" @print;
+import "method-extension.cod" extended_score as score;
 using "method-library.cod" score;
-using "method-other-library.cod" score;
-function score(x::f32)::f32 { x * 2.0f32 }
+using "method-other-library.cod" score as boolean_score;
+function score(x::u32)::u32 { x + 1u32 }
 behave @print(score(3));
 behave @print(score(3.0));
 behave @print(score(3.0f32));
-behave @print(score(true));
+behave @print(boolean_score(true));
+behave @print(score(7u32));
+symbol from "procedure-vocabulary.cod" @bias;
+import "mixin-lexical-provider.cod" read as compute;
+proc compute(x::bool) -> i64 { if (x) { 5 } else { 0 } }
+effect @bias <- 2;
+behave @print(compute(3));
+behave @print(compute(true));
+using "method-library.cod" Counter;
+symbol @arena::region;
+effect @arena <- region(4096u64);
+behave @print(score(deref(alloc @arena Counter(7))));

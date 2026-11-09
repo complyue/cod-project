@@ -2,4 +2,8 @@ symbol @middle :: proc() -> i64;
 symbol @value :: i64;
 function helper() -> i64 { 9 }
 effect @value <- 7;
-import "source.cod" @p as @middle with { @value as @x; };
+mixin "source.cod" @p as @middle with { @value as @x; };
+
+export @middle;
+export @value;
+export helper;

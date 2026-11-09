@@ -3,6 +3,10 @@ symbol from "diamond-vocab.cod" @read;
 using symbol "std:io" @print;
 symbol @left :: proc() -> i64;
 effect @gain <- 3;
-using "diamond-shared.cod" @read;
+export import "diamond-shared.cod" @read;
 behave @print(behave @read());
 procedure @left()::i64 { perform @read() }
+
+export @gain;
+export @left;
+export @print;

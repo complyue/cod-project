@@ -1,2 +1,5 @@
-type Position { index::i64; weight::f32; }
+data Position { index::i64; weight::f32; }
 function read(p::Position)::f32 { p.weight }
+
+export Position;
+export read;

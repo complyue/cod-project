@@ -1,3 +1,5 @@
 using "product-library.cod" read;
 using "product-other-library.cod" Position;
-read(Position(2, 1.0f32));
+symbol @arena::region;
+effect @arena <- region(1024u64);
+read(deref(alloc @arena Position(2, 1.0f32)));

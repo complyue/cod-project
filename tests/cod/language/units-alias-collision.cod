@@ -2,3 +2,6 @@ using symbol "std:io" @print;
 behave @print(99);
 using units "units-library.cod" {m, cm};
 using units "units-other.cod" {m as cm_to_m};
+function length(x (m*))::f64 { scalar(x) }
+behave @print(scalar(cm_to_m(2.0)));
+behave @print(length(cm(250.0)));

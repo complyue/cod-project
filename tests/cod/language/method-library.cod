@@ -1,2 +1,8 @@
-function score(x::i64)::i64 { x * 3 }
-function score(x::f64)::f64 { x * 4.0 }
+function score(score::i64)::i64 { score * 3 }
+function score(x::f64)::f64 { let score = Magnitude(x); scalar(score) * 4.0 }
+unit Magnitude::f64;
+data Counter { score::i64; }
+function score(counter::Counter)::i64 { setfield(counter, score, counter.score + 1); counter.score }
+
+export score;
+export Counter;

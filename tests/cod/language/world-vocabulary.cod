@@ -1,0 +1,15 @@
+type Entity;
+data First <: Entity { value::i64; }
+data Second <: Entity { value::i64; }
+function score(x::First)::i64 { 1 }
+function score(x::Second)::i64 { 2 }
+function first(arena::region)::First { deref(alloc arena First(10)) }
+function second(arena::region)::Second { deref(alloc arena Second(20)) }
+function relay(x::Entity)::i64 { score(x) }
+export Entity;
+export First;
+export Second;
+export score;
+export first;
+export second;
+export relay;

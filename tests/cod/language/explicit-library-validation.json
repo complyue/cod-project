@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T10:41:03.794228+00:00",
+  "registry_record": "K-330",
+  "toolchain": "build",
+  "backend": "llvm",
+  "scope": "Explicit-input regional numerical library: caller-owned allocation, graph construction and A/B updates without dynamic access inside functions.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "log": "build/validation/language-20261108-explicit-gather-build.log",
+    "sha256": "1f3d16f02a6177838bd9b70d057b6c9af4ae41562104c6896588480e85d5dd65"
+  },
+  "acceptance": {
+    "passed": 4,
+    "total": 4,
+    "fixtures": [
+      "pool-typed.cod",
+      "region-owner-lexical.cod",
+      "region-gather.cod",
+      "frontend-only"
+    ],
+    "small_trace_stdout": "120\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n160.972656\n7.55859375\n7.59765625\n7.67578125\n7.79296875\n7.94921875\n7.98828125\n7.94921875\n7.890625\n11.3085938\n11.2851562\n11.2382812\n11.1679688\n15.5664062\n15.5273438\n22.4765625\n216.20079\n10.2282104\n10.2425842\n10.2704773\n10.3629456\n10.4837952\n10.5405426\n10.5371857\n10.5330658\n15.1953125\n15.1811218\n15.1538391\n15.1152954\n21.0447693\n21.0139465\n30.297699\n290.403137\n13.7314701\n13.7507114\n13.7887783\n13.9150391\n14.081461\n14.1588583\n14.1564178\n14.1529665\n20.4158382\n20.3966007\n20.3589592\n20.3042297\n28.2694607\n28.2273731\n40.6949806\n390.072388\n18.4442062\n18.4700947\n18.5212955\n18.6909924\n18.9146194\n19.0185795\n19.0152378\n19.0104847\n27.4227047\n27.3968201\n27.34618\n27.2726173\n37.9716492\n37.9150848\n54.6618118\n",
+    "measurements": [
+      {
+        "recorded_utc": "2026-11-08T10:34:15.773267+00:00",
+        "passed": true,
+        "classes": 12,
+        "top_class_sets": 1,
+        "uniform_input": false,
+        "rows": 4095,
+        "slots": 693504,
+        "updates": 8,
+        "edge_visits": 5548032,
+        "checksums": [
+          "8386560",
+          "5629297.5",
+          "4026802.25",
+          "2982854.25",
+          "2238193.5",
+          "1677704.62",
+          "1244836.38",
+          "908617.25",
+          "650299.5"
+        ],
+        "element_payload_bytes": 3500280,
+        "region_occupation_bytes": 3500448,
+        "non_element_bytes": 168,
+        "frontend_seconds": 0.037687173986341804,
+        "native_compile_link_seconds": 1.6810061090509407,
+        "native_process_seconds": 0.07979987497674301,
+        "llvm_ir_bytes": 202767,
+        "bitcode_bytes": 50644,
+        "native_executable_bytes": 92120
+      },
+      {
+        "recorded_utc": "2026-11-08T10:34:17.907424+00:00",
+        "passed": true,
+        "classes": 16,
+        "top_class_sets": 10,
+        "uniform_input": true,
+        "rows": 655350,
+        "slots": 112281600,
+        "updates": 1,
+        "edge_visits": 112281600,
+        "checksums": [
+          "655350",
+          "438600"
+        ],
+        "element_payload_bytes": 566650800,
+        "region_occupation_bytes": 566650960,
+        "non_element_bytes": 160,
+        "frontend_seconds": 0.02195158594986424,
+        "native_compile_link_seconds": 1.6031556040397845,
+        "native_process_seconds": 3.9412551909917966,
+        "llvm_ir_bytes": 202163,
+        "bitcode_bytes": 50440,
+        "native_executable_bytes": 90280
+      }
+    ]
+  },
+  "limits": [
+    "Numerical traces are programming-facility evidence, not a neuron transition, learning rule or SNN throughput result.",
+    "One arithmetic row per slot set is not a selected CC neuron count.",
+    "Process timings include initialization, startup and checksum output; there is no controlled performance comparison.",
+    "Non-element byte counts are measured native-layout costs, not a proposed application bookkeeping or padding budget.",
+    "No full-language-suite or relocation rerun is claimed; previous compact reports retain their original inputs.",
+    "Whole-region creation still uses an owning dynamic effect; functions borrow that region to allocate its contents."
+  ],
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "3bcdbbde67e4b093ed8e0b71ac392f9a0f509780c49acb6619c08f1849d87dff"
+  },
+  "source_sha256": {
+    "tests/cod/language/region-gather-kernel.cod": "ad4affbd604d19d7a0ef6a8680cbba3944fcee01db7c42c4fe0a0b67728cd6f6",
+    "tests/cod/language/region-gather-step.cod": "c54fed3e3ab5d3b4b2a9bba40e0beabee91be012556cf02eedb15a5570e4bd62",
+    "tests/cod/language/region-gather-types.cod": "94af4e8913a4c6324f4fa12ffea956025fd568544b7bb827e83b83ec3a7a577c",
+    "tests/cod/language/region-gather.cod": "ac91110c3b3ddd5cb920e738edbabdd0c13c0daa93f417910fc8b3e2879bb780",
+    "tests/cod/language/pool-adapter.cod": "a6ec7edd979434dfd152efa29022d0a73c0ba4ef080f9300d89d198982eb92e4",
+    "tests/cod/language/pool-index.cod": "8d4b59f80dd68572b1a149298255466ee38687842c27285b1b7c2bcfac9ac04b",
+    "tests/cod/language/pool-interface.cod": "8a69db7ca21cc351b96c2a64ef97e29669f905d1f7c846772c6ad5b910a07eaf",
+    "tests/cod/language/pool-layout.cod": "35687acc23c890947e2005c772371c16193f2dc0a368e5aafd80556e19ca6254",
+    "tests/cod/language/pool-typed.cod": "1a76509d09033e221ac6d16db60a99c91f65f5ad77e29401701ebae9b9a6c4e1",
+    "tests/cod/language/pool-units.cod": "7e98a99907eb5a1d546055ecdac548d129c3cafc17c8c5352179ed21388473c3",
+    "tests/cod/language/pool-view-escape.cod": "c4ed00396489e3a15e3fd5b8efaa48a5dc4f7d844eb52740fe08f85fe48ceb51",
+    "cod/lang_syntax.hh": "f4601a5186be865b600fff5863cddfe12210afb76893b9ba4db33a787cfa48d7",
+    "cod/lang_frontend.hh": "89c3fe16567670bead75ef2cf638eb732ab8b82f8a15d1ee69a0c17050d63251",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "include/shilos/region.hh": "532cf74139e814afd73bbac4ccb184ff4644ba80fb15adc87b2047f2b51167df",
+    "tests/cod/language/gather_benchmark.py": "43e47612cf018f6a8999eacd51a534b1472f8bcf3fb0ef8fb5c4e01be7193ff8",
+    "tests/cod/language/run_tests.py": "557b4440e330aa5d24418dccc0ff23ade084722ceafe71b174d9454887761b24",
+    "tests/cod/language/cases.json": "81b30a7cfbbc7d1a6e3bebc1f8c6ff4b446440ab612b1525363cc5e8eea40213",
+    "tests/cod/language/region-owner-lexical.cod": "8617c01a6cef0c920f6229d828a1e4bfd7133015ec2e468d015636430cf7b1af"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-explicit-gather-validation.json": "85267d7572626130f40191220ad4a014cfcb5f7e6db3449357bb5dc629e33111",
+    "build/validation/language-20261108-explicit-gather-default.json": "156a22a8250e2f4b971e30e29e6b3c30e156710beed0873d8b4f5aefbbd1f164",
+    "build/validation/language-20261108-explicit-gather-full.json": "81f3adee8b5ad3ac7385377871b33b698b76e51d7c643e015957cccb5587c743"
+  }
+}

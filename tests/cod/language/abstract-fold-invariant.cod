@@ -1,0 +1,9 @@
+using "abstract-adapter.cod" make_weighted;
+using "abstract-alternate-factory.cod" make_alternate;
+using "abstract-library.cod" Entity;
+function lose(arena::region, steps::u32)::Entity {
+  fold (i in 0u32 .. steps, current = make_weighted(arena)) { make_alternate(arena) }
+}
+symbol @arena::region;
+effect @arena <- region(4096u64);
+lose(@arena, 3u32);

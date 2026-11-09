@@ -1,0 +1,10 @@
+data Packet { value::i64; }
+function helper(p::Packet)::i64 { p.value + 1 }
+function read(p::Packet)::i64 { helper(p) }
+function create(arena::region)::Packet { deref(alloc arena Packet(8)) }
+proc hidden(p::Packet)::i64 { helper(p) }
+symbol @secret::i64;
+unit PrivateUnit::i64;
+export Packet;
+export read;
+export create;

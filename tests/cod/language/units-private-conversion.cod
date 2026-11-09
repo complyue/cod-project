@@ -1,0 +1,2 @@
+using units "units-reexport.cod" {metres, cm};
+cm_to_m(cm(250.0));

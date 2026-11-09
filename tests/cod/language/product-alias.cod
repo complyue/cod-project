@@ -1,4 +1,6 @@
 using symbol "std:io" @print;
 using "product-library.cod" Position as LocalPosition;
 using "product-library.cod" read;
-behave @print(read(LocalPosition(5, 0.75f32)));
+symbol @arena::region;
+effect @arena <- region(1024u64);
+behave @print(read(deref(alloc @arena LocalPosition(5, 0.75f32))));

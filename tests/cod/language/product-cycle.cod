@@ -1,4 +1,5 @@
-type A { value::B; }
-type B { value::A; }
-function read(a::A)::i64 { 1 }
-A(1);
+data A { value::B; }
+data B { value::A; }
+symbol @arena::region;
+effect @arena <- region(1024u64);
+alloc @arena A(1);

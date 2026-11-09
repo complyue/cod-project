@@ -1,27 +1,33 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
-type Pair { x::f32; count::i64; }
-type Box { pair::Pair; true::bool; }
-function double(p::Pair)::Pair { Pair(p.x * 2.0f32, p.count * 2) }
-function metric(b::Box)::f32 { if (b.true) { -b.pair.x } else { 0.0f32 } }
-global b::Box = Box(double(Pair(1.25f32, 3)), true);
-behave @print(b.pair.x);
-behave @print(b.pair.count);
-behave @print(metric(b));
-behave @assert(b.true);
-
-regional type Envelope { content::Box; next::ref<Envelope>; }
-function contents(e::Envelope)::Box { e.content }
-function through(e::Envelope)::i64 { contents(deref(e.next)).pair.count }
-symbol @arena :: region;
-symbol @envelope :: ref<Envelope>;
-effect @arena <- region(1024u64);
-effect @envelope <- alloc @arena Envelope(b, null);
-setfield(@envelope, next, @envelope);
+data Pair { x::f32; count::i64; }
+data Box { pair::ref<Pair>; true::bool; }
+data Envelope { content::ref<Box>; next::ref<Envelope>; }
+function double(p::ref<Pair>)::Pair {
+  setfield(p, x, deref(p).x * 2.0f32);
+  setfield(p, count, deref(p).count * 2);
+  deref(p)
+}
+function metric(b::Box)::f32 { if (b.true) { -deref(b.pair).x } else { 0.0f32 } }
+function contents(e::Envelope)::Box { deref(e.content) }
+function through(e::Envelope)::i64 { deref(contents(deref(e.next)).pair).count }
+symbol @arena::region;
+effect @arena <- region(2048u64);
 {
-  let saved = contents(deref(@envelope));
-  setfield(@envelope, content, Box(Pair(4.0f32, 9), false));
-  behave @print(saved.pair.count);
-  behave @print(through(deref(@envelope)));
-  behave @print(contents(deref(@envelope)).true);
+  let pair = alloc @arena Pair(1.25f32, 3);
+  double(pair);
+  let b = alloc @arena Box(pair, true);
+  behave @print(deref(deref(b).pair).x);
+  behave @print(deref(deref(b).pair).count);
+  behave @print(metric(deref(b)));
+  behave @assert(deref(b).true);
+  let envelope = alloc @arena Envelope(b, null);
+  setfield(envelope, next, envelope);
+  let saved = contents(deref(envelope));
+  setfield(pair, count, 7);
+  let replacement = alloc @arena Box(alloc @arena Pair(4.0f32, 9), false);
+  setfield(envelope, content, replacement);
+  behave @print(deref(saved.pair).count);
+  behave @print(through(deref(envelope)));
+  behave @print(contents(deref(envelope)).true);
 };

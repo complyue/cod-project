@@ -1,2 +1,2 @@
-regional type Node { value::i64; }
+data Node { value::i64; }
 Node(2);

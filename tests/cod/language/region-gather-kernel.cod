@@ -1,13 +1,32 @@
-using units "pool-units.cod" {GlobalSetId, LocalSlot};
+using units "pool-units.cod" {ClassId, GlobalSetId, LocalSlot};
 using units "region-gather-types.cod" {Neuron};
 using "region-gather-types.cod" Frame;
 using "region-gather-types.cod" Incoming;
+using "region-gather-types.cod" Sources;
+using "region-gather-types.cod" Weights;
 using "pool-layout.cod" Layout;
 using "pool-layout.cod" capacity;
+using "pool-layout.cod" class_slot_begin;
 using "pool-index.cod" locate;
+using "pool-index.cod" SetLocation;
 using "pool-index.cod" global_slot;
-function gather(input::Frame, graph::Incoming, layout::Layout, target (GlobalSetId))::f32 {
-  let position = locate(layout, target);
+function create_graph(arena::region, layout::Layout, rows::u32,
+                      location::ref<SetLocation>, weighted::bool)::Incoming {
+  let sources = alloc arena Sources(scalar(class_slot_begin(layout, ClassId(layout.classes))), Neuron(0u32));
+  let weights = alloc arena Weights(len(sources), 1u8);
+  let graph = deref(alloc arena Incoming(sources, weights));
+  for (n in 0u32 .. rows) {
+    let position = locate(layout, GlobalSetId(u64(n)), location);
+    for (j in 0u32 .. scalar(capacity(position.class_id))) {
+      let slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
+      store(sources, slot, Neuron((n + j) % rows));
+      store(weights, slot, if (weighted) { u8(1u32 + (n + j) % 4u32) } else { 1u8 });
+    };
+  };
+  graph
+}
+function gather(input::Frame, graph::Incoming, layout::Layout, target (GlobalSetId), location::ref<SetLocation>)::f32 {
+  let position = locate(layout, target, location);
   let sources = deref(graph.sources);
   let weights = deref(graph.weights);
   fold (j in 0u32 .. scalar(capacity(position.class_id)), sum = 0.0f32) {
@@ -15,3 +34,20 @@ function gather(input::Frame, graph::Incoming, layout::Layout, target (GlobalSet
     sum + input[sources[slot]] * f32(weights[slot]) / 256.0f32
   }
 }
+
+export ClassId;
+export Frame;
+export GlobalSetId;
+export Incoming;
+export Layout;
+export LocalSlot;
+export Neuron;
+export SetLocation;
+export Sources;
+export Weights;
+export capacity;
+export class_slot_begin;
+export create_graph;
+export gather;
+export global_slot;
+export locate;

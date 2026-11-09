@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T08:10:54.484367+00:00",
+  "registry_record": "K-319",
+  "scope": "Source-preserving using/import and receiver-context symbolic-procedure mixin; extension permissions/type-associated methods remain pending.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "log": "build/validation/language-20261108-mixin-build.log",
+    "sha256": "b6ebf712fda66827fbfc203e5aa42f5a5295a2d92f658c9cff3c229876a11c74"
+  },
+  "toolchain": "build",
+  "backend": "llvm",
+  "acceptance": {
+    "full_batch": {
+      "passed": 153,
+      "total": 154,
+      "only_mismatch": "using-with-map.cod expected the old import-body diagnostic; actual rejection was correct"
+    },
+    "targeted_recheck": {
+      "passed": 2,
+      "total": 2,
+      "fixtures": [
+        "using-with-map.cod",
+        "frontend-only"
+      ]
+    },
+    "composition": [
+      {
+        "case": "512-module-pure-chain-loop-inputs",
+        "passed": true,
+        "llvm_ir_bytes": 518554,
+        "native_text_bytes": 15398
+      },
+      {
+        "case": "1000-procedure-inline-chain-with-operation-leaf",
+        "passed": true,
+        "llvm_ir_bytes": 1184550,
+        "native_text_bytes": 550
+      },
+      {
+        "case": "layered-diamond-22-modules-2047-calls",
+        "passed": true,
+        "llvm_ir_bytes": 1192204,
+        "native_text_bytes": 454
+      },
+      {
+        "case": "16-unit-reexports-31-conversion-steps-with-cycle",
+        "passed": true,
+        "llvm_ir_bytes": 17922,
+        "native_text_bytes": 454
+      },
+      {
+        "case": "96-module-regional-import-snapshot-chain",
+        "passed": true,
+        "llvm_ir_bytes": 546637,
+        "native_text_bytes": 14809
+      }
+    ],
+    "new_context_case": {
+      "stdout": "1001\n401\n408\n907\n908\n1.25\n21\n11\n21\n",
+      "passed": true
+    }
+  },
+  "limits": [
+    "No type/data/abstract conformance migration yet",
+    "No using-versus-import method-extension enforcement or implicit method-name tier yet",
+    "Mixin of lexical procedures or intrinsic operations is not implemented",
+    "No owner/make/const/assignment/mailbox implementation follows from this checkpoint"
+  ],
+  "source_sha256": {
+    "cod/lang_syntax.hh": "0f5b6a8df6dc86862f18613cf96db0e97e63256f8e0752c46333f39dcc2c22be",
+    "cod/lang_frontend.hh": "a9da29cc9f7e487fc07faef54a138dcb25fdb4fd13b42a75df4c22862339c266",
+    "cod/lang_llvm.hh": "cb72b1057c1e5c3ba2c01cabf50b8ffc98d96a3302862fce44b229b960a474ef",
+    "cod/lang_native_runtime.hh": "1d1b548415e234b3e647681bed577c3f4861cedf0078ce18799926aad96a8fe3",
+    "tests/cod/language/cases.json": "23ec4f7acc1fdc83ec0875b0803e2ecfdcd31a7245787dae1a53838d1530ca3e",
+    "tests/cod/language/module-selection.cod": "fb3061f31ea90c1883cf890e60ac746e4be33a494f16d843dff3cfe1ccf27928",
+    "tests/cod/language/import-body-map.cod": "2c36d86fd7ca162b682449c313838086ea147a2a3d31d16a69ad2c53b2f5e3e1",
+    "tests/cod/language/stress_tests.py": "dcc72b1568361b79862bb06bba0ccfca35ad19c7ccf0f187159bb224043d2d1c"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-mixin-validation.json": "bfcd284f20a493299fe269e3b92fd7a6ec722ad5a32dd71e6fe920102d64af0d",
+    "build/validation/language-20261108-mixin-diagnostic.json": "05ba37cd0a9c42437f86601e948af454da0d63f8650d2cb3d79b2dd2f0ecdced",
+    "build/validation/language-20261108-mixin-stress.json": "f1985246ec5105df177fb90b224216a01559d07a77945f007641cadf9d1fa2f6"
+  }
+}

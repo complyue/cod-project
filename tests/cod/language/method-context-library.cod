@@ -1,0 +1,14 @@
+export import "method-view-library.cod" Sample;
+export import "method-view-library.cod" score as score_alias;
+function score(x::Sample)::i64 { 7 }
+function score_alias(x::bool)::i64 { 23 }
+using "method-view-library.cod" through as frozen;
+export import "method-view-library.cod" through as adapted;
+
+export frozen;
+export score;
+using "method-view-library.cod" scored as frozen_proc;
+export import "method-view-library.cod" scored as adapted_proc;
+export frozen_proc;
+
+function private_bridge(x::Sample)::i64 { 99 }

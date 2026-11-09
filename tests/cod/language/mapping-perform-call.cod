@@ -4,7 +4,7 @@ symbol @cell :: i64;
 symbol @helper :: proc() -> i64;
 effect @cell <- 3;
 procedure @helper -> i64 { @cell }
-import "mapped-perform-model.cod" @update as @step with { @helper as @next; };
+mixin "mapped-perform-model.cod" @update as @step with { @helper as @next; };
 effect @cell <- 9;
 behave @print(perform @step);
 behave @print(behave @step);

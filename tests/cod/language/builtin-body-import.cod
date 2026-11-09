@@ -1,2 +1,2 @@
 symbol @print :: i64;
-import "std:io" @print;
+mixin "std:io" @print;

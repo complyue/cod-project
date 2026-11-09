@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T21:34:26.715546+00:00",
+  "purpose": "Observe the currently separate lexical value/call lookup paths without selecting a language namespace policy.",
+  "compiler_sha256": "4e9fbdc16fdd3504ba02274b94ddb4d6d16834ef77b5df69b752676ed1ebdf45",
+  "source_sha256": {
+    "cod/lang_frontend.hh": "a9922a14f02609ca2571c7d410c7a3504d06185a75fa9611516355efad64014b",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518"
+  },
+  "results": [
+    {
+      "name": "local-name-and-call",
+      "source": "using symbol \"std:io\" @print;\nfunction scale(x::i64)::i64 { x * 10 }\n{\n let scale = 7;\n behave @print(scale);\n behave @print(scale(3));\n};\n",
+      "exit_code": 0,
+      "stdout": "7\n30\n",
+      "stderr": ""
+    },
+    {
+      "name": "lexical-procedure-parameter",
+      "source": "using symbol \"std:io\" @print;\nproc selected(x::i64) -> i64 { x + 20 }\nproc apply(callback::proc(i64) -> i64, x::i64) -> i64 { callback(x) }\nbehave @print(apply(selected, 3));\n",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "$SCRATCH/lexical-procedure-parameter.cod:3:57: unavailable lexical function 'callback'\n$SCRATCH/lexical-procedure-parameter.cod:4:15: note: in call to procedure 'apply' defined at $SCRATCH/lexical-procedure-parameter.cod:3:1\n"
+    },
+    {
+      "name": "symbolic-procedure-parameter",
+      "source": "using symbol \"std:io\" @print;\nsymbol @callback::proc(i64) -> i64;\nproc selected(x::i64) -> i64 { x + 20 }\nproc apply(callback::proc(i64) -> i64, x::i64) -> i64 {\n effect @callback <- callback;\n behave @callback(x)\n}\nbehave @print(apply(selected, 3));\n",
+      "exit_code": 0,
+      "stdout": "23\n",
+      "stderr": ""
+    },
+    {
+      "name": "same-spelled-procedure-parameter",
+      "source": "using symbol \"std:io\" @print;\nproc selected(x::i64) -> i64 { x + 20 }\nproc callback(x::i64) -> i64 { x + 1 }\nproc apply(callback::proc(i64) -> i64, x::i64) -> i64 { callback(x) }\nbehave @print(apply(selected, 3));\n",
+      "exit_code": 0,
+      "stdout": "4\n",
+      "stderr": ""
+    }
+  ],
+  "limits": [
+    "No language change; these observations are not new acceptance expectations.",
+    "H-149 selects nested value shadowing and excludes global/function/type namespace changes.",
+    "No new permanent fixture, build, runtime or ownership rule."
+  ],
+  "registry_record": "K-362",
+  "raw_evidence": {
+    "path": "build/validation/language-20261108-call-value-review.json",
+    "sha256": "840543aa7f0cd219e383e3b847b95e8934ef840833ad0d405c225de1fab63e37"
+  }
+}

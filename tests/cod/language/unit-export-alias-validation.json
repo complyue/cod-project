@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-08T20:22:35.410888+00:00",
+  "registry_record": "K-353",
+  "toolchain": "build",
+  "compiler_sha256": "6fd191aac2898c019d18f6d7bdb1da917f8c78dedfa23a9c916990d19abb0076",
+  "scope": "Exported conversion aliases select existing source-bundle entries, retaining selected formula context and unit identity; repeated aliases do not create extra conversion paths.",
+  "focused": {
+    "passed": 34,
+    "total": 34,
+    "fixtures": [
+      "method-modules.cod",
+      "units-basic.cod",
+      "units-aliased-bundle.cod",
+      "units-private-conversion.cod",
+      "units-exact-reject.cod",
+      "units-omitted-route.cod",
+      "units-repeated.cod",
+      "units-import.cod",
+      "units-identity.cod",
+      "units-direct.cod",
+      "units-declared.cod",
+      "units-priority.cod",
+      "units-impure.cod",
+      "units-procedure.cod",
+      "units-exact-overload.cod",
+      "units-ambiguous.cod",
+      "units-ambiguous.cod",
+      "units-private-helper.cod",
+      "units-duplicate-identity.cod",
+      "units-exact-before-route.cod",
+      "units-cycle-no-route.cod",
+      "units-argument-once.cod",
+      "units-shorter-route.cod",
+      "units-direct-ambiguous.cod",
+      "units-unavailable-overload.cod",
+      "units-name-collision.cod",
+      "units-alias-collision.cod",
+      "units-function-order.cod",
+      "units-conversion-signature.cod",
+      "units-procedure-order.cod",
+      "units-operator-order.cod",
+      "abstract-types.cod",
+      "method-context-selection.cod",
+      "frontend-only"
+    ]
+  },
+  "contract_results": [
+    {
+      "fixture": "units-aliased-bundle.cod",
+      "exit_code": 0,
+      "stdout": "2.5\n1.5\n4\n6\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-private-conversion.cod",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-private-conversion.cod:2:1: unavailable lexical function 'cm_to_m'\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-omitted-route.cod",
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-omitted-route.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::mm\n/ws/EvtWorks/cod-project/tests/cod/language/units-omitted-route.cod:3:1: note: in call to function 'distance' defined at /ws/EvtWorks/cod-project/tests/cod/language/units-omitted-route.cod:2:1\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-private-helper.cod",
+      "exit_code": 0,
+      "stdout": "200\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-argument-once.cod",
+      "exit_code": 0,
+      "stdout": "123\n2.5\n11\n21\n7\n11\n22\n7\n11\n23\n7\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "units-function-order.cod",
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-sequencing-library.cod:5:11: division by zero\n",
+      "passed": true
+    },
+    {
+      "fixture": "units-procedure-order.cod",
+      "exit_code": 70,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/units-sequencing-library.cod:5:11: division by zero\n",
+      "passed": true
+    },
+    {
+      "fixture": "method-context-selection.cod",
+      "exit_code": 0,
+      "stdout": "1\n7\n1\n7\n2\n14\n1\n6\n12\n2\n6\n8\n12\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "before": {
+    "recorded_utc": "2026-11-08T20:09:09.853556+00:00",
+    "compiler_sha256": "6a0f2f8ee2126676cdbc4d5b5721a1adbdc850b1aeb64d28abb2f8557f67ed61",
+    "sources": {
+      "bridge.cod": "using units \"/ws/EvtWorks/cod-project/tests/cod/language/units-library.cod\" {m, cm};\nusing \"/ws/EvtWorks/cod-project/tests/cod/language/units-library.cod\" cm_to_m as metres_from_centimetres;\nexport m; export cm; export metres_from_centimetres;\n",
+      "main.cod": "using symbol \"std:io\" @print;\nusing units \"bridge.cod\" {m, cm};\nfunction consume(x (m*))::f64 { scalar(x) }\nbehave @print(consume(cm(250.0)));\n",
+      "direct.cod": "using symbol \"std:io\" @print;\nusing units \"bridge.cod\" {m, cm};\nbehave @print(scalar(metres_from_centimetres(cm(250.0))));\n"
+    },
+    "results": [
+      {
+        "entry": "main.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/main.cod:4:15: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::cm\n<probe>/main.cod:4:15: note: in call to function 'consume' defined at <probe>/main.cod:3:1\n"
+      },
+      {
+        "entry": "direct.cod",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/direct.cod:3:22: unavailable lexical function 'metres_from_centimetres'\n"
+      }
+    ]
+  },
+  "registration_boundary_observations": {
+    "recorded_utc": "2026-11-08T20:20:39.253271+00:00",
+    "compiler_sha256": "6fd191aac2898c019d18f6d7bdb1da917f8c78dedfa23a9c916990d19abb0076",
+    "sources": {
+      "bridge.cod": "using units \"/ws/EvtWorks/cod-project/tests/cod/language/units-library.cod\" {m, cm};\nexport import \"/ws/EvtWorks/cod-project/tests/cod/language/units-library.cod\" cm_to_m as adapted;\nexport m; export cm;\n",
+      "direct.cod": "using symbol \"std:io\" @print;\nusing units \"bridge.cod\" {m, cm};\nusing \"bridge.cod\" adapted;\nbehave @print(scalar(adapted(cm(250.0))));\n",
+      "automatic.cod": "using units \"bridge.cod\" {m, cm};\nfunction length(x (m*))::f64 {scalar(x)}\nlength(cm(250.0));\n"
+    },
+    "observations": [
+      {
+        "entry": "direct.cod",
+        "mode": "--run",
+        "exit_code": 0,
+        "stdout": "2.5\n",
+        "stderr": ""
+      },
+      {
+        "entry": "automatic.cod",
+        "mode": "--check",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "<probe>/automatic.cod:3:1: expected /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::m, got /ws/EvtWorks/cod-project/tests/cod/language/units-library.cod::cm\n<probe>/automatic.cod:3:1: note: in call to function 'length' defined at <probe>/automatic.cod:2:1\n"
+      }
+    ],
+    "limit": "Ordinary callable import does not register a new adapted entry in an existing conversion bundle. This observation does not select a general conversion-extension policy."
+  },
+  "source_sha256": {
+    "cod/lang_frontend.hh": "f5da2d7a4b708160b91a9ab369bf4c03009f3f34d56d75f86eff6bcf6fc24b23",
+    "cod/lang_syntax.hh": "c117ed090ceecd7eb899066c851fdcf5da641755cc5c4877bbd6dd5679f6a21b",
+    "cod/lang_llvm.hh": "46fcab21ffa2de13b36665969a3a220ece990372960710560cd0a063dbbe6518",
+    "tests/cod/language/units-reexport.cod": "ebcf34532c8df2e3f399f05661e723a021d2c0eba86b4eb8932c76b070872bf5",
+    "tests/cod/language/units-aliased-bundle.cod": "8d2a53d84ed751004aafa24c8fa675764965b593d5ef9c0232de3d90cfe94fc0",
+    "tests/cod/language/units-private-conversion.cod": "9db041789016297c74150db46b5484dc743e1b7bfb076425bafaa179a41fafa9",
+    "tests/cod/language/cases.json": "753bee84f450cc5c83f2d1df80e50240f55d96980ac9d751f30eb1f303e3d4a6"
+  },
+  "raw_reports": {
+    "build/validation/language-20261108-unit-export-alias-final-focused.json": "357c5c5ac0400a2625529f636f69ede44652d79f5e3c80333810a1bb8b9905e8",
+    "build/validation/language-20261108-unit-export-alias-before.json": "d76dbcf40bd41411c7ad18a718bc1b88ad953cbafefe363ada875c52c6be2f38",
+    "build/validation/language-20261108-unit-export-alias-registration.json": "7113fa34531e2d5f5338ac210606bd4c6cec08408e5a5777b9ff0ceb4394d910"
+  },
+  "limits": [
+    "The last full component checkpoint remains180/180 at its recorded compiler/source revision. Two focused fixtures were added here; no182-check full-run claim is made.",
+    "Existing bundle entries, selected endpoints, one-shot unit selection and source formula contexts remain authoritative. Ordinary callable adaptation is not registration of a new automatic conversion. General conversion-extension syntax remains pending.",
+    "The focused batch covers all units-* fixtures, module methods, abstract/conversion composition and the frontend-only LLVM/bitcode check. It does not repeat native relocation, large numerical benchmarks or the earlier deep composition measurements.",
+    "No emitter/runtime, region layout/lifetime, allocator, owner/const/transfer/mailbox or SNN model changes are included."
+  ]
+}

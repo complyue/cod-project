@@ -8,3 +8,14 @@ unit SlotCount::u64;
 unit SlotsPerSet::u32;
 conversion function capacity_count(x (SlotsPerSet))::SlotCount { SlotCount(u64(scalar(x))) }
 function (*)(slots (SlotCount*), sets (SetCount))::SlotCount { SlotCount(scalar(slots) * scalar(sets)) }
+
+export (*);
+export ClassId;
+export ClassSetId;
+export GlobalSetId;
+export GlobalSlot;
+export LocalSlot;
+export SetCount;
+export SlotCount;
+export SlotsPerSet;
+export capacity_count;
