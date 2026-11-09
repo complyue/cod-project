@@ -5,6 +5,17 @@
     "stdout": "1\n7\n2\n2\n8\n8\n6\n9\n6\n"
   },
   {
+    "file": "comments.cod",
+    "exit": 0,
+    "stdout": "6\n4\n"
+  },
+  {
+    "file": "fraction-reserved.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "'//' is reserved for fraction construction; use '#' for line comments"
+  },
+  {
     "file": "quoted-operator.cod",
     "exit": 2,
     "stdout": "",
@@ -418,7 +429,7 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": [
-      "units-library.cod::m, got ",
+      "units-library.cod::m), got ",
       "units-library.cod::cm"
     ]
   },
@@ -427,7 +438,7 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": [
-      "units-library.cod::m, got ",
+      "units-library.cod::m), got ",
       "units-library.cod::mm"
     ]
   },
@@ -448,7 +459,7 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": [
-      "units-library.cod::m, got ",
+      "units-library.cod::m), got ",
       "units-other.cod::m"
     ]
   },
@@ -519,7 +530,7 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": [
-      "units-cycle-no-route.cod::c, got ",
+      "units-cycle-no-route.cod::c), got ",
       "units-cycle-no-route.cod::a"
     ]
   },
@@ -553,7 +564,11 @@
   {
     "file": "iteration-scope.cod",
     "exit": 0,
-    "stdout": "0\n1\n2\n90\n123\nfalse\ntrue\n9\n41\n7\n"
+    "stdout": "0\n1\n2\n90\n123\nfalse\ntrue\n9\n41\n7\n",
+    "stderr_contains": [
+      "[-Wshadow]",
+      "shadowed binding declared here"
+    ]
   },
   {
     "file": "local-duplicate.cod",
@@ -659,7 +674,7 @@
   {
     "file": "region-arrays.cod",
     "exit": 0,
-    "stdout": "3.5\n2\n9.5\n11\n"
+    "stdout": "3.5\n2\n9.5\n11\n21.5\n12\n"
   },
   {
     "file": "region-records.cod",
@@ -866,7 +881,11 @@
   {
     "file": "procedure-declarations.cod",
     "exit": 0,
-    "stdout": "21\n11\n21\n11\n21\n22\n32\n42\n62\n30\n"
+    "stdout": "21\n11\n21\n11\n21\n22\n32\n42\n62\n30\n33\n43\n",
+    "stderr_contains": [
+      "[-Wshadow]",
+      "shadows a callable in module"
+    ]
   },
   {
     "file": "procedure-signature-error.cod",
@@ -1177,5 +1196,76 @@
     "file": "world-export-alias.cod",
     "exit": 0,
     "stdout": ""
+  },
+  {
+    "file": "callable-contract.cod",
+    "exit": 0,
+    "stdout": "7\n7\n10\n60\n4\n1\n2\n3\n2\n6\n"
+  },
+  {
+    "file": "callable-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "callable 'unavailable' has no method implementation"
+  },
+  {
+    "file": "callable-result-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "method result violates callable declaration"
+  },
+  {
+    "file": "callable-generic-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "inconsistent type-parameter arguments"
+  },
+  {
+    "file": "callable-signature-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "requires an explicit result type"
+  },
+  {
+    "file": "callable-local-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "binding 'scale' is not callable"
+  },
+  {
+    "file": "procedure-declarations.cod",
+    "exit": 2,
+    "stdout": "",
+    "args": [
+      "-Werror=shadow"
+    ],
+    "stderr_contains": "warning treated as error:"
+  },
+  {
+    "file": "units-representations.cod",
+    "exit": 0,
+    "stdout": "32\n64\n32\n5\n7\n2.5\n1.25\n1.25\n32\n64\n2.5\n"
+  },
+  {
+    "file": "units-representation-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "expected f64(",
+      "units-representations-library.cod::m), got u64(",
+      "units-representations-library.cod::mm)"
+    ]
+  },
+  {
+    "file": "numeric-widening-ambiguous.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "ambiguous method 'choose'"
+  },
+  {
+    "file": "numeric-widening-lossy.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected f64, got i64"
   }
 ]

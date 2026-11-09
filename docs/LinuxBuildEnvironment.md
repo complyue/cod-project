@@ -14,6 +14,14 @@ documentation trees. It does not apply files from `patches/llvm/`.
 LLVM libc sources supply shared utility headers; the host C library remains
 the distribution's glibc.
 
+The self-hosted C++ compiler uses the bundled libc++ headers and libraries.
+It does not provide an isolated Linux sysroot: libc++'s C wrappers still include
+glibc/POSIX and Linux API headers, and LLVM/LLDB use the selected host C libraries
+and their development headers. Updating those packages can invalidate compiled
+objects and precompiled headers even when the compiler and C++ runtime are
+unchanged. A system C++ standard-library header in the final build's dependency
+records would require investigation; host C headers are an expected dependency.
+
 The validated environment is Debian 13 x86-64 with GCC 14.2.0 as the stage-one
 compiler, CMake 4.4.4, Ninja 1.13.2, SWIG 4.5.1 and LLVM 23.1.3. Linux validation
 covers all three bootstrap stages, installation, eight test suites, relocation,
@@ -64,6 +72,22 @@ memory. For source-only incremental changes, run exactly:
 ```sh
 cmake --build ./build
 ```
+
+After a client-image or development-package update, inspect dependency changes
+before starting that incremental build:
+
+```sh
+ninja -C build -n -d explain
+```
+
+Compare the affected inputs with the recorded package versions and, where
+available, prior file contents. Package updates can give unchanged headers new
+timestamps; rebuilding one shared precompiled header then invalidates many
+objects. Preserve the existing build tree and rebuild the required dependencies
+under the repository's authorization rules. Prevent unnecessary timestamp churn
+in the image publisher by retaining prior timestamps only for files verified
+unchanged in content and relevant metadata. This does not replace rebuilding
+when headers, libraries, compiler options or the compiler itself actually change.
 
 When tests are authorized, use `COD_TEST_TOOLCHAIN=build`. Linux validation
 covers CoD, shilos, codp and YAML integration; direct C/C++ compiler use; bundled

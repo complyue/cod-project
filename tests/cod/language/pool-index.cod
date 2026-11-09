@@ -4,10 +4,10 @@ using "pool-layout.cod" sets;
 using "pool-layout.cod" capacity;
 using "pool-layout.cod" class_set_begin;
 using "pool-layout.cod" class_slot_begin;
-data SetLocation { class_id::ClassId; local::ClassSetId; }
-function (u64)(count (SlotsPerSet))::u64 { u64(scalar(count)) }
-function (u64)(index (LocalSlot))::u64 { u64(scalar(index)) }
-function locate(layout::Layout, index (GlobalSetId), found::ref<SetLocation>)::SetLocation {
+data SetLocation { class_id::u32(ClassId); local::u64(ClassSetId); }
+function (u64)(count::u32(SlotsPerSet))::u64 { u64(scalar(count)) }
+function (u64)(index::u32(LocalSlot))::u64 { u64(scalar(index)) }
+function locate(layout::Layout, index::u64(GlobalSetId), found::ref<SetLocation>)::SetLocation {
   setfield(found, class_id, ClassId(0u32));
   setfield(found, local, ClassSetId(0u64));
   for (j in 0u32 .. layout.classes) {
@@ -20,7 +20,7 @@ function locate(layout::Layout, index (GlobalSetId), found::ref<SetLocation>)::S
   };
   deref(found)
 }
-function global_slot(layout::Layout, j (ClassId), set (ClassSetId), slot (LocalSlot))::GlobalSlot {
+function global_slot(layout::Layout, j::u32(ClassId), set::u64(ClassSetId), slot::u32(LocalSlot))::u64(GlobalSlot) {
   GlobalSlot(scalar(class_slot_begin(layout, j)) + scalar(set) * u64(capacity(j)) + u64(slot))
 }
 

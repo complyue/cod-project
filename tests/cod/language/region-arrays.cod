@@ -1,14 +1,14 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
-unit Neuron::u32;
-array Rates[Neuron]::f32;
+unit Neuron;
+array Rates[u32(Neuron)]::f32;
 symbol @arena :: region;
 symbol @rates :: ref<Rates>;
 symbol @cell :: ref<f32>;
 function total(a::Rates)::f32 {
   fold (i in Neuron(0u32) .. Neuron(u32(len(a))), sum = 0.0f32) { sum + a[i] }
 }
-function choose(a::Rates, i (Neuron))::ref<f32> { ref_at(a, i) }
+function choose(a::Rates, i::u32(Neuron))::ref<f32> { ref_at(a, i) }
 function read(p::ref<f32>)::f32 { deref(p) }
 effect @arena <- region(4096u64);
 behave @assert(true && { effect @arena <- region(128u64); capacity_bytes(@arena) > 0u64 });
@@ -20,3 +20,11 @@ behave @print(read(@cell));
 { store(@cell, 9.5f32); };
 behave @print(read(@cell));
 behave @print(total(deref(@rates)));
+
+function sample_then_mutate(p::ref<f32>)::f32 {
+  let saved = deref(p);
+  store(p, 12.0f32);
+  saved + deref(p)
+}
+behave @print(sample_then_mutate(@cell));
+behave @print(read(@cell));

@@ -1,11 +1,11 @@
-unit raw::f64;
-unit normalized::f64;
-conversion function normalize(x (raw))::normalized { normalized(scalar(x) / 100.0) }
+unit raw;
+unit normalized;
+conversion function normalize(x::f64(raw))::f64(normalized) { normalized(scalar(x) / 100.0) }
 function adjust(x::f64)::f64 { x + 1.0 }
-symbol @distance :: normalized;
-symbol @read :: proc(normalized) -> f64;
+symbol @distance :: f64(normalized);
+symbol @read :: proc(f64(normalized)) -> f64;
 effect @distance <- normalized(4.0);
-procedure @read(x (normalized*))::f64 { adjust(scalar(@distance) + scalar(x)) }
+procedure @read(x::f64(normalized*))::f64 { adjust(scalar(@distance) + scalar(x)) }
 
 export @distance;
 export @read;

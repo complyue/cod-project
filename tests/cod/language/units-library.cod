@@ -1,11 +1,11 @@
-unit m::f64;
-unit cm::f64;
-unit mm::f64;
-unit km::f64;
-conversion function cm_to_m(x (cm))::m { m(scalar(x) / 100.0) }
-conversion function mm_to_cm(x (mm))::cm { cm(scalar(x) / 10.0) }
-conversion function m_to_cm(x (m))::cm { cm(scalar(x) * 100.0) }
-conversion function km_to_m(x (km))::m { m(scalar(x) * 1000.0) }
+unit m;
+unit cm;
+unit mm;
+unit km;
+conversion function cm_to_m(x::f64(cm))::f64(m) { m(scalar(x) / 100.0) }
+conversion function mm_to_cm(x::f64(mm))::f64(cm) { cm(scalar(x) / 10.0) }
+conversion function m_to_cm(x::f64(m))::f64(cm) { cm(scalar(x) * 100.0) }
+conversion function km_to_m(x::f64(km))::f64(m) { m(scalar(x) * 1000.0) }
 
 export cm;
 export cm_to_m;

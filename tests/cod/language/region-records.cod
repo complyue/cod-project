@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-unit Weight::f32;
-array Values[u32]::Weight;
+unit Weight;
+array Values[u32]::f32(Weight);
 data Node { effect::f32; next::ref<Node>; data::ref<Values>; }
 symbol @arena :: region;
 symbol @values :: ref<Values>;
@@ -9,7 +9,7 @@ symbol @head :: ref<Node>;
 symbol @selected :: ref<Node>;
 function child(n::Node)::ref<Node> { n.next }
 function child_value(n::Node)::f32 { deref(child(n)).effect }
-function weight(n::Node)::ref<Weight> { ref_at(deref(n.data), 0u32) }
+function weight(n::Node)::ref<f32(Weight)> { ref_at(deref(n.data), 0u32) }
 function measure(n::Node)::f32 { n.effect + child_value(n) + scalar(deref(weight(n))) }
 effect @arena <- region(8192u64);
 effect @values <- alloc @arena Values(2u64, Weight(0.25f32));

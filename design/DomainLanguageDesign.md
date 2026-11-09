@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 105
+Discussion revision: 111
 
 Recorded: 2026-10-22
 
@@ -10,7 +10,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-- **Registry / scope:** [D-07](DesignAuthorityRegistry.md#d-07), revision105, all sections; [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms.
+- **Registry / scope:** [D-07](DesignAuthorityRegistry.md#d-07), revision111, all sections; [K-400](DesignAuthorityRegistry.md#k-400) records successful repair/build and28 focused checks; H-257/H-258/[K-399](DesignAuthorityRegistry.md#k-399) directs lexical call/shadowing correction, mandatory generic/variadic callable signatures and LLVM value/place modelling, with ordinary ownership deferred. [K-398](DesignAuthorityRegistry.md#k-398) records H-256 priority follow-up for comment reservation and representation-independent UoM; [K-397](DesignAuthorityRegistry.md#k-397) adds the H-254/H-255 fraction draft and future compatibility-review requirement without scheduling implementation; [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred. [K-402](DesignAuthorityRegistry.md#k-402) records the implemented quantity/widening subset and56 focused checks.
 - **Value lineage:** C-10 supplies inspectable typed execution. C-35/C-43/C-45/C-46 through P-84/P-100/P-102/P-109–P-111 and C-56/C-57 through P-182–P-197 concern identity, composition, interfaces and explicit behavior selection. C-39/C-54 through P-94/P-143/P-155 supplies regional lifetime boundaries. C-58/P-199–P-202 adds explicit publication and module-scoped callable composition. These candidate paths serve charter §§2–4; dependency evidence does not qualify them.
 - **Human baseline:** H-96–H-141 supplies symbols, callables, modules and units, subject to later supersession. H-143–H-146 selects LLVM, lean validation, simplification and the known zero-offset limitation. H-166/H-180/H-181 preserves module lifetime, captured/hidden owners and non-extractable resources; H-184–H-189 supplies typed lexical/symbolic procedures. H-193/H-196–H-203 supplies regional data, intrinsic owners, mutable explicit-memory functions, borrowing, const and same-owner edges. H-209–H-220 supplies abstract/data types, explicit conformance, source-preserving selections, mixin, aliases and dispatch. H-222–H-224 supplies the const-RHS assignment discussion. H-225–H-227 selects associated signature membership, using/import-dependent local declarations and caller-selected ordinary implementation views. H-229 preserves concrete-data dispatch; H-230 refines callable identities and alias composition; H-231 requires explicit exports; H-232 selects using-preserved versus import-adapted helper implementations; H-233 requires explicit re-export and permits export import.
 - **Invariants / non-goals:** preserve zero-cost relocation, region-only non-bits storage, no regional object copy/move, owner provenance, non-consuming capture replay and no dynamic effect/procedure calls from functions. No module namespace, runtime interface wrapper, allocator policy, bootstrap/toolchain change or SNN modeling choice is introduced. The confirmed method-selection increment does not settle qualifiers, ownership construction/transfer, standalone abstract signatures or mailbox semantics.
@@ -27,6 +27,8 @@ H-237/H-238 distinguishes different entity sets rather than two views of the sam
 The compiler stores callable/global information by identity, with independent local/public alias maps; source selection is read-only. H-247 defines export as publication of an identity under an alias. H-248 permits multiple aliases per identity, and H-246/H-249 directs first-principles implementation and helper removal. [K-396's architecture audit](../tests/cod/language/world-architecture-validation.json) establishes implementation across the goal's requirements on one compiler revision, including shared vocabularies, local merging, publication, TLS and lifetime behavior. H-253 requires conflicting inherited/selected overloads to reject; future arbitration syntax remains undecided. Full-suite and relocation reports retain their earlier compiler revisions, and full-document qualification remains pending-human.
 
 RTTI remains an explicit discussion item under H-251. The current compiler tracks type identity and selects concrete methods statically; that does not establish a runtime reflection or dispatch contract. [Current RTTI boundary](ModuleWorlds.md#rtti-current-implementation-and-decision-boundary) separates compiler metadata, typed TLS pointers and the storage layer's region-root UUID. Related decisions require discussion with the user before design or implementation.
+
+H-257/H-258 prioritizes three language corrections: nearest lexical procedure bindings govern direct calls and shadowing warns; callable identities and signature-only declarations are distinct from implemented methods; LLVM lowering distinguishes evaluated bits from storage places. Declarations require parameter/result signatures and permit generic type parameters and varargs. D-10r88 and D-15r14 record the contract and K-400 records28 focused checks; complete ordinary-region ownership is a separate design discussion. H-256's comment reservation and H-260/H-261's representation-independent quantities/lossless widening pass K-401/K-402; D-16 remains the fraction compatibility constraint.
 
 ## Confirmed direction
 
@@ -95,6 +97,8 @@ The sixteen topics contain confirmed local propositions and open implementation/
 
 **Current scalar discussion:** [ScalarUnitsAndIndexTypes](ScalarUnitsAndIndexTypes.md), D-11, compares newtype-style wrappers with UoM arithmetic against actual pool formulas. Arrays declare an index type; scalar operations must preserve or explicitly transform its meaning. H-128 makes UoMs independent named compile-time entities with first-class type identities, same-name distinct definitions and identity-preserving local aliases; they are not represented by symbols. H-130 supplies pure conversion methods with Julia-style argument-type dispatch; H-134 specifies fresh UoM definitions and one-shot using selections, with no UoM import. H-135–H-138 specify parameter-controlled conversion and compile-time route choice. H-131 adds parenthesized operator names such as `(+)` for readable method definitions; D-11 distinguishes pure conversion/index functions from the mixed function/procedure operation overloads specified by H-153–H-155/H-158/H-159 in D-10; unary/binary methods use argument count and types. H-132 plans compound UoMs for future physical-quantity use and defers their implementation; compound equivalence/inference does not block this increment. Index origins and literal rules remain open within the bounded interface discussion. H-126 requests analysis before selecting the mechanism.
 
+**Planned fraction compatibility:** [FixedWidthFractions](FixedWidthFractions.md), D-16, records H-254/H-255: intrinsic fixed-width `i64/i32`-style bits representations independent of UoM, unreduced arithmetic, explicit same-type `canonical`, `//` construction/output and `#` line comments. The compiler reserves `//` with a diagnostic and uses `#` comments under K-401. Fraction implementation is deferred. K-401/K-402 establish the separate H-256 comment/UoM prerequisites; H-260/H-261 supplies independent unit declarations, typed quantities and lossless primitive widening. Subsequent language designs and implementations must check this plan; conflicts with accepted requirements are design obstacles for human discussion before implementing the affected choice. Exact promotion, layout, qualifier and precedence rules remain open. This does not introduce denominator units, arbitrary precision or fraction-specific ownership.
+
 **Proposal to discuss:** start from a small explicit sum/product and method core whose checked representation can express business logic and evolve toward the charter's GADT graphs. Decide the necessary indexed features from concrete programs.
 
 **Decision evidence:** one domain definition, one business program with a result-dependent branch, an invalid construction that is rejected, and the exact boundary between value, type and kind representations.
@@ -129,12 +133,12 @@ H-218 requires a declared relation for data applicability to an abstract constra
 Head-only declarations refer to the same separately defined data identity and may occur in different modules. Illustrative adapter modules:
 
 ```text
-// adapter-a.cod
+# adapter-a.cod
 import "model.cod" SomeADT;
 import "interfaces.cod" SomeAbsType;
 data SomeADT <: SomeAbsType;
 
-// adapter-b.cod
+# adapter-b.cod
 import "model.cod" SomeADT;
 import "interfaces.cod" AnotherAbsType;
 data SomeADT <: AnotherAbsType;
@@ -185,8 +189,8 @@ Lean acceptance must show one data identity with head-only conformance declarati
 The proposed surface reuses the existing callable header and ends it with a semicolon:
 
 ```text
-function read(store::SlotStore, slot::Slot)::i64;
-function cell(store::SlotStore, slot::Slot)::ref<i64>;
+function read(store::SlotStore, slot::u32(Slot))::i64;
+function cell(store::SlotStore, slot::u32(Slot))::ref<i64>;
 proc flush(store::SlotStore)::void;
 export read;
 export cell;
@@ -279,7 +283,7 @@ Callable identity, extension permission, selected implementations and body lexic
 
 Callable-dependency analysis follows expression meaning: a setfield field selector is a compile-time field label even when a lexical function has the same spelling. It cannot make an otherwise source-bound method depend on the importing module. Calls in the object or stored-value expressions remain ordinary dependencies. [Field-selector evidence](../tests/cod/language/field-selector-context-validation.json) records the inherited-setter regression and separate adapter/value-call ambiguity controls; the existing module-method example includes a Counter field named score alongside the score family.
 
-[Historical method-context observations](../tests/cod/language/method-context-observations.json) and [pool observations](../tests/cod/language/pool-method-context-observations.json) preserve the source-only baseline that motivated H-227. [The associated-method checkpoint](../tests/cod/language/associated-method-validation.json) records the actual compiler, sources and results, including the interface-only pool algorithm selecting its later adapter and returning 18 for slots containing 7 and 11. Its intentionally unavailable fallback body is checked only if selected; this is not implementation of standalone abstract-method syntax. The [deep-view checkpoint](../tests/cod/language/deep-method-view-validation.json) adds 96-module alias propagation, restoration between two adapter paths, demanded leaf ambiguity and source-family diagnostic locations. [The pool integration](../tests/cod/language/pool-algorithm-validation.json) supplies a checked-in interface-only algorithm module: replace/peek/locate are defined once and imported by the adapter that selects storage methods. A temporary second layout uses the same bodies through separate aliases and produces13,6,9,13, preserving owner-dependent payload writes and the first adapter after the second call. A source-frozen helper fails at its demanded unavailable operation. The primary pool retains10000 reuse laps,152 occupied bytes and independent whole-image relocation/free-chain checks. Its fallback interface bodies are explicitly provisional scaffolding until standalone method declarations are designed. Association in this subset reads declared signatures, not body-inferred return types; broader inference is not selected here.
+[Historical method-context observations](../tests/cod/language/method-context-observations.json) and [pool observations](../tests/cod/language/pool-method-context-observations.json) preserve the source-only baseline that motivated H-227. [The associated-method checkpoint](../tests/cod/language/associated-method-validation.json) records the actual compiler, sources and results, including the interface-only pool algorithm selecting its later adapter and returning 18 for slots containing 7 and 11. Its intentionally unavailable fallback body is checked only if selected; this is not implementation of standalone abstract-method syntax. The [deep-view checkpoint](../tests/cod/language/deep-method-view-validation.json) adds 96-module alias propagation, restoration between two adapter paths, demanded leaf ambiguity and source-family diagnostic locations. [The pool integration](../tests/cod/language/pool-algorithm-validation.json) supplies a checked-in interface-only algorithm module: replace/peek/locate are defined once and imported by the adapter that selects storage methods. A temporary second layout uses the same bodies through separate aliases and produces13,6,9,13, preserving owner-dependent payload writes and the first adapter after the second call. A source-frozen helper fails at its demanded unavailable operation. The primary pool retains10000 reuse laps,152 occupied bytes and independent whole-image relocation/free-chain checks. The pool interface uses typed bodyless declarations; K-400 covers demanded implementation checks through the imported algorithms. Association in this subset reads declared signatures, not body-inferred return types; broader inference is not selected here.
 
 #### Concrete-data dispatch through abstract parameters
 
@@ -303,10 +307,10 @@ H-230 assigns distinct identities and method sets to base/ext1/ext2 versions of 
 using "base.cod" score as base;
 using "ext.cod" score as extended;
 function indirect(x::Sample)::i64 { base(x) }
-// base defines score(Metric)=1; ext adds score(Sample)=7.
-base(x);      // required: 1
-extended(x);  // required: 7
-indirect(x);  // required: 1
+# base defines score(Metric)=1; ext adds score(Sample)=7.
+base(x);      # required: 1
+extended(x);  # required: 7
+indirect(x);  # required: 1
 ```
 
 Concrete dispatch still uses Sample on all three calls. The candidate sets differ; entering a wrapper cannot add extended's candidates to the distinct base identity. [Historical alias observations](../tests/cod/language/selection-surface-observations.json) record the earlier1,7,7 behavior. [The current context fixture](../tests/cod/language/method-context-selection.cod) passes1,7,1 and also checks a same-alias union, using/import helpers, re-export and captured/current procedure calls. The complete local reproducer is build/validation/language-alias-example.cod.
@@ -314,7 +318,7 @@ Concrete dispatch still uses Sample on all three calls. The candidate sets diffe
 ```text
 using "base.cod" score;
 using "ext.cod" score;
-// score names the consumer's new union identity.
+# score names the consumer's new union identity.
 ```
 
 The required composition must preserve original method definitions and source provenance. A shared inherited method reached twice is one candidate; two distinct equally specific implementations remain ambiguous under H-209. Source-defined unit constructors retain their lexical type identity and do not by themselves make an imported method context-dependent. Calls inside constructor arguments still participate in implementation selection. [Native evidence](../tests/cod/language/module-unit-validation.json) distinguishes a constructor-only shared method from two helper-selected implementations that return different results. Declaration order cannot select a winner. A union through using does not grant import's extension permission. These constraints do not require a runtime registry, new object layout or module-qualified calls. Keeping provenance of the original semantic family separately from the selected identity is a compiler representation candidate, not a new user-visible symbol mechanism. Whether unrelated same-spelled families may be explicitly fused, and how a local method extends a union selected with mixed permissions, remain outside this confirmed scope.
@@ -322,18 +326,18 @@ The required composition must preserve original method definitions and source pr
 **Helper dependency context follows using/import.** H-232 confirms the following schematic source, with standalone export-list syntax proposed below:
 
 ```text
-// base.cod
+# base.cod
 function score(x::Metric)::i64 { 1 }
 function twice(x::Metric)::i64 { score(x) + score(x) }
 export score, twice;
 
-// ext.cod
+# ext.cod
 import "base.cod" score;
 function score(x::Sample)::i64 { 7 }
-using "base.cod" twice;  // replace with import to select ext's implementation context
+using "base.cod" twice;  # replace with import to select ext's implementation context
 export score, twice;
 
-// client.cod
+# client.cod
 using "ext.cod" twice;
 twice(sample);
 ```
@@ -402,7 +406,7 @@ Privacy, explicit re-export and export import are confirmed and implemented in t
 Acceptance needs a public function using a private helper, rejected direct/private selections through all three reuse forms, alias re-export, private associated methods staying hidden, and public factories remaining available. Together with the identity increment it must check separate aliases yielding1,7,1, same-alias union deduplication and ambiguity, plus using-preserved2/import-adapted14 and export import publication without implicit re-export. Existing initialization, captures, conformance, concrete dispatch and owner checks remain relevant. [Boundary evidence](../tests/cod/language/module-boundary-validation.json) covers inherited-method name binding and publication identity at its recorded compiler revision. [The module composition record](../tests/cod/language/module-context-export-validation.json) retains its179-check compiler revision, all five composition cases and native LLVM/relocation/lifetime validation. The context fixture additionally distinguishes frozen/adapted direct procedures, perform retaining captured bias1 and behave using current bias5. Existing test-library APIs and generated composition modules explicitly export their selected resources; unrelated entry-local definitions remain private. The record does not qualify unresolved compound contexts or the complete language contract.
 
 
-Lean acceptance should exercise explicit conformance without eager body completeness, rejection of undeclared conformance despite matching signatures, unrelated declared abstract constraints remaining ambiguous, and unused missing implementations remaining allowed while demanded missing implementations fail. An adapter's declared conformance must be usable through using without granting declaration permission; an unrelated same-identity view or mere WPO inclusion must not silently publish it. Different field layouts must be irrelevant to interface matching. Module cases need distributed parent/child methods, source-visible transitive methods, duplicate-path identity handling, using-only extension rejection and permitted import extension. Alias cases must show explicit shadowing of implicit conflicts, unchanged operation identity/source captures, and no fallback to a hidden operation after explicit dispatch fails. The native abstract checkpoint covers the explicit-conformance/applicability portion. The linked increment evidence covers the native association, name-priority and caller-view subset; unimplemented qualifier, owner and standalone-signature contracts remain separate.
+Lean acceptance should exercise explicit conformance without eager body completeness, rejection of undeclared conformance despite matching signatures, unrelated declared abstract constraints remaining ambiguous, and unused missing implementations remaining allowed while demanded missing implementations fail. An adapter's declared conformance must be usable through using without granting declaration permission; an unrelated same-identity view or mere WPO inclusion must not silently publish it. Different field layouts must be irrelevant to interface matching. Module cases need distributed parent/child methods, source-visible transitive methods, duplicate-path identity handling, using-only extension rejection and permitted import extension. Alias cases must show explicit shadowing of implicit conflicts, unchanged operation identity/source captures, and no fallback to a hidden operation after explicit dispatch fails. The native abstract checkpoint covers the explicit-conformance/applicability portion. The linked increment evidence covers the native association, name-priority and caller-view subset; unimplemented qualifier and owner contracts remain separate; K-400 covers the bounded typed-signature increment.
 
 <a id="dl-02"></a>
 ### DL-02 — Methods, effects and entry execution
@@ -634,7 +638,7 @@ H-133–H-138, H-148–H-150 and H-153–H-155/H-158/H-159 resolve the following
 | --- | --- | --- |
 | LI-01 | Result references from a function | H-133/H-197: returning an existing input-reachable reference retains its source-region lifetime. Mutation is allowed; returning a view cannot keep a locally released region alive. |
 | LI-02 | UoM definition reuse | H-134: fresh definitions and one-shot using only; no UoM import. Select the intended UoMs and their associated conversions together. Partial selections exclude conversions involving omitted UoMs; repeated using does not extend the bundle. |
-| LI-03 | Conversion during method selection | H-135: `amount (m)` forbids inserted conversion; `amount (m*)` permits it. This is a user-declared parameter policy, not a universal language restriction. |
+| LI-03 | Conversion during method selection | H-135: H-260/H-261 `amount::f64(m)` preserves unit identity while allowing lossless representation widening; `amount::f64(m*)` also permits selected unit conversions. This is a user-declared parameter policy, not a universal language restriction. |
 | LI-04 | Conversion route selection | H-136: discover routes at compile time, choose a unique route automatically, warn about unresolved alternatives and allow warnings-as-errors. H-137/H-138: a direct conversion wins; otherwise use the declared indirect route, illustrated by `m*<-cm<-mm`. |
 | LI-05 | Argument/conversion order | H-148: evaluate each argument once and finish its selected conversions before evaluating the next argument. An earlier failure prevents later argument effects. |
 | LI-06 | Local value names | H-149: nested scopes may shadow outer locals; declarations within one scope must be unique. The initializer sees the outer value, and scope exit restores its visibility. Function parameters and loop bindings share their body’s declaration scope. |
@@ -786,3 +790,5 @@ Dates above are recording dates. Exact source-message timestamps were unavailabl
 | DD-107 | 2026-11-08 | Module resources are private unless explicitly exported; using/import/mixin cannot select private resources. | H-231; C-58/P-199–P-201; grammar and bundle details remain draft. |
 | DD-108 | 2026-11-08 | A source-defined helper selected through using retains its source implementation context; import adapts its callable dependencies to the receiving module. The twice example returns2 versus14. | H-232; P-191/P-202/P-203; this refines callable context without general lexical body redefinition. |
 | DD-109 | 2026-11-08 | Re-export must be explicit; export import performs the normal import and exports all resources it imports. | H-233; C-58/P-200/P-201; source privacy and consumer extension permission remain separate. |
+| DD-110 | 2026-11-09 | Independent `unit m;` declarations, quantity types `f64(m)`, representation-preserving `m(value)` construction and starred quantity conversion parameters. | H-260; P-231; K-402 native acceptance; full fraction support deferred. |
+| DD-111 | 2026-11-09 | Automatic widening preserves every source-type value; exact methods precede unique most-specific widened matches, and builtin mixed scalar arithmetic uses a unique least safe common representation. | H-261; P-231; K-402; narrowing, reference covariance and fraction-specific promotion are not implicit. |

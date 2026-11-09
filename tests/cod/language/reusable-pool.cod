@@ -1,20 +1,20 @@
-// Stable typed slots; returning a slot changes membership, not object lifetime.
-// A Slot is valid only for this pool and until its next release. Callers must
-// return an acquired slot exactly once and stop using it after release.
+# Stable typed slots; returning a slot changes membership, not object lifetime.
+# A Slot is valid only for this pool and until its next release. Callers must
+# return an acquired slot exactly once and stop using it after release.
 using units "pool-interface.cod" {Slot};
 using "pool-interface.cod" (==);
 import "pool-interface.cod" read;
 import "pool-interface.cod" cell;
 import "pool-interface.cod" acquire;
 import "pool-interface.cod" release;
-array Payloads[Slot]::i64;
-array Links[Slot]::Slot;
-data Pool { head::Slot; payloads::ref<Payloads>; links::ref<Links>; }
+array Payloads[u32(Slot)]::i64;
+array Links[u32(Slot)]::u32(Slot);
+data Pool { head::u32(Slot); payloads::ref<Payloads>; links::ref<Links>; }
 
-function end_slot(pool::Pool)::Slot { Slot(u32(len(pool.payloads))) }
+function end_slot(pool::Pool)::u32(Slot) { Slot(u32(len(pool.payloads))) }
 function empty(pool::Pool)::bool { pool.head == end_slot(pool) }
-function read(pool::Pool, slot::Slot)::i64 { deref(pool.payloads)[slot] }
-function cell(pool::Pool, slot::Slot)::ref<i64> { ref_at(pool.payloads, slot) }
+function read(pool::Pool, slot::u32(Slot))::i64 { deref(pool.payloads)[slot] }
+function cell(pool::Pool, slot::u32(Slot))::ref<i64> { ref_at(pool.payloads, slot) }
 
 function initialize(pool::Pool) -> void {
   for (i in 0u32 .. scalar(end_slot(pool))) {
@@ -32,8 +32,8 @@ function create(arena::region, capacity::u32) -> Pool {
   pool
 }
 
-// Exhaustion returns the capacity sentinel without modifying the pool.
-function acquire(pool::Pool, value::i64) -> Slot {
+# Exhaustion returns the capacity sentinel without modifying the pool.
+function acquire(pool::Pool, value::i64) -> u32(Slot) {
   let slot = pool.head;
   if (slot == end_slot(pool)) {
     slot
@@ -44,7 +44,7 @@ function acquire(pool::Pool, value::i64) -> Slot {
   }
 }
 
-function release(pool::Pool, slot::Slot) -> void {
+function release(pool::Pool, slot::u32(Slot)) -> void {
   store(pool.links, slot, pool.head);
   setfield(pool, head, slot);
   {}

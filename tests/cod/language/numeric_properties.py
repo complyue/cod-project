@@ -37,8 +37,8 @@ def main():
                (f32(2 ** -126), 0.25), (16777216.0, 1.0), (16777215.0, 0.5)]
     integers = [(rng.randrange(2 ** 30), rng.randrange(2 ** 30)) for _ in range(16)]
     integers += [(0, 0), (2 ** 32 - 1, 2 ** 32), (2 ** 63 - 1, 1)]
-    lines = ['using symbol "std:io" @print;', 'unit Slot::u32;',
-             'array Floats[Slot]::f32;', 'array Integers[Slot]::u64;',
+    lines = ['using symbol "std:io" @print;', 'unit Slot;',
+             'array Floats[u32(Slot)]::f32;', 'array Integers[u32(Slot)]::u64;',
              'data Sample { a::f32; b::f32; }',
              'function blend(s::Sample)::f32 { (s.a * s.b + s.a) / s.b }',
              'function blend(a::u64, b::u64)::u64 { a * b + a }',

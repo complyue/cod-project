@@ -1,10 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 30 · Recorded: 2026-11-09 · Status: design draft.
+Design revision: 31 · Recorded: 2026-11-09 · Status: design draft.
 
 ## Design authority
 
-- **Registry / coverage:** [D-14](DesignAuthorityRegistry.md#d-14), revision 30, all sections. [K-396](DesignAuthorityRegistry.md#k-396) coordinates module-world selection and current lifetime evidence; it selects no new ownership mechanism. [K-382](DesignAuthorityRegistry.md#k-382) records typed factory forwarding with preserved captures, implementation context and result owners. [K-377](DesignAuthorityRegistry.md#k-377) records direct adapted regional factories; [K-374](DesignAuthorityRegistry.md#k-374) records algorithms across distinct pool layouts/owners. The complete draft and candidate value path remain `pending-human`. K-379/K-367 reconciles evidence navigation and lifetime descriptions. K-346/K-338 retains the explicit-memory function and pending assignment-place/result reviews. These records select no owning construction, source post-state or assignment policy.
+- **Registry / coverage:** [D-14](DesignAuthorityRegistry.md#d-14), revision 31, all sections. [K-396](DesignAuthorityRegistry.md#k-396) coordinates module-world selection and current lifetime evidence; it selects no new ownership mechanism. [K-382](DesignAuthorityRegistry.md#k-382) records typed factory forwarding with preserved captures, implementation context and result owners. [K-377](DesignAuthorityRegistry.md#k-377) records direct adapted regional factories; [K-374](DesignAuthorityRegistry.md#k-374) records algorithms across distinct pool layouts/owners. The complete draft and candidate value path remain `pending-human`. K-379/K-367 reconciles evidence navigation and lifetime descriptions. K-346/K-338 retains the explicit-memory function and pending assignment-place/result reviews. These records select no owning construction, source post-state or assignment policy. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred.
 - **Value / dependencies:** C-54/P-143 and D-14/P-155 relate explicit lifetime responsibility to C-10's typed business intent; C-39/P-94 preserves regional storage. P-156–P-158 links effects/capture (D-10), graph lifetimes (D-13) and regional invariants (D-01). These candidate value paths and technical dependencies retain their registry status.
 - **Human baseline:** H-166/H-180/H-181 establishes module lifetime, owner-preserving capture/shadow and non-extractable dynamic resources. H-190/H-193/H-196–H-203 distinguishes whole-region ownership from user storage policy, permits explicit-memory functions, and supplies borrowing, const and same-owner constraints. H-204–H-210/H-222–H-224 supplies transfer/assignment requirements; H-211–H-220 governs interface and method context.
 - **Invariants / non-goals:** Regional objects remain region-only and relocatable without copy/move. Borrowing cannot extend lifetime or duplicate ownership. Functions cannot access dynamic bindings or call procedures. No per-object owner, runtime borrow registry, immutable snapshot or SNN policy is introduced.
@@ -314,7 +314,7 @@ data Packet { sequence::u64; }
     make Packet(capacity = 65536u64) { sequence = 7u64 };
   let view :: ref<Packet> = root(packet);
   setfield(view, sequence, 8u64);
-  // Ordinary scope exit releases the still-held region.
+  # Ordinary scope exit releases the still-held region.
 };
 ```
 
@@ -516,10 +516,10 @@ H-204/H-205 proposes ordinary `lhs = rhs` for reference assignment and names `<-
 Illustrative existing-destination cases, not current compiler syntax:
 
 ```text
-alias = packet;                 // Borrowed name refers to the same Packet.
-packet.next = next_packet;      // Stored edge: require the same region owner.
-packet.count <- local_count;    // Copy bits across storage owners.
-local_count <- local_count + 1; // Read and update the local bits slot.
+alias = packet;                 # Borrowed name refers to the same Packet.
+packet.next = next_packet;      # Stored edge: require the same region owner.
+packet.count <- local_count;    # Copy bits across storage owners.
+local_count <- local_count + 1; # Read and update the local bits slot.
 ```
 
 Assignment reads its source through const access under H-223/H-224. That does not by itself choose the permission of a newly established destination alias; the overload/chaining section identifies this pending distinction. Writes through an explicitly const destination are forbidden. A reference or region handle is not copyable bits because its native representation happens to be a machine word. Wrappers, scalar casts and byte-copy helpers must not bypass the semantic category or owner-bearing-container restriction.
@@ -652,12 +652,12 @@ The proposed send result owns the disposition on every outcome: local acceptance
 ```text
 let view = root(packet);
 let outcome = send(mailbox, packet);
-// root(packet), deref(view), or send(mailbox, packet): compile errors here.
+# root(packet), deref(view), or send(mailbox, packet): compile errors here.
 match outcome {
   Accepted => { /* No packet remains with the sender. */ }
   LocalError(error, returned_packet) => {
     let editable = root(returned_packet);
-    // Edit, retry with returned_packet, or release it by ending this arm.
+    # Edit, retry with returned_packet, or release it by ending this arm.
   }
 }
 ```
@@ -682,9 +682,9 @@ symbol probe :: proc() -> u64;
 effect @probe <- read_state;
 {
   effect @state <- make_packet(2u64, 65536u64);
-  behave @print(perform @probe()); // 1: definition-time captured access.
-  behave @print(behave @probe());  // 2: current access.
-}; // Release R2, restore lookup of still-owned R1.
+  behave @print(perform @probe()); # 1: definition-time captured access.
+  behave @print(behave @probe());  # 2: current access.
+}; # Release R2, restore lookup of still-owned R1.
 ```
 
 `perform` temporarily restores access to R1 and hides R2; it acquires or destroys neither. The top-level owner of R1 lasts until program exit. `effect @other <- @state`, sending `@state`, and routing it through a purported owning identity function remain invalid. The value yielded by effect installation is access under the installed owner, not another transferable result.

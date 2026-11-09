@@ -1,8 +1,8 @@
 using units "pool-units.cod" {GlobalSlot};
-unit Neuron::u32;
-array Frame[Neuron]::f32;
-array Sources[GlobalSlot]::Neuron;
-array Weights[GlobalSlot]::u8;
+unit Neuron;
+array Frame[u32(Neuron)]::f32;
+array Sources[u64(GlobalSlot)]::u32(Neuron);
+array Weights[u64(GlobalSlot)]::u8;
 data Incoming { sources::ref<Sources>; weights::ref<Weights>; }
 
 export Frame;

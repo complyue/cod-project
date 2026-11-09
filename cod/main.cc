@@ -197,6 +197,7 @@ static void printUsage(const char *prog_name) {
             << "  --warnings-as-errors  Treat all CoD language warnings as errors\n"
             << "  -Werror=unit-conversion       Reject ambiguous unit conversion paths\n"
             << "  -Werror=multi-alias-extension Reject overload declarations through multiple aliases\n"
+            << "  -Werror=shadow                Reject lexical binding shadowing\n"
             << "  -h, --help          Show this help message\n"
             << "  --no-cache          Disable build cache\n"
             << "  --force-rebuild     Force rebuild (ignore cache)\n"
@@ -870,6 +871,8 @@ int main(int argc, const char **argv) {
       warnings.errors.insert(cod::language::Warning::unit_conversion);
     } else if (arg == "-Werror=multi-alias-extension") {
       warnings.errors.insert(cod::language::Warning::multi_alias_extension);
+    } else if (arg == "-Werror=shadow") {
+      warnings.errors.insert(cod::language::Warning::shadow);
     } else if (arg == "--emit-llvm" || arg == "--emit-bc" || arg == "--emit-runtime") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires a path\n";

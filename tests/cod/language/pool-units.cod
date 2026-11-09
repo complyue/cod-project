@@ -1,13 +1,13 @@
-unit ClassId::u32;
-unit ClassSetId::u64;
-unit GlobalSetId::u64;
-unit LocalSlot::u32;
-unit GlobalSlot::u64;
-unit SetCount::u64;
-unit SlotCount::u64;
-unit SlotsPerSet::u32;
-conversion function capacity_count(x (SlotsPerSet))::SlotCount { SlotCount(u64(scalar(x))) }
-function (*)(slots (SlotCount*), sets (SetCount))::SlotCount { SlotCount(scalar(slots) * scalar(sets)) }
+unit ClassId;
+unit ClassSetId;
+unit GlobalSetId;
+unit LocalSlot;
+unit GlobalSlot;
+unit SetCount;
+unit SlotCount;
+unit SlotsPerSet;
+conversion function capacity_count(x::u32(SlotsPerSet))::u64(SlotCount) { SlotCount(u64(scalar(x))) }
+function (*)(slots::u64(SlotCount*), sets::u64(SetCount))::u64(SlotCount) { SlotCount(scalar(slots) * scalar(sets)) }
 
 export (*);
 export ClassId;

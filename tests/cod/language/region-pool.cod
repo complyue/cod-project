@@ -25,7 +25,7 @@ effect @arena <- region(8192u64);
   behave @assert(peek(pool, Slot(3u32)) == 9999);
   behave @assert(peek(pool, Slot(1u32)) == -9999);
   behave @assert(used_bytes(@arena) == occupation);
-  // Preserve both live data and a nontrivial free chain for image relocation.
+  # Preserve both live data and a nontrivial free chain for image relocation.
   release(pool, Slot(1u32));
   release(pool, Slot(3u32));
   behave @assert(!empty(pool));

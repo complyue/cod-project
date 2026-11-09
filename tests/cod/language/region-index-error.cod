@@ -1,6 +1,6 @@
-unit Neuron::u32;
-unit Slot::u32;
-array Values[Neuron]::f32;
+unit Neuron;
+unit Slot;
+array Values[u32(Neuron)]::f32;
 symbol @arena :: region;
 symbol @values :: ref<Values>;
 effect @arena <- region(4096u64);

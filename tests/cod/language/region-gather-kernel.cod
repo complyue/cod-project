@@ -25,7 +25,7 @@ function create_graph(arena::region, layout::Layout, rows::u32,
   };
   graph
 }
-function gather(input::Frame, graph::Incoming, layout::Layout, target (GlobalSetId), location::ref<SetLocation>)::f32 {
+function gather(input::Frame, graph::Incoming, layout::Layout, target::u64(GlobalSetId), location::ref<SetLocation>)::f32 {
   let position = locate(layout, target, location);
   let sources = deref(graph.sources);
   let weights = deref(graph.weights);

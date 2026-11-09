@@ -24,9 +24,9 @@ function paired(left::Weighted, right::Weighted)::i64 { 3 }
 function paired(left::Entity, right::Weighted)::i64 { 1 }
 function paired(left::Weighted, right::Entity)::i64 { 2 }
 function pair_context(left::Weighted, right::Weighted)::i64 { paired(left, right) }
-function adapted(x::Weighted, amount (m*))::f64 { scalar(amount) + f64(rank(x)) }
-function adapted(x::Entity, amount (m*))::f64 { scalar(amount) + 1.0 }
-function unit_context(x::Weighted, amount (mm))::f64 { adapted(x, amount) }
+function adapted(x::Weighted, amount::f64(m*))::f64 { scalar(amount) + f64(rank(x)) }
+function adapted(x::Entity, amount::f64(m*))::f64 { scalar(amount) + 1.0 }
+function unit_context(x::Weighted, amount::f64(mm))::f64 { adapted(x, amount) }
 function rank_entity(x::Entity)::i64 { rank(x) }
 function nested_entity(x::Entity)::i64 { rank_entity(x) }
 

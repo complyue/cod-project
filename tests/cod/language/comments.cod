@@ -1,0 +1,6 @@
+# Line comments may contain // without starting an expression.
+using symbol "std:io" @print;
+symbol from ".//vocabulary.cod" @x;
+effect @x <- 24 / 4; # Division and slashes in quoted paths remain valid.
+behave @print(@x);
+behave @print(9 / 2);

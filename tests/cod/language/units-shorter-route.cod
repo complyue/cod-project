@@ -1,13 +1,13 @@
 using symbol "std:io" @print;
-unit a::i64;
-unit b::i64;
-unit c::i64;
-unit d::i64;
-unit e::i64;
-conversion function ac(x (a))::c { c(scalar(x)) }
-conversion function cd(x (c))::d { d(scalar(x)) }
-conversion function de(x (d))::e { e(scalar(x) + 100) }
-conversion function ab(x (a))::b { b(scalar(x)) }
-conversion function be(x (b))::e { e(scalar(x) + 10) }
-function consume(x (e*))::i64 { scalar(x) }
+unit a;
+unit b;
+unit c;
+unit d;
+unit e;
+conversion function ac(x::i64(a))::i64(c) { c(scalar(x)) }
+conversion function cd(x::i64(c))::i64(d) { d(scalar(x)) }
+conversion function de(x::i64(d))::i64(e) { e(scalar(x) + 100) }
+conversion function ab(x::i64(a))::i64(b) { b(scalar(x)) }
+conversion function be(x::i64(b))::i64(e) { e(scalar(x) + 10) }
+function consume(x::i64(e*))::i64 { scalar(x) }
 behave @print(consume(a(1)));

@@ -1,9 +1,9 @@
-unit raw::f64;
-unit normalized::f64;
-conversion function normalize(x (raw))::normalized { normalized(scalar(x) / 50.0) }
+unit raw;
+unit normalized;
+conversion function normalize(x::f64(raw))::f64(normalized) { normalized(scalar(x) / 50.0) }
 function adjust(x::f64)::f64 { x + 100.0 }
-symbol @receiver_distance :: normalized;
-symbol @receiver_read :: proc(normalized) -> f64;
+symbol @receiver_distance :: f64(normalized);
+symbol @receiver_read :: proc(f64(normalized)) -> f64;
 effect @receiver_distance <- normalized(10.0);
 mixin "units-procedure-source.cod" @read as @receiver_read with { @receiver_distance as @distance; };
 

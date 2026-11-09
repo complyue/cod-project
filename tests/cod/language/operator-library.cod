@@ -1,5 +1,5 @@
-unit Position::i64;
-function (+)(i::Position, step::i64)::Position { Position(scalar(i) + step) }
+unit Position;
+function (+)(i::i64(Position), step::i64)::i64(Position) { Position(scalar(i) + step) }
 
 export (+);
 export Position;

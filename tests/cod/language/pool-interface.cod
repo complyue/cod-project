@@ -1,13 +1,12 @@
-unit Slot::u32;
-function (==)(a (Slot), b (Slot))::bool { scalar(a) == scalar(b) }
+unit Slot;
+function (==)(a::u32(Slot), b::u32(Slot))::bool { scalar(a) == scalar(b) }
 type SlotStore;
 type ReusableSlotStore <: SlotStore;
 
-// Demand-checked placeholders until standalone method declarations are available.
-function read(pool::SlotStore, slot::Slot)::i64 { missing_pool_read(pool, slot) }
-function cell(pool::SlotStore, slot::Slot)::ref<i64> { missing_pool_cell(pool, slot) }
-function acquire(pool::ReusableSlotStore, value::i64)::Slot { missing_pool_acquire(pool, value) }
-function release(pool::ReusableSlotStore, slot::Slot)::void { missing_pool_release(pool, slot) }
+function read(pool::SlotStore, slot::u32(Slot))::i64;
+function cell(pool::SlotStore, slot::u32(Slot))::ref<i64>;
+function acquire(pool::ReusableSlotStore, value::i64)::u32(Slot);
+function release(pool::ReusableSlotStore, slot::u32(Slot))::void;
 
 export Slot;
 export (==);

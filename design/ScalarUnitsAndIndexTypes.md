@@ -1,10 +1,10 @@
 # Scalar units, strict brands and array index domains
 
-Discussion revision: 26 · Recorded: 2026-11-09 · Status: alternatives under discussion.
+Discussion revision: 30 · Recorded: 2026-11-09 · Status: alternatives under discussion.
 
 ## Design authority
 
-- **Registry / scope:** [D-11](DesignAuthorityRegistry.md#d-11), revision 26, all sections; full contract and candidate value derivations remain `pending-human`. [K-396](DesignAuthorityRegistry.md#k-396) coordinates the module-world dependency without changing scalar/unit rules. [K-354](DesignAuthorityRegistry.md#k-354) records implicit priority for names automatically selected by unit bundles. K-353 retains exported conversion-alias evidence with preserved bundle membership, formula context and alias deduplication. K-343 retains its earlier method-selection review. Only the identified human-confirmed propositions authorize their stated implementation scopes.
+- **Registry / scope:** [D-11](DesignAuthorityRegistry.md#d-11), revision 30, all sections; [K-398](DesignAuthorityRegistry.md#k-398) records H-256 priority implementation planning for representation-independent UoM; [K-397](DesignAuthorityRegistry.md#k-397) adds the H-254/H-255 future fraction/representation dependency and conflict-review requirement; full contract and candidate value derivations remain `pending-human`. [K-396](DesignAuthorityRegistry.md#k-396) coordinates the module-world dependency without changing scalar/unit rules. [K-354](DesignAuthorityRegistry.md#k-354) records implicit priority for names automatically selected by unit bundles. K-353 retains exported conversion-alias evidence with preserved bundle membership, formula context and alias deduplication. K-343 retains its earlier method-selection review. Only the identified human-confirmed propositions authorize their stated implementation scopes. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred. [K-402](DesignAuthorityRegistry.md#k-402) records the implemented quantity/widening subset and56 focused checks.
 - **Value lineage:** C-47/P-112 and D-11/P-113 derive strict scalar/index meanings from C-10/P-14/C-01's inspectable typed business intent. C-49/P-119/P-120 preserves independent unit identity/reuse; C-50/P-121–P-123 and C-51/P-124–P-128 govern typed methods, conversions and explicit route control. C-39/P-94 and C-56/P-186 retain region-only data and nominal abstractions. Candidate value paths keep their registry status; P-118's application formula dependency grants no authority to choose an SNN configuration.
 - **Human baseline:** H-123/H-125/H-128/H-130–H-138 supplies structured values, branded array indices, first-class UoM identities distinct from symbols, local aliases, one-shot using bundles, pure conversion methods, explicit starred parameters and direct-before-declared-indirect routes. H-148 requires each argument's conversion before the next argument. Compound units remain planned under H-132. H-193/H-197/H-198/H-200 and H-209/H-210 supplies regional user data, mutable explicit-memory functions, type/data and unique-most-specific matching. H-218/H-220 requires declared data conformance, adapter import permission and consumer visibility through using. H-230–H-233 supplies selected callable identities/contexts and explicit publication; these rules do not register new UoM conversion definitions implicitly.
 - **Native scope / evidence:** Scalar units, selected conversion routes and typed arrays retain their recorded [numeric evidence](../tests/cod/language/numeric-validation.json). [Regional-data evidence](../tests/cod/language/data-validation.json) covers arithmetic pool layouts with reusable regional result storage. [Module evidence](../tests/cod/language/module-integration-validation.json) covers explicit conformance and inherited matching. [View-fold evidence](../tests/cod/language/view-fold-validation.json) covers borrowed record/array accumulators with fixed concrete type, owner and admitted-interface guarantees. [Explicit-library evidence](../tests/cod/language/explicit-library-validation.json) covers caller-region graph construction and frame updates through functions, with independent FP32 comparisons at two scales. Each report retains its actual source revision; no historical result is relabeled current.
@@ -23,6 +23,46 @@ For example, the first pool program can define named `SetCount`, `SlotsPerSet` a
 The roadmap retains unit-expression products/quotients, powers where useful, normalization, unit-polymorphic inference and the distinction between algebraic aliases and fresh nominal identities. It must preserve H-128 identity and H-134 using-selection semantics. No solver, implicit conversion graph, automatic scaling policy or physical-unit catalog is selected merely by retaining that roadmap.
 
 The immediate choices are recorded in [the language increment review](DomainLanguageDesign.md#immediate-increment-decisions): existing regional references use the calling procedure scope, UoMs use one-shot selections rather than definition import, and parameter annotations control automatic conversion and route preference. Compound-unit equivalence and inference are deferred rather than blockers for this run.
+
+## Representation-independent units and planned fractions
+
+[FixedWidthFractions](FixedWidthFractions.md), D-16, records H-254/H-255's planned separation of unit identity, numerical representation and admissibility. Unit definitions do not fix a storage width/layout; conversion input/output types constrain their accepted and produced representations. Intrinsic fractions such as `i64/i32` are numerical bits representations that may carry applicable UoMs. A denominator is not itself a unit. Conversion routes must remain valid across their typed representation endpoints, without silently introducing return-type dispatch or a promotion rule.
+
+The fraction plan requires unreduced ordinary arithmetic, explicit same-type canonicalization and fixed storage without special regional allocation/ownership. Its planned constructor/output separator is `//`; line comments use `#`. K-401/K-402 implement the H-256 comment reservation and quantity refactor; fraction implementation remains deferred. Future changes to numeric representations, conversion routing, dispatch, compound units or related language features must check D-16. Conflicts with its accepted requirements must be discussed before implementing the affected choice; unrelated qualified work may proceed. D-16's open promotion, layout, grammar and signature choices remain open.
+
+### Priority UoM refactor boundary
+
+H-256 requests prompt implementation planning for representation-independent UoM, separately from fraction support. A unit declaration establishes semantic identity without fixing one numerical representation. Value/parameter/result types retain the representation information needed for layout and typed arithmetic. Conversion methods state their accepted inputs and produced outputs; route applicability checks the intermediate representations as well as unit identities. Identity-preserving aliases and receiver-local selected bundles remain unchanged obligations.
+
+Acceptance for this prerequisite should demonstrate one shared unit identity used with multiple supported integer/floating representations, preservation of distinct same-spelled unit identities, typed conversions with differing input/output representations, rejected incompatible routes, source/receiver isolation and preserved per-argument conversion order. No fraction runtime is needed to establish those properties. K-402 records native acceptance of this prerequisite; full fraction execution remains deferred.
+
+H-260 selects independent `unit m;` declarations and quantity annotations such as `f64(m)`, `u64(m)` and `x::f64(m*<-cm<-mm)`. `m(3u64)` associates m's identity with the supplied u64 bits; `scalar` exposes the underlying representation. H-261 selects whole-type lossless widening. [K-402](DesignAuthorityRegistry.md#k-402) and [56 focused checks](../tests/cod/language/quantity-widening-validation.json) establish the bounded native implementation.
+
+### Quantity types and lossless widening
+
+```text
+unit m;
+unit cm;
+conversion function cm_to_m(x::f64(cm))::f64(m) {
+  m(scalar(x) / 100.0)
+}
+function distance(x::f64(m*))::f64 { scalar(x) }
+```
+
+Units are compile-time identities; quantities combine one identity with a numeric representation. Aliases do not change either component. The existing concrete representations have these additional implicit destinations:
+
+| Source | Lossless destinations |
+| --- | --- |
+| u8 | u32, u64, i64, f32, f64 |
+| u32 | u64, i64, f64 |
+| f32 | f64 |
+| i64, u64, f64 | none |
+
+Identity conversions remain valid. Bool is not numeric. The rule concerns every value of a source type, rather than the magnitude of one literal. In particular, i64/u64→f64 and u32→f32 require explicit conversion. Fraction-specific promotion remains deferred. Floating widening preserves numerical values, signed zeros and infinities, not a promise about NaN payload encodings.
+
+Exact applicable methods take precedence. Otherwise there must be a unique most-specific applicable signature under lossless widening; incomparable candidates reject. Builtin mixed scalar arithmetic chooses the unique least common safe representation: u32 with f32 uses f64, whereas i64 with f64 has none. Quantity operations retain their declared overloads; widening can adapt their arguments while preserving the unit identity. Mutable reference targets are not widened.
+
+Quantity parameter `f64(m)` permits safe representation widening within m; `f64(m*)` additionally permits selected unit conversions. Each declared conversion has typed input/output quantities. A route may widen to an input or from an output only under the table above; its intermediate representation must remain compatible. Numeric widening is compatibility, not another semantic conversion edge or an extra source of path ambiguity. Direct unit conversion remains preferred, then an explicit unit itinerary, then the existing searched-route/warning policy. Conversions complete before the next argument's effects. No implicit narrowing, ordinary return-type-only overload selection, runtime unit tag or source-world editing is introduced.
 
 ## The requirement
 
@@ -79,9 +119,9 @@ H-135 makes acceptance a declaration-site choice:
 
 | Parameter annotation | Meaning |
 | --- | --- |
-| `amount (m)` | Require the `m` identity; do not insert a conversion for this parameter. |
-| `amount (m*)` | Permit automatic conversion to `m` using the selected pure conversion functions. |
-| `amount (m*<-cm<-mm)` | Permit conversion to `m`; a direct conversion wins, otherwise use the declared indirect route `mm → cm → m` when it connects the supplied unit to `m`. |
+| `amount::f64(m)` | Require the `m` identity; permit lossless representation widening but no implicit unit conversion. |
+| `amount::f64(m*)` | Permit automatic conversion to `m` using the selected pure conversion functions. |
+| `amount::f64(m*<-cm<-mm)` | Permit conversion to `m`; a direct conversion wins, otherwise use the declared indirect route `mm → cm → m` when it connects the supplied unit to `m`. |
 
 The star is a parameter conversion policy, not a new UoM identity, a compound unit or a runtime flag on the numeric value. Matching `m` needs no conversion. An actual conversion changes the value through the selected pure formulas; it does not unify source and destination identities. Scalar representation and rounding remain part of those formulas and the numeric contract.
 
@@ -113,9 +153,9 @@ H-130 chooses Julia-style parameter-type method dispatch. Conversion permission 
 Illustrative method shapes, pending the complete numeric/array grammar:
 
 ```text
-function consume(amount (m)) { ... }
-function consume_convertible(amount (m*)) { ... }
-function consume_via_cm(amount (m*<-cm<-mm)) { ... }
+function consume(amount::f64(m)) { ... }
+function consume_convertible(amount::f64(m*)) { ... }
+function consume_via_cm(amount::f64(m*<-cm<-mm)) { ... }
 
 convert_index(layout::PoolLayout, set::SetIndex, slot::LocalSlot)::GlobalSlot
 getindex(a::SlotWeights, i::GlobalSlot)::Weight
@@ -124,7 +164,7 @@ getindex(a::NeuronRates, i::NeuronIndex)::Rate
 
 The unit annotation supplies the unit identity and acceptance policy; it need not replace independent numeric-representation annotations. A nontrivial layout-dependent mapping can remain an explicit pure function with layout arguments. Automatic search cannot invent unavailable runtime inputs or dynamic resource bindings.
 
-Whole-program compilation can specialize known method choices and conversion paths. The source forms select functions through argument types, not receiver-owned conversion operators. Normal method-definition conflicts remain distinct from H-136's warning about multiple valid conversion routes. No Julia runtime method mutation or automatic promotion policy is implied; the selected using/import extension distinction and mixin redefinition are recorded separately in D-07/D-10. [Julia methods](https://docs.julialang.org/en/v1/manual/methods/), [Julia conversion and promotion](https://docs.julialang.org/en/v1/manual/conversion-and-promotion/)
+Whole-program compilation can specialize known method choices and conversion paths. The source forms select functions through argument types, not receiver-owned conversion operators. Normal method-definition conflicts remain distinct from H-136's warning about multiple valid conversion routes. No Julia runtime method mutation is implied; H-261 supplies the primitive lossless-widening policy, while the selected using/import extension distinction and mixin redefinition are recorded separately in D-07/D-10. [Julia methods](https://docs.julialang.org/en/v1/manual/methods/), [Julia conversion and promotion](https://docs.julialang.org/en/v1/manual/conversion-and-promotion/)
 
 ## Region-root constraints for transfer methods — design scope
 
@@ -298,20 +338,20 @@ The bounded implementation increment uses the confirmed call, using and conversi
 
 ## Bounded native prototype
 
-The H-122/H-123 increment implements named units over `i64`, `u8`, `u32`, `u64`, `f32` or `f64`. Unit identity is compile-time metadata; native values retain the scalar representation without a runtime unit tag. The following is runnable prototype syntax, not a complete unit algebra or permanent grammar:
+The H-260/H-261 increment implements independently named units with quantities represented by `i64`, `u8`, `u32`, `u64`, `f32` or `f64`. Unit identity is compile-time metadata; native values retain the scalar representation without a runtime unit tag. The following is runnable prototype syntax, not a complete unit algebra or permanent grammar:
 
 ```text
-unit m::f64;
-unit cm::f64;
-conversion function cm_to_m(x (cm))::m { m(scalar(x) / 100.0) }
-function consume(x (m*))::f64 { scalar(x) }
+unit m;
+unit cm;
+conversion function cm_to_m(x::f64(cm))::f64(m) { m(scalar(x) / 100.0) }
+function consume(x::f64(m*))::f64 { scalar(x) }
 ```
 
-A constructor such as `m(2.0)` requires the exact scalar representation. `scalar(x)` explicitly extracts it. Unit arithmetic uses declared pure methods such as `(+)`; merely sharing a scalar representation grants no implicit interchangeability. Compound-unit algebra remains deferred.
+A constructor such as `m(2.0)` preserves its input scalar representation; `m(2u32)` uses the same identity with u32 bits. `scalar(x)` explicitly extracts it. Unit arithmetic uses declared pure methods such as `(+)`; merely sharing a scalar representation grants no implicit interchangeability. Compound-unit algebra remains deferred.
 
 A receiving module selects `using units "units.cod" {m as metres, cm, mm};`. Each source is selected once in that receiver, and selecting an already selected identity through a re-export is also rejected. Associated conversion methods are selected only when both endpoint units belong to that bundle. Their bodies and private helpers retain source lexical bindings. Re-exports preserve identities and the selected conversion set. Ordinary resource using/import cannot bypass this bundle rule.
 
-Automatic insertion searches the call site's selected conversion graph; the parameter's target and declared route aliases resolve in the defining module. An exact argument-tuple method is preferred before inspecting conversion routes. Otherwise there must be one applicable method; an overload whose required conversion step is unavailable is inapplicable and does not reject a different viable overload. When no alternative declaration applies, a missing declared step retains its diagnostic. Ambiguity between methods is an error distinct from ambiguity between routes for a chosen method. These dispatch details are bounded implementation conventions for review, not a general inference/coherence theory.
+Automatic insertion searches the call site's selected conversion graph; the parameter's target and declared route aliases resolve in the defining module. An exact argument-tuple method is preferred before inspecting conversion routes. Otherwise there must be one most-specific applicable method under the confirmed H-261 widening rule; an overload whose required conversion step is unavailable is inapplicable and does not reject a different viable overload. When no alternative declaration applies, a missing declared step retains its diagnostic. Ambiguity between methods is an error distinct from ambiguity between routes for a chosen method. These scoped dispatch rules do not establish a complete generic inference/coherence theory.
 
 Direct conversion takes priority; otherwise a supplied route is followed. Without a declared route, the implementation chooses the shortest available path, with source/bundle declaration order breaking equal lengths. Any other simple route produces a warning identifying the chosen route and one alternative witness. This deterministic warn-and-continue fallback does not assert numerical equivalence. `--warnings-as-errors` or `-Werror=unit-conversion` promotes that warning to a frontend error. A direct choice or explicit route avoids warnings about unrelated indirect alternatives; multiple conversion functions for the same selected step still require a warning.
 
@@ -321,7 +361,7 @@ Search visits a finite graph. After selecting a shortest route, excluding each c
 
 ### Numeric and indexing checkpoint
 
-The bounded prototype exposes one-, four- and eight-byte unsigned carriers, signed `i64` and FP32/FP64. Identity is independent of representation; a constructor requires its declared scalar type, and numeric casts remain explicit in the pure formula. Integer arithmetic overflow is checked; floating operators use native IEEE arithmetic. Float-to-integer casts truncate before range checking, including negative fractions whose truncated value is zero. Floating casts can round, so a numeric round-trip is not promised merely because unit identities are preserved. Literal range validation parses directly at the declared precision; an intermediate FP64 rounding must not reject an otherwise finite FP32 boundary value.
+The bounded prototype exposes one-, four- and eight-byte unsigned carriers, signed `i64` and FP32/FP64. Identity is independent of representation; a constructor preserves its supplied scalar type. Calls and builtin mixed arithmetic apply H-261 lossless widening; narrowing and potentially lossy numeric casts remain explicit in the formula. Integer arithmetic overflow is checked; floating operators use native IEEE arithmetic. Float-to-integer casts truncate before range checking, including negative fractions whose truncated value is zero. Floating casts can round, so a numeric round-trip is not promised merely because unit identities are preserved. Literal range validation parses directly at the declared precision; an intermediate FP64 rounding must not reject an otherwise finite FP32 boundary value.
 
 Native `for` and `fold` expressions traverse half-open integer ranges, including integer-backed unit ranges. A fold's accumulator must preserve its concrete type and, for a regional view, its owner and any admitted abstract interface. It can carry a record or array view directly; each iteration updates or selects existing storage, and the body result must satisfy the accumulator's initial guarantees. Several related intermediate fields can live in one caller-allocated data object; functions update that explicit storage and return its borrowed view. The typed pool example reuses one regional SetLocation result slot, while scalar/UoM reductions remain scalar values. This supports bounded layout formulas without requiring compound-unit algebra.
 
@@ -330,7 +370,7 @@ The separate unit/layout/index modules in [pool-typed.cod](../tests/cod/language
 
 ### Typed regional arrays and measured cost
 
-The native subset declares arrays such as `array Sources[GlobalSlot]::Neuron` and `array Weights[GlobalSlot]::u8`. Indexing requires the declared unit identity; related arrays can share that identity while retaining separate scalar buffers. Unit tags and conversion registries have no per-element runtime representation. This does not prove class membership or array bounds: runtime indexing still checks the selected array's length.
+The native subset declares arrays such as `array Sources[u64(GlobalSlot)]::u32(Neuron)` and `array Weights[u64(GlobalSlot)]::u8`. Indexing requires the declared unit identity; related arrays can share that identity while retaining separate scalar buffers. Unit tags and conversion registries have no per-element runtime representation. This does not prove class membership or array bounds: runtime indexing still checks the selected array's length.
 
 [region-gather.cod](../tests/cod/language/region-gather.cod) connects the pool index formulas to regional SoA arrays. A library function allocates and initializes the graph in an explicitly supplied region; another function performs each A/B update using the FP32 gather. The entry program holds the region and uses a lexical procedure for tracing. Layout and index-result storage are allocated once; the update loop makes no allocations.
 

@@ -1,0 +1,2 @@
+function same(x::T, y::T)::T where T { x }
+same(1, true);

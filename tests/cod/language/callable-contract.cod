@@ -1,0 +1,27 @@
+using symbol "std:io" @print;
+using "callable-contract-api.cod" unavailable;
+using "callable-contract-api.cod" Metric;
+using "callable-contract-impl.cod" Sample;
+using "callable-contract-impl.cod" forwarded;
+using "callable-contract-impl.cod" measure;
+symbol @arena :: region;
+effect @arena <- region(1024u64);
+function classify(a::T, b::U)::i64 where {T, U} { 1 }
+function classify(a::T, b::T)::i64 where T { 2 }
+function classify(a::i64, b::i64)::i64 { 3 }
+function bounded(x::T)::i64 where T { 1 }
+function bounded(x::T)::i64 where T <: Metric { 2 }
+proc @variadic(first::T, rest::T...) -> T where T { forwarded(first, rest...) }
+{
+  let sample = deref(alloc @arena Sample(7));
+  behave @print(score(sample));
+  behave @print(measure(sample));
+  behave @print(forwarded(10));
+  behave @print(forwarded(10, 20, 30));
+  behave @print(forwarded(1.5f32, 2.5f32));
+  behave @print(classify(1, 2.0f32));
+  behave @print(classify(1.0f32, 2.0f32));
+  behave @print(classify(1, 2));
+  behave @print(bounded(sample));
+  behave @print(perform @variadic(1, 2, 3));
+};

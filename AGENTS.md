@@ -44,6 +44,7 @@
 - Top-level repository scripts may be executed when they are within the current human authorization. Inspect scripts first when their effects are unclear. Scripts that can bootstrap, reconfigure, clean, install, or mutate toolchains follow the Bootstrap and Build Configuration Safety rules below.
 - Do not create or modify build symlinks.
 - Do not re-create build directories, that's too time/resource costing.
+- Before the first build after a client-profile, system-header or toolchain update, inspect the existing build graph without executing it (for Ninja, `ninja -C build -n -d explain`). Identify unexpectedly broad dependency invalidation before starting the build; compare package/content evidence when timestamps alone appear responsible. Keep the existing tree and follow the authorization rules below. An already authorized repair does not require repeated confirmation.
 
 ## Bootstrap and Build Configuration Safety
 - Unless the human explicitly authorizes a bootstrap/configuration task in the current conversation, agents must not run commands or make edits that can cause a full or partial rebootstrap of LLVM/Clang/CoD.
@@ -71,6 +72,11 @@
 ## Documentation
 - Write documents and source comments to reflect the final state; avoid narrating what changed or comparisons with earlier versions.
 - Exceptions: dedicated change logs (e.g., `CHANGELOG.md`), the historical evidence and decision/continuity records in `design/DesignAuthorityRegistry.md`, and places where old and new designs coexist.
+
+## Planned Fraction Compatibility
+- Future CoD language design and implementation must check relevant interactions with `design/FixedWidthFractions.md` (D-16): syntax/comments, numeric types and promotion, intrinsic dispatch, bits/layout, borrowing/transfer and formatting.
+- A conflict with its accepted requirements is a design obstacle: present the conflicting requirements and alternatives to the user before implementing the affected choice. Unrelated qualified work may continue.
+- Fraction support remains a design draft with implementation deferred. H-256 separately prioritizes reserving `//` with `#` comments and the representation-independent UoM refactor. Those prerequisites do not authorize implementing fractions or silently deciding the draft's open questions.
 
 ## Memory Regions and Regional Types (Critical)
 - Zero-cost relocation is mandatory for regional types.

@@ -1,10 +1,10 @@
 using symbol "std:io" @print;
-unit Position::i64;
-function (+)(i::Position, step::i64)::Position { Position(scalar(i) + step) }
-function (-)(i::Position)::Position { Position(-scalar(i)) }
+unit Position;
+function (+)(i::i64(Position), step::i64)::i64(Position) { Position(scalar(i) + step) }
+function (-)(i::i64(Position))::i64(Position) { Position(-scalar(i)) }
 function score(x::i64)::i64 { x * 2 }
 function score(x::f32)::f32 { x * 3.0f32 }
-function score(x::Position)::i64 { scalar(x) }
+function score(x::i64(Position))::i64 { scalar(x) }
 behave @print(score(4));
 behave @print(score(2.5f32));
 behave @print(score(Position(10) + 5));

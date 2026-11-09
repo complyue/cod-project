@@ -1,13 +1,13 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 85 · Recorded: 2026-11-09 · Phase: language/application co-design.
+Design revision: 88 · Recorded: 2026-11-09 · Phase: language/application co-design.
 
 ## Design authority
 
-- **Registry / scope:** [D-10](DesignAuthorityRegistry.md#d-10), revision85, all sections; [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms.
+- **Registry / scope:** [D-10](DesignAuthorityRegistry.md#d-10), revision88, all sections; H-257/H-258 and [K-399](DesignAuthorityRegistry.md#k-399) cover lexical callee selection, typed callable declarations and the compiler value/place distinction; [K-400](DesignAuthorityRegistry.md#k-400) records successful build repair and28 focused compiler/native/IR checks. [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred.
 - **Value lineage:** C-10's inspectable typed execution motivates C-35/C-43/C-45/C-46 identity/composition through P-84/P-100/P-102/P-109–P-111; C-56/C-57/P-182–P-197 covers abstractions, dispatch and adapter visibility. C-39/C-54/P-94/P-143/P-155 retains regional lifetime boundaries; C-58/P-199–P-203 covers publication and selected contexts. These candidate paths serve charter §§2–4 without borrowing authority from technical dependencies.
 - **Human baseline:** H-96–H-141 supplies symbols/modules/units, subject to supersession. H-143–H-146 selects LLVM, lean checks and the zero-offset limitation. H-149/H-150 bounds value shadowing/reserved names. H-166/H-180/H-181 governs module lifetime, capture/shadow and non-extraction; H-184–H-189 governs typed lexical/symbolic procedures. H-193/H-196–H-210 governs regional data, intrinsic owners, explicit-memory functions, borrowing/const and transfer requirements. H-211–H-233 governs source selection, mixin, explicit interfaces, concrete dispatch, aliases/implementation contexts and publication, with the scope/exclusions recorded in the registry.
-- **Invariants / non-goals:** preserve region-only non-bits storage, zero-cost relocation, no regional copy/move, same-owner stored edges, preserved hidden/captured owners and no dynamic access or procedure calls from functions. No module namespace, runtime interface/borrow registry, immutable snapshot, allocator/toolchain change or SNN model is selected. Compound views, value/call lookup, standalone method heads, full qualifiers/ownership construction/transfer and mailbox remain bounded or pending.
+- **Invariants / non-goals:** preserve region-only non-bits storage, zero-cost relocation, no regional copy/move, same-owner stored edges, preserved hidden/captured owners and no dynamic access or procedure calls from functions. No module namespace, runtime interface/borrow registry, immutable snapshot, allocator/toolchain change or SNN model is selected. Compound views, higher-order overload values, full qualifiers/ownership construction/transfer and mailbox remain bounded or pending.
 - **Acceptance / evidence:** H-245 authorizes the corrected architecture goal, whose implementation audit is recorded by K-396; H-221 records the completed ten-hour period. Native checks must distinguish source/caller contexts, conformance visibility, using/import permission, unique/ambiguous dispatch, demanded/unused missing bodies and owner lifetimes. The [prototype contract table](../tests/cod/language/README.md#current-bounded-acceptance) and [evidence below](#runnable-prototype-evidence) identify implemented subsets and actual source revisions; qualifier, transfer and mailbox acceptance requires its own evidence.
 
 ## Bounded native pointer bindings
@@ -74,7 +74,7 @@ H-242 extends the vocabulary idiom beyond symbols: the vocabulary also defines t
 
 The TLS entry uses the vocabulary symbol identity and its declared type identity. A compatible value supplied from another module-world copy does not require another symbol or a world-specific version of the TLS slot. This is shared identity provenance, not shared mutable module state. [World inventory](ModuleWorlds.md#vocabulary-modules-establish-shared-identities) · [Global Variables Done Right](GlobalVariablesDoneRight.md#shared-vocabularies-independent-worlds)
 
-This idiom does not choose standalone method-head semantics or require a new source module kind. Whether a particular vocabulary provides method signatures, default bodies or both follows the method contract; no default dynamic value is inferred merely from a symbol/type declaration.
+This idiom requires no new source module kind. A vocabulary may provide typed callable declarations, implemented methods or both under H-257/H-258; no default dynamic value is inferred merely from a symbol/type declaration.
 
 ## Symbol identity, variable identity and compiled location
 
@@ -118,7 +118,7 @@ symbol @step :: proc() -> i64;
 symbol from "snn/vocabulary.cod" @tgt_neuron as @tgt;
 
 using "models/lif.cod" @update as @step;
-// Alternative definition route:
+# Alternative definition route:
 mixin "models/lif.cod" @update as @step;
 ```
 
@@ -237,7 +237,7 @@ A symbolic call uses the selected procedure value in its dynamic binding. Import
 | Perform the explicitly adapted inner procedure | 8; adapted score7 with its retained captured bias1. |
 | Read caller @bias after the calls | 5; temporary captures did not replace its binding. |
 
-The complete generated sources and output are preserved in the record. This checks composition of the existing capture/context contracts; it does not select a policy for competing dependency views or change the pending direct-call/value namespace boundary.
+The complete generated sources and output are preserved in the record. This checks composition of the existing capture/context contracts; it does not select a policy for competing dependency views or establish lexical-call acceptance; H-257 and K-400 supply that separate contract and evidence.
 
 ### Callee selection and argument rebinding: native observation
 
@@ -313,29 +313,41 @@ H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform 
 | `perform @p(...)` | Procedure value currently bound to the symbol | Temporarily install that procedure’s captured dynamic values. |
 | `behave @p(...)` | Procedure value currently bound to the symbol | Use current dynamic values. |
 
-### Local values and callable names — review boundary
+### Lexical calls and shadowing
 
-**Deferred to D-15 architecture review:** H-235 rejects exposing invocation internals in user programs; H-236 requires the architecture before local fixes. H-149 settles nested value shadowing and explicitly excludes function/type namespace changes. H-185/H-189 establishes direct lexical procedure calls under current dynamic bindings; it does not separately decide how a callable family competes with a same-spelled value binding. These cases must be specified before changing that lookup policy.
-
-The [native observations](../tests/cod/language/call-value-lookup-observations.json) preserve four current-prototype programs. They are observations, not approved expectations:
-
-| Program shape | Current result |
-| --- | --- |
-| Module function scale(x) = x * 10; a block declares let scale = 7, reads scale and calls scale(3). | The read yields7; the call yields30. |
-| apply(callback::proc(i64) -> i64, x) calls callback(x), with no module callable named callback. | Compilation rejects the unavailable lexical function. |
-| The same apply receives selected(x) = x + 20, while the module also declares callback(x) = x + 1. | apply(selected, 3) yields4 from the module declaration. |
-| apply instead installs its supplied value with effect @callback <- callback and uses behave @callback(x). | apply(selected, 3) yields23 from the supplied procedure. |
-
-The last two cases differ only in which binding supplies the callee. The direct-call example is:
+H-257 requires ordinary call syntax to respect the nearest lexical value binding. A procedure parameter or local procedure value supplies the callee; a same-spelled module callable does not bypass it. A non-callable local value makes the call ill-typed. Direct calls retain H-189's current dynamic bindings. Symbol-only `perform`/`behave` and the function/procedure effect boundary are unchanged.
 
 ```text
 proc selected(x::i64) -> i64 { x + 20 }
 proc callback(x::i64) -> i64 { x + 1 }
 proc apply(callback::proc(i64) -> i64, x::i64) -> i64 { callback(x) }
-// Current apply(selected, 3) result: 4.
+# apply(selected, 3) must yield 23.
 ```
 
-The source-level observation is that the supplied parameter and the module declaration are different possible denotations of callback. It is not a request for users to manage an internal call protocol. The symbolic-installation row records what the prototype executes; it is not a requirement or recommended workaround for ordinary calls. The former separate-namespace versus innermost-binding question is deferred until the world/definition/execution architecture is coherent. No shadowing policy, first-class function values, runtime higher-order dispatch or escaping closures are selected by H-235. Intrinsic representation and dispatch implementation stay internal.
+A parameter or local declaration that shadows an outer local, module callable or module value/type binding emits `[-Wshadow]`. `-Werror=shadow` or the general warnings-as-errors option makes it an error. Same-scope duplicate declarations remain errors. No user-visible call protocol, escaping closure representation, general function-value type or runtime callable dispatch is introduced.
+
+### Callable declarations and methods
+
+A callable identity can exist without any executable methods. Its signature declarations and its methods are separate module-world information. Using/import, explicit exports, aliases and receiver-local merging apply to both; selecting or exporting an unimplemented declaration does not execute or fabricate a body. A demanded call requires an applicable implementation. A function declaration promises a function implementation with a compatible result for its applicable inputs; a procedure declaration supplies the corresponding procedure contract. These promises are checked on demanded calls, alongside the selected method's own signature.
+
+H-258 requires parameters and an explicit return type on a bodyless declaration; an untyped identity-only `function score;` is not supported. Generic declarations and methods use compile-time type parameters, including abstract upper bounds, and a final variadic parameter:
+
+```text
+function score(x::T)::i64 where T <: Metric;
+function combine(first::T, rest::T...)::T where T;
+proc dispatch(first::T, rest::T...) -> void where T;
+function pair(x::T, y::U)::i64 where {T, U};
+```
+
+Type parameters are inferred from concrete argument types at a demanded call. Repeated occurrences constrain those types to agree; bounds use the caller's selected conformance information. A type parameter that cannot be inferred from inputs is diagnosed. Unique-most-specific dispatch compares signature constraints, including concrete types, bounds, repeated-variable relationships and fixed versus variadic arity, independently of declaration order. Equally specific candidates remain ambiguous. This bounded prototype does not supply generic ADT constructors, explicit type-argument calls or a complete higher-rank type system.
+
+Within a method, `len(rest)` gives the tail count, `rest[i]` reads an element and `other(first, rest...)` forwards it. The finite argument pack is compiler metadata with each argument's existing provenance; it is not a user heap object. A dynamic index into regional arguments requires a common live owner. A pack cannot escape its call scope or become a TLS value. Empty tails are valid when their element type can be inferred from another argument or is explicitly concrete. Automatic conversion still completes for each argument before the next argument's effects.
+
+### Evaluated bits and storage places
+
+H-257 directs the compiler model toward LLVM register optimization. An evaluated bits value is an SSA value; a storage place denotes a typed address in a tracked owner. Reading a place produces the value at that point. Writing the place does not retroactively change that SSA value. A retained regional reference permits a subsequent read to observe intervening writes. Const non-bits access therefore does not imply immutable underlying memory.
+
+LLVM lowering uses typed places for referent, field and element access, with common read/write operations. Regional aggregate views retain their offsets and owners; relative reference fields keep their existing encoding. Bits operations and variadic argument selection do not require artificial memory cells. This internal separation does not introduce `owned`/`const`/`make` source syntax, change the assignment-result contract, extend owner lifetime or select RTTI. The complete ordinary-region lifecycle is the separately deferred fourth work package.
 
 ### Direct symbolic procedure declaration
 

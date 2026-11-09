@@ -57,9 +57,6 @@ class LLVMEmission {
     if (source_location_) return b().CreateGlobalString(location_text(*source_location_));
     return llvm::ConstantPointerNull::get(pointer_type());
   }
-  static Type representation(Type type) {
-    return type.kind == Type::unit ? Type(type.representation) : type;
-  }
   static bool signed_integer(Type type) { return representation(type) == Type::integer; }
   llvm::ConstantInt *integer(llvm::IntegerType *type, uint64_t bits) {
     return llvm::ConstantInt::get(type, bits);
@@ -444,8 +441,7 @@ public:
     const auto &fields = fields_.at(type.identity);
     for (size_t i = 0; i < args.size(); ++i) {
       auto *field = b().CreateStructGEP(record, storage, unsigned(i));
-      if (fields[i].kind == Type::reference) store_reference(owner, field, args[i]);
-      else b().CreateStore(args[i], field);
+      write({fields[i], owner, field}, args[i]);
     }
     return offset;
   }
@@ -468,42 +464,46 @@ public:
     auto *data = address(owner, data_offset);
     store_reference(owner, pointer_field, data_offset);
     auto fill = loop(Type::uint64, integer(i64(), 0), length);
-    b().CreateStore(initial, b().CreateGEP(element_type, data, fill.index));
+    write({element, owner, b().CreateGEP(element_type, data, fill.index)}, initial);
     end_loop(fill);
     b().CreateBr(done);
     b().SetInsertPoint(done);
     return offset;
   }
-  llvm::Value *dereference(llvm::Value *owner, llvm::Value *source, Type type) {
-    auto *storage = checked_address(owner, source);
-    return type.kind == Type::array || type.kind == Type::regional ? source : b().CreateLoad(type_of(type), storage);
+  // A place denotes storage; reading it produces an SSA value at that point.
+  // Neither a bits read nor its users promise that aliased storage is immutable.
+  struct Place { Type type; llvm::Value *owner, *address; };
+  Place referent(llvm::Value *owner, llvm::Value *source, Type type) {
+    return {type, owner, checked_address(owner, source)};
   }
-  llvm::Value *regional_field(llvm::Value *owner, llvm::Value *source,
-                               Type record, size_t index, Type field_type) {
-    auto *field = b().CreateStructGEP(record_type(record), checked_address(owner, source), unsigned(index));
-    return field_type.kind == Type::reference ? read_reference(owner, field) : b().CreateLoad(type_of(field_type), field);
+  Place field(llvm::Value *owner, llvm::Value *source, Type record, size_t index, Type type) {
+    return {type, owner, b().CreateStructGEP(record_type(record), checked_address(owner, source), unsigned(index))};
   }
-  void set_field(llvm::Value *owner, llvm::Value *source, Type record,
-                 size_t index, Type field_type, llvm::Value *input) {
-    auto *field = b().CreateStructGEP(record_type(record), checked_address(owner, source), unsigned(index));
-    if (field_type.kind == Type::reference) store_reference(owner, field, input);
-    else b().CreateStore(input, field);
+  Place element(llvm::Value *owner, llvm::Value *source, Type index_type, llvm::Value *index, Type type) {
+    return {type, owner, array_address(owner, source, index_type, index, type)};
+  }
+  llvm::Value *reference(const Place &place) { return offset_of(place.owner, place.address); }
+  llvm::Value *read(const Place &place) {
+    if (place.type.kind == Type::array || place.type.kind == Type::regional) return reference(place);
+    if (place.type.kind == Type::reference) return read_reference(place.owner, place.address);
+    return b().CreateLoad(type_of(place.type), place.address);
+  }
+  void write(const Place &place, llvm::Value *value) {
+    if (place.type.kind == Type::array || place.type.kind == Type::regional)
+      throw std::logic_error("regional aggregates cannot be copied");
+    if (place.type.kind == Type::reference) store_reference(place.owner, place.address, value);
+    else b().CreateStore(value, place.address);
   }
   llvm::Value *array_length(llvm::Value *owner, llvm::Value *source) {
     return b().CreateLoad(i64(), b().CreateStructGEP(array_header_, checked_address(owner, source), 1));
   }
-  llvm::Value *array_element(llvm::Value *owner, llvm::Value *source, Type index_type,
-                              llvm::Value *index, Type element, bool reference) {
-    auto *location = array_address(owner, source, index_type, index, element);
-    return reference ? offset_of(owner, location) : b().CreateLoad(type_of(element), location);
-  }
-  llvm::Value *array_store(llvm::Value *owner, llvm::Value *source, Type index_type,
-                            llvm::Value *index, Type element, llvm::Value *input) {
-    b().CreateStore(input, array_address(owner, source, index_type, index, element));
-    return input;
-  }
-  void scalar_store(llvm::Value *owner, llvm::Value *source, llvm::Value *input) {
-    b().CreateStore(input, checked_address(owner, source));
+  llvm::Value *argument_element(Type type, llvm::Value *index, const std::vector<llvm::Value *> &values) {
+    require(b().CreateICmpULT(index, integer(i64(), values.size())), "variadic argument index out of bounds");
+    if (values.empty()) return llvm::PoisonValue::get(type_of(type));
+    auto *result = values.front();
+    for (size_t i = 1; i < values.size(); ++i)
+      result = b().CreateSelect(b().CreateICmpEQ(index, integer(i64(), i)), values[i], result);
+    return result;
   }
 
   std::pair<std::string, std::string> finish() {

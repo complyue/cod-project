@@ -53,11 +53,13 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
       advance();
       continue;
     }
-    if (c == '#' || (c == '/' && cursor + 1 < source.size() && source[cursor + 1] == '/')) {
+    if (c == '#') {
       while (cursor < source.size() && source[cursor] != '\n')
         advance();
       continue;
     }
+    if (c == '/' && cursor + 1 < source.size() && source[cursor + 1] == '/')
+      fail(at, "'//' is reserved for fraction construction; use '#' for line comments");
     const auto start = at;
     const auto offset = cursor;
     if (c == '@' || std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
@@ -127,6 +129,11 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
       continue;
     }
     std::string punctuation(1, c);
+    if (source.compare(cursor, 3, "...") == 0) {
+      advance(); advance(); advance();
+      tokens.push_back({TokenKind::punctuation, "...", start});
+      continue;
+    }
     if (cursor + 1 < source.size()) {
       const auto pair = source.substr(cursor, 2);
       if (pair == "->" || pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" ||
@@ -146,18 +153,19 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
 
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
-              named, unit, region, regional, array, reference, null_ref, abstract_type };
+              named, unit, quantity, region, regional, array, reference, null_ref, abstract_type, arguments, parameter };
   Kind kind;
   std::string name;
   size_t identity = 0;
-  Kind representation = void_type;
   std::shared_ptr<Type> target;
   std::vector<Type> parameters;
-  Type(Kind kind = void_type, std::string name = {}, size_t identity = 0, Kind representation = void_type)
-      : kind(kind), name(std::move(name)), identity(identity), representation(representation) {}
+  std::vector<Type> bounds;
+  bool variadic = false;
+  Type(Kind kind = void_type, std::string name = {}, size_t identity = 0)
+      : kind(kind), name(std::move(name)), identity(identity) {}
   bool operator==(const Type &other) const {
     return kind == other.kind && name == other.name && identity == other.identity &&
-           representation == other.representation && parameters == other.parameters &&
+           parameters == other.parameters && bounds == other.bounds && variadic == other.variadic &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
   }
 };
@@ -166,6 +174,30 @@ inline bool integral(Type type) {
   return type == Type::integer || type == Type::uint8 || type == Type::uint32 || type == Type::uint64;
 }
 inline bool numeric(Type type) { return integral(type) || floating(type); }
+inline Type representation(Type type) {
+  return type.kind == Type::quantity ? *type.target : type;
+}
+inline Type quantity(Type unit, Type number) {
+  unit.kind = Type::quantity;
+  unit.target = std::make_shared<Type>(std::move(number));
+  return unit;
+}
+inline bool widens(Type from, Type to) {
+  if (from == to) return true;
+  if (from.kind == Type::quantity || to.kind == Type::quantity) {
+    if (from.kind != Type::quantity || to.kind != Type::quantity || from.identity != to.identity ||
+        !from.target || !to.target) return false;
+    return widens(*from.target, *to.target);
+  }
+  switch (from.kind) {
+  case Type::uint8:
+    return to == Type::uint32 || to == Type::uint64 || to == Type::integer || floating(to);
+  case Type::uint32:
+    return to == Type::uint64 || to == Type::integer || to == Type::float64;
+  case Type::float32: return to == Type::float64;
+  default: return false;
+  }
+}
 inline std::string type_name(const Type &type) {
   switch (type.kind) {
   case Type::integer: return "i64";
@@ -175,19 +207,24 @@ inline std::string type_name(const Type &type) {
   case Type::boolean: return "bool";
   case Type::void_type: return "void";
   case Type::procedure: {
-    if (!type.target) return "intrinsic procedure family";
+    if (!type.target) return "procedure family";
     std::string result = "proc(";
     for (size_t i = 0; i < type.parameters.size(); ++i)
-      result += (i ? ", " : "") + type_name(type.parameters[i]);
+      result += (i ? ", " : "") + type_name(type.parameters[i]) +
+                (type.variadic && i + 1 == type.parameters.size() ? "..." : "");
     return result + ") -> " + type_name(*type.target);
   }
   case Type::float32: return "f32";
   case Type::float64: return "f64";
-  case Type::named: case Type::unit: case Type::regional: case Type::array:
+  case Type::quantity: return type_name(*type.target) + "(" + type.name + ")";
+  case Type::unit: return type.name;
+  case Type::named: case Type::regional: case Type::array:
   case Type::abstract_type: return type.name;
   case Type::region: return "region";
   case Type::reference: return "ref<" + type_name(*type.target) + ">";
   case Type::null_ref: return "null";
+  case Type::arguments: return "variadic arguments";
+  case Type::parameter: return "type parameter " + std::to_string(type.identity + 1);
   }
   return "unknown";
 }
@@ -201,6 +238,7 @@ struct Expression {
   std::vector<std::unique_ptr<Expression>> children;
   std::optional<size_t> symbol_id;
   std::string binding;
+  bool spread = false;
 };
 using Expr = std::unique_ptr<Expression>;
 
@@ -210,7 +248,9 @@ struct Parameter {
   Location at;
   bool automatic_conversion = false;
   std::vector<std::string> conversion_route;
+  bool variadic = false;
 };
+struct TypeParameter { std::string name; std::optional<Type> bound; Location at; };
 struct UnitSelection { std::string source, local; Location at; };
 struct SymbolMapping {
   std::string local;
@@ -235,6 +275,7 @@ struct Form {
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
+  std::vector<TypeParameter> type_parameters;
   std::optional<Type> result_type;
   std::optional<Type> index_type;
   std::optional<Type> parent_type;
@@ -337,13 +378,17 @@ class Parser {
     form.alias = form.explicit_alias ? (form.symbolic ? name(kind).text : lexical_name(&form.alias_operation).text) : form.name;
     if (!form.explicit_alias) form.alias_operation = form.operation;
   }
-  Type parse_type() {
+  Type parse_type(Parameter *parameter = nullptr) {
     auto token = name(TokenKind::identifier);
     if (token.text == "proc" || token.text == "procedure") {
       Type type{Type::procedure};
       expect("(");
       if (!take(")")) {
-        do { type.parameters.push_back(parse_type()); } while (take(","));
+        do {
+          if (type.variadic) fail(peek().at, "only the last procedure parameter can be variadic");
+          type.parameters.push_back(parse_type());
+          type.variadic = take("...");
+        } while (take(","));
         expect(")");
       }
       expect("->");
@@ -357,16 +402,30 @@ class Parser {
       expect(">");
       return type;
     }
-    if (token.text == "region") return Type::region;
-    if (token.text == "i64") return Type::integer;
-    if (token.text == "u8") return Type::uint8;
-    if (token.text == "u32") return Type::uint32;
-    if (token.text == "u64") return Type::uint64;
-    if (token.text == "bool") return Type::boolean;
-    if (token.text == "void") return Type::void_type;
-    if (token.text == "f32") return Type::float32;
-    if (token.text == "f64") return Type::float64;
-    return {Type::named, token.text};
+    Type type{Type::named, token.text};
+    if (token.text == "region") type = Type::region;
+    else if (token.text == "i64") type = Type::integer;
+    else if (token.text == "u8") type = Type::uint8;
+    else if (token.text == "u32") type = Type::uint32;
+    else if (token.text == "u64") type = Type::uint64;
+    else if (token.text == "bool") type = Type::boolean;
+    else if (token.text == "void") type = Type::void_type;
+    else if (token.text == "f32") type = Type::float32;
+    else if (token.text == "f64") type = Type::float64;
+    if (take("(")) {
+      auto unit = name(TokenKind::identifier);
+      if (parameter) {
+        parameter->automatic_conversion = take("*");
+        if (is("<-") && !parameter->automatic_conversion)
+          fail(peek().at, "a conversion route requires a starred parameter");
+        while (take("<-")) parameter->conversion_route.push_back(name(TokenKind::identifier).text);
+      }
+      expect(")");
+      Type annotated{Type::named, unit.text};
+      annotated.target = std::make_shared<Type>(std::move(type));
+      return annotated;
+    }
+    return type;
   }
   void type_separator() { if (!take("::")) expect(":"); }
   Expr make(Expression::Kind kind, const Token &token) {
@@ -384,7 +443,11 @@ class Parser {
       do {
         if (expr.kind == Expression::Kind::call && expr.text == "setfield" && expr.children.size() == 1)
           expr.children.push_back(make(Expression::Kind::name, field_name()));
-        else expr.children.push_back(expression());
+        else {
+          auto argument = expression();
+          argument->spread = take("...");
+          expr.children.push_back(std::move(argument));
+        }
       } while (take(","));
       expect(")");
     }
@@ -580,9 +643,6 @@ public:
       } else if (take("unit")) {
         form->kind = Form::Kind::unit;
         form->name = ordinary_name().text;
-        type_separator();
-        form->result_type = parse_type();
-        if (!numeric(*form->result_type)) fail(start.at, "a unit requires a scalar numeric representation");
         expect(";");
       } else if (take("array")) {
         form->kind = Form::Kind::array;
@@ -628,23 +688,16 @@ public:
         form->kind = function ? Form::Kind::function : Form::Kind::procedure;
         form->symbolic = !function && peek().kind == TokenKind::symbol;
         form->name = form->symbolic ? name(TokenKind::symbol).text : lexical_name(&form->operation).text;
-        if (take("(")) {
+        const bool parameter_list = take("(");
+        if (parameter_list) {
           if (!take(")")) {
             do {
               auto param = value_name();
               Parameter parameter{param.text, Type::void_type, param.at, false, {}};
-              if (take("(")) {
-                parameter.type = parse_type();
-                parameter.automatic_conversion = take("*");
-                if (is("<-") && !parameter.automatic_conversion)
-                  fail(peek().at, "a conversion route requires a starred parameter");
-                while (take("<-")) parameter.conversion_route.push_back(name(TokenKind::identifier).text);
-                expect(")");
-              } else {
-                type_separator();
-                parameter.type = parse_type();
-              }
+              type_separator();
+              parameter.type = parse_type(&parameter);
               if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
+              parameter.variadic = take("...");
               form->parameters.push_back(std::move(parameter));
             } while (take(","));
             expect(")");
@@ -653,9 +706,27 @@ public:
           fail(peek().at, "a function requires a parameter list");
         }
         if (take("->") || take("::")) form->result_type = parse_type();
-        if (!function && !form->result_type) fail(form->at, "a procedure declaration requires an explicit result type");
-        form->body = block();
-        take(";");
+        if (take("where")) {
+          const bool grouped = take("{");
+          do {
+            auto parameter = ordinary_name();
+            for (const auto &previous : form->type_parameters)
+              if (previous.name == parameter.text) fail(parameter.at, "duplicate type parameter '" + parameter.text + "'");
+            TypeParameter type_parameter{parameter.text, {}, parameter.at};
+            if (take("<:")) type_parameter.bound = parse_type();
+            form->type_parameters.push_back(std::move(type_parameter));
+          } while (grouped && take(","));
+          if (grouped) expect("}");
+        }
+        for (size_t i = 0; i + 1 < form->parameters.size(); ++i)
+          if (form->parameters[i].variadic) fail(form->parameters[i].at, "only the last parameter can be variadic");
+        const bool declaration = take(";");
+        if (declaration && !parameter_list) fail(form->at, "a callable declaration requires a parameter list");
+        if ((!function || declaration) && !form->result_type)
+          fail(form->at, "a callable declaration requires an explicit result type");
+        if (declaration && form->conversion)
+          fail(form->at, "a conversion requires an implemented function method");
+        if (!declaration) { form->body = block(); take(";"); }
       } else if (take("global")) {
         form->kind = Form::Kind::global;
         form->name = ordinary_name().text;

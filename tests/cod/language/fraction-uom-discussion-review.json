@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "kind": "discussion-to-current-state review; not a test execution",
+  "recorded_utc": "2026-11-09T17:30:48.615354+00:00",
+  "authority": {
+    "discussion": "fraction-design side conversation",
+    "decisions": [
+      "H-254",
+      "H-255",
+      "H-256"
+    ],
+    "design": "D-16 revision 2",
+    "implementation_contract_qualification": "full draft remains pending-human; no new design choice made by this review"
+  },
+  "scope": "Independent comparison requested by the user; only this evidence file is written. No compiler/design/build edits or test commands.",
+  "requirements": [
+    {
+      "id": "F01",
+      "discussion_requirement": "Fraction intrinsic types use N/D type syntax and permit unequal component widths, including i64/i32.",
+      "comparison": "consistent",
+      "current_status": "recorded; fraction implementation deferred",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 27,
+        "excerpt": "In a type position, `i64/i64` and `i64/i32` specify the two component types. In an expression, `/` remains an arithmetic operator and `//` constructs a fraction. Nested fraction component types such as `i64/i32/i16` are excluded from the initial scope. The complete signed/unsigned type family and promotion rules remain to be specified before implementation."
+      }
+    },
+    {
+      "id": "F02",
+      "discussion_requirement": "Fractions are numerical representations independent of UoM; no denominator UoM.",
+      "comparison": "consistent",
+      "current_status": "recorded; fraction implementation deferred",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 25,
+        "excerpt": "A fraction is an intrinsic numerical bits type. It represents an exact ratio using a numerator and a nonzero denominator, each with its own fixed-width integer type. Its representation is independent of any unit of measure. A denominator is a component role, not a UoM; multiplying fractions does not manufacture powers of a denominator unit."
+      }
+    },
+    {
+      "id": "F03",
+      "discussion_requirement": "Construction uses // and standard output uses the same form, without implicit reduction.",
+      "comparison": "consistent",
+      "current_status": "recorded; fraction implementation deferred",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 35,
+        "excerpt": "Standard fraction output uses the same `numerator // denominator` form and displays the stored, potentially unreduced pair. Display is not an implicit call to `canonical`. Whitespace, type-width suffixes and unit annotations for typed textual round-tripping remain open; the common separator is confirmed."
+      }
+    },
+    {
+      "id": "F04",
+      "discussion_requirement": "Reserve // for fractions; # is the planned line-comment syntax.",
+      "comparison": "consistent",
+      "current_status": "priority accepted and recorded; not implemented",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 37,
+        "excerpt": "The planned line-comment marker is `#`; `//` is reserved for fraction construction. The current [lexer](../cod/lang_syntax.hh) accepts both `#` and `//` as line comments. Consequently, fraction support requires a coordinated source-comment migration and lexer/tooling update. The existing grammar remains in effect until the H-256 priority prerequisite is implemented. This draft changes no source comments or compiler behavior."
+      }
+    },
+    {
+      "id": "F05",
+      "discussion_requirement": "Ordinary arithmetic does not canonicalize automatically.",
+      "comparison": "consistent",
+      "current_status": "recorded; fraction implementation deferred",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 43,
+        "excerpt": "Ordinary fraction arithmetic does not automatically reduce fractions. For example, `(1 // 2) + (1 // 2)` may produce `4 // 4`; explicit canonicalization produces `1 // 1`. No GCD reduction is inserted to rescue an otherwise overflowing arithmetic operation."
+      }
+    },
+    {
+      "id": "F06",
+      "discussion_requirement": "Canonical is an explicit intrinsic returning the same numerator/denominator component types.",
+      "comparison": "consistent",
+      "current_status": "recorded; fraction implementation deferred",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 53,
+        "excerpt": "The semantic signature is `canonical(n::i64/i32) -> i64/i32`, generalized over the supported component types. This notation describes input/result representation, not a new rule for default borrowing or returning references to local storage. Full declarations must follow the eventual bits/const value-result contract."
+      }
+    },
+    {
+      "id": "F07",
+      "discussion_requirement": "Canonical reduces by GCD, normalizes zero and uses a positive denominator only when both components fit.",
+      "comparison": "consistent",
+      "current_status": "recorded; fraction implementation deferred",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 55,
+        "excerpt": "Canonicalization returns an equivalent reduced fraction of the same component types; it does not mutate the input:"
+      }
+    },
+    {
+      "id": "F08",
+      "discussion_requirement": "Equality and order compare numerical values even for unreduced stored pairs.",
+      "comparison": "consistent",
+      "current_status": "recorded; fraction implementation deferred",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 45,
+        "excerpt": "Equality and ordering concern mathematical values: `1 // 2` equals `2 // 4`. Comparisons do not mutate or normalize the operands. Their implementation must not obtain an incorrect result from an overflowing cross-product. This mathematical requirement does not prescribe a particular comparison algorithm."
+      }
+    },
+    {
+      "id": "F09",
+      "discussion_requirement": "Fractions use fixed-width bits with no fraction-specific allocation, owner or copy management.",
+      "comparison": "consistent",
+      "current_status": "recorded; fraction implementation deferred",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 68,
+        "excerpt": "A fraction always occupies fixed-size bits storage and contains no pointer, owner, hidden allocation or cleanup action. It may be held in lexical bits storage or embedded in regional fields and arrays. Its creation and bits transfer require no special regional memory management. This does not grant copy/move semantics to a containing regional object or relax reference lifetime and access permissions."
+      }
+    },
+    {
+      "id": "F10",
+      "discussion_requirement": "Plan practical intrinsic assistance without making every convenience compiler machinery.",
+      "comparison": "consistent",
+      "current_status": "recorded; fraction implementation deferred",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 64,
+        "excerpt": "Checked construction, numerator/denominator access, canonicalization and numeric conversions form the initial intrinsic-support requirements. Exact accessor names and overload signatures remain open. Intrinsic support does not imply that every arithmetic algorithm belongs in compiler code. Reciprocal, for example, can use component access and checked construction, swapping `i64/i32` to `i32/i64` when the numerator is nonzero. No separate intrinsic is required without a demonstrated need."
+      }
+    },
+    {
+      "id": "F11",
+      "discussion_requirement": "Unit definitions do not fix representation; conversion input/output types constrain accepted/produced representations.",
+      "comparison": "consistent",
+      "current_status": "priority accepted and recorded; not implemented",
+      "evidence": {
+        "path": "design/ScalarUnitsAndIndexTypes.md",
+        "line": 35,
+        "excerpt": "H-256 requests prompt implementation planning for representation-independent UoM, separately from fraction support. A unit declaration establishes semantic identity without fixing one numerical representation. Value/parameter/result types retain the representation information needed for layout and typed arithmetic. Conversion methods state their accepted inputs and produced outputs; route applicability checks the intermediate representations as well as unit identities. Identity-preserving aliases and receiver-local selected bundles remain unchanged obligations."
+      }
+    },
+    {
+      "id": "F12",
+      "discussion_requirement": "Typing must account for permitted widening/precision and conversion-path representation compatibility without inventing a promotion policy.",
+      "comparison": "consistent",
+      "current_status": "recorded open decisions; no conflicting policy selected",
+      "evidence": {
+        "path": "design/ScalarUnitsAndIndexTypes.md",
+        "line": 39,
+        "excerpt": "Complete declaration/annotation grammar, representation-polymorphic method matching, permitted widening and how a caller selects a destination representation must be resolved against actual use cases. H-256 does not authorize arbitrary return-type dispatch, silent narrowing, implicit unit erasure or changing the confirmed direct-before-indirect route policy. An unresolved choice that obstructs the refactor or conflicts with D-16 must be brought to the user; unrelated confirmed work may proceed."
+      }
+    },
+    {
+      "id": "F13",
+      "discussion_requirement": "Future language designs/implementations must report conflicts with accepted fraction requirements before choosing an incompatible implementation.",
+      "comparison": "consistent",
+      "current_status": "review rule installed",
+      "evidence": {
+        "path": "AGENTS.md",
+        "line": 78,
+        "excerpt": "- A conflict with its accepted requirements is a design obstacle: present the conflicting requirements and alternatives to the user before implementing the affected choice. Unrelated qualified work may continue."
+      }
+    },
+    {
+      "id": "F14",
+      "discussion_requirement": "Prioritize // reservation and UoM refactor while leaving full fraction execution deferred.",
+      "comparison": "consistent",
+      "current_status": "scheduling boundary preserved; two prerequisites remain pending",
+      "evidence": {
+        "path": "design/FixedWidthFractions.md",
+        "line": 21,
+        "excerpt": "These priorities supersede only the blanket deferral of those two prerequisites. The fraction type, constructor execution, arithmetic, canonicalization and formatting remain planned future work. Their open grammar/promotion/layout decisions are not silently authorized by prioritizing the prerequisites. Main-chat implementation planning must surface concrete design obstacles before selecting an incompatible policy."
+      }
+    }
+  ],
+  "confirmed_design_deviations": [],
+  "confirmed_missing_discussion_requirements": [],
+  "unfinished_priority_work": [
+    {
+      "item": "Reserve // and migrate CoD line comments to #",
+      "status": "not implemented",
+      "evidence": {
+        "path": "cod/lang_syntax.hh",
+        "line": 56,
+        "excerpt": "    if (c == '#' || (c == '/' && cursor + 1 < source.size() && source[cursor + 1] == '/')) {"
+      }
+    },
+    {
+      "item": "Representation-independent UoM refactor",
+      "status": "not implemented",
+      "evidence": [
+        {
+          "path": "cod/lang_syntax.hh",
+          "line": 607,
+          "excerpt": "        if (!numeric(*form->result_type)) fail(start.at, \"a unit requires a scalar numeric representation\");"
+        },
+        {
+          "path": "cod/lang_frontend.hh",
+          "line": 538,
+          "excerpt": "                                            next_unit_++, form.result_type->kind});"
+        }
+      ]
+    }
+  ],
+  "validation_boundary": {
+    "prior_record": "tests/cod/language/callable-model-validation.json",
+    "reported_passed": 28,
+    "reported_total": 28,
+    "compiler_sha256": "2b74faeeccdefd8e4c5b38dad1e0a9df017e9e96f03131166b69adafd8578fb6",
+    "compiler_matches_record": true,
+    "source_hashes_checked": 265,
+    "mismatched_paths": [],
+    "scope_limit": "The 28 checks concern callable declarations, lexical calls and LLVM value/place work; they do not prove either H-256 prerequisite or fraction support. No tests were rerun by this review."
+  },
+  "parent_chat": {
+    "thread_id": "01a14005-1edf-70d1-adcf-c091e8652c75",
+    "request": "Persist implementation status and evidence, compare with this side conversation.",
+    "request_accepted": true,
+    "readback": "Both H-256 priorities remain unimplemented. The lexer still treats // as a comment, and each UoM declaration still fixes one scalar representation. The 28 passing checks validate the callable work, not these prerequisites.",
+    "durable_status_record": "tests/cod/language/fraction-uom-progress.json",
+    "receipt": "Parent explicitly confirmed the request and returned the durable status path through native chat messaging."
+  },
+  "source_sha256": {
+    "design/FixedWidthFractions.md": "263653a4368f9701ad0126d216a0aeb568c85a5c0bfc14eaabe0bb27a9e77a63",
+    "design/ScalarUnitsAndIndexTypes.md": "eb2a5a13218842b386e29a363ae174f82cfe08c91799ece3b2df1ea02d1856ad",
+    "design/DomainLanguageDesign.md": "7890b51f1192c95beb216cc1b89b12ab39e01bc452c43a15ba47199b665688ae",
+    "design/DesignAuthorityRegistry.md": "bd91a28629af6ed719d8cb4ecc231d60521d0dca8348021899415673f363edf6",
+    "AGENTS.md": "10458c1d374d30f7eaa107aa8dbb0479ca51345c53d843b597c2c577b6a23329",
+    "cod/lang_syntax.hh": "538242181e3fb9f8e179e9bb9cf1eae1bab1b17dc3fd4103ecd29b64d5dd9773",
+    "cod/lang_frontend.hh": "b35fe7935f96f764286aee3a8c4ae5b487ea495c3819bddcfc159a5380de7dcd",
+    "cod/lang_llvm.hh": "ceca7ac3a2b5fb1540ced1e735b634c277359c61b66b261d100a6ae3204f826a",
+    "tests/cod/language/callable-model-validation.json": "aa44d0a721aa9ae95e19d7ce38bb0508a27d2a51e4d1ee748bb864add454e943"
+  },
+  "limits": [
+    "This is a dated source/document snapshot, not future implementation acceptance.",
+    "Open promotion, destination-selection, grammar, layout and full fraction semantics remain separately scoped.",
+    "User has requested priority implementation follow-up; no delivery date or completed work is inferred from acknowledgement."
+  ],
+  "parent_status_verification": {
+    "path": "tests/cod/language/fraction-uom-progress.json",
+    "sha256": "f953cb169ff6ac02b439d81129e42fea692299e0544862f05293069369f83c89",
+    "source_hashes_checked": 17,
+    "mismatched_paths": [],
+    "comparison": "Both priority statuses agree with independently inspected lexer, unit parser/loader and design records. Full fraction execution remains deferred. No recorded decision was lost or contradicted.",
+    "build_status": "Parent K-400 and referenced build-repair record report completed authorized repair. Earlier build blockage is not a current H-256 blocker.",
+    "pending_choices": [
+      "unit/quantity declaration and parameter/result annotation syntax",
+      "representation-polymorphic matching and allowed widening",
+      "destination representation selection, especially identical input signatures with different outputs; no implicit general return-type dispatch",
+      "migration of existing fixed-representation unit declarations and constructions"
+    ],
+    "implementation_next": {
+      "comments": "Implement the reservation and coordinated source migration as the first prerequisite; compile with cmake --build ./build and validate focused boundaries.",
+      "uom": "Develop small concrete annotation/conversion examples and discuss the unresolved choices, then refactor identity/value representation and typed route selection while retaining source-world isolation and existing conversion priority."
+    }
+  },
+  "review_completed_utc": "2026-11-09T17:31:34.056286+00:00"
+}

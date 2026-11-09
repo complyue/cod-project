@@ -92,8 +92,8 @@ def main():
         (directory / 'operation-vocabulary.cod').write_text('symbol @base :: i64;\nexport @base;\n')
         (directory / 'operation-leaf.cod').write_text(
             'symbol from "operation-vocabulary.cod" @base;\n'
-            'unit Argument::i64;\n'
-            'procedure (+)(value::Argument, delta::i64)::i64 { scalar(value) + delta + @base }\n'
+            'unit Argument;\n'
+            'procedure (+)(value::i64(Argument), delta::i64)::i64 { scalar(value) + delta + @base }\n'
             'export Argument;\nexport (+);\n')
         lines = ['using symbol "std:io" @print;',
                  'symbol from "operation-vocabulary.cod" @base;',
@@ -111,8 +111,8 @@ def main():
                            '1000-procedure-inline-chain-with-operation-leaf'))
         (directory / 'operation-leaf.cod').write_text(
             'symbol @missing :: i64;\n'
-            'unit Argument::i64;\n'
-            'procedure (+)(value::Argument, delta::i64)::i64 { @missing }\n'
+            'unit Argument;\n'
+            'procedure (+)(value::i64(Argument), delta::i64)::i64 { @missing }\n'
             'export Argument;\nexport (+);\n')
         command = [str(executable), '--check', str(entry)]
         diagnostic = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=120)
@@ -143,10 +143,10 @@ def main():
 
         units = 32
         names = ', '.join(f'unit{i}' for i in range(units))
-        definitions = [f'unit unit{i}::i64;' for i in range(units)]
-        definitions += [f'conversion function step{i}(x (unit{i}))::unit{i+1} {{ unit{i+1}(scalar(x) + 1) }}'
+        definitions = [f'unit unit{i};' for i in range(units)]
+        definitions += [f'conversion function step{i}(x::i64(unit{i}))::i64(unit{i+1}) {{ unit{i+1}(scalar(x) + 1) }}'
                         for i in range(units-1)]
-        definitions += ['conversion function back(x (unit16))::unit15 { unit15(scalar(x) - 1) }']
+        definitions += ['conversion function back(x::i64(unit16))::i64(unit15) { unit15(scalar(x) - 1) }']
         unit_exports = ''.join(f'export unit{i};\n' for i in range(units))
         conversion_exports = ''.join(f'export step{i};\n' for i in range(units-1)) + 'export back;\n'
         (directory / 'unit-base.cod').write_text('\n'.join(definitions) + '\n' + unit_exports + conversion_exports)
@@ -154,7 +154,7 @@ def main():
         for i in range(16):
             current = f'unit-layer-{i}.cod'
             (directory / current).write_text(f'using units "{previous}" {{{names}}};\n'
-                                             'function finish(x (unit31*))::i64 { scalar(x) }\n'
+                                             'function finish(x::i64(unit31*))::i64 { scalar(x) }\n'
                                              'export finish;\n' + unit_exports + conversion_exports)
             previous = current
         entry = directory / 'unit-main.cod'
