@@ -1,0 +1,9 @@
+{
+  ptr a = 1;
+  ptr readonly = a <- 1;
+  ptr p = a;
+  for (i in 0 .. 2) {
+    p <- 3;
+    p = readonly;
+  };
+};

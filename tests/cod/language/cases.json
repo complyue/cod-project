@@ -1022,8 +1022,8 @@
     "stderr_contains": [
       "no matching method 'rank'",
       "method lookup uses module",
-      "candidate function 'rank' (Entity) -> i64",
-      "candidate function 'rank' (Weighted) -> i64",
+      "candidate function 'rank' (Entity in O1) -> i64",
+      "candidate function 'rank' (Weighted in O1) -> i64",
       "abstract-hidden-conformance.cod'"
     ]
   },
@@ -1034,8 +1034,8 @@
     "stderr_contains": [
       "ambiguous method 'choose'",
       "method lookup uses module",
-      "candidate function 'choose' (Entity, Weighted) -> i64",
-      "candidate function 'choose' (Weighted, Entity) -> i64",
+      "candidate function 'choose' (Entity in O1, Weighted in O2) -> i64",
+      "candidate function 'choose' (Weighted in O1, Entity in O2) -> i64",
       "abstract-ambiguous.cod'"
     ]
   },
@@ -1346,6 +1346,12 @@
     "stderr_contains": "read-only destination view"
   },
   {
+    "file": "ptr-readonly-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a writable ptr cannot rebind to a read-only view"
+  },
+  {
     "file": "ptr-owner-rebind.cod",
     "exit": 2,
     "stdout": "",
@@ -1368,5 +1374,32 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "a non-bits parameter requires an explicit external owner"
+  },
+  {
+    "file": "ptr-assignment.cod",
+    "exit": 0,
+    "stdout": "1\n2\n3\n4\n5\n6\n"
+  },
+  {
+    "file": "ptr-assignment-invalid-body.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a writable ptr cannot rebind to a read-only view"
+  },
+  {
+    "file": "ptr-assignment-result.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a (=) overload must return its destination binding's resulting view"
+  },
+  {
+    "file": "const-dispatch-ambiguity.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "ambiguous method",
+      "const Node",
+      "Base"
+    ]
   }
 ]

@@ -787,6 +787,8 @@ class Compiler {
     std::map<std::string, std::pair<bool, size_t>> owners;
     for (size_t i = 0; i < args.size(); ++i) {
       const auto &parameter = parameter_at(form, i);
+      if (form.operation && form.name == "=" && i == 0 && args[i].read_only != parameter.read_only)
+        return reject("reference-assignment destination requires an exact const qualifier");
       if (args[i].read_only && !parameter.read_only &&
           (object_type(args[i].type) || !parameter.owner.empty()))
         return reject("read-only object cannot satisfy a writable parameter");
@@ -1097,6 +1099,10 @@ class Compiler {
       return {};
     };
     for (size_t i = 0; i < args.size(); ++i) {
+      const auto &left_parameter = parameter_at(*left.form, i);
+      const auto &right_parameter = parameter_at(*right.form, i);
+      if (left_parameter.read_only != right_parameter.read_only &&
+          left_parameter.read_only != args[i].read_only) return false;
       const auto right_root = root_constraint(right, i);
       if (right_root) {
         const auto left_root = root_constraint(left, i);
@@ -1257,7 +1263,8 @@ class Compiler {
     return {procedure_type(form, lexical), {}, std::move(proc), &lexical};
   }
   Value block(const Expression &expr, const Module &module, Environment env, Locals locals,
-              bool function_context, bool discard_result = false, std::optional<Type> result_type = {}, bool copy_result = false) {
+              bool function_context, bool discard_result = false, std::optional<Type> result_type = {}, bool copy_result = false,
+              std::optional<size_t> destination_binding = {}) {
     const bool parent_module = module_top_level_;
     const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
     const auto region_initializer = llvm::SaveAndRestore(region_initializer_, false);
@@ -1275,6 +1282,8 @@ class Compiler {
     if (discard_result && result.type != Type::never) result = {};
     if (result_type && result.type != Type::never) result = admit(std::move(result), *result_type, module, expr.at);
     if (copy_result && local_bits(result.type)) result = bits_value(read_value(std::move(result), expr.at));
+    if (destination_binding && result.type != Type::never && result.pointer != destination_binding)
+      fail(expr.at, "a (=) overload must return its destination binding's resulting view; finish the body with the lhs parameter");
     result.pointer.reset();
     scopes_[scope_id] = false;
     valid_view(result, expr.at);
@@ -1399,9 +1408,15 @@ class Compiler {
       if (owner.root) declare_local(locals, owner.name, *region, lexical, owner.at);
     }
     const auto fixed = form.parameters.size() - (variadic(form) ? 1 : 0);
+    const bool rebind = form.operation && form.name == "=";
     for (size_t i = 0; i < fixed; ++i) {
       auto argument = parameters[i];
-      if (argument.storage || (!form.parameters[i].owner.empty() && object_type(argument.type)))
+      if (rebind && i == 0) {
+        if (!argument.pointer) fail(at, "a (=) overload requires an ordinary ptr destination");
+        // The assignment destination denotes the caller's binding; other
+        // parameters borrow storage through their own lexical pointer bindings.
+        declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
+      } else if (argument.storage || (!form.parameters[i].owner.empty() && object_type(argument.type)))
         declare_pointer(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at,
                         form.parameters[i].read_only);
       else declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
@@ -1418,7 +1433,8 @@ class Compiler {
     }
     const bool assignment = form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=");
     auto result = block(*form.body, lexical, std::move(env), std::move(locals), function_context, false,
-                        instantiated.result, form.result_const && form.result_owner.empty() && !assignment);
+                        instantiated.result, form.result_const && form.result_owner.empty() && !assignment,
+                        rebind ? args.front().pointer : std::nullopt);
     scopes_[scope_id] = false;
     valid_view(result, at);
     result = finish_scope(holding_begin, native_scope, std::move(result), at, parent_module);
@@ -1430,6 +1446,8 @@ class Compiler {
         fail(form.at, "result does not belong to its declared owner");
     }
     if (form.result_const && storage_owner(result)) result.read_only = true;
+    if (!form.result_const && !form.result_owner.empty() && result.read_only)
+      fail(form.at, "a writable borrowed result cannot return a read-only view");
     result.pointer.reset();
     call_path_.pop_back();
     return result;
@@ -1559,7 +1577,7 @@ class Compiler {
     std::string message = (ambiguous ? "ambiguous method '" : "no matching method '") + name +
                           "' for supplied argument types (";
     for (size_t i = 0; i < args.size(); ++i)
-      message += (i ? ", " : "") + type_name(args[i].type);
+      message += (i ? ", " : "") + std::string(args[i].read_only ? "const " : "") + type_name(args[i].type);
     message += "): " + std::to_string(candidates.size()) + (ambiguous ? " matching" : " available") + " candidates";
     message += "\n" + location_text(at) + ": note: method lookup uses module '" + visible.path + "'";
     for (size_t i = 0; i < args.size(); ++i)
@@ -1574,7 +1592,8 @@ class Compiler {
                  (form.kind == Form::Kind::procedure ? "procedure '" : "function '") + callable_name(form) + "' (";
       for (size_t parameter = 0; parameter < form.parameters.size(); ++parameter) {
         const auto &declared = form.parameters[parameter];
-        message += (parameter ? ", " : "") + type_name(declared.type);
+        message += (parameter ? ", " : "") + std::string(declared.read_only ? "const " : "") + type_name(declared.type);
+        if (!declared.owner.empty()) message += " in " + declared.owner;
         if (declared.automatic_conversion) message += "*";
         for (const auto &step : declared.conversion_route) message += "<-" + step;
       }
@@ -1645,6 +1664,7 @@ class Compiler {
     choose_specific(exact, false);
     if (!exact.empty()) return exact.front();
     for (const auto &candidate : candidates) {
+      if (candidate.form->operation && candidate.form->name == "=") continue;
       const auto instantiated = signature(*candidate.form, *candidate.lexical, args, module, at);
       if (!instantiated) continue;
       const auto context = llvm::SaveAndRestore(type_context_, TypeContext{candidate.lexical, instantiated->bindings});
@@ -1669,7 +1689,7 @@ class Compiler {
       if (candidates.size() == 1) {
         const auto &candidate = candidates.front();
         const auto instantiated = signature(*candidate.form, *candidate.lexical, args, module, at);
-        if (instantiated) {
+        if (instantiated && !(candidate.form->operation && candidate.form->name == "=")) {
           const auto context = llvm::SaveAndRestore(type_context_, TypeContext{candidate.lexical, instantiated->bindings});
           for (size_t i = 0; i < args.size(); ++i)
             route(args[i].type, parameter_at(*candidate.form, i), *candidate.lexical, module, at);
@@ -1727,6 +1747,9 @@ class Compiler {
       if (contract->result && !accepts(result, *contract->result, caller, at))
         fail(at, "method result violates callable declaration: expected " + type_name(*contract->result) +
                      ", got " + type_name(result.type) + "\n" + location_text(declaration.form->at) + ": note: callable signature declared here");
+      if (!declaration.form->result_const && !declaration.form->result_owner.empty() && result.read_only)
+        fail(at, "read-only method result violates writable callable declaration\n" +
+                     location_text(declaration.form->at) + ": note: result access promised here");
       if (!declaration.form->result_owner.empty()) {
         bool inferred = false;
         for (size_t i = 0; i < args.size(); ++i)
@@ -1796,21 +1819,29 @@ class Compiler {
   }
   Value rebind_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context) {
+    if (expr.children.size() != 2) fail(expr.at, "reference assignment requires a destination and source");
     auto destination = expression(*expr.children[0], module, env, locals, function_context, false);
     auto source = expression(*expr.children[1], module, env, locals, function_context, false);
     if (!destination.pointer) fail(expr.at, "reference assignment requires an ordinary ptr binding; use '<-' for bits transfer");
-    if (!loop_pointer_boundaries_.empty() && *destination.pointer < loop_pointer_boundaries_.back())
-      fail(expr.at, "loop-carried pointer rebinding is not yet proven by initialization analysis; use a loop-local ptr");
+    if (source.storage && std::all_of(source.storage->cells.begin(), source.storage->cells.end(),
+        [&](size_t cell) { return cells_.at(cell).initialized; })) source = read_value(std::move(source), expr.at);
+    // Select user methods before checking the builtin alias operation. A method
+    // may use a read-only source to choose an independently writable target.
+    if (const auto selected = method("=", module, {destination, source}, expr.at))
+      return call_method(*selected, {destination, source}, expr.at, env, function_context, module);
     require(source.type, destination.type, expr.at);
     if (storage_owner(destination) != storage_owner(source))
       fail(expr.at, "reference assignment cannot cross owners; you may want '<-' for bits transfer");
     valid_view(source, expr.at);
+    if (!destination.read_only && source.read_only)
+      fail(expr.at, "a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias");
+    if (!loop_pointer_boundaries_.empty() && *destination.pointer < loop_pointer_boundaries_.back())
+      fail(expr.at, "loop-carried pointer rebinding is not yet proven by initialization analysis; use a loop-local ptr");
     source.pointer.reset();
     auto &binding = pointers_.at(*destination.pointer);
-    if (binding.read_only) source.read_only = true;
+    source.read_only = destination.read_only || binding.read_only;
     ir_.write_pointer(binding.slot, source.storage ? source.storage->address : source.native);
     binding.target = source;
-    source.read_only = true;
     return source;
   }
   Value query_value(const Expression &expr, const Module &module, const Locals &locals) {
@@ -2170,6 +2201,7 @@ class Compiler {
   Value call_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context, bool function_result = false) {
     using K = Expression::Kind;
+    if (expr.text == "=") return rebind_expression(expr, module, env, locals, function_context || function_result);
     if (expr.text == "<-") return transfer_expression(expr, module, env, locals, function_context || function_result);
     if (const auto local = locals.visible.find(expr.text); local != locals.visible.end()) {
       const auto callee = local->second;

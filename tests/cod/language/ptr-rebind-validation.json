@@ -1,0 +1,216 @@
+{
+  "schema_version": 2,
+  "recorded_utc": "2026-11-10T12:52:47.462528+00:00",
+  "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+  "toolchain": "build",
+  "backend": "llvm",
+  "passed": 12,
+  "total": 12,
+  "results": [
+    {
+      "fixture": "ptr-storage.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/ptr-storage.cod"
+      ],
+      "expected": {
+        "file": "ptr-storage.cod",
+        "exit": 0,
+        "stdout": ""
+      },
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "fixture": "ptr-initialization-path.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/ptr-initialization-path.cod"
+      ],
+      "expected": {
+        "file": "ptr-initialization-path.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "read of storage before definite initialization"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/ptr-initialization-path.cod:9:10: read of storage before definite initialization in an argument\n",
+      "passed": true
+    },
+    {
+      "fixture": "ptr-readonly-alias.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/ptr-readonly-alias.cod"
+      ],
+      "expected": {
+        "file": "ptr-readonly-alias.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "read-only destination view"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/ptr-readonly-alias.cod:5:9: cannot transfer into a read-only destination view\n",
+      "passed": true
+    },
+    {
+      "fixture": "ptr-readonly-rebind.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/ptr-readonly-rebind.cod"
+      ],
+      "expected": {
+        "file": "ptr-readonly-rebind.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "a writable ptr cannot rebind to a read-only view"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/ptr-readonly-rebind.cod:7:7: a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias\n",
+      "passed": true
+    },
+    {
+      "fixture": "ptr-owner-rebind.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/ptr-owner-rebind.cod"
+      ],
+      "expected": {
+        "file": "ptr-owner-rebind.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "you may want '<-' for bits transfer"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/ptr-owner-rebind.cod:3:26: reference assignment cannot cross owners; you may want '<-' for bits transfer\n",
+      "passed": true
+    },
+    {
+      "fixture": "ptr-owner-escape.cod",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--run",
+        "/ws/EvtWorks/cod-project/tests/cod/language/ptr-owner-escape.cod"
+      ],
+      "expected": {
+        "file": "ptr-owner-escape.cod",
+        "exit": 2,
+        "stdout": "",
+        "stderr_contains": "outlive its lexical storage owner"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/ptr-owner-escape.cod:1:17: borrowed value would outlive its lexical storage owner\n",
+      "passed": true
+    },
+    {
+      "fixture": "frontend-only",
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/cod",
+        "--check",
+        "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
+        "--emit-llvm",
+        "/tmp/cod-language-check-ue4rj4o7/program.ll",
+        "--emit-bc",
+        "/tmp/cod-language-check-ue4rj4o7/program.bc"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "69811cd27961f45b2d0895f221c6c972d9052e4e6497c08e8dc12a0a615e52c5"
+  },
+  "source_sha256": {
+    "cod/main.cc": "fa52fb708d819239c9db43c6f0a665856419aae9d1351f4e888b87afa326cb90",
+    "cod/lang_syntax.hh": "0333ec7c88951908c43a08ba79e8ab0e10c947db58871bfa5735fbaa300663ca",
+    "cod/lang_frontend.hh": "94b0010839e62e9c22e296b671fac430f3aba16e11dba9b5f45db4eb14329205",
+    "cod/lang_llvm.hh": "97ccdbdcb7465c9d959da88f539e3f408c61fe400d0484cd09ddcb681357bfa7",
+    "cod/lang_native_runtime.hh": "297350aef0f1a81254ebdcd0b1e28ed70ddad2bfe17f22d0b5cca2255af4bed8",
+    "tests/cod/language/run_tests.py": "6b44a22d7fa1f75b6e0cabd4dd505b176d0aedd1bc14b8b92c43e8ad959f4d11",
+    "tests/cod/language/cases.json": "3ca196ad57d8daff7544af1aada97b086738c52d01e7319703868ae50b6bcfa9",
+    "tests/cod/language/import-mapping.cod": "b7c5c5f4335bf05e10cd45413317c863efbd4179e0b671105fb80a47e875383c",
+    "tests/cod/language/ptr-initialization-path.cod": "05ddfe7bb5d774b009d6e41a778e480c6f2651376aab911dd0beb97164865755",
+    "tests/cod/language/ptr-owner-escape.cod": "3782da0f2a2f273c85b072c2676d3f212e685d52d6a7969bdb4e45188574eea9",
+    "tests/cod/language/ptr-owner-rebind.cod": "410401f20d7c8e627b580fc06691439636c1deee32dd13395ddcadefd336ead9",
+    "tests/cod/language/ptr-readonly-alias.cod": "e33fde17805dea5acd67fef5519f4aa2be78275452af3dd9400449c8349d8f51",
+    "tests/cod/language/ptr-readonly-rebind.cod": "b7d13d421f08ea5e38d153ab8e7bf6fc0f9fb14fac15072cfa6d1e1a115548dc",
+    "tests/cod/language/ptr-storage.cod": "b4b5d2c1b35f53432d6efaec3ba935400f52c7f710b1289db8f91f5ed32df2c3"
+  },
+  "scope": "H-299 writable ptr rebinding rejection; H-300 loop else and H-301 assignment-result changes remain proposals.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit_code": 0
+  },
+  "focused": {
+    "passed": 5,
+    "total": 5,
+    "results": [
+      {
+        "name": "direct-readonly-rebind",
+        "source": "{ ptr a = 1, b = 2; ptr ro = a <- 1; b = ro; };",
+        "expected_exit": 2,
+        "expected_diagnostic": "a writable ptr cannot rebind to a read-only view",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-ptr-rebind-q10a5om0/direct-readonly-rebind.cod:1:40: a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias\n",
+        "passed": true
+      },
+      {
+        "name": "readonly-assignment-chain",
+        "source": "{ ptr a = 1, b = 2, c = 3; a = b = c; };",
+        "expected_exit": 2,
+        "expected_diagnostic": "a writable ptr cannot rebind to a read-only view",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-ptr-rebind-q10a5om0/readonly-assignment-chain.cod:1:30: a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias\n",
+        "passed": true
+      },
+      {
+        "name": "alias-and-copy",
+        "source": "using symbol \"std:io\" @assert;\n{ ptr a = 1, b = 2, c = 3;\n  b = c; a = b; a <- 9;\n  behave @assert(a == 9 && b == 9 && c == 9);\n  ptr ro = b = c; c <- 12;\n  behave @assert(ro == 12);\n  ptr copy <- ro; copy <- 17;\n  behave @assert(c == 12 && copy == 17);\n  a <- b <- copy;\n  behave @assert(a == 17 && b == 17 && c == 17);\n};",
+        "expected_exit": 0,
+        "expected_diagnostic": "",
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "name": "const-holder",
+        "source": "function check(x::const i64 in O, y::i64 in O) -> void where {owner O} {\n x = y; x <- 3; {} }\n{ ptr a = 1, b = 2; check(a,b); };",
+        "expected_exit": 2,
+        "expected_diagnostic": "read-only destination view",
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-ptr-rebind-q10a5om0/const-holder.cod:2:11: cannot transfer into a read-only destination view\n/tmp/cod-ptr-rebind-q10a5om0/const-holder.cod:3:21: note: in call to function 'check' defined at /tmp/cod-ptr-rebind-q10a5om0/const-holder.cod:1:1\n",
+        "passed": true
+      },
+      {
+        "name": "zero-trip-fallback",
+        "source": "using symbol \"std:io\" @assert;\nfunction run(count::i64) -> const i64 {\n ptr answer = -1;\n for (i in 0 .. count) { answer <- i; };\n answer\n}\nbehave @assert(run(0) == -1 && run(3) == 2);",
+        "expected_exit": 0,
+        "expected_diagnostic": "",
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ]
+  },
+  "base_commit": "28d43a811eebfcac053e523058852cf9e354049b"
+}

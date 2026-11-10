@@ -1,0 +1,33 @@
+using symbol "std:io" @print;
+data Node { value::i64; }
+data Choice { next::ref<Node>; }
+symbol @replacement::ref<Node>;
+proc (=)(lhs::i64 in O, rhs::i64 in O) -> i64 in O where {owner O} {
+  behave @print(1); lhs
+}
+proc (=)(lhs::i64 in O, rhs::const i64 in O) -> i64 in O where {owner O} {
+  behave @print(2); lhs
+}
+proc (=)(lhs::const i64 in O, rhs::i64 in O) -> const i64 in O where {owner O} {
+  behave @print(3); lhs
+}
+proc (=)(lhs::const i64 in O, rhs::const i64 in O) -> const i64 in O where {owner O} {
+  behave @print(4); lhs
+}
+proc (=)(lhs::const f32 in O, rhs::const f32 in O) -> const f32 in O where {owner O} {
+  behave @print(5); lhs
+}
+proc (=)(lhs::ref<Node> in O, rhs::const ref<Choice> in O) -> ref<Node> in O where {owner O} {
+  lhs = @replacement;
+  behave @print(6);
+  lhs
+}
+function access(value::const i64 in O) -> const i64 where {owner O} { 20 }
+function access(value::i64 in O) -> const i64 where {owner O} { 10 }
+function readonly_choice(value::ref<Choice> in O) -> const ref<Choice> in O where {owner O} { value }
+export (=);
+export Node;
+export Choice;
+export @replacement;
+export access;
+export readonly_choice;

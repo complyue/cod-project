@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 129
+Discussion revision: 132
 
 Recorded: 2026-10-22
 
@@ -9,6 +9,10 @@ Current discussion: 2026-11-10
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Assignment-result safeguard:** [H-303](DesignAuthorityRegistry.md#h-303)/[K-432](DesignAuthorityRegistry.md#k-432) confirms that an ordinary `(=)` overload must finish with its destination parameter. C-64/P-261 makes the explicit destination return a semantic safeguard, rather than an alias-equivalence proof limitation. Acceptance rejects returning another alias even when it denotes the same storage; owner/access rules and the compiler representation are unchanged. This scoped confirmation does not qualify wider pending designs.
+
+- **Const-qualified methods and reference assignment:** [H-302](DesignAuthorityRegistry.md#h-302)/[K-431](DesignAuthorityRegistry.md#k-431) confirms parameter qualifiers as method distinctions, exact destination qualification, safe input-view weakening, uniquely best dispatch and checked method bodies. C-65/P-260 constrains C-64/D-10/D-14 so reference assignment preserves owner/access provenance without hidden value conversions. Builtin `=` preserves destination access; selected overloads declare their result access. H-299 still forbids directly rebinding a writable ptr from a read-only view, but does not preclude selecting a method whose body finds an independently writable target. Acceptance covers qualifier selection, writable chains, actual caller rebinding and unsafe/ambiguous/result rejection. D-14r57 records the semantic safeguard and separate implementation limits. H-300's loop-else proposal and full-document pending qualification remain separate.
 
 - **Ptr/local-storage implementation:** [H-298](DesignAuthorityRegistry.md#h-298)/[K-429](DesignAuthorityRegistry.md#k-429) records the requested integration and bounded implementation of H-270–H-273/H-292–H-297. C-65/P-244–P-246/P-255/P-257/P-258 and C-64/P-256 connect explicit storage identity, lifetime and access to checked business operations. Acceptance covers local initialization, aliasing, external-owner calls, branch/exception joins, readonly destination views and declared result owners; [native evidence](../tests/cod/language/ptr-storage-validation.json) records the actual compiler. Regional layout, TLS contracts, fractions, transport and the wider qualifier/region-declaration grammar are unchanged. Full-document qualification remains pending; the proof limits are listed in D-14's bounded implementation section.
 
@@ -826,3 +830,6 @@ Dates above are recording dates. Exact source-message timestamps were unavailabl
 | DD-132 | 2026-11-10 | A make-local block supplies one variable’s initial value; a block after the final comma initializes the ptr declaration group and has its result ignored. Both source forms are supported by the design. | H-296; D-14r53/P-257; K-428. Preserves the H-292 value initializer and distinguishes group initialization by punctuation. No native ptr acceptance. |
 | DD-133 | 2026-11-10 | Allocated ptr targets may remain uninitialized after the declaration group. Reject every read not preceded by definite initialization. | H-297; D-14r53/P-258; K-428. Storage identity, aliasing, access and owner lifetime remain distinct checks; no implicit zero or runtime uninitialized-value exception. |
 | DD-134 | 2026-11-10 | Integrate the confirmed local-storage, initializer and owner contracts into documentation, native implementation and validation. | H-298; K-429; D-14r54 bounded implementation and proof limits. This records implementation authorization, not new approval of wider pending design choices. |
+| DD-135 | 2026-11-10 | Writable ptr rebinding rejects read-only views; pre-loop initialization is a valid zero-iteration workaround. | H-299/P-259/K-430; D-14r55. H-300 requests assessment of a zero-body-execution else; its proposed range-for contract remains unimplemented and pending. Const assignment results imply rejection of writable outer reference-assignment chains. |
+| DD-136 | 2026-11-10 | Const-qualified methods, exact assignment-destination qualification, safe input weakening and uniquely best dispatch; builtin reference results preserve access. | H-302/P-260/K-431; D-14r56. Writable-lhs/const-rhs methods may be selected and must pass body checks. No value conversion, access escalation or fallback after a selected-body failure. |
+| DD-137 | 2026-11-10 | Require a reference-assignment method to finish with its destination parameter as a semantic safeguard. | H-303/P-261/K-432; D-14r57. Returning another alias is invalid even when it denotes the same storage; this is not a planned alias-proof relaxation. |

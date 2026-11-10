@@ -1,0 +1,43 @@
+using symbol "std:io" @assert;
+using symbol "std:io" @print;
+using "ptr-assignment-methods.cod" (=);
+using "ptr-assignment-methods.cod" Node;
+using "ptr-assignment-methods.cod" Choice;
+using "ptr-assignment-methods.cod" access;
+using "ptr-assignment-methods.cod" readonly_choice;
+symbol from "ptr-assignment-methods.cod" @replacement;
+symbol @arena::region;
+effect @arena <- region(4096u64);
+{
+  ptr a = 1u32, b = 2u32, c = 3u32;
+  a = b = c;
+  a <- 9u32;
+  behave @assert(a == 9u32 && b == 9u32 && c == 9u32);
+  ptr copied = a <- 7u32;
+  behave @assert(copied == 7u32);
+
+  ptr x = 1, y = 2;
+  ptr rx = x <- 1, ry = y <- 2;
+  behave @assert(access(x) == 10 && access(rx) == 20);
+  x = y;
+  ptr selected = (=)(x, ry);
+  selected <- 11;
+  behave @assert(x == 11 && y == 2);
+  (=)(rx, y);
+  rx = ry;
+
+  ptr f = 1.0f32, g = 2.0f32;
+  ptr rf = f <- 1.0f32;
+  rf = g;
+  f = g;
+  f <- 8.0f32;
+  behave @assert(g == 8.0f32);
+
+  ptr node = alloc @arena Node(1);
+  ptr choice = readonly_choice(alloc @arena Choice(node));
+  effect @replacement = alloc @arena Node(9);
+  ptr result = node = choice;
+  behave @assert(deref(node).value == 9 && deref(result).value == 9);
+  deref(result).value <- 12;
+  behave @assert(deref(node).value == 12);
+};
