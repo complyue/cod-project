@@ -37,7 +37,7 @@ def main():
         diagnostics = case.get("stderr_contains", "")
         if isinstance(diagnostics, str):
             diagnostics = [diagnostics]
-        expected_warnings = case.get("stderr_contains") and all(
+        expected_warnings = bool(case.get("stderr_contains")) and all(
             "[-Wunit-conversion]" in line or "[-Wmulti-alias-extension]" in line or "[-Wshadow]" in line
             or (": note:" in line and any(message in line for message in diagnostics if message))
             for line in result.stderr.splitlines())

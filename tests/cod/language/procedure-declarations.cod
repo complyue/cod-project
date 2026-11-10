@@ -4,7 +4,7 @@ symbol from "procedure-vocabulary.cod" @dispatch as @selected;
 using "procedure-library.cod" read as local_read;
 using symbol "procedure-library.cod" @automatic as @remote;
 effect @bias <- 20;
-effect @selected <- local_read;
+effect @selected = local_read;
 behave @print(local_read(1));
 behave @print(perform @selected(1));
 behave @print(behave @selected(1));

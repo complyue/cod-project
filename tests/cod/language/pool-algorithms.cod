@@ -2,12 +2,12 @@ using "pool-interface.cod" SlotStore;
 using "pool-interface.cod" ReusableSlotStore;
 using units "pool-interface.cod" {Slot};
 
-function replace(pool::ReusableSlotStore, slot::u32(Slot), value::i64)::u32(Slot) {
+function replace(pool::ReusableSlotStore in O1, slot::u32(Slot), value::i64)::u32(Slot) where {owner O1} {
   release(pool, slot);
   acquire(pool, value)
 }
-function peek(pool::SlotStore, slot::u32(Slot))::i64 { read(pool, slot) }
-function locate(pool::ReusableSlotStore, slot::u32(Slot))::ref<i64> { cell(pool, slot) }
+function peek(pool::SlotStore in O1, slot::u32(Slot))::i64 where {owner O1} { read(pool, slot) }
+function locate(pool::ReusableSlotStore in O1, slot::u32(Slot))::ref<i64> where {owner O1} { cell(pool, slot) }
 
 export replace;
 export peek;

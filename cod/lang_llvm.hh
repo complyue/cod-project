@@ -618,6 +618,14 @@ public:
   // A place denotes storage; reading it produces an SSA value at that point.
   // Neither a bits read nor its users promise that aliased storage is immutable.
   struct Place { Type type; llvm::Value *owner, *address; };
+  llvm::Value *local_storage(Type type) { return entry_slot(storage_type(type), "local.bits"); }
+  llvm::Value *pointer_storage(llvm::Value *address) {
+    auto *slot = entry_slot(address->getType(), "local.ptr");
+    b().CreateStore(address, slot);
+    return slot;
+  }
+  llvm::Value *read_pointer(llvm::Value *slot, llvm::Value *shape) { return b().CreateLoad(shape->getType(), slot); }
+  void write_pointer(llvm::Value *slot, llvm::Value *address) { b().CreateStore(address, slot); }
   Place referent(llvm::Value *owner, llvm::Value *source, Type type) {
     return {type, owner, checked_address(owner, source)};
   }

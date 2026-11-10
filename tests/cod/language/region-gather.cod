@@ -11,10 +11,10 @@ using "region-gather-step.cod" step;
 global trace_values::bool = true;
 global weighted::bool = true;
 symbol @arena :: region;
-function checksum(frame::Frame)::f32 {
+function checksum(frame::Frame in O1)::f32 where {owner O1} {
   fold (n in Neuron(0u32) .. Neuron(u32(len(frame))), total = 0.0f32) { total + frame[n] }
 }
-proc emit_frame(frame::Frame) -> void {
+proc emit_frame(frame::Frame in O1) -> void where {owner O1} {
   behave @print(checksum(frame));
   if (trace_values) {
     for (n in Neuron(0u32) .. Neuron(u32(len(frame)))) {

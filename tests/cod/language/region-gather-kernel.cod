@@ -10,8 +10,8 @@ using "pool-layout.cod" class_slot_begin;
 using "pool-index.cod" locate;
 using "pool-index.cod" SetLocation;
 using "pool-index.cod" global_slot;
-function create_graph(arena::region, layout::Layout, rows::u32,
-                      location::ref<SetLocation>, weighted::bool)::Incoming {
+function create_graph(arena::region, layout::Layout in L, rows::u32,
+                      location::ref<SetLocation> in S, weighted::bool)::Incoming where {owner L, owner S} {
   let sources = alloc arena Sources(scalar(class_slot_begin(layout, ClassId(layout.classes))), Neuron(0u32));
   let weights = alloc arena Weights(len(sources), 1u8);
   let graph = deref(alloc arena Incoming(sources, weights));
@@ -25,7 +25,7 @@ function create_graph(arena::region, layout::Layout, rows::u32,
   };
   graph
 }
-function gather(input::Frame, graph::Incoming, layout::Layout, target::u64(GlobalSetId), location::ref<SetLocation>)::f32 {
+function gather(input::Frame in O1, graph::Incoming in O2, layout::Layout in O3, target::u64(GlobalSetId), location::ref<SetLocation> in O5)::f32 where {owner O1, owner O2, owner O3, owner O5} {
   let position = locate(layout, target, location);
   let sources = deref(graph.sources);
   let weights = deref(graph.weights);

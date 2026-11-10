@@ -1,3 +1,3 @@
 using "method-view-library.cod" through;
 export import "method-view-library.cod" Sample;
-function score(x::Sample)::i64 { 7 }
+function score(x::Sample in O1)::i64 where {owner O1} { 7 }

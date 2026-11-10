@@ -1,5 +1,5 @@
 using "method-view-library.cod" Sample;
-function score(x::Sample)::i64 { 13 }
+function score(x::Sample in O1)::i64 where {owner O1} { 13 }
 function (len)(x::bool)::i64 { 7 }
 function run(arena::region)::i64 {
   let sample = create(arena);

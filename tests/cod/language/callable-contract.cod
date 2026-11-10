@@ -10,7 +10,7 @@ function classify(a::T, b::U)::i64 where {T, U} { 1 }
 function classify(a::T, b::T)::i64 where T { 2 }
 function classify(a::i64, b::i64)::i64 { 3 }
 function bounded(x::T)::i64 where T { 1 }
-function bounded(x::T)::i64 where T <: Metric { 2 }
+function bounded(x::T in O1)::i64 where {T <: Metric, owner O1} { 2 }
 proc @variadic(first::T, rest::T...) -> T where T { forwarded(first, rest...) }
 {
   let sample = deref(alloc @arena Sample(7));

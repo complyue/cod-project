@@ -1,15 +1,15 @@
 data Sample { value::i64; }
 data Bundle { item::ref<Sample>; }
-function view(sample::ref<Sample>)::Sample { deref(sample) }
-function item(bundle::ref<Bundle>)::Sample { deref(deref(bundle).item) }
-function maybe_view(sample::ref<Sample>, keep::bool)::ref<Sample> {
+function view(sample::ref<Sample> in O1)::Sample where {owner O1} { deref(sample) }
+function item(bundle::ref<Bundle> in O1)::Sample where {owner O1} { deref(deref(bundle).item) }
+function maybe_view(sample::ref<Sample> in O1, keep::bool)::ref<Sample> where {owner O1} {
   if (keep) { sample } else { null }
 }
 using "abstract-library.cod" rank_entity;
-function observe_maybe(sample::ref<Sample>, keep::bool)::i64 {
+function observe_maybe(sample::ref<Sample> in O1, keep::bool)::i64 where {owner O1} {
   rank_entity(deref(maybe_view(sample, keep)))
 }
-function same_type(sample::Sample, arena::region)::i64 {
+function same_type(sample::Sample in O1, arena::region)::i64 where {owner O1} {
   rank_entity(deref(alloc arena Sample(sample.value + 1)))
 }
 

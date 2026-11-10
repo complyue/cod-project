@@ -3,14 +3,14 @@ using symbol "std:io" @assert;
 data Pair { x::f32; count::i64; }
 data Box { pair::ref<Pair>; true::bool; }
 data Envelope { content::ref<Box>; next::ref<Envelope>; }
-function double(p::ref<Pair>)::Pair {
+function double(p::ref<Pair> in O1)::Pair where {owner O1} {
   setfield(p, x, deref(p).x * 2.0f32);
   setfield(p, count, deref(p).count * 2);
   deref(p)
 }
-function metric(b::Box)::f32 { if (b.true) { -deref(b.pair).x } else { 0.0f32 } }
-function contents(e::Envelope)::Box { deref(e.content) }
-function through(e::Envelope)::i64 { deref(contents(deref(e.next)).pair).count }
+function metric(b::Box in O1)::f32 where {owner O1} { if (b.true) { -deref(b.pair).x } else { 0.0f32 } }
+function contents(e::Envelope in O1)::Box where {owner O1} { deref(e.content) }
+function through(e::Envelope in O1)::i64 where {owner O1} { deref(contents(deref(e.next)).pair).count }
 symbol @arena::region;
 effect @arena <- region(2048u64);
 {

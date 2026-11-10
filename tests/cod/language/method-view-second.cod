@@ -1,5 +1,5 @@
 export import "method-view-library.cod" Sample;
-function score(x::Sample)::i64 { 11 }
+function score(x::Sample in O1)::i64 where {owner O1} { 11 }
 function run(arena::region)::i64 { through(create(arena)) }
 
 export run;

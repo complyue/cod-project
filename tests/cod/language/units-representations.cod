@@ -3,7 +3,7 @@ using units "units-representations-library.cod" {m as metres, cm, mm};
 function number(x::f64(metres))::f64 { scalar(x) }
 function distance(x::f64(metres*))::f64 { scalar(x) }
 function declared(x::f64(metres*<-cm<-mm))::f64 { scalar(x) }
-function identity(x::T(metres))::T(metres) where T { x }
+function identity(x::T(metres))::const T(metres) where T { x }
 function kind(x::u32(metres))::i64 { 32 }
 function kind(x::f64(metres))::i64 { 64 }
 function width(x::u32)::i64 { 32 }

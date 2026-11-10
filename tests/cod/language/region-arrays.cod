@@ -5,11 +5,11 @@ array Rates[u32(Neuron)]::f32;
 symbol @arena :: region;
 symbol @rates :: ref<Rates>;
 symbol @cell :: ref<f32>;
-function total(a::Rates)::f32 {
+function total(a::Rates in O1)::f32 where {owner O1} {
   fold (i in Neuron(0u32) .. Neuron(u32(len(a))), sum = 0.0f32) { sum + a[i] }
 }
-function choose(a::Rates, i::u32(Neuron))::ref<f32> { ref_at(a, i) }
-function read(p::ref<f32>)::f32 { deref(p) }
+function choose(a::Rates in O1, i::u32(Neuron))::ref<f32> where {owner O1} { ref_at(a, i) }
+function read(p::ref<f32> in O1)::f32 where {owner O1} { deref(p) }
 effect @arena <- region(4096u64);
 behave @assert(true && { effect @arena <- region(128u64); capacity_bytes(@arena) > 0u64 });
 effect @rates = alloc @arena Rates(4u64, 0.5f32);
@@ -21,7 +21,7 @@ behave @print(read(@cell));
 behave @print(read(@cell));
 behave @print(total(deref(@rates)));
 
-function sample_then_mutate(p::ref<f32>)::f32 {
+function sample_then_mutate(p::ref<f32> in O1)::f32 where {owner O1} {
   let saved = deref(p);
   store(p, 12.0f32);
   saved + deref(p)

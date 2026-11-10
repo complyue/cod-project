@@ -88,7 +88,7 @@
     "stderr_contains": [
       "incompatible value types for",
       "units-procedure-source.cod::@distance",
-      "units-procedure-source.cod::normalized, got ",
+      "units-procedure-source.cod::normalized), got",
       "type-error.cod::normalized"
     ]
   },
@@ -96,13 +96,13 @@
     "file": "plain-assignment.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "expected ';'"
+    "stderr_contains": "symbolic bits require effect '<-'"
   },
   {
     "file": "effect-equals.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "symbolic bindings require 'effect @name <- value', not '='"
+    "stderr_contains": "bits and region resources use '<-'"
   },
   {
     "file": "scan-error.cod",
@@ -336,7 +336,8 @@
   {
     "file": "method-modules.cod",
     "exit": 0,
-    "stdout": "9\n12\n6\n7\n8\n8\n5\n8\n"
+    "stdout": "9\n12\n6\n7\n8\n8\n5\n8\n",
+    "stderr_contains": "local 'score' shadows a callable"
   },
   {
     "file": "operator-using.cod",
@@ -593,7 +594,7 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": [
-      "iteration-index-error.cod::A, got ",
+      "iteration-index-error.cod::A), got",
       "iteration-index-error.cod::B"
     ]
   },
@@ -708,7 +709,7 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": [
-      "region-index-error.cod::Neuron, got ",
+      "region-index-error.cod::Neuron), got",
       "region-index-error.cod::Slot"
     ]
   },
@@ -830,13 +831,13 @@
     "file": "logical-unscoped-effect.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "conditional rebinding in a logical operand needs an explicit scope"
+    "stderr_contains": "expected bool, got void"
   },
   {
     "file": "logical-unscoped-region.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "conditional rebinding in a logical operand needs an explicit scope"
+    "stderr_contains": "region size requires a whole region"
   },
   {
     "file": "units-name-collision.cod",
@@ -1326,5 +1327,46 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "expected i64, got void"
+  },
+  {
+    "file": "ptr-storage.cod",
+    "exit": 0,
+    "stdout": ""
+  },
+  {
+    "file": "ptr-initialization-path.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "ptr-readonly-alias.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only destination view"
+  },
+  {
+    "file": "ptr-owner-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "you may want '<-' for bits transfer"
+  },
+  {
+    "file": "ptr-owner-escape.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "outlive its lexical storage owner"
+  },
+  {
+    "file": "ptr-result-contract.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "method result violates callable declaration owner"
+  },
+  {
+    "file": "ptr-implicit-object-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a non-bits parameter requires an explicit external owner"
   }
 ]

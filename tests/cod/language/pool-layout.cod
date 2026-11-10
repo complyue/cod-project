@@ -7,13 +7,13 @@ function capacity(j::u32(ClassId))::u32(SlotsPerSet) {
   let base = if (ordinal % 2u32 == 0u32) { 100u64 } else { 144u64 };
   SlotsPerSet(u32(base * pow2(ordinal / 2u32)))
 }
-function sets(layout::Layout, j::u32(ClassId))::u64(SetCount) {
+function sets(layout::Layout in O1, j::u32(ClassId))::u64(SetCount) where {owner O1} {
   SetCount(layout.top_count * pow2(layout.classes - 1u32 - scalar(j)))
 }
-function class_set_begin(layout::Layout, j::u32(ClassId))::u64(GlobalSetId) {
+function class_set_begin(layout::Layout in O1, j::u32(ClassId))::u64(GlobalSetId) where {owner O1} {
   GlobalSetId(fold (i in 0u32 .. scalar(j), n = 0u64) { n + scalar(sets(layout, ClassId(i))) })
 }
-function class_slot_begin(layout::Layout, j::u32(ClassId))::u64(GlobalSlot) {
+function class_slot_begin(layout::Layout in O1, j::u32(ClassId))::u64(GlobalSlot) where {owner O1} {
   GlobalSlot(fold (i in 0u32 .. scalar(j), n = 0u64) {
     n + scalar(capacity(ClassId(i)) * sets(layout, ClassId(i)))
   })

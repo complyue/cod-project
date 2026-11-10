@@ -3,10 +3,10 @@ function (==)(a::u32(Slot), b::u32(Slot))::bool { scalar(a) == scalar(b) }
 type SlotStore;
 type ReusableSlotStore <: SlotStore;
 
-function read(pool::SlotStore, slot::u32(Slot))::i64;
-function cell(pool::SlotStore, slot::u32(Slot))::ref<i64>;
-function acquire(pool::ReusableSlotStore, value::i64)::u32(Slot);
-function release(pool::ReusableSlotStore, slot::u32(Slot))::void;
+function read(pool::SlotStore in O1, slot::u32(Slot))::i64 where {owner O1} ;
+function cell(pool::SlotStore in O1, slot::u32(Slot))::ref<i64> where {owner O1} ;
+function acquire(pool::ReusableSlotStore in O1, value::i64)::u32(Slot) where {owner O1} ;
+function release(pool::ReusableSlotStore in O1, slot::u32(Slot))::void where {owner O1} ;
 
 export Slot;
 export (==);

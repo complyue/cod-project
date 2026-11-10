@@ -243,7 +243,8 @@ struct Form;
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect,
                     block, conditional, field, let, range_for, fold, allocate, index, null_ref,
-                    try_scope, handler, raise, make_region, touch, effect_group, transfer, procedure_effect };
+                    try_scope, handler, raise, make_region, touch, effect_group, transfer, procedure_effect,
+                    pointer_group, pointer, make_local, rebind };
   Kind kind;
   Location at;
   std::string text;
@@ -327,7 +328,7 @@ inline bool expression_keyword(std::string_view name) {
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "proc" || name == "global" || name == "symbol" ||
          name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "from" ||
-         name == "make" || name == "owned" || name == "touch";
+         name == "make" || name == "owned" || name == "touch" || name == "ptr" || name == "typeof";
 }
 
 inline bool module_keyword(std::string_view name) {
@@ -563,6 +564,16 @@ class Parser {
   Expr primary() {
     auto token = peek();
     if (take("make")) {
+      if (take("local")) {
+        auto expr = make(Expression::Kind::make_local, token);
+        if (take("typeof")) {
+          expect("(");
+          expr->children.push_back(expression());
+          expect(")");
+        } else expr->annotation = parse_type();
+        if (is("{")) expr->children.push_back(block());
+        return expr;
+      }
       auto expr = make(Expression::Kind::make_region, name(TokenKind::identifier));
       expect("(");
       expect("capacity");
@@ -637,6 +648,19 @@ class Parser {
       expect(")");
       expr->children.push_back(block());
       return expr;
+    }
+    if (take("ptr")) {
+      auto group = make(Expression::Kind::pointer_group, token);
+      do {
+        if (is("{")) { group->children.push_back(block()); break; }
+        auto expr = make(Expression::Kind::pointer, value_name());
+        if (take("::")) expr->annotation = parse_type();
+        if (take("<-")) expr->binding = "<-";
+        else { expect("="); expr->binding = "="; }
+        expr->children.push_back(expression());
+        group->children.push_back(std::move(expr));
+      } while (take(","));
+      return group;
     }
     if (take("let")) {
       auto expr = make(Expression::Kind::let, value_name());
@@ -766,6 +790,12 @@ class Parser {
       transfer->children.push_back(std::move(left));
       transfer->children.push_back(expression());
       return transfer;
+    }
+    if (minimum == 0 && is("=")) {
+      auto rebind = make(Expression::Kind::rebind, expect("="));
+      rebind->children.push_back(std::move(left));
+      rebind->children.push_back(expression());
+      return rebind;
     }
     return left;
   }

@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+function maybe_initialize(dst::i64 in O, yes::bool) -> void where {owner O} {
+  if (yes) { dst <- 1; {} } else { {} }
+}
+{
+  ptr value = make local i64;
+  ptr alias = value;
+  maybe_initialize(alias, true);
+  behave @print(value);
+};

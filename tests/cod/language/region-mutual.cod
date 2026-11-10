@@ -4,7 +4,7 @@ data Right { value::f32; left::ref<Left>; }
 symbol @arena :: region;
 symbol @left :: ref<Left>;
 symbol @right :: ref<Right>;
-function through(l::Left)::i64 { deref(deref(l.right).left).value }
+function through(l::Left in O1)::i64 where {owner O1} { deref(deref(l.right).left).value }
 effect @arena <- region(4096u64);
 effect @left = alloc @arena Left(17, null);
 effect @right = alloc @arena Right(2.5f32, @left);

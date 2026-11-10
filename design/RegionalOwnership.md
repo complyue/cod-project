@@ -1,8 +1,12 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 51 · Recorded: 2026-11-10 · Status: design draft with scoped confirmed requirements.
+Design revision: 54 · Recorded: 2026-11-10 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Ptr/local-storage implementation:** [H-298](DesignAuthorityRegistry.md#h-298)/[K-429](DesignAuthorityRegistry.md#k-429) records the requested integration and bounded implementation of H-270–H-273/H-292–H-297. C-65/P-244–P-246/P-255/P-257/P-258 and C-64/P-256 connect explicit storage identity, lifetime and access to checked business operations. Acceptance covers local initialization, aliasing, external-owner calls, branch/exception joins, readonly destination views and declared result owners; [native evidence](../tests/cod/language/ptr-storage-validation.json) records the actual compiler. Regional layout, TLS contracts, fractions, transport and the wider qualifier/region-declaration grammar are unchanged. Full-document qualification remains pending; the proof limits are listed in D-14's bounded implementation section.
+
+- **Local bits and assignment owners:** [H-292/H-293](DesignAuthorityRegistry.md#h-292)/[K-427](DesignAuthorityRegistry.md#k-427) confirms implicit enclosing-scope bits storage via `make local T { expression }`, preservation of read-only access through aliases, and mandatory explicit external owners on assignment-overload destinations. C-65/P-244/P-255 and C-64/P-256 retains lifetime and destination-view dependencies; acceptance must distinguish aliasing, independent bits and caller-visible assignment. [H-296/H-297](DesignAuthorityRegistry.md#h-296)/[K-428](DesignAuthorityRegistry.md#k-428) distinguishes individual value initialization from a comma-introduced declaration-group initializer and permits later initialization while rejecting reads before definite initialization. typeof remains compile-time only. K-429 records bounded native acceptance and the remaining analysis/source limits.
 
 - **Symbolic implementation scope:** [H-287–H-291](DesignAuthorityRegistry.md#h-287)/[K-426](DesignAuthorityRegistry.md#k-426) records the requested implementation and callable/result decisions: every effect yields void; procedure rebinding uses `=`, while inline `effect proc` introduces or signature-checks its symbol and captures at definition. C-36/C-54/C-65/C-66 and P-248–P-254 preserve typed dynamic context, actual-region lifetime and explicit capture. [Native evidence](../tests/cod/language/symbolic-context-validation.json) covers typed TLS payloads, staged groups, touch/replay checks and overload-backed object transfer. This bounded scope does not qualify whole-document drafts or implement ordinary ptr migration, transport, runtime closures or fractions.
 
@@ -10,7 +14,7 @@ Design revision: 51 · Recorded: 2026-11-10 · Status: design draft with scoped 
 
 - **Region declaration direction:** [H-274](DesignAuthorityRegistry.md#h-274) requires root-constrained owner access with an actual borrowed region reference. [H-275](DesignAuthorityRegistry.md#h-275) confirms `where {region r::RootType}` and extends the direction to all user-facing region references: `region` is a declaration keyword rather than a type constructor. Generic `owner` remains the unconstrained region-or-scope form. [K-420](DesignAuthorityRegistry.md#k-420) coordinates C-65/C-55/P-247 and the wider declaration inventory below. Local and parameter forms use the same declaration shape; result and symbolic declaration spellings remain proposals. Native source still uses the prototype notation.
 
-- **Pointer-binding baseline:** [H-271](DesignAuthorityRegistry.md#h-271) makes ordinary user variables `ptr` bindings with an initializer-fixed owner, same-owner rebinding, implicit dereference on reads and no pointer arithmetic. It resolves RO-Q2 by rejecting cross-owner local rebinding. [H-272](DesignAuthorityRegistry.md#h-272) makes default function/procedure parameter targets callee-local: bits are copied, and modifying the parameter leaves the caller unchanged. [H-273](DesignAuthorityRegistry.md#h-273) confirms `in O`, `where {owner O}` and borrowed-result owner annotations, and permits omitting `ptr` in parameter declarations. [K-418](DesignAuthorityRegistry.md#k-418) records this syntax decision under C-65/P-244–P-246; wider qualifier/resource interfaces remain open and native implementation is unchanged.
+- **Pointer-binding baseline:** [H-271](DesignAuthorityRegistry.md#h-271) makes ordinary user variables `ptr` bindings with an initializer-fixed owner, same-owner rebinding, implicit dereference on reads and no pointer arithmetic. It resolves RO-Q2 by rejecting cross-owner local rebinding. [H-272](DesignAuthorityRegistry.md#h-272) makes default function/procedure parameter targets callee-local: bits are copied, and modifying the parameter leaves the caller unchanged. [H-273](DesignAuthorityRegistry.md#h-273) confirms `in O`, `where {owner O}` and borrowed-result owner annotations, and permits omitting `ptr` in parameter declarations. [K-418](DesignAuthorityRegistry.md#k-418) records this syntax decision under C-65/P-244–P-246; wider qualifier/resource interfaces remain open; K-429 records the implemented ordinary-pointer subset.
 
 - **Current decision / coverage:** [H-270](DesignAuthorityRegistry.md#h-270) confirms RO-Q1: assignment-family results are read-only destination views, including bits destinations, and ordinary-variable `=` assigns references. A rejected cross-owner reference assignment must suggest `<-` for bits transfer. [K-416](DesignAuthorityRegistry.md#k-416) records the scoped reconciliation of C-64/P-241–P-243 and the acceptance cases below. This confirms the result contract, not the full qualifier/place implementation. H-271 separately resolves RO-Q2 below. [K-415](DesignAuthorityRegistry.md#k-415) retains the [owned-pool factory evidence](../tests/cod/language/owned-pool-validation.json) under D-17 E4/E5.
 
@@ -18,7 +22,7 @@ Design revision: 51 · Recorded: 2026-11-10 · Status: design draft with scoped 
 
 - **Bounded exception/lifecycle contract:** [H-267](DesignAuthorityRegistry.md#h-267)/[K-408](DesignAuthorityRegistry.md#k-408) accepts [D-17r3 E1–E5](ExceptionControl.md#accepted-first-implementation-contract), including explicit throw-from only, cleanup, fresh owners and call/result transfer. This overrides pending labels for that enumerated scope; wider qualifier, assignment, mailbox and user exception graph choices remain open. [K-414](DesignAuthorityRegistry.md#k-414) records completed H-267/H-269 E1–E5 acceptance and [current native evidence](../tests/cod/language/exception-ownership-validation.json). Wider unconfirmed scopes retain their status.
 
-- **Registry / coverage:** [D-14](DesignAuthorityRegistry.md#d-14), revision 51, all sections. [K-411](DesignAuthorityRegistry.md#k-411) records bounded D-17 lifecycle evidence; wider unconfirmed choices retain their status. [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) supplies unchecked OOM and exception-control planning; [D-17](ExceptionControl.md) owns the accepted bounded propagation/cleanup contract. [H-263](DesignAuthorityRegistry.md#h-263) preserves permitted local views across ownership transfer; [H-264](DesignAuthorityRegistry.md#h-264) selects the first typed let/make/root-initializer form. [K-405](DesignAuthorityRegistry.md#k-405) records their scope; H-265 supplies the subsequent unchecked-exception direction. [H-262](DesignAuthorityRegistry.md#h-262) confirms compiler-tracked consumption of ordinary named owners; [K-404](DesignAuthorityRegistry.md#k-404) propagates that scoped decision. [K-403](DesignAuthorityRegistry.md#k-403) records the lifecycle decision sequence and current implementation boundary below; qualifier and extended construction choices outside H-267/E1–E5 remain `pending-human`. [K-396](DesignAuthorityRegistry.md#k-396) coordinates module-world selection and current lifetime evidence; it selects no new ownership mechanism. [K-382](DesignAuthorityRegistry.md#k-382) records typed factory forwarding with preserved captures, implementation context and result owners. [K-377](DesignAuthorityRegistry.md#k-377) records direct adapted regional factories; [K-374](DesignAuthorityRegistry.md#k-374) records algorithms across distinct pool layouts/owners. The complete draft and candidate value path remain `pending-human`. K-379/K-367 reconciles evidence navigation and lifetime descriptions. K-346/K-338 retains the explicit-memory function and pending assignment-place/result reviews. These earlier records select no owning construction or assignment policy; H-262 supplies the named-source post-state without qualifying the full lifecycle. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred.
+- **Registry / coverage:** [D-14](DesignAuthorityRegistry.md#d-14), revision 54, all sections. [K-411](DesignAuthorityRegistry.md#k-411) records bounded D-17 lifecycle evidence; wider unconfirmed choices retain their status. [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) supplies unchecked OOM and exception-control planning; [D-17](ExceptionControl.md) owns the accepted bounded propagation/cleanup contract. [H-263](DesignAuthorityRegistry.md#h-263) preserves permitted local views across ownership transfer; [H-264](DesignAuthorityRegistry.md#h-264) selects the first typed let/make/root-initializer form. [K-405](DesignAuthorityRegistry.md#k-405) records their scope; H-265 supplies the subsequent unchecked-exception direction. [H-262](DesignAuthorityRegistry.md#h-262) confirms compiler-tracked consumption of ordinary named owners; [K-404](DesignAuthorityRegistry.md#k-404) propagates that scoped decision. [K-403](DesignAuthorityRegistry.md#k-403) records the lifecycle decision sequence and current implementation boundary below; qualifier and extended construction choices outside H-267/E1–E5 remain `pending-human`. [K-396](DesignAuthorityRegistry.md#k-396) coordinates module-world selection and current lifetime evidence; it selects no new ownership mechanism. [K-382](DesignAuthorityRegistry.md#k-382) records typed factory forwarding with preserved captures, implementation context and result owners. [K-377](DesignAuthorityRegistry.md#k-377) records direct adapted regional factories; [K-374](DesignAuthorityRegistry.md#k-374) records algorithms across distinct pool layouts/owners. The complete draft and candidate value path remain `pending-human`. K-379/K-367 reconciles evidence navigation and lifetime descriptions. K-346/K-338 retains the explicit-memory function and pending assignment-place/result reviews. These earlier records select no owning construction or assignment policy; H-262 supplies the named-source post-state without qualifying the full lifecycle. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred.
 - **Value / dependencies:** C-54/P-143 and D-14/P-155 relate explicit lifetime responsibility to C-10's typed business intent; C-39/P-94 preserves regional storage. P-156–P-158 links effects/capture (D-10), graph lifetimes (D-13) and regional invariants (D-01). These candidate value paths and technical dependencies retain their registry status.
 - **Human baseline:** H-166/H-180/H-181 establishes module lifetime, owner-preserving capture/shadow and non-extractable dynamic resources. H-190/H-193/H-196–H-203 distinguishes whole-region ownership from user storage policy, permits explicit-memory functions, and supplies borrowing, const and same-owner constraints. H-204–H-210/H-222–H-224 supplies transfer/assignment requirements; H-270 confirms destination-view results and reference-only assignment; H-211–H-220 governs interface and method context. H-262 permits non-optional named owning variables and makes them statically unavailable after transfer. H-263 separates that consumed name from still-valid views under a live accessible local owner; H-264 selects the first declaration/construction syntax.
 - **Invariants / non-goals:** Regional objects remain region-only and relocatable without copy/move. Borrowing cannot extend lifetime or duplicate ownership. Functions cannot access dynamic bindings or call procedures. No per-object owner, runtime borrow registry, immutable snapshot or SNN policy is introduced.
@@ -77,7 +81,7 @@ function choose(a::Node in O, b::Node in O, second::bool)
   -> Node in O where {owner O};
 ```
 
-For example, `a::Node in O` and `ptr a::Node in O` are equivalent parameters. Likewise, `second::bool` and `ptr second::bool` both target a callee-local copy. This applies to function and procedure signatures, including signature-only declarations. These forms are confirmed source syntax; the prototype does not yet implement owner generics.
+For example, `a::Node in O` and `ptr a::Node in O` are equivalent parameters. Likewise, `second::bool` and `ptr second::bool` both target a callee-local copy. This applies to function and procedure signatures, including signature-only declarations. These forms are confirmed source syntax. The prototype accepts both regional and lexical storage for generic owner constraints.
 
 `in O` associates a parameter or borrowed result with an owner variable. `where {owner O}` introduces that variable alongside, but distinct from, type parameters. One O constrains all of its occurrences to one actual owner; distinct variables D and S do not assert inequality. A caller need not pass an owner-ID value: the compiler checks the arguments' tracked provenance. O is neither a type identity, a TLS symbol, nor a requirement for RTTI. The same source method can be specialized for different owner instances without erasing their distinction within a call.
 
@@ -150,9 +154,28 @@ The current compiler and its native evidence still use `region<Root>` and `owned
 
 The compiler needs to retain a pointer's target type, target storage, fixed owner and access permission separately from a bits value loaded for computation. This is semantic information, not a requirement to allocate a pointer object or runtime owner record for every scalar. LLVM may eliminate storage when the program cannot observe its address or aliases. Same-owner proof must survive nested calls, rebindings and branch joins; inlining cannot extend a source lifetime.
 
-The following details remain to be coordinated with the confirmed principle: region result/symbol spellings; read-only external bits-parameter spelling; owning-resource carrier storage; parameter/result conversions that create new storage; destination-binding access for reference-assignment overloads; and local temporary materialization. An external-owner annotation cannot be treated as mere documentation while a conversion silently substitutes an unrelated local object. These are affected interfaces, not permission to silently introduce copyable regional objects or runtime owner dispatch. Symbolic effects retain their separate shadow/restore and no-extraction contracts; this pointer declaration rule does not authorize bare `@x = rhs` or `@x <- rhs`.
+The following details remain to be coordinated with the confirmed principle: region result spellings; read-only external bits-parameter spelling; owning-resource carrier storage; and parameter/result conversions that create new storage. An external-owner annotation cannot be treated as mere documentation while a conversion silently substitutes an unrelated local object. These are affected interfaces, not permission to silently introduce copyable regional objects or runtime owner dispatch. Symbolic effects retain their separate shadow/restore and no-extraction contracts; this pointer declaration rule does not authorize bare `@x = rhs` or `@x <- rhs`.
 
-Acceptance should demonstrate same-owner local rebinding and rejection across owners of identical types; implicit numeric reads without address arithmetic; a default bits parameter whose mutation leaves the caller unchanged; an owner-generic parameter whose permitted payload write is visible to the caller; same-owner checks through a deep helper call; and rejection of a borrowed result from callee-local storage. Including or omitting ptr in a parameter declaration must preserve its binding, dispatch and owner checks. H-270's destination-view/const-result cases remain necessary. These are target acceptance cases, not native results from the existing compiler. Fixed-width fractions remain bits for storage/transfer purposes; this rule introduces no fraction implementation, layout or promotion policy.
+Acceptance should demonstrate same-owner local rebinding and rejection across owners of identical types; implicit numeric reads without address arithmetic; a default bits parameter whose mutation leaves the caller unchanged; an owner-generic parameter whose permitted payload write is visible to the caller; same-owner checks through a deep helper call; and rejection of a borrowed result from callee-local storage. Including or omitting ptr in a parameter declaration must preserve its binding, dispatch and owner checks. H-270's destination-view/const-result cases remain necessary. K-429 records native checks for this bounded storage and call contract; the limits below remain explicit. Fixed-width fractions remain bits for storage/transfer purposes; this rule introduces no fraction implementation, layout or promotion policy.
+
+### Bounded pointer and initialization implementation
+
+Ordinary `ptr` bindings retain target storage independently of a loaded numeric value. Local scalar/quantity/bool targets lower to LLVM storage places; default bits parameters receive independent callee-local targets. `where {owner O}` accepts a region or lexical owner, while `where {region r::Root}` accepts only a qualifying region and exposes its borrowed reference. Non-bits parameters require an explicit external owner. A const parameter remains read-only after rebinding within that owner. Signature-only result-owner promises are checked against the selected method's actual returned storage.
+
+`make local`, individual value blocks, final comma group blocks, inferred fresh-bits initializers and `ptr n <- rhs` are implemented. A plain alias initializer retains its source target, owner and permissions. Bits `<-` writes the target; ordinary-pointer `=` rebinds within its fixed owner. Both yield read-only target views and associate rightward. A fresh ordinary const bits result is copied; an explicitly owner-qualified result remains a view. A group block's result is discarded. Initializer names resolve before the new declaration enters scope, and each runtime RHS is evaluated once.
+
+Initialization facts belong to allocations, so aliases and inlined external-owner calls share them. Reaching branches and exception handlers intersect definite facts; a possibly empty loop cannot establish initialization solely from its body. Local slots are not zeroed, and no runtime initialization flags or owner tags are emitted. An explicit borrowed argument can supply an uninitialized destination, but every read inside its callee still checks that storage. A default copied argument must already be initialized at its own evaluation point, before later arguments run.
+
+The bounded `typeof` query reads declaration/operand types without emitting the operand's evaluation. It supports known bindings, scalar literals/operations, fields/indices, selected intrinsic forms and calls with declared result types. It can inspect an uninitialized slot's type. A call whose result requires executing or analyzing an unannotated body is rejected with a diagnostic; this is not runtime reflection or general RTTI.
+
+Current implementation limits:
+
+- Rebinding an outer ptr from a repeating loop is conservatively rejected. Ordinary payload updates and loop-local ptr declarations work. General loop-carried alias fixed-point analysis remains implementation work, not a different language owner rule.
+- A joined pointer may denote several allocations. Reads require every possible target to be initialized; a write through such a pointer does not yet prove which alternative became initialized. This can reject valid correlated branch programs without accepting an uninitialized read.
+- The legacy `let` surface retains scalar value-binding compatibility, and ordinary owned-region construction still uses its existing typed `let` form. Full region-as-declaration syntax, all qualifier combinations and general reference-rebinding overload bodies are not claimed complete. User data remains region-only.
+- General graph-transfer algorithms and fraction execution remain outside this increment. Existing regional transfer overloads and indexed operations require explicit destination owners; this is not a user-visible binding-cell API.
+
+The regression suite checks the compiler's module, numerical, region, exception and symbolic contracts alongside [the ptr workflow](../tests/cod/language/ptr-storage.cod). [The validation record](../tests/cod/language/ptr-storage-validation.json) retains source/compiler hashes and actual results. LLVM promotion can remove unobservable local storage; source-level owner identity does not require a runtime registry.
 
 ## Bounded local lifecycle and remaining construction scope
 
@@ -450,7 +473,7 @@ The local construction/edit/call/transfer/cleanup lifecycle is implemented. Furt
 | Topic | Confirmed foundation | Remaining design and decisive check |
 | --- | --- | --- |
 | Pointer variables and parameters | H-271 fixes a ptr binding's owner at initialization; H-272 copies default bits arguments into callee-local targets. External borrowing requires owner generics. | H-273 confirms owner annotations; coordinate external const access, local temporary lifetimes and result provenance. |
-| Assignment and transfer | `=` rebinds references within a fixed owner; `<-` transfers bits/ownership. Both associate rightward and expose a read-only destination view; owning moves use separate steps. | H-270 resolves RO-Q1 and H-271 resolves RO-Q2. Destination-binding access, alias write permissions and indexed transfer syntax still need coordination. |
+| Assignment and transfer | `=` rebinds references within a fixed owner; `<-` transfers bits/ownership. Both associate rightward and expose a read-only destination view; owning moves use separate steps. | H-270/H-271 fixes result views and owner identity; H-293 requires an external destination owner and preserves read-only aliases. Indexed transfer syntax and general qualifier composition remain separate. |
 | Owner reassignment and optional outcomes | Fresh ordinary owners have a consumed state; local transfer preserves permitted views. | Occupied destinations, reinitialization and intrinsic owner-bearing optional/results need explicit contracts. They are not required to construct an ordinary region. |
 | Mailbox handoff | Local send errors only, no delivery acknowledgment; failed send can return ownership. | Specify the intrinsic result/matching surface, receive ownership and revoked sender views. Validate one complete process-boundary path when implemented. |
 
@@ -666,17 +689,91 @@ Source-level elision must not erase distinctions required by stored graphs. A st
 
 H-203 fixes the permitted stored edge independently of physical layout: a field storing a reference and its target must share one allocation owner. The lifetime carrier is a region instance or lexical-scope instance. Inline storage versus reference storage still affects layout: a dense bits array does not acquire pointer slots merely because ordinary variables borrow. The assignment forms below must respect the destination's declared representation.
 
-### Bits storage and make local — detailed semantics pending
+### Local bits storage and initialization
 
-H-200 proposes `make local` for stack-allocated bits storage and excludes non-bits objects from the stack. The lifetime is lexical; borrows of that storage do not extend it. Bits may also be stored inside regions. Reference/resource metadata does not become a self-contained bits datum solely because its native representation fits in an integer.
-
-Illustrative construction, with initializer grammar still unselected:
+H-292 confirms that a fresh bits result used to initialize a ptr is materialized in the enclosing lexical scope. The explicit source form is `make local T { expression }`. For an expression of type i64, the following are equivalent:
 
 ```text
-ptr count = make local i64(0);
+ptr n = 3 + b;
+ptr n = make local i64 { 3 + b };
 ```
 
-This should establish bits storage whose access is checked against the local scope. It does not authorize `make local Packet(...)`, stack-backed region objects or automatic heap promotion. Whether the constructed local carries an intrinsic owning-bits qualifier or is a borrow of scope-owned local storage remains a source-model detail; no generic per-object ownership framework is assumed.
+These are alternative declarations, not two declarations of n in one scope. The implicit form infers the computed result type; it does not force every scalar to i64 or select a new numeric conversion. The initializer is evaluated once. The resulting bits storage belongs to the scope enclosing make local, not merely to the initializer's braces. No source-visible owning-bits wrapper or native heap allocation is required.
+
+Initializing from existing storage remains borrowing:
+
+```text
+ptr alias = existing;
+```
+
+The alias retains that storage's actual owner and access permissions; it does not copy the bits simply because their type is scalar. A copied const bits function result can be materialized in the caller's scope. Returning an inner-scope reference does not materialize a copy or extend that target's lifetime. Default parameter copies retain the separately confirmed H-272 callee-local rule.
+
+Only bits storage may be constructed locally. A non-bits data object still requires regional allocation; local construction cannot stack-copy a regional graph or duplicate region ownership. LLVM may keep unobservable storage in registers while preserving source aliasing, evaluation and lifetime semantics.
+
+#### Individual value initializers and declaration-group blocks
+
+H-296 distinguishes two source positions. A block attached directly to make local supplies the initial bits value of that one allocation. A block introduced after the final comma belongs to the entire ptr declaration group; it executes after the individual declarations, and its result is ignored.
+
+```text
+# One allocation initialized from the block's bits result.
+ptr n = make local typeof(b) { b };
+
+# One declaration followed by an explicit group initialization block.
+ptr n = make local typeof(b), { n <- b };
+
+# A group may combine individual value initialization and explicit writes.
+ptr a = make local i64 { 1 },
+    b = make local i64,
+    { b <- a + 1 };
+```
+
+The comma is semantic punctuation: it separates the group block from an individual initializer. There is no heuristic based on the last expression's type to decide which role a block plays. The individual value block supplies bits; it does not implicitly denote a method body or discard that result. The group block runs ordinary expressions over the declared variables, can initialize several targets, and does not implicitly assign its final value to one of them.
+
+Individual declarations evaluate in source order, each RHS once; the group block follows all of them. An initializer resolves its references in the preceding lexical environment. A newly declared name is available to subsequent declarations and to the final group block. Consequently, an individual initializer in a nested shadowing declaration can read the outer name, while the final group block uses the newly declared name. The shorthand's source expression must retain that resolution when lowered; the compiler must not accidentally redirect an outer reference to the new uninitialized destination.
+
+The allocated bits belong to the lexical scope enclosing the declaration, not to the final initialization block. Ordinary locals created inside that block retain the block's own lifetime and cannot escape through these pointers. The declarations neither change fixed-owner rebinding nor permit stored cross-owner edges. Initializer failure follows normal exception unwinding; it does not roll back unrelated earlier writes or effects.
+
+#### Transfer shorthand and compile-time typeof
+
+The H-294 transfer initializer uses the comma-separated group form:
+
+```text
+ptr n <- b;
+# Equivalent allocation and transfer:
+ptr n = make local typeof(b), { n <- b };
+```
+
+This constructs independent local bits storage, then applies the ordinary transfer contract. In contrast, `ptr n = b` borrows existing storage. A bits copy from read-only access may create independent writable storage; it does not make an alias of the original target writable. Non-bits data still requires an explicitly supplied regional allocation destination and cannot use make local as a graph-copy fallback.
+
+H-292's arithmetic shorthand keeps its individual value initializer:
+
+```text
+ptr n = 3 + b;
+# For an i64 expression result:
+ptr n = make local i64 { 3 + b };
+```
+
+H-295 makes typeof a compile-time operation with no runtime execution. `typeof(b)` does not evaluate b, allocate its value or invoke its procedures. Runtime initialization evaluates the source once; this supplies no RTTI or general runtime reflection mechanism. A known type can be queried even when its storage has not yet been initialized: the query does not read that payload. Broader typeof applicability and type-query forms remain separate from this local-initializer contract.
+
+#### Definite initialization may extend beyond the declaration
+
+H-297 permits a group to finish with allocated but uninitialized slots:
+
+```text
+ptr a = make local i64,
+    b = make local i64,
+    { a <- 1 };
+
+# Reading b here is a compile error.
+b <- 2;
+# Reading b now is valid.
+```
+
+Storage existence and initialized contents are separate compiler facts. The pointer can identify a valid initialization destination without authorizing a read of its old contents. There is no implicit zero initialization or runtime uninitialized-value exception. A read requires a successful prior initialization on every path reaching it. If an overload reads the destination before initializing it, that read must reject; choosing an overload does not bypass the rule.
+
+Initialization follows actual storage identity through aliases and explicit-owner calls, not merely the spelling of a variable. Initializing through one writable alias permits subsequent reads through another alias of that storage. Scope exit, invalid owner lifetime or a read-only view retains its independent constraints. Any initializer read remains subject to definite initialization even if its eventual result is unused.
+
+Acceptance must distinguish the two block positions, preserve source order and shadowing, permit deferred initialization and reject premature reads across branches/calls, while preserving alias identity and enclosing-scope lifetime. These are confirmed source obligations covered by the bounded implementation below; no new per-value runtime initialization flags or allocator protocol is selected.
 
 Under H-272, default bits parameters target independent callee-local storage. H-201's const bits results still supply independent values; H-270's assignment-family results instead retain destination views. An explicit external-owner parameter is needed to retain a caller's slot. H-273 confirms the owner grammar above; external read-only bits-access spelling remains separate. Ownership transfer through owned region is a separate resource case; no bits argument rule grants a copyable owner or regional object.
 
@@ -687,10 +784,10 @@ The resulting obligations are:
 | Case | Required semantic distinction |
 | --- | --- |
 | A bits parameter and another alias may reach the caller's slot | A default parameter has its own callee-local copy. An explicit external-owner parameter retains the original slot and observes permitted intervening writes. |
-| A literal or `a + b` produces a fresh scalar | Specify its result storage and the extent for which a variable may borrow it; no dangling expression temporary or mandatory heap allocation. |
+| A literal or `a + b` initializes a ptr with a fresh scalar | Enclosing lexical-scope bits storage, equivalent to make local with the inferred type; no arbitrary extension of an existing borrow. |
 | A function returns a scalar | An unqualified i64 result borrows; a const i64 result supplies independent bits. A callee-local borrow cannot survive return merely because its element type is i64. |
 
-Const bits results can be lowered through the native value ABI without preserving callee stack addresses. For ptr bindings initialized from fresh scalar expressions, temporary materialization and scope extent still need a rule; the confirmed callee-local parameter rule does not settle every local initializer. An owned i64 is not required merely to return a computed scalar.
+Const bits results can be lowered through the native value ABI without preserving callee stack addresses. H-292 gives fresh scalar ptr initializers enclosing-scope storage; existing borrowed results retain their source owner and cannot escape it. An owned i64 is not required merely to return a computed scalar.
 
 For non-bits objects, H-202 defines `const Packet` as read-only borrowed access. It does not copy/freeze the object or promise unchanged contents; a writable alias may change what later reads observe. This preserves the region lifetime dependency and narrows H-201's independent-value rule to bits. `const owned region<RT>` qualifier composition remains a separate question; no owner may be duplicated through a const view.
 
@@ -709,7 +806,7 @@ Acceptance must distinguish caller-visible external borrows from default callee-
 | const non-bits T | Read-only borrow under H-202; writable aliases may still change the target. |
 | owned region<RT> | One whole-region release-or-transfer responsibility. |
 
-A holder of const non-bits access cannot modify the target through that access; an independently writable alias may still modify it. Reading inline fields does not grant permission to overwrite those fields. Propagation across a pointer edge and the permissions of a newly established reference-assignment alias need explicit rules; see the assignment discussion below. No whole-graph freezing or non-aliasing is assumed. LLVM must not infer invariant memory or eliminate a reload across a possible aliasing write solely from const. The qualifier does not itself settle concurrency or race freedom.
+A holder of const non-bits access cannot modify the target through that access; an independently writable alias may still modify it. Reading inline fields does not grant permission to overwrite those fields. H-293 requires a new alias of a read-only view to remain read-only. Passing it through another variable, a field or an assignment result cannot restore write access. An operation requiring a writable view must reject a read-only one; independent copies of bits are different storage. See the assignment discussion below. No whole-graph freezing or non-aliasing is assumed. LLVM must not infer invariant memory or eliminate a reload across a possible aliasing write solely from const. The qualifier does not itself settle concurrency or race freedom.
 
 A field's storage and a reference's target have distinct provenance facts. For an inline field, storage belongs to its containing object. For a stored reference, the target belongs to its actual allocation owner. H-203 requires exact equality of those owners, not merely overlapping or sufficiently long lifetimes:
 
@@ -737,7 +834,7 @@ H-204/H-205 names `<-` the ownership/bits transfer operator. H-270 confirms that
 | Transfer owned region with <- | Pass the region's single cleanup responsibility to an admitted owning destination. | Source loses ownership availability; no graph copy, duplicated owner or extraction from a borrowed/dynamic resource. |
 | Apply <- to a pointer-bearing object | No default graph transfer; a selected user overload may reconstruct/convert its graph. | Use permitted source/destination storage interfaces and form only same-owner edges. Existing regional objects do not gain intrinsic copy/move semantics. |
 
-Illustrative existing-destination cases, not current compiler syntax:
+Existing-destination source forms (stored reference-field rebinding remains outside the bounded ptr implementation):
 
 ```text
 alias = packet;                 # Borrowed name refers to the same Packet.
@@ -748,18 +845,18 @@ local_count <- local_count + 1; # Read and update the local bits slot.
 
 When an assignment is rejected because the reference would cross owners, the diagnostic must identify the incompatible owners and explain that `=` assigns a reference: “You may want `<-` for bits transfer.” This is guidance, not an automatic rewrite. A pointer-bearing graph still requires a suitable user-defined transfer; replacing `=` with `<-` does not make an arbitrary graph copy valid.
 
-Assignment reads its source through const access under H-223/H-224. That does not by itself choose the permission of a newly established destination alias; the overload/chaining section identifies this pending distinction. Writes through an explicitly const destination are forbidden. A reference or region handle is not copyable bits because its native representation happens to be a machine word. Wrappers, scalar casts and byte-copy helpers must not bypass the semantic category or owner-bearing-container restriction.
+Assignment reads its source without modifying it under H-223/H-224. H-293 prevents an alias from obtaining write permission through a read-only source view; independently supplied writable access retains its own permission. The general overload-body protocol remains separate from ordinary ptr rebinding. Writes through an explicitly const destination are forbidden. A reference or region handle is not copyable bits because its native representation happens to be a machine word. Wrappers, scalar casts and byte-copy helpers must not bypass the semantic category or owner-bearing-container restriction.
 
 An inline numeric field/array slot needs payload assignment with <-. Reference assignment requires a rebindable reference destination; it cannot silently replace a scalar element with a pointer or cause layout changes. The proposed indexed counterpart is `([]<-)(array, index, value)`, alongside `([]=)` for reference assignment. This name and its method contract are pending, not automatically approved by H-164's earlier indexed syntax. Current `(=)`/`([]=)` methods can implement arbitrary memory edits and must be reviewed before reusing their evidence for the new distinction. Typed overloads remain subject to const, owner and lifetime checks; method bodies cannot opt out of intrinsic ownership rules.
 
 Symbolic bindings are separate from ordinary pointer destinations: `effect @x <- rhs` transfers bits/ownership, while `effect @x = rhs` rebinds a regional object reference or procedure. Bits symbols reject the `=` form. Both forms restore the preceding binding on scope exit. Its bits case installs a value; its owned-region case consumes an admitted owner into the dynamic scope. A previous binding/owner remains hidden and alive, then becomes reachable on scope exit. Ordinary bits stores are not rolled back on scope exit. Captured perform is a non-consuming replay path. Bare symbolic binding assignment remains forbidden. The proposed `@object <- rhs` edits its regional referent through an overload; it provides no second way to rebind @x.
 
-Existing procedure-valued effects also use `<-`. They install the selected procedure and captured values without duplicating captured region ownership. This is a typed effect-binding case; no general classification of procedure descriptors as freely copyable bits or transferable owners follows. The shared arrow must not merge effect installation, public owner transfer and captured replay into one unchecked copy implementation.
+Procedure-valued effects use `effect @p = procedure_value`, or inline `effect proc`. They install the selected procedure and captured values without duplicating captured region ownership. They do not classify procedure descriptors as transferable owners or permit effect-arrow procedure binding. Typed effect installation, public owner transfer and captured replay retain separate checks.
 
 The concept is coherent, but these details must be chosen before lowering ordinary owner assignment:
 
 - **Occupied destination and self-transfer:** replacing a live owner needs a defined cleanup/borrow policy. For the first increment, rejecting occupied or self-owning destinations is a candidate; automatic release/replacement is another policy. Effect shadowing cannot be borrowed as ordinary replacement semantics.
-- **Expression result:** H-206 selects a const reference to the destination value, not another owner. H-207 requires explicit steps for ownership moves; the following sections specify the chain boundary. H-111's scoped-effect result retains the installed binding's permissions.
+- **Expression result:** H-206 selects a const reference to the destination value, not another owner. H-207 requires explicit steps for ownership moves; the following sections specify the chain boundary. H-288 makes every scoped-effect result void; it supplies no assignment-chain view.
 - **Evaluation and failure:** select/validate the destination and evaluate the source once, preserve the established argument/conversion order, and ensure failure cannot lose or duplicate responsibility. The precise ownership-consumption point and local-error result must agree with the operation. Send can return ownership on local failure without reviving the consumed source implicitly.
 - **Source post-state and branches:** H-262 makes a transferred ordinary source unavailable at compile time, without an implicit NPE. Optional/result storage has separately specified presence semantics. Cross-process send also revokes sender views; local forwarding can preserve views only while the actual region remains accessible under its new owner.
 
@@ -769,7 +866,16 @@ These are targeted language decisions, not reasons to add a second allocator, a 
 
 H-222 requests `a = b = c` to associate as `a = (b = c)`. H-223 requires treating the RHS as const, and H-224 proposes `(=)(lhs::XX, rhs::const YY) -> const XX`: read the source, update the destination and expose the destination's resulting type. This signature allows the inner const result to supply the outer const RHS. Chaining itself requires no writable RHS and does not consume a region owner.
 
-The remaining questions concern storage identity and result representation, not permission for the overload to modify its source. A reference assignment must identify the destination binding or reference field being rebound. That is distinct from identifying the object currently reached through it: rebinding a reference to another Node does not overwrite the first Node's fields. The borrowed parameter spelling lhs::XX does not yet specify how a method receives that destination place. Here “place” means the existing binding/field/element selected by the expression; it proposes no new public type, allocation or runtime object.
+H-293 requires the assignment-overload destination to declare an external owner. An unannotated lhs is not silently upgraded from the default callee-local target into caller storage. Reject that declaration/use and explain the missing owner annotation. For example, a same-type reference-assignment contract can use:
+
+```text
+function (=)(lhs::T in O, rhs::const T in O)
+  -> const T in O where {T, owner O};
+```
+
+A procedure overload has the same owner obligation. A root-constrained regional destination may use the existing region binder instead. The declared owner must resolve to the actual caller-selected destination and survive the call; a formal owner name alone is not proof. For reference assignment, source and destination must satisfy the fixed-owner rule. Copying an argument into callee-local storage cannot satisfy an external-owner destination contract.
+
+The destination of reference assignment is the selected binding/reference field being rebound. It is not permission to overwrite the object formerly reached through that binding. Owner/provenance and destination access are compiler facts; this requirement introduces no public pointer-to-pointer wrapper, runtime owner argument or binding-cell API. Its acceptance must demonstrate a caller-visible rebind and diagnose a missing external owner with a suggested `in O` / `where {owner O}` declaration.
 
 The following are semantic probes for the target design, not runnable prototype source. They assume the relevant storage remains live and any subsequent write has independently valid permission.
 
@@ -784,9 +890,9 @@ H-201 makes ordinary const bits parameters/results independent values; H-202 mak
 
 **Confirmed RO-Q1 — assignment-method result category.** H-270 selects a special destination-view result for `(=)`, `(<-)` and their indexed counterparts, using `-> const T`. A normal `-> const i64` result copies bits under H-201; an assignment-family result retains a read-only view of the destination. In `r = (a <- b)`, followed by another permitted write to a, reading r observes the updated destination. The result is not a frozen copy and is not an owning value.
 
-The overload body must return the destination storage, not an unrelated value or a temporary. Infix spelling and direct parenthesized calls such as `(<-)(a, b)` use the same result rule. Lowering preserves destination provenance and read-only access until a value-consuming use loads the bits. Returning a different storage location, escaping the destination lifetime, writing through the result or consuming ownership through it must reject. This is a confirmed source contract; the prototype does not yet implement it.
+The overload body must return the destination storage, not an unrelated value or a temporary. Infix spelling and direct parenthesized calls such as `(<-)(a, b)` use the same result rule. Lowering preserves destination provenance and read-only access until a value-consuming use loads the bits. Returning a different storage location, escaping the destination lifetime, writing through the result or consuming ownership through it must reject. The bounded ptr implementation preserves this result for ordinary reference rebinding and builtin bits transfer; existing regional transfer overloads also check the returned destination. General assignment-overload bodies and indexed-selector proof remain bounded separately.
 
-For reference assignment, the destination view denotes the destination's resulting referent; it does not denote the object formerly referenced or expose a mutable pointer slot. Indexed assignment returns the selected element's view, not the whole container. General user-defined collection selectors and the proposed indexed-transfer name remain outside the confirmed result rule. The rule does not select whether a newly rebound alias can write through a const source.
+For reference assignment, the destination view denotes the destination's resulting referent; it does not denote the object formerly referenced or expose a mutable pointer slot. Indexed assignment returns the selected element's view, not the whole container. General user-defined collection selectors and the proposed indexed-transfer name remain outside the confirmed result rule. H-293 forbids recovering write permission by aliasing the const result. This does not revoke independently held writable access to the same target.
 
 Lean acceptance must cover these observable distinctions:
 
@@ -800,7 +906,7 @@ Lean acceptance must cover these observable distinctions:
 
 **Confirmed RO-Q2 — local pointer owner is fixed.** H-271 rejects `a = b` after `ptr a = root(regionA); ptr b = root(regionB);` when A and B are distinct owners, even if both remain live and have the same type. Rebinding within the initializer's owner remains permitted. H-270's owner-mismatch diagnostic applies. The pointer's own local declaration does not allow it to switch target owners; H-203 separately constrains stored graph edges. RO-Q1's destination-view result is unchanged.
 
-A destination alias's permitted writes remain a separate access rule. The signature does not itself grant mutable access through a const source or decide whether independently held source permissions propagate. This review does not revive a writable-RHS requirement. The existing ([]=) hook and scalar-by-value prototype do not prove the proposed general reference-assignment, qualifier or storage-result contract.
+H-293 forbids a newly established alias from regaining write permission through a read-only source. In a chain, the inner assignment's read-only destination result remains read-only when borrowed by the outer assignment. Independently held writable aliases can still modify the target; the RHS is never required to be writable merely to read it. The existing ([]=) hook and scalar-by-value prototype do not prove the proposed general reference-assignment, qualifier or storage-result contract.
 
 ### Transfer results and chaining
 
@@ -868,7 +974,7 @@ Region-owner arguments are real borrowed values, not just static tags. They do n
 
 Abstract-root matching is proposed as satisfying an interface constraint while retaining the actual concrete RT and owner instance. It is not unchecked covariance of mutable regions, a layout cast to a base root, or an automatic conversion of one allocator's representation into another. The root interface exposes only operations promised by its contract; whole-region release/transfer remains intrinsic, while internal pool/free-list strategy belongs to user code.
 
-H-209 requires a unique most-specific applicable method independently of declaration order; no match or ambiguity is a compile error. For nominal argument constraints, a candidate narrower on every constrained argument dominates a broader fallback. Crossed source/destination specializations may be incomparable and require an explicit method for their intersection. No score based on declaration order or arbitrary inheritance distance is introduced. H-210/H-211 selects nominal abstract <: relations. Data applicability uses declared conformance supplied by the selected adapter context under H-218/H-220. Multiple unrelated declared interfaces do not gain relative priority from declaration order. H-258 supplies typed callable declarations and generic bounds for the existing argument types. Root-parameterized region matching and the owner-argument adaptation in this section remain pending. Existing UoM conversion-route ambiguity policy remains distinct from method-selection ambiguity.
+H-209 requires a unique most-specific applicable method independently of declaration order; no match or ambiguity is a compile error. For nominal argument constraints, a candidate narrower on every constrained argument dominates a broader fallback. Crossed source/destination specializations may be incomparable and require an explicit method for their intersection. No score based on declaration order or arbitrary inheritance distance is introduced. H-210/H-211 selects nominal abstract <: relations. Data applicability uses declared conformance supplied by the selected adapter context under H-218/H-220. Multiple unrelated declared interfaces do not gain relative priority from declaration order. H-258 supplies typed callable declarations and generic bounds for the existing argument types. Root constraints and inferred region access have bounded native support under K-426; K-429 adds lexical-owner arguments and explicit assignment-destination owner checks. The complete overload-body protocol remains migration work. Existing UoM conversion-route ambiguity policy remains distinct from method-selection ambiguity.
 
 The declaration split is `type` for abstract roots and `data` for concrete product/sum representations. A relationship such as `data ArenaRoot <: NodeStore` is an explicit conformance declaration. It may be head-only and supplied by a module separate from the representation definition. The same root may declare other interfaces in other modules; the adapter must import the ADT before declaring conformance, while a consumer may obtain it using the adapter. Signatures/fields do not infer conformance. Abstract-to-abstract inheritance stays nominal, with multiple abstract parents deferred. Body completeness is checked only as demanded operations require implementations. H-216 makes abstract inheritance confer methods and data annotations interface claims; abstract methods may be distributed across modules, with no Interface body and no eager completeness check. H-217 makes implicit method names shadowable by explicit names. The proposed lookup stage must select a region-policy operation before dispatch and must not use a hidden policy as fallback. Interface and selection requirements are reviewed in [D-07](DomainLanguageDesign.md#abstract-types-and-data-declarations). Matching a generic root R constrained by R <: NodeStore must preserve R and the actual owner instance. Using/import of root types brings source-visible associated methods under H-211; import preserves their definitions and permits extension, while mixin redefines a body in the receiver. This does not cast one root layout into another or create new ownership permissions.
 

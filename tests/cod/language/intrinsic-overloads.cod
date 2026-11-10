@@ -4,7 +4,7 @@ using "intrinsic-library.cod" Cell as C;
 using "intrinsic-library.cod" (len);
 using "intrinsic-library.cod" (store);
 using "intrinsic-library.cod" (+);
-using "intrinsic-library.cod" (=);
+using "intrinsic-library.cod" (<-);
 using units "intrinsic-library.cod" {Box as B, Index};
 using "intrinsic-library.cod" Scores;
 using "intrinsic-library.cod" ([]=);
@@ -26,7 +26,7 @@ effect @scores = alloc @arena Scores(2u64, 0);
 effect @bias <- 1;
 procedure @run(value::i64)::i64 { store(@cell, value) + i64(len(value)) }
 symbol @assign :: proc(i64) -> i64;
-procedure @assign(value::i64)::i64 { (=)(@cell, value) }
+procedure @assign(value::i64)::i64 { deref((<-)(@cell, value)).value }
 symbol @indexed_assign :: proc(i64) -> i64;
 procedure @indexed_assign(value::i64)::i64 { @scores[Index(0u32)] = value }
 effect @bias <- 2;
@@ -47,14 +47,14 @@ using symbol "intrinsic-library.cod" @raw_store;
 array Rates[u32]::f32;
 symbol @rates :: ref<Rates>;
 effect @rates = alloc @arena Rates(1u64, 0.0f32);
-procedure (store)(target::ref<f32>, value::f32)::f32 {
+procedure (store)(target::ref<f32> in O1, value::f32)::f32 where {owner O1} {
   behave @raw_store(target, if (value < 0.0f32) { 0.0f32 } else { value })
 }
 behave @print(store(ref_at(@rates, 0u32), -2.0f32));
 behave @print(store(ref_at(@rates, 0u32), 0.25f32));
 behave @print(@rates[0u32]);
 
-behave @print(scalar((=)(B(5), 4)));
+{ ptr a = B(5), b = B(4); behave @print(scalar(a = b)); };
 behave @print(perform @assign(10));
 behave @print(behave @assign(10));
 behave @print(deref(@cell).value);
@@ -62,7 +62,7 @@ data FieldNames { type::i64; using::i64; }
 symbol @using :: i64;
 effect @using <- 7;
 behave @print(deref(alloc @arena FieldNames(8, 9)).type + deref(alloc @arena FieldNames(8, 9)).using + @using);
-function rewrite(value::i64(B))::i64(B) { value[Index(1u32)] = 3 }
+function rewrite(value::i64(B))::const i64(B) { value[Index(1u32)] = 3 }
 behave @print(scalar(rewrite(B(2))));
 behave @print(perform @indexed_assign(10));
 behave @print(behave @indexed_assign(10));

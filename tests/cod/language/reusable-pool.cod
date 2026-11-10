@@ -11,12 +11,12 @@ array Payloads[u32(Slot)]::i64;
 array Links[u32(Slot)]::u32(Slot);
 data Pool { head::u32(Slot); payloads::ref<Payloads>; links::ref<Links>; }
 
-function end_slot(pool::Pool)::u32(Slot) { Slot(u32(len(pool.payloads))) }
-function empty(pool::Pool)::bool { pool.head == end_slot(pool) }
-function read(pool::Pool, slot::u32(Slot))::i64 { deref(pool.payloads)[slot] }
-function cell(pool::Pool, slot::u32(Slot))::ref<i64> { ref_at(pool.payloads, slot) }
+function end_slot(pool::Pool in O1)::u32(Slot) where {owner O1} { Slot(u32(len(pool.payloads))) }
+function empty(pool::Pool in O1)::bool where {owner O1} { pool.head == end_slot(pool) }
+function read(pool::Pool in O1, slot::u32(Slot))::i64 where {owner O1} { deref(pool.payloads)[slot] }
+function cell(pool::Pool in O1, slot::u32(Slot))::ref<i64> where {owner O1} { ref_at(pool.payloads, slot) }
 
-function initialize(pool::Pool) -> void {
+function initialize(pool::Pool in O1) -> void where {owner O1} {
   for (i in 0u32 .. scalar(end_slot(pool))) {
     store(pool.links, Slot(i), Slot(i + 1u32));
   };
@@ -44,7 +44,7 @@ function create(bytes::u64, capacity::u32) -> owned region<Pool> {
 }
 
 # Exhaustion returns the capacity sentinel without modifying the pool.
-function acquire(pool::Pool, value::i64) -> u32(Slot) {
+function acquire(pool::Pool in O1, value::i64) -> u32(Slot) where {owner O1} {
   let slot = pool.head;
   if (slot == end_slot(pool)) {
     slot
@@ -55,7 +55,7 @@ function acquire(pool::Pool, value::i64) -> u32(Slot) {
   }
 }
 
-function release(pool::Pool, slot::u32(Slot)) -> void {
+function release(pool::Pool in O1, slot::u32(Slot)) -> void where {owner O1} {
   store(pool.links, slot, pool.head);
   setfield(pool, head, slot);
   {}

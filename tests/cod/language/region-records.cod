@@ -7,10 +7,10 @@ symbol @values :: ref<Values>;
 symbol @tail :: ref<Node>;
 symbol @head :: ref<Node>;
 symbol @selected :: ref<Node>;
-function child(n::Node)::ref<Node> { n.next }
-function child_value(n::Node)::f32 { deref(child(n)).effect }
-function weight(n::Node)::ref<f32(Weight)> { ref_at(deref(n.data), 0u32) }
-function measure(n::Node)::f32 { n.effect + child_value(n) + scalar(deref(weight(n))) }
+function child(n::Node in O1)::ref<Node> where {owner O1} { n.next }
+function child_value(n::Node in O1)::f32 where {owner O1} { deref(child(n)).effect }
+function weight(n::Node in O1)::ref<f32(Weight)> where {owner O1} { ref_at(deref(n.data), 0u32) }
+function measure(n::Node in O1)::f32 where {owner O1} { n.effect + child_value(n) + scalar(deref(weight(n))) }
 effect @arena <- region(8192u64);
 effect @values = alloc @arena Values(2u64, Weight(0.25f32));
 effect @tail = alloc @arena Node(2.0f32, null, @values);
