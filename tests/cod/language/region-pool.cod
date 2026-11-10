@@ -3,11 +3,19 @@ using symbol "std:io" @print;
 using units "reusable-pool.cod" {Slot};
 using "reusable-pool.cod" (==);
 using "pool-adapter.cod" Pool;
-symbol arena :: region;
-effect @arena <- region(8192u64);
+using "std:exceptions" RegionCapacityExceeded;
+# Fail at the root, first array header, second header and second payload.
+for (stage in 0u64 .. 4u64) {
+  let bytes = if(stage == 0u64) {23u64} else {
+    if(stage == 1u64) {24u64} else {if(stage == 2u64) {72u64} else {88u64}}
+  };
+  try {create(bytes, 4u32); behave @assert(false)}
+  catch(error::const RegionCapacityExceeded) {}
+};
 {
-  let pool = create(@arena, 4u32);
-  let occupation = used_bytes(@arena);
+  let arena::owned region<Pool> <- create(8192u64, 4u32);
+  let pool = root(arena);
+  let occupation = used_bytes(arena);
   for (i in 0u32 .. 4u32) {
     behave @assert(acquire(pool, i64(i) + 10) == Slot(i));
   };
@@ -24,10 +32,10 @@ effect @arena <- region(8192u64);
   store(live_cell, 9999);
   behave @assert(peek(pool, Slot(3u32)) == 9999);
   behave @assert(peek(pool, Slot(1u32)) == -9999);
-  behave @assert(used_bytes(@arena) == occupation);
+  behave @assert(used_bytes(arena) == occupation);
   # Preserve both live data and a nontrivial free chain for image relocation.
   release(pool, Slot(1u32));
   release(pool, Slot(3u32));
   behave @assert(!empty(pool));
-  behave @print(used_bytes(@arena));
+  behave @print(used_bytes(arena));
 };

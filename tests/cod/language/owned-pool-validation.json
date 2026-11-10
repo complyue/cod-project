@@ -1,0 +1,168 @@
+{
+  "schema_version": 4,
+  "recorded_utc": "2026-11-10T07:22:50.763885+00:00",
+  "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+  "toolchain": "build",
+  "passed": true,
+  "executable": {
+    "path": "build/bin/cod",
+    "sha256": "f2ebc8225a56b9dae5b73859ea446037701da4db1a144f6ec95a3c1356360bf4"
+  },
+  "llvm_artifact_roundtrip": true,
+  "layout": {
+    "relocation_passed": true,
+    "relocated_bytes": 120,
+    "region_header_bytes": 40,
+    "array_header_bytes": 16,
+    "record_bytes": 24
+  },
+  "frontend_seconds": 0.020077575994946528,
+  "native_compile_link_seconds": 1.6281262850025087,
+  "native_process_seconds": 0.001429144002031535,
+  "llvm_ir_bytes": 35949,
+  "bitcode_bytes": 11024,
+  "pool": {
+    "layout": {
+      "relocation_passed": true,
+      "relocated_bytes": 144,
+      "slots": 4,
+      "cod_reuse_laps": 10000,
+      "bounded_occupation": true,
+      "failed_constructions_released": 4,
+      "typed_root_factory": true,
+      "relocated_free_chain": [
+        3,
+        1,
+        4
+      ],
+      "independent_native_reuse_passed": true
+    },
+    "frontend_seconds": 0.023255079999216832,
+    "native_compile_link_seconds": 1.645459038001718,
+    "native_process_seconds": 0.001776352000888437,
+    "llvm_ir_bytes": 129952,
+    "bitcode_bytes": 31756
+  },
+  "resources": {
+    "layout": {
+      "owners_acquired": 4,
+      "owners_released": 4,
+      "release_order": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "live_resource_reads": 18,
+      "loop_iterations": 3,
+      "untaken_branch_acquires_nothing": true,
+      "captured_and_hidden_owners_survive_replay": true
+    },
+    "frontend_seconds": 0.017829520998930093,
+    "native_compile_link_seconds": 1.5306690279976465,
+    "native_process_seconds": 0.0014314790023490787,
+    "llvm_ir_bytes": 16754,
+    "bitcode_bytes": 6932
+  },
+  "notes": [
+    "The CoD program creates the inspected records, array, sharing and cycle through LLVM IR.",
+    "The graph retains a module-lifetime dynamic region; the pool owns a typed root returned by its factory and releases it at lexical scope exit.",
+    "The hooks copy each whole image and free its original before inspecting relocated references.",
+    "The CoD pool factory is selected with its result type through an adapter. Four partial-construction failures release once; successful typed-root construction supports 10000 reuse laps without allocation.",
+    "Abstract calls preserve the owner of returned payload references; alias writes are observed by later pool reads.",
+    "An independent C++ check traverses and reuses the relocated free list; no CoD code resumes after relocation.",
+    "Slot release is a user-library membership change. Returning a live slot exactly once is its caller precondition.",
+    "The existing resource-capture fixture is instrumented at allocation/read/release boundaries, with no compiler changes.",
+    "Three loop iterations preserve captured/hidden owners, restore the outer binding and release each inner owner before the next acquisition.",
+    "An untaken branch acquires no owner; the module owner releases last. Allocation-address reuse is allowed after release."
+  ],
+  "source_sha256": {
+    "cod/lang_syntax.hh": "047f15ea0f6fb2cafb864392e8355338ab3b970b538c68a295e62096a10689ec",
+    "cod/lang_frontend.hh": "71eb16bb51b3394ad2e0188a7d8c44ae4a2bf87e96ad390f7b32271c7449fc3b",
+    "cod/lang_llvm.hh": "c35693834a41d367cd00e181f7bd5127c432290024ce814a2d01c55875f89124",
+    "cod/lang_native_runtime.hh": "297350aef0f1a81254ebdcd0b1e28ed70ddad2bfe17f22d0b5cca2255af4bed8",
+    "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241",
+    "tests/cod/language/region-records.cod": "11a0351951fdc7c7b3e9f7a7e6dba28985f0e65a3b540689d4be29822ce9dbdf",
+    "tests/cod/language/region-pool.cod": "16de532962644adefc309f36e0c91410c1b270a8dda750b0fc0fc4e1a29a1a94",
+    "tests/cod/language/reusable-pool.cod": "78f2e654a46773bea1de6e57618d381f7a5eeb2b3e589eed5bd3a7409a588b1d",
+    "tests/cod/language/pool-interface.cod": "38efe492138d001054d72927297ef0d57676868f04f4f411cb90b19a5de57264",
+    "tests/cod/language/pool-adapter.cod": "41b97211645bfaf87197be96eca737d5e2e6e48670bd504d2f2c99031fd116ff",
+    "tests/cod/language/pool-algorithms.cod": "39954ce43f27ecc6a28713a1df2e3af68212b4b235403ede7a03ebeaa887ee66",
+    "tests/cod/language/region-owner-capture.cod": "7bae16a957e0b3af4c0bed80d088ab30690ae1c8602dc900377858cf1f8a2ccc",
+    "tests/cod/language/regional_runtime_tests.py": "9662539820e38a4dea4fe30006842b80ec29071359a30f1f3f72202d4d9983f3",
+    "tests/cod/language/pool-typed.cod": "1a76509d09033e221ac6d16db60a99c91f65f5ad77e29401701ebae9b9a6c4e1",
+    "tests/cod/language/pool-view-escape.cod": "c4ed00396489e3a15e3fd5b8efaa48a5dc4f7d844eb52740fe08f85fe48ceb51",
+    "tests/cod/language/run_tests.py": "c68bf97b50ca2f9ffda829626539210bc55e5888e08f411ff99c3618a7dfa764"
+  },
+  "authority": [
+    "D-17 E4/E5",
+    "H-267",
+    "K-415"
+  ],
+  "scope": "Owned typed-root pool factory, partial-construction cleanup, existing typed-index/escape checks and independent native relocation. No new language or allocation semantics.",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit": 0,
+    "compiler_unchanged": true
+  },
+  "source_checks": {
+    "passed": 3,
+    "total": 3,
+    "results": [
+      {
+        "fixture": "pool-typed.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/pool-typed.cod"
+        ],
+        "expected": {
+          "file": "pool-typed.cod",
+          "exit": 0,
+          "stdout": "655350\n112281600\n112281599\ntrue\n"
+        },
+        "exit_code": 0,
+        "stdout": "655350\n112281600\n112281599\ntrue\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "pool-view-escape.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod"
+        ],
+        "expected": {
+          "file": "pool-view-escape.cod",
+          "exit": 2,
+          "stdout": "",
+          "stderr_contains": [
+            "regional result would outlive its owning scope",
+            "pool-view-escape.cod:9:22: note: the escaping value depends on this region acquisition"
+          ]
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod:8:17: regional result would outlive its owning scope\n/ws/EvtWorks/cod-project/tests/cod/language/pool-view-escape.cod:9:22: note: the escaping value depends on this region acquisition\n",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
+          "--emit-llvm",
+          "/tmp/cod-language-check-4p1mt_vp/program.ll",
+          "--emit-bc",
+          "/tmp/cod-language-check-4p1mt_vp/program.bc"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ]
+  }
+}

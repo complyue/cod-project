@@ -101,16 +101,24 @@ struct Pool {
 };
 extern "C" void cod_lang_region_free(void *owner) {
   if (!owner) return;
-  static bool released = false;
-  assert(!released);
-  released = true;
+  static unsigned failed_constructions = 0;
   auto &original = *static_cast<CoDRegion *>(owner);
+  if (original.capacity() != sizeof(CoDRegion) + 8192) {
+    constexpr std::uint64_t capacities[] = {23, 24, 72, 88};
+    assert(failed_constructions < 4);
+    assert(original.capacity() == sizeof(CoDRegion) + capacities[failed_constructions++]);
+    cod_lang_region_release(owner);
+    return;
+  }
+  assert(failed_constructions == 4);
+  ++failed_constructions;
   CoDRegionOwner relocated(8192);
+  auto *pool_layout = static_cast<void *>(relocated->root().get());
+  relocated->allocate(sizeof(Pool) - sizeof(CoDRegionRoot), 1);
   auto *payloads_layout = relocated->allocate(sizeof(Payloads), alignof(Payloads));
   relocated->allocate(4 * sizeof(std::int64_t), alignof(std::int64_t));
   auto *links_layout = relocated->allocate(sizeof(Links), alignof(Links));
   relocated->allocate(4 * sizeof(std::uint32_t), alignof(std::uint32_t));
-  auto *pool_layout = relocated->allocate(sizeof(Pool), alignof(Pool));
   auto *base = reinterpret_cast<std::byte *>(&*relocated);
   const auto payloads_offset = static_cast<std::byte *>(payloads_layout) - base;
   const auto links_offset = static_cast<std::byte *>(links_layout) - base;
@@ -138,6 +146,7 @@ extern "C" void cod_lang_region_free(void *owner) {
   assert(relocated->occupation() == used);
   std::printf("{\"relocation_passed\":true,\"relocated_bytes\":%llu,"
               "\"slots\":4,\"cod_reuse_laps\":10000,\"bounded_occupation\":true,"
+              "\"failed_constructions_released\":4,\"typed_root_factory\":true,"
               "\"relocated_free_chain\":[3,1,4],\"independent_native_reuse_passed\":true}\n",
               static_cast<unsigned long long>(used));
 }
@@ -267,9 +276,9 @@ def main():
                                    "sha256": hashlib.sha256((toolchain / "bin/cod").read_bytes()).hexdigest()},
                     "llvm_artifact_roundtrip": True, **records, "pool": pool, "resources": resources,
                     "notes": ["The CoD program creates the inspected records, array, sharing and cycle through LLVM IR.",
-                              "Each relocation program retains one module-lifetime dynamic region; its hook checks one non-null release.",
+                              "The graph retains a module-lifetime dynamic region; the pool owns a typed root returned by its factory and releases it at lexical scope exit.",
                               "The hooks copy each whole image and free its original before inspecting relocated references.",
-                              "The CoD pool uses mutable record views through explicit adapter conformance and reuses slots for 10000 laps without allocation.",
+                              "The CoD pool factory is selected with its result type through an adapter. Four partial-construction failures release once; successful typed-root construction supports 10000 reuse laps without allocation.",
                               "Abstract calls preserve the owner of returned payload references; alias writes are observed by later pool reads.",
                               "An independent C++ check traverses and reuses the relocated free list; no CoD code resumes after relocation.",
                               "Slot release is a user-library membership change. Returning a live slot exactly once is its caller precondition.",
