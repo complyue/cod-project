@@ -1,0 +1,38 @@
+using symbol "std:io" @assert;
+using symbol "std:io" @print;
+mixin "intrinsic-direct-provider.cod" sum as native_sum;
+function (+)(a::i64, b::i64) -> const i64 { intrinsic (+)(intrinsic (+)(a, b), 10) }
+function (=)(lhs::i64 in O, rhs::i64 in O) -> i64 in O where {owner O} {
+  intrinsic (=)(lhs, rhs);
+  lhs
+}
+ptr a = 1, b = 2, c = 3;
+a = b = c;
+intrinsic (<-)(a, 9);
+behave @assert(a == 9 && b == 9 && c == 9);
+behave @assert(2 + 3 == 15 && native_sum(2, 3) == 5);
+ptr sum = make local typeof(intrinsic (+)(a, b)) { intrinsic (+)(a, b) };
+behave @assert(sum == 18);
+array Values[u32]::i64;
+symbol @arena::region;
+effect @arena <- region(256u64);
+proc (len)(values::ref<Values> in O) -> const u64 where {owner O} { 99u64 }
+function actual_length(values::ref<Values> in O) -> const u64 where {owner O} {
+  intrinsic (len)(values)
+}
+ptr values = alloc @arena Values(3u64, 7);
+behave @assert(len(values) == 99u64 && actual_length(values) == 3u64);
+intrinsic (store)(ref_at(values, 1u32), 12);
+behave @assert(intrinsic (deref)(intrinsic (ref_at)(values, 1u32)) == 12);
+data Node { value::i64; }
+symbol @replacement::ref<Node>;
+proc (=)(lhs::ref<Node> in O, rhs::const ref<Node> in O) -> ref<Node> in O where {owner O} {
+  intrinsic (=)(lhs, @replacement);
+  lhs
+}
+function readonly(node::ref<Node> in O) -> const ref<Node> in O where {owner O} { node }
+effect @replacement = alloc @arena Node(30);
+ptr node = alloc @arena Node(1);
+node = readonly(node);
+behave @assert(deref(node).value == 30);
+behave @print(1);

@@ -1,0 +1,3 @@
+ptr a = 1, b = 2;
+ptr readonly = b <- 3;
+a <-> readonly;

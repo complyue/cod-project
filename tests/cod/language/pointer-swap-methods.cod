@@ -1,0 +1,2 @@
+function (=)(lhs::i64 in O, rhs::i64 in O) -> i64 in O where {owner O} { lhs }
+export (=);

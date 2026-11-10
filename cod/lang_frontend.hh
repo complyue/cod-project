@@ -34,6 +34,7 @@ struct StorageView {
   llvm::Value *address;
   std::optional<size_t> scope;
   std::set<size_t> cells; // Possible lexical allocations, for definite initialization.
+  bool initialized_alternatives = false; // Other targets are initialized, but have no exact allocation identity.
 };
 struct Value {
   Type type = Type::void_type;
@@ -247,10 +248,13 @@ class Compiler {
   };
   std::vector<Holding> holdings_;
   struct LocalCell { size_t scope; Location at; bool initialized = false; };
-  struct Pointer { llvm::Value *slot; Value target; bool read_only = false; };
+  // The slot is the runtime address; the view carries checked owner/type/access
+  // constraints and initialization facts, not an exact runtime target identity.
+  struct Pointer { llvm::Value *slot; Value view; bool read_only = false; bool fixed_binding = false; };
   std::vector<LocalCell> cells_;
   std::vector<Pointer> pointers_;
-  std::vector<size_t> loop_pointer_boundaries_;
+  struct LoopPointers { size_t boundary; std::vector<bool> initialized; };
+  std::vector<LoopPointers> loop_pointers_;
   std::vector<bool> scopes_{true};
   size_t local_scope_ = 0;
   bool module_top_level_ = false;
@@ -297,7 +301,7 @@ class Compiler {
     for (const auto &region : regions_) result.live.push_back(region.live);
     for (const auto &holding : holdings_) result.holdings.push_back(holding.presence);
     for (const auto &cell : cells_) result.initialized.push_back(cell.initialized);
-    for (const auto &pointer : pointers_) result.pointers.push_back(pointer.target);
+    for (const auto &pointer : pointers_) result.pointers.push_back(pointer.view);
     return result;
   }
   void restore_flow(const FlowState &state) {
@@ -306,7 +310,7 @@ class Compiler {
       holdings_[i].presence = i < state.holdings.size() ? state.holdings[i] : Presence::absent;
     for (size_t i = 0; i < cells_.size(); ++i)
       cells_[i].initialized = i < state.initialized.size() && state.initialized[i];
-    for (size_t i = 0; i < state.pointers.size(); ++i) pointers_[i].target = state.pointers[i];
+    for (size_t i = 0; i < state.pointers.size(); ++i) pointers_[i].view = state.pointers[i];
   }
   static void intersect_flow(FlowState &left, const FlowState &right) {
     left.live.resize(std::max(left.live.size(), right.live.size()), false);
@@ -323,8 +327,11 @@ class Compiler {
       auto &target = left.pointers[i];
       const auto &other = right.pointers[i];
       target.read_only = target.read_only || other.read_only;
-      if (target.storage && other.storage)
+      if (target.referent != other.referent) target.referent = nullptr;
+      if (target.storage && other.storage) {
         target.storage->cells.insert(other.storage->cells.begin(), other.storage->cells.end());
+        target.storage->initialized_alternatives |= other.storage->initialized_alternatives;
+      }
     }
   }
   void close_state(FlowState &state, size_t begin, std::optional<size_t> result_owner = {}) {
@@ -484,11 +491,11 @@ class Compiler {
     source = read_value(std::move(source), at);
     require(source.type, destination.type, at);
     ir_.write(place(destination, at), source.native);
-    if (destination.storage->cells.size() == 1)
+    if (destination.storage->cells.size() == 1 && !destination.storage->initialized_alternatives)
       cells_.at(*destination.storage->cells.begin()).initialized = true;
   }
   Value pointer_value(size_t id, const Location &at) {
-    auto value = pointers_.at(id).target;
+    auto value = pointers_.at(id).view;
     valid_view(value, at);
     auto *current = ir_.read_pointer(pointers_[id].slot, value.storage ? value.storage->address : value.native);
     if (value.storage) value.storage->address = current;
@@ -497,13 +504,14 @@ class Compiler {
     return value;
   }
   void declare_pointer(Locals &locals, const std::string &name, Value value,
-                       const Module &module, const Location &at, bool read_only = false) {
+                       const Module &module, const Location &at, bool read_only = false, bool fixed_binding = false) {
     value.pointer.reset();
     valid_view(value, at);
     if (!storage_owner(value)) fail(at, "ptr requires storage with a known owner");
     const auto id = pointers_.size();
     if (!value.storage && !value.referent) value.referent = value.native;
-    pointers_.push_back({ir_.pointer_storage(value.storage ? value.storage->address : value.native), value, read_only});
+    pointers_.push_back({ir_.pointer_storage(value.storage ? value.storage->address : value.native), value,
+                         read_only || value.read_only, fixed_binding});
     value.pointer = id;
     declare_local(locals, name, std::move(value), module, at);
   }
@@ -787,7 +795,7 @@ class Compiler {
     std::map<std::string, std::pair<bool, size_t>> owners;
     for (size_t i = 0; i < args.size(); ++i) {
       const auto &parameter = parameter_at(form, i);
-      if (form.operation && form.name == "=" && i == 0 && args[i].read_only != parameter.read_only)
+      if (form.operation && ((form.name == "=" && i == 0) || swap_operation(form.name)) && args[i].read_only != parameter.read_only)
         return reject("reference-assignment destination requires an exact const qualifier");
       if (args[i].read_only && !parameter.read_only &&
           (object_type(args[i].type) || !parameter.owner.empty()))
@@ -982,6 +990,8 @@ class Compiler {
     auto expr = std::make_unique<Expression>(Expression{
         source_expr.kind, source_expr.at, source_expr.text, {}, source_expr.symbol_id, source_expr.binding,
         source_expr.spread, source_expr.annotation});
+    expr->intrinsic = source_expr.intrinsic;
+    expr->fixed_binding = source_expr.fixed_binding;
     if (uses_symbol(expr->kind)) {
       used.insert(source_expr.text);
       const auto renamed = names.find(source_expr.text);
@@ -1411,9 +1421,9 @@ class Compiler {
     const bool rebind = form.operation && form.name == "=";
     for (size_t i = 0; i < fixed; ++i) {
       auto argument = parameters[i];
-      if (rebind && i == 0) {
-        if (!argument.pointer) fail(at, "a (=) overload requires an ordinary ptr destination");
-        // The assignment destination denotes the caller's binding; other
+      if ((rebind && i == 0) || (form.operation && form.name == "<=>")) {
+        if (!argument.pointer) fail(at, "a reference operation overload requires an ordinary ptr destination");
+        // Reference-operation destinations denote the caller's bindings; other
         // parameters borrow storage through their own lexical pointer bindings.
         declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
       } else if (argument.storage || (!form.parameters[i].owner.empty() && object_type(argument.type)))
@@ -1664,7 +1674,7 @@ class Compiler {
     choose_specific(exact, false);
     if (!exact.empty()) return exact.front();
     for (const auto &candidate : candidates) {
-      if (candidate.form->operation && candidate.form->name == "=") continue;
+      if (candidate.form->operation && (candidate.form->name == "=" || swap_operation(candidate.form->name))) continue;
       const auto instantiated = signature(*candidate.form, *candidate.lexical, args, module, at);
       if (!instantiated) continue;
       const auto context = llvm::SaveAndRestore(type_context_, TypeContext{candidate.lexical, instantiated->bindings});
@@ -1689,7 +1699,7 @@ class Compiler {
       if (candidates.size() == 1) {
         const auto &candidate = candidates.front();
         const auto instantiated = signature(*candidate.form, *candidate.lexical, args, module, at);
-        if (instantiated && !(candidate.form->operation && candidate.form->name == "=")) {
+        if (instantiated && !(candidate.form->operation && (candidate.form->name == "=" || swap_operation(candidate.form->name)))) {
           const auto context = llvm::SaveAndRestore(type_context_, TypeContext{candidate.lexical, instantiated->bindings});
           for (size_t i = 0; i < args.size(); ++i)
             route(args[i].type, parameter_at(*candidate.form, i), *candidate.lexical, module, at);
@@ -1770,6 +1780,13 @@ class Compiler {
     if (form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=") &&
         (form.parameters.empty() || form.parameters.front().owner.empty()))
       fail(form.at, "an assignment destination requires an explicit external owner: use 'in O' and 'where {owner O}'");
+    if (form.operation && swap_operation(form.name) &&
+        (form.parameters.size() != 2 || form.parameters[0].owner.empty() || form.parameters[1].owner.empty() || variadic(form)))
+      fail(form.at, "a swap overload requires two destinations with explicit external owners");
+    if (form.operation && (form.name == "=" || form.name == "<=>"))
+      for (size_t i = 0; i < (form.name == "=" ? 1u : 2u) && i < args.size(); ++i)
+        if (args[i].pointer && pointers_.at(*args[i].pointer).fixed_binding)
+          fail(at, "cannot rebind a const ptr binding");
     for (size_t i = 0; i < args.size(); ++i)
       args[i] = converted(args[i], match.routes[i], at, caller, points.empty() ? nullptr : &points[i]);
     const bool function = match.function.form->kind == Form::Kind::function;
@@ -1783,6 +1800,8 @@ class Compiler {
     // Lexical procedure calls use current bindings; perform uses captured values.
     auto result = call(*match.function.form, *match.function.lexical, function ? Environment{} : env, args, function, at, caller,
                        match.function.implementation);
+    if (form.operation && swap_operation(form.name) && result.type != Type::never)
+      require(result.type, Type::void_type, at);
     check_declarations(match.declarations, match.function.form->kind, args, result, caller, at);
     return result;
   }
@@ -1799,6 +1818,7 @@ class Compiler {
     }
     if (!object_type(destination.type) || !destination.region_id)
       fail(expr.at, "object transfer requires a regional object destination; symbolic bits require effect '<-'");
+    if (expr.intrinsic) fail(expr.at, "intrinsic (<-) requires a bits destination; object transfer requires a user-defined overload");
     if (destination.read_only) fail(expr.at, "cannot transfer into a read-only destination view");
     auto source = expression(*expr.children[1], module, env, locals, function_context);
     region_pointer(destination, expr.at);
@@ -1823,26 +1843,71 @@ class Compiler {
     auto destination = expression(*expr.children[0], module, env, locals, function_context, false);
     auto source = expression(*expr.children[1], module, env, locals, function_context, false);
     if (!destination.pointer) fail(expr.at, "reference assignment requires an ordinary ptr binding; use '<-' for bits transfer");
+    if (pointers_.at(*destination.pointer).fixed_binding) fail(expr.at, "cannot rebind a const ptr binding");
     if (source.storage && std::all_of(source.storage->cells.begin(), source.storage->cells.end(),
         [&](size_t cell) { return cells_.at(cell).initialized; })) source = read_value(std::move(source), expr.at);
     // Select user methods before checking the builtin alias operation. A method
     // may use a read-only source to choose an independently writable target.
-    if (const auto selected = method("=", module, {destination, source}, expr.at))
-      return call_method(*selected, {destination, source}, expr.at, env, function_context, module);
-    require(source.type, destination.type, expr.at);
+    if (!expr.intrinsic) {
+      if (const auto selected = method("=", module, {destination, source}, expr.at))
+        return call_method(*selected, {destination, source}, expr.at, env, function_context, module);
+    }
+    check_rebind(destination, source, expr.at);
+    return rebind_pointer(destination, source);
+  }
+  void check_rebind(const Value &destination, const Value &source, const Location &at) {
+    if (!destination.pointer) fail(at, "reference swap requires ordinary ptr bindings");
+    if (pointers_.at(*destination.pointer).fixed_binding) fail(at, "cannot rebind a const ptr binding");
+    require(source.type, destination.type, at);
     if (storage_owner(destination) != storage_owner(source))
-      fail(expr.at, "reference assignment cannot cross owners; you may want '<-' for bits transfer");
-    valid_view(source, expr.at);
+      fail(at, "reference assignment cannot cross owners; you may want '<-' for bits transfer");
+    valid_view(source, at);
     if (!destination.read_only && source.read_only)
-      fail(expr.at, "a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias");
-    if (!loop_pointer_boundaries_.empty() && *destination.pointer < loop_pointer_boundaries_.back())
-      fail(expr.at, "loop-carried pointer rebinding is not yet proven by initialization analysis; use a loop-local ptr");
+      fail(at, "a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias");
+    for (const auto &loop : loop_pointers_)
+      if (*destination.pointer < loop.boundary && !loop.initialized[*destination.pointer])
+        fail(at, "loop-carried rebinding of an initially uninitialized target is not yet supported; initialize it before the loop");
+  }
+  Value rebind_pointer(const Value &destination, Value source) {
     source.pointer.reset();
     auto &binding = pointers_.at(*destination.pointer);
-    source.read_only = destination.read_only || binding.read_only;
+    source.read_only = binding.read_only;
     ir_.write_pointer(binding.slot, source.storage ? source.storage->address : source.native);
-    binding.target = source;
+    binding.view = source;
     return source;
+  }
+  Value swap_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
+                        bool function_context) {
+    if (expr.children.size() != 2) fail(expr.at, "swap requires two destinations");
+    auto left = expression(*expr.children[0], module, env, locals, function_context, false);
+    auto right = expression(*expr.children[1], module, env, locals, function_context, false);
+    if (expr.text == "<=>") {
+      if (!left.pointer || !right.pointer) fail(expr.at, "reference swap requires ordinary ptr bindings");
+      left = pointer_value(*left.pointer, expr.at);
+      right = pointer_value(*right.pointer, expr.at);
+      if (pointers_.at(*left.pointer).fixed_binding || pointers_.at(*right.pointer).fixed_binding)
+        fail(expr.at, "cannot rebind a const ptr binding");
+    }
+    if (!expr.intrinsic) {
+      if (const auto selected = method(expr.text, module, {left, right}, expr.at))
+        return call_method(*selected, {left, right}, expr.at, env, function_context, module);
+    }
+    if (expr.text == "<=>") {
+      check_rebind(left, right, expr.at);
+      check_rebind(right, left, expr.at);
+      rebind_pointer(left, right);
+      rebind_pointer(right, left);
+    } else {
+      if (!local_bits(left.type) || !local_bits(right.type) || !left.storage || !right.storage)
+        fail(expr.at, "builtin bits swap requires two bits storage destinations");
+      if (left.read_only || right.read_only) fail(expr.at, "cannot swap bits through a read-only view");
+      require(left.type, right.type, expr.at);
+      const auto left_bits = bits_value(read_value(left, expr.at));
+      const auto right_bits = bits_value(read_value(right, expr.at));
+      write_bits(left, right_bits, expr.at);
+      write_bits(right, left_bits, expr.at);
+    }
+    return {};
   }
   Value query_value(const Expression &expr, const Module &module, const Locals &locals) {
     // Type queries inspect declarations and operand types, never execute a body
@@ -1850,7 +1915,7 @@ class Compiler {
     using K = Expression::Kind;
     if (expr.kind == K::name) {
       if (const auto found = locals.visible.find(expr.text); found != locals.visible.end())
-        return found->second.pointer ? pointers_.at(*found->second.pointer).target : found->second;
+        return found->second.pointer ? pointers_.at(*found->second.pointer).view : found->second;
       if (const auto found = module.world.global_aliases.find(expr.text); found != module.world.global_aliases.end())
         return module.world.global_values.at(found->second);
     }
@@ -1882,17 +1947,17 @@ class Compiler {
     if (expr.kind == K::unary || expr.kind == K::binary || expr.kind == K::call) {
       std::vector<Value> args;
       for (const auto &child : expr.children) args.push_back(query_value(*child, module, locals));
-      if (const auto selected = method(expr.text, module, args, expr.at)) {
+      if (const auto selected = expr.intrinsic ? std::nullopt : method(expr.text, module, args, expr.at)) {
         const auto signature_value = signature(*selected->function.form, *selected->function.lexical, args, module, expr.at, true);
         if (!signature_value->result) fail(expr.at, "typeof requires a declared callable result type; the operand is not executed");
         return scalar(*signature_value->result, nullptr);
       }
-      if (expr.kind == K::unary) {
+      if (expr.kind == K::unary || (expr.kind == K::call && args.size() == 1 && (expr.text == "-" || expr.text == "!"))) {
         if (expr.text == "!") require(args[0].type, Type::boolean, expr.at);
         else if (!floating(args[0].type)) require(args[0].type, Type::integer, expr.at);
         return scalar(args[0].type, nullptr);
       }
-      if (expr.kind == K::binary) {
+      if (expr.kind == K::binary || (expr.kind == K::call && args.size() == 2 && binary_precedence(expr.text) >= 0)) {
         auto type = args[0].type;
         if (type != args[1].type && numeric(type) && numeric(args[1].type)) type = common_number(type, args[1].type, expr.at);
         else require(args[1].type, type, expr.at);
@@ -2152,6 +2217,11 @@ class Compiler {
     const bool empty = start && end && (signed_range ? start->getValue().sge(end->getValue()) :
                                                                      start->getValue().uge(end->getValue()));
     const bool one = start && end && !empty && end->getValue() - start->getValue() == 1;
+    const size_t body_index = expr.kind == K::fold ? 3 : 2;
+    const bool has_else = expr.kind == K::range_for && expr.children.size() == 4;
+    const auto native_scope = ir_.scope();
+    std::optional<LLVMEmission::Branch> empty_branch;
+    if (has_else) empty_branch = ir_.branch(ir_.binary(first.type, "<", first.native, last.native));
     auto native_loop = ir_.loop(first.type, first.native, last.native, accumulator.native,
         accumulator.type.kind == Type::exception ? exception_category(accumulator) : nullptr);
     auto inner_locals = locals.nested();
@@ -2163,10 +2233,34 @@ class Compiler {
       declare_local(inner_locals, expr.binding, accumulator, module, expr.at);
     }
 
-    loop_pointer_boundaries_.push_back(pointers_.size());
-    const auto next = block(*expr.children.back(), module, env, std::move(inner_locals), function_context,
+    LoopPointers loop_pointers{pointers_.size(), {}};
+    for (auto &pointer : pointers_) {
+      auto &view = pointer.view;
+      const bool initialized = !view.storage || std::all_of(view.storage->cells.begin(), view.storage->cells.end(),
+          [&](size_t cell) { return cells_.at(cell).initialized; });
+      loop_pointers.initialized.push_back(initialized);
+      if (!one && !empty && !pointer.fixed_binding && initialized) {
+        view.referent = nullptr;
+        if (view.storage) {
+          view.storage->cells.clear();
+          view.storage->initialized_alternatives = true;
+        }
+      }
+    }
+    if (!one && !empty) loop_pointers_.push_back(loop_pointers);
+    const auto next = block(*expr.children[body_index], module, env, std::move(inner_locals), function_context,
                             expr.kind == K::range_for, {}, local_bits(accumulator.type));
-    loop_pointer_boundaries_.pop_back();
+    if (!one && !empty) {
+      loop_pointers_.pop_back();
+      if (next.type != Type::never)
+        for (size_t i = 0; i < loop_pointers.boundary; ++i) {
+          const auto &view = pointers_[i].view;
+          if (loop_pointers.initialized[i] && view.storage &&
+              !std::all_of(view.storage->cells.begin(), view.storage->cells.end(),
+                  [&](size_t cell) { return cells_.at(cell).initialized; }))
+            fail(expr.at, "loop-carried pointer target must remain definitely initialized on every continuing path");
+        }
+    }
 
     if (expr.kind == K::fold && next.type != Type::never) {
       require(next.type, accumulator.type, expr.at);
@@ -2187,6 +2281,26 @@ class Compiler {
         if (before.holdings[i] != after.holdings[i])
           fail(expr.at, "a repeating loop cannot consume an owner from outside its iteration scope");
     ir_.end_loop(native_loop, next.native, next.type.kind == Type::exception ? exception_category(next) : nullptr);
+    if (has_else) {
+      const bool body_completes = !empty && next.type != Type::never;
+      if (!body_completes) ir_.unreachable();
+      ir_.restore(native_scope);
+      ir_.otherwise(*empty_branch);
+      restore_flow(before);
+      const auto fallback = block(*expr.children[3], module, env, locals.nested(), function_context, true);
+      const bool else_completes = (!(start && end) || empty) && fallback.type != Type::never;
+      if (!else_completes && ir_.reachable()) ir_.unreachable();
+      ir_.merge(*empty_branch, Type::void_type);
+      if (body_completes) {
+        if (else_completes) intersect_flow(after, flow_state());
+        restore_flow(after);
+      } else restore_flow(else_completes ? flow_state() : before);
+      if (!body_completes && !else_completes) {
+        if (ir_.reachable()) ir_.unreachable();
+        return scalar(Type::never, nullptr);
+      }
+      return {};
+    }
     if (empty || next.type == Type::never) restore_flow(before);
     else {
       if (!start || !end) intersect_flow(after, before);
@@ -2201,9 +2315,10 @@ class Compiler {
   Value call_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context, bool function_result = false) {
     using K = Expression::Kind;
+    if (swap_operation(expr.text)) return swap_expression(expr, module, env, locals, function_context || function_result);
     if (expr.text == "=") return rebind_expression(expr, module, env, locals, function_context || function_result);
     if (expr.text == "<-") return transfer_expression(expr, module, env, locals, function_context || function_result);
-    if (const auto local = locals.visible.find(expr.text); local != locals.visible.end()) {
+    if (const auto local = locals.visible.find(expr.text); !expr.intrinsic && local != locals.visible.end()) {
       const auto callee = local->second;
       return invoke_procedure(callee, expr, module, env, locals, function_context || function_result, false);
     }
@@ -2215,12 +2330,12 @@ class Compiler {
     std::optional<std::vector<Value>> evaluated;
     const auto values = [&](bool read = true) -> const std::vector<Value> & {
       if (!evaluated) evaluated = arguments(expr, module, env, locals, function_context,
-          converting_method(expr.text, module, expr.at) ? &points : nullptr);
+          !expr.intrinsic && converting_method(expr.text, module, expr.at) ? &points : nullptr);
       if (read) for (const auto &value : *evaluated)
         if (value.storage && !value.native) fail(expr.at, "read of storage before definite initialization in an argument");
       return *evaluated;
     };
-    if (intrinsic_name(expr.text) && expr.text != "setfield") {
+    if (!expr.intrinsic && intrinsic_name(expr.text) && expr.text != "setfield") {
       const auto &args = values(false);
       if (const auto selected = method(expr.text, module, args, expr.at))
         return call_method(*selected, args, expr.at, env, function_context || function_result, module, points);
@@ -2370,14 +2485,15 @@ class Compiler {
       }
       fail(expr.at, "this type has no value constructor");
     }
-    const auto information = lookup_callable(module, expr.text, expr.at);
-    const auto &functions = information.methods;
     if (expr.text == "scalar") {
       const auto &args = values();
       if (args.size() != 1 || args[0].type.kind != Type::quantity)
         fail(expr.at, "scalar requires one UoM value");
       return {representation(args[0].type), args[0].native, {}, nullptr};
     }
+    if (expr.intrinsic) fail(expr.at, "no builtin implementation for intrinsic (" + expr.text + ") with these arguments");
+    const auto information = lookup_callable(module, expr.text, expr.at);
+    const auto &functions = information.methods;
     if (functions.empty()) {
       if (!information.identities.empty())
         fail(expr.at, "callable '" + expr.text + "' has no method implementation" +
@@ -2406,8 +2522,10 @@ class Compiler {
         return scalar(Type::integer, ir_.bits(Type::integer, UINT64_C(1) << 63));
     }
     auto value = expression(*expr.children[0], module, env, locals, function_context);
-    if (const auto selected = method(expr.text, module, {value}, expr.at))
-      return call_method(*selected, {value}, expr.at, env, function_context || function_result, module);
+    if (!expr.intrinsic) {
+      if (const auto selected = method(expr.text, module, {value}, expr.at))
+        return call_method(*selected, {value}, expr.at, env, function_context || function_result, module);
+    }
     if (expr.text == "-" && floating(value.type))
       return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
     require(value.type, expr.text == "!" ? Type::boolean : Type::integer, expr.at);
@@ -2438,11 +2556,13 @@ class Compiler {
       return scalar(Type::boolean, ir_.merge(native_branch, Type::boolean, left.native));
     }
     std::vector<ConversionPoint> points;
-    if (converting_method(expr.text, module, expr.at)) points.push_back(conversion_point());
+    if (!expr.intrinsic && converting_method(expr.text, module, expr.at)) points.push_back(conversion_point());
     auto right = expression(*expr.children[1], module, env, locals, function_context);
     if (!points.empty()) points.push_back(conversion_point());
-    if (const auto selected = method(expr.text, module, {left, right}, expr.at))
-      return call_method(*selected, {left, right}, expr.at, env, function_context || function_result, module, points);
+    if (!expr.intrinsic) {
+      if (const auto selected = method(expr.text, module, {left, right}, expr.at))
+        return call_method(*selected, {left, right}, expr.at, env, function_context || function_result, module, points);
+    }
     if ((expr.text == "==" || expr.text == "!=") &&
         (left.type.kind == Type::reference || left.type == Type::null_ref) &&
         (right.type.kind == Type::reference || right.type == Type::null_ref)) {
@@ -2494,6 +2614,7 @@ class Compiler {
       if (result.storage) {
         addresses.emplace_back(completion.value.storage->address, completion.from);
         result.storage->cells.insert(completion.value.storage->cells.begin(), completion.value.storage->cells.end());
+        result.storage->initialized_alternatives |= completion.value.storage->initialized_alternatives;
       }
       if (result.type.owned) {
         const auto &source = regions_.at(*completion.value.region_id).origins;
@@ -2729,7 +2850,7 @@ class Compiler {
           write_bits(target, value, declaration->at);
           value = std::move(target);
         }
-        declare_pointer(locals, declaration->text, std::move(value), module, declaration->at);
+        declare_pointer(locals, declaration->text, std::move(value), module, declaration->at, false, expr.fixed_binding);
       }
       return {};
     }
@@ -2888,7 +3009,7 @@ class Compiler {
       declarations.push_back(declaration);
   }
   static bool operation_name(const std::string &name) {
-    return intrinsic_name(name) || binary_precedence(name) >= 0 || name == "!" || name == "=" || name == "[]=" || name == "<-";
+    return intrinsic_name(name) || binary_precedence(name) >= 0 || name == "!" || name == "=" || name == "[]=" || name == "<-" || swap_operation(name);
   }
   static CallableIdentity local_callable(const Module &module, const std::string &name) {
     return {operation_name(name) ? nullptr : &module, name};
@@ -3046,7 +3167,7 @@ class Compiler {
       return false;
     }
     const bool loop = expr.kind == Expression::Kind::range_for || expr.kind == Expression::Kind::fold;
-    const auto count = expr.children.size() - (loop ? 1 : 0);
+    const auto count = loop ? (expr.kind == Expression::Kind::fold ? 3u : 2u) : expr.children.size();
     for (size_t i = 0; i < count; ++i) {
       // The field selector is a compile-time label, not a lexical value lookup.
       if (expr.kind == Expression::Kind::call && expr.text == "setfield" && i == 1) continue;
@@ -3056,7 +3177,9 @@ class Compiler {
       auto nested = locals;
       nested.insert(expr.text);
       if (expr.kind == Expression::Kind::fold) nested.insert(expr.binding);
-      return context_dependent(*expr.children.back(), lexical, nested);
+      if (context_dependent(*expr.children[count], lexical, nested)) return true;
+      return expr.kind == Expression::Kind::range_for && expr.children.size() == 4 &&
+             context_dependent(*expr.children[3], lexical, locals);
     }
     if (expr.kind == Expression::Kind::let) locals.insert(expr.text);
     return false;

@@ -1,0 +1,3 @@
+using "pointer-swap-methods.cod" (=) as assign;
+const ptr a = 1, b = 2;
+assign(a, b);

@@ -130,9 +130,11 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
       continue;
     }
     std::string punctuation(1, c);
-    if (source.compare(cursor, 3, "...") == 0) {
+    if (source.compare(cursor, 3, "...") == 0 || source.compare(cursor, 3, "<=>") == 0 ||
+        source.compare(cursor, 3, "<->") == 0) {
+      const auto triple = source.substr(cursor, 3);
       advance(); advance(); advance();
-      tokens.push_back({TokenKind::punctuation, "...", start});
+      tokens.push_back({TokenKind::punctuation, triple, start});
       continue;
     }
     if (cursor + 1 < source.size()) {
@@ -254,6 +256,8 @@ struct Expression {
   bool spread = false;
   std::optional<Type> annotation;
   std::shared_ptr<Form> definition = {};
+  bool intrinsic = false;
+  bool fixed_binding = false;
 };
 using Expr = std::unique_ptr<Expression>;
 
@@ -305,6 +309,8 @@ struct Form {
   Expr body;
 };
 
+inline bool swap_operation(std::string_view op) { return op == "<=>" || op == "<->"; }
+
 inline int binary_precedence(const std::string &op) {
   if (op == "||") return 1;
   if (op == "&&") return 2;
@@ -328,7 +334,7 @@ inline bool expression_keyword(std::string_view name) {
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "proc" || name == "global" || name == "symbol" ||
          name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "from" ||
-         name == "make" || name == "owned" || name == "touch" || name == "ptr" || name == "typeof";
+         name == "make" || name == "owned" || name == "touch" || name == "ptr" || name == "typeof" || name == "intrinsic" || name == "const";
 }
 
 inline bool module_keyword(std::string_view name) {
@@ -376,7 +382,8 @@ class Parser {
   static bool operation_token(const Token &token) {
     return (token.kind == TokenKind::identifier && intrinsic_name(token.text)) ||
            (token.kind == TokenKind::punctuation &&
-            (binary_precedence(token.text) >= 0 || token.text == "!" || token.text == "=" || token.text == "<-"));
+            (binary_precedence(token.text) >= 0 || token.text == "!" || token.text == "=" || token.text == "<-" ||
+             swap_operation(token.text)));
   }
   Token lexical_name(bool *operation = nullptr) {
     const bool parenthesized = take("(");
@@ -647,10 +654,17 @@ class Parser {
       }
       expect(")");
       expr->children.push_back(block());
+      if (take("else")) {
+        if (fold) fail(token.at, "else belongs to a range for; fold already has an initial accumulator");
+        expr->children.push_back(block());
+      }
       return expr;
     }
-    if (take("ptr")) {
+    if (is("ptr") || (is("const") && is("ptr", 1))) {
+      const bool fixed = take("const");
+      expect("ptr");
       auto group = make(Expression::Kind::pointer_group, token);
+      group->fixed_binding = fixed;
       do {
         if (is("{")) { group->children.push_back(block()); break; }
         auto expr = make(Expression::Kind::pointer, value_name());
@@ -716,6 +730,13 @@ class Parser {
       return expr;
     }
     if (is("{")) return block();
+    if (take("intrinsic")) {
+      if (!is("(")) fail(peek().at, "intrinsic requires a parenthesized operator or intrinsic name");
+      auto expr = make(Expression::Kind::call, lexical_name());
+      expr->intrinsic = true;
+      arguments(*expr);
+      return expr;
+    }
     if (is("(") && ((is(")", 2) && operation_token(tokens_[cursor_ + 1])) ||
         (is("[", 1) && is("]", 2) && is("=", 3) && is(")", 4)))) {
       auto expr = make(Expression::Kind::call, lexical_name());
@@ -777,6 +798,13 @@ class Parser {
       binary->children.push_back(std::move(left));
       binary->children.push_back(expression(binary_precedence(op.text) + 1));
       left = std::move(binary);
+    }
+    if (minimum == 0 && swap_operation(peek().text)) {
+      auto swap = make(Expression::Kind::call, tokens_[cursor_++]);
+      swap->children.push_back(std::move(left));
+      swap->children.push_back(expression(1));
+      if (swap_operation(peek().text)) fail(peek().at, "swap operators cannot be chained");
+      return swap;
     }
     if (minimum == 0 && left->kind == Expression::Kind::index && is("=")) {
       auto assignment = make(Expression::Kind::call, expect("="));

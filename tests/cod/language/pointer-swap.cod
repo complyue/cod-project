@@ -1,0 +1,52 @@
+using symbol "std:io" @assert;
+using symbol "std:io" @print;
+symbol @bias::i64;
+function (<=>)(a::i64 in O, b::i64 in O) -> void where {owner O} {
+  intrinsic (<=>)(a, b)
+}
+proc (<->)(a::i64 in A, b::i64 in B) -> void where {owner A, owner B} {
+  intrinsic (<->)(a, b);
+  a <- a + @bias;
+  {}
+}
+function rotate(count::i64, builtin_swap::bool) -> const i64 {
+  const ptr first = 1, second = 10;
+  ptr a = first, b = second;
+  for (i in 0 .. count) {
+    if (builtin_swap) { a <=> b; }
+    else { const ptr temporary = a; a = b; b = temporary; {} };
+    a <- a + 1;
+  };
+  a * 100 + b
+}
+behave @assert(rotate(0, false) == 110 && rotate(1, false) == 1101);
+behave @assert(rotate(2, false) == 211 && rotate(5, false) == 1303);
+behave @assert(rotate(0, true) == 110 && rotate(1, true) == 1101);
+behave @assert(rotate(2, true) == 211 && rotate(5, true) == 1303);
+const ptr fixed = make local i64, other = make local i64, { fixed <- 3; other <- 7; };
+ptr alias = fixed;
+alias = other;
+alias <- 8;
+behave @assert(fixed == 3 && other == 8);
+effect @bias <- 2;
+fixed <-> other;
+behave @assert(fixed == 10 && other == 3);
+intrinsic (<->)(fixed, fixed);
+{
+  const ptr external = 20;
+  intrinsic (<->)(fixed, external);
+  behave @assert(fixed == 20 && external == 10);
+};
+ptr a = fixed, b = other;
+for (i in 0 .. 3) { for (j in 0 .. 3) { a <=> b; }; };
+behave @assert(a == 3 && b == 20);
+a <=> a;
+behave @assert(a == 3);
+function selected(x::i64 in O, counter::i64 in O) -> i64 in O where {owner O} {
+  counter <- counter + 1;
+  x
+}
+ptr counter = 0;
+intrinsic (<->)(selected(a, counter), selected(b, counter));
+behave @assert(counter == 2 && a == 20 && b == 3);
+behave @print(1);

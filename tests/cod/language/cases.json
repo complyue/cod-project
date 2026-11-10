@@ -1401,5 +1401,68 @@
       "const Node",
       "Base"
     ]
+  },
+  {
+    "file": "intrinsic-direct.cod",
+    "exit": 0,
+    "stdout": "1\n"
+  },
+  {
+    "file": "intrinsic-direct-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a writable ptr cannot rebind to a read-only view"
+  },
+  {
+    "file": "intrinsic-direct-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "no builtin implementation"
+  },
+  {
+    "file": "range-else.cod",
+    "exit": 0,
+    "stdout": "1\n"
+  },
+  {
+    "file": "range-else-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "range-else-scope.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "unavailable lexical value 'i'"
+  },
+  {
+    "file": "pointer-swap.cod",
+    "exit": 0,
+    "stdout": "1\n"
+  },
+  {
+    "file": "const-ptr-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot rebind a const ptr binding"
+  },
+  {
+    "file": "loop-rebind-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "loop-carried pointer target must remain definitely initialized"
+  },
+  {
+    "file": "swap-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot swap bits through a read-only view"
+  },
+  {
+    "file": "swap-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "reference assignment cannot cross owners"
   }
 ]
