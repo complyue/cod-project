@@ -20,6 +20,7 @@
 #include <map>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -47,12 +48,21 @@ class LLVMEmission {
   };
   std::vector<Cleanup> cleanups_;
   std::vector<llvm::Value *> module_regions_;
+  std::vector<llvm::Value *> exception_sites_;
+  std::function<void(size_t, llvm::Value *)> exception_handler_;
 
   llvm::LLVMContext &context() { return *context_; }
   llvm::IRBuilder<> &b() { return *builder_; }
   llvm::Type *void_type() { return llvm::Type::getVoidTy(context()); }
   llvm::IntegerType *i64() { return llvm::Type::getInt64Ty(context()); }
   llvm::PointerType *pointer_type() { return llvm::PointerType::getUnqual(context()); }
+  llvm::StructType *exception_payload_type() {
+    return llvm::StructType::get(context(), {i64(), i64(), i64(), i64()});
+  }
+  llvm::Value *entry_slot(llvm::Type *type, const char *name) {
+    llvm::IRBuilder<> storage(&entry_->getEntryBlock(), entry_->getEntryBlock().begin());
+    return storage.CreateAlloca(type, nullptr, name);
+  }
   llvm::Value *source_context() {
     if (source_location_) return b().CreateGlobalString(location_text(*source_location_));
     return llvm::ConstantPointerNull::get(pointer_type());
@@ -67,6 +77,29 @@ class LLVMEmission {
     for (const auto arg : args) types.push_back(arg->getType());
     auto function = module_->getOrInsertFunction(name, llvm::FunctionType::get(result, types, false));
     return b().CreateCall(function, args);
+  }
+  llvm::Value *checked_service(const std::string &name, llvm::Type *result,
+                              std::vector<llvm::Value *> args, llvm::Value *requested,
+                              std::initializer_list<size_t> failures) {
+    auto *status_type = llvm::ArrayType::get(i64(), 2);
+    auto *status = entry_slot(status_type, "service.status");
+    b().CreateStore(llvm::ConstantAggregateZero::get(status_type), status);
+    args.push_back(status);
+    auto *value = call_runtime(name, result, args);
+    auto *code = b().CreateLoad(i64(), status);
+    auto *available = b().CreateLoad(i64(), b().CreateConstGEP2_32(status_type, status, 0, 1));
+    const auto site = exception_sites_.size();
+    exception_sites_.push_back(source_context());
+    auto *payload = exception_payload(integer(i64(), site), requested, available);
+    for (auto category : failures) {
+      auto *bad = label("exception.raise");
+      auto *next = label("service.continue");
+      b().CreateCondBr(b().CreateICmpEQ(code, integer(i64(), category)), bad, next);
+      enter(bad);
+      exception_handler_(category, payload);
+      enter(next);
+    }
+    return value;
   }
   llvm::Value *slot(size_t id) {
     if (const auto found = slots_.find(id); found != slots_.end()) return found->second;
@@ -174,8 +207,22 @@ public:
     case Type::float64: return llvm::Type::getDoubleTy(context());
     case Type::region: return pointer_type();
     case Type::void_type: return void_type();
+    case Type::exception: return exception_payload_type();
     default: throw std::logic_error("unresolved LLVM type");
     }
+  }
+  llvm::Type *storage_type(Type type) {
+    if (type.kind == Type::exception && !type.identity)
+      return llvm::StructType::get(context(), {exception_payload_type(), i64()});
+    return type_of(type);
+  }
+  llvm::Value *store_exception(llvm::Value *payload, llvm::Value *category) {
+    llvm::Value *stored = llvm::PoisonValue::get(llvm::StructType::get(context(), {exception_payload_type(), i64()}));
+    stored = b().CreateInsertValue(stored, payload, {0});
+    return b().CreateInsertValue(stored, category, {1});
+  }
+  std::pair<llvm::Value *, llvm::Value *> load_exception(llvm::Value *stored) {
+    return {b().CreateExtractValue(stored, {0}), b().CreateExtractValue(stored, {1})};
   }
   llvm::StructType *record_type(Type type) {
     if (const auto found = records_.find(type.identity); found != records_.end()) return found->second;
@@ -186,7 +233,7 @@ public:
   void record(Type type, const std::vector<Type> &fields) {
     std::vector<llvm::Type *> native;
     for (const auto &field : fields)
-      native.push_back(field.kind == Type::reference ? pointer_integer_ : type_of(field));
+      native.push_back(field.kind == Type::reference ? pointer_integer_ : storage_type(field));
     if (native.empty()) native.push_back(llvm::Type::getInt8Ty(context()));
     record_type(type)->setBody(native);
     fields_[type.identity] = fields;
@@ -202,7 +249,7 @@ public:
     return b().CreateLoad(type_of(type), value);
   }
   void effect(size_t id, Type type, llvm::Value *source) {
-    if (type == Type::region || type.kind == Type::procedure) return;
+    if (type.kind == Type::region || type.kind == Type::procedure) return;
     // WPO checks the symbol's type and binding availability. TLS carries only
     // its current pointer; the binding's value and capture semantics are separate.
     // Calls are inlined and non-recursive. One cell per emitted binding site in
@@ -215,13 +262,79 @@ public:
     b().CreateStore(value, address);
   }
   size_t scope() const { return cleanups_.size(); }
-  void restore(size_t mark) {
-    while (cleanups_.size() > mark) {
-      auto cleanup = cleanups_.back();
-      cleanups_.pop_back();
+  void unwind(size_t mark) {
+    for (size_t i = cleanups_.size(); i > mark; --i) {
+      const auto &cleanup = cleanups_[i - 1];
       if (cleanup.saved) b().CreateStore(cleanup.saved, cleanup.address);
       else call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), cleanup.address)});
     }
+  }
+  void restore(size_t mark) {
+    if (reachable()) unwind(mark);
+    cleanups_.resize(mark);
+  }
+  bool reachable() const { return !builder_->GetInsertBlock()->hasTerminator(); }
+  llvm::BasicBlock *here() { return b().GetInsertBlock(); }
+  llvm::BasicBlock *label(const char *name) { return llvm::BasicBlock::Create(context(), name, entry_); }
+  void enter(llvm::BasicBlock *block) { b().SetInsertPoint(block); }
+  void jump(llvm::BasicBlock *block) { b().CreateBr(block); }
+  void unreachable() { b().CreateUnreachable(); }
+  llvm::Value *phi(llvm::Type *type, const std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> &edges) {
+    auto *result = b().CreatePHI(type, unsigned(edges.size()));
+    for (const auto &[value, from] : edges) result->addIncoming(value, from);
+    return result;
+  }
+  void on_exception(std::function<void(size_t, llvm::Value *)> handler) {
+    exception_handler_ = std::move(handler);
+  }
+  void dispatch_exception(llvm::Value *category, const std::function<void(size_t)> &emit) {
+    if (const auto *known = llvm::dyn_cast<llvm::ConstantInt>(category)) {
+      emit(known->getZExtValue());
+      return;
+    }
+    for (size_t kind = 1; kind <= 3; ++kind) {
+      auto *match = label("exception.type");
+      auto *next = label("exception.next");
+      b().CreateCondBr(b().CreateICmpEQ(category, integer(i64(), kind)), match, next);
+      enter(match);
+      emit(kind);
+      enter(next);
+    }
+    b().CreateUnreachable();
+  }
+  llvm::Value *exception_payload(llvm::Value *site, llvm::Value *requested, llvm::Value *available) {
+    llvm::Value *payload = llvm::PoisonValue::get(exception_payload_type());
+    payload = b().CreateInsertValue(payload, site, {0});
+    payload = b().CreateInsertValue(payload, requested, {1});
+    payload = b().CreateInsertValue(payload, available, {2});
+    return b().CreateInsertValue(payload, integer(i64(), 0), {3});
+  }
+  llvm::Value *exception_field(llvm::Value *payload, unsigned index) {
+    return b().CreateExtractValue(payload, {index});
+  }
+  llvm::Value *exception_chain(llvm::Value *primary, llvm::Value *cause, llvm::Value *category) {
+    auto *handle = checked_service("cod_lang_exception_chain", i64(),
+        {category, exception_field(cause, 0), exception_field(cause, 1), exception_field(cause, 2), exception_field(cause, 3)},
+        integer(i64(), 5 * sizeof(uint64_t)), {1});
+    return b().CreateInsertValue(primary, handle, {3});
+  }
+  llvm::Value *cause_count(llvm::Value *payload) {
+    return call_runtime("cod_lang_exception_count", i64(), {exception_field(payload, 3)});
+  }
+  std::pair<llvm::Value *, llvm::Value *> cause_at(llvm::Value *payload, llvm::Value *index) {
+    auto *storage = entry_slot(llvm::ArrayType::get(i64(), 5), "exception.cause");
+    call_runtime("cod_lang_exception_cause", void_type(), {exception_field(payload, 3), index, storage});
+    return {b().CreateLoad(exception_payload_type(), storage),
+            b().CreateLoad(i64(), b().CreateConstGEP1_64(i64(), storage, 4))};
+  }
+  void uncaught(size_t category, llvm::Value *payload) {
+    unwind(0);
+    for (auto region = module_regions_.rbegin(); region != module_regions_.rend(); ++region)
+      call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), *region)});
+    call_runtime("cod_lang_uncaught", void_type(),
+                 {integer(i64(), category), exception_field(payload, 0), exception_field(payload, 1),
+                  exception_field(payload, 2), exception_field(payload, 3)});
+    b().CreateUnreachable();
   }
   void print(Type type, llvm::Value *source) {
     auto *number = source;
@@ -303,23 +416,34 @@ public:
   };
   struct ConversionPoint {
     llvm::BasicBlock *before, *after;
+    std::vector<Cleanup> cleanups;
+    std::vector<llvm::Value *> modules;
+  };
+  struct ConversionResume {
+    llvm::IRBuilderBase::InsertPoint insertion;
+    std::vector<Cleanup> cleanups;
+    std::vector<llvm::Value *> modules;
   };
   ConversionPoint conversion_point() {
     auto *before = b().GetInsertBlock();
     auto *after = llvm::BasicBlock::Create(context(), "argument.next", entry_);
     b().CreateBr(after);
     b().SetInsertPoint(after);
-    return {before, after};
+    return {before, after, cleanups_, module_regions_};
   }
-  llvm::IRBuilderBase::InsertPoint begin_conversion(const ConversionPoint &point) {
-    auto resume = b().saveIP();
+  ConversionResume begin_conversion(const ConversionPoint &point) {
+    ConversionResume resume{b().saveIP(), cleanups_, module_regions_};
+    cleanups_ = point.cleanups;
+    module_regions_ = point.modules;
     point.before->getTerminator()->eraseFromParent();
     b().SetInsertPoint(point.before);
     return resume;
   }
-  void end_conversion(const ConversionPoint &point, llvm::IRBuilderBase::InsertPoint resume) {
-    b().CreateBr(point.after);
-    b().restoreIP(resume);
+  void end_conversion(const ConversionPoint &point, const ConversionResume &resume) {
+    if (reachable()) b().CreateBr(point.after);
+    cleanups_ = resume.cleanups;
+    module_regions_ = resume.modules;
+    b().restoreIP(resume.insertion);
   }
   Branch branch(llvm::Value *condition, bool invert = false) {
     auto *yes = llvm::BasicBlock::Create(context(), "then", entry_);
@@ -331,27 +455,30 @@ public:
     return {no, merge, nullptr, nullptr};
   }
   void otherwise(Branch &branch, llvm::Value *first = nullptr) {
-    branch.first_end = b().GetInsertBlock();
+    branch.first_end = reachable() ? b().GetInsertBlock() : nullptr;
     branch.first_value = first;
-    b().CreateBr(branch.merge);
+    if (reachable()) b().CreateBr(branch.merge);
     b().SetInsertPoint(branch.otherwise);
   }
   llvm::Value *merge(Branch &branch, Type type, llvm::Value *second = nullptr) {
-    auto *second_end = b().GetInsertBlock();
-    b().CreateBr(branch.merge);
+    auto *second_end = reachable() ? b().GetInsertBlock() : nullptr;
+    if (reachable()) b().CreateBr(branch.merge);
     b().SetInsertPoint(branch.merge);
+    if (!branch.first_end && !second_end) { b().CreateUnreachable(); return nullptr; }
     if (type == Type::void_type) return nullptr;
     auto *result = b().CreatePHI(type_of(type), 2);
-    result->addIncoming(branch.first_value, branch.first_end);
-    result->addIncoming(second, second_end);
+    if (branch.first_end) result->addIncoming(branch.first_value, branch.first_end);
+    if (second_end) result->addIncoming(second, second_end);
     return result;
   }
 
   struct Loop {
     llvm::BasicBlock *header = nullptr, *exit = nullptr;
     llvm::PHINode *index = nullptr, *accumulator = nullptr;
+    llvm::PHINode *exception_category = nullptr;
   };
-  Loop loop(Type index_type, llvm::Value *first, llvm::Value *last, llvm::Value *initial = nullptr) {
+  Loop loop(Type index_type, llvm::Value *first, llvm::Value *last, llvm::Value *initial = nullptr,
+            llvm::Value *category = nullptr) {
     auto *before = b().GetInsertBlock();
     auto *header = llvm::BasicBlock::Create(context(), "loop", entry_);
     auto *body = llvm::BasicBlock::Create(context(), "body", entry_);
@@ -365,18 +492,26 @@ public:
       accumulator = b().CreatePHI(initial->getType(), 2, "accumulator");
       accumulator->addIncoming(initial, before);
     }
+    llvm::PHINode *exception_category = nullptr;
+    if (category) {
+      exception_category = b().CreatePHI(i64(), 2, "exception.category");
+      exception_category->addIncoming(category, before);
+    }
     auto *condition = signed_integer(index_type) ? b().CreateICmpSLT(index, last) :
                                                   b().CreateICmpULT(index, last);
     b().CreateCondBr(condition, body, exit);
     b().SetInsertPoint(body);
-    return {header, exit, index, accumulator};
+    return {header, exit, index, accumulator, exception_category};
   }
-  void end_loop(Loop &loop, llvm::Value *next = nullptr) {
-    auto *end = b().GetInsertBlock();
-    auto *index = b().CreateAdd(loop.index, integer(llvm::cast<llvm::IntegerType>(loop.index->getType()), 1));
-    loop.index->addIncoming(index, end);
-    if (loop.accumulator) loop.accumulator->addIncoming(next, end);
-    b().CreateBr(loop.header);
+  void end_loop(Loop &loop, llvm::Value *next = nullptr, llvm::Value *category = nullptr) {
+    if (reachable()) {
+      auto *end = b().GetInsertBlock();
+      auto *index = b().CreateAdd(loop.index, integer(llvm::cast<llvm::IntegerType>(loop.index->getType()), 1));
+      loop.index->addIncoming(index, end);
+      if (loop.accumulator) loop.accumulator->addIncoming(next, end);
+      if (loop.exception_category) loop.exception_category->addIncoming(category, end);
+      b().CreateBr(loop.header);
+    }
     b().SetInsertPoint(loop.exit);
   }
 
@@ -394,7 +529,8 @@ private:
     return b().CreateZExtOrTrunc(offset, i64());
   }
   llvm::Value *allocate(llvm::Value *owner, llvm::Value *bytes, uint64_t alignment) {
-    return call_runtime("cod_lang_region_alloc", i64(), {owner, bytes, integer(i64(), alignment), source_context()});
+    return checked_service("cod_lang_region_alloc", i64(), {owner, bytes, integer(i64(), alignment)},
+                           bytes, {2});
   }
   void store_reference(llvm::Value *region, llvm::Value *field, llvm::Value *offset) {
     auto *target = address(region, offset);
@@ -420,15 +556,29 @@ private:
 
 public:
   llvm::Value *region_new(Type capacity_type, llvm::Value *capacity) {
-    auto *bytes = cast(capacity_type, Type::uint64, capacity);
-    return call_runtime("cod_lang_region_new", pointer_type(), {bytes, source_context()});
+    auto *bytes = b().CreateZExtOrTrunc(capacity, i64());
+    return checked_service("cod_lang_region_new", pointer_type(), {bytes}, bytes, {1, 3});
   }
-  void hold_region(llvm::Value *region, bool module_lifetime) {
+  llvm::Value *hold_region(llvm::Value *region, bool module_lifetime) {
     llvm::IRBuilder<> allocations(&entry_->getEntryBlock(), entry_->getEntryBlock().begin());
     auto *slot = allocations.CreateAlloca(pointer_type(), nullptr, "region.owner");
     b().CreateStore(region, slot);
     if (module_lifetime) module_regions_.push_back(slot);
     else cleanups_.push_back({slot, nullptr});
+    return slot;
+  }
+  void relinquish_region(llvm::Value *slot) {
+    b().CreateStore(llvm::ConstantPointerNull::get(pointer_type()), slot);
+  }
+  llvm::Value *region_root(llvm::Value *owner) {
+    return call_runtime("cod_lang_region_root", i64(), {owner});
+  }
+  llvm::Value *reserve_root(llvm::Value *owner, Type type) {
+    const auto &layout = module_->getDataLayout();
+    auto *record = record_type(type);
+    auto *bytes = integer(i64(), std::max<uint64_t>(1, layout.getTypeAllocSize(record).getFixedValue()));
+    return checked_service("cod_lang_region_reserve_root", i64(),
+        {owner, bytes, integer(i64(), layout.getABITypeAlign(record).value())}, bytes, {2});
   }
   llvm::Value *region_size(llvm::Value *owner, bool capacity) {
     return call_runtime(capacity ? "cod_lang_region_capacity" : "cod_lang_region_used", i64(), {owner});
@@ -486,7 +636,7 @@ public:
   llvm::Value *read(const Place &place) {
     if (place.type.kind == Type::array || place.type.kind == Type::regional) return reference(place);
     if (place.type.kind == Type::reference) return read_reference(place.owner, place.address);
-    return b().CreateLoad(type_of(place.type), place.address);
+    return b().CreateLoad(storage_type(place.type), place.address);
   }
   void write(const Place &place, llvm::Value *value) {
     if (place.type.kind == Type::array || place.type.kind == Type::regional)
@@ -508,9 +658,27 @@ public:
 
   std::pair<std::string, std::string> finish() {
     if (!cleanups_.empty()) throw std::logic_error("unclosed LLVM resource scope");
-    for (auto region = module_regions_.rbegin(); region != module_regions_.rend(); ++region)
-      call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), *region)});
-    b().CreateRet(integer(llvm::Type::getInt32Ty(context()), 0));
+    if (reachable()) {
+      for (auto region = module_regions_.rbegin(); region != module_regions_.rend(); ++region)
+        call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), *region)});
+      call_runtime("cod_lang_exception_finish", void_type(), {});
+      b().CreateRet(integer(llvm::Type::getInt32Ty(context()), 0));
+    }
+    // Resolve sites against the complete program, including sites emitted after
+    // an earlier throw whose cause may originate on a previous loop iteration.
+    auto *lookup = llvm::Function::Create(llvm::FunctionType::get(pointer_type(), {i64()}, false),
+        llvm::GlobalValue::ExternalLinkage, "cod_lang_exception_site", *module_);
+    llvm::IRBuilder<> sites(llvm::BasicBlock::Create(context(), "entry", lookup));
+    auto *unknown = llvm::BasicBlock::Create(context(), "unknown", lookup);
+    auto *dispatch = sites.CreateSwitch(lookup->getArg(0), unknown, unsigned(exception_sites_.size()));
+    for (size_t i = 0; i < exception_sites_.size(); ++i) {
+      auto *known = llvm::BasicBlock::Create(context(), "site", lookup);
+      dispatch->addCase(integer(i64(), i), known);
+      sites.SetInsertPoint(known);
+      sites.CreateRet(exception_sites_[i]);
+    }
+    sites.SetInsertPoint(unknown);
+    sites.CreateRet(llvm::ConstantPointerNull::get(pointer_type()));
     std::string errors;
     llvm::raw_string_ostream diagnostics(errors);
     if (llvm::verifyModule(*module_, &diagnostics))

@@ -1,0 +1,415 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-10T06:27:29.854945+00:00",
+  "toolchain": "build",
+  "backend": "llvm",
+  "passed": true,
+  "authority": [
+    "D-17 E1\u2013E5",
+    "H-267",
+    "H-269",
+    "K-414"
+  ],
+  "checkout_base": "ec5f5fd6ef2f6bdab299b8dbdc0d8e807298b417",
+  "compiler_sha256": "f2ebc8225a56b9dae5b73859ea446037701da4db1a144f6ec95a3c1356360bf4",
+  "native_compiler_sha256": "647024102b2aec917f7f279d0b7ff2cccd0edad20e4ab4abf738e3381332dc0d",
+  "scope": "Accepted local exception/ordinary-region lifecycle package. Focused acceptance, not the full language suite, transport or general RTTI.",
+  "commands": [
+    "cmake --build ./build",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/run_tests.py exception-control exception-reraise exception-chain owned-region-lifecycle",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/exception_runtime_tests.py",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/owned_region_tests.py",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/regional_runtime_tests.py",
+    "COD_TEST_TOOLCHAIN=build python3 tests/shilos/region_construction_tests.py",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/run_tests.py import-mapping"
+  ],
+  "build": {
+    "exit": 0,
+    "source_only": true,
+    "diagnostics": [
+      "Existing upstream OpenMP implicit-this-capture warning.",
+      "Existing runtime CMake policy/deprecation diagnostics."
+    ]
+  },
+  "acceptance": {
+    "E1": {
+      "passed": true,
+      "evidence": "All three categories; provider OOM; bounded payload/category preservation through regional storage, pack selection and rethrow. No general type descriptor."
+    },
+    "E2": {
+      "passed": true,
+      "evidence": "Normal/handled try results, exact/catch-all/rethrow, immutable explicit chains returned/stored past catch, and uncaught diagnostics with complete source-site resolution."
+    },
+    "E3": {
+      "passed": true,
+      "evidence": "Finally runs on normal/exceptional exit, replaces pending failure without automatic cause, and releases abandoned owning results. Failed explicit chaining preserves earlier histories."
+    },
+    "E4": {
+      "passed": true,
+      "evidence": "Borrowed/owning calls/results, per-argument conversion before later effects, entry-time moves, selected-owner cleanup and consumed-name/view rejection."
+    },
+    "E5": {
+      "passed": true,
+      "evidence": "Typed make/root initialization/edit/transfer/effect installation, 19 exact releases, branch/exception joins, root/cycle relocation, captured/hidden resources and backend construction failure cleanup."
+    }
+  },
+  "language": {
+    "passed": 5,
+    "total": 5,
+    "results": [
+      {
+        "fixture": "exception-control.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/exception-control.cod"
+        ],
+        "expected": {
+          "file": "exception-control.cod",
+          "exit": 0,
+          "stdout": "90\n20\n90\n10\n91\n21\n92\n22\n23\n24\n"
+        },
+        "exit_code": 0,
+        "stdout": "90\n20\n90\n10\n91\n21\n92\n22\n23\n24\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "exception-reraise.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/exception-reraise.cod"
+        ],
+        "expected": {
+          "file": "exception-reraise.cod",
+          "exit": 70,
+          "stdout": "10\n20\n",
+          "stderr_contains": [
+            "exception-reraise.cod:8:22:",
+            "uncaught InvalidCapacity",
+            "requested=0"
+          ]
+        },
+        "exit_code": 70,
+        "stdout": "10\n20\n",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/exception-reraise.cod:8:22: uncaught InvalidCapacity (site=2, requested=0, available=0)\n",
+        "passed": true
+      },
+      {
+        "fixture": "owned-region-lifecycle.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/owned-region-lifecycle.cod"
+        ],
+        "expected": {
+          "file": "owned-region-lifecycle.cod",
+          "stdout": "9\n9\n9\n11\n10\n101\n102\n1\n2\n2\n3\n4\n5\n6\n7\n8\n0\n",
+          "exit": 0
+        },
+        "exit_code": 0,
+        "stdout": "9\n9\n9\n11\n10\n101\n102\n1\n2\n2\n3\n4\n5\n6\n7\n8\n0\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "exception-chain.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/exception-chain.cod"
+        ],
+        "expected": {
+          "file": "exception-chain.cod",
+          "exit": 0,
+          "stdout": "1\n"
+        },
+        "exit_code": 0,
+        "stdout": "1\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
+          "--emit-llvm",
+          "/tmp/cod-language-check-xtpx9hh4/program.ll",
+          "--emit-bc",
+          "/tmp/cod-language-check-xtpx9hh4/program.bc"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ]
+  },
+  "exceptions": {
+    "layout": {
+      "provider_failures": 1,
+      "owners_acquired": 2,
+      "owners_released": 2,
+      "inner_released_before_catch": true,
+      "outer_preserved_until_exit": true
+    },
+    "frontend_seconds": 0.018181589999585412,
+    "native_compile_link_seconds": 1.7230387129966402,
+    "native_process_seconds": 0.0013505070019164123,
+    "llvm_ir_bytes": 12965,
+    "bitcode_bytes": 5588,
+    "retained_chain": {
+      "layout": {
+        "returned_and_stored_causes": true,
+        "relocation_after_original_release": true,
+        "category_preserved": true,
+        "immutable_records": 4,
+        "storage_released_at_exit": true
+      },
+      "frontend_seconds": 0.02221726899733767,
+      "native_compile_link_seconds": 1.7354120169984526,
+      "native_process_seconds": 0.001398598004016094,
+      "llvm_ir_bytes": 66027,
+      "bitcode_bytes": 17156
+    },
+    "chain_allocation_failure": {
+      "layout": {
+        "real_chain_allocation_failures": 3,
+        "automatic_cause_added": false,
+        "saved_chain_survives_failure": true,
+        "retry_passed": true,
+        "owners_acquired": 2,
+        "owners_released": 2,
+        "chain_allocations": 4,
+        "chain_deallocations": 4
+      },
+      "frontend_seconds": 0.02253291600209195,
+      "native_compile_link_seconds": 1.7248111689987127,
+      "native_process_seconds": 0.001462699001422152,
+      "llvm_ir_bytes": 77969,
+      "bitcode_bytes": 17188
+    },
+    "uncaught": {
+      "exit": 70,
+      "trace": [
+        "release 64",
+        "10",
+        "20",
+        "release 4096"
+      ],
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/exception-reraise.cod:8:22: uncaught InvalidCapacity (site=2, requested=0, available=0)\n"
+    },
+    "uncaught_chain": {
+      "exit": 70,
+      "diagnostics": [
+        "/tmp/cod-exception-viqka1c7/uncaught-chain.cod:4:48: uncaught InvalidCapacity (site=0, requested=0, available=0)",
+        "/tmp/cod-exception-viqka1c7/uncaught-chain.cod:10:47: caused by RegionCapacityExceeded (site=15, requested=8, available=1)"
+      ],
+      "released_owners": 2,
+      "later_emitted_cause_site_resolved": true,
+      "chain_storage_released": true
+    },
+    "recorded_utc": "2026-11-10T06:23:34.673950+00:00",
+    "compile_rejections": [
+      "non-exception-cause",
+      "duplicate-category",
+      "catch-order",
+      "finally-value",
+      "rethrow-context",
+      "function-effects"
+    ]
+  },
+  "ownership": {
+    "layout": {
+      "owners_acquired": 19,
+      "owners_released": 19,
+      "root_relocations": 1,
+      "pending_result_cleanup": true,
+      "callee_entry_timing": true
+    },
+    "frontend_seconds": 0.03690003600058844,
+    "native_compile_link_seconds": 1.9838044680000166,
+    "native_process_seconds": 0.0014438030048040673,
+    "llvm_ir_bytes": 212393,
+    "bitcode_bytes": 44348,
+    "recorded_utc": "2026-11-10T06:23:28.515604+00:00",
+    "toolchain": "build",
+    "trace": [
+      "9",
+      "9",
+      "9",
+      "11",
+      "10",
+      "101",
+      "102",
+      "1",
+      "2",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "0"
+    ],
+    "compile_rejections": [
+      "stale-reference-comparison",
+      "consumed-name",
+      "escaping-view",
+      "ended-effect-owner",
+      "conditional-consumption",
+      "duplicate-move",
+      "later-argument-move",
+      "borrow-extraction",
+      "dynamic-extraction",
+      "repeated-move",
+      "mode-overload",
+      "exceptional-join",
+      "owner-field",
+      "missing-field",
+      "duplicate-field"
+    ]
+  },
+  "regional_regression": {
+    "recorded_utc": "2026-11-10T06:23:31.574848+00:00",
+    "llvm_artifact_roundtrip": true,
+    "layout": {
+      "relocation_passed": true,
+      "relocated_bytes": 120,
+      "region_header_bytes": 40,
+      "array_header_bytes": 16,
+      "record_bytes": 24
+    },
+    "pool": {
+      "layout": {
+        "relocation_passed": true,
+        "relocated_bytes": 152,
+        "slots": 4,
+        "cod_reuse_laps": 10000,
+        "bounded_occupation": true,
+        "relocated_free_chain": [
+          3,
+          1,
+          4
+        ],
+        "independent_native_reuse_passed": true
+      },
+      "frontend_seconds": 0.021545497998886276,
+      "native_compile_link_seconds": 1.7579946069963626,
+      "native_process_seconds": 0.0014111120035522617,
+      "llvm_ir_bytes": 100998,
+      "bitcode_bytes": 26288
+    },
+    "resources": {
+      "layout": {
+        "owners_acquired": 4,
+        "owners_released": 4,
+        "release_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "live_resource_reads": 18,
+        "loop_iterations": 3,
+        "untaken_branch_acquires_nothing": true,
+        "captured_and_hidden_owners_survive_replay": true
+      },
+      "frontend_seconds": 0.014480081998044625,
+      "native_compile_link_seconds": 1.708108558996173,
+      "native_process_seconds": 0.0012368620009510778,
+      "llvm_ir_bytes": 16754,
+      "bitcode_bytes": 6932
+    }
+  },
+  "shilos_construction": {
+    "exit": 0,
+    "throwing_root_overloads_released_once": 2,
+    "provider_failure_never_enters_root": true,
+    "successful_root_retained_until_release": true
+  },
+  "low_memory_source_audit": {
+    "trivial_tls_pointer": true,
+    "native_runtime_ir_has_thread_destructor_registration": false,
+    "method": "Generated current native runtime and inspected clang-emitted LLVM IR for __cxa_thread_atexit; no lazy TLS destructor registration is emitted."
+  },
+  "limits": [
+    "Cause/site handles are execution-local; no cross-process delivery or persistence claim.",
+    "Discarded immutable cause records remain until execution exit; explicit chaining can exhaust storage.",
+    "Relocation is independent native inspection after freeing the original; resumed CoD execution after relocation is not claimed.",
+    "General qualifiers/places, owner reassignment, mailbox, user exception graphs, general RTTI and fractions remain outside this package."
+  ],
+  "source_sha256": {
+    "cod/lang_frontend.hh": "71eb16bb51b3394ad2e0188a7d8c44ae4a2bf87e96ad390f7b32271c7449fc3b",
+    "cod/lang_llvm.hh": "c35693834a41d367cd00e181f7bd5127c432290024ce814a2d01c55875f89124",
+    "cod/lang_native_runtime.hh": "297350aef0f1a81254ebdcd0b1e28ed70ddad2bfe17f22d0b5cca2255af4bed8",
+    "cod/lang_syntax.hh": "047f15ea0f6fb2cafb864392e8355338ab3b970b538c68a295e62096a10689ec",
+    "cod/main.cc": "fa52fb708d819239c9db43c6f0a665856419aae9d1351f4e888b87afa326cb90",
+    "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241",
+    "tests/cod/language/cases.json": "682f3336d80a4ce1833a08d5a0049f71786c3a35509706bb487b870aaa868d29",
+    "tests/cod/language/exception-allocation.cod": "cdf5cc6fa5ac40ef7a5034660d8d06aef46e4a6adcd2d6d67e837c643d5a7ea7",
+    "tests/cod/language/exception-chain.cod": "1dfca1a8cdcfed5ddda02500c0fd92cb40c7af4efc0cdc78d8d7d9f40159ffb8",
+    "tests/cod/language/exception-control.cod": "85f404a2a87be3e4a507772c9e21d047a5f1bd9caf77fab750b4a76419e02a58",
+    "tests/cod/language/exception-reraise.cod": "f904273bf0a6c38f5c6370d3256c66ff0262f88857232ab58239d8a461b5b4d2",
+    "tests/cod/language/exception_runtime_tests.py": "c05ad65f86e49a77ce93c26c26bed12a55a3f27fada3856b1e23a11023b90bb2",
+    "tests/cod/language/import-mapping.cod": "b7c5c5f4335bf05e10cd45413317c863efbd4179e0b671105fb80a47e875383c",
+    "tests/cod/language/owned-region-library.cod": "070518e25d1a6228fd84d29c13c59269f99e9c0aec4aae22f06b5ab28da9343a",
+    "tests/cod/language/owned-region-lifecycle.cod": "6723f3ff45b256dd3accbbd80c68ae02254e360ac133fc4221409d0c081f5435",
+    "tests/cod/language/owned_region_tests.py": "e411d204192384bda60e7b2e96aac0ea917d087e5fdb4408b42e9fe020bd7358",
+    "tests/cod/language/pool-adapter.cod": "41b97211645bfaf87197be96eca737d5e2e6e48670bd504d2f2c99031fd116ff",
+    "tests/cod/language/pool-algorithms.cod": "39954ce43f27ecc6a28713a1df2e3af68212b4b235403ede7a03ebeaa887ee66",
+    "tests/cod/language/pool-interface.cod": "38efe492138d001054d72927297ef0d57676868f04f4f411cb90b19a5de57264",
+    "tests/cod/language/region-owner-capture.cod": "7bae16a957e0b3af4c0bed80d088ab30690ae1c8602dc900377858cf1f8a2ccc",
+    "tests/cod/language/region-pool.cod": "4bb90e7e5df463f260cd9bd153e73424e206d47e964bf5758efcfa4ebe894b64",
+    "tests/cod/language/region-records.cod": "11a0351951fdc7c7b3e9f7a7e6dba28985f0e65a3b540689d4be29822ce9dbdf",
+    "tests/cod/language/regional_runtime_tests.py": "a3934500b777a95753089fa4f1bcc4b1accd899c0024870b9af64b6b19117180",
+    "tests/cod/language/reusable-pool.cod": "cfbc32a1e3bef80d3a80625cba9ceb10fd1a08fd4b0c6fe832ea525549be101d",
+    "tests/cod/language/run_tests.py": "c68bf97b50ca2f9ffda829626539210bc55e5888e08f411ff99c3618a7dfa764",
+    "tests/cod/language/source.cod": "8f1e3089f7adbadb02f90cb843d837380b029e314c1c2f5717c0557380c3883b",
+    "tests/shilos/region_construction_tests.py": "51cd1505fa457e91c87e534f3fd4f3affac6112b61e0f27df55126014a0ae820"
+  },
+  "scalar_runtime_regression": {
+    "reason": "Native linkage/cleanup with neither regional allocation nor exception sites.",
+    "results": [
+      {
+        "fixture": "import-mapping.cod",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--run",
+          "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod"
+        ],
+        "expected": {
+          "file": "import-mapping.cod",
+          "exit": 0,
+          "stdout": "1001\n907\n908\n8\n"
+        },
+        "exit_code": 0,
+        "stdout": "1001\n907\n908\n8\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "command": [
+          "/ws/EvtWorks/cod-project/build/bin/cod",
+          "--check",
+          "/ws/EvtWorks/cod-project/tests/cod/language/import-mapping.cod",
+          "--emit-llvm",
+          "/tmp/cod-language-check-dy8rwwah/program.ll",
+          "--emit-bc",
+          "/tmp/cod-language-check-dy8rwwah/program.bc"
+        ],
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ],
+    "passed": 2,
+    "total": 2
+  }
+}

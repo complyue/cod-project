@@ -1,0 +1,28 @@
+data Node { value::u64; next::ref<Node>; }
+data Packet { sequence::u64; head::ref<Node>; }
+function fresh(bytes::u64, value::u64)::owned region<Packet> {
+  make Packet(capacity = bytes) { sequence <- value; head <- null }
+}
+function forward(packet::owned region<R>)::owned region<R> where R { packet }
+function inspect(packet::region<R>)::R where R { root(packet) }
+function dispose(packet::owned region<Packet>, unused::u64)::void {}
+function fail_inside(packet::owned region<Packet>, bytes::u64)::void {
+  setfield(root(packet), sequence, 99u64);
+  let unfinished::owned region<Packet> <- fresh(bytes, 0u64);
+  {}
+}
+
+export Node;
+export Packet;
+export fresh;
+export forward;
+export inspect;
+export dispose;
+export fail_inside;
+
+function edit_then_fail(packet::region<Packet>, bytes::u64)::void {
+  setfield(root(packet), sequence, 55u64);
+  let failed::owned region<Packet> <- fresh(bytes, 0u64);
+  {}
+}
+export edit_then_fail;

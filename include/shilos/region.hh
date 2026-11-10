@@ -141,7 +141,12 @@ public:
                                               Args &&...args) noexcept(false) {
     const size_t capacity = sizeof(memory_region) + payload_capacity;
     void *ptr = allocator.allocate(capacity);
-    return new (ptr) memory_region<RT>(capacity, std::forward<Args>(args)...);
+    try {
+      return new (ptr) memory_region<RT>(capacity, std::forward<Args>(args)...);
+    } catch (...) {
+      allocator.deallocate(static_cast<std::byte *>(ptr), capacity);
+      throw;
+    }
   }
 
   // Simplified alloc_region for root types that only need memory_region& parameter
@@ -153,9 +158,7 @@ public:
   static memory_region<RT> *alloc_region_with(std::allocator<std::byte> allocator, const size_t payload_capacity)
     requires std::constructible_from<RT, memory_region<RT> &>
   {
-    const size_t capacity = sizeof(memory_region) + payload_capacity;
-    void *ptr = allocator.allocate(capacity);
-    return new (ptr) memory_region<RT>(capacity);
+    return alloc_region_with<>(allocator, payload_capacity);
   }
 
   // Manual deallocation methods

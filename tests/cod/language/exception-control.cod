@@ -1,0 +1,114 @@
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+using "std:exceptions" InvalidCapacity;
+using "std:exceptions" RegionCapacityExceeded;
+symbol arena :: region, level :: i64, original_capacity :: u64;
+array Values[u32]::u64;
+effect @level <- 1;
+effect @arena <- region(4096u64);
+effect @original_capacity <- capacity_bytes(@arena);
+proc @captured() -> i64 { @level }
+proc @captured_failure() -> void {
+  behave @assert(@level == 1);
+  behave @assert(capacity_bytes(@arena) == @original_capacity);
+  effect @arena <- region(0u64);
+  {}
+}
+function forward(error::InvalidCapacity)::i64 { throw error }
+function forward_bool(error::InvalidCapacity)::bool { throw error }
+
+for (i in 0 .. 2) {
+  let answer = try {
+    effect @level <- 2;
+    effect @arena <- region(if (i == 0) { 0u64 } else { 128u64 });
+    10
+  } catch (error :: const InvalidCapacity) {
+    behave @assert(@level == 1);
+    behave @assert(error.requested == 0u64);
+    behave @assert(true || forward_bool(error));
+    behave @assert(!(false && forward_bool(error)));
+    behave @assert(if (true) { true } else { forward_bool(error) });
+    try { false || forward_bool(error); {} }
+    catch (again :: const InvalidCapacity) { behave @assert(again.requested == 0u64) };
+    20
+  } finally {
+    behave @assert(@level == 1);
+    behave @print(90)
+  };
+  behave @print(answer)
+};
+
+try {
+  try {
+    effect @level <- 3;
+    effect @arena <- region(64u64);
+    let values = alloc @arena Values(100u64, 0u64);
+    behave @print(len(values))
+  } catch (error :: const InvalidCapacity) {
+    behave @print(999)
+  } finally {
+    behave @assert(@level == 1);
+    behave @print(91)
+  }
+} catch (error :: const RegionCapacityExceeded) {
+  behave @assert(error.requested == 800u64);
+  behave @print(21)
+};
+
+try {
+  try {
+    effect @arena <- region(0u64);
+    {}
+  } catch (error) {
+    behave @assert(error.category == 3u64);
+    throw;
+  } finally {
+    behave @print(92)
+  }
+} catch (error :: const InvalidCapacity) {
+  behave @print(22)
+};
+
+try {
+  try {
+    effect @arena <- region(0u64);
+    0
+  } catch (error :: const InvalidCapacity) {
+    forward(error)
+  } finally {
+    effect @arena <- region(-1);
+    behave @print(999)
+  }
+} catch (error :: const InvalidCapacity) {
+  behave @assert(error.requested == 18446744073709551615u64);
+  behave @print(23);
+  0
+};
+behave @assert(perform @captured() == 1);
+try {
+  try { effect @arena <- region(0u64); {} }
+  catch (first) {
+    try {
+      effect @arena <- region(64u64);
+      let values = alloc @arena Values(100u64, 0u64);
+      {}
+    } catch (second) {
+      let selected = fold (i in 0 .. 2, error = first) {
+        if (i == 0) { second } else { error }
+      };
+      throw selected;
+    }
+  }
+} catch (error :: const RegionCapacityExceeded) {
+  behave @assert(error.requested == 800u64)
+};
+{
+  effect @level <- 8;
+  effect @arena <- region(8192u64);
+  try { perform @captured_failure() }
+  catch (error :: const InvalidCapacity) {
+    behave @assert(@level == 8);
+    behave @assert(capacity_bytes(@arena) == @original_capacity + 4096u64)
+  }
+};
+behave @print(24);

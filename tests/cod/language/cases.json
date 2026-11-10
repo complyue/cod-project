@@ -749,7 +749,7 @@
     "stdout": "",
     "stderr_contains": [
       "region-capacity.cod:4:14:",
-      "bad_alloc"
+      "uncaught RegionCapacityExceeded"
     ]
   },
   {
@@ -1267,5 +1267,30 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "expected f64, got i64"
+  },
+  {
+    "file": "exception-control.cod",
+    "exit": 0,
+    "stdout": "90\n20\n90\n10\n91\n21\n92\n22\n23\n24\n"
+  },
+  {
+    "file": "exception-reraise.cod",
+    "exit": 70,
+    "stdout": "10\n20\n",
+    "stderr_contains": [
+      "exception-reraise.cod:8:22:",
+      "uncaught InvalidCapacity",
+      "requested=0"
+    ]
+  },
+  {
+    "file": "owned-region-lifecycle.cod",
+    "stdout": "9\n9\n9\n11\n10\n101\n102\n1\n2\n2\n3\n4\n5\n6\n7\n8\n0\n",
+    "exit": 0
+  },
+  {
+    "file": "exception-chain.cod",
+    "exit": 0,
+    "stdout": "1\n"
   }
 ]

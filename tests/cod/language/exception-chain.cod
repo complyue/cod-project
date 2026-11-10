@@ -1,0 +1,71 @@
+using symbol "std:io" @assert;
+using symbol "std:io" @print;
+using "std:exceptions" SystemException;
+using "std:exceptions" InvalidCapacity;
+using "std:exceptions" RegionCapacityExceeded;
+data Packet { sequence::u64; }
+data Saved { error::SystemException; exact::InvalidCapacity; }
+
+function chain(primary::SystemException, cause::SystemException)::SystemException {
+  try { throw primary from cause } catch(result) { result }
+}
+function capacity_failure(fallback::SystemException)::SystemException {
+  try {
+    let packet::owned region<Packet> <- make Packet(capacity=1u64){sequence<-0u64};
+    fallback
+  } catch(error) { error }
+}
+function selected(index::u64, errors::SystemException...)::SystemException { errors[index] }
+proc check() -> void {
+  try {
+    let invalid::owned region<Packet> <- make Packet(capacity=0u64){sequence<-0u64};
+    {}
+  } catch(seed) {
+    let initial = try {throw seed} catch(exact::const InvalidCapacity) {exact};
+    let secondary = capacity_failure(seed);
+    let first = chain(secondary, initial);
+    let second = chain(initial, first);
+    behave @assert(first.category == 2u64 && first.cause_count == 1u64);
+    behave @assert(second.category == 3u64 && second.cause_count == 2u64);
+    behave @assert(cause_at(second, 0u64).category == 2u64);
+    behave @assert(cause_at(second, 1u64).category == 3u64);
+    behave @assert(cause_at(second, 0u64).requested == 8u64);
+    behave @assert(cause_at(second, 1u64).requested == 0u64);
+    behave @assert(cause_at(second, 0u64).site == secondary.site);
+    behave @assert(cause_at(second, 1u64).site == initial.site);
+    let replaced = chain(second, initial);
+    behave @assert(replaced.cause_count == 1u64 && second.cause_count == 2u64);
+    let self = chain(first, first);
+    behave @assert(self.cause_count == 2u64 && first.cause_count == 1u64);
+
+    let saved::owned region<Saved> <- make Saved(capacity=256u64){error<-second; exact<-initial};
+    # Store an exact category in common storage, then reload and catch by its identity.
+    setfield(root(saved), error, secondary);
+    try {throw root(saved).error} catch(error::const RegionCapacityExceeded) {
+      behave @assert(error.requested == 8u64)
+    };
+    let record = alloc saved Saved(second, initial);
+    setfield(root(saved), error, deref(record).error);
+    let escaped = {
+      let temporary::owned region<Saved> <- make Saved(capacity=72u64){error<-first; exact<-initial};
+      root(temporary).error
+    };
+    behave @assert(escaped.cause_count == 1u64);
+    try {throw escaped} catch(error::const RegionCapacityExceeded) {
+      behave @assert(error.cause_count == 1u64)
+    };
+    for(i in 0u64 .. 2u64) {
+      let error = selected(i, secondary, second);
+      behave @assert(error.category == 2u64 + i);
+      try {throw error}
+      catch(capacity_error::const RegionCapacityExceeded) {behave @assert(i == 0u64)}
+      catch(invalid_error::const InvalidCapacity) {behave @assert(i == 1u64)}
+    };
+    try {try {throw second} catch(error) {throw;}}
+    catch(error::const InvalidCapacity) {behave @assert(error.cause_count == 2u64)};
+    try {try {throw second} finally {throw initial}}
+    catch(error::const InvalidCapacity) {behave @assert(error.cause_count == 0u64)};
+    behave @print(1)
+  }
+}
+check();

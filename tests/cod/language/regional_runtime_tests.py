@@ -168,10 +168,10 @@ static unsigned live_resource(void *owner) {
   assert(false && "operation on an unacquired region");
   return 0;
 }
-extern "C" void *cod_lang_region_new(std::uint64_t capacity, const char *context) {
+extern "C" void *cod_lang_region_new(std::uint64_t capacity, std::uint64_t *status) {
   assert(acquired < 4);
   if (acquired) assert(released == acquired - 1);
-  void *owner = cod_lang_region_acquire(capacity, context);
+  void *owner = cod_lang_region_acquire(capacity, status);
   resources[acquired++] = {owner, true};
   return owner;
 }
@@ -181,7 +181,8 @@ extern "C" std::uint64_t cod_lang_region_capacity(void *owner) {
   return cod_lang_region_inspect(owner);
 }
 extern "C" void cod_lang_region_free(void *owner) {
-  assert(owner);
+  // A transferred holder is empty; the service's null case releases nothing.
+  if (!owner) return;
   const auto index = live_resource(owner);
   constexpr unsigned order[] = {1, 2, 3, 0};
   assert(released < 4 && index == order[released]);
@@ -208,7 +209,7 @@ def checked(command, root):
     return result.stdout, seconds
 
 
-def run_case(root, toolchain, entry, scratch, harness, capture_lifetimes=False):
+def run_case(root, toolchain, entry, scratch, harness, capture_lifetimes=False, extra_wrappers=""):
     ir, bitcode, runtime = [scratch / name for name in ("main.ll", "main.bc", "runtime.cc")]
     _, frontend_seconds = checked([toolchain / "bin/cod", "--check", entry,
                                    "--emit-llvm", ir, "--emit-bc", bitcode, "--emit-runtime", runtime], root)
@@ -224,7 +225,7 @@ def run_case(root, toolchain, entry, scratch, harness, capture_lifetimes=False):
     if capture_lifetimes:
         wrappers += ('#define cod_lang_region_new cod_lang_region_acquire\n'
                      '#define cod_lang_region_capacity cod_lang_region_inspect\n')
-    source.write_text(wrappers + runtime.read_text() + harness)
+    source.write_text(wrappers + extra_wrappers + runtime.read_text() + harness)
     executable = scratch / "relocation"
     command = [toolchain / "bin/clang++", "-std=c++20", "-O2", "-g", "-UNDEBUG", "-stdlib=libc++",
                "-fuse-ld=lld", "-I" + str(root / "include"), roundtrip, source, "-o", executable,

@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-11-09T21:02:19.086117+00:00",
+  "toolchain": "build",
+  "passed": true,
+  "scope": "Plain intrinsic exception control and existing dynamic-region cleanup; the complete E1\u2013E5 goal remains incomplete.",
+  "pending": [
+    "explicit cause storage/lifetime decision and implementation",
+    "typed make/root and ordinary owning declarations",
+    "consuming calls/results and owner/path joins"
+  ],
+  "commands": [
+    "cmake --build ./build",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/run_tests.py exception-control exception-reraise region-capacity region-owner-capture region-records scopes",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/exception_runtime_tests.py",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/regional_runtime_tests.py"
+  ],
+  "compiler": {
+    "path": "build/bin/cod",
+    "sha256": "7810e822791dc420a278bfd81b60c64d5cf164e2657ecbe9840c45835f611857"
+  },
+  "language_checks": {
+    "passed": 7,
+    "total": 7,
+    "results": [
+      {
+        "fixture": "scopes.cod",
+        "exit_code": 0,
+        "stdout": "1\n7\n2\n2\n8\n8\n6\n9\n6\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "region-records.cod",
+        "exit_code": 0,
+        "stdout": "5.5\n10.5\ntrue\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "region-capacity.cod",
+        "exit_code": 70,
+        "stdout": "",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/region-capacity.cod:4:14: uncaught RegionCapacityExceeded (site=2, requested=4000, available=104)\n",
+        "passed": true
+      },
+      {
+        "fixture": "region-owner-capture.cod",
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "exception-control.cod",
+        "exit_code": 0,
+        "stdout": "90\n20\n90\n10\n91\n21\n92\n22\n23\n24\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "exception-reraise.cod",
+        "exit_code": 70,
+        "stdout": "10\n20\n",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/exception-reraise.cod:8:22: uncaught InvalidCapacity (site=2, requested=0, available=0)\n",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ]
+  },
+  "injected_failure": {
+    "layout": {
+      "provider_failures": 1,
+      "owners_acquired": 2,
+      "owners_released": 2,
+      "inner_released_before_catch": true,
+      "outer_preserved_until_exit": true
+    },
+    "frontend_seconds": 0.02410723800130654,
+    "native_compile_link_seconds": 1.4933501820014499,
+    "native_process_seconds": 0.0017119830008596182,
+    "llvm_ir_bytes": 11040,
+    "bitcode_bytes": 5156,
+    "uncaught": {
+      "exit": 70,
+      "trace": [
+        "release 64",
+        "10",
+        "20",
+        "release 4096"
+      ],
+      "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/exception-reraise.cod:8:22: uncaught InvalidCapacity (site=2, requested=0, available=0)\n"
+    },
+    "compile_rejections": [
+      "duplicate-category",
+      "catch-order",
+      "finally-value",
+      "rethrow-context",
+      "function-effects"
+    ],
+    "compiler_sha256": "7810e822791dc420a278bfd81b60c64d5cf164e2657ecbe9840c45835f611857",
+    "source_sha256": {
+      "cod/lang_syntax.hh": "351f38776de9ca174217031f85aee47b17d1de98112aaad400af4d8688c62560",
+      "cod/lang_frontend.hh": "e4c7910374acbe97ec7f073b119e515407ea078418e4e85c2554e809bd7165e3",
+      "cod/lang_llvm.hh": "d0901316f8577698833e8a2f4390956a90389cc4a83de681c17d97cc7fadceb8",
+      "cod/lang_native_runtime.hh": "7a9c9f9db229143950bcb0eaa74f008d66726a203dc0a432d0c1d06a51e796a2",
+      "tests/cod/language/exception-allocation.cod": "cdf5cc6fa5ac40ef7a5034660d8d06aef46e4a6adcd2d6d67e837c643d5a7ea7",
+      "tests/cod/language/exception_runtime_tests.py": "c66f5de00e469a59ed1d8ebc6a888d788b85a6fc5658ceed412ea7a8792f2018"
+    }
+  },
+  "regional_regression": {
+    "llvm_roundtrip": true,
+    "graph": {
+      "relocation_passed": true,
+      "relocated_bytes": 120,
+      "region_header_bytes": 40,
+      "array_header_bytes": 16,
+      "record_bytes": 24
+    },
+    "pool": {
+      "relocation_passed": true,
+      "relocated_bytes": 152,
+      "slots": 4,
+      "cod_reuse_laps": 10000,
+      "bounded_occupation": true,
+      "relocated_free_chain": [
+        3,
+        1,
+        4
+      ],
+      "independent_native_reuse_passed": true
+    },
+    "resources": {
+      "owners_acquired": 4,
+      "owners_released": 4,
+      "release_order": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "live_resource_reads": 18,
+      "loop_iterations": 3,
+      "untaken_branch_acquires_nothing": true,
+      "captured_and_hidden_owners_survive_replay": true
+    },
+    "source_sha256": {
+      "cod/lang_syntax.hh": "351f38776de9ca174217031f85aee47b17d1de98112aaad400af4d8688c62560",
+      "cod/lang_frontend.hh": "e4c7910374acbe97ec7f073b119e515407ea078418e4e85c2554e809bd7165e3",
+      "cod/lang_llvm.hh": "d0901316f8577698833e8a2f4390956a90389cc4a83de681c17d97cc7fadceb8",
+      "cod/lang_native_runtime.hh": "7a9c9f9db229143950bcb0eaa74f008d66726a203dc0a432d0c1d06a51e796a2",
+      "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241",
+      "tests/cod/language/region-records.cod": "11a0351951fdc7c7b3e9f7a7e6dba28985f0e65a3b540689d4be29822ce9dbdf",
+      "tests/cod/language/region-pool.cod": "4bb90e7e5df463f260cd9bd153e73424e206d47e964bf5758efcfa4ebe894b64",
+      "tests/cod/language/reusable-pool.cod": "cfbc32a1e3bef80d3a80625cba9ceb10fd1a08fd4b0c6fe832ea525549be101d",
+      "tests/cod/language/pool-interface.cod": "38efe492138d001054d72927297ef0d57676868f04f4f411cb90b19a5de57264",
+      "tests/cod/language/pool-adapter.cod": "41b97211645bfaf87197be96eca737d5e2e6e48670bd504d2f2c99031fd116ff",
+      "tests/cod/language/pool-algorithms.cod": "39954ce43f27ecc6a28713a1df2e3af68212b4b235403ede7a03ebeaa887ee66",
+      "tests/cod/language/region-owner-capture.cod": "7bae16a957e0b3af4c0bed80d088ab30690ae1c8602dc900377858cf1f8a2ccc",
+      "tests/cod/language/regional_runtime_tests.py": "fad9c936f371e40c61395608366e4347623ade1c9fcc8e786061ab6919dda9de"
+    }
+  },
+  "source_sha256": {
+    "cod/lang_syntax.hh": "351f38776de9ca174217031f85aee47b17d1de98112aaad400af4d8688c62560",
+    "cod/lang_frontend.hh": "e4c7910374acbe97ec7f073b119e515407ea078418e4e85c2554e809bd7165e3",
+    "cod/lang_llvm.hh": "d0901316f8577698833e8a2f4390956a90389cc4a83de681c17d97cc7fadceb8",
+    "cod/lang_native_runtime.hh": "7a9c9f9db229143950bcb0eaa74f008d66726a203dc0a432d0c1d06a51e796a2",
+    "tests/cod/language/exception-control.cod": "85f404a2a87be3e4a507772c9e21d047a5f1bd9caf77fab750b4a76419e02a58",
+    "tests/cod/language/exception-reraise.cod": "f904273bf0a6c38f5c6370d3256c66ff0262f88857232ab58239d8a461b5b4d2",
+    "tests/cod/language/exception-allocation.cod": "cdf5cc6fa5ac40ef7a5034660d8d06aef46e4a6adcd2d6d67e837c643d5a7ea7"
+  }
+}

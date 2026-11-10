@@ -153,7 +153,8 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
 
 struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
-              named, unit, quantity, region, regional, array, reference, null_ref, abstract_type, arguments, parameter };
+              named, unit, quantity, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
+              exception, never };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -161,11 +162,12 @@ struct Type {
   std::vector<Type> parameters;
   std::vector<Type> bounds;
   bool variadic = false;
+  bool owned = false;
   Type(Kind kind = void_type, std::string name = {}, size_t identity = 0)
       : kind(kind), name(std::move(name)), identity(identity) {}
   bool operator==(const Type &other) const {
     return kind == other.kind && name == other.name && identity == other.identity &&
-           parameters == other.parameters && bounds == other.bounds && variadic == other.variadic &&
+           parameters == other.parameters && bounds == other.bounds && variadic == other.variadic && owned == other.owned &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
   }
 };
@@ -220,18 +222,22 @@ inline std::string type_name(const Type &type) {
   case Type::unit: return type.name;
   case Type::named: case Type::regional: case Type::array:
   case Type::abstract_type: return type.name;
-  case Type::region: return "region";
+  case Type::region: return std::string(type.owned ? "owned " : "") + "region" +
+                           (type.target ? "<" + type_name(*type.target) + ">" : "");
   case Type::reference: return "ref<" + type_name(*type.target) + ">";
   case Type::null_ref: return "null";
   case Type::arguments: return "variadic arguments";
   case Type::parameter: return "type parameter " + std::to_string(type.identity + 1);
+  case Type::exception: return type.name;
+  case Type::never: return "non-returning expression";
   }
   return "unknown";
 }
 
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect,
-                    block, conditional, field, let, range_for, fold, allocate, index, null_ref };
+                    block, conditional, field, let, range_for, fold, allocate, index, null_ref,
+                    try_scope, handler, raise, make_region };
   Kind kind;
   Location at;
   std::string text;
@@ -239,6 +245,7 @@ struct Expression {
   std::optional<size_t> symbol_id;
   std::string binding;
   bool spread = false;
+  std::optional<Type> annotation;
 };
 using Expr = std::unique_ptr<Expression>;
 
@@ -293,7 +300,7 @@ inline int binary_precedence(const std::string &op) {
 }
 
 inline bool intrinsic_name(std::string_view name) {
-  return name == "region" || name == "used_bytes" || name == "capacity_bytes" ||
+  return name == "cause_at" || name == "region" || name == "root" || name == "used_bytes" || name == "capacity_bytes" ||
          name == "deref" || name == "len" || name == "ref_at" || name == "store" ||
          name == "setfield" || name == "scalar" || name == "i64" || name == "u8" ||
          name == "u32" || name == "u64" || name == "f32" || name == "f64";
@@ -303,7 +310,9 @@ inline bool expression_keyword(std::string_view name) {
   return name == "true" || name == "false" || name == "null" || name == "alloc" ||
          name == "for" || name == "fold" || name == "let" || name == "effect" ||
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
-         name == "function" || name == "proc" || name == "global" || name == "symbol";
+         name == "function" || name == "proc" || name == "global" || name == "symbol" ||
+         name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "from" ||
+         name == "make" || name == "owned";
 }
 
 inline bool module_keyword(std::string_view name) {
@@ -380,6 +389,12 @@ class Parser {
   }
   Type parse_type(Parameter *parameter = nullptr) {
     auto token = name(TokenKind::identifier);
+    if (token.text == "owned") {
+      auto type = parse_type(parameter);
+      if (type.kind != Type::region || type.owned) fail(token.at, "owned requires a whole-region type");
+      type.owned = true;
+      return type;
+    }
     if (token.text == "proc" || token.text == "procedure") {
       Type type{Type::procedure};
       expect("(");
@@ -403,7 +418,13 @@ class Parser {
       return type;
     }
     Type type{Type::named, token.text};
-    if (token.text == "region") type = Type::region;
+    if (token.text == "region") {
+      type = Type::region;
+      if (take("<")) {
+        type.target = std::make_shared<Type>(parse_type());
+        expect(">");
+      }
+    }
     else if (token.text == "i64") type = Type::integer;
     else if (token.text == "u8") type = Type::uint8;
     else if (token.text == "u32") type = Type::uint32;
@@ -429,7 +450,7 @@ class Parser {
   }
   void type_separator() { if (!take("::")) expect(":"); }
   Expr make(Expression::Kind kind, const Token &token) {
-    return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}});
+    return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}, false, {}});
   }
   Token field_name() {
     if (!take("(")) return name(TokenKind::identifier);
@@ -454,6 +475,52 @@ class Parser {
   }
   Expr primary() {
     auto token = peek();
+    if (take("make")) {
+      auto expr = make(Expression::Kind::make_region, name(TokenKind::identifier));
+      expect("(");
+      expect("capacity");
+      expect("=");
+      expr->children.push_back(expression());
+      expect(")");
+      expect("{");
+      while (!take("}")) {
+        auto field = make(Expression::Kind::field, field_name());
+        expect("<-");
+        field->children.push_back(expression());
+        expr->children.push_back(std::move(field));
+        if (!is("}")) expect(";");
+        else take(";");
+      }
+      return expr;
+    }
+    if (take("try")) {
+      auto expr = make(Expression::Kind::try_scope, token);
+      expr->children.push_back(block());
+      bool catch_all = false;
+      while (take("catch")) {
+        if (catch_all) fail(peek().at, "catch-all must be the final catch clause");
+        expect("(");
+        auto handler = make(Expression::Kind::handler, value_name());
+        if (take("::")) {
+          expect("const");
+          handler->annotation = parse_type();
+        } else catch_all = true;
+        expect(")");
+        handler->children.push_back(block());
+        expr->children.push_back(std::move(handler));
+      }
+      if (take("finally")) expr->children.push_back(block());
+      if (expr->children.size() == 1) fail(token.at, "try requires catch, finally, or both");
+      return expr;
+    }
+    if (take("throw")) {
+      auto expr = make(Expression::Kind::raise, token);
+      if (!is(";") && !is("}")) {
+        expr->children.push_back(expression());
+        if (take("from")) expr->children.push_back(expression());
+      }
+      return expr;
+    }
     if (take("alloc")) {
       const bool symbolic = peek().kind == TokenKind::symbol;
       auto owner = make(symbolic ? Expression::Kind::symbol : Expression::Kind::name,
@@ -486,7 +553,9 @@ class Parser {
     }
     if (take("let")) {
       auto expr = make(Expression::Kind::let, value_name());
-      expect("=");
+      if (take("::")) expr->annotation = parse_type();
+      if (take("<-")) expr->binding = "<-";
+      else { expect("="); expr->binding = "="; }
       expr->children.push_back(expression());
       return expr;
     }

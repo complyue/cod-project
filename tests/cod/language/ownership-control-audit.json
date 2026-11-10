@@ -1,0 +1,269 @@
+{
+  "layout": {
+    "owners_acquired": 19,
+    "owners_released": 19,
+    "root_relocations": 1,
+    "pending_result_cleanup": true,
+    "callee_entry_timing": true
+  },
+  "frontend_seconds": 0.026731367001048056,
+  "native_compile_link_seconds": 1.7296691340015968,
+  "native_process_seconds": 0.0011990000020887237,
+  "llvm_ir_bytes": 318367,
+  "bitcode_bytes": 59860,
+  "recorded_utc": "2026-11-09T21:47:20.283451+00:00",
+  "toolchain": "build",
+  "trace": [
+    "9",
+    "9",
+    "9",
+    "11",
+    "10",
+    "101",
+    "102",
+    "1",
+    "2",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "0"
+  ],
+  "compile_rejections": [
+    "stale-reference-comparison",
+    "consumed-name",
+    "escaping-view",
+    "ended-effect-owner",
+    "conditional-consumption",
+    "duplicate-move",
+    "later-argument-move",
+    "borrow-extraction",
+    "dynamic-extraction",
+    "repeated-move",
+    "mode-overload",
+    "exceptional-join",
+    "owner-field",
+    "missing-field",
+    "duplicate-field"
+  ],
+  "compiler_sha256": "56c974019f68bc99a1293abb5841cd5c64587079281e19067b325d3483453533",
+  "source_sha256": {
+    "cod/lang_syntax.hh": "36a230b09c4b80db0ab533dfb739f9c362f850e3253c366837f1374c06a78d94",
+    "cod/lang_frontend.hh": "5b164d14df3a96a8254589ee0c052fb980b9c7f8d5d3a7553acadad8d4454faa",
+    "cod/lang_llvm.hh": "e9baac95c1983cb5b65faa176dac87f6d439389529538ee3a9a9b0fc7238f06a",
+    "cod/lang_native_runtime.hh": "390c7b75758b4d5f3155327b0d53881051ece67ce73d987a05d5d18158c8f502",
+    "tests/cod/language/owned-region-library.cod": "070518e25d1a6228fd84d29c13c59269f99e9c0aec4aae22f06b5ab28da9343a",
+    "tests/cod/language/owned-region-lifecycle.cod": "6723f3ff45b256dd3accbbd80c68ae02254e360ac133fc4221409d0c081f5435",
+    "tests/cod/language/owned_region_tests.py": "e411d204192384bda60e7b2e96aac0ea917d087e5fdb4408b42e9fe020bd7358"
+  },
+  "schema_version": 1,
+  "passed": true,
+  "scope": "Operand and owning-result audit; E1\u2013E5 remains incomplete.",
+  "commands": [
+    "cmake --build ./build",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/owned_region_tests.py",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/run_tests.py owned-region-lifecycle region-records exception-control exception-reraise",
+    "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/regional_runtime_tests.py"
+  ],
+  "language_checks": {
+    "compiler": {
+      "path": "build/bin/cod",
+      "sha256": "56c974019f68bc99a1293abb5841cd5c64587079281e19067b325d3483453533"
+    },
+    "passed": 5,
+    "total": 5,
+    "results": [
+      {
+        "fixture": "region-records.cod",
+        "exit_code": 0,
+        "stdout": "5.5\n10.5\ntrue\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "exception-control.cod",
+        "exit_code": 0,
+        "stdout": "90\n20\n90\n10\n91\n21\n92\n22\n23\n24\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "exception-reraise.cod",
+        "exit_code": 70,
+        "stdout": "10\n20\n",
+        "stderr": "/ws/EvtWorks/cod-project/tests/cod/language/exception-reraise.cod:8:22: uncaught InvalidCapacity (site=2, requested=0, available=0)\n",
+        "passed": true
+      },
+      {
+        "fixture": "owned-region-lifecycle.cod",
+        "exit_code": 0,
+        "stdout": "9\n9\n9\n10\n101\n102\n1\n2\n2\n3\n4\n5\n6\n7\n8\n0\n",
+        "stderr": "",
+        "passed": true
+      },
+      {
+        "fixture": "frontend-only",
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "passed": true
+      }
+    ],
+    "note": "This language checkpoint preceded adding the final selected-input/symbolic-owner probes; the current instrumented lifecycle result above covers the final fixture."
+  },
+  "regional_regression": {
+    "schema_version": 4,
+    "recorded_utc": "2026-11-09T21:45:39.752946+00:00",
+    "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "toolchain": "build",
+    "passed": true,
+    "executable": {
+      "path": "build/bin/cod",
+      "sha256": "56c974019f68bc99a1293abb5841cd5c64587079281e19067b325d3483453533"
+    },
+    "llvm_artifact_roundtrip": true,
+    "layout": {
+      "relocation_passed": true,
+      "relocated_bytes": 120,
+      "region_header_bytes": 40,
+      "array_header_bytes": 16,
+      "record_bytes": 24
+    },
+    "frontend_seconds": 0.019710477001353865,
+    "native_compile_link_seconds": 1.680349797999952,
+    "native_process_seconds": 0.0013852720003342256,
+    "llvm_ir_bytes": 35506,
+    "bitcode_bytes": 10836,
+    "pool": {
+      "layout": {
+        "relocation_passed": true,
+        "relocated_bytes": 152,
+        "slots": 4,
+        "cod_reuse_laps": 10000,
+        "bounded_occupation": true,
+        "relocated_free_chain": [
+          3,
+          1,
+          4
+        ],
+        "independent_native_reuse_passed": true
+      },
+      "frontend_seconds": 0.023633715998585103,
+      "native_compile_link_seconds": 1.6112606800015783,
+      "native_process_seconds": 0.0012303500006964896,
+      "llvm_ir_bytes": 100761,
+      "bitcode_bytes": 26136
+    },
+    "resources": {
+      "layout": {
+        "owners_acquired": 4,
+        "owners_released": 4,
+        "release_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "live_resource_reads": 18,
+        "loop_iterations": 3,
+        "untaken_branch_acquires_nothing": true,
+        "captured_and_hidden_owners_survive_replay": true
+      },
+      "frontend_seconds": 0.016683786998328287,
+      "native_compile_link_seconds": 1.4811973130017577,
+      "native_process_seconds": 0.001282537999941269,
+      "llvm_ir_bytes": 16391,
+      "bitcode_bytes": 6748
+    },
+    "notes": [
+      "The CoD program creates the inspected records, array, sharing and cycle through LLVM IR.",
+      "Each relocation program retains one module-lifetime dynamic region; its hook checks one non-null release.",
+      "The hooks copy each whole image and free its original before inspecting relocated references.",
+      "The CoD pool uses mutable record views through explicit adapter conformance and reuses slots for 10000 laps without allocation.",
+      "Abstract calls preserve the owner of returned payload references; alias writes are observed by later pool reads.",
+      "An independent C++ check traverses and reuses the relocated free list; no CoD code resumes after relocation.",
+      "Slot release is a user-library membership change. Returning a live slot exactly once is its caller precondition.",
+      "The existing resource-capture fixture is instrumented at allocation/read/release boundaries, with no compiler changes.",
+      "Three loop iterations preserve captured/hidden owners, restore the outer binding and release each inner owner before the next acquisition.",
+      "An untaken branch acquires no owner; the module owner releases last. Allocation-address reuse is allowed after release."
+    ],
+    "source_sha256": {
+      "cod/lang_syntax.hh": "36a230b09c4b80db0ab533dfb739f9c362f850e3253c366837f1374c06a78d94",
+      "cod/lang_frontend.hh": "5b164d14df3a96a8254589ee0c052fb980b9c7f8d5d3a7553acadad8d4454faa",
+      "cod/lang_llvm.hh": "e9baac95c1983cb5b65faa176dac87f6d439389529538ee3a9a9b0fc7238f06a",
+      "cod/lang_native_runtime.hh": "390c7b75758b4d5f3155327b0d53881051ece67ce73d987a05d5d18158c8f502",
+      "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241",
+      "tests/cod/language/region-records.cod": "11a0351951fdc7c7b3e9f7a7e6dba28985f0e65a3b540689d4be29822ce9dbdf",
+      "tests/cod/language/region-pool.cod": "4bb90e7e5df463f260cd9bd153e73424e206d47e964bf5758efcfa4ebe894b64",
+      "tests/cod/language/reusable-pool.cod": "cfbc32a1e3bef80d3a80625cba9ceb10fd1a08fd4b0c6fe832ea525549be101d",
+      "tests/cod/language/pool-interface.cod": "38efe492138d001054d72927297ef0d57676868f04f4f411cb90b19a5de57264",
+      "tests/cod/language/pool-adapter.cod": "41b97211645bfaf87197be96eca737d5e2e6e48670bd504d2f2c99031fd116ff",
+      "tests/cod/language/pool-algorithms.cod": "39954ce43f27ecc6a28713a1df2e3af68212b4b235403ede7a03ebeaa887ee66",
+      "tests/cod/language/region-owner-capture.cod": "7bae16a957e0b3af4c0bed80d088ab30690ae1c8602dc900377858cf1f8a2ccc",
+      "tests/cod/language/regional_runtime_tests.py": "a3934500b777a95753089fa4f1bcc4b1accd899c0024870b9af64b6b19117180"
+    }
+  },
+  "acceptance_audit": [
+    {
+      "requirement": "E1 unchecked system failures and allocation-independent OOM delivery",
+      "status": "bounded evidence",
+      "evidence": [
+        "exception-validation.json",
+        "region-construction-validation.json in tests/shilos",
+        "ownership-lifecycle-validation.json"
+      ]
+    },
+    {
+      "requirement": "E2 normal/handled expression values, exact catches and rethrow",
+      "status": "bounded evidence",
+      "evidence": [
+        "exception-control.cod",
+        "exception-reraise.cod",
+        "exception_runtime_tests.py"
+      ]
+    },
+    {
+      "requirement": "E2 explicit throw-from relationships with no automatic chaining",
+      "status": "incomplete",
+      "reason": "Retained-chain versus scope-bound lifetime decision still pending; source form diagnoses unimplemented execution."
+    },
+    {
+      "requirement": "E3 finally replacement and abandoned owning results",
+      "status": "bounded evidence",
+      "evidence": [
+        "exception-control.cod",
+        "owned-region-lifecycle.cod pending-result instrumentation"
+      ]
+    },
+    {
+      "requirement": "E4 callee-entry consumption, result transfer and valid views",
+      "status": "bounded evidence",
+      "evidence": [
+        "owned-region-lifecycle.cod",
+        "owned_region_tests.py"
+      ]
+    },
+    {
+      "requirement": "E5 typed construction, exact cleanup, branches and invalid exceptional accesses",
+      "status": "bounded evidence",
+      "evidence": [
+        "owned_region_tests.py",
+        "regional_runtime_tests.py",
+        "tests/shilos/region_construction_tests.py"
+      ]
+    },
+    {
+      "requirement": "Generalized generic exception storage",
+      "status": "incomplete",
+      "reason": "Lexical propagation preserves its category; storing a generic catch-all field is explicitly unsupported."
+    }
+  ],
+  "notes": [
+    "The reference-comparison negative control compiled successfully before adding operand revalidation. It now rejects as a dead owning region.",
+    "An edited borrowed graph remains owned and readable by the caller after the callee throws.",
+    "No owner reassignment, mailbox transport, general RTTI, user exception graph or toolchain change."
+  ]
+}
