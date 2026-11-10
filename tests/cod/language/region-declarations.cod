@@ -1,0 +1,36 @@
+using symbol "std:io" @assert;
+using symbol "std:io" @print;
+data Arena { id::u64; }
+data Cell { value::i64; }
+region symbol @active::Arena;
+symbol @factory::proc(u64) -> owned region ::Arena;
+function create(bytes::u64) -> owned region ::Arena {
+  make Arena(capacity = bytes) { id <- 7u64 }
+}
+function forward(owned region arena::R) -> owned region ::R where R { arena }
+function edit(region arena::Arena, cell::ref<Cell> in arena, value::i64) -> void {
+  deref(cell).value <- value;
+  {}
+}
+function inspect(const region arena::Arena) -> const u64 { root(arena).id }
+function origin(cell::ref<Cell> in r) -> region ::Arena in r where {region r::Arena} { r }
+function echo(region arena::Arena) -> region ::Arena in arena { arena }
+effect proc @factory(bytes::u64) -> owned region ::Arena { create(bytes) };
+{
+  owned region arena::Arena <- behave @factory(512u64);
+  region view::Arena = echo(arena);
+  ptr cell = alloc view Cell(1);
+  edit(arena, cell, 9);
+  region inferred = origin(cell);
+  behave @assert(deref(cell).value == 9 && inspect(inferred) == 7u64);
+  owned region moved::Arena <- forward(arena);
+  effect @active <- moved;
+  behave @assert(capacity_bytes(@active) == capacity_bytes(view));
+};
+{
+  owned region raw <- region(128u64);
+  region view = raw;
+  ptr cell = alloc view Cell(4);
+  behave @assert(deref(cell).value == 4);
+};
+behave @print(1);

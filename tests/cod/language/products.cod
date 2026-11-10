@@ -11,7 +11,7 @@ function double(p::ref<Pair> in O1)::Pair where {owner O1} {
 function metric(b::Box in O1)::f32 where {owner O1} { if (b.true) { -deref(b.pair).x } else { 0.0f32 } }
 function contents(e::Envelope in O1)::Box where {owner O1} { deref(e.content) }
 function through(e::Envelope in O1)::i64 where {owner O1} { deref(contents(deref(e.next)).pair).count }
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(2048u64);
 {
   let pair = alloc @arena Pair(1.25f32, 3);

@@ -15,6 +15,6 @@ effect @bias <- 2;
 behave @print(compute(3));
 behave @print(compute(true));
 using "method-library.cod" Counter;
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(4096u64);
 behave @print(score(deref(alloc @arena Counter(7))));

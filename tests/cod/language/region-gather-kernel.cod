@@ -10,7 +10,7 @@ using "pool-layout.cod" class_slot_begin;
 using "pool-index.cod" locate;
 using "pool-index.cod" SetLocation;
 using "pool-index.cod" global_slot;
-function create_graph(arena::region, layout::Layout in L, rows::u32,
+function create_graph(region arena, layout::Layout in L, rows::u32,
                       location::ref<SetLocation> in S, weighted::bool)::Incoming where {owner L, owner S} {
   let sources = alloc arena Sources(scalar(class_slot_begin(layout, ClassId(layout.classes))), Neuron(0u32));
   let weights = alloc arena Weights(len(sources), 1u8);

@@ -1,7 +1,8 @@
 using symbol "std:io" @assert;
 using symbol "std:io" @print;
 using "std:exceptions" InvalidCapacity;
-symbol @arena::region, @level::i64;
+region symbol @arena;
+symbol @level::i64;
 effect @level <- 1;
 function last_or(first::i64, last::i64) -> const i64 {
   ptr result = make local i64;

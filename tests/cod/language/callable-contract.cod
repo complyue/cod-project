@@ -4,7 +4,7 @@ using "callable-contract-api.cod" Metric;
 using "callable-contract-impl.cod" Sample;
 using "callable-contract-impl.cod" forwarded;
 using "callable-contract-impl.cod" measure;
-symbol @arena :: region;
+region symbol @arena;
 effect @arena <- region(1024u64);
 function classify(a::T, b::U)::i64 where {T, U} { 1 }
 function classify(a::T, b::T)::i64 where T { 2 }

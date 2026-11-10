@@ -2,7 +2,7 @@ using symbol "std:io" @print;
 using symbol "std:io" @assert;
 unit Neuron;
 array Rates[u32(Neuron)]::f32;
-symbol @arena :: region;
+region symbol @arena;
 symbol @rates :: ref<Rates>;
 symbol @cell :: ref<f32>;
 function total(a::Rates in O1)::f32 where {owner O1} {

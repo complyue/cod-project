@@ -1,16 +1,18 @@
 # CoD exception control and regional cleanup
 
-Design revision: 11 · Recorded: 2026-11-10 · Status: accepted exception/lifecycle contract; parameter syntax migration specified separately.
+Design revision: 12 · Recorded: 2026-11-10 · Status: accepted exception/lifecycle contract; parameter syntax migration specified separately.
 
 ## Design authority
 
-- **Resource declaration migration:** [H-275](DesignAuthorityRegistry.md#h-275)/[K-420](DesignAuthorityRegistry.md#k-420) extends region-as-declaration across user-facing references. [D-14](RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language) retains owned for single cleanup responsibility and maps local/parameter forms; result/symbol spellings remain proposals. Prototype region<Root> notation in this document and native evidence describes the implemented pre-migration subset. Exceptional transfer timing, cleanup and retained causes are unchanged.
+- **Region-source continuity:** [H-307](DesignAuthorityRegistry.md#h-307)/[K-435](DesignAuthorityRegistry.md#k-435) updates region examples to the declaration-keyword surface in [D-14](RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language). C-70/P-270–P-271 preserves the intrinsic borrowed/owning distinction and existing lifecycle constraints. This revision changes source notation and evidence navigation only; it does not qualify pending transport, optional-owner, numeric or general graph contracts. Acceptance is coherent examples plus the migrated compiler/lifecycle checks recorded by K-435.
 
-- **Parameter migration:** [H-271/H-272](DesignAuthorityRegistry.md#h-271) replaces the default-borrowed parameter source rule with `ptr` and callee-local default targets; external borrowing requires owner-generic declarations in [D-14](RegionalOwnership.md#pointer-variables-and-owner-generic-parameters). [K-417](DesignAuthorityRegistry.md#k-417) records this scoped supersession. E4's transfer timing, exceptional cleanup and single-owner invariants continue unchanged. Native E1–E5 evidence applies to the recorded pre-migration source forms, not the new parameter grammar.
+- **Resource declarations:** H-275/H-307 and [D-14](RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language) use region declarations for all resource references, retaining owned for one cleanup responsibility. Local, parameter, result and procedure-signature forms are implemented. Exceptional transfer timing, cleanup and retained causes are unchanged; historical evidence retains its original source revision.
+
+- **Parameter migration:** [H-271/H-272](DesignAuthorityRegistry.md#h-271) replaces the default-borrowed parameter source rule with `ptr` and callee-local default targets; external borrowing requires owner-generic declarations in [D-14](RegionalOwnership.md#pointer-variables-and-owner-generic-parameters). [K-417](DesignAuthorityRegistry.md#k-417) records this scoped supersession. E4's transfer timing, exceptional cleanup and single-owner invariants continue unchanged. K-435 supplies fresh cleanup/relocation evidence using the region declaration surface; older E1–E5 reports retain their recorded source/compiler scope.
 
 - **Current continuity:** [K-414](DesignAuthorityRegistry.md#k-414) continues H-267/H-269 with [the completed E1–E5 audit](../tests/cod/language/exception-ownership-validation.json). Retained causes, fallible explicit creation, storage, cleanup and regional lifetimes have focused native evidence; no general RTTI or wider qualifier choice is made.
 
-- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 11, E1–E5 and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. K-408–K-413 retains the acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
+- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 12, E1–E5 and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. K-408–K-413 retains the acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
 - **Value path:** C-63/P-235 → C-10 and D-17/P-236 → C-63: recoverable business failure must preserve explicit regional responsibility, effects and inspectable lifetimes. H-267 confirms this bounded path and scope under charter §§2–4, 6.2–6.3 and 12; it does not qualify unrelated ownership proposals.
 - **Dependencies / constraints:** P-237 links D-14's ownership/borrowing, P-238 links D-10's scoped bindings, and P-239 links D-01's allocation, allocator symmetry and relocation. H-180/H-181 preserves hidden/captured owners; H-262/H-263 separates consumed names from valid local views. H-265/P-240 supplies the unchecked-OOM constraint. H-251 reserves RTTI decisions for human discussion.
 - **Invariants / non-goals:** one cleanup responsibility per region; no per-object ownership, implicit owner resurrection, allocation-dependent OOM delivery, graph rollback, foreign-world editing or general RTTI decision. No C++ exception type or ABI becomes a CoD user type by implication.
@@ -20,7 +22,7 @@ Design revision: 11 · Recorded: 2026-11-10 · Status: accepted exception/lifecy
 
 CoD provides `try`, `catch` and `finally` control in the accepted contract. Ultimate out-of-memory failure is an **unchecked exception**: calling allocation does not require a checked-error result, a `throws` declaration or an enclosing catch merely to compile. A caller may catch the failure; otherwise it propagates toward the execution boundary. Unchecked does not mean ignoring ownership validity or turning invalid references into runtime exceptions.
 
-`make` continues to produce its normal `owned region<Root>` result when construction succeeds. OOM is an exceptional exit, not an implicit null owner or a mandatory optional/result wrapper. H-265 does not select automatic allocation retries, region growth, compaction or a process recovery policy. “Ultimate” failure describes exhaustion after any separately defined policy has failed; no such policy is introduced here.
+`make` continues to produce its normal `owned region ::Root` result when construction succeeds. OOM is an exceptional exit, not an implicit null owner or a mandatory optional/result wrapper. H-265 does not select automatic allocation retries, region growth, compaction or a process recovery policy. “Ultimate” failure describes exhaustion after any separately defined policy has failed; no such policy is introduced here.
 
 The initial error taxonomy distinguishes `OutOfMemory` (the memory provider cannot supply storage), `RegionCapacityExceeded` (placement exceeds an existing region's fixed budget), and `InvalidCapacity` (an invalid or unrepresentable capacity request). All three are unchecked; none implies automatic growth or retry.
 
@@ -34,7 +36,7 @@ The exception identities are explicitly selected into the module before use:
 
 ```text
 try {
-  let packet :: owned region<Packet> <-
+  owned region packet::Packet <-
     make Packet(capacity = bytes) { sequence <- initial };
   process_packet(packet)
 } catch (error :: const OutOfMemory) {
@@ -112,18 +114,18 @@ A new exception from finally replaces a pending exception or normal result. Oute
 
 ### E4 — Consuming calls and results
 
-An admitted owning parameter transfers responsibility at callee entry, after argument evaluation and conversion succeed. An external borrowed parameter retains the original owner without acquiring cleanup responsibility. H-271/H-272 requires explicit owner-generic declarations for external borrowing; the native prototype's unqualified `region<Root>` borrowing spelling is a migration boundary, not the new default. The call itself has not consumed an owning argument if a later argument fails before entry; explicit transfers performed inside earlier argument expressions retain their actual effects. Validate availability and provenance again at the call boundary, including duplicate moves and later-argument invalidation of earlier views.
+An admitted owning parameter transfers responsibility at callee entry, after argument evaluation and conversion succeed. An external borrowed parameter retains the original owner without acquiring cleanup responsibility. H-271/H-272 requires explicit owner-generic declarations for external borrowing; the native prototype's unqualified `region ::Root` borrowing spelling is a migration boundary, not the new default. The call itself has not consumed an owning argument if a later argument fails before entry; explicit transfers performed inside earlier argument expressions retain their actual effects. Validate availability and provenance again at the call boundary, including duplicate moves and later-argument invalidation of earlier views.
 
 After entry, an owning parameter's region belongs to the callee scope until returned or otherwise transferred; an exceptional callee exit releases what that scope still owns. The caller's original name remains consumed. An owning result transfers only after the callee's required finally work completes successfully; a result abandoned by finally failure remains subject to cleanup. This preserves the existing per-argument evaluation/conversion order without treating ownership transfer as a numerical conversion.
 
-The following uses the current prototype's source spelling, before the ptr/owner-parameter migration:
+The borrowed and consuming call forms are:
 
 ```text
-function edit(packet::region<Packet>) -> void { ... }
-function transform(packet::owned region<Packet>) -> owned region<Packet> { ... }
+function edit(region packet::Packet) -> void { ... }
+function transform(owned region packet::Packet) -> owned region ::Packet { ... }
 
 edit(packet); # Borrow; the caller still owns packet.
-let next :: owned region<Packet> <- transform(packet);
+owned region next::Packet <- transform(packet);
 # packet is consumed after callee entry; next owns the successful result.
 ```
 

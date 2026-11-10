@@ -5,7 +5,7 @@ using "method-view-library.cod" score;
 using "method-view-first.cod" run as first;
 using "method-view-second.cod" run as second;
 using "method-view-shadow.cod" run as shadow;
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(4096u64);
 {
   behave @print(first(@arena));

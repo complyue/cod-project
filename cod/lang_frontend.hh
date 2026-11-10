@@ -476,7 +476,7 @@ class Compiler {
     return value;
   }
   static Value bits_value(Value value) {
-    value.storage.reset(); value.pointer.reset(); value.region_id.reset(); value.read_only = false;
+    value.storage.reset(); value.pointer.reset(); value.region_id.reset(); value.read_only = false; value.referent = nullptr;
     return value;
   }
   Value local_storage(Type type, const Location &at) {
@@ -509,7 +509,7 @@ class Compiler {
     valid_view(value, at);
     if (!storage_owner(value)) fail(at, "ptr requires storage with a known owner");
     const auto id = pointers_.size();
-    if (!value.storage && !value.referent) value.referent = value.native;
+    if (!value.referent) value.referent = value.storage ? value.storage->address : value.native;
     pointers_.push_back({ir_.pointer_storage(value.storage ? value.storage->address : value.native), value,
                          read_only || value.read_only, fixed_binding});
     value.pointer = id;
@@ -1138,7 +1138,7 @@ class Compiler {
     auto type = form->kind == Form::Kind::symbol ? resolve(*form->result_type, *module, form->at)
                                                : procedure_type(*form, *module);
     if (type == Type::void_type) fail(form->at, "a symbol cannot have void type");
-    if (type.owned) fail(form->at, "a dynamic region symbol uses region<Root>, without the ordinary-owner qualifier");
+    if (type.owned) fail(form->at, "a dynamic resource uses 'region symbol @name::Root', without an owned qualifier");
     if (form->symbol_owner && !object_type(type))
       fail(form->at, "a shared region owner requires object-reference symbols, not TLS bits or whole-region symbols");
     symbol_types_.emplace(id, std::move(type));
@@ -1380,6 +1380,8 @@ class Compiler {
       if (args[i].region_id) region_pointer(args[i], at);
       auto parameter = admit(args[i], instantiated.parameters[i], caller, at);
       const auto &formal = parameter_at(form, i);
+      if (parameter.type.kind == Type::region && formal.type.kind != Type::region)
+        fail(formal.at, "a whole-region parameter requires a region declaration");
       if (formal.owner.empty() && object_type(parameter.type))
         fail(formal.at, "a non-bits parameter requires an explicit external owner: use 'in O' and 'where {owner O}'");
       if (formal.owner.empty() && local_bits(parameter.type)) {
@@ -1415,7 +1417,7 @@ class Compiler {
       }
       if (!region) fail(owner.at, "cannot infer owner '" + owner.name + "' from the arguments");
       owner_values.emplace(owner.name, *region);
-      if (owner.root) declare_local(locals, owner.name, *region, lexical, owner.at);
+      if (owner.root && !owner.explicit_parameter) declare_local(locals, owner.name, *region, lexical, owner.at);
     }
     const auto fixed = form.parameters.size() - (variadic(form) ? 1 : 0);
     const bool rebind = form.operation && form.name == "=";
@@ -1441,7 +1443,7 @@ class Compiler {
       pack.arguments = std::make_shared<const std::vector<Value>>(std::move(tail));
       declare_local(locals, form.parameters.back().name, std::move(pack), lexical, form.parameters.back().at);
     }
-    const bool assignment = form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=");
+    const bool assignment = form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=" || form.name == "[]<-");
     auto result = block(*form.body, lexical, std::move(env), std::move(locals), function_context, false,
                         instantiated.result, form.result_const && form.result_owner.empty() && !assignment,
                         rebind ? args.front().pointer : std::nullopt);
@@ -1686,6 +1688,8 @@ class Compiler {
           match.routes.push_back({});
           continue;
         }
+        if (i == 0 && candidate.form->operation &&
+            (candidate.form->name == "<-" || candidate.form->name == "[]<-")) { matches = false; break; }
         auto path = route(args[i].type, parameter, *candidate.lexical, module, at, false);
         if (!path) { matches = false; break; }
         match.routes.push_back(std::move(*path));
@@ -1699,7 +1703,8 @@ class Compiler {
       if (candidates.size() == 1) {
         const auto &candidate = candidates.front();
         const auto instantiated = signature(*candidate.form, *candidate.lexical, args, module, at);
-        if (instantiated && !(candidate.form->operation && (candidate.form->name == "=" || swap_operation(candidate.form->name)))) {
+        if (instantiated && !(candidate.form->operation && (candidate.form->name == "=" || candidate.form->name == "<-" ||
+            candidate.form->name == "[]<-" || swap_operation(candidate.form->name)))) {
           const auto context = llvm::SaveAndRestore(type_context_, TypeContext{candidate.lexical, instantiated->bindings});
           for (size_t i = 0; i < args.size(); ++i)
             route(args[i].type, parameter_at(*candidate.form, i), *candidate.lexical, module, at);
@@ -1777,7 +1782,7 @@ class Compiler {
                     const Environment &env, bool function_context, const Module &caller,
                     const std::vector<ConversionPoint> &points = {}) {
     const auto &form = *match.function.form;
-    if (form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=") &&
+    if (form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=" || form.name == "[]<-") &&
         (form.parameters.empty() || form.parameters.front().owner.empty()))
       fail(form.at, "an assignment destination requires an explicit external owner: use 'in O' and 'where {owner O}'");
     if (form.operation && swap_operation(form.name) &&
@@ -1802,6 +1807,17 @@ class Compiler {
                        match.function.implementation);
     if (form.operation && swap_operation(form.name) && result.type != Type::never)
       require(result.type, Type::void_type, at);
+    if (form.operation && (form.name == "<-" || form.name == "[]<-") && result.type != Type::never && result.type != Type::void_type) {
+      if (!form.result_const || !storage_owner(result))
+        fail(form.at, "a transfer overload must return void or a const destination view");
+      if (storage_owner(result) != storage_owner(args.front()))
+        fail(at, "a transfer result must belong to the destination owner");
+      if (form.name == "<-" &&
+          (result.referent ? result.referent : result.storage ? result.storage->address : result.native) !=
+          (args.front().referent ? args.front().referent : args.front().storage ? args.front().storage->address : args.front().native))
+        fail(at, "a (<-) overload must return the original destination, not another object");
+      result.read_only = true;
+    }
     check_declarations(match.declarations, match.function.form->kind, args, result, caller, at);
     return result;
   }
@@ -1809,8 +1825,12 @@ class Compiler {
                             bool function_context) {
     if (expr.children.size() != 2) fail(expr.at, "object transfer requires a destination and source");
     auto destination = expression(*expr.children[0], module, env, locals, function_context, false);
+    if (destination.read_only) fail(expr.at, "cannot transfer into a read-only destination view");
+    auto source = expression(*expr.children[1], module, env, locals, function_context);
+    if (!expr.intrinsic)
+      if (const auto selected = method("<-", module, {destination, source}, expr.at))
+        return call_method(*selected, {destination, source}, expr.at, env, function_context, module);
     if (local_bits(destination.type) && destination.storage) {
-      auto source = expression(*expr.children[1], module, env, locals, function_context);
       write_bits(destination, source, expr.at);
       destination.read_only = true;
       destination.pointer.reset();
@@ -1819,23 +1839,7 @@ class Compiler {
     if (!object_type(destination.type) || !destination.region_id)
       fail(expr.at, "object transfer requires a regional object destination; symbolic bits require effect '<-'");
     if (expr.intrinsic) fail(expr.at, "intrinsic (<-) requires a bits destination; object transfer requires a user-defined overload");
-    if (destination.read_only) fail(expr.at, "cannot transfer into a read-only destination view");
-    auto source = expression(*expr.children[1], module, env, locals, function_context);
-    region_pointer(destination, expr.at);
-    if (source.region_id) region_pointer(source, expr.at);
-    const std::vector<Value> args{destination, source};
-    const auto selected = method("<-", module, args, expr.at);
-    if (!selected) fail(expr.at, "object transfer requires a user-defined (<-) overload");
-    if (!selected->function.form->result_const)
-      fail(selected->function.form->at, "a (<-) overload must return a const destination view");
-    if (selected->function.form->parameters.front().owner.empty())
-      fail(selected->function.form->at, "an assignment destination requires an explicit external owner: use 'in O' and 'where {owner O}'");
-    auto result = call_method(*selected, args, expr.at, env, function_context, module);
-    if (result.region_id != destination.region_id ||
-        (result.referent ? result.referent : result.native) != (destination.referent ? destination.referent : destination.native))
-      fail(expr.at, "a (<-) overload must return the original destination, not another object");
-    result.read_only = true;
-    return result;
+    fail(expr.at, "object transfer requires a user-defined (<-) overload");
   }
   Value rebind_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context) {
@@ -2340,6 +2344,17 @@ class Compiler {
       if (const auto selected = method(expr.text, module, args, expr.at))
         return call_method(*selected, args, expr.at, env, function_context || function_result, module, points);
     }
+    if (expr.text == "[]<-") {
+      const auto &args = values(false);
+      if (args.size() != 3) fail(expr.at, "indexed transfer requires container, index and source");
+      if (!expr.intrinsic)
+        if (const auto selected = method(expr.text, module, args, expr.at))
+          return call_method(*selected, args, expr.at, env, function_context || function_result, module, points);
+      auto destination = array_element(args[0], args[1], expr.at);
+      write_bits(destination, args[2], expr.at);
+      destination.read_only = true;
+      return destination;
+    }
     if (expr.text == "cause_at") {
       const auto &args = values();
       if (args.size() != 2 || args[0].type.kind != Type::exception)
@@ -2364,7 +2379,7 @@ class Compiler {
       const auto &args = values();
       if (args.size() != 1 || !integral(args[0].type)) fail(expr.at, "region requires an integer byte capacity");
       regional_runtime_ = true;
-      if (!region_initializer_) fail(expr.at, "a new region must be acquired by an effect binding");
+      if (!region_initializer_) fail(expr.at, "a new region must be acquired by an effect or owning region declaration");
       auto *owner = ir_.region_new(args[0].type, args[0].native);
       const auto id = new_region(owner, expr.at);
       Type type{Type::region}; type.owned = true;
@@ -2844,6 +2859,7 @@ class Compiler {
         // Resolve the complete RHS before introducing this name, including the
         // transfer shorthand's source when it shadows an outer binding.
         auto value = expression(*declaration->children.front(), module, env, locals, function_context, false);
+        if (value.type.kind == Type::region) fail(declaration->at, "a whole-region binding requires a region declaration, not ptr");
         if (declaration->annotation) value = admit(std::move(value), resolve(*declaration->annotation, module, declaration->at), module, declaration->at);
         if (declaration->binding == "<-" || (!value.storage && local_bits(value.type))) {
           auto target = local_storage(value.type, declaration->at);
@@ -2866,6 +2882,16 @@ class Compiler {
       }
       return value;
     }
+    case K::region_binding: {
+      const auto type = resolve(*expr.annotation, module, expr.at);
+      const auto initializer = llvm::SaveAndRestore(region_initializer_, type.owned);
+      auto value = admit(expression(*expr.children[0], module, env, locals, function_context), type, module, expr.at);
+      if (type.owned) value = hold_region(take_owner(value, expr.at), module_top_level_, true);
+      else value = borrowed(std::move(value));
+      value.pointer.reset();
+      declare_local(locals, expr.text, value, module, expr.at);
+      return {};
+    }
     case K::let: {
       auto value = expression(*expr.children[0], module, env, locals, function_context);
       if (value.type == Type::void_type) fail(expr.at, "a lexical value cannot be void");
@@ -2874,11 +2900,7 @@ class Compiler {
         if (declared.owned && expr.binding != "<-") fail(expr.at, "an owning declaration requires <-");
         value = admit(std::move(value), declared, module, expr.at);
       }
-      if (value.type.kind == Type::region) {
-        if (expr.binding == "<-")
-          value = hold_region(take_owner(value, expr.at), module_top_level_, true);
-        else value = borrowed(std::move(value));
-      }
+      if (value.type.kind == Type::region) fail(expr.at, "a whole-region binding requires a region declaration, not let");
       // The pre-ptr surface remains value-binding compatibility for scalar fixtures.
       if (local_bits(value.type)) value = bits_value(std::move(value));
       value.pointer.reset();
@@ -3009,7 +3031,7 @@ class Compiler {
       declarations.push_back(declaration);
   }
   static bool operation_name(const std::string &name) {
-    return intrinsic_name(name) || binary_precedence(name) >= 0 || name == "!" || name == "=" || name == "[]=" || name == "<-" || swap_operation(name);
+    return intrinsic_name(name) || binary_precedence(name) >= 0 || name == "!" || name == "=" || name == "[]=" || name == "[]<-" || name == "<-" || swap_operation(name);
   }
   static CallableIdentity local_callable(const Module &module, const std::string &name) {
     return {operation_name(name) ? nullptr : &module, name};
@@ -3181,7 +3203,7 @@ class Compiler {
       return expr.kind == Expression::Kind::range_for && expr.children.size() == 4 &&
              context_dependent(*expr.children[3], lexical, locals);
     }
-    if (expr.kind == Expression::Kind::let) locals.insert(expr.text);
+    if (expr.kind == Expression::Kind::let || expr.kind == Expression::Kind::region_binding) locals.insert(expr.text);
     return false;
   }
   static bool context_dependent(const Method &method) {

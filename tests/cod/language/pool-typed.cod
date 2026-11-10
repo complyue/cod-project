@@ -9,7 +9,7 @@ using "pool-layout.cod" class_slot_begin;
 using "pool-index.cod" locate;
 using "pool-index.cod" global_slot;
 using "pool-index.cod" SetLocation;
-symbol @arena::region;
+region symbol @arena;
 symbol @layout::ref<Layout>;
 symbol @location::ref<SetLocation>;
 effect @arena <- region(2048u64);

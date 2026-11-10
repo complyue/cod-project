@@ -20,7 +20,7 @@ function reversed(x::Weighted in O1)::i64 where {owner O1} { 4 }
 function reversed(x::Entity in O1)::i64 where {owner O1} { 3 }
 function separate(x::Separate in O1)::i64 where {owner O1} { 5 }
 data Local <: Entity { value::i64; }
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(4096u64);
 {
   let point = deref(alloc @arena Point(17));

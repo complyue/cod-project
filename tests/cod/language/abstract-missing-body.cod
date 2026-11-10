@@ -1,5 +1,5 @@
 using "abstract-adapter.cod" Sample;
 using "abstract-library.cod" unfinished;
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(1024u64);
 unfinished(deref(alloc @arena Sample(1)));

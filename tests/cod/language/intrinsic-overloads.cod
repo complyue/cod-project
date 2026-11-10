@@ -12,7 +12,7 @@ function twice(value::i64)::i64 { value * 1000 }
 function pure(value::i64(B))::i64(B) { store(value, 4) }
 global saved::i64(B) = store(B(5), 4);
 array Values[u32]::i64;
-symbol @arena :: region;
+region symbol @arena;
 symbol @values :: ref<Values>;
 symbol @cell :: ref<C>;
 symbol @run :: proc(i64) -> i64;

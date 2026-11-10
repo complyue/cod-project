@@ -15,7 +15,7 @@ import "product-library.cod" Position as Point;
 using "product-library.cod" Position as SamePoint;
 import "product-library.cod" read as measure;
 function weight(p::SamePoint in O1) -> f32 where {owner O1} { measure(p) }
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(1024u64);
 behave @print(weight(deref(alloc @arena Point(3, 1.25f32))));
 

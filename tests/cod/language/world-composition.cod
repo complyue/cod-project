@@ -4,7 +4,7 @@ using "world-integration.cod" zipped;
 using "world-integration.cod" relay;
 using "world-first.cod" first;
 using "world-second.cod" second;
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(4096u64);
 {
   let a = first(@arena);

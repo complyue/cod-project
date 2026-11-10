@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 data Node { value::i64; next::ref<Node>; }
-symbol @arena :: region;
+region symbol @arena;
 symbol @tail :: ref<Node>;
 symbol @middle :: ref<Node>;
 symbol @head :: ref<Node>;

@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 using "std:exceptions" InvalidCapacity;
-symbol arena :: region;
+region symbol arena;
 effect @arena <- region(4096u64);
 try {
   try {

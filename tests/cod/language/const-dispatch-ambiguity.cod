@@ -2,6 +2,6 @@ type Base;
 data Node <: Base { value::i64; }
 function choose(value::const Node in O) -> const i64 where {owner O} { 1 }
 function choose(value::Base in O) -> const i64 where {owner O} { 2 }
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(4096u64);
 choose(deref(alloc @arena Node(1)));

@@ -1,6 +1,6 @@
 data Node { value::i64; next::ref<Node>; }
-symbol @first :: region;
-symbol @second :: region;
+region symbol @first;
+region symbol @second;
 symbol @node :: ref<Node>;
 effect @first <- region(4096u64);
 effect @second <- region(4096u64);

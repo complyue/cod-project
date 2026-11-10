@@ -9,7 +9,7 @@ using "abstract-library.cod" rank_entity;
 function observe_maybe(sample::ref<Sample> in O1, keep::bool)::i64 where {owner O1} {
   rank_entity(deref(maybe_view(sample, keep)))
 }
-function same_type(sample::Sample in O1, arena::region)::i64 where {owner O1} {
+function same_type(sample::Sample in O1, region arena)::i64 where {owner O1} {
   rank_entity(deref(alloc arena Sample(sample.value + 1)))
 }
 

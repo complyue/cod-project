@@ -113,9 +113,9 @@ using symbol "std:io" @assert;
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemory;
 data Packet {value::u64;}
-try {let invalid::owned region<Packet> <- make Packet(capacity=0u64){value<-0u64}; {}}
+try {owned region invalid::Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
 catch(seed) {
-  let keep::owned region<Packet> <- make Packet(capacity=16u64){value<-7u64};
+  owned region keep::Packet <- make Packet(capacity=16u64){value<-7u64};
   for(i in 0 .. 2) {
     try {throw seed from seed} catch(error::const OutOfMemory) {
       behave @assert(error.cause_count == 0u64)
@@ -123,7 +123,7 @@ catch(seed) {
   };
   let first = try {throw seed from seed} catch(error) {error};
   try {
-    let inner::owned region<Packet> <- make Packet(capacity=16u64){value<-0u64};
+    owned region inner::Packet <- make Packet(capacity=16u64){value<-0u64};
     throw first from seed
   } catch(error::const OutOfMemory) {
     behave @assert(error.cause_count == 0u64);
@@ -248,13 +248,13 @@ extern "C" void cod_lang_region_free(void *owner) {
         loop.write_text('''using "std:exceptions" SystemException;
 data Packet {value::u64;}
 data Saved {error::SystemException;}
-try {let invalid::owned region<Packet> <- make Packet(capacity=0u64){value<-0u64}; {}}
+try {owned region invalid::Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
 catch(seed) {
-  let saved::owned region<Saved> <- make Saved(capacity=64u64){error<-seed};
+  owned region saved::Saved <- make Saved(capacity=64u64){error<-seed};
   for(i in 0 .. 2) {
     if(i == 1) {throw root(saved).error} else {};
     let cause = try {
-      let small::owned region<Packet> <- make Packet(capacity=1u64){value<-0u64}; seed
+      owned region small::Packet <- make Packet(capacity=1u64){value<-0u64}; seed
     } catch(error) {error};
     let chained = try {throw seed from cause} catch(error) {error};
     setfield(root(saved), error, chained)
@@ -290,7 +290,7 @@ static const int audit = [] {
                                       "later_emitted_cause_site_resolved": True, "chain_storage_released": True}
         print("PASS: uncaught chain sites from a preceding iteration and complete execution cleanup")
         rejects = {
-            "non-exception-cause": ('symbol arena::region; try {effect @arena <- region(0u64); {}} '
+            "non-exception-cause": ('region symbol arena; try {effect @arena <- region(0u64); {}} '
                                     'catch(error) {throw error from 42;};',
                                     "an explicit cause requires an intrinsic exception value"),
             "duplicate-category": ('using "std:exceptions" InvalidCapacity; using "std:exceptions" InvalidCapacity as Bad; '

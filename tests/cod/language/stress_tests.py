@@ -165,7 +165,7 @@ def main():
 
         (directory / 'regional-types.cod').write_text(
             'data Node { value::f32; next::ref<Node>; }\n'
-            'function create(arena::region, value::f32)::ref<Node> { alloc arena Node(value, null) }\n'
+            'function create(region arena, value::f32)::ref<Node> { alloc arena Node(value, null) }\n'
             'export Node;\nexport create;\n')
         (directory / 'regional-interface.cod').write_text('type Link;\nexport Link;\n')
         depth = 96
@@ -204,7 +204,7 @@ def main():
                 body += f'import "regional-{i+1}.cod" shared_measure as shared_next;\n'
             body += 'function shared_measure(node::Link)::i64 { '
             body += ('shared_next(node) + ' if i + 1 < depth else '') + 'weigh(node) }\n'
-            body += 'function borrow(arena::region)::region { ' + ('borrow_next(arena)' if i + 1 < depth else 'arena') + ' }\n'
+            body += 'function borrow(region arena)-> region { ' + ('borrow_next(arena)' if i + 1 < depth else 'arena') + ' }\n'
             body += 'function retain(node::Link)::Root { ' + ('retain_next(node)' if i + 1 < depth else 'node') + ' }\n'
             body += f'function rank(node::Link)::i64 {{ {i} }}\nfunction rank(node::Root)::i64 {{ -1 }}\n'
             body += 'function measure(node::Link)::i64 { rank(node)' + (' + measure_next(node)' if i + 1 < depth else '') + ' }\n'
@@ -220,7 +220,7 @@ def main():
         entry.write_text('using symbol "std:io" @print;\nusing symbol "std:io" @assert;\n'
                          'using "regional-adapter.cod" Node;\nusing "regional-types.cod" create;\n'
                          'symbol from "regional-vocabulary.cod" @root as @head;\n'
-                         'symbol @arena :: region;\nsymbol @tail :: ref<Node>;\nsymbol @alternate :: ref<Node>;\n'
+                         'region symbol @arena;\nsymbol @tail :: ref<Node>;\nsymbol @alternate :: ref<Node>;\n'
                          'effect @arena <- region(16384u64);\n'
                          'effect @tail = alloc @arena Node(11.0f32, null);\n'
                          f'effect @head = fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'

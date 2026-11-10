@@ -7,7 +7,7 @@ procedure ([]=)(values::ref<Values> in O1, index::u32(Index*), value::i64)::cons
   store(values, index, value);
   values[index]
 }
-symbol @arena :: region;
+region symbol @arena;
 symbol @values :: ref<Values>;
 effect @arena <- region(4096u64);
 effect @values = alloc @arena Values(1u64, 0);

@@ -2,7 +2,7 @@ using symbol "std:io" @print;
 unit Weight;
 array Values[u32]::f32(Weight);
 data Node { effect::f32; next::ref<Node>; data::ref<Values>; }
-symbol @arena :: region;
+region symbol @arena;
 symbol @values :: ref<Values>;
 symbol @tail :: ref<Node>;
 symbol @head :: ref<Node>;

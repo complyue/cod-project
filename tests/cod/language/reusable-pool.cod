@@ -24,7 +24,7 @@ function initialize(pool::Pool in O1) -> void where {owner O1} {
   {}
 }
 
-function create(arena::region, capacity::u32) -> Pool {
+function create(region arena, capacity::u32) -> Pool {
   let payloads = alloc arena Payloads(u64(capacity), 0);
   let links = alloc arena Links(u64(capacity), Slot(0u32));
   let pool = deref(alloc arena Pool(Slot(0u32), payloads, links));
@@ -32,8 +32,8 @@ function create(arena::region, capacity::u32) -> Pool {
   pool
 }
 
-function create(bytes::u64, capacity::u32) -> owned region<Pool> {
-  let arena::owned region<Pool> <- make Pool(capacity = bytes) {
+function create(bytes::u64, capacity::u32) -> owned region ::Pool {
+  owned region arena::Pool <- make Pool(capacity = bytes) {
     head <- Slot(0u32); payloads <- null; links <- null
   };
   let pool = root(arena);

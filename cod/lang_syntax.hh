@@ -230,7 +230,7 @@ inline std::string type_name(const Type &type) {
   case Type::named: case Type::regional: case Type::array:
   case Type::abstract_type: return type.name;
   case Type::region: return std::string(type.owned ? "owned " : "") + "region" +
-                           (type.target ? "<" + type_name(*type.target) + ">" : "");
+                           (type.target ? " ::" + type_name(*type.target) : "");
   case Type::reference: return "ref<" + type_name(*type.target) + ">";
   case Type::null_ref: return "null";
   case Type::arguments: return "variadic arguments";
@@ -246,7 +246,7 @@ struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect,
                     block, conditional, field, let, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, make_region, touch, effect_group, transfer, procedure_effect,
-                    pointer_group, pointer, make_local, rebind };
+                    pointer_group, pointer, make_local, rebind, region_binding };
   Kind kind;
   Location at;
   std::string text;
@@ -272,7 +272,7 @@ struct Parameter {
   bool read_only = false;
 };
 struct TypeParameter { std::string name; std::optional<Type> bound; Location at; };
-struct OwnerParameter { std::string name; std::optional<Type> root; Location at; };
+struct OwnerParameter { std::string name; std::optional<Type> root; Location at; bool explicit_parameter = false; };
 struct SymbolOwner { std::string name; Type root; Location at; };
 struct UnitSelection { std::string source, local; Location at; };
 struct SymbolMapping {
@@ -392,8 +392,8 @@ class Parser {
     auto op = tokens_[cursor_++];
     if (op.kind == TokenKind::punctuation && op.text == "[") {
       expect("]");
-      expect("=");
-      op.text = "[]=";
+      if (take("<-")) op.text = "[]<-";
+      else { expect("="); op.text = "[]="; }
     } else if (!operation_token(op))
       fail(op.at, "expected an operator or intrinsic name");
     if (op.text == "&&" || op.text == "||") fail(op.at, "short-circuit operators are control expressions");
@@ -412,25 +412,21 @@ class Parser {
   }
   Type parse_type(Parameter *parameter = nullptr) {
     auto token = name(TokenKind::identifier);
-    if (token.text == "owned") {
-      auto type = parse_type(parameter);
-      if (type.kind != Type::region || type.owned) fail(token.at, "owned requires a whole-region type");
-      type.owned = true;
-      return type;
-    }
+    if (token.text == "owned" || token.text == "region")
+      fail(token.at, "region is a declaration keyword; use 'region name::Root' or 'owned region name::Root', not a value-type annotation");
     if (token.text == "proc" || token.text == "procedure") {
       Type type{Type::procedure};
       expect("(");
       if (!take(")")) {
         do {
           if (type.variadic) fail(peek().at, "only the last procedure parameter can be variadic");
-          type.parameters.push_back(parse_type());
+          type.parameters.push_back(signature_type());
           type.variadic = take("...");
         } while (take(","));
         expect(")");
       }
       expect("->");
-      type.target = std::make_shared<Type>(parse_type());
+      type.target = std::make_shared<Type>(signature_type());
       return type;
     }
     if (token.text == "ref") {
@@ -441,14 +437,7 @@ class Parser {
       return type;
     }
     Type type{Type::named, token.text};
-    if (token.text == "region") {
-      type = Type::region;
-      if (take("<")) {
-        type.target = std::make_shared<Type>(parse_type());
-        expect(">");
-      }
-    }
-    else if (token.text == "i64") type = Type::integer;
+    if (token.text == "i64") type = Type::integer;
     else if (token.text == "u8") type = Type::uint8;
     else if (token.text == "u32") type = Type::uint32;
     else if (token.text == "u64") type = Type::uint64;
@@ -496,6 +485,24 @@ class Parser {
       expect(")");
     }
   }
+  Type region_annotation(bool owned) {
+    Type type{Type::region};
+    type.owned = owned;
+    if (is("<")) fail(peek().at, "region root annotations use '::Root', not '<Root>'");
+    if (is("::") || is(":")) {
+      type_separator();
+      type.target = std::make_shared<Type>(parse_type());
+    }
+    return type;
+  }
+  Type signature_type() {
+    if (is("region") || is("owned")) {
+      const bool owned = take("owned");
+      expect("region");
+      return region_annotation(owned);
+    }
+    return parse_type();
+  }
   void callable(Form &form, bool inline_effect = false) {
     form.conversion = take("conversion");
     if (form.conversion && !is("function")) fail(peek().at, "conversion requires a pure function");
@@ -508,12 +515,22 @@ class Parser {
     if (parameter_list) {
       if (!take(")")) {
         do {
-          take("ptr");
+          const bool const_region = is("const") && (is("region", 1) || (is("owned", 1) && is("region", 2)));
+          if (const_region) expect("const");
+          const bool owned_region = take("owned");
+          const bool regional = take("region");
+          if (owned_region && !regional) fail(peek().at, "owned requires a region declaration");
+          if (!regional) take("ptr");
           auto param = value_name();
           Parameter parameter{param.text, Type::void_type, param.at, false, {}};
-          type_separator();
-          parameter.read_only = take("const");
-          parameter.type = parse_type(&parameter);
+          if (regional) {
+            parameter.type = region_annotation(owned_region);
+            parameter.read_only = const_region;
+          } else {
+            type_separator();
+            parameter.read_only = take("const");
+            parameter.type = parse_type(&parameter);
+          }
           if (take("in")) parameter.owner = ordinary_name().text;
           if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
           parameter.variadic = take("...");
@@ -526,7 +543,7 @@ class Parser {
     }
     if (take("->") || take("::")) {
       form.result_const = take("const");
-      form.result_type = parse_type();
+      form.result_type = signature_type();
       if (take("in")) form.result_owner = ordinary_name().text;
     }
     if (take("where")) {
@@ -550,6 +567,17 @@ class Parser {
       } while (grouped && take(","));
       if (grouped) expect("}");
     }
+    for (auto &parameter : form.parameters) {
+      if (parameter.type.kind != Type::region) continue;
+      const bool used = form.result_owner == parameter.name || std::any_of(form.parameters.begin(), form.parameters.end(),
+          [&](const Parameter &other) { return other.owner == parameter.name; });
+      if (!used) continue;
+      if (!parameter.owner.empty() && parameter.owner != parameter.name)
+        fail(parameter.at, "a named region owner cannot also name a different generic owner");
+      parameter.owner = parameter.name;
+      form.owner_parameters.push_back({parameter.name, parameter.type.target ? std::optional<Type>(*parameter.type.target) : std::nullopt,
+                                       parameter.at, true});
+    }
     std::set<std::string> generic_names;
     for (const auto &parameter : form.type_parameters) generic_names.insert(parameter.name);
     for (const auto &owner : form.owner_parameters)
@@ -570,6 +598,16 @@ class Parser {
   }
   Expr primary() {
     auto token = peek();
+    if (is("owned") || (is("region") && !is("(", 1))) {
+      const bool owned = take("owned");
+      expect("region");
+      auto expr = make(Expression::Kind::region_binding, value_name());
+      expr->annotation = region_annotation(owned);
+      expr->binding = owned ? "<-" : "=";
+      expect(expr->binding);
+      expr->children.push_back(expression());
+      return expr;
+    }
     if (take("make")) {
       if (take("local")) {
         auto expr = make(Expression::Kind::make_local, token);
@@ -738,7 +776,7 @@ class Parser {
       return expr;
     }
     if (is("(") && ((is(")", 2) && operation_token(tokens_[cursor_ + 1])) ||
-        (is("[", 1) && is("]", 2) && is("=", 3) && is(")", 4)))) {
+        (is("[", 1) && is("]", 2) && (is("=", 3) || is("<-", 3)) && is(")", 4)))) {
       auto expr = make(Expression::Kind::call, lexical_name());
       arguments(*expr);
       return expr;
@@ -806,9 +844,9 @@ class Parser {
       if (swap_operation(peek().text)) fail(peek().at, "swap operators cannot be chained");
       return swap;
     }
-    if (minimum == 0 && left->kind == Expression::Kind::index && is("=")) {
-      auto assignment = make(Expression::Kind::call, expect("="));
-      assignment->text = "[]=";
+    if (minimum == 0 && left->kind == Expression::Kind::index && (is("=") || is("<-"))) {
+      auto assignment = make(Expression::Kind::call, tokens_[cursor_++]);
+      assignment->text = "[]" + assignment->text;
       assignment->children = std::move(left->children);
       assignment->children.push_back(expression());
       return assignment;
@@ -863,6 +901,7 @@ public:
       if (region_symbol) expect("region");
       if (take("symbol")) {
         if (take("from")) {
+          if (region_symbol) fail(start.at, "use 'symbol from' to select a symbol identity; 'region symbol' declares one");
           form->kind = Form::Kind::symbol_from;
           resource(*form, true);
         } else {
@@ -873,13 +912,12 @@ public:
             const auto token = name(peek().kind == TokenKind::symbol ? TokenKind::symbol : TokenKind::identifier);
             declaration->name = token.text;
             declaration->at = token.at;
-            if (!is("::") && !is(":")) fail(peek().at, "a symbol declaration requires an explicit type");
-            type_separator();
-            declaration->result_type = parse_type();
             if (region_symbol) {
-              Type region{Type::region};
-              region.target = std::make_shared<Type>(*declaration->result_type);
-              declaration->result_type = std::move(region);
+              declaration->result_type = region_annotation(false);
+            } else {
+              if (!is("::") && !is(":")) fail(peek().at, "a symbol declaration requires an explicit type");
+              type_separator();
+              declaration->result_type = parse_type();
             }
             const auto owner = take("in") ? ordinary_name().text : std::string{};
             declarations.emplace_back(declaration.get(), owner);
@@ -936,6 +974,8 @@ public:
           fail(start.at, "abstract type declarations have no body; use data for a representation");
         expect("{");
         while (!take("}")) {
+          if (is("region") || (is("owned") && is("region", 1)))
+            fail(peek().at, "region handles cannot be stored in user data fields");
           auto field = name(TokenKind::identifier);
           type_separator();
           auto type = parse_type();

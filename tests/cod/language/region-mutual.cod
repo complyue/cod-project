@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 data Left { value::i64; right::ref<Right>; }
 data Right { value::f32; left::ref<Left>; }
-symbol @arena :: region;
+region symbol @arena;
 symbol @left :: ref<Left>;
 symbol @right :: ref<Right>;
 function through(l::Left in O1)::i64 where {owner O1} { deref(deref(l.right).left).value }

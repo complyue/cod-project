@@ -10,42 +10,43 @@ using "owned-region-library.cod" inspect;
 using "owned-region-library.cod" dispose;
 using "owned-region-library.cod" fail_inside;
 using "owned-region-library.cod" edit_then_fail;
-symbol resource::region<Packet>, bias::u64;
+region symbol resource::Packet;
+symbol bias::u64;
 effect @bias <- 7u64;
-proc @replay_owner(packet::owned region<Packet>) -> owned region<Packet> {
+proc @replay_owner(owned region packet::Packet) -> owned region ::Packet {
   setfield(root(packet), sequence, @bias);
   packet
 }
 proc symbolic_owner() -> void {
   effect @bias <- 8u64;
-  let packet::owned region<Packet> <- fresh(16u64, 0u64);
-  let captured::owned region<Packet> <- perform @replay_owner(packet);
+  owned region packet::Packet <- fresh(16u64, 0u64);
+  owned region captured::Packet <- perform @replay_owner(packet);
   behave @assert(root(captured).sequence == 7u64);
-  let current::owned region<Packet> <- behave @replay_owner(captured);
+  owned region current::Packet <- behave @replay_owner(captured);
   behave @assert(root(current).sequence == 8u64);
   behave @print(11)
 }
 unit Raw; unit Ready;
 conversion function normalize(value::u64(Raw))::u64(Ready) {
-  let scratch::owned region<Packet> <- fresh(scalar(value), 0u64);
+  owned region scratch::Packet <- fresh(scalar(value), 0u64);
   Ready(1u64)
 }
 function accept(value::u64(Ready*), ignored::u64)::void {}
-function select_owner(left::owned region<Packet>, right::owned region<Packet>, flag::bool)::owned region<Packet> {
+function select_owner(owned region left::Packet, owned region right::Packet, flag::bool)-> owned region ::Packet {
   if(flag) {left} else {right}
 }
-function choose(flag::bool)::owned region<Packet> {
-  let left::owned region<Packet> <- fresh(16u64, 1u64);
-  let right::owned region<Packet> <- fresh(16u64, 2u64);
+function choose(flag::bool)-> owned region ::Packet {
+  owned region left::Packet <- fresh(16u64, 1u64);
+  owned region right::Packet <- fresh(16u64, 2u64);
   forward(select_owner(left, right, flag))
 }
-function recover(bytes::u64)::owned region<Packet> {
+function recover(bytes::u64)-> owned region ::Packet {
   try {fresh(bytes, 3u64)}
   catch(error::const InvalidCapacity) {fresh(16u64, 4u64)}
   finally {}
 }
 proc lifecycle(bytes::u64) -> void {
-  let packet::owned region<Packet> <- make Packet(capacity = 256u64) {
+  owned region packet::Packet <- make Packet(capacity = 256u64) {
     head <- {behave @print(101); null};
     sequence <- {behave @print(102); 41u64}
   };
@@ -53,7 +54,7 @@ proc lifecycle(bytes::u64) -> void {
   let node = alloc packet Node(7u64, null);
   setfield(node, next, node);
   setfield(view, head, node);
-  let next::owned region<Packet> <- forward(packet);
+  owned region next::Packet <- forward(packet);
   setfield(view, sequence, 42u64);
   behave @assert(inspect(next).sequence == 42u64);
   effect @resource <- next;
@@ -61,14 +62,14 @@ proc lifecycle(bytes::u64) -> void {
   behave @print(1)
 }
 proc branch_results(bytes::u64) -> void {
-  let first::owned region<Packet> <- choose(bytes == 0u64);
-  let second::owned region<Packet> <- recover(bytes);
+  owned region first::Packet <- choose(bytes == 0u64);
+  owned region second::Packet <- recover(bytes);
   behave @assert(root(first).sequence == (if (bytes == 0u64) {1u64} else {2u64}));
   behave @print(2)
 }
 proc failures(bytes::u64) -> void {
   try {
-    let too_small::owned region<Packet> <- make Packet(capacity = 7u64) {
+    owned region too_small::Packet <- make Packet(capacity = 7u64) {
       sequence <- {behave @print(999); 0u64}; head <- null
     };
     {}
@@ -78,29 +79,29 @@ proc failures(bytes::u64) -> void {
     behave @print(3)
   };
   try {
-    let unfinished::owned region<Packet> <- make Packet(capacity = 16u64) {
+    owned region unfinished::Packet <- make Packet(capacity = 16u64) {
       sequence <- root(fresh(bytes, 0u64)).sequence; head <- null
     };
     {}
   } catch(error::const InvalidCapacity) {behave @print(4)};
-  let keep::owned region<Packet> <- fresh(16u64, 23u64);
+  owned region keep::Packet <- fresh(16u64, 23u64);
   try {dispose(keep, root(fresh(bytes, 0u64)).sequence)}
   catch(error::const InvalidCapacity) {
     behave @assert(root(keep).sequence == 23u64);
     behave @print(5)
   };
   try {
-    let pending::owned region<Packet> <- try {choose(true)}
+    owned region pending::Packet <- try {choose(true)}
     finally {fresh(bytes, 0u64); {}};
     {}
   } catch(error::const InvalidCapacity) {behave @print(6)};
-  let entered::owned region<Packet> <- fresh(16u64, 0u64);
+  owned region entered::Packet <- fresh(16u64, 0u64);
   try {fail_inside(entered, bytes)}
   catch(error::const InvalidCapacity) {behave @print(7)};
   {}
 }
 proc conversion_order(bytes::u64) -> void {
-  let keep::owned region<Packet> <- fresh(16u64, 23u64);
+  owned region keep::Packet <- fresh(16u64, 23u64);
   try {accept(Raw(bytes), {dispose(keep, 0u64); 1u64})}
   catch(error::const InvalidCapacity) {
     behave @assert(root(keep).sequence == 23u64);
@@ -109,19 +110,19 @@ proc conversion_order(bytes::u64) -> void {
   {}
 }
 proc stable_join(flag::bool) -> void {
-  let packet::owned region<Packet> <- fresh(16u64, 17u64);
+  owned region packet::Packet <- fresh(16u64, 17u64);
   let view = root(packet);
-  let selected::owned region<Packet> <- if(flag) {packet} else {packet};
+  owned region selected::Packet <- if(flag) {packet} else {packet};
   behave @assert(view.sequence == root(selected).sequence);
   behave @print(9)
 }
 for(i in 0u64 .. 2u64) {
-  let packet::owned region<Packet> <- fresh(16u64, i);
+  owned region packet::Packet <- fresh(16u64, i);
   behave @print(9)
 };
 stable_join(false);
 proc borrowed_failure(bytes::u64) -> void {
-  let packet::owned region<Packet> <- fresh(16u64, 1u64);
+  owned region packet::Packet <- fresh(16u64, 1u64);
   try {edit_then_fail(packet, bytes)}
   catch(error::const InvalidCapacity) {
     behave @assert(root(packet).sequence == 55u64);

@@ -696,7 +696,7 @@
     "file": "region-unheld-create.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "a new region must be acquired by an effect binding"
+    "stderr_contains": "a new region must be acquired by an effect or owning region declaration"
   },
   {
     "file": "region-stack-error.cod",
@@ -719,7 +719,7 @@
     "stdout": "",
     "stderr_contains": [
       "outlive its owning scope",
-      "region-escape.cod:4:46: note: the escaping value depends on this region acquisition"
+      "region-escape.cod:4:47: note: the escaping value depends on this region acquisition"
     ]
   },
   {
@@ -769,7 +769,7 @@
     "stdout": "",
     "stderr_contains": [
       "cannot transfer ownership out of a dynamic region binding",
-      "region-owner-move.cod:3:14: note: the non-extractable region was acquired here"
+      "region-owner-move.cod:4:14: note: the non-extractable region was acquired here"
     ]
   },
   {
@@ -939,8 +939,8 @@
     "stdout": "",
     "stderr_contains": [
       "cross-region reference fields",
-      "function-cross-region.cod:6:18: note: destination object's region acquired here",
-      "function-cross-region.cod:7:19: note: referenced target's region acquired here"
+      "function-cross-region.cod:8:18: note: destination object's region acquired here",
+      "function-cross-region.cod:9:19: note: referenced target's region acquired here"
     ]
   },
   {
@@ -1108,8 +1108,8 @@
     "stdout": "",
     "stderr_contains": [
       "a fold reference must retain its owning region",
-      "fold-view-owner.cod:6:18: note: initial accumulator's region acquired here",
-      "fold-view-owner.cod:7:19: note: iteration result's region acquired here"
+      "fold-view-owner.cod:7:18: note: initial accumulator's region acquired here",
+      "fold-view-owner.cod:8:19: note: iteration result's region acquired here"
     ]
   },
   {
@@ -1464,5 +1464,27 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "reference assignment cannot cross owners"
+  },
+  {
+    "file": "region-declarations.cod",
+    "exit": 0,
+    "stdout": "1\n"
+  },
+  {
+    "file": "indexed-transfer.cod",
+    "exit": 0,
+    "stdout": "1\n"
+  },
+  {
+    "file": "void-transfer-chain.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected u32, got void"
+  },
+  {
+    "file": "region-legacy-syntax.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "region root annotations use '::Root'"
   }
 ]

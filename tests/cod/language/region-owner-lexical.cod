@@ -1,17 +1,17 @@
 using symbol "std:io" @assert;
 data Cell { value::i64; }
-symbol @a :: region;
-function forward(arena::region) -> region { let view = arena; view }
-function repeat(arena::region, count::u32) -> region {
+region symbol @a;
+function forward(region arena) -> region { region view = arena; view }
+function repeat(region arena, count::u32) -> region {
   fold (i in 0u32 .. count, view = arena) { forward(view) }
 }
-function create(arena::region, value::i64) -> Cell {
+function create(region arena, value::i64) -> Cell {
   deref(alloc arena Cell(value))
 }
-proc inspect(arena::region) -> u64 { capacity_bytes(forward(arena)) }
+proc inspect(region arena) -> u64 { capacity_bytes(forward(arena)) }
 effect @a <- region(4096u64);
 {
-  let view = forward(@a);
+  region view = forward(@a);
   let capacity = inspect(view);
   let cell = create(repeat(view, 3u32), 7);
   {

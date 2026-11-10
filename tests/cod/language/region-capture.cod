@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 array Values[u32]::i64;
-symbol @arena :: region;
+region symbol @arena;
 symbol @values :: ref<Values>;
 symbol @first :: ref<Values>;
 symbol @read :: proc() -> i64;

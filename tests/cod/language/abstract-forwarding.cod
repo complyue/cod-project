@@ -5,7 +5,7 @@ using "abstract-adapter.cod" make_weighted_reference;
 using "abstract-second-adapter.cod" make_extended_reference;
 using "abstract-alternate-factory.cod" make_alternate_reference;
 using "abstract-data.cod" Bundle;
-symbol @arena::region;
+region symbol @arena;
 symbol @held::ref<Sample>;
 effect @arena <- region(4096u64);
 effect @held = make_weighted_reference(@arena, 7);

@@ -1,3 +1,3 @@
-symbol @arena :: region;
+region symbol @arena;
 
 export @arena;

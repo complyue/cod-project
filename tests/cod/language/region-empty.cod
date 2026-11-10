@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
 array Flags[u8]::bool;
-symbol @arena :: region;
+region symbol @arena;
 symbol @empty :: ref<Flags>;
 symbol @full :: ref<Flags>;
 effect @arena <- region(4096u64);

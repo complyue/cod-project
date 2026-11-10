@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 data Pair { x::i64; y::f64; }
-symbol @arena::region;
+region symbol @arena;
 symbol @pair::ref<Pair>;
 symbol @read::proc() -> ref<Pair>;
 effect @arena <- region(1024u64);

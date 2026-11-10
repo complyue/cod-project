@@ -3,7 +3,7 @@ using "reusable-pool.cod" Payloads;
 using "reusable-pool.cod" Links;
 using "pool-adapter.cod" Pool;
 using "pool-adapter.cod" locate;
-symbol @arena::region;
+region symbol @arena;
 {
   let escaped = {
     effect @arena <- region(4096u64);

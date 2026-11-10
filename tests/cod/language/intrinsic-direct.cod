@@ -14,7 +14,7 @@ behave @assert(2 + 3 == 15 && native_sum(2, 3) == 5);
 ptr sum = make local typeof(intrinsic (+)(a, b)) { intrinsic (+)(a, b) };
 behave @assert(sum == 18);
 array Values[u32]::i64;
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(256u64);
 proc (len)(values::ref<Values> in O) -> const u64 where {owner O} { 99u64 }
 function actual_length(values::ref<Values> in O) -> const u64 where {owner O} {

@@ -1,0 +1,29 @@
+using symbol "std:io" @assert;
+using symbol "std:io" @print;
+using "indexed-transfer-library.cod" Packed;
+using "indexed-transfer-library.cod" Values;
+using "indexed-transfer-library.cod" ([]<-);
+using "indexed-transfer-library.cod" (<-);
+using "indexed-transfer-library.cod" ([]<-) as write;
+data Arena { id::u64; }
+function index(counter::u32 in O, value::u32) -> const u32 where {owner O} {
+  counter <- counter + 1u32;
+  value
+}
+owned region arena::Arena <- make Arena(capacity = 512u64) { id <- 1u64 };
+ptr packed = alloc arena Packed(0u32), copy = alloc arena Packed(0u32);
+ptr counter = 0u32;
+packed[index(counter, 0u32)] <- index(counter, 7u32);
+write(packed, 1u32, 11u32);
+behave @assert(counter == 2u32 && deref(packed).bits == 183u32);
+copy <- packed;
+behave @assert(deref(copy).bits == 183u32);
+ptr values = alloc arena Values(2u64, 0);
+ptr target = 1, intermediate = 2;
+target <- intermediate <- 9;
+ptr view = values[0u32] <- intermediate;
+values[0u32] <- 12;
+behave @assert(view == 12 && target == 9);
+target <- 20u32;
+behave @assert(target == 20);
+behave @print(1);

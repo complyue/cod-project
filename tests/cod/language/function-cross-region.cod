@@ -1,5 +1,7 @@
 data Node { value::i64; next::ref<Node>; }
-symbol first :: region, second :: region, node :: ref<Node>;
+region symbol first;
+region symbol second;
+symbol node :: ref<Node>;
 function link(node::Node in O1, child::ref<Node> in O2) -> ref<Node> where {owner O1, owner O2} {
   setfield(node, next, child)
 }

@@ -2,7 +2,8 @@ array Values[u32]::i64;
 function change_owner(first::Values in O1, second::Values in O2, steps::u32)::Values where {owner O1, owner O2} {
   fold (i in 0u32 .. steps, current = first) { second }
 }
-symbol @first::region, @second::region;
+region symbol @first;
+region symbol @second;
 effect @first <- region(4096u64);
 effect @second <- region(4096u64);
 change_owner(deref(alloc @first Values(1u64, 1)), deref(alloc @second Values(1u64, 2)), 3u32);

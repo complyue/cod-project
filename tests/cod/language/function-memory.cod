@@ -1,6 +1,8 @@
 using symbol "std:io" @print;
 array Values[u32]::i64;
-symbol arena :: region, values :: ref<Values>, selected :: ref<i64>;
+region symbol arena;
+symbol values :: ref<Values>;
+symbol selected :: ref<i64>;
 
 function tick(values::Values in O1) -> i64 where {owner O1} {
   let old = values[0u32];

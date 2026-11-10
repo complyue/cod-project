@@ -1,6 +1,6 @@
 type Metric;
 data Sample <: Metric { value::i64; }
-function create(arena::region)::Sample { deref(alloc arena Sample(3)) }
+function create(region arena)::Sample { deref(alloc arena Sample(3)) }
 function score(x::Metric in O1)::i64 where {owner O1} { 1 }
 function through(x::Metric in O1)::i64 where {owner O1} { private_bridge(x) + private_bridge(x) }
 function pointer_value(x::ref<Sample> in O1)::i64 where {owner O1} { deref(x).value }

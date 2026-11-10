@@ -23,7 +23,7 @@ proc @adapted(x::Metric in O1)::i64 where {owner O1};
 effect @frozen = frozen_proc;
 effect @adapted = adapted_proc;
 effect @bias <- 5;
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(4096u64);
 {
   let x = create(@arena);

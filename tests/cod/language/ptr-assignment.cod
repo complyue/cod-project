@@ -6,7 +6,7 @@ using "ptr-assignment-methods.cod" Choice;
 using "ptr-assignment-methods.cod" access;
 using "ptr-assignment-methods.cod" readonly_choice;
 symbol from "ptr-assignment-methods.cod" @replacement;
-symbol @arena::region;
+region symbol @arena;
 effect @arena <- region(4096u64);
 {
   ptr a = 1u32, b = 2u32, c = 3u32;

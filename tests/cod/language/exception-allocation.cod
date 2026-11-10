@@ -2,7 +2,8 @@ using symbol "std:io" @print;
 using symbol "std:io" @assert;
 using "std:exceptions" OutOfMemory;
 using "std:exceptions" InvalidCapacity;
-symbol arena :: region, original_capacity :: u64;
+region symbol arena;
+symbol original_capacity :: u64;
 effect @arena <- region(4096u64);
 effect @original_capacity <- capacity_bytes(@arena);
 try {

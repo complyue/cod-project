@@ -13,7 +13,7 @@ for (stage in 0u64 .. 4u64) {
   catch(error::const RegionCapacityExceeded) {}
 };
 {
-  let arena::owned region<Pool> <- create(8192u64, 4u32);
+  owned region arena::Pool <- create(8192u64, 4u32);
   let pool = root(arena);
   let occupation = used_bytes(arena);
   for (i in 0u32 .. 4u32) {

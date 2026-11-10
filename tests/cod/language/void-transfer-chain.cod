@@ -1,0 +1,6 @@
+using "indexed-transfer-library.cod" Packed;
+using "indexed-transfer-library.cod" ([]<-);
+region symbol @arena;
+effect @arena <- region(128u64);
+ptr packed = alloc @arena Packed(0u32), value = 1u32;
+value <- (packed[0u32] <- 2u32);
