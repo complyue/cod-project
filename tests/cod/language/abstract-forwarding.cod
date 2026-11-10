@@ -8,7 +8,7 @@ using "abstract-data.cod" Bundle;
 symbol @arena::region;
 symbol @held::ref<Sample>;
 effect @arena <- region(4096u64);
-effect @held <- make_weighted_reference(@arena, 7);
+effect @held = make_weighted_reference(@arena, 7);
 proc @inspect() -> i64 { rank(deref(@held)) }
 {
   let reference = @held;
@@ -26,7 +26,7 @@ proc @inspect() -> i64 { rank(deref(@held)) }
   };
   behave @print(rank_entity(deref(continued)));
 };
-effect @held <- make_alternate_reference(@arena);
+effect @held = make_alternate_reference(@arena);
 behave @print(perform @inspect());
 behave @print(behave @inspect());
 behave @print(rank(deref(@held)));

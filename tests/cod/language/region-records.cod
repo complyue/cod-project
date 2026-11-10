@@ -12,12 +12,12 @@ function child_value(n::Node)::f32 { deref(child(n)).effect }
 function weight(n::Node)::ref<f32(Weight)> { ref_at(deref(n.data), 0u32) }
 function measure(n::Node)::f32 { n.effect + child_value(n) + scalar(deref(weight(n))) }
 effect @arena <- region(8192u64);
-effect @values <- alloc @arena Values(2u64, Weight(0.25f32));
-effect @tail <- alloc @arena Node(2.0f32, null, @values);
-effect @head <- alloc @arena Node(3.0f32, @tail, @values);
+effect @values = alloc @arena Values(2u64, Weight(0.25f32));
+effect @tail = alloc @arena Node(2.0f32, null, @values);
+effect @head = alloc @arena Node(3.0f32, @tail, @values);
 store(weight(deref(@head)), Weight(0.5f32));
 behave @print(measure(deref(@head)));
-effect @selected <- child(deref(@head));
+effect @selected = child(deref(@head));
 setfield(@selected, effect, 7.0f32);
 behave @print(measure(deref(@head)));
 behave @print(deref(@tail).next == null);

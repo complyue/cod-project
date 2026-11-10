@@ -1292,5 +1292,39 @@
     "file": "exception-chain.cod",
     "exit": 0,
     "stdout": "1\n"
+  },
+  {
+    "file": "symbolic-context.cod",
+    "exit": 0,
+    "stdout": ""
+  },
+  {
+    "file": "symbolic-transfer.cod",
+    "exit": 0,
+    "stdout": ""
+  },
+  {
+    "file": "symbolic-partial-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "shared-region constraint violated"
+  },
+  {
+    "file": "symbolic-procedure-transfer.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "use '=' for object/procedure rebinding"
+  },
+  {
+    "file": "symbolic-procedure-signature.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "incompatible value types"
+  },
+  {
+    "file": "symbolic-effect-result.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected i64, got void"
   }
 ]

@@ -9,7 +9,7 @@ procedure ([]=)(values::ref<Values>, index::u32(Index*), value::i64)::i64 {
 symbol @arena :: region;
 symbol @values :: ref<Values>;
 effect @arena <- region(4096u64);
-effect @values <- alloc @arena Values(1u64, 0);
+effect @values = alloc @arena Values(1u64, 0);
 ({ behave @print(11); @values })[{ behave @print(22); Request(0u32) }] = {
   behave @print(33);
   7

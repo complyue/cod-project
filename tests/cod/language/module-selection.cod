@@ -23,7 +23,7 @@ symbol from "procedure-vocabulary.cod" @bias;
 symbol saved :: proc(i64) -> i64;
 import "procedure-library.cod" read as source_read;
 effect @bias <- 20;
-effect @saved <- source_read;
+effect @saved = source_read;
 behave @print(source_read(1));
 behave @print(perform @saved(1));
 behave @print(behave @saved(1));
@@ -34,7 +34,7 @@ function scale(x::i64)::i64 { x * 4 }
 effect @local_bias <- 100;
 using "mixin-lexical-provider.cod" read as original_scaled;
 mixin "mixin-lexical-provider.cod" read as mixed_scaled with { @local_bias as @bias; };
-effect @mixed_lexical <- mixed_scaled;
+effect @mixed_lexical = mixed_scaled;
 behave @print(original_scaled(3));
 effect @local_bias <- 110;
 behave @print(perform @mixed_lexical(3));

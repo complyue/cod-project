@@ -4,5 +4,5 @@ symbol from "region-source.cod" @values;
 using symbol "region-source.cod" @read;
 symbol @arena :: region;
 effect @arena <- region(4096u64);
-effect @values <- alloc @arena Values(1u64, 23);
+effect @values = alloc @arena Values(1u64, 23);
 behave @print(behave @read());

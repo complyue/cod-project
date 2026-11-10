@@ -44,10 +44,10 @@ def main():
              'function blend(a::u64, b::u64)::u64 { a * b + a }',
              'symbol @arena :: region;', 'symbol @fa :: ref<Floats>;', 'symbol @fb :: ref<Floats>;', 'symbol @ia :: ref<Integers>;', 'symbol @ib :: ref<Integers>;',
              'effect @arena <- region(16384u64);',
-             f'effect @fa <- alloc @arena Floats({len(floats)}u64, 0.0f32);',
-             f'effect @fb <- alloc @arena Floats({len(floats)}u64, 0.0f32);',
-             f'effect @ia <- alloc @arena Integers({len(integers)}u64, 0u64);',
-             f'effect @ib <- alloc @arena Integers({len(integers)}u64, 0u64);']
+             f'effect @fa = alloc @arena Floats({len(floats)}u64, 0.0f32);',
+             f'effect @fb = alloc @arena Floats({len(floats)}u64, 0.0f32);',
+             f'effect @ia = alloc @arena Integers({len(integers)}u64, 0u64);',
+             f'effect @ib = alloc @arena Integers({len(integers)}u64, 0u64);']
     for i, (a, b) in enumerate(floats):
         lines += [f'store(@fa, Slot({i}u32), {literal(a)});',
                   f'store(@fb, Slot({i}u32), {literal(b)});']

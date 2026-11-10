@@ -1,0 +1,3 @@
+symbol @level::i64;
+function identity(value::i64)::i64 { value }
+identity(effect @level <- 3);

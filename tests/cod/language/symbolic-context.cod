@@ -1,0 +1,50 @@
+using symbol "std:io" @assert;
+using "std:exceptions" InvalidCapacity;
+using "symbolic-vocabulary.cod" ContextPool;
+using "symbolic-vocabulary.cod" ContextNode;
+symbol from "symbolic-vocabulary.cod" @arena;
+symbol from "symbolic-vocabulary.cod" @left;
+symbol from "symbolic-vocabulary.cod" @right as @companion;
+symbol from "symbolic-vocabulary.cod" @gain;
+symbol from "symbolic-vocabulary.cod" @selected;
+effect @gain <- 7;
+effect @arena <- make ContextPool(capacity = 4096u64) { tag <- 1 };
+effect @left = deref(alloc @arena ContextNode(10)), @companion = deref(alloc @arena ContextNode(20));
+proc read_left() -> i64 { @left.value + @gain }
+proc original() -> i64 { touch @companion; read_left() }
+effect @selected = original;
+proc stage_next() -> ContextNode {
+  behave @assert(@left.value == 10);
+  deref(alloc @arena ContextNode(40))
+}
+proc fail_next() -> ContextNode {
+  behave @assert(@left.value == 10);
+  let candidate = deref(alloc @arena ContextNode(40));
+  effect @arena <- make ContextPool(capacity = 0u64) { tag <- 0 };
+  candidate
+}
+{
+  effect @gain <- 9;
+  effect @arena <- make ContextPool(capacity = 4096u64) { tag <- 2 };
+  try {
+    effect @left = deref(alloc @arena ContextNode(30)), @companion = fail_next();
+    behave @assert(false)
+  } catch (failure::const InvalidCapacity) {
+    behave @assert(@left.value == 10);
+    behave @assert(@companion.value == 20)
+  };
+  effect @left = deref(alloc @arena ContextNode(30)), @companion = stage_next();
+  behave @assert(perform @selected() == 17);
+  behave @assert(behave @selected() == 39);
+  {
+    effect proc @selected() -> i64 { touch @companion; @left.value + @gain + 1 };
+    effect @gain <- 30;
+    behave @assert(perform @selected() == 40);
+    behave @assert(behave @selected() == 61)
+  };
+  behave @assert(perform @selected() == 17);
+};
+behave @assert(@gain == 7);
+behave @assert(@left.value == 10);
+effect proc @empty() {};
+perform @empty();

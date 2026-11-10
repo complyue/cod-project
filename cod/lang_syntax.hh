@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -161,6 +162,9 @@ struct Type {
   std::shared_ptr<Type> target;
   std::vector<Type> parameters;
   std::vector<Type> bounds;
+  std::vector<Type> owner_bounds;
+  std::vector<size_t> owners;
+  std::vector<bool> const_views;
   bool variadic = false;
   bool owned = false;
   Type(Kind kind = void_type, std::string name = {}, size_t identity = 0)
@@ -168,6 +172,7 @@ struct Type {
   bool operator==(const Type &other) const {
     return kind == other.kind && name == other.name && identity == other.identity &&
            parameters == other.parameters && bounds == other.bounds && variadic == other.variadic && owned == other.owned &&
+           owner_bounds == other.owner_bounds && owners == other.owners && const_views == other.const_views &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
   }
 };
@@ -234,10 +239,11 @@ inline std::string type_name(const Type &type) {
   return "unknown";
 }
 
+struct Form;
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect,
                     block, conditional, field, let, range_for, fold, allocate, index, null_ref,
-                    try_scope, handler, raise, make_region };
+                    try_scope, handler, raise, make_region, touch, effect_group, transfer, procedure_effect };
   Kind kind;
   Location at;
   std::string text;
@@ -246,6 +252,7 @@ struct Expression {
   std::string binding;
   bool spread = false;
   std::optional<Type> annotation;
+  std::shared_ptr<Form> definition = {};
 };
 using Expr = std::unique_ptr<Expression>;
 
@@ -256,8 +263,12 @@ struct Parameter {
   bool automatic_conversion = false;
   std::vector<std::string> conversion_route;
   bool variadic = false;
+  std::string owner = {};
+  bool read_only = false;
 };
 struct TypeParameter { std::string name; std::optional<Type> bound; Location at; };
+struct OwnerParameter { std::string name; std::optional<Type> root; Location at; };
+struct SymbolOwner { std::string name; Type root; Location at; };
 struct UnitSelection { std::string source, local; Location at; };
 struct SymbolMapping {
   std::string local;
@@ -283,6 +294,10 @@ struct Form {
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
   std::vector<TypeParameter> type_parameters;
+  std::vector<OwnerParameter> owner_parameters;
+  std::shared_ptr<SymbolOwner> symbol_owner;
+  std::string result_owner;
+  bool result_const = false;
   std::optional<Type> result_type;
   std::optional<Type> index_type;
   std::optional<Type> parent_type;
@@ -312,7 +327,7 @@ inline bool expression_keyword(std::string_view name) {
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "proc" || name == "global" || name == "symbol" ||
          name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "from" ||
-         name == "make" || name == "owned";
+         name == "make" || name == "owned" || name == "touch";
 }
 
 inline bool module_keyword(std::string_view name) {
@@ -360,7 +375,7 @@ class Parser {
   static bool operation_token(const Token &token) {
     return (token.kind == TokenKind::identifier && intrinsic_name(token.text)) ||
            (token.kind == TokenKind::punctuation &&
-            (binary_precedence(token.text) >= 0 || token.text == "!" || token.text == "="));
+            (binary_precedence(token.text) >= 0 || token.text == "!" || token.text == "=" || token.text == "<-"));
   }
   Token lexical_name(bool *operation = nullptr) {
     const bool parenthesized = take("(");
@@ -473,6 +488,78 @@ class Parser {
       expect(")");
     }
   }
+  void callable(Form &form, bool inline_effect = false) {
+    form.conversion = take("conversion");
+    if (form.conversion && !is("function")) fail(peek().at, "conversion requires a pure function");
+    const bool function = take("function");
+    if (!function && !take("proc")) expect("procedure");
+    form.kind = function ? Form::Kind::function : Form::Kind::procedure;
+    form.symbolic = !function && peek().kind == TokenKind::symbol;
+    form.name = form.symbolic ? name(TokenKind::symbol).text : lexical_name(&form.operation).text;
+    const bool parameter_list = take("(");
+    if (parameter_list) {
+      if (!take(")")) {
+        do {
+          take("ptr");
+          auto param = value_name();
+          Parameter parameter{param.text, Type::void_type, param.at, false, {}};
+          type_separator();
+          parameter.read_only = take("const");
+          parameter.type = parse_type(&parameter);
+          if (take("in")) parameter.owner = ordinary_name().text;
+          if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
+          parameter.variadic = take("...");
+          form.parameters.push_back(std::move(parameter));
+        } while (take(","));
+        expect(")");
+      }
+    } else if (function) {
+      fail(peek().at, "a function requires a parameter list");
+    }
+    if (take("->") || take("::")) {
+      form.result_const = take("const");
+      form.result_type = parse_type();
+      if (take("in")) form.result_owner = ordinary_name().text;
+    }
+    if (take("where")) {
+      const bool grouped = take("{");
+      do {
+        if (is("region") || is("owner")) {
+          const bool regional = take("region");
+          if (!regional) expect("owner");
+          auto owner = ordinary_name();
+          OwnerParameter parameter{owner.text, {}, owner.at};
+          if (regional) { type_separator(); parameter.root = parse_type(); }
+          form.owner_parameters.push_back(std::move(parameter));
+          continue;
+        }
+        auto parameter = ordinary_name();
+        for (const auto &previous : form.type_parameters)
+          if (previous.name == parameter.text) fail(parameter.at, "duplicate type parameter '" + parameter.text + "'");
+        TypeParameter type_parameter{parameter.text, {}, parameter.at};
+        if (take("<:")) type_parameter.bound = parse_type();
+        form.type_parameters.push_back(std::move(type_parameter));
+      } while (grouped && take(","));
+      if (grouped) expect("}");
+    }
+    std::set<std::string> generic_names;
+    for (const auto &parameter : form.type_parameters) generic_names.insert(parameter.name);
+    for (const auto &owner : form.owner_parameters)
+      if (!generic_names.insert(owner.name).second)
+        fail(owner.at, "duplicate generic parameter '" + owner.name + "'");
+    for (size_t i = 0; i + 1 < form.parameters.size(); ++i)
+      if (form.parameters[i].variadic) fail(form.parameters[i].at, "only the last parameter can be variadic");
+    const bool declaration = take(";");
+    if (declaration && !parameter_list) fail(form.at, "a callable declaration requires a parameter list");
+    if (inline_effect && !form.result_type) form.result_type = Type::void_type;
+    if ((!function || declaration) && !form.result_type)
+      fail(form.at, "a callable declaration requires an explicit result type");
+    if (declaration && form.conversion)
+      fail(form.at, "a conversion requires an implemented function method");
+    if (!declaration) { form.body = block(); if (!inline_effect) take(";"); }
+    if (inline_effect && (!form.symbolic || declaration || function))
+      fail(form.at, "effect proc requires a symbolic procedure definition");
+  }
   Expr primary() {
     auto token = peek();
     if (take("make")) {
@@ -560,13 +647,32 @@ class Parser {
       return expr;
     }
     if (take("effect")) {
-      auto symbol = name(TokenKind::symbol);
-      auto expr = make(Expression::Kind::effect, symbol);
-      if (is("=")) fail(peek().at, "symbolic bindings require 'effect @name <- value', not '='");
-      expect("<-");
-      expr->children.push_back(expression());
-      return expr;
+      if (is("proc") || is("procedure")) {
+        auto definition = std::make_shared<Form>();
+        definition->at = peek().at;
+        callable(*definition, true);
+        auto expr = make(Expression::Kind::procedure_effect, token);
+        expr->text = definition->name;
+        expr->definition = std::move(definition);
+        return expr;
+      }
+      auto group = make(Expression::Kind::effect_group, token);
+      do {
+        auto expr = make(Expression::Kind::effect, name(TokenKind::symbol));
+        if (take("=")) expr->binding = "=";
+        else { expect("<-"); expr->binding = "<-"; }
+        expr->children.push_back(expression());
+        group->children.push_back(std::move(expr));
+        if (!is(",") || tokens_[cursor_ + 1].kind != TokenKind::symbol ||
+            (!is("=", 2) && !is("<-", 2))) break;
+        expect(",");
+      } while (true);
+      if (group->children.size() == 1) return std::move(group->children.front());
+      for (const auto &binding : group->children)
+        if (binding->binding != "=") fail(binding->at, "a grouped effect currently requires object-reference '=' bindings");
+      return group;
     }
+    if (take("touch")) return make(Expression::Kind::touch, name(TokenKind::symbol));
     if (is("perform") || is("behave")) {
       const bool perform = take("perform");
       if (!perform) expect("behave");
@@ -655,6 +761,12 @@ class Parser {
       assignment->children.push_back(expression());
       return assignment;
     }
+    if (minimum == 0 && is("<-")) {
+      auto transfer = make(Expression::Kind::transfer, expect("<-"));
+      transfer->children.push_back(std::move(left));
+      transfer->children.push_back(expression());
+      return transfer;
+    }
     return left;
   }
   Expr block() {
@@ -689,11 +801,14 @@ public:
           continue;
         }
       }
+      const bool region_symbol = is("region") && is("symbol", 1);
+      if (region_symbol) expect("region");
       if (take("symbol")) {
         if (take("from")) {
           form->kind = Form::Kind::symbol_from;
           resource(*form, true);
         } else {
+          std::vector<std::pair<Form *, std::string>> declarations;
           do {
             auto declaration = std::make_unique<Form>();
             declaration->kind = Form::Kind::symbol;
@@ -703,8 +818,30 @@ public:
             if (!is("::") && !is(":")) fail(peek().at, "a symbol declaration requires an explicit type");
             type_separator();
             declaration->result_type = parse_type();
+            if (region_symbol) {
+              Type region{Type::region};
+              region.target = std::make_shared<Type>(*declaration->result_type);
+              declaration->result_type = std::move(region);
+            }
+            const auto owner = take("in") ? ordinary_name().text : std::string{};
+            declarations.emplace_back(declaration.get(), owner);
             forms.push_back(std::move(declaration));
           } while (take(","));
+          if (take("where")) {
+            expect("{"); expect("region");
+            auto owner = ordinary_name();
+            type_separator();
+            auto constraint = std::make_shared<SymbolOwner>(SymbolOwner{owner.text, parse_type(), owner.at});
+            expect("}");
+            for (auto &[declaration, name] : declarations) {
+              if (region_symbol || name != owner.text)
+                fail(declaration->at, "each object symbol must name the declared region owner");
+              declaration->symbol_owner = constraint;
+            }
+          } else {
+            for (const auto &[declaration, owner] : declarations)
+              if (!owner.empty()) fail(declaration->at, "symbol owner requires a where {region ...} declaration");
+          }
           expect(";");
           continue;
         }
@@ -750,52 +887,7 @@ public:
         }
         take(";");
       } else if (is("function") || is("procedure") || is("proc") || is("conversion")) {
-        form->conversion = take("conversion");
-        if (form->conversion && !is("function")) fail(peek().at, "conversion requires a pure function");
-        const bool function = take("function");
-        if (!function && !take("proc")) expect("procedure");
-        form->kind = function ? Form::Kind::function : Form::Kind::procedure;
-        form->symbolic = !function && peek().kind == TokenKind::symbol;
-        form->name = form->symbolic ? name(TokenKind::symbol).text : lexical_name(&form->operation).text;
-        const bool parameter_list = take("(");
-        if (parameter_list) {
-          if (!take(")")) {
-            do {
-              auto param = value_name();
-              Parameter parameter{param.text, Type::void_type, param.at, false, {}};
-              type_separator();
-              parameter.type = parse_type(&parameter);
-              if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
-              parameter.variadic = take("...");
-              form->parameters.push_back(std::move(parameter));
-            } while (take(","));
-            expect(")");
-          }
-        } else if (function) {
-          fail(peek().at, "a function requires a parameter list");
-        }
-        if (take("->") || take("::")) form->result_type = parse_type();
-        if (take("where")) {
-          const bool grouped = take("{");
-          do {
-            auto parameter = ordinary_name();
-            for (const auto &previous : form->type_parameters)
-              if (previous.name == parameter.text) fail(parameter.at, "duplicate type parameter '" + parameter.text + "'");
-            TypeParameter type_parameter{parameter.text, {}, parameter.at};
-            if (take("<:")) type_parameter.bound = parse_type();
-            form->type_parameters.push_back(std::move(type_parameter));
-          } while (grouped && take(","));
-          if (grouped) expect("}");
-        }
-        for (size_t i = 0; i + 1 < form->parameters.size(); ++i)
-          if (form->parameters[i].variadic) fail(form->parameters[i].at, "only the last parameter can be variadic");
-        const bool declaration = take(";");
-        if (declaration && !parameter_list) fail(form->at, "a callable declaration requires a parameter list");
-        if ((!function || declaration) && !form->result_type)
-          fail(form->at, "a callable declaration requires an explicit result type");
-        if (declaration && form->conversion)
-          fail(form->at, "a conversion requires an implemented function method");
-        if (!declaration) { form->body = block(); take(";"); }
+        callable(*form);
       } else if (take("global")) {
         form->kind = Form::Kind::global;
         form->name = ordinary_name().text;

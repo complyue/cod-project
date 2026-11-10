@@ -194,7 +194,7 @@ def main():
             body = ('using "regional-types.cod" Node;\nusing "regional-interface.cod" Link as Root;\n'
                     f'using "regional-interface-{i}.cod" Link;\n')
             body += ('symbol from "regional-vocabulary.cod" @root;\n'
-                     f'symbol @node{i} :: ref<Node>;\neffect @node{i} <- @root;\nsymbol @walk :: proc() -> ref<Node>;\n')
+                     f'symbol @node{i} :: ref<Node>;\neffect @node{i} = @root;\nsymbol @walk :: proc() -> ref<Node>;\n')
             if i + 1 < depth:
                 body += f'using "regional-{i+1}.cod" find as next;\nusing "regional-{i+1}.cod" retain as retain_next;\n'
                 body += f'using "regional-{i+1}.cod" measure as measure_next;\n'
@@ -222,8 +222,8 @@ def main():
                          'symbol from "regional-vocabulary.cod" @root as @head;\n'
                          'symbol @arena :: region;\nsymbol @tail :: ref<Node>;\nsymbol @alternate :: ref<Node>;\n'
                          'effect @arena <- region(16384u64);\n'
-                         'effect @tail <- alloc @arena Node(11.0f32, null);\n'
-                         f'effect @head <- fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'
+                         'effect @tail = alloc @arena Node(11.0f32, null);\n'
+                         f'effect @head = fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'
                          '  alloc @arena Node(f32(i), node)\n};\n'
                          'using "regional-0.cod" find;\nusing "regional-0.cod" retain;\nusing symbol "regional-0.cod" @walk;\n'
                          'behave @print(retain(deref(@head)).value);\n'
@@ -236,11 +236,11 @@ def main():
                          '{\nlet original = @arena;\nlet old_used = used_bytes(original);\n'
                          'effect @arena <- region(4096u64);\n'
                          'let borrowed = borrow(@arena);\nlet initial = used_bytes(borrowed);\n'
-                         'effect @alternate <- create(borrowed, 47.0f32);\n'
+                         'effect @alternate = create(borrowed, 47.0f32);\n'
                          'behave @assert(used_bytes(borrowed) > initial);\n'
                          'behave @assert(used_bytes(original) == old_used);\n'
                          'setfield(@alternate, next, @alternate);\n'
-                         'effect @selected <- @alternate;\n'
+                         'effect @selected = @alternate;\n'
                          'behave @print(deref(perform @walk()).value);\n'
                          'behave @print(deref(behave @walk()).value);\n};\n'
                          'using "regional-rank-first.cod" measure as first;\n'

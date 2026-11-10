@@ -3,5 +3,5 @@ array Values[u32]::f32;
 symbol @arena :: region;
 symbol @values :: ref<Values>;
 effect @arena <- region(4096u64);
-effect @values <- alloc @arena Values(4u64, 0.0f32);
+effect @values = alloc @arena Values(4u64, 0.0f32);
 @values[outside()];

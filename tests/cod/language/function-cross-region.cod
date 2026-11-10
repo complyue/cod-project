@@ -5,5 +5,5 @@ function link(node::Node, child::ref<Node>) -> ref<Node> {
 }
 effect @first <- region(4096u64);
 effect @second <- region(4096u64);
-effect @node <- alloc @first Node(1, null);
+effect @node = alloc @first Node(1, null);
 link(deref(@node), alloc @second Node(2, null));

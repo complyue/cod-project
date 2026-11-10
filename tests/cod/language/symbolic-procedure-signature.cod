@@ -1,0 +1,2 @@
+symbol from "symbolic-vocabulary.cod" @selected as @local;
+effect proc @local() -> bool { true };

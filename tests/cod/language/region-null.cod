@@ -3,5 +3,5 @@ function consume(node::Node)::i64 { 7 }
 symbol @arena :: region;
 symbol @node :: ref<Node>;
 effect @arena <- region(4096u64);
-effect @node <- alloc @arena Node(1, null);
+effect @node = alloc @arena Node(1, null);
 consume(deref(deref(@node).next));

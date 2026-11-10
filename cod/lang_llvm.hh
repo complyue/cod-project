@@ -101,10 +101,11 @@ class LLVMEmission {
     }
     return value;
   }
-  llvm::Value *slot(size_t id) {
+  llvm::Value *slot(size_t id, Type type) {
     if (const auto found = slots_.find(id); found != slots_.end()) return found->second;
-    auto *global = new llvm::GlobalVariable(*module_, pointer_type(), false, llvm::GlobalValue::InternalLinkage,
-        llvm::ConstantPointerNull::get(pointer_type()), "effect." + std::to_string(id));
+    auto *native = type_of(type);
+    auto *global = new llvm::GlobalVariable(*module_, native, false, llvm::GlobalValue::InternalLinkage,
+        llvm::Constant::getNullValue(native), "effect." + std::to_string(id));
     global->setThreadLocalMode(llvm::GlobalVariable::GeneralDynamicTLSModel);
     slots_.emplace(id, global);
     return global;
@@ -245,21 +246,15 @@ public:
     return llvm::ConstantFP::get(type_of(type), spelling);
   }
   llvm::Value *read_symbol(size_t id, Type type) {
-    auto *value = b().CreateLoad(pointer_type(), slot(id));
-    return b().CreateLoad(type_of(type), value);
+    return b().CreateLoad(type_of(type), slot(id, type));
   }
   void effect(size_t id, Type type, llvm::Value *source) {
     if (type.kind == Type::region || type.kind == Type::procedure) return;
-    // WPO checks the symbol's type and binding availability. TLS carries only
-    // its current pointer; the binding's value and capture semantics are separate.
-    // Calls are inlined and non-recursive. One cell per emitted binding site in
-    // the entry block avoids allocating more stack storage on every loop lap.
-    llvm::IRBuilder<> storage(&entry_->getEntryBlock(), entry_->getEntryBlock().begin());
-    auto *value = storage.CreateAlloca(type_of(type), nullptr, "effect.value");
-    b().CreateStore(source, value);
-    auto *address = slot(id);
-    cleanups_.push_back({address, b().CreateLoad(pointer_type(), address)});
-    b().CreateStore(value, address);
+    // WPO fixes each slot's type. Save the payload for scoped restoration;
+    // bits never borrow a lexical cell, and object views retain region provenance.
+    auto *address = slot(id, type);
+    cleanups_.push_back({address, b().CreateLoad(type_of(type), address)});
+    b().CreateStore(source, address);
   }
   size_t scope() const { return cleanups_.size(); }
   void unwind(size_t mark) {

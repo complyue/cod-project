@@ -19,10 +19,10 @@ symbol @run :: proc(i64) -> i64;
 symbol @len :: i64;
 effect @len <- 99;
 effect @arena <- region(4096u64);
-effect @values <- alloc @arena Values(3u64, 0);
-effect @cell <- alloc @arena C(2);
+effect @values = alloc @arena Values(3u64, 0);
+effect @cell = alloc @arena C(2);
 symbol @scores :: ref<Scores>;
-effect @scores <- alloc @arena Scores(2u64, 0);
+effect @scores = alloc @arena Scores(2u64, 0);
 effect @bias <- 1;
 procedure @run(value::i64)::i64 { store(@cell, value) + i64(len(value)) }
 symbol @assign :: proc(i64) -> i64;
@@ -46,7 +46,7 @@ behave @print(scalar(B(5) + 1));
 using symbol "intrinsic-library.cod" @raw_store;
 array Rates[u32]::f32;
 symbol @rates :: ref<Rates>;
-effect @rates <- alloc @arena Rates(1u64, 0.0f32);
+effect @rates = alloc @arena Rates(1u64, 0.0f32);
 procedure (store)(target::ref<f32>, value::f32)::f32 {
   behave @raw_store(target, if (value < 0.0f32) { 0.0f32 } else { value })
 }

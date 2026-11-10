@@ -13,9 +13,9 @@ function value(node::ref<Node>)::i64 {
   if (node == null) { -1 } else { deref(node).value }
 }
 effect @arena <- region(4096u64);
-effect @tail <- alloc @arena Node(3, null);
-effect @middle <- alloc @arena Node(2, @tail);
-effect @head <- alloc @arena Node(1, @middle);
+effect @tail = alloc @arena Node(3, null);
+effect @middle = alloc @arena Node(2, @tail);
+effect @head = alloc @arena Node(1, @middle);
 for (i in 0u32 .. 5u32) { behave @print(value(walk(@head, i))); };
 setfield(@tail, next, @head);
 behave @print(value(walk(@head, 4u32)));

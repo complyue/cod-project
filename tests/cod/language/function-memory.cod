@@ -29,12 +29,12 @@ function through_alias(writer::Values, reader::Values) -> i64 {
 }
 
 effect @arena <- region(4096u64);
-effect @values <- alloc @arena Values(1u64, 0);
+effect @values = alloc @arena Values(1u64, 0);
 behave @print(tick(deref(@values)));
 behave @print(tick(deref(@values)));
 behave @print(add_two(deref(@values)));
 behave @print(observe(deref(@values)));
-effect @selected <- update(@values);
+effect @selected = update(@values);
 store(@selected, 99);
 behave @print(@values[0u32]);
 behave @print(through_alias(deref(@values), deref(@values)));

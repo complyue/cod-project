@@ -25,6 +25,7 @@ namespace cod::language {
 
 struct Module;
 struct Procedure;
+struct CaptureReplay;
 struct Conformance {
   Type data, interface;
   bool operator==(const Conformance &) const = default;
@@ -39,12 +40,14 @@ struct Value {
   std::vector<Conformance> conformances = {}; // Selected type facts carried by a borrowed view, never runtime metadata.
   std::shared_ptr<const std::vector<Value>> arguments = {}; // WPO argument pack; no user allocation or runtime container.
   llvm::Value *exception_category = nullptr; // Propagation context, separate from the scalar payload.
+  bool read_only = false;
 };
 using Bindings = llvm::ImmutableMap<size_t, const Value *>;
 struct Environment {
   Bindings bindings{nullptr};
   Bindings captured_bindings{nullptr};
   bool captured_context = false;
+  std::shared_ptr<CaptureReplay> replay;
 
   const Value *lookup(size_t id) const {
     const auto found = bindings.lookup(id);
@@ -54,6 +57,12 @@ struct Environment {
     const auto found = captured_bindings.lookup(id);
     return found && *found == value;
   }
+};
+struct CaptureReplay {
+  Environment caller;
+  Bindings captured_values{nullptr};
+  std::shared_ptr<CaptureReplay> defining_replay;
+  std::set<size_t> used;
 };
 struct Locals {
   std::map<std::string, Value> visible;
@@ -171,6 +180,8 @@ class Compiler {
   std::vector<std::string> symbol_names_;
   std::map<size_t, Type> symbol_types_;
   std::map<size_t, CallableDeclaration> symbol_declarations_;
+  struct BindingCheck { Environment environment; Location at; };
+  std::vector<BindingCheck> binding_checks_;
   std::vector<std::string> scanned_;
   std::vector<std::string> execution_order_;
   std::set<const Form *> active_calls_;
@@ -215,6 +226,8 @@ class Compiler {
     Location acquired;
     bool live = true;
     std::set<size_t> origins;
+    bool symbolic = false;
+    std::optional<Type> root = {};
   };
   std::vector<Region> regions_;
   struct Holding {
@@ -595,7 +608,9 @@ class Compiler {
   Value scalar(Type type, llvm::Value *native, std::optional<size_t> region_id = {}) {
     return {type, native, {}, nullptr, region_id};
   }
-  llvm::Value *stored_value(const Value &value, Type destination) {
+  llvm::Value *stored_value(const Value &value, Type destination, const Location &at) {
+    if (destination.kind == Type::reference && value.read_only)
+      fail(at, "cannot store a read-only view in a writable reference field");
     if (destination.kind == Type::exception && !destination.identity)
       return ir_.store_exception(value.native, exception_category(value));
     return value.native;
@@ -659,8 +674,25 @@ class Compiler {
       }
     }
     Signature result{type_context_.bindings, {}, {}};
+    std::map<std::string, size_t> owners;
     for (size_t i = 0; i < args.size(); ++i) {
       const auto &parameter = parameter_at(form, i);
+      if (args[i].read_only && !parameter.read_only && args[i].region_id)
+        return reject("read-only object cannot satisfy a writable parameter");
+      if (!parameter.owner.empty()) {
+        const auto declaration = std::find_if(form.owner_parameters.begin(), form.owner_parameters.end(),
+            [&](const auto &owner) { return owner.name == parameter.owner; });
+        if (declaration == form.owner_parameters.end()) return reject("undeclared parameter owner '" + parameter.owner + "'");
+        if (!args[i].region_id) return reject("external owner requires regional provenance in this prototype");
+        const auto [found, inserted] = owners.emplace(parameter.owner, *args[i].region_id);
+        if (!inserted && found->second != *args[i].region_id) return reject("arguments require the same actual owner");
+        if (declaration->root) {
+          const auto &root = regions_.at(*args[i].region_id).root;
+          if (!root || !accepts(contextual(scalar(*root, nullptr), caller),
+                               resolve(*declaration->root, lexical, declaration->at), caller, at))
+            return reject("argument region does not satisfy its root constraint");
+        }
+      }
       result.parameters.push_back(resolve(parameter.type, lexical, parameter.at));
     }
     if (form.result_type) result.result = resolve(*form.result_type, lexical, form.at);
@@ -774,6 +806,19 @@ class Compiler {
         }
       }
     }
+    const auto register_inline = [&](auto &&self, const Expression &expression) -> void {
+      if (expression.definition) {
+        const auto &definition = *expression.definition;
+        if (!result.world.symbols.contains(definition.name) && !result.world.symbol_aliases.contains(definition.name)) {
+          symbol_declarations_.emplace(new_symbol(result, definition.name), CallableDeclaration{&definition, &result});
+          result.world.available_symbols.insert(definition.name);
+        }
+        self(self, *definition.body);
+      }
+      for (const auto &child : expression.children) self(self, *child);
+    };
+    for (const auto &owned : result.forms)
+      if (owned->body) register_inline(register_inline, *owned->body);
     for (const auto &owned : result.forms) {
       auto &form = *owned;
       if (form.kind != Form::Kind::symbol_from && form.kind != Form::Kind::using_resource &&
@@ -798,7 +843,23 @@ class Compiler {
   }
   static bool uses_symbol(Expression::Kind kind) {
     using K = Expression::Kind;
-    return kind == K::symbol || kind == K::effect || kind == K::perform || kind == K::behave;
+    return kind == K::symbol || kind == K::effect || kind == K::perform || kind == K::behave || kind == K::touch ||
+           kind == K::procedure_effect;
+  }
+  static std::unique_ptr<Form> procedure_header(const Form &source) {
+    auto form = std::make_unique<Form>();
+    form->kind = Form::Kind::procedure;
+    form->at = source.at;
+    form->name = source.name;
+    form->symbolic = source.symbolic;
+    form->operation = source.operation;
+    form->parameters = source.parameters;
+    form->type_parameters = source.type_parameters;
+    form->owner_parameters = source.owner_parameters;
+    form->result_type = source.result_type;
+    form->result_owner = source.result_owner;
+    form->result_const = source.result_const;
+    return form;
   }
   Expr mixin_expression(const Expression &source_expr, const Module &source, const Module &receiver,
                          const std::map<std::string, std::string> &names,
@@ -818,6 +879,11 @@ class Compiler {
     }
     for (const auto &child : source_expr.children)
       expr->children.push_back(mixin_expression(*child, source, receiver, names, identities, used));
+    if (source_expr.definition) {
+      expr->definition = procedure_header(*source_expr.definition);
+      expr->definition->name = expr->text;
+      expr->definition->body = mixin_expression(*source_expr.definition->body, source, receiver, names, identities, used);
+    }
     return expr;
   }
   Form &mixin_body(const Procedure &source, const Form &selection, const Module &receiver) {
@@ -828,14 +894,10 @@ class Compiler {
         fail(mapping.at, "duplicate source role @" + mapping.source + " in symbol map");
       symbol(receiver, mapping.local, mapping.at);
     }
-    auto form = std::make_unique<Form>();
-    form->kind = Form::Kind::procedure;
+    auto form = procedure_header(*source.form);
     form->at = selection.at;
     form->name = selection.alias;
     form->symbolic = selection.symbolic;
-    form->parameters = source.form->parameters;
-    form->type_parameters = source.form->type_parameters;
-    form->result_type = source.form->result_type;
     std::map<size_t, size_t> identities;
     std::set<std::string> used;
     form->body = mixin_expression(*source.form->body, *source.lexical, receiver, names, identities, used);
@@ -857,6 +919,27 @@ class Compiler {
     for (const auto &parameter : form.parameters)
       type.parameters.push_back(resolve(parameter.type, module, parameter.at));
     type.target = std::make_shared<Type>(form.result_type ? resolve(*form.result_type, module, form.at) : Type::void_type);
+    std::map<std::string, size_t> owners;
+    const auto owner_index = [&](const std::string &name) -> size_t {
+      if (name.empty()) return 0;
+      if (const auto found = owners.find(name); found != owners.end()) return found->second;
+      const auto declaration = std::find_if(form.owner_parameters.begin(), form.owner_parameters.end(),
+          [&](const auto &owner) { return owner.name == name; });
+      if (declaration == form.owner_parameters.end()) fail(form.at, "undeclared signature owner '" + name + "'");
+      type.owner_bounds.push_back(declaration->root ? resolve(*declaration->root, module, declaration->at) : Type::void_type);
+      const auto index = type.owner_bounds.size();
+      owners.emplace(name, index);
+      return index;
+    };
+    for (const auto &parameter : form.parameters) {
+      type.owners.push_back(owner_index(parameter.owner));
+      type.const_views.push_back(parameter.read_only);
+    }
+    type.owners.push_back(owner_index(form.result_owner));
+    type.const_views.push_back(form.result_const);
+    if (type.owner_bounds.empty()) type.owners.clear();
+    if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool value) { return value; }))
+      type.const_views.clear();
     return type;
   }
   bool signature_subset(const Method &left, const Method &right, const Module &caller,
@@ -893,6 +976,26 @@ class Compiler {
     for (size_t i = 0; i < args.size(); ++i)
       if (!covers(covers, l.parameters[std::min(i, l.parameters.size() - 1)],
                           r.parameters[std::min(i, r.parameters.size() - 1)], widening)) return false;
+    const auto root_constraint = [&](const Method &method, size_t index) -> std::optional<Type> {
+      const auto &parameter = parameter_at(*method.form, index);
+      for (const auto &owner : method.form->owner_parameters)
+        if (owner.name == parameter.owner && owner.root)
+          return resolve(*owner.root, *method.lexical, owner.at);
+      return {};
+    };
+    for (size_t i = 0; i < args.size(); ++i) {
+      const auto right_root = root_constraint(right, i);
+      if (right_root) {
+        const auto left_root = root_constraint(left, i);
+        if (!left_root || !subtype(*left_root, *right_root, caller, at)) return false;
+      }
+      const auto &right_owner = parameter_at(*right.form, i).owner;
+      if (right_owner.empty()) continue;
+      if (parameter_at(*left.form, i).owner.empty()) return false;
+      for (size_t j = 0; j < i; ++j)
+        if (parameter_at(*right.form, j).owner == right_owner &&
+            parameter_at(*left.form, j).owner != parameter_at(*left.form, i).owner) return false;
+    }
     // A fixed arity is a subset of a matching variadic signature, not vice versa.
     if (l.variadic != r.variadic) return !l.variadic;
     return true;
@@ -907,7 +1010,41 @@ class Compiler {
                                                : procedure_type(*form, *module);
     if (type == Type::void_type) fail(form->at, "a symbol cannot have void type");
     if (type.owned) fail(form->at, "a dynamic region symbol uses region<Root>, without the ordinary-owner qualifier");
+    if (form->symbol_owner && !object_type(type))
+      fail(form->at, "a shared region owner requires object-reference symbols, not TLS bits or whole-region symbols");
     symbol_types_.emplace(id, std::move(type));
+  }
+  static bool object_type(Type type) {
+    return type.kind == Type::reference || type.kind == Type::regional || type.kind == Type::array ||
+           type.kind == Type::abstract_type;
+  }
+  const Value *effective_binding(const Environment &env, size_t id) const {
+    const auto *value = env.lookup(id);
+    if (env.replay && !env.replay->used.contains(id) && (!value || env.captured(id, value)))
+      return effective_binding(env.replay->caller, id);
+    return value;
+  }
+  void check_binding_owners(const Environment &env, const Location &at) {
+    std::map<const SymbolOwner *, std::pair<size_t, size_t>> owners;
+    for (const auto &[id, declaration] : symbol_declarations_) {
+      const auto *group = declaration.form->symbol_owner.get();
+      if (!group) continue;
+      const auto *value = effective_binding(env, id);
+      if (!value) continue;
+      if (!value->region_id) fail(at, "symbolic object has no proven region owner: " + symbol_names_[id]);
+      const auto [found, inserted] = owners.emplace(group, std::pair{*value->region_id, id});
+      if (!inserted && found->second.first != *value->region_id)
+        fail(at, "shared-region constraint violated by " + symbol_names_[found->second.second] + " and " + symbol_names_[id] +
+            "; a partial perform replay may require explicit touch of its companion symbol\n" +
+            location_text(group->at) + ": note: shared region '" + group->name + "' declared here");
+    }
+  }
+  void binding_check(const Environment &env, const Location &at) {
+    // A demanded call discovers its actual dependencies after method selection.
+    // Validate captured overlays after those reads/touches are known, without
+    // treating the complete definition-time metadata snapshot as a capture set.
+    if (env.replay) binding_checks_.push_back({env, at});
+    else check_binding_owners(env, at);
   }
   void fix_type(size_t id, Type type, const Location &at) {
     declare_symbol_type(id);
@@ -916,22 +1053,29 @@ class Compiler {
       fail(at, "incompatible value types for " + symbol_names_[id] +
                    ": expected " + type_name(found->second) + ", got " + type_name(type));
   }
-  Value read_symbol(size_t id, const Environment &env, const Location &at) {
+  Value read_symbol(size_t id, const Environment &env, const Location &at, bool materialize = true) {
     const auto *found = env.lookup(id);
     if (!found) fail(at, (env.captured_context
         ? "perform requires an unavailable definition-time capture " : "missing required binding ") + symbol_names_[id]);
+    if (env.replay && env.captured(id, found)) {
+      for (auto replay = env.replay; replay; replay = replay->defining_replay) {
+        const auto origin = replay->captured_values.lookup(id);
+        if (!origin || *origin != found) break;
+        replay->used.insert(id);
+      }
+    }
     if (found->region_id) region_pointer(*found, at);
-    if (found->type.kind == Type::procedure || found->type.kind == Type::region) return *found;
+    if (!materialize || found->type.kind == Type::procedure || found->type.kind == Type::region) return *found;
     const auto type = found->type;
     auto result = scalar(type, env.captured(id, found) ? found->native : ir_.read_symbol(id, type), found->region_id);
     result.conformances = found->conformances;
     result.exception_category = found->exception_category;
+    result.read_only = found->read_only;
     return result;
   }
-  Value bind(size_t id, Value value, const Module &owner, Environment &env, const Location &at) {
+  Value bind(size_t id, Value value, const Module &owner, Environment &env, const Location &at, bool grouped = false) {
     if (value.type == Type::void_type || value.arguments) fail(at, "a symbol cannot be bound to void or a variadic argument pack");
-    if (value.type.kind == Type::regional || value.type.kind == Type::array || value.type == Type::null_ref)
-      fail(at, "bind bits or a typed regional reference, not a dereferenced regional object");
+    if (value.type == Type::null_ref) fail(at, "a symbolic object binding requires a live region-backed object");
     if (value.region_id) region_pointer(value, at);
     declare_symbol_type(id);
     if (value.procedure && !value.procedure->builtin.empty()) {
@@ -953,12 +1097,29 @@ class Compiler {
       value = take_owner(value, at);
       value.type.owned = false;
       value = hold_region(value, module_top_level_, false);
+      regions_.at(*value.region_id).symbolic = true;
+      if (value.type.target) regions_.at(*value.region_id).root = *value.type.target;
     }
-    fix_type(id, value.type, at);
+    if (object_type(value.type)) {
+      if (!value.region_id || !regions_.at(*value.region_id).symbolic)
+        fail(at, "a symbolic object reference requires a region supplied by a region symbol");
+      if (const auto declaration = symbol_declarations_.find(id); declaration != symbol_declarations_.end()) {
+        if (const auto &group = declaration->second.form->symbol_owner) {
+          const auto &root = regions_.at(*value.region_id).root;
+          const auto expected = resolve(group->root, *declaration->second.lexical, group->at);
+          if (!root || !accepts(contextual(scalar(*root, nullptr), owner), expected, owner, at))
+            fail(at, "symbolic object's region root does not satisfy " + type_name(expected));
+        }
+      }
+      const auto declared = symbol_types_.find(id);
+      if (declared == symbol_types_.end() || !accepts(value, declared->second, owner, at))
+        fix_type(id, value.type, at);
+    } else fix_type(id, value.type, at);
     ir_.effect(id, value.type, value.native);
     value.owner = &owner;
     binding_values_.push_back(std::move(value));
     env.bindings = binding_factory_.add(env.bindings, id, &binding_values_.back());
+    if (!grouped) binding_check(env, at);
     return binding_values_.back();
   }
 
@@ -966,6 +1127,7 @@ class Compiler {
     if (uses_symbol(expr.kind) && !expr.symbol_id)
       expr.symbol_id = symbol(module, expr.text, expr.at);
     for (const auto &child : expr.children) resolve_procedure_symbols(*child, module);
+    if (expr.definition) resolve_procedure_symbols(*expr.definition->body, module);
   }
   Value define_procedure(Form &form, const Module &lexical, const Environment &env) {
     resolve_procedure_symbols(*form.body, lexical);
@@ -1036,6 +1198,15 @@ class Compiler {
     const auto instantiated = *signature(form, lexical, args, caller, at, true);
     const auto types = llvm::SaveAndRestore(type_context_, TypeContext{&lexical, instantiated.bindings});
     if (!form.body) fail(at, "callable '" + form.name + "' has no method implementation");
+    if (!function_context) {
+      const auto touches = [&](auto &&self, const Expression &expression) -> void {
+        if (expression.kind == Expression::Kind::touch)
+          read_symbol(expression_symbol(expression, lexical), env, expression.at, false);
+        // An inline definition's touches belong to that procedure, not this body.
+        for (const auto &child : expression.children) self(self, *child);
+      };
+      touches(touches, *form.body);
+    }
     // A using selection retains this context; import selects the receiving module.
     // The source body still resolves types, globals and symbols in lexical.
     const auto saved_context = llvm::SaveAndRestore(implementation_context_,
@@ -1060,6 +1231,7 @@ class Compiler {
     for (size_t i = 0; i < args.size(); ++i) {
       if (args[i].region_id) region_pointer(args[i], at);
       auto parameter = admit(args[i], instantiated.parameters[i], caller, at);
+      if (parameter_at(form, i).read_only && parameter.region_id) parameter.read_only = true;
       if (parameter.type.owned && (!parameter.holding_id || !transferring.insert(*parameter.holding_id).second))
         fail(at, "one region owner cannot be consumed by multiple parameters");
       parameters.push_back(std::move(parameter));
@@ -1069,6 +1241,24 @@ class Compiler {
     for (auto &parameter : parameters)
       if (parameter.type.owned) parameter = hold_region(take_owner(parameter, at), false, true);
     Locals locals;
+    std::map<std::string, Value> owner_values;
+    for (const auto &owner : form.owner_parameters) {
+      std::optional<Value> region;
+      for (size_t i = 0; i < parameters.size(); ++i) {
+        if (parameter_at(form, i).owner != owner.name) continue;
+        auto &metadata = regions_.at(*parameters[i].region_id);
+        if (!region) {
+          Type type{Type::region};
+          if (metadata.root) type.target = std::make_shared<Type>(*metadata.root);
+          region = scalar(type, region_pointer(parameters[i], at), parameters[i].region_id);
+          region->read_only = parameters[i].read_only;
+          region->conformances = parameters[i].conformances;
+        } else region->read_only = region->read_only && parameters[i].read_only;
+      }
+      if (!region) fail(owner.at, "cannot infer owner '" + owner.name + "' from the arguments");
+      owner_values.emplace(owner.name, *region);
+      if (owner.root) declare_local(locals, owner.name, *region, lexical, owner.at);
+    }
     const auto fixed = form.parameters.size() - (variadic(form) ? 1 : 0);
     for (size_t i = 0; i < fixed; ++i) {
       auto argument = parameters[i];
@@ -1088,6 +1278,12 @@ class Compiler {
     result = finish_scope(holding_begin, native_scope, std::move(result), at, parent_module);
     active_calls_.erase(&form);
     if (instantiated.result) result = admit(std::move(result), *instantiated.result, lexical, form.at);
+    if (!form.result_owner.empty()) {
+      const auto owner = owner_values.find(form.result_owner);
+      if (owner == owner_values.end() || result.region_id != owner->second.region_id)
+        fail(form.at, "result does not belong to its declared owner");
+    }
+    if (form.result_const && object_type(result.type)) result.read_only = true;
     call_path_.pop_back();
     return result;
   }
@@ -1405,6 +1601,27 @@ class Compiler {
     check_declarations(match.declarations, match.function.form->kind, args, result, caller, at);
     return result;
   }
+  Value transfer_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
+                            bool function_context) {
+    if (expr.children.size() != 2) fail(expr.at, "object transfer requires a destination and source");
+    auto destination = expression(*expr.children[0], module, env, locals, function_context);
+    if (!object_type(destination.type) || !destination.region_id)
+      fail(expr.at, "object transfer requires a regional object destination; symbolic bits require effect '<-'");
+    if (destination.read_only) fail(expr.at, "cannot transfer into a read-only destination view");
+    auto source = expression(*expr.children[1], module, env, locals, function_context);
+    region_pointer(destination, expr.at);
+    if (source.region_id) region_pointer(source, expr.at);
+    const std::vector<Value> args{destination, source};
+    const auto selected = method("<-", module, args, expr.at);
+    if (!selected) fail(expr.at, "object transfer requires a user-defined (<-) overload");
+    if (!selected->function.form->result_const)
+      fail(selected->function.form->at, "a (<-) overload must return a const destination view");
+    auto result = call_method(*selected, args, expr.at, env, function_context, module);
+    if (result.region_id != destination.region_id || result.native != destination.native)
+      fail(expr.at, "a (<-) overload must return the original destination, not another object");
+    result.read_only = true;
+    return result;
+  }
   Type array_type(const Value &value, const Location &at) {
     const auto type = value.type.kind == Type::reference ? *value.type.target : value.type;
     if (type.kind != Type::array) fail(at, "expected a regional array");
@@ -1450,7 +1667,9 @@ class Compiler {
     require(index.type, layout.index, at);
     const auto result_type = as_reference ? reference(layout.element) : layout.element;
     const auto place = ir_.element(region_pointer(array, at), array.native, index.type, index.native, layout.element);
-    return scalar(result_type, as_reference ? ir_.reference(place) : ir_.read(place), as_reference ? array.region_id : std::nullopt);
+    auto result = scalar(result_type, as_reference ? ir_.reference(place) : ir_.read(place), as_reference ? array.region_id : std::nullopt);
+    result.read_only = as_reference && array.read_only;
+    return result;
   }
   Value invoke_procedure(const Value &value, const Expression &expr, const Module &module,
                          Environment &env, Locals &locals, bool function_context, bool captured) {
@@ -1482,6 +1701,11 @@ class Compiler {
       }
     }
     auto call_env = captured ? proc->captures : env;
+    if (captured) {
+      call_env.replay = std::make_shared<CaptureReplay>(CaptureReplay{
+          env, proc->captures.captured_bindings, proc->captures.replay, {}});
+      binding_check(call_env, expr.at);
+    }
     auto result = call(*proc->form, *proc->lexical, std::move(call_env), args, false, expr.at, module, proc->implementation);
     check_declarations(proc->declarations, Form::Kind::procedure, args, result, module, expr.at);
     return result;
@@ -1489,10 +1713,8 @@ class Compiler {
   Value invoke(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                bool function_context) {
     const auto id = expression_symbol(expr, module);
-    const auto *found = env.lookup(id);
-    if (!found) fail(expr.at, (env.captured_context
-        ? "perform requires an unavailable definition-time capture " : "missing required procedure binding ") + symbol_names_[id]);
-    return invoke_procedure(*found, expr, module, env, locals, function_context,
+    const auto value = read_symbol(id, env, expr.at, false);
+    return invoke_procedure(value, expr, module, env, locals, function_context,
                             expr.kind == Expression::Kind::perform);
   }
   Value make_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
@@ -1519,6 +1741,7 @@ class Compiler {
     auto *native = ir_.region_new(capacity.type, capacity.native);
     Type type{Type::region}; type.owned = true; type.target = std::make_shared<Type>(root);
     auto owner = hold_region(scalar(type, native, new_region(native, expr.at)), module_top_level_, true);
+    regions_.at(*owner.region_id).root = root;
     auto *offset = ir_.reserve_root(native, root);
     for (size_t i = 0; i < order.size(); ++i) {
       const auto &initializer = *expr.children[i + 1];
@@ -1528,7 +1751,7 @@ class Compiler {
       else if (!(value.type == Type::null_ref && field.kind == Type::reference)) require(value.type, field, initializer.at);
       if (value.region_id && value.region_id != owner.region_id)
         fail(initializer.at, "a root reference field must belong to the new region");
-      ir_.write(ir_.field(native, offset, root, order[i], field), stored_value(value, field));
+      ir_.write(ir_.field(native, offset, root, order[i], field), stored_value(value, field, initializer.at));
     }
     return contextual(std::move(owner), module);
   }
@@ -1536,6 +1759,7 @@ class Compiler {
                           bool function_context) {
     auto owner = expression(*expr.children[0], module, env, locals, function_context);
     if (owner.type.kind != Type::region) fail(expr.at, "alloc requires a whole region");
+    if (owner.read_only) fail(expr.at, "cannot allocate through a read-only region view");
     region_pointer(owner, expr.at);
     auto type = resolve({Type::named, expr.text}, module, expr.at);
     if (type.kind != Type::array && type.kind != Type::regional)
@@ -1565,7 +1789,7 @@ class Compiler {
     }
     std::vector<llvm::Value *> native_args;
     for (size_t i = 0; i < args.size(); ++i)
-      native_args.push_back(type.kind == Type::regional ? stored_value(args[i], products_.at(type.identity).fields[i].type) : args[i].native);
+      native_args.push_back(type.kind == Type::regional ? stored_value(args[i], products_.at(type.identity).fields[i].type, expr.at) : args[i].native);
     auto *native = type.kind == Type::array ?
         ir_.array_new(region_pointer(owner, expr.at), arrays_.at(type.identity).element,
                       args[0].type, args[0].native, args[1].native) :
@@ -1621,6 +1845,8 @@ class Compiler {
         fail(expr.at, "a fold reference must retain its owning region" +
                          region_note(accumulator.region_id, "initial accumulator's region acquired here") +
                          region_note(next.region_id, "iteration result's region acquired here"));
+      if (next.read_only && !accumulator.read_only)
+        fail(expr.at, "a fold cannot feed a read-only view into a writable accumulator");
       for (const auto &relation : accumulator.conformances)
         if (!establishes(next, relation, expr.at) && !subtype(relation.data, relation.interface, module, expr.at))
           fail(expr.at, "a fold result must retain established conformance " + type_name(relation.data) +
@@ -1646,6 +1872,7 @@ class Compiler {
   Value call_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context, bool function_result = false) {
     using K = Expression::Kind;
+    if (expr.text == "<-") return transfer_expression(expr, module, env, locals, function_context || function_result);
     if (const auto local = locals.visible.find(expr.text); local != locals.visible.end()) {
       const auto callee = local->second;
       return invoke_procedure(callee, expr, module, env, locals, function_context || function_result, false);
@@ -1683,6 +1910,7 @@ class Compiler {
       const auto &owner = args[0];
       auto value = scalar(*owner.type.target, ir_.region_root(region_pointer(owner, expr.at)), owner.region_id);
       value.conformances = owner.conformances;
+      value.read_only = owner.read_only;
       return contextual(std::move(value), module);
     }
     if (expr.text == "region") {
@@ -1710,6 +1938,7 @@ class Compiler {
       if (type.kind == Type::array || type.kind == Type::regional) {
         auto result = scalar(type, native, args[0].region_id);
         result.conformances = args[0].conformances;
+        result.read_only = args[0].read_only;
         return contextual(std::move(result), module);
       }
       return loaded_value(type, native);
@@ -1724,6 +1953,7 @@ class Compiler {
     }
     if (expr.text == "store") {
       const auto &args = values();
+      if (!args.empty() && args[0].read_only) fail(expr.at, "cannot store through a read-only view");
       if (args.size() == 2 && args[0].type.kind == Type::reference &&
           (numeric(*args[0].type.target) || *args[0].type.target == Type::boolean ||
            args[0].type.target->kind == Type::quantity || args[0].type.target->kind == Type::exception)) {
@@ -1732,7 +1962,7 @@ class Compiler {
           value = admit(std::move(value), *args[0].type.target, module, expr.at);
         else require(value.type, *args[0].type.target, expr.at);
         ir_.write(ir_.referent(region_pointer(args[0], expr.at), args[0].native, *args[0].type.target),
-                  stored_value(value, *args[0].type.target));
+                  stored_value(value, *args[0].type.target, expr.at));
         return value;
       }
       if (args.size() != 3) fail(expr.at, "store requires an array/index/value or scalar reference/value");
@@ -1747,6 +1977,7 @@ class Compiler {
       if (expr.children.size() != 3 || expr.children[1]->kind != K::name)
         fail(expr.at, "setfield requires a reference, field name and value");
       const auto object = expression(*expr.children[0], module, env, locals, function_context);
+      if (object.read_only) fail(expr.at, "cannot change fields through a read-only view");
       const auto target = object.type.kind == Type::reference ? *object.type.target : object.type;
       if (target.kind != Type::regional)
         fail(expr.at, "setfield requires a regional record view or reference");
@@ -1771,7 +2002,7 @@ class Compiler {
           value = contextual(std::move(value), module);
         }
 
-        ir_.write(ir_.field(region_pointer(object, expr.at), object.native, type, i, field), stored_value(value, field));
+        ir_.write(ir_.field(region_pointer(object, expr.at), object.native, type, i, field), stored_value(value, field, expr.at));
         return value;
       }
       fail(expr.at, "no such regional field '" + expr.children[1]->text + "'");
@@ -1916,6 +2147,7 @@ class Compiler {
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> values, categories;
     for (const auto &completion : completions) {
       require(completion.value.type, result.type, at);
+      result.read_only = result.read_only || completion.value.read_only;
       if (!result.type.owned && completion.value.region_id != result.region_id)
         fail(at, "borrowed control-flow results require one owning region");
       if (result.type.owned) {
@@ -1945,6 +2177,7 @@ class Compiler {
             return completion.value.region_id != result.region_id;
           })) result.region_id = new_region(result.native, at, std::move(origins));
       regions_.at(*result.region_id).live = true;
+      if (result.type.target) regions_.at(*result.region_id).root = *result.type.target;
       result = hold_region(std::move(result), module_lifetime, true);
     }
     return result;
@@ -2169,6 +2402,7 @@ class Compiler {
         if (fields[i].type.kind == Type::reference) {
           auto result = scalar(fields[i].type, ir_.read(ir_.field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type)), value.region_id);
           result.conformances = value.conformances;
+          result.read_only = value.read_only;
           return contextual(std::move(result), module);
         }
         return loaded_value(fields[i].type, ir_.read(ir_.field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type)));
@@ -2207,16 +2441,45 @@ class Compiler {
     case K::symbol:
       if (function_context) fail(expr.at, "a function cannot read symbolic effects");
       return read_symbol(expression_symbol(expr, module), env, expr.at);
-    case K::effect: {
-      if (function_context) fail(expr.at, "a function cannot establish effects");
-      const auto region_initializer = llvm::SaveAndRestore(region_initializer_,
-          expr.children[0]->kind == K::call && expr.children[0]->text == "region");
-      auto value = expression(*expr.children[0], module, env, locals, function_context);
-      value = bind(expression_symbol(expr, module), value, module, env, expr.at);
+    case K::touch:
+      if (function_context) fail(expr.at, "a function cannot touch symbolic effects");
+      read_symbol(expression_symbol(expr, module), env, expr.at, false);
+      return {};
+    case K::procedure_effect: {
+      if (function_context) fail(expr.at, "a function cannot establish procedure effects");
+      const auto id = expression_symbol(expr, module);
+      auto value = define_procedure(*expr.definition, module, env);
+      bind(id, std::move(value), module, env, expr.at);
       scope_rebound_ = true;
-      return value;
+      return {};
+    }
+    case K::effect: case K::effect_group: {
+      if (function_context) fail(expr.at, "a function cannot establish effects");
+      std::vector<const Expression *> bindings;
+      if (expr.kind == K::effect) bindings.push_back(&expr);
+      else for (const auto &child : expr.children) bindings.push_back(child.get());
+      std::vector<std::pair<size_t, Value>> values;
+      std::set<size_t> assigned;
+      for (const auto *binding : bindings) {
+        const auto id = expression_symbol(*binding, module);
+        if (!assigned.insert(id).second) fail(binding->at, "duplicate symbol identity in effect group");
+        declare_symbol_type(id);
+        const auto type = symbol_types_.at(id);
+        if (binding->binding == "=" && !object_type(type) && type.kind != Type::procedure)
+          fail(binding->at, "effect '=' requires an object or procedure symbol; bits and region resources use '<-'");
+        if (binding->binding == "<-" && (object_type(type) || type.kind == Type::procedure))
+          fail(binding->at, "effect '<-' is limited to bits and whole-region acquisition; use '=' for object/procedure rebinding");
+        const auto region_initializer = llvm::SaveAndRestore(region_initializer_,
+            binding->children[0]->kind == K::call && binding->children[0]->text == "region");
+        values.emplace_back(id, expression(*binding->children[0], module, env, locals, function_context));
+      }
+      for (auto &[id, value] : values) bind(id, value, module, env, expr.at, true);
+      binding_check(env, expr.at);
+      scope_rebound_ = true;
+      return {};
     }
     case K::make_region: return make_expression(expr, module, env, locals, function_context);
+    case K::transfer: return transfer_expression(expr, module, env, locals, function_context);
     case K::allocate: return allocate_expression(expr, module, env, locals, function_context);
     case K::range_for: case K::fold: return loop_expression(expr, module, env, locals, function_context);
     case K::block: return block(expr, module, env, locals.nested(), function_context);
@@ -2236,7 +2499,7 @@ class Compiler {
       declarations.push_back(declaration);
   }
   static bool operation_name(const std::string &name) {
-    return intrinsic_name(name) || binary_precedence(name) >= 0 || name == "!" || name == "=" || name == "[]=";
+    return intrinsic_name(name) || binary_precedence(name) >= 0 || name == "!" || name == "=" || name == "[]=" || name == "<-";
   }
   static CallableIdentity local_callable(const Module &module, const std::string &name) {
     return {operation_name(name) ? nullptr : &module, name};
@@ -2905,6 +3168,7 @@ public:
       }
       throw std::runtime_error(message);
     }
+    for (const auto &check : binding_checks_) check_binding_owners(check.environment, check.at);
     auto [llvm_ir, bitcode] = ir_.finish();
     return {scanned_, execution_order_, warnings_, std::move(llvm_ir), std::move(bitcode), regional_runtime_};
   }

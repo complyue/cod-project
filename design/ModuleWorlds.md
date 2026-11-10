@@ -1,20 +1,22 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 14 · Recorded: 2026-11-09 · Status: architecture implemented and audited in the WPO native prototype.
+Design revision: 16 · Recorded: 2026-11-10 · Status: module-world architecture audited; bounded typed symbolic bindings implemented.
 
 ## Design authority
 
-- **Registry / scope:** [D-15](DesignAuthorityRegistry.md#d-15), revision14, all sections; H-257/H-258 and [K-399](DesignAuthorityRegistry.md#k-399) separate typed callable declarations from executable methods; [K-400](DesignAuthorityRegistry.md#k-400) records its bounded native acceptance. [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms.
+- **Symbolic implementation scope:** [H-287–H-291](DesignAuthorityRegistry.md#h-287)/[K-426](DesignAuthorityRegistry.md#k-426) records the requested implementation and callable/result decisions: every effect yields void; procedure rebinding uses `=`, while inline `effect proc` introduces or signature-checks its symbol and captures at definition. C-36/C-54/C-65/C-66 and P-248–P-254 preserve typed dynamic context, actual-region lifetime and explicit capture. [Native evidence](../tests/cod/language/symbolic-context-validation.json) covers typed TLS payloads, staged groups, touch/replay checks and overload-backed object transfer. This bounded scope does not qualify whole-document drafts or implement ordinary ptr migration, transport, runtime closures or fractions.
+
+- **Registry / scope:** [D-15](DesignAuthorityRegistry.md#d-15), revision16, all sections; H-257/H-258 and [K-399](DesignAuthorityRegistry.md#k-399) separate typed callable declarations from executable methods; [K-400](DesignAuthorityRegistry.md#k-400) records its bounded native acceptance. [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms.
 - **Value lineage:** C-59/P-204/P-209 relates receiver-owned semantic construction to C-10 and charter §§1–4. P-205 preserves explicit publication and local identity merging. H-245/P-216 governs world isolation and the compile-layout/runtime-binding distinction; P-206 is superseded. P-210–P-212 distinguishes the entity sets and typed-pointer roles. H-241/P-213 places module worlds in D-12's vision; H-242/C-60/P-214 supplies common vocabulary identities. H-252/P-219 requires a diagnostic for multi-alias extension while retaining shared identity; H-253/P-220 requires conflicting inherited/selected overloads to reject during import adaptation. Full document value paths remain pending-human. P-207/P-208 are dependencies, not authority.
 - **Human baseline:** H-96/H-97/H-104/H-111/H-184–H-189 supplies typed symbol identities, aliases, scoped bindings, procedure captures and call modes. H-180/H-181 preserves hidden/captured owners and forbids extraction from dynamic resources. H-234–H-242 supplies the two-world inventory and vocabulary idiom, subject to H-245's explicit correction of cross-module editing. H-245 also requests the replacement active goal. H-235 keeps invocation machinery internal; H-236 requires architecture before local fixes.
-- **Invariants / non-goals:** A module constructs its own world; it cannot edit another world at either stage. Source selection reads published information and constructs receiver-local information. Symbol identity, type identity, a module-world copy and a referenced value are distinct. TLS is a flat typed-pointer collection, not another type/method catalog or permission to edit a source world. Preserve capture and regional lifetime/ownership contracts. No cross-module world editor, editor-target effect, live method-table mutation protocol, public pointer ABI or transaction scheme is introduced.
+- **Invariants / non-goals:** A module constructs its own world; it cannot edit another world at either stage. Source selection reads published information and constructs receiver-local information. Symbol identity, type identity, a module-world copy and a referenced value are distinct. TLS is a flat typed-binding collection, not another type/method catalog or permission to edit a source world. Preserve capture and regional lifetime/ownership contracts. No cross-module world editor, editor-target effect, live method-table mutation protocol, public pointer ABI or transaction scheme is introduced.
 - **Acceptance / evidence:** [K-396's audit](../tests/cod/language/world-architecture-validation.json) establishes receiver-owned construction, source isolation, explicit publication, identity-local composition, flattened TLS/type checking, native rebinding/restoration, captures and owner preservation. It combines source inspection with 42 direct checks on one compiler revision. This implements H-245's architecture in the WPO native prototype; it does not qualify the full document or establish a persistent world ABI, general runtime callable representation or Actor lifecycle.
 
 ## The two sets of entities
 
 A module world is a module's own semantic runtime environment, containing its available types, callable values, methods and related module information. It is more than a source-name or declaration index. Different modules have independent world copies and explicitly select what to publish and integrate.
 
-A TLS world is the thread's **flattened set of typed symbolic pointers**. Each symbol has its own identity and a required type identity. At runtime its entry dynamically points to a value of a compatible type. The value may originate from any of the module-world copies; it is not copied into a second type/method catalog in TLS merely because the pointer refers to it.
+A TLS world is the thread's **flattened set of typed symbolic bindings**. Each symbol has its own identity and required type identity. Bits payloads are stored directly in TLS. Non-bits object bindings reference values in regions supplied by region symbols, with actual region lifetime checks; scoped rebinding may select a different region. Values may originate from different module-world copies without importing those worlds into TLS. Region-resource and procedure-valued bindings retain their distinct ownership/capture contracts.
 
 These worlds do not model the same set of entities. The relevant connection is **typed reference to a value**, not a pair of matching world records representing that value.
 
@@ -26,7 +28,7 @@ These worlds do not model the same set of entities. The relevant connection is *
 | Function/procedure | Callable identity, definition/body and the callable information/value available in this world. | Callable definition, an overload's definition, a captured procedure value and an individual invocation. |
 | Overloaded method | Signature, body, origin and membership in the callable's available method set. | A world-local method set versus a process-global shared mutable method table. |
 | Explicit type relation | Selected abstract inheritance and data-interface declarations. | Declared conformance versus inference from similar fields or a value's storage address. |
-| Symbol declaration | Strict symbol identity and declared type; the source aliases used to refer to that identity. | The declaration versus the pointer currently installed under that identity in a thread's TLS. |
+| Symbol declaration | Strict symbol identity and declared type; the source aliases used to refer to that identity. | The declaration versus the binding currently installed under that identity in a thread's TLS. |
 | UoM/conversion | Unit identities and the selected pure conversion definitions. | A unit type versus a particular measured amount/index value. |
 | Module globals and initialization | Permitted global declarations/values and the initialization semantics that establish module resources. | Module state versus an automatic thread-local copy of every global; exact sharing/copying details cannot be inferred from a host compiler container. |
 | Names, selection permissions and exports | Source-local access to the world's definitions, extension permission and explicit publication. | Aliases versus identity; local availability versus onward export. |
@@ -48,7 +50,6 @@ If one module declares overloads through several local aliases of the same calla
 An imported helper retains the source-to-receiver sequence of its selected implementation contexts. Each receiving interpretation considers inherited definitions and the source-related callable information selected in that world, by identity. Several aliases of one identity contribute its information once. A repeated view of a declaration supplies its selected interpretation only through the same identity or its explicit receiver import. Sibling identities remain distinct even when they share a source body, so nested helper interpretations cannot silently replace one another. A distinct overload definition remains a dispatch candidate. Ordinary typed dispatch must have a unique best candidate. In H-253's case, A's score(Sample)=7 and B's score(Sample)=11 conflict when B is selected while importing A's helper, so compilation rejects and identifies both definitions.
 
 This candidate comparison does not merge the published identities or edit any source world. Direct calls through distinct aliases still select those identities, while `using` preserves the helper's existing interpretation. `import` adds the receiving interpretation without erasing inherited overloads. Explicit syntax for informed conflict arbitration is a future design possibility, not a current feature. Source globals, non-callable names, procedure captures and runtime data layout retain their separate contracts. No arbitrary choice by alias order, original ancestor or preferred source identity resolves a conflicting overload.
-
 
 Export means **make an identity importable under a public alias** (H-247). Public aliases are a separate mapping from local lookup names. An ordinary `export name;` publishes the identity selected by that local name. `export import` publishes the identities selected by the import, including admitted associated methods. A competing local name does not retarget that publication. Two public aliases may expose the same identity; a single public alias cannot denote two conflicting identities. Existing selection-as followed by export supplies renamed publication without a new grammar form.
 
@@ -93,19 +94,19 @@ The semantic entry is described schematically as:
 ```text
 symbol identity S
     declared type identity T
-    current typed pointer -> value v, whose type identity is compatible with T
+    current bits payload or permitted reference, compatible with T
 ```
 
 This is explanatory notation, not a public struct, boxed-value ABI or requirement for a runtime tag check. WPO may prove compatibility and resolve identities before execution. The contract still uses identities even when their checks have been discharged statically.
 
 | TLS concern | Role |
 | --- | --- |
-| Symbol identity S | Selects the symbolic pointer entry. Different module-local aliases of S refer to the same entry within the thread. Different symbol identities remain different entries even when their spellings match. |
+| Symbol identity S | Selects the symbolic binding entry. Different module-local aliases of S refer to the same entry within the thread. Different symbol identities remain different entries even when their spellings match. |
 | Declared type identity T | Constrains which values the entry may reference. T is not the symbol identity and is not replaced by a module-local type name or type-record address. |
-| Current typed pointer | Dynamically associates S with a value. Rebinding can select a different value originating in another module-world copy when its type identity is compatible. |
+| Current typed binding | Contains bits directly, or a permitted reference. Object-reference rebinding may select another region-symbol-backed region when type and lifetime checks hold. |
 | Dynamic scope behavior | Effects shadow the current association and restore the preceding association on scope exit, following the binding/capture contracts. The flattened active collection does not require a dictionary or a separate TLS namespace per module. |
 
-The referenced value can be bits, a procedure value or a permitted regional/resource reference. The final admissible dynamic-value categories retain their separate design status. The TLS entry is a typed pointer to that value; the value's payload, procedure captures or region contents do not thereby become extra TLS-world declarations.
+The [symbolic contract](SymbolicDynamicScope.md#symbolic-storage-and-regional-provenance) distinguishes inline bits, regional object references, whole-region resources and procedure bindings. Bits require `effect @x <- rhs`; object references use `effect @x = rhs`. These storage categories do not put type definitions, method sets or region contents into TLS. No raw symbolic assignment is permitted.
 
 The flat collection describes active entries. Saved values/pointers needed for scope restoration and procedure captures are supporting execution semantics, not a second catalog of module definitions. This does not prescribe a heap-allocated scope frame or runtime closure.
 
@@ -119,7 +120,7 @@ Module world A                      Module world B
   value a : T                        value b : T
             \                         /
              \                       /
-TLS for one thread:  S :: T  -> a
+TLS for one thread:  S :: T  -> a   # Object reference; region-symbol backing required.
                      S :: T  -> b     after a scoped rebinding
 ```
 
@@ -149,9 +150,9 @@ This module-world independence belongs to the [Global Variables Done Right visio
 
 ## Storage and execution stages
 
-A referenced value still needs valid storage. Regional graphs, packets and application state reside in their regions; lexical bits storage follows its lexical lifetime. TLS does not become a third user allocation carrier. A module-world value referenced through TLS must remain valid for its permitted use, just as any other bound regional value must. Scoped rebinding and captured replay do not transfer or destroy hidden region owners.
+A referenced object still needs a live region supplied by a region symbol. Regional graphs, packets and application state reside in their regions. Symbolic bits payloads reside directly in TLS; lexical bits retain lexical storage. TLS is not a non-bits allocation arena, and its thread lifetime does not extend the lifetime of a referenced object. Scoped rebinding and captured replay do not transfer or destroy hidden region owners.
 
-Compilation determines the flattened TLS shape: the admitted symbolic identities, their declared type constraints and the binding layout used by generated code. Runtime effects change the typed pointers occupying that layout and restore preceding bindings as scopes end. The compiler's analysis of those effects is not execution of a source-program TLS-world edit at compile time.
+Compilation determines the flattened TLS shape: the admitted symbolic identities, their declared type constraints and the binding layout used by generated code. Runtime effects change the bits payloads or permitted references occupying that layout and restore preceding bindings as scopes end. The compiler's analysis of those effects is not execution of a source-program TLS-world edit at compile time.
 
 Cross-module module-world editing is impossible at compile time and runtime (H-245). A module constructs only its own world. Reading another module's exports and merging their information locally is receiver construction, not an edit of the source world. TLS binding to a compatible value from another copy does not grant a way to rewrite that copy's semantic information. The runtime use of referenced values retains the established memory-access, capture and ownership contracts.
 
@@ -162,12 +163,14 @@ H-245's implementation goal covers independent module worlds and flat runtime TL
 The architecture separates three operations:
 
 1. **Receiver-owned module construction:** read explicitly exported source information and merge information for identical identities in the receiver's own world. Local aliases provide access; distinct identities remain distinct. The operation never edits a source world and does not automatically re-export imported information.
-2. **Compile-time TLS layout:** determine the flattened symbolic-pointer collection and its declared type constraints, then check demanded paths and captures against that model.
-3. **Runtime TLS editing:** change a symbol's current typed pointer, potentially selecting a compatible value from another module-world copy, and restore the preceding binding on scope exit. Binding changes do not edit module-world definitions or method sets.
+2. **Compile-time TLS layout:** determine the flattened typed-binding collection and its declared type constraints, then check demanded paths and captures against that model.
+3. **Runtime TLS editing:** change a symbol's current bits payload or permitted reference, potentially selecting a compatible value from another module-world copy, and restore the preceding binding on scope exit. Binding changes do not edit module-world definitions or method sets.
 
 Canonical identity-based composition must follow this ownership boundary. Compiler-internal construction and call machinery stays internal. No cross-module world-edit primitive, TLS editor-target protocol or runtime method-table update mechanism is required or permitted by this goal. Native lowering may specialize statically known semantic information without inventing runtime world objects solely to host an editor.
 
 ## Current implementation evidence and deferred work
+
+The current typed TLS implementation is recorded in [symbolic-context evidence](../tests/cod/language/symbolic-context-validation.json); older pointer-cell reports retain their original source hashes.
 
 | Source | Observed representation and limit |
 | --- | --- |
@@ -185,6 +188,6 @@ Each emitted native binding site has one value cell in the entry block of the cu
 
 The [architecture audit](../tests/cod/language/world-architecture-validation.json) maps every goal requirement to current source and evidence. Its 15 supplemental checks cover private/non-re-exported resources, separate symbol/type identities, unavailable bindings, escape/extraction rejection, same-type conformance information merged through aliases, source isolation and a saved alias beside a local union. The compiler/source hashes match K-395's 27 checks, including conflict rejection through a 64-module chain and the cross-world TLS probe.
 
-The WPO implementation preserves the semantic flat binding set while specializing statically known procedure and region associations. Procedure calls are inlined with their selected captures/current bindings; region values retain native pointers and checked owner provenance. Native data bindings use real thread-local pointer cells. This does not supply a generic runtime closure, reflection registry or mutable runtime method table. Module owners survive initialization and hidden/captured use until program exit; ordinary scoped acquisitions retain their own cleanup points.
+The WPO implementation preserves the semantic flat binding set while specializing statically known procedure and region associations. Procedure calls are inlined with their selected captures/current bindings; region values retain native pointers and checked owner provenance. Native data bindings use typed thread-local payloads. This does not supply a generic runtime closure, reflection registry or mutable runtime method table. Module owners survive initialization and hidden/captured use until program exit; ordinary scoped acquisitions retain their own cleanup points.
 
 H-253 resolves conflicting imported dependencies through typed dispatch, including distinct helper interpretations sharing source code. Explicit conflict arbitration, extension of unrelated callable unions, cyclic initialization and broader owner/qualifier syntax retain their separate design scope. The audit proves this architecture implementation, not the full language or Actor lifecycle. No cross-module world editor is a pending deliverable.

@@ -4,9 +4,9 @@ symbol @arena::region;
 symbol @pair::ref<Pair>;
 symbol @read::proc() -> ref<Pair>;
 effect @arena <- region(1024u64);
-effect @pair <- alloc @arena Pair(7, 1.5);
+effect @pair = alloc @arena Pair(7, 1.5);
 procedure @read()::ref<Pair> { @pair }
-effect @pair <- alloc @arena Pair(9, 2.5);
+effect @pair = alloc @arena Pair(9, 2.5);
 behave @print(deref(perform @read()).x);
 behave @print(deref(behave @read()).x);
 behave @print(deref(@pair).y);
