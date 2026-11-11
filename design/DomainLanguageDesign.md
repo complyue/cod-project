@@ -1,14 +1,18 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 146
+Discussion revision: 148
 
 Recorded: 2026-10-22
 
-Current discussion: 2026-11-10
+Current discussion: 2026-11-11
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **IPC/DBMR responsibility boundaries:** [H-352](DesignAuthorityRegistry.md#h-352)/[K-470](DesignAuthorityRegistry.md#k-470) covers revision148's DL-03–DL-09/DL-11–DL-12: imported libraries select data-update/graph-transfer methods; the first compatibility scheme uses a manual root-type identifier; Actor design owns language support for application outcomes; region snapshot save/replace and third-party intrinsic SPI are planning directions. C-08/C-09/C-11/C-55 and C-77–C-79/P-308–P-313 connect typed interpretation, persistence and environment services to charter §§2–4/6–7. H-06/H-143/H-168/H-206/H-208/H-351 remains the baseline. Acceptance for this documentation revision is complete topic migration with explicit responsibility and open details; no wire layout, snapshot failure protocol, SPI ABI, Actor guarantee or new implementation is approved. Full-document qualification remains pending-human.
+
+- **Cross-region graph transfer:** [H-351](DesignAuthorityRegistry.md#h-351)/[K-469](DesignAuthorityRegistry.md#k-469) covers revision147's DL-03/DL-06/DL-09 clarification: third-party library `(<-)` methods implement graph transfer between regions, including DBMR. C-55/P-177/P-180 preserves explicit graph semantics, actual owner/access checks and same-owner stored edges; C-08/C-09 connects this mechanism to packet application and persistent rebuilding under charter §§2–4/7. H-206/H-208 supplies the prior transfer baseline. Acceptance here is consistent design routing and an open-question list that separates library transfer from retention, concurrency and durability; no graph algorithm, compiler-generated copier, transaction guarantee or implementation acceptance is selected. Full-document qualification remains pending-human.
 
 - **Current regional captures:** [D-18](RegionalClosures.md)/[K-459](DesignAuthorityRegistry.md#k-459) is the bounded contract for structural region requirements, aliases, captures and owner projection under H-327–H-335. This revision updates only that navigation and removes superseded research text under H-336; C-65/C-73/C-75 and P-294–P-298 retain their confirmed scope. Owner/access/relocation, dynamic effects and D-16 remain constraints. Acceptance and unresolved limits stay explicit in D-18; unrelated pending contracts are not qualified.
 
@@ -49,7 +53,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 - **Bounded exception/lifecycle contract:** [H-267](DesignAuthorityRegistry.md#h-267)/[K-408](DesignAuthorityRegistry.md#k-408) accepts [D-17r3 E1–E5](ExceptionControl.md#accepted-first-implementation-contract), including explicit throw-from only, cleanup, fresh owners and call/result transfer. This overrides pending labels for that enumerated scope; wider qualifier, assignment, mailbox and user exception graph choices remain open. [K-414](DesignAuthorityRegistry.md#k-414) records completed H-267/H-269 E1–E5 acceptance and [current native evidence](../tests/cod/language/exception-ownership-validation.json). Wider unconfirmed scopes retain their status.
 
-- **Registry / scope:** [D-07](DesignAuthorityRegistry.md#d-07), revision145, all sections; [K-411](DesignAuthorityRegistry.md#k-411) records bounded typed-region ownership and exception cleanup under D-17; [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) establishes exception-control planning and unchecked ultimate OOM in [D-17](ExceptionControl.md); [H-263/H-264](DesignAuthorityRegistry.md#h-263)/[K-405](DesignAuthorityRegistry.md#k-405) supplies permitted local-view survival and the initial typed construction form; [H-262](DesignAuthorityRegistry.md#h-262)/[K-404](DesignAuthorityRegistry.md#k-404) confirms the ordinary named-owner consumed state; D-17 E4/E5 bounds implemented construction/transfer; [K-400](DesignAuthorityRegistry.md#k-400) records successful repair/build and28 focused checks; H-257/H-258/[K-399](DesignAuthorityRegistry.md#k-399) directs lexical call/shadowing correction, mandatory generic/variadic callable signatures and LLVM value/place modelling, with ordinary ownership covered separately by D-17. [K-398](DesignAuthorityRegistry.md#k-398) records H-256 priority follow-up for comment reservation and representation-independent UoM; [K-397](DesignAuthorityRegistry.md#k-397) adds the H-254/H-255 fraction draft and future compatibility-review requirement without scheduling implementation; [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred. [K-402](DesignAuthorityRegistry.md#k-402) records the implemented quantity/widening subset and56 focused checks.
+- **Registry / scope:** [D-07](DesignAuthorityRegistry.md#d-07), revision148, all sections; [K-411](DesignAuthorityRegistry.md#k-411) records bounded typed-region ownership and exception cleanup under D-17; [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) establishes exception-control planning and unchecked ultimate OOM in [D-17](ExceptionControl.md); [H-263/H-264](DesignAuthorityRegistry.md#h-263)/[K-405](DesignAuthorityRegistry.md#k-405) supplies permitted local-view survival and the initial typed construction form; [H-262](DesignAuthorityRegistry.md#h-262)/[K-404](DesignAuthorityRegistry.md#k-404) confirms the ordinary named-owner consumed state; D-17 E4/E5 bounds implemented construction/transfer; [K-400](DesignAuthorityRegistry.md#k-400) records successful repair/build and28 focused checks; H-257/H-258/[K-399](DesignAuthorityRegistry.md#k-399) directs lexical call/shadowing correction, mandatory generic/variadic callable signatures and LLVM value/place modelling, with ordinary ownership covered separately by D-17. [K-398](DesignAuthorityRegistry.md#k-398) records H-256 priority follow-up for comment reservation and representation-independent UoM; [K-397](DesignAuthorityRegistry.md#k-397) adds the H-254/H-255 fraction draft and future compatibility-review requirement without scheduling implementation; [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred. [K-402](DesignAuthorityRegistry.md#k-402) records the implemented quantity/widening subset and56 focused checks.
 - **Value lineage:** C-10 supplies inspectable typed execution. C-35/C-43/C-45/C-46 through P-84/P-100/P-102/P-109–P-111 and C-56/C-57 through P-182–P-197 concern identity, composition, interfaces and explicit behavior selection. C-39/C-54 through P-94/P-143/P-155 supplies regional lifetime boundaries. C-58/P-199–P-202 adds explicit publication and module-scoped callable composition. These candidate paths serve charter §§2–4; dependency evidence does not qualify them.
 - **Human baseline:** H-96–H-141 supplies symbols, callables, modules and units, subject to later supersession. H-143–H-146 selects LLVM, lean validation, simplification and the known zero-offset limitation. H-166/H-180/H-181 preserves module lifetime, captured/hidden owners and non-extractable resources; H-184–H-189 supplies typed lexical/symbolic procedures. H-193/H-196–H-203 supplies regional data, intrinsic owners, mutable explicit-memory functions, borrowing, const and same-owner edges. H-209–H-220 supplies abstract/data types, explicit conformance, source-preserving selections, mixin, aliases and dispatch. H-222–H-224 supplies the const-RHS assignment discussion. H-225–H-227 selects associated signature membership, using/import-dependent local declarations and caller-selected ordinary implementation views. H-229 preserves concrete-data dispatch; H-230 refines callable identities and alias composition; H-231 requires explicit exports; H-232 selects using-preserved versus import-adapted helper implementations; H-233 requires explicit re-export and permits export import.
 - **Invariants / non-goals:** preserve zero-cost relocation, region-only non-bits storage, no regional object copy/move, owner provenance, non-consuming capture replay and no dynamic effect/procedure calls from functions. No module namespace, runtime interface wrapper, allocator policy, bootstrap/toolchain change or SNN modeling choice is introduced. The confirmed method-selection increment does not settle qualifiers, ownership construction/transfer, standalone abstract signatures or mailbox semantics.
@@ -89,7 +93,7 @@ These are summaries of the user's statements, not inferred approval of the prece
 | G-06 | Nominal symbols, thread-scoped effects, captured/current procedure invocation, lexical functions and lexical or symbol-bound procedures, with whole-program call-path checking. | H-96–H-98, H-102–H-104, H-180; DL-02, DL-14, DL-15 |
 | G-07 | User storage is stack or `@region`. Captures are bits or regional pointers. Each region contains one direct-pointer graph. Relationships between regions are logical business associations. | H-99/H-100/H-156/H-157; DL-03, DL-08, DL-15 |
 
-“Only record” has not yet settled whether updates append immutable versions or mutate existing objects while allocation remains monotonic. It does not by itself require logging every read. “Apply” has not yet specified a durability guarantee, retry protocol or native method-pointer representation.
+H-352 assigns update/versioning behavior to the selected library's `<-` methods rather than one mandatory DBMR-wide policy. Actor-model design supplies language-level facilities for application outcomes and recovery; applications choose their business protocol. Snapshot save/replace and intrinsic SPI support are planning directions, with their operational interfaces still to be designed.
 
 ## Scope and invariants
 
@@ -316,7 +320,7 @@ Name lookup precedes argument-type dispatch. The rule resolves one binding, then
 
 Implicit-name ambiguity is diagnosed at demanded lookup or at an extension declaration that needs one identity. Explicit bindings may shadow unused conflicts. Scan-before-incorporation and explicit alias availability remain unchanged; these rules do not hoist module initialization or grant cross-alias extension permission.
 
-Local value lookup versus callable lookup is a separate unresolved boundary. H-149 confirms nested value shadowing while excluding function/type namespace changes. The prototype can read a local scale value and still resolve scale(...) to a module method; a procedure parameter currently needs symbolic installation to invoke its supplied value. [The concrete review](SymbolicDynamicScope.md#local-values-and-callable-names--review-boundary) records native examples and the pending separate-versus-unified lookup choice. No callable namespace policy follows from the implicit type-method priority rule.
+H-257 requires calls to resolve the nearest lexical value binding: a callable parameter or local supplies the callee, while a non-callable shadow makes the call ill-typed. [Lexical calls and shadowing](SymbolicDynamicScope.md#lexical-calls-and-shadowing) records the rule and shadowing diagnostics. This explicit decision is separate from the priority of implicitly selected type methods.
 
 #### Method-selection examples and evidence
 
@@ -480,12 +484,13 @@ H-262 permits a named non-optional owning region to supply an effect installatio
 
 **Question:** Which region owns every value and reference throughout packet application, querying and persistence?
 
+- **Confirmed transfer mechanism:** cross-region object-graph transfer, including packet-to-DBMR and DBMR-to-DBMR reconstruction, uses `<-` with third-party library overloads for the graph data structures concerned (H-351). [The transfer contract](RegionalOwnership.md#bits-field-transfer-and-user-defined-graph-conversion) supplies owner/access checks and rejects default transfer of pointer-bearing objects without a matching method. Library algorithms define topology handling and failure behavior; this does not select a universal compiler-generated graph copier.
 - Distinguish packet construction/receive storage, persistent DBMR storage, query scratch and response storage. Define allocation, borrowing, mutation and region destruction rules.
-- Decide how received data becomes durable: explicitly materialize a graph in DBMR, retain the received region as a persistent dependency, or provide separately specified alternatives. A short-lived packet reference cannot silently become a durable reference.
-- Distinguish legal graph construction/materialization from copying or moving a regional C++ object. Define cycle/sharing preservation and the treatment of runtime-only resources.
+- The selected library defines which graph is transferred into DBMR and how its data is updated; the application's persistence protocol determines when those changes are durable. Independently retained regions participate through business identity/lifetime protocols; a short-lived packet pointer cannot become a stored cross-owner edge.
+- Require each selected graph-transfer library to state its sharing/cycle and runtime-resource semantics. Cross-region reconstruction neither copies/moves a regional C++ object nor transfers whole-region ownership merely by using the same operator spelling.
 - Specify when bindings or borrows pin a region and what happens on remapping, unloading and generation changes. Decide which guarantees the checker proves and which a runtime boundary verifies.
 
-**Proposal to discuss:** materialization into DBMR for the first packet workflow, with temporary query/response regions. This is a scope choice, not a commitment to prohibit persistent multi-region graphs.
+**Application/library work:** select the packet/database graph library and document its update, failure and temporary-storage contracts for each workflow. The language does not select one update/history policy for all libraries. Actor support and snapshot persistence retain the separate design boundaries in DL-05/DL-09.
 
 **Decision evidence:** a lifetime diagram for one request, including a rejected escaping reference, a result surviving packet disposal and a query whose temporary allocations can be released.
 
@@ -494,9 +499,13 @@ H-262 permits a named non-optional owning region to supply an effect installatio
 
 **Question:** What exact bytes form a complete, interpretable packet, and when may its entry method run?
 
+**Initial compatibility decision (H-352):** use a manually assigned root-type compatibility identifier, such as a UUID. It records the producer/consumer's declared compatibility agreement; it is distinct from the compiler's type identity and does not itself derive compatibility from layouts. The identifier's exact declaration, encoding and location remain protocol details.
+
+**Later direction:** consider compatibility checking across the layouts of all ADTs involved, with a checksum for fast matching. The layout description, dependency coverage, comparison rules and checksum choice remain to be designed. This direction neither introduces general RTTI nor establishes cross-architecture portability by itself.
+
 - Define total-length meaning, header encoding, occupied bytes versus reserved capacity, root location/type and dependency identification. Decide what is carried in the packet versus pinned in the connection context.
 - Define partial reception, frame boundaries, minimum structural checks and rejection behavior. Validation should establish the conditions needed for correct interpretation and application; its depth and cost belong in the protocol contract.
-- Choose the initial compatibility envelope: identical layout/ABI peers, a specified portable image, or explicit conversion between representations. Separate semantic/schema versions from layout and ABI versions; builds on multiple architectures do not establish image compatibility.
+- Specify the layout/ABI agreement represented by the initial manual identifier, including byte order, field widths and alignment. Semantic/schema versions remain distinct from layout and ABI compatibility; builds on multiple architectures do not establish image compatibility.
 - Decide mutation rights during construction, after sending and after reception. Whole-region relocation preserves valid relative layouts; arbitrary truncation or object movement does not follow from that property.
 
 **Proposal to discuss:** construction → sealing → complete reception → validation/binding → application. The total binary length is confirmed; sealing and this exact state model remain proposals.
@@ -508,24 +517,27 @@ H-262 permits a named non-optional owning region to supply an effect installatio
 
 **Question:** What observable event means that a packet has “taken effect”?
 
-- Distinguish fully received, semantically accepted, applied in memory and durably committed. Choose what an acknowledgment promises and what response state can be queried after a lost connection.
-- Define application failure, persistent-write failure and process failure separately. State the first fault model and any unsupported recovery cases.
-- Decide request/execution identity, duplicate handling and retry behavior. No framing or member-call convention alone supplies exactly-once effects.
-- Specify which changes can be rolled back and which external effects need retry, compensation or an explicit failure result. Relate this to single-region and cross-region commit boundaries.
+**Assigned design responsibility (H-352):** [Actor-model design](GlobalVariablesDoneRight.md#actor-implementation-readiness) must design the language-level support applications use for outcomes, failure and recovery. The packet format and graph-transfer operator do not impose a database transaction protocol.
+
+- Actor design must state local send/receive, handler completion and failure boundaries. H-168's intrinsic send reports local system errors only; it does not acknowledge delivery or application.
+- Applications use the Actor facilities to define any response, retry, duplicate-handling or compensation protocol they need. Distinguish fully received, applied in memory and durably committed outcomes in that protocol.
+- Snapshot/file operations supply the persistence boundary in DL-09; their failure behavior must be explicit before applications can rely on it. Selecting Actor support does not yet choose a scheduler, supervision strategy, exactly-once guarantee or cross-region transaction mechanism.
 
 **Decision evidence:** a small outcome table for failure before application, during application, after commit but before acknowledgment, and during retry. Select only the guarantees needed for the first business workflow.
 
 <a id="dl-06"></a>
 ### DL-06 — Updates, visibility and history
 
-**Question:** Does “only record” mean immutable appended versions, mutable current objects with monotonic allocation, or another explicitly defined model?
+**Confirmed responsibility (H-352):** importing different libraries selects different `<-` overload logic for data processing. DBMR does not impose a universal overwrite, immutable-version or tombstone policy. Method selection follows the existing module-world and dispatch rules; an import does not mutate another module's methods.
 
-- Specify insertion, update, deletion and the visible view for reads/statistics. Decide whether deletion uses tombstones, whether prior versions are queryable and which state establishes the current version.
-- Separate allocation policy from logical mutation, event history and audit logging. Clarify whether reads create records at all.
-- Choose the initial writer/reader model, snapshot boundaries and index visibility. A single writer with bounded read views is one candidate; it is not an approved concurrency contract.
-- Identify authoritative facts, retained history and rebuildable derived state. Specify which changes invalidate queries, bindings or compiled specializations.
+Each library/application contract must state:
 
-**Proposal to discuss:** append new logical versions and deletion markers, then reclaim discarded history during rebuilding. Compare this against in-place logical updates with monotonic allocation before choosing.
+- Insertion/update/deletion behavior, visible records and statistics, retained history and any tombstone scheme.
+- The relation between logical updates, allocation/reuse, event history and audit records. Allocation policy alone does not require recording reads or retaining every prior value.
+- Writer/reader coordination, snapshot boundaries and index visibility using the selected Actor/persistence facilities.
+- Which facts are authoritative, which derived structures can be rebuilt and which changes invalidate cached results or specializations.
+
+These are contracts of the selected libraries and application, rather than one unresolved language-wide choice between overwrite and append.
 
 **Decision evidence:** show the visible records, statistics and retained bytes after create → update → delete, including the same sequence across close/reopen.
 
@@ -534,7 +546,7 @@ H-262 permits a named non-optional owning region to supply an effect installatio
 
 **Question:** How does business code express queries, and what meaning, ownership and cost do their results have?
 
-- Choose initial lookup, traversal, filtering and aggregate operations; decide whether they are ordinary typed methods/effects or require separate query syntax.
+- Express lookup, traversal, filtering and aggregate operations through user-program libraries under H-352's extension direction. Dedicated query syntax is not selected; library contracts define their available operations and costs.
 - Define result types, ordering where observable, visibility and errors. Decide whether results are borrowed views, iterators pinned to a snapshot, or independently owned response graphs.
 - Specify index semantics, maintenance and rebuildability. Record when an index is merely an acceleration structure versus part of a required business constraint.
 - Keep temporary query allocations distinct from permanent database growth; choose representative measurements before setting performance targets.
@@ -545,6 +557,8 @@ H-262 permits a named non-optional owning region to supply an effect installatio
 ### DL-08 — Identity, references and versions
 
 **Question:** Which identities survive transport, independent region loading, compaction and definition changes?
+
+DL-04's root-type compatibility identifier identifies a representation agreement, not a business entity or its location. Libraries/applications still define the logical keys used to find transferred or rebuilt data.
 
 - Distinguish domain entity, graph node, type/method definition, region, physical location, execution and effect-occurrence identities. Decide which require persistent identifiers.
 - Define efficient intra-region references and business protocols for relationships between independently managed regions. The protocol determines identity and version selection, missing targets and any access lifetimes.
@@ -560,12 +574,14 @@ H-262 permits a named non-optional owning region to supply an effect installatio
 
 **Question:** Which retained semantic graph is rebuilt, and how does the new backing file become authoritative?
 
-- Select roots, reachability and retention rules for current facts, history, tombstones, dependencies and live execution state. Retaining all history limits what compaction can discard.
-- Define typed reconstruction and reference rewriting when objects change relative positions; preserve required identities, sharing and cycles. Whole-region relocation and graph compaction are different operations.
-- Choose when compaction may run: a maintenance boundary with quiescent users, snapshot-based rebuilding with catch-up, or another stated model. Define active readers and queued requests during publication.
-- Specify candidate-file completion, publication, reopening and eventual old-file removal under the chosen crash/durability model. File replacement alone does not define the complete recovery protocol.
+**Language support direction (H-352):** plan an operation that saves a region snapshot directly to a disk file, including replacement of an existing file. Applications decide and implement the business workflow around it. This is a required design work item, not an implemented API or a selected crash/durability guarantee.
 
-**Proposal to discuss:** first prove rebuilding at a maintenance boundary, avoiding an unchosen online-compaction protocol. This would bound the initial implementation without fixing the long-term concurrency model.
+- Applications and their libraries select roots, reachability and retention rules for current facts, history, tombstones, dependencies and live execution state. Retaining all history limits what compaction can discard.
+- Reconstruct retained graphs in the new region through third-party library `<-` methods under DL-03. The library supplies traversal and reference reconstruction for its structures, preserving the identities, sharing and cycles required by its declared semantics. Whole-region relocation and graph compaction remain different operations; the language does not acquire a universal compactor from this transfer contract.
+- Applications choose when to rebuild and how active users or queued requests are coordinated, then invoke the snapshot/file facility. An exclusive maintenance boundary and online rebuilding are application strategies, neither mandated by this language direction.
+- The snapshot operation still needs a precise capture/consistency, byte-range, error, replacement and durability contract. Applications use that contract to implement publication, reopening, recovery and old-file removal. File replacement alone does not supply a transaction or recovery protocol.
+
+**Remaining language work:** specify the snapshot save/replace interface and its observable outcomes. Library graph transfer supplies reconstruction; the application supplies compaction scheduling, retention and publication policy.
 
 **Decision evidence:** retained facts/identities and query results agree before/after rebuilding; discarded state no longer occupies the new payload; interrupted publication has the outcome promised by DL-05.
 
@@ -588,11 +604,13 @@ The native source prototype reports selected implementation contexts alongside a
 
 **Question:** What interoperability contract exposes useful operations while preserving regional and language semantics?
 
+**Planning direction (H-352):** provide a service provider interface (SPI) through which third parties can extend intrinsics; other extension logic belongs in CoD user-program libraries. C/C++ remains the compatibility role from H-06. The SPI is the expected integration path, not a chosen registration, loading or native-call ABI.
+
 - Specify ownership of buffers/regions, borrowed-view lifetimes, allocation/deallocation symmetry, error results, calling threads and callbacks. Separate physical image compatibility from a function-call ABI.
 - Decide which foreign values must be materialized and which runtime handles can be temporarily bound. Native heap pointers, callbacks and operating-system handles need an explicit execution-lifetime treatment.
-- Define how external hosts construct/check packets, invoke methods, consume responses and bind effects without bypassing the chosen invariants.
+- Define how providers expose typed intrinsic operations and how external runtimes construct/check packets, invoke methods, consume responses and bind effects while preserving language invariants. Provider selection must fit module-world visibility and function/procedure contracts; it does not imply mutable shared registries or dynamic code loading.
 
-**Proposal to discuss:** a small C ABI with opaque handles and explicit buffer/ownership contracts, plus a C++ wrapper. Direct C++ integration remains an alternative for comparison; the user has approved interoperability's role, not this exact ABI structure.
+**Remaining interface work:** typed provider declarations, compiler/runtime integration, native argument/result and error conventions, owner/lifetime checking and provider version compatibility. A C ABI or C++ adapter may serve that SPI, but neither an opaque-handle ABI nor a mandatory wrapper is selected. No third-party intrinsic extension is claimed implemented here.
 
 **Decision evidence:** trace one foreign-runtime caller through construction, application, result consumption and release, including an error and a rejected lifetime violation.
 
@@ -602,7 +620,7 @@ The native source prototype reports selected implementation contexts alongside a
 **Question:** What is the smallest language and runtime implementation that can demonstrate the selected semantics without making the host language their only definition?
 
 - Use direct LLVM IR as the sole execution lowering path under H-143. Keep source semantics and future persistent semantic graphs distinct from derived .ll/.bc artifacts; use LLVM's standard optimization pipeline without a multi-backend framework or custom micro-optimizations.
-- Decide which typed representation, checking rules and handler interfaces are shared. Any layout, validator, traversal or compactor generation should follow one defined type contract rather than diverging handwritten descriptions.
+- Decide which typed representation, checking rules and handler interfaces are shared. Layout/validation facilities must follow one defined type contract; graph transfer/compaction algorithms remain library code under H-351/H-352, with no implicit compiler-generated universal traversal.
 - Bound syntax, ADT/GADT features, effects, query primitives and FFI for an initial version. Distinguish deliberate omissions from restrictions that would prevent multi-domain integration or later type/kind work.
 - H-106 separates complete dependency scanning/registration from entry-driven compilation of execution semantics. Top-level procedure declarations do not execute during scanning; dependency execution semantics are incorporated in encounter order.
 - Keep program intent separate from native code and caches. H-96/H-102 specify demand-driven whole-program compilation, with the complete caller paths available and no independent module compilation. Collect required symbolic variables, check binding availability/types, then lay out direct per-thread access. Concrete lowering, specialization and cache dependencies remain to be specified; this does not select machine-code JIT.
@@ -705,6 +723,8 @@ Storage observations below describe repository commit `b72669e5d2bd9374e3aa69d6d
 The [memory-region design](MemoryRegionAndRegionalTypes.md), [CoD driver design](CompileOnDemand.md) and [YAML conversion design](YamlConversionsOfRegionalTypes.md) remain relevant references with the qualification limits listed in the registry. Reusing code does not select its representation as the language's contract.
 
 ## Discussion order and decision history
+
+The initial IPC/DBMR discussion is preserved at commit `384928e1632fc06497a1a9d04176d63f14bc724b`, path `discuss/dsl.md`. [K-470](DesignAuthorityRegistry.md#k-470) records each topic’s current document destination and the replacement of superseded proposals.
 
 Application design proceeds in its separate document set, linked from DL-13. Language decisions are recorded at their confirmed scope; application proposals become reusable language requirements only through an explicit scope and value decision.
 
@@ -869,3 +889,5 @@ Dates above are recording dates. Exact source-message timestamps were unavailabl
 | DD-144 | 2026-11-10 | Review checked NPE at immediate func/proc boundaries and explicit val bits locals/parameters. | H-312/C-72/P-278–P-279/K-439; D-17r13/D-14r64. Pending-human recommendations, not an accepted source contract. No implementation, parameter-default change or checked-OOM policy is implied. |
 | DD-145 | 2026-11-10 | Implement checked NPE with mandatory module-top-level handling and val bits locals/parameters; support literal null and a non-dereferencing intrinsic. | H-313/P-280–P-281/K-440; D-14r65/D-17r14. No checked OOM, implicit object copy or general RTTI. |
 | DD-146 | 2026-11-10 | Nullable locals may omit in r; first non-null assignment establishes the fixed owner. Null is a reserved literal; the intrinsic is spelled isnull(p). | H-314/H-315/P-282/K-440. Field owners remain their containing region; clearing a pointer does not discard its established owner. |
+| DD-147 | 2026-11-11 | Use third-party library (<-) methods for cross-region object-graph transfer, including DBMR; retain database policy and publication as separate questions. | H-351/C-55/P-177/P-180/K-469; DL-03/DL-06/DL-09. No universal graph copier, transaction contract or implementation acceptance is selected. |
+| DD-148 | 2026-11-11 | Libraries define update semantics; begin compatibility with a manual root-type identifier; assign application support to Actor design; plan snapshot file save/replace and third-party intrinsic SPI. | H-352/C-77–C-79/P-308–P-313/K-470; DL-04–DL-09/DL-11. Detailed protocols remain future design work; retire the initial discussion after topic mapping. |
