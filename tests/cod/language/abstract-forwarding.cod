@@ -1,3 +1,5 @@
+using symbol "std:io" @assert;
+using "std:exceptions" NullPointerException;
 using symbol "std:io" @print;
 using "abstract-data.cod" Sample;
 using "abstract-library.cod" Weighted;
@@ -6,14 +8,14 @@ using "abstract-second-adapter.cod" make_extended_reference;
 using "abstract-alternate-factory.cod" make_alternate_reference;
 using "abstract-data.cod" Bundle;
 region symbol @arena;
-symbol @held::ref<Sample>;
+symbol @held::Sample;
 effect @arena <- region(4096u64);
 effect @held = make_weighted_reference(@arena, 7);
 proc @inspect() -> i64 { rank(deref(@held)) }
-{
-  let reference = @held;
-  let sample = view(reference);
-  let bundle = alloc @arena Bundle(reference);
+try {
+  ref reference = @held;
+  ref sample = view(reference);
+  ref bundle = alloc @arena Bundle(reference);
   behave @print(rank(sample));
   behave @print(rank_entity(sample));
   behave @print(nested_entity(upcast(sample)));
@@ -21,11 +23,11 @@ proc @inspect() -> i64 { rank(deref(@held)) }
   behave @print(rank_entity(item(bundle)));
   behave @print(observe_maybe(reference, true));
   behave @print(same_type(sample, @arena));
-  let continued = fold (i in 0u32 .. 3u32, current = reference) {
+  ref continued = fold (i in 0u32 .. 3u32, current = reference) {
     make_extended_reference(@arena, i64(i))
   };
   behave @print(rank_entity(deref(continued)));
-};
+} catch (unexpected::const NullPointerException) { behave @assert(false); };
 effect @held = make_alternate_reference(@arena);
 behave @print(perform @inspect());
 behave @print(behave @inspect());

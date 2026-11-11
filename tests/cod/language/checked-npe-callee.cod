@@ -1,0 +1,5 @@
+using "std:exceptions" NullPointerException;
+data Node { value::i64; ptr next::Node; }
+function read(n::Node in O) -> const i64 where {owner O} { n.next.value }
+owned region r::Node <- make Node(capacity=256u64) {value <- 1; next = null};
+try { read(root(r)) } catch(e::const NullPointerException) { 0 };

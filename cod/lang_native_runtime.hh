@@ -77,7 +77,8 @@ void cod_lang_exception_cause(std::uint64_t cause, std::uint64_t index, std::uin
                                   std::uint64_t requested, std::uint64_t available, std::uint64_t cause) {
   const auto print = [](const char *prefix, const CoDCause &value) {
     const char *name = value.category == 1 ? "OutOfMemory" :
-                       value.category == 2 ? "RegionCapacityExceeded" : "InvalidCapacity";
+                       value.category == 2 ? "RegionCapacityExceeded" :
+                       value.category == 3 ? "InvalidCapacity" : "NullPointerException";
     if (const char *context = cod_lang_exception_site(value.site)) std::fprintf(stderr, "%s: ", context);
     std::fprintf(stderr, "%s %s (site=%llu, requested=%llu, available=%llu)\n", prefix, name,
                  static_cast<unsigned long long>(value.site), static_cast<unsigned long long>(value.requested),

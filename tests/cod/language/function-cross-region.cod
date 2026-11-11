@@ -1,8 +1,8 @@
-data Node { value::i64; next::ref<Node>; }
+data Node { value::i64; ptr next::Node; }
 region symbol first;
 region symbol second;
-symbol node :: ref<Node>;
-function link(node::Node in O1, child::ref<Node> in O2) -> ref<Node> where {owner O1, owner O2} {
+symbol node :: Node;
+function link(node::Node in O1, child::Node in O2) -> Node where {owner O1, owner O2} {
   setfield(node, next, child)
 }
 effect @first <- region(4096u64);

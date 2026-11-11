@@ -26,7 +26,7 @@ effect @bias <- 5;
 region symbol @arena;
 effect @arena <- region(4096u64);
 {
-  let x = create(@arena);
+  ref x = create(@arena);
   behave @assert(renamed_score(x) == 7);
   behave @assert(renamed_score(true) == 23);
   behave @assert(related_score(true) == 23);

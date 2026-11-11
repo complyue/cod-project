@@ -2,7 +2,7 @@ export import "abstract-data.cod" Sample;
 using "abstract-library.cod" Alternate;
 data Sample <: Alternate;
 function make_alternate(region arena)::Alternate { deref(alloc arena Sample(29)) }
-function make_alternate_reference(region arena)::ref<Sample> { alloc arena Sample(29) }
+function make_alternate_reference(region arena)::Sample { alloc arena Sample(29) }
 
 export Alternate;
 export make_alternate;

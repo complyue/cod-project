@@ -1,3 +1,4 @@
+using "std:exceptions" NullPointerException;
 using units "pool-units.cod" {ClassId, GlobalSetId, LocalSlot};
 using units "region-gather-types.cod" {Neuron};
 using "region-gather-types.cod" Frame;
@@ -11,26 +12,26 @@ using "pool-index.cod" locate;
 using "pool-index.cod" SetLocation;
 using "pool-index.cod" global_slot;
 function create_graph(region arena, layout::Layout in L, rows::u32,
-                      location::ref<SetLocation> in S, weighted::bool)::Incoming where {owner L, owner S} {
-  let sources = alloc arena Sources(scalar(class_slot_begin(layout, ClassId(layout.classes))), Neuron(0u32));
-  let weights = alloc arena Weights(len(sources), 1u8);
-  let graph = deref(alloc arena Incoming(sources, weights));
+                      location::SetLocation in S, weighted::bool)::Incoming where {owner L, owner S} {
+  ref sources = alloc arena Sources(scalar(class_slot_begin(layout, ClassId(layout.classes))), Neuron(0u32));
+  ref weights = alloc arena Weights(len(sources), 1u8);
+  ref graph = deref(alloc arena Incoming(sources, weights));
   for (n in 0u32 .. rows) {
-    let position = locate(layout, GlobalSetId(u64(n)), location);
+    ref position = locate(layout, GlobalSetId(u64(n)), location);
     for (j in 0u32 .. scalar(capacity(position.class_id))) {
-      let slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
+      val slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
       store(sources, slot, Neuron((n + j) % rows));
       store(weights, slot, if (weighted) { u8(1u32 + (n + j) % 4u32) } else { 1u8 });
     };
   };
   graph
 }
-function gather(input::Frame in O1, graph::Incoming in O2, layout::Layout in O3, target::u64(GlobalSetId), location::ref<SetLocation> in O5)::f32 where {owner O1, owner O2, owner O3, owner O5} {
-  let position = locate(layout, target, location);
-  let sources = deref(graph.sources);
-  let weights = deref(graph.weights);
+function gather(input::Frame in O1, graph::Incoming in O2, layout::Layout in O3, target::u64(GlobalSetId), location::SetLocation in O5)::f32 throws NullPointerException where {owner O1, owner O2, owner O3, owner O5} {
+  ref position = locate(layout, target, location);
+  ref sources = deref(graph.sources);
+  ref weights = deref(graph.weights);
   fold (j in 0u32 .. scalar(capacity(position.class_id)), sum = 0.0f32) {
-    let slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
+    val slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
     sum + input[sources[slot]] * f32(weights[slot]) / 256.0f32
   }
 }

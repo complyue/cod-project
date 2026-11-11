@@ -126,6 +126,7 @@ class LLVMEmission {
     return b().CreateFCmpOLT(absolute, infinity);
   }
 public:
+  struct Place { Type type; llvm::Value *owner, *address; };
   llvm::Value *binary(Type type, const std::string &op, llvm::Value *left, llvm::Value *right) {
     if (floating(representation(type))) {
       if (op == "+") return b().CreateFAdd(left, right);
@@ -287,7 +288,7 @@ public:
       emit(known->getZExtValue());
       return;
     }
-    for (size_t kind = 1; kind <= 3; ++kind) {
+    for (size_t kind = 1; kind <= 4; ++kind) {
       auto *match = label("exception.type");
       auto *next = label("exception.next");
       b().CreateCondBr(b().CreateICmpEQ(category, integer(i64(), kind)), match, next);
@@ -297,6 +298,30 @@ public:
     }
     b().CreateUnreachable();
   }
+  llvm::Value *is_null(llvm::Value *value) {
+    return b().CreateICmpEQ(value, llvm::Constant::getNullValue(value->getType()));
+  }
+  void null_check(llvm::Value *value) {
+    auto *bad = label("null.raise");
+    auto *next = label("nonnull.continue");
+    b().CreateCondBr(is_null(value), bad, next);
+    enter(bad);
+    const auto site = exception_sites_.size();
+    exception_sites_.push_back(source_context());
+    exception_handler_(4, exception_payload(integer(i64(), site), integer(i64(), 0), integer(i64(), 0)));
+    enter(next);
+  }
+  llvm::Value *nullable_address(llvm::Value *owner, llvm::Value *offset) {
+    return b().CreateSelect(is_null(offset), llvm::ConstantPointerNull::get(pointer_type()), address(owner, offset));
+  }
+  llvm::Value *nullable_offset(llvm::Value *owner, llvm::Value *target) {
+    return b().CreateSelect(is_null(target), integer(i64(), 0), offset_of(owner, target));
+  }
+  void require_representable_reference(const Place &field, llvm::Value *offset) {
+    require(b().CreateICmpNE(address(field.owner, offset), field.address),
+            "non-null ref cannot encode a zero-displacement self reference");
+  }
+  llvm::Value *null_pointer() { return llvm::ConstantPointerNull::get(pointer_type()); }
   llvm::Value *exception_payload(llvm::Value *site, llvm::Value *requested, llvm::Value *available) {
     llvm::Value *payload = llvm::PoisonValue::get(exception_payload_type());
     payload = b().CreateInsertValue(payload, site, {0});
@@ -617,7 +642,6 @@ public:
   }
   // A place denotes storage; reading it produces an SSA value at that point.
   // Neither a bits read nor its users promise that aliased storage is immutable.
-  struct Place { Type type; llvm::Value *owner, *address; };
   llvm::Value *local_storage(Type type) { return entry_slot(storage_type(type), "local.bits"); }
   llvm::Value *pointer_storage(llvm::Value *address) {
     auto *slot = entry_slot(address->getType(), "local.ptr");

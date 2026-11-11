@@ -7,8 +7,8 @@ using "world-second.cod" second;
 region symbol @arena;
 effect @arena <- region(4096u64);
 {
-  let a = first(@arena);
-  let b = second(@arena);
+  ref a = first(@arena);
+  ref b = second(@arena);
   behave @assert(joined(a) == 1);
   behave @assert(joined(b) == 2);
   behave @assert(zipped(a) == 1);

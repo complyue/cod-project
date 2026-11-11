@@ -1,12 +1,12 @@
 using symbol "std:io" @print;
 array Values[u32]::i64;
 region symbol @arena;
-symbol @values :: ref<Values>;
-symbol @first :: ref<Values>;
-symbol @create :: proc() -> ref<Values>;
-proc @grow(first::ref<Values> in O1)::ref<Values> where {owner O1};
-procedure @create()::ref<Values> { alloc @arena Values(2u64, 19) }
-procedure @grow(first::ref<Values> in O1)::ref<Values> where {owner O1} {
+symbol @values :: Values;
+symbol @first :: Values;
+symbol @create :: proc() -> Values;
+proc @grow(first::Values in O1)::Values where {owner O1};
+procedure @create()::Values { alloc @arena Values(2u64, 19) }
+procedure @grow(first::Values in O1)::Values where {owner O1} {
   fold (i in 0 .. 4, previous = first) { alloc @arena Values(2u64, previous[0u32] + i) }
 }
 effect @arena <- region(4096u64);

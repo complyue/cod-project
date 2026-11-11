@@ -1,3 +1,4 @@
+using "std:exceptions" NullPointerException;
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
 using "std:exceptions" InvalidCapacity;
@@ -45,13 +46,13 @@ function recover(bytes::u64)-> owned region ::Packet {
   catch(error::const InvalidCapacity) {fresh(16u64, 4u64)}
   finally {}
 }
-proc lifecycle(bytes::u64) -> void {
+proc lifecycle(bytes::u64) -> void throws NullPointerException {
   owned region packet::Packet <- make Packet(capacity = 256u64) {
-    head <- {behave @print(101); null};
+    head = {behave @print(101); null};
     sequence <- {behave @print(102); 41u64}
   };
-  let view = root(packet);
-  let node = alloc packet Node(7u64, null);
+  ref view = root(packet);
+  ref node = alloc packet Node(7u64, null);
   setfield(node, next, node);
   setfield(view, head, node);
   owned region next::Packet <- forward(packet);
@@ -70,7 +71,7 @@ proc branch_results(bytes::u64) -> void {
 proc failures(bytes::u64) -> void {
   try {
     owned region too_small::Packet <- make Packet(capacity = 7u64) {
-      sequence <- {behave @print(999); 0u64}; head <- null
+      sequence <- {behave @print(999); 0u64}; head = null
     };
     {}
   } catch(error::const RegionCapacityExceeded) {
@@ -80,7 +81,7 @@ proc failures(bytes::u64) -> void {
   };
   try {
     owned region unfinished::Packet <- make Packet(capacity = 16u64) {
-      sequence <- root(fresh(bytes, 0u64)).sequence; head <- null
+      sequence <- root(fresh(bytes, 0u64)).sequence; head = null
     };
     {}
   } catch(error::const InvalidCapacity) {behave @print(4)};
@@ -111,7 +112,7 @@ proc conversion_order(bytes::u64) -> void {
 }
 proc stable_join(flag::bool) -> void {
   owned region packet::Packet <- fresh(16u64, 17u64);
-  let view = root(packet);
+  ref view = root(packet);
   owned region selected::Packet <- if(flag) {packet} else {packet};
   behave @assert(view.sequence == root(selected).sequence);
   behave @print(9)
@@ -131,7 +132,7 @@ proc borrowed_failure(bytes::u64) -> void {
 }
 symbolic_owner();
 borrowed_failure(0u64);
-lifecycle(0u64);
+try { lifecycle(0u64); } catch (unexpected::const NullPointerException) { behave @assert(false); };
 branch_results(0u64);
 branch_results(16u64);
 failures(0u64);

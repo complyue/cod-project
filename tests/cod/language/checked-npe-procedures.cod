@@ -1,0 +1,21 @@
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+using "std:exceptions" NullPointerException as Missing;
+data Node { value::i64; ptr next::Node; }
+region symbol @state::Node;
+symbol @work::proc() -> void throws Missing;
+effect @state <- make Node(capacity=256u64) { value <- 7; next = null };
+proc work() -> void throws Missing {
+  behave @print(root(@state).value);
+  val unreachable <- root(@state).next.value;
+  {}
+}
+effect @work = work;
+{
+  effect @state <- make Node(capacity=256u64) { value <- 9; next = null };
+  try { perform @work(); } catch (e::const Missing) { behave @assert(e.category == 4u64); };
+  try { behave @work(); } catch (e::const Missing) { behave @assert(e.cause_count == 0u64); };
+};
+proc callback(cb::proc() -> void throws Missing) -> void throws Missing { cb(); }
+try { callback(work); } catch (e::const Missing) { behave @print(1); }
+finally { behave @assert(root(@state).value == 7); };

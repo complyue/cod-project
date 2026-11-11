@@ -19,7 +19,7 @@ proc stage_next() -> ContextNode {
 }
 proc fail_next() -> ContextNode {
   behave @assert(@left.value == 10);
-  let candidate = deref(alloc @arena ContextNode(40));
+  ref candidate = deref(alloc @arena ContextNode(40));
   effect @arena <- make ContextPool(capacity = 0u64) { tag <- 0 };
   candidate
 }

@@ -6,28 +6,28 @@ array Values[u32]::i64;
 effect @value <- 9;
 procedure @read()::i64 { @value }
 {
-  let i = 90;
-  let values = 123;
+  val i = 90;
+  val values = 123;
   for (i in 0 .. 3) {
     effect @value <- i;
     effect @arena <- region(128u64);
-    let values = alloc @arena Values(2u64, behave @read());
+    ref values = alloc @arena Values(2u64, behave @read());
     behave @print(values[0u32]);
     values
   };
   behave @print(i);
   behave @print(values);
-  let flag = true;
-  behave @print(true && (let flag = !flag));
+  val flag = true;
+  behave @print(true && { val flag = !flag; !!flag });
   behave @print(flag);
 };
 behave @print(@value);
 
 function nested(in::i64)::i64 {
-  let value = { let in = in + 1; in };
-  let sum = 10;
-  let total = fold (in in 0 .. 3, sum = sum) { sum + in };
-  let branch = if (in > 0) { let in = in + 2; in } else { let in = in - 2; in };
+  val value = { val in = in + 1; in };
+  val sum = 10;
+  val total = fold (in in 0 .. 3, sum = sum) { sum + in };
+  val branch = if (in > 0) { val in = in + 2; in } else { val in = in - 2; in };
   value + total + branch + in + sum
 }
 behave @print(nested(5));

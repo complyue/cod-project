@@ -1,6 +1,6 @@
 data Packed { bits::u32; }
 array Values[u32]::i64;
-function ([]<-)(packed::ref<Packed> in O, index::u32, value::u32) -> void where {owner O} {
+function ([]<-)(packed::Packed in O, index::u32, value::u32) -> void where {owner O} {
   if (index == 0u32) {
     deref(packed).bits <- (deref(packed).bits / 16u32) * 16u32 + value % 16u32;
   } else {
@@ -8,11 +8,11 @@ function ([]<-)(packed::ref<Packed> in O, index::u32, value::u32) -> void where 
   };
   {}
 }
-function (<-)(destination::ref<Packed> in D, source::const ref<Packed> in S) -> void where {owner D, owner S} {
+function (<-)(destination::Packed in D, source::const Packed in S) -> void where {owner D, owner S} {
   deref(destination).bits <- deref(source).bits;
   {}
 }
-function ([]<-)(values::ref<Values> in O, index::u32, value::i64) -> const i64 in O where {owner O} {
+function ([]<-)(values::Values in O, index::u32, value::i64) -> const i64 in O where {owner O} {
   intrinsic ([]<-)(values, index, value)
 }
 function (<-)(destination::i64 in O, source::u32) -> void where {owner O} {

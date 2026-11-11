@@ -5,6 +5,7 @@
 #include "lang_llvm.hh"
 
 #include <llvm/ADT/ImmutableMap.h>
+#include <clang/Basic/Stack.h>
 
 #include <algorithm>
 #include <array>
@@ -14,6 +15,7 @@
 #include <cstdint>
 #include <deque>
 #include <fstream>
+#include <exception>
 #include <iterator>
 #include <map>
 #include <queue>
@@ -49,6 +51,12 @@ struct Value {
   bool read_only = false;
   std::optional<StorageView> storage = {};
   std::optional<size_t> pointer = {}; // Lexical binding, distinct from its current referent.
+  bool nullable = false;
+  bool pending_owner = false;
+  std::optional<std::pair<size_t, bool>> nonnull_when = {};
+  std::optional<LLVMEmission::Place> reference_field = {};
+  bool required_reference = false;
+  bool pointer_view = false;
   llvm::Value *referent = nullptr; // Stable object expression identity across lexical pointer loads.
 };
 using Bindings = llvm::ImmutableMap<size_t, const Value *>;
@@ -250,7 +258,7 @@ class Compiler {
   struct LocalCell { size_t scope; Location at; bool initialized = false; };
   // The slot is the runtime address; the view carries checked owner/type/access
   // constraints and initialization facts, not an exact runtime target identity.
-  struct Pointer { llvm::Value *slot; Value view; bool read_only = false; bool fixed_binding = false; };
+  struct Pointer { llvm::Value *slot; Value view; bool read_only = false; bool fixed_binding = false; bool required = false; Location at; };
   std::vector<LocalCell> cells_;
   std::vector<Pointer> pointers_;
   struct LoopPointers { size_t boundary; std::vector<bool> initialized; };
@@ -259,6 +267,7 @@ class Compiler {
   size_t local_scope_ = 0;
   bool module_top_level_ = false;
   bool region_initializer_ = false;
+  bool npe_allowed_ = false;
   bool regional_runtime_ = false;
   size_t next_unit_ = 0;
   LLVMEmission ir_;
@@ -281,14 +290,33 @@ class Compiler {
   struct Landing { llvm::BasicBlock *block = nullptr; std::vector<ExceptionalEdge> incoming; };
   struct HandlerScope {
     size_t cleanup, holding_begin;
-    std::array<Landing, 3> landing;
+    std::array<Landing, 4> landing;
   };
   std::vector<HandlerScope *> handlers_;
   std::optional<Value> caught_exception_;
 
   static Type exception_type(size_t category) {
-    static const std::array names{"SystemException", "OutOfMemory", "RegionCapacityExceeded", "InvalidCapacity"};
+    static const std::array names{"SystemException", "OutOfMemory", "RegionCapacityExceeded", "InvalidCapacity", "NullPointerException"};
     return {Type::exception, names.at(category), category};
+  }
+  void require_npe_handler(const Location &at) {
+    if (!npe_allowed_)
+      fail(at, "checked NullPointerException requires a local catch or throws NullPointerException on the immediate func/proc; module top level must catch it");
+  }
+  bool declares_npe(const std::vector<Type> &types, const Module &module, const Location &at) {
+    for (const auto &type : types)
+      if (resolve(type, module, at) != exception_type(4))
+        fail(at, "throws requires the NullPointerException identity from std:exceptions");
+    return !types.empty();
+  }
+  void check_nullable(const Value &value, const Location &at) {
+    if (!value.nullable) return;
+    if (value.pending_owner && value.pointer && std::any_of(loop_pointers_.begin(), loop_pointers_.end(),
+        [&](const LoopPointers &loop) { return *value.pointer < loop.boundary; }))
+      fail(at, "establish a pointer owner before a repeated loop dereference");
+    require_npe_handler(at);
+    ir_.null_check(value.storage ? value.storage->address : value.native);
+    if (value.pending_owner) { ir_.unreachable(); throw EndPath{}; }
   }
   size_t new_region(llvm::Value *owner, const Location &at, std::set<size_t> origins = {}) {
     const auto id = regions_.size();
@@ -312,7 +340,7 @@ class Compiler {
       cells_[i].initialized = i < state.initialized.size() && state.initialized[i];
     for (size_t i = 0; i < state.pointers.size(); ++i) pointers_[i].view = state.pointers[i];
   }
-  static void intersect_flow(FlowState &left, const FlowState &right) {
+  void intersect_flow(FlowState &left, const FlowState &right) {
     left.live.resize(std::max(left.live.size(), right.live.size()), false);
     for (size_t i = 0; i < left.live.size(); ++i) left.live[i] = left.live[i] && i < right.live.size() && right.live[i];
     left.holdings.resize(std::max(left.holdings.size(), right.holdings.size()), Presence::absent);
@@ -326,6 +354,13 @@ class Compiler {
     for (size_t i = 0; i < std::min(left.pointers.size(), right.pointers.size()); ++i) {
       auto &target = left.pointers[i];
       const auto &other = right.pointers[i];
+      if (target.pending_owner && !other.pending_owner) {
+        target = other;
+        target.nullable = true;
+      } else if (!target.pending_owner && !other.pending_owner && storage_owner(target) != storage_owner(other)) {
+        fail(pointers_[i].at, "pointer paths establish different owners; the first non-null assignment must establish one consistent owner");
+      }
+      target.nullable = target.nullable || other.nullable;
       target.read_only = target.read_only || other.read_only;
       if (target.referent != other.referent) target.referent = nullptr;
       if (target.storage && other.storage) {
@@ -379,6 +414,22 @@ class Compiler {
   }
   llvm::Value *exception_category(const Value &value) {
     return value.type.identity ? ir_.bits(Type::uint64, value.type.identity) : value.exception_category;
+  }
+  static bool may_be_npe(llvm::Value *category) {
+    std::vector<const llvm::Value *> pending{category};
+    std::set<const llvm::Value *> visited;
+    while (!pending.empty()) {
+      auto *next = pending.back(); pending.pop_back();
+      if (!visited.insert(next).second) continue;
+      if (const auto *constant = llvm::dyn_cast<llvm::ConstantInt>(next)) {
+        if (constant->getZExtValue() == 4) return true;
+      } else if (const auto *phi = llvm::dyn_cast<llvm::PHINode>(next)) {
+        for (auto &incoming : phi->incoming_values()) pending.push_back(incoming.get());
+      } else if (const auto *select = llvm::dyn_cast<llvm::SelectInst>(next)) {
+        pending.push_back(select->getTrueValue()); pending.push_back(select->getFalseValue());
+      } else return true;
+    }
+    return false;
   }
   void raise_exception(Value error) {
     ir_.dispatch_exception(exception_category(error), [&](size_t category) {
@@ -448,7 +499,7 @@ class Compiler {
                    region_note(value.region_id, "the referenced region was acquired here"));
     return regions_.at(*value.region_id).owner;
   }
-  static bool local_bits(Type type) { return numeric(representation(type)) || type == Type::boolean; }
+  static bool local_bits(Type type) { return numeric(representation(type)) || type == Type::boolean || type.kind == Type::exception; }
   static std::optional<std::pair<bool, size_t>> storage_owner(const Value &value) {
     if (value.region_id) return std::pair(true, *value.region_id);
     if (value.storage && value.storage->scope) return std::pair(false, *value.storage->scope);
@@ -461,22 +512,50 @@ class Compiler {
   }
   LLVMEmission::Place place(const Value &value, const Location &at) {
     valid_view(value, at);
+    check_nullable(value, at);
     if (!value.storage) fail(at, "operation requires addressable target storage");
     return {value.type, value.region_id ? region_pointer(value, at) : nullptr, value.storage->address};
   }
+  Value target_view(Value value, const Location &at) {
+    if (value.type.kind != Type::reference) return value;
+    const auto target = *value.type.target;
+    if (local_bits(target)) {
+      value.storage = StorageView{ir_.nullable_address(region_pointer(value, at), value.native), {}, {}};
+      value.native = nullptr;
+    }
+    value.type = target;
+    return value;
+  }
+  Value null_target(Type type, std::optional<Value> owner, const Location &at) {
+    Value value; value.type = type; value.nullable = true;
+    value.pending_owner = !owner || !storage_owner(*owner);
+    if (owner) value.region_id = owner->region_id;
+    if (local_bits(type)) {
+      value.storage = StorageView{ir_.null_pointer(), owner && owner->storage ? owner->storage->scope : std::nullopt, {}};
+    } else if (type.kind == Type::regional || type.kind == Type::array || type.kind == Type::reference) {
+      value.native = ir_.bits(Type::null_ref, 0);
+    } else fail(at, "null requires a pointer to bits or regional data");
+    return value;
+  }
   Value read_value(Value value, const Location &at) {
     valid_view(value, at);
+    if (value.type.kind != Type::reference) {
+      check_nullable(value, at);
+      value.nullable = false;
+    }
     if (value.storage) {
       for (const auto cell : value.storage->cells)
         if (!cells_.at(cell).initialized)
           fail(at, "read of storage before definite initialization\n" + location_text(cells_[cell].at) +
                        ": note: local storage allocated here");
-      value.native = ir_.read(place(value, at));
+      const auto loaded = loaded_value(value.type, ir_.read(place(value, at)));
+      value.native = loaded.native;
+      value.exception_category = loaded.exception_category;
     }
     return value;
   }
   static Value bits_value(Value value) {
-    value.storage.reset(); value.pointer.reset(); value.region_id.reset(); value.read_only = false; value.referent = nullptr;
+    value.storage.reset(); value.pointer.reset(); value.region_id.reset(); value.read_only = false; value.referent = nullptr; value.nullable = false; value.reference_field.reset(); value.nonnull_when.reset(); value.pointer_view = false;
     return value;
   }
   Value local_storage(Type type, const Location &at) {
@@ -490,7 +569,7 @@ class Compiler {
     if (destination.read_only) fail(at, "cannot transfer into a read-only destination view");
     source = read_value(std::move(source), at);
     require(source.type, destination.type, at);
-    ir_.write(place(destination, at), source.native);
+    ir_.write(place(destination, at), stored_value(source, destination.type, at));
     if (destination.storage->cells.size() == 1 && !destination.storage->initialized_alternatives)
       cells_.at(*destination.storage->cells.begin()).initialized = true;
   }
@@ -504,14 +583,17 @@ class Compiler {
     return value;
   }
   void declare_pointer(Locals &locals, const std::string &name, Value value,
-                       const Module &module, const Location &at, bool read_only = false, bool fixed_binding = false) {
+                       const Module &module, const Location &at, bool read_only = false, bool fixed_binding = false, bool required = false) {
     value.pointer.reset();
+    value.reference_field.reset();
+    value.required_reference = false;
+    value.pointer_view = true;
     valid_view(value, at);
-    if (!storage_owner(value)) fail(at, "ptr requires storage with a known owner");
+    if (!storage_owner(value) && !value.pending_owner) fail(at, "ptr requires storage with a known owner");
     const auto id = pointers_.size();
     if (!value.referent) value.referent = value.storage ? value.storage->address : value.native;
     pointers_.push_back({ir_.pointer_storage(value.storage ? value.storage->address : value.native), value,
-                         read_only || value.read_only, fixed_binding});
+                         read_only || value.read_only, fixed_binding, required, at});
     value.pointer = id;
     declare_local(locals, name, std::move(value), module, at);
   }
@@ -615,6 +697,12 @@ class Compiler {
           (subtype(*actual.type.target, *expected.target, visible, at) ||
            establishes(actual, {*actual.type.target, *expected.target}, at)));
     }
+    if (actual.type.kind == Type::procedure && expected.kind == Type::procedure) {
+      if (!actual.type.throws_types.empty() && expected.throws_types.empty()) return false;
+      auto provided = actual.type;
+      provided.throws_types.clear(); expected.throws_types.clear();
+      return provided == expected;
+    }
     if (actual.type.kind == Type::exception && expected.kind == Type::exception && !expected.identity) return true;
     return subtype(actual.type, expected, visible, at) ||
            (actual.type.kind == Type::regional && establishes(actual, {actual.type, expected}, at));
@@ -631,6 +719,7 @@ class Compiler {
       }
       fail(at, message);
     }
+    if (actual.type.kind == Type::procedure) actual.type = expected;
     if (actual.type.kind == Type::region && !expected.owned) actual = borrowed(std::move(actual));
     return actual;
   }
@@ -664,6 +753,7 @@ class Compiler {
         if (parameter == Type::void_type) fail(at, "a procedure parameter must have a value type");
       }
       type.target = std::make_shared<Type>(resolve(*type.target, module, at));
+      if (declares_npe(type.throws_types, module, at)) type.throws_types = {exception_type(4)};
       return type;
     }
     if (type.kind == Type::reference) {
@@ -695,12 +785,16 @@ class Compiler {
         for (const auto &field : product.form->parameters) {
           if (!fields.insert(field.name).second) fail(field.at, "duplicate product field '" + field.name + "'");
           auto field_type = resolve_name(field.type, *product.module, field.at);
+          if (field.declaration_kind == "val" && field_type.kind == Type::reference)
+            fail(field.at, "val fields store direct bits; use ref or ptr for a stored reference");
+          if (field.declaration_kind == "ptr" || field.declaration_kind == "ref") field_type = reference(field_type);
           if (field_type.kind == Type::procedure) fail(field.at, "procedure fields are outside the prototype");
           if (field_type.kind == Type::region || field_type.kind == Type::regional || field_type.kind == Type::array ||
               field_type.kind == Type::abstract_type)
-            fail(field.at, "data object fields currently require explicit ref<T> references");
+            fail(field.at, "data object fields require a ref or ptr declaration");
           field_type = resolve(field_type, *product.module, field.at);
           product.fields.push_back({field.name, field_type, field.at, false, {}});
+          product.fields.back().declaration_kind = field.declaration_kind;
         }
         regional_runtime_ = true;
         std::vector<Type> field_types;
@@ -845,7 +939,7 @@ class Compiler {
     scanned_.push_back(canonical);
     if (builtin) {
       if (path == "std:exceptions") {
-        for (size_t category = 0; category <= 3; ++category) {
+        for (size_t category = 0; category <= 4; ++category) {
           const auto type = exception_type(category);
           result.world.types.emplace(type.name, type);
           result.world.exports.emplace(type.name, type);
@@ -981,6 +1075,7 @@ class Compiler {
     form->owner_parameters = source.owner_parameters;
     form->result_type = source.result_type;
     form->result_owner = source.result_owner;
+    form->throws_types = source.throws_types;
     form->result_const = source.result_const;
     return form;
   }
@@ -992,6 +1087,8 @@ class Compiler {
         source_expr.spread, source_expr.annotation});
     expr->intrinsic = source_expr.intrinsic;
     expr->fixed_binding = source_expr.fixed_binding;
+    expr->declaration_kind = source_expr.declaration_kind;
+    expr->owner_name = source_expr.owner_name;
     if (uses_symbol(expr->kind)) {
       used.insert(source_expr.text);
       const auto renamed = names.find(source_expr.text);
@@ -1040,6 +1137,7 @@ class Compiler {
       type_context_.bindings.emplace(form.type_parameters[i].name, Type{Type::parameter, {}, i});
     for (const auto &parameter : form.type_parameters)
       type.bounds.push_back(parameter.bound ? resolve(*parameter.bound, module, parameter.at) : Type::void_type);
+    if (declares_npe(form.throws_types, module, form.at)) type.throws_types = {exception_type(4)};
     type.variadic = variadic(form);
     for (const auto &parameter : form.parameters)
       type.parameters.push_back(resolve(parameter.type, module, parameter.at));
@@ -1244,6 +1342,14 @@ class Compiler {
       const auto declared = symbol_types_.find(id);
       if (declared == symbol_types_.end() || !accepts(value, declared->second, owner, at))
         fix_type(id, value.type, at);
+    } else if (value.type.kind == Type::procedure && symbol_types_.contains(id)) {
+      auto actual = value.type;
+      auto declared = symbol_types_.at(id);
+      const bool permitted = actual.throws_types.empty() || !declared.throws_types.empty();
+      actual.throws_types.clear(); declared.throws_types.clear();
+      if (actual != declared) fix_type(id, value.type, at);
+      if (!permitted) fail(at, "procedure checked NullPointerException exceeds symbolic declaration");
+      value.type = symbol_types_.at(id);
     } else fix_type(id, value.type, at);
     ir_.effect(id, value.type, value.native);
     value.owner = &owner;
@@ -1287,7 +1393,14 @@ class Compiler {
 
     Value result;
     try {
-      for (const auto &child : expr.children) result = expression(*child, module, env, locals, function_context);
+      for (size_t i = 0; i < expr.children.size(); ++i) {
+        const auto &child = expr.children[i];
+        const bool assignment = child->kind == Expression::Kind::rebind ||
+            (child->kind == Expression::Kind::call && child->text == "=");
+        result = expression(*child, module, env, locals, function_context,
+                            !assignment || (!discard_result && i + 1 == expr.children.size()),
+                            copy_result && i + 1 == expr.children.size());
+      }
     } catch (const EndPath &) { result = scalar(Type::never, nullptr); }
     if (discard_result && result.type != Type::never) result = {};
     if (result_type && result.type != Type::never) result = admit(std::move(result), *result_type, module, expr.at);
@@ -1312,7 +1425,10 @@ class Compiler {
       if (value.storage) {
         const bool initialized = std::all_of(value.storage->cells.begin(), value.storage->cells.end(),
             [&](size_t cell) { return cells_.at(cell).initialized; });
-        value.native = initialized ? read_value(value, arg->at).native : nullptr;
+        if (initialized) value = read_value(std::move(value), arg->at);
+        else value.native = nullptr;
+      } else if (value.type.kind != Type::reference && value.nullable) {
+        value = read_value(std::move(value), arg->at);
       }
       if (arg->spread) {
         if (!value.arguments) fail(arg->at, "argument expansion requires a variadic parameter pack");
@@ -1340,6 +1456,9 @@ class Compiler {
   }
   Value call(Form &form, const Module &lexical, Environment env, const std::vector<Value> &args,
              bool function_context, const Location &at, const Module &caller, ImplementationContext implementation = {}) {
+    const bool throws_npe = declares_npe(form.throws_types, lexical, form.at);
+    if (throws_npe) require_npe_handler(at);
+    const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, throws_npe);
     const auto instantiated = *signature(form, lexical, args, caller, at, true);
     const auto types = llvm::SaveAndRestore(type_context_, TypeContext{&lexical, instantiated.bindings});
     if (!form.body) fail(at, "callable '" + form.name + "' has no method implementation");
@@ -1384,6 +1503,8 @@ class Compiler {
         fail(formal.at, "a whole-region parameter requires a region declaration");
       if (formal.owner.empty() && object_type(parameter.type))
         fail(formal.at, "a non-bits parameter requires an explicit external owner: use 'in O' and 'where {owner O}'");
+      if (formal.declaration_kind == "val" && !local_bits(parameter.type))
+        fail(formal.at, "val parameters require bits; regional objects are borrowed through an explicit owner");
       if (formal.owner.empty() && local_bits(parameter.type)) {
         if (!parameter.native) fail(at, "read of storage before definite initialization in a local parameter argument");
         const auto source = bits_value(parameter);
@@ -1428,7 +1549,9 @@ class Compiler {
         // Reference-operation destinations denote the caller's bindings; other
         // parameters borrow storage through their own lexical pointer bindings.
         declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
-      } else if (argument.storage || (!form.parameters[i].owner.empty() && object_type(argument.type)))
+      } else if (form.parameters[i].declaration_kind == "val")
+        declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
+      else if (argument.storage || (!form.parameters[i].owner.empty() && object_type(argument.type)))
         declare_pointer(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at,
                         form.parameters[i].read_only);
       else declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
@@ -1749,7 +1872,7 @@ class Compiler {
   }
   void check_declarations(const std::vector<CallableDeclaration> &declarations, Form::Kind kind,
                            const std::vector<Value> &args, const Value &result,
-                           const Module &caller, const Location &at) {
+                           const Module &caller, const Location &at, bool throws_npe) {
     for (const auto &declaration : declarations) {
       const auto contract = signature(*declaration.form, *declaration.lexical, args, caller, at);
       if (!contract) continue;
@@ -1757,6 +1880,8 @@ class Compiler {
       for (size_t i = 0; i < args.size(); ++i)
         applicable = applicable && accepts(args[i], contract->parameters[i], caller, at);
       if (!applicable) continue;
+      if (throws_npe && !declares_npe(declaration.form->throws_types, *declaration.lexical, declaration.form->at))
+        fail(at, "method checked NullPointerException exceeds callable declaration");
       if (declaration.form->kind != kind)
         fail(at, "method callable kind violates declaration\n" + location_text(declaration.form->at) + ": note: callable signature declared here");
       if (contract->result && !accepts(result, *contract->result, caller, at))
@@ -1802,6 +1927,15 @@ class Compiler {
       fail(at, message + "\n" + location_text(form.at) + ": note: selected procedure '" +
                    callable_name(form) + "' declared here");
     }
+    for (const auto &declaration : match.declarations) {
+      const auto contract = signature(*declaration.form, *declaration.lexical, args, caller, at);
+      if (!contract) continue;
+      bool applicable = true;
+      for (size_t i = 0; i < args.size(); ++i)
+        applicable &= accepts(args[i], contract->parameters[i], caller, at);
+      if (applicable && declares_npe(declaration.form->throws_types, *declaration.lexical, declaration.form->at))
+        require_npe_handler(at);
+    }
     // Lexical procedure calls use current bindings; perform uses captured values.
     auto result = call(*match.function.form, *match.function.lexical, function ? Environment{} : env, args, function, at, caller,
                        match.function.implementation);
@@ -1818,7 +1952,7 @@ class Compiler {
         fail(at, "a (<-) overload must return the original destination, not another object");
       result.read_only = true;
     }
-    check_declarations(match.declarations, match.function.form->kind, args, result, caller, at);
+    check_declarations(match.declarations, match.function.form->kind, args, result, caller, at, declares_npe(form.throws_types, *match.function.lexical, form.at));
     return result;
   }
   Value transfer_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
@@ -1841,14 +1975,54 @@ class Compiler {
     if (expr.intrinsic) fail(expr.at, "intrinsic (<-) requires a bits destination; object transfer requires a user-defined overload");
     fail(expr.at, "object transfer requires a user-defined (<-) overload");
   }
+  Value reference_source(Value value, Type target, size_t owner, bool required, const Location &at) {
+    if (value.type == Type::null_ref) {
+      if (required) fail(at, "a ref field cannot contain null");
+      value = scalar(reference(target), ir_.bits(Type::null_ref, 0), owner);
+      value.nullable = true;
+      return value;
+    }
+    if (required && value.nullable) fail(at, "a ref field requires a proven non-null target");
+    if (value.read_only) fail(at, "cannot store a read-only view in a writable reference field");
+    if (value.region_id != owner) fail(at, "cross-region reference fields require a target in the same owner; use '<-' for bits transfer");
+    valid_view(value, at);
+    if (value.type == target) {
+      if (local_bits(target)) {
+        if (!value.storage) fail(at, "a reference field requires existing target storage");
+        auto *address = value.storage->address;
+        value.native = ir_.reference({target, regions_.at(owner).owner, address});
+        if (value.nullable) value.native = ir_.nullable_offset(regions_.at(owner).owner, address);
+      }
+      value.type = reference(target);
+      value.storage.reset();
+    }
+    require(value.type, reference(target), at);
+    return value;
+  }
+  Value rebind_field(Value destination, Value source, const Location &at) {
+    if (destination.read_only) fail(at, "cannot rebind a field through a read-only view");
+    auto stored = reference_source(source, *destination.reference_field->type.target,
+                                   *destination.region_id, destination.required_reference, at);
+    if (destination.required_reference) ir_.require_representable_reference(*destination.reference_field, stored.native);
+    ir_.write(*destination.reference_field, stored.native);
+    destination.native = stored.native;
+    destination.nullable = stored.nullable;
+    if (destination.storage) {
+      destination.storage->address = ir_.nullable_address(destination.reference_field->owner, stored.native);
+      destination.native = nullptr;
+    }
+    return destination;
+  }
   Value rebind_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context) {
     if (expr.children.size() != 2) fail(expr.at, "reference assignment requires a destination and source");
     auto destination = expression(*expr.children[0], module, env, locals, function_context, false);
     auto source = expression(*expr.children[1], module, env, locals, function_context, false);
+    if (destination.reference_field) return rebind_field(destination, source, expr.at);
+    if (source.type == Type::null_ref && destination.pointer) source = null_target(destination.type, destination, expr.at);
     if (!destination.pointer) fail(expr.at, "reference assignment requires an ordinary ptr binding; use '<-' for bits transfer");
     if (pointers_.at(*destination.pointer).fixed_binding) fail(expr.at, "cannot rebind a const ptr binding");
-    if (source.storage && std::all_of(source.storage->cells.begin(), source.storage->cells.end(),
+    if (!source.nullable && source.storage && std::all_of(source.storage->cells.begin(), source.storage->cells.end(),
         [&](size_t cell) { return cells_.at(cell).initialized; })) source = read_value(std::move(source), expr.at);
     // Select user methods before checking the builtin alias operation. A method
     // may use a read-only source to choose an independently writable target.
@@ -1863,7 +2037,8 @@ class Compiler {
     if (!destination.pointer) fail(at, "reference swap requires ordinary ptr bindings");
     if (pointers_.at(*destination.pointer).fixed_binding) fail(at, "cannot rebind a const ptr binding");
     require(source.type, destination.type, at);
-    if (storage_owner(destination) != storage_owner(source))
+    if (pointers_.at(*destination.pointer).required && source.nullable) fail(at, "ref cannot be rebound to a nullable target");
+    if (!destination.pending_owner && storage_owner(destination) != storage_owner(source))
       fail(at, "reference assignment cannot cross owners; you may want '<-' for bits transfer");
     valid_view(source, at);
     if (!destination.read_only && source.read_only)
@@ -1874,6 +2049,8 @@ class Compiler {
   }
   Value rebind_pointer(const Value &destination, Value source) {
     source.pointer.reset();
+    source.reference_field.reset();
+    source.pointer_view = true;
     auto &binding = pointers_.at(*destination.pointer);
     source.read_only = binding.read_only;
     ir_.write_pointer(binding.slot, source.storage ? source.storage->address : source.native);
@@ -1932,11 +2109,17 @@ class Compiler {
         expr.text.ends_with("u32") ? Type::uint32 : expr.text.ends_with("u64") ? Type::uint64 : Type::integer, nullptr);
     if (expr.kind == K::real) return scalar(expr.text.ends_with("f32") ? Type::float32 : Type::float64, nullptr);
     if (expr.kind == K::boolean) return scalar(Type::boolean, nullptr);
+    if (expr.kind == K::null_ref) return scalar(Type::null_ref, nullptr);
     if (expr.kind == K::field) {
       auto value = query_value(*expr.children.front(), module, locals);
       if (value.type.kind == Type::regional)
         for (const auto &field : products_.at(value.type.identity).fields)
-          if (field.name == expr.text) { value.type = field.type; return value; }
+          if (field.name == expr.text) {
+            const bool view = field.declaration_kind == "ref" || field.declaration_kind == "ptr";
+            auto result = scalar(view ? *field.type.target : field.type, nullptr, value.region_id);
+            result.pointer_view = view;
+            return result;
+          }
       fail(expr.at, "typeof: unavailable field '" + expr.text + "'");
     }
     if (expr.kind == K::index) {
@@ -1975,13 +2158,20 @@ class Compiler {
         return scalar(type, nullptr);
       }
       if (expr.kind == K::call) {
+        if (expr.text == "isnull") {
+          if (args.size() != 1) fail(expr.at, "isnull requires one pointer operand");
+          if (args[0].type != Type::null_ref && !args[0].pointer_view && args[0].type.kind != Type::reference)
+            fail(expr.at, "isnull requires a ptr variable or reference field, not a copied payload");
+          return scalar(Type::boolean, nullptr);
+        }
         if (expr.text == "len") {
           if (args.size() != 1 || !(args[0].type.kind == Type::array || args[0].type.kind == Type::arguments ||
               (args[0].type.kind == Type::reference && args[0].type.target->kind == Type::array)))
             fail(expr.at, "typeof: len requires an array or argument pack");
           return scalar(Type::uint64, nullptr);
         }
-        if (expr.text == "root" || expr.text == "deref") {
+        if (expr.text == "deref" && args.size() == 1) return args[0];
+        if (expr.text == "root") {
           if (args.size() == 1 && args[0].type.target &&
               args[0].type.kind == (expr.text == "root" ? Type::region : Type::reference)) {
             auto value = args[0]; value.type = *value.type.target; return value;
@@ -2014,6 +2204,7 @@ class Compiler {
   Type array_type(const Value &value, const Location &at) {
     const auto type = value.type.kind == Type::reference ? *value.type.target : value.type;
     if (type.kind != Type::array) fail(at, "expected a regional array");
+    check_nullable(value, at);
     region_pointer(value, at);
     return type;
   }
@@ -2056,10 +2247,10 @@ class Compiler {
     const auto type = array_type(array, at);
     const auto &layout = arrays_.at(type.identity);
     require(index.type, layout.index, at);
-    const auto result_type = as_reference ? reference(layout.element) : layout.element;
     const auto place = ir_.element(region_pointer(array, at), array.native, index.type, index.native, layout.element);
-    auto result = scalar(result_type, as_reference ? ir_.reference(place) : nullptr, array.region_id);
-    if (!as_reference) result.storage = StorageView{place.address, {}, {}};
+    auto result = scalar(layout.element, nullptr, array.region_id);
+    result.storage = StorageView{place.address, {}, {}};
+    result.pointer_view = true;
     result.read_only = array.read_only;
     return result;
   }
@@ -2067,6 +2258,7 @@ class Compiler {
                          Environment &env, Locals &locals, bool function_context, bool captured) {
     if (function_context) fail(expr.at, "a function cannot invoke a procedure");
     if (!value.procedure) fail(expr.at, "binding '" + expr.text + "' is not callable");
+    if (!value.type.throws_types.empty()) require_npe_handler(expr.at);
     const auto proc = value.procedure; // Resolve before arguments/capture installation.
     std::vector<ConversionPoint> points;
     const bool convert_arguments = proc->form && converting_parameters(*proc->form);
@@ -2100,7 +2292,7 @@ class Compiler {
       binding_check(call_env, expr.at);
     }
     auto result = call(*proc->form, *proc->lexical, std::move(call_env), args, false, expr.at, module, proc->implementation);
-    check_declarations(proc->declarations, Form::Kind::procedure, args, result, module, expr.at);
+    check_declarations(proc->declarations, Form::Kind::procedure, args, result, module, expr.at, declares_npe(proc->form->throws_types, *proc->lexical, proc->form->at));
     return result;
   }
   Value invoke(const Expression &expr, const Module &module, Environment &env, Locals &locals,
@@ -2138,13 +2330,18 @@ class Compiler {
     auto *offset = ir_.reserve_root(native, root);
     for (size_t i = 0; i < order.size(); ++i) {
       const auto &initializer = *expr.children[i + 1];
-      auto value = expression(*initializer.children.front(), module, env, locals, function_context);
-      const auto field = fields[order[i]].type;
-      if (field.kind == Type::exception) value = admit(std::move(value), field, module, initializer.at);
-      else if (!(value.type == Type::null_ref && field.kind == Type::reference)) require(value.type, field, initializer.at);
-      if (field.kind == Type::reference && value.region_id && value.region_id != owner.region_id)
-        fail(initializer.at, "a root reference field must belong to the new region");
-      ir_.write(ir_.field(native, offset, root, order[i], field), stored_value(value, field, initializer.at));
+      const auto &field = fields[order[i]];
+      const bool edge = field.type.kind == Type::reference;
+      auto value = expression(*initializer.children.front(), module, env, locals, function_context, !edge);
+      if (!field.declaration_kind.empty() && (field.declaration_kind == "ref" || field.declaration_kind == "ptr") && initializer.binding != "=")
+        fail(initializer.at, "initialize a reference field with '='; '<-' writes an existing target");
+      if (!edge && initializer.binding == "=") fail(initializer.at, "a bits field uses '<-' for payload initialization");
+      if (edge) value = reference_source(std::move(value), *field.type.target, *owner.region_id, field.declaration_kind == "ref", initializer.at);
+      else if (field.type.kind == Type::exception) value = admit(std::move(value), field.type, module, initializer.at);
+      else require(value.type, field.type, initializer.at);
+      const auto slot = ir_.field(native, offset, root, order[i], field.type);
+      if (field.declaration_kind == "ref") ir_.require_representable_reference(slot, value.native);
+      ir_.write(slot, stored_value(value, field.type, initializer.at));
     }
     return contextual(std::move(owner), module);
   }
@@ -2159,7 +2356,9 @@ class Compiler {
       fail(expr.at, "alloc requires a regional type or regional array");
     std::vector<Value> args;
     for (size_t i = 1; i < expr.children.size(); ++i)
-      args.push_back(expression(*expr.children[i], module, env, locals, function_context));
+      args.push_back(expression(*expr.children[i], module, env, locals, function_context,
+          type.kind == Type::array || i > products_.at(type.identity).fields.size() ||
+          products_.at(type.identity).fields[i - 1].type.kind != Type::reference));
 
     if (type.kind == Type::array) {
       if (args.size() != 2 || !integral(args[0].type))
@@ -2170,6 +2369,9 @@ class Compiler {
       const auto &fields = products_.at(type.identity).fields;
       if (args.size() != fields.size()) fail(expr.at, "wrong field count for regional allocation");
       for (size_t i = 0; i < args.size(); ++i) {
+        if (fields[i].type.kind == Type::reference)
+          args[i] = reference_source(std::move(args[i]), *fields[i].type.target, *owner.region_id,
+                                     fields[i].declaration_kind == "ref", expr.at);
         if (fields[i].type.kind == Type::exception) args[i] = admit(std::move(args[i]), fields[i].type, module, expr.at);
         else if (!(args[i].type == Type::null_ref && fields[i].type.kind == Type::reference))
           require(args[i].type, fields[i].type, expr.at);
@@ -2187,7 +2389,14 @@ class Compiler {
         ir_.array_new(region_pointer(owner, expr.at), arrays_.at(type.identity).element,
                       args[0].type, args[0].native, args[1].native) :
         ir_.record_new(region_pointer(owner, expr.at), type, native_args);
-    auto result = scalar(reference(type), native, owner.region_id);
+    auto result = scalar(type, native, owner.region_id);
+    result.pointer_view = true;
+    if (type.kind == Type::regional) {
+      const auto &fields = products_.at(type.identity).fields;
+      for (size_t i = 0; i < fields.size(); ++i)
+        if (fields[i].declaration_kind == "ref")
+          ir_.require_representable_reference(ir_.field(region_pointer(owner, expr.at), result.native, type, i, fields[i].type), args[i].native);
+    }
     for (const auto &arg : args) merge_conformances(result.conformances, arg.conformances);
     return contextual(std::move(result), module);
   }
@@ -2237,6 +2446,19 @@ class Compiler {
       declare_local(inner_locals, expr.binding, accumulator, module, expr.at);
     }
 
+    std::set<size_t> rebound_pointers;
+    const auto changed = [&](auto &&self, const Expression &item) -> void {
+      const bool assignment = item.kind == K::rebind || (item.kind == K::call && item.text == "=");
+      const bool swap = item.kind == K::call && item.text == "<=>";
+      for (size_t i = 0; i < (swap ? 2u : assignment ? 1u : 0u) && i < item.children.size(); ++i) {
+        const auto &target = *item.children[i];
+        if (target.kind == K::name)
+          if (const auto found = locals.visible.find(target.text); found != locals.visible.end() && found->second.pointer)
+            rebound_pointers.insert(*found->second.pointer);
+      }
+      for (const auto &child : item.children) self(self, *child);
+    };
+    changed(changed, *expr.children[body_index]);
     LoopPointers loop_pointers{pointers_.size(), {}};
     for (auto &pointer : pointers_) {
       auto &view = pointer.view;
@@ -2244,6 +2466,7 @@ class Compiler {
           [&](size_t cell) { return cells_.at(cell).initialized; });
       loop_pointers.initialized.push_back(initialized);
       if (!one && !empty && !pointer.fixed_binding && initialized) {
+        if (!pointer.required && rebound_pointers.contains(size_t(&pointer - pointers_.data()))) view.nullable = true;
         view.referent = nullptr;
         if (view.storage) {
           view.storage->cells.clear();
@@ -2318,7 +2541,6 @@ class Compiler {
   }
   Value call_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context, bool function_result = false) {
-    using K = Expression::Kind;
     if (swap_operation(expr.text)) return swap_expression(expr, module, env, locals, function_context || function_result);
     if (expr.text == "=") return rebind_expression(expr, module, env, locals, function_context || function_result);
     if (expr.text == "<-") return transfer_expression(expr, module, env, locals, function_context || function_result);
@@ -2330,6 +2552,48 @@ class Compiler {
       return binary_expression(expr, module, env, locals, function_context, function_result);
     if (expr.children.size() == 1 && (expr.text == "-" || expr.text == "!"))
       return unary_expression(expr, module, env, locals, function_context, function_result);
+    if (expr.intrinsic || intrinsic_name(expr.text) || expr.text == "[]<-" || module.world.types.contains(expr.text) ||
+        (type_context_.lexical == &module && type_context_.bindings.contains(expr.text)))
+      return builtin_expression(expr, module, env, locals, function_context, function_result);
+    const auto information = lookup_callable(module, expr.text, expr.at);
+    const auto &functions = information.methods;
+    if (functions.empty()) {
+      if (!information.identities.empty())
+        fail(expr.at, "callable '" + expr.text + "' has no method implementation" +
+                     (information.declarations.empty() ? std::string{} :
+                      "\n" + location_text(information.declarations.front().form->at) + ": note: callable signature declared here"));
+      if (expr.text == "=" || expr.text == "[]=")
+        fail(expr.at, "unavailable operation overload '(" + expr.text + ")'");
+      fail(expr.at, "unavailable lexical function '" + expr.text + "'");
+    }
+    std::vector<ConversionPoint> points;
+    const auto args = arguments(expr, module, env, locals, function_context,
+        converting_method(expr.text, module, expr.at) ? &points : nullptr);
+    auto selected = method(expr.text, module, args, expr.at);
+    if (!selected && functions.size() == 1) {
+      const auto &candidate = functions.front();
+      return call_method({candidate, std::vector<Route>(args.size()), information.declarations}, args, expr.at, env, function_context || function_result, module, points);
+    }
+    if (!selected) method_failure(expr.text, args, functions, expr.at, false, module);
+    return call_method(*selected, args, expr.at, env, function_context || function_result, module, points);
+  }
+  Value builtin_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
+                           bool function_context, bool function_result) {
+    using K = Expression::Kind;
+    if (expr.text == "isnull") {
+      if (expr.children.size() != 1) fail(expr.at, "isnull requires one pointer operand");
+      const auto value = expression(*expr.children.front(), module, env, locals, function_context, false);
+      if (!expr.intrinsic)
+        if (const auto selected = method("isnull", module, {value}, expr.at))
+          return call_method(*selected, {value}, expr.at, env, function_context || function_result, module);
+      if (value.type == Type::null_ref) return scalar(Type::boolean, ir_.bits(Type::boolean, 1));
+      if (!value.pointer_view && value.type.kind != Type::reference)
+        fail(expr.at, "isnull requires a ptr variable or reference field, not a copied payload");
+      valid_view(value, expr.at);
+      auto result = scalar(Type::boolean, ir_.is_null(value.storage ? value.storage->address : value.native));
+      if (value.pointer) result.nonnull_when = std::pair{*value.pointer, false};
+      return result;
+    }
     std::vector<ConversionPoint> points;
     std::optional<std::vector<Value>> evaluated;
     const auto values = [&](bool read = true) -> const std::vector<Value> & {
@@ -2393,23 +2657,9 @@ class Compiler {
     }
     if (expr.text == "deref") {
       const auto &args = values();
-      if (args.size() != 1 || args[0].type.kind != Type::reference)
-        fail(expr.at, "deref requires a typed regional reference");
-      const auto type = resolve(*args[0].type.target, module, expr.at);
-      const auto target = ir_.referent(region_pointer(args[0], expr.at), args[0].native, type);
-      if (type.kind == Type::array || type.kind == Type::regional) {
-        auto result = scalar(type, ir_.read(target), args[0].region_id);
-        result.conformances = args[0].conformances;
-        result.read_only = args[0].read_only;
-        return contextual(std::move(result), module);
-      }
-      if (local_bits(type)) {
-        auto result = scalar(type, nullptr, args[0].region_id);
-        result.storage = StorageView{target.address, {}, {}};
-        result.read_only = args[0].read_only;
-        return result;
-      }
-      return loaded_value(type, ir_.read(target));
+      if (args.size() != 1 || (!args[0].storage && !object_type(args[0].type)))
+        fail(expr.at, "deref requires an object or storage view");
+      return read_value(args[0], expr.at);
     }
     if (expr.text == "len" || expr.text == "ref_at") {
       const auto &args = values();
@@ -2422,16 +2672,9 @@ class Compiler {
     if (expr.text == "store") {
       const auto &args = values();
       if (!args.empty() && args[0].read_only) fail(expr.at, "cannot store through a read-only view");
-      if (args.size() == 2 && args[0].type.kind == Type::reference &&
-          (numeric(*args[0].type.target) || *args[0].type.target == Type::boolean ||
-           args[0].type.target->kind == Type::quantity || args[0].type.target->kind == Type::exception)) {
-        auto value = args[1];
-        if (args[0].type.target->kind == Type::exception)
-          value = admit(std::move(value), *args[0].type.target, module, expr.at);
-        else require(value.type, *args[0].type.target, expr.at);
-        ir_.write(ir_.referent(region_pointer(args[0], expr.at), args[0].native, *args[0].type.target),
-                  stored_value(value, *args[0].type.target, expr.at));
-        return value;
+      if (args.size() == 2 && args[0].storage && local_bits(args[0].type)) {
+        write_bits(args[0], args[1], expr.at);
+        return args[1];
       }
       if (args.size() != 3) fail(expr.at, "store requires an array/index/value or scalar reference/value");
       const auto type = array_type(args[0], expr.at);
@@ -2449,13 +2692,15 @@ class Compiler {
       const auto target = object.type.kind == Type::reference ? *object.type.target : object.type;
       if (target.kind != Type::regional)
         fail(expr.at, "setfield requires a regional record view or reference");
+      check_nullable(object, expr.at);
       const auto type = resolve(target, module, expr.at);
-      auto value = expression(*expr.children[2], module, env, locals, function_context);
+      auto value = expression(*expr.children[2], module, env, locals, function_context, false);
       const auto &fields = products_.at(type.identity).fields;
       for (size_t i = 0; i < fields.size(); ++i) {
         if (fields[i].name != expr.children[1]->text) continue;
         const auto field = fields[i].type;
-        if (value.type == Type::null_ref && field.kind == Type::reference) value.type = field;
+        if (field.kind == Type::reference) value = reference_source(std::move(value), *field.target, *object.region_id, fields[i].declaration_kind == "ref", expr.at);
+        else value = read_value(std::move(value), expr.at);
         if (field.kind == Type::exception) value = admit(std::move(value), field, module, expr.at);
         else require(value.type, field, expr.at);
         if (field.kind == Type::reference && value.region_id && value.region_id != object.region_id)
@@ -2470,8 +2715,10 @@ class Compiler {
           value = contextual(std::move(value), module);
         }
 
-        ir_.write(ir_.field(region_pointer(object, expr.at), object.native, type, i, field), stored_value(value, field, expr.at));
-        return value;
+        const auto slot = ir_.field(region_pointer(object, expr.at), object.native, type, i, field);
+        if (fields[i].declaration_kind == "ref") ir_.require_representable_reference(slot, value.native);
+        ir_.write(slot, stored_value(value, field, expr.at));
+        return field.kind == Type::reference ? target_view(std::move(value), expr.at) : value;
       }
       fail(expr.at, "no such regional field '" + expr.children[1]->text + "'");
     }
@@ -2506,26 +2753,7 @@ class Compiler {
         fail(expr.at, "scalar requires one UoM value");
       return {representation(args[0].type), args[0].native, {}, nullptr};
     }
-    if (expr.intrinsic) fail(expr.at, "no builtin implementation for intrinsic (" + expr.text + ") with these arguments");
-    const auto information = lookup_callable(module, expr.text, expr.at);
-    const auto &functions = information.methods;
-    if (functions.empty()) {
-      if (!information.identities.empty())
-        fail(expr.at, "callable '" + expr.text + "' has no method implementation" +
-                     (information.declarations.empty() ? std::string{} :
-                      "\n" + location_text(information.declarations.front().form->at) + ": note: callable signature declared here"));
-      if (expr.text == "=" || expr.text == "[]=")
-        fail(expr.at, "unavailable operation overload '(" + expr.text + ")'");
-      fail(expr.at, "unavailable lexical function '" + expr.text + "'");
-    }
-    const auto &args = values(false);
-    auto selected = method(expr.text, module, args, expr.at);
-    if (!selected && functions.size() == 1) {
-      const auto &candidate = functions.front();
-      return call_method({candidate, std::vector<Route>(args.size()), information.declarations}, args, expr.at, env, function_context || function_result, module, points);
-    }
-    if (!selected) method_failure(expr.text, args, functions, expr.at, false, module);
-    return call_method(*selected, args, expr.at, env, function_context || function_result, module, points);
+    fail(expr.at, "no builtin implementation for intrinsic (" + expr.text + ") with these arguments");
   }
   Value unary_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                          bool function_context, bool function_result = false) {
@@ -2544,7 +2772,9 @@ class Compiler {
     if (expr.text == "-" && floating(value.type))
       return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
     require(value.type, expr.text == "!" ? Type::boolean : Type::integer, expr.at);
-    return scalar(value.type, ir_.unary(value.type, expr.text, value.native));
+    auto result = scalar(value.type, ir_.unary(value.type, expr.text, value.native));
+    if (expr.text == "!" && value.nonnull_when) result.nonnull_when = std::pair{value.nonnull_when->first, !value.nonnull_when->second};
+    return result;
   }
   Value binary_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context, bool function_result = false) {
@@ -2623,6 +2853,8 @@ class Compiler {
     for (const auto &completion : completions) {
       require(completion.value.type, result.type, at);
       result.read_only = result.read_only || completion.value.read_only;
+      result.nullable = result.nullable || completion.value.nullable;
+      result.nonnull_when.reset();
       if (!result.type.owned && (storage_owner(completion.value) != storage_owner(result) ||
                                 bool(completion.value.storage) != bool(result.storage)))
         fail(at, "borrowed control-flow results require one storage owner and reference category");
@@ -2665,10 +2897,10 @@ class Compiler {
     return result;
   }
   Value try_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                       bool function_context) {
+                       bool function_context, bool copy_bits = false) {
     const bool parent_module = module_top_level_;
     const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
-    std::array<const Expression *, 3> catches{};
+    std::array<const Expression *, 4> catches{};
     const Expression *finally = nullptr;
     for (size_t i = 1; i < expr.children.size(); ++i) {
       const auto &clause = *expr.children[i];
@@ -2686,7 +2918,11 @@ class Compiler {
     }
     HandlerScope protected_scope{ir_.scope(), holdings_.size(), {}};
     handlers_.push_back(&protected_scope);
-    auto normal = block(*expr.children.front(), module, env, locals.nested(), function_context);
+    Value normal;
+    {
+      const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, npe_allowed_ || catches[3]);
+      normal = block(*expr.children.front(), module, env, locals.nested(), function_context, false, {}, copy_bits);
+    }
     handlers_.pop_back();
 
     auto *join = ir_.label("try.result");
@@ -2694,7 +2930,7 @@ class Compiler {
     const auto complete = [&](Value result) {
       if (result.type == Type::never) { ir_.restore(protected_scope.cleanup); return; }
       if (finally) {
-        const auto finished = block(*finally, module, env, locals.nested(), function_context);
+        const auto finished = block(*finally, module, env, locals.nested(), function_context, false, {}, copy_bits);
         require(finished.type, Type::void_type, finally->at);
         if (finished.type == Type::never) { ir_.restore(protected_scope.cleanup); return; }
       }
@@ -2721,7 +2957,7 @@ class Compiler {
     };
     const auto propagate = [&](Value error) {
       if (finally) {
-        auto finished = block(*finally, module, env, locals.nested(), function_context);
+        auto finished = block(*finally, module, env, locals.nested(), function_context, false, {}, copy_bits);
         require(finished.type, Type::void_type, finally->at);
         if (finished.type == Type::never) return;
       }
@@ -2743,7 +2979,7 @@ class Compiler {
       Value result;
       {
         const auto active = llvm::SaveAndRestore(caught_exception_, std::optional(error));
-        result = block(*clause->children.front(), module, env, std::move(inner_locals), function_context);
+        result = block(*clause->children.front(), module, env, std::move(inner_locals), function_context, false, {}, copy_bits);
       }
       if (finally) handlers_.pop_back();
       complete(result);
@@ -2754,7 +2990,7 @@ class Compiler {
     return join_completions(completions, expr.at, parent_module);
   }
   Value conditional_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                          bool function_context) {
+                          bool function_context, bool copy_bits = false) {
     const auto condition = expression(*expr.children[0], module, env, locals, function_context);
     require(condition.type, Type::boolean, expr.at);
 
@@ -2763,19 +2999,21 @@ class Compiler {
     const auto before = flow_state();
     const auto native_scope = ir_.scope();
     auto native_branch = ir_.branch(condition.native);
-    auto first = block(*expr.children[1], module, env, locals.nested(), function_context);
+    if (condition.nonnull_when && condition.nonnull_when->second) pointers_.at(condition.nonnull_when->first).view.nullable = false;
+    auto first = block(*expr.children[1], module, env, locals.nested(), function_context, false, {}, copy_bits);
     if (first.type.owned) first = take_owner(first, expr.at);
     ir_.restore(native_scope);
     auto first_state = flow_state();
     ir_.otherwise(native_branch);
     restore_flow(before);
-    auto second = block(*expr.children[2], module, env, locals.nested(), function_context);
+    if (condition.nonnull_when && !condition.nonnull_when->second) pointers_.at(condition.nonnull_when->first).view.nullable = false;
+    auto second = block(*expr.children[2], module, env, locals.nested(), function_context, false, {}, copy_bits);
     if (second.type.owned) second = take_owner(second, expr.at);
     ir_.restore(native_scope);
     if (first.type == Type::null_ref && second.type.kind == Type::reference) {
-      first.type = second.type; first.region_id = second.region_id; first.conformances = second.conformances;
+      first.type = second.type; first.region_id = second.region_id; first.conformances = second.conformances; first.nullable = true;
     } else if (second.type == Type::null_ref && first.type.kind == Type::reference) {
-      second.type = first.type; second.region_id = first.region_id; second.conformances = first.conformances;
+      second.type = first.type; second.region_id = first.region_id; second.conformances = first.conformances; second.nullable = true;
     }
     std::vector<Completion> completions;
     if (first.type != Type::never) completions.push_back({first, native_branch.first_end, std::move(first_state)});
@@ -2787,17 +3025,139 @@ class Compiler {
     return join_completions(completions, expr.at, parent_module);
   }
   Value expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                   bool function_context, bool read = true) {
-    auto result = evaluate(expr, module, env, locals, function_context);
+                   bool function_context, bool read = true, bool copy_bits = false) {
+    if (clang::isStackNearlyExhausted()) {
+#if LLVM_ENABLE_THREADS
+      Value result;
+      std::exception_ptr error;
+      // WPO can have deep source call paths. Use Clang's existing stack
+      // support, and resume C++ diagnostics on the originating stack.
+      clang::runWithSufficientStackSpace([] {}, [&] {
+        try { result = expression(expr, module, env, locals, function_context, read, copy_bits); }
+        catch (...) { error = std::current_exception(); }
+      });
+      if (error) std::rethrow_exception(error);
+      return result;
+#else
+      fail(expr.at, "compiler stack capacity exhausted while elaborating this expression");
+#endif
+    }
+    auto result = evaluate(expr, module, env, locals, function_context, copy_bits);
     if (result.type == Type::never) throw EndPath{};
+    if (copy_bits && local_bits(result.type)) return bits_value(read_value(std::move(result), expr.at));
     return read ? read_value(std::move(result), expr.at) : result;
   }
+  Value declaration_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
+                         bool function_context) {
+    using K = Expression::Kind;
+      for (const auto &declaration : expr.children) {
+        if (declaration->kind == K::block) {
+          block(*declaration, module, env, locals.nested(), function_context, true);
+          continue;
+        }
+        // Resolve the complete RHS before introducing this name, including the
+        // transfer shorthand's source when it shadows an outer binding.
+        auto value = expression(*declaration->children.front(), module, env, locals, function_context, false, expr.declaration_kind == "val" && declaration->children.front()->kind != K::make_local);
+        if (value.type.kind == Type::region) fail(declaration->at, "a whole-region binding requires a region declaration, not ptr");
+        if (expr.declaration_kind == "ref" && value.type.kind == Type::reference)
+          value = target_view(std::move(value), declaration->at);
+        if (expr.declaration_kind == "ptr" && value.type.kind == Type::reference && declaration->annotation &&
+            declaration->annotation->kind != Type::reference)
+          value = target_view(std::move(value), declaration->at);
+        if (value.procedure && expr.declaration_kind == "ref" && expr.fixed_binding) {
+          declare_local(locals, declaration->text, std::move(value), module, declaration->at);
+          continue;
+        }
+        std::optional<Value> owner;
+        if (!declaration->owner_name.empty()) {
+          const auto found = locals.visible.find(declaration->owner_name);
+          if (found == locals.visible.end()) fail(declaration->at, "unavailable pointer owner '" + declaration->owner_name + "'");
+          owner = found->second;
+          if (owner->type.kind != Type::region) fail(declaration->at, "an explicit pointer owner must name a region");
+        }
+        if (value.type == Type::null_ref) {
+          if (expr.declaration_kind != "ptr" || declaration->binding != "=" || !declaration->annotation)
+            fail(declaration->at, "null initialization requires ptr, an explicit target type, and '='");
+          value = null_target(resolve(*declaration->annotation, module, declaration->at), owner, declaration->at);
+        } else {
+          if (declaration->annotation) value = admit(std::move(value), resolve(*declaration->annotation, module, declaration->at), module, declaration->at);
+          if (owner && storage_owner(value) != storage_owner(*owner)) fail(declaration->at, "pointer initializer does not belong to its declared owner");
+          const bool explicit_local = declaration->children.front()->kind == K::make_local;
+          if (declaration->binding == "<-" || (expr.declaration_kind == "val" && !explicit_local) ||
+              (!value.storage && local_bits(value.type))) {
+            auto target = local_storage(value.type, declaration->at);
+            write_bits(target, value, declaration->at);
+            value = std::move(target);
+          }
+        }
+        if (expr.declaration_kind == "val") {
+          if (!local_bits(value.type)) fail(declaration->at, "val declarations require bits storage");
+          if (owner) fail(declaration->at, "val local storage belongs to its lexical scope");
+          value.read_only = expr.fixed_binding;
+          value.pointer.reset();
+          declare_local(locals, declaration->text, std::move(value), module, declaration->at);
+        } else {
+          if (expr.declaration_kind == "ref" && value.nullable)
+            fail(declaration->at, "ref requires a proven non-null target");
+          declare_pointer(locals, declaration->text, std::move(value), module, declaration->at, false, expr.fixed_binding,
+                          expr.declaration_kind == "ref");
+        }
+      }
+      return {};
+  }
+  Value field_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
+                         bool function_context) {
+      const auto value = expression(*expr.children[0], module, env, locals, function_context);
+      if (value.type.kind == Type::exception) {
+        if (expr.text == "category") return scalar(Type::uint64, exception_category(value));
+        if (expr.text == "cause_count") return scalar(Type::uint64, ir_.cause_count(value.native));
+        const std::array<std::string_view, 3> fields{"site", "requested", "available"};
+        const auto field = std::find(fields.begin(), fields.end(), expr.text);
+        if (field == fields.end()) fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
+        return scalar(Type::uint64, ir_.exception_field(value.native, unsigned(field - fields.begin())));
+      }
+      if (value.type.kind != Type::regional)
+        fail(expr.at, "field access requires a product value; dereference regional pointers first");
+      const auto &fields = products_.at(value.type.identity).fields;
+      for (size_t i = 0; i < fields.size(); ++i) {
+        if (fields[i].name != expr.text) continue;
+        if (fields[i].type.kind == Type::reference) {
+          const auto slot = ir_.field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type);
+          const auto offset = ir_.read(slot);
+          auto result = scalar(fields[i].type, offset, value.region_id);
+          result.nullable = true;
+          result.reference_field = slot;
+          result.pointer_view = true;
+          result.required_reference = fields[i].declaration_kind == "ref";
+          if (fields[i].declaration_kind == "ref" || fields[i].declaration_kind == "ptr") {
+            result.type = *fields[i].type.target;
+            result.nullable = fields[i].declaration_kind == "ptr";
+            if (local_bits(result.type)) {
+              result.storage = StorageView{ir_.nullable_address(slot.owner, offset), {}, {}};
+              result.native = nullptr;
+            }
+          }
+          result.conformances = value.conformances;
+          result.read_only = value.read_only;
+          return contextual(std::move(result), module);
+        }
+        const auto target = ir_.field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type);
+        if (local_bits(fields[i].type)) {
+          auto result = scalar(fields[i].type, nullptr, value.region_id);
+          result.storage = StorageView{target.address, {}, {}};
+          result.read_only = value.read_only;
+          return result;
+        }
+        return loaded_value(fields[i].type, ir_.read(target));
+      }
+      fail(expr.at, "no field '" + expr.text + "' in " + type_name(value.type));
+  }
   Value evaluate(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                 bool function_context) {
+                 bool function_context, bool copy_bits = false) {
     const auto location = ir_.source_location(expr.at);
     using K = Expression::Kind;
     switch (expr.kind) {
-    case K::try_scope: return try_expression(expr, module, env, locals, function_context);
+    case K::try_scope: return try_expression(expr, module, env, locals, function_context, copy_bits);
     case K::handler: fail(expr.at, "catch requires an enclosing try");
     case K::raise: {
       Value error;
@@ -2811,6 +3171,7 @@ class Compiler {
         if (cause.type.kind != Type::exception) fail(expr.at, "an explicit cause requires an intrinsic exception value");
         error.native = ir_.exception_chain(error.native, cause.native, exception_category(cause));
       }
+      if (may_be_npe(exception_category(error))) require_npe_handler(expr.at);
       raise_exception(error);
       return scalar(Type::never, nullptr);
     }
@@ -2850,26 +3211,7 @@ class Compiler {
       return scalar(type, ir_.floating_literal(type, spelling));
     }
     case K::boolean: return scalar(Type::boolean, ir_.bits(Type::boolean, expr.text == "true"));
-    case K::pointer_group: {
-      for (const auto &declaration : expr.children) {
-        if (declaration->kind == K::block) {
-          block(*declaration, module, env, locals.nested(), function_context, true);
-          continue;
-        }
-        // Resolve the complete RHS before introducing this name, including the
-        // transfer shorthand's source when it shadows an outer binding.
-        auto value = expression(*declaration->children.front(), module, env, locals, function_context, false);
-        if (value.type.kind == Type::region) fail(declaration->at, "a whole-region binding requires a region declaration, not ptr");
-        if (declaration->annotation) value = admit(std::move(value), resolve(*declaration->annotation, module, declaration->at), module, declaration->at);
-        if (declaration->binding == "<-" || (!value.storage && local_bits(value.type))) {
-          auto target = local_storage(value.type, declaration->at);
-          write_bits(target, value, declaration->at);
-          value = std::move(target);
-        }
-        declare_pointer(locals, declaration->text, std::move(value), module, declaration->at, false, expr.fixed_binding);
-      }
-      return {};
-    }
+    case K::pointer_group: return declaration_expression(expr, module, env, locals, function_context);
     case K::pointer: fail(expr.at, "ptr declarator requires a declaration group");
     case K::make_local: {
       const auto type = expr.annotation ? resolve(*expr.annotation, module, expr.at) :
@@ -2892,53 +3234,8 @@ class Compiler {
       declare_local(locals, expr.text, value, module, expr.at);
       return {};
     }
-    case K::let: {
-      auto value = expression(*expr.children[0], module, env, locals, function_context);
-      if (value.type == Type::void_type) fail(expr.at, "a lexical value cannot be void");
-      if (expr.annotation) {
-        const auto declared = resolve(*expr.annotation, module, expr.at);
-        if (declared.owned && expr.binding != "<-") fail(expr.at, "an owning declaration requires <-");
-        value = admit(std::move(value), declared, module, expr.at);
-      }
-      if (value.type.kind == Type::region) fail(expr.at, "a whole-region binding requires a region declaration, not let");
-      // The pre-ptr surface remains value-binding compatibility for scalar fixtures.
-      if (local_bits(value.type)) value = bits_value(std::move(value));
-      value.pointer.reset();
-      declare_local(locals, expr.text, value, module, expr.at);
-      return value;
-    }
-    case K::field: {
-      const auto value = expression(*expr.children[0], module, env, locals, function_context);
-      if (value.type.kind == Type::exception) {
-        if (expr.text == "category") return scalar(Type::uint64, exception_category(value));
-        if (expr.text == "cause_count") return scalar(Type::uint64, ir_.cause_count(value.native));
-        const std::array<std::string_view, 3> fields{"site", "requested", "available"};
-        const auto field = std::find(fields.begin(), fields.end(), expr.text);
-        if (field == fields.end()) fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
-        return scalar(Type::uint64, ir_.exception_field(value.native, unsigned(field - fields.begin())));
-      }
-      if (value.type.kind != Type::regional)
-        fail(expr.at, "field access requires a product value; dereference regional pointers first");
-      const auto &fields = products_.at(value.type.identity).fields;
-      for (size_t i = 0; i < fields.size(); ++i) {
-        if (fields[i].name != expr.text) continue;
-        if (fields[i].type.kind == Type::reference) {
-          auto result = scalar(fields[i].type, ir_.read(ir_.field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type)), value.region_id);
-          result.conformances = value.conformances;
-          result.read_only = value.read_only;
-          return contextual(std::move(result), module);
-        }
-        const auto target = ir_.field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type);
-        if (local_bits(fields[i].type)) {
-          auto result = scalar(fields[i].type, nullptr, value.region_id);
-          result.storage = StorageView{target.address, {}, {}};
-          result.read_only = value.read_only;
-          return result;
-        }
-        return loaded_value(fields[i].type, ir_.read(target));
-      }
-      fail(expr.at, "no field '" + expr.text + "' in " + type_name(value.type));
-    }
+
+    case K::field: return field_expression(expr, module, env, locals, function_context);
     case K::index: {
       auto array = expression(*expr.children[0], module, env, locals, function_context);
       auto index = expression(*expr.children[1], module, env, locals, function_context);
@@ -3014,12 +3311,12 @@ class Compiler {
     case K::rebind: return rebind_expression(expr, module, env, locals, function_context);
     case K::allocate: return allocate_expression(expr, module, env, locals, function_context);
     case K::range_for: case K::fold: return loop_expression(expr, module, env, locals, function_context);
-    case K::block: return block(expr, module, env, locals.nested(), function_context);
+    case K::block: return block(expr, module, env, locals.nested(), function_context, false, {}, copy_bits);
     case K::call: return call_expression(expr, module, env, locals, function_context);
     case K::perform: case K::behave: return invoke(expr, module, env, locals, function_context);
     case K::unary: return unary_expression(expr, module, env, locals, function_context);
     case K::binary: return binary_expression(expr, module, env, locals, function_context);
-    case K::conditional: return conditional_expression(expr, module, env, locals, function_context);
+    case K::conditional: return conditional_expression(expr, module, env, locals, function_context, copy_bits);
     }
     fail(expr.at, "unsupported expression");
   }
@@ -3203,7 +3500,7 @@ class Compiler {
       return expr.kind == Expression::Kind::range_for && expr.children.size() == 4 &&
              context_dependent(*expr.children[3], lexical, locals);
     }
-    if (expr.kind == Expression::Kind::let || expr.kind == Expression::Kind::region_binding) locals.insert(expr.text);
+    if (expr.kind == Expression::Kind::region_binding || expr.kind == Expression::Kind::pointer) locals.insert(expr.text);
     return false;
   }
   static bool context_dependent(const Method &method) {
@@ -3435,6 +3732,7 @@ class Compiler {
     // encounter reuses the incorporated module's resources, never its effects.
     if (module.state == Module::State::complete) return;
     if (module.state == Module::State::executing) fail(at, "cyclic module execution is outside the first prototype");
+    const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, false);
     const auto module_scope = llvm::SaveAndRestore(module_top_level_, true);
     const auto scope_id = scopes_.size();
     scopes_.push_back(true); // Module storage remains live through process exit.
@@ -3554,7 +3852,8 @@ class Compiler {
         break;
       }
       case Form::Kind::expression:
-        expression(*form.body, module, env, locals, false);
+        expression(*form.body, module, env, locals, false, form.body->kind != Expression::Kind::rebind &&
+                   !(form.body->kind == Expression::Kind::call && form.body->text == "="));
         break;
       case Form::Kind::using_resource: case Form::Kind::import_resource: case Form::Kind::mixin_resource: {
         const bool mixing = form.kind == Form::Kind::mixin_resource;
@@ -3681,6 +3980,7 @@ public:
     });
   }
   Compilation compile(const std::filesystem::path &entry) {
+    clang::noteBottomOfStack(true);
     auto &module = load(entry.string(), {entry.string()});
     // All source files have been parsed before any execution semantics are lowered.
 

@@ -164,8 +164,8 @@ def main():
         results.append(run(executable, root, entry, '32\n', '16-unit-reexports-31-conversion-steps-with-cycle'))
 
         (directory / 'regional-types.cod').write_text(
-            'data Node { value::f32; next::ref<Node>; }\n'
-            'function create(region arena, value::f32)::ref<Node> { alloc arena Node(value, null) }\n'
+            'data Node { value::f32; ptr next::Node; }\n'
+            'function create(region arena, value::f32)::Node { alloc arena Node(value, null) }\n'
             'export Node;\nexport create;\n')
         (directory / 'regional-interface.cod').write_text('type Link;\nexport Link;\n')
         depth = 96
@@ -176,25 +176,25 @@ def main():
         (directory / 'regional-adapter.cod').write_text(
             'export import "regional-types.cod" Node;\nusing "regional-interface-0.cod" Link;\ndata Node <: Link;\n')
         (directory / 'regional-rank.cod').write_text(
-            'using "regional-interface.cod" Link;\nfunction score(node::Link)::i64 { -1 }\nexport score;\n')
+            'using "regional-interface.cod" Link;\nfunction score(node::Link in O)::i64 where {owner O} { -1 }\nexport score;\n')
         for name, value in [('first', 2), ('second', 3)]:
             (directory / f'regional-rank-{name}.cod').write_text(
                 'using "regional-adapter.cod" Node;\n'
                 'import "regional-rank.cod" score as weight;\n'
-                f'function weight(node::Node)::i64 {{ {value} }}\n'
+                f'function weight(node::Node in O)::i64 where {{owner O}} {{ {value} }}\n'
                 'import "regional-0.cod" shared_measure as chain;\n'
-                'function measure(node::Node)::i64 { chain(node) }\nexport weight;\nexport measure;\n')
-        (directory / 'regional-vocabulary.cod').write_text('using "regional-types.cod" Node;\nsymbol @root :: ref<Node>;\nexport @root;\n')
+                'function measure(node::Node in O)::i64 where {owner O} { chain(node) }\nexport weight;\nexport measure;\n')
+        (directory / 'regional-vocabulary.cod').write_text('using "regional-types.cod" Node;\nsymbol @root :: Node;\nexport @root;\n')
         (directory / 'regional-body.cod').write_text(
-            'using "regional-types.cod" Node;\n'
+            'using "regional-types.cod" Node;\nusing "std:exceptions" NullPointerException;\n'
             'symbol from "regional-vocabulary.cod" @root as @input;\n'
-            'symbol @walk :: proc() -> ref<Node>;\nfunction find(node::Node)::ref<Node> { node.next }\n'
-            'procedure @walk()::ref<Node> { find(deref(@input)) }\nexport @walk;\n')
+            'symbol @walk :: proc() -> Node throws NullPointerException;\nfunction find(node::Node in O)::Node throws NullPointerException where {owner O} { node.next }\n'
+            'procedure @walk()::Node throws NullPointerException { find(deref(@input)) }\nexport @walk;\n')
         for i in range(depth):
-            body = ('using "regional-types.cod" Node;\nusing "regional-interface.cod" Link as Root;\n'
+            body = ('using "std:exceptions" NullPointerException;\nusing "regional-types.cod" Node;\nusing "regional-interface.cod" Link as Root;\n'
                     f'using "regional-interface-{i}.cod" Link;\n')
             body += ('symbol from "regional-vocabulary.cod" @root;\n'
-                     f'symbol @node{i} :: ref<Node>;\neffect @node{i} = @root;\nsymbol @walk :: proc() -> ref<Node>;\n')
+                     f'symbol @node{i} :: Node;\neffect @node{i} = @root;\nsymbol @walk :: proc() -> Node throws NullPointerException;\n')
             if i + 1 < depth:
                 body += f'using "regional-{i+1}.cod" find as next;\nusing "regional-{i+1}.cod" retain as retain_next;\n'
                 body += f'using "regional-{i+1}.cod" measure as measure_next;\n'
@@ -202,13 +202,13 @@ def main():
             body += 'using "regional-rank.cod" score as weigh;\n'
             if i + 1 < depth:
                 body += f'import "regional-{i+1}.cod" shared_measure as shared_next;\n'
-            body += 'function shared_measure(node::Link)::i64 { '
+            body += 'function shared_measure(node::Link in O)::i64 where {owner O} { '
             body += ('shared_next(node) + ' if i + 1 < depth else '') + 'weigh(node) }\n'
             body += 'function borrow(region arena)-> region { ' + ('borrow_next(arena)' if i + 1 < depth else 'arena') + ' }\n'
-            body += 'function retain(node::Link)::Root { ' + ('retain_next(node)' if i + 1 < depth else 'node') + ' }\n'
-            body += f'function rank(node::Link)::i64 {{ {i} }}\nfunction rank(node::Root)::i64 {{ -1 }}\n'
-            body += 'function measure(node::Link)::i64 { rank(node)' + (' + measure_next(node)' if i + 1 < depth else '') + ' }\n'
-            body += 'function find(node::Node)::ref<Node> { '
+            body += 'function retain(node::Link in O)::Root where {owner O} { ' + ('retain_next(node)' if i + 1 < depth else 'node') + ' }\n'
+            body += f'function rank(node::Link in O)::i64 where {{owner O}} {{ {i} }}\nfunction rank(node::Root in O)::i64 where {{owner O}} {{ -1 }}\n'
+            body += 'function measure(node::Link in O)::i64 where {owner O} { rank(node)' + (' + measure_next(node)' if i + 1 < depth else '') + ' }\n'
+            body += 'function find(node::Node in O)::Node throws NullPointerException where {owner O} { '
             body += ('next(deref(node.next))' if i + 1 < depth else 'node.next') + ' }\n'
             source = f'regional-{i+1}.cod' if i + 1 < depth else 'regional-body.cod'
             role = f'node{i+1}' if i + 1 < depth else 'input'
@@ -217,10 +217,10 @@ def main():
             body += f'export @node{i};\n'
             (directory / f'regional-{i}.cod').write_text(body)
         entry = directory / 'regional-main.cod'
-        entry.write_text('using symbol "std:io" @print;\nusing symbol "std:io" @assert;\n'
+        entry.write_text('using symbol "std:io" @print;\nusing symbol "std:io" @assert;\nusing "std:exceptions" NullPointerException;\n'
                          'using "regional-adapter.cod" Node;\nusing "regional-types.cod" create;\n'
                          'symbol from "regional-vocabulary.cod" @root as @head;\n'
-                         'region symbol @arena;\nsymbol @tail :: ref<Node>;\nsymbol @alternate :: ref<Node>;\n'
+                         'region symbol @arena;\nsymbol @tail :: Node;\nsymbol @alternate :: Node;\n'
                          'effect @arena <- region(16384u64);\n'
                          'effect @tail = alloc @arena Node(11.0f32, null);\n'
                          f'effect @head = fold (i in 0u32 .. {depth}u32, node = @tail) {{\n'
@@ -229,20 +229,20 @@ def main():
                          'behave @print(retain(deref(@head)).value);\n'
                          'using "regional-0.cod" measure;\nbehave @print(measure(deref(@head)));\n'
                          'symbol from "regional-0.cod" @node0 as @selected;\n'
-                         'behave @print(deref(find(deref(@head))).value);\n'
+                         'try {behave @print(deref(find(deref(@head))).value)} catch(e::const NullPointerException){behave @assert(false)};\n'
                          'setfield(@tail, value, 29.0f32);\n'
-                         'behave @print(deref(find(deref(@head))).value);\n'
+                         'try {behave @print(deref(find(deref(@head))).value)} catch(e::const NullPointerException){behave @assert(false)};\n'
                          'using "regional-0.cod" borrow;\n'
-                         '{\nlet original = @arena;\nlet old_used = used_bytes(original);\n'
+                         '{\nregion original = @arena;\nval old_used = used_bytes(original);\n'
                          'effect @arena <- region(4096u64);\n'
-                         'let borrowed = borrow(@arena);\nlet initial = used_bytes(borrowed);\n'
+                         'region borrowed = borrow(@arena);\nval initial = used_bytes(borrowed);\n'
                          'effect @alternate = create(borrowed, 47.0f32);\n'
                          'behave @assert(used_bytes(borrowed) > initial);\n'
                          'behave @assert(used_bytes(original) == old_used);\n'
                          'setfield(@alternate, next, @alternate);\n'
                          'effect @selected = @alternate;\n'
-                         'behave @print(deref(perform @walk()).value);\n'
-                         'behave @print(deref(behave @walk()).value);\n};\n'
+                         'try {behave @print(deref(perform @walk()).value)} catch(e::const NullPointerException){behave @assert(false)};\n'
+                         'try {behave @print(deref(behave @walk()).value)} catch(e::const NullPointerException){behave @assert(false)};\n};\n'
                          'using "regional-rank-first.cod" measure as first;\n'
                          'using "regional-rank-second.cod" measure as second;\n'
                          'using "regional-0.cod" shared_measure;\n'

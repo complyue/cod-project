@@ -1,3 +1,4 @@
+using "std:exceptions" NullPointerException;
 using symbol "std:io" @assert;
 using symbol "std:io" @print;
 using "std:exceptions" SystemException;
@@ -16,15 +17,15 @@ function capacity_failure(fallback::SystemException)::SystemException {
   } catch(error) { error }
 }
 function selected(index::u64, errors::SystemException...)::SystemException { errors[index] }
-proc check() -> void {
+proc check() -> void throws NullPointerException {
   try {
     owned region invalid::Packet <- make Packet(capacity=0u64){sequence<-0u64};
     {}
   } catch(seed) {
-    let initial = try {throw seed} catch(exact::const InvalidCapacity) {exact};
-    let secondary = capacity_failure(seed);
-    let first = chain(secondary, initial);
-    let second = chain(initial, first);
+    val initial = try {throw seed} catch(exact::const InvalidCapacity) {exact};
+    val secondary = capacity_failure(seed);
+    val first = chain(secondary, initial);
+    val second = chain(initial, first);
     behave @assert(first.category == 2u64 && first.cause_count == 1u64);
     behave @assert(second.category == 3u64 && second.cause_count == 2u64);
     behave @assert(cause_at(second, 0u64).category == 2u64);
@@ -33,9 +34,9 @@ proc check() -> void {
     behave @assert(cause_at(second, 1u64).requested == 0u64);
     behave @assert(cause_at(second, 0u64).site == secondary.site);
     behave @assert(cause_at(second, 1u64).site == initial.site);
-    let replaced = chain(second, initial);
+    val replaced = chain(second, initial);
     behave @assert(replaced.cause_count == 1u64 && second.cause_count == 2u64);
-    let self = chain(first, first);
+    val self = chain(first, first);
     behave @assert(self.cause_count == 2u64 && first.cause_count == 1u64);
 
     owned region saved::Saved <- make Saved(capacity=256u64){error<-second; exact<-initial};
@@ -44,9 +45,9 @@ proc check() -> void {
     try {throw root(saved).error} catch(error::const RegionCapacityExceeded) {
       behave @assert(error.requested == 8u64)
     };
-    let record = alloc saved Saved(second, initial);
+    ref record = alloc saved Saved(second, initial);
     setfield(root(saved), error, deref(record).error);
-    let escaped = {
+    val escaped = {
       owned region temporary::Saved <- make Saved(capacity=72u64){error<-first; exact<-initial};
       root(temporary).error
     };
@@ -55,7 +56,7 @@ proc check() -> void {
       behave @assert(error.cause_count == 1u64)
     };
     for(i in 0u64 .. 2u64) {
-      let error = selected(i, secondary, second);
+      val error = selected(i, secondary, second);
       behave @assert(error.category == 2u64 + i);
       try {throw error}
       catch(capacity_error::const RegionCapacityExceeded) {behave @assert(i == 0u64)}
@@ -68,4 +69,4 @@ proc check() -> void {
     behave @print(1)
   }
 }
-check();
+try { check(); } catch (unexpected::const NullPointerException) { behave @assert(false); };

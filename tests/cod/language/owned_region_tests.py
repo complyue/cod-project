@@ -67,15 +67,15 @@ function read(region p::Packet)::u64 {root(p).sequence}
 '''
 
 REJECTS = {
-    "stale-reference-comparison": ('data Node {value::u64;} function compare()::bool {'
+    "stale-borrow-argument": ('data Node {value::u64;} function match(node::Node in O, value::u64)::bool where {owner O} {node.value == value} function compare()::bool {'
                                    'owned region p::Packet <- make Packet(capacity=64u64){sequence<-1u64};'
-                                   'let n=alloc p Node(2u64); n == {drop(p); null}} compare();',
+                                   'ref n=alloc p Node(2u64); match(n, {drop(p); 0u64})} compare();',
                                    "requires a live owning region"),
     "consumed-name": ('proc test()->void {owned region p::Packet <- fresh(); drop(p); read(p); {}} test();',
                       "owner has been consumed"),
     "escaping-view": ('function bad()::Packet {owned region p::Packet <- fresh(); root(p)} bad();',
                       "result would outlive its owning scope"),
-    "ended-effect-owner": ('proc test()->void {owned region p::Packet <- fresh(); let v=root(p); '
+    "ended-effect-owner": ('proc test()->void {owned region p::Packet <- fresh(); ref v=root(p); '
                            '{effect @state <- p; {}}; v.sequence; {}} test();', "requires a live owning region"),
     "conditional-consumption": ('proc test(flag::bool)->void {owned region p::Packet <- fresh(); '
                                 'if(flag){drop(p)}else{}; read(p); {}} test(true);', "owner has been consumed"),

@@ -10,7 +10,7 @@ for (i in 0u32 .. 3u32) {
     behave @assert(perform @inspect() == @original);
     behave @assert(behave @inspect() > @original);
     behave @assert(capacity_bytes(@a) > @original);
-    let selected = if (i == 1u32) { behave @inspect() } else { perform @inspect() };
+    val selected = if (i == 1u32) { behave @inspect() } else { perform @inspect() };
     behave @assert(if (i == 1u32) { selected > @original } else { selected == @original });
     true
   };

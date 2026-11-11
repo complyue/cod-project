@@ -4,7 +4,7 @@ using "world-second.cod" second;
 region symbol @arena;
 effect @arena <- region(4096u64);
 {
-  let b = second(@arena);
+  ref b = second(@arena);
   relay(b);
   local_score(b);
 };

@@ -1,16 +1,17 @@
+using "std:exceptions" NullPointerException;
 using units "reusable-pool.cod" {Slot};
 using "reusable-pool.cod" Payloads;
 using "reusable-pool.cod" Links;
 using "pool-adapter.cod" Pool;
 using "pool-adapter.cod" locate;
 region symbol @arena;
-{
-  let escaped = {
+try {
+  ref escaped = {
     effect @arena <- region(4096u64);
-    let payloads = alloc @arena Payloads(1u64, 17);
-    let links = alloc @arena Links(1u64, Slot(1u32));
-    let pool = deref(alloc @arena Pool(Slot(0u32), payloads, links));
+    ref payloads = alloc @arena Payloads(1u64, 17);
+    ref links = alloc @arena Links(1u64, Slot(1u32));
+    ref pool = deref(alloc @arena Pool(Slot(0u32), payloads, links));
     locate(pool, Slot(0u32))
   };
   deref(escaped)
-};
+} catch(e::const NullPointerException) {};

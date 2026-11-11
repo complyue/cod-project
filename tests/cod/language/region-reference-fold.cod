@@ -1,21 +1,20 @@
 using symbol "std:io" @print;
-data Node { value::i64; next::ref<Node>; }
+data Node { value::i64; ptr next::Node; }
 region symbol @arena;
-symbol @tail :: ref<Node>;
-symbol @middle :: ref<Node>;
-symbol @head :: ref<Node>;
-function walk(start::ref<Node> in O1, count::u32)::ref<Node> where {owner O1} {
-  fold (i in 0u32 .. count, node = start) {
-    if (node == null) { node } else { deref(node).next }
-  }
-}
-function value(node::ref<Node> in O1)::i64 where {owner O1} {
-  if (node == null) { -1 } else { deref(node).value }
+symbol @tail :: Node;
+symbol @middle :: Node;
+symbol @head :: Node;
+function walk_value(start::Node in O1, count::u32)::const i64 where {owner O1} {
+  ptr node = start;
+  for (i in 0u32 .. count) {
+    if (!isnull(node)) { node = node.next; {} } else {};
+  };
+  if (isnull(node)) { -1 } else { node.value }
 }
 effect @arena <- region(4096u64);
 effect @tail = alloc @arena Node(3, null);
 effect @middle = alloc @arena Node(2, @tail);
 effect @head = alloc @arena Node(1, @middle);
-for (i in 0u32 .. 5u32) { behave @print(value(walk(@head, i))); };
+for (i in 0u32 .. 5u32) { behave @print(walk_value(@head, i)); };
 setfield(@tail, next, @head);
-behave @print(value(walk(@head, 4u32)));
+behave @print(walk_value(@head, 4u32));

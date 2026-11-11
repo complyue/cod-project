@@ -11,14 +11,14 @@ function (<-)(dst::Node in d, src::const Node in s) -> const Node in d
   dst
 }
 {
-  let first = deref(alloc @a Node(1));
-  let second = deref(alloc @b Node(9));
+  ref first = deref(alloc @a Node(1));
+  ref second = deref(alloc @b Node(9));
   effect @object = first;
-  let result = @object <- second;
+  ref result = @object <- second;
   behave @assert(result.value == 107);
   setfield(first, value, 108);
   behave @assert(result.value == 108);
   behave @assert(@object.value == 108);
-  let explicit = (<-)(@object, second);
+  ref explicit = (<-)(@object, second);
   behave @assert(explicit.value == 107);
 };

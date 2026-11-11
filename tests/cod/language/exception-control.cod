@@ -1,3 +1,4 @@
+using "std:exceptions" NullPointerException;
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
 using "std:exceptions" InvalidCapacity;
@@ -20,7 +21,7 @@ function forward(error::InvalidCapacity)::i64 { throw error }
 function forward_bool(error::InvalidCapacity)::bool { throw error }
 
 for (i in 0 .. 2) {
-  let answer = try {
+  val answer = try {
     effect @level <- 2;
     effect @arena <- region(if (i == 0) { 0u64 } else { 128u64 });
     10
@@ -44,7 +45,7 @@ try {
   try {
     effect @level <- 3;
     effect @arena <- region(64u64);
-    let values = alloc @arena Values(100u64, 0u64);
+    ref values = alloc @arena Values(100u64, 0u64);
     behave @print(len(values))
   } catch (error :: const InvalidCapacity) {
     behave @print(999)
@@ -92,10 +93,10 @@ try {
   catch (first) {
     try {
       effect @arena <- region(64u64);
-      let values = alloc @arena Values(100u64, 0u64);
+      ref values = alloc @arena Values(100u64, 0u64);
       {}
     } catch (second) {
-      let selected = fold (i in 0 .. 2, error = first) {
+      val selected = fold (i in 0 .. 2, error = first) {
         if (i == 0) { second } else { error }
       };
       throw selected;
@@ -103,7 +104,7 @@ try {
   }
 } catch (error :: const RegionCapacityExceeded) {
   behave @assert(error.requested == 800u64)
-};
+} catch (unexpected::const NullPointerException) {behave @assert(false)};
 {
   effect @level <- 8;
   effect @arena <- region(8192u64);

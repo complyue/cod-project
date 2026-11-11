@@ -1,7 +1,7 @@
-data Node { value::u64; next::ref<Node>; }
-data Packet { sequence::u64; head::ref<Node>; }
+data Node { value::u64; ptr next::Node; }
+data Packet { sequence::u64; ptr head::Node; }
 function fresh(bytes::u64, value::u64)-> owned region ::Packet {
-  make Packet(capacity = bytes) { sequence <- value; head <- null }
+  make Packet(capacity = bytes) { sequence <- value; head = null }
 }
 function forward(owned region packet::R)-> owned region ::R where R { packet }
 function inspect(region packet::R)::R where R { root(packet) }

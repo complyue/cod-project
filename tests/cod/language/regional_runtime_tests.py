@@ -259,7 +259,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="cod-regional-layout-") as temporary:
         scratch = Path(temporary)
         entry = scratch / "main.cod"
-        entry.write_text((directory / "region-records.cod").read_text() + "\nsetfield(@tail, next, @head);\n")
+        entry.write_text((directory / "region-records.cod").read_text() + "\ntry {setfield(@tail, next, @head)} catch(e::const NullPointerException){behave @assert(false)};\n")
         output, records = run_case(root, toolchain, entry, scratch, HARNESS)
         if output != ["5.5", "10.5", "true"]:
             raise RuntimeError("The source fixture did not retain its expected result: " + repr(output))

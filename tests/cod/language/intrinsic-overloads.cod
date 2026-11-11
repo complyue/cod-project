@@ -13,15 +13,15 @@ function pure(value::i64(B))::i64(B) { store(value, 4) }
 global saved::i64(B) = store(B(5), 4);
 array Values[u32]::i64;
 region symbol @arena;
-symbol @values :: ref<Values>;
-symbol @cell :: ref<C>;
+symbol @values :: Values;
+symbol @cell :: C;
 symbol @run :: proc(i64) -> i64;
 symbol @len :: i64;
 effect @len <- 99;
 effect @arena <- region(4096u64);
 effect @values = alloc @arena Values(3u64, 0);
 effect @cell = alloc @arena C(2);
-symbol @scores :: ref<Scores>;
+symbol @scores :: Scores;
 effect @scores = alloc @arena Scores(2u64, 0);
 effect @bias <- 1;
 procedure @run(value::i64)::i64 { store(@cell, value) + i64(len(value)) }
@@ -45,9 +45,9 @@ behave @print(scalar(B(5) + 1));
 
 using symbol "intrinsic-library.cod" @raw_store;
 array Rates[u32]::f32;
-symbol @rates :: ref<Rates>;
+symbol @rates :: Rates;
 effect @rates = alloc @arena Rates(1u64, 0.0f32);
-procedure (store)(target::ref<f32> in O1, value::f32)::f32 where {owner O1} {
+procedure (store)(target::f32 in O1, value::f32)::f32 where {owner O1} {
   behave @raw_store(target, if (value < 0.0f32) { 0.0f32 } else { value })
 }
 behave @print(store(ref_at(@rates, 0u32), -2.0f32));

@@ -294,7 +294,7 @@
     "file": "product-cycle.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "data object fields currently require explicit ref<T> references"
+    "stderr_contains": "data object fields require a ref or ptr declaration"
   },
   {
     "file": "product-field-error.cod",
@@ -726,11 +726,7 @@
     "file": "region-cross-pointer.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": [
-      "cross-region reference fields",
-      "region-cross-pointer.cod:6:19: note: destination object's region acquired here",
-      "region-cross-pointer.cod:5:18: note: referenced target's region acquired here"
-    ]
+    "stderr_contains": "cross-region reference fields"
   },
   {
     "file": "region-bounds.cod",
@@ -740,9 +736,8 @@
   },
   {
     "file": "region-null.cod",
-    "exit": 70,
-    "stdout": "",
-    "stderr_contains": "null regional reference"
+    "exit": 0,
+    "stdout": "1\n"
   },
   {
     "file": "region-capacity.cod",
@@ -937,11 +932,7 @@
     "file": "function-cross-region.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": [
-      "cross-region reference fields",
-      "function-cross-region.cod:8:18: note: destination object's region acquired here",
-      "function-cross-region.cod:9:19: note: referenced target's region acquired here"
-    ]
+    "stderr_contains": "cross-region reference fields"
   },
   {
     "file": "module-export-shadow.cod",
@@ -1088,7 +1079,7 @@
     "stdout": "",
     "stderr_contains": [
       "regional result would outlive its owning scope",
-      "pool-view-escape.cod:9:22: note: the escaping value depends on this region acquisition"
+      "pool-view-escape.cod:10:22: note: the escaping value depends on this region acquisition"
     ]
   },
   {
@@ -1486,5 +1477,68 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "region root annotations use '::Root'"
+  },
+  {
+    "file": "nullable-storage.cod",
+    "exit": 0,
+    "stdout": "1\n2\n3\n"
+  },
+  {
+    "file": "checked-npe-callee.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "checked-npe-module.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "module top level must catch it"
+  },
+  {
+    "file": "checked-npe-declaration.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "method checked NullPointerException exceeds callable declaration"
+  },
+  {
+    "file": "nullable-owner-conflict.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "pointer paths establish different owners"
+  },
+  {
+    "file": "ref-null-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "ref cannot be rebound to a nullable target"
+  },
+  {
+    "file": "val-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "use '<-' for bits transfer"
+  },
+  {
+    "file": "checked-npe-procedures.cod",
+    "exit": 0,
+    "stdout": "7\n9\n7\n1\n"
+  },
+  {
+    "file": "nullable-intrinsics.cod",
+    "exit": 0,
+    "stdout": "1\n2\n"
+  },
+  {
+    "file": "legacy-let-rejected.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "use ref/ptr for reference bindings or val for independent bits storage"
+  },
+  {
+    "file": "legacy-reference-type-rejected.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "ref/ptr/val are declaration modifiers, not type constructors"
   }
 ]

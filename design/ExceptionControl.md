@@ -1,8 +1,14 @@
 # CoD exception control and regional cleanup
 
-Design revision: 12 · Recorded: 2026-11-10 · Status: accepted exception/lifecycle contract; parameter syntax migration specified separately.
+Design revision: 16 · Recorded: 2026-11-10 · Status: accepted exception/lifecycle and checked-NPE contracts.
 
 ## Design authority
+
+- **Declaration cleanup:** [H-316](DesignAuthorityRegistry.md#h-316)/[K-442](DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](../tests/cod/language/declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. No nullable parameter/result grammar, reference-target allocation policy or general cyclic construction is selected. Existing pending qualifications remain pending.
+
+- **Native nullable-storage acceptance:** [K-441](DesignAuthorityRegistry.md#k-441) continues H-309–H-315 for the bounded field/val/checked-NPE implementation. [Evidence](../tests/cod/language/nullable-storage-validation.json) records the actual compiler, language cases, LLVM verification, relocated scalar/object reference fields and exceptional region cleanup. Nullability does not weaken definite initialization, fixed owners or readonly access. Automatic reference-target allocation and general cyclic ref publication remain outside this acceptance; H-316/K-442 covers declaration cleanup.
+
+- **Checked NPE and explicit bits storage:** [H-313–H-315](DesignAuthorityRegistry.md#h-313)/[K-440](DesignAuthorityRegistry.md#k-440) accepts checked NullPointerException, mandatory module-top-level handling and val locals/parameters; null is a reserved literal and isnull inspects a pointer without dereferencing it. C-72/P-280–P-282 preserves storage/access/lifetime rules, with a null-initialized local acquiring its fixed owner at the first non-null assignment. D-17 owns exception/signature obligations and D-14 owns ordinary storage/owner checks. No checked OOM, payload RTTI, implicit regional-object copy or per-object owner is introduced. Acceptance requires native execution plus rejection at uncovered calls, unsafe reads and inconsistent owner paths; evidence is recorded separately from this confirmed contract.
 
 - **Region-source continuity:** [H-307](DesignAuthorityRegistry.md#h-307)/[K-435](DesignAuthorityRegistry.md#k-435) updates region examples to the declaration-keyword surface in [D-14](RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language). C-70/P-270–P-271 preserves the intrinsic borrowed/owning distinction and existing lifecycle constraints. This revision changes source notation and evidence navigation only; it does not qualify pending transport, optional-owner, numeric or general graph contracts. Acceptance is coherent examples plus the migrated compiler/lifecycle checks recorded by K-435.
 
@@ -12,11 +18,11 @@ Design revision: 12 · Recorded: 2026-11-10 · Status: accepted exception/lifecy
 
 - **Current continuity:** [K-414](DesignAuthorityRegistry.md#k-414) continues H-267/H-269 with [the completed E1–E5 audit](../tests/cod/language/exception-ownership-validation.json). Retained causes, fallible explicit creation, storage, cleanup and regional lifetimes have focused native evidence; no general RTTI or wider qualifier choice is made.
 
-- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 12, E1–E5 and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. K-408–K-413 retains the acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
+- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 16, E1–E5, checked NPE and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. K-408–K-413 retains the acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
 - **Value path:** C-63/P-235 → C-10 and D-17/P-236 → C-63: recoverable business failure must preserve explicit regional responsibility, effects and inspectable lifetimes. H-267 confirms this bounded path and scope under charter §§2–4, 6.2–6.3 and 12; it does not qualify unrelated ownership proposals.
 - **Dependencies / constraints:** P-237 links D-14's ownership/borrowing, P-238 links D-10's scoped bindings, and P-239 links D-01's allocation, allocator symmetry and relocation. H-180/H-181 preserves hidden/captured owners; H-262/H-263 separates consumed names from valid local views. H-265/P-240 supplies the unchecked-OOM constraint. H-251 reserves RTTI decisions for human discussion.
 - **Invariants / non-goals:** one cleanup responsibility per region; no per-object ownership, implicit owner resurrection, allocation-dependent OOM delivery, graph rollback, foreign-world editing or general RTTI decision. No C++ exception type or ABI becomes a CoD user type by implication.
-- **Acceptance:** nested normal/exceptional paths preserve values, cleanup and effect restoration; controlled construction failures neither leak nor double-release; invalid exceptional-path borrows reject. The focused E1–E5 audit above supplies current compiler/source hashes and actual evidence; it is not full-suite acceptance.
+- **Acceptance:** nested normal/exceptional paths preserve values, cleanup and effect restoration; controlled construction failures neither leak nor double-release; invalid exceptional-path borrows reject. K-441 supplies current compiler/source hashes and full language plus focused native acceptance; the earlier E1–E5 audit retains its recorded scope.
 
 ## Selected direction
 
@@ -27,6 +33,25 @@ CoD provides `try`, `catch` and `finally` control in the accepted contract. Ulti
 The initial error taxonomy distinguishes `OutOfMemory` (the memory provider cannot supply storage), `RegionCapacityExceeded` (placement exceeds an existing region's fixed budget), and `InvalidCapacity` (an invalid or unrepresentable capacity request). All three are unchecked; none implies automatic growth or retry.
 
 Compile-time type, moved-name, escape and binding errors remain compile errors. Other runtime checks are not all reclassified as catchable exceptions merely because OOM becomes catchable.
+
+## Checked NullPointerException
+
+H-313 accepts checked NPE: every potentially null dereference must be covered by a matching catch or declared by its immediately enclosing function/procedure with `throws NullPointerException`. Module top-level execution must handle it explicitly. A catch-all handles NPE when it covers the operation; no automatic boundary handler satisfies the source obligation. Null/default absence is not a substitute for definite payload initialization or valid owner lifetime.
+
+```text
+using "std:exceptions" NullPointerException;
+function following(n::Node in O) -> const i64
+  throws NullPointerException where {owner O} { n.next.count }
+try { following(node) } catch (e :: const NullPointerException) { 0 }
+```
+
+The exception name is selected and aliased through the normal type-identity rules. Throws may follow the result annotation or the where clause. It does not distinguish overloads. Bodyless contracts and symbolic procedure signatures retain the checked obligation; an implementation cannot expose more checked failure than its applicable declaration permits. A caller handles declared NPE even if a particular specialization does not throw. An outer caller's catch cannot excuse an undeclared callee body, and WPO inlining does not erase that boundary. Functions may throw/catch without gaining dynamic-symbol access.
+
+Only a dereference creates the null-access obligation. `null` is a reserved literal, never a binding. `isnull(p)` evaluates its operand once and examines its reference without loading the target; merely rebinding a pointer with `=` does not dereference it. Ordinary payload argument evaluation, including copying bits into val, must account for null access in the caller. A valid non-null ref needs no NPE obligation. Stable pointer tests may establish a non-null view on the corresponding branch; mutations invalidate the fact, and checking a mutable field does not prove a later reload unchanged.
+
+A handler's NPE or rethrow and NPE from finally must satisfy the enclosing callable's own contract. A cause containing NPE does not alter the primary exception's matching category. Existing E1–E5 cleanup, explicit causes and replacement semantics remain. OutOfMemory, RegionCapacityExceeded and InvalidCapacity remain unchecked; type, expired-owner and definite-initialization errors remain compile errors. Checked metadata introduces no payload RTTI, allocation on throw, general exception-effect polymorphism or runtime initialization registry.
+
+Acceptance covers direct/module and callee-boundary rejection, explicit propagation, local handling and finally cleanup, bodyless and symbolic signatures, literal/test/rebind operations without target access, val argument evaluation, branch refinement and nullable loop paths. D-14 retains the reference initialization, same-owner, fixed-owner and current relative-encoding constraints. General exception payload graphs and unrelated deferred exception mechanisms remain outside this increment.
 
 ## Expression-oriented control
 

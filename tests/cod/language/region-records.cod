@@ -1,23 +1,28 @@
+using symbol "std:io" @assert;
+using "std:exceptions" NullPointerException;
 using symbol "std:io" @print;
 unit Weight;
 array Values[u32]::f32(Weight);
-data Node { effect::f32; next::ref<Node>; data::ref<Values>; }
+data Node { effect::f32; ptr next::Node; ptr data::Values; }
 region symbol @arena;
-symbol @values :: ref<Values>;
-symbol @tail :: ref<Node>;
-symbol @head :: ref<Node>;
-symbol @selected :: ref<Node>;
-function child(n::Node in O1)::ref<Node> where {owner O1} { n.next }
-function child_value(n::Node in O1)::f32 where {owner O1} { deref(child(n)).effect }
-function weight(n::Node in O1)::ref<f32(Weight)> where {owner O1} { ref_at(deref(n.data), 0u32) }
-function measure(n::Node in O1)::f32 where {owner O1} { n.effect + child_value(n) + scalar(deref(weight(n))) }
+symbol @values :: Values;
+symbol @tail :: Node;
+symbol @head :: Node;
+symbol @selected :: Node;
+function child(n::Node in O1)::Node throws NullPointerException where {owner O1} { n.next }
+function child_value(n::Node in O1)::f32 throws NullPointerException where {owner O1} { deref(child(n)).effect }
+function weight(n::Node in O1)::f32(Weight) throws NullPointerException where {owner O1} { ref_at(deref(n.data), 0u32) }
+function measure(n::Node in O1)::f32 throws NullPointerException where {owner O1} { n.effect + child_value(n) + scalar(deref(weight(n))) }
 effect @arena <- region(8192u64);
 effect @values = alloc @arena Values(2u64, Weight(0.25f32));
 effect @tail = alloc @arena Node(2.0f32, null, @values);
 effect @head = alloc @arena Node(3.0f32, @tail, @values);
+try {
 store(weight(deref(@head)), Weight(0.5f32));
 behave @print(measure(deref(@head)));
 effect @selected = child(deref(@head));
 setfield(@selected, effect, 7.0f32);
 behave @print(measure(deref(@head)));
-behave @print(deref(@tail).next == null);
+behave @print(isnull(deref(@tail).next));
+
+} catch (unexpected::const NullPointerException) { behave @assert(false); };

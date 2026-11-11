@@ -17,13 +17,13 @@ function alternate(first::Values in O1, second::Values in O2, steps::u32)::Value
 region symbol @arena;
 effect @arena <- region(1024u64);
 {
-  let result = accumulate(8, deref(alloc @arena Sum(0.0f32, 0)));
+  ref result = accumulate(8, deref(alloc @arena Sum(0.0f32, 0)));
   behave @print(result.total);
   behave @print(result.count);
-  let first = deref(alloc @arena Values(1u64, 10));
-  let second = deref(alloc @arena Values(1u64, 20));
+  ref first = deref(alloc @arena Values(1u64, 10));
+  ref second = deref(alloc @arena Values(1u64, 20));
   behave @print(alternate(first, second, 0u32)[0u32]);
-  let final = alternate(first, second, 3u32);
+  ref final = alternate(first, second, 3u32);
   behave @print(first[0u32]);
   behave @print(final[0u32]);
 };

@@ -2,7 +2,7 @@ using "method-view-library.cod" Sample;
 function score(x::Sample in O1)::i64 where {owner O1} { 13 }
 function (len)(x::bool)::i64 { 7 }
 function run(region arena)::i64 {
-  let sample = create(arena);
+  ref sample = create(arena);
   score(sample) + through(sample) + len(sample) + len(false)
 }
 

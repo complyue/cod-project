@@ -1,6 +1,6 @@
 symbol @bias :: i64;
 symbol @missing :: i64;
-proc @raw_store(target::ref<f32> in O1, value::f32)::const f32 where {owner O1};
+proc @raw_store(target::f32 in O1, value::f32)::const f32 where {owner O1};
 unit Box;
 data Cell { value::i64; }
 unit Index;
@@ -10,7 +10,7 @@ function (len)(value::i64(Box))::u64 { u64(scalar(value)) }
 procedure (len)(value::i64)::u64 { u64(value + @bias) }
 procedure (len)(value::bool)::u64 { u64(@missing) }
 function (store)(value::i64(Box), amount::i64)::i64(Box) { Box(scalar(value) + amount) }
-procedure (<-)(cell::ref<Cell> in O1, amount::i64)::const ref<Cell> in O1 where {owner O1} {
+procedure (<-)(cell::Cell in O1, amount::i64)::const Cell in O1 where {owner O1} {
   setfield(cell, value, amount + @bias);
   cell
 }
@@ -18,18 +18,18 @@ function ([]=)(value::i64(Box) in O, index::u32(Index), amount::i64)::const i64(
   value <- Box(scalar(value) + i64(scalar(index)) + amount);
   value
 }
-procedure ([]=)(values::ref<Scores> in O1, index::u32(Index), amount::i64)::const i64 in O1 where {owner O1} {
+procedure ([]=)(values::Scores in O1, index::u32(Index), amount::i64)::const i64 in O1 where {owner O1} {
   store(values, index, amount + @bias);
   values[index]
 }
-procedure (store)(cell::ref<Cell> in O1, amount::i64)::i64 where {owner O1} {
+procedure (store)(cell::Cell in O1, amount::i64)::i64 where {owner O1} {
   setfield(cell, value, twice(amount) + @bias)
 }
 function (+)(value::i64(Box), step::i64)::i64(Box) { Box(scalar(value) + step) }
-procedure (+)(cell::ref<Cell> in O1, step::i64)::i64 where {owner O1} {
+procedure (+)(cell::Cell in O1, step::i64)::i64 where {owner O1} {
   setfield(cell, value, deref(cell).value + step + @bias)
 }
-procedure @raw_store(target::ref<f32> in O1, value::f32)::const f32 where {owner O1} { store(target, value) }
+procedure @raw_store(target::f32 in O1, value::f32)::const f32 where {owner O1} { store(target, value) }
 
 export (+);
 export (<-);

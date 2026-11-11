@@ -165,6 +165,7 @@ struct Type {
   std::vector<Type> parameters;
   std::vector<Type> bounds;
   std::vector<Type> owner_bounds;
+  std::vector<Type> throws_types;
   std::vector<size_t> owners;
   std::vector<bool> const_views;
   bool variadic = false;
@@ -174,7 +175,7 @@ struct Type {
   bool operator==(const Type &other) const {
     return kind == other.kind && name == other.name && identity == other.identity &&
            parameters == other.parameters && bounds == other.bounds && variadic == other.variadic && owned == other.owned &&
-           owner_bounds == other.owner_bounds && owners == other.owners && const_views == other.const_views &&
+           throws_types == other.throws_types && owner_bounds == other.owner_bounds && owners == other.owners && const_views == other.const_views &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
   }
 };
@@ -231,7 +232,7 @@ inline std::string type_name(const Type &type) {
   case Type::abstract_type: return type.name;
   case Type::region: return std::string(type.owned ? "owned " : "") + "region" +
                            (type.target ? " ::" + type_name(*type.target) : "");
-  case Type::reference: return "ref<" + type_name(*type.target) + ">";
+  case Type::reference: return "stored reference to " + type_name(*type.target);
   case Type::null_ref: return "null";
   case Type::arguments: return "variadic arguments";
   case Type::parameter: return "type parameter " + std::to_string(type.identity + 1);
@@ -244,7 +245,7 @@ inline std::string type_name(const Type &type) {
 struct Form;
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect,
-                    block, conditional, field, let, range_for, fold, allocate, index, null_ref,
+                    block, conditional, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding };
   Kind kind;
@@ -258,6 +259,8 @@ struct Expression {
   std::shared_ptr<Form> definition = {};
   bool intrinsic = false;
   bool fixed_binding = false;
+  std::string declaration_kind = {};
+  std::string owner_name = {};
 };
 using Expr = std::unique_ptr<Expression>;
 
@@ -270,6 +273,7 @@ struct Parameter {
   bool variadic = false;
   std::string owner = {};
   bool read_only = false;
+  std::string declaration_kind = {};
 };
 struct TypeParameter { std::string name; std::optional<Type> bound; Location at; };
 struct OwnerParameter { std::string name; std::optional<Type> root; Location at; bool explicit_parameter = false; };
@@ -299,6 +303,7 @@ struct Form {
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
   std::vector<TypeParameter> type_parameters;
+  std::vector<Type> throws_types;
   std::vector<OwnerParameter> owner_parameters;
   std::shared_ptr<SymbolOwner> symbol_owner;
   std::string result_owner;
@@ -322,7 +327,7 @@ inline int binary_precedence(const std::string &op) {
 }
 
 inline bool intrinsic_name(std::string_view name) {
-  return name == "cause_at" || name == "region" || name == "root" || name == "used_bytes" || name == "capacity_bytes" ||
+  return name == "isnull" || name == "cause_at" || name == "region" || name == "root" || name == "used_bytes" || name == "capacity_bytes" ||
          name == "deref" || name == "len" || name == "ref_at" || name == "store" ||
          name == "setfield" || name == "scalar" || name == "i64" || name == "u8" ||
          name == "u32" || name == "u64" || name == "f32" || name == "f64";
@@ -330,11 +335,11 @@ inline bool intrinsic_name(std::string_view name) {
 
 inline bool expression_keyword(std::string_view name) {
   return name == "true" || name == "false" || name == "null" || name == "alloc" ||
-         name == "for" || name == "fold" || name == "let" || name == "effect" ||
+         name == "for" || name == "fold" || name == "var" || name == "let" || name == "effect" ||
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "proc" || name == "global" || name == "symbol" ||
          name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "from" ||
-         name == "make" || name == "owned" || name == "touch" || name == "ptr" || name == "typeof" || name == "intrinsic" || name == "const";
+         name == "val" || name == "ref" || name == "throws" || name == "make" || name == "owned" || name == "touch" || name == "ptr" || name == "typeof" || name == "intrinsic" || name == "const";
 }
 
 inline bool module_keyword(std::string_view name) {
@@ -427,15 +432,11 @@ class Parser {
       }
       expect("->");
       type.target = std::make_shared<Type>(signature_type());
+      if (take("throws")) type.throws_types.push_back(parse_type());
       return type;
     }
-    if (token.text == "ref") {
-      expect("<");
-      Type type{Type::reference};
-      type.target = std::make_shared<Type>(parse_type());
-      expect(">");
-      return type;
-    }
+    if (token.text == "ref" || token.text == "ptr" || token.text == "val")
+      fail(token.at, "ref/ptr/val are declaration modifiers, not type constructors; name the target type directly");
     Type type{Type::named, token.text};
     if (token.text == "i64") type = Type::integer;
     else if (token.text == "u8") type = Type::uint8;
@@ -520,7 +521,8 @@ class Parser {
           const bool owned_region = take("owned");
           const bool regional = take("region");
           if (owned_region && !regional) fail(peek().at, "owned requires a region declaration");
-          if (!regional) take("ptr");
+          std::string mode;
+          if (!regional && (is("ptr") || is("ref") || is("val"))) mode = tokens_[cursor_++].text;
           auto param = value_name();
           Parameter parameter{param.text, Type::void_type, param.at, false, {}};
           if (regional) {
@@ -531,7 +533,9 @@ class Parser {
             parameter.read_only = take("const");
             parameter.type = parse_type(&parameter);
           }
+          parameter.declaration_kind = mode;
           if (take("in")) parameter.owner = ordinary_name().text;
+          if (mode == "val" && !parameter.owner.empty()) fail(param.at, "a val parameter has callee-local bits storage, not an external owner");
           if (parameter.type == Type::void_type) fail(param.at, "a parameter must have a value type");
           parameter.variadic = take("...");
           form.parameters.push_back(std::move(parameter));
@@ -546,6 +550,7 @@ class Parser {
       form.result_type = signature_type();
       if (take("in")) form.result_owner = ordinary_name().text;
     }
+    if (take("throws")) form.throws_types.push_back(parse_type());
     if (take("where")) {
       const bool grouped = take("{");
       do {
@@ -566,6 +571,10 @@ class Parser {
         form.type_parameters.push_back(std::move(type_parameter));
       } while (grouped && take(","));
       if (grouped) expect("}");
+    }
+    if (take("throws")) {
+      if (!form.throws_types.empty()) fail(peek().at, "duplicate throws clause");
+      form.throws_types.push_back(parse_type());
     }
     for (auto &parameter : form.parameters) {
       if (parameter.type.kind != Type::region) continue;
@@ -628,7 +637,8 @@ class Parser {
       expect("{");
       while (!take("}")) {
         auto field = make(Expression::Kind::field, field_name());
-        expect("<-");
+        if (take("=")) field->binding = "=";
+        else { expect("<-"); field->binding = "<-"; }
         field->children.push_back(expression());
         expr->children.push_back(std::move(field));
         if (!is("}")) expect(";");
@@ -698,15 +708,18 @@ class Parser {
       }
       return expr;
     }
-    if (is("ptr") || (is("const") && is("ptr", 1))) {
+    if (is("ptr") || is("ref") || is("val") || (is("const") && (is("ptr", 1) || is("ref", 1) || is("val", 1)))) {
       const bool fixed = take("const");
-      expect("ptr");
+      const auto mode = tokens_[cursor_++].text;
       auto group = make(Expression::Kind::pointer_group, token);
       group->fixed_binding = fixed;
+      group->declaration_kind = mode;
       do {
         if (is("{")) { group->children.push_back(block()); break; }
         auto expr = make(Expression::Kind::pointer, value_name());
+        expr->declaration_kind = mode;
         if (take("::")) expr->annotation = parse_type();
+        if (take("in")) expr->owner_name = ordinary_name().text;
         if (take("<-")) expr->binding = "<-";
         else { expect("="); expr->binding = "="; }
         expr->children.push_back(expression());
@@ -714,14 +727,9 @@ class Parser {
       } while (take(","));
       return group;
     }
-    if (take("let")) {
-      auto expr = make(Expression::Kind::let, value_name());
-      if (take("::")) expr->annotation = parse_type();
-      if (take("<-")) expr->binding = "<-";
-      else { expect("="); expr->binding = "="; }
-      expr->children.push_back(expression());
-      return expr;
-    }
+    if (is("let") || is("var"))
+      fail(token.at, "use ref/ptr for reference bindings or val for independent bits storage");
+
     if (take("effect")) {
       if (is("proc") || is("procedure")) {
         auto definition = std::make_shared<Form>();
@@ -976,11 +984,14 @@ public:
         while (!take("}")) {
           if (is("region") || (is("owned") && is("region", 1)))
             fail(peek().at, "region handles cannot be stored in user data fields");
+          std::string mode;
+          if (is("ref") || is("ptr") || is("val")) mode = tokens_[cursor_++].text;
           auto field = name(TokenKind::identifier);
           type_separator();
           auto type = parse_type();
           if (type == Type::void_type) fail(field.at, "a product field must have a value type");
           form->parameters.push_back({field.text, type, field.at, false, {}});
+          form->parameters.back().declaration_kind = mode;
           if (!is("}")) expect(";");
         }
         take(";");

@@ -13,7 +13,7 @@ function bounded(x::T)::i64 where T { 1 }
 function bounded(x::T in O1)::i64 where {T <: Metric, owner O1} { 2 }
 proc @variadic(first::T, rest::T...) -> T where T { forwarded(first, rest...) }
 {
-  let sample = deref(alloc @arena Sample(7));
+  ref sample = deref(alloc @arena Sample(7));
   behave @print(score(sample));
   behave @print(measure(sample));
   behave @print(forwarded(10));

@@ -1,0 +1,56 @@
+using symbol "std:io" @assert;
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+data Node { val count::i64; ptr next::Node; ptr number::i64; }
+data Link { val padding::i64; ref node::Node; ref number::i64; }
+function copy(val n::i64) -> const i64 { n <- 99; n }
+function successor(n::Node in O) -> const i64 throws NullPointerException where {owner O} { n.next.count }
+owned region r::Node <- make Node(capacity = 4096u64) { count <- 12; next = null; number = null };
+{
+  val a::i64 <- 3;
+  ref alias = a;
+  alias <- 4;
+  behave @assert(a == 4 && copy(a) == 99 && a == 4);
+  ptr p::i64 = null;
+  behave @assert(isnull(p));
+  val known_null = make local typeof(isnull(p)) { true };
+  behave @assert(known_null);
+  p = a;
+  p <- 5;
+  behave @assert(a == 5 && !isnull(p));
+  behave @assert(isnull(p = null));
+  try { val copied <- p; behave @print(999); } catch (error :: const NullPointerException) { behave @print(1); };
+  p = a;
+  if (!isnull(p)) { ref certain = p; certain <- 6; {} } else {};
+  behave @assert(a == 6);
+  ref n = root(r);
+  behave @assert(isnull(n.next));
+  val payload_type = make local typeof(n.number) { 11 };
+  behave @assert(payload_type == 11);
+  try { successor(n); {} } catch (error :: const NullPointerException) { behave @print(2); };
+  n.next = n;
+  n.number = n.count;
+  ptr edge::Node = n.next;
+  edge = null;
+  behave @assert(isnull(edge) && !isnull(n.next));
+  val deferred = make local i64;
+  deferred <- 17;
+  behave @assert(deferred == 17);
+  try { behave @assert(n.next.count == 12 && n.number == 12); n.number <- 13; {} } catch (error :: const NullPointerException) { behave @print(999); };
+  behave @assert(n.count == 13);
+  ref link = alloc r Link(0, n, n.count);
+  behave @assert(link.node.count == 13 && link.number == 13);
+  n.next = null;
+  behave @assert(isnull(n.next));
+  ptr maybe::i64 = null;
+  if (a == 6) { maybe = a; {} } else {};
+  try { behave @assert(maybe == 6); } catch (e :: const NullPointerException) { behave @assert(false); };
+  p = a;
+  val misses <- 0;
+  for (i in 0 .. 2) {
+    try { val sampled <- p; } catch (e :: const NullPointerException) { misses <- misses + 1; {} };
+    p = null;
+  };
+  behave @assert(misses == 1 && isnull(p));
+  behave @print(3);
+};

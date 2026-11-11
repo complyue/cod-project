@@ -4,7 +4,7 @@ using "module-export-adapter.cod" public_read;
 region symbol @arena;
 effect @arena <- region(4096u64);
 {
-  let packet = create(@arena);
+  ref packet = create(@arena);
   behave @print(read(packet));
   behave @print(public_read(packet));
 };

@@ -112,7 +112,9 @@ CHAIN_FAILURE_SOURCE = '''
 using symbol "std:io" @assert;
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemory;
+using "std:exceptions" NullPointerException;
 data Packet {value::u64;}
+try {
 try {owned region invalid::Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
 catch(seed) {
   owned region keep::Packet <- make Packet(capacity=16u64){value<-7u64};
@@ -121,7 +123,7 @@ catch(seed) {
       behave @assert(error.cause_count == 0u64)
     }
   };
-  let first = try {throw seed from seed} catch(error) {error};
+  val first = try {throw seed from seed} catch(error) {error};
   try {
     owned region inner::Packet <- make Packet(capacity=16u64){value<-0u64};
     throw first from seed
@@ -132,9 +134,10 @@ catch(seed) {
     behave @assert(root(keep).value == 7u64);
     behave @print(10)
   };
-  let retry = try {throw first from first} catch(error) {error};
+  val retry = try {throw first from first} catch(error) {error};
   behave @assert(retry.cause_count == 2u64 && first.cause_count == 1u64)
 };
+} catch(unexpected::const NullPointerException) {behave @assert(false)};
 '''
 
 
@@ -246,17 +249,22 @@ extern "C" void cod_lang_region_free(void *owner) {
         print("PASS: uncaught rethrow runs inner cleanup, both finally blocks and module cleanup")
         loop = scratch / "uncaught-chain.cod"
         loop.write_text('''using "std:exceptions" SystemException;
+using "std:exceptions" NullPointerException;
+using symbol "std:io" @assert;
 data Packet {value::u64;}
 data Saved {error::SystemException;}
 try {owned region invalid::Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
 catch(seed) {
   owned region saved::Saved <- make Saved(capacity=64u64){error<-seed};
   for(i in 0 .. 2) {
-    if(i == 1) {throw root(saved).error} else {};
-    let cause = try {
+    if(i == 1) {
+      try {throw root(saved).error}
+      catch(unexpected::const NullPointerException) {behave @assert(false);}
+    } else {};
+    val cause = try {
       owned region small::Packet <- make Packet(capacity=1u64){value<-0u64}; seed
     } catch(error) {error};
-    let chained = try {throw seed from cause} catch(error) {error};
+    val chained = try {throw seed from cause} catch(error) {error};
     setfield(root(saved), error, chained)
   }
 };
@@ -283,8 +291,8 @@ static const int audit = [] {
         uncaught_chain = subprocess.run([str(executable)], text=True, capture_output=True, timeout=30)
         diagnostic = uncaught_chain.stderr.splitlines()
         assert uncaught_chain.returncode == 70 and len(diagnostic) == 2, uncaught_chain
-        assert "uncaught InvalidCapacity" in diagnostic[0] and "uncaught-chain.cod:4:" in diagnostic[0], diagnostic
-        assert "caused by RegionCapacityExceeded" in diagnostic[1] and "uncaught-chain.cod:10:" in diagnostic[1], diagnostic
+        assert "uncaught InvalidCapacity" in diagnostic[0] and "uncaught-chain.cod:6:" in diagnostic[0], diagnostic
+        assert "caused by RegionCapacityExceeded" in diagnostic[1] and "uncaught-chain.cod:15:" in diagnostic[1], diagnostic
         assert uncaught_chain.stdout == "uncaught chain cleanup passed\n", uncaught_chain
         evidence["uncaught_chain"] = {"exit": 70, "diagnostics": diagnostic, "released_owners": 2,
                                       "later_emitted_cause_site_resolved": True, "chain_storage_released": True}

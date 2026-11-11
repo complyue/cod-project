@@ -1,3 +1,4 @@
+using "std:exceptions" NullPointerException;
 using units "pool-units.cod" {GlobalSetId};
 using units "region-gather-types.cod" {Neuron};
 using "region-gather-types.cod" Frame;
@@ -5,7 +6,7 @@ using "region-gather-types.cod" Incoming;
 using "pool-layout.cod" Layout;
 using "pool-index.cod" SetLocation;
 using "region-gather-kernel.cod" gather;
-function step(input::Frame in O1, output::ref<Frame> in O2, graph::Incoming in O3, layout::Layout in O4, location::ref<SetLocation> in O5)::void where {owner O1, owner O2, owner O3, owner O4, owner O5} {
+function step(input::Frame in O1, output::Frame in O2, graph::Incoming in O3, layout::Layout in O4, location::SetLocation in O5)::void throws NullPointerException where {owner O1, owner O2, owner O3, owner O4, owner O5} {
   for (n in 0u32 .. u32(len(input))) {
     store(output, Neuron(n), gather(input, graph, layout, GlobalSetId(u64(n)), location));
   }

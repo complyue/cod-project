@@ -1,10 +1,10 @@
 data Node { value::i64; }
-data Choice { next::ref<Node>; }
-function (=)(lhs::ref<Node> in O, rhs::const ref<Choice> in O) -> ref<Node> in O where {owner O} {
+data Choice { ptr next::Node; }
+function (=)(lhs::Node in O, rhs::const Choice in O) -> Node in O where {owner O} {
   lhs = deref(rhs).next;
   lhs
 }
-function readonly(value::ref<Choice> in O) -> const ref<Choice> in O where {owner O} { value }
+function readonly(value::Choice in O) -> const Choice in O where {owner O} { value }
 region symbol @arena;
 effect @arena <- region(4096u64);
 { ptr node = alloc @arena Node(1);
