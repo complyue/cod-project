@@ -30,3 +30,6 @@ const ref factory:func[region first]()->func[region first]()->const u64 =
   };
 const ref nested = factory();
 behave @print(nested());
+function score(action:func[region specific]()->const u64) -> const u64 where {region specific:Extended} { 2u64 }
+function score(action:func[region general]()->const u64) -> const u64 where {region general:Counter} { 1u64 }
+behave @print(score(reader(second)));

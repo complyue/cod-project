@@ -1,11 +1,11 @@
 # Structural regions and regional closures: experimental comparison
 
-Design revision: 4 · Recorded: 2026-11-10 · Status: authorized experimental scope; final language selection pending.
+Design revision: 6 · Recorded: 2026-11-10 · Status: authorized experimental scope; final language selection pending.
 
 ## Design authority
 
-- Registry: [D-18](DesignAuthorityRegistry.md#d-18), revision 4, all sections; [H-324](DesignAuthorityRegistry.md#h-324)/[H-325](DesignAuthorityRegistry.md#h-325)/[K-450](DesignAuthorityRegistry.md#k-450).
-- Value path: D-18/P-293 to C-73/C-74 explores practical, explicit storage and lifetime contracts serving charter §§1–3 through C-65/C-39. H-324 explicitly authorizes autonomous alternative design, branch implementation and empirical comparison within repository principles; this does not approve every experimental mechanism as the final language.
+- Registry: [D-18](DesignAuthorityRegistry.md#d-18), revision 6, all sections; [H-324](DesignAuthorityRegistry.md#h-324)/[H-325](DesignAuthorityRegistry.md#h-325)/[K-452](DesignAuthorityRegistry.md#k-452).
+- Value path: D-18/P-293/P-294 to C-65/C-73/C-74 explores practical, explicit storage and lifetime contracts serving charter §§1–3 through C-65/C-39. H-324 explicitly authorizes autonomous alternative design, branch implementation and empirical comparison within repository principles; this does not approve every experimental mechanism as the final language.
 - Dependencies: D-14 owners/field kinds, D-13 storage policy, D-10 callables/effects, D-17 failures/scopes and D-16 fixed bits/future fractions. D-01 relocation/allocator invariants and D-15 module-world/TLS separation remain constraints.
 - Non-goals: new RTTI, bootstrap/toolchain work, SNN learning/model selection, per-object ownership, hidden heap closures, cross-region stored pointers, copying/moving regional objects or merging a final design without review.
 - Acceptance: native examples and meaningful rejection cases for at least two alternatives, full applicable language regression checks, targeted lifetime/relocation evidence, compact reproducible artifacts and a comparison of practical source use, complexity and limitations. Stop for human review at or before 48 active work hours; exclude waiting, with a conservative allowance for unmeasured baseline preparation.
@@ -159,3 +159,27 @@ Acceptance checks both branches with same-root/different-instance rejection, und
 C-01 validation records are separate from the initial A-01/B-01 checkpoints. Its positive examples include a typed callback factory returning another owner-anchored callback; its rejection cases also check local annotations, so `const ref` cannot bypass the owner contract. Branch-join diagnostics identify the acquisition sites of retained regions even when both alternatives display the same source-level owner alias.
 
 The [explicit-slot owner-contract checkpoint](../tests/cod/language/exploration/slots-owner-contract-validation.json) passes 280/280 language cases plus native ownership/exception/relocation and composition checks.
+
+
+### Same contract across both capture alternatives
+
+```text
+# A-01: owner-based body
+function reader(region state:Counter) -> func[region state]()->const u64 {
+    func () -> const u64 { state.ticks }
+}
+# B-01: explicitly selected regional slot
+function reader(region state:Counter) -> func[region state]()->const u64 {
+    func [ticks = state.ticks] () -> const u64 { ticks }
+}
+```
+
+A caller reads the same declared dependency in either branch. The actual region supplied as `state` must remain live, including through wrappers and typed local bindings. The region is named at the factory boundary; it need not be passed again on every callback invocation. The different capture expressions determine how the body accesses regional storage, not whether the callable's owner dependency is visible.
+
+The current prototypes intentionally keep both branches separate. Their common contract is useful evidence for later consolidation, but exact dependency sets, the annotation spelling and symbolic callable environments remain review choices. `main` keeps the baseline. This avoids folding the still-unsettled slot-alias semantics into an apparently settled foundation.
+
+Single-owner callable overloads use the declared region field requirement in specificity comparisons, just as direct region parameters do. Candidate diagnostics print the `where` owner constraints. The positive contract probe places the more specific overload before the general one and requires the structurally stronger match.
+
+The [implicit-owner contract checkpoint](../tests/cod/language/exploration/owners-owner-contract-validation.json) passes 275/275 language cases and the same native/composition checks, including root-requirement specificity.
+
+Final C-01 comparison: A-01 passes 275/275 language checks and B-01 passes 280/280, with native ownership/exception/relocation and composition checks passing for both. The final B-01 record includes matching hashes for the shared owner validation, binding and specificity logic against owner branch d3227f2. Both preserve their original capture mechanism; no final language choice or main merge accompanies the checkpoints.

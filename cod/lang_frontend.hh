@@ -1330,8 +1330,10 @@ class Compiler {
                           r.parameters[std::min(i, r.parameters.size() - 1)], widening)) return false;
     const auto root_constraint = [&](const Method &method, size_t index) -> std::optional<Type> {
       const auto &parameter = parameter_at(*method.form, index);
+      const auto &name = parameter.owner.empty() && parameter.type.capture_owners.size() == 1
+          ? parameter.type.capture_owners.front() : parameter.owner;
       for (const auto &owner : method.form->owner_parameters)
-        if (owner.name == parameter.owner && owner.root)
+        if (owner.name == name && owner.root)
           return resolve(*owner.root, *method.lexical, owner.at);
       return {};
     };
@@ -1917,6 +1919,15 @@ class Compiler {
       }
       message += ")";
       if (form.result_type) message += " -> " + type_name(*form.result_type);
+      if (!form.owner_parameters.empty()) {
+        message += " where {";
+        for (size_t j = 0; j < form.owner_parameters.size(); ++j) {
+          const auto &owner = form.owner_parameters[j];
+          message += (j ? ", " : "") + std::string(owner.root ? "region " : "owner ") + owner.name;
+          if (owner.root) message += ":" + type_name(*owner.root);
+        }
+        message += "}";
+      }
       if (!candidates[i].implementation.empty() && candidates[i].implementation.back() != candidates[i].lexical)
         message += "; implementation context '" + candidates[i].implementation.back()->path + "'";
     }

@@ -1705,7 +1705,7 @@
   {
     "file": "exploration/owner-contract.cod",
     "exit": 0,
-    "stdout": "5\n12\n1\n0\n5\n"
+    "stdout": "5\n12\n1\n0\n5\n2\n"
   },
   {
     "file": "exploration/owner-contract-local-error.cod",

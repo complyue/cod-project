@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：451
+记录版本：453
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -207,7 +207,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 451，延续检查 K-01—K-450；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
+- 当前记录维护范围：记录版本 453，延续检查 K-01—K-452；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
 
 ### 待补确认的现有技术设计
 
@@ -479,7 +479,7 @@ Design authority
 <a id="d-18"></a>
 ### D-18: Structural region and closure experimental comparison
 
-- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 4, all sections; H-324 confirms autonomous multi-branch design/implementation/validation within existing principles, with trade-offs reserved for final human review. P-293 records the scoped value path to C-73/C-74.
+- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 6, all sections; H-324 confirms autonomous multi-branch design/implementation/validation within existing principles, with trade-offs reserved for final human review. P-293 records the scoped value path to C-73/C-74.
 - **Boundaries:** No final adoption, cross-region stored edges, lexical-cell promotion, hidden user heap, new RTTI, bootstrap/configuration changes or SNN model decisions. Existing memory/effect/module/exception/fraction invariants constrain every candidate.
 - **Acceptance:** At least two useful alternatives with working native examples, invalid-program rejection, practical code and complexity comparison, exact evidence and an active-time ledger. Stop for review no later than 48 active work hours even if incomplete; waiting is excluded.
 
@@ -9154,3 +9154,18 @@ Scope: prioritizes formal owner declarations in callable interfaces as anchors f
 - C-01 tries `func[region r]()->...` / `proc[region r]()->...` type contracts, separated from callable storage and capture expressions. Named owners bind to actual region instances, propagate through helpers, and anchor mismatch/lifetime errors. The bounded trial uses exact owner sets, single-unknown inference and explicit anchors for ambiguous multiple roles; these choices remain experimental, not newly ratified language policy.
 - Both variants retain their capture mechanism. No merge to main, runtime environment allocation, RTTI, pointer encoding change or TLS contract extension is inferred. Existing unanchored symbolic procedure declarations cannot erase lexical closure dependencies; that case is explicitly rejected while dynamic-region-symbol capture retains its established behavior. Validation evidence follows in this event's checkpoint.
 - Explicit-slot checkpoint: source-only build, 280/280 language cases, native ownership/exception/relocation checks and 64-module/10,000-frame composition pass. tests/cod/language/exploration/slots-owner-contract-validation.json records exact compiler/source identities and diagnostics; implicit owner capture is validated separately against the same contract.
+
+
+<a id="k-451"></a>
+
+- Registry451 →452; D-18r4 →5 continues H-325/P-294 and H-324's experimental scope for the corresponding implicit-owner branch. The callable owner contract and diagnostics match C-01; automatic owner capture and explicit regional-slot capture remain independent candidates. D-GOV452 continues H-05 record maintenance. Charter §§1–3 and the same D-01/D-14/D-15/D-16 invariants remain unchanged.
+- The shared implementation binds named owner roles to actual regional identities in a demanded signature and reuses those checked bindings in call lowering. It checks local annotations and nested callable results as well as ordinary boundaries. Evidence from the explicit-slot branch is retained with its own compiler/source identities; validation of this branch follows separately. No merge into main or final syntax/contract selection is claimed.
+- A concrete callback-overload probe exposed omitted root constraints in specificity comparison. The existing single-owner comparison now includes callable environment owner requirements, and candidate diagnostics print their where clauses. This continues the established unique-most-specific rule; it introduces no new dispatch policy. The shared probe validates the same result on both branches.
+- Implicit-owner checkpoint: 275/275 language cases, native ownership/exception/relocation and 64-module/10,000-frame composition pass with the final specificity correction. tests/cod/language/exploration/owners-owner-contract-validation.json binds the results to exact compiler/source identities. The source and compiler manifests match this branch; the explicit-slot branch retains its separate evidence and receives the same small correction.
+
+
+<a id="k-452"></a>
+
+- Registry452 →453; D-18r5 →6 continues H-325/P-294's experimental contract while carrying the owner-root specificity correction back to B-01. Owner-based branch d3227f2 and explicit-slot branch retain independent capture semantics and a common named-owner boundary. D-GOV453 continues H-05 maintenance. No final choice of exact owner sets, syntax, symbolic environments or main-branch merge is inferred.
+- Both variants expose retained region names in result/parameter/local callable types, preserve actual owner identity across aliases and generic forwarding, and diagnose unanchored, wrong-instance, expired and readonly cases. The shared test also exercises nested callable results and unique-most-specific owner-root dispatch. Final explicit-slot evidence is recorded separately from its earlier checkpoint; the native runtime/LLVM lowering representation remains unchanged.
+- Final B-01 checkpoint: 280/280 language cases and native ownership/exception/relocation/composition checks pass after the specificity correction. The compiler and all 363 source hashes match; owner binding, view validation and signature specificity code match d3227f2 exactly. The updated slots-owner-contract-validation.json records these hashes and actual diagnostics; A-01 remains independently validated at 275/275.

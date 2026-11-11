@@ -1,15 +1,21 @@
 {
   "experimental_authority": "D-18/H-325/C-01",
   "variant": "explicit slots",
-  "base_commit": "cec1c31",
-  "recorded_utc": "2026-11-11T06:11:15.742610+00:00",
+  "base_commit": "c11a4e2",
+  "corresponding_owner_branch_commit": "d3227f2",
+  "identical_owner_logic_sha256": {
+    "void valid_view(": "02f4bb842c280b300d3b6575e085e0811b6f03ec6ee98c45b15a74c55120ad75",
+    "std::optional<Signature> signature(": "cf960b8ab58a667f8dc08c5a223df60dfc15d535b229c72f800fd416d259a47f",
+    "bool signature_subset(": "36c99c20962a6d03db6ddf0dee83b9ea6704df5a2575af8b25423fa365abaa3b"
+  },
+  "recorded_utc": "2026-11-11T06:26:48.123436+00:00",
   "build": {
     "command": "cmake --build ./build",
     "exit": 0
   },
   "compiler": {
     "path": "build/bin/cod",
-    "sha256": "7d93dd1ab9d62bcaa5fca8aab715fb62537ab383e22dc6738cebb3fc28f5b18c"
+    "sha256": "290ac15be0c598e63f320def5f0b7bf52af6082b66cfc00e9dde664a1cfbe770"
   },
   "language": {
     "passed": 280,
@@ -18,13 +24,13 @@
   "source_sha256": {
     "cod/main.cc": "fa52fb708d819239c9db43c6f0a665856419aae9d1351f4e888b87afa326cb90",
     "cod/lang_syntax.hh": "ccd51263c4fffae76a384eb8bbafb63de831cc05367b8d638b782c16c34aee44",
-    "cod/lang_frontend.hh": "eb83e73ce4040dd35e61017e4ec51b47fde0e62e4e273199e4bc7e1205a9c220",
+    "cod/lang_frontend.hh": "d42b7f7d1f3528b74dca6301aca50d190700b5f1af437c3bb60005c607f49050",
     "cod/lang_llvm.hh": "476af19c5fb67745a0843598d327b11d11213f19e4c57067300edc53962bed0b",
     "cod/lang_native_runtime.hh": "4054b6db30d5301480ab426964643ee2bb093ad74eb1d96edad7aa10300da2ef",
     "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241",
     "tests/cod/test_language.sh": "c46a5226fe1841593a9dae58f661e8b9d82fe95f0fc1beed34b4cb9c6536357c",
     "tests/cod/language/run_tests.py": "772059f291685de3bf4c74e86ea36014a16e63a2f7df391e6b829c39d34f3eeb",
-    "tests/cod/language/cases.json": "dfa3d6bd71a168545935da134c179df7f0a08ba159da58a801efd34b22daba3e",
+    "tests/cod/language/cases.json": "0e13b20fc20c64c03847c11c8603b7ff58b0beea3c1457f04d729f6d16f2d525",
     "tests/cod/language/abstract-adapter.cod": "ffde128d9a5887193fbae425e65701f32aad0c226348814e7bb95fb58d57eb53",
     "tests/cod/language/abstract-alternate-factory.cod": "24887e86784b463e552b66ce7008812d7d0028a69c577f37bfcea395c643a4e8",
     "tests/cod/language/abstract-ambiguous.cod": "3315b06d1d37fb73492cc0b8e3cdc7f5439deeb0157ead56c148a15cc4a73eba",
@@ -93,7 +99,7 @@
     "tests/cod/language/exploration/owner-contract-local-error.cod": "c8c85b1c5ac38bc6f88d0562cf3f932e59304b08c8a408076e18433c81b9f13e",
     "tests/cod/language/exploration/owner-contract-readonly-error.cod": "2ba5a849259cc29aba6c0a67e0c89e918c86bb8c3b027db2f0bf18d9ae77abb4",
     "tests/cod/language/exploration/owner-contract-wrong.cod": "f647e3b712dc854badaebfd626b4d674dd753854435ff3f0e7c42ee99691730b",
-    "tests/cod/language/exploration/owner-contract.cod": "8ba0b7561094ae56e4a28ef79da4e6cb7740a63fa435bc337dd4d22f72adcb65",
+    "tests/cod/language/exploration/owner-contract.cod": "1f1f456d3ff8d9aaa7866ca09f8e97e12aae0ecfcec4d84badeeace4062f9b32",
     "tests/cod/language/exploration/slot-bits-mutation-error.cod": "240734eb206da56acdeee6937543d09dd832688d070fcbbd5795b74f6450739a",
     "tests/cod/language/exploration/slot-closures.cod": "27ec2c42ef878cffb8cd432049ce9fbb62939517fc0311eddf770c2cefd0a60d",
     "tests/cod/language/exploration/slot-cross-region-error.cod": "2bb3b69f7428b227e61e5edf569e99b631e8a4507c9de55808fb1cbf22bf1ef4",
@@ -817,10 +823,10 @@
       "expected": {
         "file": "exploration/owner-contract.cod",
         "exit": 0,
-        "stdout": "5\n12\n1\n0\n5\n"
+        "stdout": "5\n12\n1\n0\n5\n2\n"
       },
       "exit_code": 0,
-      "stdout": "5\n12\n1\n0\n5\n",
+      "stdout": "5\n12\n1\n0\n5\n2\n",
       "stderr": "",
       "passed": true
     },
@@ -854,13 +860,13 @@
   },
   "composition": {
     "variant": "slot",
-    "compiler_sha256": "7d93dd1ab9d62bcaa5fca8aab715fb62537ab383e22dc6738cebb3fc28f5b18c",
+    "compiler_sha256": "290ac15be0c598e63f320def5f0b7bf52af6082b66cfc00e9dde664a1cfbe770",
     "script_sha256": "7d837b5c47026661272b058a95634fc357c1e26a136ae0821c0a181d36798fd3",
     "passed": true,
     "results": [
       {
         "case": "64-module-returned-nested-closures",
-        "seconds": 1.7592096900043543,
+        "seconds": 1.8529668890114408,
         "stdout": "69\n85\n",
         "llvm_bytes": 87929,
         "sources": {
@@ -934,7 +940,7 @@
       },
       {
         "case": "10000-two-frame-updates",
-        "seconds": 1.7555721380049363,
+        "seconds": 1.7907815139915328,
         "stdout": "10001\n10000\n",
         "bounded_occupation": true,
         "llvm_bytes": 39217,
@@ -947,13 +953,13 @@
   "native": {
     "regional": {
       "schema_version": 4,
-      "recorded_utc": "2026-11-11T06:08:25.380906+00:00",
+      "recorded_utc": "2026-11-11T06:22:51.245788+00:00",
       "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
       "toolchain": "build",
       "passed": true,
       "executable": {
         "path": "build/bin/cod",
-        "sha256": "7d93dd1ab9d62bcaa5fca8aab715fb62537ab383e22dc6738cebb3fc28f5b18c"
+        "sha256": "290ac15be0c598e63f320def5f0b7bf52af6082b66cfc00e9dde664a1cfbe770"
       },
       "llvm_artifact_roundtrip": true,
       "layout": {
@@ -963,9 +969,9 @@
         "array_header_bytes": 16,
         "record_bytes": 24
       },
-      "frontend_seconds": 0.01864046699483879,
-      "native_compile_link_seconds": 1.6781410959956702,
-      "native_process_seconds": 0.001452428987249732,
+      "frontend_seconds": 0.01515734801068902,
+      "native_compile_link_seconds": 1.7617572199960705,
+      "native_process_seconds": 0.0013873160060029477,
       "llvm_ir_bytes": 35003,
       "bitcode_bytes": 10344,
       "pool": {
@@ -984,9 +990,9 @@
           ],
           "independent_native_reuse_passed": true
         },
-        "frontend_seconds": 0.03135418798774481,
-        "native_compile_link_seconds": 1.7500082270125858,
-        "native_process_seconds": 0.0013310100184753537,
+        "frontend_seconds": 0.027075674996012822,
+        "native_compile_link_seconds": 1.766274830995826,
+        "native_process_seconds": 0.0014533009962178767,
         "llvm_ir_bytes": 175973,
         "bitcode_bytes": 40332
       },
@@ -1005,9 +1011,9 @@
           "untaken_branch_acquires_nothing": true,
           "captured_and_hidden_owners_survive_replay": true
         },
-        "frontend_seconds": 0.017193659994518384,
-        "native_compile_link_seconds": 1.648415360978106,
-        "native_process_seconds": 0.001318105001701042,
+        "frontend_seconds": 0.015638438024325296,
+        "native_compile_link_seconds": 1.64938093998353,
+        "native_process_seconds": 0.0015197670145425946,
         "llvm_ir_bytes": 16458,
         "bitcode_bytes": 6916
       },
@@ -1025,7 +1031,7 @@
       ],
       "source_sha256": {
         "cod/lang_syntax.hh": "ccd51263c4fffae76a384eb8bbafb63de831cc05367b8d638b782c16c34aee44",
-        "cod/lang_frontend.hh": "eb83e73ce4040dd35e61017e4ec51b47fde0e62e4e273199e4bc7e1205a9c220",
+        "cod/lang_frontend.hh": "d42b7f7d1f3528b74dca6301aca50d190700b5f1af437c3bb60005c607f49050",
         "cod/lang_llvm.hh": "476af19c5fb67745a0843598d327b11d11213f19e4c57067300edc53962bed0b",
         "cod/lang_native_runtime.hh": "4054b6db30d5301480ab426964643ee2bb093ad74eb1d96edad7aa10300da2ef",
         "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241",
@@ -1047,12 +1053,12 @@
         "pending_result_cleanup": true,
         "callee_entry_timing": true
       },
-      "frontend_seconds": 0.029674059012904763,
-      "native_compile_link_seconds": 1.8698162890214007,
-      "native_process_seconds": 0.0013364299957174808,
+      "frontend_seconds": 0.029000528011238202,
+      "native_compile_link_seconds": 1.8570162139949389,
+      "native_process_seconds": 0.0019031830015592277,
       "llvm_ir_bytes": 245818,
       "bitcode_bytes": 50584,
-      "recorded_utc": "2026-11-11T06:08:27.596199+00:00",
+      "recorded_utc": "2026-11-11T06:22:53.450794+00:00",
       "toolchain": "build",
       "trace": [
         "9",
@@ -1090,10 +1096,10 @@
         "missing-field",
         "duplicate-field"
       ],
-      "compiler_sha256": "7d93dd1ab9d62bcaa5fca8aab715fb62537ab383e22dc6738cebb3fc28f5b18c",
+      "compiler_sha256": "290ac15be0c598e63f320def5f0b7bf52af6082b66cfc00e9dde664a1cfbe770",
       "source_sha256": {
         "cod/lang_syntax.hh": "ccd51263c4fffae76a384eb8bbafb63de831cc05367b8d638b782c16c34aee44",
-        "cod/lang_frontend.hh": "eb83e73ce4040dd35e61017e4ec51b47fde0e62e4e273199e4bc7e1205a9c220",
+        "cod/lang_frontend.hh": "d42b7f7d1f3528b74dca6301aca50d190700b5f1af437c3bb60005c607f49050",
         "cod/lang_llvm.hh": "476af19c5fb67745a0843598d327b11d11213f19e4c57067300edc53962bed0b",
         "cod/lang_native_runtime.hh": "4054b6db30d5301480ab426964643ee2bb093ad74eb1d96edad7aa10300da2ef",
         "tests/cod/language/owned-region-library.cod": "f4fd14ab2a16adbebf3eb8fb0701b882c0b8be9403631f2880f07a01b48c0023",
@@ -1109,9 +1115,9 @@
         "inner_released_before_catch": true,
         "outer_preserved_until_exit": true
       },
-      "frontend_seconds": 0.017690618988126516,
-      "native_compile_link_seconds": 1.6855141039995942,
-      "native_process_seconds": 0.001227272005053237,
+      "frontend_seconds": 0.016691431985236704,
+      "native_compile_link_seconds": 1.6705854640167672,
+      "native_process_seconds": 0.0012319420056883246,
       "llvm_ir_bytes": 12766,
       "bitcode_bytes": 5564,
       "retained_chain": {
@@ -1122,9 +1128,9 @@
           "immutable_records": 4,
           "storage_released_at_exit": true
         },
-        "frontend_seconds": 0.020385921001434326,
-        "native_compile_link_seconds": 1.6788811229926068,
-        "native_process_seconds": 0.0013292660005390644,
+        "frontend_seconds": 0.01771107199601829,
+        "native_compile_link_seconds": 1.6921916459978092,
+        "native_process_seconds": 0.0013139670190867037,
         "llvm_ir_bytes": 86178,
         "bitcode_bytes": 19204
       },
@@ -1139,9 +1145,9 @@
           "chain_allocations": 4,
           "chain_deallocations": 4
         },
-        "frontend_seconds": 0.017779026995413005,
-        "native_compile_link_seconds": 1.6302949030068703,
-        "native_process_seconds": 0.0014424799883272499,
+        "frontend_seconds": 0.019002654997166246,
+        "native_compile_link_seconds": 1.6790497740148567,
+        "native_process_seconds": 0.0012528410006780177,
         "llvm_ir_bytes": 86399,
         "bitcode_bytes": 18108
       },
@@ -1158,14 +1164,14 @@
       "uncaught_chain": {
         "exit": 70,
         "diagnostics": [
-          "/tmp/cod-exception-pq1xvupk/uncaught-chain.cod:6:42: uncaught InvalidCapacity (site=0, requested=0, available=0)",
-          "/tmp/cod-exception-pq1xvupk/uncaught-chain.cod:15:41: caused by RegionCapacityExceeded (site=15, requested=8, available=1)"
+          "/tmp/cod-exception-i41x0wc0/uncaught-chain.cod:6:42: uncaught InvalidCapacity (site=0, requested=0, available=0)",
+          "/tmp/cod-exception-i41x0wc0/uncaught-chain.cod:15:41: caused by RegionCapacityExceeded (site=15, requested=8, available=1)"
         ],
         "released_owners": 2,
         "later_emitted_cause_site_resolved": true,
         "chain_storage_released": true
       },
-      "recorded_utc": "2026-11-11T06:08:35.952444+00:00",
+      "recorded_utc": "2026-11-11T06:23:01.896982+00:00",
       "compile_rejections": [
         "non-exception-cause",
         "duplicate-category",
@@ -1174,10 +1180,10 @@
         "rethrow-context",
         "function-effects"
       ],
-      "compiler_sha256": "7d93dd1ab9d62bcaa5fca8aab715fb62537ab383e22dc6738cebb3fc28f5b18c",
+      "compiler_sha256": "290ac15be0c598e63f320def5f0b7bf52af6082b66cfc00e9dde664a1cfbe770",
       "source_sha256": {
         "cod/lang_syntax.hh": "ccd51263c4fffae76a384eb8bbafb63de831cc05367b8d638b782c16c34aee44",
-        "cod/lang_frontend.hh": "eb83e73ce4040dd35e61017e4ec51b47fde0e62e4e273199e4bc7e1205a9c220",
+        "cod/lang_frontend.hh": "d42b7f7d1f3528b74dca6301aca50d190700b5f1af437c3bb60005c607f49050",
         "cod/lang_llvm.hh": "476af19c5fb67745a0843598d327b11d11213f19e4c57067300edc53962bed0b",
         "cod/lang_native_runtime.hh": "4054b6db30d5301480ab426964643ee2bb093ad74eb1d96edad7aa10300da2ef",
         "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241",
