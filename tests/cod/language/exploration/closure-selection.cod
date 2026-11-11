@@ -1,0 +1,85 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+data CounterCell { ticks:u64; }
+data Cursor { ptr current:CounterCell; }
+region State { choose_first:bool; }
+function reader(ref counter:CounterCell in state) where {region state:State}
+    -> func()->const u64 with {region state} {
+  val var ticks:u64 in state -> counter.ticks;
+  func () -> const u64 { ticks }
+}
+function wrap(action:func()->const u64 with {region r}) where {region r:State}
+    -> func()->const u64 with {region r} {
+  func () -> const u64 { action() + 10u64 }
+}
+function select(ref a:CounterCell in state, ref b:CounterCell in state, flag:bool)
+    where {region state:State} -> func()->const u64 with {region state} {
+  if (flag) { wrap(reader(a)) } else { wrap(reader(b)) }
+}
+function following(ref cursor:Cursor in state) where {region state:State}
+    -> func()->const u64 with {region state} throws NullPointerException {
+  ptr var current -> cursor.current;
+  func () -> const u64 throws NullPointerException { current.ticks }
+}
+function select_cursor(ref a:Cursor in state, ref b:Cursor in state, flag:bool)
+    where {region state:State} -> func()->const u64 with {region state} throws NullPointerException {
+  if (flag) { following(a) } else { following(b) }
+}
+owned region state:State <- make State(capacity = 512u64) { choose_first <- true };
+ref first = alloc state CounterCell(1u64);
+ref second = alloc state CounterCell(2u64);
+const ref left = select(first, second, state.choose_first);
+state.choose_first <- false;
+const ref right = select(first, second, state.choose_first);
+behave @print(left());
+behave @print(right());
+first.ticks <- 3u64;
+second.ticks <- 4u64;
+behave @print(left());
+behave @print(right());
+ref a = alloc state Cursor(first);
+ref b = alloc state Cursor(second);
+const ref cursor = select_cursor(a, b, state.choose_first);
+# The selected slot follows b.current, not its target at callback creation.
+b.current = first;
+try {
+  behave @print(cursor());
+  b.current = null;
+  cursor();
+  {}
+} catch (e:const NullPointerException) { behave @print(99u64); };
+b.current = second;
+try { behave @print(cursor()); } catch (e:const NullPointerException) { behave @print(0u64); };
+
+# Projection uses the visible callback type, including a helper's renamed role.
+function mark(action:func()->const u64 with {region r}) where {region r:State} -> void {
+  (action -> r).choose_first <- true;
+  {}
+}
+mark(right);
+behave @print((right -> state).choose_first);
+function pair(region later:State, region earlier:State)
+    -> func()->const bool with {region later, region earlier} {
+  func [later, earlier] () -> const bool { later.choose_first && earlier.choose_first }
+}
+owned region extra:State <- make State(capacity = 128u64) { choose_first <- false };
+const ref paired = pair(extra, state);
+# Named roles must not be recovered from sorted region identities.
+behave @print((paired -> later).choose_first);
+behave @print((paired -> earlier).choose_first);
+(paired -> later).choose_first <- true;
+behave @print(paired());
+
+proc incrementer(ref counter:CounterCell in state) where {region state:State}
+    -> proc()->void with {region state} {
+  val var ticks -> counter.ticks;
+  proc () -> void { ticks <- ticks + 1u64; {} }
+}
+proc choose_incrementer(ref a:CounterCell in state, ref b:CounterCell in state, flag:bool)
+    where {region state:State} -> proc()->void with {region state} {
+  if (flag) { incrementer(a) } else { incrementer(b) }
+}
+const ref increment = choose_incrementer(first, second, state.choose_first);
+increment();
+behave @print(left());
+behave @print(right());

@@ -1,0 +1,7 @@
+region State { flag:bool; }
+function reader(const region state:State) -> func()->const bool with {region state} {
+  func [state] () -> const bool { state.flag }
+}
+owned region state:State <- make State(capacity = 128u64) { flag <- true };
+const ref cb = reader(state);
+owned region stolen:State <- cb -> state;

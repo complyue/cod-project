@@ -556,6 +556,7 @@ class Compiler {
         const auto found = owners.find(name);
         if (found == owners.end() || !found->second.region_id)
           fail(at, "callable environment owner '" + name + "' must name a declared, inferred region owner");
+        type.capture_owner_regions.push_back(*found->second.region_id);
         type.capture_regions.push_back(*found->second.region_id);
       }
       std::sort(type.capture_regions.begin(), type.capture_regions.end());
@@ -3144,6 +3145,103 @@ class Compiler {
     if (floating(left.type) && expr.text == "%") fail(expr.at, "remainder requires integer operands");
     return scalar(left.type, ir_.binary(left.type, expr.text, left.native, right.native));
   }
+  struct CaptureAlternative { const Value *value; llvm::BasicBlock *from; };
+  Value join_captures(const std::vector<CaptureAlternative> &alternatives, const Location &at) {
+    auto result = *alternatives.front().value;
+    // The body stays statically known. Only its borrowed regional places vary
+    // at runtime; selecting their addresses preserves subsequent slot writes.
+    auto select = [&](auto get) -> llvm::Value * {
+      auto *first = get(*alternatives.front().value);
+      std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> edges;
+      bool different = false;
+      for (const auto &alternative : alternatives) {
+        auto *value = get(*alternative.value);
+        if (bool(value) != bool(first) || (value && value->getType() != first->getType()))
+          fail(at, "callable capture alternatives require compatible storage representations");
+        different |= value != first;
+        edges.emplace_back(value, alternative.from);
+      }
+      return different ? ir_.phi(first->getType(), edges) : first;
+    };
+    for (const auto &alternative : alternatives) {
+      const auto &value = *alternative.value;
+      if (value.type.capture_regions != result.type.capture_regions) {
+        auto message = std::string("callable alternatives require the same actual region owners");
+        std::set<size_t> owners(result.type.capture_regions.begin(), result.type.capture_regions.end());
+        owners.insert(value.type.capture_regions.begin(), value.type.capture_regions.end());
+        for (const auto id : owners) message += region_note(id, "a callable alternative retains this region");
+        fail(at, message);
+      }
+      require(value.type, result.type, at);
+      if (value.type.capture_owner_regions != result.type.capture_owner_regions)
+        fail(at, "runtime callable selection requires the same actual with-owner associations");
+      if (value.region_id != result.region_id || value.holding_id != result.holding_id ||
+          bool(value.storage) != bool(result.storage) || bool(value.reference_field) != bool(result.reference_field) ||
+          value.required_reference != result.required_reference || value.pointer_view != result.pointer_view ||
+          value.pointer || value.arguments || value.pending_owner ||
+          (value.storage && value.storage->scope != result.storage->scope))
+        fail(at, "callable capture alternatives require the same owner and storage kind");
+      result.read_only |= value.read_only;
+      result.binding_read_only |= value.binding_read_only;
+      result.nullable |= value.nullable;
+      std::erase_if(result.conformances, [&](const Conformance &fact) {
+        return std::find(value.conformances.begin(), value.conformances.end(), fact) == value.conformances.end();
+      });
+      if (result.storage) {
+        result.storage->cells.insert(value.storage->cells.begin(), value.storage->cells.end());
+        result.storage->initialized_alternatives |= value.storage->initialized_alternatives;
+      }
+    }
+    result.nonnull_when.reset();
+    result.referent = nullptr;
+    result.native = select([](const Value &value) { return value.native; });
+    result.exception_category = select([](const Value &value) { return value.exception_category; });
+    if (result.storage)
+      result.storage->address = select([](const Value &value) { return value.storage->address; });
+    if (result.reference_field) {
+      for (const auto &alternative : alternatives) require(alternative.value->reference_field->type, result.reference_field->type, at);
+      result.reference_field->owner = select([](const Value &value) { return value.reference_field->owner; });
+      result.reference_field->address = select([](const Value &value) { return value.reference_field->address; });
+    }
+    if (std::all_of(alternatives.begin(), alternatives.end(), [&](const CaptureAlternative &alternative) {
+          return alternative.value->procedure == result.procedure;
+        })) return result;
+    if (!result.procedure) fail(at, "control-flow alternatives must all be callable");
+    auto procedure = std::make_shared<Procedure>(*result.procedure);
+    for (const auto &alternative : alternatives) {
+      const auto &candidate = alternative.value->procedure;
+      if (!candidate || candidate->form != procedure->form || candidate->lexical != procedure->lexical ||
+          candidate->builtin != procedure->builtin || candidate->implementation != procedure->implementation ||
+          candidate->declarations != procedure->declarations)
+        fail(at, "runtime selection between different callable implementations is not yet supported");
+      if (candidate->captures.bindings != procedure->captures.bindings ||
+          candidate->captures.captured_bindings != procedure->captures.captured_bindings ||
+          candidate->captures.captured_context != procedure->captures.captured_context ||
+          candidate->captures.replay != procedure->captures.replay)
+        fail(at, "runtime selection between different captured dynamic bindings is not yet supported");
+      if (candidate->lexical_captures.regional_slots != procedure->lexical_captures.regional_slots)
+        fail(at, "callable capture alternatives require matching regional slots");
+    }
+    auto join_map = [&](auto &destination, auto get) {
+      for (const auto &alternative : alternatives)
+        if (get(*alternative.value->procedure).size() != destination.size())
+          fail(at, "callable capture alternatives require matching names");
+      for (auto &[name, value] : destination) {
+        std::vector<CaptureAlternative> captures;
+        for (const auto &alternative : alternatives) {
+          const auto &source = get(*alternative.value->procedure);
+          const auto found = source.find(name);
+          if (found == source.end()) fail(at, "callable capture alternatives require matching names");
+          captures.push_back({&found->second, alternative.from});
+        }
+        value = join_captures(captures, at);
+      }
+    };
+    join_map(procedure->lexical_captures.visible, [](const Procedure &value) -> const auto & { return value.lexical_captures.visible; });
+    join_map(procedure->lexical_captures.owner_anchors, [](const Procedure &value) -> const auto & { return value.lexical_captures.owner_anchors; });
+    result.procedure = std::move(procedure);
+    return result;
+  }
   struct Completion { Value value; llvm::BasicBlock *from; FlowState regions; };
   Value join_completions(const std::vector<Completion> &completions, const Location &at, bool module_lifetime) {
     if (completions.empty()) { ir_.unreachable(); return scalar(Type::never, nullptr); }
@@ -3155,6 +3253,11 @@ class Compiler {
       return join_completions(values, at, module_lifetime);
     }
     auto result = completions.front().value;
+    if (result.procedure) {
+      std::vector<CaptureAlternative> alternatives;
+      for (const auto &completion : completions) alternatives.push_back({&completion.value, completion.from});
+      result = join_captures(alternatives, at);
+    }
     if (result.storage && std::any_of(completions.begin(), completions.end(),
         [](const Completion &completion) { return !completion.value.native; })) result.native = nullptr;
     result.pointer.reset();
@@ -3163,13 +3266,6 @@ class Compiler {
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> values, categories;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> addresses;
     for (const auto &completion : completions) {
-      if (completion.value.procedure != result.procedure) {
-        std::string message = "runtime selection of different callable captures is outside this experiment; select regional state inside one callable";
-        for (const auto &candidate : completions)
-          for (const auto id : candidate.value.type.capture_regions)
-            message += region_note(id, "a callable alternative retains this actual region owner");
-        fail(at, message);
-      }
       require(completion.value.type, result.type, at);
       result.read_only = result.read_only || completion.value.read_only;
       result.nullable = result.nullable || completion.value.nullable;
@@ -3607,6 +3703,24 @@ class Compiler {
       return {};
     }
 
+    case K::capture_owner: {
+      const auto callable = expression(*expr.children.front(), module, env, locals, function_context);
+      valid_view(callable, expr.at);
+      if (!callable.procedure) fail(expr.at, "owner projection requires a callable value");
+      const auto &names = callable.type.capture_owners;
+      const auto found = std::find(names.begin(), names.end(), expr.text);
+      if (found == names.end() || callable.type.capture_owner_regions.size() != names.size())
+        fail(expr.at, "callable type has no associated owner '" + expr.text + "'; use a name from its visible with clause");
+      const auto id = callable.type.capture_owner_regions[size_t(found - names.begin())];
+      const auto retained = closure_regions(callable);
+      const auto access = retained.find(id);
+      if (access == retained.end()) fail(expr.at, "callable does not retain its declared region owner");
+      Type type{Type::region}; type.target = std::make_shared<Type>(*regions_.at(id).root);
+      auto result = scalar(type, region_pointer(access->second, expr.at), id);
+      result.read_only = access->second.read_only;
+      result.conformances = access->second.conformances;
+      return result;
+    }
     case K::field: return field_expression(expr, module, env, locals, function_context);
     case K::index: {
       auto array = expression(*expr.children[0], module, env, locals, function_context);

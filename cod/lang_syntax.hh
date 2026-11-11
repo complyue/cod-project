@@ -170,6 +170,7 @@ struct Type {
   std::vector<Type> throws_types;
   std::vector<size_t> owners;
   std::vector<std::string> capture_owners; // Source names anchoring a callable environment's regional dependencies.
+  std::vector<size_t> capture_owner_regions; // Actual owner for each visible with-name, in declaration order.
   std::vector<size_t> capture_regions; // Concrete WPO region identities, never runtime type information.
   std::vector<bool> const_views;
   std::vector<bool> nullable_views;
@@ -264,7 +265,7 @@ struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect,
                     block, conditional, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, make_region, touch, effect_group, transfer, procedure_effect,
-                    pointer_group, pointer, make_local, rebind, region_binding, callable, alias };
+                    pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner };
   Kind kind;
   Location at;
   std::string text;
@@ -929,6 +930,10 @@ class Parser {
         auto member = make(Expression::Kind::field, name(TokenKind::identifier));
         member->children.push_back(std::move(left));
         left = std::move(member);
+      } else if (take("->")) {
+        auto owner = make(Expression::Kind::capture_owner, ordinary_name());
+        owner->children.push_back(std::move(left));
+        left = std::move(owner);
       } else if (is("[")) {
         auto index = make(Expression::Kind::index, expect("["));
         index->children.push_back(std::move(left));

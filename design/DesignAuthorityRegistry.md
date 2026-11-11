@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：458
+记录版本：459
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -164,7 +164,7 @@ Design authority
 | C-70 | Region is a declaration keyword for whole-resource locals, parameters, results and procedure signatures. | C-65 scoped value P-270; C-54/C-37 constraints P-271 | H-307 completes H-275/H-276 without a legacy parser path; D-14r67/D-10r118. Root inference does not erase borrowed/owning responsibility or lifecycle checks. |
 | C-71 | Transfer methods return void or checked readonly destination views; indexed writes select logical container operations. | C-10 scoped value P-272; C-64/C-65 constraints P-273 | H-307 permits non-addressable containers; H-308 limits bits-like library guidance to intended/recommended chaining. D-14r67/D-10r118; no result-based dispatch or implicit graph copy. |
 | C-72 | Ref/ptr ordinary declarations distinguish compiler-checked initialization from nullable dereference. | Scoped declaration value P-274 to C-65; lifetime/access constraint P-275 | H-309 confirms ptr-marked fields and requests ordinary ref/ptr declarations without let/var; H-311 separately permits unmodified/val bits fields. Ref premature reads reject; ptr dereference may produce NPE. H-310/P-276 makes ref/ptr fields references even for scalars; H-311/P-277 permits direct bits fields with val or no modifier. D-14r67 keeps null/defaults, construction and conversion refinements pending-human. No implementation or changed encoding is approved by implication. H-313 accepts checked NPE and val locals/parameters under P-280–P-281; H-314/H-315 adds first-owner acquisition and isnull under P-282. Wider construction/source migration details remain scoped separately. |
-| C-73 | Unified owner-aware captures for named and anonymous functions/procedures. | Candidate value P-288/P-290 and scoped confirmed P-297 to C-65; dependencies P-289 on C-36/C-54 | H-321/H-322 requests a unified review; H-323 adds regional val/ref/ptr slots without lexical-cell promotion. H-329 confirms inferred captures when brackets are omitted, completeness checking when supplied, missing-capture errors and unused-entry warnings, with source-visible associated owners in D-18r9/C-03. Wider capture representation, persistence and nested dependency details remain review items; D-18r11/C-04 records the unified implementation and its bounded acceptance. |
+| C-73 | Unified owner-aware captures for named and anonymous functions/procedures. | Candidate value P-288/P-290 and scoped confirmed P-297 to C-65; dependencies P-289 on C-36/C-54 | H-321/H-322 requests a unified review; H-323 adds regional val/ref/ptr slots without lexical-cell promotion. H-329 confirms inferred captures when brackets are omitted, completeness checking when supplied, missing-capture errors and unused-entry warnings, with source-visible associated owners in D-18r9/C-03. Wider capture representation, persistence and nested dependency details remain review items; D-18r12/C-04 records the unified implementation and same-body environment selection; H-334/H-335/P-298 confirms visible-name owner projection with captured access and no ownership/lifetime extension. |
 | C-74 | Structural product region definitions and required field subsets, with language-owned storage mechanics. | Candidate value P-291 to C-39/C-65; dependencies P-292 on C-72/C-54/D-01 | H-323 proposes region definitions alongside data, complete fields as the root product and structural field requirements in place of root-type requirements. D-13r29 reviews concrete layouts, owner identity and intrinsic/library allocation boundaries. Matching, identity, syntax and allocator policy details remain pending-human; no host layout or RTTI change is selected. |
 | C-75 | Explicit variable aliases naming existing storage without introducing a new holder. | Scoped confirmed value P-295 to C-65/C-73; constraints P-296 | H-327 accepts the ordinary-place alias explanation and requests optional val/ref/ptr prefixes, inferred when omitted and strictly checked when present. D-18r8/C-02 records that scope; whole-region/TLS inclusion and detailed capture integration remain separate. No implementation, legacy var restoration, new ownership or automatic lexical promotion is inferred. |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
@@ -208,7 +208,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 458，延续检查 K-01—K-457；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
+- 当前记录维护范围：记录版本 459，延续检查 K-01—K-458；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
 
 ### 待补确认的现有技术设计
 
@@ -480,7 +480,7 @@ Design authority
 <a id="d-18"></a>
 ### D-18: Structural region and closure experimental comparison
 
-- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 11; H-327 confirms C-02's ordinary-place alias interpretation and strict optional storage-kind prefixes. H-329 confirms C-03's where/with/capture distinction, object-derived region owner, alias-owner assertion and inferred-or-complete-list captures. H-330 authorizes integration; H-331 requires owner dependencies even for unused explicit captures. H-332 requires actual capture of every with-listed owner. C-04 records 289/289 language checks and matching native/composition evidence. Runtime closure representation and future named-owner projection remain review items. H-324's experimental scope remains unchanged; P-293/P-294/P-295/P-297 record the scoped value paths.
+- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 12; H-327 confirms C-02's ordinary-place alias interpretation and strict optional storage-kind prefixes. H-329 confirms C-03's where/with/capture distinction, object-derived region owner, alias-owner assertion and inferred-or-complete-list captures. H-330 authorizes integration; H-331 requires owner dependencies even for unused explicit captures. H-332 requires actual capture of every with-listed owner. C-04 records 289/289 language checks and matching native/composition evidence. H-333 authorizes repair of same-body runtime capture selection; H-334/H-335 confirms named retained-owner projection with visible-name adaptation and borrowed access. General stored/runtime-dispatched closure representation remains a review item; K-458 records bounded selection/projection implementation and validation. H-324's experimental scope remains unchanged; P-293/P-294/P-295/P-297 record the scoped value paths.
 - **Boundaries:** No final adoption, cross-region stored edges, lexical-cell promotion, hidden user heap, new RTTI, bootstrap/configuration changes or SNN model decisions. Existing memory/effect/module/exception/fraction invariants constrain every candidate.
 - **Acceptance:** At least two useful alternatives with working native examples, invalid-program rejection, practical code and complexity comparison, exact evidence and an active-time ledger. Stop for review no later than 48 active work hours even if incomplete; waiting is excluded.
 
@@ -790,6 +790,7 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-295 | C-75 derives-from | C-65 / C-73 | H-327 accepts naming an existing storage place with no new holder, fixed alias selection, inherited owner/access checks and capture eligibility following storage ownership. Its optional kind assertion makes intent and variable nature locally readable. D-18r8/C-02 qualifies this ordinary-place contract only; capture-list integration and whole-region/TLS inclusion remain separate. |
 | P-296 | C-75 depends-on | C-72 / C-36 / C-54 / C-71 | Existing storage kind, nullability, initialization, effect-only TLS writes, whole-region ownership and non-addressable container rules constrain aliases. Dependency grants no design authority or hidden proxy/environment allocation. D-18r8/C-02 preserves these boundaries under H-327; broader inclusion is not selected. |
 | P-297 | C-73 derives-from | C-65 / C-75 | H-329 confirms omitted-list inference and explicit-list completeness checks, combining convenient regional-variable use with a readable declaration of capture intent. Missing entries error; unused entries warn. D-18r9/C-03 preserves actual storage owners and separates variables in the body from owner associations in the callable type. H-331 retains every explicit capture dependency, with owner validation before unused warnings. This does not authorize lexical-cell promotion or select runtime closure representation. |
+| P-298 | C-73 derives-from | C-65 / C-75 | H-334/H-335 makes retained regions usable through cb -> owner_name, serving the explicit storage/lifetime contract rather than adding a separate owner lookup mechanism. The visible with-type supplies the name, including helper-local renaming; projection borrows captured access, never acquires ownership or extends lifetime. D-18r12/C-04 covers same-body selection and projection. Runtime callable ABI, persistence and RTTI remain excluded. |
 
 
 ### 影响检索索引
@@ -4575,6 +4576,30 @@ Human/source: current user, reply to `call_519e9c1b26ab4eb593ea7d667ddf5c5b`, re
 > with 列出来的需要全部capture下来，后面还要考虑 cb -> <some-with-var-name> 语法从callback引用里取这些region出来用呢
 
 Scope: every owner named by with must actually be captured; the list is not merely an upper bound allowing an owner association to be absent. The integrated prototype retains exact owner validation. The user proposes future callback-to-named-owner access; this event does not settle its grammar, public role-name/alias mapping, permissions, runtime representation or ownership-transfer behavior. P-294/D-18r11/C-04 records the actual-association requirement and keeps projection separate.
+
+<a id="h-333"></a>
+
+Human/source: current user, current project chat, recorded 2026-11-11 UTC; exact message timestamp unavailable.
+
+> "runtime selection between callbacks capturing different slots" 拒绝是实现限制？ 尝试解决
+
+Scope: investigate and repair the documented same-owner callback-slot selection limitation. Continues H-330's affected CoD validation authorization while retaining owner, access, lifetime, effect and no-RTTI boundaries. It does not authorize arbitrary stored closure ABI or runtime dispatch policy.
+
+<a id="h-334"></a>
+
+Human/source: current user, current project chat, recorded 2026-11-11 UTC; exact message timestamp unavailable.
+
+> **`cb -> owner_name`** 是不是也应该存在某capture slot里？ 设计了一起解决比较好吧？
+
+Scope: design named owner projection together with the environment-selection repair, treating the retained region association as part of that environment. P-298 relates usable owner access to C-73/C-65's source-visible storage and lifetime contract. Detailed visible-name and permission behavior is confirmed separately by H-335; no physical heap record or RTTI follows from the semantic capture slot.
+
+<a id="h-335"></a>
+
+Human/source: current user, reply to call_7eec82c577d1470f99351cdd369a0234, recorded 2026-11-11 UTC; exact message timestamp unavailable.
+
+> Use the visible with-name and borrowed access (Recommended)
+
+Accepted proposition: cb -> state resolves state in cb's visible with-type. A helper parameter with region r uses cb -> r, and does not expose the factory's former name state through that view. Projection borrows the retained region with captured permissions, cannot take ownership and cannot extend its lifetime. Scope is D-18r12/C-04/P-298; it does not select general runtime closure storage, persistence or cross-owner adaptation.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -9278,3 +9303,10 @@ Scope: every owner named by with must actually be captured; the list is not mere
 - The unified compiler passes 289/289 language checks with COD_TEST_TOOLCHAIN=build. Native regional relocation, ownership cleanup/invalid access and exception cleanup/retained cause chains pass. Composition passes a 64-module returned-callback chain alternating inferred/explicit lists and 10,000 frame updates with one region acquisition and bounded occupation. The compact unified-validation.json matches the actual compiler plus 376 checked source inputs; all native reports use the same compiler hash.
 - The stream monitor demonstrates object-derived region access, live counters and mean values, pointer-slot following, pinned target-slot mutation and checked null handling. Investigation repaired a missing compile-time owner anchor in nested returned-callable signatures; this metadata remains separate from body captures. The same-owner runtime-selection probe still rejects distinct callable environments and is documented for a dedicated representation discussion.
 - Build used only cmake --build ./build after source changes; the initial dry run found no broad invalidation. No bootstrap definition, host toolchain, native regional encoding or LLVM emitter was changed. Old experiment syntax is absent from active source examples except intentional rejection probes and historical evidence. D-16 numerical/fraction rules, D-01 relocation, D-15 module/TLS boundaries and earlier human/continuity history remain unchanged.
+
+<a id="k-458"></a>
+
+- Registry458 →459; D-18r11 →12 records H-333's bounded implementation-limit repair and H-334/H-335's retained-owner projection. Charter §§1–3/§8 supports source-readable typed intent, explicit storage lifetimes and separation of semantic capture from native representation. P-294/P-295/P-297 remains unchanged; P-298 records the newly confirmed projection value. D-GOV459 continues H-05 maintenance only.
+- Same-body/same-owner callback environments merge borrowed regional slot addresses through LLVM PHIs, including nested callable captures. Captured ref/ptr slots preserve later rebinding and checked null behavior. Owner names map to actual retained regions independently of sorted lifetime dependencies; projection uses the visible with-type and preserves borrowed access. No per-object ownership, lexical-cell promotion, user heap closure, RTTI, numeric/fraction conversion, native allocation/relative-pointer encoding or bootstrap changes occur.
+- D-14 access/lifetime rules, D-10 lexical versus dynamic procedure contexts and D-15 module/TLS separation remain constraints. Different code bodies, captured dynamic contexts and actual owner sets retain explicit prototype rejection; no general runtime closure ABI is silently selected. D-16 review finds no conflict with planned fractions or numeric representation/formatting. Affected descendants are bounded D-18 implementation/examples; wider pending D-10/D-14 designs remain pending.
+- Validation: cmake --build ./build succeeds; COD_TEST_TOOLCHAIN=build passes 295/295 language cases. Native regional relocation/resource cleanup and 64-module/10,000-frame composition pass on the same compiler. selection-validation.json records exact compiler/source hashes, both branch outcomes, nested and pointer-slot captures, procedure selection, owner-name adaptation and readonly/non-owning/expired/mismatched-owner rejection. Emitted LLVM has four pointer PHIs and only the two explicit region acquisitions. The native runtime and allocation/relative-reference encoding are unchanged.

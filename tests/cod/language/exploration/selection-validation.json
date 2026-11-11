@@ -1,0 +1,168 @@
+{
+  "authority": "D-18 revision 12 / H-333\u2013H-335 / K-458",
+  "recorded_utc": "2026-11-11T10:54:26.789665+00:00",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit": 0,
+    "log_sha256": "2b7856d5c9339b02af21b30ade7e28f573126b48dfd7a933c901d6469cd3be90"
+  },
+  "compiler": {
+    "path": "build/bin/cod",
+    "sha256": "4808adc62c4d62ad487a5e547136687a1f6fe346c99e77af4768e1c594906328"
+  },
+  "inputs": {
+    "files": 380,
+    "sha256": "65d7153af0243fdfef0d8f0cf283979ce517c147e059eb7fce0b42b96ee60f10",
+    "encoding": "Sorted repository-relative path + NUL + file SHA256 + newline; language/native manifests plus composition script."
+  },
+  "compiler_source_sha256": {
+    "cod/main.cc": "5c87c74e624d5dcecd7cd97cdd1df16045605c7b6102acd6230b1bf74bc6a4b7",
+    "cod/lang_syntax.hh": "5efcf5d3bbd99f5baf9bdc494a963fe95a50fca8513e401472f83ce73120c11e",
+    "cod/lang_frontend.hh": "6da3525987dd2c8caee149db70d642be7a5b75f355d28651fae0964f5e662eb2",
+    "cod/lang_llvm.hh": "476af19c5fb67745a0843598d327b11d11213f19e4c57067300edc53962bed0b",
+    "cod/lang_native_runtime.hh": "4054b6db30d5301480ab426964643ee2bb093ad74eb1d96edad7aa10300da2ef",
+    "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241"
+  },
+  "language": {
+    "command": "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/run_tests.py",
+    "passed": 295,
+    "total": 295,
+    "observations": [
+      {
+        "fixture": "exploration/closure-selection.cod",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "11\n12\n13\n14\n3\n99\n4\ntrue\nfalse\ntrue\ntrue\n14\n14\n",
+        "stderr": ""
+      },
+      {
+        "fixture": "exploration/closure-projection-readonly.cod",
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/closure-projection-readonly.cod:7:20: cannot transfer into a read-only destination view\n"
+      },
+      {
+        "fixture": "exploration/closure-projection-owner.cod",
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/closure-projection-owner.cod:7:14: expected owned region :tests/cod/language/exploration/closure-projection-owner.cod::State, got region :tests/cod/language/exploration/closure-projection-owner.cod::State\n"
+      },
+      {
+        "fixture": "exploration/closure-projection-name.cod",
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/closure-projection-name.cod:8:14: callable type has no associated owner 'state'; use a name from its visible with clause\ntests/cod/language/exploration/closure-projection-name.cod:10:1: note: in call to function 'inspect' defined at tests/cod/language/exploration/closure-projection-name.cod:7:1\n"
+      },
+      {
+        "fixture": "exploration/closure-selection-implementation.cod",
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/closure-selection-implementation.cod:3:22: runtime selection between different callable implementations is not yet supported\n"
+      },
+      {
+        "fixture": "exploration/closure-selection-owner.cod",
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/closure-selection-owner.cod:7:16: callable alternatives require the same actual region owners\ntests/cod/language/exploration/closure-selection-owner.cod:5:30: note: a callable alternative retains this region\ntests/cod/language/exploration/closure-selection-owner.cod:6:30: note: a callable alternative retains this region\n"
+      },
+      {
+        "fixture": "exploration/closure-projection-lifetime.cod",
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/closure-projection-lifetime.cod:5:24: regional result would outlive its owning scope\ntests/cod/language/exploration/closure-projection-lifetime.cod:6:36: note: the escaping value depends on this region acquisition\n"
+      }
+    ]
+  },
+  "llvm": {
+    "fixture": "tests/cod/language/exploration/closure-selection.cod",
+    "verified": true,
+    "phi_pointer_instructions": 4,
+    "region_acquisition_calls": 2,
+    "note": "Four runtime selections lower to pointer PHIs. The two region acquisitions correspond to the two explicit make expressions; there is no runtime closure allocation."
+  },
+  "regional_runtime": {
+    "passed": true,
+    "llvm_artifact_roundtrip": true,
+    "layout": {
+      "relocation_passed": true,
+      "relocated_bytes": 120,
+      "region_header_bytes": 40,
+      "array_header_bytes": 16,
+      "record_bytes": 24
+    },
+    "pool": {
+      "layout": {
+        "relocation_passed": true,
+        "relocated_bytes": 144,
+        "slots": 4,
+        "cod_reuse_laps": 10000,
+        "bounded_occupation": true,
+        "failed_constructions_released": 4,
+        "typed_root_factory": true,
+        "relocated_free_chain": [
+          3,
+          1,
+          4
+        ],
+        "independent_native_reuse_passed": true
+      },
+      "frontend_seconds": 0.030730765021871775,
+      "native_compile_link_seconds": 1.825143603986362,
+      "native_process_seconds": 0.0013479609915520996,
+      "llvm_ir_bytes": 175973,
+      "bitcode_bytes": 40332
+    },
+    "resources": {
+      "layout": {
+        "owners_acquired": 4,
+        "owners_released": 4,
+        "release_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "live_resource_reads": 18,
+        "loop_iterations": 3,
+        "untaken_branch_acquires_nothing": true,
+        "captured_and_hidden_owners_survive_replay": true
+      },
+      "frontend_seconds": 0.01678094800445251,
+      "native_compile_link_seconds": 1.6701221780094784,
+      "native_process_seconds": 0.0012729490117635578,
+      "llvm_ir_bytes": 16458,
+      "bitcode_bytes": 6916
+    }
+  },
+  "composition": {
+    "passed": true,
+    "cases": [
+      {
+        "case": "64-module-returned-nested-closures",
+        "seconds": 1.9050505640043411,
+        "stdout": "69\n85\n",
+        "llvm_bytes": 87929
+      },
+      {
+        "case": "10000-two-frame-updates",
+        "seconds": 1.8093999290140346,
+        "stdout": "10001\n10000\n",
+        "bounded_occupation": true,
+        "llvm_bytes": 39220,
+        "region_acquisition_calls": 1,
+        "source_sha256": "e3038a3b5b0441be21a31fa7616af51aaad678634c1eefb496e590a6c8269ca6"
+      }
+    ]
+  },
+  "remaining_limits": [
+    "Different callable implementations require a separate runtime dispatch representation.",
+    "Different captured dynamic environments and different actual region-owner associations remain rejected.",
+    "General stored/persistent runtime closures are not implemented."
+  ]
+}

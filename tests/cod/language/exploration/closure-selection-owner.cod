@@ -1,0 +1,8 @@
+region State { flag:bool; }
+function reader(region state:State) -> func()->const bool with {region state} {
+  func [state] () -> const bool { state.flag }
+}
+owned region a:State <- make State(capacity = 128u64) { flag <- true };
+owned region b:State <- make State(capacity = 128u64) { flag <- false };
+const ref cb = if (a.flag) { reader(a) } else { reader(b) };
+cb();

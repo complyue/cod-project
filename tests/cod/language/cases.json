@@ -1617,10 +1617,9 @@
     "stderr_contains": "read-only"
   },
   {
-    "file": "exploration/closure-selection-error.cod",
-    "exit": 2,
-    "stdout": "",
-    "stderr_contains": "runtime selection of different callable captures"
+    "file": "exploration/closure-selection.cod",
+    "exit": 0,
+    "stdout": "11\n12\n13\n14\n3\n99\n4\ntrue\nfalse\ntrue\ntrue\n14\n14\n"
   },
   {
     "file": "exploration/closure-mixin.cod",
@@ -1774,5 +1773,41 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "cannot rebind through a const var alias"
+  },
+  {
+    "file": "exploration/closure-projection-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "exploration/closure-projection-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected owned region"
+  },
+  {
+    "file": "exploration/closure-projection-name.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "no associated owner 'state'"
+  },
+  {
+    "file": "exploration/closure-selection-implementation.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "different callable implementations"
+  },
+  {
+    "file": "exploration/closure-selection-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "same actual region owners"
+  },
+  {
+    "file": "exploration/closure-projection-lifetime.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional result would outlive its owning scope"
   }
 ]

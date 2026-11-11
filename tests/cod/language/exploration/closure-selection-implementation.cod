@@ -1,0 +1,4 @@
+region State { flag:bool; }
+owned region state:State <- make State(capacity = 128u64) { flag <- true };
+const ref callback = if (state.flag) { func () -> const u64 { 1u64 } } else { func () -> const u64 { 2u64 } };
+callback();
