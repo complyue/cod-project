@@ -1,0 +1,4 @@
+region State { count:u64; }
+owned region state:State <- make State(capacity = 128u64) { count <- 1u64 };
+val var count -> state.count;
+const ref reader = func [] () -> const u64 { count };

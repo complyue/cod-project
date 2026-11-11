@@ -58,6 +58,7 @@ struct Value {
   bool required_reference = false;
   bool pointer_view = false;
   llvm::Value *referent = nullptr; // Stable object expression identity across lexical pointer loads.
+  bool binding_read_only = false; // A const var view cannot rebind the selected binding.
 };
 using Bindings = llvm::ImmutableMap<size_t, const Value *>;
 struct Environment {
@@ -86,8 +87,17 @@ struct Locals {
   std::set<std::string> declared;
   std::map<std::string, Location> locations;
   std::set<std::string> regional_slots; // Binding locations, never a property of a loaded value.
+  std::map<std::string, Value> owner_anchors; // Type-level associations, separate from body captures.
 
-  Locals nested() const { return {visible, {}, locations, regional_slots}; }
+  Locals nested() const { return {visible, {}, locations, regional_slots, owner_anchors}; }
+  std::map<std::string, Value> owners() const {
+    auto result = owner_anchors;
+    for (const auto &[name, value] : visible) {
+      result.erase(name);
+      if (value.type.kind == Type::region) result.emplace(name, value);
+    }
+    return result;
+  }
   bool declare(const std::string &name, Value value, const Location &at) {
     if (!declared.insert(name).second) return false;
     visible.insert_or_assign(name, std::move(value));
@@ -185,7 +195,7 @@ struct Compilation {
   std::string bitcode;
   bool uses_regions = false;
 };
-enum class Warning { unit_conversion, multi_alias_extension, shadow };
+enum class Warning { unit_conversion, multi_alias_extension, shadow, unused_capture };
 struct WarningOptions {
   bool as_errors = false;
   std::set<Warning> errors;
@@ -277,6 +287,7 @@ class Compiler {
   LLVMEmission ir_;
   WarningOptions warning_options_;
   std::vector<std::string> warnings_;
+  std::vector<std::pair<Location, std::string>> capture_warnings_;
   bool scope_rebound_ = false; // Includes bindings with no native TLS slot.
   struct EndPath {};
   struct FlowState {
@@ -454,14 +465,15 @@ class Compiler {
 
   void warn(Warning kind, const Location &at, std::string message) {
     const auto category = kind == Warning::unit_conversion ? "unit-conversion" :
-                          kind == Warning::shadow ? "shadow" : "multi-alias-extension";
+                          kind == Warning::shadow ? "shadow" :
+                          kind == Warning::unused_capture ? "unused-capture" : "multi-alias-extension";
     const auto newline = message.find('\n');
     message.insert(newline == std::string::npos ? message.size() : newline,
                    " [-W" + std::string(category) + "]");
     if (warning_options_.as_errors || warning_options_.errors.contains(kind))
       fail(at, "warning treated as error: " + message);
     auto diagnostic = location_text(at) + ": warning: " + message;
-    if (kind != Warning::shadow || std::find(warnings_.begin(), warnings_.end(), diagnostic) == warnings_.end())
+    if (std::find(warnings_.begin(), warnings_.end(), diagnostic) == warnings_.end())
       warnings_.push_back(std::move(diagnostic));
   }
 
@@ -524,6 +536,8 @@ class Compiler {
   std::map<size_t, Value> closure_regions(const Value &value) {
     std::map<size_t, Value> result;
     if (!value.procedure) return result;
+    for (const auto &[name, owner] : value.procedure->lexical_captures.owner_anchors)
+      if (owner.region_id) result.emplace(*owner.region_id, owner);
     for (const auto &[name, capture] : value.procedure->lexical_captures.visible) {
       auto dependencies = closure_regions(capture);
       if (capture.region_id) dependencies.emplace(*capture.region_id, borrowed(capture));
@@ -597,6 +611,7 @@ class Compiler {
   }
   static Value bits_value(Value value) {
     value.storage.reset(); value.pointer.reset(); value.region_id.reset(); value.read_only = false; value.referent = nullptr; value.nullable = false; value.reference_field.reset(); value.nonnull_when.reset(); value.pointer_view = false;
+    value.binding_read_only = false;
     return value;
   }
   Value local_storage(Type type, const Location &at) {
@@ -628,6 +643,7 @@ class Compiler {
     value.pointer.reset();
     value.reference_field.reset();
     value.required_reference = false;
+    value.binding_read_only = false;
     value.pointer_view = true;
     valid_view(value, at);
     if (!storage_owner(value) && !value.pending_owner) fail(at, "ptr requires storage with a known owner");
@@ -774,7 +790,7 @@ class Compiler {
           actual.type.capture_regions != expected.capture_regions) {
         message = "callable environment owner mismatch: " + message;
         if (expected.capture_owners.empty())
-          message += "\n" + location_text(at) + ": note: declare retained regions in the callable type, for example func[region r]()->const u64";
+          message += "\n" + location_text(at) + ": note: declare retained regions in the callable type, for example func()->const u64 with {region r}";
         for (const auto id : actual.type.capture_regions)
           message += region_note(id, "the returned or supplied callable retains this region owner");
         for (const auto id : expected.capture_regions)
@@ -956,8 +972,7 @@ class Compiler {
     }
     Signature result{type_context_.bindings, {}, {}, {}};
     if (captures)
-      for (const auto &[name, value] : captures->visible)
-        if (value.type.kind == Type::region) result.owner_values.emplace(name, borrowed(value));
+      for (const auto &[name, value] : captures->owners()) result.owner_values.emplace(name, borrowed(value));
     const auto bind_owner = [&](const std::string &name, Value value) -> std::optional<std::string> {
       const auto declaration = std::find_if(form.owner_parameters.begin(), form.owner_parameters.end(),
           [&](const auto &owner) { return owner.name == name; });
@@ -1196,6 +1211,8 @@ class Compiler {
     form->throws_types = source.throws_types;
     form->result_const = source.result_const;
     form->result_kind = source.result_kind;
+    form->captures = source.captures;
+    form->explicit_captures = source.explicit_captures;
     return form;
   }
   Expr mixin_expression(const Expression &source_expr, const Module &source, const Module &receiver,
@@ -1223,9 +1240,6 @@ class Compiler {
     if (source_expr.definition) {
       expr->definition = procedure_header(*source_expr.definition);
       if (expr->kind == Expression::Kind::procedure_effect) expr->definition->name = expr->text;
-      for (const auto &capture : source_expr.definition->captures)
-        expr->definition->captures.push_back({capture.name,
-            mixin_expression(*capture.source, source, receiver, names, identities, used), capture.transfer, capture.at});
       expr->definition->body = mixin_expression(*source_expr.definition->body, source, receiver, names, identities, used);
     }
     return expr;
@@ -1244,9 +1258,6 @@ class Compiler {
     form->symbolic = selection.symbolic;
     std::map<size_t, size_t> identities;
     std::set<std::string> used;
-    for (const auto &capture : source.form->captures)
-      form->captures.push_back({capture.name,
-          mixin_expression(*capture.source, *source.lexical, receiver, names, identities, used), capture.transfer, capture.at});
     form->body = mixin_expression(*source.form->body, *source.lexical, receiver, names, identities, used);
     for (const auto &mapping : selection.mappings)
       if (!used.contains(mapping.source))
@@ -1498,35 +1509,101 @@ class Compiler {
     for (const auto &child : expr.children) resolve_procedure_symbols(*child, module);
     if (expr.definition) resolve_procedure_symbols(*expr.definition->body, module);
   }
-  Locals capture_slots(const Form &form, const Module &module, Environment env, Locals locals, bool function_context) {
+  Locals capture_variables(const Form &form, const Locals &outer) {
+    std::map<std::string, Location> required;
     Locals captures;
-    for (const auto &capture : form.captures) {
-      if (captures.visible.contains(capture.name) ||
-          std::any_of(form.parameters.begin(), form.parameters.end(), [&](const auto &p) { return p.name == capture.name; }) ||
-          std::any_of(form.owner_parameters.begin(), form.owner_parameters.end(), [&](const auto &o) { return o.name == capture.name; }))
-        fail(capture.at, "a capture name must be distinct from other captures and parameters");
-      auto value = expression(*capture.source, module, env, locals, function_context, capture.transfer);
-      valid_view(value, capture.at);
-      bool slot = false;
-      if (capture.transfer) {
-        if (!local_bits(value.type)) fail(capture.at, "a capture '<-' copies bits only; it cannot acquire a region owner");
-        value = bits_value(std::move(value));
-        value.read_only = true;
-      } else if (value.type.kind == Type::region) {
-        value = borrowed(std::move(value));
-      } else if (!value.procedure) {
-        using K = Expression::Kind;
-        const bool regional_name = capture.source->kind == K::name && locals.regional_slots.contains(capture.source->text);
-        if ((capture.source->kind != K::field && capture.source->kind != K::index && !regional_name) ||
-            !value.region_id || (!value.storage && !value.reference_field))
-          fail(capture.at, "a reference capture must select regional variable storage, not a lexical variable or temporary");
-        slot = true;
-        value.pointer.reset();
-        value.native = nullptr;
-        if (value.reference_field) value.storage.reset();
+    const auto owners = outer.owners();
+    const auto type_owners = [&](auto &&self, const Type &type, const std::set<std::string> &bound) -> void {
+      for (const auto &name : type.capture_owners)
+        if (!bound.contains(name))
+          if (const auto found = owners.find(name); found != owners.end()) {
+            valid_view(found->second, form.at);
+            captures.owner_anchors.emplace(name, borrowed(found->second));
+          }
+      if (type.target) self(self, *type.target, bound);
+      for (const auto &parameter : type.parameters) self(self, parameter, bound);
+    };
+    const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound) {
+      if (!bound.contains(name) && outer.visible.contains(name)) required.try_emplace(name, at);
+    };
+    const auto scan = [&](auto &&self, const Expression &expr, std::set<std::string> &bound) -> void {
+      using K = Expression::Kind;
+      if (expr.kind == K::name || expr.kind == K::call) use(expr.text, expr.at, bound);
+      if (!expr.owner_name.empty()) use(expr.owner_name, expr.at, bound);
+      if (expr.annotation) type_owners(type_owners, *expr.annotation, bound);
+      if (expr.kind == K::block) {
+        auto inner = bound;
+        for (const auto &child : expr.children) self(self, *child, inner);
+        return;
       }
-      captures.declare(capture.name, std::move(value), capture.at);
-      if (slot) captures.regional_slots.insert(capture.name);
+      if (expr.kind == K::pointer_group) {
+        for (const auto &child : expr.children) {
+          self(self, *child, bound);
+          if (child->kind == K::pointer) bound.insert(child->text);
+        }
+        return;
+      }
+      if (expr.kind == K::range_for || expr.kind == K::fold) {
+        const auto body = expr.kind == K::fold ? 3u : 2u;
+        for (size_t i = 0; i < body; ++i) self(self, *expr.children[i], bound);
+        auto inner = bound;
+        inner.insert(expr.text);
+        if (expr.kind == K::fold) inner.insert(expr.binding);
+        self(self, *expr.children[body], inner);
+        if (expr.children.size() > body + 1) self(self, *expr.children.back(), bound);
+        return;
+      }
+      if (expr.definition) {
+        // Constructing a nested callable also requires its declared captures,
+        // including entries which its own body does not use.
+        for (const auto &capture : expr.definition->captures) use(capture.name, capture.at, bound);
+        auto inner = bound;
+        for (const auto &parameter : expr.definition->parameters) inner.insert(parameter.name);
+        for (const auto &owner : expr.definition->owner_parameters) inner.insert(owner.name);
+        for (const auto &parameter : expr.definition->parameters) type_owners(type_owners, parameter.type, inner);
+        if (expr.definition->result_type) type_owners(type_owners, *expr.definition->result_type, inner);
+        self(self, *expr.definition->body, inner);
+        if (expr.kind == K::callable && !expr.definition->name.empty()) bound.insert(expr.definition->name);
+        return;
+      }
+      if (expr.kind == K::handler) {
+        auto inner = bound;
+        inner.insert(expr.text);
+        for (const auto &child : expr.children) self(self, *child, inner);
+        return;
+      }
+      for (const auto &child : expr.children) self(self, *child, bound);
+      if (expr.kind == K::region_binding || expr.kind == K::alias) bound.insert(expr.text);
+    };
+    std::set<std::string> bound;
+    for (const auto &parameter : form.parameters) bound.insert(parameter.name);
+    for (const auto &owner : form.owner_parameters) bound.insert(owner.name);
+    for (const auto &parameter : form.parameters) type_owners(type_owners, parameter.type, bound);
+    if (form.result_type) type_owners(type_owners, *form.result_type, bound);
+    scan(scan, *form.body, bound);
+
+    std::map<std::string, Location> selected;
+    if (!form.explicit_captures) selected = required;
+    else {
+      for (const auto &capture : form.captures) {
+        if (bound.contains(capture.name)) fail(capture.at, "a capture name must be distinct from parameters and owner declarations");
+        if (!selected.emplace(capture.name, capture.at).second) fail(capture.at, "duplicate capture '" + capture.name + "'");
+        if (!outer.visible.contains(capture.name)) fail(capture.at, "unavailable captured variable '" + capture.name + "'");
+      }
+      for (const auto &[name, at] : required)
+        if (!selected.contains(name)) fail(at, "explicit capture list is missing '" + name + "'");
+    }
+    for (const auto &[name, at] : selected) {
+      auto value = outer.visible.at(name);
+      const bool slot = outer.regional_slots.contains(name);
+      if (value.type.kind == Type::region) value = borrowed(std::move(value));
+      else if (!value.procedure && !slot)
+        fail(at, "a closure cannot capture lexical variable storage; declare a var alias to regional storage");
+      valid_view(value, at);
+      captures.declare(name, std::move(value), outer.locations.at(name));
+      if (slot) captures.regional_slots.insert(name);
+      if (form.explicit_captures && !required.contains(name))
+        capture_warnings_.emplace_back(at, "capture '" + name + "' is unused by the body but retains its owner dependency");
     }
     return captures;
   }
@@ -1542,12 +1619,12 @@ class Compiler {
     }
     return value;
   }
-  Value define_procedure(Form &form, const Module &lexical, const Environment &env, const Locals &locals = {}, bool function_context = false) {
+  Value define_procedure(Form &form, const Module &lexical, const Environment &env, const Locals &locals = {}) {
     resolve_procedure_symbols(*form.body, lexical);
     auto proc = std::make_shared<Procedure>();
     proc->form = &form;
     proc->lexical = &lexical;
-    proc->lexical_captures = capture_slots(form, lexical, env, locals, function_context);
+    proc->lexical_captures = capture_variables(form, locals);
     // This is compiler metadata, not a runtime closure or a retained region.
     // SSA values already represent each binding's value at its definition.
     // Only demanded reads generate native uses, after typed method selection.
@@ -1557,7 +1634,7 @@ class Compiler {
       proc->captures.captured_bindings = env.bindings;
     }
     Value result{procedure_type(form, lexical), {}, std::move(proc), &lexical};
-    result.type = bind_capture_type(result.type, result.procedure->lexical_captures.visible, form.at, true);
+    result.type = bind_capture_type(result.type, result.procedure->lexical_captures.owners(), form.at, true);
     for (const auto &[id, access] : closure_regions(result)) result.type.capture_regions.push_back(id);
     return result;
   }
@@ -2116,9 +2193,11 @@ class Compiler {
         (form.parameters.size() != 2 || form.parameters[0].owner.empty() || form.parameters[1].owner.empty() || variadic(form)))
       fail(form.at, "a swap overload requires two destinations with explicit external owners");
     if (form.operation && (form.name == "=" || form.name == "<=>"))
-      for (size_t i = 0; i < (form.name == "=" ? 1u : 2u) && i < args.size(); ++i)
+      for (size_t i = 0; i < (form.name == "=" ? 1u : 2u) && i < args.size(); ++i) {
+        if (args[i].binding_read_only) fail(at, "cannot rebind through a const var alias");
         if (args[i].pointer && pointers_.at(*args[i].pointer).fixed_binding)
           fail(at, "cannot rebind a const ptr binding");
+      }
     for (size_t i = 0; i < args.size(); ++i)
       args[i] = converted(args[i], match.routes[i], at, caller, points.empty() ? nullptr : &points[i],
           !points.empty() && points[i].raw_view && !(parameter_at(form, i).declaration_kind == "ptr" && !parameter_at(form, i).owner.empty()));
@@ -2229,6 +2308,7 @@ class Compiler {
     if (expr.children.size() != 2) fail(expr.at, "reference assignment requires a destination and source");
     auto destination = expression(*expr.children[0], module, env, locals, function_context, false);
     auto source = expression(*expr.children[1], module, env, locals, function_context, false);
+    if (destination.binding_read_only) fail(expr.at, "cannot rebind through a const var alias");
     if (destination.reference_field) return rebind_field(destination, source, expr.at);
     if (source.type == Type::null_ref && destination.pointer) source = null_target(destination.type, destination, expr.at);
     if (!destination.pointer) fail(expr.at, "reference assignment requires an ordinary ptr binding; use '<-' for bits transfer");
@@ -2274,6 +2354,7 @@ class Compiler {
     auto left = expression(*expr.children[0], module, env, locals, function_context, false);
     auto right = expression(*expr.children[1], module, env, locals, function_context, false);
     if (expr.text == "<=>") {
+      if (left.binding_read_only || right.binding_read_only) fail(expr.at, "cannot rebind through a const var alias");
       const auto reload = [&](Value value) {
         if (value.pointer) {
           if (pointers_.at(*value.pointer).fixed_binding) fail(expr.at, "cannot rebind a const ptr binding");
@@ -3304,7 +3385,7 @@ class Compiler {
         if (value.procedure && expr.declaration_kind == "ref" && expr.fixed_binding) {
           if (declaration->annotation)
             value = admit(std::move(value), bind_capture_type(resolve(*declaration->annotation, module, declaration->at),
-                          locals.visible, declaration->at), module, declaration->at);
+                          locals.owners(), declaration->at), module, declaration->at);
           declare_local(locals, declaration->text, std::move(value), module, declaration->at);
           continue;
         }
@@ -3344,6 +3425,44 @@ class Compiler {
         }
       }
       return {};
+  }
+  Value alias_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
+                         bool function_context) {
+    using K = Expression::Kind;
+    const auto &source = *expr.children.front();
+    if (source.kind != K::name && source.kind != K::field && source.kind != K::index)
+      fail(expr.at, "var requires an existing variable, field or array element lvalue");
+    auto value = expression(source, module, env, locals, function_context, false);
+    if (value.type.kind == Type::region || value.procedure || source.kind == K::symbol ||
+        (!value.pointer && !value.reference_field && !value.storage))
+      fail(expr.at, "var requires existing val/ref/ptr storage; whole-region and symbolic bindings use their own declarations");
+    std::string kind = "val";
+    if (value.pointer) kind = pointers_.at(*value.pointer).required ? "ref" : "ptr";
+    else if (value.reference_field) kind = value.required_reference ? "ref" : "ptr";
+    if (!expr.declaration_kind.empty() && kind != expr.declaration_kind)
+      fail(expr.at, "var storage kind mismatch: declared " + expr.declaration_kind + ", selected " + kind);
+    if (expr.annotation) {
+      const auto type = resolve(*expr.annotation, module, expr.at);
+      if ((local_bits(value.type) && type != value.type) || !accepts(value, type, module, expr.at))
+        fail(expr.at, "var type annotation cannot convert storage: expected " + type_name(type) + ", got " + type_name(value.type));
+    }
+    if (!expr.owner_name.empty()) {
+      const auto owner = locals.visible.find(expr.owner_name);
+      if (owner == locals.visible.end() || owner->second.type.kind != Type::region)
+        fail(expr.at, "unavailable region owner '" + expr.owner_name + "' for var alias");
+      valid_view(owner->second, expr.at);
+      if (value.pointer || !value.region_id || value.region_id != owner->second.region_id)
+        fail(expr.at, "var storage does not belong to declared region owner '" + expr.owner_name + "'");
+    }
+    const bool regional = !value.pointer && value.region_id.has_value();
+    if (expr.fixed_binding) { value.read_only = true; value.binding_read_only = true; }
+    if (regional) {
+      value.native = nullptr;
+      if (value.reference_field) value.storage.reset();
+    }
+    declare_local(locals, expr.text, std::move(value), module, expr.at);
+    if (regional) locals.regional_slots.insert(expr.text);
+    return {};
   }
   Value field_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                          bool function_context) {
@@ -3458,12 +3577,13 @@ class Compiler {
     }
     case K::boolean: return scalar(Type::boolean, ir_.bits(Type::boolean, expr.text == "true"));
     case K::callable: {
-      auto value = define_procedure(*expr.definition, module, env, locals, function_context);
+      auto value = define_procedure(*expr.definition, module, env, locals);
       if (expr.definition->name.empty()) return value;
       declare_local(locals, expr.definition->name, std::move(value), module, expr.at);
       return {};
     }
     case K::pointer_group: return declaration_expression(expr, module, env, locals, function_context);
+    case K::alias: return alias_expression(expr, module, env, locals, function_context);
     case K::pointer: fail(expr.at, "ptr declarator requires a declaration group");
     case K::make_local: {
       const auto type = expr.annotation ? resolve(*expr.annotation, module, expr.at) :
@@ -3496,7 +3616,12 @@ class Compiler {
     case K::name: {
       if (const auto local = locals.visible.find(expr.text); local != locals.visible.end()) {
         if (locals.regional_slots.contains(expr.text)) return captured_view(local->second, expr.at);
-        if (local->second.pointer) return pointer_value(*local->second.pointer, expr.at);
+        if (local->second.pointer) {
+          auto value = pointer_value(*local->second.pointer, expr.at);
+          value.binding_read_only = local->second.binding_read_only;
+          value.read_only |= value.binding_read_only;
+          return value;
+        }
         if (local->second.region_id) region_pointer(local->second, expr.at);
         return local->second;
       }
@@ -4267,6 +4392,8 @@ public:
       throw std::runtime_error(message);
     }
     for (const auto &check : binding_checks_) check_binding_owners(check.environment, check.at);
+    // Owner/type errors take precedence over warnings for unused listed captures.
+    for (const auto &[at, message] : capture_warnings_) warn(Warning::unused_capture, at, message);
     auto [llvm_ir, bitcode] = ir_.finish();
     return {scanned_, execution_order_, warnings_, std::move(llvm_ir), std::move(bitcode), regional_runtime_};
   }

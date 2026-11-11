@@ -1,35 +1,32 @@
 #!/usr/bin/env python3
-"""Exercise closure composition and bounded frame reuse on each experiment branch."""
+"""Exercise closure composition and bounded frame reuse with inferred and explicit captures."""
 import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
-import sys
 import tempfile
 import time
 
 
 def main():
-    variant = sys.argv[1] if len(sys.argv) > 1 else "owner"
-    assert variant in ("owner", "slot")
     root = Path(__file__).resolve().parents[4]
     compiler = root / os.environ.get("COD_TEST_TOOLCHAIN", "build") / "bin/cod"
     results = []
     with tempfile.TemporaryDirectory(prefix="cod-closure-composition-") as temporary:
         scratch = Path(temporary)
-        capture = " [state = state]" if variant == "slot" else ""
+        capture = " [state]"
         (scratch / "base.cod").write_text('region Shape { val value:u64; }\n'
-            'export Shape;\nfunction reader(region state:Shape) -> func[region state]()->const u64 {\n'
+            'export Shape;\nfunction reader(region state:Shape) -> func()->const u64 with {region state} {\n'
             f'  func{capture} () -> const u64 {{ state.value }}\n}}\nexport reader;\n')
         previous = "base.cod"
         levels = 64
         for index in range(levels):
             name = f"layer-{index}.cod"
-            capture = " [prior = prior]" if variant == "slot" else ""
+            capture = " [prior]" if index % 2 else ""
             (scratch / name).write_text(f'using "{previous}" reader as previous;\n'
                 'using "base.cod" Shape;\n'
-                'function reader(region state:Shape) -> func[region state]()->const u64 {\n'
+                'function reader(region state:Shape) -> func()->const u64 with {region state} {\n'
                 '  const ref prior = previous(state);\n'
                 f'  func{capture} () -> const u64 {{ prior() + 1u64 }}\n}}\nexport reader;\n')
             previous = name
@@ -66,7 +63,7 @@ def main():
                         "stdout": run.stdout, "bounded_occupation": True, "llvm_bytes": len(ir.encode()),
                         "region_acquisition_calls": sum('call ' in l and '@cod_lang_region_new(' in l for l in ir.splitlines()),
                         "source_sha256": hashlib.sha256(frame.encode()).hexdigest()})
-    evidence = {"variant": variant, "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
+    evidence = {"variant": "unified", "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
                 "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "passed": True,
                 "results": results, "timing_scope": "frontend, native compile/link and process combined; not a simulation throughput benchmark"}
     print(json.dumps(evidence, indent=2))

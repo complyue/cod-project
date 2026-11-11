@@ -1,3 +1,5 @@
-val number:u64 <- 3u64;
-const ref callback = func [number <- number] () -> void { number <- 4u64; {} };
+region State { number:u64; }
+owned region state:State <- make State(capacity = 128u64) { number <- 3u64 };
+val var number:const u64 -> state.number;
+const ref callback = func [number] () -> void { number <- 4u64; {} };
 callback();

@@ -873,6 +873,8 @@ int main(int argc, const char **argv) {
       warnings.errors.insert(cod::language::Warning::multi_alias_extension);
     } else if (arg == "-Werror=shadow") {
       warnings.errors.insert(cod::language::Warning::shadow);
+    } else if (arg == "-Werror=unused-capture") {
+      warnings.errors.insert(cod::language::Warning::unused_capture);
     } else if (arg == "--emit-llvm" || arg == "--emit-bc" || arg == "--emit-runtime") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires a path\n";

@@ -1,0 +1,234 @@
+{
+  "authority": "D-18 / H-327\u2013H-332 / C-04",
+  "recorded_utc": "2026-11-11T10:28:09.571195+00:00",
+  "branch": "codex/region-closure-unified",
+  "build": {
+    "command": "cmake --build ./build",
+    "exit": 0,
+    "log_sha256": "2b7856d5c9339b02af21b30ade7e28f573126b48dfd7a933c901d6469cd3be90"
+  },
+  "compiler": {
+    "path": "build/bin/cod",
+    "sha256": "5213467750924aa33aba16320608365246e3f59bdc28e56ce2b6536e785ae677"
+  },
+  "inputs": {
+    "files": 376,
+    "sha256": "3101d52430a4d758c2fb13c7c0016a3285cebcf78ba06d80bf6f45903aeea335",
+    "encoding": "Sorted repository-relative path + NUL + file SHA256 + newline; union of language/native source manifests plus composition script."
+  },
+  "compiler_source_sha256": {
+    "cod/main.cc": "5c87c74e624d5dcecd7cd97cdd1df16045605c7b6102acd6230b1bf74bc6a4b7",
+    "cod/lang_syntax.hh": "078315b8cba5768bd6e36860c0dea49c1aec6c63356a1fe418a2c54179ffb2cc",
+    "cod/lang_frontend.hh": "66fcdfc4ec7c1a48eff1e8903e530b9d3cccff3451b8fecbc7bbf26f9b2d2dd8",
+    "cod/lang_llvm.hh": "476af19c5fb67745a0843598d327b11d11213f19e4c57067300edc53962bed0b",
+    "cod/lang_native_runtime.hh": "4054b6db30d5301480ab426964643ee2bb093ad74eb1d96edad7aa10300da2ef",
+    "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241"
+  },
+  "language": {
+    "command": "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/run_tests.py",
+    "passed": 289,
+    "total": 289,
+    "observations": [
+      {
+        "fixture": "exploration/closure-selection-error.cod",
+        "args": [],
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/closure-selection-error.cod:10:3: runtime selection of different callable captures is outside this experiment; select regional state inside one callable\ntests/cod/language/exploration/closure-selection-error.cod:12:34: note: a callable alternative retains this actual region owner\ntests/cod/language/exploration/closure-selection-error.cod:12:34: note: a callable alternative retains this actual region owner\ntests/cod/language/exploration/closure-selection-error.cod:15:20: note: in call to function 'select' defined at tests/cod/language/exploration/closure-selection-error.cod:8:1\n"
+      },
+      {
+        "fixture": "exploration/closure-symbol-owner-error.cod",
+        "args": [],
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/closure-symbol-owner-error.cod:7:1: symbolic procedure binding cannot erase captured region owners; use an owner-anchored lexical callable\n"
+      },
+      {
+        "fixture": "exploration/stream-monitor-use.cod",
+        "args": [],
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "0\n0\n2\n96\n128\n64\n80\n1\n",
+        "stderr": ""
+      },
+      {
+        "fixture": "exploration/variable-aliases.cod",
+        "args": [],
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "7\ntrue\n9\n13\n11\n17\n19\n",
+        "stderr": ""
+      },
+      {
+        "fixture": "exploration/capture-missing.cod",
+        "args": [],
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/capture-missing.cod:4:46: explicit capture list is missing 'count'\n"
+      },
+      {
+        "fixture": "exploration/capture-unused.cod",
+        "args": [],
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "1\n",
+        "stderr": "tests/cod/language/exploration/capture-unused.cod:7:16: warning: capture 'other' is unused by the body but retains its owner dependency [-Wunused-capture]\n"
+      },
+      {
+        "fixture": "exploration/capture-unused.cod",
+        "args": [
+          "-Werror=unused-capture"
+        ],
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/capture-unused.cod:7:16: warning treated as error: capture 'other' is unused by the body but retains its owner dependency [-Wunused-capture]\n"
+      },
+      {
+        "fixture": "exploration/capture-unused-owner.cod",
+        "args": [
+          "-Werror=unused-capture"
+        ],
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/capture-unused-owner.cod:3:46: callable environment owner mismatch: expected func() -> const u64 with {region state}, got func() -> const u64 with {region <inferred>}\ntests/cod/language/exploration/capture-unused-owner.cod:8:36: note: the returned or supplied callable retains this region owner\ntests/cod/language/exploration/capture-unused-owner.cod:9:37: note: the returned or supplied callable retains this region owner\ntests/cod/language/exploration/capture-unused-owner.cod:8:36: note: the callable signature requires this actual region owner\ntests/cod/language/exploration/capture-unused-owner.cod:10:18: note: in call to function 'reader' defined at tests/cod/language/exploration/capture-unused-owner.cod:2:1\n"
+      },
+      {
+        "fixture": "exploration/alias-kind-error.cod",
+        "args": [],
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/alias-kind-error.cod:4:9: var storage kind mismatch: declared ref, selected ptr\n"
+      },
+      {
+        "fixture": "exploration/alias-owner-error.cod",
+        "args": [],
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/alias-owner-error.cod:4:9: var storage does not belong to declared region owner 'state'\n"
+      },
+      {
+        "fixture": "exploration/alias-readonly-error.cod",
+        "args": [],
+        "passed": true,
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "tests/cod/language/exploration/alias-readonly-error.cod:5:6: cannot rebind through a const var alias\n"
+      }
+    ]
+  },
+  "native": {
+    "regional": {
+      "command": "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/regional_runtime_tests.py",
+      "exit": 0,
+      "layout": {
+        "relocation_passed": true,
+        "relocated_bytes": 120,
+        "region_header_bytes": 40,
+        "array_header_bytes": 16,
+        "record_bytes": 24
+      },
+      "compile_rejections": [],
+      "passed": true
+    },
+    "ownership": {
+      "command": "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/owned_region_tests.py",
+      "exit": 0,
+      "layout": {
+        "owners_acquired": 19,
+        "owners_released": 19,
+        "root_relocations": 1,
+        "pending_result_cleanup": true,
+        "callee_entry_timing": true
+      },
+      "compile_rejections": [
+        "stale-borrow-argument",
+        "consumed-name",
+        "escaping-view",
+        "ended-effect-owner",
+        "conditional-consumption",
+        "duplicate-move",
+        "later-argument-move",
+        "borrow-extraction",
+        "dynamic-extraction",
+        "repeated-move",
+        "mode-overload",
+        "exceptional-join",
+        "owner-field",
+        "missing-field",
+        "duplicate-field"
+      ]
+    },
+    "exception": {
+      "command": "COD_TEST_TOOLCHAIN=build python3 tests/cod/language/exception_runtime_tests.py",
+      "exit": 0,
+      "layout": {
+        "provider_failures": 1,
+        "owners_acquired": 2,
+        "owners_released": 2,
+        "inner_released_before_catch": true,
+        "outer_preserved_until_exit": true
+      },
+      "compile_rejections": [
+        "non-exception-cause",
+        "duplicate-category",
+        "catch-order",
+        "finally-value",
+        "rethrow-context",
+        "function-effects"
+      ],
+      "retained_chain": {
+        "returned_and_stored_causes": true,
+        "relocation_after_original_release": true,
+        "category_preserved": true,
+        "immutable_records": 4,
+        "storage_released_at_exit": true
+      },
+      "chain_allocation_failure": {
+        "real_chain_allocation_failures": 3,
+        "automatic_cause_added": false,
+        "saved_chain_survives_failure": true,
+        "retry_passed": true,
+        "owners_acquired": 2,
+        "owners_released": 2,
+        "chain_allocations": 4,
+        "chain_deallocations": 4
+      }
+    }
+  },
+  "composition": {
+    "variant": "unified",
+    "passed": true,
+    "results": [
+      {
+        "case": "64-module-returned-nested-closures",
+        "seconds": 1.8649777300015558,
+        "stdout": "69\n85\n",
+        "llvm_bytes": 87929,
+        "generated_source_count": 66,
+        "generated_sources_sha256": "1feee7357b1a1c437e1a12bd511b5e9fb23a1527c7624adfaca4e0c604bcfb2e"
+      },
+      {
+        "case": "10000-two-frame-updates",
+        "seconds": 1.8581192290002946,
+        "stdout": "10001\n10000\n",
+        "bounded_occupation": true,
+        "llvm_bytes": 39220,
+        "region_acquisition_calls": 1,
+        "source_sha256": "e3038a3b5b0441be21a31fa7616af51aaad678634c1eefb496e590a6c8269ca6"
+      }
+    ],
+    "timing_scope": "frontend, native compile/link and process combined; not a simulation throughput benchmark"
+  },
+  "boundaries": [
+    "No runtime closure records or runtime selection of distinct callable environments.",
+    "With lists actual retained owners; exact owner validation is enforced. Named owner projection is future design.",
+    "No runtime/emitter/relative-pointer representation change."
+  ]
+}

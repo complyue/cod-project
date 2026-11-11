@@ -10,15 +10,17 @@ ptr first_link = alloc state Link(first);
 ptr second_link = alloc state Link(second);
 state.link = first_link;
 try {
-  const ref pinned = func [selected = state.link.selected] () -> const i64 throws NullPointerException { selected.value };
-  const ref following = func [state = state] () -> const i64 throws NullPointerException { state.link.selected.value };
+  ptr var pinned_selection -> state.link.selected;
+  const ref pinned = func [pinned_selection] () -> const i64 throws NullPointerException { pinned_selection.value };
+  const ref following = func [state] () -> const i64 throws NullPointerException { state.link.selected.value };
   state.link = second_link;
   behave @print(pinned());
   behave @print(following());
   first_link.selected = second;
   behave @print(pinned());
   behave @print(following());
-  const ref replace = func [selected = first_link.selected, state = state] () -> void throws NullPointerException {
+  ptr var selected -> first_link.selected;
+  const ref replace = func [selected, state] () -> void throws NullPointerException {
     selected = state.link.selected;
     {}
   };
@@ -26,8 +28,12 @@ try {
   replace();
   behave @print(first_link.selected.value);
 } catch (e:const NullPointerException) { behave @print(-1); };
-function adder(region state:State, increment:u64) -> func[region state]()->const u64 {
-  func [tick = state.tick, increment <- increment] () -> const u64 { tick + increment }
+data Increment { amount:u64; }
+function adder(region state:State, increment:u64) -> (func()->const u64 with {region state}) {
+  ref configuration = alloc state Increment(increment);
+  val var tick -> state.tick;
+  val var amount -> configuration.amount;
+  func [tick, amount] () -> const u64 { tick + amount }
 }
 const ref add = adder(state, 4u64);
 behave @print(add());
@@ -36,15 +42,18 @@ behave @print(add());
 data Required { ref selected:Node; }
 ptr required_left = alloc state Required(first);
 ptr required_right = alloc state Required(second);
-const ref copy_ref = func [left = required_left.selected, right = required_right.selected] () -> void { left = right; {} };
+ref var left -> required_left.selected;
+ref var right -> required_right.selected;
+const ref copy_ref = func [left, right] () -> void { left = right; {} };
 copy_ref();
 behave @print(required_left.selected.value);
 try {
   first_link.selected = first;
-  const ref alias_test = func [selected = first_link.selected, state = state] () -> const i64 throws NullPointerException {
-    ptr alias = selected;
+  ptr var chosen -> first_link.selected;
+  const ref alias_test = func [chosen, state] () -> const i64 throws NullPointerException {
+    ptr alias = chosen;
     alias = state.link.selected;
-    selected.value + alias.value
+    chosen.value + alias.value
   };
   behave @print(alias_test());
   behave @print(first_link.selected.value);
@@ -52,13 +61,14 @@ try {
 function (<=>)(left:Node in O, right:Node in O) -> void where {owner O} {
   intrinsic (<=>)(left, right)
 }
-const ref swap_slots = func [left = required_left.selected, right = required_right.selected] () -> void { left <=> right };
+const ref swap_slots = func [left, right] () -> void { left <=> right };
 required_left.selected = first;
 swap_slots();
 behave @print(required_left.selected.value);
 behave @print(required_right.selected.value);
-const ref factory = func [state = state] () -> func[region state]()->const u64 {
-  func [tick = state.tick] () -> const u64 { tick }
+const ref factory = func [state] () -> (func()->const u64 with {region state}) {
+  val var tick -> state.tick;
+  func [tick] () -> const u64 { tick }
 };
 const ref nested = factory();
 state.tick <- 11u64;
@@ -66,14 +76,17 @@ behave @print(nested());
 array Values[u32]:i64;
 ref values = alloc state Values(2u64, 0);
 ref selected <- 0u32;
-const ref element = func [value = values[selected]] () -> const i64 { value };
+val var item -> values[selected];
+const ref element = func [item] () -> const i64 { item };
 selected <- 1u32;
 values[0u32] <- 17;
 values[1u32] <- 23;
 behave @print(element());
 first_link.selected = null;
 second_link.selected = second;
-const ref swap_nullable = func [left = first_link.selected, right = second_link.selected] () -> void { intrinsic (<=>)(left, right) };
+ptr var nullable_left -> first_link.selected;
+ptr var nullable_right -> second_link.selected;
+const ref swap_nullable = func [nullable_left, nullable_right] () -> void { intrinsic (<=>)(nullable_left, nullable_right) };
 swap_nullable();
 behave @print(isnull(first_link.selected));
 behave @print(isnull(second_link.selected));

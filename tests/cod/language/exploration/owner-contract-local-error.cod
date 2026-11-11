@@ -2,4 +2,4 @@ using "structural-api.cod" Counter;
 using "owner-closure-library.cod" reader;
 owned region first:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 owned region second:Counter <- make Counter(capacity = 128u64) { ticks <- 7u64 };
-const ref wrong:func[region first]()->const u64 = reader(second);
+const ref wrong:(func()->const u64 with {region first}) = reader(second);

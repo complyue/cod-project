@@ -1,0 +1,4 @@
+region State { count:u64; ptr selected:u64; }
+owned region state:State <- make State(capacity = 128u64) { count <- 1u64; selected = null };
+state.selected = state.count;
+ref var selected:u64 -> state.selected;

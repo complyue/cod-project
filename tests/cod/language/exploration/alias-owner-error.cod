@@ -1,0 +1,4 @@
+region State { count:u64; }
+owned region state:State <- make State(capacity = 128u64) { count <- 1u64 };
+ref local = state.count;
+ref var alias:u64 in state -> local;

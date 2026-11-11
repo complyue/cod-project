@@ -226,19 +226,20 @@ inline std::string type_name(const Type &type) {
   case Type::procedure: {
     if (!type.target) return "procedure family";
     std::string result = type.pure_callable ? "func" : "proc";
-    if (!type.capture_owners.empty() || !type.capture_regions.empty()) {
-      result += "[";
-      if (type.capture_owners.empty()) result += "region <inferred>";
-      for (size_t i = 0; i < type.capture_owners.size(); ++i)
-        result += (i ? ", " : "") + std::string("region ") + type.capture_owners[i];
-      result += "]";
-    }
     result += "(";
     for (size_t i = 0; i < type.parameters.size(); ++i)
       result += (i ? ", " : "") + type_name(type.parameters[i]) +
                 (type.variadic && i + 1 == type.parameters.size() ? "..." : "");
-    return result + ") -> " +
-           (type.const_views.size() > type.parameters.size() && type.const_views.back() ? "const " : "") + type_name(*type.target);
+    result += ") -> " + std::string(type.const_views.size() > type.parameters.size() && type.const_views.back() ? "const " : "");
+    result += type.target->kind == Type::procedure ? "(" + type_name(*type.target) + ")" : type_name(*type.target);
+    if (!type.capture_owners.empty() || !type.capture_regions.empty()) {
+      result += " with {";
+      if (type.capture_owners.empty()) result += "region <inferred>";
+      for (size_t i = 0; i < type.capture_owners.size(); ++i)
+        result += (i ? ", " : "") + std::string("region ") + type.capture_owners[i];
+      result += "}";
+    }
+    return result;
   }
   case Type::float32: return "f32";
   case Type::float64: return "f64";
@@ -263,7 +264,7 @@ struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect,
                     block, conditional, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, make_region, touch, effect_group, transfer, procedure_effect,
-                    pointer_group, pointer, make_local, rebind, region_binding, callable };
+                    pointer_group, pointer, make_local, rebind, region_binding, callable, alias };
   Kind kind;
   Location at;
   std::string text;
@@ -300,7 +301,7 @@ struct SymbolMapping {
   std::string source;
   Location at;
 };
-struct Capture { std::string name; Expr source; bool transfer; Location at; };
+struct Capture { std::string name; Location at; };
 struct Form {
   enum class Kind { symbol, symbol_from, function, procedure, data, region_definition, array, unit, using_units, global,
                     using_resource, import_resource, mixin_resource, export_resource, expression, abstract_type, conformance };
@@ -320,6 +321,7 @@ struct Form {
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
   std::vector<Capture> captures;
+  bool explicit_captures = false;
   std::vector<TypeParameter> type_parameters;
   std::vector<Type> throws_types;
   std::vector<OwnerParameter> owner_parameters;
@@ -435,22 +437,18 @@ class Parser {
     if (!form.explicit_alias) form.alias_operation = form.operation;
   }
   Type parse_type(Parameter *parameter = nullptr) {
+    if (take("(")) {
+      auto type = parse_type(parameter);
+      expect(")");
+      return type;
+    }
     auto token = name(TokenKind::identifier);
     if (token.text == "owned" || token.text == "region")
       fail(token.at, "region is a declaration keyword; use 'region name:Root' or 'owned region name:Root', not a value-type annotation");
     if (token.text == "proc" || token.text == "procedure" || token.text == "func" || token.text == "function") {
       Type type{Type::procedure};
       type.pure_callable = token.text == "func" || token.text == "function";
-      if (take("[")) {
-        do {
-          expect("region");
-          const auto owner = ordinary_name();
-          if (std::find(type.capture_owners.begin(), type.capture_owners.end(), owner.text) != type.capture_owners.end())
-            fail(owner.at, "duplicate callable environment owner '" + owner.text + "'");
-          type.capture_owners.push_back(owner.text);
-        } while (take(","));
-        expect("]");
-      }
+      if (is("[")) fail(peek().at, "callable types associate owners with 'with {region name}'; brackets list body captures");
       expect("(");
       if (!take(")")) {
         do {
@@ -466,6 +464,17 @@ class Parser {
         type.const_views.back() = true;
       }
       type.target = std::make_shared<Type>(signature_type());
+      if (take("with")) {
+        expect("{");
+        do {
+          expect("region");
+          const auto owner = ordinary_name();
+          if (std::find(type.capture_owners.begin(), type.capture_owners.end(), owner.text) != type.capture_owners.end())
+            fail(owner.at, "duplicate callable environment owner '" + owner.text + "'");
+          type.capture_owners.push_back(owner.text);
+        } while (take(","));
+        expect("}");
+      }
       if (take("throws")) type.throws_types.push_back(parse_type());
       return type;
     }
@@ -538,6 +547,27 @@ class Parser {
     }
     return parse_type();
   }
+  void generic_clause(Form &form) {
+    const bool grouped = take("{");
+    do {
+      if (is("region") || is("owner")) {
+        const bool regional = take("region");
+        if (!regional) expect("owner");
+        auto owner = ordinary_name();
+        OwnerParameter parameter{owner.text, {}, owner.at};
+        if (regional) { type_separator(); parameter.root = parse_type(); }
+        form.owner_parameters.push_back(std::move(parameter));
+      } else {
+        auto parameter = ordinary_name();
+        for (const auto &previous : form.type_parameters)
+          if (previous.name == parameter.text) fail(parameter.at, "duplicate type parameter '" + parameter.text + "'");
+        TypeParameter type_parameter{parameter.text, {}, parameter.at};
+        if (take("<:")) type_parameter.bound = parse_type();
+        form.type_parameters.push_back(std::move(type_parameter));
+      }
+    } while (grouped && take(","));
+    if (grouped) expect("}");
+  }
   void callable(Form &form, bool inline_effect = false, bool expression_form = false) {
     form.conversion = take("conversion");
     if (form.conversion && !is("function")) fail(peek().at, "conversion requires a pure function");
@@ -548,13 +578,15 @@ class Parser {
     if (!(expression_form && (is("(") || is("["))))
       form.name = form.symbolic ? name(TokenKind::symbol).text : lexical_name(&form.operation).text;
     if (take("[")) {
-      do {
-        const auto binding = value_name();
-        const bool transfer = take("<-");
-        if (!transfer) expect("=");
-        form.captures.push_back({binding.text, expression(), transfer, binding.at});
-      } while (take(","));
-      expect("]");
+      form.explicit_captures = true;
+      if (!take("]")) {
+        do {
+          const auto binding = value_name();
+          if (is("=") || is("<-")) fail(peek().at, "capture lists contain variable names; declare a var alias before the callable");
+          form.captures.push_back({binding.text, binding.at});
+        } while (take(","));
+        expect("]");
+      }
       if (!expression_form && function)
         fail(form.at, "captured functions are lexical callable expressions, not module method declarations");
     }
@@ -591,6 +623,8 @@ class Parser {
     } else if (function) {
       fail(peek().at, "a function requires a parameter list");
     }
+    const bool preceding_where = take("where");
+    if (preceding_where) generic_clause(form);
     if (take("->")) {
       form.result_const = take("const");
       if (is("ptr") || is("ref")) form.result_kind = tokens_[cursor_++].text;
@@ -601,25 +635,8 @@ class Parser {
       fail(form.at, "a ref/ptr result requires an explicit external owner: use in O");
     if (take("throws")) form.throws_types.push_back(parse_type());
     if (take("where")) {
-      const bool grouped = take("{");
-      do {
-        if (is("region") || is("owner")) {
-          const bool regional = take("region");
-          if (!regional) expect("owner");
-          auto owner = ordinary_name();
-          OwnerParameter parameter{owner.text, {}, owner.at};
-          if (regional) { type_separator(); parameter.root = parse_type(); }
-          form.owner_parameters.push_back(std::move(parameter));
-          continue;
-        }
-        auto parameter = ordinary_name();
-        for (const auto &previous : form.type_parameters)
-          if (previous.name == parameter.text) fail(parameter.at, "duplicate type parameter '" + parameter.text + "'");
-        TypeParameter type_parameter{parameter.text, {}, parameter.at};
-        if (take("<:")) type_parameter.bound = parse_type();
-        form.type_parameters.push_back(std::move(type_parameter));
-      } while (grouped && take(","));
-      if (grouped) expect("}");
+      if (preceding_where) fail(form.at, "a callable declares its generic parameters in one where clause");
+      generic_clause(form);
     }
     if (take("throws")) {
       if (!form.throws_types.empty()) fail(peek().at, "duplicate throws clause");
@@ -772,6 +789,22 @@ class Parser {
         if (fold) fail(token.at, "else belongs to a range for; fold already has an initial accumulator");
         expr->children.push_back(block());
       }
+      return expr;
+    }
+    if (is("var") || ((is("val") || is("ref") || is("ptr")) && is("var", 1))) {
+      std::string mode;
+      if (!is("var")) mode = tokens_[cursor_++].text;
+      expect("var");
+      auto expr = make(Expression::Kind::alias, value_name());
+      expr->declaration_kind = mode;
+      if (take(":")) {
+        expr->fixed_binding = take("const");
+        if (!is("->") && !is("in")) expr->annotation = parse_type();
+        else if (!expr->fixed_binding) fail(peek().at, "an alias colon requires a type or const qualifier");
+      }
+      if (take("in")) expr->owner_name = ordinary_name().text;
+      if (!take("->")) fail(peek().at, "var aliases require '-> lvalue'; use ref/ptr for reference bindings or val for independent bits storage");
+      expr->children.push_back(expression());
       return expr;
     }
     if (is("ptr") || is("ref") || is("val") || (is("const") && (is("ptr", 1) || is("ref", 1) || is("val", 1)))) {

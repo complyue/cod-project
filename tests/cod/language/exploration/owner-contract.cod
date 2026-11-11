@@ -2,20 +2,20 @@ using symbol "std:io" @print;
 using "structural-api.cod" Counter;
 using "owner-closure-library.cod" reader;
 region Extended { extra:u8; ticks:u64; }
-function relay(action:func[region source]()->const u64)
-  -> func[region source]()->const u64 where {region source:Counter} { action }
+function relay(action:(func()->const u64 with {region source}))
+  -> (func()->const u64 with {region source}) where {region source:Counter} { action }
 function generic(value:T) -> T where {T} { value }
 function pair(region left:Counter, region right:Counter)
-  -> func[region left, region right]()->const u64 {
-  func [left = left, right = right] () -> const u64 { left.ticks + right.ticks }
+  -> (func()->const u64 with {region left, region right}) {
+  func [left, right] () -> const u64 { left.ticks + right.ticks }
 }
 function both(region left:Counter, region right:Counter,
-              action:func[region left, region right]()->const u64) -> const u64 { action() }
+              action:(func()->const u64 with {region left, region right})) -> const u64 { action() }
 function mode(action:func()->const u64) -> const u64 { 0u64 }
-function mode(action:func[region r]()->const u64) -> const u64 where {region r:Counter} { 1u64 }
+function mode(action:(func()->const u64 with {region r})) -> const u64 where {region r:Counter} { 1u64 }
 owned region first:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 owned region second:Extended <- make Extended(capacity = 128u64) { extra <- 1u8; ticks <- 7u64 };
-const ref typed:func[region first]()->const u64 = reader(first);
+const ref typed:(func()->const u64 with {region first}) = reader(first);
 const ref forwarded = generic(relay(typed));
 first.ticks <- 5u64;
 behave @print(forwarded());
@@ -24,12 +24,12 @@ behave @print(both(first, second, combined));
 behave @print(mode(typed));
 const ref independent = func () -> const u64 { 42u64 };
 behave @print(mode(independent));
-const ref factory:func[region first]()->func[region first]()->const u64 =
-  func [first = first] () -> func[region first]()->const u64 {
-    func [first = first] () -> const u64 { first.ticks }
+const ref factory:(func()->(func()->const u64 with {region first}) with {region first}) =
+  func [first] () -> (func()->const u64 with {region first}) {
+    func [first] () -> const u64 { first.ticks }
   };
 const ref nested = factory();
 behave @print(nested());
-function score(action:func[region specific]()->const u64) -> const u64 where {region specific:Extended} { 2u64 }
-function score(action:func[region general]()->const u64) -> const u64 where {region general:Counter} { 1u64 }
+function score(action:(func()->const u64 with {region specific})) -> const u64 where {region specific:Extended} { 2u64 }
+function score(action:(func()->const u64 with {region general})) -> const u64 where {region general:Counter} { 1u64 }
 behave @print(score(reader(second)));

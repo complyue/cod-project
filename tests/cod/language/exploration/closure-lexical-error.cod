@@ -1,2 +1,2 @@
 val local:i64 <- 3;
-const ref callback = func [local = local] () -> const i64 { local };
+const ref callback = func [local] () -> const i64 { local };

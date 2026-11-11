@@ -1602,7 +1602,7 @@
     "file": "exploration/closure-lexical-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "reference capture must select regional variable storage"
+    "stderr_contains": "cannot capture lexical variable storage"
   },
   {
     "file": "exploration/closure-escape-error.cod",
@@ -1641,7 +1641,7 @@
     "file": "exploration/slot-owner-transfer-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "copies bits only"
+    "stderr_contains": "capture lists contain variable names"
   },
   {
     "file": "exploration/slot-bits-mutation-error.cod",
@@ -1653,7 +1653,7 @@
     "file": "exploration/closure-released-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "callable owner contract func[region state]"
+    "stderr_contains": "requires a live region owner"
   },
   {
     "file": "exploration/slot-cross-region-error.cod",
@@ -1713,8 +1713,66 @@
     "stdout": "",
     "stderr_contains": [
       "callable environment owner mismatch",
-      "func[region first]",
+      "with {region first}",
       "this actual region owner"
     ]
+  },
+  {
+    "file": "exploration/stream-monitor-use.cod",
+    "exit": 0,
+    "stdout": "0\n0\n2\n96\n128\n64\n80\n1\n"
+  },
+  {
+    "file": "exploration/variable-aliases.cod",
+    "exit": 0,
+    "stdout": "7\ntrue\n9\n13\n11\n17\n19\n"
+  },
+  {
+    "file": "exploration/capture-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "explicit capture list is missing 'count'"
+  },
+  {
+    "file": "exploration/capture-unused.cod",
+    "exit": 0,
+    "stdout": "1\n",
+    "stderr_contains": "capture 'other' is unused"
+  },
+  {
+    "file": "exploration/capture-unused.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "warning treated as error",
+    "args": [
+      "-Werror=unused-capture"
+    ]
+  },
+  {
+    "file": "exploration/capture-unused-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "callable environment owner mismatch",
+    "args": [
+      "-Werror=unused-capture"
+    ]
+  },
+  {
+    "file": "exploration/alias-kind-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "var storage kind mismatch"
+  },
+  {
+    "file": "exploration/alias-owner-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "var storage does not belong"
+  },
+  {
+    "file": "exploration/alias-readonly-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot rebind through a const var alias"
   }
 ]

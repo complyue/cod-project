@@ -1,0 +1,38 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+using "stream-monitor.cod" Stream;
+using "stream-monitor.cod" Packet;
+using "stream-monitor.cod" reader;
+using "stream-monitor.cod" mean_size;
+using "stream-monitor.cod" selected_size;
+using "stream-monitor.cod" pinned_size;
+using "stream-monitor.cod" record;
+
+# Concrete storage can carry fields beyond either helper's requirement.
+region Receiver { tag:u8; ticks:u64; ptr current:Packet; bytes:u64; }
+owned region receiver:Receiver <- make Receiver(capacity = 2048u64) {
+  tag <- 1u8; ticks <- 0u64; current = null; bytes <- 0u64
+};
+ref stream = alloc receiver Stream(17u64);
+ref first = alloc receiver Packet(64u64);
+ref second = alloc receiver Packet(128u64);
+const ref count = reader(stream);
+const ref mean = mean_size(stream);
+const ref selected = selected_size(stream);
+behave @print(count());
+behave @print(mean());
+try {
+  receiver.current = first;
+  const ref pinned = pinned_size(stream);
+  record(stream, selected());
+  receiver.current = second;
+  record(stream, selected());
+  behave @print(count());
+  behave @print(mean());
+  behave @print(selected());
+  behave @print(pinned());
+  first.bytes <- 80u64;
+  behave @print(pinned());
+  receiver.current = null;
+  try { selected(); {} } catch (e:const NullPointerException) { behave @print(1); };
+} catch (e:const NullPointerException) { behave @print(-1); };

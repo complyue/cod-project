@@ -1,0 +1,38 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+region State { count:u64; ptr selected:u64; }
+owned region state:State <- make State(capacity = 256u64) { count <- 1u64; selected = null };
+val var count:u64 in state -> state.count;
+val var observed:const u64 -> count;
+count <- 7u64;
+behave @print(observed);
+ptr var selected:u64 -> state.selected;
+behave @print(isnull(selected));
+selected = state.count;
+try { selected <- 9u64; {} } catch (e:const NullPointerException) { behave @print(-1); };
+behave @print(count);
+val first:u64 <- 11u64;
+val second:u64 <- 13u64;
+ref cursor = first;
+ref var cursor_alias -> cursor;
+cursor_alias = second;
+behave @print(cursor);
+ref var readonly:const u64 -> cursor_alias;
+cursor = first;
+behave @print(readonly);
+val pending = make local u64;
+val var pending_alias -> pending;
+pending_alias <- 17u64;
+behave @print(pending);
+
+# Inference preserves a dependency needed to construct a nested callable.
+function nested(region state:State) -> (func()->const u64 with {region state}) {
+  val var ticks -> state.count;
+  const ref outer = func () -> (func()->const u64 with {region state}) {
+    func [ticks] () -> const u64 { ticks }
+  };
+  outer()
+}
+const ref read = nested(state);
+state.count <- 19u64;
+behave @print(read());

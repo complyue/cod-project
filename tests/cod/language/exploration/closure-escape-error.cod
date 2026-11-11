@@ -1,7 +1,8 @@
 using "structural-api.cod" Counter;
 function bad() -> func()->const u64 {
   owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
-  func [ticks = state.ticks] () -> const u64 { ticks }
+  val var ticks -> state.ticks;
+  func [ticks] () -> const u64 { ticks }
 }
 const ref callback = bad();
 callback();

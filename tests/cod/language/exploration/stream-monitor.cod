@@ -1,0 +1,50 @@
+using "std:exceptions" NullPointerException;
+
+data Stream { id:u64; }
+data Packet { bytes:u64; }
+region Counters { ticks:u64; bytes:u64; }
+region Selection { ptr current:Packet; }
+
+# A stream object supplies its region owner; callers do not pass state again.
+function reader(ref stream:Stream in state) where {region state:Counters}
+    -> func()->const u64 with {region state} {
+  val var ticks:u64 in state -> state.ticks;
+  func [ticks] () -> const u64 { ticks }
+}
+
+function mean_size(ref stream:Stream in state) where {region state:Counters}
+    -> func()->const u64 with {region state} {
+  val var ticks:u64 in state -> state.ticks;
+  val var bytes:u64 in state -> state.bytes;
+  func () -> const u64 { if (ticks == 0u64) { 0u64 } else { bytes / ticks } }
+}
+
+# Retain the pointer slot, so subsequent packet selection is visible.
+function selected_size(ref stream:Stream in state) where {region state:Selection}
+    -> func()->const u64 with {region state} throws NullPointerException {
+  ptr var current:Packet in state -> state.current;
+  func [current] () -> const u64 throws NullPointerException { current.bytes }
+}
+
+# Retain this packet's bits slot, independently of subsequent selection.
+function pinned_size(ref stream:Stream in state) where {region state:Selection}
+    -> (func()->const u64 with {region state}) throws NullPointerException {
+  val var bytes:u64 in state -> state.current.bytes;
+  func () -> const u64 { bytes }
+}
+
+function record(ref stream:Stream in state, size:u64) where {region state:Counters} -> void {
+  state.ticks <- state.ticks + 1u64;
+  state.bytes <- state.bytes + size;
+  {}
+}
+
+export Stream;
+export Packet;
+export Counters;
+export Selection;
+export reader;
+export mean_size;
+export selected_size;
+export pinned_size;
+export record;
