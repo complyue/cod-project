@@ -1,6 +1,6 @@
 using "structural-api.cod" Counter;
 function writer(const region state:Counter) -> func()->void {
-  func () -> void { state.ticks <- 1u64; {} }
+  func [ticks = state.ticks] () -> void { ticks <- 1u64; {} }
 }
 owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 const ref callback = writer(state);

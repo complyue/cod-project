@@ -1,0 +1,7 @@
+using "structural-api.cod" Node;
+using "structural-api.cod" Cursor;
+owned region first:Cursor <- make Cursor(capacity = 256u64) { ticks <- 0u64; current = null };
+owned region second:Cursor <- make Cursor(capacity = 256u64) { ticks <- 0u64; current = null };
+second.current = alloc second Node(3);
+const ref wrong = func [left = first.current, right = second.current] () -> void { left = right; {} };
+wrong();

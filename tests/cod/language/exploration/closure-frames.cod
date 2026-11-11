@@ -4,9 +4,9 @@ unit Cell;
 array Frame[u32(Cell)]:f32;
 region Buffers { ptr input:Frame; ptr output:Frame; }
 function updater(region state:Buffers) -> func()->void throws NullPointerException {
-  func () -> void throws NullPointerException {
-    for (i in Cell(0u32) .. Cell(u32(len(state.input)))) {
-      state.output[i] <- state.input[i] + 1.0f32;
+  func [input = state.input, output = state.output] () -> void throws NullPointerException {
+    for (i in Cell(0u32) .. Cell(u32(len(input)))) {
+      output[i] <- input[i] + 1.0f32;
     };
     {}
   }

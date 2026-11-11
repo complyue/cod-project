@@ -85,11 +85,13 @@ struct Locals {
   std::map<std::string, Value> visible;
   std::set<std::string> declared;
   std::map<std::string, Location> locations;
+  std::set<std::string> regional_slots; // Binding locations, never a property of a loaded value.
 
-  Locals nested() const { return {visible, {}, locations}; }
+  Locals nested() const { return {visible, {}, locations, regional_slots}; }
   bool declare(const std::string &name, Value value, const Location &at) {
     if (!declared.insert(name).second) return false;
     visible.insert_or_assign(name, std::move(value));
+    regional_slots.erase(name);
     locations.insert_or_assign(name, at);
     return true;
   }
@@ -1127,6 +1129,9 @@ class Compiler {
     if (source_expr.definition) {
       expr->definition = procedure_header(*source_expr.definition);
       if (expr->kind == Expression::Kind::procedure_effect) expr->definition->name = expr->text;
+      for (const auto &capture : source_expr.definition->captures)
+        expr->definition->captures.push_back({capture.name,
+            mixin_expression(*capture.source, source, receiver, names, identities, used), capture.transfer, capture.at});
       expr->definition->body = mixin_expression(*source_expr.definition->body, source, receiver, names, identities, used);
     }
     return expr;
@@ -1145,6 +1150,9 @@ class Compiler {
     form->symbolic = selection.symbolic;
     std::map<size_t, size_t> identities;
     std::set<std::string> used;
+    for (const auto &capture : source.form->captures)
+      form->captures.push_back({capture.name,
+          mixin_expression(*capture.source, *source.lexical, receiver, names, identities, used), capture.transfer, capture.at});
     form->body = mixin_expression(*source.form->body, *source.lexical, receiver, names, identities, used);
     for (const auto &mapping : selection.mappings)
       if (!used.contains(mapping.source))
@@ -1392,78 +1400,64 @@ class Compiler {
     for (const auto &child : expr.children) resolve_procedure_symbols(*child, module);
     if (expr.definition) resolve_procedure_symbols(*expr.definition->body, module);
   }
-  Locals capture_regions(const Form &form, const Locals &outer) {
+  Locals capture_slots(const Form &form, const Module &module, Environment env, Locals locals, bool function_context) {
     Locals captures;
-    const auto capture = [&](const std::string &name, const Location &at, const std::set<std::string> &bound) {
-      if (bound.contains(name) || captures.visible.contains(name)) return;
-      const auto found = outer.visible.find(name);
-      if (found == outer.visible.end()) return;
-      auto value = found->second;
-      if (value.type.kind != Type::region && !value.procedure)
-        fail(at, "a closure cannot capture a lexical variable; access its region and regional fields explicitly");
-      valid_view(value, at);
-      if (value.type.kind == Type::region) value = borrowed(std::move(value));
-      captures.declare(name, std::move(value), outer.locations.at(name));
-    };
-    const auto scan = [&](auto &&self, const Expression &expr, std::set<std::string> &bound) -> void {
-      using K = Expression::Kind;
-      if (expr.kind == K::name || expr.kind == K::call) capture(expr.text, expr.at, bound);
-      if (!expr.owner_name.empty()) capture(expr.owner_name, expr.at, bound);
-      if (expr.kind == K::block) {
-        auto inner = bound;
-        for (const auto &child : expr.children) self(self, *child, inner);
-        return;
+    for (const auto &capture : form.captures) {
+      if (captures.visible.contains(capture.name) ||
+          std::any_of(form.parameters.begin(), form.parameters.end(), [&](const auto &p) { return p.name == capture.name; }) ||
+          std::any_of(form.owner_parameters.begin(), form.owner_parameters.end(), [&](const auto &o) { return o.name == capture.name; }))
+        fail(capture.at, "a capture name must be distinct from other captures and parameters");
+      auto value = expression(*capture.source, module, env, locals, function_context, capture.transfer);
+      valid_view(value, capture.at);
+      bool slot = false;
+      if (capture.transfer) {
+        if (!local_bits(value.type)) fail(capture.at, "a capture '<-' copies bits only; it cannot acquire a region owner");
+        value = bits_value(std::move(value));
+        value.read_only = true;
+      } else if (value.type.kind == Type::region) {
+        value = borrowed(std::move(value));
+      } else if (!value.procedure) {
+        using K = Expression::Kind;
+        const bool regional_name = capture.source->kind == K::name && locals.regional_slots.contains(capture.source->text);
+        if ((capture.source->kind != K::field && capture.source->kind != K::index && !regional_name) ||
+            !value.region_id || (!value.storage && !value.reference_field))
+          fail(capture.at, "a reference capture must select regional variable storage, not a lexical variable or temporary");
+        slot = true;
+        value.pointer.reset();
+        value.native = nullptr;
+        if (value.reference_field) value.storage.reset();
       }
-      if (expr.kind == K::pointer_group) {
-        for (const auto &child : expr.children) {
-          self(self, *child, bound);
-          if (child->kind == K::pointer) bound.insert(child->text);
-        }
-        return;
-      }
-      if (expr.kind == K::range_for || expr.kind == K::fold) {
-        const auto body = expr.kind == K::fold ? 3u : 2u;
-        for (size_t i = 0; i < body; ++i) self(self, *expr.children[i], bound);
-        auto inner = bound; inner.insert(expr.text);
-        if (expr.kind == K::fold) inner.insert(expr.binding);
-        self(self, *expr.children[body], inner);
-        if (expr.children.size() > body + 1) self(self, *expr.children.back(), bound);
-        return;
-      }
-      if (expr.definition) {
-        auto inner = bound;
-        for (const auto &parameter : expr.definition->parameters) inner.insert(parameter.name);
-        for (const auto &owner : expr.definition->owner_parameters) inner.insert(owner.name);
-        self(self, *expr.definition->body, inner);
-        if (expr.kind == K::callable && !expr.definition->name.empty()) bound.insert(expr.definition->name);
-        return;
-      }
-      if (expr.kind == K::handler) {
-        auto inner = bound; inner.insert(expr.text);
-        for (const auto &child : expr.children) self(self, *child, inner);
-        return;
-      }
-      for (const auto &child : expr.children) self(self, *child, bound);
-      if (expr.kind == K::region_binding) bound.insert(expr.text);
-    };
-    std::set<std::string> bound;
-    for (const auto &parameter : form.parameters) bound.insert(parameter.name);
-    for (const auto &owner : form.owner_parameters) bound.insert(owner.name);
-    scan(scan, *form.body, bound);
+      captures.declare(capture.name, std::move(value), capture.at);
+      if (slot) captures.regional_slots.insert(capture.name);
+    }
     return captures;
   }
-  Value define_procedure(Form &form, const Module &lexical, const Environment &env, const Locals &locals = {}) {
+  Value captured_view(Value value, const Location &at) {
+    valid_view(value, at);
+    if (value.reference_field) {
+      const auto offset = ir_.read(*value.reference_field);
+      value.native = offset;
+      if (local_bits(value.type)) {
+        value.storage = StorageView{ir_.nullable_address(value.reference_field->owner, offset), {}, {}};
+        value.native = nullptr;
+      }
+    }
+    return value;
+  }
+  Value define_procedure(Form &form, const Module &lexical, const Environment &env, const Locals &locals = {}, bool function_context = false) {
     resolve_procedure_symbols(*form.body, lexical);
     auto proc = std::make_shared<Procedure>();
     proc->form = &form;
     proc->lexical = &lexical;
-    proc->lexical_captures = capture_regions(form, locals);
+    proc->lexical_captures = capture_slots(form, lexical, env, locals, function_context);
     // This is compiler metadata, not a runtime closure or a retained region.
     // SSA values already represent each binding's value at its definition.
     // Only demanded reads generate native uses, after typed method selection.
-    proc->captures = env;
-    proc->captures.captured_context = true;
-    proc->captures.captured_bindings = env.bindings;
+    if (form.kind == Form::Kind::procedure) {
+      proc->captures = env;
+      proc->captures.captured_context = true;
+      proc->captures.captured_bindings = env.bindings;
+    }
     return {procedure_type(form, lexical), {}, std::move(proc), &lexical};
   }
   Value block(const Expression &expr, const Module &module, Environment env, Locals locals,
@@ -1644,10 +1638,12 @@ class Compiler {
     for (size_t i = 0; i < fixed; ++i) {
       auto argument = parameters[i];
       if ((rebind && i == 0) || (form.operation && form.name == "<=>")) {
-        if (!argument.pointer) fail(at, "a reference operation overload requires an ordinary ptr destination");
-        // Reference-operation destinations denote the caller's bindings; other
-        // parameters borrow storage through their own lexical pointer bindings.
+        if (!argument.pointer && !argument.reference_field)
+          fail(at, "a reference operation overload requires a pointer binding destination");
+        // Destinations denote caller bindings, including regional reference slots.
+        const bool regional = bool(argument.reference_field);
         declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
+        if (regional) locals.regional_slots.insert(form.parameters[i].name);
       } else if (form.parameters[i].declaration_kind == "val")
         declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
       else if (argument.storage || (!form.parameters[i].owner.empty() && object_type(argument.type)))
@@ -2181,21 +2177,32 @@ class Compiler {
     auto left = expression(*expr.children[0], module, env, locals, function_context, false);
     auto right = expression(*expr.children[1], module, env, locals, function_context, false);
     if (expr.text == "<=>") {
-      if (!left.pointer || !right.pointer) fail(expr.at, "reference swap requires ordinary ptr bindings");
-      left = pointer_value(*left.pointer, expr.at);
-      right = pointer_value(*right.pointer, expr.at);
-      if (pointers_.at(*left.pointer).fixed_binding || pointers_.at(*right.pointer).fixed_binding)
-        fail(expr.at, "cannot rebind a const ptr binding");
+      const auto reload = [&](Value value) {
+        if (value.pointer) {
+          if (pointers_.at(*value.pointer).fixed_binding) fail(expr.at, "cannot rebind a const ptr binding");
+          return pointer_value(*value.pointer, expr.at);
+        }
+        if (value.reference_field) return captured_view(std::move(value), expr.at);
+        fail(expr.at, "reference swap requires pointer binding destinations");
+      };
+      left = reload(std::move(left));
+      right = reload(std::move(right));
     }
     if (!expr.intrinsic) {
       if (const auto selected = method(expr.text, module, {left, right}, expr.at))
         return call_method(*selected, {left, right}, expr.at, env, function_context, module);
     }
     if (expr.text == "<=>") {
-      check_rebind(left, right, expr.at);
-      check_rebind(right, left, expr.at);
-      rebind_pointer(left, right);
-      rebind_pointer(right, left);
+      const auto check = [&](const Value &destination, const Value &source) {
+        if (!destination.reference_field) { check_rebind(destination, source, expr.at); return; }
+        if (destination.read_only) fail(expr.at, "cannot rebind a read-only reference field");
+        reference_source(source, *destination.reference_field->type.target, *destination.region_id,
+                         destination.required_reference, expr.at);
+      };
+      check(left, right);
+      check(right, left);
+      if (left.reference_field) rebind_field(left, right, expr.at); else rebind_pointer(left, right);
+      if (right.reference_field) rebind_field(right, left, expr.at); else rebind_pointer(right, left);
     } else {
       if (!local_bits(left.type) || !local_bits(right.type) || !left.storage || !right.storage)
         fail(expr.at, "builtin bits swap requires two bits storage destinations");
@@ -3346,7 +3353,7 @@ class Compiler {
     }
     case K::boolean: return scalar(Type::boolean, ir_.bits(Type::boolean, expr.text == "true"));
     case K::callable: {
-      auto value = define_procedure(*expr.definition, module, env, locals);
+      auto value = define_procedure(*expr.definition, module, env, locals, function_context);
       if (expr.definition->name.empty()) return value;
       declare_local(locals, expr.definition->name, std::move(value), module, expr.at);
       return {};
@@ -3383,6 +3390,7 @@ class Compiler {
     }
     case K::name: {
       if (const auto local = locals.visible.find(expr.text); local != locals.visible.end()) {
+        if (locals.regional_slots.contains(expr.text)) return captured_view(local->second, expr.at);
         if (local->second.pointer) return pointer_value(*local->second.pointer, expr.at);
         if (local->second.region_id) region_pointer(local->second, expr.at);
         return local->second;

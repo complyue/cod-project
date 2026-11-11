@@ -1,10 +1,10 @@
 # Structural regions and regional closures: experimental comparison
 
-Design revision: 2 · Recorded: 2026-11-10 · Status: authorized experimental scope; final language selection pending.
+Design revision: 3 · Recorded: 2026-11-10 · Status: authorized experimental scope; final language selection pending.
 
 ## Design authority
 
-- Registry: [D-18](DesignAuthorityRegistry.md#d-18), revision 2, all sections; [H-324](DesignAuthorityRegistry.md#h-324)/[K-448](DesignAuthorityRegistry.md#k-448).
+- Registry: [D-18](DesignAuthorityRegistry.md#d-18), revision 3, all sections; [H-324](DesignAuthorityRegistry.md#h-324)/[K-449](DesignAuthorityRegistry.md#k-449).
 - Value path: D-18/P-293 to C-73/C-74 explores practical, explicit storage and lifetime contracts serving charter §§1–3 through C-65/C-39. H-324 explicitly authorizes autonomous alternative design, branch implementation and empirical comparison within repository principles; this does not approve every experimental mechanism as the final language.
 - Dependencies: D-14 owners/field kinds, D-13 storage policy, D-10 callables/effects, D-17 failures/scopes and D-16 fixed bits/future fractions. D-01 relocation/allocator invariants and D-15 module-world/TLS separation remain constraints.
 - Non-goals: new RTTI, bootstrap/toolchain work, SNN learning/model selection, per-object ownership, hidden heap closures, cross-region stored pointers, copying/moving regional objects or merging a final design without review.
@@ -61,3 +61,66 @@ The [owner validation](../tests/cod/language/exploration/owners-validation.json)
 This branch keeps callable identity and captured access in WPO metadata. It does not provide a stored runtime closure descriptor. A control-flow join of different callable/capture values rejects explicitly; a single callable may still follow runtime-selected regional fields. The explicit-block/defer/contextual-callback increment remains separate. A field requirement is a minimum, not a restricted view hiding concrete fields.
 
 An owner capture follows an entire field path on every call. Thus a callback using state.link.current observes rebinding of state.link as well as current. Whether a library instead needs to keep the original current slot is the practical question for B-01.
+
+
+## B-01: Explicit regional-slot and value captures
+
+An explicit list distinguishes a retained regional variable slot from a copied bits value. It can also retain a borrowed region or a statically known callable. The list evaluates left-to-right in the defining context; names in the list belong to the body, not to subsequent capture initializers. Capture names must be distinct from parameters and one another.
+
+```text
+region Counter { val ticks:u64; }
+function reader(region state:Counter) -> func()->const u64 {
+    func [ticks = state.ticks] () -> const u64 { ticks }
+}
+function shifted(region state:Counter, delta:u64) -> func()->const u64 {
+    func [ticks = state.ticks, delta <- delta] () -> const u64 {
+        ticks + delta
+    }
+}
+```
+
+`=` selects an existing regional field/array-element slot, an already captured regional slot, a borrowed region or a statically known callable. Selecting an ordinary lexical ref/ptr binding rejects even if its current target lies inside a region. `<-` copies bits into an immutable capture; it neither borrows the source storage nor transfers a region owner. Thus `shifted` may return after its local parameter storage ends. These are experimental closure-list rules, not a change to ordinary assignment/transfer.
+
+A captured val slot observes later bits writes. A captured ref/ptr slot observes later rebinding and retains its access/nullability contract. Its name reloads the slot when used. An ordinary local alias initialized from that name borrows the current target and has its own binding: rebinding the alias does not rebind the captured slot. A nested closure can retain the slot by name without converting it into a lexical-cell capture. Reference swaps support regional reference slots as destinations, including overloaded swaps that delegate to the intrinsic; both directions are validated before either write.
+
+```text
+func [selected = state.link.selected] () -> const i64
+    throws NullPointerException { selected.value }
+func [state = state] () -> const i64
+    throws NullPointerException { state.link.selected.value }
+```
+
+The first callback retains the selected slot inside the original link. The second follows the current link each time. Rebinding `state.link` therefore affects only the second; changing the original link's selected slot affects the first. Both depend on the actual owning region remaining accessible. A slot capture does not retain a logical pool item after a library recycles that slot; item identity/reuse remains a library contract.
+
+Named lexical callable expressions and anonymous callables share this capture contract. Module function method declarations cannot carry lexical capture lists; an explicit callable value supplies that role.
+
+Explicit capture removes the free-name/scope walker used by A-01. Regional-slot identity belongs to the compiler's local binding model, not to every value loaded from that slot. Captures use existing typed storage views and owner checks; the native runtime, LLVM emitter and relative-pointer encoding require no changes. Procedure dynamic captures remain separate: `perform` restores captured symbolic values while observing current regional contents, and `behave` uses current symbolic bindings.
+
+The [slot validation](../tests/cod/language/exploration/slots-validation.json) records 273/273 passing language checks, the branch's exact compiler/source identities and native evidence. B-01 retains A-01's WPO-only callable limitation: this is not a runtime closure record that can be stored in a region, serialized or selected from heterogeneous runtime callbacks. Explicit double-brace scopes, defer and contextual block-to-callable syntax are not implemented by this experiment.
+
+## Review criteria
+
+Both alternatives preserve concrete field layouts through structural requirements and can return callbacks over a live external region. Neither extends a region's lifetime, promotes lexical cells or requires RTTI. A-01 offers shorter bodies for code that naturally names its owner; B-01 makes captures visible and adds stable-slot and copied-bits choices while also supporting explicit owner paths.
+
+The source of a dependency is an architectural distinction, not merely syntax: owning a region, borrowing a region, retaining a slot and loading that slot's current target are different operations. The experiments keep those distinctions in compiler metadata. A final design should retain this separation even if the capture spelling changes.
+
+B-01 is the preferred candidate for review because it expresses both path-following and stable-slot intent and removes implicit free-name analysis. This recommendation is not language adoption. Region field requirements remain minimum structural requirements over concrete WPO types; strict field-visibility erasure and stored runtime closures need separate design. No additional per-object lifecycle system or generic closure heap is justified by these results.
+
+
+### Measured comparison
+
+| Criterion | A-01: owner-based | B-01: explicit capture |
+| --- | --- | --- |
+| Returned callback with a live external owner | Native pass | Native pass |
+| Later pointer-slot rebinding | Follows owner path | Captured slot reloads; explicit owner paths also available |
+| Replacement of an intermediate path link | Follows replacement | User chooses fixed leaf slot or full path |
+| Independent copied local bits | Rejected as lexical capture | Explicit immutable `<-` capture |
+| Hidden lexical storage promotion | None | None |
+| Capture discovery | Free-name/scope traversal | Explicit list plus regional-slot binding metadata |
+| Compiler diff from baseline, frontend | +137 / −18 lines | +161 / −34 lines |
+| Compiler diff from baseline, syntax | +35 / −15 lines | +48 / −15 lines |
+| LLVM emitter / native runtime changes | None | None |
+| 64-module returned callback LLVM artifact | 87,929 bytes | 87,929 bytes |
+| 10,000 frame iterations | Bounded region occupation, one acquisition | Bounded region occupation, one acquisition |
+
+Line counts describe review surface, not a complexity score. Artifact sizes do not establish throughput or optimization quality. The repeated-frame probe verifies reuse and native behavior without implementing SNN model equations. Exact [comparison evidence](../tests/cod/language/exploration/comparison.json) and each branch's validation record identify the sources used.

@@ -1,0 +1,79 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+data Node { value:i64; }
+data Link { ptr selected:Node; }
+region State { ptr link:Link; val tick:u64; }
+owned region state:State <- make State(capacity = 1024u64) { link = null; tick <- 3u64 };
+ptr first = alloc state Node(5);
+ptr second = alloc state Node(9);
+ptr first_link = alloc state Link(first);
+ptr second_link = alloc state Link(second);
+state.link = first_link;
+try {
+  const ref pinned = func [selected = state.link.selected] () -> const i64 throws NullPointerException { selected.value };
+  const ref following = func [state = state] () -> const i64 throws NullPointerException { state.link.selected.value };
+  state.link = second_link;
+  behave @print(pinned());
+  behave @print(following());
+  first_link.selected = second;
+  behave @print(pinned());
+  behave @print(following());
+  const ref replace = func [selected = first_link.selected, state = state] () -> void throws NullPointerException {
+    selected = state.link.selected;
+    {}
+  };
+  first_link.selected = first;
+  replace();
+  behave @print(first_link.selected.value);
+} catch (e:const NullPointerException) { behave @print(-1); };
+function adder(region state:State, increment:u64) -> func()->const u64 {
+  func [tick = state.tick, increment <- increment] () -> const u64 { tick + increment }
+}
+const ref add = adder(state, 4u64);
+behave @print(add());
+state.tick <- 5u64;
+behave @print(add());
+data Required { ref selected:Node; }
+ptr required_left = alloc state Required(first);
+ptr required_right = alloc state Required(second);
+const ref copy_ref = func [left = required_left.selected, right = required_right.selected] () -> void { left = right; {} };
+copy_ref();
+behave @print(required_left.selected.value);
+try {
+  first_link.selected = first;
+  const ref alias_test = func [selected = first_link.selected, state = state] () -> const i64 throws NullPointerException {
+    ptr alias = selected;
+    alias = state.link.selected;
+    selected.value + alias.value
+  };
+  behave @print(alias_test());
+  behave @print(first_link.selected.value);
+} catch (e:const NullPointerException) { behave @print(-1); };
+function (<=>)(left:Node in O, right:Node in O) -> void where {owner O} {
+  intrinsic (<=>)(left, right)
+}
+const ref swap_slots = func [left = required_left.selected, right = required_right.selected] () -> void { left <=> right };
+required_left.selected = first;
+swap_slots();
+behave @print(required_left.selected.value);
+behave @print(required_right.selected.value);
+const ref factory = func [tick = state.tick] () -> func()->const u64 {
+  func [tick = tick] () -> const u64 { tick }
+};
+const ref nested = factory();
+state.tick <- 11u64;
+behave @print(nested());
+array Values[u32]:i64;
+ref values = alloc state Values(2u64, 0);
+ref selected <- 0u32;
+const ref element = func [value = values[selected]] () -> const i64 { value };
+selected <- 1u32;
+values[0u32] <- 17;
+values[1u32] <- 23;
+behave @print(element());
+first_link.selected = null;
+second_link.selected = second;
+const ref swap_nullable = func [left = first_link.selected, right = second_link.selected] () -> void { intrinsic (<=>)(left, right) };
+swap_nullable();
+behave @print(isnull(first_link.selected));
+behave @print(isnull(second_link.selected));

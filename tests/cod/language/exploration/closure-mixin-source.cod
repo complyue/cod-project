@@ -1,6 +1,6 @@
 region Counter { ticks:u64; }
 proc factory(region state:Counter) -> func()->const u64 {
-  func () -> const u64 { state.ticks }
+  func [state = state] () -> const u64 { state.ticks }
 }
 export Counter;
 export factory;

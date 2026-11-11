@@ -1,0 +1,4 @@
+symbol @bias:i64;
+effect @bias <- 3;
+const ref callback = func () -> i64 { @bias };
+callback();

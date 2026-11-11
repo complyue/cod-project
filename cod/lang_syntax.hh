@@ -288,6 +288,7 @@ struct SymbolMapping {
   std::string source;
   Location at;
 };
+struct Capture { std::string name; Expr source; bool transfer; Location at; };
 struct Form {
   enum class Kind { symbol, symbol_from, function, procedure, data, region_definition, array, unit, using_units, global,
                     using_resource, import_resource, mixin_resource, export_resource, expression, abstract_type, conformance };
@@ -306,6 +307,7 @@ struct Form {
   std::vector<SymbolMapping> mappings;
   std::vector<UnitSelection> units;
   std::vector<Parameter> parameters;
+  std::vector<Capture> captures;
   std::vector<TypeParameter> type_parameters;
   std::vector<Type> throws_types;
   std::vector<OwnerParameter> owner_parameters;
@@ -521,8 +523,19 @@ class Parser {
     if (!function && !take("proc")) expect("procedure");
     form.kind = function ? Form::Kind::function : Form::Kind::procedure;
     form.symbolic = !function && peek().kind == TokenKind::symbol;
-    if (!(expression_form && is("(")))
+    if (!(expression_form && (is("(") || is("["))))
       form.name = form.symbolic ? name(TokenKind::symbol).text : lexical_name(&form.operation).text;
+    if (take("[")) {
+      do {
+        const auto binding = value_name();
+        const bool transfer = take("<-");
+        if (!transfer) expect("=");
+        form.captures.push_back({binding.text, expression(), transfer, binding.at});
+      } while (take(","));
+      expect("]");
+      if (!expression_form && function)
+        fail(form.at, "captured functions are lexical callable expressions, not module method declarations");
+    }
     const bool parameter_list = take("(");
     if (parameter_list) {
       if (!take(")")) {
@@ -626,7 +639,7 @@ class Parser {
       auto definition = std::make_shared<Form>();
       definition->at = token.at;
       callable(*definition, false, true);
-      if (definition->symbolic || !definition->body)
+      if (definition->symbolic || definition->operation || !definition->body)
         fail(token.at, "a lexical callable expression requires a body and a lexical name or no name");
       auto expr = make(Expression::Kind::callable, token);
       expr->definition = std::move(definition);

@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：449
+记录版本：450
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -207,7 +207,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 449，延续检查 K-01—K-448；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
+- 当前记录维护范围：记录版本 450，延续检查 K-01—K-449；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
 
 ### 待补确认的现有技术设计
 
@@ -479,7 +479,7 @@ Design authority
 <a id="d-18"></a>
 ### D-18: Structural region and closure experimental comparison
 
-- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 2, all sections; H-324 confirms autonomous multi-branch design/implementation/validation within existing principles, with trade-offs reserved for final human review. P-293 records the scoped value path to C-73/C-74.
+- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 3, all sections; H-324 confirms autonomous multi-branch design/implementation/validation within existing principles, with trade-offs reserved for final human review. P-293 records the scoped value path to C-73/C-74.
 - **Boundaries:** No final adoption, cross-region stored edges, lexical-cell promotion, hidden user heap, new RTTI, bootstrap/configuration changes or SNN model decisions. Existing memory/effect/module/exception/fraction invariants constrain every candidate.
 - **Acceptance:** At least two useful alternatives with working native examples, invalid-program rejection, practical code and complexity comparison, exact evidence and an active-time ledger. Stop for review no later than 48 active work hours even if incomplete; waiting is excluded.
 
@@ -9129,3 +9129,11 @@ Scope: explicitly authorizes baseline commit, autonomous multi-branch experiment
 - A-01 implements named/anonymous func/proc values with captured actual regions or compile-time callable dependencies, rejecting lexical variable capture. Returned captures retain borrowed region validity; funcs preserve effect exclusion, while procs retain their existing dynamic context behavior. Mixin preserves nested callable kind and anonymity. Referenced data layouts resolve on field access even before any allocation of that type.
 - A runtime join of different callable/capture values is explicitly rejected rather than silently taking the first branch. Stored runtime closure descriptors and explicit double-brace/defer/contextual callback syntax remain outside this bounded trial. Full field paths follow current intermediate links; the forthcoming slot alternative examines retaining an original slot instead.
 - Source-only build and LLVM verification pass; 266/266 language cases, native relocation/ownership/exception checks, a 64-module returned-callback chain and 10,000 bounded two-frame updates pass. tests/cod/language/exploration/owners-validation.json records exact sources/compiler, results and limitations. Work is tracked separately from the conservative preparation allowance; final design review remains pending.
+
+
+<a id="k-449"></a>
+
+- Registry449 →450; D-18r2 →3 continues H-324/P-293's branch-local experimental scope for B-01 and comparison. Charter §§1–3 still constrain explicit ownership, typed regional storage and execution semantics; D-01/D-10/D-14/D-15/D-16 boundaries are preserved. D-GOV450 continues H-05 maintenance only. Final language selection, runtime stored closures and module/TLS architecture changes are not inferred.
+- B-01 replaces implicit free-name scanning with explicit capture lists: regional field/element/already-captured slots, borrowed owners and static callable values use `=`, while immutable bits copies use `<-`. It preserves actual owner checks, nullable/access obligations and distinct dynamic procedure capture semantics. Slot identity is carried by local binding metadata, never by an ordinary loaded alias value. Reference-slot swaps reuse the established same-owner/type/access contract.
+- Native examples compare retained leaf slots with owner-based paths, nested slot captures, copied local bits, slot/alias rebinding, nullable swaps and perform/behave. Compiler/runtime evidence and limitations are recorded in tests/cod/language/exploration/slots-validation.json. The native runtime, LLVM emitter and relative-pointer representation are unchanged. The review recommendation favors explicit captures but remains pending human selection; no final contract is merged into main.
+- B-01 final validation: 273/273 language cases, native relocation/ownership/exception probes, LLVM verification, 64-module nested callbacks and 10,000 bounded frame updates pass. The source manifest matches all 356 current compiler/test sources. Evidence extraction uses the runner’s fixture key to retain actual exploration outputs for both variants; original compiler/source hashes and outcomes are preserved.
