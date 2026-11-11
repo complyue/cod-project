@@ -1,2 +1,2 @@
-function number(x::f64)::f64 { x }
+function number(x:f64) -> f64 { x }
 number(9007199254740993);

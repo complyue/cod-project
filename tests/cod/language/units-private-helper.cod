@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
 using units "units-private-library.cod" {m, cm};
-function factor()::f64 { 3.0 }
-function consume(x::f64(cm*))::f64 { scalar(x) }
+function factor() -> f64 { 3.0 }
+function consume(x:f64(cm*)) -> f64 { scalar(x) }
 behave @print(consume(m(2.0)));

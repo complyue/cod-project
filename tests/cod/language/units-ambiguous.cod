@@ -3,9 +3,9 @@ unit start;
 unit left;
 unit right;
 unit target;
-conversion function a(x::f64(start))::f64(left) { left(scalar(x)) }
-conversion function b(x::f64(left))::f64(target) { target(scalar(x) + 10.0) }
-conversion function c(x::f64(start))::f64(right) { right(scalar(x)) }
-conversion function d(x::f64(right))::f64(target) { target(scalar(x) + 20.0) }
-function select(x::f64(target*))::f64 { scalar(x) }
+conversion function a(x:f64(start)) -> f64(left) { left(scalar(x)) }
+conversion function b(x:f64(left)) -> f64(target) { target(scalar(x) + 10.0) }
+conversion function c(x:f64(start)) -> f64(right) { right(scalar(x)) }
+conversion function d(x:f64(right)) -> f64(target) { target(scalar(x) + 20.0) }
+function select(x:f64(target*)) -> f64 { scalar(x) }
 behave @print(select(start(1.0)));

@@ -1,4 +1,4 @@
-function incomplete(first::i64, last::i64) -> const i64 {
+function incomplete(first:i64, last:i64) -> const i64 {
   ptr result = make local i64;
   for (i in first .. last) { result <- i; } else {};
   result

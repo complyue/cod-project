@@ -10,16 +10,16 @@ using "method-context-reexport.cod" adapted;
 using "method-context-reexport.cod" renamed_score;
 using "method-context-library.cod" score as related_score;
 import "method-view-library.cod" score as local_union;
-function local_union(x::bool)::i64 { 31 }
+function local_union(x:bool) -> i64 { 31 }
 import "method-view-library.cod" score as saved_local;
 using "method-view-second.cod" score as local_union;
-function indirect(x::Sample in O1)::i64 where {owner O1} { base(x) }
+function indirect(x:Sample in O1) -> i64 where {owner O1} { base(x) }
 using "method-view-library.cod" Metric;
 symbol from "method-view-library.cod" @bias;
 using "method-context-reexport.cod" frozen_proc;
 using "method-context-reexport.cod" adapted_proc;
-proc @frozen(x::Metric in O1)::i64 where {owner O1};
-proc @adapted(x::Metric in O1)::i64 where {owner O1};
+proc @frozen(x:Metric in O1) -> i64 where {owner O1};
+proc @adapted(x:Metric in O1) -> i64 where {owner O1};
 effect @frozen = frozen_proc;
 effect @adapted = adapted_proc;
 effect @bias <- 5;

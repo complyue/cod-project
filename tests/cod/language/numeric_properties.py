@@ -38,11 +38,11 @@ def main():
     integers = [(rng.randrange(2 ** 30), rng.randrange(2 ** 30)) for _ in range(16)]
     integers += [(0, 0), (2 ** 32 - 1, 2 ** 32), (2 ** 63 - 1, 1)]
     lines = ['using symbol "std:io" @print;', 'unit Slot;',
-             'array Floats[u32(Slot)]::f32;', 'array Integers[u32(Slot)]::u64;',
-             'data Sample { a::f32; b::f32; }',
-             'function blend(s::Sample in O)::f32 where {owner O} { (s.a * s.b + s.a) / s.b }',
-             'function blend(a::u64, b::u64)::u64 { a * b + a }',
-             'region symbol @arena;', 'symbol @fa :: Floats;', 'symbol @fb :: Floats;', 'symbol @ia :: Integers;', 'symbol @ib :: Integers;',
+             'array Floats[u32(Slot)]:f32;', 'array Integers[u32(Slot)]:u64;',
+             'data Sample { a:f32; b:f32; }',
+             'function blend(s:Sample in O) -> f32 where {owner O} { (s.a * s.b + s.a) / s.b }',
+             'function blend(a:u64, b:u64) -> u64 { a * b + a }',
+             'region symbol @arena;', 'symbol @fa : Floats;', 'symbol @fb : Floats;', 'symbol @ia : Integers;', 'symbol @ib : Integers;',
              'effect @arena <- region(16384u64);',
              f'effect @fa = alloc @arena Floats({len(floats)}u64, 0.0f32);',
              f'effect @fb = alloc @arena Floats({len(floats)}u64, 0.0f32);',

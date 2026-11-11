@@ -1,2 +1,2 @@
-symbol @print :: i64;
+symbol @print : i64;
 mixin "std:io" @print;

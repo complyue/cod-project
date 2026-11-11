@@ -1,14 +1,14 @@
 using symbol "std:io" @print;
 unit Request;
 unit Index;
-array Values[u32(Index)]::i64;
-conversion function choose(value::u32(Request))::u32(Index) { Index(1u32 / scalar(value)) }
-procedure ([]=)(values::Values in O1, index::u32(Index*), value::i64)::const i64 in O1 where {owner O1} {
+array Values[u32(Index)]:i64;
+conversion function choose(value:u32(Request)) -> u32(Index) { Index(1u32 / scalar(value)) }
+procedure ([]=)(values:Values in O1, index:u32(Index*), value:i64) -> const i64 in O1 where {owner O1} {
   store(values, index, value);
   values[index]
 }
 region symbol @arena;
-symbol @values :: Values;
+symbol @values : Values;
 effect @arena <- region(4096u64);
 effect @values = alloc @arena Values(1u64, 0);
 ({ behave @print(11); @values })[{ behave @print(22); Request(0u32) }] = {

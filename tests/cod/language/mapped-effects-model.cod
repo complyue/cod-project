@@ -1,6 +1,6 @@
-symbol @target :: i64;
-symbol @next :: i64;
-symbol @update :: proc() -> i64;
+symbol @target : i64;
+symbol @next : i64;
+symbol @update : proc() -> i64;
 procedure @update -> i64 { effect @target <- @target + 1; behave @next }
 
 export @next;

@@ -1,11 +1,11 @@
 type Metric;
-data Sample <: Metric { value::i64; }
-function create(region arena)::Sample { deref(alloc arena Sample(3)) }
-function score(x::Metric in O1)::i64 where {owner O1} { 1 }
-function through(x::Metric in O1)::i64 where {owner O1} { private_bridge(x) + private_bridge(x) }
-function pointer_value(x::Sample in O1)::i64 where {owner O1} { deref(x).value }
-function unused(x::Unavailable in O1)::i64 where {owner O1} { missing_implementation(x) }
-function (len)(x::Sample in O1)::i64 where {owner O1} { x.value }
+data Sample <: Metric { value:i64; }
+function create(region arena) -> Sample { deref(alloc arena Sample(3)) }
+function score(x:Metric in O1) -> i64 where {owner O1} { 1 }
+function through(x:Metric in O1) -> i64 where {owner O1} { private_bridge(x) + private_bridge(x) }
+function pointer_value(x:Sample in O1) -> i64 where {owner O1} { deref(x).value }
+function unused(x:Unavailable in O1) -> i64 where {owner O1} { missing_implementation(x) }
+function (len)(x:Sample in O1) -> i64 where {owner O1} { x.value }
 
 export (len);
 export Metric;
@@ -16,10 +16,10 @@ export score;
 export through;
 export unused;
 
-symbol @bias::i64;
+symbol @bias:i64;
 effect @bias <- 1;
-proc scored(x::Metric in O1)::i64 where {owner O1} { private_bridge(x) + @bias }
+proc scored(x:Metric in O1) -> i64 where {owner O1} { private_bridge(x) + @bias }
 export @bias;
 export scored;
 
-function private_bridge(x::Metric in O1)::i64 where {owner O1} { score(x) }
+function private_bridge(x:Metric in O1) -> i64 where {owner O1} { score(x) }

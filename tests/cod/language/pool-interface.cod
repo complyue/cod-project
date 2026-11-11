@@ -1,13 +1,13 @@
 using "std:exceptions" NullPointerException;
 unit Slot;
-function (==)(a::u32(Slot), b::u32(Slot))::bool { scalar(a) == scalar(b) }
+function (==)(a:u32(Slot), b:u32(Slot)) -> bool { scalar(a) == scalar(b) }
 type SlotStore;
 type ReusableSlotStore <: SlotStore;
 
-function read(pool::SlotStore in O1, slot::u32(Slot))::i64 throws NullPointerException where {owner O1} ;
-function cell(pool::SlotStore in O1, slot::u32(Slot))::i64 throws NullPointerException where {owner O1} ;
-function acquire(pool::ReusableSlotStore in O1, value::i64)::u32(Slot) throws NullPointerException where {owner O1} ;
-function release(pool::ReusableSlotStore in O1, slot::u32(Slot))::void throws NullPointerException where {owner O1} ;
+function read(pool:SlotStore in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} ;
+function cell(pool:SlotStore in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} ;
+function acquire(pool:ReusableSlotStore in O1, value:i64) -> u32(Slot) throws NullPointerException where {owner O1} ;
+function release(pool:ReusableSlotStore in O1, slot:u32(Slot)) -> void throws NullPointerException where {owner O1} ;
 
 export Slot;
 export (==);

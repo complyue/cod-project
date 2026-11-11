@@ -8,16 +8,16 @@ import "pool-interface.cod" read;
 import "pool-interface.cod" cell;
 import "pool-interface.cod" acquire;
 import "pool-interface.cod" release;
-array Payloads[u32(Slot)]::i64;
-array Links[u32(Slot)]::u32(Slot);
-data Pool { head::u32(Slot); ptr payloads::Payloads; ptr links::Links; }
+array Payloads[u32(Slot)]:i64;
+array Links[u32(Slot)]:u32(Slot);
+data Pool { head:u32(Slot); ptr payloads:Payloads; ptr links:Links; }
 
-function end_slot(pool::Pool in O1)::u32(Slot) throws NullPointerException where {owner O1} { Slot(u32(len(pool.payloads))) }
-function empty(pool::Pool in O1)::bool throws NullPointerException where {owner O1} { pool.head == end_slot(pool) }
-function read(pool::Pool in O1, slot::u32(Slot))::i64 throws NullPointerException where {owner O1} { deref(pool.payloads)[slot] }
-function cell(pool::Pool in O1, slot::u32(Slot))::i64 throws NullPointerException where {owner O1} { ref_at(pool.payloads, slot) }
+function end_slot(pool:Pool in O1) -> u32(Slot) throws NullPointerException where {owner O1} { Slot(u32(len(pool.payloads))) }
+function empty(pool:Pool in O1) -> bool throws NullPointerException where {owner O1} { pool.head == end_slot(pool) }
+function read(pool:Pool in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { deref(pool.payloads)[slot] }
+function cell(pool:Pool in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { ref_at(pool.payloads, slot) }
 
-function initialize(pool::Pool in O1) -> void throws NullPointerException where {owner O1} {
+function initialize(pool:Pool in O1) -> void throws NullPointerException where {owner O1} {
   for (i in 0u32 .. scalar(end_slot(pool))) {
     store(pool.links, Slot(i), Slot(i + 1u32));
   };
@@ -25,7 +25,7 @@ function initialize(pool::Pool in O1) -> void throws NullPointerException where 
   {}
 }
 
-function create(region arena, capacity::u32) -> Pool throws NullPointerException {
+function create(region arena, capacity:u32) -> Pool throws NullPointerException {
   val payloads = alloc arena Payloads(u64(capacity), 0);
   val links = alloc arena Links(u64(capacity), Slot(0u32));
   val pool = deref(alloc arena Pool(Slot(0u32), payloads, links));
@@ -33,8 +33,8 @@ function create(region arena, capacity::u32) -> Pool throws NullPointerException
   pool
 }
 
-function create(bytes::u64, capacity::u32) -> owned region ::Pool throws NullPointerException {
-  owned region arena::Pool <- make Pool(capacity = bytes) {
+function create(bytes:u64, capacity:u32) -> owned region :Pool throws NullPointerException {
+  owned region arena:Pool <- make Pool(capacity = bytes) {
     head <- Slot(0u32); payloads = null; links = null
   };
   ref pool = root(arena);
@@ -45,7 +45,7 @@ function create(bytes::u64, capacity::u32) -> owned region ::Pool throws NullPoi
 }
 
 # Exhaustion returns the capacity sentinel without modifying the pool.
-function acquire(pool::Pool in O1, value::i64) -> const u32(Slot) throws NullPointerException where {owner O1} {
+function acquire(pool:Pool in O1, value:i64) -> const u32(Slot) throws NullPointerException where {owner O1} {
   val slot = pool.head;
   if (slot == end_slot(pool)) {
     slot
@@ -56,7 +56,7 @@ function acquire(pool::Pool in O1, value::i64) -> const u32(Slot) throws NullPoi
   }
 }
 
-function release(pool::Pool in O1, slot::u32(Slot)) -> void throws NullPointerException where {owner O1} {
+function release(pool:Pool in O1, slot:u32(Slot)) -> void throws NullPointerException where {owner O1} {
   store(pool.links, slot, pool.head);
   setfield(pool, head, slot);
   {}

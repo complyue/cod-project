@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
-symbol @x :: f32;
-symbol @read :: proc() -> f32;
+symbol @x : f32;
+symbol @read : proc() -> f32;
 effect @x <- 1.25f32;
-procedure @read()::f32 { @x }
+procedure @read() -> f32 { @x }
 effect @x <- 2.5f32;
 behave @print(perform @read());
 behave @print(behave @read());

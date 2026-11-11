@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-symbol @step :: proc() -> i64;
-symbol @left :: i64;
+symbol @step : proc() -> i64;
+symbol @left : i64;
 effect @left <- 3;
 mixin "aliased-body-model.cod" @p as @step with { @left as @a; @left as @b; };
 behave @print(perform @step);

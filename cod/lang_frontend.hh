@@ -284,6 +284,7 @@ class Compiler {
   struct ConversionPoint {
     LLVMEmission::ConversionPoint native;
     FlowState regions;
+    bool raw_view = false;
   };
   ConversionPoint conversion_point() { return {ir_.conversion_point(), flow_state()}; }
   struct ExceptionalEdge { Value error; llvm::BasicBlock *from; FlowState regions; };
@@ -527,7 +528,7 @@ class Compiler {
     return value;
   }
   Value null_target(Type type, std::optional<Value> owner, const Location &at) {
-    Value value; value.type = type; value.nullable = true;
+    Value value; value.type = type; value.nullable = true; value.pointer_view = true;
     value.pending_owner = !owner || !storage_owner(*owner);
     if (owner) value.region_id = owner->region_id;
     if (local_bits(type)) {
@@ -1077,6 +1078,7 @@ class Compiler {
     form->result_owner = source.result_owner;
     form->throws_types = source.throws_types;
     form->result_const = source.result_const;
+    form->result_kind = source.result_kind;
     return form;
   }
   Expr mixin_expression(const Expression &source_expr, const Module &source, const Module &receiver,
@@ -1157,9 +1159,12 @@ class Compiler {
     for (const auto &parameter : form.parameters) {
       type.owners.push_back(owner_index(parameter.owner));
       type.const_views.push_back(parameter.read_only);
+      type.nullable_views.push_back(parameter.declaration_kind == "ptr" && !parameter.owner.empty());
     }
     type.owners.push_back(owner_index(form.result_owner));
     type.const_views.push_back(form.result_const);
+    type.nullable_views.push_back(form.result_kind == "ptr");
+    if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool x) { return x; })) type.nullable_views.clear();
     if (type.owner_bounds.empty()) type.owners.clear();
     if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool value) { return value; }))
       type.const_views.clear();
@@ -1236,7 +1241,7 @@ class Compiler {
     auto type = form->kind == Form::Kind::symbol ? resolve(*form->result_type, *module, form->at)
                                                : procedure_type(*form, *module);
     if (type == Type::void_type) fail(form->at, "a symbol cannot have void type");
-    if (type.owned) fail(form->at, "a dynamic resource uses 'region symbol @name::Root', without an owned qualifier");
+    if (type.owned) fail(form->at, "a dynamic resource uses 'region symbol @name:Root', without an owned qualifier");
     if (form->symbol_owner && !object_type(type))
       fail(form->at, "a shared region owner requires object-reference symbols, not TLS bits or whole-region symbols");
     symbol_types_.emplace(id, std::move(type));
@@ -1380,7 +1385,8 @@ class Compiler {
   }
   Value block(const Expression &expr, const Module &module, Environment env, Locals locals,
               bool function_context, bool discard_result = false, std::optional<Type> result_type = {}, bool copy_result = false,
-              std::optional<size_t> destination_binding = {}) {
+              std::optional<size_t> destination_binding = {}, bool read_result = true,
+              const Value *null_owner = nullptr) {
     const bool parent_module = module_top_level_;
     const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
     const auto region_initializer = llvm::SaveAndRestore(region_initializer_, false);
@@ -1398,11 +1404,15 @@ class Compiler {
         const bool assignment = child->kind == Expression::Kind::rebind ||
             (child->kind == Expression::Kind::call && child->text == "=");
         result = expression(*child, module, env, locals, function_context,
-                            !assignment || (!discard_result && i + 1 == expr.children.size()),
-                            copy_result && i + 1 == expr.children.size());
+                            (!assignment || (!discard_result && i + 1 == expr.children.size())) &&
+                                (read_result || i + 1 != expr.children.size()),
+                            copy_result && i + 1 == expr.children.size(),
+                            read_result || i + 1 != expr.children.size());
       }
     } catch (const EndPath &) { result = scalar(Type::never, nullptr); }
     if (discard_result && result.type != Type::never) result = {};
+    if (result.type == Type::null_ref && null_owner && result_type)
+      result = null_target(*result_type, *null_owner, expr.at);
     if (result_type && result.type != Type::never) result = admit(std::move(result), *result_type, module, expr.at);
     if (copy_result && local_bits(result.type)) result = bits_value(read_value(std::move(result), expr.at));
     if (destination_binding && result.type != Type::never && result.pointer != destination_binding)
@@ -1417,28 +1427,34 @@ class Compiler {
   }
   std::vector<Value> arguments(const Expression &expr, const Module &module, Environment &env,
                                Locals &locals, bool function_context,
-                               std::vector<ConversionPoint> *points = nullptr) {
+                               std::vector<ConversionPoint> *points = nullptr,
+                               const std::vector<Method> &nullable_candidates = {}) {
     const auto region_initializer = llvm::SaveAndRestore(region_initializer_, false);
     std::vector<Value> values;
     for (const auto &arg : expr.children) {
-      auto value = expression(*arg, module, env, locals, function_context, false);
-      if (value.storage) {
+      const bool forward = std::any_of(nullable_candidates.begin(), nullable_candidates.end(), [&](const Method &method) {
+        return !method.form->parameters.empty() && (variadic(*method.form) || values.size() < method.form->parameters.size()) &&
+               parameter_at(*method.form, values.size()).declaration_kind == "ptr" &&
+               !parameter_at(*method.form, values.size()).owner.empty();
+      });
+      auto value = expression(*arg, module, env, locals, function_context, false, false, !forward);
+      if (!forward && value.storage) {
         const bool initialized = std::all_of(value.storage->cells.begin(), value.storage->cells.end(),
             [&](size_t cell) { return cells_.at(cell).initialized; });
         if (initialized) value = read_value(std::move(value), arg->at);
         else value.native = nullptr;
-      } else if (value.type.kind != Type::reference && value.nullable) {
+      } else if (!forward && value.type.kind != Type::reference && value.nullable) {
         value = read_value(std::move(value), arg->at);
       }
       if (arg->spread) {
         if (!value.arguments) fail(arg->at, "argument expansion requires a variadic parameter pack");
         for (const auto &element : *value.arguments) {
-          values.push_back(read_value(element, arg->at));
-          if (points) points->push_back(conversion_point());
+          values.push_back(forward ? element : read_value(element, arg->at));
+          if (points) { points->push_back(conversion_point()); points->back().raw_view = forward; }
         }
       } else {
         values.push_back(std::move(value));
-        if (points) points->push_back(conversion_point());
+        if (points) { points->push_back(conversion_point()); points->back().raw_view = forward; }
       }
     }
     return values;
@@ -1553,7 +1569,7 @@ class Compiler {
         declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
       else if (argument.storage || (!form.parameters[i].owner.empty() && object_type(argument.type)))
         declare_pointer(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at,
-                        form.parameters[i].read_only);
+                        form.parameters[i].read_only, false, form.parameters[i].declaration_kind == "ref");
       else declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
     }
     if (variadic(form)) {
@@ -1567,9 +1583,11 @@ class Compiler {
       declare_local(locals, form.parameters.back().name, std::move(pack), lexical, form.parameters.back().at);
     }
     const bool assignment = form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=" || form.name == "[]<-");
+    const Value *result_owner = form.result_owner.empty() ? nullptr : &owner_values.at(form.result_owner);
     auto result = block(*form.body, lexical, std::move(env), std::move(locals), function_context, false,
                         instantiated.result, form.result_const && form.result_owner.empty() && !assignment,
-                        rebind ? args.front().pointer : std::nullopt);
+                        rebind ? args.front().pointer : std::nullopt, form.result_kind != "ptr", result_owner);
+    if (form.result_kind != "ptr" && result.nullable) result = read_value(std::move(result), at);
     scopes_[scope_id] = false;
     valid_view(result, at);
     result = finish_scope(holding_begin, native_scope, std::move(result), at, parent_module);
@@ -1838,8 +1856,8 @@ class Compiler {
     return converted.front();
   }
   Value converted(Value value, const Route &route, const Location &at, const Module &caller,
-                  const ConversionPoint *point = nullptr) {
-    if (route.steps.empty() && !route.target) return value;
+                  const ConversionPoint *point = nullptr, bool read_argument = false) {
+    if (route.steps.empty() && !route.target && !read_argument) return value;
     if (!route.alternative.empty()) {
       auto describe = [&](const std::vector<Method> &path) {
         std::string result = type_name(value.type);
@@ -1856,6 +1874,12 @@ class Compiler {
     const auto state = flow_state();
     const auto resume = point ? std::optional(ir_.begin_conversion(point->native)) : std::nullopt;
     if (point) restore_flow(point->regions);
+    if (read_argument) {
+      const bool initialized = !value.storage || std::all_of(value.storage->cells.begin(), value.storage->cells.end(),
+          [&](size_t cell) { return cells_.at(cell).initialized; });
+      if (initialized) value = read_value(std::move(value), at);
+      else value.native = nullptr;
+    }
     for (const auto &step : route.steps) {
       value = widened(value, conversion(step).source, at);
       value = call(*step.form, *step.lexical, {}, {value}, true, at, caller, step.implementation);
@@ -1884,6 +1908,8 @@ class Compiler {
         fail(at, "method checked NullPointerException exceeds callable declaration");
       if (declaration.form->kind != kind)
         fail(at, "method callable kind violates declaration\n" + location_text(declaration.form->at) + ": note: callable signature declared here");
+      if (result.nullable && declaration.form->result_kind != "ptr")
+        fail(at, "nullable method result violates non-null callable declaration");
       if (contract->result && !accepts(result, *contract->result, caller, at))
         fail(at, "method result violates callable declaration: expected " + type_name(*contract->result) +
                      ", got " + type_name(result.type) + "\n" + location_text(declaration.form->at) + ": note: callable signature declared here");
@@ -1918,7 +1944,8 @@ class Compiler {
         if (args[i].pointer && pointers_.at(*args[i].pointer).fixed_binding)
           fail(at, "cannot rebind a const ptr binding");
     for (size_t i = 0; i < args.size(); ++i)
-      args[i] = converted(args[i], match.routes[i], at, caller, points.empty() ? nullptr : &points[i]);
+      args[i] = converted(args[i], match.routes[i], at, caller, points.empty() ? nullptr : &points[i],
+          !points.empty() && points[i].raw_view && !(parameter_at(form, i).declaration_kind == "ptr" && !parameter_at(form, i).owner.empty()));
     const bool function = match.function.form->kind == Form::Kind::function;
     if (!function && function_context) {
       const auto &form = *match.function.form;
@@ -2261,8 +2288,8 @@ class Compiler {
     if (!value.type.throws_types.empty()) require_npe_handler(expr.at);
     const auto proc = value.procedure; // Resolve before arguments/capture installation.
     std::vector<ConversionPoint> points;
-    const bool convert_arguments = proc->form && converting_parameters(*proc->form);
-    auto args = arguments(expr, module, env, locals, function_context, convert_arguments ? &points : nullptr);
+    auto args = arguments(expr, module, env, locals, function_context, proc->form ? &points : nullptr,
+        proc->form ? std::vector<Method>{{proc->form, proc->lexical}} : std::vector<Method>{});
     if (!proc->builtin.empty()) {
       if (args.size() != 1) fail(expr.at, "@" + proc->builtin + " expects one argument");
       if (!args[0].native) fail(expr.at, "read of storage before definite initialization in an argument");
@@ -2282,7 +2309,8 @@ class Compiler {
       const auto types = llvm::SaveAndRestore(type_context_, TypeContext{proc->lexical, instantiated.bindings});
       for (size_t i = 0; i < args.size(); ++i) {
         if (const auto path = route(args[i].type, parameter_at(*proc->form, i), *proc->lexical, module, expr.at))
-          args[i] = converted(args[i], *path, expr.at, module, points.empty() ? nullptr : &points[i]);
+          args[i] = converted(args[i], *path, expr.at, module, points.empty() ? nullptr : &points[i],
+              !points.empty() && points[i].raw_view && !(parameter_at(*proc->form, i).declaration_kind == "ptr" && !parameter_at(*proc->form, i).owner.empty()));
       }
     }
     auto call_env = captured ? proc->captures : env;
@@ -2568,7 +2596,7 @@ class Compiler {
     }
     std::vector<ConversionPoint> points;
     const auto args = arguments(expr, module, env, locals, function_context,
-        converting_method(expr.text, module, expr.at) ? &points : nullptr);
+        &points, functions);
     auto selected = method(expr.text, module, args, expr.at);
     if (!selected && functions.size() == 1) {
       const auto &candidate = functions.front();
@@ -2845,6 +2873,8 @@ class Compiler {
       return join_completions(values, at, module_lifetime);
     }
     auto result = completions.front().value;
+    if (result.storage && std::any_of(completions.begin(), completions.end(),
+        [](const Completion &completion) { return !completion.value.native; })) result.native = nullptr;
     result.pointer.reset();
     auto state = completions.front().regions;
     std::set<size_t> origins;
@@ -2879,7 +2909,7 @@ class Compiler {
       }
       result.conformances = std::move(common);
       if (result.native) values.emplace_back(completion.value.native, completion.from);
-      if (result.type.kind == Type::exception)
+      if (result.type.kind == Type::exception && result.native)
         categories.emplace_back(exception_category(completion.value), completion.from);
     }
     restore_flow(state);
@@ -2897,7 +2927,7 @@ class Compiler {
     return result;
   }
   Value try_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                       bool function_context, bool copy_bits = false) {
+                       bool function_context, bool copy_bits = false, bool read_result = true) {
     const bool parent_module = module_top_level_;
     const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
     std::array<const Expression *, 4> catches{};
@@ -2921,7 +2951,7 @@ class Compiler {
     Value normal;
     {
       const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, npe_allowed_ || catches[3]);
-      normal = block(*expr.children.front(), module, env, locals.nested(), function_context, false, {}, copy_bits);
+      normal = block(*expr.children.front(), module, env, locals.nested(), function_context, false, {}, copy_bits, {}, read_result);
     }
     handlers_.pop_back();
 
@@ -2930,7 +2960,7 @@ class Compiler {
     const auto complete = [&](Value result) {
       if (result.type == Type::never) { ir_.restore(protected_scope.cleanup); return; }
       if (finally) {
-        const auto finished = block(*finally, module, env, locals.nested(), function_context, false, {}, copy_bits);
+        const auto finished = block(*finally, module, env, locals.nested(), function_context);
         require(finished.type, Type::void_type, finally->at);
         if (finished.type == Type::never) { ir_.restore(protected_scope.cleanup); return; }
       }
@@ -2957,7 +2987,7 @@ class Compiler {
     };
     const auto propagate = [&](Value error) {
       if (finally) {
-        auto finished = block(*finally, module, env, locals.nested(), function_context, false, {}, copy_bits);
+        auto finished = block(*finally, module, env, locals.nested(), function_context);
         require(finished.type, Type::void_type, finally->at);
         if (finished.type == Type::never) return;
       }
@@ -2979,7 +3009,7 @@ class Compiler {
       Value result;
       {
         const auto active = llvm::SaveAndRestore(caught_exception_, std::optional(error));
-        result = block(*clause->children.front(), module, env, std::move(inner_locals), function_context, false, {}, copy_bits);
+        result = block(*clause->children.front(), module, env, std::move(inner_locals), function_context, false, {}, copy_bits, {}, read_result);
       }
       if (finally) handlers_.pop_back();
       complete(result);
@@ -2990,7 +3020,7 @@ class Compiler {
     return join_completions(completions, expr.at, parent_module);
   }
   Value conditional_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                          bool function_context, bool copy_bits = false) {
+                          bool function_context, bool copy_bits = false, bool read_result = true) {
     const auto condition = expression(*expr.children[0], module, env, locals, function_context);
     require(condition.type, Type::boolean, expr.at);
 
@@ -3000,21 +3030,20 @@ class Compiler {
     const auto native_scope = ir_.scope();
     auto native_branch = ir_.branch(condition.native);
     if (condition.nonnull_when && condition.nonnull_when->second) pointers_.at(condition.nonnull_when->first).view.nullable = false;
-    auto first = block(*expr.children[1], module, env, locals.nested(), function_context, false, {}, copy_bits);
+    auto first = block(*expr.children[1], module, env, locals.nested(), function_context, false, {}, copy_bits, {}, read_result);
     if (first.type.owned) first = take_owner(first, expr.at);
     ir_.restore(native_scope);
     auto first_state = flow_state();
     ir_.otherwise(native_branch);
     restore_flow(before);
     if (condition.nonnull_when && !condition.nonnull_when->second) pointers_.at(condition.nonnull_when->first).view.nullable = false;
-    auto second = block(*expr.children[2], module, env, locals.nested(), function_context, false, {}, copy_bits);
+    auto second = block(*expr.children[2], module, env, locals.nested(), function_context, false, {}, copy_bits, {}, read_result);
     if (second.type.owned) second = take_owner(second, expr.at);
     ir_.restore(native_scope);
-    if (first.type == Type::null_ref && second.type.kind == Type::reference) {
-      first.type = second.type; first.region_id = second.region_id; first.conformances = second.conformances; first.nullable = true;
-    } else if (second.type == Type::null_ref && first.type.kind == Type::reference) {
-      second.type = first.type; second.region_id = first.region_id; second.conformances = first.conformances; second.nullable = true;
-    }
+    if (first.type == Type::null_ref && storage_owner(second))
+      first = null_target(second.type, second, expr.at);
+    else if (second.type == Type::null_ref && storage_owner(first))
+      second = null_target(first.type, first, expr.at);
     std::vector<Completion> completions;
     if (first.type != Type::never) completions.push_back({first, native_branch.first_end, std::move(first_state)});
     if (second.type != Type::never) {
@@ -3025,7 +3054,7 @@ class Compiler {
     return join_completions(completions, expr.at, parent_module);
   }
   Value expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                   bool function_context, bool read = true, bool copy_bits = false) {
+                   bool function_context, bool read = true, bool copy_bits = false, bool read_nested = true) {
     if (clang::isStackNearlyExhausted()) {
 #if LLVM_ENABLE_THREADS
       Value result;
@@ -3033,7 +3062,7 @@ class Compiler {
       // WPO can have deep source call paths. Use Clang's existing stack
       // support, and resume C++ diagnostics on the originating stack.
       clang::runWithSufficientStackSpace([] {}, [&] {
-        try { result = expression(expr, module, env, locals, function_context, read, copy_bits); }
+        try { result = expression(expr, module, env, locals, function_context, read, copy_bits, read_nested); }
         catch (...) { error = std::current_exception(); }
       });
       if (error) std::rethrow_exception(error);
@@ -3042,7 +3071,7 @@ class Compiler {
       fail(expr.at, "compiler stack capacity exhausted while elaborating this expression");
 #endif
     }
-    auto result = evaluate(expr, module, env, locals, function_context, copy_bits);
+    auto result = evaluate(expr, module, env, locals, function_context, copy_bits, read_nested);
     if (result.type == Type::never) throw EndPath{};
     if (copy_bits && local_bits(result.type)) return bits_value(read_value(std::move(result), expr.at));
     return read ? read_value(std::move(result), expr.at) : result;
@@ -3153,11 +3182,11 @@ class Compiler {
       fail(expr.at, "no field '" + expr.text + "' in " + type_name(value.type));
   }
   Value evaluate(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                 bool function_context, bool copy_bits = false) {
+                 bool function_context, bool copy_bits = false, bool read_result = true) {
     const auto location = ir_.source_location(expr.at);
     using K = Expression::Kind;
     switch (expr.kind) {
-    case K::try_scope: return try_expression(expr, module, env, locals, function_context, copy_bits);
+    case K::try_scope: return try_expression(expr, module, env, locals, function_context, copy_bits, read_result);
     case K::handler: fail(expr.at, "catch requires an enclosing try");
     case K::raise: {
       Value error;
@@ -3311,12 +3340,12 @@ class Compiler {
     case K::rebind: return rebind_expression(expr, module, env, locals, function_context);
     case K::allocate: return allocate_expression(expr, module, env, locals, function_context);
     case K::range_for: case K::fold: return loop_expression(expr, module, env, locals, function_context);
-    case K::block: return block(expr, module, env, locals.nested(), function_context, false, {}, copy_bits);
+    case K::block: return block(expr, module, env, locals.nested(), function_context, false, {}, copy_bits, {}, read_result);
     case K::call: return call_expression(expr, module, env, locals, function_context);
     case K::perform: case K::behave: return invoke(expr, module, env, locals, function_context);
     case K::unary: return unary_expression(expr, module, env, locals, function_context);
     case K::binary: return binary_expression(expr, module, env, locals, function_context);
-    case K::conditional: return conditional_expression(expr, module, env, locals, function_context, copy_bits);
+    case K::conditional: return conditional_expression(expr, module, env, locals, function_context, copy_bits, read_result);
     }
     fail(expr.at, "unsupported expression");
   }

@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
 using units "units-library.cod" {m as metres, cm, mm};
-function distance(x::f64(metres*))::f64 { scalar(x) }
-function exact(x::f64(metres))::f64 { scalar(x) }
-function (+)(x::f64(metres), offset::f64)::f64(metres) { metres(scalar(x) + offset) }
+function distance(x:f64(metres*)) -> f64 { scalar(x) }
+function exact(x:f64(metres)) -> f64 { scalar(x) }
+function (+)(x:f64(metres), offset:f64) -> f64(metres) { metres(scalar(x) + offset) }
 behave @print(distance(cm(250.0)));
 behave @print(distance(mm(1250.0)));
 behave @print(exact(metres(3.0) + 1.0));

@@ -1,8 +1,8 @@
-function score(score::i64)::i64 { score * 3 }
-function score(x::f64)::f64 { val score = Magnitude(x); scalar(score) * 4.0 }
+function score(score:i64) -> i64 { score * 3 }
+function score(x:f64) -> f64 { val score = Magnitude(x); scalar(score) * 4.0 }
 unit Magnitude;
-data Counter { score::i64; }
-function score(counter::Counter in O1)::i64 where {owner O1} { setfield(counter, score, counter.score + 1); counter.score }
+data Counter { score:i64; }
+function score(counter:Counter in O1) -> i64 where {owner O1} { setfield(counter, score, counter.score + 1); counter.score }
 
 export score;
 export Counter;

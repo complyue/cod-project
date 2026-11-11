@@ -14,4 +14,4 @@ try {
     locate(pool, Slot(0u32))
   };
   deref(escaped)
-} catch(e::const NullPointerException) {};
+} catch(e:const NullPointerException) {};

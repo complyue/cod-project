@@ -1,14 +1,14 @@
 using symbol "std:io" @print;
-data Sum { total::f32; count::i64; }
-function accumulate(n::i64, result::Sum in O2)::Sum where {owner O2} {
+data Sum { total:f32; count:i64; }
+function accumulate(n:i64, result:Sum in O2) -> Sum where {owner O2} {
   fold (i in 0 .. n, current = result) {
     setfield(current, total, current.total + 0.25f32);
     setfield(current, count, current.count + 1);
     current
   }
 }
-array Values[u32]::i64;
-function alternate(first::Values in O1, second::Values in O2, steps::u32)::Values where {owner O1, owner O2} {
+array Values[u32]:i64;
+function alternate(first:Values in O1, second:Values in O2, steps:u32) -> Values where {owner O1, owner O2} {
   fold (i in 0u32 .. steps, target = first) {
     store(target, 0u32, target[0u32] + 1);
     if (i % 2u32 == 0u32) { second } else { first }

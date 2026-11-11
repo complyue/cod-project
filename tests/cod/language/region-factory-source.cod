@@ -1,12 +1,12 @@
-data Node { score::i64; ptr next::Node; }
+data Node { score:i64; ptr next:Node; }
 symbol from "region-factory-vocabulary.cod" @arena;
-symbol @make :: proc(i64) -> Node;
-symbol @initial :: Node;
-symbol @read :: proc() -> Node;
-function adjust(x::i64)::i64 { x + 1 }
+symbol @make : proc(i64) -> Node;
+symbol @initial : Node;
+symbol @read : proc() -> Node;
+function adjust(x:i64) -> i64 { x + 1 }
 effect @initial = alloc @arena Node(7, null);
-procedure @read()::Node { @initial }
-procedure @make(x::i64)::Node { alloc @arena Node(adjust(x), null) }
+procedure @read() -> Node { @initial }
+procedure @make(x:i64) -> Node { alloc @arena Node(adjust(x), null) }
 
 export @arena;
 export @initial;

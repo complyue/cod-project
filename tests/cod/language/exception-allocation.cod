@@ -3,7 +3,7 @@ using symbol "std:io" @assert;
 using "std:exceptions" OutOfMemory;
 using "std:exceptions" InvalidCapacity;
 region symbol arena;
-symbol original_capacity :: u64;
+symbol original_capacity : u64;
 effect @arena <- region(4096u64);
 effect @original_capacity <- capacity_bytes(@arena);
 try {
@@ -12,7 +12,7 @@ try {
     effect @arena <- region(513u64);
     {}
   } finally { behave @print(10) }
-} catch (error :: const OutOfMemory) {
+} catch (error : const OutOfMemory) {
   behave @assert(error.requested == 513u64);
   behave @assert(capacity_bytes(@arena) == @original_capacity);
   behave @print(20)
@@ -20,7 +20,7 @@ try {
 try {
   effect @arena <- region(0u64);
   {}
-} catch (error :: const InvalidCapacity) {
+} catch (error : const InvalidCapacity) {
   behave @assert(capacity_bytes(@arena) == @original_capacity);
   behave @print(30)
 };

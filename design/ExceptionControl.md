@@ -1,10 +1,17 @@
 # CoD exception control and regional cleanup
 
-Design revision: 16 · Recorded: 2026-11-10 · Status: accepted exception/lifecycle and checked-NPE contracts.
+Design revision: 19 · Recorded: 2026-11-10 · Status: accepted exception/lifecycle and checked-NPE contracts.
 
 ## Design authority
 
-- **Declaration cleanup:** [H-316](DesignAuthorityRegistry.md#h-316)/[K-442](DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](../tests/cod/language/declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. No nullable parameter/result grammar, reference-target allocation policy or general cyclic construction is selected. Existing pending qualifications remain pending.
+- **Unified closure-owner review:** [H-321/H-322](DesignAuthorityRegistry.md#h-321)/[K-445](DesignAuthorityRegistry.md#k-445), candidate C-73/P-288–P-289, covers the region-only capture proposal for named and anonymous functions/procedures. [D-14's analysis](RegionalOwnership.md#unified-callable-captures-and-region-owners) separates target owner, lexical binding and environment storage. Charter §§1–3, D-01 and D-16 constraints remain; no automatic lexical boxing, ownership retention, new pointer layout or RTTI is inferred. The detailed capture contract is pending-human. Future acceptance must distinguish rebinding from object mutation, copied bits from references, known from absent owners and valid from escaped captures. H-317/H-318 native acceptance remains separate.
+
+- **Explicit scope boundary:** [H-319](DesignAuthorityRegistry.md#h-319)/[K-444](DesignAuthorityRegistry.md#k-444) confirms ordinary grouping braces and explicit double-brace lexical/effect scopes, plus defer only within an explicit scoped block when inside a loop. C-63/P-286–P-287 preserves C-65 lifetime and C-36 effect requirements. This scope change is not implemented by the colon/nullable checkpoint; acceptance must cover name visibility, initialization, cleanup, conditional paths and loops. H-320's contextual callable/capture boundary remains pending; no escaping closure or wider qualification is implied.
+
+- **Nullable calls and uniform annotations:** [H-317/H-318](DesignAuthorityRegistry.md#h-317)/[K-443](DesignAuthorityRegistry.md#k-443) accepts explicit nullable ptr call boundaries, retains ptr edges for cycles and uses single-colon annotations with arrow results. C-72/P-284–P-285 preserves C-65 owners/access and C-63 checked failures; charter §§1–3 and D-16 compatibility were reviewed. Acceptance requires nullable forwarding without payload access, checked dereference, owner/result rejection and migrated grammar. H-319 establishes the revised scope boundary; native colon/nullable acceptance is recorded by K-444, while scope/defer implementation remains separate.
+
+
+- **Declaration cleanup:** [H-316](DesignAuthorityRegistry.md#h-316)/[K-442](DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](../tests/cod/language/declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. H-317 covers nullable call boundaries; automatic reference-target allocation and staged required-reference cycles remain outside that acceptance. Existing pending qualifications remain pending.
 
 - **Native nullable-storage acceptance:** [K-441](DesignAuthorityRegistry.md#k-441) continues H-309–H-315 for the bounded field/val/checked-NPE implementation. [Evidence](../tests/cod/language/nullable-storage-validation.json) records the actual compiler, language cases, LLVM verification, relocated scalar/object reference fields and exceptional region cleanup. Nullability does not weaken definite initialization, fixed owners or readonly access. Automatic reference-target allocation and general cyclic ref publication remain outside this acceptance; H-316/K-442 covers declaration cleanup.
 
@@ -18,7 +25,7 @@ Design revision: 16 · Recorded: 2026-11-10 · Status: accepted exception/lifecy
 
 - **Current continuity:** [K-414](DesignAuthorityRegistry.md#k-414) continues H-267/H-269 with [the completed E1–E5 audit](../tests/cod/language/exception-ownership-validation.json). Retained causes, fallible explicit creation, storage, cleanup and regional lifetimes have focused native evidence; no general RTTI or wider qualifier choice is made.
 
-- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 16, E1–E5, checked NPE and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. K-408–K-413 retains the acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
+- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 19, E1–E5, checked NPE and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. K-408–K-413 retains the acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
 - **Value path:** C-63/P-235 → C-10 and D-17/P-236 → C-63: recoverable business failure must preserve explicit regional responsibility, effects and inspectable lifetimes. H-267 confirms this bounded path and scope under charter §§2–4, 6.2–6.3 and 12; it does not qualify unrelated ownership proposals.
 - **Dependencies / constraints:** P-237 links D-14's ownership/borrowing, P-238 links D-10's scoped bindings, and P-239 links D-01's allocation, allocator symmetry and relocation. H-180/H-181 preserves hidden/captured owners; H-262/H-263 separates consumed names from valid local views. H-265/P-240 supplies the unchecked-OOM constraint. H-251 reserves RTTI decisions for human discussion.
 - **Invariants / non-goals:** one cleanup responsibility per region; no per-object ownership, implicit owner resurrection, allocation-dependent OOM delivery, graph rollback, foreign-world editing or general RTTI decision. No C++ exception type or ABI becomes a CoD user type by implication.
@@ -28,7 +35,7 @@ Design revision: 16 · Recorded: 2026-11-10 · Status: accepted exception/lifecy
 
 CoD provides `try`, `catch` and `finally` control in the accepted contract. Ultimate out-of-memory failure is an **unchecked exception**: calling allocation does not require a checked-error result, a `throws` declaration or an enclosing catch merely to compile. A caller may catch the failure; otherwise it propagates toward the execution boundary. Unchecked does not mean ignoring ownership validity or turning invalid references into runtime exceptions.
 
-`make` continues to produce its normal `owned region ::Root` result when construction succeeds. OOM is an exceptional exit, not an implicit null owner or a mandatory optional/result wrapper. H-265 does not select automatic allocation retries, region growth, compaction or a process recovery policy. “Ultimate” failure describes exhaustion after any separately defined policy has failed; no such policy is introduced here.
+`make` continues to produce its normal `owned region :Root` result when construction succeeds. OOM is an exceptional exit, not an implicit null owner or a mandatory optional/result wrapper. H-265 does not select automatic allocation retries, region growth, compaction or a process recovery policy. “Ultimate” failure describes exhaustion after any separately defined policy has failed; no such policy is introduced here.
 
 The initial error taxonomy distinguishes `OutOfMemory` (the memory provider cannot supply storage), `RegionCapacityExceeded` (placement exceeds an existing region's fixed budget), and `InvalidCapacity` (an invalid or unrepresentable capacity request). All three are unchecked; none implies automatic growth or retry.
 
@@ -40,9 +47,9 @@ H-313 accepts checked NPE: every potentially null dereference must be covered by
 
 ```text
 using "std:exceptions" NullPointerException;
-function following(n::Node in O) -> const i64
+function following(n:Node in O) -> const i64
   throws NullPointerException where {owner O} { n.next.count }
-try { following(node) } catch (e :: const NullPointerException) { 0 }
+try { following(node) } catch (e : const NullPointerException) { 0 }
 ```
 
 The exception name is selected and aliased through the normal type-identity rules. Throws may follow the result annotation or the where clause. It does not distinguish overloads. Bodyless contracts and symbolic procedure signatures retain the checked obligation; an implementation cannot expose more checked failure than its applicable declaration permits. A caller handles declared NPE even if a particular specialization does not throw. An outer caller's catch cannot excuse an undeclared callee body, and WPO inlining does not erase that boundary. Functions may throw/catch without gaining dynamic-symbol access.
@@ -53,6 +60,16 @@ A handler's NPE or rethrow and NPE from finally must satisfy the enclosing calla
 
 Acceptance covers direct/module and callee-boundary rejection, explicit propagation, local handling and finally cleanup, bodyless and symbolic signatures, literal/test/rebind operations without target access, val argument evaluation, branch refinement and nullable loop paths. D-14 retains the reference initialization, same-owner, fixed-owner and current relative-encoding constraints. General exception payload graphs and unrelated deferred exception mechanisms remain outside this increment.
 
+## Deferred work and explicit scopes
+
+H-319 distinguishes expression grouping from scope creation. `{ ... }` groups expressions without starting a lexical or dynamic-effect scope. `{{ ... }}` starts both: it owns its local storage lifetimes, restores its effects on exit and runs its deferred work. Calls and module top levels remain inherent scopes. Direct defer in a loop body is rejected; `for (...) { {{ defer ...; ... }} }` is permitted because the explicit scope finishes on every iteration rather than accumulating actions in an outer scope.
+
+A plain deferred operand is evaluated when its owning scope exits: `defer f(x)` is the single-expression form of `defer { f(x) }`. The requested `defer (x) { f(x) }` provides explicit registration-time capture. Capture must distinguish independent bits from a borrowed target; it cannot silently copy a regional object or extend its lifetime. Deferred code retains the surrounding function/procedure permissions and existing explicit-only exception-chain rules.
+
+[Go's specification](https://go.dev/ref/spec#Defer_statements) evaluates and saves call arguments when registering, then invokes deferred calls in reverse order at function return. CoD's explicit scoped blocks and general operands make timing visible in source. The compiler must validate normal/exceptional cleanup order, skipped registration, pending expression results, owner consumption and repeated loop scopes before claiming this implementation complete.
+
+H-320 additionally proposes that an expected `func():void` or `proc():void` parameter can interpret `{{ ... }}` as an anonymous callable body instead of executing the block while evaluating the argument. The expected kind must retain function/effect restrictions; unresolved function/procedure overload ambiguity cannot be settled by silently executing the block. H-322 replaces the isolated inline-callback review with a unified owner-aware proposal for named and anonymous callables. Region-only reference captures, explicit copied bits and closure storage/lifetime requirements are reviewed in [D-14](RegionalOwnership.md#unified-callable-captures-and-region-owners); neither live lexical binding capture nor a blanket receiving-call-only restriction is selected. This is a language contract question, not permission to expose compiler callable-routing objects to source programs.
+
 ## Expression-oriented control
 
 `try` is an expression, consistent with CoD's existing expression model. Normal completion and handled completion provide its result; an unhandled exception provides no normal result. A `finally` block performs completion work without replacing the result merely through its final expression value. No public bottom type or general continuation API is needed to express this planning requirement.
@@ -61,10 +78,10 @@ The exception identities are explicitly selected into the module before use:
 
 ```text
 try {
-  owned region packet::Packet <-
+  owned region packet:Packet <-
     make Packet(capacity = bytes) { sequence <- initial };
   process_packet(packet)
-} catch (error :: const OutOfMemory) {
+} catch (error : const OutOfMemory) {
   handle_allocation_failure(error)
 } finally {
   finish_attempt()
@@ -120,7 +137,7 @@ Use this source family, with exception identities already selected into the curr
 ```text
 try {
   operation()
-} catch (error :: const OutOfMemory) {
+} catch (error : const OutOfMemory) {
   recover(error)
 } catch (error) {
   report_or_rethrow(error)
@@ -139,18 +156,18 @@ A new exception from finally replaces a pending exception or normal result. Oute
 
 ### E4 — Consuming calls and results
 
-An admitted owning parameter transfers responsibility at callee entry, after argument evaluation and conversion succeed. An external borrowed parameter retains the original owner without acquiring cleanup responsibility. H-271/H-272 requires explicit owner-generic declarations for external borrowing; the native prototype's unqualified `region ::Root` borrowing spelling is a migration boundary, not the new default. The call itself has not consumed an owning argument if a later argument fails before entry; explicit transfers performed inside earlier argument expressions retain their actual effects. Validate availability and provenance again at the call boundary, including duplicate moves and later-argument invalidation of earlier views.
+An admitted owning parameter transfers responsibility at callee entry, after argument evaluation and conversion succeed. An external borrowed parameter retains the original owner without acquiring cleanup responsibility. H-271/H-272 requires explicit owner-generic declarations for external borrowing; the native prototype's unqualified `region :Root` borrowing spelling is a migration boundary, not the new default. The call itself has not consumed an owning argument if a later argument fails before entry; explicit transfers performed inside earlier argument expressions retain their actual effects. Validate availability and provenance again at the call boundary, including duplicate moves and later-argument invalidation of earlier views.
 
 After entry, an owning parameter's region belongs to the callee scope until returned or otherwise transferred; an exceptional callee exit releases what that scope still owns. The caller's original name remains consumed. An owning result transfers only after the callee's required finally work completes successfully; a result abandoned by finally failure remains subject to cleanup. This preserves the existing per-argument evaluation/conversion order without treating ownership transfer as a numerical conversion.
 
 The borrowed and consuming call forms are:
 
 ```text
-function edit(region packet::Packet) -> void { ... }
-function transform(owned region packet::Packet) -> owned region ::Packet { ... }
+function edit(region packet:Packet) -> void { ... }
+function transform(owned region packet:Packet) -> owned region :Packet { ... }
 
 edit(packet); # Borrow; the caller still owns packet.
-owned region next::Packet <- transform(packet);
+owned region next:Packet <- transform(packet);
 # packet is consumed after callee entry; next owns the successful result.
 ```
 

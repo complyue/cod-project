@@ -1476,7 +1476,7 @@
     "file": "region-legacy-syntax.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "region root annotations use '::Root'"
+    "stderr_contains": "region root annotations use ':Root'"
   },
   {
     "file": "nullable-storage.cod",
@@ -1540,5 +1540,28 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "ref/ptr/val are declaration modifiers, not type constructors"
+  },
+  {
+    "file": "nullable-calls.cod",
+    "exit": 0,
+    "stdout": "true\ntrue\ntrue\ntrue\ntrue\n42\n7\ntrue\ntrue\n9\n"
+  },
+  {
+    "file": "nullable-call-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional result would outlive"
+  },
+  {
+    "file": "nullable-call-read.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException"
+  },
+  {
+    "file": "legacy-colon-rejected.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "single colon"
   }
 ]

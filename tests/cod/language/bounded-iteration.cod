@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-function sum(n::i64)::i64 { fold (i in 0 .. n, total = 0) { total + i } }
-function nested(n::i64)::i64 {
+function sum(n:i64) -> i64 { fold (i in 0 .. n, total = 0) { total + i } }
+function nested(n:i64) -> i64 {
   fold (i in 0 .. n, total = 0) {
     total + fold (j in 0 .. i, inner = 0) { inner + j }
   }

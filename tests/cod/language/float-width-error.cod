@@ -1,2 +1,2 @@
-function read(x::f32)::f32 { x }
+function read(x:f32) -> f32 { x }
 read(1.0);

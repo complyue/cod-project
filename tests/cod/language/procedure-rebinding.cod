@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
-symbol @x :: i64;
-symbol @a :: proc() -> i64;
-symbol @b :: proc() -> i64;
-symbol @call :: proc() -> i64;
+symbol @x : i64;
+symbol @a : proc() -> i64;
+symbol @b : proc() -> i64;
+symbol @call : proc() -> i64;
 effect @x <- 1;
 procedure @a -> i64 { @x + 10 }
 effect @x <- 2;

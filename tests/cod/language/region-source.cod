@@ -1,10 +1,10 @@
-array Values[u32]::i64;
+array Values[u32]:i64;
 region symbol @arena;
-symbol @values :: Values;
-symbol @read :: proc() -> i64;
+symbol @values : Values;
+symbol @read : proc() -> i64;
 effect @arena <- region(4096u64);
 effect @values = alloc @arena Values(1u64, 7);
-procedure @read()::i64 { @values[0u32] }
+procedure @read() -> i64 { @values[0u32] }
 
 export @arena;
 export @read;

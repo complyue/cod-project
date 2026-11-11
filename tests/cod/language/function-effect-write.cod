@@ -1,5 +1,5 @@
-symbol bias :: i64;
-function write(value::i64) -> i64 { effect @bias <- value; value }
+symbol bias : i64;
+function write(value:i64) -> i64 { effect @bias <- value; value }
 function caller() -> i64 { write(3) }
 effect @bias <- 2;
 caller();

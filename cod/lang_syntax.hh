@@ -61,6 +61,8 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
     }
     if (c == '/' && cursor + 1 < source.size() && source[cursor + 1] == '/')
       fail(at, "'//' is reserved for fraction construction; use '#' for line comments");
+    if (source.compare(cursor, 2, "::") == 0)
+      fail(at, "use a single colon for type annotations, or -> for callable results");
     const auto start = at;
     const auto offset = cursor;
     if (c == '@' || std::isalpha(static_cast<unsigned char>(c)) || c == '_') {
@@ -140,7 +142,7 @@ inline std::vector<Token> tokenize(const std::string &source, const std::string 
     if (cursor + 1 < source.size()) {
       const auto pair = source.substr(cursor, 2);
       if (pair == "->" || pair == "==" || pair == "!=" || pair == "<=" || pair == ">=" ||
-          pair == "&&" || pair == "||" || pair == "::" || pair == "<-" || pair == "<:" || pair == "..") {
+          pair == "&&" || pair == "||" || pair == "<-" || pair == "<:" || pair == "..") {
         punctuation = pair;
         advance();
       }
@@ -168,6 +170,7 @@ struct Type {
   std::vector<Type> throws_types;
   std::vector<size_t> owners;
   std::vector<bool> const_views;
+  std::vector<bool> nullable_views;
   bool variadic = false;
   bool owned = false;
   Type(Kind kind = void_type, std::string name = {}, size_t identity = 0)
@@ -175,7 +178,7 @@ struct Type {
   bool operator==(const Type &other) const {
     return kind == other.kind && name == other.name && identity == other.identity &&
            parameters == other.parameters && bounds == other.bounds && variadic == other.variadic && owned == other.owned &&
-           throws_types == other.throws_types && owner_bounds == other.owner_bounds && owners == other.owners && const_views == other.const_views &&
+           throws_types == other.throws_types && owner_bounds == other.owner_bounds && owners == other.owners && const_views == other.const_views && nullable_views == other.nullable_views &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
   }
 };
@@ -308,6 +311,7 @@ struct Form {
   std::shared_ptr<SymbolOwner> symbol_owner;
   std::string result_owner;
   bool result_const = false;
+  std::string result_kind;
   std::optional<Type> result_type;
   std::optional<Type> index_type;
   std::optional<Type> parent_type;
@@ -418,7 +422,7 @@ class Parser {
   Type parse_type(Parameter *parameter = nullptr) {
     auto token = name(TokenKind::identifier);
     if (token.text == "owned" || token.text == "region")
-      fail(token.at, "region is a declaration keyword; use 'region name::Root' or 'owned region name::Root', not a value-type annotation");
+      fail(token.at, "region is a declaration keyword; use 'region name:Root' or 'owned region name:Root', not a value-type annotation");
     if (token.text == "proc" || token.text == "procedure") {
       Type type{Type::procedure};
       expect("(");
@@ -461,7 +465,7 @@ class Parser {
     }
     return type;
   }
-  void type_separator() { if (!take("::")) expect(":"); }
+  void type_separator() { expect(":"); }
   Expr make(Expression::Kind kind, const Token &token) {
     return std::make_unique<Expression>(Expression{kind, token.at, token.text, {}, {}, {}, false, {}});
   }
@@ -489,8 +493,8 @@ class Parser {
   Type region_annotation(bool owned) {
     Type type{Type::region};
     type.owned = owned;
-    if (is("<")) fail(peek().at, "region root annotations use '::Root', not '<Root>'");
-    if (is("::") || is(":")) {
+    if (is("<")) fail(peek().at, "region root annotations use ':Root', not '<Root>'");
+    if (is(":")) {
       type_separator();
       type.target = std::make_shared<Type>(parse_type());
     }
@@ -545,11 +549,14 @@ class Parser {
     } else if (function) {
       fail(peek().at, "a function requires a parameter list");
     }
-    if (take("->") || take("::")) {
+    if (take("->")) {
       form.result_const = take("const");
+      if (is("ptr") || is("ref")) form.result_kind = tokens_[cursor_++].text;
       form.result_type = signature_type();
       if (take("in")) form.result_owner = ordinary_name().text;
     }
+    if (!form.result_kind.empty() && form.result_owner.empty())
+      fail(form.at, "a ref/ptr result requires an explicit external owner: use in O");
     if (take("throws")) form.throws_types.push_back(parse_type());
     if (take("where")) {
       const bool grouped = take("{");
@@ -654,7 +661,7 @@ class Parser {
         if (catch_all) fail(peek().at, "catch-all must be the final catch clause");
         expect("(");
         auto handler = make(Expression::Kind::handler, value_name());
-        if (take("::")) {
+        if (take(":")) {
           expect("const");
           handler->annotation = parse_type();
         } else catch_all = true;
@@ -718,7 +725,7 @@ class Parser {
         if (is("{")) { group->children.push_back(block()); break; }
         auto expr = make(Expression::Kind::pointer, value_name());
         expr->declaration_kind = mode;
-        if (take("::")) expr->annotation = parse_type();
+        if (take(":")) expr->annotation = parse_type();
         if (take("in")) expr->owner_name = ordinary_name().text;
         if (take("<-")) expr->binding = "<-";
         else { expect("="); expr->binding = "="; }

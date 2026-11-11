@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
 using units "units-library.cod" {m, mm};
-function read(x::f64(m*<-missing<-mm))::i64 { 1 }
-function read(x::f64(mm))::i64 { 2 }
+function read(x:f64(m*<-missing<-mm)) -> i64 { 1 }
+function read(x:f64(mm)) -> i64 { 2 }
 behave @print(read(mm(5.0)));

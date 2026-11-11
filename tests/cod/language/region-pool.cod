@@ -12,10 +12,10 @@ for (stage in 0u64 .. 4u64) {
     if(stage == 1u64) {24u64} else {if(stage == 2u64) {72u64} else {88u64}}
   };
   try {create(bytes, 4u32); behave @assert(false)}
-  catch(error::const RegionCapacityExceeded) {}
+  catch(error:const RegionCapacityExceeded) {}
 };
 {
-  owned region arena::Pool <- create(8192u64, 4u32);
+  owned region arena:Pool <- create(8192u64, 4u32);
   ref pool = root(arena);
   val occupation = used_bytes(arena);
   for (i in 0u32 .. 4u32) {
@@ -41,4 +41,4 @@ for (stage in 0u64 .. 4u64) {
   behave @assert(!empty(pool));
   behave @print(used_bytes(arena));
 };
-} catch(e::const NullPointerException) {behave @assert(false)};
+} catch(e:const NullPointerException) {behave @assert(false)};

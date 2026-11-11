@@ -2,20 +2,20 @@ using symbol "std:io" @assert;
 using symbol "std:io" @print;
 using "std:exceptions" InvalidCapacity;
 region symbol @arena;
-symbol @level::i64;
+symbol @level:i64;
 effect @level <- 1;
-function last_or(first::i64, last::i64) -> const i64 {
+function last_or(first:i64, last:i64) -> const i64 {
   ptr result = make local i64;
   for (i in first .. last) { result <- i; }
   else { result <- -1; };
   result
 }
-function bound(count::i64 in O, value::i64) -> const i64 where {owner O} {
+function bound(count:i64 in O, value:i64) -> const i64 where {owner O} {
   count <- count + 1;
   value
 }
 proc fail_bound() -> i64 { effect @arena <- region(0u64); 0 }
-function checked(first::i64, last::i64, error::InvalidCapacity) -> const i64 {
+function checked(first:i64, last:i64, error:InvalidCapacity) -> const i64 {
   ptr result = make local i64;
   for (i in first .. last) { result <- i; }
   else { throw error; };
@@ -31,14 +31,14 @@ else { effect @level <- 2; marker <- @level; };
 behave @assert(count == 2 && marker == 2 && @level == 1);
 try {
   for (i in 0 .. fail_bound()) { marker <- 99; } else { marker <- 98; };
-} catch (error::const InvalidCapacity) {};
+} catch (error:const InvalidCapacity) {};
 behave @assert(marker == 2);
 try {
   for (i in 0 .. 1) { effect @arena <- region(0u64); } else { marker <- 98; };
-} catch (error::const InvalidCapacity) {
+} catch (error:const InvalidCapacity) {
   behave @assert(marker == 2 && checked(0, 2, error) == 1);
   try { checked(0, 0, error); }
-  catch (again::const InvalidCapacity) { marker <- 3; };
+  catch (again:const InvalidCapacity) { marker <- 3; };
   {}
 };
 behave @assert(marker == 3);

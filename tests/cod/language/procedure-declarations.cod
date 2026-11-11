@@ -10,8 +10,8 @@ behave @print(perform @selected(1));
 behave @print(behave @selected(1));
 behave @print(perform @remote(1));
 behave @print(behave @remote(1));
-proc @fresh(x::i64) -> i64 { @bias + x }
-proc @selected(x::i64) -> i64 { @bias * 2 + x }
+proc @fresh(x:i64) -> i64 { @bias + x }
+proc @selected(x:i64) -> i64 { @bias * 2 + x }
 effect @bias <- 30;
 behave @print(perform @fresh(2));
 behave @print(behave @fresh(2));
@@ -19,8 +19,8 @@ behave @print(perform @selected(2));
 behave @print(behave @selected(2));
 behave @print(@bias);
 
-proc callback(x::i64) -> i64 { x + 1 }
-proc selected(x::i64) -> i64 { @bias + x }
-proc apply(callback::proc(i64)->i64, x::i64) -> i64 { callback(x) }
+proc callback(x:i64) -> i64 { x + 1 }
+proc selected(x:i64) -> i64 { @bias + x }
+proc apply(callback:proc(i64)->i64, x:i64) -> i64 { callback(x) }
 behave @print(apply(selected, 3));
 { const ref callback = selected; effect @bias <- 40; behave @print(callback(3)); };

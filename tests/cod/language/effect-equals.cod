@@ -1,4 +1,4 @@
 using symbol "std:io" @print;
 behave @print(99);
-symbol @x :: i64;
+symbol @x : i64;
 effect @x = 1;

@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
-symbol @p :: proc() -> i64;
+symbol @p : proc() -> i64;
 symbol from "vocabulary.cod" @p as @foreign;
 procedure @foreign -> i64 { 900 }
 using "source.cod" @p as @p;

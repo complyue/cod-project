@@ -1,12 +1,12 @@
 using symbol "std:io" @assert;
-data Pool { tag::i64; }
-data Node { value::i64; }
-region symbol @a::Pool, @b::Pool;
+data Pool { tag:i64; }
+data Node { value:i64; }
+region symbol @a:Pool, @b:Pool;
 effect @a <- make Pool(capacity = 4096u64) { tag <- 100 };
 effect @b <- make Pool(capacity = 4096u64) { tag <- 2 };
-symbol @object::Node;
-function (<-)(dst::Node in d, src::const Node in s) -> const Node in d
-  where {region d::Pool, region s::Pool} {
+symbol @object:Node;
+function (<-)(dst:Node in d, src:const Node in s) -> const Node in d
+  where {region d:Pool, region s:Pool} {
   setfield(dst, value, src.value + root(d).tag - root(s).tag);
   dst
 }

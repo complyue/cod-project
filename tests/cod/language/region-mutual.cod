@@ -1,12 +1,12 @@
 using symbol "std:io" @assert;
 using "std:exceptions" NullPointerException;
 using symbol "std:io" @print;
-data Left { value::i64; ptr right::Right; }
-data Right { value::f32; ptr left::Left; }
+data Left { value:i64; ptr right:Right; }
+data Right { value:f32; ptr left:Left; }
 region symbol @arena;
-symbol @left :: Left;
-symbol @right :: Right;
-function through(l::Left in O1)::i64 throws NullPointerException where {owner O1} { deref(deref(l.right).left).value }
+symbol @left : Left;
+symbol @right : Right;
+function through(l:Left in O1) -> i64 throws NullPointerException where {owner O1} { deref(deref(l.right).left).value }
 effect @arena <- region(4096u64);
 effect @left = alloc @arena Left(17, null);
 effect @right = alloc @arena Right(2.5f32, @left);
@@ -17,4 +17,4 @@ setfield(@left, value, 29);
 behave @print(through(deref(@left)));
 behave @print(deref(deref(@left).right).value);
 
-} catch (unexpected::const NullPointerException) { behave @assert(false); };
+} catch (unexpected:const NullPointerException) { behave @assert(false); };

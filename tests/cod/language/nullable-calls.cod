@@ -1,0 +1,37 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+data Node {value:i64; ptr next:Node;}
+function find(node:Node in O, present:bool) -> ptr Node in O where {owner O} {
+  if(present) {node} else {null}
+}
+function absent(node:Node in O) -> ptr Node in O where {owner O} {null}
+function empty(ptr node:Node in O) -> const bool where {owner O} {isnull(node)}
+function forward(ptr node:Node in O) -> ptr Node in O where {owner O} {node}
+function value(ptr node:Node in O) -> const i64 where {owner O} throws NullPointerException {node.value}
+function optional_number(number:i64 in O, present:bool) -> ptr i64 in O where {owner O} {
+  if(present) {number} else {null}
+}
+function scalar_view(ptr number:i64 in O) -> ptr i64 in O where {owner O} {number}
+proc @missing(ptr node:Node in O) -> const bool where {owner O} {isnull(node)}
+owned region packet:Node <- make Node(capacity=128u64){value<-42; next=null};
+ref node=root(packet);
+ptr found=find(node,true);
+ptr missing=find(node,false);
+behave @print(empty(missing));
+behave @print(isnull(absent(node)));
+behave @print(behave @missing(missing));
+behave @print(perform @missing(missing));
+ptr forwarded=forward(missing);
+behave @print(isnull(forwarded));
+try {behave @print(value(found)); value(missing)}
+catch(e:const NullPointerException){behave @print(7); 0};
+val number<-9;
+ptr number_view:i64=null;
+number_view=number;
+number_view=null;
+ptr returned=scalar_view(number_view);
+behave @print(isnull(returned));
+ptr empty_number=optional_number(number,false);
+behave @print(isnull(empty_number));
+ptr full_number=optional_number(number,true);
+try {behave @print(full_number)} catch(e:const NullPointerException) {};

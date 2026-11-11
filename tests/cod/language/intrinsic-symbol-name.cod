@@ -1,1 +1,1 @@
-function (@len)(value::i64)::i64 { value }
+function (@len)(value:i64) -> i64 { value }

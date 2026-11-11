@@ -1,10 +1,15 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 179 · Recorded: 2026-11-10.
+Prototype reference revision: 181 · Recorded: 2026-11-10.
 
 ## Design authority
 
-- **Declaration cleanup:** [H-316](../../../design/DesignAuthorityRegistry.md#h-316)/[K-442](../../../design/DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. No nullable parameter/result grammar, reference-target allocation policy or general cyclic construction is selected. Existing pending qualifications remain pending.
+- **Explicit scope boundary:** [H-319](../../../design/DesignAuthorityRegistry.md#h-319)/[K-444](../../../design/DesignAuthorityRegistry.md#k-444) confirms ordinary grouping braces and explicit double-brace lexical/effect scopes, plus defer only within an explicit scoped block when inside a loop. C-63/P-286–P-287 preserves C-65 lifetime and C-36 effect requirements. This scope change is not implemented by the colon/nullable checkpoint; acceptance must cover name visibility, initialization, cleanup, conditional paths and loops. H-320's contextual callable/capture boundary remains pending; no escaping closure or wider qualification is implied.
+
+- **Nullable calls and uniform annotations:** [H-317/H-318](../../../design/DesignAuthorityRegistry.md#h-317)/[K-443](../../../design/DesignAuthorityRegistry.md#k-443) accepts explicit nullable ptr call boundaries, retains ptr edges for cycles and uses single-colon annotations with arrow results. C-72/P-284–P-285 preserves C-65 owners/access and C-63 checked failures; charter §§1–3 and D-16 compatibility were reviewed. Acceptance requires nullable forwarding without payload access, checked dereference, owner/result rejection and migrated grammar. H-319 establishes the revised scope boundary; native colon/nullable acceptance is recorded by K-444, while scope/defer implementation remains separate.
+
+
+- **Declaration cleanup:** [H-316](../../../design/DesignAuthorityRegistry.md#h-316)/[K-442](../../../design/DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. H-317 covers nullable call boundaries; automatic reference-target allocation and staged required-reference cycles remain outside that acceptance. Existing pending qualifications remain pending.
 
 - **Native nullable-storage acceptance:** [K-441](../../../design/DesignAuthorityRegistry.md#k-441) continues H-309–H-315 for the bounded field/val/checked-NPE implementation. [Evidence](nullable-storage-validation.json) records the actual compiler, language cases, LLVM verification, relocated scalar/object reference fields and exceptional region cleanup. Nullability does not weaken definite initialization, fixed owners or readonly access. Automatic reference-target allocation and general cyclic ref publication remain outside this acceptance; H-316/K-442 covers declaration cleanup.
 
@@ -37,7 +42,7 @@ Prototype reference revision: 179 · Recorded: 2026-11-10.
 - **Invariants / non-goals:** Preserve region-only non-bits storage, relocation, no regional object copy/move, same-owner stored edges, owner-preserving capture and no dynamic access or procedure calls from functions. No runtime borrow registry, immutable snapshot, module namespace, toolchain change or SNN model is selected.
 - **Acceptance / limits:** H-245 supplies the architecture goal audited by K-396; H-221 records the completed language/runtime work period. The table below separates working subsets, historical measurements and unfinished contracts. Native output, diagnostics and source hashes supply evidence; allocation, extension, qualifier and transfer limits remain explicit rather than inferred from examples.
 
-H-257/H-258's current source increment adds nearest-lexical procedure calls with `-Werror=shadow`, mandatory signature-only callable declarations, generic `where` parameters, final `args::T...` parameters and `args...` forwarding. The compiler carries signature declarations separately from methods and uses typed LLVM storage places for reads/writes. [K-399](../../../design/DesignAuthorityRegistry.md#k-399) records the scope. [K-400](../../../design/DesignAuthorityRegistry.md#k-400) and [28 focused checks](callable-model-validation.json) record successful compilation, native behavior, diagnostics and LLVM/bitcode emission; earlier evidence below retains its own compiler. `callable-contract.cod` and its API/implementation modules cover declarations and generic/variadic composition; the procedure and regional-array fixtures cover lexical binding and saved bits versus live reads. D-17 supplies the separate bounded ordinary-owner/make increment below; general qualifier combinations remain outside that earlier evidence; K-429 records the bounded ptr/read-only integration.
+H-257/H-258's current source increment adds nearest-lexical procedure calls with `-Werror=shadow`, mandatory signature-only callable declarations, generic `where` parameters, final `args:T...` parameters and `args...` forwarding. The compiler carries signature declarations separately from methods and uses typed LLVM storage places for reads/writes. [K-399](../../../design/DesignAuthorityRegistry.md#k-399) records the scope. [K-400](../../../design/DesignAuthorityRegistry.md#k-400) and [28 focused checks](callable-model-validation.json) record successful compilation, native behavior, diagnostics and LLVM/bitcode emission; earlier evidence below retains its own compiler. `callable-contract.cod` and its API/implementation modules cover declarations and generic/variadic composition; the procedure and regional-array fixtures cover lexical binding and saved bits versus live reads. D-17 supplies the separate bounded ordinary-owner/make increment below; general qualifier combinations remain outside that earlier evidence; K-429 records the bounded ptr/read-only integration.
 
 Ordinary `ptr` variables retain a fixed target owner, allow same-owner reference rebinding, implicitly dereference on reads and provide no pointer arithmetic. Fresh bits initializers and `make local` create enclosing-scope storage; existing targets remain aliases. Individual initializer blocks supply a value, while a final comma block initializes the group and discards its result. Deferred initialization is accepted, and reads require definite initialization across aliases, calls and reaching branches. Default bits parameters receive independent callee-local copies; non-bits parameters and external bits borrows require `in O` with `where {owner O}`. Region-specific binders additionally check the root type and expose the borrowed region. Result-owner promises apply to declaration-only signatures as well as method bodies. Assignment results retain readonly destination views; ordinary const bits results copy. [D-14](../../../design/RegionalOwnership.md#bounded-pointer-and-initialization-implementation) states the exact scope and conservative proof limits. Legacy let/owned-region spellings remain compatibility surfaces; the complete region-declaration/qualifier migration is separate.
 
@@ -45,11 +50,11 @@ Line comments use `#`. The compiler diagnoses `//` outside strings/comments as r
 
 ## Intrinsic exception control
 
-[ExceptionControl.md](../../../design/ExceptionControl.md) (D-17) is the bounded H-267 contract; [K-410](../../../design/DesignAuthorityRegistry.md#k-410) records this implementation increment. `using "std:exceptions" InvalidCapacity;` selects an exact catch identity, with normal local alias support. `try { ... } catch (e :: const InvalidCapacity) { ... } finally { ... }` produces the normal or handled value; finally yields void. A final `catch (e)` accepts remaining intrinsic categories. `throw e` propagates a caught value and `throw;` rethrows the active catch. Finally failure replaces pending completion without adding an automatic cause.
+[ExceptionControl.md](../../../design/ExceptionControl.md) (D-17) is the bounded H-267 contract; [K-410](../../../design/DesignAuthorityRegistry.md#k-410) records this implementation increment. `using "std:exceptions" InvalidCapacity;` selects an exact catch identity, with normal local alias support. `try { ... } catch (e : const InvalidCapacity) { ... } finally { ... }` produces the normal or handled value; finally yields void. A final `catch (e)` accepts remaining intrinsic categories. `throw e` propagates a caught value and `throw;` rethrows the active catch. Finally failure replaces pending completion without adding an automatic cause.
 
 [The focused evidence](exception-validation.json) covers the three intrinsic allocation failures, nested control and cleanup, original failure sites through rethrow, captured/hidden binding restoration, and category preservation through loops. The runtime fault test injects a provider `std::bad_alloc` without exhausting host memory. `python3 tests/cod/language/exception_runtime_tests.py` runs that check plus the key invalid-catch/finally/effect-context cases.
 
-[Typed ownership evidence](ownership-lifecycle-validation.json), recorded by [K-411](../../../design/DesignAuthorityRegistry.md#k-411), covers `owned region packet::Packet <- make Packet(capacity = bytes) { ... }`, `root(packet)`, borrowed versus owned parameters/results, local moves/effect installation, branches and exceptional cleanup. `owned_region_tests.py` checks initialized-root relocation, 19 exact acquisitions/releases, pre-entry conversion failure, abandoned results and invalid owner/view uses. The library fixture exercises exported typed factories and generic forwarding. [K-412](../../../design/DesignAuthorityRegistry.md#k-412) and [the control audit](ownership-control-audit.json) add15 invalid-source checks, selected-owner cleanup, captured/current symbolic owning results and borrowed edits surviving failure.
+[Typed ownership evidence](ownership-lifecycle-validation.json), recorded by [K-411](../../../design/DesignAuthorityRegistry.md#k-411), covers `owned region packet:Packet <- make Packet(capacity = bytes) { ... }`, `root(packet)`, borrowed versus owned parameters/results, local moves/effect installation, branches and exceptional cleanup. `owned_region_tests.py` checks initialized-root relocation, 19 exact acquisitions/releases, pre-entry conversion failure, abandoned results and invalid owner/view uses. The library fixture exercises exported typed factories and generic forwarding. [K-412](../../../design/DesignAuthorityRegistry.md#k-412) and [the control audit](ownership-control-audit.json) add15 invalid-source checks, selected-owner cleanup, captured/current symbolic owning results and borrowed edits surviving failure.
 
 `throw primary from cause` creates an immutable explicit relationship. Returned/stored errors retain their causes beyond catch exit; `.cause_count` and `cause_at(error, index)` inspect them. Common `SystemException` fields preserve the category on reload. Cause records use execution-local numeric handles, and their backing storage remains until execution exit. Creating a chain can raise a fresh unchained OOM; ordinary propagation allocates no cause storage. This is not a persistence or cross-process format.
 
@@ -177,7 +182,7 @@ build/bin/cod --check tests/cod/language/using.cod --emit-llvm /tmp/cod-example.
 ## Supported source forms
 
 ```text
-symbol x :: i64, p :: proc() -> i64;
+symbol x : i64, p : proc() -> i64;
 using symbol "std:io" @print;
 function twice(value: i64) -> i64 { value * 2 }
 global seed: i64 = twice(3);
@@ -189,14 +194,14 @@ behave @print(behave @p);   # 9: current dynamic binding
 ```
 
 - Scalars `i64`, `u8`, `u32`, `u64`, `f32`, `f64`, `bool` and `void`; decimal integers with optional leading zeroes, floating literals with optional `f32`/`f64` suffix, `true`/`false`, arithmetic, comparisons, `!`, `&&` and `||`. Unsuffixed floating literals use `f64`; mixed numeric arithmetic uses a unique least lossless common representation. Floating operators use native IEEE arithmetic; signed integer arithmetic checks overflow.
-- Lexical functions and procedures have typed parameters. Procedures use `proc` or `procedure` and require an explicit result type. `proc p(x::i64) -> i64 { ... }` defines a lexical procedure; `proc @p(x::i64) -> i64 { ... }` defines a symbolic procedure, declaring its typed identity if absent. A no-argument procedure may omit its parameter list. `p(...)` uses lexical lookup and current dynamic bindings; `perform @p(...)` restores captures and `behave @p(...)` uses current bindings. Functions cannot call procedures. Operation overloads also use current bindings.
+- Lexical functions and procedures have typed parameters. Procedures use `proc` or `procedure` and require an explicit result type. `proc p(x:i64) -> i64 { ... }` defines a lexical procedure; `proc @p(x:i64) -> i64 { ... }` defines a symbolic procedure, declaring its typed identity if absent. A no-argument procedure may omit its parameter list. `p(...)` uses lexical lookup and current dynamic bindings; `perform @p(...)` restores captures and `behave @p(...)` uses current bindings. Functions cannot call procedures. Operation overloads also use current bindings.
 - `effect @name <- value` transfers bits or acquires a whole-region resource for the enclosing scope; `effect @name = value` rebinds an object or procedure. All effects yield void. `@name` reads. Nested braces restore bindings on exit. Ordinary `@name = value` rebinding is rejected. Each symbol declares one value type, checked before binding; procedure types include parameter and result types. A conflicting binding reports the symbol and both types, including nominal module origins even when local aliases have the same spelling.
 - `if (condition) { ... } else { ... }`, with matching branch result types. Blocks yield their last expression; an empty block yields `void`. Semicolons separate expressions and a trailing semicolon does not discard the last value.
 - `const ptr a = value, b = value, { ... };` fixes the declaration-group bindings. It does not make writable target memory readonly; `<-` and `<->` may still edit that memory. Rebinding through `=` or `<=>` rejects, including overload/intrinsic calls.
 - `<=>` exchanges same-owner pointer targets, and `<->` exchanges same-type writable bits across either the same or different owners. Both evaluate two destinations once, left-to-right, yield void and cannot chain. Parenthesized overloads can be functions/procedures with two explicit external-owner parameters; reference-swap formals denote both actual caller bindings. Explicit `intrinsic` calls retain all builtin checks.
 - `for (i in first .. last) { ... } else { ... }` optionally handles **zero body executions only**. Bounds evaluate once. Exceptions do not trigger else, the index is body-local, and both blocks restore their own dynamic bindings. The loop yields void. Initialization after the loop must hold on every normally completing path; a body read before its first write still rejects. `fold ... else` is not supported.
 - Module-level `symbol`, `function`, `procedure`, immutable bits `global`, resource declarations and expressions. Global initializers must be bits literals or function calls. Their selected outer user callable must be a function, including for overloaded operation spellings; native explicit-memory operations are also allowed. A procedure overload remains invalid in that position. Local immutable `let` bindings, bounded loops and declared regional arrays support numerical kernels.
-- `symbol local :: T;` (also `symbol @local :: T;`) declares a fresh typed identity; grouped declarations require a type on each name. `proc(T1, T2) -> RT` denotes a procedure signature. `symbol from "vocabulary.cod" @source as @local;` preserves the source identity and type. A standalone symbol declaration/selection supplies no runtime value.
+- `symbol local : T;` (also `symbol @local : T;`) declares a fresh typed identity; grouped declarations require a type on each name. `proc(T1, T2) -> RT` denotes a procedure signature. `symbol from "vocabulary.cod" @source as @local;` preserves the source identity and type. A standalone symbol declaration/selection supplies no runtime value.
 - `using "module.cod" @resource as @local;` and `import "module.cod" @resource as @local;` install the source procedure with its definition/captures under an existing destination symbol. `mixin "module.cod" @resource as @local;` redefines the body in the receiving lexical/dynamic context and installs that result. The destination must be declared or selected before the encounter, even when `as` is omitted. For source-preserving using/import, omitting `as` requires the destination to share the source identity; a different identity requires explicit `as`, even `using "module.cod" @resource as @resource;`. Mixin retains its receiving-context mapping rule.
 - `using symbol "module.cod" @resource as @local;` selects both the source identity and its procedure in one encounter; `as` is optional. An absent local name becomes an alias of the source identity. An existing name must resolve to that same identity; otherwise use ordinary `using` with an explicit destination. Equal procedure values or spellings do not establish identity equality.
 - `mixin "module.cod" @resource as @local with { @target as @tgt_neuron; };` supplies the receiving module’s `@target` identity for the source-body role `@tgt_neuron`. Unlisted body aliases use the same name in the receiving module. Translation precedes capture/checking, covers reads, writes and procedure calls, and creates no runtime alias map or extra local alias. Using/import do not accept a body map.
@@ -210,7 +215,7 @@ Prototype expression evaluation is left-to-right; boolean operators short-circui
 ```text
 type Entity;
 type Weighted <: Entity;
-data Sample { value::i64; }
+data Sample { value:i64; }
 ```
 
 Abstract types have nominal identity and one optional abstract parent; they have no constructor or native object layout. Data products use the existing region allocation/reference path. A separate adapter may `import "data.cod" Sample;`, select the abstract type, then declare `data Sample <: Weighted;`. A consumer may `using "adapter.cod" Sample;` to obtain that identity and the adapter's visible conformance. Using alone does not allow an adapter to add external data conformance. Source module inclusion or selecting only a method does not globally publish its relations.
@@ -223,7 +228,7 @@ Type selection supplies source-visible associated signatures, including factorie
 
 ```text
 import "method-library.cod" score as local_score;
-function local_score(x::bool)::i64 { if (x) { 1 } else { 0 } }
+function local_score(x:bool) -> i64 { if (x) { 1 } else { 0 } }
 ```
 
 For one source family selected under an ordinary local name, import permits local overloads and using alone is rejected. This applies to functions and lexical procedures and is checked before native execution. Source methods retain their definition contexts; direct procedure calls use current dynamic bindings. The extension participates in caller-selected ordinary implementation views; it is not published program-wide. Source names keep their callable identities.
@@ -247,10 +252,10 @@ H-253 requires an imported helper's inherited overloads and receiver-selected de
 ### Lexical procedure mixin
 
 ```text
-symbol @local_bias::i64;
+symbol @local_bias:i64;
 effect @local_bias <- 100;
 mixin "provider.cod" read as local_read with { @local_bias as @bias; };
-symbol @saved::proc(i64) -> i64;
+symbol @saved:proc(i64) -> i64;
 effect @saved = local_read;
 ```
 
@@ -259,13 +264,13 @@ This defines local_read from the source procedure body in the receiver's lexical
 ## Typed values and methods
 
 ```text
-data Position { index::i64; weight::f32; }
-function advance(p::Position, step::i64)::Position {
+data Position { index:i64; weight:f32; }
+function advance(p:Position, step:i64) -> Position {
     setfield(p, index, deref(p).index + step);
     deref(p)
 }
-function score(p::Position)::f32 { p.weight }
-function score(x::f32)::f32 { x * 2.0f32 }
+function score(p:Position) -> f32 { p.weight }
+function score(x:f32) -> f32 { x * 2.0f32 }
 region symbol @arena;
 effect @arena <- region(1024u64);
 {
@@ -278,7 +283,7 @@ Data products have nominal identity from their defining module/declaration and a
 
 Composite intermediate results can use caller-provided regional storage. The pool index helper writes a `SetLocation` and returns its borrowed view; callers reuse one result slot. This preserves typed fields without a heap allocation or a region allocation per query. Typed make/ordinary ownership has separate D-17 evidence; implicit-field-borrowing grammar remains pending.
 
-Ref/ptr bind views and val provides independent bits storage inside an expression scope; module values use typed `global` declarations. Parameter annotations accept `:` or `::`; results accept `->` or `::`. Methods dispatch on the complete argument-type tuple. Selected function sets from multiple modules can share a local method name; duplicate identical matches are diagnosed when demanded. Ambiguous calls and unmatched named-function calls show the supplied argument types, lookup module and up to four declaration signatures/locations, with an omitted-candidate count for larger sets. Ambiguity lists matching definitions; an unmatched overload call lists available definitions. Original names and function/procedure kinds remain visible through aliases. Candidates also identify a selected implementation context when it differs from the source module, distinguishing two contexts of one source body. A function that selects a procedure reports that procedure’s declaration location, including selections made through imported helpers. Candidate parameter/result annotations, conversion stars and declared routes are shown in their definition context without additional type resolution. Single-method argument errors retain their direct type/count diagnostics. An unresolved implicit name identifies up to four original callable families with their declaration locations, so explicit selection can resolve the conflict; larger sets include an omitted-family count. A failed abstract check also identifies its module context and the available value guarantee, when present; overload errors show each supplied argument's admitted interface. [Diagnostic evidence](interface-diagnostics-validation.json) distinguishes missing visible conformance, crossed overloads and a parent guarantee insufficient for a required child. These notes do not add conformance or change dispatch. Operator methods use names such as `(+)`; `p + 1` and `(+)(p, 1)` select the same user-defined method. Supported eager unary/binary operator calls share the corresponding prefix/infix lowering, including scalar operations such as `(+)(2, 3)` and `(!)(false)`. Explicit calls remain valid function-call global initializers. Unary/binary arities are distinct. Short-circuit operators remain control expressions.
+Ref/ptr bind views and val provides independent bits storage inside an expression scope; module values use typed `global` declarations. Parameter annotations accept `:` or `:`; results accept `->` or `:`. Methods dispatch on the complete argument-type tuple. Selected function sets from multiple modules can share a local method name; duplicate identical matches are diagnosed when demanded. Ambiguous calls and unmatched named-function calls show the supplied argument types, lookup module and up to four declaration signatures/locations, with an omitted-candidate count for larger sets. Ambiguity lists matching definitions; an unmatched overload call lists available definitions. Original names and function/procedure kinds remain visible through aliases. Candidates also identify a selected implementation context when it differs from the source module, distinguishing two contexts of one source body. A function that selects a procedure reports that procedure’s declaration location, including selections made through imported helpers. Candidate parameter/result annotations, conversion stars and declared routes are shown in their definition context without additional type resolution. Single-method argument errors retain their direct type/count diagnostics. An unresolved implicit name identifies up to four original callable families with their declaration locations, so explicit selection can resolve the conflict; larger sets include an omitted-family count. A failed abstract check also identifies its module context and the available value guarantee, when present; overload errors show each supplied argument's admitted interface. [Diagnostic evidence](interface-diagnostics-validation.json) distinguishes missing visible conformance, crossed overloads and a parent guarantee insufficient for a required child. These notes do not add conformance or change dispatch. Operator methods use names such as `(+)`; `p + 1` and `(+)(p, 1)` select the same user-defined method. Supported eager unary/binary operator calls share the corresponding prefix/infix lowering, including scalar operations such as `(+)(2, 3)` and `(!)(false)`. Explicit calls remain valid function-call global initializers. Unary/binary arities are distinct. Short-circuit operators remain control expressions.
 
 Demanded function/procedure calls are inlined into LLVM control flow. Compile-time call failures include source locations for the failing definition and its callers. Deep paths retain the innermost four and outermost four calls, with an omitted-call count; this is compiler context, not a runtime stack trace. The semantic checker carries LLVM values directly for expressions, captures and region owners. Typed TLS slots back scoped dynamic writes. WPO preserves definition-time binding values as SSA values; captured reads use those values along demanded typed paths. Current native services receive explicit arguments, and no foreign ABI exposes the private CoD TLS slots. Definition environments are compiler metadata, not runtime closures or extended region lifetimes. They share immutable maps of binding records; a definition retains a snapshot root, and a subsequent binding creates a distinct record. The compiler owns those records until lowering finishes. Captured-map membership preserves the distinction between frozen reads and fresh current bindings. Scoped writes retain their ordinary restoration. Machine-code reuse is deferred. [stress_tests.py](stress_tests.py) checks deep and shared dependency graphs and records IR/bitcode, executable and `.text` size plus separate checking/linking/process time, including 512 modules and 1,000 procedure specializations. Each checked artifact is linked with its emitted system services; the ordinary source corpus exercises `--run`. The pure chain takes loop-varying inputs and checks its result against independent modular arithmetic; a failing leaf in the same graph checks bounded diagnostics back to the entry call. Other fixed-input cases permit constant folding, so their sizes are not worst-case bounds. LLVM's standard optimization pipeline handles native optimization; no custom optimizer or backend abstraction is used.
 
@@ -296,7 +301,7 @@ Unmodified/val fields store bits directly. Ref/ptr fields store relocation-safe 
 
 ## Intrinsic and procedural operation overloads
 
-`function (len)(value::Box)::u64 { ... }` explicitly declares an intrinsic overload. `procedure (store)(cell::Cell, amount::i64)::i64 { ... }` declares a procedural overload; its body can access dynamic resources and mutate regional storage. Parenthesized eager operator names such as `(+)` support both kinds too. These are compiler operation names, independent of any `@len` or `@store` symbol. `(@len)` is a grouped symbolic read; neither `(@len)` nor `("len")` is an intrinsic declaration name.
+`function (len)(value:Box) -> u64 { ... }` explicitly declares an intrinsic overload. `procedure (store)(cell:Cell, amount:i64) -> i64 { ... }` declares a procedural overload; its body can access dynamic resources and mutate regional storage. Parenthesized eager operator names such as `(+)` support both kinds too. These are compiler operation names, independent of any `@len` or `@store` symbol. `(@len)` is a grouped symbolic read; neither `(@len)` nor `("len")` is an intrinsic declaration name.
 
 Calls dispatch on argument types across both kinds. A function cannot call a selected procedure overload; the checker does not substitute a different pure method. Exact matches precede conversion-enabled alternatives, and equal matches remain ambiguous. Arguments execute once with each selected conversion before the next argument. A procedural operation uses current dynamic bindings, including the captured context of an enclosing ordinary `perform`. Pure UoM conversions retain their function-only rule.
 
@@ -317,17 +322,17 @@ The lean regression cases in `intrinsic-overloads.cod`, `intrinsic-pure-error.co
 ### Region declarations and indexed transfer
 
 ```text
-region symbol @arena::Arena;
-owned region packet::Packet <- make Packet(capacity = bytes) { sequence <- initial };
-region view::Packet = packet;
-function edit(region r::Packet, node::Node in r) -> void { ... }
-function forward(owned region r::R) -> owned region ::R where R { r }
-function origin(node::Node in r) -> region ::Packet in r
-  where {region r::Packet} { r }
-symbol @factory::proc(u64) -> owned region ::Packet;
+region symbol @arena:Arena;
+owned region packet:Packet <- make Packet(capacity = bytes) { sequence <- initial };
+region view:Packet = packet;
+function edit(region r:Packet, node:Node in r) -> void { ... }
+function forward(owned region r:R) -> owned region :R where R { r }
+function origin(node:Node in r) -> region :Packet in r
+  where {region r:Packet} { r }
+symbol @factory:proc(u64) -> owned region :Packet;
 ```
 
-The root may be omitted for a raw/inferred region. `const region r::Packet` is a readonly borrowed parameter. Bodyless signatures and procedure types retain the same resource distinction. Ordinary ref/ptr/val declarations cannot hold a whole-region value, and region is not an ordinary value-type constructor. No old syntax compatibility path remains; historical validation records retain their original source revisions. Region declarations produce void; ownership transfer, cleanup and non-extractable dynamic resources retain their existing rules.
+The root may be omitted for a raw/inferred region. `const region r:Packet` is a readonly borrowed parameter. Bodyless signatures and procedure types retain the same resource distinction. Ordinary ref/ptr/val declarations cannot hold a whole-region value, and region is not an ordinary value-type constructor. No old syntax compatibility path remains; historical validation records retain their original source revisions. Region declarations produce void; ownership transfer, cleanup and non-extractable dynamic resources retain their existing rules.
 
 Indexed payload transfer `a[i] <- value` selects `([]<-)(a, i, value)` without first demanding an addressable element. A method returns either void or a const view owned by the destination container. Builtin array transfer returns a readonly element view; `intrinsic ([]<-)(a, i, value)` delegates directly to it. Ordinary `(<-)` also permits void; its nonvoid form still returns the original destination. Method selection uses inputs, not the desired result. A void intermediate rejects in a chain. Library overloads intended or recommended for chaining should align with bits-transfer intent; other library overloads carry no additional copy-like requirement.
 
@@ -338,17 +343,17 @@ Indexed payload transfer `a[i] <- value` selects `([]<-)(a, i, value)` without f
 ```text
 unit metres;
 unit cm;
-conversion function cm_to_metres(x::f64(cm))::f64(metres) {
+conversion function cm_to_metres(x:f64(cm)) -> f64(metres) {
     metres(scalar(x) / 100.0)
 }
-function distance(x::f64(metres*))::f64 { scalar(x) }
+function distance(x:f64(metres*)) -> f64 { scalar(x) }
 ```
 
 A unit definition creates a distinct compile-time identity independent of numerical storage. `metres(2.0)` has type `f64(metres)` and `metres(2u32)` has type `u32(metres)`; `scalar(x)` extracts the representation explicitly. Aliases preserve identity and do not add a runtime tag. Methods can define meaningful arithmetic on unit values.
 
 `using units "units-library.cod" {m as metres, cm, mm};` selects one bundle of units and associated conversion methods. Repeated selections from the same source, duplicate identities through re-exports, and UoM import are rejected. Omitted-unit conversions are unavailable to automatic search, while source-bound private helper calls retain their lexical meaning. Automatically selected conversion names occupy the lower-priority implicit-method namespace. A local function, global or explicit type alias can shadow them without removing their automatic conversion edges. A shadowing callable does not fall back to a hidden converter when its parameter types do not match. Explicit callable using/import still determines extension permission. Distinct implicit converter families with one spelling require explicit name selection for direct calls; their typed automatic routes remain separate.
 
-`x::f64(metres)` requires that identity and permits lossless representation widening; `x::f64(metres*)` also permits unit conversion. `x::f64(metres*<-cm<-mm)` uses a direct conversion when available, otherwise the declared indirect route. Automatic graph search chooses a unique path. Multiple unresolved paths warn and continue using the shortest route with declaration-order tie breaking, reporting an alternative witness. `--warnings-as-errors` and `-Werror=unit-conversion` turn those warnings into errors. Paths use the call site's selected bundle; route names resolve where the parameter is defined. Exact applicable methods are selected first; otherwise require one most-specific widening/conversion-compatible signature. Numeric widening preserves the unit identity and never supplies implicit narrowing.
+`x:f64(metres)` requires that identity and permits lossless representation widening; `x:f64(metres*)` also permits unit conversion. `x:f64(metres*<-cm<-mm)` uses a direct conversion when available, otherwise the declared indirect route. Automatic graph search chooses a unique path. Multiple unresolved paths warn and continue using the shortest route with declaration-order tie breaking, reporting an alternative witness. `--warnings-as-errors` and `-Werror=unit-conversion` turn those warnings into errors. Paths use the call site's selected bundle; route names resolve where the parameter is defined. Exact applicable methods are selected first; otherwise require one most-specific widening/conversion-compatible signature. Numeric widening preserves the unit identity and never supplies implicit narrowing.
 
 [units-procedure.cod](units-procedure.cod) composes a source definition and two receiver-context procedure redefinitions. Each module defines distinct same-named units and pure conversion/helper functions. Ordinary `using` retains the source types and captures; procedure mixin checks parameter/result types and body names in the receiver, with explicit symbol maps for its effects. The fixture checks all three definitions under captured `perform` and current-binding `behave`. It mixes procedure bodies, not UoM definitions.
 
@@ -357,7 +362,7 @@ A `conversion function` requires one exact UoM parameter and an explicit UoM res
 ## Bounded iteration and numeric representations
 
 ```text
-function sum(n::u32)::u64 {
+function sum(n:u32) -> u64 {
     fold (i in 0u32 .. n, total = 0u64) { total + u64(i) }
 }
 for (i in 0 .. 10) { behave @print(i); };
@@ -377,14 +382,14 @@ Unsigned literals use `u8`, `u32` or `u64` suffixes. Integer arithmetic checks o
 
 ```text
 unit Neuron;
-array Rates[u32(Neuron)]::f32;
-data Node { value::f32; ptr next::Node; ptr rates::Rates; }
+array Rates[u32(Neuron)]:f32;
+data Node { value:f32; ptr next:Node; ptr rates:Rates; }
 region symbol @arena;
-symbol @rates :: Rates;
+symbol @rates : Rates;
 effect @arena <- region(4096u64);
 effect @rates = alloc @arena Rates(4u64, 0.5f32);
 store(@rates, Neuron(1u32), 2.0f32);
-function total(a::Rates)::f32 {
+function total(a:Rates) -> f32 {
   fold (i in Neuron(0u32) .. Neuron(u32(len(a))), sum = 0.0f32) { sum + a[i] }
 }
 ```
@@ -416,8 +421,8 @@ The optional `gather_benchmark.py --full-pool` case exercises all 112,281,600 sl
 ## Scoped symbolic context
 
 ```cod
-region symbol @arena::Pool;
-symbol @left::Node in r, @right::Node in r where {region r::Pool};
+region symbol @arena:Pool;
+symbol @left:Node in r, @right:Node in r where {region r:Pool};
 effect @arena <- make Pool(capacity = 4096u64) { tag <- 1 };
 effect @left = deref(alloc @arena Node(10)), @right = deref(alloc @arena Node(20));
 effect proc @read() -> i64 { touch @right; @left.value };
@@ -427,7 +432,7 @@ The group evaluates every RHS against the preceding bindings, then installs the 
 
 `touch` adds an explicit procedure capture dependency without reading object fields. A partial `perform` replay that mixes incompatible group owners rejects; adding the companion touch captures it deliberately. `behave` uses current bindings. Every effect returns void. `effect @selected = existing_proc` preserves that procedure's captures; `effect proc @selected(...) -> T { ... }` captures at definition, declares a new typed symbol or validates the existing/imported signature, and restores the previous binding at scope exit. `effect proc @empty() {}` has a void result signature.
 
-A bare object transfer `@object <- rhs`, or `(<-)(@object, rhs)`, uses a user-defined overload and returns void or a read-only view of the original destination. Owner formals such as `dst::Node in d` with `where {region d::Pool}` provide the actual region as d. The overload can call root-policy operations without consulting an unrelated ambient symbol. No transfer fallback copies a graph. Regional read-only views propagate through reads/branches, cannot enter writable parameters/fields, and cannot become writable fold accumulators.
+A bare object transfer `@object <- rhs`, or `(<-)(@object, rhs)`, uses a user-defined overload and returns void or a read-only view of the original destination. Owner formals such as `dst:Node in d` with `where {region d:Pool}` provide the actual region as d. The overload can call root-policy operations without consulting an unrelated ambient symbol. No transfer fallback copies a graph. Regional read-only views propagate through reads/branches, cannot enter writable parameters/fields, and cannot become writable fold accumulators.
 
 [symbolic-context.cod](symbolic-context.cod) and its vocabulary exercise imported identities, hidden owners, staged failures, touch, existing/inline captures and restoration. [symbolic-transfer.cod](symbolic-transfer.cod) exercises actual source/destination regions, persistent edits and live destination views. The [evidence record](symbolic-context-validation.json) includes focused invalid-source checks and migrated-context regression traces. Complete ordinary ptr/lexical-owner semantics, general scalar assignment places and runtime closures remain outside this native subset.
 
@@ -441,7 +446,7 @@ A bare region is borrowed access outside its acquiring effect. `region view = @a
 
 D-17 distinguishes owning-holder availability from the actual region lifetime. Fresh `make` results, owning locals/calls/results, effect installation and normal/exceptional joins are implemented and covered by [the lifecycle audit](exception-ownership-validation.json). [Earlier lifetime evidence](owner-liveness-validation.json) retains its effect-owned scope. General qualifier/assignment, owner reinitialization, optional owner extraction and mailbox transport remain separate. Historical reports retain their recorded compiler/source scope.
 
-The [owned-pool example](region-pool.cod) selects Pool through its adapter, obtains the associated factory, and holds its `owned region ::Pool` in a lexical scope. The factory initializes its root and both arrays before returning. [Native evidence](owned-pool-validation.json) covers four partial-construction failures with exact cleanup, 10,000 bounded reuse laps and independent inspection/reuse of the 144-byte image after freeing the original. The caller-region overload remains available; no new allocation-policy intrinsic is needed.
+The [owned-pool example](region-pool.cod) selects Pool through its adapter, obtains the associated factory, and holds its `owned region :Pool` in a lexical scope. The factory initializes its root and both arrays before returning. [Native evidence](owned-pool-validation.json) covers four partial-construction failures with exact cleanup, 10,000 bounded reuse laps and independent inspection/reuse of the 144-byte image after freeing the original. The caller-region overload remains available; no new allocation-policy intrinsic is needed.
 
 Regional failures retain the primary error and add source notes identifying the relevant acquisitions. A cross-region stored edge shows the destination object's owner and referenced target's owner; an escaping result identifies the region it would outlive. Fold/conditional owner conflicts distinguish their input paths, and prohibited dynamic extraction identifies the held resource. This is compiler metadata, with no runtime layout change. [Diagnostic evidence](region-diagnostics-validation.json) records twelve focused checks, including six existing negative fixtures that assert the acquisition locations and five valid borrowing/mutation/capture/dispatch examples.
 

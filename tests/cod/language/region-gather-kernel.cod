@@ -11,8 +11,8 @@ using "pool-layout.cod" class_slot_begin;
 using "pool-index.cod" locate;
 using "pool-index.cod" SetLocation;
 using "pool-index.cod" global_slot;
-function create_graph(region arena, layout::Layout in L, rows::u32,
-                      location::SetLocation in S, weighted::bool)::Incoming where {owner L, owner S} {
+function create_graph(region arena, layout:Layout in L, rows:u32,
+                      location:SetLocation in S, weighted:bool) -> Incoming where {owner L, owner S} {
   ref sources = alloc arena Sources(scalar(class_slot_begin(layout, ClassId(layout.classes))), Neuron(0u32));
   ref weights = alloc arena Weights(len(sources), 1u8);
   ref graph = deref(alloc arena Incoming(sources, weights));
@@ -26,7 +26,7 @@ function create_graph(region arena, layout::Layout in L, rows::u32,
   };
   graph
 }
-function gather(input::Frame in O1, graph::Incoming in O2, layout::Layout in O3, target::u64(GlobalSetId), location::SetLocation in O5)::f32 throws NullPointerException where {owner O1, owner O2, owner O3, owner O5} {
+function gather(input:Frame in O1, graph:Incoming in O2, layout:Layout in O3, target:u64(GlobalSetId), location:SetLocation in O5) -> f32 throws NullPointerException where {owner O1, owner O2, owner O3, owner O5} {
   ref position = locate(layout, target, location);
   ref sources = deref(graph.sources);
   ref weights = deref(graph.weights);

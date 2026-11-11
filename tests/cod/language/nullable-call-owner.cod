@@ -1,0 +1,7 @@
+data Node {value:i64;}
+function wrong(node:Node in O) -> ptr Node in O where {owner O} {
+  owned region hidden:Node <- make Node(capacity=64u64){value<-1};
+  root(hidden)
+}
+owned region visible:Node <- make Node(capacity=64u64){value<-2};
+ptr invalid=wrong(root(visible));

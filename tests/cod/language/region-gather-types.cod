@@ -1,9 +1,9 @@
 using units "pool-units.cod" {GlobalSlot};
 unit Neuron;
-array Frame[u32(Neuron)]::f32;
-array Sources[u64(GlobalSlot)]::u32(Neuron);
-array Weights[u64(GlobalSlot)]::u8;
-data Incoming { ptr sources::Sources; ptr weights::Weights; }
+array Frame[u32(Neuron)]:f32;
+array Sources[u64(GlobalSlot)]:u32(Neuron);
+array Weights[u64(GlobalSlot)]:u8;
+data Incoming { ptr sources:Sources; ptr weights:Weights; }
 
 export Frame;
 export GlobalSlot;

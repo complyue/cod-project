@@ -1,7 +1,7 @@
 type Metric;
-function score(x::T in O1)::i64 where {T <: Metric, owner O1} ;
-function collect(head::T, rest::T...)::T where T;
-function unavailable(x::i64)::i64;
+function score(x:T in O1) -> i64 where {T <: Metric, owner O1} ;
+function collect(head:T, rest:T...) -> T where T;
+function unavailable(x:i64) -> i64;
 export Metric;
 export score;
 export collect;

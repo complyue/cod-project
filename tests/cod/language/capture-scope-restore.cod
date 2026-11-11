@@ -1,19 +1,19 @@
 using symbol "std:io" @print;
-symbol @x :: i64;
-symbol @y :: i64;
-symbol @left :: proc() -> i64;
-symbol @right :: proc() -> i64;
-symbol @route :: proc() -> i64;
-symbol @nested :: proc() -> i64;
-symbol @branch :: proc(bool) -> i64;
-symbol @relay :: proc() -> i64;
-symbol @chained :: proc() -> i64;
+symbol @x : i64;
+symbol @y : i64;
+symbol @left : proc() -> i64;
+symbol @right : proc() -> i64;
+symbol @route : proc() -> i64;
+symbol @nested : proc() -> i64;
+symbol @branch : proc(bool) -> i64;
+symbol @relay : proc() -> i64;
+symbol @chained : proc() -> i64;
 effect @x <- 10;
 effect @y <- 20;
-procedure @left()::i64 { @x }
-procedure @right()::i64 { @y }
+procedure @left() -> i64 { @x }
+procedure @right() -> i64 { @y }
 effect @route = @left;
-procedure @nested()::i64 {
+procedure @nested() -> i64 {
   val middle = {
     effect @route = @right;
     val inner = { effect @route = @left; behave @route() };
@@ -21,7 +21,7 @@ procedure @nested()::i64 {
   };
   middle * 1000 + behave @route()
 }
-procedure @branch(flag::bool)::i64 {
+procedure @branch(flag:bool) -> i64 {
   val selected = if (flag) {
     effect @route = @right;
     behave @route()
@@ -31,7 +31,7 @@ procedure @branch(flag::bool)::i64 {
   };
   selected * 1000 + behave @route()
 }
-procedure @chained()::i64 {
+procedure @chained() -> i64 {
   effect @relay = @left;
   effect @route = @relay;
   behave @route()

@@ -1,10 +1,19 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 118 · Recorded: 2026-11-10 · Phase: language/application co-design.
+Design revision: 122 · Recorded: 2026-11-10 · Phase: language/application co-design.
 
 ## Design authority
 
-- **Declaration cleanup:** [H-316](DesignAuthorityRegistry.md#h-316)/[K-442](DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](../tests/cod/language/declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. No nullable parameter/result grammar, reference-target allocation policy or general cyclic construction is selected. Existing pending qualifications remain pending.
+- **Regional variable capture review:** [H-323](DesignAuthorityRegistry.md#h-323)/[K-446](DesignAuthorityRegistry.md#k-446), C-73/C-74/P-290–P-292, distinguishes a captured regional val/ref/ptr slot from a captured current target. This revision covers the storage/capture cross-reference only. The candidate C-65/C-39 value path preserves explicit owner/lifetime reasoning under charter §§1–3, D-01 and D-16. H-180's definition-time dynamic values and perform/behave contract remain unchanged. Detailed lexical capture and structural region contracts are pending-human; acceptance must observe regional slot changes without capturing a dead lexical binding or extending ownership. No new implementation evidence is claimed.
+
+- **Unified closure-owner review:** [H-321/H-322](DesignAuthorityRegistry.md#h-321)/[K-445](DesignAuthorityRegistry.md#k-445), candidate C-73/P-288–P-289, covers the region-only capture proposal for named and anonymous functions/procedures. [D-14's analysis](RegionalOwnership.md#unified-callable-captures-and-region-owners) separates target owner, lexical binding and environment storage. Charter §§1–3, D-01 and D-16 constraints remain; no automatic lexical boxing, ownership retention, new pointer layout or RTTI is inferred. The detailed capture contract is pending-human. Future acceptance must distinguish rebinding from object mutation, copied bits from references, known from absent owners and valid from escaped captures. H-317/H-318 native acceptance remains separate.
+
+- **Explicit scope boundary:** [H-319](DesignAuthorityRegistry.md#h-319)/[K-444](DesignAuthorityRegistry.md#k-444) confirms ordinary grouping braces and explicit double-brace lexical/effect scopes, plus defer only within an explicit scoped block when inside a loop. C-63/P-286–P-287 preserves C-65 lifetime and C-36 effect requirements. This scope change is not implemented by the colon/nullable checkpoint; acceptance must cover name visibility, initialization, cleanup, conditional paths and loops. H-320's contextual callable/capture boundary remains pending; no escaping closure or wider qualification is implied.
+
+- **Nullable calls and uniform annotations:** [H-317/H-318](DesignAuthorityRegistry.md#h-317)/[K-443](DesignAuthorityRegistry.md#k-443) accepts explicit nullable ptr call boundaries, retains ptr edges for cycles and uses single-colon annotations with arrow results. C-72/P-284–P-285 preserves C-65 owners/access and C-63 checked failures; charter §§1–3 and D-16 compatibility were reviewed. Acceptance requires nullable forwarding without payload access, checked dereference, owner/result rejection and migrated grammar. H-319 establishes the revised scope boundary; native colon/nullable acceptance is recorded by K-444, while scope/defer implementation remains separate.
+
+
+- **Declaration cleanup:** [H-316](DesignAuthorityRegistry.md#h-316)/[K-442](DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](../tests/cod/language/declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. H-317 covers nullable call boundaries; automatic reference-target allocation and staged required-reference cycles remain outside that acceptance. Existing pending qualifications remain pending.
 
 - **Native nullable-storage acceptance:** [K-441](DesignAuthorityRegistry.md#k-441) continues H-309–H-315 for the bounded field/val/checked-NPE implementation. [Evidence](../tests/cod/language/nullable-storage-validation.json) records the actual compiler, language cases, LLVM verification, relocated scalar/object reference fields and exceptional region cleanup. Nullability does not weaken definite initialization, fixed owners or readonly access. Automatic reference-target allocation and general cyclic ref publication remain outside this acceptance; H-316/K-442 covers declaration cleanup.
 
@@ -30,13 +39,13 @@ Design revision: 118 · Recorded: 2026-11-10 · Phase: language/application co-d
 
 - **Symbolic implementation scope:** [H-287–H-291](DesignAuthorityRegistry.md#h-287)/[K-426](DesignAuthorityRegistry.md#k-426) records the requested implementation and callable/result decisions: every effect yields void; procedure rebinding uses `=`, while inline `effect proc` introduces or signature-checks its symbol and captures at definition. C-36/C-54/C-65/C-66 and P-248–P-254 preserve typed dynamic context, actual-region lifetime and explicit capture. [Native evidence](../tests/cod/language/symbolic-context-validation.json) covers typed TLS payloads, staged groups, touch/replay checks and overload-backed object transfer. This bounded scope does not qualify whole-document drafts or implement ordinary ptr migration, transport, runtime closures or fractions.
 
-- **Region declaration direction:** [H-274/H-275](DesignAuthorityRegistry.md#h-274)/[K-420](DesignAuthorityRegistry.md#k-420) requires root-constrained access to the actual region, confirms `where {region r::RootType}` and makes region a declaration keyword throughout user-facing region references. [D-14](RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language) specifies the complete local/parameter/result/symbol surface under H-307. Generic owner remains a region-or-scope constraint; effects, cleanup and function restrictions are unchanged.
+- **Region declaration direction:** [H-274/H-275](DesignAuthorityRegistry.md#h-274)/[K-420](DesignAuthorityRegistry.md#k-420) requires root-constrained access to the actual region, confirms `where {region r:RootType}` and makes region a declaration keyword throughout user-facing region references. [D-14](RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language) specifies the complete local/parameter/result/symbol surface under H-307. Generic owner remains a region-or-scope constraint; effects, cleanup and function restrictions are unchanged.
 
 - **Variable/parameter baseline:** [H-271/H-272](DesignAuthorityRegistry.md#h-271) requires `ptr` variables, initialization-fixed owners, same-owner-only rebinding, implicit dereference and callee-local default parameter targets. [H-273](DesignAuthorityRegistry.md#h-273)/[K-418](DesignAuthorityRegistry.md#k-418) confirms [D-14 owner annotations](RegionalOwnership.md#confirmed-owner-syntax): `in O`, `where {owner O}`, result owners, and optional `ptr` in parameter declarations. This replaces the older default borrowed-parameter source contract without changing effect capture/shadowing, function restrictions or region cleanup. Current native examples retain their prototype spelling and are not evidence of this migration.
 
 - **Bounded exception/lifecycle contract:** [H-267](DesignAuthorityRegistry.md#h-267)/[K-408](DesignAuthorityRegistry.md#k-408) accepts [D-17r3 E1–E5](ExceptionControl.md#accepted-first-implementation-contract), including explicit throw-from only, cleanup, fresh owners and call/result transfer. This overrides pending labels for that enumerated scope; wider qualifier, assignment, mailbox and user exception graph choices remain open. [K-414](DesignAuthorityRegistry.md#k-414) records completed H-267/H-269 E1–E5 acceptance and [current native evidence](../tests/cod/language/exception-ownership-validation.json). Wider unconfirmed scopes retain their status.
 
-- **Registry / scope:** [D-10](DesignAuthorityRegistry.md#d-10), revision118, all sections; [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) adds exception-control planning in [D-17](ExceptionControl.md); [H-263/H-264](DesignAuthorityRegistry.md#h-263)/[K-405](DesignAuthorityRegistry.md#k-405) records permitted local-view survival and the first typed construction form; [H-262](DesignAuthorityRegistry.md#h-262)/[K-404](DesignAuthorityRegistry.md#k-404) records compiler-tracked consumption of named ordinary owners without changing dynamic resource capture/shadowing; H-257/H-258 and [K-399](DesignAuthorityRegistry.md#k-399) cover lexical callee selection, typed callable declarations and the compiler value/place distinction; [K-400](DesignAuthorityRegistry.md#k-400) records successful build repair and28 focused compiler/native/IR checks. [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred.
+- **Registry / scope:** [D-10](DesignAuthorityRegistry.md#d-10), revision122, all sections; [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) adds exception-control planning in [D-17](ExceptionControl.md); [H-263/H-264](DesignAuthorityRegistry.md#h-263)/[K-405](DesignAuthorityRegistry.md#k-405) records permitted local-view survival and the first typed construction form; [H-262](DesignAuthorityRegistry.md#h-262)/[K-404](DesignAuthorityRegistry.md#k-404) records compiler-tracked consumption of named ordinary owners without changing dynamic resource capture/shadowing; H-257/H-258 and [K-399](DesignAuthorityRegistry.md#k-399) cover lexical callee selection, typed callable declarations and the compiler value/place distinction; [K-400](DesignAuthorityRegistry.md#k-400) records successful build repair and28 focused compiler/native/IR checks. [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred.
 - **Value lineage:** C-10's inspectable typed execution motivates C-35/C-43/C-45/C-46 identity/composition through P-84/P-100/P-102/P-109–P-111; C-56/C-57/P-182–P-197 covers abstractions, dispatch and adapter visibility. C-39/C-54/P-94/P-143/P-155 retains regional lifetime boundaries; C-58/P-199–P-203 covers publication and selected contexts. These candidate paths serve charter §§2–4 without borrowing authority from technical dependencies.
 - **Human baseline:** H-96–H-141 supplies symbols/modules/units, subject to supersession. H-143–H-146 selects LLVM, lean checks and the zero-offset limitation. H-149/H-150 bounds value shadowing/reserved names. H-166/H-180/H-181 governs module lifetime, capture/shadow and non-extraction; H-184–H-189 governs typed lexical/symbolic procedures. H-193/H-196–H-210 governs regional data, intrinsic owners, explicit-memory functions, borrowing/const and transfer requirements. H-211–H-233 governs source selection, mixin, explicit interfaces, concrete dispatch, aliases/implementation contexts and publication, with the scope/exclusions recorded in the registry.
 - **Invariants / non-goals:** preserve region-only non-bits storage, zero-cost relocation, no regional copy/move, same-owner stored edges, preserved hidden/captured owners and no dynamic access or procedure calls from functions. No module namespace, runtime interface/borrow registry, immutable snapshot, allocator/toolchain change or SNN model is selected. Compound views, higher-order overload values, full qualifiers/ownership construction/transfer and mailbox remain bounded or pending.
@@ -76,8 +85,8 @@ Bounded acceptance must demonstrate independent TLS bits payloads, bits/referenc
 H-284/H-287 extends owner annotations to a set of symbolic object references:
 
 ```text
-symbol @o1::T1 in r, @o2::T2 in r
-  where {region r::RT};
+symbol @o1:T1 in r, @o2:T2 in r
+  where {region r:RT};
 
 effect @o1 = xxx, @o2 = yyy;
 ```
@@ -156,7 +165,7 @@ Acceptance covers one overload-backed update, persistent content after the enclo
 ## Callable effects
 
 ```text
-symbol @selected::proc() -> i64;
+symbol @selected:proc() -> i64;
 proc existing() -> i64 { @gain }
 effect @selected = existing;
 effect proc @selected() -> i64 { @gain + 1 };
@@ -185,7 +194,7 @@ H-236 requires architecture before local lookup fixes. H-247/H-248 makes that ar
 
 | Construct | Meaning |
 | --- | --- |
-| `symbol tgt_neuron :: T` | Introduce a first-class symbol with strict identity and an explicitly declared value type. The runtime use is `@tgt_neuron`. |
+| `symbol tgt_neuron : T` | Introduce a first-class symbol with strict identity and an explicitly declared value type. The runtime use is `@tgt_neuron`. |
 | Import a symbol, optionally under a local alias | Refer to the same exported symbol identity. An alias does not create another symbol. This is distinct from redefining a procedure body with mixin. |
 | Vocabulary module | Define typed symbols, primarily abstract types with some supporting ADTs, and their method collections; document their meaning and publish intended shared identities explicitly. A symbol declaration does not supply a default TLS binding. |
 | `using` an external procedure | Refer to the procedure defined in the source module's lexical/dynamic scopes, preserving that definition and its captures. |
@@ -213,16 +222,16 @@ The supplied `effect` spelling operates within the enclosing scope. It need not 
 H-184 requires a type for every newly defined symbol, including those used to bind procedures:
 
 ```text
-symbol a :: T1, b :: T2;
+symbol a : T1, b : T2;
 ```
 
 The names in this declaration introduce symbol identities in the module’s compile-time vocabulary. They do not declare runtime lexical values named `a` and `b`; symbolic reads remain `@a` and `@b`. Each identity has its declared value type before binding. A standalone `symbol` declaration does not supply a runtime value, even for an optional type. The compiler checks uses and installations against that type instead of choosing a permanent type from the first effect value.
 
-A combined `proc @p(...) -> RT { ... }` declaration also satisfies the explicit-type requirement: when `@p` has no prior declaration or import, its signature declares the new symbol's procedure type. The symbol identity is established at compile time; the procedure value and dynamic binding are established at the definition's execution event. No separate `symbol p :: ...` declaration is required.
+A combined `proc @p(...) -> RT { ... }` declaration also satisfies the explicit-type requirement: when `@p` has no prior declaration or import, its signature declares the new symbol's procedure type. The symbol identity is established at compile time; the procedure value and dynamic binding are established at the definition's execution event. No separate `symbol p : ...` declaration is required.
 
 Identity-preserving aliases and vocabulary selections also preserve the declared type. Procedure selection/installation must respect the destination symbol’s declared procedure type. Mixin body maps translate identities at compile time, with typed uses checked in the receiving context. The implemented procedure-type notation is `proc(T1, T2) -> RT`; parameters/results retain their nominal type identities. Aliasing does not silently retype an identity. Broader callable subtyping remains outside this subset.
 
-The executable requires a type on each `symbol` definition. Both `symbol x :: T` and `symbol @x :: T` are accepted, including comma-separated definitions. A procedure signature supplies the type in a combined declaration. The compiler-provided `std:io` print family remains scalar-polymorphic; binding it to an explicitly typed procedure symbol checks and restricts its signature.
+The executable requires a type on each `symbol` definition. Both `symbol x : T` and `symbol @x : T` are accepted, including comma-separated definitions. A procedure signature supplies the type in a combined declaration. The compiler-provided `std:io` print family remains scalar-polymorphic; binding it to an explicitly typed procedure symbol checks and restricts its signature.
 
 ## Shared vocabulary identities
 
@@ -270,7 +279,7 @@ In declaration/selection syntax, `@name` identifies which symbol is meant. In an
 Vocabulary selection and procedure installation have different jobs:
 
 ```text
-symbol @step :: proc() -> i64;
+symbol @step : proc() -> i64;
 symbol from "snn/vocabulary.cod" @tgt_neuron as @tgt;
 
 using "models/lif.cod" @update as @step;
@@ -278,13 +287,13 @@ using "models/lif.cod" @update as @step;
 mixin "models/lif.cod" @update as @step;
 ```
 
-`symbol @step :: proc() -> i64` creates a local identity. The `symbol from ...` form introduces a local compile-time alias for an identity declared by the vocabulary; omitting `as` keeps its spelling. It does not retain an incidental runtime value bound to that symbol in the source module.
+`symbol @step : proc() -> i64` creates a local identity. The `symbol from ...` form introduces a local compile-time alias for an identity declared by the vocabulary; omitting `as` keeps its spelling. It does not retain an incidental runtime value bound to that symbol in the source module.
 
 In the procedure forms, `@step` must already resolve to a symbol identity T, either from `symbol @step` or a vocabulary selection. The source module's `@update` selects the source procedure resource under some identity S. The operation installs the resulting procedure value under T. **S and T may be different identities.** `as @step` does not rename S, make S equal T, or create the missing destination symbol. Ordinary `using` without `as` requires an existing same-spelling destination with the source identity under H-120. Explicit `as` selects an existing destination even when its identity differs and its spelling is unchanged. The combined `using symbol` form below can introduce the source identity when the local name is absent. The corresponding outer `mixin` shorthand policy is not settled by this using-specific clarification.
 
 | Form | Compile-time action | Resulting execution |
 | --- | --- | --- |
-| `symbol @local :: T` | Introduce a fresh nominal identity, its local name and value type | No initial runtime binding |
+| `symbol @local : T` | Introduce a fresh nominal identity, its local name and value type | No initial runtime binding |
 | `symbol from "vocab" @src as @local` | Make `@local` denote the source identity | Source execution still follows H-109; no selected runtime value is retained |
 | `using "model" @src as @local` for a procedure | Resolve the source resource and existing destination identity | Install the source-defined procedure value under the destination identity, retaining its lexical context and captured values |
 | `mixin "model" @src as @local` for a procedure | Resolve destination and reinstantiate the body with receiving lexical names and symbol-alias translation | Create the receiving-context procedure value/captures and install it under the destination identity |
@@ -306,10 +315,10 @@ Let S be the identity selected by the source module and T the identity already b
 | `using "m" @p;` | Error: destination is not declared | Install the procedure | Compilation error; require explicit `as` |
 | `using "m" @p as @p;` | Error: destination is not declared | Install the procedure | Install the procedure under T, preserving S and T as distinct identities |
 
-For example, when both modules select `@print` from the same vocabulary, the receiving module can write `using "std:io" @print;`. When it independently declares `symbol @print :: proc(i64) -> void;`, it must write:
+For example, when both modules select `@print` from the same vocabulary, the receiving module can write `using "std:io" @print;`. When it independently declares `symbol @print : proc(i64) -> void;`, it must write:
 
 ```text
-symbol @print :: proc(i64) -> void;
+symbol @print : proc(i64) -> void;
 using "std:io" @print as @print;
 ```
 
@@ -329,7 +338,7 @@ Acceptance for this refinement: a missing local name is introduced by the combin
 H-115 adds a compile-time correspondence between source-body aliases and receiving-module symbols. Following H-117/H-118, the design spelling presents the supplied local symbol first and the source-body role second:
 
 ```text
-symbol @step :: proc() -> i64;
+symbol @step : proc() -> i64;
 symbol from "application-vocabulary.cod" @cell as @target;
 symbol from "model-vocabulary.cod" @gain;
 
@@ -356,7 +365,7 @@ The prototype requires each explicit source role to occur in the selected body, 
 
 ### Syntax and practical use
 
-The `using/mixin "module" @source as @local` spelling keeps the requested operation, origin, source resource and destination visible. `symbol @local :: T` introduces a new identity; `symbol from "module" @source as @local` names an existing identity. This keeps compile-time symbol declarations together and uses using/import for source-preserving selection and mixin for receiving-context definition. Neither declaration permits `@local = ...` assignment. H-214 excludes a module-prefix namespace and qualified callable names. Grouped selections may be considered without binding a module name; callable use still goes through selected local names.
+The `using/mixin "module" @source as @local` spelling keeps the requested operation, origin, source resource and destination visible. `symbol @local : T` introduces a new identity; `symbol from "module" @source as @local` names an existing identity. This keeps compile-time symbol declarations together and uses using/import for source-preserving selection and mixin for receiving-context definition. Neither declaration permits `@local = ...` assignment. H-214 excludes a module-prefix namespace and qualified callable names. Grouped selections may be considered without binding a module name; callable use still goes through selected local names.
 
 Keep source provenance at declarations/selections and short names in procedure bodies. A local alias rename accompanied by the corresponding explicit mixin-map update should preserve the selected identities and runtime behavior. Auto-matching source-body spellings is convenient, but a change to one side alone can change or break the correspondence; navigation and diagnostics should show the resolved identities, not just matching text. Ambiguous aliases should require explicit disambiguation instead of depending on selection order.
 
@@ -472,9 +481,9 @@ H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform 
 H-257 requires ordinary call syntax to respect the nearest lexical value binding. A procedure parameter or local procedure value supplies the callee; a same-spelled module callable does not bypass it. A non-callable local value makes the call ill-typed. Direct calls retain H-189's current dynamic bindings. Symbol-only `perform`/`behave` and the function/procedure effect boundary are unchanged.
 
 ```text
-proc selected(x::i64) -> i64 { x + 20 }
-proc callback(x::i64) -> i64 { x + 1 }
-proc apply(callback::proc(i64) -> i64, x::i64) -> i64 { callback(x) }
+proc selected(x:i64) -> i64 { x + 20 }
+proc callback(x:i64) -> i64 { x + 1 }
+proc apply(callback:proc(i64) -> i64, x:i64) -> i64 { callback(x) }
 # apply(selected, 3) must yield 23.
 ```
 
@@ -487,10 +496,10 @@ A callable identity can exist without any executable methods. Its signature decl
 H-258 requires parameters and an explicit return type on a bodyless declaration; an untyped identity-only `function score;` is not supported. Generic declarations and methods use compile-time type parameters, including abstract upper bounds, and a final variadic parameter:
 
 ```text
-function score(x::T)::i64 where T <: Metric;
-function combine(first::T, rest::T...)::T where T;
-proc dispatch(first::T, rest::T...) -> void where T;
-function pair(x::T, y::U)::i64 where {T, U};
+function score(x:T) -> i64 where T <: Metric;
+function combine(first:T, rest:T...) -> T where T;
+proc dispatch(first:T, rest:T...) -> void where T;
+function pair(x:T, y:U) -> i64 where {T, U};
 ```
 
 Type parameters are inferred from concrete argument types at a demanded call. Repeated occurrences constrain those types to agree; bounds use the caller's selected conformance information. A type parameter that cannot be inferred from inputs is diagnosed. Unique-most-specific dispatch compares signature constraints, including concrete types, bounds, repeated-variable relationships and fixed versus variadic arity, independently of declaration order. Equally specific candidates remain ambiguous. This bounded prototype does not supply generic ADT constructors, explicit type-argument calls or a complete higher-rank type system.
@@ -508,7 +517,7 @@ LLVM lowering uses typed places for referent, field and element access, with com
 H-186 permits defining the symbolic procedure directly:
 
 ```text
-proc @p(arg::T) -> RT {
+proc @p(arg:T) -> RT {
     ...
 }
 
@@ -665,8 +674,8 @@ The executable supports typed make, ordinary owning locals/calls/results and con
 The declaration’s value type and the availability of its dynamic binding are separate facts. H-181 permits a direct region-reference declaration and an explicitly optional one:
 
 ```text
-symbol @required :: ResRegion;
-symbol @optional :: Maybe<SomeRegion>;
+symbol @required : ResRegion;
+symbol @optional : Maybe<SomeRegion>;
 ```
 
 These show the user’s desired typed-symbol form; typed symbol annotations are implemented, while general `Maybe` construction/matching and domain-specific resource types remain design work. The names denote domain resource types, not a selected generic region layout.
@@ -712,7 +721,7 @@ H-274 additionally requires region-specific owner parameters constrained by a ro
 
 ### Lexical declaration keywords
 
-H-150 rejects reserved expression names in lexical value declarations: function/procedure parameters, ref/ptr/val declarations, loop indices and fold accumulators. A bare name that the expression parser treats as a literal or control/declaration form cannot introduce a local binding. For example, `function identity(true::bool)::bool { true }` is a compilation error rather than a function with an inaccessible parameter.
+H-150 rejects reserved expression names in lexical value declarations: function/procedure parameters, ref/ptr/val declarations, loop indices and fold accumulators. A bare name that the expression parser treats as a literal or control/declaration form cannot introduce a local binding. For example, `function identity(true:bool) -> bool { true }` is a compilation error rather than a function with an inaccessible parameter.
 
 The bounded grammar reserves `true`, `false`, `null`, `alloc`, `for`, `fold`, `let`, `ptr`, `ref`, `val`, `throws`, `const`, `typeof`, `intrinsic`, `effect`, `perform`, `behave`, `if`, `procedure`, `function`, `global` and `symbol` in those declaration positions. Contextual names with ordinary value lookup, such as `in` and `else`, remain available. This aligns accepted declarations with their subsequent lexical lookup, serving C-37/C-41’s readable composition through the existing candidate P-86/P-97 value paths. It does not change H-149’s visibility/uniqueness rule or dynamic symbol identity.
 
@@ -757,6 +766,8 @@ Field selection and resource ownership retain their own boundaries. `setfield` c
 The value rationale is readable operation syntax with inspectable type, effect and environment dependencies: C-41/P-97 and C-50/P-121 support readable typed composition, while C-37/P-86 and C-36/P-85 preserve explicit-input versus dynamic-context boundaries and contextual interpretation. These candidate value paths do not qualify the complete contract. Acceptance must distinguish function and procedure overloads of one spelling, reject a selected procedure in a function call tree, preserve current versus captured values and argument order, and diagnose ordinary keyword declarations. Existing intrinsic behavior and contextual field names must remain covered. The [prototype reference](../tests/cod/language/README.md#intrinsic-and-procedural-operation-overloads) describes the implemented subset. The earlier effect-arrow checkpoint passed 147 source checks, five composition cases and the regional roundtrip/relocation harness, with its source/compiler hashes in the [effect-arrow record](../tests/cod/language/effect-arrow-validation.json). The [assignment record](../tests/cod/language/assignment-validation.json) retains the focused purity, nominal-index and reserved-alias checks at their recorded source revision. Numeric and gather records retain their own run scope. These are language/runtime checks, not SNN acceptance. General lvalues, record-field assignment, field-selector overloads and intrinsic body-mixin extensions remain deferred; passing this subset does not qualify the full design.
 
 ### Storage carriers, capture types and lifetime
+
+[Unified lexical capture](RegionalOwnership.md#unified-callable-captures-and-region-owners) is under H-322/H-323 review for both named and anonymous callables. A regional variable slot may itself be captured, allowing a closure to observe its later bits writes or reference rebinding; a lexical pointer into a region does not thereby become a regional binding slot. Target capture and slot capture therefore need distinct treatment. The table below describes the existing definition-time **dynamic** capture contract; it does not choose lexical capture timing or storage. Capturing a regional slot would not change perform into a memory snapshot or alter its symbol-value restoration.
 
 Ordinary user-program storage has lexical and regional carriers; symbolic bits payloads use the dedicated TLS storage specified above. H-177 permits ordinary variables to own region handles; H-179 permits consuming installation into a dynamic resource owner. Neither copies a regional object onto the stack. Host-native heap allocation belongs to system code such as compiler/runtime infrastructure. It cannot serve as a hidden way to extend the lifetime of a user closure, captured object or environment. No user `malloc`/`free` lifetime, automatic heap box, user GC object or reference-counted heap capture is introduced.
 

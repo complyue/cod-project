@@ -1,9 +1,9 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
-array Flags[u8]::bool;
+array Flags[u8]:bool;
 region symbol @arena;
-symbol @empty :: Flags;
-symbol @full :: Flags;
+symbol @empty : Flags;
+symbol @full : Flags;
 effect @arena <- region(4096u64);
 effect @empty = alloc @arena Flags(0u64, false);
 effect @full = alloc @arena Flags(256u64, false);

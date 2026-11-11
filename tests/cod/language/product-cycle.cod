@@ -1,5 +1,5 @@
-data A { value::B; }
-data B { value::A; }
+data A { value:B; }
+data B { value:A; }
 region symbol @arena;
 effect @arena <- region(1024u64);
 alloc @arena A(1);

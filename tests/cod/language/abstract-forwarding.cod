@@ -8,7 +8,7 @@ using "abstract-second-adapter.cod" make_extended_reference;
 using "abstract-alternate-factory.cod" make_alternate_reference;
 using "abstract-data.cod" Bundle;
 region symbol @arena;
-symbol @held::Sample;
+symbol @held:Sample;
 effect @arena <- region(4096u64);
 effect @held = make_weighted_reference(@arena, 7);
 proc @inspect() -> i64 { rank(deref(@held)) }
@@ -27,7 +27,7 @@ try {
     make_extended_reference(@arena, i64(i))
   };
   behave @print(rank_entity(deref(continued)));
-} catch (unexpected::const NullPointerException) { behave @assert(false); };
+} catch (unexpected:const NullPointerException) { behave @assert(false); };
 effect @held = make_alternate_reference(@arena);
 behave @print(perform @inspect());
 behave @print(behave @inspect());

@@ -1,2 +1,2 @@
-symbol @step :: proc() -> i64;
+symbol @step : proc() -> i64;
 mixin "source.cod" @p as @step;

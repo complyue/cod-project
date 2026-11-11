@@ -9,13 +9,13 @@ using "pool-layout.cod" class_set_begin;
 using "pool-index.cod" SetLocation;
 using "region-gather-kernel.cod" create_graph;
 using "region-gather-step.cod" step;
-global trace_values::bool = true;
-global weighted::bool = true;
+global trace_values:bool = true;
+global weighted:bool = true;
 region symbol @arena;
-function checksum(frame::Frame in O1)::f32 where {owner O1} {
+function checksum(frame:Frame in O1) -> f32 where {owner O1} {
   fold (n in Neuron(0u32) .. Neuron(u32(len(frame))), total = 0.0f32) { total + frame[n] }
 }
-proc emit_frame(frame::Frame in O1) -> void where {owner O1} {
+proc emit_frame(frame:Frame in O1) -> void where {owner O1} {
   behave @print(checksum(frame));
   if (trace_values) {
     for (n in Neuron(0u32) .. Neuron(u32(len(frame)))) {
@@ -45,4 +45,4 @@ try {
     };
   };
   behave @assert(used_bytes(@arena) < 12000u64);
-} catch (unexpected::const NullPointerException) { behave @assert(false); };
+} catch (unexpected:const NullPointerException) { behave @assert(false); };

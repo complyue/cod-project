@@ -1,3 +1,3 @@
-function answer(x::T)::T where T;
-function answer(x::i64)::bool { true }
+function answer(x:T) -> T where T;
+function answer(x:i64) -> bool { true }
 answer(1);

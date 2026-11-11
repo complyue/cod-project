@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 behave @print(99);
 using units "units-library.cod" {m, cm};
-global cm_to_m::i64 = 7;
-function length(x::f64(m*))::f64 { scalar(x) }
+global cm_to_m:i64 = 7;
+function length(x:f64(m*)) -> f64 { scalar(x) }
 behave @print(cm_to_m);
 behave @print(length(cm(250.0)));

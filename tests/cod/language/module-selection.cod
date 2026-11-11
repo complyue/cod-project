@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 symbol from "vocabulary.cod" @x;
-symbol imported :: proc() -> i64, mixed :: proc() -> i64;
+symbol imported : proc() -> i64, mixed : proc() -> i64;
 function helper() -> i64 { 9 }
 effect @x <- 7;
 import "source.cod" @p as @imported;
@@ -14,13 +14,13 @@ behave @print(behave @mixed());
 import "product-library.cod" Position as Point;
 using "product-library.cod" Position as SamePoint;
 import "product-library.cod" read as measure;
-function weight(p::SamePoint in O1) -> f32 where {owner O1} { measure(p) }
+function weight(p:SamePoint in O1) -> f32 where {owner O1} { measure(p) }
 region symbol @arena;
 effect @arena <- region(1024u64);
 behave @print(weight(deref(alloc @arena Point(3, 1.25f32))));
 
 symbol from "procedure-vocabulary.cod" @bias;
-symbol saved :: proc(i64) -> i64;
+symbol saved : proc(i64) -> i64;
 import "procedure-library.cod" read as source_read;
 effect @bias <- 20;
 effect @saved = source_read;
@@ -28,9 +28,9 @@ behave @print(source_read(1));
 behave @print(perform @saved(1));
 behave @print(behave @saved(1));
 
-symbol @local_bias::i64;
-symbol @mixed_lexical::proc(i64) -> i64;
-function scale(x::i64)::i64 { x * 4 }
+symbol @local_bias:i64;
+symbol @mixed_lexical:proc(i64) -> i64;
+function scale(x:i64) -> i64 { x * 4 }
 effect @local_bias <- 100;
 using "mixin-lexical-provider.cod" read as original_scaled;
 mixin "mixin-lexical-provider.cod" read as mixed_scaled with { @local_bias as @bias; };

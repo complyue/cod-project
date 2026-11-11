@@ -1,2 +1,2 @@
-proc sum(a::i64, b::i64) -> const i64 { intrinsic (+)(a, b) }
+proc sum(a:i64, b:i64) -> const i64 { intrinsic (+)(a, b) }
 export sum;

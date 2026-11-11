@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 142
+Discussion revision: 145
 
 Recorded: 2026-10-22
 
@@ -10,7 +10,14 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-- **Declaration cleanup:** [H-316](DesignAuthorityRegistry.md#h-316)/[K-442](DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](../tests/cod/language/declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. No nullable parameter/result grammar, reference-target allocation policy or general cyclic construction is selected. Existing pending qualifications remain pending.
+- **Unified closure-owner review:** [H-321/H-322](DesignAuthorityRegistry.md#h-321)/[K-445](DesignAuthorityRegistry.md#k-445), candidate C-73/P-288–P-289, covers the region-only capture proposal for named and anonymous functions/procedures. [D-14's analysis](RegionalOwnership.md#unified-callable-captures-and-region-owners) separates target owner, lexical binding and environment storage. Charter §§1–3, D-01 and D-16 constraints remain; no automatic lexical boxing, ownership retention, new pointer layout or RTTI is inferred. The detailed capture contract is pending-human. Future acceptance must distinguish rebinding from object mutation, copied bits from references, known from absent owners and valid from escaped captures. H-317/H-318 native acceptance remains separate.
+
+- **Explicit scope boundary:** [H-319](DesignAuthorityRegistry.md#h-319)/[K-444](DesignAuthorityRegistry.md#k-444) confirms ordinary grouping braces and explicit double-brace lexical/effect scopes, plus defer only within an explicit scoped block when inside a loop. C-63/P-286–P-287 preserves C-65 lifetime and C-36 effect requirements. This scope change is not implemented by the colon/nullable checkpoint; acceptance must cover name visibility, initialization, cleanup, conditional paths and loops. H-320's contextual callable/capture boundary remains pending; no escaping closure or wider qualification is implied.
+
+- **Nullable calls and uniform annotations:** [H-317/H-318](DesignAuthorityRegistry.md#h-317)/[K-443](DesignAuthorityRegistry.md#k-443) accepts explicit nullable ptr call boundaries, retains ptr edges for cycles and uses single-colon annotations with arrow results. C-72/P-284–P-285 preserves C-65 owners/access and C-63 checked failures; charter §§1–3 and D-16 compatibility were reviewed. Acceptance requires nullable forwarding without payload access, checked dereference, owner/result rejection and migrated grammar. H-319 establishes the revised scope boundary; native colon/nullable acceptance is recorded by K-444, while scope/defer implementation remains separate.
+
+
+- **Declaration cleanup:** [H-316](DesignAuthorityRegistry.md#h-316)/[K-442](DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](../tests/cod/language/declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. H-317 covers nullable call boundaries; automatic reference-target allocation and staged required-reference cycles remain outside that acceptance. Existing pending qualifications remain pending.
 
 - **Native nullable-storage acceptance:** [K-441](DesignAuthorityRegistry.md#k-441) continues H-309–H-315 for the bounded field/val/checked-NPE implementation. [Evidence](../tests/cod/language/nullable-storage-validation.json) records the actual compiler, language cases, LLVM verification, relocated scalar/object reference fields and exceptional region cleanup. Nullability does not weaken definite initialization, fixed owners or readonly access. Automatic reference-target allocation and general cyclic ref publication remain outside this acceptance; H-316/K-442 covers declaration cleanup.
 
@@ -42,11 +49,15 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 - **Bounded exception/lifecycle contract:** [H-267](DesignAuthorityRegistry.md#h-267)/[K-408](DesignAuthorityRegistry.md#k-408) accepts [D-17r3 E1–E5](ExceptionControl.md#accepted-first-implementation-contract), including explicit throw-from only, cleanup, fresh owners and call/result transfer. This overrides pending labels for that enumerated scope; wider qualifier, assignment, mailbox and user exception graph choices remain open. [K-414](DesignAuthorityRegistry.md#k-414) records completed H-267/H-269 E1–E5 acceptance and [current native evidence](../tests/cod/language/exception-ownership-validation.json). Wider unconfirmed scopes retain their status.
 
-- **Registry / scope:** [D-07](DesignAuthorityRegistry.md#d-07), revision142, all sections; [K-411](DesignAuthorityRegistry.md#k-411) records bounded typed-region ownership and exception cleanup under D-17; [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) establishes exception-control planning and unchecked ultimate OOM in [D-17](ExceptionControl.md); [H-263/H-264](DesignAuthorityRegistry.md#h-263)/[K-405](DesignAuthorityRegistry.md#k-405) supplies permitted local-view survival and the initial typed construction form; [H-262](DesignAuthorityRegistry.md#h-262)/[K-404](DesignAuthorityRegistry.md#k-404) confirms the ordinary named-owner consumed state; D-17 E4/E5 bounds implemented construction/transfer; [K-400](DesignAuthorityRegistry.md#k-400) records successful repair/build and28 focused checks; H-257/H-258/[K-399](DesignAuthorityRegistry.md#k-399) directs lexical call/shadowing correction, mandatory generic/variadic callable signatures and LLVM value/place modelling, with ordinary ownership covered separately by D-17. [K-398](DesignAuthorityRegistry.md#k-398) records H-256 priority follow-up for comment reservation and representation-independent UoM; [K-397](DesignAuthorityRegistry.md#k-397) adds the H-254/H-255 fraction draft and future compatibility-review requirement without scheduling implementation; [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred. [K-402](DesignAuthorityRegistry.md#k-402) records the implemented quantity/widening subset and56 focused checks.
+- **Registry / scope:** [D-07](DesignAuthorityRegistry.md#d-07), revision145, all sections; [K-411](DesignAuthorityRegistry.md#k-411) records bounded typed-region ownership and exception cleanup under D-17; [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) establishes exception-control planning and unchecked ultimate OOM in [D-17](ExceptionControl.md); [H-263/H-264](DesignAuthorityRegistry.md#h-263)/[K-405](DesignAuthorityRegistry.md#k-405) supplies permitted local-view survival and the initial typed construction form; [H-262](DesignAuthorityRegistry.md#h-262)/[K-404](DesignAuthorityRegistry.md#k-404) confirms the ordinary named-owner consumed state; D-17 E4/E5 bounds implemented construction/transfer; [K-400](DesignAuthorityRegistry.md#k-400) records successful repair/build and28 focused checks; H-257/H-258/[K-399](DesignAuthorityRegistry.md#k-399) directs lexical call/shadowing correction, mandatory generic/variadic callable signatures and LLVM value/place modelling, with ordinary ownership covered separately by D-17. [K-398](DesignAuthorityRegistry.md#k-398) records H-256 priority follow-up for comment reservation and representation-independent UoM; [K-397](DesignAuthorityRegistry.md#k-397) adds the H-254/H-255 fraction draft and future compatibility-review requirement without scheduling implementation; [K-396](DesignAuthorityRegistry.md#k-396) records the completed architecture audit on the K-395 compiler, including H-253 conflict rejection, H-252 warning controls and cross-world TLS. Earlier checkpoints retain their actual scopes. H-234/H-237–H-249 supplies independent module worlds, separate typed TLS, vocabulary identities, receiver-local composition and identity-based publication; H-245 supersedes cross-module editing. H-251 reserves RTTI for human discussion. Earlier decisions/evidence retain their scopes in the registry. Full contracts and candidate value paths remain pending-human; this revision does not qualify unresolved mechanisms. [K-401](DesignAuthorityRegistry.md#k-401) records H-255/H-256 comment reservation and H-260/H-261 quantity/widening decisions; full fraction execution remains deferred. [K-402](DesignAuthorityRegistry.md#k-402) records the implemented quantity/widening subset and56 focused checks.
 - **Value lineage:** C-10 supplies inspectable typed execution. C-35/C-43/C-45/C-46 through P-84/P-100/P-102/P-109–P-111 and C-56/C-57 through P-182–P-197 concern identity, composition, interfaces and explicit behavior selection. C-39/C-54 through P-94/P-143/P-155 supplies regional lifetime boundaries. C-58/P-199–P-202 adds explicit publication and module-scoped callable composition. These candidate paths serve charter §§2–4; dependency evidence does not qualify them.
 - **Human baseline:** H-96–H-141 supplies symbols, callables, modules and units, subject to later supersession. H-143–H-146 selects LLVM, lean validation, simplification and the known zero-offset limitation. H-166/H-180/H-181 preserves module lifetime, captured/hidden owners and non-extractable resources; H-184–H-189 supplies typed lexical/symbolic procedures. H-193/H-196–H-203 supplies regional data, intrinsic owners, mutable explicit-memory functions, borrowing, const and same-owner edges. H-209–H-220 supplies abstract/data types, explicit conformance, source-preserving selections, mixin, aliases and dispatch. H-222–H-224 supplies the const-RHS assignment discussion. H-225–H-227 selects associated signature membership, using/import-dependent local declarations and caller-selected ordinary implementation views. H-229 preserves concrete-data dispatch; H-230 refines callable identities and alias composition; H-231 requires explicit exports; H-232 selects using-preserved versus import-adapted helper implementations; H-233 requires explicit re-export and permits export import.
 - **Invariants / non-goals:** preserve zero-cost relocation, region-only non-bits storage, no regional object copy/move, owner provenance, non-consuming capture replay and no dynamic effect/procedure calls from functions. No module namespace, runtime interface wrapper, allocator policy, bootstrap/toolchain change or SNN modeling choice is introduced. The confirmed method-selection increment does not settle qualifiers, ownership construction/transfer, standalone abstract signatures or mailbox semantics.
 - **Acceptance / evidence:** H-245 authorizes the corrected architecture goal, whose implementation audit is recorded by K-396. H-221 records the completed ten-hour work period. Native examples must distinguish source/caller contexts, visible/hidden conformance, use/extension permission, unique/ambiguous dispatch and demanded/unused missing implementations, while preserving lifetimes and relocation. The [prototype coverage table](../tests/cod/language/README.md#current-bounded-acceptance) identifies implemented subsets and their actual evidence. [Method-context observations](../tests/cod/language/method-context-observations.json) preserve the source-only prototype baseline for the confirmed caller-view increment; they are not acceptance evidence for that increment.
+
+## Declaration annotations
+
+Type annotations use one colon: `val count:i64`, `ref node:Node in O`, `symbol @limit:u64`, `region arena:Root` and `where {region r:NodeStore}`. Callable result annotations use an arrow, such as `function size(node:Node in O) -> const u64 where {owner O}`. Double-colon syntax rejects with a migration diagnostic. `<:` remains the separate subtype token; module paths are quoted; UoM and planned fraction syntax retain their existing roles. H-318 covers this source grammar and migration, with no numeric or representation change.
 
 ## Module-world architecture
 
@@ -145,8 +156,8 @@ Illustrative declaration headers, with constructor/sum and standalone method-sig
 type RegionStore;
 type NodeStore <: RegionStore;
 
-data ArenaRoot <: NodeStore { used::u64; limit::u64; }
-data PoolRoot  <: NodeStore { head::u32; count::u32; }
+data ArenaRoot <: NodeStore { used:u64; limit:u64; }
+data PoolRoot  <: NodeStore { head:u32; count:u32; }
 ```
 
 The abstract NodeStore <: RegionStore edge is nominal and inherits methods. Data-to-abstract <: explicitly declares interface conformance under H-218; it is required rather than informational. Neither relationship implies shared fields or offsets. The illustrative names/headers specify no allocator behavior and are not executable fixtures. Type aliases preserve the original nominal identity, independently of whether a conformance declaration is visible in the receiving module.
@@ -196,7 +207,7 @@ Inheritance and visibility are independent: inheriting a method does not make an
 
 Neither nominal abstract inheritance nor an explicit data conformance declaration implies a shared concrete field layout. Code constrained by NodeStore uses the applicable visible methods; field access still requires a concrete representation or a separately valid operation. A region must be created with a concrete supported root representation, rather than attempting to allocate an unspecified abstract root. Root matching retains the actual concrete RT and owner instance.
 
-Generic argument matching and generic subtyping must remain distinct. The intended root method can constrain a parameter R by `R <: NodeStore` and receive region ::R; this does not automatically establish `region ::ArenaRoot <: region ::NodeStore` as a mutable-value conversion. The generic bound/header syntax is still proposed. Similar constraints apply to array element types, const access and owning qualifiers; <: cannot erase ownership or permission differences.
+Generic argument matching and generic subtyping must remain distinct. The intended root method can constrain a parameter R by `R <: NodeStore` and receive region :R; this does not automatically establish `region :ArenaRoot <: region :NodeStore` as a mutable-value conversion. The generic bound/header syntax is still proposed. Similar constraints apply to array element types, const access and owning qualifiers; <: cannot erase ownership or permission differences.
 
 Sum alternatives and abstract descendants serve different roles. The recommended initial data sum is a fixed alternative set suitable for exhaustive matching. An abstract family may acquire nominal abstract descendants and explicitly conforming data types in other modules; neither current set is an implicit closed sum. Sum closure/extension and constructor namespaces still need an explicit contract. Future GADT constructors may refine indices of the declared data family; subtype syntax alone does not define those refinements or permit unchecked casts.
 
@@ -221,15 +232,15 @@ Lean acceptance must show one data identity with head-only conformance declarati
 The proposed surface reuses the existing callable header and ends it with a semicolon:
 
 ```text
-function read(store::SlotStore, slot::u32(Slot))::i64;
-function cell(store::SlotStore, slot::u32(Slot))::i64;
-proc flush(store::SlotStore)::void;
+function read(store:SlotStore, slot:u32(Slot)) -> i64;
+function cell(store:SlotStore, slot:u32(Slot)) -> i64;
+proc flush(store:SlotStore) -> void;
 export read;
 export cell;
 export flush;
 ```
 
-An explicit result type is required because there is no body from which to infer it. These are ordinary lexical callable declarations; `symbol @p::proc(...) -> ...;` already expresses a required dynamic procedure binding. A bodyless symbolic-procedure shorthand is not needed for this slice. There is no Interface body, module namespace, runtime method table, execution step or capture event attached to a head. Public selection and extension follow the same using/import/export rules as implemented methods. Importing a declaration supplies the family to extend; it does not manufacture an implementation. Mixin still requires a body.
+An explicit result type is required because there is no body from which to infer it. These are ordinary lexical callable declarations; `symbol @p:proc(...) -> ...;` already expresses a required dynamic procedure binding. A bodyless symbolic-procedure shorthand is not needed for this slice. There is no Interface body, module namespace, runtime method table, execution step or capture event attached to a head. Public selection and extension follow the same using/import/export rules as implemented methods. Importing a declaration supplies the family to extend; it does not manufacture an implementation. Mixin still requires a body.
 
 The pool example makes the need concrete. Its interface declares read/cell/acquire/release families, its storage module implements them for Pool, and a separate module defines replace/peek/locate using only interface types. The adapter imports the algorithm helpers into the implementation context it selects. The native example currently uses deliberately unavailable fallback bodies to expose the families; those are test scaffolding, not the proposed declaration syntax or a runtime failure mechanism.
 
@@ -338,7 +349,7 @@ H-230 assigns distinct identities and method sets to base/ext1/ext2 versions of 
 ```text
 using "base.cod" score as base;
 using "ext.cod" score as extended;
-function indirect(x::Sample)::i64 { base(x) }
+function indirect(x:Sample) -> i64 { base(x) }
 # base defines score(Metric)=1; ext adds score(Sample)=7.
 base(x);      # required: 1
 extended(x);  # required: 7
@@ -359,13 +370,13 @@ The required composition must preserve original method definitions and source pr
 
 ```text
 # base.cod
-function score(x::Metric)::i64 { 1 }
-function twice(x::Metric)::i64 { score(x) + score(x) }
+function score(x:Metric) -> i64 { 1 }
+function twice(x:Metric) -> i64 { score(x) + score(x) }
 export score, twice;
 
 # ext.cod
 import "base.cod" score;
-function score(x::Sample)::i64 { 7 }
+function score(x:Sample) -> i64 { 7 }
 using "base.cod" twice;  # replace with import to select ext's implementation context
 export score, twice;
 
@@ -669,7 +680,7 @@ H-133–H-138, H-148–H-150 and H-153–H-155/H-158/H-159 resolve the following
 | --- | --- | --- |
 | LI-01 | Result references from a function | H-133/H-197: returning an existing input-reachable reference retains its source-region lifetime. Mutation is allowed; returning a view cannot keep a locally released region alive. |
 | LI-02 | UoM definition reuse | H-134: fresh definitions and one-shot using only; no UoM import. Select the intended UoMs and their associated conversions together. Partial selections exclude conversions involving omitted UoMs; repeated using does not extend the bundle. |
-| LI-03 | Conversion during method selection | H-135: H-260/H-261 `amount::f64(m)` preserves unit identity while allowing lossless representation widening; `amount::f64(m*)` also permits selected unit conversions. This is a user-declared parameter policy, not a universal language restriction. |
+| LI-03 | Conversion during method selection | H-135: H-260/H-261 `amount:f64(m)` preserves unit identity while allowing lossless representation widening; `amount:f64(m*)` also permits selected unit conversions. This is a user-declared parameter policy, not a universal language restriction. |
 | LI-04 | Conversion route selection | H-136: discover routes at compile time, choose a unique route automatically, warn about unresolved alternatives and allow warnings-as-errors. H-137/H-138: a direct conversion wins; otherwise use the declared indirect route, illustrated by `m*<-cm<-mm`. |
 | LI-05 | Argument/conversion order | H-148: evaluate each argument once and finish its selected conversions before evaluating the next argument. An earlier failure prevents later argument effects. |
 | LI-06 | Local value names | H-149: nested scopes may shadow outer locals; declarations within one scope must be unique. The initializer sees the outer value, and scope exit restores its visibility. Function parameters and loop bindings share their body’s declaration scope. |

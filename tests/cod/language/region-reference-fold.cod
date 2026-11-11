@@ -1,10 +1,10 @@
 using symbol "std:io" @print;
-data Node { value::i64; ptr next::Node; }
+data Node { value:i64; ptr next:Node; }
 region symbol @arena;
-symbol @tail :: Node;
-symbol @middle :: Node;
-symbol @head :: Node;
-function walk_value(start::Node in O1, count::u32)::const i64 where {owner O1} {
+symbol @tail : Node;
+symbol @middle : Node;
+symbol @head : Node;
+function walk_value(start:Node in O1, count:u32) -> const i64 where {owner O1} {
   ptr node = start;
   for (i in 0u32 .. count) {
     if (!isnull(node)) { node = node.next; {} } else {};

@@ -113,21 +113,21 @@ using symbol "std:io" @assert;
 using symbol "std:io" @print;
 using "std:exceptions" OutOfMemory;
 using "std:exceptions" NullPointerException;
-data Packet {value::u64;}
+data Packet {value:u64;}
 try {
-try {owned region invalid::Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
+try {owned region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
 catch(seed) {
-  owned region keep::Packet <- make Packet(capacity=16u64){value<-7u64};
+  owned region keep:Packet <- make Packet(capacity=16u64){value<-7u64};
   for(i in 0 .. 2) {
-    try {throw seed from seed} catch(error::const OutOfMemory) {
+    try {throw seed from seed} catch(error:const OutOfMemory) {
       behave @assert(error.cause_count == 0u64)
     }
   };
   val first = try {throw seed from seed} catch(error) {error};
   try {
-    owned region inner::Packet <- make Packet(capacity=16u64){value<-0u64};
+    owned region inner:Packet <- make Packet(capacity=16u64){value<-0u64};
     throw first from seed
-  } catch(error::const OutOfMemory) {
+  } catch(error:const OutOfMemory) {
     behave @assert(error.cause_count == 0u64);
     behave @assert(error.requested == 40u64);
     behave @assert(first.cause_count == 1u64 && cause_at(first, 0u64).category == 3u64);
@@ -137,7 +137,7 @@ catch(seed) {
   val retry = try {throw first from first} catch(error) {error};
   behave @assert(retry.cause_count == 2u64 && first.cause_count == 1u64)
 };
-} catch(unexpected::const NullPointerException) {behave @assert(false)};
+} catch(unexpected:const NullPointerException) {behave @assert(false)};
 '''
 
 
@@ -251,18 +251,18 @@ extern "C" void cod_lang_region_free(void *owner) {
         loop.write_text('''using "std:exceptions" SystemException;
 using "std:exceptions" NullPointerException;
 using symbol "std:io" @assert;
-data Packet {value::u64;}
-data Saved {error::SystemException;}
-try {owned region invalid::Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
+data Packet {value:u64;}
+data Saved {error:SystemException;}
+try {owned region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
 catch(seed) {
-  owned region saved::Saved <- make Saved(capacity=64u64){error<-seed};
+  owned region saved:Saved <- make Saved(capacity=64u64){error<-seed};
   for(i in 0 .. 2) {
     if(i == 1) {
       try {throw root(saved).error}
-      catch(unexpected::const NullPointerException) {behave @assert(false);}
+      catch(unexpected:const NullPointerException) {behave @assert(false);}
     } else {};
     val cause = try {
-      owned region small::Packet <- make Packet(capacity=1u64){value<-0u64}; seed
+      owned region small:Packet <- make Packet(capacity=1u64){value<-0u64}; seed
     } catch(error) {error};
     val chained = try {throw seed from cause} catch(error) {error};
     setfield(root(saved), error, chained)
@@ -302,13 +302,13 @@ static const int audit = [] {
                                     'catch(error) {throw error from 42;};',
                                     "an explicit cause requires an intrinsic exception value"),
             "duplicate-category": ('using "std:exceptions" InvalidCapacity; using "std:exceptions" InvalidCapacity as Bad; '
-                                   'try {} catch(e::const InvalidCapacity){} catch(e::const Bad){};',
+                                   'try {} catch(e:const InvalidCapacity){} catch(e:const Bad){};',
                                    "duplicate exception category"),
             "catch-order": ('try {} catch(e){} catch(f){};', "catch-all must be the final catch clause"),
             "finally-value": ('try {1} finally {2};', "expected void, got i64"),
             "rethrow-context": ('throw;', "bare throw requires an active catch"),
-            "function-effects": ('symbol x::i64; effect @x <- 1; '
-                                 'function f()::i64 {try {@x} finally {}}; f();',
+            "function-effects": ('symbol x:i64; effect @x <- 1; '
+                                 'function f() -> i64 {try {@x} finally {}}; f();',
                                  "a function cannot read symbolic effects"),
         }
         for name, (source, diagnostic) in rejects.items():

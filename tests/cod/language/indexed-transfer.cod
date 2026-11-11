@@ -5,12 +5,12 @@ using "indexed-transfer-library.cod" Values;
 using "indexed-transfer-library.cod" ([]<-);
 using "indexed-transfer-library.cod" (<-);
 using "indexed-transfer-library.cod" ([]<-) as write;
-data Arena { id::u64; }
-function index(counter::u32 in O, value::u32) -> const u32 where {owner O} {
+data Arena { id:u64; }
+function index(counter:u32 in O, value:u32) -> const u32 where {owner O} {
   counter <- counter + 1u32;
   value
 }
-owned region arena::Arena <- make Arena(capacity = 512u64) { id <- 1u64 };
+owned region arena:Arena <- make Arena(capacity = 512u64) { id <- 1u64 };
 ptr packed = alloc arena Packed(0u32), copy = alloc arena Packed(0u32);
 ptr counter = 0u32;
 packed[index(counter, 0u32)] <- index(counter, 7u32);

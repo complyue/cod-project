@@ -1,6 +1,6 @@
 using symbol "std:io" @assert;
 region symbol a;
-symbol original :: u64;
+symbol original : u64;
 effect @a <- region(4096u64);
 effect @original <- capacity_bytes(@a);
 proc @inspect() -> u64 { capacity_bytes(@a) }

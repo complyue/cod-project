@@ -1,2 +1,2 @@
 symbol from "procedure-vocabulary.cod" @dispatch;
-proc @dispatch(x::bool) -> i64 { 1 }
+proc @dispatch(x:bool) -> i64 { 1 }

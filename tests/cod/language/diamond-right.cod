@@ -1,11 +1,11 @@
 symbol from "diamond-vocab.cod" @gain;
 symbol from "diamond-vocab.cod" @read;
 using symbol "std:io" @print;
-symbol @right :: proc() -> i64;
+symbol @right : proc() -> i64;
 effect @gain <- 7;
 using "diamond-shared.cod" @read;
 behave @print(behave @read());
-procedure @right()::i64 { perform @read() }
+procedure @right() -> i64 { perform @read() }
 
 export @gain;
 export @print;

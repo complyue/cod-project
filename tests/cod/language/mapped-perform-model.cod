@@ -1,5 +1,5 @@
-symbol @next :: i64;
-symbol @update :: proc() -> i64;
+symbol @next : i64;
+symbol @update : proc() -> i64;
 procedure @update -> i64 { perform @next }
 
 export @next;

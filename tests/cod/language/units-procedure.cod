@@ -7,10 +7,10 @@ using symbol "units-procedure-source.cod" @read as @source_read;
 using symbol "units-procedure-receiver.cod" @receiver_read;
 unit raw;
 unit normalized;
-conversion function normalize(x::f64(raw))::f64(normalized) { normalized(scalar(x) / 25.0) }
-function adjust(x::f64)::f64 { x + 1000.0 }
-symbol @entry_distance :: f64(normalized);
-symbol @entry_read :: proc(f64(normalized)) -> f64;
+conversion function normalize(x:f64(raw)) -> f64(normalized) { normalized(scalar(x) / 25.0) }
+function adjust(x:f64) -> f64 { x + 1000.0 }
+symbol @entry_distance : f64(normalized);
+symbol @entry_read : proc(f64(normalized)) -> f64;
 effect @entry_distance <- normalized(20.0);
 mixin "units-procedure-receiver.cod" @receiver_read as @entry_read with { @entry_distance as @receiver_distance; };
 effect @source_distance <- SourceN(9.0);

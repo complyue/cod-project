@@ -2,10 +2,10 @@ export import "abstract-data.cod" Sample;
 using "abstract-library.cod" Weighted;
 data Sample <: Weighted;
 # A private, unrelated type must not become a returned Sample's loop invariant.
-data PrivateMarker <: Weighted { ignored::i64; }
+data PrivateMarker <: Weighted { ignored:i64; }
 using "abstract-library.cod" rank;
-function make_weighted(region arena)::Weighted { deref(alloc arena Sample(17)) }
-function make_weighted_reference(region arena, value::i64)::Sample { alloc arena Sample(value) }
+function make_weighted(region arena) -> Weighted { deref(alloc arena Sample(17)) }
+function make_weighted_reference(region arena, value:i64) -> Sample { alloc arena Sample(value) }
 
 export Weighted;
 export make_weighted;

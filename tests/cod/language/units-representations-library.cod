@@ -1,10 +1,10 @@
 unit m;
 unit cm;
 unit mm;
-conversion function cm_to_m(x::f64(cm))::f64(m) { m(scalar(x) / 100.0) }
+conversion function cm_to_m(x:f64(cm)) -> f64(m) { m(scalar(x) / 100.0) }
 # The first arrival at cm cannot widen to f64; the second can.
-conversion function wide_path(x::u32(mm))::u64(cm) { cm(u64(scalar(x) / 10u32)) }
-conversion function mm_to_cm(x::u32(mm))::u32(cm) { cm(scalar(x) / 10u32) }
+conversion function wide_path(x:u32(mm)) -> u64(cm) { cm(u64(scalar(x) / 10u32)) }
+conversion function mm_to_cm(x:u32(mm)) -> u32(cm) { cm(scalar(x) / 10u32) }
 export m;
 export cm;
 export mm;

@@ -1,4 +1,4 @@
 using symbol "std:io" @print;
-conversion function bad(x::i64)::i64 { x + 1 }
+conversion function bad(x:i64) -> i64 { x + 1 }
 behave @print(99);
 behave @print(bad(1));

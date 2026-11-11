@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
 using "method-library.cod" score as f;
-function f(x::f32)::f32 { x }
+function f(x:f32) -> f32 { x }
 behave @print(99);
 f(true);

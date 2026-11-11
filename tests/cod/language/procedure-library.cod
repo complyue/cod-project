@@ -1,7 +1,7 @@
 symbol from "procedure-vocabulary.cod" @bias;
 effect @bias <- 10;
-proc read(x::i64) -> i64 { @bias + x }
-proc @automatic(x::i64) -> i64 { read(x) }
+proc read(x:i64) -> i64 { @bias + x }
+proc @automatic(x:i64) -> i64 { read(x) }
 
 export @automatic;
 export @bias;

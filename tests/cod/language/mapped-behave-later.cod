@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
-symbol @step :: proc() -> i64;
-symbol @target :: i64;
+symbol @step : proc() -> i64;
+symbol @target : i64;
 function helper() -> i64 { 9 }
 mixin "source.cod" @p as @step with { @target as @x; };
 effect @target <- 9;

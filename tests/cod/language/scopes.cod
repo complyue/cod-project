@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
-symbol @effect :: i64;
-symbol @read :: proc() -> i64;
-symbol @increment :: proc() -> i64;
+symbol @effect : i64;
+symbol @read : proc() -> i64;
+symbol @increment : proc() -> i64;
 function twice(x: i64) -> i64 { x * 2 }
 global initial: i64 = twice(3);
 effect @effect <- 1;

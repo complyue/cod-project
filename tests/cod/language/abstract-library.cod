@@ -3,32 +3,32 @@ type Entity;
 type Weighted <: Entity;
 type Alternate <: Entity;
 type Separate;
-function rank(x::Entity in O1)::i64 where {owner O1} { 1 }
-function rank(x::Weighted in O1)::i64 where {owner O1} { 2 }
-function relay(x::Weighted in O1, choose::bool)::Weighted where {owner O1} {
+function rank(x:Entity in O1) -> i64 where {owner O1} { 1 }
+function rank(x:Weighted in O1) -> i64 where {owner O1} { 2 }
+function relay(x:Weighted in O1, choose:bool) -> Weighted where {owner O1} {
   if (choose) { x } else { x }
 }
-function upcast(x::Weighted in O1)::Entity where {owner O1} { relay(x, true) }
-function through(x::Weighted in O1)::i64 where {owner O1} { rank(relay(x, false)) }
-function choose_sibling(left::Weighted in O1, right::Alternate in O2, choice::bool)::Entity where {owner O1, owner O2} {
+function upcast(x:Weighted in O1) -> Entity where {owner O1} { relay(x, true) }
+function through(x:Weighted in O1) -> i64 where {owner O1} { rank(relay(x, false)) }
+function choose_sibling(left:Weighted in O1, right:Alternate in O2, choice:bool) -> Entity where {owner O1, owner O2} {
   if (choice) { left } else { right }
 }
-function narrow_sibling(left::Weighted in O1, right::Alternate in O2, choice::bool)::Weighted where {owner O1, owner O2} {
+function narrow_sibling(left:Weighted in O1, right:Alternate in O2, choice:bool) -> Weighted where {owner O1, owner O2} {
   choose_sibling(left, right, choice)
 }
-function repeat(x::Weighted in O1, steps::u32)::Weighted where {owner O1} {
+function repeat(x:Weighted in O1, steps:u32) -> Weighted where {owner O1} {
   fold (i in 0u32 .. steps, current = x) { relay(current, true) }
 }
-function unfinished(x::Entity in O1)::i64 where {owner O1} { missing_implementation(x) }
-function paired(left::Weighted in O1, right::Weighted in O2)::i64 where {owner O1, owner O2} { 3 }
-function paired(left::Entity in O1, right::Weighted in O2)::i64 where {owner O1, owner O2} { 1 }
-function paired(left::Weighted in O1, right::Entity in O2)::i64 where {owner O1, owner O2} { 2 }
-function pair_context(left::Weighted in O1, right::Weighted in O2)::i64 where {owner O1, owner O2} { paired(left, right) }
-function adapted(x::Weighted in O1, amount::f64(m*))::f64 where {owner O1} { scalar(amount) + f64(rank(x)) }
-function adapted(x::Entity in O1, amount::f64(m*))::f64 where {owner O1} { scalar(amount) + 1.0 }
-function unit_context(x::Weighted in O1, amount::f64(mm))::f64 where {owner O1} { adapted(x, amount) }
-function rank_entity(x::Entity in O1)::i64 where {owner O1} { rank(x) }
-function nested_entity(x::Entity in O1)::i64 where {owner O1} { rank_entity(x) }
+function unfinished(x:Entity in O1) -> i64 where {owner O1} { missing_implementation(x) }
+function paired(left:Weighted in O1, right:Weighted in O2) -> i64 where {owner O1, owner O2} { 3 }
+function paired(left:Entity in O1, right:Weighted in O2) -> i64 where {owner O1, owner O2} { 1 }
+function paired(left:Weighted in O1, right:Entity in O2) -> i64 where {owner O1, owner O2} { 2 }
+function pair_context(left:Weighted in O1, right:Weighted in O2) -> i64 where {owner O1, owner O2} { paired(left, right) }
+function adapted(x:Weighted in O1, amount:f64(m*)) -> f64 where {owner O1} { scalar(amount) + f64(rank(x)) }
+function adapted(x:Entity in O1, amount:f64(m*)) -> f64 where {owner O1} { scalar(amount) + 1.0 }
+function unit_context(x:Weighted in O1, amount:f64(mm)) -> f64 where {owner O1} { adapted(x, amount) }
+function rank_entity(x:Entity in O1) -> i64 where {owner O1} { rank(x) }
+function nested_entity(x:Entity in O1) -> i64 where {owner O1} { rank_entity(x) }
 
 export Alternate;
 export Entity;

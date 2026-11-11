@@ -1,10 +1,10 @@
 using "std:exceptions" NullPointerException;
 using symbol "std:io" @print;
-data Node { value::i64; ptr next::Node; }
-function consume(node::Node in O1)::i64 where {owner O1} { 7 }
+data Node { value:i64; ptr next:Node; }
+function consume(node:Node in O1) -> i64 where {owner O1} { 7 }
 region symbol @arena;
-symbol @node :: Node;
+symbol @node : Node;
 effect @arena <- region(4096u64);
 effect @node = alloc @arena Node(1, null);
 try { consume(deref(deref(@node).next)); {} }
-catch (error::const NullPointerException) { behave @print(1); };
+catch (error:const NullPointerException) { behave @print(1); };

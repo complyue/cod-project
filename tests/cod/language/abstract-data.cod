@@ -1,15 +1,15 @@
 using "std:exceptions" NullPointerException;
-data Sample { value::i64; }
-data Bundle { ptr item::Sample; }
-function view(sample::Sample in O1)::Sample where {owner O1} { deref(sample) }
-function item(bundle::Bundle in O1)::Sample throws NullPointerException where {owner O1} { deref(deref(bundle).item) }
+data Sample { value:i64; }
+data Bundle { ptr item:Sample; }
+function view(sample:Sample in O1) -> Sample where {owner O1} { deref(sample) }
+function item(bundle:Bundle in O1) -> Sample throws NullPointerException where {owner O1} { deref(deref(bundle).item) }
 using "abstract-library.cod" rank_entity;
-function observe_maybe(sample::Sample in O1, keep::bool)::i64 throws NullPointerException where {owner O1} {
-  ptr chosen::Sample = null;
+function observe_maybe(sample:Sample in O1, keep:bool) -> i64 throws NullPointerException where {owner O1} {
+  ptr chosen:Sample = null;
   if (keep) { chosen = sample; {} } else {};
   rank_entity(chosen)
 }
-function same_type(sample::Sample in O1, region arena)::i64 where {owner O1} {
+function same_type(sample:Sample in O1, region arena) -> i64 where {owner O1} {
   rank_entity(deref(alloc arena Sample(sample.value + 1)))
 }
 

@@ -1,13 +1,13 @@
 using "callable-contract-api.cod" Metric;
 import "callable-contract-api.cod" score;
 import "callable-contract-api.cod" collect;
-data Sample <: Metric { amount::i64 }
-function score(x::Sample in O1)::i64 where {owner O1} { x.amount }
-function collect(head::T, rest::T...)::T where T {
+data Sample <: Metric { amount:i64 }
+function score(x:Sample in O1) -> i64 where {owner O1} { x.amount }
+function collect(head:T, rest:T...) -> T where T {
   fold (i in 0u64 .. len(rest), total = head) { total + rest[i] }
 }
-function forwarded(head::T, rest::T...)::T where T { collect(head, rest...) }
-function measure(x::T in O1)::i64 where {T <: Metric, owner O1} { score(x) }
+function forwarded(head:T, rest:T...) -> T where T { collect(head, rest...) }
+function measure(x:T in O1) -> i64 where {T <: Metric, owner O1} { score(x) }
 export Sample;
 export score;
 export collect;
