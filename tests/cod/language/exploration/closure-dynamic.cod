@@ -1,12 +1,13 @@
 using symbol "std:io" @print;
 symbol @bias:i64;
 region State { value:i64; }
-owned region state:State <- make State(capacity = 128u64) { value <- 3 };
+region symbol @state:State;
+effect @state <- make State(capacity = 128u64) { value <- 3 };
 effect @bias <- 10;
-proc @read [value = state.value] () -> i64 { value + @bias }
+proc @read() -> i64 { @state.value + @bias }
 effect @bias <- 20;
 behave @print(perform @read());
 behave @print(behave @read());
-state.value <- 5;
+@state.value <- 5;
 behave @print(perform @read());
 behave @print(behave @read());

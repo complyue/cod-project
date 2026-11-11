@@ -1,5 +1,5 @@
 using "structural-api.cod" Counter;
-function writer(const region state:Counter) -> func()->void {
+function writer(const region state:Counter) -> func[region state]()->void {
   func [ticks = state.ticks] () -> void { ticks <- 1u64; {} }
 }
 owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };

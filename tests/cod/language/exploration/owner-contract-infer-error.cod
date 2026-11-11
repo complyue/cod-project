@@ -1,0 +1,5 @@
+using "structural-api.cod" Counter;
+using "owner-closure-library.cod" reader;
+function use(action:func[region missing]()->const u64) -> const u64 { action() }
+owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
+use(reader(state));

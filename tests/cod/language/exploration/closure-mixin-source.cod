@@ -1,5 +1,5 @@
 region Counter { ticks:u64; }
-proc factory(region state:Counter) -> func()->const u64 {
+proc factory(region state:Counter) -> func[region state]()->const u64 {
   func [state = state] () -> const u64 { state.ticks }
 }
 export Counter;

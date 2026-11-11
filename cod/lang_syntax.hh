@@ -169,6 +169,8 @@ struct Type {
   std::vector<Type> owner_bounds;
   std::vector<Type> throws_types;
   std::vector<size_t> owners;
+  std::vector<std::string> capture_owners; // Source names anchoring a callable environment's regional dependencies.
+  std::vector<size_t> capture_regions; // Concrete WPO region identities, never runtime type information.
   std::vector<bool> const_views;
   std::vector<bool> nullable_views;
   bool variadic = false;
@@ -180,6 +182,7 @@ struct Type {
     return kind == other.kind && name == other.name && identity == other.identity &&
            parameters == other.parameters && bounds == other.bounds && variadic == other.variadic && owned == other.owned && pure_callable == other.pure_callable &&
            throws_types == other.throws_types && owner_bounds == other.owner_bounds && owners == other.owners && const_views == other.const_views && nullable_views == other.nullable_views &&
+           capture_regions == other.capture_regions && (!capture_regions.empty() || capture_owners == other.capture_owners) &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
   }
 };
@@ -222,11 +225,20 @@ inline std::string type_name(const Type &type) {
   case Type::void_type: return "void";
   case Type::procedure: {
     if (!type.target) return "procedure family";
-    std::string result = type.pure_callable ? "func(" : "proc(";
+    std::string result = type.pure_callable ? "func" : "proc";
+    if (!type.capture_owners.empty() || !type.capture_regions.empty()) {
+      result += "[";
+      if (type.capture_owners.empty()) result += "region <inferred>";
+      for (size_t i = 0; i < type.capture_owners.size(); ++i)
+        result += (i ? ", " : "") + std::string("region ") + type.capture_owners[i];
+      result += "]";
+    }
+    result += "(";
     for (size_t i = 0; i < type.parameters.size(); ++i)
       result += (i ? ", " : "") + type_name(type.parameters[i]) +
                 (type.variadic && i + 1 == type.parameters.size() ? "..." : "");
-    return result + ") -> " + type_name(*type.target);
+    return result + ") -> " +
+           (type.const_views.size() > type.parameters.size() && type.const_views.back() ? "const " : "") + type_name(*type.target);
   }
   case Type::float32: return "f32";
   case Type::float64: return "f64";
@@ -429,6 +441,16 @@ class Parser {
     if (token.text == "proc" || token.text == "procedure" || token.text == "func" || token.text == "function") {
       Type type{Type::procedure};
       type.pure_callable = token.text == "func" || token.text == "function";
+      if (take("[")) {
+        do {
+          expect("region");
+          const auto owner = ordinary_name();
+          if (std::find(type.capture_owners.begin(), type.capture_owners.end(), owner.text) != type.capture_owners.end())
+            fail(owner.at, "duplicate callable environment owner '" + owner.text + "'");
+          type.capture_owners.push_back(owner.text);
+        } while (take(","));
+        expect("]");
+      }
       expect("(");
       if (!take(")")) {
         do {
@@ -605,8 +627,14 @@ class Parser {
     }
     for (auto &parameter : form.parameters) {
       if (parameter.type.kind != Type::region) continue;
-      const bool used = form.result_owner == parameter.name || std::any_of(form.parameters.begin(), form.parameters.end(),
-          [&](const Parameter &other) { return other.owner == parameter.name; });
+      const auto mentions = [&](auto &&self, const Type &type) -> bool {
+        return std::find(type.capture_owners.begin(), type.capture_owners.end(), parameter.name) != type.capture_owners.end() ||
+               (type.target && self(self, *type.target)) || std::any_of(type.parameters.begin(), type.parameters.end(),
+                   [&](const Type &child) { return self(self, child); });
+      };
+      const bool used = form.result_owner == parameter.name || (form.result_type && mentions(mentions, *form.result_type)) ||
+          std::any_of(form.parameters.begin(), form.parameters.end(),
+              [&](const Parameter &other) { return other.owner == parameter.name || mentions(mentions, other.type); });
       if (!used) continue;
       if (!parameter.owner.empty() && parameter.owner != parameter.name)
         fail(parameter.at, "a named region owner cannot also name a different generic owner");

@@ -20,7 +20,7 @@ def main():
         scratch = Path(temporary)
         capture = " [state = state]" if variant == "slot" else ""
         (scratch / "base.cod").write_text('region Shape { val value:u64; }\n'
-            'export Shape;\nfunction reader(region state:Shape) -> func()->const u64 {\n'
+            'export Shape;\nfunction reader(region state:Shape) -> func[region state]()->const u64 {\n'
             f'  func{capture} () -> const u64 {{ state.value }}\n}}\nexport reader;\n')
         previous = "base.cod"
         levels = 64
@@ -29,7 +29,7 @@ def main():
             capture = " [prior = prior]" if variant == "slot" else ""
             (scratch / name).write_text(f'using "{previous}" reader as previous;\n'
                 'using "base.cod" Shape;\n'
-                'function reader(region state:Shape) -> func()->const u64 {\n'
+                'function reader(region state:Shape) -> func[region state]()->const u64 {\n'
                 '  const ref prior = previous(state);\n'
                 f'  func{capture} () -> const u64 {{ prior() + 1u64 }}\n}}\nexport reader;\n')
             previous = name

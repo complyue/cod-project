@@ -217,6 +217,7 @@ class Compiler {
     std::map<std::string, Type> bindings;
     std::vector<Type> parameters;
     std::optional<Type> result;
+    std::map<std::string, Value> owner_values;
   };
   std::vector<std::unique_ptr<Form>> mixed_forms_;
   struct Product {
@@ -510,11 +511,45 @@ class Compiler {
     return {};
   }
   void valid_view(const Value &value, const Location &at) {
+    for (const auto region : value.type.capture_regions)
+      if (!regions_.at(region).live)
+        fail(at, "callable owner contract " + type_name(value.type) + " requires a live region owner" +
+                 region_note(region, "this captured region's owner was acquired here"));
     if (value.procedure)
       for (const auto &[name, capture] : value.procedure->lexical_captures.visible) valid_view(capture, at);
     if (value.region_id) region_pointer(value, at);
     if (value.storage && value.storage->scope && !scopes_.at(*value.storage->scope))
       fail(at, "borrowed value would outlive its lexical storage owner");
+  }
+  std::map<size_t, Value> closure_regions(const Value &value) {
+    std::map<size_t, Value> result;
+    if (!value.procedure) return result;
+    for (const auto &[name, capture] : value.procedure->lexical_captures.visible) {
+      auto dependencies = closure_regions(capture);
+      if (capture.region_id) dependencies.emplace(*capture.region_id, borrowed(capture));
+      for (const auto &[id, access] : dependencies) {
+        const auto [found, inserted] = result.emplace(id, access);
+        if (!inserted) found->second.read_only = found->second.read_only && access.read_only;
+      }
+    }
+    return result;
+  }
+  Type bind_capture_type(Type type, const std::map<std::string, Value> &owners, const Location &at, bool partial = false) {
+    if (type.kind != Type::procedure) return type;
+    if (type.capture_regions.empty() && (!partial || std::all_of(type.capture_owners.begin(), type.capture_owners.end(),
+        [&](const std::string &name) { return owners.contains(name); }))) {
+      for (const auto &name : type.capture_owners) {
+        const auto found = owners.find(name);
+        if (found == owners.end() || !found->second.region_id)
+          fail(at, "callable environment owner '" + name + "' must name a declared, inferred region owner");
+        type.capture_regions.push_back(*found->second.region_id);
+      }
+      std::sort(type.capture_regions.begin(), type.capture_regions.end());
+      type.capture_regions.erase(std::unique(type.capture_regions.begin(), type.capture_regions.end()), type.capture_regions.end());
+    }
+    for (auto &parameter : type.parameters) parameter = bind_capture_type(parameter, owners, at, partial);
+    if (type.target) type.target = std::make_shared<Type>(bind_capture_type(*type.target, owners, at, partial));
+    return type;
   }
   LLVMEmission::Place place(const Value &value, const Location &at) {
     valid_view(value, at);
@@ -735,6 +770,16 @@ class Compiler {
     actual = contextual(std::move(actual), visible);
     if (!accepts(actual, expected, visible, at)) {
       auto message = "expected " + type_name(expected) + ", got " + type_name(actual.type);
+      if (actual.type.kind == Type::procedure && expected.kind == Type::procedure &&
+          actual.type.capture_regions != expected.capture_regions) {
+        message = "callable environment owner mismatch: " + message;
+        if (expected.capture_owners.empty())
+          message += "\n" + location_text(at) + ": note: declare retained regions in the callable type, for example func[region r]()->const u64";
+        for (const auto id : actual.type.capture_regions)
+          message += region_note(id, "the returned or supplied callable retains this region owner");
+        for (const auto id : expected.capture_regions)
+          message += region_note(id, "the callable signature requires this actual region owner");
+      }
       if (expected.kind == Type::abstract_type) {
         message += "\n" + location_text(at) + ": note: required interface is not established in module '" + visible.path + "'";
         for (const auto &relation : actual.conformances)
@@ -875,7 +920,7 @@ class Compiler {
     return form.parameters[std::min(index, form.parameters.size() - 1)];
   }
   std::optional<Signature> signature(const Form &form, const Module &lexical, const std::vector<Value> &args,
-                                      const Module &caller, const Location &at, bool required = false) {
+                                      const Module &caller, const Location &at, bool required = false, const Locals *captures = nullptr) {
     const auto reject = [&](const std::string &reason) -> std::optional<Signature> {
       if (required) fail(at, reason + " for '" + form.name + "'\n" + location_text(form.at) + ": note: signature declared here");
       return {};
@@ -909,34 +954,83 @@ class Compiler {
           return reject("type argument does not satisfy bound for '" + parameter.name + "'");
       }
     }
-    Signature result{type_context_.bindings, {}, {}};
-    std::map<std::string, std::pair<bool, size_t>> owners;
+    Signature result{type_context_.bindings, {}, {}, {}};
+    if (captures)
+      for (const auto &[name, value] : captures->visible)
+        if (value.type.kind == Type::region) result.owner_values.emplace(name, borrowed(value));
+    const auto bind_owner = [&](const std::string &name, Value value) -> std::optional<std::string> {
+      const auto declaration = std::find_if(form.owner_parameters.begin(), form.owner_parameters.end(),
+          [&](const auto &owner) { return owner.name == name; });
+      if (declaration == form.owner_parameters.end()) return "undeclared owner '" + name + "'";
+      const auto actual = storage_owner(value);
+      if (!actual) return "owner '" + name + "' requires storage with known provenance";
+      if (declaration->root) {
+        if (!value.region_id) return "region owner '" + name + "' cannot bind lexical storage";
+        const auto &metadata = regions_.at(*value.region_id);
+        if (!metadata.root || !accepts(contextual(scalar(*metadata.root, nullptr), caller),
+            resolve(*declaration->root, lexical, declaration->at), caller, at))
+          return "region owner '" + name + "' does not satisfy its root constraint";
+        Type type{Type::region}; type.target = std::make_shared<Type>(*metadata.root);
+        auto region = scalar(type, metadata.owner, value.region_id);
+        region.read_only = value.read_only; region.conformances = value.conformances;
+        value = std::move(region);
+      }
+      const auto [found, inserted] = result.owner_values.emplace(name, borrowed(value));
+      if (!inserted) {
+        if (storage_owner(found->second) != actual) return "owner '" + name + "' requires the same actual owner";
+        found->second.read_only = found->second.read_only && value.read_only;
+      }
+      return {};
+    };
     for (size_t i = 0; i < args.size(); ++i) {
       const auto &parameter = parameter_at(form, i);
       if (form.operation && ((form.name == "=" && i == 0) || swap_operation(form.name)) && args[i].read_only != parameter.read_only)
         return reject("reference-assignment destination requires an exact const qualifier");
       if (args[i].read_only && !parameter.read_only &&
           (object_type(args[i].type) || !parameter.owner.empty()))
-        return reject("read-only object cannot satisfy a writable parameter");
-      if (!parameter.owner.empty()) {
-        const auto declaration = std::find_if(form.owner_parameters.begin(), form.owner_parameters.end(),
-            [&](const auto &owner) { return owner.name == parameter.owner; });
-        if (declaration == form.owner_parameters.end()) return reject("undeclared parameter owner '" + parameter.owner + "'");
-        const auto actual = storage_owner(args[i]);
-        if (!actual) return reject("external owner requires target storage with known provenance");
-        const auto [found, inserted] = owners.emplace(parameter.owner, *actual);
-        if (!inserted && found->second != *actual) return reject("arguments require the same actual owner");
-        if (declaration->root) {
-          if (!args[i].region_id) return reject("a region owner cannot bind lexical storage");
-          const auto &root = regions_.at(*args[i].region_id).root;
-          if (!root || !accepts(contextual(scalar(*root, nullptr), caller),
-                               resolve(*declaration->root, lexical, declaration->at), caller, at))
-            return reject("argument region does not satisfy its root constraint");
-        }
-      }
-      result.parameters.push_back(resolve(parameter.type, lexical, parameter.at));
+        return reject("cannot pass a read-only view to a writable parameter");
+      if (!parameter.owner.empty())
+        if (const auto error = bind_owner(parameter.owner, args[i])) return reject(*error);
     }
-    if (form.result_type) result.result = resolve(*form.result_type, lexical, form.at);
+    // Infer a single unbound environment owner from a callable argument. Multiple
+    // unknown roles need explicit owner arguments; never assign roles by slot order.
+    for (size_t i = 0; i < args.size(); ++i) {
+      const auto &pattern = parameter_at(form, i).type;
+      if (pattern.kind != Type::procedure || pattern.capture_owners.empty()) continue;
+      std::set<size_t> remaining(args[i].type.capture_regions.begin(), args[i].type.capture_regions.end());
+      std::vector<std::string> unknown;
+      for (const auto &name : pattern.capture_owners) {
+        if (const auto found = result.owner_values.find(name); found != result.owner_values.end()) {
+          if (!found->second.region_id) return reject("callable environment owner '" + name + "' must be regional");
+          remaining.erase(*found->second.region_id);
+        } else unknown.push_back(name);
+      }
+      if (!unknown.empty()) {
+        if (unknown.size() != 1 || remaining.size() != 1)
+          return reject("cannot uniquely infer callable environment owners; supply explicit region arguments");
+        const auto dependencies = closure_regions(args[i]);
+        const auto found = dependencies.find(*remaining.begin());
+        if (found == dependencies.end()) return reject("callable environment lacks its declared region provenance");
+        if (const auto error = bind_owner(unknown.front(), found->second)) return reject(*error);
+      }
+    }
+    const auto check_names = [&](auto &&self, const Type &type) -> std::optional<std::string> {
+      if (type.kind != Type::procedure) return {};
+      for (const auto &name : type.capture_owners)
+        if (!result.owner_values.contains(name)) return "callable environment owner '" + name + "' has no argument or captured region anchor";
+      for (const auto &parameter : type.parameters)
+        if (auto error = self(self, parameter)) return error;
+      return type.target ? self(self, *type.target) : std::nullopt;
+    };
+    for (const auto &parameter : form.parameters)
+      if (auto error = check_names(check_names, parameter.type)) return reject(*error);
+    if (form.result_type)
+      if (auto error = check_names(check_names, *form.result_type)) return reject(*error);
+    for (size_t i = 0; i < args.size(); ++i) {
+      const auto &parameter = parameter_at(form, i);
+      result.parameters.push_back(bind_capture_type(resolve(parameter.type, lexical, parameter.at), result.owner_values, parameter.at));
+    }
+    if (form.result_type) result.result = bind_capture_type(resolve(*form.result_type, lexical, form.at), result.owner_values, form.at);
     return result;
   }
   static void require(Type actual, Type expected, const Location &at) {
@@ -1378,6 +1472,8 @@ class Compiler {
       if (declared == symbol_types_.end() || !accepts(value, declared->second, owner, at))
         fix_type(id, value.type, at);
     } else if (value.type.kind == Type::procedure && symbol_types_.contains(id)) {
+      if (!value.type.capture_regions.empty())
+        fail(at, "symbolic procedure binding cannot erase captured region owners; use an owner-anchored lexical callable");
       auto actual = value.type;
       auto declared = symbol_types_.at(id);
       const bool permitted = actual.throws_types.empty() || !declared.throws_types.empty();
@@ -1458,7 +1554,10 @@ class Compiler {
       proc->captures.captured_context = true;
       proc->captures.captured_bindings = env.bindings;
     }
-    return {procedure_type(form, lexical), {}, std::move(proc), &lexical};
+    Value result{procedure_type(form, lexical), {}, std::move(proc), &lexical};
+    result.type = bind_capture_type(result.type, result.procedure->lexical_captures.visible, form.at, true);
+    for (const auto &[id, access] : closure_regions(result)) result.type.capture_regions.push_back(id);
+    return result;
   }
   Value block(const Expression &expr, const Module &module, Environment env, Locals locals,
               bool function_context, bool discard_result = false, std::optional<Type> result_type = {}, bool copy_result = false,
@@ -1552,7 +1651,7 @@ class Compiler {
     const bool throws_npe = declares_npe(form.throws_types, lexical, form.at);
     if (throws_npe) require_npe_handler(at);
     const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, throws_npe);
-    const auto instantiated = *signature(form, lexical, args, caller, at, true);
+    const auto instantiated = *signature(form, lexical, args, caller, at, true, captures);
     const auto types = llvm::SaveAndRestore(type_context_, TypeContext{&lexical, instantiated.bindings});
     if (!form.body) fail(at, "callable '" + form.name + "' has no method implementation");
     if (!function_context) {
@@ -1614,24 +1713,11 @@ class Compiler {
     for (auto &parameter : parameters)
       if (parameter.type.owned) parameter = hold_region(take_owner(parameter, at), false, true);
     Locals locals = captures ? captures->nested() : Locals{};
-    std::map<std::string, Value> owner_values;
+    const auto &owner_values = instantiated.owner_values;
     for (const auto &owner : form.owner_parameters) {
-      std::optional<Value> region;
-      for (size_t i = 0; i < parameters.size(); ++i) {
-        if (parameter_at(form, i).owner != owner.name) continue;
-        if (!owner.root) { region = parameters[i]; break; }
-        auto &metadata = regions_.at(*parameters[i].region_id);
-        if (!region) {
-          Type type{Type::region};
-          if (metadata.root) type.target = std::make_shared<Type>(*metadata.root);
-          region = scalar(type, region_pointer(parameters[i], at), parameters[i].region_id);
-          region->read_only = parameters[i].read_only;
-          region->conformances = parameters[i].conformances;
-        } else region->read_only = region->read_only && parameters[i].read_only;
-      }
-      if (!region) fail(owner.at, "cannot infer owner '" + owner.name + "' from the arguments");
-      owner_values.emplace(owner.name, *region);
-      if (owner.root && !owner.explicit_parameter) declare_local(locals, owner.name, *region, lexical, owner.at);
+      const auto found = owner_values.find(owner.name);
+      if (found == owner_values.end()) fail(owner.at, "cannot infer owner '" + owner.name + "' from the arguments");
+      if (owner.root && !owner.explicit_parameter) declare_local(locals, owner.name, found->second, lexical, owner.at);
     }
     const auto fixed = form.parameters.size() - (variadic(form) ? 1 : 0);
     const bool rebind = form.operation && form.name == "=";
@@ -2406,7 +2492,7 @@ class Compiler {
       return {};
     }
     {
-      const auto instantiated = *signature(*proc->form, *proc->lexical, args, module, expr.at, true);
+      const auto instantiated = *signature(*proc->form, *proc->lexical, args, module, expr.at, true, &proc->lexical_captures);
       const auto types = llvm::SaveAndRestore(type_context_, TypeContext{proc->lexical, instantiated.bindings});
       for (size_t i = 0; i < args.size(); ++i) {
         if (const auto path = route(args[i].type, parameter_at(*proc->form, i), *proc->lexical, module, expr.at))
@@ -2985,9 +3071,14 @@ class Compiler {
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> values, categories;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> addresses;
     for (const auto &completion : completions) {
+      if (completion.value.procedure != result.procedure) {
+        std::string message = "runtime selection of different callable captures is outside this experiment; select regional state inside one callable";
+        for (const auto &candidate : completions)
+          for (const auto id : candidate.value.type.capture_regions)
+            message += region_note(id, "a callable alternative retains this actual region owner");
+        fail(at, message);
+      }
       require(completion.value.type, result.type, at);
-      if (completion.value.procedure != result.procedure)
-        fail(at, "runtime selection of different callable captures is outside this experiment; select regional state inside one callable");
       result.read_only = result.read_only || completion.value.read_only;
       result.nullable = result.nullable || completion.value.nullable;
       result.nonnull_when.reset();
@@ -3200,6 +3291,9 @@ class Compiler {
             declaration->annotation->kind != Type::reference)
           value = target_view(std::move(value), declaration->at);
         if (value.procedure && expr.declaration_kind == "ref" && expr.fixed_binding) {
+          if (declaration->annotation)
+            value = admit(std::move(value), bind_capture_type(resolve(*declaration->annotation, module, declaration->at),
+                          locals.visible, declaration->at), module, declaration->at);
           declare_local(locals, declaration->text, std::move(value), module, declaration->at);
           continue;
         }

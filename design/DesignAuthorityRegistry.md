@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：450
+记录版本：451
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -207,7 +207,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 450，延续检查 K-01—K-449；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
+- 当前记录维护范围：记录版本 451，延续检查 K-01—K-450；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
 
 ### 待补确认的现有技术设计
 
@@ -479,7 +479,7 @@ Design authority
 <a id="d-18"></a>
 ### D-18: Structural region and closure experimental comparison
 
-- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 3, all sections; H-324 confirms autonomous multi-branch design/implementation/validation within existing principles, with trade-offs reserved for final human review. P-293 records the scoped value path to C-73/C-74.
+- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 4, all sections; H-324 confirms autonomous multi-branch design/implementation/validation within existing principles, with trade-offs reserved for final human review. P-293 records the scoped value path to C-73/C-74.
 - **Boundaries:** No final adoption, cross-region stored edges, lexical-cell promotion, hidden user heap, new RTTI, bootstrap/configuration changes or SNN model decisions. Existing memory/effect/module/exception/fraction invariants constrain every candidate.
 - **Acceptance:** At least two useful alternatives with working native examples, invalid-program rejection, practical code and complexity comparison, exact evidence and an active-time ledger. Stop for review no later than 48 active work hours even if incomplete; waiting is excluded.
 
@@ -785,6 +785,7 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-291 | C-74 derives-from | C-39 / C-65 | Candidate: explicit region products and required field subsets express reusable storage operations in CoD while retaining concrete allocation ownership, instead of requiring a particular host root class. H-323 proposes this value path; D-13r29 matching/identity/construction/allocator policy remains pending-human. |
 | P-292 | C-74 depends-on | C-72 / C-54 / D-01 | Dependency: structural matching must account for val/ref/ptr storage, access and initialization, whole-region lifetime/transfer and relocation-safe physical representation. D-13r29/D-14r71; H-311/H-190 remain scoped baselines. This edge does not authorize a new allocator policy, per-object ownership, RTTI or a C++ representation change. |
 | P-293 | D-18 derives-from | C-73 / C-74 | H-324 authorizes experimental alternatives and native comparison to find practical, low-debt regional storage/capture semantics within charter/repository principles. D-18r1 scope is confirmed for branch-local exploration and evidence, not adoption of each candidate mechanism. D-14/D-13/D-10/D-17/D-16 and D-01/D-15 constraints remain. |
+| P-294 | D-18 derives-from | C-65 / C-73 | H-325 confirms the value of source-visible callable owner declarations for ownership reasoning and diagnostics. D-18r4 experimentally checks named actual-region dependencies in both capture alternatives; syntax and detailed matching remain review candidates. |
 
 
 ### 影响检索索引
@@ -4490,6 +4491,14 @@ Human/source: current user, current conversation, recorded 2026-11-11 UTC; exact
 > 设goal保持自主推进
 
 Scope: explicitly authorizes baseline commit, autonomous multi-branch experimental design/implementation and validation of the regional closure refactor within repository principles, with final trade-offs reserved for review. The task is bounded by 48 active work hours and excludes waiting. Routine candidate design choices within this experimental scope may be tried without individual prior confirmation; this is not a charter change or final ratification of all candidates. No bootstrap/toolchain mutation or new RTTI is inferred. D-18r1/P-293 records the experimental contract and acceptance; the autonomous goal is active.
+
+<a id="h-325"></a>
+
+Human/source: current user, current conversation, recorded 2026-11-11 UTC; exact source-message timestamp unavailable.
+
+> 我注重 `-> func()->const u64` 这里缺少形式化owner声明的问题，用户心智和编译报错都会缺少owner概念锚定点。 目前两个方案各自独立增强这方面的设计关照，或者先合并一个可以确定的基底进展，都可以，你综合考虑决定，推进设计和验证
+
+Scope: prioritizes formal owner declarations in callable interfaces as anchors for reader understanding and compiler diagnostics. Authorizes design and validation in both experimental alternatives, with discretion to consolidate a determined common foundation. It does not select a particular annotation spelling, exact-versus-upper-bound dependency policy, implicit owner inference scheme, TLS contract or final capture mechanism. D-18r4/P-294 records this incremental experimental scope under H-324's governing principles.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -9137,3 +9146,11 @@ Scope: explicitly authorizes baseline commit, autonomous multi-branch experiment
 - B-01 replaces implicit free-name scanning with explicit capture lists: regional field/element/already-captured slots, borrowed owners and static callable values use `=`, while immutable bits copies use `<-`. It preserves actual owner checks, nullable/access obligations and distinct dynamic procedure capture semantics. Slot identity is carried by local binding metadata, never by an ordinary loaded alias value. Reference-slot swaps reuse the established same-owner/type/access contract.
 - Native examples compare retained leaf slots with owner-based paths, nested slot captures, copied local bits, slot/alias rebinding, nullable swaps and perform/behave. Compiler/runtime evidence and limitations are recorded in tests/cod/language/exploration/slots-validation.json. The native runtime, LLVM emitter and relative-pointer representation are unchanged. The review recommendation favors explicit captures but remains pending human selection; no final contract is merged into main.
 - B-01 final validation: 273/273 language cases, native relocation/ownership/exception probes, LLVM verification, 64-module nested callbacks and 10,000 bounded frame updates pass. The source manifest matches all 356 current compiler/test sources. Evidence extraction uses the runner’s fixture key to retain actual exploration outputs for both variants; original compiler/source hashes and outcomes are preserved.
+
+
+<a id="k-450"></a>
+
+- Registry450 →451; D-18r3 →4 records H-325/P-294's formal callable-owner priority and continues H-324's experimental branch scope. Charter §§1–3, D-14 actual-owner/access constraints and D-15 TLS/module separation remain; D-16 syntax/representation review finds no fraction or numeric change. D-GOV451 continues H-05 governance maintenance only.
+- C-01 tries `func[region r]()->...` / `proc[region r]()->...` type contracts, separated from callable storage and capture expressions. Named owners bind to actual region instances, propagate through helpers, and anchor mismatch/lifetime errors. The bounded trial uses exact owner sets, single-unknown inference and explicit anchors for ambiguous multiple roles; these choices remain experimental, not newly ratified language policy.
+- Both variants retain their capture mechanism. No merge to main, runtime environment allocation, RTTI, pointer encoding change or TLS contract extension is inferred. Existing unanchored symbolic procedure declarations cannot erase lexical closure dependencies; that case is explicitly rejected while dynamic-region-symbol capture retains its established behavior. Validation evidence follows in this event's checkpoint.
+- Explicit-slot checkpoint: source-only build, 280/280 language cases, native ownership/exception/relocation checks and 64-module/10,000-frame composition pass. tests/cod/language/exploration/slots-owner-contract-validation.json records exact compiler/source identities and diagnostics; implicit owner capture is validated separately against the same contract.

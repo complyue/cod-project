@@ -1,0 +1,10 @@
+using "structural-api.cod" Counter;
+function reader(const region state:Counter) -> func[region state]()->const u64 {
+  func [state = state] () -> const u64 { state.ticks }
+}
+function mutate(action:func[region r]()->const u64) -> void where {region r:Counter} {
+  r.ticks <- 1u64;
+  {}
+}
+owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
+mutate(reader(state));
