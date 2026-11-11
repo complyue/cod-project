@@ -1,10 +1,10 @@
 # Structural regions and regional closures: experimental comparison
 
-Design revision: 1 · Recorded: 2026-11-10 · Status: authorized experimental scope; final language selection pending.
+Design revision: 2 · Recorded: 2026-11-10 · Status: authorized experimental scope; final language selection pending.
 
 ## Design authority
 
-- Registry: [D-18](DesignAuthorityRegistry.md#d-18), revision 1, all sections; [H-324](DesignAuthorityRegistry.md#h-324)/[K-447](DesignAuthorityRegistry.md#k-447).
+- Registry: [D-18](DesignAuthorityRegistry.md#d-18), revision 2, all sections; [H-324](DesignAuthorityRegistry.md#h-324)/[K-448](DesignAuthorityRegistry.md#k-448).
 - Value path: D-18/P-293 to C-73/C-74 explores practical, explicit storage and lifetime contracts serving charter §§1–3 through C-65/C-39. H-324 explicitly authorizes autonomous alternative design, branch implementation and empirical comparison within repository principles; this does not approve every experimental mechanism as the final language.
 - Dependencies: D-14 owners/field kinds, D-13 storage policy, D-10 callables/effects, D-17 failures/scopes and D-16 fixed bits/future fractions. D-01 relocation/allocator invariants and D-15 module-world/TLS separation remain constraints.
 - Non-goals: new RTTI, bootstrap/toolchain work, SNN learning/model selection, per-object ownership, hidden heap closures, cross-region stored pointers, copying/moving regional objects or merging a final design without review.
@@ -45,3 +45,19 @@ Progress and active-time checkpoints are recorded in the exploration evidence di
 The [structural validation](../tests/cod/language/exploration/structural-validation.json) records 259/259 passing language checks, including different concrete layouts used through one cross-module field requirement, owner inference, readonly rejection, field-kind/type rejection and unique-most-specific versus ambiguous shape dispatch. Compilation uses the existing native LLVM path and unchanged regional runtime.
 
 Requirements act as lower bounds; WPO retains the concrete layout and type for nested dispatch. They do not currently hide extra fields from a demanded helper body. Treating a requirement as a restricted access view is a separate comparison dimension, not a runtime layout cast. Existing data-root syntax remains for baseline comparison, and this checkpoint provides no closure implementation evidence.
+
+## A-01: Owner-based callable captures
+
+Named nested and anonymous func/proc definitions may retain actual regional access and compile-time-known callable values. Ordinary lexical val/ref/ptr capture rejects. A body uses explicit paths such as state.current, reloading each field when called. A returned callback retains its actual region dependency without retaining its defining call scope or acquiring a second owner. Func callbacks use explicit memory and cannot invoke procedures or access dynamic effects. Proc callbacks preserve the existing lexical/current and perform/captured dynamic distinction.
+
+```text
+function reader(region state:Counter) -> func()->const u64 {
+    func () -> const u64 { state.ticks }
+}
+```
+
+The [owner validation](../tests/cod/language/exploration/owners-validation.json) records 266/266 language checks, native regional/exception/ownership checks, a 64-module nested-return composition and 10,000 two-frame updates with bounded occupation. Captures see later field writes and pointer rebinding, survive permitted local ownership transfer and reject expired regions or readonly mutation. Mixin preserves nested callable kind and anonymous identity.
+
+This branch keeps callable identity and captured access in WPO metadata. It does not provide a stored runtime closure descriptor. A control-flow join of different callable/capture values rejects explicitly; a single callable may still follow runtime-selected regional fields. The explicit-block/defer/contextual-callback increment remains separate. A field requirement is a minimum, not a restricted view hiding concrete fields.
+
+An owner capture follows an entire field path on every call. Thus a callback using state.link.current observes rebinding of state.link as well as current. Whether a library instead needs to keep the original current slot is the practical question for B-01.

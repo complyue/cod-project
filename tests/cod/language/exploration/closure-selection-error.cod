@@ -1,0 +1,9 @@
+using "structural-api.cod" Counter;
+using "owner-closure-library.cod" reader;
+function select(region a:Counter, region b:Counter, flag:bool) -> func()->const u64 {
+  if (flag) { reader(a) } else { reader(b) }
+}
+owned region first:Counter <- make Counter(capacity = 128u64) { ticks <- 1u64 };
+owned region second:Counter <- make Counter(capacity = 128u64) { ticks <- 2u64 };
+const ref chosen = select(first, second, false);
+chosen();

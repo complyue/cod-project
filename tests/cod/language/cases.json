@@ -1592,5 +1592,44 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "ambiguous"
+  },
+  {
+    "file": "exploration/owner-closures.cod",
+    "exit": 0,
+    "stdout": "3\n9\n9\n10\n0\n42\n7\n11\n10\n"
+  },
+  {
+    "file": "exploration/closure-lexical-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot capture a lexical variable"
+  },
+  {
+    "file": "exploration/closure-escape-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "live owning region"
+  },
+  {
+    "file": "exploration/closure-readonly-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "exploration/closure-selection-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "runtime selection of different callable captures"
+  },
+  {
+    "file": "exploration/closure-mixin.cod",
+    "exit": 0,
+    "stdout": "23\n24\n"
+  },
+  {
+    "file": "exploration/closure-frames.cod",
+    "exit": 0,
+    "stdout": "4\n3\n"
   }
 ]

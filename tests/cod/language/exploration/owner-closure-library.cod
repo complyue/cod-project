@@ -1,0 +1,17 @@
+using "structural-api.cod" Counter;
+using "structural-api.cod" Cursor;
+using "std:exceptions" NullPointerException;
+function reader(region state:Counter) -> func()->const u64 {
+  func () -> const u64 { state.ticks }
+}
+proc current_reader(region state:Cursor) -> proc()->const i64 throws NullPointerException {
+  proc () -> const i64 throws NullPointerException { state.current.value }
+}
+function apply(action:func()->const u64) -> const u64 { action() }
+export reader;
+export current_reader;
+export apply;
+function wrap(action:func()->const u64) -> func()->const u64 {
+  func () -> const u64 { action() + 1u64 }
+}
+export wrap;

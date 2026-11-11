@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+using "closure-mixin-source.cod" Counter;
+mixin "closure-mixin-source.cod" factory;
+owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 23u64 };
+const ref read = factory(state);
+behave @print(read());
+state.ticks <- 24u64;
+behave @print(read());

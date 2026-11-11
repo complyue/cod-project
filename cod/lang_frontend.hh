@@ -111,6 +111,7 @@ struct Procedure {
   const Module *lexical = nullptr;
   std::string builtin;
   Environment captures;
+  Locals lexical_captures;
   ImplementationContext implementation{};
   std::vector<CallableDeclaration> declarations;
 };
@@ -507,6 +508,8 @@ class Compiler {
     return {};
   }
   void valid_view(const Value &value, const Location &at) {
+    if (value.procedure)
+      for (const auto &[name, capture] : value.procedure->lexical_captures.visible) valid_view(capture, at);
     if (value.region_id) region_pointer(value, at);
     if (value.storage && value.storage->scope && !scopes_.at(*value.storage->scope))
       fail(at, "borrowed value would outlive its lexical storage owner");
@@ -611,6 +614,7 @@ class Compiler {
     const bool owns = result.type.kind == Type::region && result.type.owned;
     if (owns) result = take_owner(result, at);
     close_holdings(holding_begin, result, at);
+    if (result.procedure) valid_view(result, at);
     ir_.restore(native_scope);
     if (owns) result = hold_region(std::move(result), parent_module, true);
     return result;
@@ -1083,7 +1087,7 @@ class Compiler {
   }
   static std::unique_ptr<Form> procedure_header(const Form &source) {
     auto form = std::make_unique<Form>();
-    form->kind = Form::Kind::procedure;
+    form->kind = source.kind;
     form->at = source.at;
     form->name = source.name;
     form->symbolic = source.symbolic;
@@ -1122,7 +1126,7 @@ class Compiler {
       expr->children.push_back(mixin_expression(*child, source, receiver, names, identities, used));
     if (source_expr.definition) {
       expr->definition = procedure_header(*source_expr.definition);
-      expr->definition->name = expr->text;
+      if (expr->kind == Expression::Kind::procedure_effect) expr->definition->name = expr->text;
       expr->definition->body = mixin_expression(*source_expr.definition->body, source, receiver, names, identities, used);
     }
     return expr;
@@ -1151,6 +1155,7 @@ class Compiler {
   }
   Type procedure_type(const Form &form, const Module &module) {
     Type type{Type::procedure};
+    type.pure_callable = form.kind == Form::Kind::function;
     const auto context = llvm::SaveAndRestore(type_context_, TypeContext{&module, {}});
     for (size_t i = 0; i < form.type_parameters.size(); ++i)
       type_context_.bindings.emplace(form.type_parameters[i].name, Type{Type::parameter, {}, i});
@@ -1387,11 +1392,72 @@ class Compiler {
     for (const auto &child : expr.children) resolve_procedure_symbols(*child, module);
     if (expr.definition) resolve_procedure_symbols(*expr.definition->body, module);
   }
-  Value define_procedure(Form &form, const Module &lexical, const Environment &env) {
+  Locals capture_regions(const Form &form, const Locals &outer) {
+    Locals captures;
+    const auto capture = [&](const std::string &name, const Location &at, const std::set<std::string> &bound) {
+      if (bound.contains(name) || captures.visible.contains(name)) return;
+      const auto found = outer.visible.find(name);
+      if (found == outer.visible.end()) return;
+      auto value = found->second;
+      if (value.type.kind != Type::region && !value.procedure)
+        fail(at, "a closure cannot capture a lexical variable; access its region and regional fields explicitly");
+      valid_view(value, at);
+      if (value.type.kind == Type::region) value = borrowed(std::move(value));
+      captures.declare(name, std::move(value), outer.locations.at(name));
+    };
+    const auto scan = [&](auto &&self, const Expression &expr, std::set<std::string> &bound) -> void {
+      using K = Expression::Kind;
+      if (expr.kind == K::name || expr.kind == K::call) capture(expr.text, expr.at, bound);
+      if (!expr.owner_name.empty()) capture(expr.owner_name, expr.at, bound);
+      if (expr.kind == K::block) {
+        auto inner = bound;
+        for (const auto &child : expr.children) self(self, *child, inner);
+        return;
+      }
+      if (expr.kind == K::pointer_group) {
+        for (const auto &child : expr.children) {
+          self(self, *child, bound);
+          if (child->kind == K::pointer) bound.insert(child->text);
+        }
+        return;
+      }
+      if (expr.kind == K::range_for || expr.kind == K::fold) {
+        const auto body = expr.kind == K::fold ? 3u : 2u;
+        for (size_t i = 0; i < body; ++i) self(self, *expr.children[i], bound);
+        auto inner = bound; inner.insert(expr.text);
+        if (expr.kind == K::fold) inner.insert(expr.binding);
+        self(self, *expr.children[body], inner);
+        if (expr.children.size() > body + 1) self(self, *expr.children.back(), bound);
+        return;
+      }
+      if (expr.definition) {
+        auto inner = bound;
+        for (const auto &parameter : expr.definition->parameters) inner.insert(parameter.name);
+        for (const auto &owner : expr.definition->owner_parameters) inner.insert(owner.name);
+        self(self, *expr.definition->body, inner);
+        if (expr.kind == K::callable && !expr.definition->name.empty()) bound.insert(expr.definition->name);
+        return;
+      }
+      if (expr.kind == K::handler) {
+        auto inner = bound; inner.insert(expr.text);
+        for (const auto &child : expr.children) self(self, *child, inner);
+        return;
+      }
+      for (const auto &child : expr.children) self(self, *child, bound);
+      if (expr.kind == K::region_binding) bound.insert(expr.text);
+    };
+    std::set<std::string> bound;
+    for (const auto &parameter : form.parameters) bound.insert(parameter.name);
+    for (const auto &owner : form.owner_parameters) bound.insert(owner.name);
+    scan(scan, *form.body, bound);
+    return captures;
+  }
+  Value define_procedure(Form &form, const Module &lexical, const Environment &env, const Locals &locals = {}) {
     resolve_procedure_symbols(*form.body, lexical);
     auto proc = std::make_shared<Procedure>();
     proc->form = &form;
     proc->lexical = &lexical;
+    proc->lexical_captures = capture_regions(form, locals);
     // This is compiler metadata, not a runtime closure or a retained region.
     // SSA values already represent each binding's value at its definition.
     // Only demanded reads generate native uses, after typed method selection.
@@ -1438,7 +1504,6 @@ class Compiler {
     scopes_[scope_id] = false;
     valid_view(result, expr.at);
     result = finish_scope(holding_begin, native_scope, std::move(result), expr.at, parent_module);
-    if (result.type.kind == Type::procedure) fail(expr.at, "procedure-valued scope results are not supported");
     if (result.arguments) fail(expr.at, "a variadic argument pack cannot escape its call scope");
     return result;
   }
@@ -1488,7 +1553,8 @@ class Compiler {
     });
   }
   Value call(Form &form, const Module &lexical, Environment env, const std::vector<Value> &args,
-             bool function_context, const Location &at, const Module &caller, ImplementationContext implementation = {}) {
+             bool function_context, const Location &at, const Module &caller, ImplementationContext implementation = {},
+             const Locals *captures = nullptr) {
     const bool throws_npe = declares_npe(form.throws_types, lexical, form.at);
     if (throws_npe) require_npe_handler(at);
     const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, throws_npe);
@@ -1529,7 +1595,7 @@ class Compiler {
     std::vector<Value> parameters;
     std::set<size_t> transferring;
     for (size_t i = 0; i < args.size(); ++i) {
-      if (args[i].region_id) region_pointer(args[i], at);
+      valid_view(args[i], at);
       auto parameter = admit(args[i], instantiated.parameters[i], caller, at);
       const auto &formal = parameter_at(form, i);
       if (parameter.type.kind == Type::region && formal.type.kind != Type::region)
@@ -1553,7 +1619,7 @@ class Compiler {
     // earlier owner or view. Transfers begin only at this callee-entry boundary.
     for (auto &parameter : parameters)
       if (parameter.type.owned) parameter = hold_region(take_owner(parameter, at), false, true);
-    Locals locals;
+    Locals locals = captures ? captures->nested() : Locals{};
     std::map<std::string, Value> owner_values;
     for (const auto &owner : form.owner_parameters) {
       std::optional<Value> region;
@@ -1981,8 +2047,16 @@ class Compiler {
         require_npe_handler(at);
     }
     // Lexical procedure calls use current bindings; perform uses captured values.
+    const Locals *captures = nullptr;
+    if (!function && !form.operation) {
+      const auto definition = match.function.lexical->world.procedures.find(&form);
+      if (definition != match.function.lexical->world.procedures.end()) {
+        valid_view(definition->second, at);
+        captures = &definition->second.procedure->lexical_captures;
+      }
+    }
     auto result = call(*match.function.form, *match.function.lexical, function ? Environment{} : env, args, function, at, caller,
-                       match.function.implementation);
+                       match.function.implementation, captures);
     if (form.operation && swap_operation(form.name) && result.type != Type::never)
       require(result.type, Type::void_type, at);
     if (form.operation && (form.name == "<-" || form.name == "[]<-") && result.type != Type::never && result.type != Type::void_type) {
@@ -2157,6 +2231,7 @@ class Compiler {
     if (expr.kind == K::field) {
       auto value = query_value(*expr.children.front(), module, locals);
       if (value.type.kind == Type::region && value.type.target) value.type = *value.type.target;
+      if (value.type.kind == Type::regional) resolve(value.type, module, expr.at);
       if (value.type.kind == Type::regional)
         for (const auto &field : products_.at(value.type.identity).fields)
           if (field.name == expr.text) {
@@ -2301,7 +2376,8 @@ class Compiler {
   }
   Value invoke_procedure(const Value &value, const Expression &expr, const Module &module,
                          Environment &env, Locals &locals, bool function_context, bool captured) {
-    if (function_context) fail(expr.at, "a function cannot invoke a procedure");
+    if (function_context && !value.type.pure_callable) fail(expr.at, "a function cannot invoke a procedure");
+    valid_view(value, expr.at);
     if (!value.procedure) fail(expr.at, "binding '" + expr.text + "' is not callable");
     if (!value.type.throws_types.empty()) require_npe_handler(expr.at);
     const auto proc = value.procedure; // Resolve before arguments/capture installation.
@@ -2337,14 +2413,17 @@ class Compiler {
           env, proc->captures.captured_bindings, proc->captures.replay, {}});
       binding_check(call_env, expr.at);
     }
-    auto result = call(*proc->form, *proc->lexical, std::move(call_env), args, false, expr.at, module, proc->implementation);
-    check_declarations(proc->declarations, Form::Kind::procedure, args, result, module, expr.at, declares_npe(proc->form->throws_types, *proc->lexical, proc->form->at));
+    const bool pure = value.type.pure_callable;
+    auto result = call(*proc->form, *proc->lexical, pure ? Environment{} : std::move(call_env), args, pure, expr.at, module, proc->implementation, &proc->lexical_captures);
+    check_declarations(proc->declarations, pure ? Form::Kind::function : Form::Kind::procedure, args, result, module, expr.at, declares_npe(proc->form->throws_types, *proc->lexical, proc->form->at));
     return result;
   }
   Value invoke(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                bool function_context) {
+    if (function_context) fail(expr.at, "a function cannot invoke a procedure");
     const auto id = expression_symbol(expr, module);
     const auto value = read_symbol(id, env, expr.at, false);
+    if (value.type.pure_callable) fail(expr.at, "perform/behave require a procedure, not a function");
     return invoke_procedure(value, expr, module, env, locals, function_context,
                             expr.kind == Expression::Kind::perform);
   }
@@ -2900,6 +2979,8 @@ class Compiler {
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> addresses;
     for (const auto &completion : completions) {
       require(completion.value.type, result.type, at);
+      if (completion.value.procedure != result.procedure)
+        fail(at, "runtime selection of different callable captures is outside this experiment; select regional state inside one callable");
       result.read_only = result.read_only || completion.value.read_only;
       result.nullable = result.nullable || completion.value.nullable;
       result.nonnull_when.reset();
@@ -3170,6 +3251,7 @@ class Compiler {
       }
       if (value.type.kind != Type::regional)
         fail(expr.at, "field access requires a product value; dereference regional pointers first");
+      resolve(value.type, module, expr.at);
       const auto &fields = products_.at(value.type.identity).fields;
       for (size_t i = 0; i < fields.size(); ++i) {
         if (fields[i].name != expr.text) continue;
@@ -3263,6 +3345,12 @@ class Compiler {
       return scalar(type, ir_.floating_literal(type, spelling));
     }
     case K::boolean: return scalar(Type::boolean, ir_.bits(Type::boolean, expr.text == "true"));
+    case K::callable: {
+      auto value = define_procedure(*expr.definition, module, env, locals);
+      if (expr.definition->name.empty()) return value;
+      declare_local(locals, expr.definition->name, std::move(value), module, expr.at);
+      return {};
+    }
     case K::pointer_group: return declaration_expression(expr, module, env, locals, function_context);
     case K::pointer: fail(expr.at, "ptr declarator requires a declaration group");
     case K::make_local: {
@@ -3315,6 +3403,14 @@ class Compiler {
           selected.procedure = std::move(procedure);
           return selected;
         }
+        if (method.form->kind == Form::Kind::function && method.form->body) {
+          auto value = define_procedure(*method.form, *method.lexical, {});
+          auto function = std::make_shared<Procedure>(*value.procedure);
+          function->implementation = method.implementation;
+          function->declarations = information.declarations;
+          value.procedure = std::move(function);
+          return value;
+        }
       }
       fail(expr.at, "unavailable lexical value '" + expr.text + "'");
     }
@@ -3328,7 +3424,7 @@ class Compiler {
     case K::procedure_effect: {
       if (function_context) fail(expr.at, "a function cannot establish procedure effects");
       const auto id = expression_symbol(expr, module);
-      auto value = define_procedure(*expr.definition, module, env);
+      auto value = define_procedure(*expr.definition, module, env, locals);
       bind(id, std::move(value), module, env, expr.at);
       scope_rebound_ = true;
       return {};
@@ -3878,7 +3974,7 @@ class Compiler {
           break;
         }
         if (form.operation) break;
-        auto value = define_procedure(form, module, env);
+        auto value = define_procedure(form, module, env, locals);
         if (form.symbolic) {
           const auto id = symbol(module, form.name, form.at);
           module.world.available_symbols.insert(form.name);
@@ -3934,7 +4030,7 @@ class Compiler {
                              "; to select that destination explicitly");
           auto value = resource->second;
           if (mixing)
-            value = define_procedure(mixin_body(*value.procedure, form, module), module, env);
+            value = define_procedure(mixin_body(*value.procedure, form, module), module, env, locals);
           else if (form.kind == Form::Kind::import_resource) {
             auto imported = std::make_shared<Procedure>(*value.procedure);
             if (imported->implementation.empty()) imported->implementation = {imported->lexical};
@@ -3981,7 +4077,7 @@ class Compiler {
               if (original == candidate.lexical->world.procedures.end())
                 fail(form.at, "procedure body requires its definition encounter before mixin");
               auto &body = mixin_body(*original->second.procedure, form, module);
-              auto value = define_procedure(body, module, env);
+              auto value = define_procedure(body, module, env, locals);
               declare_callable(module, body);
               module.world.procedures.emplace(&body, std::move(value));
             }
