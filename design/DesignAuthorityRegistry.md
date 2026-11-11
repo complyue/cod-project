@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：471
+记录版本：476
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -171,6 +171,8 @@ Design authority
 | C-77 | Initial manual root-type compatibility identifier, with later consideration of all participating ADT layouts and checksum-assisted matching. | C-08 scoped planning value P-308; representation dependency P-309 | H-352 selects the initial UUID-like manual marker and future investigation. D-07r148 DL-04; exact encoding, layout-comparison rules and checksum remain pending. No general RTTI or cross-architecture guarantee. |
 | C-78 | Language support for saving/replacing a disk file with a region snapshot, with application-controlled persistence workflow. | C-09 scoped planning value P-310; lifetime/layout dependencies P-311 | H-352 requests planning this facility; D-07r148 DL-09. Snapshot consistency, failures, replacement/durability semantics and API remain pending. Compaction scheduling and retention belong to applications/libraries. |
 | C-79 | Third-party intrinsic extension through a service provider interface; ordinary extensions through CoD libraries. | C-11 scoped planning value P-312; typed-context dependencies P-313 | H-352 identifies the expected SPI direction; D-07r148 DL-11. Registration, provider selection, native ABI, error/owner contracts and loading remain pending; no implementation or shared-registry mechanism is selected. |
+| C-80 | A compiler application designed in CoD: regional frontend/semantic artifacts, persistent stage reuse and selectively bound LLVM services, progressing toward self-hosting. | C-01/C-05 planning values P-314/P-315; native and language dependencies P-316/P-318; document P-317 | H-353 requests documentation only. D-20r3 includes H-354's output-initialization proposal and H-355's registration-time evaluation within defer terminology/syntax review. Cache schemas, handle/storage/cleanup contracts, output/registration grammar, concrete algorithms and implementation acceptance remain pending-human. |
+| C-81 | Write-only out reference parameters establish initialized output on normal return; a bare local handle ref declaration allocates uninitialized target storage. | C-65 candidate value P-319; owner/exception/native dependencies P-320 | H-354 proposes this direction for D-20r2's native initialization idiom. Modifier grammar, general declaration applicability, alias/failure postconditions and provider verification remain pending-human. No D-14/D-17 language implementation change is authorized. |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
 | GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
 
@@ -212,7 +214,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 471，延续检查 K-01—K-459、K-464、K-469—K-470；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
+- 当前记录维护范围：记录版本 476，延续检查 K-01—K-459、K-464、K-469—K-470、K-473—K-475；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
 
 ### 待补确认的现有技术设计
 
@@ -494,6 +496,13 @@ Design authority
 - **Contract/status:** [ConstFunctionsAndTailCalls.md](ConstFunctionsAndTailCalls.md), revision1; confirmed deferred planning/compatibility scope under H-346–H-348, detailed implementation contract pending-human. C-76/P-304/P-305 supplies the value path; P-306 records dependencies; P-307 records the required human conflict review. K-464 checks charter/dependency alignment without selecting implementation mechanisms.
 - **Boundary:** Pre-existing external state is readonly for the outermost const call; private mutation is permitted; the result is judged at immediate return. Later use of a returned ref/ptr is outside that boundary. No permanent freezing, implicit input copying, blanket optimizer purity, new escape channel or TCO outside const functions is planned. Internal callbacks must preserve the same boundary.
 - **Priority / acceptance:** H-345 requires ordinary function/procedure recursion now. Const functions, their TCO and persistent-data support are deferred and optional; current work must consult the human before activating materially conflicting choices. Future observations concern external-state preservation, private construction, valid immediate results and bounded-stack execution with correct cleanup. No implementation/build/test evidence is claimed.
+
+<a id="d-20"></a>
+### D-20: CoD compiler application and self-hosting plan
+
+- **Contract/status:** [applications/cod-booter/README.md](../applications/cod-booter/README.md), [CompilerPipeline.md](../applications/cod-booter/docs/CompilerPipeline.md) and [LLVMInterop.md](../applications/cod-booter/docs/LLVMInterop.md), document-set revision3, all sections. H-353 authorizes this parallel application planning; H-354/C-81/P-319/P-320 adds proposed output initialization and local handle storage. H-355 selects registration-time evaluation within defer terminology and requests syntax alternatives. The detailed designs and implementation contract remain `pending-human`; K-473–K-475 records draft revisions, not continuity of a qualified product design.
+- **Value/dependencies:** C-80/P-314/P-315 connects compiler semantics and DBMR reuse to C-01/C-05 and charter §§2/5.3–5.4/7/12. P-316 connects selected native services to C-02/C-11/C-79. P-317 records the draft's candidate value path; P-318 identifies language/representation constraints. H-353's planning agreement does not qualify all proposed artifact boundaries or native lifecycle mechanics.
+- **Boundaries / acceptance:** design from compiler operations rather than porting C++ classes; preserve independent module worlds, typed symbolic TLS, regional relocation and explicit owners. Future evidence must distinguish cached/uncached semantic correctness, fresh-process reuse, native-resource cleanup, self-hosting and compilation/runtime cost. No implementation, build, toolchain, cache format, registration-time syntax or provider ABI is selected. D-08 SNN and existing D-01/D-07/D-14–D-19 contracts retain their scopes.
 
 The following relationships apply only to the individually recorded scopes and revisions. Current document coverage is maintained in the status entries above; a historical row annotation does not qualify a later revision. P-31 remains rejected. P-69/P-70/P-83 retains its confirmed H-94 local scope; other human constraints and pending candidate paths retain their own recorded status. Dependency edges never confer design authority.
 
@@ -811,6 +820,13 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-311 | C-78 depends-on | D-01 / C-54 | Snapshot output requires a valid regional image and a defined lifetime/access boundary during capture. Dependency only; no frozen-copy mechanism, concurrent writer protocol, allocation strategy or ownership transfer is selected. D-07r148 DL-09 keeps these interface obligations open. |
 | P-312 | C-79 derives-from | C-11 / C-02 | A provider interface can expose third-party native capabilities as typed intrinsics while business/data-structure extensions stay in CoD libraries. H-352 confirms investigation of this integration direction; D-07r148 DL-11 does not qualify a native ABI or provider-loading mechanism. |
 | P-313 | C-79 depends-on | C-37 / C-54 / D-15 / D-17 | Intrinsic providers must preserve callable/effect classification, owner/lifetime responsibility, module-world selection and error contracts. This dependency identifies design obligations, not permission to bypass checks, edit another world or add runtime code loading. Detailed SPI design remains pending. |
+| P-314 | C-80 derives-from | C-01 | A compiler implemented around typed CoD operations makes compiler intent inspectable and exercises the language on its own domain. H-353 confirms this planning direction, explicitly avoiding a C++ implementation port; D-20r1. Exact frontend/semantic encodings remain pending. |
+| P-315 | C-80 derives-from | C-05 | Saving reusable regional compiler stages as DBMR can avoid repeated graph reconstruction in large-project compilation. H-353 requests investigation of this value; D-20r1. Stage boundaries, validity keys, publication and measured benefit are pending, not guaranteed by relocation. |
+| P-316 | C-80 depends-on | C-02 / C-11 / C-78 / C-79 | Native code emission needs selected LLVM services; persistent stage reuse needs snapshot support. H-352/H-353 names these dependencies without selecting provider ABI, handle classification, save/replacement behavior or implementation order. |
+| P-317 | D-20 derives-from | C-80 | A separate application plan makes compiler use cases, boundaries and remaining choices reviewable without changing language contracts by implication. H-353 authorizes drafting; this revision's detailed design/value path remains pending-human. |
+| P-318 | C-80 depends-on | D-01 / D-14 / D-15 / D-16 / D-17 / D-18 | Regional layouts, owners/initialization, module identities, numeric conventions, exceptions/defer and callable values constrain the pilot. Dependency only: no lexical-cell capture, native-handle persistence, eager grammar or broader qualification follows. D-20r1 lists the review obligations. |
+| P-319 | C-81 derives-from | C-65 | Explicit write-only parameters can expose initialization intent and establish a caller-visible postcondition without reading uninitialized payloads. H-354 proposes this value and local handle storage; D-20r2 records the candidate. Full syntax, scope and proof rules remain pending-human. |
+| P-320 | C-81 depends-on | D-14 / D-17 / C-79 | Output arguments require actual external-owner storage, access/alias checks, normal-versus-exceptional flow analysis and a trustworthy native-provider contract. Dependency only; it does not approve lexical allocation of regional graphs, resource replacement, rollback or new runtime initialization exceptions. D-20r2. |
 
 
 ### 影响检索索引
@@ -4698,6 +4714,46 @@ Cleanup authorization is the same user's earlier explicit request in this side c
 > /ws/EvtWorks/cod-project/discuss/dsl.md 里面的很多问题是不是都已经有答案了？ 有些应该已经体现进设计文档了，看下收尾清理这个文档，所有相关讨论项都落相关文档以后删除这个讨论文件
 
 The subsequent request to discuss unanswered items first led to H-351 and the five decisions above. Retire the discussion file only after all its topics have destinations; unresolved detailed mechanisms remain recorded design work, not silently approved or discarded.
+
+### H-353 — Plan a CoD-native compiler application and owner-aware native cleanup
+
+<a id="h-353"></a>
+
+Human: current project user in this side conversation; independently verified name unavailable. Source: visible user messages, no durable per-message link available. Recorded 2026-11-11; exact message timestamps unavailable. This records planning intent, not approval of an unseen implementation contract.
+
+> 接下来，先作为一个并行的试点应用来探讨： 随着推进，挑选用到的 LLVM API，实现 CoD binding，然后逐步实现自举的 CoD 版 CoD Tokenizer、Parser、编译管道等
+>
+> Lexer/Parser/Analyzer 等，要避免 “迁移 C++” 实现的思路，而是尽量发掘CoD的优势潜力，发挥已有语言长处，寻找编程语言领域，CoD可以纳入设计的 “低垂果实”。 比如大型项目的模块预编译各阶段缓存，都可以考虑直接将结果region保存为 DBMR 文件，需要的适合直接高效加载。
+>
+> LLVM native resource，我考虑主要走指针映射为 CoD handle 类型，dynscope / lexical scope 配合 defer 释放handle 的思路，语法糖考虑把本地变量的ref交给binding中的初始化函数去赋值，这些初始化函数返回适合defer的callable，onliner完成初始化和析构注册。
+
+The user explicitly corrects an assistant's out-parameter suggestion: CoD uses a ref argument with a declared external owner, not an out keyword. Their final general example uses `proc llvm_context_init(ref ctx: LLVMContextHandle in o) where { owner o } { ... }`, followed by `ref ctx: LLVMContextHandle; defer ((llvm_context_init(ctx)))();`. The generic owner permits lexical as well as regional caller storage; it does not select admissible native-handle storage or implicit reference-target allocation. The preceding eager-syntax message explicitly requires comparing implementation difficulty and practicality before a final decision.
+
+> 认同你的细化分析方向，不过目前先不深入推进具体设计实现，只是把这件事先规划出来。 你起草 applications/cod-booter/ 目录内容，把目前的思路和重要细节起头落进文档吧
+
+Scope: record C-80/P-314–P-318 and D-20r1 as a separate compiler application plan, including selective LLVM bindings, CoD-native compiler algorithms, regional caches and immediate-acquisition/deferred-cleanup investigation. The analysis agreement authorizes documenting these considerations, not choosing a cache schema, native handle representation/storage policy, cleanup capture or linearity rule, eager grammar, ordinary declaration shorthand, general closure extension or implementation schedule. D-20 remains pending-human beyond the stated direction. No implementation, build, bootstrap, test execution, commit or push is requested by this documentation instruction.
+
+### H-354 — Propose explicit output initialization and local handle storage
+
+<a id="h-354"></a>
+
+Human: current project user in this side conversation; independently verified name unavailable. Source: visible user message during the H-353 documentation task, no durable per-message link available. Recorded 2026-11-11; exact message timestamp unavailable.
+
+> 可能加个 `out` 修饰符，代表仅写入作为输出；然后 `ref ctx: LLVMContextHandle;` 实现为分配空间但不初始化，之后作为 `out` 调用了init，编译器就知道它完成了初始化。 这个思路挺不错的。
+
+Scope: prefer investigating an out modifier for write-only output and a local handle ref declaration that allocates uninitialized target storage, with initialization known after the initializer returns successfully. This revises H-353's earlier no-out preference at planning scope; it does not discard the actual external-owner requirement. C-81/P-319/P-320 and D-20r2 keep exact modifier ordering, general type applicability, aliasing, exceptional postconditions and native-provider enforcement open. The immediately preceding instruction limits work to planning documentation; no implementation or eager-syntax selection is authorized. Existing D-14/D-17/D-18 contracts are not silently revised by this proposal.
+
+### H-355 — Registration-time evaluation terminology and syntax comparison
+
+<a id="h-355"></a>
+
+Human: current project user in this side conversation. Source: visible user messages; independently verified name, exact message timestamps and durable per-message links unavailable. Recorded 2026-11-11.
+
+> 你的 registration-time evaluation within `defer` 提法比 eager 更好，用你的术语
+>
+> 具体语法你推敲几个备选看看
+
+Scope: use registration-time evaluation within defer as the planning term and compare syntax candidates. D-20r3 records double parentheses, a named registration clause and a bracketed boundary; none is selected by this request. This changes terminology and authorizes analysis, not a general early-evaluation mechanism, parsing implementation or broadened capture semantics. H-353's documentation-only scope and H-354's pending output-parameter design remain.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -9445,3 +9501,28 @@ The subsequent request to discuss unanswered items first led to H-351 and the fi
 - Generated-C++/reference-executor suggestions are not retained as production backends under H-143; SNN is the selected first application under H-08/H-11 rather than the initial inventory proposal. Mandatory intrinsic delivery acknowledgment is not inferred from packet receipt under H-168. These replacements already have human evidence and are not new choices in this cleanup.
 - Delete discuss/dsl.md after preserving its source at commit384928e1632fc06497a1a9d04176d63f14bc724b and linking that provenance from D-07's decision-history section. Historical registry mentions of the old path remain as history, not live document dependencies.
 - D-07 DL-01 navigation also replaces a stale unresolved-lookup paragraph/link with H-257’s confirmed nearest-lexical-binding rule and D-10’s current section. This is editorial continuity of that prior decision, not a new callable policy. Documentation-only validation checks topic coverage, relative links, unique authority anchors, preserved prior events and diff whitespace. No source/build/toolchain mutation, build, tests, commit or push is performed by this side-conversation cleanup.
+
+<a id="k-473"></a>
+
+### K-473 — Register the CoD compiler application planning draft (2026-11-11)
+
+- Registry473 →474; add D-20 document-set revision1 in applications/cod-booter, C-80, P-314–P-318 and H-353. The user's latest instruction explicitly limits this task to initial planning documents. D-20 has no earlier qualified implementation baseline and remains pending-human; this event is not a product-design continuity approval. D-GOV474 continues H-05 record maintenance without changing prior H/K events or the main conversation's uncommitted work.
+- Charter §§2/5.3–5.4 supports typed compiler operations and a distinction between analysis workspaces and published semantics; §§6–7 separates native resources from reusable persistent artifacts; §12 requires observable correctness and cost. P-314/P-315 records H-353's stated application/cache value at planning scope, while P-317 keeps the full draft's derivation pending. P-316/P-318 identifies technical dependencies rather than manufacturing authority from them.
+- README records the application purpose, candidate checkpoints and decisions to revisit. CompilerPipeline records stage-sensitive reuse, receiving module worlds, regional persistence, library graph transfer and LLVM compilation scale. LLVMInterop records selective bindings, generic-owner ref initialization and immediate-acquisition/deferred-invocation timing as a proposal, with storage, capture, failure and syntax questions retained. No out syntax, approved eager grammar, lexical-reference capture exemption or persistent native pointer is introduced.
+- H-352/C-77–C-79 supplies snapshot/compatibility/SPI planning dependencies; D-01 relocation, D-14 owners, D-15 identities/world construction, D-16 syntax/numeric/layout requirements, D-17 exceptions and D-18 callable values remain unchanged. D-08 SNN continues separately. No existing product design is superseded or invalidated, and no implementation contract is qualified by this application draft.
+- Documentation checks cover relative destinations/anchors, unique new registry IDs and whitespace. No source, build/configuration, toolchain, generated artifact or test changes are part of this task; no build/test execution, commit or push is performed.
+
+<a id="k-474"></a>
+
+### K-474 — Record the proposed write-only initializer contract (2026-11-11)
+
+- Registry474 →475; D-20r1 →2, C-81/P-319/P-320 and H-354. The user proposes adding out and allocated-but-uninitialized handle storage during the documentation task. H-353's earlier preference remains in history; H-354 explicitly supersedes that preference for this planning discussion. This is an unqualified design refinement, not agent continuity approval or an implementation instruction. D-GOV475 continues H-05 record maintenance.
+- Charter §§2/5.4/6 keeps typed compiler intent, checking and native interpretation distinct. C-65's actual external owners and definite initialization motivate P-319; P-320 preserves D-14/D-17/C-79 obligations. The candidate signature adds write-only out to generic-owner ref, with success establishing initialized output. Exact grammar, aliasing, resource replacement and exceptional postconditions remain open. A local handle-storage example does not authorize stack allocation of regional objects or persistent native pointers.
+- README and LLVMInterop record this preferred direction and distinguish compiler-checked body obligations from trust in a native provider. CompilerPipeline retains its substance and only updates document-set authority navigation. Eager double-parenthesis syntax, native cleanup captures and provider ABI remain pending; no source, language contract, build/test or toolchain change follows. Prior H/K events and unrelated main-conversation modifications are preserved.
+
+<a id="k-475"></a>
+
+### K-475 — Name registration-time evaluation and compare source forms (2026-11-11)
+
+- Registry475 →476; D-20r2 →3 under H-355. Current planning prose uses registration-time evaluation within defer. The syntax comparison records double parentheses, named preparation/capture declarations and a bracketed expression; the named form is an agent recommendation only. Body timing, actual owners, exceptional cleanup and callable-value storage remain constraints, not newly qualified designs.
+- P-314–P-320 and charter §§2/6/12 retain their draft value/dependency scope. Pipeline substance is unchanged; README and authority navigation reflect the document-set revision. Prior human/continuity events retain their original terminology as history. D-20 remains pending-human; D-GOV476 continues H-05 maintenance. No language/runtime implementation, source/build/test/toolchain change, commit or push follows.
