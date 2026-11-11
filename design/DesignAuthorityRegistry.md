@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：460
+记录版本：465
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -167,6 +167,7 @@ Design authority
 | C-73 | Unified owner-aware captures for named and anonymous functions/procedures. | Candidate value P-288/P-290 and scoped confirmed P-297 to C-65; dependencies P-289 on C-36/C-54 | H-321/H-322 requests a unified review; H-323 adds regional val/ref/ptr slots without lexical-cell promotion. H-329 confirms inferred captures when brackets are omitted, completeness checking when supplied, missing-capture errors and unused-entry warnings, with source-visible associated owners in D-18r9/C-03. Wider capture representation, persistence and nested dependency details remain review items; D-18r13 records the unified implementation and same-body environment selection; H-334/H-335/P-298 confirms visible-name owner projection with captured access and no ownership/lifetime extension. |
 | C-74 | Structural product region definitions and required field subsets, with language-owned storage mechanics. | Candidate value P-291 to C-39/C-65; dependencies P-292 on C-72/C-54/D-01 | H-323 proposes region definitions alongside data, complete fields as the root product and structural field requirements in place of root-type requirements. D-13r29 reviews concrete layouts, owner identity and intrinsic/library allocation boundaries. Matching, identity, syntax and allocator policy details remain pending-human; no host layout or RTTI change is selected. |
 | C-75 | Explicit variable aliases naming existing storage without introducing a new holder. | Scoped confirmed value P-295 to C-65/C-73; constraints P-296 | H-327 accepts the ordinary-place alias explanation and requests optional val/ref/ptr prefixes, inferred when omitted and strictly checked when present. D-18r8/C-02 records that scope; whole-region/TLS inclusion and detailed capture integration remain separate. No implementation, legacy var restoration, new ownership or automatic lexical promotion is inferred. |
+| C-76 | Boundary-pure const functions with private mutable state and deferred const-function TCO. | Scoped value P-304 to C-36/C-65; document P-305, dependencies P-306 and compatibility constraint P-307 | H-346/H-347 defines the outer-call/immediate-result observation boundary; H-348 authorizes deferred planning and human review over material conflicts. D-19r1 records this direction, not an implementation contract for syntax, effect analysis, output construction or TCO eligibility. H-345 separately requires recursion in current work. |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
 | GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
 
@@ -208,7 +209,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 460，延续检查 K-01—K-459；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
+- 当前记录维护范围：记录版本 465，延续检查 K-01—K-459、K-464；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
 
 ### 待补确认的现有技术设计
 
@@ -479,6 +480,13 @@ Design authority
 - **Contract/status:** [RegionalClosures.md](RegionalClosures.md), revision 13, continues the bounded H-327–H-335 contract: ordinary aliases, inferred/checked captures, actual named owners, same-implementation selection and borrowed owner projection. P-293/P-294/P-295/P-297/P-298 retains the value path. H-336/K-459 consolidates conclusions and executable coverage, with historical research available from the commit identified in the conclusion document.
 - **Boundaries:** No lexical-cell promotion, hidden user heap, new RTTI, region ownership extension or native representation change. General stored/runtime-dispatched closures and unrelated pending contracts remain outside scope.
 - **Acceptance:** Native source fixtures and rejection cases preserve kind/type/access/owner/lifetime checks, selection and projection semantics, deep composition and bounded region use. The implementation checkpoint passed 295/295 language cases; cleanup validates relocated coverage without changing compiler behavior.
+
+<a id="d-19"></a>
+### D-19: Const functions and tail calls
+
+- **Contract/status:** [ConstFunctionsAndTailCalls.md](ConstFunctionsAndTailCalls.md), revision1; confirmed deferred planning/compatibility scope under H-346–H-348, detailed implementation contract pending-human. C-76/P-304/P-305 supplies the value path; P-306 records dependencies; P-307 records the required human conflict review. K-464 checks charter/dependency alignment without selecting implementation mechanisms.
+- **Boundary:** Pre-existing external state is readonly for the outermost const call; private mutation is permitted; the result is judged at immediate return. Later use of a returned ref/ptr is outside that boundary. No permanent freezing, implicit input copying, blanket optimizer purity, new escape channel or TCO outside const functions is planned. Internal callbacks must preserve the same boundary.
+- **Priority / acceptance:** H-345 requires ordinary function/procedure recursion now. Const functions, their TCO and persistent-data support are deferred and optional; current work must consult the human before activating materially conflicting choices. Future observations concern external-state preservation, private construction, valid immediate results and bounded-stack execution with correct cleanup. No implementation/build/test evidence is claimed.
 
 The following relationships apply only to the individually recorded scopes and revisions. Current document coverage is maintained in the status entries above; a historical row annotation does not qualify a later revision. P-31 remains rejected. P-69/P-70/P-83 retains its confirmed H-94 local scope; other human constraints and pending candidate paths retain their own recorded status. Dependency edges never confer design authority.
 
@@ -786,9 +794,15 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-296 | C-75 depends-on | C-72 / C-36 / C-54 / C-71 | Existing storage kind, nullability, initialization, effect-only TLS writes, whole-region ownership and non-addressable container rules constrain aliases. Dependency grants no design authority or hidden proxy/environment allocation. D-18r8/C-02 preserves these boundaries under H-327; broader inclusion is not selected. |
 | P-297 | C-73 derives-from | C-65 / C-75 | H-329 confirms omitted-list inference and explicit-list completeness checks, combining convenient regional-variable use with a readable declaration of capture intent. Missing entries error; unused entries warn. D-18r9/C-03 preserves actual storage owners and separates variables in the body from owner associations in the callable type. H-331 retains every explicit capture dependency, with owner validation before unused warnings. This does not authorize lexical-cell promotion or select runtime closure representation. |
 | P-298 | C-73 derives-from | C-65 / C-75 | H-334/H-335 makes retained regions usable through cb -> owner_name, serving the explicit storage/lifetime contract rather than adding a separate owner lookup mechanism. The visible with-type supplies the name, including helper-local renaming; projection borrows captured access, never acquires ownership or extends lifetime. D-18r12/C-04 covers same-body selection and projection. Runtime callable ABI, persistence and RTTI remain excluded. |
+| P-304 | C-76 derives-from | C-36 / C-65 | H-346/H-347 gives functional-style computation an explicit outer-call effect boundary while retaining checked storage/lifetimes and private mutation. This serves charter §§1–3/§6/§8's typed business intent, native execution and readable source. Confirmed direction for D-19r1 only; no chosen checker or TCO guarantee. |
+| P-305 | D-19 derives-from | C-76 | H-348 requests a compact deferred plan so current recursion/callable work can preserve the optional future direction without speculative implementation. D-19r1 records the accepted boundary, open decisions and proposed future evidence. This authorizes the plan, not unconfirmed detailed language mechanisms. |
+| P-306 | C-76 depends-on | D-10 / D-14 / D-17 / D-18 / D-16 | Function/effect separation, ownership/access, exceptions, callable environments/ABI and planned numerical semantics constrain the future const-function checker and TCO. D-01 relocation and D-15 world boundaries remain invariants. Dependency is not approval of a particular checker, publication mechanism or backend layout. |
+| P-307 | C-76 constrains | D-10 / D-14 / D-18 and affected future language/runtime work | H-348 requires material conflicts with the deferred direction to be raised to a human before an incompatible choice is activated. Current work need not implement const/TCO or satisfy a universal tail ABI. Local implementation gaps do not automatically constitute a conflict. Scope is D-19r1's recorded direction, not speculative details. |
 
 
 ### 影响检索索引
+
+C-76/P-304–P-307 → D-19r1. H-345 keeps current recursion mandatory; H-346–H-348 defers const-function/TCO work while requiring human review of material conflicts. Consult D-10/D-14/D-17/D-18 when callable/owner/effect/exception choices affect this direction, and D-16 for numeric/transfer compatibility. Existing ordinary function semantics and unrelated qualification remain unchanged.
 
 H-257/H-258/P-229/P-230 → D-10r88, D-15r14, D-07r111 and prototype152. K-399 records the first-three-items implementation; K-400 records its bounded native acceptance. D-11/D-14 are unchanged dependency contracts; H-256/D-16 prerequisite and fraction-compatibility requirements remain applicable. No RTTI or full ownership qualification follows.
 
@@ -4603,6 +4617,42 @@ Human/source: current user, current project chat, recorded 2026-11-11 UTC; exact
 > 提交推送。 然后做个文档和代码清理，研究性篇幅从repo删除，仅简单通过 commit hash 在结论文档中提及，避免干扰 repo search
 
 Scope: commit/push the validated implementation, remove the completed regional-closure exploration's research prose/reports, retain concise conclusions with a commit reference, and clean the associated code/tests. This is editorial/organizational authorization, not a new language or ownership policy. Human decision history remains append-only; archived experiment artifacts are not active contracts.
+
+<a id="h-345"></a>
+
+Human/source: current user, side chat 01a1caaf-f14f-73a0-b649-1a705b687ef1 associated with main chat 01a14005-1edf-70d1-adcf-c091e8652c75; recorded 2026-11-11 UTC, exact message timestamp unavailable.
+
+> 递归调用作为强需求要加入当前这批工作，这个先通知主线程纳入。
+
+Scope: recursion is mandatory in the current callable/runtime increment. The authorized notification explicitly includes functions and procedures and was acknowledged by the main chat. This does not require TCO, perpetual source inlining, unrestricted polymorphic recursion or a particular recursive ABI. H-346 separately narrows the deferred TCO research scope.
+
+<a id="h-346"></a>
+
+Human/source: same user and side chat; recorded 2026-11-11 UTC, exact message timestamps unavailable.
+
+> 我比较希望CoD能实现TCO，将来依靠 `const func` + `const` persistent data structures 也做一定程度的 pure functional 范式支持，但这是 better to have，困难大就可以舍弃的目标。
+> 我觉得初步探索TCO的核心区域是 const func
+> 其它场景的TCO都可以先不规划。
+
+Scope: optional functional-programming support through const functions/persistent data and TCO, with initial TCO research confined to const functions. Ordinary function/procedure TCO is not planned by this scope. The user's accompanying suggestion of body-wide readonly objects and possibly all-const locals was exploratory; H-347 refines the boundary to permit private mutation. No local-variable restriction or exact const grammar is confirmed here.
+
+<a id="h-347"></a>
+
+Human/source: same user and side chat; recorded 2026-11-11 UTC, exact message timestamps unavailable.
+
+> 对于一个不返回 callable （有可能enclose只读的引用，后续读取被修改的位置）的 const function ，只返回 val/ref/ptr，那么可以认为对它的 call 就是 snapshot input -> snapshot output 了吧？ 其内部过程随便把 callable 传来传去使用，都不影响这个性质好像。
+> “Allocate and initialize new regional nodes” 我觉得可以类比Haskell的ST monad，内部怎么弄都没事吧，边界是pure的就行
+> 只需要关注刚刚返回的当下，后面再执行就是 impure 语境了
+
+Accepted direction: judge the outer const call through its immediate result, with private mutation/construction permitted behind the pure boundary. Internal callables do not inherently invalidate it; later observations through returned references are outside the observation interval. This refines H-346's exploratory whole-body readonly/all-const idea. No permanent immutable snapshot, physical graph copy, writes to pre-existing external state, unsafe escape or specific checking mechanism is authorized. The initial output discussion excludes callable results and does not decide whole-region output/publication syntax.
+
+<a id="h-348"></a>
+
+Human/source: same user and side chat; recorded 2026-11-11 UTC, exact message timestamp unavailable.
+
+> 看看还有没有需要继续讨论、澄清的地方？ 没有的话就过一个预研规划文档，把这里讨论的关键细节都记下来，将来再着手推进。 当前推进的工作与规划目标不产生实质性冲突就好，有潜在冲突时需要及时和人类确认。 文档落好单独提交一下然后知会主线程。
+
+Scope: review for immediately necessary clarification, preserve the discussion in a deferred pre-research plan, commit the documentation separately and notify the main chat. Current work may proceed when materially compatible; potential material conflicts require timely human confirmation. This confirms C-76/P-304/P-305's planning value and P-307's conflict-review constraint for D-19r1, not exact syntax, private-state analysis, allocator exceptions or a universal tail-call guarantee. No const/TCO implementation or test run is requested.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -9319,3 +9369,12 @@ Scope: commit/push the validated implementation, remove the completed regional-c
 - Registry459 →460; D-18r12 →13 is an editorial continuation of H-327–H-335 under H-336. D-18 retains the accepted alias/capture/owner/projection contract, invariants and limitations, while superseded syntax, comparisons, work logs and historical report bodies leave the current tree. The conclusion document carries the research commit reference. D-GOV460 continues H-05 maintenance; human confirmation and prior continuity events are unchanged.
 - Charter §§1–3/§8 alignment preserves explicit storage/owner reasoning and readable source without competing design narratives. C-65/C-73/C-75 and P-294/P-295/P-297/P-298 are unchanged. D-07r145 →146, D-10r122 →123, D-13r29 →30 and D-14r71 →72 replace stale closure review prose with D-18 references; they do not qualify their wider pending mechanisms. D-01 allocation/relocation, D-15 module/TLS and D-16 numeric/fraction requirements are unchanged.
 - Executable fixtures move to tests/cod/language/closures, with unchanged contents and case expectations; the composition runner uses a current suite label instead of an experiment variant. No alternative compiler implementation or experimental switch remains to remove. The compiler/runtime are unchanged. Validation: cmake --build ./build succeeds; COD_TEST_TOOLCHAIN=build passes all 42 affected language checks, including frontend emission, plus 64-module and 10,000-frame composition. Fixture bytes, case expectations and relative imports are preserved; new document links resolve. Original H/K history is unchanged. No report dump is reintroduced into the repository.
+
+
+<a id="k-464"></a>
+
+- D-19r1 registers C-76/P-304–P-307/H-345–H-348 as deferred planning with a confirmed outer-call boundary and compatibility-review requirement. Detailed execution contracts remain pending-human. Charter §§1–3/§6/§8 alignment preserves typed intent, state/effect separation, checked lifetime and readable native computation. This event does not self-approve a checker, purity optimization, publication mechanism or tail ABI.
+- Scope review distinguishes mandatory present recursion from optional future const-function TCO; external readonly access from private mutation; immediate result selection from later dereference; and bounded execution frames from growing data/callable environments. D-10/D-14 ordinary functions, D-17 failure/cleanup, D-18 callable contracts, D-01 relocation and D-15 worlds retain their existing scopes. D-16 review finds no syntax, numeric promotion, representation, formatting or transfer change.
+- No decision needs to block the document or unrelated implementation. Const syntax/type distinction, private-state proof, externally supplied allocation destinations, concurrent input stability, output publication and precise TCO eligibility remain explicit future questions. A discovered material conflict must reach a human before activation; deferred TCO alone is not a reason to block current recursive-call implementation.
+- This isolated documentation branch starts from registry460/commit31e070f. Registry465 and D-19/C-76/P-304–P-307/H-345–H-348/K-464 were coordinated with the main chat; its independently pending registry461–464 records are not copied into this commit. Integration must preserve both histories. Existing H/K records are unchanged. D-GOV465 continues H-05 record-maintenance authority only.
+- Documentation-only validation checks references, anchors, reserved-ID uniqueness, unchanged prior decision history and patch whitespace. No source/configuration changes, build, runtime measurements or test-script execution are part of this commit. The main chat receives the resulting commit and the deferred/conflict-review scope.
