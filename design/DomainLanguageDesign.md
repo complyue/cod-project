@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 145
+Discussion revision: 146
 
 Recorded: 2026-10-22
 
@@ -10,7 +10,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-- **Unified closure-owner review:** [H-321/H-322](DesignAuthorityRegistry.md#h-321)/[K-445](DesignAuthorityRegistry.md#k-445), candidate C-73/P-288–P-289, covers the region-only capture proposal for named and anonymous functions/procedures. [D-14's analysis](RegionalOwnership.md#unified-callable-captures-and-region-owners) separates target owner, lexical binding and environment storage. Charter §§1–3, D-01 and D-16 constraints remain; no automatic lexical boxing, ownership retention, new pointer layout or RTTI is inferred. The detailed capture contract is pending-human. Future acceptance must distinguish rebinding from object mutation, copied bits from references, known from absent owners and valid from escaped captures. H-317/H-318 native acceptance remains separate.
+- **Current regional captures:** [D-18](RegionalClosures.md)/[K-459](DesignAuthorityRegistry.md#k-459) is the bounded contract for structural region requirements, aliases, captures and owner projection under H-327–H-335. This revision updates only that navigation and removes superseded research text under H-336; C-65/C-73/C-75 and P-294–P-298 retain their confirmed scope. Owner/access/relocation, dynamic effects and D-16 remain constraints. Acceptance and unresolved limits stay explicit in D-18; unrelated pending contracts are not qualified.
 
 - **Explicit scope boundary:** [H-319](DesignAuthorityRegistry.md#h-319)/[K-444](DesignAuthorityRegistry.md#k-444) confirms ordinary grouping braces and explicit double-brace lexical/effect scopes, plus defer only within an explicit scoped block when inside a loop. C-63/P-286–P-287 preserves C-65 lifetime and C-36 effect requirements. This scope change is not implemented by the colon/nullable checkpoint; acceptance must cover name visibility, initialization, cleanup, conditional paths and loops. H-320's contextual callable/capture boundary remains pending; no escaping closure or wider qualification is implied.
 

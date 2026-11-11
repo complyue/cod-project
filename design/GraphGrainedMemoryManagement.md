@@ -1,10 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 29 · 2026-11-10
+Design revision 30 · 2026-11-11
 
 ## Design authority
 
-- **Structural region review:** [H-323](DesignAuthorityRegistry.md#h-323)/[K-446](DesignAuthorityRegistry.md#k-446), C-74/P-290–P-292, proposes region-defined structural products and required field subsets to support reusable operations and region-resident closure variables. Covered scope is the structural-region section below. The candidate value path through C-65/C-39 serves charter §§1–3's explicit semantic storage and lifecycle boundaries. H-311's field kinds, H-190's intrinsic-region/library-policy division, D-01 relocation and D-16 fixed bits remain constraints. Matching, declaration identity, construction and allocator extension details are pending-human; no C++ protocol or runtime representation is replaced by this review. Acceptance requires correct field projections across concrete layouts, observable captured-slot updates and rejection of invalid lifetime/access/initialization, with relocation preserved.
+- **Current regional captures:** [D-18](RegionalClosures.md)/[K-459](DesignAuthorityRegistry.md#k-459) is the bounded contract for structural region requirements, aliases, captures and owner projection under H-327–H-335. This revision updates only that navigation and removes superseded research text under H-336; C-65/C-73/C-75 and P-294–P-298 retain their confirmed scope. Owner/access/relocation, dynamic effects and D-16 remain constraints. Acceptance and unresolved limits stay explicit in D-18; unrelated pending contracts are not qualified.
 
 - **Declaration cleanup:** [H-316](DesignAuthorityRegistry.md#h-316)/[K-442](DesignAuthorityRegistry.md#k-442) applies C-72/P-283 to the current ref/ptr/val surface. Ordinary views name their target type; allocation and element selection preserve owner/access information directly. Let/var declarations and angle-bracket reference types are rejected. [Native evidence](../tests/cod/language/declaration-cleanup-validation.json) covers migrated examples, copied bits versus aliases, checked NPE, lifetime/relocation and multi-module composition. No nullable parameter/result grammar, reference-target allocation policy or general cyclic construction is selected. Existing pending qualifications remain pending.
 
@@ -14,7 +14,7 @@ Design revision 29 · 2026-11-10
 
 - **Bounded exception/lifecycle contract:** [H-267](DesignAuthorityRegistry.md#h-267)/[K-408](DesignAuthorityRegistry.md#k-408) accepts [D-17r3 E1–E5](ExceptionControl.md#accepted-first-implementation-contract), including explicit throw-from only, cleanup, fresh owners and call/result transfer. This overrides pending labels for that enumerated scope; wider qualifier, assignment, mailbox and user exception graph choices remain open. [K-414](DesignAuthorityRegistry.md#k-414) records completed H-267/H-269 E1–E5 acceptance and [current native evidence](../tests/cod/language/exception-ownership-validation.json). Wider unconfirmed scopes retain their status.
 
-- **Registry / scope:** [D-13](DesignAuthorityRegistry.md#d-13), revision 29, all sections. [K-411](DesignAuthorityRegistry.md#k-411) records D-17 local lifecycle implementation/evidence without adding transport or graph transactions. [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) links [exception control](ExceptionControl.md) and unchecked ultimate OOM to construction cleanup. [H-263/H-264](DesignAuthorityRegistry.md#h-263)/[K-405](DesignAuthorityRegistry.md#k-405) supplies permitted local-view survival and the initial typed construction form. [H-262](DesignAuthorityRegistry.md#h-262)/[K-404](DesignAuthorityRegistry.md#k-404) confirms compiler-tracked consumption of ordinary named owners; H-267/E1–E5 fixes the bounded exception and consuming call/result contract. [K-383](DesignAuthorityRegistry.md#k-383) reconciles the lexical-view example and named-source wording with non-extractable dynamic resources; H-262 now selects the ordinary named-source consumed state. K-379/K-367 maintains evidence navigation and graph/resource boundaries. H-156/H-157 confirms the local graph boundary; the full design and candidate value paths remain `pending-human`.
+- **Registry / scope:** [D-13](DesignAuthorityRegistry.md#d-13), revision 30, all sections. [K-411](DesignAuthorityRegistry.md#k-411) records D-17 local lifecycle implementation/evidence without adding transport or graph transactions. [H-265](DesignAuthorityRegistry.md#h-265)/[K-406](DesignAuthorityRegistry.md#k-406) links [exception control](ExceptionControl.md) and unchecked ultimate OOM to construction cleanup. [H-263/H-264](DesignAuthorityRegistry.md#h-263)/[K-405](DesignAuthorityRegistry.md#k-405) supplies permitted local-view survival and the initial typed construction form. [H-262](DesignAuthorityRegistry.md#h-262)/[K-404](DesignAuthorityRegistry.md#k-404) confirms compiler-tracked consumption of ordinary named owners; H-267/E1–E5 fixes the bounded exception and consuming call/result contract. [K-383](DesignAuthorityRegistry.md#k-383) reconciles the lexical-view example and named-source wording with non-extractable dynamic resources; H-262 now selects the ordinary named-source consumed state. K-379/K-367 maintains evidence navigation and graph/resource boundaries. H-156/H-157 confirms the local graph boundary; the full design and candidate value paths remain `pending-human`.
 - **Value lineage:** P-138/P-139 relates region-grained storage to inspectable graphs (C-01) and structured semantic units (C-05); P-140 constrains C-40. C-54/P-143 and D-14/P-155 concerns explicit lifetime responsibility through C-10. P-141/P-142 supplies representation/language dependencies, not qualification. These paths serve charter §§2–4 while keeping storage, access and execution distinct.
 - **Human baseline:** H-99/H-100 governs user storage and captures; H-156/H-157 sets the graph/inter-region boundary. H-166 keeps module owners alive through process exit. H-177/H-179 permits ordinary ownership and consuming installation; H-180/H-181 requires value capture, owner-preserving replay and no extraction from dynamic resources. H-184–H-189 governs typed lexical/symbolic procedures. H-190/H-193/H-196–H-203 and H-209 governs intrinsic ownership, regional data, mutable explicit-memory functions, borrowing/const and same-owner edges, with their recorded exclusions.
 - **Invariants / non-goals:** preserve region-local stored pointers, regional allocation, zero-cost relocation, no regional object copy/move and one whole-region cleanup responsibility. Captures do not extend lifetime or duplicate ownership. Functions cannot access dynamic bindings or call procedures. No per-object owner, mandatory generation table, runtime borrow registry, copied graph snapshot or allocator policy is selected.
@@ -29,42 +29,9 @@ A direct pointer is a traversable edge between objects in the same region. The r
 
 ## Structural region definitions and variable storage
 
-H-323 proposes a region type definition alongside data: it describes a structural product whose complete fields form the region's root. A consumer states the fields it requires, and a concrete region may contain additional fields. This is a proposed language contract, separate from the implemented nominal root-type requirements; no source migration is activated by this review.
+[RegionalClosures.md](RegionalClosures.md#structural-regions) specifies the implemented field-subset requirement and its relation to captured regional slots. WPO retains concrete layouts and actual owners; structural compatibility does not authorize layout casts, cross-owner stored edges or nominal data-interface conformance.
 
-Schematic declaration notation, not implemented syntax:
-
-```text
-region CursorState {
-    val ticks:u64;
-    ptr current:Node;
-}
-
-region WorkerState {
-    val ticks:u64;
-    ptr current:Node;
-    val processed:u64;
-}
-```
-
-A consumer requiring CursorState could accept a live WorkerState region because it supplies the required fields. The complete WorkerState fields describe that instance's root product; CursorState used as a requirement does not create another root or copy a subobject. Both definitions describe products only. Ordinary data remains the place for the existing nominal products/sums and declared method interfaces. Structural field satisfaction for region requirements must not silently restore implicit structural conformance for those interfaces.
-
-### Required fields, concrete owners and layout
-
-The proposed minimum check matches field labels, field storage kind, field types and required access. A writable ptr field cannot be replaced with an inline val field or with a reference whose target type is merely numerically convertible. Existing data/UoM/type identities inside fields remain significant. Any broader compatibility between field kinds, qualified views or reordered definitions needs an explicit rule rather than a layout guess. Region declaration names, aliases and structural satisfaction must also be distinguished from concrete allocation identity.
-
-Matching a field subset does not establish a shared byte prefix or equal offsets. WPO can compile accesses using the actual concrete layout while checking the consumer against its declared field requirement. Structural compatibility alone does not authorize a bitcast, copying a root, generic data-layout changes or selecting runtime RTTI. A dynamic layout-erased use would require separate design if demanded by a real use case. Logical product fields do not select AoS for repeated data; the existing SoA preference and D-16's explicit layout requirements remain.
-
-Independent instances with identical fields remain independent owners. A captured regional variable is associated with one actual instance, not any region satisfying the same requirement. Capturing the storage of a root val observes its bits updates; capturing a root ref/ptr slot observes its rebinding and accesses the selected same-region target. Root slots are stable for the region's lifetime. The same reasoning can apply to other stable typed slots inside that region; moving/reusing their logical contents does not manufacture a new region owner. [D-14](RegionalOwnership.md#unified-callable-captures-and-region-owners) distinguishes slot capture from target capture and lexical binding storage.
-
-### Intrinsic storage mechanics and library allocation policy
-
-The proposed language-level region definition should not require a user to supply a C++ root class. CoD needs intrinsic knowledge of region acquisition/release, capacity, valid typed placement, root/field access, reference provenance and admitted whole-region transfers. These facts let the compiler check captures and generate correct accesses. C++ can implement those services without defining the user's region extension contract.
-
-This does not by itself require every allocation policy to become intrinsic. H-190 explicitly leaves free lists, typed pools and slot reuse to CoD libraries. Such policies can store their metadata in the region's declared fields and use ordinary checked functions/procedures; requiring those fields can replace a nominal root-policy interface for an operation. The recommended boundary keeps these policies in user code and reserves intrinsics for storage operations that ordinary checked code cannot express. Overlapping/retyping storage, compaction with outstanding captures and custom physical allocators are not approved merely by adopting structural products.
-
-The current backend already provides a useful implementation separation: [CoDRegionRoot and native region services](../cod/lang_native_runtime.hh) use one host root shell and reserve LLVM-defined root storage; [shilos memory_region](../include/shilos/region.hh) owns capacity, allocation and release. This is evidence that the source-level type/constraint/capture redesign need not start by replacing the physical allocator. It is not validation of the proposed structural checker or closure representation. The C++ API and on-image layout remain under D-01 until a separately reviewed implementation changes them.
-
-Before implementation, resolve the structural matching/identity and declaration grammar, capture selection/environment lifetime and the precise intrinsic-versus-library allocation boundary. Acceptance should cover the same helper against two concrete field supersets with differing offsets, captured val updates and nullable/ref slot rebinding, missing/wrong-kind/wrong-type fields, checked null reads and invalid owner escape. Whole-image relocation must preserve stored references; invocation across relocation additionally requires the chosen environment/binding contract. The existing compiler's passing native suites do not cover these proposed capabilities.
+Region acquisition/release, capacity, typed placement and reference provenance remain intrinsic services. Free lists, typed pools and item reuse remain CoD library policies under H-190. The source contract uses the existing native root shell and shilos allocator without changing D-01's physical representation. Overlapping/retyping storage, compaction with outstanding captures and custom physical allocators require separate design.
 
 ## Relationships between regions
 

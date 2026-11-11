@@ -1565,149 +1565,149 @@
     "stderr_contains": "single colon"
   },
   {
-    "file": "exploration/structural-regions.cod",
+    "file": "closures/structural-regions.cod",
     "exit": 0,
     "stdout": "4\n11\n11\n11\ntrue\nfalse\n11\n2\n2\n"
   },
   {
-    "file": "exploration/structural-kind-error.cod",
+    "file": "closures/structural-kind-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "expected region"
   },
   {
-    "file": "exploration/structural-type-error.cod",
+    "file": "closures/structural-type-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "expected region"
   },
   {
-    "file": "exploration/structural-readonly-error.cod",
+    "file": "closures/structural-readonly-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read-only"
   },
   {
-    "file": "exploration/structural-ambiguous.cod",
+    "file": "closures/structural-ambiguous.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "ambiguous"
   },
   {
-    "file": "exploration/owner-closures.cod",
+    "file": "closures/owner-closures.cod",
     "exit": 0,
     "stdout": "3\n9\n9\n10\n0\n42\n7\n11\n10\n"
   },
   {
-    "file": "exploration/closure-lexical-error.cod",
+    "file": "closures/closure-lexical-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "cannot capture lexical variable storage"
   },
   {
-    "file": "exploration/closure-escape-error.cod",
+    "file": "closures/closure-escape-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "declare retained regions in the callable type"
   },
   {
-    "file": "exploration/closure-readonly-error.cod",
+    "file": "closures/closure-readonly-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read-only"
   },
   {
-    "file": "exploration/closure-selection.cod",
+    "file": "closures/closure-selection.cod",
     "exit": 0,
     "stdout": "11\n12\n13\n14\n3\n99\n4\ntrue\nfalse\ntrue\ntrue\n14\n14\n"
   },
   {
-    "file": "exploration/closure-mixin.cod",
+    "file": "closures/closure-mixin.cod",
     "exit": 0,
     "stdout": "23\n24\n"
   },
   {
-    "file": "exploration/closure-frames.cod",
+    "file": "closures/closure-frames.cod",
     "exit": 0,
     "stdout": "4\n3\n"
   },
   {
-    "file": "exploration/slot-closures.cod",
+    "file": "closures/slot-closures.cod",
     "exit": 0,
     "stdout": "5\n9\n9\n9\n9\n7\n9\n9\n14\n5\n9\n5\n11\n17\nfalse\ntrue\n"
   },
   {
-    "file": "exploration/slot-owner-transfer-error.cod",
+    "file": "closures/slot-owner-transfer-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "capture lists contain variable names"
   },
   {
-    "file": "exploration/slot-bits-mutation-error.cod",
+    "file": "closures/slot-bits-mutation-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read-only"
   },
   {
-    "file": "exploration/closure-released-error.cod",
+    "file": "closures/closure-released-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "requires a live region owner"
   },
   {
-    "file": "exploration/slot-cross-region-error.cod",
+    "file": "closures/slot-cross-region-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "cross-region reference fields"
   },
   {
-    "file": "exploration/closure-dynamic.cod",
+    "file": "closures/closure-dynamic.cod",
     "exit": 0,
     "stdout": "13\n23\n15\n25\n"
   },
   {
-    "file": "exploration/closure-function-effect-error.cod",
+    "file": "closures/closure-function-effect-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "function cannot read symbolic effects"
   },
   {
-    "file": "exploration/closure-symbol-owner-error.cod",
+    "file": "closures/closure-symbol-owner-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "symbolic procedure binding cannot erase captured region owners"
   },
   {
-    "file": "exploration/owner-contract-wrong.cod",
+    "file": "closures/owner-contract-wrong.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "callable environment owner mismatch"
   },
   {
-    "file": "exploration/owner-contract-infer-error.cod",
+    "file": "closures/owner-contract-infer-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "undeclared owner 'missing'"
   },
   {
-    "file": "exploration/owner-contract-readonly-error.cod",
+    "file": "closures/owner-contract-readonly-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read-only"
   },
   {
-    "file": "exploration/owner-contract-ambiguous.cod",
+    "file": "closures/owner-contract-ambiguous.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "cannot uniquely infer callable environment owners"
   },
   {
-    "file": "exploration/owner-contract.cod",
+    "file": "closures/owner-contract.cod",
     "exit": 0,
     "stdout": "5\n12\n1\n0\n5\n2\n"
   },
   {
-    "file": "exploration/owner-contract-local-error.cod",
+    "file": "closures/owner-contract-local-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": [
@@ -1717,29 +1717,29 @@
     ]
   },
   {
-    "file": "exploration/stream-monitor-use.cod",
+    "file": "closures/stream-monitor-use.cod",
     "exit": 0,
     "stdout": "0\n0\n2\n96\n128\n64\n80\n1\n"
   },
   {
-    "file": "exploration/variable-aliases.cod",
+    "file": "closures/variable-aliases.cod",
     "exit": 0,
     "stdout": "7\ntrue\n9\n13\n11\n17\n19\n"
   },
   {
-    "file": "exploration/capture-missing.cod",
+    "file": "closures/capture-missing.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "explicit capture list is missing 'count'"
   },
   {
-    "file": "exploration/capture-unused.cod",
+    "file": "closures/capture-unused.cod",
     "exit": 0,
     "stdout": "1\n",
     "stderr_contains": "capture 'other' is unused"
   },
   {
-    "file": "exploration/capture-unused.cod",
+    "file": "closures/capture-unused.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "warning treated as error",
@@ -1748,7 +1748,7 @@
     ]
   },
   {
-    "file": "exploration/capture-unused-owner.cod",
+    "file": "closures/capture-unused-owner.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "callable environment owner mismatch",
@@ -1757,55 +1757,55 @@
     ]
   },
   {
-    "file": "exploration/alias-kind-error.cod",
+    "file": "closures/alias-kind-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "var storage kind mismatch"
   },
   {
-    "file": "exploration/alias-owner-error.cod",
+    "file": "closures/alias-owner-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "var storage does not belong"
   },
   {
-    "file": "exploration/alias-readonly-error.cod",
+    "file": "closures/alias-readonly-error.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "cannot rebind through a const var alias"
   },
   {
-    "file": "exploration/closure-projection-readonly.cod",
+    "file": "closures/closure-projection-readonly.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read-only"
   },
   {
-    "file": "exploration/closure-projection-owner.cod",
+    "file": "closures/closure-projection-owner.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "expected owned region"
   },
   {
-    "file": "exploration/closure-projection-name.cod",
+    "file": "closures/closure-projection-name.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "no associated owner 'state'"
   },
   {
-    "file": "exploration/closure-selection-implementation.cod",
+    "file": "closures/closure-selection-implementation.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "different callable implementations"
   },
   {
-    "file": "exploration/closure-selection-owner.cod",
+    "file": "closures/closure-selection-owner.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "same actual region owners"
   },
   {
-    "file": "exploration/closure-projection-lifetime.cod",
+    "file": "closures/closure-projection-lifetime.cod",
     "exit": 2,
     "stdout": "",
     "stderr_contains": "regional result would outlive its owning scope"

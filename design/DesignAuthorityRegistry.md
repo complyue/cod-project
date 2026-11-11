@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：459
+记录版本：460
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -164,7 +164,7 @@ Design authority
 | C-70 | Region is a declaration keyword for whole-resource locals, parameters, results and procedure signatures. | C-65 scoped value P-270; C-54/C-37 constraints P-271 | H-307 completes H-275/H-276 without a legacy parser path; D-14r67/D-10r118. Root inference does not erase borrowed/owning responsibility or lifecycle checks. |
 | C-71 | Transfer methods return void or checked readonly destination views; indexed writes select logical container operations. | C-10 scoped value P-272; C-64/C-65 constraints P-273 | H-307 permits non-addressable containers; H-308 limits bits-like library guidance to intended/recommended chaining. D-14r67/D-10r118; no result-based dispatch or implicit graph copy. |
 | C-72 | Ref/ptr ordinary declarations distinguish compiler-checked initialization from nullable dereference. | Scoped declaration value P-274 to C-65; lifetime/access constraint P-275 | H-309 confirms ptr-marked fields and requests ordinary ref/ptr declarations without let/var; H-311 separately permits unmodified/val bits fields. Ref premature reads reject; ptr dereference may produce NPE. H-310/P-276 makes ref/ptr fields references even for scalars; H-311/P-277 permits direct bits fields with val or no modifier. D-14r67 keeps null/defaults, construction and conversion refinements pending-human. No implementation or changed encoding is approved by implication. H-313 accepts checked NPE and val locals/parameters under P-280–P-281; H-314/H-315 adds first-owner acquisition and isnull under P-282. Wider construction/source migration details remain scoped separately. |
-| C-73 | Unified owner-aware captures for named and anonymous functions/procedures. | Candidate value P-288/P-290 and scoped confirmed P-297 to C-65; dependencies P-289 on C-36/C-54 | H-321/H-322 requests a unified review; H-323 adds regional val/ref/ptr slots without lexical-cell promotion. H-329 confirms inferred captures when brackets are omitted, completeness checking when supplied, missing-capture errors and unused-entry warnings, with source-visible associated owners in D-18r9/C-03. Wider capture representation, persistence and nested dependency details remain review items; D-18r12/C-04 records the unified implementation and same-body environment selection; H-334/H-335/P-298 confirms visible-name owner projection with captured access and no ownership/lifetime extension. |
+| C-73 | Unified owner-aware captures for named and anonymous functions/procedures. | Candidate value P-288/P-290 and scoped confirmed P-297 to C-65; dependencies P-289 on C-36/C-54 | H-321/H-322 requests a unified review; H-323 adds regional val/ref/ptr slots without lexical-cell promotion. H-329 confirms inferred captures when brackets are omitted, completeness checking when supplied, missing-capture errors and unused-entry warnings, with source-visible associated owners in D-18r9/C-03. Wider capture representation, persistence and nested dependency details remain review items; D-18r13 records the unified implementation and same-body environment selection; H-334/H-335/P-298 confirms visible-name owner projection with captured access and no ownership/lifetime extension. |
 | C-74 | Structural product region definitions and required field subsets, with language-owned storage mechanics. | Candidate value P-291 to C-39/C-65; dependencies P-292 on C-72/C-54/D-01 | H-323 proposes region definitions alongside data, complete fields as the root product and structural field requirements in place of root-type requirements. D-13r29 reviews concrete layouts, owner identity and intrinsic/library allocation boundaries. Matching, identity, syntax and allocator policy details remain pending-human; no host layout or RTTI change is selected. |
 | C-75 | Explicit variable aliases naming existing storage without introducing a new holder. | Scoped confirmed value P-295 to C-65/C-73; constraints P-296 | H-327 accepts the ordinary-place alias explanation and requests optional val/ref/ptr prefixes, inferred when omitted and strictly checked when present. D-18r8/C-02 records that scope; whole-region/TLS inclusion and detailed capture integration remain separate. No implementation, legacy var restoration, new ownership or automatic lexical promotion is inferred. |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
@@ -208,7 +208,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 459，延续检查 K-01—K-458；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
+- 当前记录维护范围：记录版本 460，延续检查 K-01—K-459；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
 
 ### 待补确认的现有技术设计
 
@@ -230,7 +230,7 @@ Design authority
 <a id="d-07"></a>
 ### D-07：领域语言讨论与设计决策跟踪
 
-- **Unified closure-owner review:** H-321/H-322/C-73/P-288–P-289/[K-445](#k-445) reviews region-owned captures for named and anonymous callables. No live lexical binding capture, closure storage layout or ownership retention is selected; the affected new closure implementation contract remains pending-human.
+- **Current closure navigation:** D-07r146 points to [D-18r13](RegionalClosures.md) for the bounded H-327–H-335 capture/owner contract. H-336/K-459 removes superseded research text without changing language semantics or qualifying unrelated pending designs. Earlier revisions/events retain their recorded scope.
 
 - **Nullable call direction and annotation syntax:** H-317/H-318/P-284–P-285/[K-443](#k-443) records explicit nullable forwarding, deferred required-ref cycles and uniform colon annotations. Native implementation acceptance is pending; defer scope/timing remains under discussion.
 
@@ -311,9 +311,7 @@ Design authority
 <a id="d-10"></a>
 ### D-10: Symbols, dynamic scope and callable kinds
 
-- **Regional slot / structural-region review:** H-323/C-73–C-74/P-290–P-292/[K-446](#k-446) adds region-resident variable slots and proposes region field-set requirements. D-14r71/D-13r29 separates storage locations, concrete owners and structural compatibility. The affected new closure/structural-region contract remains pending-human; existing field, owner, dynamic-capture and allocator-library baselines are preserved. No runtime migration or new RTTI authority follows.
-
-- **Unified closure-owner review:** H-321/H-322/C-73/P-288–P-289/[K-445](#k-445) reviews region-owned captures for named and anonymous callables. No live lexical binding capture, closure storage layout or ownership retention is selected; the affected new closure implementation contract remains pending-human.
+- **Current closure navigation:** D-10r123 points to [D-18r13](RegionalClosures.md) for the bounded H-327–H-335 capture/owner contract. H-336/K-459 removes superseded research text without changing language semantics or qualifying unrelated pending designs. Earlier revisions/events retain their recorded scope.
 
 - **Nullable call direction and annotation syntax:** H-317/H-318/P-284–P-285/[K-443](#k-443) records explicit nullable forwarding, deferred required-ref cycles and uniform colon annotations. Native implementation acceptance is pending; defer scope/timing remains under discussion.
 
@@ -379,12 +377,12 @@ Design authority
 <a id="d-13"></a>
 ### D-13: CoD regional memory vision and implementation tracker
 
-- **Regional slot / structural-region review:** H-323/C-73–C-74/P-290–P-292/[K-446](#k-446) adds region-resident variable slots and proposes region field-set requirements. D-14r71/D-13r29 separates storage locations, concrete owners and structural compatibility. The affected new closure/structural-region contract remains pending-human; existing field, owner, dynamic-capture and allocator-library baselines are preserved. No runtime migration or new RTTI authority follows.
+- **Current closure navigation:** D-13r30 points to [D-18r13](RegionalClosures.md) for the bounded H-327–H-335 capture/owner contract. H-336/K-459 removes superseded research text without changing language semantics or qualifying unrelated pending designs. Earlier revisions/events retain their recorded scope.
 
 - **Region/transfer continuity:** H-307/H-308/C-70–C-71/P-270–P-273/K-435 covers complete region declaration syntax and void-or-view ordinary/indexed transfers. [Current validation](../tests/cod/language/region-transfer-validation.json) records migrated language checks, lifecycle cleanup and LLVM verification. K-441 covers the accepted checked-NPE extension; other pending scopes remain pending.
 
 - **Symbolic storage update:** H-277–H-281/K-422 records inline TLS bits, effect-arrow transfer and effect-equals object-reference rebinding with region-symbol backing and lifetime checks. P-248/P-249 separates ordinary fixed-owner pointers and resource ownership. This migration is not covered by existing pointer-cell native evidence; full-document pending qualification is unchanged.
-- **Contract/status:** [GraphGrainedMemoryManagement.md](GraphGrainedMemoryManagement.md), revision 29, all sections; K-383 reconciles lexical-view examples and source post-state wording with H-181 and D-14. K-379 retains its evidence-link review. H-156/H-157 confirms the local graph boundary. The full design and candidate value paths remain `pending-human`.
+- **Contract/status:** [GraphGrainedMemoryManagement.md](GraphGrainedMemoryManagement.md), revision 30, all sections; K-383 reconciles lexical-view examples and source post-state wording with H-181 and D-14. K-379 retains its evidence-link review. H-156/H-157 confirms the local graph boundary. The full design and candidate value paths remain `pending-human`.
 - **Lineage / baseline:** P-138/P-139 motivates inspectable graphs/structured semantic units through C-01/C-05; P-140 constrains C-40. C-54/P-143 and D-14/P-155 relates lifetime responsibility to C-10. P-141/P-142 supplies representation/language dependencies only. H-166/H-177/H-179–H-181/H-190/H-193/H-196–H-203/H-209 supplies the recorded module, ownership, regional-data, function and borrow constraints.
 - **Current boundary:** data products are regional; type declares abstractions. Typed dynamic resources reject extraction and preserve captured/hidden owners. Explicit-memory functions and borrowed results retain region provenance. K-411 records typed make/root and ordinary owning locals/calls/results under D-17 E4/E5; optional outcomes and packet transport remain unimplemented. H-262 supplies the consumed-state contract.
 - **Acceptance / evidence:** K-381 records4 acquisitions/releases,18 live reads, guarded-scope cleanup and independent graph/pool relocation on its recorded compiler; K-365 retains its earlier focused checkpoint. K-382 checks actual factory-result owners through four forwarding modules. K-383 removes obsolete consuming-dynamic-owner examples from the current explanation; their original reports remain historical. K-364 preserves supported symbolic-reference conformance. K-305/K-310/K-311 and earlier owner-move records retain their original source/semantic scopes. No per-object ownership, runtime borrow table or allocator policy is introduced.
@@ -404,9 +402,7 @@ Design authority
 <a id="d-14"></a>
 ### D-14: Regional ownership language: syntax, semantics and practical use
 
-- **Regional slot / structural-region review:** H-323/C-73–C-74/P-290–P-292/[K-446](#k-446) adds region-resident variable slots and proposes region field-set requirements. D-14r71/D-13r29 separates storage locations, concrete owners and structural compatibility. The affected new closure/structural-region contract remains pending-human; existing field, owner, dynamic-capture and allocator-library baselines are preserved. No runtime migration or new RTTI authority follows.
-
-- **Unified closure-owner review:** H-321/H-322/C-73/P-288–P-289/[K-445](#k-445) reviews region-owned captures for named and anonymous callables. No live lexical binding capture, closure storage layout or ownership retention is selected; the affected new closure implementation contract remains pending-human.
+- **Current closure navigation:** D-14r72 points to [D-18r13](RegionalClosures.md) for the bounded H-327–H-335 capture/owner contract. H-336/K-459 removes superseded research text without changing language semantics or qualifying unrelated pending designs. Earlier revisions/events retain their recorded scope.
 
 - **Nullable call direction and annotation syntax:** H-317/H-318/P-284–P-285/[K-443](#k-443) records explicit nullable forwarding, deferred required-ref cycles and uniform colon annotations. Native implementation acceptance is pending; defer scope/timing remains under discussion.
 
@@ -478,12 +474,11 @@ Design authority
 - **Affected designs:** D-07r121/D-10r118/D-13r28/D-14r67 link this bounded accepted contract; their other pending choices remain pending. D-01/D-04 cleanup claims still require actual evidence.
 
 <a id="d-18"></a>
-### D-18: Structural region and closure experimental comparison
+### D-18: Regional variables and callable captures
 
-- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 12; H-327 confirms C-02's ordinary-place alias interpretation and strict optional storage-kind prefixes. H-329 confirms C-03's where/with/capture distinction, object-derived region owner, alias-owner assertion and inferred-or-complete-list captures. H-330 authorizes integration; H-331 requires owner dependencies even for unused explicit captures. H-332 requires actual capture of every with-listed owner. C-04 records 289/289 language checks and matching native/composition evidence. H-333 authorizes repair of same-body runtime capture selection; H-334/H-335 confirms named retained-owner projection with visible-name adaptation and borrowed access. General stored/runtime-dispatched closure representation remains a review item; K-458 records bounded selection/projection implementation and validation. H-324's experimental scope remains unchanged; P-293/P-294/P-295/P-297 record the scoped value paths.
-- **Boundaries:** No final adoption, cross-region stored edges, lexical-cell promotion, hidden user heap, new RTTI, bootstrap/configuration changes or SNN model decisions. Existing memory/effect/module/exception/fraction invariants constrain every candidate.
-- **Acceptance:** At least two useful alternatives with working native examples, invalid-program rejection, practical code and complexity comparison, exact evidence and an active-time ledger. Stop for review no later than 48 active work hours even if incomplete; waiting is excluded.
-
+- **Contract/status:** [RegionalClosures.md](RegionalClosures.md), revision 13, continues the bounded H-327–H-335 contract: ordinary aliases, inferred/checked captures, actual named owners, same-implementation selection and borrowed owner projection. P-293/P-294/P-295/P-297/P-298 retains the value path. H-336/K-459 consolidates conclusions and executable coverage, with historical research available from the commit identified in the conclusion document.
+- **Boundaries:** No lexical-cell promotion, hidden user heap, new RTTI, region ownership extension or native representation change. General stored/runtime-dispatched closures and unrelated pending contracts remain outside scope.
+- **Acceptance:** Native source fixtures and rejection cases preserve kind/type/access/owner/lifetime checks, selection and projection semantics, deep composition and bounded region use. The implementation checkpoint passed 295/295 language cases; cleanup validates relocated coverage without changing compiler behavior.
 
 The following relationships apply only to the individually recorded scopes and revisions. Current document coverage is maintained in the status entries above; a historical row annotation does not qualify a later revision. P-31 remains rejected. P-69/P-70/P-83 retains its confirmed H-94 local scope; other human constraints and pending candidate paths retain their own recorded status. Dependency edges never confer design authority.
 
@@ -4600,6 +4595,14 @@ Human/source: current user, reply to call_7eec82c577d1470f99351cdd369a0234, reco
 > Use the visible with-name and borrowed access (Recommended)
 
 Accepted proposition: cb -> state resolves state in cb's visible with-type. A helper parameter with region r uses cb -> r, and does not expose the factory's former name state through that view. Projection borrows the retained region with captured permissions, cannot take ownership and cannot extend its lifetime. Scope is D-18r12/C-04/P-298; it does not select general runtime closure storage, persistence or cross-owner adaptation.
+
+<a id="h-336"></a>
+
+Human/source: current user, current project chat, recorded 2026-11-11 UTC; exact message timestamp unavailable.
+
+> 提交推送。 然后做个文档和代码清理，研究性篇幅从repo删除，仅简单通过 commit hash 在结论文档中提及，避免干扰 repo search
+
+Scope: commit/push the validated implementation, remove the completed regional-closure exploration's research prose/reports, retain concise conclusions with a commit reference, and clean the associated code/tests. This is editorial/organizational authorization, not a new language or ownership policy. Human decision history remains append-only; archived experiment artifacts are not active contracts.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -9310,3 +9313,9 @@ Accepted proposition: cb -> state resolves state in cb's visible with-type. A he
 - Same-body/same-owner callback environments merge borrowed regional slot addresses through LLVM PHIs, including nested callable captures. Captured ref/ptr slots preserve later rebinding and checked null behavior. Owner names map to actual retained regions independently of sorted lifetime dependencies; projection uses the visible with-type and preserves borrowed access. No per-object ownership, lexical-cell promotion, user heap closure, RTTI, numeric/fraction conversion, native allocation/relative-pointer encoding or bootstrap changes occur.
 - D-14 access/lifetime rules, D-10 lexical versus dynamic procedure contexts and D-15 module/TLS separation remain constraints. Different code bodies, captured dynamic contexts and actual owner sets retain explicit prototype rejection; no general runtime closure ABI is silently selected. D-16 review finds no conflict with planned fractions or numeric representation/formatting. Affected descendants are bounded D-18 implementation/examples; wider pending D-10/D-14 designs remain pending.
 - Validation: cmake --build ./build succeeds; COD_TEST_TOOLCHAIN=build passes 295/295 language cases. Native regional relocation/resource cleanup and 64-module/10,000-frame composition pass on the same compiler. selection-validation.json records exact compiler/source hashes, both branch outcomes, nested and pointer-slot captures, procedure selection, owner-name adaptation and readonly/non-owning/expired/mismatched-owner rejection. Emitted LLVM has four pointer PHIs and only the two explicit region acquisitions. The native runtime and allocation/relative-reference encoding are unchanged.
+
+<a id="k-459"></a>
+
+- Registry459 →460; D-18r12 →13 is an editorial continuation of H-327–H-335 under H-336. D-18 retains the accepted alias/capture/owner/projection contract, invariants and limitations, while superseded syntax, comparisons, work logs and historical report bodies leave the current tree. The conclusion document carries the research commit reference. D-GOV460 continues H-05 maintenance; human confirmation and prior continuity events are unchanged.
+- Charter §§1–3/§8 alignment preserves explicit storage/owner reasoning and readable source without competing design narratives. C-65/C-73/C-75 and P-294/P-295/P-297/P-298 are unchanged. D-07r145 →146, D-10r122 →123, D-13r29 →30 and D-14r71 →72 replace stale closure review prose with D-18 references; they do not qualify their wider pending mechanisms. D-01 allocation/relocation, D-15 module/TLS and D-16 numeric/fraction requirements are unchanged.
+- Executable fixtures move to tests/cod/language/closures, with unchanged contents and case expectations; the composition runner uses a current suite label instead of an experiment variant. No alternative compiler implementation or experimental switch remains to remove. The compiler/runtime are unchanged. Validation: cmake --build ./build succeeds; COD_TEST_TOOLCHAIN=build passes all 42 affected language checks, including frontend emission, plus 64-module and 10,000-frame composition. Fixture bytes, case expectations and relative imports are preserved; new document links resolve. Original H/K history is unchanged. No report dump is reintroduced into the repository.

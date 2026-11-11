@@ -63,7 +63,7 @@ def main():
                         "stdout": run.stdout, "bounded_occupation": True, "llvm_bytes": len(ir.encode()),
                         "region_acquisition_calls": sum('call ' in l and '@cod_lang_region_new(' in l for l in ir.splitlines()),
                         "source_sha256": hashlib.sha256(frame.encode()).hexdigest()})
-    evidence = {"variant": "unified", "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
+    evidence = {"suite": "regional-closures", "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
                 "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), "passed": True,
                 "results": results, "timing_scope": "frontend, native compile/link and process combined; not a simulation throughput benchmark"}
     print(json.dumps(evidence, indent=2))
