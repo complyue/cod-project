@@ -651,8 +651,25 @@ class Compiler {
     const auto &parent = abstracts_.at(actual.identity).parent;
     return parent && nominal_subtype(*parent, expected, at);
   }
+  bool region_definition(Type type) const {
+    return type.kind == Type::regional && products_.at(type.identity).form->kind == Form::Kind::region_definition;
+  }
   bool subtype(Type actual, Type expected, const Module &visible, const Location &at) {
     if (nominal_subtype(actual, expected, at)) return true;
+    if (region_definition(actual) && region_definition(expected)) {
+      resolve(actual, visible, at);
+      resolve(expected, visible, at);
+      const auto &available = products_.at(actual.identity).fields;
+      const auto &required = products_.at(expected.identity).fields;
+      const auto kind = [](const Parameter &field) {
+        return field.declaration_kind.empty() ? std::string_view("val") : std::string_view(field.declaration_kind);
+      };
+      return std::all_of(required.begin(), required.end(), [&](const Parameter &field) {
+        return std::any_of(available.begin(), available.end(), [&](const Parameter &candidate) {
+          return candidate.name == field.name && candidate.type == field.type && kind(candidate) == kind(field);
+        });
+      });
+    }
     if (actual.kind != Type::regional || expected.kind != Type::abstract_type) return false;
     const auto matches = [&](const Conformance &relation) {
       return relation.data == actual && nominal_subtype(relation.interface, expected, at);
@@ -985,7 +1002,7 @@ class Compiler {
         if (!lexical_names.insert(form.name).second) fail(form.at, "duplicate lexical name '" + form.name + "'");
         result.world.types.emplace(form.name, Type{Type::abstract_type, result.path + "::" + form.name, abstracts_.size()});
         abstracts_.push_back({&form, &result, {}});
-      } else if (form.kind == Form::Kind::data) {
+      } else if (form.kind == Form::Kind::data || form.kind == Form::Kind::region_definition) {
         require_user_type_name(form.name, form.at);
         if (!lexical_names.insert(form.name).second) fail(form.at, "duplicate lexical name '" + form.name + "'");
         const Type type{Type::regional, result.path + "::" + form.name, products_.size()};
@@ -2139,6 +2156,7 @@ class Compiler {
     if (expr.kind == K::null_ref) return scalar(Type::null_ref, nullptr);
     if (expr.kind == K::field) {
       auto value = query_value(*expr.children.front(), module, locals);
+      if (value.type.kind == Type::region && value.type.target) value.type = *value.type.target;
       if (value.type.kind == Type::regional)
         for (const auto &field : products_.at(value.type.identity).fields)
           if (field.name == expr.text) {
@@ -3136,7 +3154,12 @@ class Compiler {
   }
   Value field_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                          bool function_context) {
-      const auto value = expression(*expr.children[0], module, env, locals, function_context);
+      auto value = expression(*expr.children[0], module, env, locals, function_context);
+      if (value.type.kind == Type::region && value.type.target) {
+        value.native = ir_.region_root(region_pointer(value, expr.at));
+        value.type = *value.type.target;
+        value.holding_id.reset();
+      }
       if (value.type.kind == Type::exception) {
         if (expr.text == "category") return scalar(Type::uint64, exception_category(value));
         if (expr.text == "cause_count") return scalar(Type::uint64, ir_.cause_count(value.native));
@@ -3792,7 +3815,7 @@ class Compiler {
         module.world.available_symbols.insert(form.name);
         break;
       case Form::Kind::function: case Form::Kind::array: case Form::Kind::unit:
-      case Form::Kind::export_resource: break;
+      case Form::Kind::region_definition: case Form::Kind::export_resource: break;
       case Form::Kind::abstract_type:
         resolve_abstract(module.world.types.at(form.name), form.at);
         break;

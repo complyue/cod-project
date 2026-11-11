@@ -71,7 +71,7 @@ def main():
                    root / "cod/lang_llvm.hh", root / "cod/lang_native_runtime.hh",
                    root / "include/shilos/region.hh",
                    root / "tests/cod/test_language.sh", directory / "run_tests.py", directory / "cases.json",
-                   *sorted(directory.glob("*.cod"))]
+                   *sorted(directory.rglob("*.cod"))]
         evidence = {"schema_version": 2, "recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "platform": platform.platform(), "toolchain": mode, "backend": "llvm", "passed": passed_count,
                     "total": len(results), "results": results,

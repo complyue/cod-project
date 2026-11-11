@@ -288,7 +288,7 @@ struct SymbolMapping {
   Location at;
 };
 struct Form {
-  enum class Kind { symbol, symbol_from, function, procedure, data, array, unit, using_units, global,
+  enum class Kind { symbol, symbol_from, function, procedure, data, region_definition, array, unit, using_units, global,
                     using_resource, import_resource, mixin_resource, export_resource, expression, abstract_type, conformance };
   Kind kind;
   Location at;
@@ -970,11 +970,13 @@ public:
         type_separator();
         form->result_type = parse_type();
         expect(";");
-      } else if (is("type") || is("data") || is("regional")) {
+      } else if (is("type") || is("data") || is("regional") ||
+                 (is("region") && tokens_[cursor_ + 1].kind == TokenKind::identifier && is("{", 2))) {
         if (is("regional")) fail(start.at, "regional type is not a declaration; use data for a regional representation");
-        const bool data = take("data");
+        const bool region = take("region");
+        const bool data = region || take("data");
         if (!data) expect("type");
-        form->kind = Form::Kind::data;
+        form->kind = region ? Form::Kind::region_definition : Form::Kind::data;
         form->name = ordinary_name().text;
         if (take("<:")) form->parent_type = parse_type();
         if (!is("{")) {

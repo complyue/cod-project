@@ -1,0 +1,4 @@
+using "structural-api.cod" advance;
+region Wrong { val ticks:u32; }
+owned region state:Wrong <- make Wrong(capacity = 128u64) { ticks <- 3u32 };
+advance(state);

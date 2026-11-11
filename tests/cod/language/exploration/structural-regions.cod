@@ -1,0 +1,25 @@
+using symbol "std:io" @print;
+using "structural-api.cod" Node;
+using "structural-api.cod" Counter;
+using "structural-api.cod" Cursor;
+using "structural-api.cod" advance;
+using "structural-api.cod" owner_ticks;
+region First { val ticks:u64; ptr current:Node; val spare:u64; }
+region Second { val tag:u8; val spare:u64; ptr current:Node; val ticks:u64; }
+owned region first:First <- make First(capacity = 512u64) { ticks <- 3u64; current = null; spare <- 17u64 };
+owned region second:Second <- make Second(capacity = 512u64) { tag <- 2u8; spare <- 19u64; current = null; ticks <- 10u64 };
+behave @print(advance(first));
+behave @print(advance(second));
+ptr node = alloc second Node(42);
+second.current = node;
+behave @print(owner_ticks(node));
+region cursor:Cursor = second;
+behave @print(cursor.ticks);
+behave @print(isnull(first.current));
+behave @print(isnull(cursor.current));
+val copied <- second.ticks;
+behave @print(copied);
+function select(region state:Counter) -> const u64 { 1u64 }
+function select(region state:Cursor) -> const u64 { 2u64 }
+behave @print(select(first));
+behave @print(select(second));

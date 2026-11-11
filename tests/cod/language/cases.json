@@ -1563,5 +1563,34 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "single colon"
+  },
+  {
+    "file": "exploration/structural-regions.cod",
+    "exit": 0,
+    "stdout": "4\n11\n11\n11\ntrue\nfalse\n11\n2\n2\n"
+  },
+  {
+    "file": "exploration/structural-kind-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected region"
+  },
+  {
+    "file": "exploration/structural-type-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected region"
+  },
+  {
+    "file": "exploration/structural-readonly-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "exploration/structural-ambiguous.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "ambiguous"
   }
 ]

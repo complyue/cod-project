@@ -1,0 +1,18 @@
+{
+  "baseline": "96468d9",
+  "started_utc": "2026-11-11T04:29:21.955156+00:00",
+  "active_limit_seconds": 172800,
+  "active_seconds": 523.1813397799851,
+  "boot_id": "cb17c49d-02bc-443b-80b3-79d027ae35d4",
+  "segment_started_monotonic": 138630.13708919,
+  "phase": "owner-based closure alternative",
+  "excluded_wait_seconds": 0,
+  "branches": [
+    "codex/region-closure-common",
+    "codex/region-closure-owners",
+    "codex/region-closure-slots"
+  ],
+  "note": "Measured active work plus one conservative hour for unmeasured baseline preparation must stay below 48 hours; waiting excluded. Branches share existing build sequentially.",
+  "preparation_allowance_seconds": 3600,
+  "checkpoint_utc": "2026-11-11T04:38:05.136203+00:00"
+}

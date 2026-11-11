@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：447
+记录版本：448
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -207,7 +207,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 447，延续检查 K-01—K-446；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
+- 当前记录维护范围：记录版本 448，延续检查 K-01—K-447；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
 
 ### 待补确认的现有技术设计
 
@@ -475,6 +475,14 @@ Design authority
 - **Non-goals:** owner reassignment, mailbox transport, general user exception payload graphs, general RTTI, graph rollback, per-object owners, toolchain changes. H-269 resolves retained cause lifetime; other material choices still require review.
 - **Acceptance:** controlled construction failure and exact release; nested control, explicit causes, captured/hidden effect restoration, pre-entry versus in-callee failure, handler owner/view joins and abandoned owning results. K-409/K-410 supplies backend/plain-exception evidence; K-411 proves bounded ordinary-owner construction, calls/results, joins and cleanup. H-269 confirms retained chains beyond catch exit and fallible explicit chain creation; K-414 validates immutable numeric cause handles, stored categories, three chain-allocation failure points and normal/uncaught cleanup. The [completed E1–E5 audit](../tests/cod/language/exception-ownership-validation.json) maps every requirement to current compiler/source evidence; no full-suite or cross-process acceptance is claimed.
 - **Affected designs:** D-07r121/D-10r118/D-13r28/D-14r67 link this bounded accepted contract; their other pending choices remain pending. D-01/D-04 cleanup claims still require actual evidence.
+
+<a id="d-18"></a>
+### D-18: Structural region and closure experimental comparison
+
+- **Contract/status:** [RegionClosureExploration.md](RegionClosureExploration.md), revision 1, all sections; H-324 confirms autonomous multi-branch design/implementation/validation within existing principles, with trade-offs reserved for final human review. P-293 records the scoped value path to C-73/C-74.
+- **Boundaries:** No final adoption, cross-region stored edges, lexical-cell promotion, hidden user heap, new RTTI, bootstrap/configuration changes or SNN model decisions. Existing memory/effect/module/exception/fraction invariants constrain every candidate.
+- **Acceptance:** At least two useful alternatives with working native examples, invalid-program rejection, practical code and complexity comparison, exact evidence and an active-time ledger. Stop for review no later than 48 active work hours even if incomplete; waiting is excluded.
+
 
 The following relationships apply only to the individually recorded scopes and revisions. Current document coverage is maintained in the status entries above; a historical row annotation does not qualify a later revision. P-31 remains rejected. P-69/P-70/P-83 retains its confirmed H-94 local scope; other human constraints and pending candidate paths retain their own recorded status. Dependency edges never confer design authority.
 
@@ -776,6 +784,7 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-290 | C-73 derives-from | C-65 | Candidate: capturing a regional variable slot preserves its actual owner's validity while permitting ordinary variable updates to remain observable in a callable. H-323 supplies the use case; D-14r71 keeps lexical-cell promotion, capture syntax and environment layout unselected. Slot capture does not depend on adopting structural region types. Pending-human for the detailed mechanism. |
 | P-291 | C-74 derives-from | C-39 / C-65 | Candidate: explicit region products and required field subsets express reusable storage operations in CoD while retaining concrete allocation ownership, instead of requiring a particular host root class. H-323 proposes this value path; D-13r29 matching/identity/construction/allocator policy remains pending-human. |
 | P-292 | C-74 depends-on | C-72 / C-54 / D-01 | Dependency: structural matching must account for val/ref/ptr storage, access and initialization, whole-region lifetime/transfer and relocation-safe physical representation. D-13r29/D-14r71; H-311/H-190 remain scoped baselines. This edge does not authorize a new allocator policy, per-object ownership, RTTI or a C++ representation change. |
+| P-293 | D-18 derives-from | C-73 / C-74 | H-324 authorizes experimental alternatives and native comparison to find practical, low-debt regional storage/capture semantics within charter/repository principles. D-18r1 scope is confirmed for branch-local exploration and evidence, not adoption of each candidate mechanism. D-14/D-13/D-10/D-17/D-16 and D-01/D-15 constraints remain. |
 
 
 ### 影响检索索引
@@ -4471,6 +4480,16 @@ Human/source: current user, current conversation, recorded 2026-11-11 UTC; exact
 > 有个重要场景是，某些 val/ref/ptr 本身的存储就在 region 内，CoD应该能确认该 owning region live 时把它们当程序变量用，能capture它们到closure里。 感觉要大改 region 机制，变成与 `data` 并列的类型定义关键词，单只定义 structural typed product type，使用者声明region要求时，不再按root type，而是要求包含所需的字段集，完整字段就是一个region的 root  (product ADT) type。 region 内部内存管理机制，大概要做成 CoD 语言intrisic了，其扩展不能再简单通过C++ root type做了
 
 Scope: identifies region-resident val/ref/ptr storage as variables that closures should be able to capture while their actual region remains valid. Proposes region-defined structural products, field-subset requirements and language intrinsic storage management. This supplies the concrete use case missing from H-322's target-versus-lexical-binding review; it does not equate capture of a regional binding slot with capture of that slot's current target. Exact capture syntax, structural matching/identity, field access projection, environment storage and allocation-policy extent remain for discussion. C-73/P-290 and C-74/P-291–P-292 record candidate derivations, not approval of the agent's detailed design. H-190's intra-region library policies are not silently withdrawn; D-01 layout and RTTI remain unchanged.
+
+<a id="h-324"></a>
+
+Human/source: current user, current conversation, recorded 2026-11-11 UTC; exact source-message timestamps unavailable.
+
+> 提交一版基线。 然后你用多分支自主推进这次设计重构的尝试，大的原则repo已经有了，不违反的情况下你自主探索设计空间，找到实用性强，技术债务低的语言设计，可以是多个，最后再跟我探讨取舍，拿经验证的结果说。 48工作小时内你自主推进，超过48小时还没收尾也停下跟我一起审查进展情况。
+>
+> 设goal保持自主推进
+
+Scope: explicitly authorizes baseline commit, autonomous multi-branch experimental design/implementation and validation of the regional closure refactor within repository principles, with final trade-offs reserved for review. The task is bounded by 48 active work hours and excludes waiting. Routine candidate design choices within this experimental scope may be tried without individual prior confirmation; this is not a charter change or final ratification of all candidates. No bootstrap/toolchain mutation or new RTTI is inferred. D-18r1/P-293 records the experimental contract and acceptance; the autonomous goal is active.
 
 ## 7. 延续、整理与失效事件（只追加）
 
@@ -9096,3 +9115,10 @@ Scope: identifies region-resident val/ref/ptr storage as variables that closures
 - D-13 proposes full region products and consumer field subsets, preserving actual owner identity and nominal field types/UoM identities. Field compatibility is not a byte-prefix/layout cast; compile-time concrete-layout access is an implementation candidate, not runtime RTTI. Language region definitions need not extend C++ roots; native code inspection finds an existing empty CoDRegionRoot shell plus LLVM-defined root storage. This supports bounded implementation planning without proving structural matching or requiring replacement of the allocator. Intrinsic storage/lifetime versus library free-list/pool policy remains an explicit review boundary.
 - Affected downstream scopes: D-07 language integration and D-17 contextual callbacks/defer depend on the completed capture contract; D-10 lexical capture remains pending while perform/behave's dynamic capture contract is preserved. D-14 root-constrained owners and D-13 storage construction require review before structural migration. D-01 host protocols, D-15 module/TLS identity and RTTI restrictions, D-16 numeric representation and existing colon/nullable acceptance remain unchanged. Current D-10/D-14 index revision labels are synchronized without broadening qualification; old H/K evidence remains append-only.
 - No compiler changes, build/test execution, commit/push or implemented-closure claim accompanies this design review. Validation is limited to document revisions/links, historical record preservation and whitespace. Existing compiler/source acceptance records retain their own scope.
+
+<a id="k-447"></a>
+
+- Registry447 →448; introduces D-18r1/P-293 under H-324's explicit experimental authorization. Baseline 96468d9 preserves the accepted colon/nullable compiler and the H-323 design review; its compiler and 338 source hashes match 254/254 native language acceptance plus regional/exception/ownership/composition evidence.
+- D-18 defines a shared structural-region foundation and owner-based versus explicit-slot closure branches. Charter §§1–3 and current D-01/D-10/D-13/D-14/D-15/D-16/D-17 dependencies constrain alternatives. Pending final language choices remain pending; isolated implementation experiments are now authorized, not self-approved as a production contract. D-GOV448 continues H-05 record maintenance only.
+- The active goal tracks evidence-based comparison and the 48-active-hour review limit. Branches reuse the existing SSD checkout/build sequentially, with no configuration, cleanup, symlink or bootstrap change. Baseline preparation receives a conservative time allowance; measured work and waiting are recorded separately. User-facing final selection and merge remain deferred to review.
+- Shared-foundation checkpoint: source-only build succeeds and 259/259 language checks pass, including five structural-region cases plus frontend LLVM verification. Exact compiler/source identities and limitations are recorded in tests/cod/language/exploration/structural-validation.json. Field requirements are lower bounds over known concrete layouts; no closure, field-visibility erasure, allocator or RTTI acceptance is claimed.
