@@ -1,0 +1,9 @@
+proc run()->void {
+  val first:u64 <- 1u64;
+  ptr selected = first;
+  {{
+    val second:u64 <- 2u64;
+    defer {selected = second;};
+  }};
+}
+run();

@@ -107,6 +107,7 @@ struct Value {
   std::optional<StorageView> storage = {};
   std::optional<size_t> pointer = {}; // Lexical binding, distinct from its current referent.
   bool nullable = false;
+  size_t target_flow = 0; // Selected pointer targets through shared control flow.
   bool pending_owner = false;
   std::optional<std::pair<size_t, bool>> nonnull_when = {};
   std::optional<LLVMEmission::Place> reference_field = {};
@@ -372,7 +373,7 @@ class Compiler {
     size_t scope = 0;
   };
   std::vector<Holding> holdings_;
-  struct LocalCell { size_t scope; Location at; size_t initialized = 0; };
+  struct LocalCell { size_t scope; Location at; size_t initialized = 0; bool selected_target = false; };
   // The slot is the runtime address; the view carries checked owner/type/access
   // constraints and initialization facts, not an exact runtime target identity.
   struct Pointer { llvm::Value *slot; const Value *view; ReadOnly read_only; bool fixed_binding = false; bool required = false; Location at; };
@@ -404,12 +405,29 @@ class Compiler {
   // Control-flow snapshots share unchanged views. A rebind or refinement adds
   // a version, leaving every saved branch/call/exception state intact.
   std::deque<Value> pointer_views_;
+  struct PointerFlow {
+    std::vector<size_t> inputs;
+    const Value *source = nullptr;
+    bool open = false;
+    bool nonnull = false;
+    size_t initialized = 0;
+  };
+  std::vector<PointerFlow> pointer_flows_{{}};
+  struct PointerSubstitution { std::map<size_t, size_t> inputs, nodes; };
+  std::deque<PointerSubstitution> pointer_substitutions_;
+  struct TargetInitialization { size_t target, cell, proof; bool excludes; };
+  std::vector<TargetInitialization> target_initializations_;
+  std::map<size_t, size_t> pointer_initializations_;
+  std::map<size_t, size_t> selected_cells_;
+  std::vector<std::pair<size_t, FlowCondition>> initialization_conditions_;
+  FlowCondition null_check_possible_ = true;
   using CallableAlternatives = std::vector<std::shared_ptr<const Procedure>>;
   using CallableMemory = llvm::ImmutableMap<size_t, size_t>;
   CallableMemory::Factory callable_memory_factory_;
   struct CleanupState {
     std::vector<size_t> initialized;
     CallableMemory callables{nullptr};
+    std::vector<const Value *> pointers;
   };
   using CleanupPaths = std::array<CleanupState, concrete_exception_count + 1>;
   struct NativeCallDemand;
@@ -552,6 +570,7 @@ class Compiler {
     size_t owner_scope;
     std::deque<DeferredAction> actions;
     DeferredScope *parent = nullptr;
+    std::set<size_t> rebound_pointers = {};
   };
   DeferredScope *deferred_scope_ = nullptr;
   std::set<llvm::Value *> deferred_loop_controls_;
@@ -682,7 +701,11 @@ class Compiler {
     if (value.pending_owner && value.pointer && std::any_of(loop_pointers_.begin(), loop_pointers_.end(),
         [&](const LoopPointers &loop) { return *value.pointer < loop.boundary; }))
       fail(at, "establish a pointer owner before a repeated loop dereference");
-    require_npe_handler(at);
+    const auto possible = value.target_flow ? FlowCondition::deferred([this, flow = value.target_flow] {
+      return pointer_nullable(flow);
+    }) : FlowCondition{true};
+    require_npe_handler(at, possible);
+    const auto checking = llvm::SaveAndRestore(null_check_possible_, possible);
     ir_.null_check(value.storage ? value.storage->address : value.native);
     if (value.pending_owner) { ir_.unreachable(); throw EndPath{}; }
   }
@@ -695,6 +718,137 @@ class Compiler {
   const Value *snapshot_pointer(Value value) {
     pointer_views_.push_back(std::move(value));
     return &pointer_views_.back();
+  }
+  size_t pointer_flow(const Value &value, const std::vector<size_t> *initialized = nullptr) {
+    if (value.target_flow) {
+      if (value.nullable) return value.target_flow;
+      pointer_flows_.push_back({{value.target_flow}, nullptr, false, true});
+    } else {
+      size_t proof = 1;
+      if (value.storage) for (const auto cell : value.storage->cells)
+        proof = join_initialization(proof, initialized ?
+            (cell < initialized->size() ? initialized->at(cell) : 0) : cells_.at(cell).initialized);
+      pointer_flows_.push_back({{}, snapshot_pointer(value), false, false, proof});
+    }
+    return pointer_flows_.size() - 1;
+  }
+  size_t pointer_initialization(size_t flow) {
+    if (const auto found = pointer_initializations_.find(flow); found != pointer_initializations_.end())
+      return found->second;
+    initialization_flows_.push_back({{}, true});
+    const auto proof = initialization_flows_.size() - 1;
+    pointer_initializations_.emplace(flow, proof);
+    return proof;
+  }
+  size_t selected_cell(const Value &value, const Location &at) {
+    if (const auto found = selected_cells_.find(value.target_flow); found != selected_cells_.end()) return found->second;
+    const auto cell = cells_.size();
+    cells_.push_back({value.storage && value.storage->scope ? *value.storage->scope : local_scope_, at,
+                      pointer_initialization(value.target_flow), true});
+    selected_cells_.emplace(value.target_flow, cell);
+    return cell;
+  }
+  size_t join_pointer_flow(const Value &first, const Value &second) {
+    if (!first.target_flow && !second.target_flow) return 0;
+    const auto a = pointer_flow(first), b = pointer_flow(second);
+    if (a == b) return a;
+    pointer_flows_.push_back({{a, b}});
+    return pointer_flows_.size() - 1;
+  }
+  struct PointerTargets { std::set<size_t> cells; bool other = false; bool closed = true; };
+  PointerTargets pointer_targets(size_t flow) const {
+    PointerTargets result;
+    std::set<size_t> visited;
+    std::vector<size_t> pending{flow};
+    while (!pending.empty()) {
+      const auto id = pending.back(); pending.pop_back();
+      if (!id || !visited.insert(id).second) continue;
+      const auto &node = pointer_flows_.at(id);
+      result.closed &= !node.open;
+      if (node.source && node.source->storage) {
+        const auto &storage = *node.source->storage;
+        result.cells.insert(storage.cells.begin(), storage.cells.end());
+        result.other |= storage.initialized_alternatives;
+      }
+      pending.insert(pending.end(), node.inputs.begin(), node.inputs.end());
+    }
+    return result;
+  }
+  bool pointer_nullable(size_t flow) const {
+    std::set<size_t> visited;
+    std::vector<size_t> pending{flow};
+    while (!pending.empty()) {
+      const auto id = pending.back(); pending.pop_back();
+      if (!id || !visited.insert(id).second) continue;
+      const auto &node = pointer_flows_.at(id);
+      if (node.nonnull) continue;
+      if (node.open || (node.source && node.source->nullable)) return true;
+      pending.insert(pending.end(), node.inputs.begin(), node.inputs.end());
+    }
+    return false;
+  }
+  size_t target_initialization(size_t target, size_t cell, bool excludes) {
+    initialization_flows_.push_back({{}, true});
+    const auto proof = initialization_flows_.size() - 1;
+    target_initializations_.push_back({target, cell, proof, excludes});
+    return proof;
+  }
+  void resolve_target_initialization() {
+    for (const auto &[proof, excluded] : initialization_conditions_)
+      initialization_flows_.at(proof) = {{size_t(!bool(excluded))}};
+    std::set<size_t> resolved;
+    while (resolved.size() != pointer_initializations_.size())
+    for (auto position = pointer_initializations_.begin(); position != pointer_initializations_.end(); ++position) {
+      const auto [flow, proof] = *position;
+      if (!resolved.insert(flow).second) continue;
+      const auto node = pointer_flows_.at(flow);
+      size_t inherited = 1;
+      for (const auto input : node.inputs) inherited = join_initialization(inherited, pointer_initialization(input));
+      const auto known = node.source ? node.initialized : preserved_initialization(inherited, node.initialized);
+      initialization_flows_.at(proof) = {{known}, node.open};
+    }
+    for (const auto &item : target_initializations_) {
+      const auto targets = pointer_targets(item.target);
+      auto &proof = initialization_flows_.at(item.proof);
+      proof.open = !targets.closed;
+      if (targets.closed) proof.inputs = {size_t(item.excludes ? !targets.cells.contains(item.cell) :
+          !targets.other && targets.cells.size() == 1 && targets.cells.contains(item.cell))};
+    }
+  }
+  size_t selected_initialization(const Value &value, size_t cell) {
+    auto proof = cells_.at(cell).initialized;
+    if (value.target_flow) {
+      proof = preserved_initialization(proof, target_initialization(value.target_flow, cell, true));
+      proof = preserved_initialization(proof, cells_.at(selected_cell(value, cells_.at(cell).at)).initialized);
+    }
+    return proof;
+  }
+  size_t substitute_pointer_flow(size_t source, PointerSubstitution &substitution) {
+    if (!source) return 0;
+    if (const auto input = substitution.inputs.find(source); input != substitution.inputs.end()) return input->second;
+    if (const auto found = substitution.nodes.find(source); found != substitution.nodes.end()) return found->second;
+    const auto &node = pointer_flows_.at(source);
+    if (!node.open && node.inputs.empty()) return source;
+    pointer_flows_.push_back({{}, nullptr, true});
+    const auto output = pointer_flows_.size() - 1;
+    substitution.nodes.emplace(source, output);
+    return output;
+  }
+  bool resolve_pointer_substitutions() {
+    bool changed = false;
+    for (auto &substitution : pointer_substitutions_)
+      for (auto position = substitution.nodes.begin(); position != substitution.nodes.end(); ++position) {
+        const auto [source, destination] = *position;
+        auto value = pointer_flows_.at(source);
+        for (auto &input : value.inputs) input = substitute_pointer_flow(input, substitution);
+        auto &output = pointer_flows_.at(destination);
+        if (output.inputs != value.inputs || output.source != value.source ||
+            output.open != value.open || output.nonnull != value.nonnull || output.initialized != value.initialized) {
+          output = std::move(value);
+          changed = true;
+        }
+      }
+    return changed;
   }
   FlowState flow_state() const {
     FlowState result;
@@ -818,6 +972,7 @@ class Compiler {
     return result;
   }
   void register_callable_holder(Value &value) {
+    value.target_flow = 0;
     const auto holder = callable_scopes_.size();
     callable_scopes_.push_back(*value.storage->scope);
     callable_holders_ = callable_memory_factory_.add(callable_holders_, holder, value.callable_flow);
@@ -902,6 +1057,7 @@ class Compiler {
       } else if (!target.pending_owner && !other.pending_owner && storage_owner(target) != storage_owner(other)) {
         fail(pointers_[i].at, "pointer paths establish different owners; the first non-null assignment must establish one consistent owner");
       }
+      target.target_flow = join_pointer_flow(target, other);
       target.nullable = target.nullable || other.nullable;
       target.read_only |= other.read_only;
       target.callable_address = join_callable_flow({target.callable_address, other.callable_address});
@@ -1000,6 +1156,11 @@ class Compiler {
       const auto possible = possibilities.at(category - 1);
       if (!possible.pending() && !possible) { ir_.unreachable(); return; }
       const auto memory = llvm::SaveAndRestore(callable_holders_);
+      std::vector<const Value *> pointer_views;
+      for (const auto &pointer : pointers_) pointer_views.push_back(pointer.view);
+      const auto restore_pointers = llvm::scope_exit([&] {
+        for (size_t i = 0; i < pointer_views.size(); ++i) pointers_[i].view = pointer_views[i];
+      });
       std::vector<std::pair<size_t, size_t>> initialized;
       const auto restore_initialization = llvm::scope_exit([&] {
         for (auto item = initialized.rbegin(); item != initialized.rend(); ++item)
@@ -1008,6 +1169,7 @@ class Compiler {
       if (paths) {
         const auto &state = paths->at(category);
         callable_holders_ = state.callables;
+        for (size_t i = 0; i < state.pointers.size(); ++i) pointers_[i].view = state.pointers[i];
         for (size_t cell = 0; cell < state.initialized.size(); ++cell) {
           initialized.emplace_back(cell, cells_.at(cell).initialized);
           cells_[cell].initialized = state.initialized[cell];
@@ -1457,7 +1619,7 @@ class Compiler {
     }
     if (value.storage) {
       for (const auto cell : value.storage->cells) {
-        InitializationRead read{cells_.at(cell).initialized, cell, at};
+        InitializationRead read{selected_initialization(value, cell), cell, at};
         if (argument) {
           if (initialization_known(read.proof) != true) value.argument_reads.push_back(read);
         } else require_initialization(read);
@@ -1475,6 +1637,7 @@ class Compiler {
     return value;
   }
   static Value bits_value(Value value) {
+    value.target_flow = 0;
     value.storage.reset(); value.pointer.reset(); value.region_id.reset(); value.read_only = false; value.referent = nullptr; value.nullable = false; value.reference_field.reset(); value.nonnull_when.reset(); value.pointer_view = false;
     value.binding_read_only = false;
     value.reference_read_only = false;
@@ -1493,7 +1656,12 @@ class Compiler {
     source = read_value(std::move(source), at);
     require(source.type, destination.type, at);
     ir_.write(place(destination, at), stored_value(source, destination.type, at));
-    if (destination.storage->cells.size() == 1 && !destination.storage->initialized_alternatives)
+    if (destination.target_flow) {
+      cells_.at(selected_cell(destination, at)).initialized = 1;
+      for (const auto cell : destination.storage->cells)
+        cells_.at(cell).initialized = preserved_initialization(cells_.at(cell).initialized,
+            target_initialization(destination.target_flow, cell, false));
+    } else if (destination.storage->cells.size() == 1 && !destination.storage->initialized_alternatives)
       cells_.at(*destination.storage->cells.begin()).initialized = 1;
   }
   Value pointer_value(size_t id, const Location &at) {
@@ -1562,6 +1730,7 @@ class Compiler {
     value = read_value(std::move(value), at);
     value.native = value.callable_temporary && value.storage
         ? ir_.take_callable(value.storage->address) : ir_.copy_callable(value.native);
+    value.target_flow = 0;
     value.storage.reset(); value.pointer.reset(); value.pointer_view = false;
     value.callable_address = 0;
     value.callable_temporary = true;
@@ -1578,6 +1747,7 @@ class Compiler {
     } else value.storage = StorageView{ir_.hold_callable(value.native, module_top_level_), local_scope_, {}};
     value.pointer.reset();
     value.pointer_view = false;
+    value.target_flow = 0;
     value.callable_address = 0;
     value.callable_temporary = true;
     return value;
@@ -2608,6 +2778,7 @@ class Compiler {
         std::set<NativeCallDemand *> resolving;
         resolve_native_flow(value.callable_flow, resolving);
         value.pointer.reset(); value.pointer_view = false;
+        value.target_flow = 0;
         value.callable_address = 0;
       }
       captures.declare(name, std::move(value), outer.locations.at(name));
@@ -2697,6 +2868,7 @@ class Compiler {
             captured.storage->address = ir_.read_symbol(id, captured.type);
           captured = read_value(std::move(captured), at);
           captured.storage.reset(); captured.pointer.reset(); captured.pointer_view = false;
+          captured.target_flow = 0;
           captured.callable_address = 0;
           captured.callable_temporary = false;
           captured.replayed = false;
@@ -2885,7 +3057,7 @@ class Compiler {
       auto value = expression(*arg, module, env, locals, function_context, false, false, !forward);
       if (!forward && value.storage) {
         const bool initialized = std::all_of(value.storage->cells.begin(), value.storage->cells.end(),
-            [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) != false; });
+            [&](size_t cell) { return initialization_known(selected_initialization(value, cell)) != false; });
         if (initialized) value = read_value(std::move(value), arg->at, true);
         else value.native = nullptr;
       } else if (!forward && value.type.kind != Type::reference && value.nullable) {
@@ -4123,7 +4295,7 @@ class Compiler {
     if (point) restore_flow(point->regions);
     if (read_argument) {
       const bool initialized = !value.storage || std::all_of(value.storage->cells.begin(), value.storage->cells.end(),
-          [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) != false; });
+          [&](size_t cell) { return initialization_known(selected_initialization(value, cell)) != false; });
       if (initialized) value = read_value(std::move(value), at, true);
       else value.native = nullptr;
     }
@@ -4384,7 +4556,7 @@ class Compiler {
     if (source.type == Type::null_ref && destination.pointer) source = null_target(destination.type, destination, expr.at);
     if (!destination.pointer) fail(expr.at, "reference assignment requires an ordinary ptr binding; use '<-' for bits transfer");
     if (pointers_.at(*destination.pointer).fixed_binding) fail(expr.at, "cannot rebind a const ptr binding");
-    if (!source.nullable && source.storage && std::all_of(source.storage->cells.begin(), source.storage->cells.end(),
+    if (!source.target_flow && !source.nullable && source.storage && std::all_of(source.storage->cells.begin(), source.storage->cells.end(),
         [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) == true; })) source = read_value(std::move(source), expr.at);
     // Select user methods before checking the builtin alias operation. A method
     // may use a read-only source to choose an independently writable target.
@@ -4410,6 +4582,7 @@ class Compiler {
         fail(at, "loop-carried rebinding of an initially uninitialized target is not yet supported; initialize it before the loop");
   }
   Value rebind_pointer(const Value &destination, Value source) {
+    if (destination.target_flow && !source.target_flow) source.target_flow = pointer_flow(source);
     source.pointer.reset();
     source.reference_field.reset();
     source.reference_read_only = false;
@@ -4724,7 +4897,17 @@ class Compiler {
       if (!borrowed_parameter(demand.type, i)) continue;
       argument.argument_reads.clear();
       if (!argument.storage) continue;
-      for (size_t cell : argument.storage->cells) {
+      auto cells = argument.storage->cells;
+      if (argument.target_flow) {
+        const auto selected = selected_cell(argument, demand.at);
+        if (demand.state.initialized.size() <= selected) {
+          const auto start = demand.state.initialized.size();
+          demand.state.initialized.resize(cells_.size());
+          for (size_t cell = start; cell < cells_.size(); ++cell) demand.state.initialized[cell] = cells_[cell].initialized;
+        }
+        cells.insert(selected);
+      }
+      for (size_t cell : cells) {
         if (initialization_known(demand.state.initialized.at(cell)) == true || demand.initialized.contains(cell)) continue;
         const auto create = [&] {
           initialization_flows_.push_back({{}, true});
@@ -4964,7 +5147,7 @@ class Compiler {
       matched_images.push_back(pair);
       const auto same_value = [&](const Value &x, const Value &y) {
         if (mapped_type(mapped_type, x.type) != y.type || x.read_only != y.read_only ||
-            x.nullable != y.nullable || x.pending_owner != y.pending_owner ||
+            x.nullable != y.nullable || x.target_flow != y.target_flow || x.pending_owner != y.pending_owner ||
             x.pointer_view != y.pointer_view || x.required_reference != y.required_reference ||
             x.binding_read_only != y.binding_read_only || x.reference_read_only != y.reference_read_only || x.replayed != y.replayed ||
             bool(x.native) != bool(y.native) || bool(x.storage) != bool(y.storage) ||
@@ -5111,15 +5294,21 @@ class Compiler {
             ? same_region(*first.region_id, *second.region_id) : storage_owner(first) == storage_owner(second);
         if (first.type != second.type || !same_storage ||
             first.read_only != second.read_only || !same_facts ||
-            first.nullable != second.nullable || first.pending_owner != second.pending_owner ||
+            first.nullable != second.nullable || first.target_flow != second.target_flow || first.pending_owner != second.pending_owner ||
             bool(first.storage) != bool(second.storage)) return false;
         if (first.storage) {
           if (first.storage->cells != second.storage->cells ||
               first.storage->initialized_alternatives != second.storage->initialized_alternatives) return false;
           // These same live allocations cannot become uninitialized along a
           // recursive call path. Sibling calls have no such entry invariant.
-          if (!recursive) for (size_t cell : first.storage->cells)
-            if (left.state.initialized.at(cell) != right.state.initialized.at(cell)) return false;
+          if (!recursive) {
+            auto cells = first.storage->cells;
+            if (const auto selected = selected_cells_.find(first.target_flow); selected != selected_cells_.end())
+              cells.insert(selected->second);
+            for (size_t cell : cells)
+              if (cell >= left.state.initialized.size() || cell >= right.state.initialized.size() ||
+                  left.state.initialized[cell] != right.state.initialized[cell]) return false;
+          }
         }
         if (native_callable(first)) {
           const auto a = callable_targets(first.callable_address), b = callable_targets(second.callable_address);
@@ -5237,7 +5426,7 @@ class Compiler {
           right.environment.captured(r->first, b)) return false;
       if (native_callable(*a) && native_callable(*b) &&
           a->storage && b->storage && !left.environment.captured(l->first, a)) {
-        if (a->read_only != b->read_only || a->nullable != b->nullable ||
+        if (a->read_only != b->read_only || a->nullable != b->nullable || a->target_flow != b->target_flow ||
             a->pointer_view != b->pointer_view || a->binding_read_only != b->binding_read_only ||
             a->required_reference != b->required_reference || a->reference_read_only != b->reference_read_only ||
             !a->storage->scope || !b->storage->scope) return false;
@@ -5988,6 +6177,40 @@ class Compiler {
         initialization_flows_.push_back({std::move(alternatives)});
         header.joined.initialized.push_back(initialization_flows_.size() - 1);
       }
+      for (size_t i = 0; i < entry_flow.pointers.size(); ++i) {
+        const auto *original = entry_flow.pointers[i];
+        if (!scope.rebound_pointers.contains(i) || original->pending_owner) {
+          for (auto &path : header.paths) path.pointers.push_back(original);
+          header.joined.pointers.push_back(original);
+          continue;
+        }
+        auto view = *original;
+        view.referent = nullptr;
+        view.nullable = !pointers_[i].required;
+        if (view.storage && view.storage->scope) {
+          view.storage->cells.clear();
+          for (size_t cell = 0; cell < entry_flow.initialized.size(); ++cell)
+            if (!cells_[cell].selected_target && cells_[cell].scope == *view.storage->scope) view.storage->cells.insert(cell);
+          view.storage->initialized_alternatives = true;
+        }
+        std::vector<size_t> targets, addresses;
+        for (auto &path : header.paths) {
+          pointer_flows_.push_back({{}, nullptr, true});
+          view.target_flow = pointer_flows_.size() - 1;
+          targets.push_back(view.target_flow);
+          if (original->callable_address) {
+            callable_flows_.push_back({{}, {}, true});
+            callable_flows_.back().loop = true;
+            view.callable_address = callable_flows_.size() - 1;
+            addresses.push_back(view.callable_address);
+          }
+          path.pointers.push_back(snapshot_pointer(view));
+        }
+        pointer_flows_.push_back({std::move(targets)});
+        view.target_flow = pointer_flows_.size() - 1;
+        if (original->callable_address) view.callable_address = join_callable_flow(std::move(addresses));
+        header.joined.pointers.push_back(snapshot_pointer(std::move(view)));
+      }
       for (const auto &[holder, value] : entry_flow.callables) {
         std::vector<size_t> alternatives;
         for (auto &path : header.paths) {
@@ -6010,9 +6233,37 @@ class Compiler {
         if (std::find(inputs.begin(), inputs.end(), *input) == inputs.end()) inputs.push_back(*input);
       }
     };
+    const auto connect_pointers = [&](const std::vector<const Value *> &destination,
+                                       const std::vector<const Value *> &source,
+                                       const std::vector<size_t> *initialized = nullptr, size_t unreachable = 0) {
+      for (size_t i = 0; i < std::min(destination.size(), source.size()); ++i) {
+        if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner) continue;
+        auto input = pointer_flow(*source[i], initialized);
+        size_t guaranteed = unreachable;
+        if (initialized && source[i]->target_flow) {
+          const auto found = selected_cells_.find(source[i]->target_flow);
+          if (found != selected_cells_.end() && found->second < initialized->size()) {
+            guaranteed = preserved_initialization(guaranteed, initialized->at(found->second));
+          }
+        }
+        if (guaranteed) {
+          pointer_flows_.push_back({{input}, nullptr, false, false, guaranteed});
+          input = pointer_flows_.size() - 1;
+        }
+        auto &inputs = pointer_flows_.at(destination[i]->target_flow).inputs;
+        if (input != destination[i]->target_flow && std::find(inputs.begin(), inputs.end(), input) == inputs.end())
+          inputs.push_back(input);
+        if (destination[i]->callable_address) {
+          auto &addresses = callable_flows_.at(destination[i]->callable_address).inputs;
+          if (source[i]->callable_address != destination[i]->callable_address &&
+              std::find(addresses.begin(), addresses.end(), source[i]->callable_address) == addresses.end())
+            addresses.push_back(source[i]->callable_address);
+        }
+      }
+    };
     cleanup_header(0);
     std::set<size_t> action_headers{0}, routed_states;
-    const auto connect_states = [&](const FlowState &state, size_t category) {
+    const auto connect_states = [&](const FlowState &state, size_t category, size_t unreachable = 0) {
       for (const auto &action : scope.actions) {
         cleanup_header(action.registration, action.initialized);
         action_headers.insert(action.registration);
@@ -6026,6 +6277,7 @@ class Compiler {
         if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
       }
       connect_callables(path.callables, state.callables);
+      connect_pointers(path.pointers, state.pointers, &state.initialized, unreachable);
       // Allocation initialization is monotonic; queue edges retain its earlier
       // guarantees. Callable contents follow the incoming completion instead:
       // an intervening replacement supersedes the earlier holder value.
@@ -6044,6 +6296,7 @@ class Compiler {
               if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
             }
             connect_callables(destination[mode].callables, source[mode].callables);
+            connect_pointers(destination[mode].pointers, source[mode].pointers);
           }
           pending.push_back(input.queue);
         }
@@ -6051,8 +6304,16 @@ class Compiler {
     };
     const auto connect_failure = [&](const FlowState &state, const Value &error) {
       const auto possibilities = exception_possibilities(error);
-      for (size_t i = 0; i < possibilities.size(); ++i)
-        if (possibilities[i].pending() || possibilities[i]) connect_states(state, i + 1);
+      for (size_t i = 0; i < possibilities.size(); ++i) {
+        if (!possibilities[i].pending() && !possibilities[i]) continue;
+        if (!possibilities[i].pending()) { connect_states(state, i + 1); continue; }
+        initialization_flows_.push_back({{}, true});
+        const auto excluded = initialization_flows_.size() - 1;
+        initialization_conditions_.emplace_back(excluded, possibilities[i]);
+        auto reachable = state;
+        for (auto &proof : reachable.initialized) proof = preserved_initialization(proof, excluded);
+        connect_states(reachable, i + 1, excluded);
+      }
     };
     std::set<size_t> source_holders;
     for (const auto &entry : entries)
@@ -6075,7 +6336,9 @@ class Compiler {
       bool changed = false;
       for (size_t i = 0; i < before.live.size(); ++i) changed |= !before.live[i].same(exit.live[i]);
       for (size_t i = 0; i < before.holdings.size(); ++i) changed |= before.holdings[i] != exit.holdings[i];
-      for (size_t i = 0; i < before.pointers.size(); ++i) changed |= before.pointers[i] != exit.pointers[i];
+      for (size_t i = 0; i < before.pointers.size(); ++i)
+        if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner)
+          changed |= before.pointers[i] != exit.pointers[i];
       const std::string message = "deferred action changes flow facts; deferred backedge checking is not implemented yet";
       if (changed) fail(action.at, message);
     };
@@ -6095,6 +6358,7 @@ class Compiler {
       const auto &header = cleanup_header(action.registration, action.initialized);
       const auto &initialized = header.joined.initialized;
       callable_holders_ = header.joined.callables;
+      for (size_t i = 0; i < header.joined.pointers.size(); ++i) pointers_[i].view = header.joined.pointers[i];
       auto paths = header.paths;
       for (auto &path : paths)
         for (size_t cell = 0; cell < path.initialized.size(); ++cell)
@@ -6148,6 +6412,30 @@ class Compiler {
               auto &substitution = callable_substitutions_.back();
               for (const auto &[holder, input] : header.joined.callables)
                 substitution.inputs.emplace(input, *header.paths[category].callables.lookup(holder));
+              pointer_substitutions_.emplace_back();
+              auto &targets = pointer_substitutions_.back();
+              for (size_t i = 0; i < header.joined.pointers.size(); ++i) {
+                if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner) continue;
+                const auto &input = *header.joined.pointers[i];
+                const auto &path = *header.paths[category].pointers[i];
+                targets.inputs.emplace(input.target_flow, path.target_flow);
+                if (input.callable_address) substitution.inputs.emplace(input.callable_address, path.callable_address);
+              }
+              for (size_t i = 0; i < header.joined.pointers.size(); ++i) {
+                if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner) continue;
+                auto view = *exit.pointers[i];
+                auto target = pointer_flow(view, &continued.initialized);
+                if (view.target_flow) {
+                  const auto selected = selected_cells_.find(view.target_flow);
+                  if (selected != selected_cells_.end() && selected->second < exit.initialized.size()) {
+                    pointer_flows_.push_back({{target}, nullptr, false, false, exit.initialized[selected->second]});
+                    target = pointer_flows_.size() - 1;
+                  }
+                }
+                view.target_flow = substitute_pointer_flow(target, targets);
+                if (view.callable_address) view.callable_address = substitute_callable_flow(view.callable_address, substitution);
+                continued.pointers[i] = snapshot_pointer(std::move(view));
+              }
               for (const auto &[holder, output] : exit.callables)
                 continued.callables = callable_memory_factory_.add(continued.callables, holder,
                     substitute_callable_flow(output, substitution));
@@ -6193,10 +6481,26 @@ class Compiler {
       for (const auto &path : header.paths) {
         for (const auto proof : path.initialized) initialization_flows_.at(proof).open = false;
         for (const auto &[holder, flow] : path.callables) callable_flows_.at(flow).open = false;
+        for (size_t i = 0; i < path.pointers.size(); ++i) {
+          if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner) continue;
+          pointer_flows_.at(path.pointers[i]->target_flow).open = false;
+          if (path.pointers[i]->callable_address) callable_flows_.at(path.pointers[i]->callable_address).open = false;
+        }
+      }
+    for (auto &path : cleanup_headers.at(0).paths)
+      for (const auto *pointer : path.pointers) {
+        if (!pointer->target_flow || !pointer->storage) continue;
+        const auto initialized = pointer_initialization(pointer->target_flow);
+        for (const auto cell : pointer->storage->cells) {
+          if (cell >= path.initialized.size() || cells_[cell].selected_target) continue;
+          const auto exact = target_initialization(pointer->target_flow, cell, false);
+          path.initialized[cell] = preserved_initialization(path.initialized[cell], join_initialization(initialized, exact));
+        }
       }
     auto completed_flow = entry_flow;
     completed_flow.initialized = cleanup_headers.at(0).paths[0].initialized;
     completed_flow.callables = cleanup_headers.at(0).paths[0].callables;
+    completed_flow.pointers = cleanup_headers.at(0).paths[0].pointers;
     restore_flow(completed_flow);
     registered_deferred_.erase(scope.owner_scope);
     env = entry_env;
@@ -6288,8 +6592,30 @@ class Compiler {
       value.procedure = std::move(procedure);
     }
   }
+  std::set<size_t> rebound_pointers(const Expression &expr, const Locals &locals, bool cleanup = false) {
+    using K = Expression::Kind;
+    std::set<size_t> result;
+    const auto changed = [&](auto &&self, const Expression &item, bool cleanup) -> void {
+      cleanup |= item.scoped;
+      if (!cleanup && item.kind == K::deferred && !item.children.empty() &&
+          item.children.front()->kind == K::block) return;
+      const bool assignment = item.kind == K::rebind || (item.kind == K::call && item.text == "=");
+      const bool swap = item.kind == K::call && item.text == "<=>";
+      for (size_t i = 0; i < (swap ? 2u : assignment ? 1u : 0u) && i < item.children.size(); ++i) {
+        const auto &target = *item.children[i];
+        if (target.kind == K::name)
+          if (const auto found = locals.visible.find(target.text); found != locals.visible.end() && found->second.pointer)
+            result.insert(*found->second.pointer);
+      }
+      for (const auto &child : item.children) self(self, *child, cleanup);
+    };
+    changed(changed, expr, cleanup);
+    return result;
+  }
   Value deferred_block(const Expression &expr, const Module &module, const Locals &locals, bool function_context) {
     auto selected = locals;
+    const auto rebound = rebound_pointers(expr, locals, true);
+    deferred_scope_->rebound_pointers.insert(rebound.begin(), rebound.end());
     const auto references = lexical_references(expr, locals);
     auto caught = caught_exception_;
     std::set<llvm::Value *> controls = deferred_loop_controls_;
@@ -6693,19 +7019,7 @@ class Compiler {
       declare_local(inner_locals, expr.binding, accumulator, module, expr.at);
     }
 
-    std::set<size_t> rebound_pointers;
-    const auto changed = [&](auto &&self, const Expression &item) -> void {
-      const bool assignment = item.kind == K::rebind || (item.kind == K::call && item.text == "=");
-      const bool swap = item.kind == K::call && item.text == "<=>";
-      for (size_t i = 0; i < (swap ? 2u : assignment ? 1u : 0u) && i < item.children.size(); ++i) {
-        const auto &target = *item.children[i];
-        if (target.kind == K::name)
-          if (const auto found = locals.visible.find(target.text); found != locals.visible.end() && found->second.pointer)
-            rebound_pointers.insert(*found->second.pointer);
-      }
-      for (const auto &child : item.children) self(self, *child);
-    };
-    changed(changed, *expr.children[body_index]);
+    const auto rebound = rebound_pointers(*expr.children[body_index], locals);
     LoopPointers loop_pointers{pointers_.size(), {}};
     std::vector<std::pair<size_t, size_t>> callable_headers, address_headers, deferred_headers;
     if (!one && !empty) {
@@ -6736,7 +7050,7 @@ class Compiler {
           view.callable_address = callable_flows_.size() - 1;
           address_headers.emplace_back(size_t(&pointer - pointers_.data()), view.callable_address);
         }
-        if (!pointer.required && rebound_pointers.contains(size_t(&pointer - pointers_.data()))) view.nullable = true;
+        if (!pointer.required && rebound.contains(size_t(&pointer - pointers_.data()))) view.nullable = true;
         view.referent = nullptr;
         if (view.storage) {
           view.storage->cells.clear();
@@ -7168,6 +7482,7 @@ class Compiler {
       result.read_only |= value.read_only;
       result.binding_read_only |= value.binding_read_only;
       result.reference_read_only &= value.reference_read_only;
+      result.target_flow = join_pointer_flow(result, value);
       result.nullable |= value.nullable;
       std::erase_if(result.conformances, [&](const Conformance &fact) {
         return std::find(value.conformances.begin(), value.conformances.end(), fact) == value.conformances.end();
@@ -7401,6 +7716,7 @@ class Compiler {
         }, at, "owning control-flow results require one concrete root layout"});
       } else require(completion.value.type, result.type, at);
       result.read_only |= completion.value.read_only;
+      result.target_flow = join_pointer_flow(result, completion.value);
       result.nullable = result.nullable || completion.value.nullable;
       result.nonnull_when.reset();
       if (!result.type.owned && (storage_owner(completion.value) != storage_owner(result) ||
@@ -7564,6 +7880,7 @@ class Compiler {
         if (emission->incoming_states) {
           const auto &state = emission->incoming_states->front();
           callable_holders_ = state.callables;
+          for (size_t i = 0; i < state.pointers.size(); ++i) pointers_[i].view = state.pointers[i];
           const auto &initialized = state.initialized;
           for (size_t cell = 0; cell < initialized.size(); ++cell) cells_[cell].initialized = initialized[cell];
         }
@@ -8923,7 +9240,13 @@ class Compiler {
 public:
   explicit Compiler(WarningOptions warnings = {}) : warning_options_(std::move(warnings)) {
     ir_.on_exception([this](size_t category, llvm::Value *payload) {
-      raise_exception(scalar(exception_type(category), payload));
+      auto error = scalar(exception_type(category), payload);
+      if (category == exception_id(ExceptionCategory::null_pointer) && null_check_possible_.pending()) {
+        auto facts = std::make_shared<ExceptionPossibilities>();
+        facts->at(category - 1) = null_check_possible_;
+        error.exception_facts = std::move(facts);
+      }
+      raise_exception(std::move(error));
     });
   }
   Compilation compile(const std::filesystem::path &entry, bool emit_text, bool emit_bitcode) {
@@ -8937,7 +9260,8 @@ public:
       // Loop headers now include their back edges. Check exactly the reachable
       // implementations; compiling a body can demand further callable nodes.
       for (;;) {
-        bool changed = resolve_callable_substitutions();
+        bool changed = resolve_pointer_substitutions();
+        changed |= resolve_callable_substitutions();
         changed |= resolve_native_calls(0);
         changed |= resolve_callable_results();
         for (size_t i = 0; i < callable_demands_.size(); ++i) {
@@ -8949,7 +9273,7 @@ public:
         if (changed) continue;
         for (auto &demand : native_call_demands_) close_callable_effects(demand);
         if (resolve_native_calls(0) || resolve_callable_results() || refine_native_reuse() ||
-            resolve_callable_substitutions()) continue;
+            resolve_callable_substitutions() || resolve_pointer_substitutions()) continue;
         break;
       }
       for (const auto &demand : callable_demands_)
@@ -9001,6 +9325,7 @@ public:
           fail(pending.at, "selected record does not provide the declared field view");
         if (pending.offset) ir_.resolve_field(pending.offset, root, size_t(field - fields.begin()));
       }
+      resolve_target_initialization();
       resolve_initialization_guarantees();
       for (const auto &read : initialization_reads_) {
         if (initialization_known(read.proof) != true)

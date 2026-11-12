@@ -207,7 +207,7 @@ def main():
         for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
                      'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization',
-                     'defer-borrowed-arguments', 'defer-callable-flow'):
+                     'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -277,6 +277,19 @@ proc failed_copy()->void {
 failed_copy();
 behave @print(9012u64);
 '''
+            if name == 'defer-pointer-flow':
+                source += '''
+proc failed_registration()->void {
+  val first:u64 <- 50u64;
+  val second:u64 <- 51u64;
+  ptr selected = first;
+  defer {show(selected);};
+  behave @print(9001u64);
+  defer {selected = second;};
+}
+try {failed_registration();} catch(error:const OutOfMemory) {behave @print(9002u64);};
+swap_repeated(10000u64);
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -299,6 +312,10 @@ behave @print(9012u64);
             if name == 'defer-callable-flow':
                 expected += ['9001', '1', '1', '9002', '9011', '1', '1', '1', '9012']
                 assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
+            if name == 'defer-pointer-flow':
+                expected += ['9001', '50', '9002', '14', '15']
+                assert evidence['layout']['record_failures'] == 1
+                assert evidence['layout']['peak_records'] == 10000
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
             evidence['executed_source_sha256'] = hashlib.sha256(source.encode()).hexdigest()

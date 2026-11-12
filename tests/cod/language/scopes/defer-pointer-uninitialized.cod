@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+proc run()->void {
+  val first:u64 <- 1u64;
+  ptr second = make local u64;
+  ptr selected = first;
+  {{
+    defer {behave @print(selected);};
+    defer {selected = second;};
+  }};
+}
+run();

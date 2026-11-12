@@ -1,0 +1,199 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+using "std:exceptions" OutOfMemory;
+proc show(value:u64 in O)->void where {owner O} {behave @print(value);}
+proc set(value:u64 in O)->void where {owner O} {value <- 7u64;}
+proc run()->void {
+  val first:u64 <- 1u64;
+  val second:u64 <- 2u64;
+  ptr selected = first;
+  {{
+    defer {behave @print(selected);};
+    defer {selected = second;};
+  }};
+  behave @print(selected);
+}
+run();
+proc init()->void {
+  ptr first = make local u64;
+  ptr second = make local u64;
+  ptr selected = first;
+  {{
+    defer {behave @print(selected);} catch(error:const OutOfMemory) {throw error;};
+    defer {selected <- 6u64;};
+    defer {selected = second;};
+  }};
+  behave @print(second);
+}
+init();
+proc nulling()->void {
+  val value:u64 <- 3u64;
+  ptr selected = value;
+  {{
+    defer catch(error:const NullPointerException) {behave @print(4u64);};
+    defer {behave @print(selected);};
+    defer {selected = null;};
+  }};
+}
+nulling();
+proc native()->void {
+  val first:u64 <- 5u64;
+  ptr second = make local u64;
+  ptr selected = first;
+  {{
+    defer {show(selected);} catch(error:const OutOfMemory) {throw error;};
+    defer {set(selected);};
+    defer {selected = second;};
+  }};
+}
+native();
+proc prepared()->void {
+  val first:u64 <- 10u64;
+  val second:u64 <- 11u64;
+  ptr selected = first;
+  {{
+    defer show(selected);
+    defer {show(selected);};
+    defer {selected = second;};
+  }};
+  show(selected);
+}
+prepared();
+func one()->const u64 {return 12u64;}
+func two()->const u64 {return 13u64;}
+proc callables()->void {
+  func first = one;
+  func second = two;
+  ptr selected = first;
+  {{
+    defer {behave @print(selected());};
+    defer behave @print(selected());
+    defer {selected = second;};
+  }};
+  behave @print(selected());
+}
+callables();
+proc swap_repeated(count:u64)->void {
+  val first:u64 <- 14u64;
+  val second:u64 <- 15u64;
+  ptr left = first;
+  ptr right = second;
+  {{for(i in 0u64 .. count) {defer {left <=> right;};};}};
+  behave @print(left);
+  behave @print(right);
+}
+swap_repeated(0u64); swap_repeated(3u64); swap_repeated(4u64);
+proc branch(yes:bool)->void {
+  val first:u64 <- 16u64;
+  val second:u64 <- 17u64;
+  ptr selected = first;
+  {{
+    defer {show(selected);};
+    if(yes) {defer {selected = second;};} else {};
+  }};
+  show(selected);
+}
+branch(true); branch(false);
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+proc bad()->void {effect @arena <- region(0u64);}
+proc recovery()->void {
+  val first:u64 <- 18u64;
+  val second:u64 <- 19u64;
+  ptr selected = first;
+  {{
+    defer catch(error:const InvalidCapacity) {selected = first;} finally {show(selected);};
+    defer {selected = second; bad();};
+  }};
+  show(selected);
+}
+recovery();
+proc failure()->void {
+  val first:u64 <- 20u64;
+  val second:u64 <- 21u64;
+  ptr selected = first;
+  try {{defer {selected = second; bad();};}} catch(error:const InvalidCapacity) {show(selected);};
+}
+failure();
+proc returning()->const u64 {
+  val first:u64 <- 22u64;
+  val second:u64 <- 23u64;
+  ptr selected = first;
+  defer {show(selected);};
+  defer {selected = second; return 24u64;};
+  return 25u64;
+}
+behave @print(returning());
+data Node {value:u64;}
+region Arena {value:u64;}
+proc region_pointers()->void {
+  owned region r:Arena <- make Arena(capacity=512u64){value <- 30u64};
+  ref first = alloc r Node(31u64);
+  ref second = alloc r Node(32u64);
+  ptr selected = first;
+  {{
+    defer {behave @print(selected.value);};
+    defer {selected = second;};
+  }};
+  behave @print(selected.value);
+}
+region_pointers();
+proc borrowed_result(first:u64 in O, second:u64 in O)->ptr u64 in O where {owner O} {
+  ptr selected = first;
+  defer {selected = second;};
+  return selected;
+}
+{{
+  val first:u64 <- 33u64;
+  val second:u64 <- 34u64;
+  ptr result = borrowed_result(first,second);
+  try {show(result);} catch(error:const NullPointerException) {behave @print(999u64);};
+}};
+proc recursive_set(value:u64 in O, count:u64)->void where {owner O} {
+  if(count == 0u64) {value <- 35u64; {}} else {recursive_set(value,count-1u64);};
+}
+proc separate_targets()->void {
+  ptr first = make local u64;
+  ptr second = make local u64;
+  ptr third = make local u64;
+  ptr left = first;
+  ptr right = first;
+  {{
+    defer {show(left); show(right);}
+      catch(error:const OutOfMemory) {throw error;};
+    defer {set(left); recursive_set(right,3u64);};
+    defer {left = second; right = third;};
+  }};
+  show(second); show(third);
+}
+separate_targets();
+proc branch_initialization(yes:bool)->void {
+  ptr first = make local u64;
+  ptr second = make local u64;
+  ptr selected = first;
+  {{
+    defer {show(selected);} catch(error:const OutOfMemory) {throw error;};
+    defer {
+      if(yes) {second <- 37u64; selected = second; {}}
+      else {first <- 36u64; selected = first; {}};
+    };
+  }};
+  show(selected);
+}
+branch_initialization(true); branch_initialization(false);
+proc reader(region r:Arena)->func()->const u64 with {region r} {
+  ref first = alloc r Node(40u64);
+  ref second = alloc r Node(41u64);
+  ptr selected = first;
+  defer {selected = first;};
+  defer {selected = second; {{
+    val var value:u64 in r -> selected.value;
+    return func[value]()->const u64 {return value;};
+  }};};
+  return func[r]()->const u64 {return r.value;};
+}
+{{
+  owned region r:Arena <- make Arena(capacity=512u64){value <- 39u64};
+  func callback = reader(r);
+  behave @print(callback());
+}};

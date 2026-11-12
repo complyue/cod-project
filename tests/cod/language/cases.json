@@ -3144,5 +3144,52 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "scopes/defer-pointer-flow.cod",
+    "exit": 0,
+    "stdout": "2\n2\n6\n6\n4\n7\n11\n10\n11\n12\n13\n13\n14\n15\n15\n14\n14\n15\n17\n17\n16\n16\n18\n18\n21\n23\n24\n32\n32\n33\n7\n35\n7\n35\n37\n37\n36\n36\n41\n"
+  },
+  {
+    "file": "scopes/defer-pointer-branch-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-pointer-checked.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/defer-pointer-const.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot rebind a const ptr binding"
+  },
+  {
+    "file": "scopes/defer-pointer-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "reference assignment cannot cross owners"
+  },
+  {
+    "file": "scopes/defer-pointer-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a writable ptr cannot rebind to a read-only view"
+  },
+  {
+    "file": "scopes/defer-pointer-registration-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-pointer-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
   }
 ]

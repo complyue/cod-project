@@ -1,0 +1,7 @@
+proc run()->void {
+  val first:u64 <- 1u64;
+  const val second:u64 <- 2u64;
+  ptr selected = first;
+  defer {selected = second;};
+}
+run();

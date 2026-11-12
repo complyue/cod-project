@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+proc run()->void {
+  val value:u64 <- 1u64;
+  ptr selected = value;
+  defer {behave @print(selected);};
+  defer {selected = null;};
+}
+run();
