@@ -3232,5 +3232,62 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/defer-first-owner.cod",
+    "exit": 0,
+    "stdout": "2\n3\n4\n5\n6\n0\n7\n7\n10\n8\n9\n12\n13\n13\n15\n14\n16\n17\n19\n21\n20\n23\n22\n25\n29\n29\n32\n32\n0\n30\n30\n30\n30\n",
+    "stderr_contains": [
+      "[-Wshadow]",
+      "shadowed binding declared here"
+    ]
+  },
+  {
+    "file": "scopes/defer-first-owner-nullable.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException"
+  },
+  {
+    "file": "scopes/defer-first-owner-conflict.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "reference assignment cannot cross owners"
+  },
+  {
+    "file": "scopes/defer-first-owner-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "outlive its lexical storage owner"
+  },
+  {
+    "file": "scopes/defer-first-owner-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/defer-first-owner-const.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot rebind a const"
+  },
+  {
+    "file": "scopes/defer-first-owner-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "scopes/defer-first-owner-failed-registration.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException"
+  },
+  {
+    "file": "scopes/defer-first-owner-consumed.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "consumed"
   }
 ]

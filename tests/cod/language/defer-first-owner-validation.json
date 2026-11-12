@@ -1,0 +1,371 @@
+{
+  "recorded_utc": "2026-11-12T19:51:03.965375+00:00",
+  "scope": "Static first-non-null owner constraints shared by ordinary loops and deferred cleanup, preserving original null selections, fixed-owner checks and retained local borrows.",
+  "baseline_commit": "9ac341773df8fcb699be5931d977beb7d49d30a9",
+  "compiler_sha256": "fe3752f1fb58e1a5829a625f8ed0ebe784f0c30c3aa11896e52d66d764b8f770",
+  "implementation_sha256": {
+    "cod/lang_frontend.hh": "35e023259d20e2507797a99e99bd6bc495d80315678fb675f3ecddf5b2d25c21",
+    "cod/lang_llvm.hh": "a83e5b14f9d42705d83e337db909fba387b4f0c585ccd98f97655d668aecc27b",
+    "tests/cod/language/defer_runtime_tests.py": "dd422c98483e023a31736a813ea1c5d4265a08c68d42880ef67167540e5c1ee6",
+    "tests/cod/language/regional_runtime_tests.py": "4f2498dd3b6fae3027088a26f306b45028665ceab7857ed52adec4a61acfbaf6"
+  },
+  "build": {
+    "command": "cmake --build ./build",
+    "passed": true,
+    "log_sha256": "e09a7c093a90e3449a4da9b6096150531d90c318245b7c2777b07b1bb4f1c0f7",
+    "warnings": "Existing LLVM deprecated-this-capture and CMake policy warnings only."
+  },
+  "language": {
+    "passed": 552,
+    "total": 552,
+    "source_count": 642,
+    "all_sources_match": true,
+    "source_manifest_sha256": "b393ace3704bb8537a6400ebc584aa0e9dbfa9426e0eecf013c10ce0ac78a89c"
+  },
+  "new_cases": [
+    {
+      "fixture": "scopes/defer-first-owner.cod",
+      "passed": true,
+      "exit": 0,
+      "stdout": "2\n3\n4\n5\n6\n0\n7\n7\n10\n8\n9\n12\n13\n13\n15\n14\n16\n17\n19\n21\n20\n23\n22\n25\n29\n29\n32\n32\n0\n30\n30\n30\n30\n",
+      "expected_diagnostic": [
+        "[-Wshadow]",
+        "shadowed binding declared here"
+      ]
+    },
+    {
+      "fixture": "scopes/defer-first-owner-expired.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "outlive its lexical storage owner"
+    },
+    {
+      "fixture": "scopes/defer-first-owner-uninitialized.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "before definite initialization"
+    },
+    {
+      "fixture": "scopes/defer-first-owner-conflict.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "reference assignment cannot cross owners"
+    },
+    {
+      "fixture": "scopes/defer-first-owner-failed-registration.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "checked NullPointerException"
+    },
+    {
+      "fixture": "scopes/defer-first-owner-nullable.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "checked NullPointerException"
+    },
+    {
+      "fixture": "scopes/defer-first-owner-const.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "cannot rebind a const"
+    },
+    {
+      "fixture": "scopes/defer-first-owner-readonly.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "read-only"
+    },
+    {
+      "fixture": "scopes/defer-first-owner-consumed.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "consumed"
+    }
+  ],
+  "native": {
+    "layout": {
+      "registrations": 10038,
+      "drained": 10038,
+      "peak_records": 4,
+      "peak_record_bytes": 120,
+      "images": 24,
+      "images_released": 24,
+      "record_failures": 1,
+      "copy_failures": 0,
+      "owners": 8,
+      "owners_released": 8
+    },
+    "frontend_seconds": 0.054203763022087514,
+    "frontend_diagnostics": [
+      "/tmp/cod-defer-native-6l1awh6e/program.cod:75:42: warning: local 'p' shadows an outer binding [-Wshadow]\n/tmp/cod-defer-native-6l1awh6e/program.cod:72:7: note: shadowed binding declared here\n"
+    ],
+    "native_compile_link_seconds": 2.1498053110553883,
+    "native_process_seconds": 0.0017582799773663282,
+    "llvm_ir_bytes": 472839,
+    "bitcode_bytes": 78424,
+    "fixture_sha256": "502034473ae3476773c2270db9864fad7abe52aa6acebb8e55698164a3e3cc7a",
+    "executed_source_sha256": "0f87e7919e184c8f0e712a09e12a72cd79e0f0d8ff04e8c801a7c6d519abbe58"
+  },
+  "comparisons": {
+    "runtime": {
+      "baseline_cases": 17,
+      "current_cases": 18,
+      "preexisting_resource_and_artifact_changes": [
+        {
+          "case": "defer-callable-flow",
+          "field": "llvm_ir_bytes",
+          "before": 699441,
+          "after": 699437
+        }
+      ],
+      "baseline_frontend_seconds": 0.5887983320862986,
+      "current_preexisting_frontend_seconds": 0.6011379431001842
+    },
+    "callables": {
+      "baseline_cases": 30,
+      "current_cases": 30,
+      "preexisting_resource_and_artifact_changes": [],
+      "baseline_frontend_seconds": 1.0496838700491935,
+      "current_preexisting_frontend_seconds": 1.018335893866606
+    }
+  },
+  "sanitizer": {
+    "passed": true,
+    "compiler_sha256": "fe3752f1fb58e1a5829a625f8ed0ebe784f0c30c3aa11896e52d66d764b8f770",
+    "cases": [
+      {
+        "fixture": "defer-first-owner",
+        "executed_source_sha256": "502034473ae3476773c2270db9864fad7abe52aa6acebb8e55698164a3e3cc7a",
+        "instrumented_definitions": 29,
+        "stages": [
+          {
+            "stage": "frontend",
+            "exit": 0,
+            "seconds": 0.058370476006530225
+          },
+          {
+            "stage": "instrument",
+            "exit": 0,
+            "seconds": 0.26932691398542374
+          },
+          {
+            "stage": "verify_instrumentation",
+            "exit": 0,
+            "seconds": 0.011114794004242867
+          },
+          {
+            "stage": "link",
+            "exit": 0,
+            "seconds": 1.8581802900298499
+          },
+          {
+            "stage": "execute",
+            "exit": 0,
+            "seconds": 0.015348643995821476
+          }
+        ]
+      }
+    ]
+  },
+  "static_first_owner_scale": [
+    {
+      "count": 4,
+      "seconds": 0.020636859990190715,
+      "exit": 0,
+      "stderr": "",
+      "ir_bytes": 30427,
+      "bitcode_bytes": 7764,
+      "source_sha256": "3e5eb6efd146ef1fcf5483cf7e2e36f77e1ad1a5a4bed0a792c1ae11a92344b9"
+    },
+    {
+      "count": 8,
+      "seconds": 0.024758158018812537,
+      "exit": 0,
+      "stderr": "",
+      "ir_bytes": 43168,
+      "bitcode_bytes": 10132,
+      "source_sha256": "e6509de392bf68d4dc6dc7626c543c0b0c9f2ebaa27027585816f5ef3da5b1a4"
+    },
+    {
+      "count": 16,
+      "seconds": 0.04783072101417929,
+      "exit": 0,
+      "stderr": "",
+      "ir_bytes": 69261,
+      "bitcode_bytes": 15004,
+      "source_sha256": "8a27be7b9299d93065f5c587b36335eb83ae430bf31d74cdf402635bc80610d0"
+    },
+    {
+      "count": 32,
+      "seconds": 0.14414184703491628,
+      "exit": 0,
+      "stderr": "",
+      "ir_bytes": 123518,
+      "bitcode_bytes": 24784,
+      "source_sha256": "12841c711241e43ab7e717079ed06d1acd9e93b1acaf26fad1f5ec3d529ded40"
+    },
+    {
+      "count": 64,
+      "seconds": 0.7727697259979323,
+      "exit": 0,
+      "stderr": "",
+      "ir_bytes": 240528,
+      "bitcode_bytes": 45216,
+      "source_sha256": "f7aac5cca9d611d5d16ee77aeb8057fdb646666aca82c026ebaf86e5f2a70821"
+    }
+  ],
+  "loop_scale_regression": {
+    "baseline": [
+      {
+        "count": 4,
+        "seconds": 0.02268145396374166,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 43601,
+        "bitcode_bytes": 9180,
+        "source_sha256": "e7378994c5fac33aa74e8628fdad99f82ce62948903c354424dd12c679ba4dfd"
+      },
+      {
+        "count": 8,
+        "seconds": 0.022556627984158695,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 80443,
+        "bitcode_bytes": 14628,
+        "source_sha256": "e46c66e081646915cf24ad23c97ef326f117dd87a3876a87e12ce6a926fa7991"
+      },
+      {
+        "count": 16,
+        "seconds": 0.03574377397308126,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 154187,
+        "bitcode_bytes": 25612,
+        "source_sha256": "3bd89799c1e55b84b80d435c93e75f854cda4ffb2e2285185bb901c7f2d7e74e"
+      },
+      {
+        "count": 32,
+        "seconds": 0.06488827802240849,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 304158,
+        "bitcode_bytes": 48584,
+        "source_sha256": "c68aa9b5c79c1b57d51d9ab7be4dd81365ac8a28a18f726e66e4d7e2e4c4b111"
+      },
+      {
+        "count": 64,
+        "seconds": 0.19213142397347838,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 607085,
+        "bitcode_bytes": 96480,
+        "source_sha256": "11ee1861e8dcef85fca6d77ab33f597168307afbbc98d19248bfdba3ecdc757a"
+      }
+    ],
+    "current": [
+      {
+        "count": 4,
+        "seconds": 0.025075839017517865,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 43593,
+        "bitcode_bytes": 9172,
+        "source_sha256": "e7378994c5fac33aa74e8628fdad99f82ce62948903c354424dd12c679ba4dfd"
+      },
+      {
+        "count": 8,
+        "seconds": 0.027393047988880426,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 80427,
+        "bitcode_bytes": 14612,
+        "source_sha256": "e46c66e081646915cf24ad23c97ef326f117dd87a3876a87e12ce6a926fa7991"
+      },
+      {
+        "count": 16,
+        "seconds": 0.0423524760408327,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 154155,
+        "bitcode_bytes": 25584,
+        "source_sha256": "3bd89799c1e55b84b80d435c93e75f854cda4ffb2e2285185bb901c7f2d7e74e"
+      },
+      {
+        "count": 32,
+        "seconds": 0.09041241998784244,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 304094,
+        "bitcode_bytes": 48528,
+        "source_sha256": "c68aa9b5c79c1b57d51d9ab7be4dd81365ac8a28a18f726e66e4d7e2e4c4b111"
+      },
+      {
+        "count": 64,
+        "seconds": 0.2118196520023048,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 606957,
+        "bitcode_bytes": 96368,
+        "source_sha256": "11ee1861e8dcef85fca6d77ab33f597168307afbbc98d19248bfdba3ecdc757a"
+      }
+    ],
+    "all_source_hashes_match": true,
+    "llvm_ir_matches_after_source_path_normalization": true,
+    "artifact_size_note": "Source diagnostic paths are one byte shorter in the current scratch directory; the normalized textual IR is identical."
+  },
+  "supplemental_probes": [
+    {
+      "name": "ordinary-loop",
+      "mode": "--run",
+      "source": "using symbol \"std:io\" @print;\nproc run(count:u64)->void {\n val target:u64 <-30u64;\n ptr p:u64=null;\n for(i in 0u64 .. count) {if(isnull(p)) {p=target;{};} else {behave @print(p);};};\n if(isnull(p)) {behave @print(0u64);} else {behave @print(p);};\n}\nrun(0u64);run(1u64);run(3u64);\n",
+      "source_sha256": "0d45496793ea0ffc8e6c954a35b7aa6dba45ec530bc9a445657eda356b287ad3",
+      "exit": 0,
+      "stdout": "0\n30\n30\n30\n30\n",
+      "stderr": ""
+    },
+    {
+      "name": "retained-borrow",
+      "mode": "--run",
+      "source": "using symbol \"std:io\" @print;\nusing \"std:exceptions\" OutOfMemory;\ndata Item {value:u64;}\nproc run()->void {\n owned region original:Item <-make Item(capacity=256u64){value<-32u64};\n ref borrowed = root(original);\n ptr p:Item=null;\n defer {behave @print(p.value);} catch(e:const OutOfMemory){throw e;};\n defer {p=borrowed;};\n owned region moved:Item <-original;\n}\nrun();\n",
+      "source_sha256": "17c447f86c85ba798b9a7f730bec49c85dd188b2e0c062cef52413d327874f78",
+      "exit": 0,
+      "stdout": "32\n",
+      "stderr": ""
+    },
+    {
+      "name": "conditional-consumed",
+      "mode": "--check",
+      "source": "data Item {value:u64;}\nproc run(yes:bool)->void {\n owned region original:Item <-make Item(capacity=256u64){value<-1u64};\n ptr p:Item=null;\n defer {p=root(original);};\n if(yes) {owned region moved:Item <-original;} else {};\n}\nrun(true);run(false);\n",
+      "source_sha256": "c0122c6fac6c6ddc0531607ad2586f4dc42c8b65a0dd539dfdf516328b385964",
+      "exit": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-first-owner-flow/conditional-consumed.cod:5:16: region owner has been consumed on a path reaching this use\n/tmp/cod-first-owner-flow/conditional-consumed.cod:3:36: note: the region was acquired here\n"
+    },
+    {
+      "name": "branch-region",
+      "mode": "--check",
+      "source": "using symbol \"std:io\" @print;\nusing \"std:exceptions\" OutOfMemory;\ndata Item {value:u64;}\nproc run(yes:bool)->void {\n ptr p:Item=null;\n if(yes) {\n  owned region r:Item <-make Item(capacity=256u64){value<-24u64};\n  defer {behave @print(p.value);} catch(e:const OutOfMemory) {throw e;};\n  defer {p=root(r);};\n } else {};\n}\nrun(true);run(false);\n",
+      "source_sha256": "b58c378405d4d039425918f6e2210740595312f046b0456ad430a7035fdc1341",
+      "exit": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-first-owner-flow/branch-region.cod:8:24: regional value requires a live owning region in this caller scope\n/tmp/cod-first-owner-flow/branch-region.cod:7:30: note: the referenced region was acquired here\n"
+    }
+  ],
+  "limits": [
+    "Timings are individual observations under concurrent verification, not a general performance guarantee. The first-owner scale probe combines 4/8/16/32/64 initially null bindings, delayed setters and one reader; the loop scale probe retains its baseline sources.",
+    "The 10000-iteration native stress asserts one live deferred record at peak. The complete fixture peaks at four records/120bytes. One injected registration failure publishes no binding; records, callable images and regions are released exactly once.",
+    "Positive cases cover ordinary zero/one/repeated loops, per-iteration and accumulated actions, lexical/regional/field/callable targets, declared borrowed helper results, delayed effects, chained assignments, shadowing, checked-null recovery, writes after binding and retained borrows through a local transfer or failure before it.",
+    "Invalid cases reject incompatible owners, expired or uninitialized storage, const/readonly violations, failed registration and consumed owning names. A supplemental conditional-consumption case also rejects.",
+    "The valid branch-region probe acquires its region and registers cleanup on the same branch. Its joined owner and queue facts still lose that correlation and reject; this is an implementation gap rather than a language restriction.",
+    "Non-queryable owner provenance, remaining loop/target/result correlations, ownership mutation and owning operands during cleanup, generic capture transport, process-lifetime module queues and broader callable-family/AOT work remain unfinished.",
+    "Inferred owners remain one statically consistent owner. Existing owning slots supply its base across local transfers; this selects a handle retaining the same region, not a runtime actual-owner union. No region layout, allocator, ABI, runtime ownership table, D-16 fraction behavior or D-22 construction choice is changed."
+  ]
+}

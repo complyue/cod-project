@@ -373,6 +373,7 @@ class Compiler {
     size_t scope = 0;
   };
   std::vector<Holding> holdings_;
+  std::map<size_t, FlowCondition> conditional_holdings_;
   struct LocalCell { size_t scope; Location at; size_t initialized = 0; bool selected_target = false; };
   // The slot is the runtime address; the view carries checked owner/type/access
   // constraints and initialization facts, not an exact runtime target identity.
@@ -565,12 +566,20 @@ class Compiler {
     std::vector<size_t> initialized = {};
     std::set<size_t> borrowed_regions = {};
   };
+  struct PointerOwnerConstraint {
+    size_t pointer;
+    const Expression *source;
+    const Module *module;
+    Locals locals;
+  };
+  using PointerOwners = std::map<size_t, const Value *>;
   struct DeferredScope {
     llvm::AllocaInst *head;
     size_t owner_scope;
     std::deque<DeferredAction> actions;
     DeferredScope *parent = nullptr;
     std::set<size_t> rebound_pointers = {};
+    std::vector<PointerOwnerConstraint> owner_constraints = {};
   };
   DeferredScope *deferred_scope_ = nullptr;
   std::set<llvm::Value *> deferred_loop_controls_;
@@ -1098,6 +1107,7 @@ class Compiler {
     for (size_t i = 0; i < std::min(left.pointers.size(), right.pointers.size()); ++i) {
       if (left.pointers[i] == right.pointers[i]) continue;
       auto target = *left.pointers[i];
+      const auto selection = target;
       const auto &other = *right.pointers[i];
       if (target.pending_owner && !other.pending_owner) {
         target = other;
@@ -1105,7 +1115,7 @@ class Compiler {
       } else if (!target.pending_owner && !other.pending_owner && storage_owner(target) != storage_owner(other)) {
         fail(pointers_[i].at, "pointer paths establish different owners; the first non-null assignment must establish one consistent owner");
       }
-      target.target_flow = join_pointer_flow(target, other);
+      target.target_flow = join_pointer_flow(selection, other);
       target.nullable = target.nullable || other.nullable;
       target.read_only |= other.read_only;
       target.callable_address = join_callable_flow({target.callable_address, other.callable_address});
@@ -1407,9 +1417,14 @@ class Compiler {
     else if (!live) fail(at, message);
   }
   llvm::Value *region_pointer(const Value &value, const Location &at) {
-    if (value.type.owned && (!value.holding_id || holdings_.at(*value.holding_id).presence != Presence::present))
-      fail(at, "region owner has been consumed on a path reaching this use" +
-                   region_note(value.region_id, "the region was acquired here"));
+    if (value.type.owned && (!value.holding_id || holdings_.at(*value.holding_id).presence != Presence::present)) {
+      const std::string message = "region owner has been consumed on a path reaching this use" +
+          region_note(value.region_id, "the region was acquired here");
+      const auto guarantee = value.holding_id ? conditional_holdings_.find(*value.holding_id) : conditional_holdings_.end();
+      if (!value.holding_id || holdings_.at(*value.holding_id).presence != Presence::conditional ||
+          guarantee == conditional_holdings_.end()) fail(at, message);
+      require_live(guarantee->second, at, message);
+    }
     require_live(value.region_id ? regions_.at(*value.region_id).live : FlowCondition{false}, at,
         "regional value requires a live owning region in this caller scope" +
         region_note(value.region_id, "the referenced region was acquired here"));
@@ -4718,14 +4733,27 @@ class Compiler {
     }
     return {};
   }
-  Value query_value(const Expression &expr, const Module &module, const Locals &locals) {
+  Value owner_view(Value value, const Value &owner) {
+    value.pending_owner = false;
+    value.region_id = owner.region_id;
+    if (value.storage) value.storage->scope = owner.storage ? owner.storage->scope : std::nullopt;
+    if (value.type.kind == Type::procedure && owner.callable_address)
+      value.callable_address = owner.callable_address;
+    return value;
+  }
+  Value query_value(const Expression &expr, const Module &module, const Locals &locals,
+                    const PointerOwners *inferred = nullptr) {
     // Type queries inspect declarations and operand types, never execute a body
     // or emit an operand's loads, allocation, transfer or dynamic effects.
     using K = Expression::Kind;
     if (expr.kind == K::name) {
       if (const auto found = locals.visible.find(expr.text); found != locals.visible.end()) {
         require_runtime_value(found->second, expr.at);
-        return found->second.pointer ? *pointers_.at(*found->second.pointer).view : found->second;
+        auto value = found->second.pointer ? *pointers_.at(*found->second.pointer).view : found->second;
+        if (value.pending_owner && inferred && found->second.pointer)
+          if (const auto owner = inferred->find(*found->second.pointer); owner != inferred->end())
+            value = owner_view(std::move(value), *owner->second);
+        return value;
       }
       if (const auto found = module.world.global_aliases.find(expr.text); found != module.world.global_aliases.end())
         return module.execution.global_values.at(found->second);
@@ -4740,8 +4768,34 @@ class Compiler {
     if (expr.kind == K::real) return scalar(expr.text.ends_with("f32") ? Type::float32 : Type::float64, nullptr);
     if (expr.kind == K::boolean) return scalar(Type::boolean, nullptr);
     if (expr.kind == K::null_ref) return scalar(Type::null_ref, nullptr);
+    if (inferred && expr.kind == K::block && !expr.children.empty()) {
+      auto visible = locals;
+      for (size_t i = 0; i + 1 < expr.children.size(); ++i)
+        for (const auto &name : lexical_references(*expr.children[i], locals).bound) {
+          Value shadow; shadow.provenance_only = true;
+          visible.visible.insert_or_assign(name, std::move(shadow));
+        }
+      return query_value(*expr.children.back(), module, visible, inferred);
+    }
+    if (inferred && expr.kind == K::conditional) {
+      auto first = query_value(*expr.children[1], module, locals, inferred);
+      auto second = query_value(*expr.children[2], module, locals, inferred);
+      if (first.type == Type::null_ref) return second;
+      if (second.type == Type::null_ref) return first;
+      require(second.type, first.type, expr.at);
+      if (first.pending_owner) return second;
+      if (second.pending_owner) return first;
+      first.read_only |= second.read_only;
+      if (storage_owner(first) != storage_owner(second)) return scalar(first.type, nullptr);
+      return first;
+    }
+    if (inferred && expr.kind == K::allocate) {
+      const auto owner = query_value(*expr.children.front(), module, locals, inferred);
+      if (owner.type.kind != Type::region) fail(expr.at, "alloc requires a whole region");
+      return scalar(resolve({Type::named, expr.text}, module, expr.at), nullptr, owner.region_id);
+    }
     if (expr.kind == K::field) {
-      auto value = query_value(*expr.children.front(), module, locals);
+      auto value = query_value(*expr.children.front(), module, locals, inferred);
       const auto [field, place] = record_field(value, expr.text, module, expr.at, false);
       const bool view = field.declaration_kind == "ref" || field.declaration_kind == "ptr";
       auto result = scalar(view ? *field.type.target : field.type, nullptr, value.region_id);
@@ -4749,22 +4803,30 @@ class Compiler {
       return result;
     }
     if (expr.kind == K::index) {
-      auto value = query_value(*expr.children.front(), module, locals);
+      auto value = query_value(*expr.children.front(), module, locals, inferred);
       if (value.type.kind == Type::reference) value.type = *value.type.target;
       if (value.type.kind == Type::array) {
         const auto &array = arrays_.at(value.type.identity);
-        require(query_value(*expr.children[1], module, locals).type, array.index, expr.at);
+        require(query_value(*expr.children[1], module, locals, inferred).type, array.index, expr.at);
         value.type = array.element; return value;
       }
     }
-    if (expr.kind == K::unary || expr.kind == K::binary || expr.kind == K::call) {
+    if (expr.kind == K::unary || expr.kind == K::binary || expr.kind == K::call ||
+        (inferred && expr.kind == K::rebind)) {
       std::vector<Value> args;
-      for (const auto &child : expr.children) args.push_back(query_value(*child, module, locals));
+      for (const auto &child : expr.children) args.push_back(query_value(*child, module, locals, inferred));
       if (const auto selected = expr.intrinsic ? std::nullopt : method(expr.text, module, args, expr.at)) {
         const auto signature_value = signature(*selected->function.form, *selected->function.lexical, args, module, expr.at, true);
         if (!signature_value->result) fail(expr.at, "typeof requires a declared callable result type; the operand is not executed");
-        return scalar(*signature_value->result, nullptr);
+        auto result = scalar(*signature_value->result, nullptr);
+        const auto &owner = selected->function.form->result_owner;
+        if (const auto source = signature_value->owner_values.find(owner); source != signature_value->owner_values.end()) {
+          result.region_id = source->second.region_id;
+          result.storage = source->second.storage;
+        }
+        return result;
       }
+      if (inferred && expr.text == "=" && args.size() == 2) return args[1];
       if (expr.kind == K::unary || (expr.kind == K::call && args.size() == 1 && (expr.text == "-" || expr.text == "!"))) {
         if (expr.text == "!") require(args[0].type, Type::boolean, expr.at);
         else if (!floating(args[0].type)) require(args[0].type, Type::integer, expr.at);
@@ -6201,20 +6263,27 @@ class Compiler {
     ir_.enter(dispatch);
     auto *site = ir_.pop_deferred(scope.head, record);
     const auto entry_flow = flow_state();
+    const auto inferred_owners = infer_pointer_owners(scope.owner_constraints);
+    const auto tracked_pointer = [&](size_t id) {
+      return scope.rebound_pointers.contains(id) &&
+          (!entry_flow.pointers[id]->pending_owner || inferred_owners.contains(id));
+    };
     const auto entry_env = env;
     // An acquisition failure before registration cannot invalidate the owner
     // of a prepared call that did register. Select its retained owners from
     // reaching queues; mutable ownership backedges remain unsupported.
-    auto owner_entries = std::make_shared<std::vector<std::pair<size_t, std::vector<FlowCondition>>>>();
+    struct OwnerEntry { size_t queue; std::vector<FlowCondition> live; std::vector<Presence> holdings; };
+    auto owner_entries = std::make_shared<std::vector<OwnerEntry>>();
     for (const auto &entry : entries) {
       const auto queue = entry.state.deferred.find(scope.owner_scope);
-      owner_entries->emplace_back(queue == entry.state.deferred.end() ? 0 : queue->second, entry.state.live);
+      owner_entries->push_back({queue == entry.state.deferred.end() ? 0 : queue->second,
+                                entry.state.live, entry.state.holdings});
     }
-    const auto live_at_action = [&](size_t action, size_t region) {
-      return FlowCondition::deferred([this, owner_entries, action, region] {
-        for (const auto &[queue, live] : *owner_entries) {
+    const auto live_at_action = [&](size_t action, size_t region, std::optional<size_t> holding = {}) {
+      return FlowCondition::deferred([this, owner_entries, action, region, holding, parent = conditional_holdings_] {
+        for (const auto &entry : *owner_entries) {
           std::set<size_t> visited;
-          std::vector<size_t> pending{queue};
+          std::vector<size_t> pending{entry.queue};
           bool reaches = false;
           while (!pending.empty() && !reaches) {
             const auto next = pending.back(); pending.pop_back();
@@ -6224,7 +6293,15 @@ class Compiler {
             for (const auto &input : flow.inputs) pending.push_back(input.queue);
             pending.insert(pending.end(), flow.continuations.begin(), flow.continuations.end());
           }
-          if (reaches && (region >= live.size() || !live[region])) return false;
+          if (!reaches) continue;
+          if (region >= entry.live.size() || !entry.live[region]) return false;
+          if (holding) {
+            if (*holding >= entry.holdings.size() || entry.holdings[*holding] == Presence::absent) return false;
+            if (entry.holdings[*holding] == Presence::conditional) {
+              const auto inherited = parent.find(*holding);
+              if (inherited == parent.end() || !inherited->second) return false;
+            }
+          }
         }
         return true;
       });
@@ -6252,18 +6329,21 @@ class Compiler {
       }
       for (size_t i = 0; i < entry_flow.pointers.size(); ++i) {
         const auto *original = entry_flow.pointers[i];
-        if (!scope.rebound_pointers.contains(i) || original->pending_owner) {
+        if (!tracked_pointer(i)) {
           for (auto &path : header.paths) path.pointers.push_back(original);
           header.joined.pointers.push_back(original);
           continue;
         }
-        auto view = pointer_header_view(*original, entry_flow.initialized.size(), pointers_[i].required);
+        auto prototype = *original;
+        if (const auto owner = inferred_owners.find(i); owner != inferred_owners.end())
+          prototype = owner_view(std::move(prototype), *owner->second);
+        auto view = pointer_header_view(std::move(prototype), entry_flow.initialized.size(), pointers_[i].required);
         std::vector<size_t> targets, addresses;
         for (auto &path : header.paths) {
           pointer_flows_.push_back({{}, nullptr, true});
           view.target_flow = pointer_flows_.size() - 1;
           targets.push_back(view.target_flow);
-          if (original->callable_address) {
+          if (view.callable_address) {
             callable_flows_.push_back({{}, {}, true});
             callable_flows_.back().loop = true;
             view.callable_address = callable_flows_.size() - 1;
@@ -6273,7 +6353,7 @@ class Compiler {
         }
         pointer_flows_.push_back({std::move(targets)});
         view.target_flow = pointer_flows_.size() - 1;
-        if (original->callable_address) view.callable_address = join_callable_flow(std::move(addresses));
+        if (view.callable_address) view.callable_address = join_callable_flow(std::move(addresses));
         header.joined.pointers.push_back(snapshot_pointer(std::move(view)));
       }
       for (const auto &[holder, value] : entry_flow.callables) {
@@ -6302,7 +6382,7 @@ class Compiler {
                                        const std::vector<const Value *> &source,
                                        const std::vector<size_t> *initialized = nullptr, size_t unreachable = 0) {
       for (size_t i = 0; i < std::min(destination.size(), source.size()); ++i) {
-        if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner) continue;
+        if (!tracked_pointer(i)) continue;
         connect_pointer(*destination[i], *source[i], initialized, unreachable);
       }
     };
@@ -6379,10 +6459,11 @@ class Compiler {
       if (queue != exit.deferred.end())
         deferred_flows_[action.registration].continuations.push_back(queue->second);
       bool changed = false;
-      for (size_t i = 0; i < before.live.size(); ++i) changed |= !before.live[i].same(exit.live[i]);
+      // Ownership changes appear in the holding state. Queue/category joins
+      // can refine liveness formulas without consuming or releasing an owner.
       for (size_t i = 0; i < before.holdings.size(); ++i) changed |= before.holdings[i] != exit.holdings[i];
       for (size_t i = 0; i < before.pointers.size(); ++i)
-        if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner)
+        if (!tracked_pointer(i) && !(before.pointers[i]->pending_owner && exit.pointers[i]->pending_owner))
           changed |= before.pointers[i] != exit.pointers[i];
       const std::string message = "deferred action changes flow facts; deferred backedge checking is not implemented yet";
       if (changed) fail(action.at, message);
@@ -6394,12 +6475,43 @@ class Compiler {
       ir_.choose(ir_.binary(Type::uint64, "==", site, ir_.bits(Type::uint64, i)), run, other);
       ir_.enter(run);
       restore_flow(entry_flow);
-      for (size_t region : action.borrowed_regions)
+      const auto owned_access = llvm::SaveAndRestore(conditional_holdings_);
+      auto retained_owners = action.borrowed_regions;
+      for (const auto &[pointer, owner] : inferred_owners)
+        if (owner->region_id) retained_owners.insert(*owner->region_id);
+      for (size_t region : retained_owners)
         if (region < entry_flow.live.size() && (entry_flow.live[region].pending() || !entry_flow.live[region]) &&
             std::any_of(owner_entries->begin(), owner_entries->end(), [&](const auto &entry) {
-              return region < entry.second.size() && (entry.second[region].pending() || entry.second[region]);
+              return region < entry.live.size() && (entry.live[region].pending() || entry.live[region]);
             }))
           regions_[region].live = live_at_action(action.registration, region);
+      for (size_t holding = 0; holding < holdings_.size(); ++holding)
+        if (holdings_[holding].presence == Presence::conditional && retained_owners.contains(holdings_[holding].region))
+          conditional_holdings_.insert_or_assign(holding, live_at_action(action.registration, holdings_[holding].region, holding));
+      // Existing owning slots dominate dispatch, unlike the acquisition SSA
+      // value. Transfers can leave different slots holding the same region on
+      // different incoming paths. Select its retained base without granting
+      // access through a consumed owning name; actual reads check liveness.
+      std::map<size_t, llvm::Value *> owner_bases;
+      for (const auto &[pointer, owner] : inferred_owners) {
+        if (!owner->region_id || owner_bases.contains(*owner->region_id)) continue;
+        std::vector<llvm::Value *> slots;
+        for (size_t holding = 0; holding < holdings_.size(); ++holding) {
+          const auto &candidate = holdings_[holding];
+          if (candidate.region != *owner->region_id || candidate.presence == Presence::absent) continue;
+          if (const auto *slot = llvm::dyn_cast<llvm::Instruction>(candidate.slot);
+              slot && slot->getFunction() != ir_.here()->getParent()) continue;
+          if (candidate.presence == Presence::present) { slots = {candidate.slot}; break; }
+          slots.push_back(candidate.slot);
+        }
+        if (slots.empty()) continue;
+        auto &base = regions_.at(*owner->region_id).owner;
+        owner_bases.emplace(*owner->region_id, base);
+        base = ir_.retained_pointer(slots, base);
+      }
+      const auto restore_owner_bases = llvm::scope_exit([&] {
+        for (const auto &[region, base] : owner_bases) regions_[region].owner = base;
+      });
       const auto &header = cleanup_header(action.registration, action.initialized);
       const auto &initialized = header.joined.initialized;
       callable_holders_ = header.joined.callables;
@@ -6460,14 +6572,14 @@ class Compiler {
               pointer_substitutions_.emplace_back();
               auto &targets = pointer_substitutions_.back();
               for (size_t i = 0; i < header.joined.pointers.size(); ++i) {
-                if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner) continue;
+                if (!tracked_pointer(i)) continue;
                 const auto &input = *header.joined.pointers[i];
                 const auto &path = *header.paths[category].pointers[i];
                 targets.inputs.emplace(input.target_flow, path.target_flow);
                 if (input.callable_address) substitution.inputs.emplace(input.callable_address, path.callable_address);
               }
               for (size_t i = 0; i < header.joined.pointers.size(); ++i) {
-                if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner) continue;
+                if (!tracked_pointer(i)) continue;
                 auto view = *exit.pointers[i];
                 auto target = pointer_flow(view, &continued.initialized);
                 if (view.target_flow) {
@@ -6527,7 +6639,7 @@ class Compiler {
         for (const auto proof : path.initialized) initialization_flows_.at(proof).open = false;
         for (const auto &[holder, flow] : path.callables) callable_flows_.at(flow).open = false;
         for (size_t i = 0; i < path.pointers.size(); ++i) {
-          if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner) continue;
+          if (!tracked_pointer(i)) continue;
           pointer_flows_.at(path.pointers[i]->target_flow).open = false;
           if (path.pointers[i]->callable_address) callable_flows_.at(path.pointers[i]->callable_address).open = false;
         }
@@ -6637,28 +6749,94 @@ class Compiler {
       value.procedure = std::move(procedure);
     }
   }
-  std::set<size_t> rebound_pointers(const Expression &expr, const Locals &locals, bool cleanup = false) {
+  void pointer_assignments(const Expression &expr, const Locals &locals, bool cleanup,
+                           const std::function<void(size_t, const Expression &, const Expression &, const Locals &)> &visit) {
     using K = Expression::Kind;
-    std::set<size_t> result;
-    const auto changed = [&](auto &&self, const Expression &item, bool cleanup) -> void {
+    const auto hide = [](Locals &visible, const std::string &name) {
+      Value shadow; shadow.provenance_only = true;
+      visible.visible.insert_or_assign(name, std::move(shadow));
+    };
+    const auto scan = [&](auto &&self, const Expression &item, Locals &visible, bool cleanup) -> void {
       cleanup |= item.scoped;
       if (!cleanup && item.kind == K::deferred && !item.children.empty() &&
           item.children.front()->kind == K::block) return;
+      if (item.definition) {
+        if (!item.definition->name.empty()) hide(visible, item.definition->name);
+        return;
+      }
+      if (item.kind == K::block) {
+        auto inner = visible;
+        for (const auto &child : item.children) self(self, *child, item.scoped ? inner : visible, cleanup);
+        return;
+      }
+      if (item.kind == K::range_for || item.kind == K::fold) {
+        const auto body = item.kind == K::fold ? 3u : 2u;
+        for (size_t i = 0; i < body; ++i) self(self, *item.children[i], visible, cleanup);
+        auto inner = visible;
+        hide(inner, item.text);
+        if (item.kind == K::fold) hide(inner, item.binding);
+        self(self, *item.children[body], inner, cleanup);
+        if (item.children.size() > body + 1) self(self, *item.children.back(), visible, cleanup);
+        return;
+      }
+      if (item.kind == K::handler) {
+        auto inner = visible;
+        hide(inner, item.text);
+        for (const auto &child : item.children) self(self, *child, inner, cleanup);
+        return;
+      }
       const bool assignment = item.kind == K::rebind || (item.kind == K::call && item.text == "=");
       const bool swap = item.kind == K::call && item.text == "<=>";
-      for (size_t i = 0; i < (swap ? 2u : assignment ? 1u : 0u) && i < item.children.size(); ++i) {
+      if (item.children.size() == 2) for (size_t i = 0; i < (swap ? 2u : assignment ? 1u : 0u); ++i) {
         const auto &target = *item.children[i];
         if (target.kind == K::name)
-          if (const auto found = locals.visible.find(target.text); found != locals.visible.end() && found->second.pointer)
-            result.insert(*found->second.pointer);
+          if (const auto found = visible.visible.find(target.text); found != visible.visible.end() && found->second.pointer)
+            visit(*found->second.pointer, *item.children[1 - i], item, visible);
       }
-      for (const auto &child : item.children) self(self, *child, cleanup);
+      for (const auto &child : item.children) self(self, *child, visible, cleanup);
+      if (item.kind == K::pointer || item.kind == K::region_binding || item.kind == K::alias)
+        hide(visible, item.text);
     };
-    changed(changed, expr, cleanup);
+    auto visible = locals;
+    scan(scan, expr, visible, cleanup);
+  }
+  std::set<size_t> rebound_pointers(const Expression &expr, const Locals &locals, bool cleanup = false) {
+    std::set<size_t> result;
+    pointer_assignments(expr, locals, cleanup, [&](size_t id, const Expression &, const Expression &, const Locals &) {
+      result.insert(id);
+    });
+    return result;
+  }
+  void pointer_owner_constraints(std::vector<PointerOwnerConstraint> &constraints, const Expression &expr,
+                                  const Module &module, const Locals &locals, bool cleanup) {
+    pointer_assignments(expr, locals, cleanup,
+        [&](size_t id, const Expression &source, const Expression &operation, const Locals &visible) {
+          if (!pointers_.at(id).view->pending_owner) return;
+          if (!operation.intrinsic && !lookup_callable(module, operation.text, operation.at).methods.empty()) return;
+          constraints.push_back({id, &source, &module, visible});
+        });
+  }
+  PointerOwners infer_pointer_owners(const std::vector<PointerOwnerConstraint> &constraints) {
+    PointerOwners result;
+    bool changed;
+    do {
+      changed = false;
+      for (const auto &constraint : constraints) {
+        if (!pointers_.at(constraint.pointer).view->pending_owner || result.contains(constraint.pointer)) continue;
+        std::optional<Value> source;
+        try { source = query_value(*constraint.source, *constraint.module, constraint.locals, &result); }
+        catch (const std::runtime_error &) { continue; } // The actual expression supplies its diagnostic when lowered.
+        if (!source->pending_owner && storage_owner(*source)) {
+          result.emplace(constraint.pointer, snapshot_pointer(std::move(*source)));
+          changed = true;
+        }
+      }
+    } while (changed);
     return result;
   }
   Value deferred_block(const Expression &expr, const Module &module, const Locals &locals, bool function_context) {
     auto selected = locals;
+    pointer_owner_constraints(deferred_scope_->owner_constraints, expr, module, locals, true);
     const auto rebound = rebound_pointers(expr, locals, true);
     deferred_scope_->rebound_pointers.insert(rebound.begin(), rebound.end());
     const auto references = lexical_references(expr, locals);
@@ -6717,6 +6895,7 @@ class Compiler {
     };
     auto &scope = *deferred_scope_;
     scope.actions.push_back({layout, expr.at, {}, std::move(invoke), expr.children.size() > 1, std::move(recovered)});
+    for (const auto &[owner, field] : owners) scope.actions.back().borrowed_regions.insert(owner);
     std::set<size_t> catches;
     const auto handlers = exception_handlers(expr, module);
     for (size_t i = 0; i < handlers.catches.size(); ++i) if (handlers.catches[i]) catches.insert(i + 1);
@@ -7065,6 +7244,9 @@ class Compiler {
     }
 
     const auto rebound = rebound_pointers(*expr.children[body_index], locals);
+    std::vector<PointerOwnerConstraint> owner_constraints;
+    pointer_owner_constraints(owner_constraints, *expr.children[body_index], module, locals, false);
+    const auto inferred_owners = infer_pointer_owners(owner_constraints);
     LoopPointers loop_pointers{pointers_.size()};
     std::vector<std::pair<size_t, const Value *>> pointer_headers;
     std::vector<std::pair<size_t, size_t>> callable_headers, deferred_headers;
@@ -7085,8 +7267,11 @@ class Compiler {
     }
     if (!one && !empty) for (const auto id : rebound) {
       auto &pointer = pointers_.at(id);
-      if (pointer.fixed_binding || pointer.view->pending_owner) continue;
-      auto view = pointer_header_view(*pointer.view, before.initialized.size(), pointer.required);
+      if (pointer.fixed_binding || (pointer.view->pending_owner && !inferred_owners.contains(id))) continue;
+      auto prototype = *pointer.view;
+      if (const auto owner = inferred_owners.find(id); owner != inferred_owners.end())
+        prototype = owner_view(std::move(prototype), *owner->second);
+      auto view = pointer_header_view(std::move(prototype), before.initialized.size(), pointer.required);
       pointer_flows_.push_back({{}, nullptr, true});
       view.target_flow = pointer_flows_.size() - 1;
       if (view.callable_address) {

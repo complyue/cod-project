@@ -213,7 +213,8 @@ def checked(command, root, allowed_warnings=(), diagnostics=None):
     started = time.perf_counter()
     result = subprocess.run([str(x) for x in command], cwd=root, capture_output=True, text=True, timeout=120)
     seconds = time.perf_counter() - started
-    unexpected = any('warning:' not in line or not any(line.endswith(warning) for warning in allowed_warnings)
+    unexpected = any(not ('warning:' in line or ': note:' in line) or
+                     not any(line.endswith(warning) for warning in allowed_warnings)
                      for line in result.stderr.splitlines())
     if result.returncode or unexpected:
         raise RuntimeError(f"{command}\nexit={result.returncode}\n{result.stdout}\n{result.stderr}")

@@ -209,7 +209,7 @@ def main():
         for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
                      'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization',
-                     'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow', 'loop-pointer-flow'):
+                     'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow', 'loop-pointer-flow', 'defer-first-owner'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -318,10 +318,34 @@ behave @print(9041u64);
 stress(10000u64);
 behave @print(9042u64);
 '''
+            if name == 'defer-first-owner':
+                source += '''
+proc failed_first_owner()->void {
+  val value:u64 <-26u64;
+  ptr p:u64=null;
+  defer catch(e:const OutOfMemory) {
+    if(isnull(p)) {behave @print(27u64);} else {behave @print(999u64);};
+  };
+  behave @print(9001u64);
+  defer {p=value;};
+}
+failed_first_owner();
+behave @print(9002u64);
+proc first_stress(count:u64)->void {
+  val value:u64 <-28u64;
+  ptr p:u64=null;
+  for(i in 0u64 .. count) {{defer {p=value;};}};
+  if(isnull(p)) {behave @print(999u64);} else {behave @print(p);};
+}
+behave @print(9041u64);
+first_stress(10000u64);
+behave @print(9042u64);
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
-                                        frontend_warnings=('[-Wmissing-return]',) if name in ('defer-blocks', 'defer-returns') else ())
+                                        frontend_warnings=('[-Wmissing-return]',) if name in ('defer-blocks', 'defer-returns') else
+                                        ('[-Wshadow]', ': note: shadowed binding declared here') if name == 'defer-first-owner' else ())
             expected = next(case['stdout'].splitlines() for case in cases if case['file'] == 'scopes/' + name + '.cod')
             if name == 'defer-failures':
                 expected += ['9001', '81', '9002', '9011', '82', '9012', '84', '83', '85', '86', '87', '88', '89', '86', '90', '88', '91', '9021', '9022', '9031', '9032']
@@ -348,6 +372,10 @@ behave @print(9042u64);
                 expected += ['9001', '18', '9002', '9041', '20', '21', '9042']
                 assert evidence['layout']['record_failures'] == 1
                 assert evidence['layout']['peak_records'] == 3
+            if name == 'defer-first-owner':
+                expected += ['9001', '27', '9002', '9041', '28', '9042']
+                assert evidence['layout']['record_failures'] == 1
+                assert evidence['layout']['peak_records'] == 4
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
             evidence['executed_source_sha256'] = hashlib.sha256(source.encode()).hexdigest()

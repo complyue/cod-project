@@ -1386,6 +1386,14 @@ public:
     return slot;
   }
   llvm::Value *read_pointer(llvm::Value *slot, llvm::Value *shape) { return b().CreateLoad(shape->getType(), slot); }
+  llvm::Value *retained_pointer(const std::vector<llvm::Value *> &slots, llvm::Value *shape) {
+    llvm::Value *result = nullptr;
+    for (auto *slot : slots) {
+      auto *candidate = read_pointer(slot, shape);
+      result = result ? b().CreateSelect(is_null(candidate), result, candidate) : candidate;
+    }
+    return result;
+  }
   void write_pointer(llvm::Value *slot, llvm::Value *address) { b().CreateStore(address, slot); }
   Place referent(llvm::Value *owner, llvm::Value *source, Type type) {
     return {type, owner, checked_address(owner, source)};
