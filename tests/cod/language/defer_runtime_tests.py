@@ -209,7 +209,8 @@ def main():
         for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
                      'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization',
-                     'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow', 'loop-pointer-flow', 'defer-first-owner'):
+                     'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow', 'loop-pointer-flow', 'defer-first-owner',
+                     'defer-owner-queue'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -341,6 +342,33 @@ behave @print(9041u64);
 first_stress(10000u64);
 behave @print(9042u64);
 '''
+            if name == 'defer-owner-queue':
+                source += r'''
+proc conditional_failure(yes:bool)->void {
+  defer catch(e:const OutOfMemory) {behave @print(14u64);};
+  if(yes) {
+    owned region r:Item <-make Item(capacity=256u64){value<-99u64};
+    behave @print(9001u64);
+    defer show_region(r);
+  } else {};
+}
+conditional_failure(true);
+behave @print(9002u64);
+proc verify_region(region r:Item)->void {
+  if(root(r).value != 13u64) {behave @print(999u64);} else {};
+}
+proc conditional_stress(count:u64)->void {
+  for(i in 0u64 .. count) {{
+    if(i % 2u64 == 0u64) {
+      owned region r:Item <-make Item(capacity=256u64){value<-13u64};
+      defer verify_region(r);
+    } else {};
+  }};
+}
+behave @print(9041u64);
+conditional_stress(10000u64);
+behave @print(9042u64);
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -376,6 +404,10 @@ behave @print(9042u64);
                 expected += ['9001', '27', '9002', '9041', '28', '9042']
                 assert evidence['layout']['record_failures'] == 1
                 assert evidence['layout']['peak_records'] == 4
+            if name == 'defer-owner-queue':
+                expected += ['9001', '14', '9002', '9041', '9042']
+                assert evidence['layout']['record_failures'] == 1
+                assert evidence['layout']['peak_records'] == 3
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
             evidence['executed_source_sha256'] = hashlib.sha256(source.encode()).hexdigest()

@@ -1,0 +1,386 @@
+{
+  "recorded_utc": "2026-11-12T20:17:55.298372+00:00",
+  "scope": "Current region and owning-handle facts correlated with deferred registration through shared compiler branch choices; query-local sharing of queue/fact suffixes.",
+  "baseline_commit": "7224125f85929ae9f781f4a5776f993b89c5bcce",
+  "compiler_sha256": "c2638280a626d01dce00d22772f7a3e8d331b31f34909a895ac4022db3106afb",
+  "implementation_sha256": {
+    "cod/lang_frontend.hh": "6e95c95739a7298f3dbaf3a0941311e447fa51224d1460548882d4d8a581c627",
+    "tests/cod/language/defer_runtime_tests.py": "6ecaf0fa9b4e8a2f3e34129af490110d714ffd4f216ceebe73b542932df9681a"
+  },
+  "build": {
+    "command": "cmake --build ./build",
+    "passed": true,
+    "log_sha256": "2b7856d5c9339b02af21b30ade7e28f573126b48dfd7a933c901d6469cd3be90",
+    "warnings": "Existing LLVM deprecated-this-capture and CMake policy warnings only."
+  },
+  "language": {
+    "passed": 557,
+    "total": 557,
+    "source_count": 647,
+    "all_sources_match": true,
+    "source_manifest_sha256": "f0cf4872d15143c2be1b2a7d410f33932da2ab36ecd3e84a5d65564005d3d67e"
+  },
+  "new_cases": [
+    {
+      "fixture": "scopes/defer-owner-queue-consumed.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "region owner has been consumed"
+    },
+    {
+      "fixture": "scopes/defer-owner-queue-later-release.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "regional value requires a live owning region"
+    },
+    {
+      "fixture": "scopes/defer-owner-queue-released.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "regional value requires a live owning region"
+    },
+    {
+      "fixture": "scopes/defer-owner-queue.cod",
+      "passed": true,
+      "exit": 0,
+      "stdout": "1\n2\n3\n40\n4\n40\n4\n5\n5\n5\n6\n7\n7\n6\n8\n80\n81\n91\n9\n90\n91\n10\n11\n12\n",
+      "expected_diagnostic": ""
+    },
+    {
+      "fixture": "scopes/defer-owner-queue-unguarded.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "before definite initialization"
+    }
+  ],
+  "native": {
+    "layout": {
+      "registrations": 5024,
+      "drained": 5024,
+      "peak_records": 3,
+      "peak_record_bytes": 96,
+      "images": 16,
+      "images_released": 16,
+      "record_failures": 1,
+      "copy_failures": 0,
+      "owners": 5019,
+      "owners_released": 5019
+    },
+    "frontend_seconds": 0.09667199500836432,
+    "frontend_diagnostics": [],
+    "native_compile_link_seconds": 2.117367279017344,
+    "native_process_seconds": 0.0017224210314452648,
+    "llvm_ir_bytes": 823052,
+    "bitcode_bytes": 130644,
+    "fixture_sha256": "2d34e7c7db726ab99877ddcffc8a999ca4e90b41f0d1cc3a5966f30b21270d14",
+    "executed_source_sha256": "1de6802af0a7faaf2852a385862fe0fb8d7157bc4491c36ea0599cbec22be820"
+  },
+  "comparisons": {
+    "runtime": {
+      "baseline_cases": 18,
+      "current_cases": 19,
+      "preexisting_resource_and_artifact_changes": [
+        {
+          "case": "defer-callable-flow",
+          "field": "llvm_ir_bytes",
+          "before": 699437,
+          "after": 699441
+        }
+      ],
+      "baseline_frontend_seconds": 0.6553417061222717,
+      "current_preexisting_frontend_seconds": 0.6473169948440045
+    },
+    "callables": {
+      "baseline_cases": 30,
+      "current_cases": 30,
+      "preexisting_resource_and_artifact_changes": [],
+      "baseline_frontend_seconds": 1.018335893866606,
+      "current_preexisting_frontend_seconds": 1.064437293971423
+    }
+  },
+  "regional_and_exception_regression": {
+    "regional": {
+      "passed": true,
+      "report_sha256": "430988bb036b23e27efd8887cac709efc03b55c748857fa3df1e2c6ab93a514f",
+      "source_hashes_match": true,
+      "layout": {
+        "relocation_passed": true,
+        "relocated_bytes": 120,
+        "region_header_bytes": 40,
+        "array_header_bytes": 16,
+        "record_bytes": 24
+      },
+      "pool": {
+        "relocation_passed": true,
+        "relocated_bytes": 144,
+        "slots": 4,
+        "cod_reuse_laps": 10000,
+        "bounded_occupation": true,
+        "failed_constructions_released": 4,
+        "typed_root_factory": true,
+        "relocated_free_chain": [
+          3,
+          1,
+          4
+        ],
+        "independent_native_reuse_passed": true
+      },
+      "resources": {
+        "owners_acquired": 4,
+        "owners_released": 4,
+        "release_order": [
+          1,
+          2,
+          3,
+          0
+        ],
+        "live_resource_reads": 18,
+        "loop_iterations": 3,
+        "untaken_branch_acquires_nothing": true,
+        "captured_and_hidden_owners_survive_replay": true
+      }
+    },
+    "exceptions": {
+      "passed": true,
+      "report_sha256": "30192ebe43db82218659a4a53965562a923171256b36300beb9f1701cb7fa64c",
+      "source_hashes_match": true,
+      "layout": {
+        "provider_failures": 1,
+        "owners_acquired": 2,
+        "owners_released": 2,
+        "inner_released_before_catch": true,
+        "outer_preserved_until_exit": true
+      },
+      "retained_chain": {
+        "returned_and_stored_causes": true,
+        "relocation_after_original_release": true,
+        "category_preserved": true,
+        "immutable_records": 4,
+        "storage_released_at_exit": true
+      },
+      "chain_allocation_failure": {
+        "real_chain_allocation_failures": 3,
+        "automatic_cause_added": false,
+        "saved_chain_survives_failure": true,
+        "retry_passed": true,
+        "owners_acquired": 2,
+        "owners_released": 2,
+        "chain_allocations": 4,
+        "chain_deallocations": 4
+      },
+      "uncaught": {
+        "exit": 70,
+        "trace": [
+          "release 64",
+          "10",
+          "20",
+          "release 4096"
+        ],
+        "stderr": "/tmp/cod-exception-7xkzx0r7/uncaught-callables.cod:12:22: uncaught InvalidCapacity (site=6, requested=0, available=0)\n",
+        "callable_cleanup_before_module_region": true
+      },
+      "uncaught_chain": {
+        "exit": 70,
+        "diagnostics": [
+          "/tmp/cod-exception-7xkzx0r7/uncaught-chain.cod:6:42: uncaught InvalidCapacity (site=0, requested=0, available=0)",
+          "/tmp/cod-exception-7xkzx0r7/uncaught-chain.cod:15:41: caused by RegionCapacityExceeded (site=5, requested=8, available=1)"
+        ],
+        "released_owners": 2,
+        "later_emitted_cause_site_resolved": true,
+        "chain_storage_released": true
+      },
+      "recursive_calls": {
+        "recursive_frames": 5,
+        "released_once_in_reverse_order": true
+      },
+      "compile_rejections": [
+        "non-exception-cause",
+        "duplicate-category",
+        "catch-order",
+        "finally-value",
+        "rethrow-context",
+        "function-effects"
+      ]
+    }
+  },
+  "sanitizer": {
+    "passed": true,
+    "compiler_sha256": "c2638280a626d01dce00d22772f7a3e8d331b31f34909a895ac4022db3106afb",
+    "cases": [
+      {
+        "fixture": "defer-owner-queue",
+        "executed_source_sha256": "2d34e7c7db726ab99877ddcffc8a999ca4e90b41f0d1cc3a5966f30b21270d14",
+        "instrumented_definitions": 56,
+        "stages": [
+          {
+            "stage": "frontend",
+            "exit": 0,
+            "seconds": 0.10055810795165598
+          },
+          {
+            "stage": "instrument",
+            "exit": 0,
+            "seconds": 0.23809284099843353
+          },
+          {
+            "stage": "verify_instrumentation",
+            "exit": 0,
+            "seconds": 0.010666394024156034
+          },
+          {
+            "stage": "link",
+            "exit": 0,
+            "seconds": 1.8168314950307831
+          },
+          {
+            "stage": "execute",
+            "exit": 0,
+            "seconds": 0.014280456001870334
+          }
+        ]
+      }
+    ]
+  },
+  "static_acquisition_scale": {
+    "pre_optimization_compiler_sha256": "64972313bbdd571b301ded7ad16a553b562091f9943e2861dd9a6f2acd82936f",
+    "before_shared_query_visits": [
+      {
+        "count": 4,
+        "seconds": 0.023792366962879896,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 130092,
+        "bitcode_bytes": 24264,
+        "source_sha256": "3f11160ad16d3b1d9fe691065ba7795bc8483092c8bf248cca7473ade14eab90"
+      },
+      {
+        "count": 8,
+        "seconds": 0.037877121998462826,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 236230,
+        "bitcode_bytes": 42028,
+        "source_sha256": "fcbd21c309f3a6e7f8eea87199cf4d786f840bb8da6d6f3339a322d45b7f2e58"
+      },
+      {
+        "count": 16,
+        "seconds": 0.08302469202317297,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 449840,
+        "bitcode_bytes": 79436,
+        "source_sha256": "c495e1aae9b3fa7d9c4d6d00d1fd1aa24f4a01693dde4deb340bd22b936a558f"
+      },
+      {
+        "count": 32,
+        "seconds": 0.3776011419831775,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 882698,
+        "bitcode_bytes": 155628,
+        "source_sha256": "b17728dbf82ed1eb545e53e8d3c11a83ed27e5120a8df6ee1228131922f47627"
+      },
+      {
+        "count": 64,
+        "seconds": 3.281077407009434,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 1753506,
+        "bitcode_bytes": 315088,
+        "source_sha256": "a9f076da6bb6108eec7b8042f7615386c06d65c7cea65f4df1a3f906e1b9d8f3"
+      }
+    ],
+    "after_shared_query_visits": [
+      {
+        "count": 4,
+        "seconds": 0.028803081018850207,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 130092,
+        "bitcode_bytes": 24264,
+        "source_sha256": "3f11160ad16d3b1d9fe691065ba7795bc8483092c8bf248cca7473ade14eab90"
+      },
+      {
+        "count": 8,
+        "seconds": 0.03575614403234795,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 236230,
+        "bitcode_bytes": 42028,
+        "source_sha256": "fcbd21c309f3a6e7f8eea87199cf4d786f840bb8da6d6f3339a322d45b7f2e58"
+      },
+      {
+        "count": 16,
+        "seconds": 0.05351338197942823,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 449840,
+        "bitcode_bytes": 79436,
+        "source_sha256": "c495e1aae9b3fa7d9c4d6d00d1fd1aa24f4a01693dde4deb340bd22b936a558f"
+      },
+      {
+        "count": 32,
+        "seconds": 0.11002278700470924,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 882698,
+        "bitcode_bytes": 155628,
+        "source_sha256": "b17728dbf82ed1eb545e53e8d3c11a83ed27e5120a8df6ee1228131922f47627"
+      },
+      {
+        "count": 64,
+        "seconds": 0.35056489502312616,
+        "exit": 0,
+        "stderr": "",
+        "ir_bytes": 1753506,
+        "bitcode_bytes": 315088,
+        "source_sha256": "a9f076da6bb6108eec7b8042f7615386c06d65c7cea65f4df1a3f906e1b9d8f3"
+      }
+    ],
+    "all_source_hashes_and_artifact_sizes_match": true,
+    "profile_compiler_sha256": "52bcb59e11de5bb76b5d43477d0a124613408359845d432f73776537a3123058",
+    "profile_log": "PROFILE owner queries 1408 steps 90133120 ms 3116 checks 1408\n",
+    "instrumentation_removed": true
+  },
+  "frontier_probes": [
+    {
+      "name": "owned-defer-call",
+      "source": "using symbol \"std:io\" @print;\ndata Item {value:u64;}\nproc consume(owned region item:Item)->void {behave @print(root(item).value);}\nproc run()->void {\n  owned region r:Item <-make Item(capacity=256u64){value<-17u64};\n  defer consume(r);\n  behave @print(root(r).value);\n}\nrun();\n",
+      "source_sha256": "384b722218cb84a43d0a69bfb9b1ca03b66594351b907622c519bb721d6cc2eb",
+      "exit": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-owner-queue-flow/owned-defer-call.cod:6:3: deferred owning-argument flow checking is not implemented yet\n/tmp/cod-owner-queue-flow/owned-defer-call.cod:9:1: note: in call to procedure 'run' defined at /tmp/cod-owner-queue-flow/owned-defer-call.cod:4:1\n"
+    },
+    {
+      "name": "owned-defer-block",
+      "source": "using symbol \"std:io\" @print;\ndata Item {value:u64;}\nproc consume(owned region item:Item)->void {behave @print(root(item).value);}\nproc run()->void {\n  owned region r:Item <-make Item(capacity=256u64){value<-18u64};\n  defer {consume(r);};\n  behave @print(root(r).value);\n}\nrun();\n",
+      "source_sha256": "b51c5b7f2a52da975ded02980ff51d1fd79568210afd1b77cd23195eeafe5a4e",
+      "exit": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-owner-queue-flow/owned-defer-block.cod:6:3: deferred action changes flow facts; deferred backedge checking is not implemented yet\n/tmp/cod-owner-queue-flow/owned-defer-block.cod:9:1: note: in call to procedure 'run' defined at /tmp/cod-owner-queue-flow/owned-defer-block.cod:4:1\n"
+    }
+  ],
+  "supplemental_probes": [
+    {
+      "name": "copied-before-release",
+      "source": "using symbol \"std:io\" @print;\ndata Item {value:u64;}\nproc copied(value:u64)->void {behave @print(value);}\nproc drop(owned region item:Item)->void {}\nproc run(yes:bool)->void {\n  if(yes) {\n    owned region r:Item <-make Item(capacity=256u64){value<-13u64};\n    defer copied(root(r).value);\n    drop(r);\n  } else {};\n}\nrun(false);run(true);\n",
+      "source_sha256": "24aeb9af055472d7669b9925e43534691d65ff7af214b4ebe42198434d8405e1",
+      "exit": 0,
+      "stdout": "13\n",
+      "stderr": ""
+    }
+  ],
+  "limits": [
+    "The ownership and queue graphs share branch choices from the same control-flow join. This is bounded relational proof coverage, not arbitrary predicate equivalence, dynamic owner unions or a new permission rule.",
+    "Use checks read current facts, including intervening consuming calls and scope release. A registration snapshot cannot revive an invalidated owner. Unconditional use cannot rely on an acquisition that occurs only on some incoming paths. A supplemental native CoD run confirms an independent default-parameter bits copy remains valid after its source region is consumed.",
+    "The native harness injects a failed registration in the acquisition branch. Its10000-iteration stress conditionally acquires5000 regions and drains one action per acquired instance; the phase asserts peak1 record. The complete fixture peaks at3 records/96bytes, and every record, callable image and region releases exactly once.",
+    "The scale probe creates4/8/16/32/64 distinct conditional acquisitions and registrations. Temporary profiling identified repeated queue/fact walks across incoming completions; query-local sharing preserves the proof semantics without caching across compilation phases. Source hashes and emitted artifact sizes match before/after; prior textual artifacts were not retained for bytewise comparison. Timings are individual observations, not general complexity guarantees.",
+    "Generated LLVM and native runtime C++ are both ASAN-instrumented. The scale measurement is frontend compilation; native process and link timings are reported separately.",
+    "The owning deferred-call and delayed owning-block probes still reject at explicit implementation guards. H370 invocation-time transfer remains required work. Other unfinished work includes non-queryable provenance, broader predicate/target/result relations, mutable ownership backedges, generic capture transport, module queues and broader callable-family/AOT composition.",
+    "D01 allocation/relocation, actual-owner unions, abstract-result ABI, D16 fractions, D22 construction choices and pure/TCO/compiler-pilot deferral retain their existing boundaries. No runtime storage or source-policy change is introduced."
+  ]
+}

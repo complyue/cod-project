@@ -3289,5 +3289,34 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "consumed"
+  },
+  {
+    "file": "scopes/defer-owner-queue.cod",
+    "exit": 0,
+    "stdout": "1\n2\n3\n40\n4\n40\n4\n5\n5\n5\n6\n7\n7\n6\n8\n80\n81\n91\n9\n90\n91\n10\n11\n12\n"
+  },
+  {
+    "file": "scopes/defer-owner-queue-consumed.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "region owner has been consumed"
+  },
+  {
+    "file": "scopes/defer-owner-queue-released.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional value requires a live owning region"
+  },
+  {
+    "file": "scopes/defer-owner-queue-unguarded.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/defer-owner-queue-later-release.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional value requires a live owning region"
   }
 ]

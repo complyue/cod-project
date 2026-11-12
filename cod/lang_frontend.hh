@@ -58,6 +58,9 @@ class FlowCondition {
   struct Deferred {
     std::function<bool()> evaluate;
     bool active = false;
+    enum class Kind { leaf, either, both, choice } kind = Kind::leaf;
+    std::vector<FlowCondition> inputs = {};
+    size_t choice = 0;
   };
   bool constant_ = false;
   std::shared_ptr<Deferred> deferred_;
@@ -76,17 +79,53 @@ public:
     // establish either an access restriction or a surviving owner.
     if (deferred_->active) return false;
     const auto active = llvm::SaveAndRestore(deferred_->active, true);
-    return deferred_->evaluate();
+    if (deferred_->kind == Deferred::Kind::leaf) return deferred_->evaluate();
+    if (deferred_->kind == Deferred::Kind::either)
+      return bool(deferred_->inputs[0]) || bool(deferred_->inputs[1]);
+    return bool(deferred_->inputs[0]) && bool(deferred_->inputs[1]);
   }
   static FlowCondition either(FlowCondition left, FlowCondition right) {
+    if (left.same(right)) return left;
     if (!left.pending()) return left.constant_ ? left : right;
     if (!right.pending()) return right.constant_ ? right : left;
-    return deferred([left, right] { return bool(left) || bool(right); });
+    FlowCondition result;
+    result.deferred_ = std::make_shared<Deferred>(Deferred{{}, false, Deferred::Kind::either, {left, right}});
+    return result;
   }
   static FlowCondition both(FlowCondition left, FlowCondition right) {
+    if (left.same(right)) return left;
     if (!left.pending()) return left.constant_ ? right : left;
     if (!right.pending()) return right.constant_ ? left : right;
-    return deferred([left, right] { return bool(left) && bool(right); });
+    FlowCondition result;
+    result.deferred_ = std::make_shared<Deferred>(Deferred{{}, false, Deferred::Kind::both, {left, right}});
+    return result;
+  }
+  static FlowCondition choice(size_t id, FlowCondition left, FlowCondition right) {
+    if (left.same(right)) return left;
+    FlowCondition result;
+    result.deferred_ = std::make_shared<Deferred>(Deferred{{}, false, Deferred::Kind::choice, {left, right}, id});
+    return result;
+  }
+  FlowCondition selected(size_t choice_id, bool right) const {
+    std::map<const Deferred *, FlowCondition> cache;
+    const auto select = [&](auto &&self, const FlowCondition &value) -> FlowCondition {
+      const auto &node = value.deferred_;
+      if (!node || node->kind == Deferred::Kind::leaf) return value;
+      if (const auto found = cache.find(node.get()); found != cache.end()) return found->second;
+      auto result = value;
+      if (node->kind == Deferred::Kind::choice && node->choice == choice_id) result = node->inputs[right];
+      else {
+        const auto first = self(self, node->inputs[0]), second = self(self, node->inputs[1]);
+        if (!first.same(node->inputs[0]) || !second.same(node->inputs[1])) {
+          if (node->kind == Deferred::Kind::choice) result = choice(node->choice, first, second);
+          else if (node->kind == Deferred::Kind::either) result = either(first, second);
+          else result = both(first, second);
+        }
+      }
+      cache.emplace(node.get(), result);
+      return result;
+    };
+    return select(select, *this);
   }
   FlowCondition &operator|=(FlowCondition other) { return *this = either(*this, std::move(other)); }
 };
@@ -371,9 +410,9 @@ class Compiler {
     Presence presence = Presence::present;
     bool movable = false;
     size_t scope = 0;
+    FlowCondition available = true;
   };
   std::vector<Holding> holdings_;
-  std::map<size_t, FlowCondition> conditional_holdings_;
   struct LocalCell { size_t scope; Location at; size_t initialized = 0; bool selected_target = false; };
   // The slot is the runtime address; the view carries checked owner/type/access
   // constraints and initialization facts, not an exact runtime target identity.
@@ -474,12 +513,18 @@ class Compiler {
   struct FlowState {
     std::vector<FlowCondition> live;
     std::vector<Presence> holdings;
+    std::vector<FlowCondition> available;
     std::vector<size_t> initialized;
     std::vector<const Value *> pointers;
     CallableMemory callables{nullptr};
     std::map<size_t, size_t> deferred;
   };
-  struct DeferredInput { size_t queue; std::vector<size_t> initialized = {}; };
+  struct DeferredInput {
+    size_t queue;
+    std::vector<size_t> initialized = {};
+    size_t choice = 0;
+    bool right = false;
+  };
   struct DeferredFlow {
     std::vector<DeferredInput> inputs;
     std::set<size_t> catches;
@@ -490,6 +535,7 @@ class Compiler {
   // loop headers retain every possible predecessor without copying stacks.
   std::deque<DeferredFlow> deferred_flows_{{{}, {}}};
   std::map<size_t, size_t> registered_deferred_;
+  size_t next_flow_choice_ = 1;
   struct ConversionPoint {
     LLVMEmission::ConversionPoint native;
     FlowState regions;
@@ -681,9 +727,9 @@ class Compiler {
     return true;
   }
   size_t join_deferred_flow(size_t left, size_t right, const std::vector<size_t> &left_initialized,
-                            const std::vector<size_t> &right_initialized) {
+                            const std::vector<size_t> &right_initialized, size_t choice) {
     if (left == right) return left;
-    deferred_flows_.push_back({{{left, left_initialized}, {right, right_initialized}}, {}});
+    deferred_flows_.push_back({{{left, left_initialized, choice, false}, {right, right_initialized, choice, true}}, {}});
     return deferred_flows_.size() - 1;
   }
   bool deferred_may_recover(size_t queue) const {
@@ -911,6 +957,7 @@ class Compiler {
     FlowState result;
     for (const auto &region : regions_) result.live.push_back(region.live);
     for (const auto &holding : holdings_) result.holdings.push_back(holding.presence);
+    for (const auto &holding : holdings_) result.available.push_back(holding.available);
     for (const auto &cell : cells_) result.initialized.push_back(cell.initialized);
     for (const auto &pointer : pointers_) result.pointers.push_back(pointer.view);
     result.callables = callable_holders_;
@@ -919,8 +966,10 @@ class Compiler {
   }
   void restore_flow(const FlowState &state) {
     for (size_t i = 0; i < regions_.size(); ++i) regions_[i].live = i < state.live.size() ? state.live[i] : FlowCondition{false};
-    for (size_t i = 0; i < holdings_.size(); ++i)
+    for (size_t i = 0; i < holdings_.size(); ++i) {
       holdings_[i].presence = i < state.holdings.size() ? state.holdings[i] : Presence::absent;
+      holdings_[i].available = i < state.available.size() ? state.available[i] : FlowCondition{false};
+    }
     for (size_t i = 0; i < cells_.size(); ++i)
       cells_[i].initialized = i < state.initialized.size() ? state.initialized[i] : 0;
     for (size_t i = 0; i < state.pointers.size(); ++i) pointers_[i].view = state.pointers[i];
@@ -1086,21 +1135,27 @@ class Compiler {
     ir_.write_pointer(definition.function->getArg(definition.context_argument + 1), image);
   }
   void intersect_flow(FlowState &left, const FlowState &right) {
+    const auto choice = next_flow_choice_++;
     for (auto &[scope, queue] : left.deferred) {
       const auto found = right.deferred.find(scope);
       queue = join_deferred_flow(queue, found == right.deferred.end() ? 0 : found->second,
-                                 left.initialized, right.initialized);
+                                 left.initialized, right.initialized, choice);
     }
     for (const auto &[scope, queue] : right.deferred)
       if (!left.deferred.contains(scope))
-        left.deferred.emplace(scope, join_deferred_flow(0, queue, left.initialized, right.initialized));
+        left.deferred.emplace(scope, join_deferred_flow(0, queue, left.initialized, right.initialized, choice));
     left.live.resize(std::max(left.live.size(), right.live.size()), false);
-    for (size_t i = 0; i < left.live.size(); ++i) left.live[i] = FlowCondition::both(left.live[i], i < right.live.size() ? right.live[i] : FlowCondition{false});
+    for (size_t i = 0; i < left.live.size(); ++i)
+      left.live[i] = FlowCondition::choice(choice, left.live[i], i < right.live.size() ? right.live[i] : FlowCondition{false});
     left.holdings.resize(std::max(left.holdings.size(), right.holdings.size()), Presence::absent);
     for (size_t i = 0; i < left.holdings.size(); ++i) {
       const auto other = i < right.holdings.size() ? right.holdings[i] : Presence::absent;
       if (left.holdings[i] != other) left.holdings[i] = Presence::conditional;
     }
+    left.available.resize(left.holdings.size(), false);
+    for (size_t i = 0; i < left.available.size(); ++i)
+      left.available[i] = FlowCondition::choice(choice, left.available[i],
+          i < right.available.size() ? right.available[i] : FlowCondition{false});
     left.initialized.resize(std::max(left.initialized.size(), right.initialized.size()), 0);
     for (size_t i = 0; i < left.initialized.size(); ++i)
       left.initialized[i] = join_initialization(left.initialized[i], i < right.initialized.size() ? right.initialized[i] : 0);
@@ -1136,6 +1191,7 @@ class Compiler {
                    std::optional<size_t> preserve_scope = {}) {
     state.live.resize(regions_.size(), false);
     state.holdings.resize(holdings_.size(), Presence::absent);
+    state.available.resize(holdings_.size(), false);
     std::set<size_t> released;
     for (size_t i = begin; i < holdings_.size(); ++i) {
       const auto &holding = holdings_[i];
@@ -1143,6 +1199,7 @@ class Compiler {
       const auto &origins = regions_[holding.region].origins;
       released.insert(origins.begin(), origins.end());
       state.holdings[i] = Presence::absent;
+      state.available[i] = false;
     }
     for (size_t i = 0; i < regions_.size(); ++i) {
       if (result_owner == i) continue;
@@ -1172,6 +1229,7 @@ class Compiler {
     auto &holding = holdings_.at(*value.holding_id);
     if (!holding.movable) fail(at, "cannot transfer ownership out of a dynamic region binding");
     holding.presence = Presence::absent;
+    holding.available = false;
     ir_.relinquish_region(holding.slot);
     value.holding_id.reset();
     return value;
@@ -1417,13 +1475,10 @@ class Compiler {
     else if (!live) fail(at, message);
   }
   llvm::Value *region_pointer(const Value &value, const Location &at) {
-    if (value.type.owned && (!value.holding_id || holdings_.at(*value.holding_id).presence != Presence::present)) {
+    if (value.type.owned) {
       const std::string message = "region owner has been consumed on a path reaching this use" +
           region_note(value.region_id, "the region was acquired here");
-      const auto guarantee = value.holding_id ? conditional_holdings_.find(*value.holding_id) : conditional_holdings_.end();
-      if (!value.holding_id || holdings_.at(*value.holding_id).presence != Presence::conditional ||
-          guarantee == conditional_holdings_.end()) fail(at, message);
-      require_live(guarantee->second, at, message);
+      require_live(value.holding_id ? holdings_.at(*value.holding_id).available : FlowCondition{false}, at, message);
     }
     require_live(value.region_id ? regions_.at(*value.region_id).live : FlowCondition{false}, at,
         "regional value requires a live owning region in this caller scope" +
@@ -6272,35 +6327,40 @@ class Compiler {
     // An acquisition failure before registration cannot invalidate the owner
     // of a prepared call that did register. Select its retained owners from
     // reaching queues; mutable ownership backedges remain unsupported.
-    struct OwnerEntry { size_t queue; std::vector<FlowCondition> live; std::vector<Presence> holdings; };
+    struct OwnerEntry {
+      size_t queue;
+      std::vector<FlowCondition> live, available;
+    };
     auto owner_entries = std::make_shared<std::vector<OwnerEntry>>();
     for (const auto &entry : entries) {
       const auto queue = entry.state.deferred.find(scope.owner_scope);
       owner_entries->push_back({queue == entry.state.deferred.end() ? 0 : queue->second,
-                                entry.state.live, entry.state.holdings});
+                                entry.state.live, entry.state.available});
     }
     const auto live_at_action = [&](size_t action, size_t region, std::optional<size_t> holding = {}) {
-      return FlowCondition::deferred([this, owner_entries, action, region, holding, parent = conditional_holdings_] {
+      return FlowCondition::deferred([this, owner_entries, action, region, holding] {
+        // Incoming completions share queue suffixes. The same current fact on
+        // the same suffix needs one check across the entire proof query.
+        std::map<size_t, std::vector<FlowCondition>> visited;
         for (const auto &entry : *owner_entries) {
-          std::set<size_t> visited;
-          std::vector<size_t> pending{entry.queue};
-          bool reaches = false;
-          while (!pending.empty() && !reaches) {
-            const auto next = pending.back(); pending.pop_back();
-            if (next == action) { reaches = true; break; }
-            if (!next || !visited.insert(next).second) continue;
-            const auto &flow = deferred_flows_.at(next);
-            for (const auto &input : flow.inputs) pending.push_back(input.queue);
-            pending.insert(pending.end(), flow.continuations.begin(), flow.continuations.end());
-          }
-          if (!reaches) continue;
-          if (region >= entry.live.size() || !entry.live[region]) return false;
-          if (holding) {
-            if (*holding >= entry.holdings.size() || entry.holdings[*holding] == Presence::absent) return false;
-            if (entry.holdings[*holding] == Presence::conditional) {
-              const auto inherited = parent.find(*holding);
-              if (inherited == parent.end() || !inherited->second) return false;
+          auto fact = region < entry.live.size() ? entry.live[region] : FlowCondition{false};
+          if (holding) fact = FlowCondition::both(fact,
+              *holding < entry.available.size() ? entry.available[*holding] : FlowCondition{false});
+          std::vector<std::pair<size_t, FlowCondition>> pending{{entry.queue, fact}};
+          while (!pending.empty()) {
+            auto [next, valid] = std::move(pending.back()); pending.pop_back();
+            if (!next || (!valid.pending() && valid)) continue;
+            if (next == action) {
+              if (!valid) return false;
+              continue;
             }
+            auto &facts = visited[next];
+            if (std::any_of(facts.begin(), facts.end(), [&](const auto &seen) { return seen.same(valid); })) continue;
+            facts.push_back(valid);
+            const auto &flow = deferred_flows_.at(next);
+            for (const auto &input : flow.inputs)
+              pending.emplace_back(input.queue, input.choice ? valid.selected(input.choice, input.right) : valid);
+            for (const auto continuation : flow.continuations) pending.emplace_back(continuation, valid);
           }
         }
         return true;
@@ -6461,7 +6521,8 @@ class Compiler {
       bool changed = false;
       // Ownership changes appear in the holding state. Queue/category joins
       // can refine liveness formulas without consuming or releasing an owner.
-      for (size_t i = 0; i < before.holdings.size(); ++i) changed |= before.holdings[i] != exit.holdings[i];
+      for (size_t i = 0; i < before.holdings.size(); ++i)
+        changed |= before.holdings[i] != exit.holdings[i] || !before.available[i].same(exit.available[i]);
       for (size_t i = 0; i < before.pointers.size(); ++i)
         if (!tracked_pointer(i) && !(before.pointers[i]->pending_owner && exit.pointers[i]->pending_owner))
           changed |= before.pointers[i] != exit.pointers[i];
@@ -6475,7 +6536,6 @@ class Compiler {
       ir_.choose(ir_.binary(Type::uint64, "==", site, ir_.bits(Type::uint64, i)), run, other);
       ir_.enter(run);
       restore_flow(entry_flow);
-      const auto owned_access = llvm::SaveAndRestore(conditional_holdings_);
       auto retained_owners = action.borrowed_regions;
       for (const auto &[pointer, owner] : inferred_owners)
         if (owner->region_id) retained_owners.insert(*owner->region_id);
@@ -6487,7 +6547,7 @@ class Compiler {
           regions_[region].live = live_at_action(action.registration, region);
       for (size_t holding = 0; holding < holdings_.size(); ++holding)
         if (holdings_[holding].presence == Presence::conditional && retained_owners.contains(holdings_[holding].region))
-          conditional_holdings_.insert_or_assign(holding, live_at_action(action.registration, holdings_[holding].region, holding));
+          holdings_[holding].available = live_at_action(action.registration, holdings_[holding].region, holding);
       // Existing owning slots dominate dispatch, unlike the acquisition SSA
       // value. Transfers can leave different slots holding the same region on
       // different incoming paths. Select its retained base without granting
@@ -8006,6 +8066,8 @@ class Compiler {
       if (exit.live[i].same(entry.live[i])) exit.live[i] = path.live[i];
     for (size_t i = 0; i < std::min(path.holdings.size(), entry.holdings.size()); ++i)
       if (exit.holdings[i] == entry.holdings[i]) exit.holdings[i] = path.holdings[i];
+    for (size_t i = 0; i < std::min(path.available.size(), entry.available.size()); ++i)
+      if (exit.available[i].same(entry.available[i])) exit.available[i] = path.available[i];
     // A live allocation stays initialized along a continuation even when a
     // shared cleanup expresses its guarantees through different proof nodes.
     for (size_t i = 0; i < std::min(path.initialized.size(), entry.initialized.size()); ++i)
