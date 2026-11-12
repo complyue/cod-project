@@ -474,6 +474,7 @@ class Compiler {
     std::array<std::map<size_t, size_t>, 4> failure_initialized = {};
   };
   std::deque<NativeCallDemand> native_call_demands_;
+  size_t callable_compilations_ = 0;
   std::set<const NativeCallDemand *> checking_native_calls_;
   const NativeCallDemand *pending_callable_failure_ = nullptr;
   struct ReturnFacts {
@@ -4569,7 +4570,7 @@ class Compiler {
         if (ac.capture_fields[i].first != bc.capture_fields[i].first) return false;
       if (ac.layout->elements() != bc.layout->elements() || ac.nested != bc.nested ||
           ac.dynamic_values != bc.dynamic_values || ac.dynamic_procedures != bc.dynamic_procedures ||
-          ac.result_flow || bc.result_flow || ac.regions.size() != bc.regions.size() ||
+          bool(ac.result_flow) != bool(bc.result_flow) || ac.regions.size() != bc.regions.size() ||
           ac.dynamic_regions.size() != bc.dynamic_regions.size() ||
           a.lexical_captures.regional_slots != b.lexical_captures.regional_slots ||
           a.captures.replay != b.captures.replay) return false;
@@ -4626,7 +4627,22 @@ class Compiler {
             !same_value(*value, *other->second)) return false;
         ++other;
       }
-      return other == b.captures.bindings.end();
+      if (other != b.captures.bindings.end()) return false;
+      if (bool(ac.entry.function) != bool(bc.entry.function)) return false;
+      if (ac.entry.function && (ac.result_flow || !ac.entry.function->empty() || !bc.entry.function->empty())) {
+        // Reuse must emit an entry reached by its peer, without demanding a
+        // returned leaf body that neither checked caller ever invokes.
+        compile_callable(a, *left.caller, left.at);
+        compile_callable(b, *right.caller, right.at);
+        if (!ac.entry.complete || !bc.entry.complete || ac.entry.returns != bc.entry.returns ||
+            ac.entry.failures != bc.entry.failures) return false;
+      }
+      if (!ac.result_flow) return true;
+      // A factory's returned images are part of its checked contract. A native
+      // entry fixes that result graph independently of this caller's adapter.
+      if (!ac.entry.function || !bc.entry.function) return false;
+      return pair_images(callable_choices(ac.result_flow), callable_choices(bc.result_flow),
+          [&](const auto &x, const auto &y) { return self(self, x, y); });
     };
     const auto preserved_outputs = [&](const NativeCallDemand &demand) {
       const auto preserved = [&](const auto &outputs) {
@@ -4677,7 +4693,21 @@ class Compiler {
         return std::optional(result);
       };
       const auto expected = contract(first, left), actual = contract(second, right);
-      return expected && actual && expected == actual;
+      if (!expected || !actual || expected != actual) return false;
+      if (a.type.target->kind != Type::procedure) return true;
+      const auto results = [&](const CallableChoices &sources) {
+        CallableChoices result;
+        for (const auto &source : sources.definitions) {
+          const auto choices = callable_choices(source->code->result_flow);
+          result.closed &= choices.closed;
+          for (const auto &definition : choices.definitions)
+            if (std::find(result.definitions.begin(), result.definitions.end(), definition) == result.definitions.end())
+              result.definitions.push_back(definition);
+        }
+        return result;
+      };
+      return pair_images(results(first), results(second),
+          [&](const auto &x, const auto &y) { return same_image(same_image, x, y); });
     };
     for (size_t i = 0; i < left.arguments.size(); ++i) {
       const auto &first = left.arguments[i], &second = right.arguments[i];
@@ -4728,8 +4758,7 @@ class Compiler {
           b.definitions.begin(), b.definitions.end())) {
         // Function images carry their own entry; contextual images need a
         // matching checked schema and caller-local dispatch adaptation.
-        if (first.type.target->kind == Type::procedure ||
-            !preserved_outputs(left) || !preserved_outputs(right)) return false;
+        if (!preserved_outputs(left) || !preserved_outputs(right)) return false;
         for (const auto *choices : {&a, &b})
           for (const auto &source : choices->definitions) changed_inputs.insert(source->code.get());
         if (contextual_callable(first.type)) {
@@ -4866,6 +4895,7 @@ class Compiler {
   }
   bool refine_native_reuse() {
     bool changed = false;
+    const auto compiled = callable_compilations_;
     for (size_t i = 0; i < native_call_demands_.size(); ++i) {
       auto &demand = native_call_demands_[i];
       if (!demand.reused) continue;
@@ -4905,7 +4935,7 @@ class Compiler {
       for (const auto &failure : demand.failure_initialized) reopen_initialization(failure);
       changed = true;
     }
-    return changed;
+    return changed || compiled != callable_compilations_;
   }
   bool compile_native_call(NativeCallDemand &demand) {
     if (demand.reused || active_native_call(demand)) return false;
@@ -5217,6 +5247,7 @@ class Compiler {
     code.entry = std::move(activation.definition);
     native_activations_.pop_back();
     if (code.result_flow) callable_flows_.at(code.result_flow).open = false;
+    ++callable_compilations_;
     return true;
   }
   Value contextual_call(const Value &selected, const std::vector<Value> &args,

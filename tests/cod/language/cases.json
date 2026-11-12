@@ -2323,5 +2323,15 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "closures/callable-recursive-factory-argument.cod",
+    "exit": 0,
+    "stdout": "39\n67\n105\n72\n15\n39\n"
+  },
+  {
+    "file": "closures/callable-recursive-unused-factory.cod",
+    "exit": 0,
+    "stdout": "0\n"
   }
 ]

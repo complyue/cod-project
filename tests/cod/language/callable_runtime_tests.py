@@ -356,6 +356,40 @@ behave @print(7002u64);
         assert expression_evidence['layout']['peak_image_bytes'] < 2048, expression_evidence
         expression_evidence['fixture_sha256'] = hashlib.sha256(expression_targets.read_bytes()).hexdigest()
         evidence['expression_targets'] = expression_evidence
+        recursive_arguments = directory / "closures/callable-recursive-factory-argument.cod"
+        entry.write_text(recursive_arguments.read_text() + '''
+using "std:exceptions" OutOfMemory;
+owned region retained <- make State(capacity=256u64){value<-17u64};
+func saved=maker(retained);
+func copied=saved;
+behave @print(6001u64);
+try { copied <- saved; {} }
+catch(e:const OutOfMemory) { behave @print(6002u64); };
+behave @print(6301u64);
+try {
+  owned region failed <- make State(capacity=256u64){value<-1u64};
+  step(failed,maker(failed),16u64); {}
+} catch(e:const OutOfMemory) { behave @print(6302u64); };
+behave @print(6401u64);
+try {
+  owned region failed <- make State(capacity=256u64){value<-1u64};
+  step(failed,maker(failed),16u64); {}
+} catch(e:const OutOfMemory) { behave @print(6402u64); };
+func stable=copied();
+behave @print(7001u64);
+behave @print(fold(i in 0u64..10000u64,total=0u64) {{ total+stable() }});
+behave @print(7002u64);
+''')
+        recursive_harness = 'static void verify_regions();\n' + HARNESS.replace(
+            '  cod_exception_release();', '  verify_regions();\n  cod_exception_release();') + OWNED_REGION_HARNESS.replace(
+            'regions_acquired == 10250 && region_failures == 4', 'regions_acquired >= 158 && region_failures == 0')
+        recursive_output, recursive_evidence = run_case(root, toolchain, entry, scratch, recursive_harness,
+            extra_wrappers=wrappers + '#define cod_lang_region_new cod_lang_region_acquire\n')
+        recursive_evidence['regions'] = json.loads(recursive_output.pop())
+        assert recursive_output == ['39', '67', '105', '72', '15', '39', '6001', '6002', '6301', '6302',
+                                    '6401', '6402', '7001', '170000', '7002'], recursive_output
+        recursive_evidence['fixture_sha256'] = hashlib.sha256(recursive_arguments.read_bytes()).hexdigest()
+        evidence['recursive_arguments'] = recursive_evidence
         effects = directory / "closures/callable-effects.cod"
         entry.write_text(effects.read_text() + '''
 using "std:exceptions" OutOfMemory;
