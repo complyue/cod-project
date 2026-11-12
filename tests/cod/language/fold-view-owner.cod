@@ -1,6 +1,6 @@
 array Values[u32]:i64;
 function change_owner(first:Values in O1, second:Values in O2, steps:u32) -> Values where {owner O1, owner O2} {
-  fold (i in 0u32 .. steps, current = first) {{ second }}
+  return fold (i in 0u32 .. steps, current = first) {{ second }}
 }
 region symbol @first;
 region symbol @second;

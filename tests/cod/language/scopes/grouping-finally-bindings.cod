@@ -14,7 +14,7 @@ proc check_local(first:u64, second:u64) -> void {
   try {
     owned region earlier <- make Pool(capacity=first){tag<-10u64};
     owned region later <- make Pool(capacity=second){tag<-11u64};
-    func callable = func()->const u64 { 12u64 };
+    func callable = func()->const u64 { return 12u64 };
   } finally { behave @print(13u64); };
   behave @print(later.tag);
   behave @print(callable());

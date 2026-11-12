@@ -13,7 +13,7 @@ function (<-)(destination:Packed in D, source:const Packed in S) -> void where {
   {}
 }
 function ([]<-)(values:Values in O, index:u32, value:i64) -> const i64 in O where {owner O} {
-  intrinsic ([]<-)(values, index, value)
+  return intrinsic ([]<-)(values, index, value)
 }
 function (<-)(destination:i64 in O, source:u32) -> void where {owner O} {
   intrinsic (<-)(destination, i64(source));

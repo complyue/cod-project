@@ -5,7 +5,7 @@ symbol from "symbolic-vocabulary.cod" @left;
 symbol from "symbolic-vocabulary.cod" @right;
 effect @arena <- make ContextPool(capacity = 4096u64) { tag <- 1 };
 effect @left = deref(alloc @arena ContextNode(10)), @right = deref(alloc @arena ContextNode(20));
-effect proc @read() -> i64 { @left.value };
+effect proc @read() -> i64 { return @left.value };
 {
   effect @arena <- make ContextPool(capacity = 4096u64) { tag <- 2 };
   effect @left = deref(alloc @arena ContextNode(30)), @right = deref(alloc @arena ContextNode(40));

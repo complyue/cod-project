@@ -4,10 +4,10 @@ region State { created:u64; called:u64; }
 owned region state <- make State(capacity=256u64) { created <- 0u64; called <- 0u64 };
 function build(region r:State) -> func()->const bool with {region r} {
   r.created <- r.created + 1u64;
-  func () -> const bool { r.called <- r.called + 1u64; true }
+  return func () -> const bool { r.called <- r.called + 1u64; return true }
 }
-function both(flag:bool,region r:State) -> const bool { flag && build(r)() }
-function either(flag:bool,region r:State) -> const bool { flag || build(r)() }
+function both(flag:bool,region r:State) -> const bool { return flag && build(r)() }
+function either(flag:bool,region r:State) -> const bool { return flag || build(r)() }
 # Skipped module paths still have process-lifetime cleanup slots.
 behave @assert(!(false && build(state)()));
 behave @assert(true || build(state)());
@@ -17,11 +17,11 @@ for (i in 0u64 .. 16u64) {
   behave @assert(either(i % 2u64 == 0u64,state));
 };
 behave @assert(state.created == 16u64 && state.called == 16u64);
-func stable = func () -> const bool { true };
-function evaluate(f:func()->const bool) -> const bool { f() }
+func stable = func () -> const bool { return true };
+function evaluate(f:func()->const bool) -> const bool { return f() }
 symbol @flag:bool;
 effect @flag <- false;
-procedure @saved() -> const bool { @flag }
+procedure @saved() -> const bool { return @flag }
 {{
   effect @flag <- true;
   behave @assert(behave @saved() && !perform @saved());

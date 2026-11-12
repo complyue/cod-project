@@ -12,11 +12,11 @@ behave @print(apply(read));
 state.ticks <- 9u64;
 behave @print(read());
 proc exercise(region r:Counter) -> void {
-  func named [r] () -> const u64 { r.ticks }
+  func named [r] () -> const u64 { return r.ticks }
   ;
   behave @print(named());
   val var ticks -> r.ticks;
-  func increment = func [ticks] () -> const u64 { ticks <- ticks + 1u64; ticks };
+  func increment = func [ticks] () -> const u64 { ticks <- ticks + 1u64; return ticks };
   behave @print(apply(increment));
 }
 exercise(state);

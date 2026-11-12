@@ -1,2 +1,2 @@
 val local:i64 <- 3;
-func callback = func [local] () -> const i64 { local };
+func callback = func [local] () -> const i64 { return local };

@@ -1,12 +1,12 @@
 using symbol "std:io" @print;
 for (i in 0u64 .. 0u64) {} else {{
   val value <- 41u64;
-  func answer = func () -> const u64 { 42u64 };
+  func answer = func () -> const u64 { return 42u64 };
   behave @print(value);
   behave @print(answer());
 }};
 # An invoked callable has its own inherent scope inside ordinary else grouping.
 for (i in 1u64 .. 0u64) {} else {
-  behave @print((func () -> const u64 { val value <- 43u64; value })());
+  behave @print((func () -> const u64 { val value <- 43u64; return value })());
 };
 for (i in 0u64 .. 1u64) {} else {{ val unexecuted <- 99u64; behave @print(unexecuted); }};

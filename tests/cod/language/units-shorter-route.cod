@@ -4,10 +4,10 @@ unit b;
 unit c;
 unit d;
 unit e;
-conversion function ac(x:i64(a)) -> i64(c) { c(scalar(x)) }
-conversion function cd(x:i64(c)) -> i64(d) { d(scalar(x)) }
-conversion function de(x:i64(d)) -> i64(e) { e(scalar(x) + 100) }
-conversion function ab(x:i64(a)) -> i64(b) { b(scalar(x)) }
-conversion function be(x:i64(b)) -> i64(e) { e(scalar(x) + 10) }
-function consume(x:i64(e*)) -> i64 { scalar(x) }
+conversion function ac(x:i64(a)) -> i64(c) { return c(scalar(x)) }
+conversion function cd(x:i64(c)) -> i64(d) { return d(scalar(x)) }
+conversion function de(x:i64(d)) -> i64(e) { return e(scalar(x) + 100) }
+conversion function ab(x:i64(a)) -> i64(b) { return b(scalar(x)) }
+conversion function be(x:i64(b)) -> i64(e) { return e(scalar(x) + 10) }
+function consume(x:i64(e*)) -> i64 { return scalar(x) }
 behave @print(consume(a(1)));

@@ -1,1 +1,1 @@
-const ref selected = func () -> const u64 { 3u64 };
+const ref selected = func () -> const u64 { return 3u64 };

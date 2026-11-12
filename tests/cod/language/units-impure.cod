@@ -2,6 +2,6 @@ unit a;
 unit b;
 symbol @offset : i64;
 effect @offset <- 1;
-conversion function convert(x:i64(a)) -> i64(b) { b(scalar(x) + @offset) }
-function exact(x:i64(b*)) -> i64 { scalar(x) }
+conversion function convert(x:i64(a)) -> i64(b) { return b(scalar(x) + @offset) }
+function exact(x:i64(b*)) -> i64 { return scalar(x) }
 exact(a(1));

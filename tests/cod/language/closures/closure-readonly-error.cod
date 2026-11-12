@@ -1,7 +1,7 @@
 using "structural-api.cod" Counter;
 function writer(const region state:Counter) -> (func()->void with {region state}) {
   val var ticks -> state.ticks;
-  func [ticks] () -> void { ticks <- 1u64; {} }
+  return func [ticks] () -> void { ticks <- 1u64; {} }
 }
 owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 func callback = writer(state);

@@ -1,2 +1,2 @@
-function bad() { region(4096u64) }
+function bad() { return region(4096u64) }
 bad();

@@ -1,13 +1,13 @@
 using symbol "std:io" @print;
 using units "units-representations-library.cod" {m as metres, cm, mm};
-function number(x:f64(metres)) -> f64 { scalar(x) }
-function distance(x:f64(metres*)) -> f64 { scalar(x) }
-function declared(x:f64(metres*<-cm<-mm)) -> f64 { scalar(x) }
-function identity(x:T(metres)) -> const T(metres) where T { x }
-function kind(x:u32(metres)) -> i64 { 32 }
-function kind(x:f64(metres)) -> i64 { 64 }
-function width(x:u32) -> i64 { 32 }
-function width(x:f64) -> i64 { 64 }
+function number(x:f64(metres)) -> f64 { return scalar(x) }
+function distance(x:f64(metres*)) -> f64 { return scalar(x) }
+function declared(x:f64(metres*<-cm<-mm)) -> f64 { return scalar(x) }
+function identity(x:T(metres)) -> const T(metres) where T { return x }
+function kind(x:u32(metres)) -> i64 { return 32 }
+function kind(x:f64(metres)) -> i64 { return 64 }
+function width(x:u32) -> i64 { return 32 }
+function width(x:f64) -> i64 { return 64 }
 behave @print(kind(metres(3u32)));
 behave @print(kind(metres(3.0)));
 behave @print(kind(metres(3u8)));

@@ -13,6 +13,7 @@ enum class ExceptionCategory : std::uint64_t {
   region_capacity_exceeded = 2,
   invalid_capacity = 3,
   null_pointer = 4,
+  missing_return = 5,
 };
 
 constexpr size_t exception_id(ExceptionCategory category) {
@@ -33,6 +34,7 @@ inline constexpr std::array exception_categories{
     ExceptionDescriptor{ExceptionCategory::region_capacity_exceeded, "RegionCapacityExceeded", false},
     ExceptionDescriptor{ExceptionCategory::invalid_capacity, "InvalidCapacity", false},
     ExceptionDescriptor{ExceptionCategory::null_pointer, "NullPointerException", true},
+    ExceptionDescriptor{ExceptionCategory::missing_return, "MissingReturnException", false},
 };
 inline constexpr size_t concrete_exception_count = exception_categories.size() - 1;
 

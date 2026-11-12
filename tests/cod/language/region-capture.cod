@@ -7,15 +7,15 @@ symbol @read : proc() -> i64;
 effect @arena <- region(4096u64);
 effect @values = alloc @arena Values(1u64, 3);
 effect @first = @values;
-procedure @read() -> i64 { @values[0u32] }
+procedure @read() -> i64 { return @values[0u32] }
 store(@values, 0u32, 8);
 behave @print(perform @read());
 effect @values = alloc @arena Values(1u64, 11);
 behave @print(perform @read());
 behave @print(behave @read());
 
-function cell(values:Values in O1) -> i64 where {owner O1} { ref_at(values, 0u32) }
-function sum(a:Values in O1, b:Values in O2) -> i64 where {owner O1, owner O2} { deref(cell(a)) + deref(cell(b)) }
+function cell(values:Values in O1) -> i64 where {owner O1} { return ref_at(values, 0u32) }
+function sum(a:Values in O1, b:Values in O2) -> i64 where {owner O1, owner O2} { return deref(cell(a)) + deref(cell(b)) }
 effect @arena <- region(4096u64);
 effect @values = alloc @arena Values(1u64, 13);
 behave @print(@first[0u32] == @values[0u32]);

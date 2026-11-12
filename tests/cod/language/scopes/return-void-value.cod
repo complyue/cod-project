@@ -1,0 +1,2 @@
+proc mismatch() -> void { return 1u64; }
+mismatch();

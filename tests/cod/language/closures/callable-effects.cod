@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 symbol @action:proc(u64)->const u64;
-proc first = proc(n:u64)->const u64 { n + 1u64 };
-proc second = proc(n:u64)->const u64 { n + 10u64 };
+proc first = proc(n:u64)->const u64 { return n + 1u64 };
+proc second = proc(n:u64)->const u64 { return n + 10u64 };
 proc current = first;
 effect @action = current;
 proc change = proc(fail:bool)->void throws NullPointerException {
@@ -36,20 +36,20 @@ behave @print(current(2u64));
 
 # A definitely overwritten value must not demand its unavailable effect.
 symbol @missing:u64;
-proc discarded = proc(n:u64)->const u64 { @missing + n };
+proc discarded = proc(n:u64)->const u64 { return @missing + n };
 current <- discarded;
 try { relay(false); } catch (e:const NullPointerException) {};
 behave @print(current(2u64));
 
 # A call can change which body that same loop site selects on the next lap.
-proc advancing = proc(n:u64)->const u64 { @action <- second; n + 1u64 };
+proc advancing = proc(n:u64)->const u64 { @action <- second; return n + 1u64 };
 current <- advancing;
 for (i in 0u64 .. 3u64) {{ behave @print(current(i)); }};
 
 # Function images use the same holder-flow boundary and indirect ABI.
 symbol @function:func(u64)->const u64;
-func initial = func(n:u64)->const u64 { n + 1u64 };
-func updated = func(n:u64)->const u64 { n + 20u64 };
+func initial = func(n:u64)->const u64 { return n + 1u64 };
+func updated = func(n:u64)->const u64 { return n + 20u64 };
 func target = initial;
 effect @function = target;
 proc update = proc()->void { @function <- updated; {} };

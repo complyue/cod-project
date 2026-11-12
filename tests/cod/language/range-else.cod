@@ -8,18 +8,18 @@ function last_or(first:i64, last:i64) -> const i64 {
   ptr result = make local i64;
   for (i in first .. last) {{ result <- i; }}
   else { result <- -1; };
-  result
+  return result
 }
 function bound(count:i64 in O, value:i64) -> const i64 where {owner O} {
   count <- count + 1;
-  value
+  return value
 }
-proc fail_bound() -> i64 { effect @arena <- region(0u64); 0 }
+proc fail_bound() -> i64 { effect @arena <- region(0u64); return 0 }
 function checked(first:i64, last:i64, error:InvalidCapacity) -> const i64 {
   ptr result = make local i64;
   for (i in first .. last) {{ result <- i; }}
   else { throw error; };
-  result
+  return result
 }
 behave @assert(last_or(0, 0) == -1);
 behave @assert(last_or(3, 1) == -1);

@@ -1,0 +1,9 @@
+using symbol "std:io" @print;
+using "std:exceptions" MissingReturnException;
+func partial(value:u64) -> const u64 {
+  if (value == 1u64) { return 17u64; } else {};
+  99u64
+}
+behave @print(partial(1u64));
+try { behave @print(partial(0u64)); }
+catch (error:const MissingReturnException) { behave @print(error.category); };

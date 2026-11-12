@@ -3,7 +3,7 @@ region symbol first;
 region symbol second;
 symbol node : Node;
 function link(node:Node in O1, child:Node in O2) -> Node where {owner O1, owner O2} {
-  setfield(node, next, child)
+  return setfield(node, next, child)
 }
 effect @first <- region(4096u64);
 effect @second <- region(4096u64);

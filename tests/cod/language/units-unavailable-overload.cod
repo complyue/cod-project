@@ -4,12 +4,12 @@ unit b;
 unit c;
 unit m;
 unit n;
-conversion function ab(x:i64(a)) -> i64(b) { b(scalar(x) + 1) }
-conversion function ac(x:i64(a)) -> i64(c) { c(scalar(x) + 2) }
-conversion function cn(x:i64(c)) -> i64(n) { n(scalar(x) + 3) }
-function choose(x:i64(m*<-b<-a)) -> i64 { scalar(x) }
-function choose(x:i64(n*)) -> i64 { scalar(x) }
-function reverse(x:i64(n*)) -> i64 { scalar(x) }
-function reverse(x:i64(m*<-b<-a)) -> i64 { scalar(x) }
+conversion function ab(x:i64(a)) -> i64(b) { return b(scalar(x) + 1) }
+conversion function ac(x:i64(a)) -> i64(c) { return c(scalar(x) + 2) }
+conversion function cn(x:i64(c)) -> i64(n) { return n(scalar(x) + 3) }
+function choose(x:i64(m*<-b<-a)) -> i64 { return scalar(x) }
+function choose(x:i64(n*)) -> i64 { return scalar(x) }
+function reverse(x:i64(n*)) -> i64 { return scalar(x) }
+function reverse(x:i64(m*<-b<-a)) -> i64 { return scalar(x) }
 behave @print(choose(a(7)));
 behave @print(reverse(a(7)));

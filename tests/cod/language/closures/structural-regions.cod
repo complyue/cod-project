@@ -19,7 +19,7 @@ behave @print(isnull(first.current));
 behave @print(isnull(cursor.current));
 val copied <- second.ticks;
 behave @print(copied);
-function select(region state:Counter) -> const u64 { 1u64 }
-function select(region state:Cursor) -> const u64 { 2u64 }
+function select(region state:Counter) -> const u64 { return 1u64 }
+function select(region state:Cursor) -> const u64 { return 2u64 }
 behave @print(select(first));
 behave @print(select(second));

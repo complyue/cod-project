@@ -7,8 +7,8 @@ using symbol "units-procedure-source.cod" @read as @source_read;
 using symbol "units-procedure-receiver.cod" @receiver_read;
 unit raw;
 unit normalized;
-conversion function normalize(x:f64(raw)) -> f64(normalized) { normalized(scalar(x) / 25.0) }
-function adjust(x:f64) -> f64 { x + 1000.0 }
+conversion function normalize(x:f64(raw)) -> f64(normalized) { return normalized(scalar(x) / 25.0) }
+function adjust(x:f64) -> f64 { return x + 1000.0 }
 symbol @entry_distance : f64(normalized);
 symbol @entry_read : proc(f64(normalized)) -> f64;
 effect @entry_distance <- normalized(20.0);

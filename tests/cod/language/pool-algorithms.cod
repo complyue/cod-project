@@ -5,10 +5,10 @@ using units "pool-interface.cod" {Slot};
 
 function replace(pool:ReusableSlotStore in O1, slot:u32(Slot), value:i64) -> u32(Slot) throws NullPointerException where {owner O1} {
   release(pool, slot);
-  acquire(pool, value)
+  return acquire(pool, value)
 }
-function peek(pool:SlotStore in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { read(pool, slot) }
-function locate(pool:ReusableSlotStore in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { cell(pool, slot) }
+function peek(pool:SlotStore in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { return read(pool, slot) }
+function locate(pool:ReusableSlotStore in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { return cell(pool, slot) }
 
 export replace;
 export peek;

@@ -1,2 +1,2 @@
-function same(x:T, y:T) -> T where T { x }
+function same(x:T, y:T) -> T where T { return x }
 same(1, true);

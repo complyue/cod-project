@@ -1,6 +1,6 @@
 data Node { value:i64; }
 function select_node(a:Node in A, b:Node in B) -> Node in A where {owner A, owner B};
-function select_node(a:Node in A, b:Node in B) -> Node in B where {owner A, owner B} { b }
+function select_node(a:Node in A, b:Node in B) -> Node in B where {owner A, owner B} { return b }
 region symbol @first:Node, @second:Node;
 effect @first <- make Node(capacity = 4096u64) { value <- 1 };
 effect @second <- make Node(capacity = 4096u64) { value <- 2 };

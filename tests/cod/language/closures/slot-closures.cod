@@ -11,8 +11,8 @@ ptr second_link = alloc state Link(second);
 state.link = first_link;
 try {{
   ptr var pinned_selection -> state.link.selected;
-  func pinned = func [pinned_selection] () -> const i64 throws NullPointerException { pinned_selection.value };
-  func following = func [state] () -> const i64 throws NullPointerException { state.link.selected.value };
+  func pinned = func [pinned_selection] () -> const i64 throws NullPointerException { return pinned_selection.value };
+  func following = func [state] () -> const i64 throws NullPointerException { return state.link.selected.value };
   state.link = second_link;
   behave @print(pinned());
   behave @print(following());
@@ -33,7 +33,7 @@ function adder(region state:State, increment:u64) -> (func()->const u64 with {re
   ref configuration = alloc state Increment(increment);
   val var tick -> state.tick;
   val var amount -> configuration.amount;
-  func [tick, amount] () -> const u64 { tick + amount }
+  return func [tick, amount] () -> const u64 { return tick + amount }
 }
 func add = adder(state, 4u64);
 behave @print(add());
@@ -53,7 +53,7 @@ try {{
   func alias_test = func [chosen, state] () -> const i64 throws NullPointerException {
     ptr alias = chosen;
     alias = state.link.selected;
-    chosen.value + alias.value
+    return chosen.value + alias.value
   };
   behave @print(alias_test());
   behave @print(first_link.selected.value);
@@ -68,7 +68,7 @@ behave @print(required_left.selected.value);
 behave @print(required_right.selected.value);
 func factory = func [state] () -> (func()->const u64 with {region state}) {
   val var tick -> state.tick;
-  func [tick] () -> const u64 { tick }
+  return func [tick] () -> const u64 { return tick }
 };
 func nested = factory();
 state.tick <- 11u64;
@@ -77,7 +77,7 @@ array Values[u32]:i64;
 ref values = alloc state Values(2u64, 0);
 ref selected <- 0u32;
 val var item -> values[selected];
-func element = func [item] () -> const i64 { item };
+func element = func [item] () -> const i64 { return item };
 selected <- 1u32;
 values[0u32] <- 17;
 values[1u32] <- 23;

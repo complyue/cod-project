@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 symbol @step : proc() -> i64;
 symbol @x : i64;
-function helper() -> i64 { 9 }
+function helper() -> i64 { return 9 }
 effect @x <- 7;
 mixin "source.cod" @p as @step;
 effect @x <- 8;

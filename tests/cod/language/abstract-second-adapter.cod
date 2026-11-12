@@ -3,7 +3,7 @@ using "abstract-library.cod" Separate;
 using "abstract-library.cod" Alternate;
 data Sample <: Separate;
 data Sample <: Alternate;
-function make_extended_reference(region arena, value:i64) -> Sample { alloc arena Sample(value) }
+function make_extended_reference(region arena, value:i64) -> Sample { return alloc arena Sample(value) }
 
 export Alternate;
 export Separate;

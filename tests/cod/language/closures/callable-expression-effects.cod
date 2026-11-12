@@ -1,5 +1,5 @@
 symbol @bias:u64;
 effect @bias <- 1u64;
-proc selected()->const u64 { @bias }
-function invoke()->const u64 { (selected)() }
+proc selected()->const u64 { return @bias }
+function invoke()->const u64 { return (selected)() }
 invoke();

@@ -1,4 +1,4 @@
 symbol @x : i64;
 effect @x <- 1;
-function bad() -> i64 { @x }
+function bad() -> i64 { return @x }
 global result: i64 = bad();

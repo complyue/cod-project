@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
 import "method-library.cod" score as f;
-function f(x:i64) -> i64 { x }
+function f(x:i64) -> i64 { return x }
 behave @print(99);
 f(2);

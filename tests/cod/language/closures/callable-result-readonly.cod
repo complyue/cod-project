@@ -1,4 +1,4 @@
-function borrow(value:const u64 in O)->const u64 in O where {owner O} { value }
+function borrow(value:const u64 in O)->const u64 in O where {owner O} { return value }
 func selected = borrow;
 ref value = 1u64;
 ref rejected = selected(value);

@@ -1,12 +1,12 @@
 region State { ticks:u64; }
 function writable(region state:State)->func()->const u64 with {region state} {
-  func()->const u64 { state.ticks }
+  return func()->const u64 { return state.ticks }
 }
 function readonly(const region state:State)->func()->const u64 with {region state} {
-  func()->const u64 { state.ticks }
+  return func()->const u64 { return state.ticks }
 }
 function select(region state:State, choose:bool)->func()->const u64 with {region state} {
-  if (choose) { writable(state) } else { readonly(state) }
+  return if (choose) { writable(state) } else { readonly(state) }
 }
 owned region state:State <- make State(capacity = 128u64) { ticks <- 1u64 };
 func selected = select(state, true);

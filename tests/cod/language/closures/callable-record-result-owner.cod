@@ -1,6 +1,6 @@
 data Node {value:u64;}
 region Arena {count:u64;}
-function wrong(a:Node in r,b:Node in s)->Node in r where {region r:Arena,region s:Arena} {b}
+function wrong(a:Node in r,b:Node in s)->Node in r where {region r:Arena,region s:Arena} {return b}
 owned region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};
 owned region other:Arena <- make Arena(capacity=256u64){count <- 0u64};
 ref a=alloc arena Node(1u64);

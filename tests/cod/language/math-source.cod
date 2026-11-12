@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
-function seed() -> i64 { 20 * 2 }
+function seed() -> i64 { return 20 * 2 }
 global base: i64 = seed();
-function add(x: i64) -> i64 { base + x }
+function add(x: i64) -> i64 { return base + x }
 behave @print(888);
 
 export @print;

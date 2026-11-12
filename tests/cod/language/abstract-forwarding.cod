@@ -11,7 +11,7 @@ region symbol @arena;
 symbol @held:Sample;
 effect @arena <- region(4096u64);
 effect @held = make_weighted_reference(@arena, 7);
-proc @inspect() -> i64 { rank(deref(@held)) }
+proc @inspect() -> i64 { return rank(deref(@held)) }
 try {
   ref reference = @held;
   ref sample = view(reference);

@@ -1,22 +1,22 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 symbol @action:proc(u64)->const u64;
-proc replacement = proc(n:u64)->const u64 { n + 10u64 };
+proc replacement = proc(n:u64)->const u64 { return n + 10u64 };
 proc active = proc(n:u64)->const u64 {
   @action <- replacement;
   proc copy = replacement;
-  copy(n) + 100u64
+  return copy(n) + 100u64
 };
 proc current = active;
 effect @action = current;
 behave @print(current(2u64));
 
 # A descendant may replace its caller's holder while the caller still uses captures.
-proc change = proc()->const u64 { @action <- replacement; 2u64 };
+proc change = proc()->const u64 { @action <- replacement; return 2u64 };
 proc ancestor = proc(n:u64)->const u64 {
   change();
   proc copy = replacement;
-  copy(n) + 200u64
+  return copy(n) + 200u64
 };
 current <- ancestor;
 behave @print(current(2u64));
@@ -24,7 +24,7 @@ behave @print(current(2u64));
 # Selection precedes arguments, including replacement hidden behind a native call.
 proc steady = proc(n:u64)->const u64 {
   proc copy = replacement;
-  copy(n) + 300u64
+  return copy(n) + 300u64
 };
 current <- steady;
 behave @print(current(change()));

@@ -1,9 +1,9 @@
 using symbol "std:io" @print;
 function select(a:u64 in O,b:u64 in O,first:bool)->u64 in O where {owner O} {
- if(first) { a } else { b }
+ return if(first) { a } else { b }
 }
 function reverse(a:u64 in O,b:u64 in O,first:bool)->u64 in O where {owner O} {
- if(first) { b } else { a }
+ return if(first) { b } else { a }
 }
 ref a = 3u64;
 ref b = 7u64;
@@ -17,14 +17,14 @@ for(i in 0u64 .. 2u64) {{
 ref saved = selected(a,b,true);
 b <- 13u64;
 behave @print(saved);
-function identity(value:T in O)->T in O where {T,owner O} { value }
+function identity(value:T in O)->T in O where {T,owner O} { return value }
 func generic = identity;
 ref gain = 0.5f32;
 ref borrowed = generic(gain);
 borrowed <- 1.25f32;
 behave @print(gain);
 function descend(value:u64 in O,steps:u64)->u64 in O where {owner O} {
- if(steps == 0u64) { value } else { descend(value,steps-1u64) }
+ return if(steps == 0u64) { value } else { descend(value,steps-1u64) }
 }
 func recursive = descend;
 ref deepest = recursive(a,32u64);
@@ -36,13 +36,13 @@ owned region arena:Arena <- make Arena(capacity=512u64) { calls <- 0u64 };
 ref values = alloc arena Values(4u64,1.0f32);
 function element(values:Values in r,index:u64)->f32 in r where {region r:Arena} {
  r.calls <- r.calls+1u64;
- values[index]
+ return values[index]
 }
 func at = element;
 ref slot = at(values,2u64);
 slot <- 2.5f32;
 behave @print(values[2u64]); behave @print(arena.calls);
-function readonly(value:const u64 in O)->const u64 in O where {owner O} { value }
+function readonly(value:const u64 in O)->const u64 in O where {owner O} { return value }
 func reader = readonly;
 const ref observed = reader(a);
 a <- 23u64;
@@ -50,7 +50,7 @@ behave @print(observed);
 
 symbol @first:bool;
 effect @first <- true;
-proc @pick(a:u64 in O,b:u64 in O)->u64 in O where {owner O} { if(@first) { a } else { b } }
+proc @pick(a:u64 in O,b:u64 in O)->u64 in O where {owner O} { return if(@first) { a } else { b } }
 proc picker = @pick;
 effect @pick = picker;
 effect @first <- false;
@@ -65,7 +65,7 @@ using "std:exceptions" NullPointerException;
 function checked(value:u64 in O)->u64 in O throws NullPointerException where {owner O} {
  ptr missing = value;
  missing = null;
- missing
+ return missing
 }
 func throwing = checked;
 try { throwing(a); {} } catch(e:const NullPointerException) { behave @print(53u64); };

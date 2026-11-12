@@ -6,24 +6,24 @@ region State { choose_first:bool; }
 function reader(ref counter:CounterCell in state) where {region state:State}
     -> func()->const u64 with {region state} {
   val var ticks:u64 in state -> counter.ticks;
-  func () -> const u64 { ticks }
+  return func () -> const u64 { return ticks }
 }
 function wrap(action:func()->const u64 with {region r}) where {region r:State}
     -> func()->const u64 with {region r} {
-  func () -> const u64 { action() + 10u64 }
+  return func () -> const u64 { return action() + 10u64 }
 }
 function select(ref a:CounterCell in state, ref b:CounterCell in state, flag:bool)
     where {region state:State} -> func()->const u64 with {region state} {
-  if (flag) { wrap(reader(a)) } else { wrap(reader(b)) }
+  return if (flag) { wrap(reader(a)) } else { wrap(reader(b)) }
 }
 function following(ref cursor:Cursor in state) where {region state:State}
     -> func()->const u64 with {region state} throws NullPointerException {
   ptr var current -> cursor.current;
-  func () -> const u64 throws NullPointerException { current.ticks }
+  return func () -> const u64 throws NullPointerException { return current.ticks }
 }
 function select_cursor(ref a:Cursor in state, ref b:Cursor in state, flag:bool)
     where {region state:State} -> func()->const u64 with {region state} throws NullPointerException {
-  if (flag) { following(a) } else { following(b) }
+  return if (flag) { following(a) } else { following(b) }
 }
 owned region state:State <- make State(capacity = 512u64) { choose_first <- true };
 ref first = alloc state CounterCell(1u64);
@@ -60,7 +60,7 @@ mark(right);
 behave @print((right -> state).choose_first);
 function pair(region later:State, region earlier:State)
     -> func()->const bool with {region later, region earlier} {
-  func [later, earlier] () -> const bool { later.choose_first && earlier.choose_first }
+  return func [later, earlier] () -> const bool { return later.choose_first && earlier.choose_first }
 }
 owned region extra:State <- make State(capacity = 128u64) { choose_first <- false };
 func paired = pair(extra, state);
@@ -73,11 +73,11 @@ behave @print(paired());
 proc incrementer(ref counter:CounterCell in state) where {region state:State}
     -> proc()->void with {region state} {
   val var ticks -> counter.ticks;
-  proc () -> void { ticks <- ticks + 1u64; {} }
+  return proc () -> void { ticks <- ticks + 1u64; {} }
 }
 proc choose_incrementer(ref a:CounterCell in state, ref b:CounterCell in state, flag:bool)
     where {region state:State} -> proc()->void with {region state} {
-  if (flag) { incrementer(a) } else { incrementer(b) }
+  return if (flag) { incrementer(a) } else { incrementer(b) }
 }
 proc increment = choose_incrementer(first, second, state.choose_first);
 increment();

@@ -2,7 +2,7 @@ using "abstract-adapter.cod" make_weighted;
 using "abstract-alternate-factory.cod" make_alternate;
 using "abstract-library.cod" Weighted;
 function narrow(region arena, choice:bool) -> Weighted {
-  if (choice) { make_weighted(arena) } else { make_alternate(arena) }
+  return if (choice) { make_weighted(arena) } else { make_alternate(arena) }
 }
 region symbol @arena;
 effect @arena <- region(4096u64);

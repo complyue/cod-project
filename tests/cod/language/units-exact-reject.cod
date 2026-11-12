@@ -1,3 +1,3 @@
 using units "units-library.cod" {m, cm};
-function exact(x:f64(m)) -> f64 { scalar(x) }
+function exact(x:f64(m)) -> f64 { return scalar(x) }
 exact(cm(2.0));

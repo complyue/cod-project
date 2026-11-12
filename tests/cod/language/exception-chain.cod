@@ -8,15 +8,15 @@ data Packet { sequence:u64; }
 data Saved { error:SystemException; exact:InvalidCapacity; }
 
 function chain(primary:SystemException, cause:SystemException) -> SystemException {
-  try { throw primary from cause } catch(result) { result }
+  return try { throw primary from cause } catch(result) { result }
 }
 function capacity_failure(fallback:SystemException) -> SystemException {
-  try {
+  return try {
     owned region packet:Packet <- make Packet(capacity=1u64){sequence<-0u64};
     fallback
   } catch(error) { error }
 }
-function selected(index:u64, errors:SystemException...) -> SystemException { errors[index] }
+function selected(index:u64, errors:SystemException...) -> SystemException { return errors[index] }
 proc check() -> void throws NullPointerException {
   try {
     owned region invalid:Packet <- make Packet(capacity=0u64){sequence<-0u64};

@@ -2,7 +2,7 @@ using symbol "std:io" @print;
 symbol @step : proc() -> i64;
 symbol @cell : i64;
 symbol @helper : proc() -> i64;
-procedure @helper -> i64 { @cell * 10 }
+procedure @helper -> i64 { return @cell * 10 }
 effect @cell <- 5;
 mixin "mapped-effects-model.cod" @update as @step
     with { @cell as @target; @helper as @next; };

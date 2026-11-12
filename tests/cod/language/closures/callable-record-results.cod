@@ -2,8 +2,8 @@ using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 data Node {value:u64;ptr next:Node;}
 region Arena {count:u64;}
-function first(a:Node in r,b:Node in r)->Node in r where {region r:Arena} {a}
-function second(a:Node in s,b:Node in s)->Node in s where {region s:Arena} {b}
+function first(a:Node in r,b:Node in r)->Node in r where {region r:Arena} {return a}
+function second(a:Node in s,b:Node in s)->Node in s where {region s:Arena} {return b}
 owned region arena:Arena <- make Arena(capacity=2048u64){count <- 0u64};
 ref tail=alloc arena Node(7u64,null);
 ref head=alloc arena Node(3u64,tail);
@@ -15,18 +15,18 @@ for(i in 0u64..2u64){{
  selected <- second;
 }};
 function descend(node:Node in r,n:u64)->Node in r where {region r:Arena} {
- if(n==0u64){node}else{descend(node,n-1u64)}
+ return if(n==0u64){node}else{descend(node,n-1u64)}
 }
 func recurse=descend;
 ref result=recurse(tail,32u64);
 result.value <- 11u64;
 behave @print(tail.value);
-function identity(value:T in O)->T in O where {T,owner O} {value}
+function identity(value:T in O)->T in O where {T,owner O} {return value}
 func generic=identity;
 ref observed=generic(head);
 behave @print(observed.value);
 function maybe(node:Node in r,present:bool)->ptr Node in r where {region r:Arena} {
- if(present){node}else{null}
+ return if(present){node}else{null}
 }
 func optional=maybe;
 ptr absent=optional(head,false);
@@ -40,7 +40,7 @@ catch(e:const NullPointerException){behave @print(999u64);};
 # The declared shape does not supply the concrete root's field offsets.
 region Shape {value:u64;}
 region Concrete {padding:u64;value:u64;}
-function view(region r:Shape)->Shape in r {root(r)}
+function view(region r:Shape)->Shape in r {return root(r)}
 owned region concrete:Concrete <- make Concrete(capacity=256u64){padding <- 99u64;value <- 37u64};
 func root_view=view;
 ref record=root_view(concrete);
@@ -48,12 +48,12 @@ behave @print(record.value);
 
 # A record-returning procedure retains its complete dynamic procedure snapshot.
 symbol @cb:proc()->const u64;
-proc one()->const u64 {1u64}
-proc two()->const u64 {2u64}
+proc one()->const u64 {return 1u64}
+proc two()->const u64 {return 2u64}
 proc current=one;
 effect @cb=current;
 effect proc @outer(node:Node in r)->Node in r where {region r:Arena} {
- behave @print(perform @cb()); node
+ behave @print(perform @cb()); return node
 };
 current <- two;
 ref captured=perform @outer(head);

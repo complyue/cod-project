@@ -75,7 +75,9 @@ def main():
         results.append(run(executable, root, entry, f'{expected}\n', '512-module-pure-chain-loop-inputs'))
         # Reuse the same demanded chain to check that a leaf error identifies
         # both the failing definition and the entry call, without 512 notes.
-        (directory / f'pure-{depth-1}.cod').write_text('function f(x:u64) -> u64 { @missing }\nexport f;\n')
+        (directory / f'pure-{depth-1}.cod').write_text('''function f(x:u64) -> u64 { return @missing }
+export f;
+''')
         command = [str(executable), '--check', str(entry)]
         diagnostic = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=120)
         diagnostic_passed = (diagnostic.returncode == 2 and diagnostic.stdout == ''
@@ -93,10 +95,12 @@ def main():
         depth = 1000
         (directory / 'operation-vocabulary.cod').write_text('symbol @base : i64;\nexport @base;\n')
         (directory / 'operation-leaf.cod').write_text(
-            'symbol from "operation-vocabulary.cod" @base;\n'
-            'unit Argument;\n'
-            'procedure (+)(value:i64(Argument), delta:i64) -> i64 { scalar(value) + delta + @base }\n'
-            'export Argument;\nexport (+);\n')
+            '''symbol from "operation-vocabulary.cod" @base;
+unit Argument;
+procedure (+)(value:i64(Argument), delta:i64) -> i64 { return scalar(value) + delta + @base }
+export Argument;
+export (+);
+''')
         lines = ['using symbol "std:io" @print;',
                  'symbol from "operation-vocabulary.cod" @base;',
                  'using units "operation-leaf.cod" {Argument};', 'using "operation-leaf.cod" (+);',
@@ -112,10 +116,12 @@ def main():
         results.append(run(executable, root, entry, f'{depth-1+5}\n{depth-1+9}\n9\n',
                            '1000-procedure-inline-chain-with-operation-leaf'))
         (directory / 'operation-leaf.cod').write_text(
-            'symbol @missing : i64;\n'
-            'unit Argument;\n'
-            'procedure (+)(value:i64(Argument), delta:i64) -> i64 { @missing }\n'
-            'export Argument;\nexport (+);\n')
+            '''symbol @missing : i64;
+unit Argument;
+procedure (+)(value:i64(Argument), delta:i64) -> i64 { return @missing }
+export Argument;
+export (+);
+''')
         command = [str(executable), '--check', str(entry)]
         diagnostic = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=120)
         diagnostic_passed = (diagnostic.returncode == 2 and diagnostic.stdout == ''
@@ -182,7 +188,7 @@ def main():
             body = 'node.value <- node.value+1u64; '
             body += (f'if(b){{step{level-1}(node,b)}}else{{step{level-1}(node,!b)}}' if level else 'qualify(node)')
             lines.append(f'function step{level}(node:Node in r,b:bool)->Node in r where {{region r:Arena}} {{{body}}}')
-        lines += ['function score(node:Entity in r)->const u64 where {region r:Arena}{node.value}',
+        lines += ['function score(node:Entity in r)->const u64 where {region r:Arena}{return node.value}',
                   'owned region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};',
                   'ref node=alloc arena Node(5u64);', f'func selected=step{depth};',
                   'ref first=selected(node,true); behave @print(score(first));',
@@ -199,7 +205,7 @@ def main():
         definitions = [f'unit unit{i};' for i in range(units)]
         definitions += [f'conversion function step{i}(x:i64(unit{i})) -> i64(unit{i+1}) {{ unit{i+1}(scalar(x) + 1) }}'
                         for i in range(units-1)]
-        definitions += ['conversion function back(x:i64(unit16)) -> i64(unit15) { unit15(scalar(x) - 1) }']
+        definitions += ['conversion function back(x:i64(unit16)) -> i64(unit15) { return unit15(scalar(x) - 1) }']
         unit_exports = ''.join(f'export unit{i};\n' for i in range(units))
         conversion_exports = ''.join(f'export step{i};\n' for i in range(units-1)) + 'export back;\n'
         (directory / 'unit-base.cod').write_text('\n'.join(definitions) + '\n' + unit_exports + conversion_exports)
@@ -217,9 +223,11 @@ def main():
         results.append(run(executable, root, entry, '32\n', '16-unit-reexports-31-conversion-steps-with-cycle'))
 
         (directory / 'regional-types.cod').write_text(
-            'data Node { value:f32; ptr next:Node; }\n'
-            'function create(region arena, value:f32) -> Node { alloc arena Node(value, null) }\n'
-            'export Node;\nexport create;\n')
+            '''data Node { value:f32; ptr next:Node; }
+function create(region arena, value:f32) -> Node { return alloc arena Node(value, null) }
+export Node;
+export create;
+''')
         (directory / 'regional-interface.cod').write_text('type Link;\nexport Link;\n')
         depth = 96
         for i in range(depth):
@@ -229,7 +237,10 @@ def main():
         (directory / 'regional-adapter.cod').write_text(
             'export import "regional-types.cod" Node;\nusing "regional-interface-0.cod" Link;\ndata Node <: Link;\n')
         (directory / 'regional-rank.cod').write_text(
-            'using "regional-interface.cod" Link;\nfunction score(node:Link in O) -> i64 where {owner O} { -1 }\nexport score;\n')
+            '''using "regional-interface.cod" Link;
+function score(node:Link in O) -> i64 where {owner O} { return -1 }
+export score;
+''')
         for name, value in [('first', 2), ('second', 3)]:
             (directory / f'regional-rank-{name}.cod').write_text(
                 'using "regional-adapter.cod" Node;\n'
@@ -239,10 +250,14 @@ def main():
                 'function measure(node:Node in O) -> i64 where {owner O} { chain(node) }\nexport weight;\nexport measure;\n')
         (directory / 'regional-vocabulary.cod').write_text('using "regional-types.cod" Node;\nsymbol @root : Node;\nexport @root;\n')
         (directory / 'regional-body.cod').write_text(
-            'using "regional-types.cod" Node;\nusing "std:exceptions" NullPointerException;\n'
-            'symbol from "regional-vocabulary.cod" @root as @input;\n'
-            'symbol @walk : proc() -> Node throws NullPointerException;\nfunction find(node:Node in O) -> Node throws NullPointerException where {owner O} { node.next }\n'
-            'procedure @walk() -> Node throws NullPointerException { find(deref(@input)) }\nexport @walk;\n')
+            '''using "regional-types.cod" Node;
+using "std:exceptions" NullPointerException;
+symbol from "regional-vocabulary.cod" @root as @input;
+symbol @walk : proc() -> Node throws NullPointerException;
+function find(node:Node in O) -> Node throws NullPointerException where {owner O} { return node.next }
+procedure @walk() -> Node throws NullPointerException { return find(deref(@input)) }
+export @walk;
+''')
         for i in range(depth):
             body = ('using "std:exceptions" NullPointerException;\nusing "regional-types.cod" Node;\nusing "regional-interface.cod" Link as Root;\n'
                     f'using "regional-interface-{i}.cod" Link;\n')

@@ -6,7 +6,7 @@ data Right { value:f32; ptr left:Left; }
 region symbol @arena;
 symbol @left : Left;
 symbol @right : Right;
-function through(l:Left in O1) -> i64 throws NullPointerException where {owner O1} { deref(deref(l.right).left).value }
+function through(l:Left in O1) -> i64 throws NullPointerException where {owner O1} { return deref(deref(l.right).left).value }
 effect @arena <- region(4096u64);
 effect @left = alloc @arena Left(17, null);
 effect @right = alloc @arena Right(2.5f32, @left);

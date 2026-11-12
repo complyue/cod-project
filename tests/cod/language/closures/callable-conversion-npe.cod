@@ -2,8 +2,8 @@ using "std:exceptions" NullPointerException;
 unit raw; unit normalized;
 conversion function normalize(x:u64(raw))->const u64(normalized) throws NullPointerException {
  ptr missing:u64=null;
- normalized(missing)
+ return normalized(missing)
 }
-function automatic(x:u64(normalized*))->const u64{scalar(x)}
+function automatic(x:u64(normalized*))->const u64{return scalar(x)}
 func selected=automatic;
 selected(raw(1u64));

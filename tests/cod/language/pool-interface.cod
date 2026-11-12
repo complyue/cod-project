@@ -1,6 +1,6 @@
 using "std:exceptions" NullPointerException;
 unit Slot;
-function (==)(a:u32(Slot), b:u32(Slot)) -> bool { scalar(a) == scalar(b) }
+function (==)(a:u32(Slot), b:u32(Slot)) -> bool { return scalar(a) == scalar(b) }
 type SlotStore;
 type ReusableSlotStore <: SlotStore;
 

@@ -258,9 +258,10 @@ def main():
         print("PASS: real chain-allocation OOM, preserved prior chain, retry and exact cleanup")
         ir, runtime = scratch / "uncaught.ll", scratch / "uncaught-runtime.cc"
         uncaught_source = scratch / "uncaught-callables.cod"
-        uncaught_source.write_text('function identity(n:u64)->const u64 { n }\n'
-            'func module_value = identity;\n'
-            'false && (func()->const bool { true })();\n' +
+        uncaught_source.write_text('''function identity(n:u64)->const u64 { return n }
+func module_value = identity;
+false && (func()->const bool { return true })();
+''' +
             (directory / "exception-reraise.cod").read_text().replace(
                 'try {{', 'try {{\n  func local_value = module_value;', 1))
         checked([toolchain / "bin/cod", "--check", uncaught_source,
@@ -378,8 +379,7 @@ static const int audit = [] {
             "catch-order": ('try {} catch(e){} catch(f){};', "catch-all must be the final catch clause"),
             "finally-value": ('try {1} finally {2};', "expected void, got i64"),
             "rethrow-context": ('throw;', "bare throw requires an active catch"),
-            "function-effects": ('symbol x:i64; effect @x <- 1; '
-                                 'function f() -> i64 {try {@x} finally {}}; f();',
+            "function-effects": ('symbol x:i64; effect @x <- 1; function f() -> i64 {return try {@x} finally {}}; f();',
                                  "a function cannot read symbolic effects"),
         }
         for name, (source, diagnostic) in rejects.items():

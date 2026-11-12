@@ -1,7 +1,7 @@
 unit raw;
 unit normalized;
-conversion function normalize(x:f64(raw)) -> f64(normalized) { normalized(scalar(x) / 50.0) }
-function adjust(x:f64) -> f64 { x + 100.0 }
+conversion function normalize(x:f64(raw)) -> f64(normalized) { return normalized(scalar(x) / 50.0) }
+function adjust(x:f64) -> f64 { return x + 100.0 }
 symbol @receiver_distance : f64(normalized);
 symbol @receiver_read : proc(f64(normalized)) -> f64;
 effect @receiver_distance <- normalized(10.0);

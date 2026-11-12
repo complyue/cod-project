@@ -1,9 +1,9 @@
 using "structural-api.cod" Counter;
 function pair(region a:Counter, region b:Counter) -> (func()->const u64 with {region a, region b}) {
-  func [a, b] () -> const u64 { a.ticks + b.ticks }
+  return func [a, b] () -> const u64 { return a.ticks + b.ticks }
 }
 function use(action:(func()->const u64 with {region a, region b})) -> const u64
-  where {region a:Counter, region b:Counter} { action() }
+  where {region a:Counter, region b:Counter} { return action() }
 owned region first:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 owned region second:Counter <- make Counter(capacity = 128u64) { ticks <- 7u64 };
 use(pair(first, second));

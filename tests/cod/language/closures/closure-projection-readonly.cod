@@ -1,6 +1,6 @@
 region State { flag:bool; }
 function reader(const region state:State) -> func()->const bool with {region state} {
-  func [state] () -> const bool { state.flag }
+  return func [state] () -> const bool { return state.flag }
 }
 owned region state:State <- make State(capacity = 128u64) { flag <- true };
 func cb = reader(state);

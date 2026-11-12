@@ -9,28 +9,28 @@ region Selection { ptr current:Packet; }
 function reader(ref stream:Stream in state) where {region state:Counters}
     -> func()->const u64 with {region state} {
   val var ticks:u64 in state -> state.ticks;
-  func [ticks] () -> const u64 { ticks }
+  return func [ticks] () -> const u64 { return ticks }
 }
 
 function mean_size(ref stream:Stream in state) where {region state:Counters}
     -> func()->const u64 with {region state} {
   val var ticks:u64 in state -> state.ticks;
   val var bytes:u64 in state -> state.bytes;
-  func () -> const u64 { if (ticks == 0u64) { 0u64 } else { bytes / ticks } }
+  return func () -> const u64 { return if (ticks == 0u64) { 0u64 } else { bytes / ticks } }
 }
 
 # Retain the pointer slot, so subsequent packet selection is visible.
 function selected_size(ref stream:Stream in state) where {region state:Selection}
     -> func()->const u64 with {region state} throws NullPointerException {
   ptr var current:Packet in state -> state.current;
-  func [current] () -> const u64 throws NullPointerException { current.bytes }
+  return func [current] () -> const u64 throws NullPointerException { return current.bytes }
 }
 
 # Retain this packet's bits slot, independently of subsequent selection.
 function pinned_size(ref stream:Stream in state) where {region state:Selection}
     -> (func()->const u64 with {region state}) throws NullPointerException {
   val var bytes:u64 in state -> state.current.bytes;
-  func () -> const u64 { bytes }
+  return func () -> const u64 { return bytes }
 }
 
 function record(ref stream:Stream in state, size:u64) where {region state:Counters} -> void {

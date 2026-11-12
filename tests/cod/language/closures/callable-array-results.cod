@@ -2,8 +2,8 @@ using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 array Values[u64]:f32;
 region Arena {count:u64;}
-function first(a:Values in r,b:Values in r)->Values in r where {region r:Arena} {a}
-function second(a:Values in s,b:Values in s)->Values in s where {region s:Arena} {b}
+function first(a:Values in r,b:Values in r)->Values in r where {region r:Arena} {return a}
+function second(a:Values in s,b:Values in s)->Values in s where {region s:Arena} {return b}
 owned region arena:Arena <- make Arena(capacity=2048u64){count <- 0u64};
 ref a=alloc arena Values(3u64,1.0f32);
 ref b=alloc arena Values(3u64,5.0f32);
@@ -18,14 +18,14 @@ ref saved=selected(a,b);
 b[1u64] <- 20.0f32;
 behave @print(saved[1u64]);
 function descend(values:Values in r,n:u64)->Values in r where {region r:Arena} {
- if(n==0u64){values}else{descend(values,n-1u64)}
+ return if(n==0u64){values}else{descend(values,n-1u64)}
 }
 func recurse=descend;
 ref deep=recurse(a,32u64);
 deep[1u64] <- 7.0f32;
 behave @print(a[1u64]);
 function fresh(values:Values in r,n:u64)->Values in r where {region r:Arena} {
- alloc r Values(n,2.0f32)
+ return alloc r Values(n,2.0f32)
 }
 func create=fresh;
 ref made=create(a,4u64);
@@ -34,7 +34,7 @@ behave @print(made[0u64]);
 
 unit neuron;
 array Signals[u64(neuron)]:f32;
-function identity(value:T in O)->T in O where {T,owner O} {value}
+function identity(value:T in O)->T in O where {T,owner O} {return value}
 func generic=identity;
 ref signals=alloc arena Signals(2u64,0.5f32);
 ref observed=generic(signals);
@@ -42,7 +42,7 @@ observed[neuron(1u64)] <- 1.5f32;
 behave @print(signals[neuron(1u64)]);
 
 function maybe(values:Values in r,present:bool)->ptr Values in r where {region r:Arena} {
- if(present){values}else{null}
+ return if(present){values}else{null}
 }
 func optional=maybe;
 ptr absent=optional(a,false);
@@ -56,7 +56,7 @@ catch(e:const NullPointerException){behave @print(999u64);};
 symbol @choose_first:bool;
 effect @choose_first <- true;
 proc @pick(a:Values in r,b:Values in r)->Values in r where {region r:Arena} {
- if(@choose_first){a}else{b}
+ return if(@choose_first){a}else{b}
 }
 effect @choose_first <- false;
 ref captured=perform @pick(a,b);

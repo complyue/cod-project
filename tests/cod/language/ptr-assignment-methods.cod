@@ -3,28 +3,28 @@ data Node { value:i64; }
 data Choice { ptr next:Node; }
 symbol @replacement:Node;
 proc (=)(lhs:i64 in O, rhs:i64 in O) -> i64 in O where {owner O} {
-  behave @print(1); lhs
+  behave @print(1); return lhs
 }
 proc (=)(lhs:i64 in O, rhs:const i64 in O) -> i64 in O where {owner O} {
-  behave @print(2); lhs
+  behave @print(2); return lhs
 }
 proc (=)(lhs:const i64 in O, rhs:i64 in O) -> const i64 in O where {owner O} {
-  behave @print(3); lhs
+  behave @print(3); return lhs
 }
 proc (=)(lhs:const i64 in O, rhs:const i64 in O) -> const i64 in O where {owner O} {
-  behave @print(4); lhs
+  behave @print(4); return lhs
 }
 proc (=)(lhs:const f32 in O, rhs:const f32 in O) -> const f32 in O where {owner O} {
-  behave @print(5); lhs
+  behave @print(5); return lhs
 }
 proc (=)(lhs:Node in O, rhs:const Choice in O) -> Node in O where {owner O} {
   lhs = @replacement;
   behave @print(6);
-  lhs
+  return lhs
 }
-function access(value:const i64 in O) -> const i64 where {owner O} { 20 }
-function access(value:i64 in O) -> const i64 where {owner O} { 10 }
-function readonly_choice(value:Choice in O) -> const Choice in O where {owner O} { value }
+function access(value:const i64 in O) -> const i64 where {owner O} { return 20 }
+function access(value:i64 in O) -> const i64 where {owner O} { return 10 }
+function readonly_choice(value:Choice in O) -> const Choice in O where {owner O} { return value }
 export (=);
 export Node;
 export Choice;

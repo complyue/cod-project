@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 symbol @final : proc() -> i64;
 symbol @target : i64;
-function helper() -> i64 { 3 }
+function helper() -> i64 { return 3 }
 effect @target <- 2;
 mixin "reimport-provider.cod" @middle as @final with { @target as @value; };
 effect @target <- 3;

@@ -1,2 +1,2 @@
-function ([]=)(value:i64, index:i64, replacement:i64) -> const i64 { replacement }
+function ([]=)(value:i64, index:i64, replacement:i64) -> const i64 { return replacement }
 intrinsic ([]=)(1, 2, 3);

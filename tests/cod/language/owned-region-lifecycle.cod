@@ -16,7 +16,7 @@ symbol bias:u64;
 effect @bias <- 7u64;
 proc @replay_owner(owned region packet:Packet) -> owned region :Packet {
   setfield(root(packet), sequence, @bias);
-  packet
+  return packet
 }
 proc symbolic_owner() -> void {
   effect @bias <- 8u64;
@@ -30,19 +30,19 @@ proc symbolic_owner() -> void {
 unit Raw; unit Ready;
 conversion function normalize(value:u64(Raw)) -> u64(Ready) {
   owned region scratch:Packet <- fresh(scalar(value), 0u64);
-  Ready(1u64)
+  return Ready(1u64)
 }
 function accept(value:u64(Ready*), ignored:u64) -> void {}
 function select_owner(owned region left:Packet, owned region right:Packet, flag:bool)-> owned region :Packet {
-  if(flag) {{left}} else {{right}}
+  return if(flag) {{left}} else {{right}}
 }
 function choose(flag:bool)-> owned region :Packet {
   owned region left:Packet <- fresh(16u64, 1u64);
   owned region right:Packet <- fresh(16u64, 2u64);
-  forward(select_owner(left, right, flag))
+  return forward(select_owner(left, right, flag))
 }
 function recover(bytes:u64)-> owned region :Packet {
-  try {{fresh(bytes, 3u64)}}
+  return try {{fresh(bytes, 3u64)}}
   catch(error:const InvalidCapacity) {{fresh(16u64, 4u64)}}
   finally {}
 }

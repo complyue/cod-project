@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
 using units "units-library.cod" {m, cm};
 symbol @emit : proc() -> f64(cm);
-procedure @emit() -> f64(cm) { behave @print(123); cm(250.0) }
-function consume(x:f64(m*)) -> f64 { scalar(x) }
+procedure @emit() -> f64(cm) { behave @print(123); return cm(250.0) }
+function consume(x:f64(m*)) -> f64 { return scalar(x) }
 behave @print(consume(behave @emit()));
 
 using units "units-sequencing-library.cod" {raw, normalized};
@@ -10,7 +10,7 @@ using "units-sequencing-library.cod" combine;
 using "units-sequencing-library.cod" (+);
 using symbol "units-sequencing-library.cod" @combine;
 symbol @raw : proc() -> u64(raw);
-procedure @raw() -> u64(raw) { behave @print(11); raw(2u64) }
+procedure @raw() -> u64(raw) { behave @print(11); return raw(2u64) }
 behave @print(combine(behave @raw(), { behave @print(21); 3u64 }));
 behave @print(perform @combine(behave @raw(), { behave @print(22); 3u64 }));
 behave @print((+)(behave @raw(), { behave @print(23); 3u64 }));

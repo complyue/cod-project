@@ -2,12 +2,12 @@ using "record-vocabulary.cod" Node;
 using "record-vocabulary.cod" Arena;
 using "record-adapter.cod" qualify;
 using "record-vocabulary.cod" Entity;
-function weight(node:T in r)->const u64 where {T, region r:Arena} {1u64}
-function weight(node:T in r)->const u64 where {T <: Entity, region r:Arena} {10u64}
+function weight(node:T in r)->const u64 where {T, region r:Arena} {return 1u64}
+function weight(node:T in r)->const u64 where {T <: Entity, region r:Arena} {return 10u64}
 function recursive(node:Node in r,n:u64)->Node in r where {region r:Arena} {
  r.count <- r.count + weight(node);
- if(n==0u64){qualify(node)}else{recursive(recursive(node,n-1u64),0u64)}
+ return if(n==0u64){qualify(node)}else{recursive(recursive(node,n-1u64),0u64)}
 }
-function plain(node:Node in r,n:u64)->Node in r where {region r:Arena} {node}
+function plain(node:Node in r,n:u64)->Node in r where {region r:Arena} {return node}
 export recursive;
 export plain;

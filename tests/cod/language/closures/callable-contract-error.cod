@@ -1,4 +1,4 @@
 function answer(x:T) -> T where T;
-function answer(x:i64) -> bool { true }
+function answer(x:i64) -> bool { return true }
 func selected = answer;
 selected(1);

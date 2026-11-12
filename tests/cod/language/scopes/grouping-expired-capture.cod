@@ -6,7 +6,7 @@ proc escaped = {{
   effect @arena <- make Pool(capacity=128u64) {tag<-1u64};
   proc (flag:bool)->const u64 {
     if (flag) { effect @arena <- make Pool(capacity=128u64) {tag<-2u64}; } else {};
-    root(@arena).tag
+    return root(@arena).tag
   }
 }};
 effect @action = escaped;

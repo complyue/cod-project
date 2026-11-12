@@ -1,7 +1,7 @@
 unit a;
 unit b;
 unit c;
-conversion function ab(x:i64(a)) -> i64(b) { b(scalar(x)) }
-conversion function ba(x:i64(b)) -> i64(a) { a(scalar(x)) }
-function consume(x:i64(c*)) -> i64 { scalar(x) }
+conversion function ab(x:i64(a)) -> i64(b) { return b(scalar(x)) }
+conversion function ba(x:i64(b)) -> i64(a) { return a(scalar(x)) }
+function consume(x:i64(c*)) -> i64 { return scalar(x) }
 consume(a(1));

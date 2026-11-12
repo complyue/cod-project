@@ -9,7 +9,7 @@ function walk_value(start:Node in O1, count:u32) -> const i64 where {owner O1} {
   for (i in 0u32 .. count) {{
     if (!isnull(node)) { node = node.next; {} } else {};
   }};
-  if (isnull(node)) { -1 } else { node.value }
+  return if (isnull(node)) { -1 } else { node.value }
 }
 effect @arena <- region(4096u64);
 effect @tail = alloc @arena Node(3, null);

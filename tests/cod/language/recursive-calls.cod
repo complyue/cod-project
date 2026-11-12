@@ -2,18 +2,18 @@ using symbol "std:io" @print;
 using "std:exceptions" InvalidCapacity;
 using "std:exceptions" NullPointerException;
 function factorial(n:u64) -> const u64 {
-  if (n == 0u64) { 1u64 } else { n * factorial(n - 1u64) }
+  return if (n == 0u64) { 1u64 } else { n * factorial(n - 1u64) }
 }
 function even(n:u64) -> const bool {
-  if (n == 0u64) { true } else { odd(n - 1u64) }
+  return if (n == 0u64) { true } else { odd(n - 1u64) }
 }
 function odd(n:u64) -> const bool {
-  if (n == 0u64) { false } else { even(n - 1u64) }
+  return if (n == 0u64) { false } else { even(n - 1u64) }
 }
-function seed() -> const u64 { 7u64 }
+function seed() -> const u64 { return 7u64 }
 global offset:u64 = seed();
 function descend(n:u64) -> const u64 {
-  if (n == 0u64) { offset } else { descend(n - 1u64) + 1u64 }
+  return if (n == 0u64) { offset } else { descend(n - 1u64) + 1u64 }
 }
 behave @print(factorial(6u64));
 behave @print(even(12u64));
@@ -24,9 +24,9 @@ symbol @bias:u64;
 symbol @saved:proc()->const u64;
 effect @bias <- 1u64;
 proc accumulate(n:u64) -> const u64 {
-  proc snapshot() -> const u64 { @bias }
+  proc snapshot() -> const u64 { return @bias }
   ;
-  if (n == 0u64) { @bias } else {
+  return if (n == 0u64) { @bias } else {
     effect @bias <- @bias + 1u64;
     val child = accumulate(n - 1u64);
     effect @saved = snapshot;
@@ -39,7 +39,7 @@ behave @print(@bias);
 data Frame { depth:u64; }
 function fail_at_bottom(depth:u64) -> const u64 {
   owned region frame:Frame <- make Frame(capacity = 128u64) { depth <- depth };
-  if (depth == 0u64) {
+  return if (depth == 0u64) {
     owned region invalid:Frame <- make Frame(capacity = 0u64) { depth <- depth };
     0u64
   } else { fail_at_bottom(depth - 1u64) }
@@ -47,7 +47,7 @@ function fail_at_bottom(depth:u64) -> const u64 {
 try { fail_at_bottom(4u64); {} }
 catch (error:const InvalidCapacity) { behave @print(99u64); };
 function null_at_bottom(depth:u64) -> const i64 throws NullPointerException {
-  if (depth == 0u64) {
+  return if (depth == 0u64) {
     ptr absent:i64 = null;
     absent
   } else { null_at_bottom(depth - 1u64) }

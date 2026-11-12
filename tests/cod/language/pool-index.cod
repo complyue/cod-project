@@ -5,8 +5,8 @@ using "pool-layout.cod" capacity;
 using "pool-layout.cod" class_set_begin;
 using "pool-layout.cod" class_slot_begin;
 data SetLocation { class_id:u32(ClassId); local:u64(ClassSetId); }
-function (u64)(count:u32(SlotsPerSet)) -> u64 { u64(scalar(count)) }
-function (u64)(index:u32(LocalSlot)) -> u64 { u64(scalar(index)) }
+function (u64)(count:u32(SlotsPerSet)) -> u64 { return u64(scalar(count)) }
+function (u64)(index:u32(LocalSlot)) -> u64 { return u64(scalar(index)) }
 function locate(layout:Layout in O1, index:u64(GlobalSetId), found:SetLocation in O3) -> SetLocation where {owner O1, owner O3} {
   setfield(found, class_id, ClassId(0u32));
   setfield(found, local, ClassSetId(0u64));
@@ -18,10 +18,10 @@ function locate(layout:Layout in O1, index:u64(GlobalSetId), found:SetLocation i
       {}
     } else {};
   }};
-  deref(found)
+  return deref(found)
 }
 function global_slot(layout:Layout in O1, j:u32(ClassId), set:u64(ClassSetId), slot:u32(LocalSlot)) -> u64(GlobalSlot) where {owner O1} {
-  GlobalSlot(scalar(class_slot_begin(layout, j)) + scalar(set) * u64(capacity(j)) + u64(slot))
+  return GlobalSlot(scalar(class_slot_begin(layout, j)) + scalar(set) * u64(capacity(j)) + u64(slot))
 }
 
 export (u64);

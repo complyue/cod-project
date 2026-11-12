@@ -198,6 +198,7 @@ static void printUsage(const char *prog_name) {
             << "  -Werror=unit-conversion       Reject ambiguous unit conversion paths\n"
             << "  -Werror=multi-alias-extension Reject overload declarations through multiple aliases\n"
             << "  -Werror=shadow                Reject lexical binding shadowing\n"
+            << "  -Werror=missing-return        Reject reachable value-callable fallthrough\n"
             << "  -h, --help          Show this help message\n"
             << "  --no-cache          Disable build cache\n"
             << "  --force-rebuild     Force rebuild (ignore cache)\n"
@@ -879,6 +880,8 @@ int main(int argc, const char **argv) {
       warnings.errors.insert(cod::language::Warning::shadow);
     } else if (arg == "-Werror=unused-capture") {
       warnings.errors.insert(cod::language::Warning::unused_capture);
+    } else if (arg == "-Werror=missing-return") {
+      warnings.errors.insert(cod::language::Warning::missing_return);
     } else if (arg == "--emit-llvm" || arg == "--emit-bc" || arg == "--emit-runtime") {
       if (i + 1 >= argc) {
         std::cerr << "Error: " << arg << " requires a path\n";

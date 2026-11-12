@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 function duplicate(n:i64) -> i64 {
-  { val n = n + 1; val n = n + 1; n }
+  return { val n = n + 1; val n = n + 1; n }
 }
 behave @print(99);
 duplicate(3);

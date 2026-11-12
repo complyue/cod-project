@@ -15,10 +15,10 @@ using "abstract-library.cod" pair_context;
 import "abstract-library.cod" adapted;
 import "abstract-library.cod" unit_context;
 using units "units-library.cod" {m, cm, mm};
-function rank(x:Point in O1) -> i64 where {owner O1} { x.value }
-function reversed(x:Weighted in O1) -> i64 where {owner O1} { 4 }
-function reversed(x:Entity in O1) -> i64 where {owner O1} { 3 }
-function separate(x:Separate in O1) -> i64 where {owner O1} { 5 }
+function rank(x:Point in O1) -> i64 where {owner O1} { return x.value }
+function reversed(x:Weighted in O1) -> i64 where {owner O1} { return 4 }
+function reversed(x:Entity in O1) -> i64 where {owner O1} { return 3 }
+function separate(x:Separate in O1) -> i64 where {owner O1} { return 5 }
 data Local <: Entity { value:i64; }
 region symbol @arena;
 effect @arena <- region(4096u64);

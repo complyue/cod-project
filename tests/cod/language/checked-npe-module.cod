@@ -1,4 +1,4 @@
 using "std:exceptions" NullPointerException;
 function advertised() -> i64 throws NullPointerException;
-function advertised() -> i64 { 1 }
+function advertised() -> i64 { return 1 }
 advertised();

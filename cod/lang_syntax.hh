@@ -280,7 +280,7 @@ struct Form;
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
                     block, conditional, field, range_for, fold, allocate, index, null_ref,
-                    try_scope, handler, raise, make_region, touch, effect_group, transfer, procedure_effect,
+                    try_scope, handler, raise, return_value, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner };
   Kind kind;
   Location at;
@@ -377,7 +377,7 @@ inline bool expression_keyword(std::string_view name) {
          name == "for" || name == "fold" || name == "var" || name == "let" || name == "effect" ||
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "func" || name == "proc" || name == "global" || name == "symbol" ||
-         name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "from" ||
+         name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "return" || name == "from" ||
          name == "val" || name == "ref" || name == "throws" || name == "make" || name == "owned" || name == "touch" || name == "ptr" || name == "typeof" || name == "intrinsic" || name == "const";
 }
 
@@ -790,6 +790,11 @@ class Parser {
         expr->children.push_back(expression());
         if (take("from")) expr->children.push_back(expression());
       }
+      return expr;
+    }
+    if (take("return")) {
+      auto expr = make(Expression::Kind::return_value, token);
+      if (!is(";") && !is("}")) expr->children.push_back(expression());
       return expr;
     }
     if (take("alloc")) {

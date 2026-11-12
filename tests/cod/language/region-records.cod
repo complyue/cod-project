@@ -9,10 +9,10 @@ symbol @values : Values;
 symbol @tail : Node;
 symbol @head : Node;
 symbol @selected : Node;
-function child(n:Node in O1) -> Node throws NullPointerException where {owner O1} { n.next }
-function child_value(n:Node in O1) -> f32 throws NullPointerException where {owner O1} { deref(child(n)).effect }
-function weight(n:Node in O1) -> f32(Weight) throws NullPointerException where {owner O1} { ref_at(deref(n.data), 0u32) }
-function measure(n:Node in O1) -> f32 throws NullPointerException where {owner O1} { n.effect + child_value(n) + scalar(deref(weight(n))) }
+function child(n:Node in O1) -> Node throws NullPointerException where {owner O1} { return n.next }
+function child_value(n:Node in O1) -> f32 throws NullPointerException where {owner O1} { return deref(child(n)).effect }
+function weight(n:Node in O1) -> f32(Weight) throws NullPointerException where {owner O1} { return ref_at(deref(n.data), 0u32) }
+function measure(n:Node in O1) -> f32 throws NullPointerException where {owner O1} { return n.effect + child_value(n) + scalar(deref(weight(n))) }
 effect @arena <- region(8192u64);
 effect @values = alloc @arena Values(2u64, Weight(0.25f32));
 effect @tail = alloc @arena Node(2.0f32, null, @values);

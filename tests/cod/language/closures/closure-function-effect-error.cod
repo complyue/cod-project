@@ -1,4 +1,4 @@
 symbol @bias:i64;
 effect @bias <- 3;
-func callback = func () -> i64 { @bias };
+func callback = func () -> i64 { return @bias };
 callback();

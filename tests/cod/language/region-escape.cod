@@ -1,5 +1,5 @@
 region symbol @arena;
 symbol @make : proc() -> region;
-function forward(region arena) -> region { arena }
-procedure @make()-> region { effect @arena <- region(4096u64); forward(@arena) }
+function forward(region arena) -> region { return arena }
+procedure @make()-> region { effect @arena <- region(4096u64); return forward(@arena) }
 behave @make();

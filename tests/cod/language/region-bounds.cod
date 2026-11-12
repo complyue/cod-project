@@ -1,4 +1,4 @@
-function outside() -> u32 { 4u32 }
+function outside() -> u32 { return 4u32 }
 array Values[u32]:f32;
 region symbol @arena;
 symbol @values : Values;

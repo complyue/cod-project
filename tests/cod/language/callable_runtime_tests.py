@@ -173,9 +173,9 @@ using "std:exceptions" InvalidCapacity;
 data Packet { value:u64; }
 function later_argument(capacity:u64) -> const u64 {
   owned region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
-  root(packet).value
+  return root(packet).value
 }
-function read_borrowed(action:func()->const u64 in O) -> const u64 where {owner O} { action() }
+function read_borrowed(action:func()->const u64 in O) -> const u64 where {owner O} { return action() }
 behave @print(6001u64);
 try {{ read_mode(original, { behave @print(9999u64); 0u64 }); {} }}
 catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
@@ -205,9 +205,9 @@ using "std:exceptions" OutOfMemory;
 using "std:exceptions" InvalidCapacity;
 function later_argument(capacity:u64) -> const u64 {
   owned region temporary:State <- make State(capacity = capacity) { value <- 0u64 };
-  root(temporary).value
+  return root(temporary).value
 }
-func nested = func (x:u64) -> const u64 { saved(x) + 1u64 };
+func nested = func (x:u64) -> const u64 { return saved(x) + 1u64 };
 behave @print(6001u64);
 try {{ current({{ current <- reader(state); 99u64 }}); {} }}
 catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
@@ -238,20 +238,20 @@ using "std:exceptions" InvalidCapacity;
 symbol @meter:proc(u64)->const u64;
 symbol @copying:proc(u64)->const u64;
 proc recursive_meter = proc(depth:u64)->const u64 {
-  if (depth == 0u64) {{ @bias }}
+  return if (depth == 0u64) {{ @bias }}
   else {{ effect @bias <- @bias + 1u64; behave @meter(depth - 1u64) + 1u64 }}
 };
 proc copying_meter = proc(depth:u64)->const u64 {
   proc local_copy = @copying;
   effect @copying = local_copy;
-  if (depth == 0u64) {{ 1u64 }} else {{ behave @copying(depth - 1u64) + 1u64 }}
+  return if (depth == 0u64) {{ 1u64 }} else {{ behave @copying(depth - 1u64) + 1u64 }}
 };
 effect @meter = recursive_meter;
 effect @copying = copying_meter;
 data Packet { value:u64; }
 function later_argument(capacity:u64) -> const u64 {
   owned region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
-  root(packet).value
+  return root(packet).value
 }
 behave @print(6001u64);
 try {{ selected({{ selected <- first; 99u64 }}); {} }}
@@ -296,7 +296,7 @@ try {{ proc failed = snapshot; {} }}
 catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(6201u64);
 try {{
-  proc fresh = proc(n:u64)->const u64 { relay(n) };
+  proc fresh = proc(n:u64)->const u64 { return relay(n) };
   effect @saved = fresh;
   perform @saved(2u64);
   {}
@@ -323,7 +323,7 @@ behave @print(6001u64);
 try {{ current({{ behave @print(9999u64); 2u64 }}); {} }}
 catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(current(2u64));
-proc stable = proc(n:u64)->const u64 { n + 1u64 };
+proc stable = proc(n:u64)->const u64 { return n + 1u64 };
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + stable(i) }});
 behave @print(7002u64);
@@ -510,7 +510,7 @@ using "std:exceptions" InvalidCapacity;
 data Packet { value:u64; }
 function later_argument(capacity:u64) -> const u64 {
   owned region packet:Packet <- make Packet(capacity = capacity) { value <- 0u64 };
-  root(packet).value
+  return root(packet).value
 }
 behave @print(6001u64);
 try {{ plain(selected, { behave @print(9999u64); 1u64 }); {} }}
@@ -682,9 +682,9 @@ behave @print(7002u64);
         evidence['holder_results'] = result_evidence
         owner_flows = directory / "closures/callable-owner-flows.cod"
         entry.write_text(owner_flows.read_text() + '''
-function access(region state:State)->const u64 {state.ticks}
-function access(const region state:State)->const u64 {state.ticks+100u64}
-function inspect(const region state:State)->const u64 {state.ticks}
+function access(region state:State)->const u64 {return state.ticks}
+function access(const region state:State)->const u64 {return state.ticks+100u64}
+function inspect(const region state:State)->const u64 {return state.ticks}
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
 try {{ func failed = current; {} }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};

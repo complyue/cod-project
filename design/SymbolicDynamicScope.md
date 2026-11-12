@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 126 · Recorded: 2026-11-12 · Phase: language/application co-design.
+Design revision: 127 · Recorded: 2026-11-12 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Callable completion continuity:** [K-526](DesignAuthorityRegistry.md#k-526) continues H-361/H-362/C-63/P-324 and H-365/P-326 for revision 127's callable source and return/effect interaction. Proc/func values use explicit return; iteration and enclosing-scope effects restore on return, and one finally body can replace a pending return/error. D-17 owns completion semantics; D-14 ownership/access and D-18 typed complete values remain unchanged. [Return evidence](../tests/cod/language/return-validation.json) bounds acceptance. This serves readable business control and explicit lifetimes under charter §§2–3/§6/§8/§12; defer and unrelated pending designs remain unimplemented/unqualified in their recorded scopes.
 
 - **Grouping continuity:** [K-525](DesignAuthorityRegistry.md#k-525) continues the H-149/H-277/H-319/H-365 declaration, binding and scope contract for this revision. Ordinary groups share names and effects with their enclosing scope; explicit scopes and calls restore their bindings, while iteration effects follow D-17. Conditional and exceptional paths join available typed bindings and declaration initialization; captured/current invocation retains its established interpretation. C-63/P-286/P-326 and the qualified symbolic-context relationships serve explicit lifetimes and readable effects under charter §§2–3/§6/§8/§12. D-14 owners/access, D-18 callable values and D-17 cleanup remain constraints. [Native grouping evidence](../tests/cod/language/grouping-validation.json) covers this bounded implementation; return/defer, broader pending designs and D-16 fraction execution are not qualified by it.
 
@@ -166,9 +168,9 @@ Acceptance covers one overload-backed update, persistent content after the enclo
 
 ```text
 symbol @selected:proc() -> i64;
-proc existing() -> i64 { @gain }
+proc existing() -> i64 { return @gain }
 effect @selected = existing;
-effect proc @selected() -> i64 { @gain + 1 };
+effect proc @selected() -> i64 { return @gain + 1 };
 effect proc @empty() {};
 ```
 
@@ -481,9 +483,9 @@ H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform 
 H-257 requires ordinary call syntax to respect the nearest lexical value binding. A procedure parameter or local procedure value supplies the callee; a same-spelled module callable does not bypass it. A non-callable local value makes the call ill-typed. Direct calls retain H-189's current dynamic bindings. Symbol-only `perform`/`behave` and the function/procedure effect boundary are unchanged.
 
 ```text
-proc selected(x:i64) -> i64 { x + 20 }
-proc callback(x:i64) -> i64 { x + 1 }
-proc apply(callback:proc(i64) -> i64, x:i64) -> i64 { callback(x) }
+proc selected(x:i64) -> i64 { return x + 20 }
+proc callback(x:i64) -> i64 { return x + 1 }
+proc apply(callback:proc(i64) -> i64, x:i64) -> i64 { return callback(x) }
 # apply(selected, 3) must yield 23.
 ```
 

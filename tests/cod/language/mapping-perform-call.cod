@@ -3,7 +3,7 @@ symbol @step : proc() -> i64;
 symbol @cell : i64;
 symbol @helper : proc() -> i64;
 effect @cell <- 3;
-procedure @helper -> i64 { @cell }
+procedure @helper -> i64 { return @cell }
 mixin "mapped-perform-model.cod" @update as @step with { @helper as @next; };
 effect @cell <- 9;
 behave @print(perform @step);

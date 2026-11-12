@@ -7,7 +7,7 @@ symbol @saved:proc()->const u64;
 proc escaped = {{
   effect @arena <- make Pool(capacity = 4096u64) { tag <- 1u64 };
   effect @node = deref(alloc @arena Node(9u64));
-  proc()->const u64 { @node.value }
+  proc()->const u64 { return @node.value }
 }};
 effect @saved = escaped;
 behave @print(perform @saved());

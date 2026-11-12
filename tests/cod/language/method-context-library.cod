@@ -1,7 +1,7 @@
 export import "method-view-library.cod" Sample;
 export import "method-view-library.cod" score as score_alias;
-function score(x:Sample in O1) -> i64 where {owner O1} { 7 }
-function score_alias(x:bool) -> i64 { 23 }
+function score(x:Sample in O1) -> i64 where {owner O1} { return 7 }
+function score_alias(x:bool) -> i64 { return 23 }
 using "method-view-library.cod" through as frozen;
 export import "method-view-library.cod" through as adapted;
 
@@ -11,4 +11,4 @@ using "method-view-library.cod" scored as frozen_proc;
 export import "method-view-library.cod" scored as adapted_proc;
 export frozen_proc;
 
-function private_bridge(x:Sample in O1) -> i64 where {owner O1} { 99 }
+function private_bridge(x:Sample in O1) -> i64 where {owner O1} { return 99 }

@@ -4,9 +4,9 @@ region Counter { val ticks:u64; }
 region Cursor { val ticks:u64; ptr current:Node; }
 function advance(region state:Counter) -> const u64 {
   state.ticks <- state.ticks + 1u64;
-  state.ticks
+  return state.ticks
 }
-function owner_ticks(node:Node in r) -> const u64 where {region r:Counter} { r.ticks }
+function owner_ticks(node:Node in r) -> const u64 where {region r:Counter} { return r.ticks }
 export Node;
 export Counter;
 export Cursor;

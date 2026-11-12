@@ -3,9 +3,9 @@ data Item {value:u64;}
 region Store {ticks:u64;}
 function reader(item:Item in r,n:u64) where {region r:Store}
  ->func()->const u64 with {region r} {
- if(n==0u64){
+ return if(n==0u64){
   val var value:u64 in r -> item.value;
-  func()->const u64 {value}
+  func()->const u64 {return value}
  }else{reader(item,n-1u64)}
 }
 owned region state:Store <- make Store(capacity=512u64){ticks <- 0u64};
@@ -16,7 +16,7 @@ behave @print(result());
 function counter(value:const u64 in r) where {region r:Store}
  ->func()->const u64 with {region r} {
  val var ticks:u64 in r -> r.ticks;
- func()->const u64 {ticks}
+ return func()->const u64 {return ticks}
 }
 func counted=counter(item.value);
 state.ticks <- 3u64;
@@ -32,9 +32,9 @@ behave @print(stored_result());
 symbol @bias:u64;
 proc updater(item:Item in r,n:u64) where {region r:Store}
  ->proc()->const u64 with {region r} {
- if(n==0u64){
+ return if(n==0u64){
   val var value:u64 in r -> item.value;
-  proc()->const u64 {value <- value+@bias;value}
+  proc()->const u64 {value <- value+@bias;return value}
  }else{updater(item,n-1u64)}
 }
 effect @bias <- 2u64;
@@ -46,7 +46,7 @@ behave @print(update());
 function alternate(item:Item in arena,n:u64) where {region arena:Store}
  ->func()->const u64 with {region arena} {
  val var ticks:u64 in arena -> arena.ticks;
- func()->const u64 {ticks+100u64}
+ return func()->const u64 {return ticks+100u64}
 }
 for(i in 0u64..2u64){{
  func value=stored_factory(item,2u64);
@@ -55,7 +55,7 @@ for(i in 0u64..2u64){{
  projected.ticks <- projected.ticks+1u64;
  stored_factory <- alternate;
 }};
-function keep(value:T)->const T where T {value}
+function keep(value:T)->const T where T {return value}
 func keeper=keep;
 func copied_factory=keeper(stored_factory);
 func copied_result=copied_factory(item,0u64);
@@ -64,12 +64,12 @@ behave @print(copied_result());
 function from_callback(cb:func()->const u64 with {region r}) where {region r:Store}
  ->func()->const u64 with {region r} {
  val var ticks:u64 in r -> r.ticks;
- func()->const u64 {ticks}
+ return func()->const u64 {return ticks}
 }
 function next_callback(cb:func()->const u64 with {region s}) where {region s:Store}
  ->func()->const u64 with {region s} {
  val var ticks:u64 in s -> s.ticks;
- func()->const u64 {ticks+10u64}
+ return func()->const u64 {return ticks+10u64}
 }
 func inferred_factory=from_callback;
 for(i in 0u64..2u64){{

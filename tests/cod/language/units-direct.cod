@@ -1,5 +1,5 @@
 using symbol "std:io" @print;
 using units "units-library.cod" {m, cm, mm};
-conversion function mm_direct(x:f64(mm)) -> f64(m) { m(scalar(x) / 1000.0 + 10.0) }
-function distance(x:f64(m*<-cm<-mm)) -> f64 { scalar(x) }
+conversion function mm_direct(x:f64(mm)) -> f64(m) { return m(scalar(x) / 1000.0 + 10.0) }
+function distance(x:f64(m*<-cm<-mm)) -> f64 { return scalar(x) }
 behave @print(distance(mm(2000.0)));

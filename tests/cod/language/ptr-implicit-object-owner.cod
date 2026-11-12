@@ -1,5 +1,5 @@
 data Node { value:i64; }
-function read(node:Node) -> i64 { node.value }
+function read(node:Node) -> i64 { return node.value }
 region symbol @pool:Node;
 effect @pool <- make Node(capacity = 4096u64) { value <- 1 };
 read(root(@pool));

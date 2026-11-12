@@ -6,7 +6,7 @@ region Buffers { ptr input:Frame; ptr output:Frame; }
 function updater(region state:Buffers) -> (func()->void with {region state} throws NullPointerException) {
   ptr var input -> state.input;
   ptr var output -> state.output;
-  func [input, output] () -> void throws NullPointerException {
+  return func [input, output] () -> void throws NullPointerException {
     for (i in Cell(0u32) .. Cell(u32(len(input)))) {{
       output[i] <- input[i] + 1.0f32;
     }};

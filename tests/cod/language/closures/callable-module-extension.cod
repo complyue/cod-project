@@ -1,5 +1,5 @@
 import "callable-module-base.cod" score;
-function score(x:u64) -> const u64 { 7u64 }
+function score(x:u64) -> const u64 { return 7u64 }
 using "callable-module-base.cod" twice as frozen;
 export import "callable-module-base.cod" twice as adapted;
 using "callable-module-base.cod" factory as frozen_factory;

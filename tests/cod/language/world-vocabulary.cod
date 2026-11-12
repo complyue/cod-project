@@ -1,11 +1,11 @@
 type Entity;
 data First <: Entity { value:i64; }
 data Second <: Entity { value:i64; }
-function score(x:First in O1) -> i64 where {owner O1} { 1 }
-function score(x:Second in O1) -> i64 where {owner O1} { 2 }
-function first(region arena) -> First { deref(alloc arena First(10)) }
-function second(region arena) -> Second { deref(alloc arena Second(20)) }
-function relay(x:Entity in O1) -> i64 where {owner O1} { score(x) }
+function score(x:First in O1) -> i64 where {owner O1} { return 1 }
+function score(x:Second in O1) -> i64 where {owner O1} { return 2 }
+function first(region arena) -> First { return deref(alloc arena First(10)) }
+function second(region arena) -> Second { return deref(alloc arena Second(20)) }
+function relay(x:Entity in O1) -> i64 where {owner O1} { return score(x) }
 export Entity;
 export First;
 export Second;

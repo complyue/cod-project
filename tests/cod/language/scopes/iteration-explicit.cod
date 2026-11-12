@@ -3,7 +3,7 @@ using "std:exceptions" InvalidCapacity;
 region State { value:u64; }
 function read(region r:State) -> func()->const u64 with {region r} {
   val var value:u64 in r -> r.value;
-  func () -> const u64 { value }
+  return func () -> const u64 { return value }
 }
 for (i in 0u64 .. 3u64) {{
   owned region state <- make State(capacity=256u64) { value <- i + 10u64 };
@@ -17,7 +17,7 @@ for (i in 0u64 .. 3u64) {{
 }};
 # Calls establish an inherent scope even when constructed in an ordinary loop body.
 for (i in 0u64 .. 2u64) {
-  behave @print((func (x:u64) -> const u64 { val saved <- x + 20u64; saved })(i));
+  behave @print((func (x:u64) -> const u64 { val saved <- x + 20u64; return saved })(i));
 };
 behave @print(fold (i in 0u64 .. 4u64, total=0u64) {{ val next <- i + 1u64; total + next }});
 # Separated braces are nested groups, and the following expression is outside the inner group.

@@ -1,6 +1,6 @@
 symbol @middle : proc() -> i64;
 symbol @value : i64;
-function helper() -> i64 { 9 }
+function helper() -> i64 { return 9 }
 effect @value <- 7;
 mixin "source.cod" @p as @middle with { @value as @x; };
 

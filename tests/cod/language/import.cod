@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 using symbol "std:io" @assert;
 symbol from "vocabulary.cod" @x;
-function helper() -> i64 { 9 }
+function helper() -> i64 { return 9 }
 effect @x <- 7;
 symbol @p : proc() -> i64;
 mixin "source.cod" @p;

@@ -4,7 +4,7 @@ function reader(region state:Counter, region spare:Counter)
     -> func()->const u64 with {region state, region spare} {
   val var count -> state.count;
   val var other -> spare.count;
-  func [count, other] () -> const u64 { count }
+  return func [count, other] () -> const u64 { return count }
 }
 owned region first:Counter <- make Counter(capacity = 128u64) { count <- 1u64 };
 owned region second:Counter <- make Counter(capacity = 128u64) { count <- 2u64 };

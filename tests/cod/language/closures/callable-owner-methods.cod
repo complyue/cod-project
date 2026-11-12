@@ -2,23 +2,23 @@ using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 region State {ticks:u64;}
 function reader(region state:State)->func()->const u64 with {region state} {
-  func()->const u64 {state.ticks}
+  return func()->const u64 {return state.ticks}
 }
 function frozen(const region state:State)->func()->const u64 with {region state} {
-  func()->const u64 {state.ticks}
+  return func()->const u64 {return state.ticks}
 }
-function inspect(const region state:State)->const u64 {state.ticks}
-function inspect_value(value:const u64 in O)->const u64 where {owner O} {value}
-function project(value:u64 in O)->const u64 in O where {owner O} {value}
-function project(value:const u64 in O)->const u64 in O where {owner O} {value}
-function one()->const u64 {1u64}
-function two()->const u64 {2u64}
+function inspect(const region state:State)->const u64 {return state.ticks}
+function inspect_value(value:const u64 in O)->const u64 where {owner O} {return value}
+function project(value:u64 in O)->const u64 in O where {owner O} {return value}
+function project(value:const u64 in O)->const u64 in O where {owner O} {return value}
+function one()->const u64 {return 1u64}
+function two()->const u64 {return 2u64}
 function access(action:func()->const u64, const region state:State, unused:u64)->const u64 throws NullPointerException;
-function access(action:func()->const u64, region state:State, unused:u64)->const u64 {100u64+action()}
-function access(action:func()->const u64, const region state:State, unused:u64)->const u64 {action()}
+function access(action:func()->const u64, region state:State, unused:u64)->const u64 {return 100u64+action()}
+function access(action:func()->const u64, const region state:State, unused:u64)->const u64 {return action()}
 symbol @bias:u64, @missing:u64;
-proc report(region state:State)->const u64 {@missing}
-proc report(const region state:State)->const u64 {state.ticks+@bias}
+proc report(region state:State)->const u64 {return @missing}
+proc report(const region state:State)->const u64 {return state.ticks+@bias}
 owned region state:State <- make State(capacity=128u64){ticks <- 9u64};
 func current = reader(state);
 func see = inspect;

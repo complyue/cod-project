@@ -1,2 +1,2 @@
-function (=)(lhs:u32 in O, rhs:u32 in O) -> u32 in O where {owner O} { rhs }
+function (=)(lhs:u32 in O, rhs:u32 in O) -> u32 in O where {owner O} { return rhs }
 { ptr a = 1u32, b = a; a = b; };

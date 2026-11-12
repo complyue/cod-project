@@ -1,2 +1,2 @@
-function scale(x:i64) -> i64 { x * 10 }
+function scale(x:i64) -> i64 { return x * 10 }
 { val scale = 7; scale(3) };

@@ -275,7 +275,7 @@ struct Compilation {
   std::string bitcode;
   bool uses_regions = false;
 };
-enum class Warning { unit_conversion, multi_alias_extension, shadow, unused_capture };
+enum class Warning { unit_conversion, multi_alias_extension, shadow, unused_capture, missing_return };
 struct WarningOptions {
   bool as_errors = false;
   std::set<Warning> errors;
@@ -495,6 +495,23 @@ class Compiler {
     std::array<Landing, concrete_exception_count> landing;
   };
   std::vector<HandlerScope *> handlers_;
+  struct EnvironmentEdge { Environment environment; llvm::BasicBlock *from; FlowState regions; };
+  struct Completion { Value value; llvm::BasicBlock *from; FlowState regions; };
+  struct ReturnTarget {
+    size_t cleanup, holding_begin, owner_scope;
+    Environment *environment;
+    llvm::BasicBlock *block;
+    std::vector<Completion> incoming = {};
+    std::vector<EnvironmentEdge> environments = {};
+  };
+  struct ReturnContext {
+    std::optional<Type> type;
+    const Value *owner;
+    bool copy, read;
+    std::optional<size_t> destination;
+  };
+  ReturnContext *return_context_ = nullptr;
+  std::vector<ReturnTarget *> return_targets_;
   std::vector<std::pair<size_t, Environment *>> active_environments_;
   std::optional<Value> caught_exception_;
   struct NativeActivation {
@@ -836,7 +853,8 @@ class Compiler {
   void warn(Warning kind, const Location &at, std::string message) {
     const auto category = kind == Warning::unit_conversion ? "unit-conversion" :
                           kind == Warning::shadow ? "shadow" :
-                          kind == Warning::unused_capture ? "unused-capture" : "multi-alias-extension";
+                          kind == Warning::unused_capture ? "unused-capture" :
+                          kind == Warning::missing_return ? "missing-return" : "multi-alias-extension";
     const auto newline = message.find('\n');
     message.insert(newline == std::string::npos ? message.size() : newline,
                    " [-W" + std::string(category) + "]");
@@ -2469,7 +2487,7 @@ class Compiler {
   }
   Value sequence(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                  bool function_context, bool discard_result, std::optional<Type> result_type, bool copy_result,
-                 std::optional<size_t> destination_binding, bool read_result, const Value *null_owner) {
+                 bool read_result, const Value *null_owner) {
     active_environments_.emplace_back(local_scope_, &env);
     const auto environment_frame = llvm::scope_exit([&] { active_environments_.pop_back(); });
     Value result;
@@ -2498,18 +2516,16 @@ class Compiler {
       result.storage = StorageView{ir_.hold_callable(result.native, module_top_level_), local_scope_, {}};
       register_callable_holder(result);
     }
-    if (destination_binding && result.type != Type::never && result.pointer != destination_binding)
-      fail(expr.at, "a (=) overload must return its destination binding's resulting view; finish the body with the lhs parameter");
     return result;
   }
   Value block(const Expression &expr, const Module &module, Environment &env, Locals &locals,
               bool function_context, bool discard_result = false, std::optional<Type> result_type = {}, bool copy_result = false,
-              std::optional<size_t> destination_binding = {}, bool read_result = true,
+              bool read_result = true,
               const Value *null_owner = nullptr, bool iteration = false) {
     const auto region_initializer = llvm::SaveAndRestore(region_initializer_, false);
     if (!expr.scoped && !iteration)
       return sequence(expr, module, env, locals, function_context, discard_result, result_type, copy_result,
-                      destination_binding, read_result, null_owner);
+                      read_result, null_owner);
     const bool parent_module = module_top_level_;
     const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
     const auto holding_begin = holdings_.size();
@@ -2522,7 +2538,7 @@ class Compiler {
     auto inner_env = env;
     auto inner_locals = locals.nested();
     auto result = sequence(expr, module, inner_env, inner_locals, function_context, discard_result, result_type,
-                           copy_result, destination_binding, read_result, null_owner);
+                           copy_result, read_result, null_owner);
     scopes_[scope_id] = false;
     result = finish_scope(holding_begin, native_scope, std::move(result), expr.at, parent_module, parent_scope);
     result.pointer.reset();
@@ -3391,11 +3407,25 @@ class Compiler {
     }
     const bool assignment = form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=" || form.name == "[]<-");
     const Value *result_owner = form.result_owner.empty() ? nullptr : &owner_values.at(form.result_owner);
-    auto result = block(*form.body, lexical, env, locals, function_context, false,
-                        instantiated.result, form.result_owner.empty() && !assignment &&
-                          (form.result_const || (instantiated.result && instantiated.result->kind == Type::procedure &&
-                                                  form.result_kind != "ptr")),
-                        rebind ? args.front().pointer : std::nullopt, form.result_kind != "ptr", result_owner);
+    ReturnContext context{instantiated.result, result_owner,
+        form.result_owner.empty() && !assignment &&
+            (form.result_const || (instantiated.result && instantiated.result->kind == Type::procedure && form.result_kind != "ptr")),
+        form.result_kind != "ptr", rebind ? args.front().pointer : std::nullopt};
+    const auto callable_return = llvm::SaveAndRestore(return_context_, &context);
+    const auto caller_returns = llvm::SaveAndRestore(return_targets_, std::vector<ReturnTarget *>{});
+    ReturnTarget destination{native_scope, holding_begin, scope_id, &env, ir_.label("callable.return")};
+    return_targets_.push_back(&destination);
+    auto body = block(*form.body, lexical, env, locals, function_context, true);
+    if (body.type != Type::never) {
+      if (context.type && *context.type != Type::void_type) {
+        warn(Warning::missing_return, form.at, "value-returning callable may finish without an explicit return");
+        const auto location = ir_.source_location(form.at);
+        ir_.missing_return();
+      } else route_return({}, form.at);
+    }
+    return_targets_.pop_back();
+    ir_.enter(destination.block);
+    auto result = join_completions(destination.incoming, form.at, false);
     if (form.result_kind != "ptr" && result.nullable) result = read_value(std::move(result), at);
     scopes_[scope_id] = false;
     result = finish_scope(holding_begin, native_scope, std::move(result), at, parent_module, parent_scope);
@@ -5730,7 +5760,7 @@ class Compiler {
     }
     if (!one && !empty) loop_pointers_.push_back(loop_pointers);
     const auto next = block(*expr.children[body_index], module, env, inner_locals, function_context,
-                            expr.kind == K::range_for, {}, local_bits(accumulator.type), {}, true, nullptr, true);
+                            expr.kind == K::range_for, {}, local_bits(accumulator.type), true, nullptr, true);
     for (const auto &[holder, id] : callable_headers) {
       auto &header = callable_flows_.at(id);
       const auto *back = callable_holders_.lookup(holder);
@@ -5780,7 +5810,7 @@ class Compiler {
       ir_.restore(native_scope);
       ir_.otherwise(*empty_branch);
       restore_flow(before);
-      const auto fallback = block(*expr.children[3], module, env, locals, function_context, true, {}, false, {}, true, nullptr, true);
+      const auto fallback = block(*expr.children[3], module, env, locals, function_context, true, {}, false, true, nullptr, true);
       const bool else_completes = (!(start && end) || empty) && fallback.type != Type::never;
       if (!else_completes && ir_.reachable()) ir_.unreachable();
       ir_.merge(*empty_branch, Type::void_type);
@@ -6213,7 +6243,6 @@ class Compiler {
     result.procedure = std::move(procedure);
     return result;
   }
-  struct EnvironmentEdge { Environment environment; llvm::BasicBlock *from; FlowState regions; };
   Environment join_environments(const std::vector<EnvironmentEdge> &edges, const Location &at) {
     if (edges.empty()) return {};
     auto result = edges.front().environment;
@@ -6287,7 +6316,40 @@ class Compiler {
     }
     return result;
   }
-  struct Completion { Value value; llvm::BasicBlock *from; FlowState regions; };
+  void route_return(Value value, const Location &at) {
+    auto &target = *return_targets_.back();
+    valid_view(value, at);
+    if (native_callable(value) && !return_context_->owner && return_context_->read)
+      value = detach_callable(std::move(value), at);
+    if (value.type.owned) value = take_owner(std::move(value), at);
+    auto state = flow_state();
+    close_state(state, target.holding_begin, value.type.owned ? value.region_id : std::nullopt, target.owner_scope);
+    auto environment = *target.environment;
+    for (auto frame = active_environments_.rbegin(); frame != active_environments_.rend(); ++frame)
+      if (frame->first == target.owner_scope) { environment = *frame->second; break; }
+    ir_.unwind(target.cleanup, target.owner_scope);
+    target.environments.push_back({std::move(environment), ir_.here(), state});
+    target.incoming.push_back({std::move(value), ir_.here(), std::move(state)});
+    ir_.jump(target.block);
+  }
+  Value return_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
+                          bool function_context) {
+    if (!return_context_) fail(expr.at, "return requires an enclosing func or proc");
+    const auto &context = *return_context_;
+    Value result;
+    if (!expr.children.empty())
+      result = expression(*expr.children.front(), module, env, locals, function_context,
+                          context.read, context.copy, context.read,
+                          context.type && context.type->kind == Type::procedure ? context.type : std::nullopt, context.owner);
+    if (result.type == Type::null_ref && context.owner && context.type)
+      result = null_target(*context.type, *context.owner, expr.at);
+    if (context.type) result = admit(std::move(result), *context.type, module, expr.at);
+    else return_context_->type = result.type;
+    if (context.destination && result.pointer != context.destination)
+      fail(expr.at, "a (=) overload must return its destination binding's resulting view; return the lhs parameter");
+    route_return(std::move(result), expr.at);
+    return scalar(Type::never, nullptr);
+  }
   Value join_completions(const std::vector<Completion> &completions, const Location &at, bool module_lifetime) {
     if (completions.empty()) { ir_.unreachable(); return scalar(Type::never, nullptr); }
     if (local_bits(completions.front().value.type) &&
@@ -6472,11 +6534,14 @@ class Compiler {
       return error;
     };
     HandlerScope protected_scope{ir_.scope(), holdings_.size(), local_scope_, &env, {}};
+    ReturnTarget returns{protected_scope.cleanup, protected_scope.holding_begin, local_scope_, &env,
+                         finally ? ir_.label("try.return") : nullptr};
+    if (finally) return_targets_.push_back(&returns);
     handlers_.push_back(&protected_scope);
     Value normal;
     {
       const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, npe_allowed_ || catches[exception_id(ExceptionCategory::null_pointer) - 1]);
-      normal = block(*expr.children.front(), module, env, locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+      normal = block(*expr.children.front(), module, env, locals, function_context, false, callable_result, copy_bits, read_result, result_owner);
     }
     handlers_.pop_back();
     complete(normal);
@@ -6512,7 +6577,7 @@ class Compiler {
       Value result;
       {
         const auto active = llvm::SaveAndRestore(caught_exception_, std::optional(error));
-        result = block(*clause->children.front(), module, env, inner_locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+        result = block(*clause->children.front(), module, env, inner_locals, function_context, false, callable_result, copy_bits, read_result, result_owner);
       }
       if (finally) handlers_.pop_back();
       const auto restore_binding = [&](auto &destination, const auto &source) {
@@ -6530,53 +6595,81 @@ class Compiler {
         propagate(enter_errors(landing.incoming));
       }
     }
+    if (finally) return_targets_.pop_back();
     ir_.enter(normal_join);
     auto result = join_completions(completions, expr.at, parent_module);
     if (result.type != Type::never) env = join_environments(environments, expr.at);
     if (!finally) return result;
+
+    enum class CompletionKind { returned, failed, normal };
+    struct Pending {
+      CompletionKind kind;
+      Value value;
+      llvm::BasicBlock *from;
+      FlowState flow;
+      Environment environment;
+    };
+    std::vector<Pending> pending;
     auto *finalizer = ir_.label("finally.body");
-    const auto normal_flow = flow_state();
-    const auto normal_env = env;
-    if (result.type != Type::never) ir_.jump(finalizer);
+    const auto retain = [&](CompletionKind kind, Value value) {
+      pending.push_back({kind, std::move(value), ir_.here(), flow_state(), env});
+      ir_.jump(finalizer);
+    };
+    // Keep normal completion last so every preceding dispatch terminates.
+    std::optional<Pending> normal_path;
+    if (result.type != Type::never) {
+      normal_path = Pending{CompletionKind::normal, result, ir_.here(), flow_state(), env};
+      ir_.jump(finalizer);
+    }
+    ir_.enter(returns.block);
+    auto returned = join_completions(returns.incoming, expr.at, parent_module);
+    if (returned.type != Type::never) {
+      env = join_environments(returns.environments, expr.at);
+      retain(CompletionKind::returned, returned);
+    }
     ir_.enter(failure_join);
     if (failures.empty()) ir_.unreachable();
-    Value pending_error;
-    if (!failures.empty()) pending_error = enter_errors(failures);
-    const auto failure_flow = flow_state();
-    const auto failure_env = env;
-    if (!failures.empty()) ir_.jump(finalizer);
+    else retain(CompletionKind::failed, enter_errors(failures));
+    if (normal_path) pending.push_back(std::move(*normal_path));
     ir_.enter(finalizer);
-    if (result.type == Type::never && failures.empty()) { ir_.unreachable(); return result; }
-    llvm::Value *normal_path = nullptr;
-    if (result.type != Type::never && !failures.empty()) {
-      auto state = normal_flow;
-      intersect_flow(state, failure_flow);
-      restore_flow(state);
-      env = join_environments({{normal_env, normal_join, normal_flow}, {failure_env, failure_join, failure_flow}}, finally->at);
-      normal_path = ir_.phi(ir_.type_of(Type::boolean), {{ir_.bits(Type::boolean, 1), normal_join}, {ir_.bits(Type::boolean, 0), failure_join}});
-    } else if (result.type != Type::never) { restore_flow(normal_flow); env = normal_env; }
+    if (pending.empty()) { ir_.unreachable(); return scalar(Type::never, nullptr); }
+    auto state = pending.front().flow;
+    std::vector<EnvironmentEdge> bindings;
+    std::vector<llvm::BasicBlock *> inputs;
+    std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> tags;
+    for (size_t i = 0; i < pending.size(); ++i) {
+      const auto &path = pending[i];
+      intersect_flow(state, path.flow);
+      bindings.push_back({path.environment, path.from, path.flow});
+      inputs.push_back(path.from);
+      tags.emplace_back(ir_.bits(Type::uint64, i), path.from);
+    }
+    restore_flow(state);
+    env = join_environments(bindings, finally->at);
+    auto *tag = ir_.phi(ir_.type_of(Type::uint64), tags);
     const auto finalizer_entry = flow_state();
     const auto finalizer_env = env;
     const auto finished = block(*finally, module, env, locals, function_context);
     require(finished.type, Type::void_type, finally->at);
     if (finished.type == Type::never) return finished;
-    if (result.type == Type::never) { raise_exception(pending_error); return result; }
-    if (!normal_path) return result;
     const auto finalizer_exit = flow_state();
     const auto finalizer_exit_env = env;
-    auto branch = ir_.branch(normal_path, true);
-    auto *failure_resume = ir_.here();
-    restore_flow(continue_flow(failure_flow, finalizer_entry, finalizer_exit));
-    env = continue_environment(failure_env, finalizer_env, finalizer_exit_env);
-    raise_exception(pending_error);
-    ir_.otherwise(branch);
-    restore_flow(continue_flow(normal_flow, finalizer_entry, finalizer_exit));
-    env = continue_environment(normal_env, finalizer_env, finalizer_exit_env);
-    ir_.merge(branch, Type::void_type);
-    ir_.continuation(normal_join, failure_join, finalizer, ir_.here());
-    ir_.continuation(failure_join, normal_join, finalizer, failure_resume);
-    return result;
+    for (size_t i = 0; i < pending.size(); ++i) {
+      const auto &path = pending[i];
+      std::optional<LLVMEmission::Branch> branch;
+      if (i + 1 != pending.size())
+        branch = ir_.branch(ir_.binary(Type::uint64, "==", tag, ir_.bits(Type::uint64, i)));
+      ir_.continuation(path.from, inputs, finalizer, ir_.here());
+      restore_flow(continue_flow(path.flow, finalizer_entry, finalizer_exit));
+      env = continue_environment(path.environment, finalizer_env, finalizer_exit_env);
+      if (path.kind == CompletionKind::returned) route_return(path.value, expr.at);
+      else if (path.kind == CompletionKind::failed) raise_exception(path.value);
+      else return path.value;
+      if (branch) { ir_.otherwise(*branch); ir_.merge(*branch, Type::void_type); }
+    }
+    return scalar(Type::never, nullptr);
   }
+
   Value conditional_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context, bool copy_bits = false, bool read_result = true,
                           std::optional<Type> callable_result = {}, const Value *result_owner = nullptr) {
@@ -6592,7 +6685,7 @@ class Compiler {
       auto view = *pointer.view; view.nullable = false;
       pointer.view = snapshot_pointer(std::move(view));
     }
-    auto first = block(*expr.children[1], module, env, locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+    auto first = block(*expr.children[1], module, env, locals, function_context, false, callable_result, copy_bits, read_result, result_owner);
     if (first.type.owned) first = take_owner(first, expr.at);
     if (native_callable(first) && !result_owner) first = detach_callable(std::move(first), expr.at);
     auto first_state = flow_state();
@@ -6605,7 +6698,7 @@ class Compiler {
       auto view = *pointer.view; view.nullable = false;
       pointer.view = snapshot_pointer(std::move(view));
     }
-    auto second = block(*expr.children[2], module, env, locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+    auto second = block(*expr.children[2], module, env, locals, function_context, false, callable_result, copy_bits, read_result, result_owner);
     if (second.type.owned) second = take_owner(second, expr.at);
     if (native_callable(second) && !result_owner) second = detach_callable(std::move(second), expr.at);
     if (first.type == Type::null_ref && storage_owner(second))
@@ -6862,6 +6955,7 @@ class Compiler {
     switch (expr.kind) {
     case K::try_scope: return try_expression(expr, module, env, locals, function_context, copy_bits, read_result, callable_result, result_owner);
     case K::handler: fail(expr.at, "catch requires an enclosing try");
+    case K::return_value: return return_expression(expr, module, env, locals, function_context);
     case K::raise: {
       Value error;
       if (expr.children.empty()) {
@@ -7063,7 +7157,7 @@ class Compiler {
     case K::rebind: return rebind_expression(expr, module, env, locals, function_context);
     case K::allocate: return allocate_expression(expr, module, env, locals, function_context);
     case K::range_for: case K::fold: return loop_expression(expr, module, env, locals, function_context);
-    case K::block: return block(expr, module, env, locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+    case K::block: return block(expr, module, env, locals, function_context, false, callable_result, copy_bits, read_result, result_owner);
     case K::call: return call_expression(expr, module, env, locals, function_context);
     case K::value_call: {
       auto callee = expression(*expr.children.front(), module, env, locals, function_context, false);

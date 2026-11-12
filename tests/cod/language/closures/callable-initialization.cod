@@ -31,7 +31,7 @@ composed(combined,6u64);
 behave @print(combined);
 
 # Both parameters denote the same allocation, independently of their names.
-function through_alias(x:u64 in O,y:u64 in O)->const u64 where {owner O}{x <- 19u64;y}
+function through_alias(x:u64 in O,y:u64 in O)->const u64 where {owner O}{x <- 19u64;return y}
 func aliased=through_alias;
 ref cell=make local u64;
 behave @print(aliased(cell,cell));
@@ -64,8 +64,8 @@ ref current=make local u64;
 behave @fill(current);
 behave @print(current);
 
-function first_value(x:u64,y:u64)->const u64{x}
-function change(x:u64 in O)->const u64 where {owner O}{x <- 5u64;0u64}
+function first_value(x:u64,y:u64)->const u64{return x}
+function change(x:u64 in O)->const u64 where {owner O}{x <- 5u64;return 0u64}
 ref snapshot=make local u64;
 func writer=initialize;
 writer(snapshot);

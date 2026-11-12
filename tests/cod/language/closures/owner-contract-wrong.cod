@@ -1,7 +1,7 @@
 using "structural-api.cod" Counter;
 using "owner-closure-library.cod" reader;
 function wrong(region promised:Counter, region other:Counter)
-  -> (func()->const u64 with {region promised}) { reader(other) }
+  -> (func()->const u64 with {region promised}) { return reader(other) }
 owned region first:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 owned region second:Counter <- make Counter(capacity = 128u64) { ticks <- 7u64 };
 wrong(first, second);

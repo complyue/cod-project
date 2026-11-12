@@ -8,7 +8,7 @@ effect @arena <- region(1024u64);
 effect @value <- 42u64;
 val outer_capacity <- capacity_bytes(@arena);
 ref outer = alloc @arena Values(1u64, 0u64);
-procedure @saved() -> const u64 { capacity_bytes(@arena) }
+procedure @saved() -> const u64 { return capacity_bytes(@arena) }
 for (i in 0u64 .. 3u64) {
   behave @assert(@value == 42u64 && capacity_bytes(@arena) == outer_capacity);
   effect @value <- i + 1u64;

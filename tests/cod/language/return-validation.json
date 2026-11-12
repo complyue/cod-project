@@ -1,0 +1,126 @@
+{
+  "compiler_sha256": "a8b22eb2d9289a75cce5895e0d0c64fb80cb7f11d2c37febb5aab60eddd7e6dd",
+  "recorded_utc": "2026-11-12T12:14:33.367627+00:00",
+  "language": {
+    "passed": 422,
+    "total": 422
+  },
+  "verified_source_count": 518,
+  "native_callable_cases": 29,
+  "returns": {
+    "layout": {
+      "owners_acquired": 5,
+      "owners_released": 5,
+      "failed_acquisitions": 2,
+      "peak_live_owners": 2,
+      "images_acquired": 7,
+      "images_released": 7,
+      "peak_image_bytes": 48
+    },
+    "frontend_seconds": 0.029601047019241378,
+    "native_compile_link_seconds": 2.7283149489958305,
+    "native_process_seconds": 0.0024524950131308287,
+    "llvm_ir_bytes": 70287,
+    "bitcode_bytes": 16320,
+    "recorded_utc": "2026-11-12T12:13:15.730696+00:00",
+    "toolchain": "build",
+    "trace": [
+      "10",
+      "30",
+      "20",
+      "40",
+      "70",
+      "80",
+      "6201",
+      "90",
+      "71",
+      "72"
+    ],
+    "compiler_sha256": "a8b22eb2d9289a75cce5895e0d0c64fb80cb7f11d2c37febb5aab60eddd7e6dd",
+    "source_sha256": {
+      "cod/lang_exceptions.hh": "402d846a16afb41ef5f9eb7974232000c37245b72f49cb02349a94b123dca1ba",
+      "cod/lang_syntax.hh": "a1d4afe878df07dd242dca29166e34707429a177ebdb8cff9596da16f9ef8150",
+      "cod/lang_frontend.hh": "0cb7318eeccf6e353572759bd8bdd61027c9829225fa5d319d36147f95cef2ab",
+      "cod/lang_llvm.hh": "8cecf9cc80871b3c5b296e34ff95a47bce240363b4203fbd1ca480def2f7a690",
+      "cod/lang_native_runtime.hh": "041aeea37aa18d33787c516f0284f7362032c0f89e0653b21b066d4224e92e55",
+      "tests/cod/language/scopes/return-resources.cod": "436220d5ce8e62537f252daca2412c9d25862f1a877373e21f6800939c5b2195",
+      "tests/cod/language/return_runtime_tests.py": "4bcfd7515709f2867ff042d099cd67a71a292f1cf5b5a021700269caf988eb33",
+      "tests/cod/language/callable_runtime_tests.py": "17dbbf0a331c155294605e5fb107e3987ef77968894b64dfca1065a14f7484fd",
+      "tests/cod/language/regional_runtime_tests.py": "ce3c4c0a7e5c3050735e776105249c4b604c79ab8c6481c22063879afa77e11b",
+      "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241"
+    }
+  },
+  "grouping": {
+    "owners_acquired": 6,
+    "owners_released": 6,
+    "failed_acquisitions": 4,
+    "peak_live_owners": 2,
+    "images_acquired": 7,
+    "images_released": 7,
+    "peak_image_bytes": 112
+  },
+  "loop_effects": {
+    "owners_acquired": 13,
+    "owners_released": 13,
+    "failed_acquisitions": 2,
+    "peak_live_owners": 3
+  },
+  "ownership": {
+    "owners_acquired": 19,
+    "owners_released": 19,
+    "root_relocations": 1,
+    "pending_result_cleanup": true,
+    "callee_entry_timing": true
+  },
+  "ownership_rejections": 21,
+  "asan": [
+    {
+      "fixture": "tests/cod/language/scopes/explicit-return.cod",
+      "fixture_sha256": "06b058890460525450a187f93529dfe9c5df33d82aae4a04d2b4a71c77a2a60f",
+      "llvm_ir_sha256": "6d47f8fae52ea47587c970bc9040326d30ba714b078627f4cb98b3507096eab9",
+      "instrumented_definitions": 12,
+      "cyclic_functions": []
+    },
+    {
+      "fixture": "tests/cod/language/scopes/return-resources.cod",
+      "fixture_sha256": "436220d5ce8e62537f252daca2412c9d25862f1a877373e21f6800939c5b2195",
+      "llvm_ir_sha256": "2412fd25db8fd85936f69d7f296abb342daf0b493a2da52162e77972375c2a4a",
+      "instrumented_definitions": 12,
+      "cyclic_functions": []
+    },
+    {
+      "fixture": "tests/cod/language/closures/callable-recursive-factory-argument.cod",
+      "fixture_sha256": "f04f820c51651ba63286fe92a44a8690b1141833d3a490cf8f7913bd2ca686ce",
+      "llvm_ir_sha256": "dfa634da5dd10ec766ce4f8c3c56444b30001ba16ad843ccb406eacca3cff0ee",
+      "instrumented_definitions": 66,
+      "cyclic_functions": [
+        "cod.call.function.context",
+        "cod.call.function.context.44",
+        "cod.call.function.context.59",
+        "cod.call.function.context.9",
+        "cod.call.procedure.context",
+        "cod.call.procedure.context.31"
+      ]
+    }
+  ],
+  "optimization": {
+    "fixture": "tests/cod/language/scopes/return-resources.cod",
+    "fixture_sha256": "436220d5ce8e62537f252daca2412c9d25862f1a877373e21f6800939c5b2195",
+    "passes": "default<O2>",
+    "input_bytes": 70287,
+    "output_bytes": 45072,
+    "input_sha256": "5ba1f2465e7f15d919bf30da4a9b35397048abe47964e952cfef95dc6c5c14c6",
+    "output_sha256": "60e9dc991f96282120664e09f53fa86a42913ce43517e3216acfaebdc2a96b2e",
+    "compiler_sha256": "a8b22eb2d9289a75cce5895e0d0c64fb80cb7f11d2c37febb5aab60eddd7e6dd",
+    "counts": {
+      "completion_phis": {
+        "input": 4,
+        "output": 3
+      },
+      "callable_return_blocks": {
+        "input": 8,
+        "output": 2
+      }
+    }
+  }
+}

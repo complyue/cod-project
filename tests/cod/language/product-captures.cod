@@ -5,7 +5,7 @@ symbol @pair:Pair;
 symbol @read:proc() -> Pair;
 effect @arena <- region(1024u64);
 effect @pair = alloc @arena Pair(7, 1.5);
-procedure @read() -> Pair { @pair }
+procedure @read() -> Pair { return @pair }
 effect @pair = alloc @arena Pair(9, 2.5);
 behave @print(deref(perform @read()).x);
 behave @print(deref(behave @read()).x);

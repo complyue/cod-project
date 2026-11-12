@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 function (=)(lhs:i64 in O, rhs:i64 in O) -> i64 in O where {owner O} {
   intrinsic (=)(lhs, rhs);
-  { lhs }
+  return { lhs }
 }
 ptr first = 1;
 ptr second = 2;

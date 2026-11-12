@@ -1,4 +1,4 @@
 using symbol "std:io" @print;
 using units "units-library.cod" {m, cm, mm};
-function distance(x:f64(m*<-cm<-mm)) -> f64 { scalar(x) }
+function distance(x:f64(m*<-cm<-mm)) -> f64 { return scalar(x) }
 behave @print(distance(mm(2000.0)));

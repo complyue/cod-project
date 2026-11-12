@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
 symbol @x : i64;
 symbol @p : proc() -> i64;
-procedure @p -> i64 { @x }
+procedure @p -> i64 { return @x }
 symbol @wrapper : proc() -> i64;
-procedure @wrapper -> i64 { perform @p }
+procedure @wrapper -> i64 { return perform @p }
 effect @x <- 9;
 behave @print(behave @wrapper);

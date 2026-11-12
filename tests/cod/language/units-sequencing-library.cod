@@ -1,16 +1,16 @@
 unit raw;
 unit normalized;
 conversion function normalize(x:u64(raw)) -> u64(normalized) {
-  normalized(if (scalar(x) == 0u64) {
+  return normalized(if (scalar(x) == 0u64) {
     10u64 / scalar(x)
   } else {
     fold (i in 0u64 .. scalar(x), sum = 0u64) {{ sum + 2u64 }}
   })
 }
-function combine(x:u64(normalized*), y:u64) -> u64 { scalar(x) + y }
-procedure (+)(x:u64(normalized*), y:u64) -> u64 { scalar(x) + y }
+function combine(x:u64(normalized*), y:u64) -> u64 { return scalar(x) + y }
+procedure (+)(x:u64(normalized*), y:u64) -> u64 { return scalar(x) + y }
 symbol @combine : proc(u64(normalized), u64) -> u64;
-procedure @combine(x:u64(normalized*), y:u64) -> u64 { scalar(x) + y }
+procedure @combine(x:u64(normalized*), y:u64) -> u64 { return scalar(x) + y }
 
 export (+);
 export @combine;

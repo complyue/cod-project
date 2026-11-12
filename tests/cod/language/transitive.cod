@@ -3,9 +3,9 @@ symbol @gain : i64;
 symbol @q : proc() -> i64;
 symbol @p : proc() -> i64;
 effect @gain <- 5;
-procedure @q -> i64 { @gain }
+procedure @q -> i64 { return @gain }
 effect @gain <- 2;
-procedure @p -> i64 { behave @q }
+procedure @p -> i64 { return behave @q }
 effect @gain <- 9;
 behave @print(perform @p);
 behave @print(behave @p);

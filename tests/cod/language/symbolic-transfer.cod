@@ -8,7 +8,7 @@ symbol @object:Node;
 function (<-)(dst:Node in d, src:const Node in s) -> const Node in d
   where {region d:Pool, region s:Pool} {
   setfield(dst, value, src.value + root(d).tag - root(s).tag);
-  dst
+  return dst
 }
 {
   ref first = deref(alloc @a Node(1));

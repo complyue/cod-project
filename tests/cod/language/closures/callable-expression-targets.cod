@@ -1,34 +1,34 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 
-function increment(n:u64)->const u64 { n + 1u64 }
-function factory()->func(u64)->const u64 { increment }
-function outer()->func()->(func(u64)->const u64) { factory }
+function increment(n:u64)->const u64 { return n + 1u64 }
+function factory()->func(u64)->const u64 { return increment }
+function outer()->func()->(func(u64)->const u64) { return factory }
 behave @print(factory()(4u8));
 behave @print(outer()()(5u64));
-behave @print((func(n:u64)->const u64 { n + 2u64 })(6u64));
+behave @print((func(n:u64)->const u64 { return n + 2u64 })(6u64));
 
 region State { trace:u64; value:u64; }
 owned region state:State <- make State(capacity=512u64) { trace <- 0u64; value <- 40u64 };
 function acquire(region r:State)->func(u64)->const u64 with {region r} {
   r.trace <- r.trace * 10u64 + 1u64;
-  func(n:u64)->const u64 {
+  return func(n:u64)->const u64 {
     r.trace <- r.trace * 10u64 + 3u64;
-    r.value + n
+    return r.value + n
   }
 }
 function argument(region r:State)->const u64 {
   r.trace <- r.trace * 10u64 + 2u64;
-  2u64
+  return 2u64
 }
 behave @print(acquire(state)(argument(state)));
 behave @print(state.trace);
 
 func base = increment;
-func first = func(n:u64)->const u64 { base(n) + 100u64 };
-func second = func(n:u64)->const u64 { n + 10u64 };
+func first = func(n:u64)->const u64 { return base(n) + 100u64 };
+func second = func(n:u64)->const u64 { return n + 10u64 };
 func current = first;
-function borrow(value:func(u64)->const u64 in O)->(func(u64)->const u64) in O where {owner O} { value }
+function borrow(value:func(u64)->const u64 in O)->(func(u64)->const u64) in O where {owner O} { return value }
 # The selected environment survives replacement during argument evaluation.
 behave @print(borrow(current)({ current <- second; 2u64 }));
 behave @print((current)(2u64));
@@ -36,7 +36,7 @@ for(i in 0u64 .. 2u64) {{
   behave @print((if(i == 0u64) { first } else { second })(3u64));
 }};
 
-function optional(ptr value:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O} { value }
+function optional(ptr value:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O} { return value }
 ptr absent:func(u64)->const u64 = current;
 absent = null;
 # Callee failure prevents argument effects; a non-null returned view works normally.
@@ -50,7 +50,7 @@ catch(e:const NullPointerException) { behave @print(state.trace); };
 symbol @bias:u64;
 effect @bias <- 7u64;
 proc procedure_factory()->proc(u64)->const u64 {
-  proc(n:u64)->const u64 { @bias + n }
+  return proc(n:u64)->const u64 { return @bias + n }
 }
 # Invocation of a returned procedure uses the current dynamic binding.
 behave @print(procedure_factory()(2u64));
@@ -58,6 +58,6 @@ effect @bias <- 11u64;
 behave @print((procedure_factory)()(2u64));
 
 # Capturing a call target observes the same complete nested environment rules.
-func wrapped = func(n:u64)->const u64 { (first)(n) };
+func wrapped = func(n:u64)->const u64 { return (first)(n) };
 first <- second;
 behave @print(wrapped(3u64));

@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
-function forward(ptr value:u64 in O)->ptr u64 in O where {owner O} { value }
+function forward(ptr value:u64 in O)->ptr u64 in O where {owner O} { return value }
 func callback = forward;
 ref value = make local u64;
 ptr returned = callback(value);

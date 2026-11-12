@@ -1,14 +1,14 @@
 using symbol "std:io" @assert;
 data Cell { value:i64; }
 region symbol @a;
-function forward(region arena) -> region { region view = arena; view }
+function forward(region arena) -> region { region view = arena; return view }
 function repeat(region arena, count:u32) -> region {
-  fold (i in 0u32 .. count, view = arena) {{ forward(view) }}
+  return fold (i in 0u32 .. count, view = arena) {{ forward(view) }}
 }
 function create(region arena, value:i64) -> Cell {
-  deref(alloc arena Cell(value))
+  return deref(alloc arena Cell(value))
 }
-proc inspect(region arena) -> u64 { capacity_bytes(forward(arena)) }
+proc inspect(region arena) -> u64 { return capacity_bytes(forward(arena)) }
 effect @a <- region(4096u64);
 {
   region view = forward(@a);

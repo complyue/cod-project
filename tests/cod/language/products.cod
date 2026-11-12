@@ -7,11 +7,11 @@ data Envelope { ptr content:Box; ptr next:Envelope; }
 function double(p:Pair in O1) -> Pair where {owner O1} {
   setfield(p, x, deref(p).x * 2.0f32);
   setfield(p, count, deref(p).count * 2);
-  deref(p)
+  return deref(p)
 }
-function metric(b:Box in O1) -> f32 throws NullPointerException where {owner O1} { if (b.true) { -deref(b.pair).x } else { 0.0f32 } }
-function contents(e:Envelope in O1) -> Box throws NullPointerException where {owner O1} { deref(e.content) }
-function through(e:Envelope in O1) -> i64 throws NullPointerException where {owner O1} { deref(contents(deref(e.next)).pair).count }
+function metric(b:Box in O1) -> f32 throws NullPointerException where {owner O1} { return if (b.true) { -deref(b.pair).x } else { 0.0f32 } }
+function contents(e:Envelope in O1) -> Box throws NullPointerException where {owner O1} { return deref(e.content) }
+function through(e:Envelope in O1) -> i64 throws NullPointerException where {owner O1} { return deref(contents(deref(e.next)).pair).count }
 region symbol @arena;
 effect @arena <- region(2048u64);
 try {

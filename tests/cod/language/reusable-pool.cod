@@ -12,10 +12,10 @@ array Payloads[u32(Slot)]:i64;
 array Links[u32(Slot)]:u32(Slot);
 data Pool { head:u32(Slot); ptr payloads:Payloads; ptr links:Links; }
 
-function end_slot(pool:Pool in O1) -> u32(Slot) throws NullPointerException where {owner O1} { Slot(u32(len(pool.payloads))) }
-function empty(pool:Pool in O1) -> bool throws NullPointerException where {owner O1} { pool.head == end_slot(pool) }
-function read(pool:Pool in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { deref(pool.payloads)[slot] }
-function cell(pool:Pool in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { ref_at(pool.payloads, slot) }
+function end_slot(pool:Pool in O1) -> u32(Slot) throws NullPointerException where {owner O1} { return Slot(u32(len(pool.payloads))) }
+function empty(pool:Pool in O1) -> bool throws NullPointerException where {owner O1} { return pool.head == end_slot(pool) }
+function read(pool:Pool in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { return deref(pool.payloads)[slot] }
+function cell(pool:Pool in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { return ref_at(pool.payloads, slot) }
 
 function initialize(pool:Pool in O1) -> void throws NullPointerException where {owner O1} {
   for (i in 0u32 .. scalar(end_slot(pool))) {{
@@ -30,7 +30,7 @@ function create(region arena, capacity:u32) -> Pool throws NullPointerException 
   val links = alloc arena Links(u64(capacity), Slot(0u32));
   val pool = deref(alloc arena Pool(Slot(0u32), payloads, links));
   initialize(pool);
-  pool
+  return pool
 }
 
 function create(bytes:u64, capacity:u32) -> owned region :Pool throws NullPointerException {
@@ -41,13 +41,13 @@ function create(bytes:u64, capacity:u32) -> owned region :Pool throws NullPointe
   setfield(pool, payloads, alloc arena Payloads(u64(capacity), 0));
   setfield(pool, links, alloc arena Links(u64(capacity), Slot(0u32)));
   initialize(pool);
-  arena
+  return arena
 }
 
 # Exhaustion returns the capacity sentinel without modifying the pool.
 function acquire(pool:Pool in O1, value:i64) -> const u32(Slot) throws NullPointerException where {owner O1} {
   val slot = pool.head;
-  if (slot == end_slot(pool)) {
+  return if (slot == end_slot(pool)) {
     slot
   } else {
     setfield(pool, head, deref(pool.links)[slot]);

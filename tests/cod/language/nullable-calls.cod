@@ -2,17 +2,17 @@ using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 data Node {value:i64; ptr next:Node;}
 function find(node:Node in O, present:bool) -> ptr Node in O where {owner O} {
-  if(present) {node} else {null}
+  return if(present) {node} else {null}
 }
-function absent(node:Node in O) -> ptr Node in O where {owner O} {null}
-function empty(ptr node:Node in O) -> const bool where {owner O} {isnull(node)}
-function forward(ptr node:Node in O) -> ptr Node in O where {owner O} {node}
-function value(ptr node:Node in O) -> const i64 where {owner O} throws NullPointerException {node.value}
+function absent(node:Node in O) -> ptr Node in O where {owner O} {return null}
+function empty(ptr node:Node in O) -> const bool where {owner O} {return isnull(node)}
+function forward(ptr node:Node in O) -> ptr Node in O where {owner O} {return node}
+function value(ptr node:Node in O) -> const i64 where {owner O} throws NullPointerException {return node.value}
 function optional_number(number:i64 in O, present:bool) -> ptr i64 in O where {owner O} {
-  if(present) {number} else {null}
+  return if(present) {number} else {null}
 }
-function scalar_view(ptr number:i64 in O) -> ptr i64 in O where {owner O} {number}
-proc @missing(ptr node:Node in O) -> const bool where {owner O} {isnull(node)}
+function scalar_view(ptr number:i64 in O) -> ptr i64 in O where {owner O} {return number}
+proc @missing(ptr node:Node in O) -> const bool where {owner O} {return isnull(node)}
 owned region packet:Node <- make Node(capacity=128u64){value<-42; next=null};
 ref node=root(packet);
 ptr found=find(node,true);

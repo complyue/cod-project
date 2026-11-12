@@ -114,7 +114,7 @@
     "file": "overflow.cod",
     "exit": 70,
     "stdout": "",
-    "stderr_contains": "overflow.cod:3:9: i64 addition overflow"
+    "stderr_contains": "overflow.cod:3:16: i64 addition overflow"
   },
   {
     "file": "perform-without-caller.cod",
@@ -2475,5 +2475,60 @@
     "file": "scopes/grouping-finally-bindings.cod",
     "exit": 0,
     "stdout": "9\n7\n9\n0\n9\n0\n13\n11\n12\n13\n0\n13\n0\n"
+  },
+  {
+    "file": "scopes/explicit-return.cod",
+    "exit": 0,
+    "stdout": "90\n11\n90\n22\n90\n33\n91\n41\n42\n10\n11\n11\n7\n2\n"
+  },
+  {
+    "file": "scopes/missing-return.cod",
+    "exit": 0,
+    "stdout": "17\n5\n",
+    "stderr_contains": "[-Wmissing-return]"
+  },
+  {
+    "file": "scopes/missing-return.cod",
+    "exit": 2,
+    "stdout": "",
+    "args": [
+      "-Werror=missing-return"
+    ],
+    "stderr_contains": "warning treated as error"
+  },
+  {
+    "file": "scopes/return-outside.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "return requires an enclosing func or proc"
+  },
+  {
+    "file": "scopes/return-type.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected u64"
+  },
+  {
+    "file": "scopes/return-void-value.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected void"
+  },
+  {
+    "file": "scopes/return-resources.cod",
+    "exit": 0,
+    "stdout": "10\n30\n20\n40\n70\n80\n6201\n60\n71\n72\n"
+  },
+  {
+    "file": "scopes/return-expired-borrow.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "live owning region"
+  },
+  {
+    "file": "scopes/return-expired-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "live region owner"
   }
 ]

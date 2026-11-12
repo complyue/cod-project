@@ -1,8 +1,8 @@
 using "abstract-adapter.cod" Sample;
 using "abstract-library.cod" Entity;
 using "abstract-library.cod" Weighted;
-function choose(a:Entity in O1, b:Weighted in O2) -> i64 where {owner O1, owner O2} { 1 }
-function choose(a:Weighted in O1, b:Entity in O2) -> i64 where {owner O1, owner O2} { 2 }
+function choose(a:Entity in O1, b:Weighted in O2) -> i64 where {owner O1, owner O2} { return 1 }
+function choose(a:Weighted in O1, b:Entity in O2) -> i64 where {owner O1, owner O2} { return 2 }
 region symbol @arena;
 effect @arena <- region(1024u64);
 {

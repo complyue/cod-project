@@ -1,5 +1,5 @@
 data Position { index:i64; weight:f32; }
-function read(p:Position in O1) -> f32 where {owner O1} { p.weight }
+function read(p:Position in O1) -> f32 where {owner O1} { return p.weight }
 
 export Position;
 export read;

@@ -1,7 +1,7 @@
 symbol from "vocabulary.cod" @x as @a;
 symbol from "vocabulary.cod" @x as @b;
 symbol @p : proc() -> i64;
-procedure @p -> i64 { @a + @b }
+procedure @p -> i64 { return @a + @b }
 
 export @a;
 export @b;

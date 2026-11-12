@@ -17,7 +17,7 @@ function rotate(count:i64, builtin_swap:bool) -> const i64 {
     else { const ptr temporary = a; a = b; b = temporary; {} };
     a <- a + 1;
   }};
-  a * 100 + b
+  return a * 100 + b
 }
 behave @assert(rotate(0, false) == 110 && rotate(1, false) == 1101);
 behave @assert(rotate(2, false) == 211 && rotate(5, false) == 1303);
@@ -44,7 +44,7 @@ a <=> a;
 behave @assert(a == 3);
 function selected(x:i64 in O, counter:i64 in O) -> i64 in O where {owner O} {
   counter <- counter + 1;
-  x
+  return x
 }
 ptr counter = 0;
 intrinsic (<->)(selected(a, counter), selected(b, counter));

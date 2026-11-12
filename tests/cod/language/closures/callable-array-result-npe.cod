@@ -1,6 +1,6 @@
 array Values[u64]:f32;
 region Arena {count:u64;}
-function missing(values:Values in r)->ptr Values in r where {region r:Arena} {null}
+function missing(values:Values in r)->ptr Values in r where {region r:Arena} {return null}
 owned region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};
 ref values=alloc arena Values(1u64,1.0f32);
 func selected=missing;

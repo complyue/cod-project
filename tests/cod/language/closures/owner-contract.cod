@@ -3,16 +3,16 @@ using "structural-api.cod" Counter;
 using "owner-closure-library.cod" reader;
 region Extended { extra:u8; ticks:u64; }
 function relay(action:(func()->const u64 with {region source}))
-  -> (func()->const u64 with {region source}) where {region source:Counter} { action }
-function generic(value:T) -> T where {T} { value }
+  -> (func()->const u64 with {region source}) where {region source:Counter} { return action }
+function generic(value:T) -> T where {T} { return value }
 function pair(region left:Counter, region right:Counter)
   -> (func()->const u64 with {region left, region right}) {
-  func [left, right] () -> const u64 { left.ticks + right.ticks }
+  return func [left, right] () -> const u64 { return left.ticks + right.ticks }
 }
 function both(region left:Counter, region right:Counter,
-              action:(func()->const u64 with {region left, region right})) -> const u64 { action() }
-function mode(action:func()->const u64) -> const u64 { 0u64 }
-function mode(action:(func()->const u64 with {region r})) -> const u64 where {region r:Counter} { 1u64 }
+              action:(func()->const u64 with {region left, region right})) -> const u64 { return action() }
+function mode(action:func()->const u64) -> const u64 { return 0u64 }
+function mode(action:(func()->const u64 with {region r})) -> const u64 where {region r:Counter} { return 1u64 }
 owned region first:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 owned region second:Extended <- make Extended(capacity = 128u64) { extra <- 1u8; ticks <- 7u64 };
 func typed:(func()->const u64 with {region first}) = reader(first);
@@ -22,14 +22,14 @@ behave @print(forwarded());
 func combined = pair(first, second);
 behave @print(both(first, second, combined));
 behave @print(mode(typed));
-func independent = func () -> const u64 { 42u64 };
+func independent = func () -> const u64 { return 42u64 };
 behave @print(mode(independent));
 func factory:(func()->(func()->const u64 with {region first}) with {region first}) =
   func [first] () -> (func()->const u64 with {region first}) {
-    func [first] () -> const u64 { first.ticks }
+    return func [first] () -> const u64 { return first.ticks }
   };
 func nested = factory();
 behave @print(nested());
-function score(action:(func()->const u64 with {region specific})) -> const u64 where {region specific:Extended} { 2u64 }
-function score(action:(func()->const u64 with {region general})) -> const u64 where {region general:Counter} { 1u64 }
+function score(action:(func()->const u64 with {region specific})) -> const u64 where {region specific:Extended} { return 2u64 }
+function score(action:(func()->const u64 with {region general})) -> const u64 where {region general:Counter} { return 1u64 }
 behave @print(score(reader(second)));

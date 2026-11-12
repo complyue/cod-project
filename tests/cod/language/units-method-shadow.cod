@@ -1,3 +1,3 @@
 using units "units-library.cod" {m, cm};
-function cm_to_m(x:bool) -> i64 { 99 }
+function cm_to_m(x:bool) -> i64 { return 99 }
 cm_to_m(cm(250.0));

@@ -10,7 +10,7 @@ array Values[u32]:u64;
 effect @level <- 1;
 effect @arena <- region(4096u64);
 effect @original_capacity <- capacity_bytes(@arena);
-proc @captured() -> i64 { @level }
+proc @captured() -> i64 { return @level }
 proc @captured_failure() -> void {
   behave @assert(@level == 1);
   behave @assert(capacity_bytes(@arena) == @original_capacity);

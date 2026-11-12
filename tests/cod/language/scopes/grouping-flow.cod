@@ -12,15 +12,15 @@ proc observe(flag:bool) -> void {
   effect @amount <- 1u64;
   effect @arena <- make Pool(capacity=512u64) { tag <- 2u64 };
   effect @node = deref(alloc @arena Node(3u64));
-  proc previous = proc()->const u64 { @node.value };
+  proc previous = proc()->const u64 { return @node.value };
   if (flag) {
     effect @arena <- make Pool(capacity=512u64) { tag <- 10u64 };
     effect @node = deref(alloc @arena Node(11u64));
-    effect @compute = proc()->const u64 { @amount + 20u64 };
+    effect @compute = proc()->const u64 { return @amount + 20u64 };
   } else {
     effect @arena <- make Pool(capacity=512u64) { tag <- 30u64 };
     effect @node = deref(alloc @arena Node(31u64));
-    effect @compute = proc()->const u64 { @amount + 40u64 };
+    effect @compute = proc()->const u64 { return @amount + 40u64 };
   };
   behave @print(root(@arena).tag);
   behave @print(@node.value);
@@ -46,11 +46,11 @@ proc observe(flag:bool) -> void {
 observe(true);
 observe(false);
 proc acquire(capacity:u64) -> owned region :Pool {
-  try { make Pool(capacity=capacity) { tag <- 90u64 } }
+  return try { make Pool(capacity=capacity) { tag <- 90u64 } }
   finally { behave @print(80u64); }
 }
 proc read_back(value:u64 in O, capacity:u64) -> u64 in O where {owner O} {
-  try { owned region scratch:Pool <- make Pool(capacity=capacity) { tag <- 91u64 }; value }
+  return try { owned region scratch:Pool <- make Pool(capacity=capacity) { tag <- 91u64 }; value }
   finally { behave @print(81u64); }
 }
 owned region retained:Pool <- acquire(128u64);

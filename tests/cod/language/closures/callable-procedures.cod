@@ -9,11 +9,11 @@ symbol @failing:proc()->const i64 throws NullPointerException;
 effect @bias <- 3u64;
 
 proc additive() -> proc(u64)->const u64 {
-  proc (n:u64) -> const u64 { @bias + n }
+  return proc (n:u64) -> const u64 { return @bias + n }
 }
 proc first = additive();
 proc second = {{ effect @bias <- 7u64; additive() }};
-proc multiplied = {{ effect @bias <- 7u64; proc (n:u64)->const u64 { @bias * n } }};
+proc multiplied = {{ effect @bias <- 7u64; proc (n:u64)->const u64 { return @bias * n } }};
 proc selected = first;
 proc copied = selected;
 for (i in 0u64 .. 3u64) {{
@@ -29,13 +29,13 @@ behave @print(@bias);
 {{ effect @action = copied; behave @print(perform @action(2u64)); }};
 
 # Context adapters must retain the parent frame of a nested dynamic call.
-proc outer = proc(n:u64)->const u64 { behave @middle(n) };
-proc middle = proc(n:u64)->const u64 { behave @last(n) };
-proc last = proc(n:u64)->const u64 { @bias + n };
+proc outer = proc(n:u64)->const u64 { return behave @middle(n) };
+proc middle = proc(n:u64)->const u64 { return behave @last(n) };
+proc last = proc(n:u64)->const u64 { return @bias + n };
 proc failing = proc()->const i64 throws NullPointerException {
   effect @bias <- 100u64;
   ptr absent:i64 = null;
-  absent
+  return absent
 };
 {{ effect @middle = middle; effect @last = last; behave @print(outer(2u64)); }};
 try {{
@@ -52,8 +52,8 @@ catch (e:const NullPointerException) {{ behave @print(0u64); }};
 
 # A symbolic definition remains reusable when lexical variables copy its value.
 {{
-  proc alternative = proc(x:u64)->const u64 { x + 10u64 };
-  effect proc @source(x:u64)->const u64 { x + 1u64 };
+  proc alternative = proc(x:u64)->const u64 { return x + 10u64 };
+  effect proc @source(x:u64)->const u64 { return x + 1u64 };
   proc left = @source;
   proc right = @source;
   left <- alternative;
@@ -65,7 +65,7 @@ catch (e:const NullPointerException) {{ behave @print(0u64); }};
 # Recursive adapters retain current TLS values in each frame, including joins.
 {{
   proc down = proc(n:u64)->const u64 {
-    if (n == 0u64) {{ @bias }}
+    return if (n == 0u64) {{ @bias }}
     else {{ effect @bias <- @bias + 1u64; behave @action(n - 1u64) + 1u64 }}
   };
   proc chosen = down;
@@ -78,11 +78,11 @@ catch (e:const NullPointerException) {{ behave @print(0u64); }};
 }};
 {{
   proc even = proc(n:u64)->const u64 {
-    if (n == 0u64) {{ @bias }}
+    return if (n == 0u64) {{ @bias }}
     else {{ effect @bias <- @bias + 1u64; behave @middle(n - 1u64) + 1u64 }}
   };
   proc odd = proc(n:u64)->const u64 {
-    if (n == 0u64) {{ @bias }}
+    return if (n == 0u64) {{ @bias }}
     else {{ effect @bias <- @bias + 2u64; behave @last(n - 1u64) + 2u64 }}
   };
   effect @middle = odd;
@@ -92,7 +92,7 @@ catch (e:const NullPointerException) {{ behave @print(0u64); }};
 }};
 {{
   proc recursive_failure = proc(depth:u64)->const i64 throws NullPointerException {
-    if (depth == 0u64) {{ ptr absent:i64 = null; absent }}
+    return if (depth == 0u64) {{ ptr absent:i64 = null; absent }}
     else {{ effect @bias <- @bias + 1u64; behave @checked(depth - 1u64) }}
   };
   effect @checked = recursive_failure;
@@ -103,7 +103,7 @@ catch (e:const NullPointerException) {{ behave @print(0u64); }};
   proc copying = proc(depth:u64)->const u64 {
     proc local_copy = @action;
     effect @action = local_copy;
-    if (depth == 0u64) {{ 1u64 }} else {{ behave @action(depth - 1u64) + 1u64 }}
+    return if (depth == 0u64) {{ 1u64 }} else {{ behave @action(depth - 1u64) + 1u64 }}
   };
   effect @action = copying;
   behave @print(copying(8u64));

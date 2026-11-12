@@ -4,9 +4,9 @@ symbol @a : proc() -> i64;
 symbol @b : proc() -> i64;
 symbol @call : proc() -> i64;
 effect @x <- 1;
-procedure @a -> i64 { @x + 10 }
+procedure @a -> i64 { return @x + 10 }
 effect @x <- 2;
-procedure @b -> i64 { @x + 20 }
+procedure @b -> i64 { return @x + 20 }
 effect @call = @a;
 {{ effect @call = @b; behave @print(perform @call); }};
 behave @print(perform @call);

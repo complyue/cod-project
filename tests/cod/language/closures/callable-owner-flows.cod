@@ -1,12 +1,12 @@
 using symbol "std:io" @print;
 region State {ticks:u64;}
 function first(region state:State,n:u64)->func()->const u64 with {region state} {
- if(n==0u64){func()->const u64 {state.ticks}}
+ return if(n==0u64){func()->const u64 {return state.ticks}}
  else{func value = first(state,n-1u64); region view:State = value -> state; view.ticks <- view.ticks+1u64; value}
 }
 function last(region state:State,n:u64)->func()->const u64 with {region state} {
- if(n!=0u64){func value = last(state,n-1u64); region view:State = value -> state; view.ticks <- view.ticks+1u64; value}
- else{func()->const u64 {state.ticks}}
+ return if(n!=0u64){func value = last(state,n-1u64); region view:State = value -> state; view.ticks <- view.ticks+1u64; value}
+ else{func()->const u64 {return state.ticks}}
 }
 owned region state:State <- make State(capacity=128u64){ticks <- 10u64};
 func early = first(state,8u64);
@@ -21,7 +21,7 @@ for(i in 0u64 .. 3u64){{
 behave @print(current());
 for(i in 0u64 .. 3u64){{
  region view:State = current -> state;
- current <- func()->const u64 {view.ticks};
+ current <- func()->const u64 {return view.ticks};
  view.ticks <- view.ticks+1u64;
 }};
 behave @print(current());

@@ -61,7 +61,8 @@ class LLVMEmission {
   };
   size_t cleanup_owner_ = 0;
   struct Continuation {
-    llvm::WeakTrackingVH selected, other, shared, resume;
+    llvm::WeakTrackingVH selected, shared, resume;
+    std::vector<llvm::WeakTrackingVH> others;
   };
   std::vector<Continuation> continuations_;
   struct CallableProtection {
@@ -359,9 +360,11 @@ public:
     for (const auto &[value, from] : edges) result->addIncoming(value, from);
     return result;
   }
-  void continuation(llvm::BasicBlock *selected, llvm::BasicBlock *other,
+  void continuation(llvm::BasicBlock *selected, const std::vector<llvm::BasicBlock *> &inputs,
                     llvm::BasicBlock *shared, llvm::BasicBlock *resume) {
-    continuations_.push_back({selected, other, shared, resume});
+    Continuation continuation{selected, shared, resume, {}};
+    for (auto *input : inputs) if (input != selected) continuation.others.emplace_back(input);
+    continuations_.push_back(std::move(continuation));
   }
   void finish_continuations() {
     // A shared finally executes for distinct pending completions. Carry values
@@ -369,9 +372,9 @@ public:
     // matching continuation. All uses, including native context stores, are
     // known here; unrelated invalid SSA remains a verifier error.
     for (const auto &continuation : continuations_) {
-      if (!continuation.selected || !continuation.other || !continuation.shared || !continuation.resume) continue;
+      if (!continuation.selected || !continuation.shared || !continuation.resume ||
+          std::any_of(continuation.others.begin(), continuation.others.end(), [](const auto &other) { return !other; })) continue;
       auto *selected = llvm::cast<llvm::BasicBlock>(continuation.selected);
-      auto *other = llvm::cast<llvm::BasicBlock>(continuation.other);
       auto *shared = llvm::cast<llvm::BasicBlock>(continuation.shared);
       auto *resume = llvm::cast<llvm::BasicBlock>(continuation.resume);
       auto *function = shared->getParent();
@@ -388,9 +391,10 @@ public:
           if (dominance.dominates(resume, from)) uses.push_back(&use);
         }
         if (uses.empty()) continue;
-        auto *carried = llvm::PHINode::Create(value.getType(), 2, "completion.value", shared->getFirstNonPHIIt());
+        auto *carried = llvm::PHINode::Create(value.getType(), 1 + continuation.others.size(), "completion.value", shared->getFirstNonPHIIt());
         carried->addIncoming(&value, selected);
-        carried->addIncoming(llvm::PoisonValue::get(value.getType()), other);
+        for (const auto &other : continuation.others)
+          carried->addIncoming(llvm::PoisonValue::get(value.getType()), llvm::cast<llvm::BasicBlock>(other));
         for (auto *use : uses) use->set(carried);
       }
     }
@@ -914,6 +918,12 @@ public:
     exception_sites_.push_back(source_context());
     exception_handler_(exception_id(ExceptionCategory::null_pointer), exception_payload(integer(i64(), site), integer(i64(), 0), integer(i64(), 0)));
     enter(next);
+  }
+  void missing_return() {
+    const auto site = exception_sites_.size();
+    exception_sites_.push_back(source_context());
+    exception_handler_(exception_id(ExceptionCategory::missing_return),
+                       exception_payload(integer(i64(), site), integer(i64(), 0), integer(i64(), 0)));
   }
   llvm::Value *nullable_address(llvm::Value *owner, llvm::Value *offset) {
     return b().CreateSelect(is_null(offset), llvm::ConstantPointerNull::get(pointer_type()), address(owner, offset));

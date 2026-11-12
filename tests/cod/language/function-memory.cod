@@ -6,28 +6,28 @@ symbol values : Values;
 function tick(values:Values in O1) -> i64 where {owner O1} {
   val old = values[0u32];
   store(values, 0u32, old + 1);
-  values[0u32]
+  return values[0u32]
 }
-function cell(values:Values in O1) -> i64 where {owner O1} { ref_at(values, 0u32) }
+function cell(values:Values in O1) -> i64 where {owner O1} { return ref_at(values, 0u32) }
 function add_two(values:Values in O1) -> i64 where {owner O1} {
-  store(cell(values), deref(cell(values)) + 2)
+  return store(cell(values), deref(cell(values)) + 2)
 }
 function ([]=)(values:Values in O1, index:u32, value:i64) -> const i64 in O1 where {owner O1} {
   store(values, index, value);
-  values[index]
+  return values[index]
 }
 function update(values:Values in O1) -> i64 where {owner O1} {
   values[0u32] = 41;
-  cell(deref(values))
+  return cell(deref(values))
 }
 function observe(values:Values in O1) -> i64 where {owner O1} {
   val before = values[0u32];
   tick(values);
-  before * 100 + values[0u32]
+  return before * 100 + values[0u32]
 }
 function through_alias(writer:Values in O1, reader:Values in O2) -> i64 where {owner O1, owner O2} {
   store(writer, 0u32, 7);
-  reader[0u32]
+  return reader[0u32]
 }
 
 effect @arena <- region(4096u64);

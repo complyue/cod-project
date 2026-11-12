@@ -1,6 +1,6 @@
 symbol @missing:u64;
-proc current = proc()->const u64 {1u64};
-proc unavailable = proc()->const u64 {@missing};
+proc current = proc()->const u64 {return 1u64};
+proc unavailable = proc()->const u64 {return @missing};
 function install(action:proc()->const u64 in O,value:proc()->const u64,n:u64)->void where {owner O} {
  if(n==0u64) { action <- value; {} } else { install(action,value,n-1u64); {} }
 }

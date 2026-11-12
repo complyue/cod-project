@@ -10,8 +10,8 @@ symbol @relay : proc() -> i64;
 symbol @chained : proc() -> i64;
 effect @x <- 10;
 effect @y <- 20;
-procedure @left() -> i64 { @x }
-procedure @right() -> i64 { @y }
+procedure @left() -> i64 { return @x }
+procedure @right() -> i64 { return @y }
 effect @route = @left;
 procedure @nested() -> i64 {
   val middle = {{
@@ -19,7 +19,7 @@ procedure @nested() -> i64 {
     val inner = {{ effect @route = @left; behave @route() }};
     inner * 1000 + behave @route()
   }};
-  middle * 1000 + behave @route()
+  return middle * 1000 + behave @route()
 }
 procedure @branch(flag:bool) -> i64 {
   val selected = if (flag) {{
@@ -29,12 +29,12 @@ procedure @branch(flag:bool) -> i64 {
     effect @route = @left;
     behave @route()
   }};
-  selected * 1000 + behave @route()
+  return selected * 1000 + behave @route()
 }
 procedure @chained() -> i64 {
   effect @relay = @left;
   effect @route = @relay;
-  behave @route()
+  return behave @route()
 }
 effect @x <- 100;
 effect @y <- 200;

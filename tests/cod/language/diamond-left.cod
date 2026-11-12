@@ -5,7 +5,7 @@ symbol @left : proc() -> i64;
 effect @gain <- 3;
 export import "diamond-shared.cod" @read;
 behave @print(behave @read());
-procedure @left() -> i64 { perform @read() }
+procedure @left() -> i64 { return perform @read() }
 
 export @gain;
 export @left;

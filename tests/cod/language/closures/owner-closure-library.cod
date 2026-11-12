@@ -3,17 +3,17 @@ using "structural-api.cod" Cursor;
 using "std:exceptions" NullPointerException;
 function reader(region state:Counter) -> (func()->const u64 with {region state}) {
   val var ticks -> state.ticks;
-  func [ticks] () -> const u64 { ticks }
+  return func [ticks] () -> const u64 { return ticks }
 }
 proc current_reader(region state:Cursor) -> (proc()->const i64 with {region state} throws NullPointerException) {
   ptr var current -> state.current;
-  proc [current] () -> const i64 throws NullPointerException { current.value }
+  return proc [current] () -> const i64 throws NullPointerException { return current.value }
 }
-function apply(action:(func()->const u64 with {region r})) -> const u64 where {region r:Counter} { action() }
+function apply(action:(func()->const u64 with {region r})) -> const u64 where {region r:Counter} { return action() }
 export reader;
 export current_reader;
 export apply;
 function wrap(action:(func()->const u64 with {region r})) -> (func()->const u64 with {region r}) where {region r:Counter} {
-  func [action] () -> const u64 { action() + 1u64 }
+  return func [action] () -> const u64 { return action() + 1u64 }
 }
 export wrap;

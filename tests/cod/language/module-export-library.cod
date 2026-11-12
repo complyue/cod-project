@@ -1,8 +1,8 @@
 data Packet { value:i64; }
-function helper(p:Packet in O1) -> i64 where {owner O1} { p.value + 1 }
-function read(p:Packet in O1) -> i64 where {owner O1} { helper(p) }
-function create(region arena) -> Packet { deref(alloc arena Packet(8)) }
-proc hidden(p:Packet in O1) -> i64 where {owner O1} { helper(p) }
+function helper(p:Packet in O1) -> i64 where {owner O1} { return p.value + 1 }
+function read(p:Packet in O1) -> i64 where {owner O1} { return helper(p) }
+function create(region arena) -> Packet { return deref(alloc arena Packet(8)) }
+proc hidden(p:Packet in O1) -> i64 where {owner O1} { return helper(p) }
 symbol @secret:i64;
 unit PrivateUnit;
 export Packet;

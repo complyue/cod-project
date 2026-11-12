@@ -2,15 +2,15 @@ using symbol "std:io" @print;
 region State {value:u64;}
 function reader(region r:State)->func()->const u64 with {region r} {
   val var value:u64 in r -> r.value;
-  func()->const u64 {value}
+  return func()->const u64 {return value}
 }
 function maker(region r:State)->(func()->(func()->const u64 with {region r}) with {region r}) {
-  func()->(func()->const u64 with {region r}) {reader(r)}
+  return func()->(func()->const u64 with {region r}) {return reader(r)}
 }
 function step(owned region work:State,
     factory:(func()->(func()->const u64 with {region work}) with {region work}),n:u64)->const u64 {
   func current=factory();
-  if(n==0u64){current()}else{
+  return if(n==0u64){current()}else{
     owned region next<-make State(capacity=256u64){value<-current()+1u64};
     func next_factory=maker(next);
     step(next,next_factory,n-1u64)
@@ -26,15 +26,15 @@ symbol @bias:u64;
 effect @bias <- 2u64;
 function reader_proc(region r:State)->proc()->const u64 with {region r} {
   val var value:u64 in r -> r.value;
-  proc()->const u64 {value + @bias}
+  return proc()->const u64 {return value + @bias}
 }
 function maker_proc(region r:State)->(func()->(proc()->const u64 with {region r}) with {region r}) {
-  func()->(proc()->const u64 with {region r}) {reader_proc(r)}
+  return func()->(proc()->const u64 with {region r}) {return reader_proc(r)}
 }
 proc step_proc(owned region work:State,
     factory:(func()->(proc()->const u64 with {region work}) with {region work}),n:u64)->const u64 {
   proc current=factory();
-  if(n==0u64){current()}else{
+  return if(n==0u64){current()}else{
     owned region next<-make State(capacity=256u64){value<-current()+1u64};
     step_proc(next,maker_proc(next),n-1u64)
   }
@@ -49,13 +49,13 @@ behave @print(step_proc(procedure_seed,maker_proc(procedure_seed),32u64));
 
 function outer_maker(region r:State)
  ->(func()->(func()->(func()->const u64 with {region r}) with {region r}) with {region r}) {
-  func()->(func()->(func()->const u64 with {region r}) with {region r}) {maker(r)}
+  return func()->(func()->(func()->const u64 with {region r}) with {region r}) {return maker(r)}
 }
 function outer_step(owned region work:State,
  factory:(func()->(func()->(func()->const u64 with {region work}) with {region work}) with {region work}),
  n:u64)->const u64 {
   func current=factory()();
-  if(n==0u64){current()}else{
+  return if(n==0u64){current()}else{
     owned region next<-make State(capacity=256u64){value<-current()+1u64};
     outer_step(next,outer_maker(next),n-1u64)
   }
@@ -67,13 +67,13 @@ behave @print(outer_step(outer_seed,outer_maker(outer_seed),8u64));
 # Invoking that leaf itself demands another factory and its returned entry.
 function late_maker(region r:State)
  ->(func()->(func()->const u64 with {region r}) with {region r}) {
-  func()->(func()->const u64 with {region r}) {
-    func()->const u64 {maker(r)()()}
+  return func()->(func()->const u64 with {region r}) {
+    return func()->const u64 {return maker(r)()()}
   }
 }
 function late_step(owned region work:State,
  factory:(func()->(func()->const u64 with {region work}) with {region work}),n:u64)->const u64 {
-  if(n>0u64){
+  return if(n>0u64){
     owned region next<-make State(capacity=256u64){value<-work.value+1u64};
     late_step(next,late_maker(next),n-1u64)
   }else{factory()()}

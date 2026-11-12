@@ -4,7 +4,7 @@ using "record-vocabulary.cod" Node;
 using "record-vocabulary.cod" Entity;
 using "record-vocabulary.cod" Arena;
 using "record-forward.cod" recursive;
-function score(value:Entity in r)->const u64 where {region r:Arena} {77u64}
+function score(value:Entity in r)->const u64 where {region r:Arena} {return 77u64}
 owned region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};
 ref item=alloc arena Node(5u64);
 func selected=recursive;

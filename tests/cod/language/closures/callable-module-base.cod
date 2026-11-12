@@ -1,9 +1,9 @@
-function score(x:T) -> const u64 where T { 1u64 }
-function twice(x:u64) -> const u64 { score(x) + score(x) }
+function score(x:T) -> const u64 where T { return 1u64 }
+function twice(x:u64) -> const u64 { return score(x) + score(x) }
 function factory() -> func(u64)->const u64 {
-  func (x:u64) -> const u64 { score(x) + score(x) }
+  return func (x:u64) -> const u64 { return score(x) + score(x) }
 }
-proc procedure_twice(x:u64) -> const u64 { score(x) + score(x) }
+proc procedure_twice(x:u64) -> const u64 { return score(x) + score(x) }
 export score;
 export twice;
 export factory;
@@ -11,24 +11,24 @@ export procedure_twice;
 
 symbol @recursive:proc(u64)->const u64;
 proc recursive_value(n:u64)->const u64 {
-  if (n == 0u64) { score(n) }
+  return if (n == 0u64) { score(n) }
   else { behave @recursive(n - 1u64) + score(n) }
 }
 export @recursive;
 export recursive_value;
 
-function generic_twice(x:T)->const u64 where T { score(x) + score(x) }
+function generic_twice(x:T)->const u64 where T { return score(x) + score(x) }
 export generic_twice;
 
 region MethodState {ticks:u64;}
 function reader(const region state:MethodState)->func()->const u64 with {region state} {
-  func()->const u64 {state.ticks}
+  return func()->const u64 {return state.ticks}
 }
-function owner_score(region state:MethodState)->const u64 {100u64}
-function owner_score(const region state:MethodState)->const u64 {score(state.ticks)}
+function owner_score(region state:MethodState)->const u64 {return 100u64}
+function owner_score(const region state:MethodState)->const u64 {return score(state.ticks)}
 function owner_loop(region state:MethodState)->const u64 {
   func current = reader(state);
-  fold(i in 0u64 .. 2u64, total=0u64) {{total+owner_score(current -> state)}}
+  return fold(i in 0u64 .. 2u64, total=0u64) {{total+owner_score(current -> state)}}
 }
 export MethodState;
 export owner_loop;

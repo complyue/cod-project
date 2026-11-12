@@ -1,10 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 181 · Recorded: 2026-11-10.
+Prototype reference revision: 182 · Recorded: 2026-11-12.
 
 ## Design authority
 
-- **Explicit scope boundary:** [H-319](../../../design/DesignAuthorityRegistry.md#h-319)/[K-444](../../../design/DesignAuthorityRegistry.md#k-444) confirms ordinary grouping braces and explicit double-brace lexical/effect scopes, plus defer only within an explicit scoped block when inside a loop. C-63/P-286–P-287 preserves C-65 lifetime and C-36 effect requirements. This scope change is not implemented by the colon/nullable checkpoint; acceptance must cover name visibility, initialization, cleanup, conditional paths and loops. H-320's contextual callable/capture boundary remains pending; no escaping closure or wider qualification is implied.
+- **Callable completion and scopes:** [H-319/H-365](../../../design/DesignAuthorityRegistry.md#h-365), [H-361/H-362](../../../design/DesignAuthorityRegistry.md#h-361) and [K-525/K-526](../../../design/DesignAuthorityRegistry.md#k-526) govern this reference's source/control coverage. Ordinary braces share declarations/effects; double braces, calls and modules own full scopes. Loop iterations restore effects/resources; declarations require a nested explicit scope. Value-returning proc/func bodies require explicit `return`; void fallthrough is allowed. Missing required return raises unchecked `MissingReturnException` with `-Wmissing-return`. Typed returns pass through finally and can replace pending return/error, retaining owner/access and exact cleanup. [Return evidence](return-validation.json) bounds native acceptance. C-63/P-324/P-326 derives visible control and resource responsibility from charter §§2–3/§6/§8/§12; D-14/D-18 dependencies remain. Scope-owned defer, pure/TCO and broader pending designs remain outside this implementation acceptance.
 
 - **Nullable calls and uniform annotations:** [H-317/H-318](../../../design/DesignAuthorityRegistry.md#h-317)/[K-443](../../../design/DesignAuthorityRegistry.md#k-443) accepts explicit nullable ptr call boundaries, retains ptr edges for cycles and uses single-colon annotations with arrow results. C-72/P-284–P-285 preserves C-65 owners/access and C-63 checked failures; charter §§1–3 and D-16 compatibility were reviewed. Acceptance requires nullable forwarding without payload access, checked dereference, owner/result rejection and migrated grammar. H-319 establishes the revised scope boundary; native colon/nullable acceptance is recorded by K-444, while scope/defer implementation remains separate.
 
@@ -50,7 +50,7 @@ Line comments use `#`. The compiler diagnoses `//` outside strings/comments as r
 
 ## Intrinsic exception control
 
-[ExceptionControl.md](../../../design/ExceptionControl.md) (D-17) is the bounded H-267 contract; [K-410](../../../design/DesignAuthorityRegistry.md#k-410) records this implementation increment. `using "std:exceptions" InvalidCapacity;` selects an exact catch identity, with normal local alias support. `try { ... } catch (e : const InvalidCapacity) { ... } finally { ... }` produces the normal or handled value; finally yields void. A final `catch (e)` accepts remaining intrinsic categories. `throw e` propagates a caught value and `throw;` rethrows the active catch. Finally failure replaces pending completion without adding an automatic cause.
+[ExceptionControl.md](../../../design/ExceptionControl.md) (D-17) is the bounded H-267 contract; [K-410](../../../design/DesignAuthorityRegistry.md#k-410) records this implementation increment. `using "std:exceptions" InvalidCapacity;` selects an exact catch identity, with normal local alias support. `try { ... } catch (e : const InvalidCapacity) { ... } finally { ... }` produces the normal or handled value; finally normally yields void, or uses explicit `return` to complete its enclosing callable. A final `catch (e)` accepts remaining intrinsic categories. `throw e` propagates a caught value and `throw;` rethrows the active catch. Finally failure replaces pending completion without adding an automatic cause.
 
 [The focused evidence](exception-validation.json) covers the three intrinsic allocation failures, nested control and cleanup, original failure sites through rethrow, captured/hidden binding restoration, and category preservation through loops. The runtime fault test injects a provider `std::bad_alloc` without exhausting host memory. `python3 tests/cod/language/exception_runtime_tests.py` runs that check plus the key invalid-catch/finally/effect-context cases.
 
@@ -68,7 +68,7 @@ Line comments use `#`. The compiler diagnoses `//` outside strings/comments as r
 
 [Ptr storage acceptance](ptr-storage-validation.json) covers native initialization/alias/call workflows, early-read and lifetime rejection, source sequencing and LLVM/bitcode output. Existing language fixtures use explicit external owners for regional parameters and explicit const results when returning copied local bits.
 
-Builtin reference assignment rejects writable-to-readonly rebinding, preserves fixed owners and returns the destination's resulting access. Writable `a = b = c` chains therefore remain writable; Builtin bits `<-` produces a readonly view; a user transfer method may instead return void. Selected `(=)` methods can distinguish const parameters and operate on the caller's lhs binding. A writable-lhs/const-rhs method is allowed, but its body cannot manufacture writable access from that readonly source. An assignment method must finish with its destination parameter as a semantic safeguard; returning an equivalent alias is invalid. Const weakening applies only to inputs; no implicit lhs qualification or value conversion is used. Ambiguities and selected-body failures reject without fallback. Initialized same-owner pointer rebinding works across repeated/nested loops without proving swap parity. The remaining initially-uninitialized-target case needs pre-loop initialization in the bounded implementation. Definite initialization can use pre-loop fallback storage or an explicit zero-iteration `else` path.
+Builtin reference assignment rejects writable-to-readonly rebinding, preserves fixed owners and returns the destination's resulting access. Writable `a = b = c` chains therefore remain writable; Builtin bits `<-` produces a readonly view; a user transfer method may instead return void. Selected `(=)` methods can distinguish const parameters and operate on the caller's lhs binding. A writable-lhs/const-rhs method is allowed, but its body cannot manufacture writable access from that readonly source. An assignment method must explicitly return its destination parameter as a semantic safeguard; returning an equivalent alias is invalid. Const weakening applies only to inputs; no implicit lhs qualification or value conversion is used. Ambiguities and selected-body failures reject without fallback. Initialized same-owner pointer rebinding works across repeated/nested loops without proving swap parity. The remaining initially-uninitialized-target case needs pre-loop initialization in the bounded implementation. Definite initialization can use pre-loop fallback storage or an explicit zero-iteration `else` path.
 
 [Architecture acceptance](world-architecture-validation.json) maps every goal requirement to source and current evidence. Its 15 supplemental checks cover export privacy, distinct identities, binding/lifetime rejection, receiver-local conformance merging and isolation. K-395 supplies 27 checks on the same compiler; hashes verify that these records apply together. Full-suite and relocation reports remain historical.
 
@@ -184,10 +184,10 @@ build/bin/cod --check tests/cod/language/using.cod --emit-llvm /tmp/cod-example.
 ```text
 symbol x : i64, p : proc() -> i64;
 using symbol "std:io" @print;
-function twice(value: i64) -> i64 { value * 2 }
+function twice(value: i64) -> i64 { return value * 2 }
 global seed: i64 = twice(3);
 effect @x <- seed;
-proc @p() -> i64 { @x }
+proc @p() -> i64 { return @x }
 effect @x <- 9;
 behave @print(perform @p);  # 6: definition-time value
 behave @print(behave @p);   # 9: current dynamic binding
@@ -228,7 +228,7 @@ Type selection supplies source-visible associated signatures, including factorie
 
 ```text
 import "method-library.cod" score as local_score;
-function local_score(x:bool) -> i64 { if (x) { 1 } else { 0 } }
+function local_score(x:bool) -> i64 { return if (x) { 1 } else { 0 } }
 ```
 
 For one source family selected under an ordinary local name, import permits local overloads and using alone is rejected. This applies to functions and lexical procedures and is checked before native execution. Source methods retain their definition contexts; direct procedure calls use current dynamic bindings. The extension participates in caller-selected ordinary implementation views; it is not published program-wide. Source names keep their callable identities.
@@ -267,10 +267,10 @@ This defines local_read from the source procedure body in the receiver's lexical
 data Position { index:i64; weight:f32; }
 function advance(p:Position, step:i64) -> Position {
     setfield(p, index, deref(p).index + step);
-    deref(p)
+    return deref(p)
 }
-function score(p:Position) -> f32 { p.weight }
-function score(x:f32) -> f32 { x * 2.0f32 }
+function score(p:Position) -> f32 { return p.weight }
+function score(x:f32) -> f32 { return x * 2.0f32 }
 region symbol @arena;
 effect @arena <- region(1024u64);
 {
@@ -344,9 +344,9 @@ Indexed payload transfer `a[i] <- value` selects `([]<-)(a, i, value)` without f
 unit metres;
 unit cm;
 conversion function cm_to_metres(x:f64(cm)) -> f64(metres) {
-    metres(scalar(x) / 100.0)
+    return metres(scalar(x) / 100.0)
 }
-function distance(x:f64(metres*)) -> f64 { scalar(x) }
+function distance(x:f64(metres*)) -> f64 { return scalar(x) }
 ```
 
 A unit definition creates a distinct compile-time identity independent of numerical storage. `metres(2.0)` has type `f64(metres)` and `metres(2u32)` has type `u32(metres)`; `scalar(x)` extracts the representation explicitly. Aliases preserve identity and do not add a runtime tag. Methods can define meaningful arithmetic on unit values.
@@ -363,7 +363,7 @@ A `conversion function` requires one exact UoM parameter and an explicit UoM res
 
 ```text
 function sum(n:u32) -> u64 {
-    fold (i in 0u32 .. n, total = 0u64) { total + u64(i) }
+    return fold (i in 0u32 .. n, total = 0u64) { total + u64(i) }
 }
 for (i in 0 .. 10) { behave @print(i); };
 ```
@@ -390,7 +390,7 @@ effect @arena <- region(4096u64);
 effect @rates = alloc @arena Rates(4u64, 0.5f32);
 store(@rates, Neuron(1u32), 2.0f32);
 function total(a:Rates) -> f32 {
-  fold (i in Neuron(0u32) .. Neuron(u32(len(a))), sum = 0.0f32) { sum + a[i] }
+  return fold (i in Neuron(0u32) .. Neuron(u32(len(a))), sum = 0.0f32) { sum + a[i] }
 }
 ```
 
@@ -425,7 +425,7 @@ region symbol @arena:Pool;
 symbol @left:Node in r, @right:Node in r where {region r:Pool};
 effect @arena <- make Pool(capacity = 4096u64) { tag <- 1 };
 effect @left = deref(alloc @arena Node(10)), @right = deref(alloc @arena Node(20));
-effect proc @read() -> i64 { touch @right; @left.value };
+effect proc @read() -> i64 { touch @right; return @left.value };
 ```
 
 The group evaluates every RHS against the preceding bindings, then installs the new references together. An RHS exception leaves all group bindings unchanged; its own regional edits are not rolled back. Shared owner means one actual region, with the declared root constraint. Object references require a region-symbol-backed live resource. Bits use direct typed TLS storage; neither object nor procedure rebinding accepts effect-arrow.
