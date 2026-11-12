@@ -1,0 +1,6 @@
+using symbol "std:io" @print;
+proc run()->void {
+  defer catch(error) {throw error;};
+  defer { {{ptr absent:u64 = null; behave @print(absent);}}; };
+}
+run();

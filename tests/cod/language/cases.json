@@ -2907,5 +2907,39 @@
     "file": "owner-binding.cod",
     "exit": 0,
     "stdout": "3\n10\n8\n"
+  },
+  {
+    "file": "scopes/defer-category-flow.cod",
+    "exit": 0,
+    "stdout": "3\n2\n3\n3\n3\n3\n4\n6\n5\n7\n8\n9\n"
+  },
+  {
+    "file": "scopes/defer-category-body-npe.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/defer-category-action-npe.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/exception-category-loop-npe.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/exception-category-mutable-npe.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/exception-category-loop.cod",
+    "exit": 0,
+    "stdout": "4\n"
   }
 ]

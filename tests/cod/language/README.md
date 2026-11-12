@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 187 · Recorded: 2026-11-12.
+Prototype reference revision: 188 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Exception category flow:** [K-539](../../../design/DesignAuthorityRegistry.md#k-539), reference188 under D-17r38, preserves catch-all/deferred/fold category possibilities until flow closure. [Verification](exception-category-validation.json) distinguishes valid unchecked rethrows from real checked NPEs, including later loop iterations and mutable reloads. Native exception storage, callable checked contracts and cleanup are unchanged. Registration-order/category correlation and the remaining defer integration are separate work.
 
 - **Implicit owner bindings:** [H-382](../../../design/DesignAuthorityRegistry.md#h-382)/[K-538](../../../design/DesignAuthorityRegistry.md#k-538), reference187, covers the const lexical binding of inferred owners. Generic owners retain erased provenance metadata; region-specific owners retain their authorized borrowed capability. Tests reject symbolic bypass, rebinding, duplicate declarations and implicit region access while permitting ordinary target writes. Binding immutability does not freeze contents or create runtime owner storage. [Verification](symbol-lookup-validation.json) records 487 language checks and thirty native callable cases with unchanged allocation/release accounting and LLVM/bitcode sizes.
 

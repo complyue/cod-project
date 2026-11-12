@@ -91,6 +91,7 @@ public:
   FlowCondition &operator|=(FlowCondition other) { return *this = either(*this, std::move(other)); }
 };
 using ReadOnly = FlowCondition;
+using ExceptionPossibilities = std::array<FlowCondition, concrete_exception_count>;
 struct InitializationRead { size_t proof, cell; Location at; };
 struct Value {
   Type type = Type::void_type;
@@ -121,6 +122,7 @@ struct Value {
   std::shared_ptr<CaptureUse> capture_use = {}; // Compile-time demand for an enclosing dynamic capture.
   bool replayed = false; // Captured bits/procedure values are installed in the active TLS scope.
   bool provenance_only = false; // Erased owner binding; its actual owner is in Locals::owner_anchors.
+  std::shared_ptr<const ExceptionPossibilities> exception_facts = {}; // Compiler reachability, independent of the native category.
   bool borrowed_arguments = false; // An external-owner variadic pack selects target views.
   size_t result_type_origin = 0;
   std::vector<size_t> result_fact_origins = {}; // Compiler-only checked returns, not runtime tags.
@@ -427,6 +429,7 @@ class Compiler {
   bool module_top_level_ = false;
   bool region_initializer_ = false;
   bool npe_allowed_ = false;
+  std::deque<ExceptionPossibilities> exception_flows_;
   bool regional_runtime_ = false;
   size_t next_unit_ = 0;
   LLVMEmission ir_;
@@ -607,11 +610,12 @@ class Compiler {
       });
     });
   }
-  void require_npe_handler(const Location &at) {
+  void require_npe_handler(const Location &at, FlowCondition possible = true) {
     const auto coverage = npe_coverage();
     const std::string message = "checked NullPointerException requires a local catch or throws NullPointerException on the immediate func/proc; module top level must catch it";
-    if (coverage.pending()) deferred_checks_.push_back({[coverage] { return !bool(coverage); }, at, message});
-    else if (!coverage) fail(at, message);
+    if (possible.pending() || coverage.pending())
+      deferred_checks_.push_back({[possible, coverage] { return bool(possible) && !bool(coverage); }, at, message});
+    else if (possible && !coverage) fail(at, message);
   }
   bool deferred_handles(size_t queue, size_t category) const {
     // A missing handler is witnessed by a finite path to the empty queue.
@@ -907,11 +911,35 @@ class Compiler {
   llvm::Value *exception_category(const Value &value) {
     return value.type.identity ? ir_.bits(Type::uint64, value.type.identity) : value.exception_category;
   }
-  static bool may_be_npe(llvm::Value *category) {
-    return LLVMEmission::possible_exceptions(category).contains(exception_id(ExceptionCategory::null_pointer));
+  static ExceptionPossibilities exception_possibilities(const Value &value) {
+    if (value.exception_facts) return *value.exception_facts;
+    ExceptionPossibilities result{};
+    if (value.type.kind != Type::exception) return result;
+    if (value.type.identity) result.at(value.type.identity - 1) = true;
+    else for (const auto category : LLVMEmission::possible_exceptions(value.exception_category))
+      result.at(category - 1) = true;
+    return result;
+  }
+  static void merge_exception_possibilities(ExceptionPossibilities &into, const Value &value) {
+    const auto incoming = exception_possibilities(value);
+    for (size_t i = 0; i < into.size(); ++i) into[i] |= incoming[i];
+  }
+  std::pair<size_t, std::shared_ptr<const ExceptionPossibilities>> pending_exception_flow(const Value &initial) {
+    const auto flow = exception_flows_.size();
+    exception_flows_.push_back(exception_possibilities(initial));
+    auto facts = std::make_shared<ExceptionPossibilities>();
+    for (size_t i = 0; i < facts->size(); ++i)
+      facts->at(i) = FlowCondition::deferred([this, flow, i] { return bool(exception_flows_.at(flow)[i]); });
+    return {flow, std::move(facts)};
   }
   void raise_exception(Value error) {
+    const auto possibilities = exception_possibilities(error);
+    std::set<size_t> categories;
+    for (size_t i = 0; i < possibilities.size(); ++i)
+      if (possibilities[i].pending() || possibilities[i]) categories.insert(i + 1);
     ir_.dispatch_exception(exception_category(error), [&](size_t category) {
+      const auto possible = possibilities.at(category - 1);
+      if (!possible.pending() && !possible) { ir_.unreachable(); return; }
       const auto memory = llvm::SaveAndRestore(callable_holders_);
       std::vector<std::pair<size_t, size_t>> initialized;
       const auto restore_initialization = llvm::scope_exit([&] {
@@ -947,10 +975,13 @@ class Compiler {
         if (frame->first == scope.owner_scope) { environment = *frame->second; break; }
       auto incoming = error;
       incoming.exception_category = ir_.bits(Type::uint64, category);
+      auto selected = std::make_shared<ExceptionPossibilities>();
+      selected->at(category - 1) = possible;
+      incoming.exception_facts = std::move(selected);
       ir_.unwind(scope.cleanup, scope.owner_scope);
       landing.incoming.push_back({incoming, ir_.here(), std::move(state), std::move(environment)});
       ir_.jump(landing.block);
-    });
+    }, std::move(categories));
   }
 
   void warn(Warning kind, const Location &at, std::string message) {
@@ -1322,6 +1353,7 @@ class Compiler {
     if (value.global_slot) {
       value.native = ir_.read({value.type, nullptr, value.global_slot});
       value.global_slot = nullptr;
+      value.exception_facts.reset();
     }
     if (value.type.kind != Type::reference) {
       check_nullable(value, at);
@@ -1337,6 +1369,7 @@ class Compiler {
       const auto loaded = loaded_value(value.type, ir_.read(place(value, at)));
       value.native = loaded.native;
       value.exception_category = loaded.exception_category;
+      value.exception_facts.reset();
     }
     if (value.callable_address) {
       CallableFlow load; load.address = value.callable_address; load.memory = callable_holders_;
@@ -2279,6 +2312,7 @@ class Compiler {
     auto result = scalar(type, env.captured(id, found) && !found->replayed ? found->native : ir_.read_symbol(id, type), found->region_id);
     result.conformances = found->conformances; result.result_fact_origins = found->result_fact_origins;
     result.exception_category = found->exception_category;
+    result.exception_facts = found->exception_facts;
     result.read_only = found->read_only;
     return result;
   }
@@ -4520,6 +4554,7 @@ class Compiler {
       }
       if (result.procedure) fail(at, "a dynamic argument index cannot select a procedure");
       std::vector<llvm::Value *> native, categories;
+      auto facts = result.type.kind == Type::exception ? std::make_shared<ExceptionPossibilities>() : nullptr;
       result.pointer.reset(); result.reference_field.reset(); result.referent = nullptr;
       result.nullable = false; result.read_only = false;
       if (std::any_of(elements.begin(), elements.end(), [](const Value &value) {
@@ -4529,6 +4564,7 @@ class Compiler {
       for (const auto &stored : elements) {
         const auto element = array.borrowed_arguments ? stored : read_value(stored, at);
         valid_view(element, at);
+        if (facts) merge_exception_possibilities(*facts, element);
         require(element.type, result.type, at);
         if (storage_owner(element) != storage_owner(result) || bool(element.storage) != bool(result.storage))
           fail(at, "a dynamic argument index requires one live storage owner");
@@ -4551,6 +4587,7 @@ class Compiler {
         result.native = nullptr;
       } else result.native = ir_.argument_element(result.type, index.native, native);
       if (!categories.empty()) result.exception_category = ir_.argument_element(Type::uint64, index.native, categories);
+      result.exception_facts = std::move(facts);
       result.pointer_view = true;
       if (!array.borrowed_arguments && local_bits(result.type)) result = bits_value(std::move(result));
       join_result_facts(result, elements);
@@ -5760,6 +5797,7 @@ class Compiler {
     return try_expression(guarded, module, env, locals, function_context, false, true, {}, nullptr, &emission);
   }
   Value drain_deferred(DeferredScope &scope, Environment &env, Value incoming) {
+    const auto [flow, pending_facts] = pending_exception_flow(incoming);
     auto *error_payload = ir_.native_slot(ir_.type_of(exception_type(ExceptionCategory::system)), "defer.error");
     auto *error_category = ir_.native_slot(ir_.type_of(Type::uint64), "defer.category");
     ir_.write_native(error_payload, incoming.native);
@@ -5849,6 +5887,7 @@ class Compiler {
         return_targets_.push_back(&replacement);
         auto pending = scalar(exception_type(ExceptionCategory::system), ir_.read_native(error_payload));
         pending.exception_category = ir_.read_native(error_category);
+        pending.exception_facts = pending_facts;
         if (action.handles_error) ir_.write_native(error_category, ir_.bits(Type::uint64, 0));
         const auto result = action.invoke(record, env, std::move(pending));
         return_targets_.pop_back();
@@ -5872,6 +5911,7 @@ class Compiler {
           ir_.enter(landing.block);
           std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> payloads, categories;
           for (const auto &edge : landing.incoming) {
+            merge_exception_possibilities(exception_flows_.at(flow), edge.error);
             check_flow(edge.regions, action);
             payloads.emplace_back(edge.error.native, edge.from);
             categories.emplace_back(exception_category(edge.error), edge.from);
@@ -5897,6 +5937,7 @@ class Compiler {
     ir_.enter(failed);
     auto error = scalar(exception_type(ExceptionCategory::system), ir_.read_native(error_payload));
     error.exception_category = category;
+    error.exception_facts = pending_facts;
     clear_return_resource();
     raise_exception(std::move(error));
     ir_.enter(resume);
@@ -6320,6 +6361,12 @@ class Compiler {
     if (has_else) empty_branch = ir_.branch(ir_.binary(first.type, "<", first.native, last.native));
     auto native_loop = ir_.loop(first.type, first.native, last.native, accumulator.native,
         accumulator.type.kind == Type::exception ? exception_category(accumulator) : nullptr);
+    std::optional<size_t> exception_flow;
+    if (accumulator.type.kind == Type::exception) {
+      auto [flow, facts] = pending_exception_flow(accumulator);
+      exception_flow = flow;
+      accumulator.exception_facts = std::move(facts);
+    }
     auto inner_locals = locals.nested();
     auto index_value = scalar(first.type, native_loop.index);
     index_value.loop_control = native_loop.index;
@@ -6433,6 +6480,8 @@ class Compiler {
       for (size_t i = 0; i < before.holdings.size(); ++i)
         if (before.holdings[i] != after.holdings[i])
           fail(expr.at, "a repeating loop cannot consume an owner from outside its iteration scope");
+    if (exception_flow && !empty && next.type != Type::never)
+      merge_exception_possibilities(exception_flows_.at(*exception_flow), next);
     ir_.end_loop(native_loop, next.native, next.type.kind == Type::exception ? exception_category(next) : nullptr);
     if (has_else) {
       const bool body_completes = !empty && next.type != Type::never;
@@ -6821,6 +6870,11 @@ class Compiler {
     result.referent = nullptr;
     result.native = select([](const Value &value) { return value.native; });
     result.exception_category = select([](const Value &value) { return value.exception_category; });
+    if (result.type.kind == Type::exception) {
+      auto facts = std::make_shared<ExceptionPossibilities>();
+      for (const auto &alternative : alternatives) merge_exception_possibilities(*facts, *alternative.value);
+      result.exception_facts = std::move(facts);
+    }
     if (result.storage)
       result.storage->address = select([](const Value &value) { return value.storage->address; });
     if (result.reference_field) {
@@ -6917,8 +6971,12 @@ class Compiler {
           return ir_.phi(first_value->getType(), incoming);
         };
         value.native = select([](const Value &item) { return item.native; });
-        if (value.type.kind == Type::exception)
+        if (value.type.kind == Type::exception) {
           value.exception_category = select([&](const Value &item) { return exception_category(item); });
+          auto facts = std::make_shared<ExceptionPossibilities>();
+          for (const auto &alternative : alternatives) merge_exception_possibilities(*facts, *alternative.value);
+          value.exception_facts = std::move(facts);
+        }
       }
       if (!region_ids.empty() && std::any_of(region_ids.begin(), region_ids.end(), [&](size_t owner) { return owner != region_ids.front(); })) {
         if (region_ids.size() != edges.size()) fail(at, "symbol alternatives require regional provenance on every path");
@@ -7016,7 +7074,9 @@ class Compiler {
     std::set<size_t> origins;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> values, categories;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> addresses;
+    auto exception_facts = result.type.kind == Type::exception ? std::make_shared<ExceptionPossibilities>() : nullptr;
     for (const auto &completion : completions) {
+      if (result.type.kind == Type::exception) merge_exception_possibilities(*exception_facts, completion.value);
       if (completion.value.type != result.type && completion.value.type.kind == Type::region &&
           result.type.kind == Type::region && completion.value.type.owned && result.type.owned &&
           (completion.value.result_type_origin || result.result_type_origin)) {
@@ -7063,6 +7123,7 @@ class Compiler {
     if (!values.empty()) result.native = ir_.phi(ir_.type_of(result.type), values);
     if (!addresses.empty()) result.storage->address = ir_.phi(addresses.front().first->getType(), addresses);
     if (!categories.empty()) result.exception_category = ir_.phi(ir_.type_of(Type::uint64), categories);
+    if (result.type.kind == Type::exception) result.exception_facts = std::move(exception_facts);
     if (native_callable(result) && !result.storage) {
       result.storage = StorageView{ir_.hold_callable(result.native, module_lifetime), local_scope_, {}};
       register_callable_holder(result);
@@ -7151,7 +7212,9 @@ class Compiler {
       auto state = incoming.front().regions;
       std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> payloads, categories;
       std::vector<EnvironmentEdge> bindings;
+      auto facts = std::make_shared<ExceptionPossibilities>();
       for (const auto &edge : incoming) {
+        merge_exception_possibilities(*facts, edge.error);
         intersect_flow(state, edge.regions);
         payloads.emplace_back(edge.error.native, edge.from);
         categories.emplace_back(exception_category(edge.error), edge.from);
@@ -7160,6 +7223,7 @@ class Compiler {
       restore_flow(state);
       auto error = scalar(exception_type(ExceptionCategory::system), ir_.phi(ir_.type_of(exception_type(ExceptionCategory::system)), payloads));
       error.exception_category = ir_.phi(ir_.type_of(Type::uint64), categories);
+      error.exception_facts = std::move(facts);
       env = join_environments(bindings, expr.at);
       return error;
     };
@@ -7296,7 +7360,9 @@ class Compiler {
     Value finished;
     if (emission && emission->cleanup) {
       std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> payloads, categories;
+      auto facts = std::make_shared<ExceptionPossibilities>();
       for (const auto &path : pending) {
+        if (path.kind == CompletionKind::failed) merge_exception_possibilities(*facts, path.value);
         payloads.emplace_back(path.kind == CompletionKind::failed ? path.value.native :
             llvm::Constant::getNullValue(ir_.type_of(exception_type(ExceptionCategory::system))), path.from);
         categories.emplace_back(path.kind == CompletionKind::failed ? exception_category(path.value) :
@@ -7305,6 +7371,7 @@ class Compiler {
       auto incoming = scalar(exception_type(ExceptionCategory::system),
           ir_.phi(ir_.type_of(exception_type(ExceptionCategory::system)), payloads));
       incoming.exception_category = ir_.phi(ir_.type_of(Type::uint64), categories);
+      incoming.exception_facts = std::move(facts);
       finished = emission->cleanup(std::move(incoming));
     } else finished = block(*finally, module, env, locals, function_context);
     require(finished.type, Type::void_type, finally->at);
@@ -7650,7 +7717,7 @@ class Compiler {
         if (cause.type.kind != Type::exception) fail(expr.at, "an explicit cause requires an intrinsic exception value");
         error.native = ir_.exception_chain(error.native, cause.native, exception_category(cause));
       }
-      if (may_be_npe(exception_category(error))) require_npe_handler(expr.at);
+      require_npe_handler(expr.at, exception_possibilities(error).at(exception_id(ExceptionCategory::null_pointer) - 1));
       raise_exception(error);
       return scalar(Type::never, nullptr);
     }

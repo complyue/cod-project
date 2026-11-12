@@ -205,7 +205,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='cod-defer-native-') as temporary:
         scratch = Path(temporary)
         for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
-                     'defer-checked', 'defer-value-scope'):
+                     'defer-checked', 'defer-value-scope', 'defer-category-flow'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':

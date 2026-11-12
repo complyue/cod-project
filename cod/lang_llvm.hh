@@ -612,8 +612,8 @@ public:
     enter(failure);
     auto *error = b().CreateExtractValue(returned, {1});
     dispatch_exception(category, [&](size_t kind) {
-      const bool possible = definition.complete ? definition.failures.contains(kind) :
-                            !exception_categories.at(kind).checked || definition.checked_null;
+      const bool possible = (!exception_categories.at(kind).checked || definition.checked_null) &&
+                            (!definition.complete || definition.failures.contains(kind));
       if (possible) exception_handler_(kind, error);
       else unreachable();
     });
@@ -929,8 +929,9 @@ public:
     result.erase(0);
     return result;
   }
-  void dispatch_exception(llvm::Value *category, const std::function<void(size_t)> &emit) {
-    const auto possible = possible_exceptions(category);
+  void dispatch_exception(llvm::Value *category, const std::function<void(size_t)> &emit,
+                          std::optional<std::set<size_t>> candidates = {}) {
+    const auto possible = candidates ? std::move(*candidates) : possible_exceptions(category);
     for (const auto kind : possible) {
       if (kind == *possible.rbegin()) { emit(kind); return; }
       auto *match = label("exception.type");

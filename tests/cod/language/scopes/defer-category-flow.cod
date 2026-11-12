@@ -1,0 +1,29 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+proc bad()->void {effect @arena <- region(0u64);}
+proc rethrow()->void {
+  defer catch(error) {behave @print(error.category); throw;} finally {behave @print(2u64);};
+  bad();
+}
+try {rethrow();} catch(error:const InvalidCapacity) {behave @print(3u64);};
+proc repeated(count:u64)->void {
+  for(i in 0u64 .. count) {defer catch(error) {behave @print(error.category); throw error;};};
+  bad();
+}
+try {repeated(3u64);} catch(error:const InvalidCapacity) {behave @print(4u64);};
+proc nested()->void {
+  defer catch(error) {behave @print(5u64); throw;};
+  defer {
+    defer catch(error) {behave @print(6u64); throw;};
+    bad();
+  };
+}
+try {nested();} catch(error:const InvalidCapacity) {behave @print(7u64);};
+proc composed()->void {
+  defer catch(error) {
+    try {throw error;} catch(again) {throw;}
+  };
+  try {bad();} finally {behave @print(8u64);};
+}
+try {composed();} catch(error:const InvalidCapacity) {behave @print(9u64);};
