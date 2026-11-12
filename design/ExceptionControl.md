@@ -1,6 +1,6 @@
 # CoD exception control and regional cleanup
 
-Design revision: 25 · Recorded: 2026-11-12 · Status: accepted exception/lifecycle, checked-NPE and defer requirements; explicit return/defer contract confirmed; loop declarations checked, grouping/defer/return implementation outstanding.
+Design revision: 26 · Recorded: 2026-11-12 · Status: accepted exception/lifecycle, checked-NPE and defer requirements; explicit return/defer contract confirmed; loop declarations checked, grouping/defer/return implementation outstanding.
 
 ## Design authority
 
@@ -10,7 +10,7 @@ Design revision: 25 · Recorded: 2026-11-12 · Status: accepted exception/lifecy
 
 - **Callable dependency:** [D-18](RegionalClosures.md) and its current registry entry govern retained callable values, captures and owner associations. Deferred work must preserve those contracts and D-14's target-owner/access checks. It introduces no automatic lexical boxing, owner lifetime extension, regional callable storage or RTTI. The contextual block-to-callback proposal remains separate from an ordinary deferred block.
 
-- **Explicit scope boundary:** [H-319](DesignAuthorityRegistry.md#h-319)/[K-444](DesignAuthorityRegistry.md#k-444) confirms ordinary grouping braces and explicit double-brace lexical/effect scopes, plus defer only within an explicit scoped block when inside a loop. H-359 extends the per-iteration explicit-scope requirement to loop-body variable declarations; K-519 records that bounded syntax/checking acceptance. [H-364](DesignAuthorityRegistry.md#h-364)/[K-521](DesignAuthorityRegistry.md#k-521) holds further loop-scope integration choices for the user’s parallel design review, including region-acquiring effects; it selects neither accumulation nor an additional restriction. C-63/P-286–P-287 preserves C-65 lifetime and C-36 effect requirements. This scope change is not implemented by the colon/nullable checkpoint; acceptance must cover name visibility, initialization, cleanup, conditional paths and loops. H-320's contextual callable/capture boundary remains pending; no escaping closure or wider qualification is implied.
+- **Loop scoping rules:** [H-365](DesignAuthorityRegistry.md#h-365)/[K-522](DesignAuthorityRegistry.md#k-522), C-63/P-286/P-321/P-325, confirms the dedicated [loop contract](ExceptionControl.md#loop-scoping-rules): body/zero-iteration else declarations require a nested explicit scope; effects and fresh effect resources end at each iteration/else exit; direct deferred work registers to the nearest enclosing full scope. Delayed blocks cannot capture loop-control bindings, and deferred borrows cannot outlive iteration resources. This serves explicit resource responsibility, inspectable effects and intentional dynamic cleanup accumulation under charter §§2–3/§6/§8/§12. H-365 supersedes H-319's direct-loop-defer prohibition and resolves H-364; no general new scope abstraction, lifetime extension or loop form is selected. Acceptance covers all exits, hidden-owner retention, snapshots, global LIFO, exact release and accumulation costs. Implementation evidence remains separately bounded.
 
 - **Nullable calls and uniform annotations:** [H-317/H-318](DesignAuthorityRegistry.md#h-317)/[K-443](DesignAuthorityRegistry.md#k-443) accepts explicit nullable ptr call boundaries, retains ptr edges for cycles and uses single-colon annotations with arrow results. C-72/P-284–P-285 preserves C-65 owners/access and C-63 checked failures; charter §§1–3 and D-16 compatibility were reviewed. Acceptance requires nullable forwarding without payload access, checked dereference, owner/result rejection and migrated grammar. H-319 establishes the revised scope boundary; native colon/nullable acceptance is recorded by K-444, while scope/defer implementation remains separate.
 
@@ -29,7 +29,7 @@ Design revision: 25 · Recorded: 2026-11-12 · Status: accepted exception/lifecy
 
 - **Current continuity:** [K-414](DesignAuthorityRegistry.md#k-414) continues H-267/H-269 with [the completed E1–E5 audit](../tests/cod/language/exception-ownership-validation.json). Retained causes, fallible explicit creation, storage, cleanup and regional lifetimes have focused native evidence; no general RTTI or wider qualifier choice is made.
 
-- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 25, E1–E5, checked NPE, deferred-work and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. H-319/H-356 supplies the explicit scope and defer call/block contracts. K-515 records their integration without claiming implementation; H-357–H-359/K-517–K-518 adds deferred-error handling, retained normal completion and the loop declaration boundary; H-360 confirms deferred entry/body-failure handling and H-361 requires explicit returns, with H-362’s enclosing-return, continued-cleanup and void rules. H-363 records pure syntax while deferring purity implementation. K-408–K-413 retains the earlier acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
+- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 26, E1–E5, checked NPE, deferred-work and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. H-319/H-356 supplies the explicit scope and defer call/block contracts. K-515 records their integration without claiming implementation; H-357–H-359/K-517–K-518 adds deferred-error handling, retained normal completion and the loop declaration boundary; H-360 confirms deferred entry/body-failure handling and H-361 requires explicit returns, with H-362’s enclosing-return, continued-cleanup and void rules. H-363 records pure syntax while deferring purity implementation. H-365 confirms the dedicated loop rules, including intentional enclosing-scope defer accumulation. K-408–K-413 retains the earlier acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
 - **Value path:** C-63/P-235 → C-10 and D-17/P-236 → C-63: recoverable business failure must preserve explicit regional responsibility, effects and inspectable lifetimes. H-267 confirms this bounded path and scope under charter §§2–4, 6.2–6.3 and 12; it does not qualify unrelated ownership proposals.
 - **Dependencies / constraints:** P-237 links D-14's ownership/borrowing, P-238 links D-10's scoped bindings, and P-239 links D-01's allocation, allocator symmetry and relocation. H-180/H-181 preserves hidden/captured owners; H-262/H-263 separates consumed names from valid local views. H-265/P-240 supplies the unchecked-OOM constraint. H-251 reserves RTTI decisions for human discussion.
 - **Invariants / non-goals:** one cleanup responsibility per region; no per-object ownership, implicit owner resurrection, allocation-dependent OOM delivery, graph rollback, foreign-world editing or general RTTI decision. No C++ exception type or ABI becomes a CoD user type by implication.
@@ -66,7 +66,7 @@ Acceptance covers direct/module and callee-boundary rejection, explicit propagat
 
 ## Deferred work and explicit scopes
 
-H-319 distinguishes expression grouping from scope creation. `{ ... }` groups expressions without starting a lexical or dynamic-effect scope. `{{ ... }}` starts both: it owns its local storage lifetimes, restores its effects on exit and runs its deferred work. Calls and module top levels remain inherent scopes. H-359 requires variable declarations in a loop body to be inside a nested per-iteration `{{ ... }}` scope. This includes val/ref/ptr, callable, alias and region declarations; loop-header bindings belong to the loop construct. Direct defer in a loop body is rejected; `for (...) { {{ defer ...; ... }} }` is permitted because the explicit scope finishes on every iteration rather than accumulating actions or storage in an outer scope. An explicit scope surrounding the loop does not provide that per-iteration boundary; nested loops require their own nested scope for body declarations.
+H-319 distinguishes expression grouping from scope creation. `{ ... }` groups expressions without starting a lexical or dynamic-effect scope. `{{ ... }}` starts a full scope: it owns its local storage lifetimes, restores its effects on exit and runs its deferred work. Calls and module top levels remain inherent full scopes. The [loop scoping rules](#loop-scoping-rules) specify loop-control bindings, iteration effect/resource restoration and enclosing-scope defer registration.
 
 For resource-management idioms, `defer` is the explicit counterpart to C++ destructor-based scope cleanup. The cleanup obligation belongs to a registered action in a CoD scope; it is not an implicitly selected method on every object's type. Acquisition can supply the action with `defer init(...)()`. This analogy does not add independent destruction lifetimes to regional objects, replace intrinsic whole-region release, or make copied handles/callables acquire independent release authority.
 
@@ -124,11 +124,53 @@ H-356 authorizes implementing this language work independently of the LLVM bindi
 1. Parse deferred calls separately from deferred blocks. Validate the call shape without executing the final invocation or assigning timing significance to redundant parentheses.
 2. Reuse typed call preparation for callee evaluation, ordered argument conversions, stored callable values and borrowed operands. Retain prepared state in the owning scope and register it only on successful preparation. Keep block bodies delayed.
 3. Integrate deferred execution with normal and exceptional scope exit, pending results, effects and intrinsic owner cleanup. Use existing LLVM call/cleanup machinery and D-18 storage; no new general closure or persistence framework is implied.
-4. Verify a compact set of composed cases: initializer-returned cleanup; saved values versus delayed block reads; later callable replacement; argument/conversion order and preparation failure; reverse-order cleanup on normal/exceptional paths; explicit loop scopes and rejection of direct loop defer; invalid borrowed-owner use. Record allocation and emitted-IR costs for repeated scoped use.
+4. Verify a compact set of composed cases: initializer-returned cleanup; saved values versus delayed block reads; later callable replacement; argument/conversion order and preparation failure; reverse-order cleanup on normal/exceptional paths; whole-loop versus per-iteration explicit scopes, direct loop defer accumulation and invalid borrowed-owner use. Record allocation and emitted-IR costs for repeated scoped use and accumulated registrations.
 
 Before claiming complete coverage, resolve any uncovered integration choice involving owned arguments, checked exceptions from cleanup, or cleanup failure while another completion is pending. Existing D-17 rules remain authoritative where they already apply. Neither a parser-only change nor execution of a standalone cleanup sample satisfies acceptance.
 
 H-320 additionally proposes that an expected `func():void` or `proc():void` parameter can interpret `{{ ... }}` as an anonymous callable body instead of executing the block while evaluating the argument. The expected kind must retain function/effect restrictions; unresolved function/procedure overload ambiguity cannot be settled by silently executing the block. H-322 replaces the isolated inline-callback review with a unified owner-aware proposal for named and anonymous callables. Region-only reference captures, explicit copied bits and closure storage/lifetime requirements are reviewed in [D-14](RegionalOwnership.md#unified-callable-captures-and-region-owners); neither live lexical binding capture nor a blanket receiving-call-only restriction is selected. This is a language contract question, not permission to expose compiler callable-routing objects to source programs.
+
+## Loop scoping rules
+
+H-365 defines loops directly, without introducing a general-purpose scope abstraction. Ordinary grouping, explicit `{{ ... }}` scopes and inherent callable/module scopes retain their contracts. A loop combines loop-control bindings, per-iteration effects/resource lifetime and deferred work registered to a full scope; these responsibilities have distinct boundaries.
+
+### Bindings and declarations
+
+Loop-header index/accumulator bindings belong to the loop construct and follow its initialization/update rules. They are not fresh body variable declarations. An ordinary loop body forbids variable declarations, including storage, aliases, callable variables/named local callable definitions and region bindings. The restriction applies through ordinary nested groups and conditionals. A nested explicit `{{ ... }}` inside that body allows local declarations with the explicit scope's lifetime and cleanup. A full scope surrounding the whole loop does not authorize direct body declarations. Each nested loop needs its own per-iteration explicit boundary for body declarations; called functions/procedures retain their independent inherent scopes.
+
+### Iteration effects and resources
+
+Every iteration restores its entry effect bindings on every exit, including throw and return. A temporary binding cannot leak into the next iteration. Restoration changes bindings, not mutations already made to regional data. A fresh region installed through an effect, such as `effect @arena <- region(bytes)`, belongs to that iteration's resource lifetime: release it at iteration exit and restore the prior binding. Captured and hidden pre-existing owners remain alive; shadowing never frees the enclosing owner.
+
+Existing access, transfer and provenance checks apply. An outer deferred action cannot borrow an iteration-owned region or a value dependent on it. Saving a view does not extend lifetime, and a dynamic binding does not permit ownership extraction. No allocator, regional representation or zero-cost-relocation rule changes.
+
+### Deferred work and accumulation
+
+Direct `defer` in an ordinary loop body is allowed. The iteration's effect restoration boundary does not own user deferred actions. Each successful dynamic registration goes to the nearest enclosing full scope (`{{ ... }}` or an inherent callable/module scope), skipping loops and ordinary grouping. Every registration remains distinct, and the owning scope runs all actions in global reverse registration order, including registrations before and after the loop. Accumulation is intentional for dynamic resource management; an implementation must not conceal its cost by cleaning up early.
+
+```text
+{{
+  defer finish_batch();
+  for (i in 0 .. count) { defer consume(i); }
+  defer begin_cleanup();
+}} # begin_cleanup, consume(count - 1) ... consume(0), finish_batch
+
+for (i in 0 .. count) { {{ defer consume(i); }} } # one cleanup per iteration
+```
+
+Putting `{{ ... }}` around the whole loop forms a cleanup batch. Putting it inside the body creates per-iteration cleanup. Callee evaluation and argument preparation remain eager under H-356; partial preparation registers no action and preserves prior registrations and acquired cleanup obligations. D-17's pending return/error, deferred catches and finally rules apply. Outer deferred calls run after iteration effects have restored; direct procedure invocation sees its current bindings, without an implicit TLS snapshot.
+
+### Loop-control snapshots and borrowing
+
+A delayed defer block cannot capture loop-control variables, including the index and fold accumulator. `defer consume(i)` saves the current bits argument through ordinary call preparation; `defer { consume(i); }` is invalid. There is no implicit final-value capture, lexical boxing or lifetime extension. A borrowed argument saves the selected reference rather than a deep copy, so its owner must outlive eventual invocation. Call syntax does not make borrowing loop-control storage or iteration-owned resources valid for an outer deferred action.
+
+### Zero-iteration else
+
+Range `for ... else` executes its else branch only when the body executes zero times, not on exhaustion. The else branch follows the same rules: direct variable declarations are forbidden; its effects restore and fresh effect regions release at branch exit; direct defer registers to the enclosing full scope. A nested explicit `{{ ... }}` permits local declarations and local deferred work. The loop index is unavailable in else. Once-only bound evaluation, initialization joins and fold's initial accumulator are unchanged. This contract does not add `fold ... else`, break/continue or new loop forms.
+
+### Acceptance
+
+Composed programs must establish outer/iteration effect values, normal/throw/return restoration, exact releases with captured/hidden owner retention, eager snapshots and global LIFO over dynamic registrations. Validate whole-loop and per-iteration cleanup batches; reject declarations through ordinary body/else groups, delayed loop-control captures and outer deferred borrows of iteration resources; accept nested explicit and callable scopes. Cover zero iterations and bound evaluation. Measure live registrations, peak storage and execution/IR costs as registration count grows. These checks must compose with return/error replacement and remaining cleanup. D-16 syntax/comments, numeric promotion, bits layout, transfer and formatting remain unchanged; fraction implementation stays deferred.
 
 ## Expression-oriented control
 
