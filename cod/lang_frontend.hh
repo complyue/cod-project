@@ -104,6 +104,7 @@ public:
   }
   static FlowCondition choice(size_t id, FlowCondition left, FlowCondition right) {
     if (left.same(right)) return left;
+    if (!id) return both(std::move(left), std::move(right));
     FlowCondition result;
     result.deferred_ = std::make_shared<Deferred>(Deferred{{}, false, Deferred::Kind::choice, {left, right}, id});
     return result;
@@ -157,6 +158,9 @@ struct Environment {
   Bindings captured_bindings{nullptr};
   bool captured_context = false;
   std::shared_ptr<CaptureReplay> replay;
+  // Partial exit facts are available only after a registered queue path proves them.
+  struct ConditionalBinding { const Value *value; FlowCondition available; };
+  std::map<size_t, ConditionalBinding> conditional;
 
   const Value *lookup(size_t id) const {
     const auto found = bindings.lookup(id);
@@ -374,6 +378,7 @@ class Compiler {
     size_t root_origin = 0;
     size_t owner_origin = 0;
     std::set<size_t> owner_inputs;
+    std::optional<size_t> alias = {};
   };
   std::vector<Region> regions_;
   struct PendingField {
@@ -512,6 +517,7 @@ class Compiler {
   std::vector<std::pair<Location, std::string>> capture_warnings_;
   struct EndPath {};
   struct FlowState {
+    size_t path = 0;
     std::vector<FlowCondition> live;
     std::vector<Presence> holdings;
     std::vector<FlowCondition> available;
@@ -539,6 +545,15 @@ class Compiler {
   std::deque<DeferredFlow> deferred_flows_{{{}, {}}};
   std::map<size_t, size_t> registered_deferred_;
   size_t next_flow_choice_ = 1;
+  size_t next_flow_path_ = 1;
+  std::map<const llvm::BasicBlock *, size_t> flow_paths_;
+  std::map<std::pair<size_t, size_t>, std::pair<size_t, size_t>> flow_joins_;
+  std::pair<size_t, size_t> join_flow_paths(size_t left, size_t right) {
+    if (left == right) return {left, 0};
+    auto [found, inserted] = flow_joins_.try_emplace({left, right});
+    if (inserted) found->second = {next_flow_path_++, next_flow_choice_++};
+    return found->second;
+  }
   struct ConversionPoint {
     LLVMEmission::ConversionPoint native;
     FlowState regions;
@@ -618,6 +633,7 @@ class Compiler {
     size_t predecessors = 0;
     size_t registration = 0;
     std::vector<size_t> initialized = {};
+    std::optional<Environment> cleanup_environment = {};
   };
   struct PointerOwnerConstraint {
     size_t pointer;
@@ -633,6 +649,7 @@ class Compiler {
     DeferredScope *parent = nullptr;
     std::set<size_t> rebound_pointers = {};
     std::vector<PointerOwnerConstraint> owner_constraints = {};
+    const Environment *cleanup_environment = nullptr;
   };
   DeferredScope *deferred_scope_ = nullptr;
   std::set<llvm::Value *> deferred_loop_controls_;
@@ -1107,8 +1124,11 @@ class Compiler {
     for (size_t i = 0; i < state.available.size(); ++i) holdings_[i].available = ownership_condition(state.available[i]);
     cleanup_unreachable_ = ownership_condition(state.unreachable);
   }
-  FlowState flow_state() const {
+  FlowState flow_state() {
     FlowState result;
+    auto [path, inserted] = flow_paths_.try_emplace(ir_.here());
+    if (inserted) path->second = next_flow_path_++;
+    result.path = path->second;
     for (const auto &region : regions_) result.live.push_back(region.live);
     for (const auto &holding : holdings_) result.holdings.push_back(holding.presence);
     for (const auto &holding : holdings_) result.available.push_back(holding.available);
@@ -1291,7 +1311,8 @@ class Compiler {
     ir_.write_pointer(definition.function->getArg(definition.context_argument + 1), image);
   }
   void intersect_flow(FlowState &left, const FlowState &right) {
-    const auto choice = next_flow_choice_++;
+    const auto [path, choice] = join_flow_paths(left.path, right.path);
+    left.path = path;
     left.cleanup_unreachable = FlowCondition::choice(choice, left.cleanup_unreachable, right.cleanup_unreachable);
     for (auto &[scope, queue] : left.deferred) {
       const auto found = right.deferred.find(scope);
@@ -1611,7 +1632,12 @@ class Compiler {
     for (const auto &[owner, role] : outer) if (result.contains(role)) return owner;
     return {};
   }
+  size_t region_source(size_t id) const {
+    while (regions_.at(id).alias) id = *regions_.at(id).alias;
+    return id;
+  }
   size_t region_identity(size_t id, const Location &at) {
+    id = region_source(id);
     const auto &region = regions_.at(id);
     if (!region.owner_origin || region.owner_inputs.empty()) return id;
     const auto inputs = region.owner_inputs;
@@ -1651,7 +1677,7 @@ class Compiler {
           region_note(value.region_id, "the region was acquired here");
       require_live(value.holding_id ? holdings_.at(*value.holding_id).available : FlowCondition{false}, at, message);
     }
-    require_live(value.region_id ? regions_.at(*value.region_id).live : FlowCondition{false}, at,
+    require_live(value.region_id ? regions_.at(region_source(*value.region_id)).live : FlowCondition{false}, at,
         "regional value requires a live owning region in this caller scope" +
         region_note(value.region_id, "the referenced region was acquired here"));
     return regions_.at(*value.region_id).owner;
@@ -1667,7 +1693,7 @@ class Compiler {
   }
   void valid_view(const Value &value, const Location &at) {
     for (const auto region : value.type.capture_regions)
-      require_live(regions_.at(region).live, at,
+      require_live(regions_.at(region_source(region)).live, at,
           "callable owner contract " + type_name(value.type) + " requires a live region owner" +
           region_note(region, "this captured region's owner was acquired here"));
     if (value.procedure)
@@ -2012,7 +2038,7 @@ class Compiler {
   void close_holdings(size_t begin, const Value &result, const Location &at) {
     auto state = flow_state();
     close_state(state, begin, result.type.owned ? result.region_id : std::nullopt);
-    if (result.region_id) require_live(state.live.at(*result.region_id), at,
+    if (result.region_id) require_live(state.live.at(region_source(*result.region_id)), at,
         "regional result would outlive its owning scope" +
         region_note(result.region_id, "the escaping value depends on this region acquisition"));
     restore_flow(state);
@@ -2959,6 +2985,7 @@ class Compiler {
     value.callable_temporary = false;
     binding_values_.push_back(std::move(value));
     env.bindings = binding_factory_.add(env.bindings, id, &binding_values_.back());
+    env.conditional.erase(id);
     if (!grouped) binding_check(env, at);
     return binding_values_.back();
   }
@@ -3176,7 +3203,7 @@ class Compiler {
     std::map<size_t, llvm::Value *> owners;
     for (size_t region : code.regions) {
       owners.try_emplace(region, regions_[region].owner);
-      if (formal_owners) regions_[region].live = true;
+      if (formal_owners) regions_[region_source(region)].live = true;
       regions_[region].owner = ir_.callable_field(image, code.layout, index++, false);
     }
     for (size_t region : code.dynamic_regions) {
@@ -3293,6 +3320,7 @@ class Compiler {
     // the procedural snapshots demanded by checked reads or explicit touches.
     if (form.kind == Form::Kind::procedure) {
       proc->captures = env;
+      proc->captures.conditional.clear();
       for (const auto &[id, value] : env.bindings) {
         if ((!local_bits(value->type) && !object_type(value->type)) ||
             (env.captured(id, value) && !value->replayed)) continue;
@@ -4115,6 +4143,9 @@ class Compiler {
   Value inline_call(Form &form, const Module &lexical, Environment env, const std::vector<Value> &args,
                     bool function_context, const Location &at, const Module &caller, ImplementationContext implementation,
                     const Locals *captures) {
+    // A callable owns its cleanup queue; caller-local registration guarantees
+    // cannot establish a missing binding in this independent invocation.
+    env.conditional.clear();
     const bool throws_npe = declares_npe(form.throws_types, lexical, form.at);
     if (throws_npe) require_npe_handler(at);
     const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, throws_npe);
@@ -6161,7 +6192,7 @@ class Compiler {
       });
       for (size_t region : code.regions) {
         owner_values.push_back(regions_[region].owner);
-        regions_[region].live = true; // Invocation checks the captured owner's live view.
+        regions_[region_source(region)].live = true; // Invocation checks the captured owner's live view.
         regions_[region].owner = ir_.callable_field(image, code.layout, index++, false);
       }
       std::vector<Value> parameters;
@@ -6501,6 +6532,65 @@ class Compiler {
     };
     return try_expression(guarded, module, env, locals, function_context, false, true, {}, nullptr, &emission);
   }
+  FlowCondition deferred_fact(size_t queue, size_t registration, const FlowCondition &fact) {
+    // Project immutable conditions as each queue edge selects its branch. A
+    // satisfied obligation needs no further path history. Mutable ownership
+    // equations retain a selected input until their cleanup graph is closed.
+    std::map<std::tuple<size_t, size_t, bool>, FlowCondition> projections;
+    const auto project = [&](auto &&self, const FlowCondition &source, size_t choice, bool right) -> FlowCondition {
+      if (!choice || !source.pending()) return source;
+      const auto key = std::tuple{ownership_fact(source), choice, right};
+      if (const auto found = projections.find(key); found != projections.end()) return found->second;
+      const auto &node = *source.deferred_;
+      FlowCondition result;
+      if (node.kind == FlowCondition::Deferred::Kind::leaf) result = source;
+      else if (node.kind == FlowCondition::Deferred::Kind::choice && node.choice == choice)
+        result = self(self, node.inputs.at(right), choice, right);
+      else {
+        const auto left = self(self, node.inputs[0], choice, right);
+        const auto next = self(self, node.inputs[1], choice, right);
+        if (left.same(node.inputs[0]) && next.same(node.inputs[1])) result = source;
+        else if (node.kind == FlowCondition::Deferred::Kind::choice)
+          result = FlowCondition::choice(node.choice, left, next);
+        else if (node.kind == FlowCondition::Deferred::Kind::both) result = FlowCondition::both(left, next);
+        else result = FlowCondition::either(left, next);
+      }
+      projections.emplace(key, result);
+      return result;
+    };
+    std::map<std::pair<size_t, size_t>, size_t> proofs;
+    struct Obligation { size_t queue, proof; FlowCondition fact; };
+    std::vector<Obligation> pending;
+    const auto intern = [&](size_t queue, FlowCondition fact) {
+      if (!fact.pending() && fact) return size_t{1};
+      auto [found, inserted] = proofs.try_emplace({queue, ownership_fact(fact)});
+      if (inserted) {
+        found->second = ownership_flows_.size();
+        ownership_flows_.push_back({OwnershipFlow::Kind::all, {}});
+        pending.push_back({queue, found->second, std::move(fact)});
+      }
+      return found->second;
+    };
+    const auto root = intern(queue, fact);
+    for (size_t i = 0; i < pending.size(); ++i) {
+      const auto current = pending[i];
+      std::vector<size_t> inputs;
+      if (current.queue == registration) inputs.push_back(ownership_fact(current.fact));
+      else if (current.queue)
+        for (const auto &input : deferred_flows_.at(current.queue).inputs)
+          inputs.push_back(selected_ownership(
+              intern(input.queue, project(project, current.fact, input.choice, input.right)), input.choice, input.right));
+      ownership_flows_.at(current.proof).inputs = std::move(inputs);
+    }
+    return ownership_condition(root);
+  }
+  Environment deferred_environment(Environment env, size_t queue, size_t registration) {
+    for (const auto &[id, binding] : env.conditional)
+      if (deferred_fact(queue, registration, binding.available))
+        env.bindings = binding_factory_.add(env.bindings, id, binding.value);
+    env.conditional.clear();
+    return env;
+  }
   Value drain_deferred(DeferredScope &scope, Environment &env, Value incoming,
                        const std::vector<CleanupEntry> &entries) {
     const auto [flow, pending_facts] = pending_exception_flow(incoming);
@@ -6754,6 +6844,11 @@ class Compiler {
     std::set<size_t> source_holders;
     for (const auto &entry : entries)
       for (const auto &[holder, value] : entry.state.callables) source_holders.insert(holder);
+    std::set<size_t> binding_regions;
+    for (const auto &[id, value] : entry_env.bindings)
+      if (value->region_id) binding_regions.insert(*value->region_id);
+    for (const auto &[id, binding] : entry_env.conditional)
+      if (binding.value->region_id) binding_regions.insert(*binding.value->region_id);
     for (const auto &entry : entries) {
       auto state = entry.state;
       if (entry.completion)
@@ -6764,6 +6859,17 @@ class Compiler {
       for (const auto &[holder, value] : entry_flow.callables)
         if (!source_holders.contains(holder))
           state.callables = callable_memory_factory_.add(state.callables, holder, value);
+      // Binding joins can also create a region descriptor after these source
+      // snapshots. Its liveness is already conditioned on the same incoming
+      // paths as the queue; retain that proof, never an unconditional live fact.
+      for (const auto region : binding_regions)
+        if (region >= entry.state.live.size()) {
+          if (region >= state.live.size()) state.live.resize(region + 1, false);
+          const auto queue = entry_flow.deferred.find(scope.owner_scope);
+          const auto source = state.deferred.find(scope.owner_scope);
+          state.live[region] = deferred_fact(queue == entry_flow.deferred.end() ? 0 : queue->second,
+              source == state.deferred.end() ? 0 : source->second, entry_flow.live.at(region));
+        }
       if (entry.error) connect_failure(state, *entry.error);
       else connect_states(state, 0);
     }
@@ -6820,7 +6926,11 @@ class Compiler {
           path.initialized[cell] = preserved_initialization(cell < action.initialized.size() ? action.initialized[cell] : 0, path.initialized[cell]);
       for (size_t cell = 0; cell < initialized.size(); ++cell) cells_[cell].initialized = initialized[cell];
       registered_deferred_[scope.owner_scope] = action.predecessors;
-      env = entry_env;
+      const auto queue = entry_flow.deferred.find(scope.owner_scope);
+      env = action.cleanup_environment ? *action.cleanup_environment :
+          deferred_environment(entry_env, queue == entry_flow.deferred.end() ? 0 : queue->second, action.registration);
+      const auto cleanup_environment = env;
+      const auto context = llvm::SaveAndRestore(scope.cleanup_environment, &cleanup_environment);
       const auto action_flow = flow_state();
       const auto holding_begin = holdings_.size();
       const auto cleanup = ir_.scope();
@@ -7052,6 +7162,7 @@ class Compiler {
   void register_deferred(DeferredScope &scope, const std::vector<llvm::Value *> &values,
                          std::set<size_t> catches = {}) {
     auto &action = scope.actions.back();
+    if (scope.cleanup_environment) action.cleanup_environment = *scope.cleanup_environment;
     action.initialized = flow_state().initialized;
     action.predecessors = registered_deferred_[scope.owner_scope];
     ir_.register_deferred(scope.head, action.layout, scope.actions.size() - 1, values);
@@ -8107,31 +8218,59 @@ class Compiler {
     if (edges.empty()) return {};
     auto result = edges.front().environment;
     if (edges.size() == 1) return result;
+    std::map<size_t, const Value *> bindings;
+    for (const auto &edge : edges) {
+      for (const auto &[id, value] : edge.environment.bindings) bindings.try_emplace(id, value);
+      for (const auto &[id, binding] : edge.environment.conditional) bindings.try_emplace(id, binding.value);
+    }
     std::map<std::vector<size_t>, size_t> owners;
-    for (const auto &[id, first] : result.bindings) {
+    for (const auto &[id, first] : bindings) {
       std::vector<CaptureAlternative> alternatives;
+      std::vector<FlowCondition> availability;
+      std::vector<bool> present;
+      std::deque<Value> absent;
+      bool definite = true;
       for (const auto &edge : edges) {
         const auto *value = edge.environment.lookup(id);
-        if (!value) break;
+        auto available = FlowCondition{bool(value)};
+        if (!value) {
+          definite = false;
+          if (const auto found = edge.environment.conditional.find(id); found != edge.environment.conditional.end()) {
+            value = found->second.value;
+            available = found->second.available;
+          }
+        }
+        present.push_back(bool(value));
+        if (!value) {
+          absent.push_back(*first);
+          deferred_fields(absent.back(), [](llvm::Value *&field) { field = llvm::PoisonValue::get(field->getType()); });
+          value = &absent.back();
+        }
         alternatives.push_back({value, edge.from});
+        availability.push_back(available);
       }
-      if (alternatives.size() != edges.size()) {
-        result.bindings = binding_factory_.remove(result.bindings, id);
-        continue;
+      if (definite && std::all_of(alternatives.begin(), alternatives.end(),
+          [&](const auto &item) { return item.value == first; })) continue;
+      auto available = availability.front();
+      auto path = edges.front().regions.path;
+      for (size_t i = 0; i < edges.size(); ++i) {
+        const auto joined = join_flow_paths(path, edges[i].regions.path);
+        path = joined.first;
+        available = FlowCondition::choice(joined.second, available, availability[i]);
       }
-      if (std::all_of(alternatives.begin(), alternatives.end(), [&](const auto &item) { return item.value == first; })) continue;
       auto value = *first;
       std::vector<size_t> region_ids;
-      for (const auto &alternative : alternatives) {
+      for (size_t i = 0; i < alternatives.size(); ++i) {
+        const auto &alternative = alternatives[i];
         require(alternative.value->type, value.type, at);
-        if (alternative.value->region_id) region_ids.push_back(*alternative.value->region_id);
+        if (alternative.value->region_id) region_ids.push_back(present[i] ? *alternative.value->region_id + 1 : 0);
         value.read_only |= alternative.value->read_only;
         std::erase_if(value.conformances, [&](const Conformance &fact) {
           const auto &facts = alternative.value->conformances;
           return std::find(facts.begin(), facts.end(), fact) == facts.end();
         });
       }
-      if (native_callable(value)) value = join_captures(alternatives, at);
+      if (native_callable(value) || value.procedure) value = join_captures(alternatives, at);
       else {
         const auto select = [&](auto get) -> llvm::Value * {
           auto *first_value = get(*first);
@@ -8149,26 +8288,48 @@ class Compiler {
           value.exception_facts = std::move(facts);
         }
       }
-      if (!region_ids.empty() && std::any_of(region_ids.begin(), region_ids.end(), [&](size_t owner) { return owner != region_ids.front(); })) {
+      if (!region_ids.empty() && std::any_of(region_ids.begin(), region_ids.end(),
+          [&](size_t owner) { return owner != region_ids.front(); })) {
         if (region_ids.size() != edges.size()) fail(at, "symbol alternatives require regional provenance on every path");
         auto found = owners.find(region_ids);
         if (found == owners.end()) {
           std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
           std::set<size_t> origins;
+          std::vector<FlowCondition> live;
+          auto *prototype = regions_.at(*first->region_id).owner;
           for (size_t i = 0; i < region_ids.size(); ++i) {
-            const auto &region = regions_.at(region_ids[i]);
+            if (!region_ids[i]) {
+              incoming.emplace_back(llvm::PoisonValue::get(prototype->getType()), edges[i].from);
+              live.push_back(false);
+              continue;
+            }
+            const auto id = region_ids[i] - 1;
+            const auto &region = regions_.at(id);
             incoming.emplace_back(region.owner, edges[i].from);
             origins.insert(region.origins.begin(), region.origins.end());
+            live.push_back(id < edges[i].regions.live.size() ? edges[i].regions.live[id] : FlowCondition{false});
           }
           const auto joined = new_region(ir_.phi(incoming.front().first->getType(), incoming), at, std::move(origins));
           auto &region = regions_[joined];
-          region.live = true;
-          for (size_t i = 0; i < region_ids.size(); ++i)
-            region.live = FlowCondition::both(region.live, region_ids[i] < edges[i].regions.live.size()
-                ? edges[i].regions.live[region_ids[i]] : FlowCondition{false});
+          region.live = live.front();
+          auto path = edges.front().regions.path;
+          for (size_t i = 0; i < edges.size(); ++i) {
+            const auto step = join_flow_paths(path, edges[i].regions.path);
+            path = step.first;
+            region.live = FlowCondition::choice(step.second, region.live, live[i]);
+          }
+          const auto source = region_source(*first->region_id);
+          if (std::all_of(region_ids.begin(), region_ids.end(), [&](size_t id) {
+                return !id || region_source(id - 1) == source;
+              })) {
+            region.alias = source;
+            region.root_origin = regions_[source].root_origin;
+            region.acquired = regions_[source].acquired;
+          }
           region.symbolic = true;
-          region.root = regions_[region_ids.front()].root;
-          for (const auto owner : region_ids) if (regions_[owner].root != region.root) region.root.reset();
+          region.root = regions_.at(*first->region_id).root;
+          for (const auto owner : region_ids)
+            if (owner && regions_[owner - 1].root != region.root) region.root.reset();
           found = owners.emplace(region_ids, joined).first;
         }
         value.region_id = found->second;
@@ -8176,7 +8337,13 @@ class Compiler {
       }
       value.declaration_cell.reset();
       binding_values_.push_back(std::move(value));
-      result.bindings = binding_factory_.add(result.bindings, id, &binding_values_.back());
+      if (definite) {
+        result.bindings = binding_factory_.add(result.bindings, id, &binding_values_.back());
+        result.conditional.erase(id);
+      } else {
+        result.bindings = binding_factory_.remove(result.bindings, id);
+        result.conditional.insert_or_assign(id, Environment::ConditionalBinding{&binding_values_.back(), available});
+      }
     }
     return result;
   }
@@ -8354,8 +8521,20 @@ class Compiler {
   Environment continue_environment(Environment path, const Environment &entry, const Environment &exit) {
     for (const auto &[id, value] : entry.bindings)
       if (!exit.lookup(id)) path.bindings = binding_factory_.remove(path.bindings, id);
+    for (const auto &[id, binding] : entry.conditional)
+      if (!exit.conditional.contains(id)) path.conditional.erase(id);
     for (const auto &[id, value] : exit.bindings)
-      if (entry.lookup(id) != value) path.bindings = binding_factory_.add(path.bindings, id, value);
+      if (entry.lookup(id) != value) {
+        path.bindings = binding_factory_.add(path.bindings, id, value);
+        path.conditional.erase(id);
+      }
+    for (const auto &[id, binding] : exit.conditional) {
+      const auto found = entry.conditional.find(id);
+      if (found != entry.conditional.end() && found->second.value == binding.value &&
+          found->second.available.same(binding.available)) continue;
+      path.bindings = binding_factory_.remove(path.bindings, id);
+      path.conditional.insert_or_assign(id, binding);
+    }
     return path;
   }
   Value try_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,

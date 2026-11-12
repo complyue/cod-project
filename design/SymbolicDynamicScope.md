@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 131 · Recorded: 2026-11-12 · Phase: language/application co-design.
+Design revision: 132 · Recorded: 2026-11-12 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Deferred current context:** [K-554](DesignAuthorityRegistry.md#k-554), D-10r132/D-17r52/D-18r72, continues H-102/H-180/H-181/H-319/H-337–H-344/H-356–H-362/H-365/H-371 and C-63/P-235–P-236/P-321–P-324/P-326/P-329 with C-65/P-294/P-299/P-301–P-303. Current bindings remain available on proven registered-action paths through normal/failure joins; perform retains definition-time captures. This preserves explicit context, ordering and resource responsibility under charter §§2–3/§5.3/§6/§8/§12. D-14 owners/access, D-10 binding rules and D-17 cleanup remain constraints. [Acceptance evidence](../tests/cod/language/defer-context-validation.json) covers conditional registration, later rebinding, grouped regional references, loops, nested registration, recovery/finally, native recursion, failures and missing/expired-context rejection. No runtime presence flag, lifetime extension, owner union, ABI or allocator change follows. Wider relational proofs, open body-result staging, inferred-signature transport, module queues and family/AOT integration remain unfinished. D-16/D-22 and pure/TCO/compiler-pilot deferral remain unchanged; this is scoped continuity, not whole-file approval.
 
 - **Implicit owner bindings:** [H-382](DesignAuthorityRegistry.md#h-382)/[K-538](DesignAuthorityRegistry.md#k-538), D-10r131, confirms P-343: every inferred owner is a const lexical binding in the callable body, including generic region-or-scope owners. C-65's provenance/root-capability distinction and H-366's binding/target constness remain; H-381's nearest lookup includes these names. This preserves semantic identity, explicit permissions and lifetime under charter §§2–3/§4.3/§5/§6/§8 without requiring a runtime owner object. Acceptance covers shadowing, immutable binding, permitted target writes and absence of implicit region capability. Broader first-class owner storage, actual-owner union and native dispatch representation remain outside this clarification.
 
@@ -583,6 +585,8 @@ H-102 locates checking at compilation of the demanded call paths. The compiler f
 - For `behave @p`, required effects must be available in the current effective dynamic scope along each reachable path to their use, accounting for bindings established inside the body.
 - For `perform @p`, the values it must install must have been obtainable at the applicable definition event. Missing required capture values are compilation errors, with no fallback to the caller's values.
 - Branches and possible callees are checked in their corresponding contexts. Knowing caller paths does not require knowing runtime branch values; a reachable path lacking a required binding cannot be excused by another path that supplies it.
+
+Deferred current-context invocation uses the bindings present when its owning full scope drains. A conditional registration requires those bindings on every path reaching that action, including failures after registration; a path that never registered it supplies no invocation obligation. Binding and owner proofs share the queue's branch choices. Later rebinding remains observable, iteration effects restore at their own boundary, and temporary effects inside an explicit cleanup scope restore before later actions. These guarantees do not make a missing binding available to an independent callable or create a definition-time capture. [Deferred-context evidence](../tests/cod/language/defer-context-validation.json) records bounded native acceptance.
 
 The reusable-operation case is therefore checked through its complete definition/call paths and chosen mode. This does not select a runtime missing-value sentinel, implicit zero value, or a separate-module rejection policy. The precise analysis must preserve by-value captures while avoiding requirements for values that the checked path does not use.
 

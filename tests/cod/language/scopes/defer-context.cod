@@ -1,0 +1,79 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+data Item {value:u64;}
+region symbol @arena:Item;
+region symbol @scratch;
+symbol @reader:proc()->const u64;
+symbol @left:Item in r, @right:Item in r where {region r:Item};
+proc show()->void {behave @print(perform @reader());}
+proc show_root()->void {behave @print(root(@arena).value);}
+proc show_pair()->void {behave @print(@left.value + @right.value);}
+proc current_result()->void {
+  effect @arena <-make Item(capacity=256u64){value<-7u64};
+  proc replacement=proc()->const u64 {return 2u64;};
+  proc current=proc()->const u64 {return 1u64;};
+  effect @reader=current;
+  effect proc @action()->Item {show(); return root(@arena);};
+  current <-replacement;
+  defer behave @action();
+}
+proc conditional(flag:bool)->void {
+  if(flag) {
+    proc current=proc()->const u64 {return 3u64;};
+    effect @reader=current;
+    effect @arena <-make Item(capacity=256u64){value<-4u64};
+    effect @left=root(@arena), @right=root(@arena);
+    defer show_pair();
+    defer {defer show();};
+  } else {};
+}
+proc rebound(flag:bool)->void {
+  proc first=proc()->const u64 {return 5u64;};
+  proc second=proc()->const u64 {return 6u64;};
+  effect @reader=first;
+  effect @arena <-make Item(capacity=256u64){value<-7u64};
+  defer show();
+  defer show_root();
+  if(flag) {
+    effect @reader=second;
+    effect @arena <-make Item(capacity=256u64){value<-8u64};
+  } else {};
+}
+proc iterations()->void {
+  proc outer=proc()->const u64 {return 9u64;};
+  proc inner=proc()->const u64 {return 10u64;};
+  effect @reader=outer;
+  for(i in 0u64..2u64) {effect @reader=inner; defer show();};
+  for(i in 0u64..2u64) {{effect @reader=inner; defer show();}};
+}
+proc recovery()->const u64 {
+  proc source=proc()->const u64 {return 11u64;};
+  effect @reader=source;
+  effect @arena <-make Item(capacity=256u64){value<-12u64};
+  defer catch(e:const InvalidCapacity) {show(); return 13u64;} finally {show_root();};
+  effect @scratch <-region(0u64);
+  return 999u64;
+}
+proc finalized(capacity:u64)->void {
+  proc first=proc()->const u64 {return 14u64;};
+  proc second=proc()->const u64 {return 15u64;};
+  effect @reader=first;
+  defer show();
+  try {effect @scratch <-region(capacity);} finally {effect @reader=second;};
+}
+symbol @depth_value:u64;
+symbol @step:proc(u64)->void;
+proc show_depth()->void {behave @print(@depth_value);}
+proc descent=proc(n:u64)->void {
+  effect @depth_value <-n+17u64;
+  defer show_depth();
+  if(n != 0u64) {behave @step(n-1u64);} else {};
+};
+current_result();
+conditional(true); conditional(false);
+rebound(true); rebound(false);
+iterations();
+behave @print(recovery());
+finalized(128u64);
+try {finalized(0u64);} catch(e:const InvalidCapacity) {behave @print(16u64);};
+{{effect @step=descent; behave @step(3u64);}};

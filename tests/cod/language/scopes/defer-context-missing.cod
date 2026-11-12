@@ -1,0 +1,7 @@
+using symbol "std:io" @print;
+symbol @reader:proc()->const u64;
+proc show()->void {behave @print(perform @reader());}
+proc run(flag:bool)->void {
+ defer show();
+ if(flag) {proc current=proc()->const u64 {return 1u64;}; effect @reader=current;} else {};
+} run(false);

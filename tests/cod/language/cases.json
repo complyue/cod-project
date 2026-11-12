@@ -3425,5 +3425,40 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "regional value requires a live owning region"
+  },
+  {
+    "file": "scopes/defer-context.cod",
+    "exit": 0,
+    "stdout": "2\n3\n8\n8\n6\n7\n5\n10\n10\n9\n9\n11\n12\n13\n15\n15\n16\n17\n18\n19\n20\n"
+  },
+  {
+    "file": "scopes/defer-context-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "scopes/defer-context-callee.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "scopes/defer-context-nested-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "scopes/defer-context-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "perform requires an unavailable definition-time capture"
+  },
+  {
+    "file": "scopes/defer-context-group-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "shared-region constraint violated"
   }
 ]

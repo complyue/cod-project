@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+symbol @saved:proc()->void;
+symbol @reader:proc()->const u64;
+proc show()->void {behave @print(perform @reader());}
+proc run(flag:bool)->void {
+ if(flag) {proc current=proc()->const u64 {return 1u64;}; effect @reader=current;} else {};
+ proc captured=proc()->void {show();};
+ effect @reader=proc()->const u64 {return 2u64;};
+ effect @saved=captured;
+ defer perform @saved();
+} run(false);

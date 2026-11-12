@@ -210,7 +210,7 @@ def main():
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
                      'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization',
                      'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow', 'loop-pointer-flow', 'defer-first-owner',
-                     'defer-owner-queue', 'defer-owned-arguments', 'defer-body-results'):
+                     'defer-owner-queue', 'defer-owned-arguments', 'defer-body-results', 'defer-context'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -427,6 +427,45 @@ behave @print(9041u64);
 body_result_stress(10000u64);
 behave @print(9042u64);
 '''
+            if name == 'defer-context':
+                source += r'''
+using "std:exceptions" OutOfMemory;
+proc context_record_failure()->void {
+  defer catch(e:const OutOfMemory) {behave @print(21u64);};
+  proc current=proc()->const u64 {return 999u64;};
+  effect @reader=current;
+  effect @arena <-make Item(capacity=256u64){value<-999u64};
+  behave @print(9001u64);
+  defer show_root();
+}
+context_record_failure();
+behave @print(9002u64);
+proc context_copy_failure()->void {
+  defer catch(e:const OutOfMemory) {behave @print(22u64);};
+  effect @arena <-make Item(capacity=256u64){value<-999u64};
+  effect proc @action()->Item {show_root(); return root(@arena);};
+  behave @print(9011u64);
+  defer behave @action();
+}
+context_copy_failure();
+behave @print(9012u64);
+proc context_stress(count:u64)->void {
+  for(i in 0u64..count) {{
+    effect @arena <-make Item(capacity=256u64){value<-43u64};
+    proc current=proc()->const u64 {return 43u64;};
+    effect @reader=current;
+    effect proc @action()->Item {
+      if(root(@arena).value != 43u64) {behave @print(999u64);} else {};
+      if(perform @reader() != 43u64) {behave @print(999u64);} else {};
+      return root(@arena);
+    };
+    defer behave @action();
+  }};
+}
+behave @print(9041u64);
+context_stress(10000u64);
+behave @print(9042u64);
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -471,6 +510,9 @@ behave @print(9042u64);
                 assert evidence['layout']['record_failures'] == 1
             if name == 'defer-body-results':
                 expected += ['9001', '41', '9002', '9011', '42', '9012', '9041', '9042']
+                assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
+            if name == 'defer-context':
+                expected += ['9001', '21', '9002', '9011', '22', '9012', '9041', '9042']
                 assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
