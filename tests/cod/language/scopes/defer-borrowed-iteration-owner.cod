@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+region Arena {value:u64;}
+region symbol @arena:Arena;
+proc show(region r:Arena)->void {behave @print(r.value);}
+proc run()->void {
+  for(i in 0u64 .. 2u64) {
+    effect @arena <- make Arena(capacity=128u64){value <- i};
+    defer show(@arena);
+  };
+}
+run();

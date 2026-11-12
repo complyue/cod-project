@@ -536,6 +536,7 @@ class Compiler {
     size_t predecessors = 0;
     size_t registration = 0;
     std::vector<size_t> initialized = {};
+    std::set<size_t> borrowed_regions = {};
   };
   struct DeferredScope {
     llvm::AllocaInst *head;
@@ -4788,6 +4789,21 @@ class Compiler {
       progressed = true;
     }
   }
+  bool forwards_callable_flow(size_t output, size_t input) const {
+    if (output == input) return true;
+    std::set<size_t> visited;
+    std::vector<size_t> pending{output};
+    while (!pending.empty()) {
+      const auto id = pending.back(); pending.pop_back();
+      if (id == input || !visited.insert(id).second) continue;
+      const auto &flow = callable_flows_.at(id);
+      // A call summary may forward the entering holder through joins or
+      // recursive calls. A load, write or new value needs full backedge flow.
+      if (!id || flow.open || flow.definition || flow.address || flow.holder) return false;
+      pending.insert(pending.end(), flow.inputs.begin(), flow.inputs.end());
+    }
+    return true;
+  }
   CallableChoices bound_callable_choices(const Value &value, const CallableMemory &memory) {
     if (!value.callable_address) return callable_choices(value.callable_flow);
     const auto targets = callable_targets(value.callable_address);
@@ -5890,6 +5906,33 @@ class Compiler {
     auto *site = ir_.pop_deferred(scope.head, record);
     const auto entry_flow = flow_state();
     const auto entry_env = env;
+    // An acquisition failure before registration cannot invalidate the owner
+    // of a prepared call that did register. Select its retained owners from
+    // reaching queues; mutable ownership backedges remain unsupported.
+    auto owner_entries = std::make_shared<std::vector<std::pair<size_t, std::vector<FlowCondition>>>>();
+    for (const auto &entry : entries) {
+      const auto queue = entry.state.deferred.find(scope.owner_scope);
+      owner_entries->emplace_back(queue == entry.state.deferred.end() ? 0 : queue->second, entry.state.live);
+    }
+    const auto live_at_action = [&](size_t action, size_t region) {
+      return FlowCondition::deferred([this, owner_entries, action, region] {
+        for (const auto &[queue, live] : *owner_entries) {
+          std::set<size_t> visited;
+          std::vector<size_t> pending{queue};
+          bool reaches = false;
+          while (!pending.empty() && !reaches) {
+            const auto next = pending.back(); pending.pop_back();
+            if (next == action) { reaches = true; break; }
+            if (!next || !visited.insert(next).second) continue;
+            const auto &flow = deferred_flows_.at(next);
+            for (const auto &input : flow.inputs) pending.push_back(input.queue);
+            pending.insert(pending.end(), flow.continuations.begin(), flow.continuations.end());
+          }
+          if (reaches && (region >= live.size() || !live[region])) return false;
+        }
+        return true;
+      });
+    };
     // Queue joins route facts to the next action. Successful completion and each
     // pending error retain separate inputs. Plain actions use their join;
     // handlers select the input matching each entry. Registration preserves allocation
@@ -5956,19 +5999,23 @@ class Compiler {
       if (entry.error) connect_failure(entry.state, *entry.error);
       else connect_initialization(entry.state, 0);
     }
-    const auto check_flow = [&](const FlowState &exit, const DeferredAction &action) {
+    const auto check_flow = [&](const FlowState &exit, const DeferredAction &action, const FlowState &before) {
       const auto queue = exit.deferred.find(scope.owner_scope);
       if (queue != exit.deferred.end())
         deferred_flows_[action.registration].continuations.push_back(queue->second);
       bool changed = false;
-      for (size_t i = 0; i < entry_flow.live.size(); ++i) changed |= !entry_flow.live[i].same(exit.live[i]);
-      for (size_t i = 0; i < entry_flow.holdings.size(); ++i) changed |= entry_flow.holdings[i] != exit.holdings[i];
-      for (size_t i = 0; i < entry_flow.pointers.size(); ++i) changed |= entry_flow.pointers[i] != exit.pointers[i];
-      for (const auto &[holder, value] : entry_flow.callables) {
+      for (size_t i = 0; i < before.live.size(); ++i) changed |= !before.live[i].same(exit.live[i]);
+      for (size_t i = 0; i < before.holdings.size(); ++i) changed |= before.holdings[i] != exit.holdings[i];
+      for (size_t i = 0; i < before.pointers.size(); ++i) changed |= before.pointers[i] != exit.pointers[i];
+      const std::string message = "deferred action changes flow facts; deferred backedge checking is not implemented yet";
+      for (const auto &[holder, value] : before.callables) {
         const auto *after = exit.callables.lookup(holder);
-        changed |= !after || *after != value;
+        if (!after) changed = true;
+        else if (*after != value)
+          deferred_checks_.push_back({[this, output = *after, value] { return !forwards_callable_flow(output, value); },
+                                      action.at, message});
       }
-      if (changed) fail(action.at, "deferred action changes flow facts; deferred backedge checking is not implemented yet");
+      if (changed) fail(action.at, message);
     };
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &action = scope.actions[i];
@@ -5977,6 +6024,12 @@ class Compiler {
       ir_.choose(ir_.binary(Type::uint64, "==", site, ir_.bits(Type::uint64, i)), run, other);
       ir_.enter(run);
       restore_flow(entry_flow);
+      for (size_t region : action.borrowed_regions)
+        if (region < entry_flow.live.size() && (entry_flow.live[region].pending() || !entry_flow.live[region]) &&
+            std::any_of(owner_entries->begin(), owner_entries->end(), [&](const auto &entry) {
+              return region < entry.second.size() && (entry.second[region].pending() || entry.second[region]);
+            }))
+          regions_[region].live = live_at_action(action.registration, region);
       const auto &header = initialization_header(action.registration, action.initialized);
       const auto &initialized = header.joined;
       auto paths = header.paths;
@@ -5986,6 +6039,7 @@ class Compiler {
       for (size_t cell = 0; cell < initialized.size(); ++cell) cells_[cell].initialized = initialized[cell];
       registered_deferred_[scope.owner_scope] = action.predecessors;
       env = entry_env;
+      const auto action_flow = flow_state();
       const auto holding_begin = holdings_.size();
       const auto cleanup = ir_.scope();
       const auto action_scope = scopes_.size();
@@ -6013,7 +6067,7 @@ class Compiler {
         handlers_.pop_back();
         if (result.type != Type::never) {
           const auto exit = flow_state();
-          check_flow(exit, action);
+          check_flow(exit, action, action_flow);
           if (action.handles_error) connect_initialization(exit, 0);
           else {
             const auto inputs = std::make_shared<const std::set<size_t>>(initialized.begin(), initialized.end());
@@ -6037,7 +6091,7 @@ class Compiler {
         ir_.enter(replacement.block);
         auto replaced = join_completions(replacement.incoming, action.at, false);
         if (replaced.type != Type::never) {
-          check_flow(flow_state(), action);
+          check_flow(flow_state(), action, action_flow);
           connect_initialization(flow_state(), 0);
           save_return(std::move(replaced), action.at);
           close_holdings(holding_begin, {}, action.at);
@@ -6049,7 +6103,7 @@ class Compiler {
           std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> payloads, categories;
           for (const auto &edge : landing.incoming) {
             merge_exception_possibilities(exception_flows_.at(flow), edge.error);
-            check_flow(edge.regions, action);
+            check_flow(edge.regions, action, action_flow);
             connect_failure(edge.regions, edge.error);
             payloads.emplace_back(edge.error.native, edge.from);
             categories.emplace_back(exception_category(edge.error), edge.from);
@@ -6271,57 +6325,99 @@ class Compiler {
     auto &args = method_call ? method_call->arguments : callable_call->arguments;
     std::vector<llvm::Value *> values, image_slots;
     std::vector<size_t> images;
+    std::vector<bool> borrowed_arguments;
+    std::map<size_t, size_t> owners;
+    std::set<size_t> borrowed_regions;
     const auto save = [&](Value &value, bool by_value) {
       valid_view(value, expr.at);
       if (value.type.owned)
         fail(expr.at, "deferred owning-argument flow checking is not implemented yet");
-      if (!by_value)
-        fail(expr.at, "deferred borrowed-argument flow checking is not implemented yet");
-      if (native_callable(value)) {
-        if (!value.storage || !value.callable_temporary)
-          value = prepare_callable_argument(std::move(value), {});
-        images.push_back(values.size());
-        image_slots.push_back(value.storage->address);
-      } else if (local_bits(value.type)) value = bits_value(std::move(value));
-      else if (value.procedure && (!value.procedure->lexical_captures.visible.empty() ||
-                                  (captured && !value.procedure->captures.bindings.isEmpty())))
-        fail(expr.at, "deferred generic callable capture lowering is not implemented yet");
-      if (value.native) values.push_back(value.native);
-      if (value.exception_category) values.push_back(value.exception_category);
       value.pointer.reset();
-      value.callable_address = 0;
+      if (!by_value) {
+        // Preparation selects a target, not its contents or the source binding.
+        // Reads and writes use the live allocation at deferred callee entry.
+        value.reference_field.reset();
+        value.argument_reads.clear();
+        if (value.storage) {
+          value.native = nullptr;
+          value.exception_category = nullptr;
+          value.exception_facts.reset();
+        }
+        deferred_fields(value, [&](llvm::Value *&native) { values.push_back(native); });
+      } else {
+        if (native_callable(value)) {
+          if (!value.storage || !value.callable_temporary)
+            value = prepare_callable_argument(std::move(value), {});
+          images.push_back(values.size());
+          image_slots.push_back(value.storage->address);
+        } else if (local_bits(value.type)) value = bits_value(std::move(value));
+        else if (value.procedure && (!value.procedure->lexical_captures.visible.empty() ||
+                                    (captured && !value.procedure->captures.bindings.isEmpty())))
+          fail(expr.at, "deferred generic callable capture lowering is not implemented yet");
+        if (value.native) values.push_back(value.native);
+        if (value.exception_category) values.push_back(value.exception_category);
+        value.callable_address = 0;
+      }
+      if (value.region_id && !owners.contains(*value.region_id)) {
+        owners.emplace(*value.region_id, values.size());
+        values.push_back(regions_.at(*value.region_id).owner);
+      }
+      if (value.region_id) borrowed_regions.insert(*value.region_id);
+      borrowed_regions.insert(value.type.capture_regions.begin(), value.type.capture_regions.end());
     };
     if (callable_call) save(callable_call->callee, true);
+    const auto *form = method_call ? method_call->method.function.form :
+        !native_callable(callable_call->callee) ? callable_call->callee.procedure->form : nullptr;
     for (size_t i = 0; i < args.size(); ++i) {
-      const bool by_value = method_call ? parameter_at(*method_call->method.function.form, i).owner.empty() :
-          (!native_callable(callable_call->callee) && callable_call->callee.procedure->form ?
-              parameter_at(*callable_call->callee.procedure->form, i).owner.empty() :
-              !borrowed_parameter(callable_call->callee.type, i));
+      const bool by_value = form ? parameter_at(*form, i).owner.empty() :
+                                  !borrowed_parameter(callable_call->callee.type, i);
+      const bool owning = form ? parameter_at(*form, i).type.owned :
+          i < callable_call->callee.type.parameters.size() && callable_call->callee.type.parameters[i].owned;
+      if (args[i].type.kind == Type::region && !owning) {
+        valid_view(args[i], expr.at);
+        args[i] = borrowed(std::move(args[i]));
+      }
+      borrowed_arguments.push_back(!by_value);
       save(args[i], by_value);
     }
     auto *layout = ir_.deferred_layout(values);
     const auto scope_id = deferred_scope_->owner_scope;
-    auto invoke = [this, method_call, callable_call, captured, layout, scope_id, &module, at = expr.at]
+    auto invoke = [this, method_call, callable_call, borrowed_arguments, captured, layout, scope_id, &module, at = expr.at]
                   (llvm::Value *record, Environment &current, Value, const InitializationPaths &) -> Value {
       auto method = method_call;
       auto callable = callable_call;
       size_t field = 0;
-      const auto restore = [&](Value &value) {
-        if (value.native) {
-          const auto index = field++;
-          value.native = ir_.read_deferred_field(layout, record, index);
-          if (native_callable(value))
-            value.storage = StorageView{ir_.deferred_field(layout, record, index), scope_id, {}};
+      std::map<size_t, llvm::Value *> previous_owners;
+      const auto restore = [&](Value &value, bool borrow) {
+        if (borrow)
+          deferred_fields(value, [&](llvm::Value *&native) { native = ir_.read_deferred_field(layout, record, field++); });
+        else {
+          if (value.native) {
+            const auto index = field++;
+            value.native = ir_.read_deferred_field(layout, record, index);
+            if (native_callable(value))
+              value.storage = StorageView{ir_.deferred_field(layout, record, index), scope_id, {}};
+          }
+          if (value.exception_category) value.exception_category = ir_.read_deferred_field(layout, record, field++);
         }
-        if (value.exception_category) value.exception_category = ir_.read_deferred_field(layout, record, field++);
+        if (value.region_id && !previous_owners.contains(*value.region_id)) {
+          auto &owner = regions_.at(*value.region_id).owner;
+          previous_owners.emplace(*value.region_id, owner);
+          owner = ir_.read_deferred_field(layout, record, field++);
+        }
       };
-      if (callable) restore(callable->callee);
-      for (auto &value : method ? method->arguments : callable->arguments) restore(value);
+      if (callable) restore(callable->callee, false);
+      auto &arguments = method ? method->arguments : callable->arguments;
+      for (size_t i = 0; i < arguments.size(); ++i) restore(arguments[i], borrowed_arguments[i]);
+      const auto owner_restore = llvm::scope_exit([&] {
+        for (const auto &[id, owner] : previous_owners) regions_.at(id).owner = owner;
+      });
       return method ? invoke_prepared_method(*method, at, current, module) :
                       invoke_prepared_callable(*callable, module, current, at, captured);
     };
     auto &scope = *deferred_scope_;
     scope.actions.push_back({layout, expr.at, std::move(images), std::move(invoke), false, {}});
+    scope.actions.back().borrowed_regions = std::move(borrowed_regions);
     register_deferred(scope, values);
     for (auto *slot : image_slots) ir_.take_callable(slot);
     return {};
@@ -7341,6 +7437,7 @@ class Compiler {
     std::vector<Completion> completions;
     std::vector<EnvironmentEdge> environments;
     std::vector<ExceptionalEdge> failures;
+    std::vector<CleanupEntry> cleanup_failures;
     const auto complete = [&](Value result) {
       if (result.type == Type::never) return;
       if (result.region_id) region_pointer(result, expr.at);
@@ -7350,8 +7447,10 @@ class Compiler {
       environments.push_back({env, ir_.here(), flow_state()});
       ir_.jump(normal_join);
     };
-    const auto propagate = [&](Value error) {
+    const auto propagate = [&](Value error, const std::vector<ExceptionalEdge> &sources) {
       if (!finally) { raise_exception(error); return; }
+      if (emission && emission->cleanup)
+        for (const auto &source : sources) cleanup_failures.push_back({source.regions, source.error});
       failures.push_back({error, ir_.here(), flow_state(), env});
       ir_.jump(failure_join);
     };
@@ -7408,7 +7507,7 @@ class Compiler {
       ir_.enter(landing.block);
       auto error = enter_errors(landing.incoming);
       const auto *clause = catches[i];
-      if (!clause) { propagate(error); continue; }
+      if (!clause) { propagate(error, landing.incoming); continue; }
       auto [entry, inserted] = entries.try_emplace(clause, CatchEntry{nullptr, {}});
       if (inserted) entry->second.block = ir_.label("catch.body");
       entry->second.incoming.push_back({error, ir_.here(), flow_state(), env});
@@ -7448,7 +7547,7 @@ class Compiler {
       complete(result);
       for (auto &landing : catch_scope.landing) if (landing.block) {
         ir_.enter(landing.block);
-        propagate(enter_errors(landing.incoming));
+        propagate(enter_errors(landing.incoming), landing.incoming);
       }
     }
     if (finally) return_targets_.pop_back();
@@ -7514,7 +7613,7 @@ class Compiler {
       std::vector<CleanupEntry> entries;
       for (const auto &path : completions) entries.push_back({path.regions, {}});
       for (const auto &path : returns.incoming) entries.push_back({path.regions, {}});
-      for (const auto &path : failures) entries.push_back({path.regions, path.error});
+      entries.insert(entries.end(), cleanup_failures.begin(), cleanup_failures.end());
       auto facts = std::make_shared<ExceptionPossibilities>();
       for (const auto &path : pending) {
         if (path.kind == CompletionKind::failed) merge_exception_possibilities(*facts, path.value);

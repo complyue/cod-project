@@ -1,0 +1,4 @@
+proc set(value:u64 in O)->void where {owner O} {value <- 1u64;}
+proc run(value:const u64 in O)->void where {owner O} {defer set(value);}
+val target:u64 <- 0u64;
+run(target);

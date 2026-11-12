@@ -1,0 +1,9 @@
+using symbol "std:io" @print;
+proc show(value:const u64 in O)->void where {owner O} {behave @print(value);}
+proc set(value:u64 in O)->void where {owner O} {value <- 1u64;}
+proc run()->void {
+  ptr target = make local u64;
+  defer show(target);
+  defer set(target);
+}
+run();

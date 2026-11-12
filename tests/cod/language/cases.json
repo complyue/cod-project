@@ -3080,5 +3080,46 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-borrowed-arguments.cod",
+    "exit": 0,
+    "stdout": "4\n3\n5\n6\n8\n9\n11\n13\n13\n23\n32\n34\n67\n33\n32\n34\n67\n33\n32\n34\n67\n33\n40\n41\n60\n61\n"
+  },
+  {
+    "file": "scopes/defer-borrowed-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-borrowed-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot pass a read-only view to a writable parameter"
+  },
+  {
+    "file": "scopes/defer-borrowed-consumed.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional value requires a live owning region"
+  },
+  {
+    "file": "scopes/defer-borrowed-iteration-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional value requires a live owning region"
+  },
+  {
+    "file": "scopes/defer-borrowed-registration-failure.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-borrowed-later-transfer.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "region owner has been consumed"
   }
 ]

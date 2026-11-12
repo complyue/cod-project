@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 192 · Recorded: 2026-11-12.
+Prototype reference revision: 193 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Prepared borrowed arguments:** [K-546](../../../design/DesignAuthorityRegistry.md#k-546), reference193 under D-17r44, uses the qualified D-14/D-18 passing modes to save selected places and actual owner bases without copying borrowed contents. [Verification](defer-borrowed-validation.json) covers late scalar/callable reads, deferred initialization, nullability, current/captured invocation, repeated regional owners, failed registration and access/lifetime rejection. Owner facts follow reaching registrations; unchanged callable summaries wait for flow closure. Owning arguments, general mutable backedges, conditional owner correlation and remaining generic/module integration stay incomplete.
 
 - **Queue-selected initialization:** [K-544](../../../design/DesignAuthorityRegistry.md#k-544), reference192 under D-17r43, retains branch/loop initialization on deferred-queue edges and routes those facts through shared cleanup equations. [Verification](defer-queue-initialization-validation.json) distinguishes deferred versus immediate writes, nested alternatives, error/recovery paths, loop fallbacks, independent cells and failed registration. Existing native artifact sizes and resource accounting remain unchanged. This does not supply arbitrary relational analysis or mutable pointer/callable/owner backedges.
 
@@ -79,6 +81,8 @@ Line comments use `#`. The compiler diagnoses `//` outside strings/comments as r
 `throw primary from cause` creates an immutable explicit relationship. Returned/stored errors retain their causes beyond catch exit; `.cause_count` and `cause_at(error, index)` inspect them. Common `SystemException` fields preserve the category on reload. Cause records use execution-local numeric handles, and their backing storage remains until execution exit. Creating a chain can raise a fresh unchained OOM; ordinary propagation allocates no cause storage. This is not a persistence or cross-process format.
 
 [K-414](../../../design/DesignAuthorityRegistry.md#k-414) and [the completed E1–E5 evidence](exception-ownership-validation.json) record five selected language/LLVM checks, the expanded native exception harness, ownership/relocation/capture regression and shilos construction checks on the final compiler. Three real allocation faults cover table creation, first record and growth; earlier histories survive, retry succeeds, and all backing storage releases. Earlier reports retain their original hashes. Full qualifier/assignment support, owner reassignment, mailbox and general RTTI remain separate.
+
+Scope-owned deferred calls prepare their operands at registration. Default bits and callable parameters save values; `in O` parameters save selected places whose contents are read at invocation. Borrowed region handles retain their actual owner. A later pointer rebind leaves the saved target unchanged, while payload writes and callable-holder replacement remain observable. Deferred setters participate in definite initialization. [The composed fixture](scopes/defer-borrowed-arguments.cod) exercises these behaviors; [its validation](defer-borrowed-validation.json) records native accounting, failure injection and sanitizer coverage. General mutable deferred flow and owning arguments remain incomplete.
 
 ## Architecture boundary
 

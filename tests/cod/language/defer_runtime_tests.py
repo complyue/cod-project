@@ -206,7 +206,8 @@ def main():
         scratch = Path(temporary)
         for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
-                     'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization'):
+                     'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization',
+                     'defer-borrowed-arguments'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -238,6 +239,17 @@ using "std:exceptions" OutOfMemory;
 behave @print(9001u64);
 try {choose(true);} catch(error:const OutOfMemory) {behave @print(9002u64);};
 '''
+            if name == 'defer-borrowed-arguments':
+                source += '''
+using "std:exceptions" OutOfMemory;
+proc registration_failure()->void {
+  val target:u64 <- 50u64;
+  defer show(target);
+  behave @print(9001u64);
+  defer set(target, 999u64);
+}
+try {registration_failure();} catch(error:const OutOfMemory) {behave @print(9002u64);};
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -253,6 +265,9 @@ try {choose(true);} catch(error:const OutOfMemory) {behave @print(9002u64);};
                 assert evidence['layout']['record_failures'] == 1
             if name == 'defer-handler-initialization':
                 expected += ['9001', '70', '71', '9002']
+                assert evidence['layout']['record_failures'] == 1
+            if name == 'defer-borrowed-arguments':
+                expected += ['9001', '50', '9002']
                 assert evidence['layout']['record_failures'] == 1
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()

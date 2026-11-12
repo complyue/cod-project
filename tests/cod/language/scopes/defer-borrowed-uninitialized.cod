@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+proc show(value:const u64 in O)->void where {owner O} {behave @print(value);}
+proc run()->void {
+  ptr missing = make local u64;
+  val initialized:u64 <- 1u64;
+  ptr selected = missing;
+  defer show(selected);
+  selected = initialized;
+}
+run();
