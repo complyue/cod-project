@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 151
+Discussion revision: 152
 
 Recorded: 2026-10-22
 
@@ -9,6 +9,8 @@ Current discussion: 2026-11-11
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Construction requirements:** [H-383–H-385](DesignAuthorityRegistry.md#h-383)/[K-542](DesignAuthorityRegistry.md#k-542), D-07r152, records intrinsic-only resource ownership, borrowed ordinary references, lexical/regional bits ADTs, explicit construction owner checking and result-only const region access. [D-22](ConstructionAndAcquisition.md) carries the confirmed requirements, candidate P-348–P-350 value paths and pending inference/representation/migration/DBMR choices. C-39/C-54/C-65/C-72 and P-344–P-347 preserve explicit responsibility and relative non-bits graphs under charter §§2–5/§7–8. H-384 authorizes comparison of alternatives with final selection reserved. Acceptance requires D-22's composed matrix; no whole-document qualification or aggregate implementation is claimed. Existing unrelated qualified scope continues unchanged.
 
 - **Nearest symbol lookup and execution separation:** [H-381](DesignAuthorityRegistry.md#h-381)/[K-537](DesignAuthorityRegistry.md#k-537), D-07r151, records P-342: @ access follows the nearest lexical binding and rejects a non-symbol binding. Captured/current execution, cached identities and delayed bodies preserve that lookup. H-248/H-249/H-372 separates semantic ModuleWorld records from ModuleExecution values/progress; source behavior remains governed by the existing contracts. This continues explicit names/context under charter §§2–3/§5.2/§6/§8/§12 and the H-378 value path. Acceptance covers shadowing, capture/mixin lookup and preserved native ownership/context; full family/stage migration and physical dispatch mechanisms remain outstanding.
 
@@ -221,7 +223,7 @@ Generic argument matching and generic subtyping must remain distinct. The intend
 
 Sum alternatives and abstract descendants serve different roles. The recommended initial data sum is a fixed alternative set suitable for exhaustive matching. An abstract family may acquire nominal abstract descendants and explicitly conforming data types in other modules; neither current set is an implicit closed sum. Sum closure/extension and constructor namespaces still need an explicit contract. Future GADT constructors may refine indices of the declared data family; subtype syntax alone does not define those refinements or permit unchecked casts.
 
-Storage remains independent of declaration spelling. Non-bits user objects stay in regions even when all their fields are bits; data does not imply immutability, stack eligibility, copying or GC. Ordinary references borrow, const non-bits references restrict holder writes without freezing aliases, and owned remains an intrinsic resource responsibility. User data containing owned-region fields, including through variants/generic instantiation, remains forbidden by H-196. Builtin resource optional/results are a separate intrinsic facility.
+Storage classification is independent of nominal declaration identity. H-383/H-384 admits recursively finite bits ADTs to lexical or regional storage; stored references, ownership carriers, managed environments and implicit cleanup exclude that category. Non-bits user objects remain region-only. The `data` keyword alone does not establish bits eligibility, immutability or GC. [D-22](ConstructionAndAcquisition.md#confirmed-requirements) records the confirmed boundary and its incomplete implementation. Ordinary references borrow, const non-bits references restrict holder writes without freezing aliases, and owned remains an intrinsic resource responsibility. User data containing owned-region fields, including through variants/generic instantiation, remains forbidden by H-196. Builtin resource optional/results are a separate intrinsic facility.
 
 Static abstract root bounds do not require a runtime object wrapper. Persisting heterogeneous abstract-typed fields or dispatching on a runtime sum nevertheless needs a sound representation/discrimination contract; WPO does not make runtime alternatives constant. No object header, fat pointer or general inheritance runtime is selected solely to support the first root-policy method.
 
