@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 202 · Recorded: 2026-11-12.
+Prototype reference revision: 203 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Result provenance:** [K-556](../../../design/DesignAuthorityRegistry.md#k-556), reference203 under D-18r74, continues the existing storage, owner and callable value contract. [Verification](callable-result-provenance-validation.json) checks the shared argument-relative owner analysis, native cleanup regressions and [closed scalar result behavior](closures/callable-scalar-result-semantics.cod). Borrowed aliases, independent materialization and cleanup timing remain distinct. Open owner-bound scalar results still need native category staging. Native captured scalar returns have an aliasing defect; fresh ordinary results and mixed categories are under [topic review](../../../design/ScalarCallResults.md). No observed copying policy is approved by these regressions.
 
 - **Native body-derived results:** [K-555](../../../design/DesignAuthorityRegistry.md#k-555), reference202 under D-18r73/D-17r53, continues the qualified complete-value, fixed-owner, explicit-scope and cleanup contracts. [Verification](defer-native-result-validation.json) covers explicitly typed regional/array/non-owning-region results through open deferred selections, native recursion, nested forwarding, current/captured contexts, symbolic resource installation, exception cleanup and owner/access rejection. Caller bases and result evidence close in the compiler graph; the borrowed-address ABI is unchanged. [Complete-image](defer-body-result-validation.json) and [cleanup-context](defer-context-validation.json) reports retain their bounded scopes. Broader result/context proofs, inferred signatures, module queues and family/AOT integration remain incomplete; actual-owner/result-discrimination design boundaries remain.
 
@@ -490,9 +492,9 @@ Unknown local suppliers/source-body roles and duplicate mapping roles are diagno
 
 The subset accepts acyclic module composition including shared and diamond dependencies. Each module is incorporated once, in first-encounter order; its effects are not rerun or recaptured for another caller. A demanded initialization cycle is diagnosed; general cyclic-initialization semantics remain open. Compiler encounters do not execute user code.
 
-Local symbol identity uses the canonical module path and declaration, preserving aliases and separating distinct source files. Versioned package identity and first-class runtime symbol selection are not implemented. Calls are specialized along known paths; recursion, procedure-valued scope results and general runtime higher-order dispatch are unsupported.
+Local symbol identity uses the canonical module path and declaration, preserving aliases and separating distinct source files. Versioned package identity and first-class runtime symbol selection are not implemented. Checked native adapters support runtime-selected callable values, recursive calls, higher-order arguments and complete callable results within [D-18's implemented boundaries](../../../design/RegionalClosures.md#implementation-status-and-review-boundaries). Unqualified owner-bound scalar result staging and broader result/context combinations remain incomplete.
 
-The generated program uses fixed thread-local typed binding slots and stack-based saved values. Known procedures are specialized by the compiler. Compiler ASTs and system machinery can use the host heap; generated user data and scalar captures do not. Regional references carry offsets with owning-region information specialized along the known WPO path. Persisted intra-region fields use shilos `regional_ptr`; source-level cross-region fields and persistent closures remain unsupported. The presence of TLS does not establish tested multi-thread or reentrant execution support.
+The generated program uses fixed thread-local typed binding slots and stack-based saved values. Native procedures are specialized for checked contexts. Callable images and defer records may use runtime-sized backing released by their lexical owner; this does not introduce an independently managed user heap lifetime. Regional user objects retain region-only allocation. Regional references carry offsets with owning-region information specialized along the known WPO path. Persisted intra-region fields use shilos `regional_ptr`; source-level cross-region fields and persistent closures remain unsupported. The presence of TLS does not establish tested multi-thread or reentrant execution support.
 
 ## Evidence
 

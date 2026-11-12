@@ -3505,5 +3505,22 @@
     "stderr_contains": [
       "native borrowed results with different actual region owners need further owner-selection support"
     ]
+  },
+  {
+    "file": "closures/callable-scalar-result-semantics.cod",
+    "exit": 0,
+    "stdout": "2\n2\n1\n3\n2\n3\n2\n1\n3\n2\n1\n"
+  },
+  {
+    "file": "closures/callable-scalar-result-value-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "owner 'o' requires storage with known provenance"
+  },
+  {
+    "file": "closures/callable-scalar-result-value-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "object transfer requires a regional object destination"
   }
 ]

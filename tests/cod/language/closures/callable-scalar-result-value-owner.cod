@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+proc consumer(v:u64 in o)->const u64 where {owner o} {return v;}
+proc run()->void {
+ val input=1u64;
+ proc view=proc(v:u64 in o)->const u64 where {owner o} {return v+1u64;};
+ behave @print(consumer(view(input)));
+}
+run();

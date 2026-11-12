@@ -1594,118 +1594,101 @@ class Compiler {
     return std::any_of(regions_.at(region).owner_inputs.begin(), regions_.at(region).owner_inputs.end(),
         [&](size_t input) { return possible_region_alias(input, target, visited); });
   }
-  std::optional<size_t> returned_owner(size_t origin, const std::set<size_t> &inputs, const Location &at) {
-    // A return is fresh or comes from an owning parameter. Recursive adapters
-    // preserve parameter roles, not the allocation IDs of their first caller.
-    using Provenance = std::set<size_t>; // Zero is fresh; parameter i is i + 1.
-    using InputRoles = std::map<size_t, size_t>;
-    std::map<const NativeCallDemand *, Provenance> summaries;
-    InputRoles outer;
-    for (size_t input : inputs) outer.emplace(input, outer.size() + 1);
-    std::function<Provenance(size_t, const InputRoles &, std::set<size_t>)> region_value;
-    const auto merge = [](Provenance &into, const Provenance &from) { into.insert(from.begin(), from.end()); };
-    const auto result_value = [&](size_t id, const InputRoles &roles, const std::set<size_t> &visited) {
-      const auto &returns = checked_returns(id, at);
-      Provenance result;
-      if (const auto *producer = return_facts_.at(id - 1).producer) {
-        const auto summary = summaries.try_emplace(producer).first->second;
-        for (size_t role : summary) {
-          if (!role) result.insert(0);
-          else merge(result, region_value(*producer->arguments.at(role - 1).region_id, roles, visited));
-        }
-      } else for (const auto &value : returns)
-        if (value.region_id) merge(result, region_value(*value.region_id, roles, visited));
-      return result;
-    };
-    region_value = [&](size_t id, const InputRoles &roles, std::set<size_t> visited) -> Provenance {
-      if (const auto found = roles.find(id); found != roles.end()) return {found->second};
-      if (!visited.insert(id).second) return {};
-      const auto &region = regions_.at(id);
-      if (!region.owner_origin || region.owner_inputs.empty()) return {0};
-      return result_value(region.owner_origin, roles, visited);
-    };
-    Provenance result;
-    for (;;) {
-      const auto before = summaries.size();
-      result = result_value(origin, outer, {});
-      bool changed = false;
-      for (auto &[demand, summary] : summaries) {
-        const auto &returns = checked_returns(demand->record_result, at);
-        Provenance next;
-        if (demand->reused) next = summaries.try_emplace(demand->reused).first->second;
-        else {
-          InputRoles roles;
-          for (size_t i = 0; i < demand->arguments.size(); ++i)
-            if (demand->type.parameters[i].owned) roles.emplace(*demand->arguments[i].region_id, i + 1);
-          for (const auto &value : returns)
-            if (value.region_id) merge(next, region_value(*value.region_id, roles, {}));
-        }
-        const auto size = summary.size();
-        merge(summary, next);
-        changed |= size != summary.size();
-      }
-      if (!changed && summaries.size() == before) break;
-    }
-    if (result.size() != 1 || result.contains(0)) return {};
-    for (const auto &[owner, role] : outer) if (result.contains(role)) return owner;
-    return {};
-  }
   size_t region_source(size_t id) const {
     while (regions_.at(id).alias) id = *regions_.at(id).alias;
     return id;
   }
-  size_t borrowed_region_owner(size_t origin, const Location &at, bool complete) {
-    using Origin = std::pair<bool, size_t>; // Argument role or fixed external region.
-    using Provenance = std::set<Origin>;
-    using Roles = std::map<size_t, size_t>;
-    std::map<const NativeCallDemand *, Provenance> summaries;
+  struct ResultOrigin {
+    enum class Kind { no_owner, fresh_region, region, lexical, argument } kind;
+    size_t identity = 0;
+    auto operator<=>(const ResultOrigin &) const = default;
+  };
+  using ResultOrigins = std::set<ResultOrigin>;
+  enum class ResultOwnership { borrowed, owning };
+  ResultOrigin storage_origin(const Value &value) const {
+    if (value.region_id) return {ResultOrigin::Kind::region, region_source(*value.region_id)};
+    if (value.storage && value.storage->scope) return {ResultOrigin::Kind::lexical, *value.storage->scope};
+    return {ResultOrigin::Kind::no_owner};
+  }
+  ResultOrigins return_storage_origins(size_t origin, ResultOwnership ownership, const Location &at,
+                                       bool complete, const std::set<size_t> &inputs = {}) {
+    // Summaries are relative to argument roles. A recursive adapter's first
+    // caller does not fix the identities of subsequent callers' storage.
+    using Kind = ResultOrigin::Kind;
+    using Roles = std::map<ResultOrigin, ResultOrigin>;
+    std::map<const NativeCallDemand *, ResultOrigins> summaries;
+    const auto owning = ownership == ResultOwnership::owning;
     const auto returns = [&](size_t id) -> const std::vector<Value> & {
       if (complete) return checked_returns(id, at);
       try { return checked_returns(id, at); }
       catch (const UnresolvedAccess &) { return return_facts_.at(id - 1).alternatives; }
     };
-    const auto merge = [](Provenance &into, const Provenance &from) { into.insert(from.begin(), from.end()); };
-    std::function<Provenance(size_t, const Roles &, std::set<size_t>)> region_value;
-    std::function<Provenance(const Value &, const Roles &, std::set<size_t>)> value_owner;
-    const auto result_value = [&](size_t id, const Roles &roles, const std::set<size_t> &visited) {
+    const auto merge = [](ResultOrigins &into, const ResultOrigins &from) {
+      into.insert(from.begin(), from.end());
+    };
+    std::function<ResultOrigins(ResultOrigin, const Roles &, std::set<ResultOrigin>)> storage_value;
+    std::function<ResultOrigins(const Value &, const Roles &, std::set<ResultOrigin>)> value_origin;
+    const auto result_value = [&](size_t id, const Roles &roles, const std::set<ResultOrigin> &visited) {
       const auto &values = returns(id);
-      Provenance result;
+      ResultOrigins result;
       if (const auto *producer = return_facts_.at(id - 1).producer) {
         const auto summary = summaries.try_emplace(producer).first->second;
-        for (const auto &[argument, value] : summary) {
-          const auto region = argument ? *producer->arguments.at(value).region_id : value;
-          merge(result, region_value(region, roles, visited));
+        for (const auto &source : summary) {
+          if (source.kind == Kind::argument) {
+            const auto owner = storage_origin(producer->arguments.at(source.identity));
+            if (owner.kind == Kind::no_owner)
+              throw std::logic_error("result owner role has no argument storage");
+            merge(result, storage_value(owner, roles, visited));
+          } else if (source.kind == Kind::region || source.kind == Kind::lexical)
+            merge(result, storage_value(source, roles, visited));
+          else result.insert(source);
         }
-      } else for (const auto &value : values) merge(result, value_owner(value, roles, visited));
+      } else for (const auto &value : values) merge(result, value_origin(value, roles, visited));
       return result;
     };
-    region_value = [&](size_t id, const Roles &roles, std::set<size_t> visited) -> Provenance {
-      id = region_source(id);
-      if (const auto found = roles.find(id); found != roles.end()) return {{true, found->second}};
-      if (!visited.insert(id).second) return {};
-      if (const auto origin = regions_.at(id).borrowed_origin) return result_value(origin, roles, visited);
-      return {{false, region_identity(id, at)}};
+    storage_value = [&](ResultOrigin source, const Roles &roles, std::set<ResultOrigin> visited) -> ResultOrigins {
+      if (source.kind == Kind::region) source.identity = region_source(source.identity);
+      if (const auto found = roles.find(source); found != roles.end()) return {found->second};
+      if (!visited.insert(source).second) return {};
+      if (source.kind == Kind::lexical) return {source};
+      const auto &region = regions_.at(source.identity);
+      if (owning) {
+        if (!region.owner_origin || region.owner_inputs.empty()) return {{Kind::fresh_region}};
+        return result_value(region.owner_origin, roles, visited);
+      }
+      if (region.borrowed_origin) return result_value(region.borrowed_origin, roles, visited);
+      return {{Kind::region, region_identity(source.identity, at)}};
     };
-    value_owner = [&](const Value &value, const Roles &roles, std::set<size_t> visited) -> Provenance {
-      if (!value.region_id) return {};
-      if (roles.contains(region_source(*value.region_id))) return region_value(*value.region_id, roles, visited);
-      if (value.region_result_origin) return result_value(value.region_result_origin, roles, visited);
-      return region_value(*value.region_id, roles, visited);
+    value_origin = [&](const Value &value, const Roles &roles, std::set<ResultOrigin> visited) -> ResultOrigins {
+      const auto owner = storage_origin(value);
+      if (owner.kind == Kind::no_owner) return owning ? ResultOrigins{} : ResultOrigins{owner};
+      if (roles.contains(owner)) return storage_value(owner, roles, visited);
+      if (!owning && value.region_result_origin) return result_value(value.region_result_origin, roles, visited);
+      return storage_value(owner, roles, visited);
     };
-    Provenance result;
+    Roles outer;
+    for (size_t input : inputs) {
+      const ResultOrigin source{Kind::region, region_source(input)};
+      outer.emplace(source, ResultOrigin{Kind::region, input});
+    }
+    ResultOrigins result;
     for (;;) {
       const auto count = summaries.size();
-      result = result_value(origin, {}, {});
+      result = result_value(origin, outer, {});
       bool changed = false;
       for (auto &[demand, summary] : summaries) {
         const auto &values = returns(demand->record_result);
-        Provenance next;
+        ResultOrigins next;
         if (demand->reused) next = summaries.try_emplace(demand->reused).first->second;
         else {
           Roles roles;
-          for (size_t i = 0; i < demand->arguments.size(); ++i)
-            if (demand->arguments[i].region_id) roles.try_emplace(region_source(*demand->arguments[i].region_id), i);
-          for (const auto &value : values) merge(next, value_owner(value, roles, {}));
+          for (size_t i = 0; i < demand->arguments.size(); ++i) {
+            if (owning && !demand->type.parameters[i].owned) continue;
+            const auto owner = storage_origin(demand->arguments[i]);
+            if (owner.kind != Kind::no_owner)
+              roles.try_emplace(owner, ResultOrigin{Kind::argument, i});
+          }
+          for (const auto &value : values) merge(next, value_origin(value, roles, {}));
         }
         const auto size = summary.size();
         merge(summary, next);
@@ -1713,10 +1696,19 @@ class Compiler {
       }
       if (!changed && count == summaries.size()) break;
     }
+    return result;
+  }
+  std::optional<size_t> returned_owner(size_t origin, const std::set<size_t> &inputs, const Location &at) {
+    const auto result = return_storage_origins(origin, ResultOwnership::owning, at, true, inputs);
+    if (result.size() != 1 || result.begin()->kind != ResultOrigin::Kind::region) return {};
+    return result.begin()->identity;
+  }
+  size_t borrowed_region_owner(size_t origin, const Location &at, bool complete) {
+    const auto result = return_storage_origins(origin, ResultOwnership::borrowed, at, complete);
     if (result.empty()) throw UnresolvedAccess(at);
-    if (result.size() != 1 || result.begin()->first)
+    if (result.size() != 1 || result.begin()->kind != ResultOrigin::Kind::region)
       fail(at, "native borrowed results with different actual region owners need further owner-selection support");
-    return result.begin()->second;
+    return result.begin()->identity;
   }
   size_t region_identity(size_t id, const Location &at) {
     id = region_source(id);
@@ -1774,8 +1766,10 @@ class Compiler {
     return value.region_id || (value.storage && value.storage->scope);
   }
   std::optional<std::pair<bool, size_t>> storage_owner(const Value &value) {
-    if (value.region_id) return std::pair(true, region_identity(*value.region_id, regions_.at(*value.region_id).acquired));
-    if (value.storage && value.storage->scope) return std::pair(false, *value.storage->scope);
+    const auto origin = storage_origin(value);
+    if (origin.kind == ResultOrigin::Kind::region)
+      return std::pair(true, region_identity(origin.identity, regions_.at(origin.identity).acquired));
+    if (origin.kind == ResultOrigin::Kind::lexical) return std::pair(false, origin.identity);
     return {};
   }
   void valid_view(const Value &value, const Location &at) {
