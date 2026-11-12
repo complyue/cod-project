@@ -99,7 +99,7 @@ REJECTS = {
     "escaping-view": ('function bad() -> Packet {owned region p:Packet <- fresh(); root(p)} bad();',
                       "result would outlive its owning scope"),
     "ended-effect-owner": ('proc test()->void {owned region p:Packet <- fresh(); ref v=root(p); '
-                           '{effect @state <- p; {}}; v.sequence; {}} test();', "requires a live owning region"),
+                           '{{effect @state <- p; {}}}; v.sequence; {}} test();', "requires a live owning region"),
     "conditional-consumption": ('proc test(flag:bool)->void {owned region p:Packet <- fresh(); '
                                 'if(flag){drop(p)}else{}; read(p); {}} test(true);', "owner has been consumed"),
     "duplicate-move": ('function both(owned region a:Packet,owned region b:Packet) -> void{} '

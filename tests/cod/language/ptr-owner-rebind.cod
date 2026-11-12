@@ -1,4 +1,4 @@
-{
+{{
   ptr outer = 1;
-  { ptr inner = 2; outer = inner; };
-};
+  {{ ptr inner = 2; outer = inner; }};
+}};

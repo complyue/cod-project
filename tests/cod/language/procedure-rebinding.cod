@@ -8,5 +8,5 @@ procedure @a -> i64 { @x + 10 }
 effect @x <- 2;
 procedure @b -> i64 { @x + 20 }
 effect @call = @a;
-{ effect @call = @b; behave @print(perform @call); };
+{{ effect @call = @b; behave @print(perform @call); }};
 behave @print(perform @call);

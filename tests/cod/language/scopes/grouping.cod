@@ -1,0 +1,24 @@
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+using "std:exceptions" InvalidCapacity;
+region symbol arena;
+symbol @number:u64;
+effect @number <- 1u64;
+{ val shared:u64 <- 3u64; effect @number <- 5u64; };
+behave @print(shared);
+behave @print(@number);
+{{ val private:u64 <- 9u64; effect @number <- private; behave @print(@number); }};
+behave @print(@number);
+if (shared == 3u64) { effect @number <- 10u64; } else { effect @number <- 11u64; };
+behave @print(@number);
+try {
+  effect @number <- 12u64;
+  effect @arena <- region(0u64);
+} catch (error:const InvalidCapacity) {
+  behave @print(@number);
+} finally {
+  effect @number <- 13u64;
+  val after:u64 <- 14u64;
+};
+behave @print(@number);
+behave @print(after);

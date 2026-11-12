@@ -33,16 +33,16 @@ behave @print(perform @saved(2u64));
 
 # Current-context invocation need not use an expired definition-time region.
 symbol @view:proc()->const u64;
-proc from_dead_scope = {
+proc from_dead_scope = {{
   effect @arena <- make Pool(capacity = 4096u64) { tag <- 90u64 };
   proc()->const u64 { root(@arena).tag }
-};
+}};
 effect @view = from_dead_scope;
 behave @print(behave @view());
 
 symbol @walk:proc(u64)->const u64;
 proc walker = proc(n:u64)->const u64 {
-  if (n == 0u64) { @node.value } else { behave @walk(n - 1u64) + 1u64 }
+  if (n == 0u64) {{ @node.value }} else {{ behave @walk(n - 1u64) + 1u64 }}
 };
 effect @walk = walker;
 behave @print(behave @walk(3u64));
@@ -56,8 +56,8 @@ proc fail = proc()->const u64 throws NullPointerException {
   observed + absent
 };
 effect @failing = fail;
-{
+{{
   effect @node = deref(alloc @arena Node(44u64));
-  try { perform @failing(); {} }
-  catch (e:const NullPointerException) { behave @print(@node.value); };
-};
+  try {{ perform @failing(); {} }}
+  catch (e:const NullPointerException) {{ behave @print(@node.value); }};
+}};

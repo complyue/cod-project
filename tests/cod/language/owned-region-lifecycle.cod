@@ -34,7 +34,7 @@ conversion function normalize(value:u64(Raw)) -> u64(Ready) {
 }
 function accept(value:u64(Ready*), ignored:u64) -> void {}
 function select_owner(owned region left:Packet, owned region right:Packet, flag:bool)-> owned region :Packet {
-  if(flag) {left} else {right}
+  if(flag) {{left}} else {{right}}
 }
 function choose(flag:bool)-> owned region :Packet {
   owned region left:Packet <- fresh(16u64, 1u64);
@@ -42,13 +42,13 @@ function choose(flag:bool)-> owned region :Packet {
   forward(select_owner(left, right, flag))
 }
 function recover(bytes:u64)-> owned region :Packet {
-  try {fresh(bytes, 3u64)}
-  catch(error:const InvalidCapacity) {fresh(16u64, 4u64)}
+  try {{fresh(bytes, 3u64)}}
+  catch(error:const InvalidCapacity) {{fresh(16u64, 4u64)}}
   finally {}
 }
 proc lifecycle(bytes:u64) -> void throws NullPointerException {
   owned region packet:Packet <- make Packet(capacity = 256u64) {
-    head = {behave @print(101); null};
+    head = {{behave @print(101); null}};
     sequence <- {behave @print(102); 41u64}
   };
   ref view = root(packet);
@@ -65,55 +65,55 @@ proc lifecycle(bytes:u64) -> void throws NullPointerException {
 proc branch_results(bytes:u64) -> void {
   owned region first:Packet <- choose(bytes == 0u64);
   owned region second:Packet <- recover(bytes);
-  behave @assert(root(first).sequence == (if (bytes == 0u64) {1u64} else {2u64}));
+  behave @assert(root(first).sequence == (if (bytes == 0u64) {{1u64}} else {{2u64}}));
   behave @print(2)
 }
 proc failures(bytes:u64) -> void {
-  try {
+  try {{
     owned region too_small:Packet <- make Packet(capacity = 7u64) {
       sequence <- {behave @print(999); 0u64}; head = null
     };
     {}
-  } catch(error:const RegionCapacityExceeded) {
+  }} catch(error:const RegionCapacityExceeded) {{
     behave @assert(error.requested == 16u64);
     behave @assert(error.available == 7u64);
     behave @print(3)
-  };
-  try {
+  }};
+  try {{
     owned region unfinished:Packet <- make Packet(capacity = 16u64) {
       sequence <- root(fresh(bytes, 0u64)).sequence; head = null
     };
     {}
-  } catch(error:const InvalidCapacity) {behave @print(4)};
+  }} catch(error:const InvalidCapacity) {{behave @print(4)}};
   owned region keep:Packet <- fresh(16u64, 23u64);
-  try {dispose(keep, root(fresh(bytes, 0u64)).sequence)}
-  catch(error:const InvalidCapacity) {
+  try {{dispose(keep, root(fresh(bytes, 0u64)).sequence)}}
+  catch(error:const InvalidCapacity) {{
     behave @assert(root(keep).sequence == 23u64);
     behave @print(5)
-  };
-  try {
-    owned region pending:Packet <- try {choose(true)}
-    finally {fresh(bytes, 0u64); {}};
+  }};
+  try {{
+    owned region pending:Packet <- try {{choose(true)}}
+    finally {{fresh(bytes, 0u64); {}}};
     {}
-  } catch(error:const InvalidCapacity) {behave @print(6)};
+  }} catch(error:const InvalidCapacity) {{behave @print(6)}};
   owned region entered:Packet <- fresh(16u64, 0u64);
-  try {fail_inside(entered, bytes)}
-  catch(error:const InvalidCapacity) {behave @print(7)};
+  try {{fail_inside(entered, bytes)}}
+  catch(error:const InvalidCapacity) {{behave @print(7)}};
   {}
 }
 proc conversion_order(bytes:u64) -> void {
   owned region keep:Packet <- fresh(16u64, 23u64);
-  try {accept(Raw(bytes), {dispose(keep, 0u64); 1u64})}
-  catch(error:const InvalidCapacity) {
+  try {{accept(Raw(bytes), {dispose(keep, 0u64); 1u64})}}
+  catch(error:const InvalidCapacity) {{
     behave @assert(root(keep).sequence == 23u64);
     behave @print(8)
-  };
+  }};
   {}
 }
 proc stable_join(flag:bool) -> void {
   owned region packet:Packet <- fresh(16u64, 17u64);
   ref view = root(packet);
-  owned region selected:Packet <- if(flag) {packet} else {packet};
+  owned region selected:Packet <- if(flag) {{packet}} else {{packet}};
   behave @assert(view.sequence == root(selected).sequence);
   behave @print(9)
 }
@@ -124,15 +124,15 @@ for(i in 0u64 .. 2u64) {{
 stable_join(false);
 proc borrowed_failure(bytes:u64) -> void {
   owned region packet:Packet <- fresh(16u64, 1u64);
-  try {edit_then_fail(packet, bytes)}
-  catch(error:const InvalidCapacity) {
+  try {{edit_then_fail(packet, bytes)}}
+  catch(error:const InvalidCapacity) {{
     behave @assert(root(packet).sequence == 55u64);
     behave @print(10)
-  }
+  }}
 }
 symbolic_owner();
 borrowed_failure(0u64);
-try { lifecycle(0u64); } catch (unexpected:const NullPointerException) { behave @assert(false); };
+try {{ lifecycle(0u64); }} catch (unexpected:const NullPointerException) {{ behave @assert(false); }};
 branch_results(0u64);
 branch_results(16u64);
 failures(0u64);

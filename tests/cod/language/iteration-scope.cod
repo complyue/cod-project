@@ -5,7 +5,7 @@ region symbol @arena;
 array Values[u32]:i64;
 effect @value <- 9;
 procedure @read() -> i64 { @value }
-{
+{{
   val i = 90;
   val values = 123;
   for (i in 0 .. 3) {{
@@ -18,16 +18,16 @@ procedure @read() -> i64 { @value }
   behave @print(i);
   behave @print(values);
   val flag = true;
-  behave @print(true && { val flag = !flag; !!flag });
+  behave @print(true && {{ val flag = !flag; !!flag }});
   behave @print(flag);
-};
+}};
 behave @print(@value);
 
 function nested(in:i64) -> i64 {
-  val value = { val in = in + 1; in };
+  val value = {{ val in = in + 1; in }};
   val sum = 10;
   val total = fold (in in 0 .. 3, sum = sum) {{ sum + in }};
-  val branch = if (in > 0) { val in = in + 2; in } else { val in = in - 2; in };
+  val branch = if (in > 0) {{ val in = in + 2; in }} else {{ val in = in - 2; in }};
   value + total + branch + in + sum
 }
 behave @print(nested(5));

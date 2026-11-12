@@ -1,0 +1,4 @@
+using symbol "std:io" @print;
+symbol @value:u64;
+if (true) { effect @value <- 1u64; } else {};
+behave @print(@value);

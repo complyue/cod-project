@@ -18,5 +18,5 @@ behave @print(behave @increment);
 behave @assert(@effect == 7);
 effect @effect <- initial;
 behave @print(@effect);
-{ effect @effect <- 9; behave @print(@effect); };
+{{ effect @effect <- 9; behave @print(@effect); }};
 behave @print(@effect);

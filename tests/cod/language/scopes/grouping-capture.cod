@@ -1,0 +1,14 @@
+using symbol "std:io" @print;
+symbol @amount:u64;
+symbol @selected:proc(bool)->const u64;
+effect @amount <- 1u64;
+proc chooser = proc(flag:bool)->const u64 {
+  if (flag) { effect @amount <- 2u64; } else {};
+  @amount
+};
+effect @selected = chooser;
+effect @amount <- 10u64;
+behave @print(perform @selected(false));
+behave @print(perform @selected(true));
+behave @print(behave @selected(false));
+behave @print(@amount);

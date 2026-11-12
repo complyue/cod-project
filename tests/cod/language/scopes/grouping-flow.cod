@@ -1,0 +1,61 @@
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+using "std:exceptions" InvalidCapacity;
+data Pool { tag:u64; }
+data Node { value:u64; }
+region symbol @arena:Pool;
+symbol @node:Node;
+symbol @amount:u64;
+symbol @compute:proc()->const u64;
+symbol @before:proc()->const u64;
+proc observe(flag:bool) -> void {
+  effect @amount <- 1u64;
+  effect @arena <- make Pool(capacity=512u64) { tag <- 2u64 };
+  effect @node = deref(alloc @arena Node(3u64));
+  proc previous = proc()->const u64 { @node.value };
+  if (flag) {
+    effect @arena <- make Pool(capacity=512u64) { tag <- 10u64 };
+    effect @node = deref(alloc @arena Node(11u64));
+    effect @compute = proc()->const u64 { @amount + 20u64 };
+  } else {
+    effect @arena <- make Pool(capacity=512u64) { tag <- 30u64 };
+    effect @node = deref(alloc @arena Node(31u64));
+    effect @compute = proc()->const u64 { @amount + 40u64 };
+  };
+  behave @print(root(@arena).tag);
+  behave @print(@node.value);
+  behave @print(perform @compute());
+  effect @before = previous;
+  behave @assert(perform @before() == 3u64);
+  flag && { effect @amount <- 50u64; true };
+  behave @print(@amount);
+  try {
+    { val available:u64 <- 7u64; };
+    effect @amount <- 60u64;
+    effect @arena <- make Pool(capacity=0u64) { tag <- 0u64 };
+  } catch (error:const InvalidCapacity) {
+    behave @print(available);
+    behave @print(@amount);
+  } finally {
+    effect @amount <- 70u64;
+    val final_value:u64 <- 8u64;
+  };
+  behave @print(@amount);
+  behave @print(final_value);
+}
+observe(true);
+observe(false);
+proc acquire(capacity:u64) -> owned region :Pool {
+  try { make Pool(capacity=capacity) { tag <- 90u64 } }
+  finally { behave @print(80u64); }
+}
+proc read_back(value:u64 in O, capacity:u64) -> u64 in O where {owner O} {
+  try { owned region scratch:Pool <- make Pool(capacity=capacity) { tag <- 91u64 }; value }
+  finally { behave @print(81u64); }
+}
+owned region retained:Pool <- acquire(128u64);
+behave @print(read_back(retained.tag, 128u64));
+try { owned region absent:Pool <- acquire(0u64); }
+catch (error:const InvalidCapacity) { behave @print(error.requested); };
+try { read_back(retained.tag, 0u64); {} }
+catch (error:const InvalidCapacity) { behave @print(error.requested); };

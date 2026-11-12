@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 125 · Recorded: 2026-11-12 · Phase: language/application co-design.
+Design revision: 126 · Recorded: 2026-11-12 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Grouping continuity:** [K-525](DesignAuthorityRegistry.md#k-525) continues the H-149/H-277/H-319/H-365 declaration, binding and scope contract for this revision. Ordinary groups share names and effects with their enclosing scope; explicit scopes and calls restore their bindings, while iteration effects follow D-17. Conditional and exceptional paths join available typed bindings and declaration initialization; captured/current invocation retains its established interpretation. C-63/P-286/P-326 and the qualified symbolic-context relationships serve explicit lifetimes and readable effects under charter §§2–3/§6/§8/§12. D-14 owners/access, D-18 callable values and D-17 cleanup remain constraints. [Native grouping evidence](../tests/cod/language/grouping-validation.json) covers this bounded implementation; return/defer, broader pending designs and D-16 fraction execution are not qualified by it.
 
 - **Current regional captures:** [D-18](RegionalClosures.md)/[K-459](DesignAuthorityRegistry.md#k-459) is the bounded contract for structural region requirements, aliases, captures and owner projection under H-327–H-335. This revision updates only that navigation and removes superseded research text under H-336; C-65/C-73/C-75 and P-294–P-298 retain their confirmed scope. Owner/access/relocation, dynamic effects and D-16 remain constraints. Acceptance and unresolved limits stay explicit in D-18; unrelated pending contracts are not qualified.
 

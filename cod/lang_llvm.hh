@@ -10,6 +10,7 @@
 #include <clang/Basic/TargetOptions.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/IR/Dominators.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
@@ -56,7 +57,13 @@ class LLVMEmission {
     std::shared_ptr<std::vector<llvm::StoreInst *>> effect_writes = {};
     std::shared_ptr<std::vector<llvm::Instruction *>> protection = {};
     llvm::Value *active = nullptr;
+    size_t owner_scope = 0;
   };
+  size_t cleanup_owner_ = 0;
+  struct Continuation {
+    llvm::WeakTrackingVH selected, other, shared, resume;
+  };
+  std::vector<Continuation> continuations_;
   struct CallableProtection {
     llvm::Value *source, *image, *slot;
     llvm::StoreInst *installed;
@@ -322,7 +329,7 @@ public:
     auto *active = entry_slot(llvm::Type::getInt1Ty(context()), "effect.active", true);
     b().CreateStore(b().CreateLoad(type_of(type), address), saved);
     b().CreateStore(llvm::ConstantInt::getTrue(context()), active);
-    cleanups_.push_back({address, saved, false, writes, {}, active});
+    cleanups_.push_back({address, saved, false, writes, {}, active, cleanup_owner_});
     auto *store = b().CreateStore(source, address);
     if (writes) writes->push_back(store);
   }
@@ -332,8 +339,10 @@ public:
     effect(id, Type::procedure, holder, writes);
   }
   size_t scope() const { return cleanups_.size(); }
-  void unwind(size_t mark) {
-    for (size_t i = cleanups_.size(); i > mark; --i) emit_cleanup(cleanups_[i - 1]);
+  size_t &cleanup_owner() { return cleanup_owner_; }
+  void unwind(size_t mark, std::optional<size_t> preserve = {}) {
+    for (size_t i = cleanups_.size(); i > mark; --i)
+      if (cleanups_[i - 1].owner_scope != preserve) emit_cleanup(cleanups_[i - 1]);
   }
   void restore(size_t mark) {
     if (reachable()) unwind(mark);
@@ -346,9 +355,45 @@ public:
   void jump(llvm::BasicBlock *block) { b().CreateBr(block); }
   void unreachable() { b().CreateUnreachable(); }
   llvm::Value *phi(llvm::Type *type, const std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> &edges) {
-    auto *result = b().CreatePHI(type, unsigned(edges.size()));
+    auto *result = llvm::PHINode::Create(type, unsigned(edges.size()), "", here()->getFirstNonPHIIt());
     for (const auto &[value, from] : edges) result->addIncoming(value, from);
     return result;
+  }
+  void continuation(llvm::BasicBlock *selected, llvm::BasicBlock *other,
+                    llvm::BasicBlock *shared, llvm::BasicBlock *resume) {
+    continuations_.push_back({selected, other, shared, resume});
+  }
+  void finish_continuations() {
+    // A shared finally executes for distinct pending completions. Carry values
+    // available on just one input through that block before their uses in the
+    // matching continuation. All uses, including native context stores, are
+    // known here; unrelated invalid SSA remains a verifier error.
+    for (const auto &continuation : continuations_) {
+      if (!continuation.selected || !continuation.other || !continuation.shared || !continuation.resume) continue;
+      auto *selected = llvm::cast<llvm::BasicBlock>(continuation.selected);
+      auto *other = llvm::cast<llvm::BasicBlock>(continuation.other);
+      auto *shared = llvm::cast<llvm::BasicBlock>(continuation.shared);
+      auto *resume = llvm::cast<llvm::BasicBlock>(continuation.resume);
+      auto *function = shared->getParent();
+      llvm::DominatorTree dominance(*function);
+      for (auto &block : *function) for (auto &value : block) {
+        if (value.getType()->isVoidTy() || !dominance.dominates(&value, selected->getTerminator()) ||
+            dominance.dominates(&value, &*shared->getFirstNonPHIIt())) continue;
+        llvm::SmallVector<llvm::Use *> uses;
+        for (auto &use : value.uses()) {
+          auto *user = llvm::dyn_cast<llvm::Instruction>(use.getUser());
+          if (!user || user->getFunction() != function || dominance.dominates(&value, use)) continue;
+          auto *from = user->getParent();
+          if (auto *phi = llvm::dyn_cast<llvm::PHINode>(user)) from = phi->getIncomingBlock(use);
+          if (dominance.dominates(resume, from)) uses.push_back(&use);
+        }
+        if (uses.empty()) continue;
+        auto *carried = llvm::PHINode::Create(value.getType(), 2, "completion.value", shared->getFirstNonPHIIt());
+        carried->addIncoming(&value, selected);
+        carried->addIncoming(llvm::PoisonValue::get(value.getType()), other);
+        for (auto *use : uses) use->set(carried);
+      }
+    }
   }
   void on_exception(std::function<void(size_t, llvm::Value *)> handler) {
     exception_handler_ = std::move(handler);
@@ -741,7 +786,7 @@ public:
     auto *slot = entry_slot(pointer_type(), "invocation.image", true);
     auto *installed = b().CreateStore(copy, slot);
     auto cleanup = std::make_shared<std::vector<llvm::Instruction *>>();
-    cleanups_.push_back({slot, nullptr, true, {}, cleanup});
+    cleanups_.push_back({slot, nullptr, true, {}, cleanup, nullptr, cleanup_owner_});
     const auto id = callable_protections_.size();
     callable_protections_.push_back({image, copy, slot, installed,
         llvm::cast<llvm::CondBrInst>(allocation->getTerminator()), std::move(cleanup), {}});
@@ -797,7 +842,7 @@ public:
     auto *slot = entry_slot(pointer_type(), "callable.owner", true);
     b().CreateStore(image, slot);
     if (module_lifetime) module_callables_.push_back(slot);
-    else cleanups_.push_back({slot, nullptr, true});
+    else cleanups_.push_back({slot, nullptr, true, {}, {}, nullptr, cleanup_owner_});
     return slot;
   }
   llvm::Value *take_callable(llvm::Value *slot) {
@@ -823,12 +868,31 @@ public:
     b().CreateStore(value, slot);
     return slot;
   }
-  void dispatch_exception(llvm::Value *category, const std::function<void(size_t)> &emit) {
-    if (const auto *known = llvm::dyn_cast<llvm::ConstantInt>(category)) {
-      emit(known->getZExtValue());
-      return;
+  static std::set<size_t> possible_exceptions(const llvm::Value *category) {
+    std::set<size_t> result;
+    std::vector<const llvm::Value *> pending{category};
+    std::set<const llvm::Value *> visited;
+    while (!pending.empty()) {
+      auto *value = pending.back(); pending.pop_back();
+      if (!visited.insert(value).second || llvm::isa<llvm::PoisonValue>(value)) continue;
+      if (const auto *constant = llvm::dyn_cast<llvm::ConstantInt>(value)) {
+        result.insert(constant->getZExtValue());
+      } else if (const auto *phi = llvm::dyn_cast<llvm::PHINode>(value)) {
+        for (auto &incoming : phi->incoming_values()) pending.push_back(incoming.get());
+      } else if (const auto *select = llvm::dyn_cast<llvm::SelectInst>(value)) {
+        pending.push_back(select->getTrueValue()); pending.push_back(select->getFalseValue());
+      } else {
+        for (size_t kind = 1; kind < exception_categories.size(); ++kind) result.insert(kind);
+        return result;
+      }
     }
-    for (size_t kind = 1; kind < exception_categories.size(); ++kind) {
+    result.erase(0);
+    return result;
+  }
+  void dispatch_exception(llvm::Value *category, const std::function<void(size_t)> &emit) {
+    const auto possible = possible_exceptions(category);
+    for (const auto kind : possible) {
+      if (kind == *possible.rbegin()) { emit(kind); return; }
       auto *match = label("exception.type");
       auto *next = label("exception.next");
       b().CreateCondBr(b().CreateICmpEQ(category, integer(i64(), kind)), match, next);
@@ -1206,7 +1270,7 @@ public:
     auto *slot = entry_slot(pointer_type(), "region.owner", true);
     b().CreateStore(region, slot);
     if (module_lifetime) module_regions_.push_back(slot);
-    else cleanups_.push_back({slot, nullptr});
+    else cleanups_.push_back({slot, nullptr, false, {}, {}, nullptr, cleanup_owner_});
     return slot;
   }
   void relinquish_region(llvm::Value *slot) {
@@ -1328,6 +1392,7 @@ public:
     }
     finish_native_contexts();
     resolve_callable_protections();
+    finish_continuations();
     // Demand pruning leaves provisional loads/GEPs for omitted captures. Drop
     // them before serialization and native optimization, not in a later host pass.
     llvm::SmallVector<llvm::WeakTrackingVH> unused;

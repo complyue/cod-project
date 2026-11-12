@@ -2,12 +2,12 @@ using symbol "std:io" @print;
 using "std:exceptions" InvalidCapacity;
 region symbol arena;
 effect @arena <- region(4096u64);
-try {
-  try {
+try {{
+  try {{
     effect @arena <- region(64u64);
     effect @arena <- region(0u64);
     {}
-  } catch (error) { throw; }
-  finally { behave @print(10) }
-} finally { behave @print(20) };
+  }} catch (error) {{ throw; }}
+  finally {{ behave @print(10) }}
+}} finally {{ behave @print(20) }};
 behave @print(999);

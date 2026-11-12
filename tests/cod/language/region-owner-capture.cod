@@ -5,21 +5,21 @@ effect @a <- region(4096u64);
 effect @original <- capacity_bytes(@a);
 proc @inspect() -> u64 { capacity_bytes(@a) }
 for (i in 0u32 .. 3u32) {{
-  true && {
+  true && {{
     effect @a <- region(8192u64 + u64(i) * 4096u64);
     behave @assert(perform @inspect() == @original);
     behave @assert(behave @inspect() > @original);
     behave @assert(capacity_bytes(@a) > @original);
-    val selected = if (i == 1u32) { behave @inspect() } else { perform @inspect() };
-    behave @assert(if (i == 1u32) { selected > @original } else { selected == @original });
+    val selected = if (i == 1u32) {{ behave @inspect() }} else {{ perform @inspect() }};
+    behave @assert(if (i == 1u32) {{ selected > @original }} else {{ selected == @original }});
     true
-  };
+  }};
   behave @assert(capacity_bytes(@a) == @original);
 }};
-true || {
+true || {{
   effect @a <- region(32768u64);
   behave @assert(capacity_bytes(@a) > @original);
   false
-};
+}};
 behave @assert(capacity_bytes(@a) == @original);
 behave @assert(perform @inspect() == @original);

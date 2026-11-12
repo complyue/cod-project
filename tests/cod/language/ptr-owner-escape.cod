@@ -1,1 +1,1 @@
-{ ptr escaped = { ptr local = 3; local }; };
+{{ ptr escaped = {{ ptr local = 3; local }}; }};

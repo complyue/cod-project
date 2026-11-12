@@ -2402,5 +2402,78 @@
     "file": "closures/callable-short-circuit.cod",
     "exit": 0,
     "stdout": "16\n"
+  },
+  {
+    "file": "scopes/grouping.cod",
+    "exit": 0,
+    "stdout": "3\n5\n9\n5\n10\n12\n13\n14\n"
+  },
+  {
+    "file": "scopes/grouping-duplicate.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "duplicate lexical value 'item'"
+  },
+  {
+    "file": "scopes/grouping-conditional-callable.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/grouping-conditional-pointer.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/grouping-conditional-value.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/grouping-flow.cod",
+    "exit": 0,
+    "stdout": "10\n11\n21\n50\n7\n60\n70\n8\n30\n31\n41\n1\n7\n60\n70\n8\n80\n81\n90\n80\n0\n81\n0\n"
+  },
+  {
+    "file": "scopes/grouping-capture.cod",
+    "exit": 0,
+    "stdout": "1\n2\n10\n10\n"
+  },
+  {
+    "file": "scopes/grouping-missing-effect.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "scopes/grouping-branch-duplicate.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "duplicate lexical value 'item'"
+  },
+  {
+    "file": "scopes/grouping-handler-initialization.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/grouping-binding.cod",
+    "exit": 0,
+    "stdout": "2\n"
+  },
+  {
+    "file": "scopes/grouping-expired-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "requires a live owning region"
+  },
+  {
+    "file": "scopes/grouping-finally-bindings.cod",
+    "exit": 0,
+    "stdout": "9\n7\n9\n0\n9\n0\n13\n11\n12\n13\n0\n13\n0\n"
   }
 ]

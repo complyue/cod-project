@@ -2,25 +2,25 @@ using symbol "std:io" @print;
 function left()->func()->const u64 { func()->const u64 { 1u64 } }
 function right()->func()->const u64 { func()->const u64 { 2u64 } }
 for (i in 0u64 .. 2u64) {{
-  func factory = if (i == 0u64) { left } else { right };
+  func factory = if (i == 0u64) {{ left }} else {{ right }};
   func result = factory();
   behave @print(result());
 }};
 # Each recursive result contains a complete nested callable value.
 function compose(n:u64)->func()->const u64 {
-  if (n == 0u64) { func()->const u64 { 1u64 } }
-  else {
+  if (n == 0u64) {{ func()->const u64 { 1u64 } }}
+  else {{
     func previous = compose(n - 1u64);
     func()->const u64 { previous() + 1u64 }
-  }
+  }}
 }
 func chained = compose(32u64);
 behave @print(chained());
 region State { ticks:u64; }
 # Recursive forwarding preserves the named borrowed owner.
 function reader(region state:State, n:u64)->func()->const u64 with {region state} {
-  if (n == 0u64) { func()->const u64 { root(state).ticks } }
-  else { reader(state, n - 1u64) }
+  if (n == 0u64) {{ func()->const u64 { root(state).ticks } }}
+  else {{ reader(state, n - 1u64) }}
 }
 owned region state:State <- make State(capacity = 8192u64) { ticks <- 17u64 };
 func read = reader(state, 12u64);
@@ -29,10 +29,10 @@ region projected:State = read -> state;
 root(projected).ticks <- 19u64;
 behave @print(read());
 function even(n:u64)->func()->const u64 {
-  if (n == 0u64) { func()->const u64 { 10u64 } } else { odd(n - 1u64) }
+  if (n == 0u64) {{ func()->const u64 { 10u64 } }} else {{ odd(n - 1u64) }}
 }
 function odd(n:u64)->func()->const u64 {
-  if (n == 0u64) { func()->const u64 { 20u64 } } else { even(n - 1u64) }
+  if (n == 0u64) {{ func()->const u64 { 20u64 } }} else {{ even(n - 1u64) }}
 }
 func parity = even(11u64);
 behave @print(parity());
@@ -40,7 +40,7 @@ symbol @bias:u64;
 symbol @factory:proc()->func()->const u64;
 effect @bias <- 3u64;
 proc factory = proc()->func()->const u64 {
-  if (@bias == 3u64) { left() } else { right() }
+  if (@bias == 3u64) {{ left() }} else {{ right() }}
 };
 effect @factory = factory;
 effect @bias <- 4u64;
@@ -53,32 +53,32 @@ behave @print(current());
 using "std:exceptions" NullPointerException;
 function bottom(n:u64)->(func()->const u64) throws NullPointerException {
   func local = func()->const u64 { 1u64 };
-  if (n == 0u64) { ptr absent:i64 = null; val ignored = absent; local }
-  else { bottom(n - 1u64) }
+  if (n == 0u64) {{ ptr absent:i64 = null; val ignored = absent; local }}
+  else {{ bottom(n - 1u64) }}
 }
-try { func result = bottom(8u64); behave @print(result()); }
-catch (e:const NullPointerException) { behave @print(100u64); };
+try {{ func result = bottom(8u64); behave @print(result()); }}
+catch (e:const NullPointerException) {{ behave @print(100u64); }};
 symbol @recursive:proc(u64)->(proc()->const u64) throws NullPointerException;
 symbol @result:proc()->const u64;
 effect @bias <- 7u64;
 proc recursive = proc(n:u64)->(proc()->const u64) throws NullPointerException {
   effect @bias <- @bias + 1u64;
-  if (n == 0u64) { proc()->const u64 { @bias } }
-  else { behave @recursive(n - 1u64) }
+  if (n == 0u64) {{ proc()->const u64 { @bias } }}
+  else {{ behave @recursive(n - 1u64) }}
 };
 effect @recursive = recursive;
-try {
+try {{
   proc result = recursive(5u64);
   effect @result = result;
   behave @print(perform @result());
   behave @print(result());
-} catch (e:const NullPointerException) { behave @print(999u64); };
+}} catch (e:const NullPointerException) {{ behave @print(999u64); }};
 behave @print(@bias);
 proc failing = proc(n:u64)->(proc()->const u64) throws NullPointerException {
   effect @bias <- @bias + 1u64;
-  if (n == 0u64) { ptr absent:i64 = null; val ignored = absent; proc()->const u64 { @bias } }
-  else { behave @recursive(n - 1u64) }
+  if (n == 0u64) {{ ptr absent:i64 = null; val ignored = absent; proc()->const u64 { @bias } }}
+  else {{ behave @recursive(n - 1u64) }}
 };
 effect @recursive = failing;
-try { proc result = failing(5u64); behave @print(result()); }
-catch (e:const NullPointerException) { behave @print(@bias); };
+try {{ proc result = failing(5u64); behave @print(result()); }}
+catch (e:const NullPointerException) {{ behave @print(@bias); }};

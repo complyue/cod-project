@@ -1,0 +1,3 @@
+using symbol "std:io" @print;
+if (false) { val selected = 1u64; } else {};
+behave @print(selected);

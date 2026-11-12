@@ -14,21 +14,21 @@ procedure @left() -> i64 { @x }
 procedure @right() -> i64 { @y }
 effect @route = @left;
 procedure @nested() -> i64 {
-  val middle = {
+  val middle = {{
     effect @route = @right;
-    val inner = { effect @route = @left; behave @route() };
+    val inner = {{ effect @route = @left; behave @route() }};
     inner * 1000 + behave @route()
-  };
+  }};
   middle * 1000 + behave @route()
 }
 procedure @branch(flag:bool) -> i64 {
-  val selected = if (flag) {
+  val selected = if (flag) {{
     effect @route = @right;
     behave @route()
-  } else {
+  }} else {{
     effect @route = @left;
     behave @route()
-  };
+  }};
   selected * 1000 + behave @route()
 }
 procedure @chained() -> i64 {

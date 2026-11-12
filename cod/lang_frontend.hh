@@ -69,6 +69,7 @@ public:
     return value;
   }
   bool pending() const { return bool(deferred_); }
+  bool same(const FlowCondition &other) const { return constant_ == other.constant_ && deferred_ == other.deferred_; }
   operator bool() const {
     if (!deferred_) return constant_;
     // Positive boolean equations need a concrete fact; a cycle alone cannot
@@ -122,6 +123,7 @@ struct Value {
   size_t result_type_origin = 0;
   std::vector<size_t> result_fact_origins = {}; // Compiler-only checked returns, not runtime tags.
   std::vector<InitializationRead> argument_reads = {};
+  std::optional<size_t> declaration_cell = {};
 };
 using Bindings = llvm::ImmutableMap<size_t, const Value *>;
 struct Environment {
@@ -356,6 +358,7 @@ class Compiler {
     llvm::Value *slot;
     Presence presence = Presence::present;
     bool movable = false;
+    size_t scope = 0;
   };
   std::vector<Holding> holdings_;
   struct LocalCell { size_t scope; Location at; size_t initialized = 0; };
@@ -421,7 +424,6 @@ class Compiler {
   WarningOptions warning_options_;
   std::vector<std::string> warnings_;
   std::vector<std::pair<Location, std::string>> capture_warnings_;
-  bool scope_rebound_ = false; // Includes bindings with no native TLS slot.
   struct EndPath {};
   struct FlowState {
     std::vector<FlowCondition> live;
@@ -485,13 +487,15 @@ class Compiler {
   bool possible_result_facts_ = false;
   std::vector<std::pair<std::shared_ptr<CaptureUse>, std::shared_ptr<LLVMEmission::EffectWrites>>> capture_effects_;
   ConversionPoint conversion_point() { return {ir_.conversion_point(), flow_state()}; }
-  struct ExceptionalEdge { Value error; llvm::BasicBlock *from; FlowState regions; };
+  struct ExceptionalEdge { Value error; llvm::BasicBlock *from; FlowState regions; Environment environment; };
   struct Landing { llvm::BasicBlock *block = nullptr; std::vector<ExceptionalEdge> incoming; };
   struct HandlerScope {
-    size_t cleanup, holding_begin;
+    size_t cleanup, holding_begin, owner_scope;
+    Environment *environment;
     std::array<Landing, concrete_exception_count> landing;
   };
   std::vector<HandlerScope *> handlers_;
+  std::vector<std::pair<size_t, Environment *>> active_environments_;
   std::optional<Value> caught_exception_;
   struct NativeActivation {
     Form *form;
@@ -731,13 +735,14 @@ class Compiler {
           previous ? join_callable_flow({*previous, flow}) : flow);
     }
   }
-  void close_state(FlowState &state, size_t begin, std::optional<size_t> result_owner = {}) {
+  void close_state(FlowState &state, size_t begin, std::optional<size_t> result_owner = {},
+                   std::optional<size_t> preserve_scope = {}) {
     state.live.resize(regions_.size(), false);
     state.holdings.resize(holdings_.size(), Presence::absent);
     std::set<size_t> released;
     for (size_t i = begin; i < holdings_.size(); ++i) {
       const auto &holding = holdings_[i];
-      if (holding.module_lifetime || state.holdings[i] == Presence::absent) continue;
+      if (holding.module_lifetime || holding.scope == preserve_scope || state.holdings[i] == Presence::absent) continue;
       const auto &origins = regions_[holding.region].origins;
       released.insert(origins.begin(), origins.end());
       state.holdings[i] = Presence::absent;
@@ -760,7 +765,7 @@ class Compiler {
   Value hold_region(Value value, bool module_lifetime, bool movable) {
     value.holding_id = holdings_.size();
     holdings_.push_back({*value.region_id, module_lifetime, ir_.hold_region(value.native, module_lifetime),
-                         Presence::present, movable});
+                         Presence::present, movable, local_scope_});
     return value;
   }
   Value take_owner(Value value, const Location &at) {
@@ -783,20 +788,7 @@ class Compiler {
     return value.type.identity ? ir_.bits(Type::uint64, value.type.identity) : value.exception_category;
   }
   static bool may_be_npe(llvm::Value *category) {
-    std::vector<const llvm::Value *> pending{category};
-    std::set<const llvm::Value *> visited;
-    while (!pending.empty()) {
-      auto *next = pending.back(); pending.pop_back();
-      if (!visited.insert(next).second) continue;
-      if (const auto *constant = llvm::dyn_cast<llvm::ConstantInt>(next)) {
-        if (constant->getZExtValue() == exception_id(ExceptionCategory::null_pointer)) return true;
-      } else if (const auto *phi = llvm::dyn_cast<llvm::PHINode>(next)) {
-        for (auto &incoming : phi->incoming_values()) pending.push_back(incoming.get());
-      } else if (const auto *select = llvm::dyn_cast<llvm::SelectInst>(next)) {
-        pending.push_back(select->getTrueValue()); pending.push_back(select->getFalseValue());
-      } else return true;
-    }
-    return false;
+    return LLVMEmission::possible_exceptions(category).contains(exception_id(ExceptionCategory::null_pointer));
   }
   void raise_exception(Value error) {
     ir_.dispatch_exception(exception_category(error), [&](size_t category) {
@@ -829,11 +821,14 @@ class Compiler {
       auto &landing = scope.landing.at(category - 1);
       if (!landing.block) landing.block = ir_.label("exception.handler");
       auto state = flow_state();
-      close_state(state, scope.holding_begin);
+      close_state(state, scope.holding_begin, {}, scope.owner_scope);
+      auto environment = *scope.environment;
+      for (auto frame = active_environments_.rbegin(); frame != active_environments_.rend(); ++frame)
+        if (frame->first == scope.owner_scope) { environment = *frame->second; break; }
       auto incoming = error;
       incoming.exception_category = ir_.bits(Type::uint64, category);
-      ir_.unwind(scope.cleanup);
-      landing.incoming.push_back({incoming, ir_.here(), std::move(state)});
+      ir_.unwind(scope.cleanup, scope.owner_scope);
+      landing.incoming.push_back({incoming, ir_.here(), std::move(state), std::move(environment)});
       ir_.jump(landing.block);
     });
   }
@@ -852,6 +847,12 @@ class Compiler {
       warnings_.push_back(std::move(diagnostic));
   }
 
+  void require_declaration(const Value &value, const Location &at) {
+    if (value.declaration_cell) {
+      const auto cell = *value.declaration_cell;
+      require_initialization({cells_.at(cell).initialized, cell, at});
+    }
+  }
   void declare_local(Locals &locals, const std::string &name, Value value,
                      const Module &module, const Location &at) {
     if (locals.declared.contains(name)) fail(at, "duplicate lexical value '" + name + "'");
@@ -863,6 +864,8 @@ class Compiler {
     } else if (module.world.global_aliases.contains(name) || module.world.types.contains(name)) {
       warn(Warning::shadow, at, "local '" + name + "' shadows a module binding in '" + module.path + "'");
     }
+    value.declaration_cell = cells_.size();
+    cells_.push_back({local_scope_, at, 1});
     locals.declare(name, std::move(value), at);
   }
 
@@ -1288,6 +1291,8 @@ class Compiler {
     close_holdings(holding_begin, result, at);
     if (result.type.kind == Type::procedure) valid_view(result, at);
     ir_.restore(native_scope);
+    const auto lexical_scope = llvm::SaveAndRestore(local_scope_, parent_scope);
+    const auto cleanup_scope = llvm::SaveAndRestore(ir_.cleanup_owner(), parent_scope);
     if (carry_callable) {
       result.storage = StorageView{ir_.hold_callable(result.native, parent_module), parent_scope, {}};
       register_callable_holder(result);
@@ -2226,7 +2231,7 @@ class Compiler {
       if (expr.annotation) type_owners(type_owners, *expr.annotation, bound);
       if (expr.kind == K::block) {
         auto inner = bound;
-        for (const auto &child : expr.children) self(self, *child, inner);
+        for (const auto &child : expr.children) self(self, *child, expr.scoped ? inner : bound);
         return;
       }
       if (expr.kind == K::pointer_group) {
@@ -2288,6 +2293,8 @@ class Compiler {
     }
     for (const auto &[name, at] : selected) {
       auto value = outer.visible.at(name);
+      require_declaration(value, at);
+      value.declaration_cell.reset();
       const bool slot = outer.regional_slots.contains(name);
       if (value.type.kind == Type::region) value = borrowed(std::move(value));
       else if (value.type.kind != Type::procedure && !slot)
@@ -2460,21 +2467,11 @@ class Compiler {
     for (const auto &[id, access] : closure_regions(result)) result.type.capture_regions.push_back(id);
     return materialize_callable(std::move(result), env, form.at);
   }
-  Value block(const Expression &expr, const Module &module, Environment env, Locals locals,
-              bool function_context, bool discard_result = false, std::optional<Type> result_type = {}, bool copy_result = false,
-              std::optional<size_t> destination_binding = {}, bool read_result = true,
-              const Value *null_owner = nullptr) {
-    const bool parent_module = module_top_level_;
-    const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
-    const auto region_initializer = llvm::SaveAndRestore(region_initializer_, false);
-    const auto rebound = llvm::SaveAndRestore(scope_rebound_, false);
-    const auto holding_begin = holdings_.size();
-    const auto native_scope = ir_.scope();
-    const auto scope_id = scopes_.size();
-    scopes_.push_back(true);
-    const auto parent_scope = local_scope_;
-    const auto lexical_scope = llvm::SaveAndRestore(local_scope_, scope_id);
-
+  Value sequence(const Expression &expr, const Module &module, Environment &env, Locals &locals,
+                 bool function_context, bool discard_result, std::optional<Type> result_type, bool copy_result,
+                 std::optional<size_t> destination_binding, bool read_result, const Value *null_owner) {
+    active_environments_.emplace_back(local_scope_, &env);
+    const auto environment_frame = llvm::scope_exit([&] { active_environments_.pop_back(); });
     Value result;
     try {
       for (size_t i = 0; i < expr.children.size(); ++i) {
@@ -2498,14 +2495,37 @@ class Compiler {
     if (copy_result && local_bits(result.type)) result = bits_value(read_value(std::move(result), expr.at));
     if (copy_result && native_callable(result)) {
       result = detach_callable(std::move(result), expr.at);
-      result.storage = StorageView{ir_.hold_callable(result.native, false), local_scope_, {}};
+      result.storage = StorageView{ir_.hold_callable(result.native, module_top_level_), local_scope_, {}};
       register_callable_holder(result);
     }
     if (destination_binding && result.type != Type::never && result.pointer != destination_binding)
       fail(expr.at, "a (=) overload must return its destination binding's resulting view; finish the body with the lhs parameter");
-    result.pointer.reset();
+    return result;
+  }
+  Value block(const Expression &expr, const Module &module, Environment &env, Locals &locals,
+              bool function_context, bool discard_result = false, std::optional<Type> result_type = {}, bool copy_result = false,
+              std::optional<size_t> destination_binding = {}, bool read_result = true,
+              const Value *null_owner = nullptr, bool iteration = false) {
+    const auto region_initializer = llvm::SaveAndRestore(region_initializer_, false);
+    if (!expr.scoped && !iteration)
+      return sequence(expr, module, env, locals, function_context, discard_result, result_type, copy_result,
+                      destination_binding, read_result, null_owner);
+    const bool parent_module = module_top_level_;
+    const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
+    const auto holding_begin = holdings_.size();
+    const auto native_scope = ir_.scope();
+    const auto scope_id = scopes_.size();
+    scopes_.push_back(true);
+    const auto parent_scope = local_scope_;
+    const auto lexical_scope = llvm::SaveAndRestore(local_scope_, scope_id);
+    const auto cleanup_scope = llvm::SaveAndRestore(ir_.cleanup_owner(), scope_id);
+    auto inner_env = env;
+    auto inner_locals = locals.nested();
+    auto result = sequence(expr, module, inner_env, inner_locals, function_context, discard_result, result_type,
+                           copy_result, destination_binding, read_result, null_owner);
     scopes_[scope_id] = false;
     result = finish_scope(holding_begin, native_scope, std::move(result), expr.at, parent_module, parent_scope);
+    result.pointer.reset();
     if (result.arguments) fail(expr.at, "a variadic argument pack cannot escape its call scope");
     return result;
   }
@@ -3292,6 +3312,7 @@ class Compiler {
     scopes_.push_back(true);
     const auto parent_scope = local_scope_;
     const auto lexical_scope = llvm::SaveAndRestore(local_scope_, scope_id);
+    const auto cleanup_scope = llvm::SaveAndRestore(ir_.cleanup_owner(), scope_id);
     std::vector<Value> parameters;
     std::set<size_t> transferring;
     for (size_t i = 0; i < args.size(); ++i) {
@@ -3370,7 +3391,7 @@ class Compiler {
     }
     const bool assignment = form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=" || form.name == "[]<-");
     const Value *result_owner = form.result_owner.empty() ? nullptr : &owner_values.at(form.result_owner);
-    auto result = block(*form.body, lexical, std::move(env), std::move(locals), function_context, false,
+    auto result = block(*form.body, lexical, env, locals, function_context, false,
                         instantiated.result, form.result_owner.empty() && !assignment &&
                           (form.result_const || (instantiated.result && instantiated.result->kind == Type::procedure &&
                                                   form.result_kind != "ptr")),
@@ -5708,8 +5729,8 @@ class Compiler {
       }
     }
     if (!one && !empty) loop_pointers_.push_back(loop_pointers);
-    const auto next = block(*expr.children[body_index], module, env, std::move(inner_locals), function_context,
-                            expr.kind == K::range_for, {}, local_bits(accumulator.type));
+    const auto next = block(*expr.children[body_index], module, env, inner_locals, function_context,
+                            expr.kind == K::range_for, {}, local_bits(accumulator.type), {}, true, nullptr, true);
     for (const auto &[holder, id] : callable_headers) {
       auto &header = callable_flows_.at(id);
       const auto *back = callable_holders_.lookup(holder);
@@ -5759,7 +5780,7 @@ class Compiler {
       ir_.restore(native_scope);
       ir_.otherwise(*empty_branch);
       restore_flow(before);
-      const auto fallback = block(*expr.children[3], module, env, locals.nested(), function_context, true);
+      const auto fallback = block(*expr.children[3], module, env, locals, function_context, true, {}, false, {}, true, nullptr, true);
       const bool else_completes = (!(start && end) || empty) && fallback.type != Type::never;
       if (!else_completes && ir_.reachable()) ir_.unreachable();
       ir_.merge(*empty_branch, Type::void_type);
@@ -5791,6 +5812,7 @@ class Compiler {
     if (expr.text == "<-") return transfer_expression(expr, module, env, locals, function_context || function_result);
     if (const auto local = locals.visible.find(expr.text); !expr.intrinsic && local != locals.visible.end()) {
       const auto callee = local->second;
+      require_declaration(callee, expr.at);
       return invoke_procedure(callee, expr, module, env, locals, function_context || function_result, false);
     }
     if (expr.children.size() == 2 && binary_precedence(expr.text) >= 0)
@@ -6028,22 +6050,22 @@ class Compiler {
     if (expr.text == "&&" || expr.text == "||") {
       require(left.type, Type::boolean, expr.at);
       auto right_env = env;
-      auto right_locals = locals.nested();
-      const auto rebound = llvm::SaveAndRestore(scope_rebound_, false);
-
       const auto before = flow_state();
       auto native_branch = ir_.branch(left.native, expr.text == "||");
       Value right;
-      try { right = expression(*expr.children[1], module, right_env, right_locals, function_context); }
+      try { right = expression(*expr.children[1], module, right_env, locals, function_context); }
       catch (const EndPath &) { right = scalar(Type::never, nullptr); }
       require(right.type, Type::boolean, expr.at);
-      if (scope_rebound_)
-        fail(expr.at, "conditional rebinding in a logical operand needs an explicit scope");
       ir_.otherwise(native_branch, right.native);
-      auto joined = right.type == Type::never ? before : flow_state();
+      const auto right_state = flow_state();
+      auto joined = right.type == Type::never ? before : right_state;
       intersect_flow(joined, before);
       restore_flow(joined);
-      return scalar(Type::boolean, ir_.merge(native_branch, Type::boolean, left.native));
+      std::vector<EnvironmentEdge> environments{{env, ir_.here(), before}};
+      if (right.type != Type::never) environments.push_back({right_env, native_branch.first_end, right_state});
+      auto result = scalar(Type::boolean, ir_.merge(native_branch, Type::boolean, left.native));
+      env = join_environments(environments, expr.at);
+      return result;
     }
     std::vector<ConversionPoint> points;
     if (!expr.intrinsic && converting_method(expr.text, module, expr.at)) points.push_back(conversion_point());
@@ -6191,6 +6213,80 @@ class Compiler {
     result.procedure = std::move(procedure);
     return result;
   }
+  struct EnvironmentEdge { Environment environment; llvm::BasicBlock *from; FlowState regions; };
+  Environment join_environments(const std::vector<EnvironmentEdge> &edges, const Location &at) {
+    if (edges.empty()) return {};
+    auto result = edges.front().environment;
+    if (edges.size() == 1) return result;
+    std::map<std::vector<size_t>, size_t> owners;
+    for (const auto &[id, first] : result.bindings) {
+      std::vector<CaptureAlternative> alternatives;
+      for (const auto &edge : edges) {
+        const auto *value = edge.environment.lookup(id);
+        if (!value) break;
+        alternatives.push_back({value, edge.from});
+      }
+      if (alternatives.size() != edges.size()) {
+        result.bindings = binding_factory_.remove(result.bindings, id);
+        continue;
+      }
+      if (std::all_of(alternatives.begin(), alternatives.end(), [&](const auto &item) { return item.value == first; })) continue;
+      auto value = *first;
+      std::vector<size_t> region_ids;
+      for (const auto &alternative : alternatives) {
+        require(alternative.value->type, value.type, at);
+        if (alternative.value->region_id) region_ids.push_back(*alternative.value->region_id);
+        value.read_only |= alternative.value->read_only;
+        std::erase_if(value.conformances, [&](const Conformance &fact) {
+          const auto &facts = alternative.value->conformances;
+          return std::find(facts.begin(), facts.end(), fact) == facts.end();
+        });
+      }
+      if (native_callable(value)) value = join_captures(alternatives, at);
+      else {
+        const auto select = [&](auto get) -> llvm::Value * {
+          auto *first_value = get(*first);
+          if (!first_value) return nullptr;
+          std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
+          for (const auto &item : alternatives) incoming.emplace_back(get(*item.value), item.from);
+          if (std::all_of(incoming.begin(), incoming.end(), [&](const auto &item) { return item.first == first_value; })) return first_value;
+          return ir_.phi(first_value->getType(), incoming);
+        };
+        value.native = select([](const Value &item) { return item.native; });
+        if (value.type.kind == Type::exception)
+          value.exception_category = select([&](const Value &item) { return exception_category(item); });
+      }
+      if (!region_ids.empty() && std::any_of(region_ids.begin(), region_ids.end(), [&](size_t owner) { return owner != region_ids.front(); })) {
+        if (region_ids.size() != edges.size()) fail(at, "symbol alternatives require regional provenance on every path");
+        auto found = owners.find(region_ids);
+        if (found == owners.end()) {
+          std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
+          std::set<size_t> origins;
+          for (size_t i = 0; i < region_ids.size(); ++i) {
+            const auto &region = regions_.at(region_ids[i]);
+            incoming.emplace_back(region.owner, edges[i].from);
+            origins.insert(region.origins.begin(), region.origins.end());
+          }
+          const auto joined = new_region(ir_.phi(incoming.front().first->getType(), incoming), at, std::move(origins));
+          auto &region = regions_[joined];
+          region.live = true;
+          for (size_t i = 0; i < region_ids.size(); ++i)
+            region.live = FlowCondition::both(region.live, region_ids[i] < edges[i].regions.live.size()
+                ? edges[i].regions.live[region_ids[i]] : FlowCondition{false});
+          region.symbolic = true;
+          region.root = regions_[region_ids.front()].root;
+          for (const auto owner : region_ids) if (regions_[owner].root != region.root) region.root.reset();
+          found = owners.emplace(region_ids, joined).first;
+        }
+        value.region_id = found->second;
+        value.holding_id.reset();
+      }
+      value.declaration_cell.reset();
+      binding_values_.push_back(std::move(value));
+      result.bindings = binding_factory_.add(result.bindings, id, &binding_values_.back());
+    }
+    return result;
+  }
   struct Completion { Value value; llvm::BasicBlock *from; FlowState regions; };
   Value join_completions(const std::vector<Completion> &completions, const Location &at, bool module_lifetime) {
     if (completions.empty()) { ir_.unreachable(); return scalar(Type::never, nullptr); }
@@ -6206,8 +6302,14 @@ class Compiler {
           return !item.value.result_fact_origins.empty();
         })) result.conformances.clear();
     if (result.type.kind == Type::procedure) {
+      auto values = completions;
       std::vector<CaptureAlternative> alternatives;
-      for (const auto &completion : completions) alternatives.push_back({&completion.value, completion.from});
+      for (auto &completion : values) {
+        // A selected view retains its holder address, not the lexical binding
+        // of the expression that supplied it.
+        completion.value.pointer.reset();
+        alternatives.push_back({&completion.value, completion.from});
+      }
       result = join_captures(alternatives, at);
     }
     if (result.storage && std::any_of(completions.begin(), completions.end(),
@@ -6288,11 +6390,38 @@ class Compiler {
     }
     return result;
   }
+  // A shared finally is checked against every entering completion. After it
+  // finishes, unchanged facts can be refined to the selected continuation.
+  FlowState continue_flow(const FlowState &path, const FlowState &entry, FlowState exit) {
+    for (size_t i = 0; i < std::min(path.live.size(), entry.live.size()); ++i)
+      if (exit.live[i].same(entry.live[i])) exit.live[i] = path.live[i];
+    for (size_t i = 0; i < std::min(path.holdings.size(), entry.holdings.size()); ++i)
+      if (exit.holdings[i] == entry.holdings[i]) exit.holdings[i] = path.holdings[i];
+    for (size_t i = 0; i < std::min(path.initialized.size(), entry.initialized.size()); ++i)
+      if (exit.initialized[i] == entry.initialized[i]) exit.initialized[i] = path.initialized[i];
+    for (size_t i = 0; i < std::min(path.pointers.size(), entry.pointers.size()); ++i)
+      if (exit.pointers[i] == entry.pointers[i]) exit.pointers[i] = path.pointers[i];
+    auto callables = path.callables;
+    for (const auto &[holder, value] : entry.callables)
+      if (!exit.callables.lookup(holder)) callables = callable_memory_factory_.remove(callables, holder);
+    for (const auto &[holder, value] : exit.callables) {
+      const auto *before = entry.callables.lookup(holder);
+      if (!before || *before != value) callables = callable_memory_factory_.add(callables, holder, value);
+    }
+    exit.callables = callables;
+    return exit;
+  }
+  Environment continue_environment(Environment path, const Environment &entry, const Environment &exit) {
+    for (const auto &[id, value] : entry.bindings)
+      if (!exit.lookup(id)) path.bindings = binding_factory_.remove(path.bindings, id);
+    for (const auto &[id, value] : exit.bindings)
+      if (entry.lookup(id) != value) path.bindings = binding_factory_.add(path.bindings, id, value);
+    return path;
+  }
   Value try_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                        bool function_context, bool copy_bits = false, bool read_result = true,
-                          std::optional<Type> callable_result = {}, const Value *result_owner = nullptr) {
+                       std::optional<Type> callable_result = {}, const Value *result_owner = nullptr) {
     const bool parent_module = module_top_level_;
-    const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
     std::array<const Expression *, concrete_exception_count> catches{};
     const Expression *finally = nullptr;
     for (size_t i = 1; i < expr.children.size(); ++i) {
@@ -6305,83 +6434,148 @@ class Compiler {
         auto &destination = catches.at(type.identity - 1);
         if (destination) fail(clause.at, "duplicate exception category in catch clauses");
         destination = &clause;
-      } else {
-        for (auto &destination : catches) if (!destination) destination = &clause;
-      }
+      } else for (auto &destination : catches) if (!destination) destination = &clause;
     }
-    HandlerScope protected_scope{ir_.scope(), holdings_.size(), {}};
+    auto *normal_join = ir_.label("try.result");
+    auto *failure_join = finally ? ir_.label("try.failure") : nullptr;
+    std::vector<Completion> completions;
+    std::vector<EnvironmentEdge> environments;
+    std::vector<ExceptionalEdge> failures;
+    const auto complete = [&](Value result) {
+      if (result.type == Type::never) return;
+      if (result.region_id) region_pointer(result, expr.at);
+      if (result.type.owned) result = take_owner(result, expr.at);
+      if (native_callable(result) && !result_owner) result = detach_callable(std::move(result), expr.at);
+      completions.push_back({result, ir_.here(), flow_state()});
+      environments.push_back({env, ir_.here(), flow_state()});
+      ir_.jump(normal_join);
+    };
+    const auto propagate = [&](Value error) {
+      if (!finally) { raise_exception(error); return; }
+      failures.push_back({error, ir_.here(), flow_state(), env});
+      ir_.jump(failure_join);
+    };
+    const auto enter_errors = [&](const std::vector<ExceptionalEdge> &incoming) {
+      auto state = incoming.front().regions;
+      std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> payloads, categories;
+      std::vector<EnvironmentEdge> bindings;
+      for (const auto &edge : incoming) {
+        intersect_flow(state, edge.regions);
+        payloads.emplace_back(edge.error.native, edge.from);
+        categories.emplace_back(exception_category(edge.error), edge.from);
+        bindings.push_back({edge.environment, edge.from, edge.regions});
+      }
+      restore_flow(state);
+      auto error = scalar(exception_type(ExceptionCategory::system), ir_.phi(ir_.type_of(exception_type(ExceptionCategory::system)), payloads));
+      error.exception_category = ir_.phi(ir_.type_of(Type::uint64), categories);
+      env = join_environments(bindings, expr.at);
+      return error;
+    };
+    HandlerScope protected_scope{ir_.scope(), holdings_.size(), local_scope_, &env, {}};
     handlers_.push_back(&protected_scope);
     Value normal;
     {
       const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, npe_allowed_ || catches[exception_id(ExceptionCategory::null_pointer) - 1]);
-      normal = block(*expr.children.front(), module, env, locals.nested(), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+      normal = block(*expr.children.front(), module, env, locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
     }
     handlers_.pop_back();
-
-    auto *join = ir_.label("try.result");
-    std::vector<Completion> completions;
-    const auto complete = [&](Value result) {
-      if (result.type == Type::never) { ir_.restore(protected_scope.cleanup); return; }
-      if (finally) {
-        const auto finished = block(*finally, module, env, locals.nested(), function_context);
-        require(finished.type, Type::void_type, finally->at);
-        if (finished.type == Type::never) { ir_.restore(protected_scope.cleanup); return; }
-      }
-      if (result.region_id) region_pointer(result, expr.at);
-      if (result.type.owned) result = take_owner(result, expr.at);
-      if (native_callable(result) && !result_owner) result = detach_callable(std::move(result), expr.at);
-      ir_.restore(protected_scope.cleanup);
-      completions.push_back({result, ir_.here(), flow_state()});
-      ir_.jump(join);
-    };
     complete(normal);
 
-    const auto enter_landing = [&](Landing &landing, size_t category) {
-      ir_.enter(landing.block);
-      auto state = landing.incoming.front().regions;
-      std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> edges;
-      for (const auto &edge : landing.incoming) {
-        intersect_flow(state, edge.regions);
-        edges.emplace_back(edge.error.native, edge.from);
-      }
-      restore_flow(state);
-      Value error = scalar(exception_type(category), ir_.phi(ir_.type_of(exception_type(category)), edges));
-      error.exception_category = ir_.bits(Type::uint64, category);
-      return error;
-    };
-    const auto propagate = [&](Value error) {
-      if (finally) {
-        auto finished = block(*finally, module, env, locals.nested(), function_context);
-        require(finished.type, Type::void_type, finally->at);
-        if (finished.type == Type::never) return;
-      }
-      raise_exception(error);
-    };
+    struct CatchEntry { llvm::BasicBlock *block; std::vector<ExceptionalEdge> incoming; };
+    std::map<const Expression *, CatchEntry> entries;
     for (size_t i = 0; i < protected_scope.landing.size(); ++i) {
       auto &landing = protected_scope.landing[i];
       if (!landing.block) continue;
-      auto error = enter_landing(landing, i + 1);
+      ir_.enter(landing.block);
+      auto error = enter_errors(landing.incoming);
       const auto *clause = catches[i];
       if (!clause) { propagate(error); continue; }
-      // Catch bodies do not see sibling handlers. Their exceptional exits must
-      // still run this try's finally before proceeding to an outer handler.
-      HandlerScope catch_scope{ir_.scope(), holdings_.size(), {}};
-      if (finally) handlers_.push_back(&catch_scope);
-      if (!clause->annotation) error.type = exception_type(ExceptionCategory::system);
-      auto inner_locals = locals.nested();
+      auto [entry, inserted] = entries.try_emplace(clause, CatchEntry{nullptr, {}});
+      if (inserted) entry->second.block = ir_.label("catch.body");
+      entry->second.incoming.push_back({error, ir_.here(), flow_state(), env});
+      ir_.jump(entry->second.block);
+    }
+    // Source order determines lexical visibility even when runtime categories
+    // reach the same handler. Each handler body is elaborated only once.
+    for (size_t i = 1; i < expr.children.size(); ++i) {
+      const auto *clause = expr.children[i].get();
+      const auto found = entries.find(clause);
+      if (found == entries.end()) continue;
+      ir_.enter(found->second.block);
+      auto error = enter_errors(found->second.incoming);
+      if (clause->annotation) error.type = resolve(*clause->annotation, module, clause->at);
+      auto inner_locals = locals;
+      inner_locals.declared.erase(clause->text);
       declare_local(inner_locals, clause->text, error, module, clause->at);
+      HandlerScope catch_scope{ir_.scope(), holdings_.size(), local_scope_, &env, {}};
+      if (finally) handlers_.push_back(&catch_scope);
       Value result;
       {
         const auto active = llvm::SaveAndRestore(caught_exception_, std::optional(error));
-        result = block(*clause->children.front(), module, env, std::move(inner_locals), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+        result = block(*clause->children.front(), module, env, inner_locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
       }
       if (finally) handlers_.pop_back();
+      const auto restore_binding = [&](auto &destination, const auto &source) {
+        destination.erase(clause->text);
+        if (const auto previous = source.find(clause->text); previous != source.end()) destination.insert(*previous);
+      };
+      restore_binding(inner_locals.visible, locals.visible);
+      restore_binding(inner_locals.locations, locals.locations);
+      restore_binding(inner_locals.declared, locals.declared);
+      restore_binding(inner_locals.regional_slots, locals.regional_slots);
+      locals = std::move(inner_locals);
       complete(result);
-      for (size_t j = 0; j < catch_scope.landing.size(); ++j)
-        if (catch_scope.landing[j].block) propagate(enter_landing(catch_scope.landing[j], j + 1));
+      for (auto &landing : catch_scope.landing) if (landing.block) {
+        ir_.enter(landing.block);
+        propagate(enter_errors(landing.incoming));
+      }
     }
-    ir_.enter(join);
-    return join_completions(completions, expr.at, parent_module);
+    ir_.enter(normal_join);
+    auto result = join_completions(completions, expr.at, parent_module);
+    if (result.type != Type::never) env = join_environments(environments, expr.at);
+    if (!finally) return result;
+    auto *finalizer = ir_.label("finally.body");
+    const auto normal_flow = flow_state();
+    const auto normal_env = env;
+    if (result.type != Type::never) ir_.jump(finalizer);
+    ir_.enter(failure_join);
+    if (failures.empty()) ir_.unreachable();
+    Value pending_error;
+    if (!failures.empty()) pending_error = enter_errors(failures);
+    const auto failure_flow = flow_state();
+    const auto failure_env = env;
+    if (!failures.empty()) ir_.jump(finalizer);
+    ir_.enter(finalizer);
+    if (result.type == Type::never && failures.empty()) { ir_.unreachable(); return result; }
+    llvm::Value *normal_path = nullptr;
+    if (result.type != Type::never && !failures.empty()) {
+      auto state = normal_flow;
+      intersect_flow(state, failure_flow);
+      restore_flow(state);
+      env = join_environments({{normal_env, normal_join, normal_flow}, {failure_env, failure_join, failure_flow}}, finally->at);
+      normal_path = ir_.phi(ir_.type_of(Type::boolean), {{ir_.bits(Type::boolean, 1), normal_join}, {ir_.bits(Type::boolean, 0), failure_join}});
+    } else if (result.type != Type::never) { restore_flow(normal_flow); env = normal_env; }
+    const auto finalizer_entry = flow_state();
+    const auto finalizer_env = env;
+    const auto finished = block(*finally, module, env, locals, function_context);
+    require(finished.type, Type::void_type, finally->at);
+    if (finished.type == Type::never) return finished;
+    if (result.type == Type::never) { raise_exception(pending_error); return result; }
+    if (!normal_path) return result;
+    const auto finalizer_exit = flow_state();
+    const auto finalizer_exit_env = env;
+    auto branch = ir_.branch(normal_path, true);
+    auto *failure_resume = ir_.here();
+    restore_flow(continue_flow(failure_flow, finalizer_entry, finalizer_exit));
+    env = continue_environment(failure_env, finalizer_env, finalizer_exit_env);
+    raise_exception(pending_error);
+    ir_.otherwise(branch);
+    restore_flow(continue_flow(normal_flow, finalizer_entry, finalizer_exit));
+    env = continue_environment(normal_env, finalizer_env, finalizer_exit_env);
+    ir_.merge(branch, Type::void_type);
+    ir_.continuation(normal_join, failure_join, finalizer, ir_.here());
+    ir_.continuation(failure_join, normal_join, finalizer, failure_resume);
+    return result;
   }
   Value conditional_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                           bool function_context, bool copy_bits = false, bool read_result = true,
@@ -6390,43 +6584,49 @@ class Compiler {
     require(condition.type, Type::boolean, expr.at);
 
     const bool parent_module = module_top_level_;
-    const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
     const auto before = flow_state();
-    const auto native_scope = ir_.scope();
+    const auto entry_env = env;
     auto native_branch = ir_.branch(condition.native);
     if (condition.nonnull_when && condition.nonnull_when->second) {
       auto &pointer = pointers_.at(condition.nonnull_when->first);
       auto view = *pointer.view; view.nullable = false;
       pointer.view = snapshot_pointer(std::move(view));
     }
-    auto first = block(*expr.children[1], module, env, locals.nested(), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+    auto first = block(*expr.children[1], module, env, locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
     if (first.type.owned) first = take_owner(first, expr.at);
     if (native_callable(first) && !result_owner) first = detach_callable(std::move(first), expr.at);
-    ir_.restore(native_scope);
     auto first_state = flow_state();
+    const auto first_env = env;
     ir_.otherwise(native_branch);
     restore_flow(before);
+    env = entry_env;
     if (condition.nonnull_when && !condition.nonnull_when->second) {
       auto &pointer = pointers_.at(condition.nonnull_when->first);
       auto view = *pointer.view; view.nullable = false;
       pointer.view = snapshot_pointer(std::move(view));
     }
-    auto second = block(*expr.children[2], module, env, locals.nested(), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+    auto second = block(*expr.children[2], module, env, locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
     if (second.type.owned) second = take_owner(second, expr.at);
     if (native_callable(second) && !result_owner) second = detach_callable(std::move(second), expr.at);
-    ir_.restore(native_scope);
     if (first.type == Type::null_ref && storage_owner(second))
       first = null_target(second.type, second, expr.at);
     else if (second.type == Type::null_ref && storage_owner(first))
       second = null_target(first.type, first, expr.at);
+    std::vector<EnvironmentEdge> environments;
     std::vector<Completion> completions;
-    if (first.type != Type::never) completions.push_back({first, native_branch.first_end, std::move(first_state)});
+    if (first.type != Type::never) {
+      completions.push_back({first, native_branch.first_end, std::move(first_state)});
+      environments.push_back({first_env, native_branch.first_end, completions.back().regions});
+    }
     if (second.type != Type::never) {
       completions.push_back({second, ir_.here(), flow_state()});
+      environments.push_back({env, ir_.here(), flow_state()});
       ir_.jump(native_branch.merge);
     }
     ir_.enter(native_branch.merge);
-    return join_completions(completions, expr.at, parent_module);
+    auto result = join_completions(completions, expr.at, parent_module);
+    if (result.type != Type::never) env = join_environments(environments, expr.at);
+    return result;
   }
   Value expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                    bool function_context, bool read = true, bool copy_bits = false, bool read_nested = true,
@@ -6447,6 +6647,8 @@ class Compiler {
       fail(expr.at, "compiler stack capacity exhausted while elaborating this expression");
 #endif
     }
+    active_environments_.emplace_back(local_scope_, &env);
+    const auto environment_frame = llvm::scope_exit([&] { active_environments_.pop_back(); });
     auto result = evaluate(expr, module, env, locals, function_context, copy_bits, read_nested, callable_result, result_owner);
     if (result.type == Type::never) throw EndPath{};
     if (copy_bits && local_bits(result.type)) return bits_value(read_value(std::move(result), expr.at));
@@ -6457,7 +6659,7 @@ class Compiler {
     using K = Expression::Kind;
       for (const auto &declaration : expr.children) {
         if (declaration->kind == K::block) {
-          block(*declaration, module, env, locals.nested(), function_context, true);
+          block(*declaration, module, env, locals, function_context, true);
           continue;
         }
         // Resolve the complete RHS before introducing this name, including the
@@ -6500,6 +6702,7 @@ class Compiler {
           const auto found = locals.visible.find(declaration->owner_name);
           if (found == locals.visible.end()) fail(declaration->at, "unavailable pointer owner '" + declaration->owner_name + "'");
           owner = found->second;
+          require_declaration(*owner, declaration->at);
           if (owner->type.kind != Type::region) fail(declaration->at, "an explicit pointer owner must name a region");
         }
         if (value.type == Type::null_ref) {
@@ -6558,6 +6761,7 @@ class Compiler {
       const auto owner = locals.visible.find(expr.owner_name);
       if (owner == locals.visible.end() || owner->second.type.kind != Type::region)
         fail(expr.at, "unavailable region owner '" + expr.owner_name + "' for var alias");
+      require_declaration(owner->second, expr.at);
       valid_view(owner->second, expr.at);
       if (value.pointer || !value.region_id)
         fail(expr.at, "var storage does not belong to declared region owner '" + expr.owner_name + "'");
@@ -6726,7 +6930,7 @@ class Compiler {
       auto value = local_storage(type, expr.at);
       const auto initial = expr.annotation ? 0u : 1u;
       if (expr.children.size() > initial) {
-        auto source = block(*expr.children[initial], module, env, locals.nested(), function_context, false, type, true);
+        auto source = block(*expr.children[initial], module, env, locals, function_context, false, type, true);
         write_bits(value, source, expr.at);
       }
       return value;
@@ -6765,6 +6969,7 @@ class Compiler {
     }
     case K::name: {
       if (const auto local = locals.visible.find(expr.text); local != locals.visible.end()) {
+        require_declaration(local->second, expr.at);
         if (locals.regional_slots.contains(expr.text)) return captured_view(local->second, expr.at);
         if (local->second.pointer) {
           auto value = pointer_value(*local->second.pointer, expr.at);
@@ -6827,7 +7032,6 @@ class Compiler {
       const auto id = expression_symbol(expr, module);
       auto value = define_procedure(*expr.definition, module, env, locals, implementation_context_);
       bind(id, std::move(value), module, env, expr.at);
-      scope_rebound_ = true;
       return {};
     }
     case K::effect: case K::effect_group: {
@@ -6852,7 +7056,6 @@ class Compiler {
       }
       for (auto &[id, value] : values) bind(id, value, module, env, expr.at, true);
       binding_check(env, expr.at);
-      scope_rebound_ = true;
       return {};
     }
     case K::make_region: return make_expression(expr, module, env, locals, function_context);
@@ -6860,7 +7063,7 @@ class Compiler {
     case K::rebind: return rebind_expression(expr, module, env, locals, function_context);
     case K::allocate: return allocate_expression(expr, module, env, locals, function_context);
     case K::range_for: case K::fold: return loop_expression(expr, module, env, locals, function_context);
-    case K::block: return block(expr, module, env, locals.nested(), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
+    case K::block: return block(expr, module, env, locals, function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
     case K::call: return call_expression(expr, module, env, locals, function_context);
     case K::value_call: {
       auto callee = expression(*expr.children.front(), module, env, locals, function_context, false);
@@ -7045,7 +7248,7 @@ class Compiler {
     if (expr.kind == Expression::Kind::block) {
       auto nested = locals;
       for (const auto &child : expr.children)
-        if (context_dependent(*child, lexical, nested)) return true;
+        if (context_dependent(*child, lexical, expr.scoped ? nested : locals)) return true;
       return false;
     }
     const bool loop = expr.kind == Expression::Kind::range_for || expr.kind == Expression::Kind::fold;
@@ -7300,6 +7503,7 @@ class Compiler {
     const auto scope_id = scopes_.size();
     scopes_.push_back(true); // Module storage remains live through process exit.
     const auto lexical_scope = llvm::SaveAndRestore(local_scope_, scope_id);
+    const auto cleanup_scope = llvm::SaveAndRestore(ir_.cleanup_owner(), scope_id);
     const auto holding_begin = holdings_.size();
     module.state = Module::State::executing;
     execution_order_.push_back(module.path);

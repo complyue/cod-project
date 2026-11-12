@@ -1,0 +1,27 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+data Pool {tag:u64;}
+region symbol @arena:Pool;
+region symbol @other:Pool;
+proc check(first:u64, second:u64) -> void {
+  try {
+    effect @other <- make Pool(capacity=first){tag<-5u64};
+    effect @arena <- make Pool(capacity=second){tag<-7u64};
+  } finally { behave @print(9u64); };
+  behave @print(root(@arena).tag);
+}
+proc check_local(first:u64, second:u64) -> void {
+  try {
+    owned region earlier <- make Pool(capacity=first){tag<-10u64};
+    owned region later <- make Pool(capacity=second){tag<-11u64};
+    func callable = func()->const u64 { 12u64 };
+  } finally { behave @print(13u64); };
+  behave @print(later.tag);
+  behave @print(callable());
+}
+check(128u64,128u64);
+try { check(128u64,0u64); } catch(error:const InvalidCapacity) { behave @print(error.requested); };
+try { check(0u64,128u64); } catch(error:const InvalidCapacity) { behave @print(error.requested); };
+check_local(128u64,128u64);
+try { check_local(128u64,0u64); } catch(error:const InvalidCapacity) { behave @print(error.requested); };
+try { check_local(0u64,128u64); } catch(error:const InvalidCapacity) { behave @print(error.requested); };

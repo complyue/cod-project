@@ -114,30 +114,30 @@ using symbol "std:io" @print;
 using "std:exceptions" OutOfMemory;
 using "std:exceptions" NullPointerException;
 data Packet {value:u64;}
-try {
-try {owned region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}}
-catch(seed) {
+try {{
+try {{owned region invalid:Packet <- make Packet(capacity=0u64){value<-0u64}; {}}}
+catch(seed) {{
   owned region keep:Packet <- make Packet(capacity=16u64){value<-7u64};
   for(i in 0 .. 2) {{
-    try {throw seed from seed} catch(error:const OutOfMemory) {
+    try {{throw seed from seed}} catch(error:const OutOfMemory) {{
       behave @assert(error.cause_count == 0u64)
-    }
+    }}
   }};
-  val first = try {throw seed from seed} catch(error) {error};
-  try {
+  val first = try {{throw seed from seed}} catch(error) {{error}};
+  try {{
     owned region inner:Packet <- make Packet(capacity=16u64){value<-0u64};
     throw first from seed
-  } catch(error:const OutOfMemory) {
+  }} catch(error:const OutOfMemory) {{
     behave @assert(error.cause_count == 0u64);
     behave @assert(error.requested == 40u64);
     behave @assert(first.cause_count == 1u64 && cause_at(first, 0u64).category == 3u64);
     behave @assert(root(keep).value == 7u64);
     behave @print(10)
-  };
-  val retry = try {throw first from first} catch(error) {error};
+  }};
+  val retry = try {{throw first from first}} catch(error) {{error}};
   behave @assert(retry.cause_count == 2u64 && first.cause_count == 1u64)
-};
-} catch(unexpected:const NullPointerException) {behave @assert(false)};
+}};
+}} catch(unexpected:const NullPointerException) {{behave @assert(false)}};
 '''
 
 
@@ -262,7 +262,7 @@ def main():
             'func module_value = identity;\n'
             'false && (func()->const bool { true })();\n' +
             (directory / "exception-reraise.cod").read_text().replace(
-                'try {', 'try {\n  func local_value = module_value;', 1))
+                'try {{', 'try {{\n  func local_value = module_value;', 1))
         checked([toolchain / "bin/cod", "--check", uncaught_source,
                  "--emit-llvm", ir, "--emit-runtime", runtime], root)
         source, executable = scratch / "uncaught.cc", scratch / "uncaught"

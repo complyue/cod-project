@@ -11,11 +11,11 @@ proc work() -> void throws Missing {
   {}
 }
 effect @work = work;
-{
+{{
   effect @state <- make Node(capacity=256u64) { value <- 9; next = null };
-  try { perform @work(); } catch (e:const Missing) { behave @assert(e.category == 4u64); };
-  try { behave @work(); } catch (e:const Missing) { behave @assert(e.cause_count == 0u64); };
-};
+  try {{ perform @work(); }} catch (e:const Missing) {{ behave @assert(e.category == 4u64); }};
+  try {{ behave @work(); }} catch (e:const Missing) {{ behave @assert(e.cause_count == 0u64); }};
+}};
 proc callback(cb:proc() -> void throws Missing) -> void throws Missing { cb(); }
-try { callback(work); } catch (e:const Missing) { behave @print(1); }
-finally { behave @assert(root(@state).value == 7); };
+try {{ callback(work); }} catch (e:const Missing) {{ behave @print(1); }}
+finally {{ behave @assert(root(@state).value == 7); }};

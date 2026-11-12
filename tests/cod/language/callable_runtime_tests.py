@@ -130,14 +130,14 @@ def main():
         entry.write_text(fixture.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func transient = reader(state); current <- copied; {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ func transient = reader(state); current <- copied; {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(current());
 current <- copied;
 behave @print(current());
 behave @print(6201u64);
-try { current <- wrap(current); {} }
-catch (e:const OutOfMemory) { behave @print(6202u64); };
+try {{ current <- wrap(current); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6202u64); }};
 behave @print(current());
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{
@@ -177,17 +177,17 @@ function later_argument(capacity:u64) -> const u64 {
 }
 function read_borrowed(action:func()->const u64 in O) -> const u64 where {owner O} { action() }
 behave @print(6001u64);
-try { read_mode(original, { behave @print(9999u64); 0u64 }); {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ read_mode(original, { behave @print(9999u64); 0u64 }); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(original());
 behave @print(6101u64);
-try { read_mode(original, later_argument(0u64)); {} }
-catch (e:const InvalidCapacity) {
+try {{ read_mode(original, later_argument(0u64)); {} }}
+catch (e:const InvalidCapacity) {{
   behave @print(6102u64);
   behave @print(6101u64);
-  try { read_after(original, throw e); {} }
-  catch (again:const InvalidCapacity) { behave @print(6102u64); };
-};
+  try {{ read_after(original, throw e); {} }}
+  catch (again:const InvalidCapacity) {{ behave @print(6102u64); }};
+}};
 behave @print(original());
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + read_borrowed(original) }});
@@ -209,14 +209,14 @@ function later_argument(capacity:u64) -> const u64 {
 }
 func nested = func (x:u64) -> const u64 { saved(x) + 1u64 };
 behave @print(6001u64);
-try { current({ current <- reader(state); 99u64 }); {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ current({{ current <- reader(state); 99u64 }}); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(current(0u64));
 # Keep the persistent replacement's size equal across the cleanup interval.
 current <- reader(state);
 behave @print(6101u64);
-try { current({ current <- reader(state); later_argument(0u64) }); {} }
-catch (e:const InvalidCapacity) { behave @print(6102u64); };
+try {{ current({{ current <- reader(state); later_argument(0u64) }}); {} }}
+catch (e:const InvalidCapacity) {{ behave @print(6102u64); }};
 behave @print(current(0u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{
@@ -238,13 +238,13 @@ using "std:exceptions" InvalidCapacity;
 symbol @meter:proc(u64)->const u64;
 symbol @copying:proc(u64)->const u64;
 proc recursive_meter = proc(depth:u64)->const u64 {
-  if (depth == 0u64) { @bias }
-  else { effect @bias <- @bias + 1u64; behave @meter(depth - 1u64) + 1u64 }
+  if (depth == 0u64) {{ @bias }}
+  else {{ effect @bias <- @bias + 1u64; behave @meter(depth - 1u64) + 1u64 }}
 };
 proc copying_meter = proc(depth:u64)->const u64 {
   proc local_copy = @copying;
   effect @copying = local_copy;
-  if (depth == 0u64) { 1u64 } else { behave @copying(depth - 1u64) + 1u64 }
+  if (depth == 0u64) {{ 1u64 }} else {{ behave @copying(depth - 1u64) + 1u64 }}
 };
 effect @meter = recursive_meter;
 effect @copying = copying_meter;
@@ -254,16 +254,16 @@ function later_argument(capacity:u64) -> const u64 {
   root(packet).value
 }
 behave @print(6001u64);
-try { selected({ selected <- first; 99u64 }); {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ selected({{ selected <- first; 99u64 }}); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(selected(2u64));
 behave @print(6101u64);
-try { selected({ selected <- first; later_argument(0u64) }); {} }
-catch (e:const InvalidCapacity) { behave @print(6102u64); };
+try {{ selected({{ selected <- first; later_argument(0u64) }}); {} }}
+catch (e:const InvalidCapacity) {{ behave @print(6102u64); }};
 behave @print(selected(2u64));
 behave @print(6301u64);
-try { copying_meter(8u64); {} }
-catch (e:const OutOfMemory) { behave @print(6302u64); };
+try {{ copying_meter(8u64); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6302u64); }};
 behave @print(copying_meter(8u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{
@@ -292,15 +292,15 @@ behave @print(7002u64);
         entry.write_text(captures.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { proc failed = snapshot; {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ proc failed = snapshot; {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(6201u64);
-try {
+try {{
   proc fresh = proc(n:u64)->const u64 { relay(n) };
   effect @saved = fresh;
   perform @saved(2u64);
   {}
-} catch (e:const OutOfMemory) { behave @print(6202u64); };
+}} catch (e:const OutOfMemory) {{ behave @print(6202u64); }};
 effect @saved = snapshot;
 behave @print(perform @saved(2u64));
 behave @print(7001u64);
@@ -320,8 +320,8 @@ behave @print(7002u64);
 using "std:exceptions" OutOfMemory;
 current <- active;
 behave @print(6001u64);
-try { current({ behave @print(9999u64); 2u64 }); {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ current({{ behave @print(9999u64); 2u64 }}); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(current(2u64));
 proc stable = proc(n:u64)->const u64 { n + 1u64 };
 behave @print(7001u64);
@@ -340,8 +340,8 @@ behave @print(7002u64);
 using "std:exceptions" OutOfMemory;
 current <- wrapped;
 behave @print(6001u64);
-try { borrow(current)({ behave @print(999u64); current <- second; 2u64 }); {} }
-catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ borrow(current)({{ behave @print(999u64); current <- second; 2u64 }}); {} }}
+catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(borrow(current)(2u64));
 behave @print(fold(i in 0u64 .. 128u64, total = 0u64) {{ total + factory()(i) }});
 behave @print(7001u64);
@@ -360,22 +360,22 @@ behave @print(7002u64);
         entry.write_text(short_circuit.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try {
+try {{
   false && evaluate(stable);
   true && evaluate(stable);
   {}
-} catch(e:const OutOfMemory) { behave @print(6002u64); };
+}} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(6201u64);
-try {
+try {{
   true || build(state)();
   false || build(state)();
   {}
-} catch(e:const OutOfMemory) { behave @print(6202u64); };
+}} catch(e:const OutOfMemory) {{ behave @print(6202u64); }};
 behave @print(state.created);
 behave @print(state.called);
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
-  total + if (i % 2u64 == 0u64 && stable()) { 1u64 } else { 0u64 }
+  total + if (i % 2u64 == 0u64 && stable()) {{ 1u64 }} else {{ 0u64 }}
 }});
 behave @print(7002u64);
 ''')
@@ -393,18 +393,18 @@ owned region retained <- make State(capacity=256u64){value<-17u64};
 func saved=maker(retained);
 func copied=saved;
 behave @print(6001u64);
-try { copied <- saved; {} }
-catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ copied <- saved; {} }}
+catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(6301u64);
-try {
+try {{
   owned region failed <- make State(capacity=256u64){value<-1u64};
   step(failed,maker(failed),16u64); {}
-} catch(e:const OutOfMemory) { behave @print(6302u64); };
+}} catch(e:const OutOfMemory) {{ behave @print(6302u64); }};
 behave @print(6401u64);
-try {
+try {{
   owned region failed <- make State(capacity=256u64){value<-1u64};
   step(failed,maker(failed),16u64); {}
-} catch(e:const OutOfMemory) { behave @print(6402u64); };
+}} catch(e:const OutOfMemory) {{ behave @print(6402u64); }};
 func stable=copied();
 behave @print(7001u64);
 behave @print(fold(i in 0u64..10000u64,total=0u64) {{ total+stable() }});
@@ -425,9 +425,9 @@ behave @print(7002u64);
 using "std:exceptions" OutOfMemory;
 current <- first;
 behave @print(6001u64);
-try { relay(false); }
+try {{ relay(false); }}
 catch (e:const NullPointerException) {}
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(current(2u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + current(i) }});
@@ -443,8 +443,8 @@ behave @print(7002u64);
         entry.write_text(regional.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { proc failed = snapshot; {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ proc failed = snapshot; {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(perform @saved(2u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + perform @saved(i) }});
@@ -460,16 +460,16 @@ behave @print(7002u64);
         entry.write_text(factories.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { chained <- saved; {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ chained <- saved; {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(chained());
 behave @print(6201u64);
-try { chained <- compose(8u64); {} }
-catch (e:const OutOfMemory) { behave @print(6202u64); };
+try {{ chained <- compose(8u64); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6202u64); }};
 behave @print(chained());
 behave @print(6401u64);
-try { chained <- compose(8u64); {} }
-catch (e:const OutOfMemory) { behave @print(6402u64); };
+try {{ chained <- compose(8u64); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6402u64); }};
 behave @print(chained());
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + chained() }});
@@ -486,11 +486,11 @@ behave @print(7002u64);
         lexical = directory / "closures/callable-lexical-factory.cod"
         entry.write_text(lexical.read_text().replace('effect @selected = first;', '''using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { proc transient = first; {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ proc transient = first; {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(6201u64);
-try { proc transient = factory(8u64); {} }
-catch (e:const OutOfMemory) { behave @print(6202u64); behave @print(@bias); };
+try {{ proc transient = factory(8u64); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6202u64); behave @print(@bias); }};
 effect @selected = first;''') + '''
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + first() }});
@@ -513,15 +513,15 @@ function later_argument(capacity:u64) -> const u64 {
   root(packet).value
 }
 behave @print(6001u64);
-try { plain(selected, { behave @print(9999u64); 1u64 }); {} }
-catch (e:const OutOfMemory) { behave @print(6002u64); };
+try {{ plain(selected, { behave @print(9999u64); 1u64 }); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(selected(3u64));
 behave @print(6101u64);
-try { plain(selected, later_argument(0u64)); {} }
-catch (e:const InvalidCapacity) { behave @print(6102u64); };
+try {{ plain(selected, later_argument(0u64)); {} }}
+catch (e:const InvalidCapacity) {{ behave @print(6102u64); }};
 behave @print(6301u64);
-try { walk(original,8u64); {} }
-catch (e:const OutOfMemory) { behave @print(6302u64); };
+try {{ walk(original,8u64); {} }}
+catch (e:const OutOfMemory) {{ behave @print(6302u64); }};
 behave @print(original(2u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + saved(2u64) }});
@@ -539,12 +539,12 @@ behave @print(7002u64);
         entry.write_text(generic.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func failed = selected; {} }
-catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ func failed = selected; {} }}
+catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(selected(3u64));
 behave @print(6301u64);
-try { iterate(originals,8u64,1u64); {} }
-catch(e:const OutOfMemory) { behave @print(6302u64); };
+try {{ iterate(originals,8u64,1u64); {} }}
+catch(e:const OutOfMemory) {{ behave @print(6302u64); }};
 behave @print(originals(3u64));
 behave @print(7001u64);
 behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + selected(i) }});
@@ -562,8 +562,8 @@ behave @print(7002u64);
         entry.write_text(regional_parameters.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { higher(selected, first, { behave @print(999u64); 0u64 }); {} }
-catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ higher(selected, first, { behave @print(999u64); 0u64 }); {} }}
+catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(selected(first,0u64));
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64, total=0u64) {{ total + readonly(second) }});
@@ -580,8 +580,8 @@ behave @print(7002u64);
         entry.write_text(owner_parameters.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func failed = integrate_view; {} }
-catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ func failed = integrate_view; {} }}
+catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(integrate_view(values,0.0f32));
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,integrated=0.0f32) {{ integrated+integrate_view(values,0.0f32) }});
@@ -598,8 +598,8 @@ behave @print(7002u64);
         entry.write_text(borrowed_results.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func failed = selected; {} }
-catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ func failed = selected; {} }}
+catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 ref after_failure = selected(a,b,true);
 after_failure <- 43u64;
 behave @print(b);
@@ -620,14 +620,14 @@ behave @print(7002u64);
         entry.write_text(nullable_views.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func failed = identity; {} }
-catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ func failed = identity; {} }}
+catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 ptr recovered = identity(maybe);
-try { recovered <- 31u64; behave @print(number); }
-catch(e:const NullPointerException) { behave @print(999u64); };
+try {{ recovered <- 31u64; behave @print(number); }}
+catch(e:const NullPointerException) {{ behave @print(999u64); }};
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,null_returns=0u64) {{
-  null_returns+if(isnull(identity(empty))) {1u64} else {0u64}
+  null_returns+if(isnull(identity(empty))) {{1u64}} else {{0u64}}
 }});
 behave @print(7002u64);
 ''')
@@ -642,7 +642,7 @@ behave @print(7002u64);
         entry.write_text(borrowed_holders.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { generic(plain,decorated); } catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ generic(plain,decorated); }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(plain());
 generic(plain,decorated);
 behave @print(plain());
@@ -661,7 +661,7 @@ behave @print(7002u64);
         entry.write_text(holder_results.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func failed = captured; {} } catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ func failed = captured; {} }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(captured());
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
@@ -687,7 +687,7 @@ function access(const region state:State)->const u64 {state.ticks+100u64}
 function inspect(const region state:State)->const u64 {state.ticks}
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func failed = current; {} } catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ func failed = current; {} }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 behave @print(current());
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
@@ -708,11 +708,11 @@ behave @print(7002u64);
 using "std:exceptions" OutOfMemory;
 func primary_factory=reader;
 behave @print(6001u64);
-try { stored_factory <- primary_factory; {} } catch(e:const OutOfMemory) { behave @print(6002u64); };
+try {{ stored_factory <- primary_factory; {} }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
 func after_failed_copy=stored_factory(item,0u64);
 behave @print(after_failed_copy());
 behave @print(6201u64);
-try { func failed = stored_factory(item,8u64); {} } catch(e:const OutOfMemory) { behave @print(6202u64); };
+try {{ func failed = stored_factory(item,8u64); {} }} catch(e:const OutOfMemory) {{ behave @print(6202u64); }};
 behave @print(result());
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
@@ -738,7 +738,7 @@ behave @print(7002u64);
         entry.write_text(array_results.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func failed=selected; {} } catch(e:const OutOfMemory){behave @print(6002u64);};
+try {{ func failed=selected; {} }} catch(e:const OutOfMemory){{behave @print(6002u64);}};
 ref preserved=selected(a,b);
 behave @print(preserved[0u64]);
 behave @print(7001u64);
@@ -760,7 +760,7 @@ behave @print(7002u64);
 using "std:exceptions" OutOfMemory;
 func original=first;
 behave @print(6001u64);
-try { selected <- original; {} } catch(e:const OutOfMemory){behave @print(6002u64);};
+try {{ selected <- original; {} }} catch(e:const OutOfMemory){{behave @print(6002u64);}};
 behave @print(selected(start(1.0)));
 behave @print(7001u64);
 behave @print(fold(i in 0u64..10000u64,total=0.0){{total+selected(start(f64(i%97u64)))}});
@@ -777,7 +777,7 @@ behave @print(7002u64);
         entry.write_text(record_results.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func failed=selected; {} } catch(e:const OutOfMemory){behave @print(6002u64);};
+try {{ func failed=selected; {} }} catch(e:const OutOfMemory){{behave @print(6002u64);}};
 ref preserved=selected(head,tail);
 behave @print(preserved.value);
 behave @print(7001u64);
@@ -799,7 +799,7 @@ behave @print(7002u64);
         entry.write_text(initialization.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try { func failed=selected; {} } catch(e:const OutOfMemory){behave @print(6002u64);};
+try {{ func failed=selected; {} }} catch(e:const OutOfMemory){{behave @print(6002u64);}};
 ref initialized=make local u64;
 selected(initialized);
 behave @print(initialized);
@@ -823,7 +823,7 @@ behave @print(7002u64);
         entry.write_text(region_results.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try {func failed=selected;{}} catch(e:const OutOfMemory){behave @print(6002u64);};
+try {{func failed=selected;{}}} catch(e:const OutOfMemory){{behave @print(6002u64);}};
 region preserved=selected(state);
 behave @print(preserved.value);
 behave @print(7001u64);
@@ -845,25 +845,25 @@ behave @print(7002u64);
         entry.write_text(owned_results.read_text() + '''
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
-try {func failed=selected;{}} catch(e:const OutOfMemory){behave @print(6002u64);};
-try {owned region rejected<-failing(31337u64,0u64);}
-catch(e:const OutOfMemory){behave @print(41u64);};
-try {
+try {{func failed=selected;{}}} catch(e:const OutOfMemory){{behave @print(6002u64);}};
+try {{owned region rejected<-failing(31337u64,0u64);}}
+catch(e:const OutOfMemory){{behave @print(41u64);}};
+try {{
   owned region seed<-make State(capacity=256u64){value<-7u64};
   ref fixed=root(seed);
   owned region unused<-rotate(fixed,fixed,seed,current_reader(seed),3u64,31337u64);
   behave @assert(false);
-} catch(e:const OutOfMemory) {};
-try {
+}} catch(e:const OutOfMemory) {};
+try {{
   owned region seed<-make State(capacity=256u64){value<-7u64};
   staged_step(seed,staged_reader(seed),3u64,31337u64,true);
   behave @assert(false);
-} catch(e:const OutOfMemory) {};
-try {
+}} catch(e:const OutOfMemory) {};
+try {{
   owned region seed<-make State(capacity=256u64){value<-7u64};
   proc unused=staged_factory(seed,stable,staged_reader(seed),3u64,31337u64);
   behave @assert(false);
-} catch(e:const OutOfMemory) {};
+}} catch(e:const OutOfMemory) {};
 behave @print(7001u64);
 behave @print(fold(i in 0u64..10000u64,total=0u64){{
   owned region result<-selected(256u64,i%97u64);

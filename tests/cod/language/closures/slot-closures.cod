@@ -9,7 +9,7 @@ ptr second = alloc state Node(9);
 ptr first_link = alloc state Link(first);
 ptr second_link = alloc state Link(second);
 state.link = first_link;
-try {
+try {{
   ptr var pinned_selection -> state.link.selected;
   func pinned = func [pinned_selection] () -> const i64 throws NullPointerException { pinned_selection.value };
   func following = func [state] () -> const i64 throws NullPointerException { state.link.selected.value };
@@ -27,7 +27,7 @@ try {
   first_link.selected = first;
   replace();
   behave @print(first_link.selected.value);
-} catch (e:const NullPointerException) { behave @print(-1); };
+}} catch (e:const NullPointerException) {{ behave @print(-1); }};
 data Increment { amount:u64; }
 function adder(region state:State, increment:u64) -> (func()->const u64 with {region state}) {
   ref configuration = alloc state Increment(increment);
@@ -47,7 +47,7 @@ ref var right -> required_right.selected;
 func copy_ref = func [left, right] () -> void { left = right; {} };
 copy_ref();
 behave @print(required_left.selected.value);
-try {
+try {{
   first_link.selected = first;
   ptr var chosen -> first_link.selected;
   func alias_test = func [chosen, state] () -> const i64 throws NullPointerException {
@@ -57,7 +57,7 @@ try {
   };
   behave @print(alias_test());
   behave @print(first_link.selected.value);
-} catch (e:const NullPointerException) { behave @print(-1); };
+}} catch (e:const NullPointerException) {{ behave @print(-1); }};
 function (<=>)(left:Node in O, right:Node in O) -> void where {owner O} {
   intrinsic (<=>)(left, right)
 }

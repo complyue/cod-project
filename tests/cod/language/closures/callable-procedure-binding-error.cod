@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 symbol @required:u64;
 proc action = proc()->const u64 { @required };
-{ effect @required <- 7u64; behave @print(action()); };
+{{ effect @required <- 7u64; behave @print(action()); }};
 # Earlier successful checking cannot supply an absent binding to this call.
 behave @print(action());
