@@ -210,7 +210,7 @@ def main():
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
                      'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization',
                      'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow', 'loop-pointer-flow', 'defer-first-owner',
-                     'defer-owner-queue'):
+                     'defer-owner-queue', 'defer-owned-arguments'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -369,10 +369,33 @@ behave @print(9041u64);
 conditional_stress(10000u64);
 behave @print(9042u64);
 '''
+            if name == 'defer-owned-arguments':
+                source += r'''
+proc registration_failure()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-23u64};
+  defer catch(e:const OutOfMemory) {consume(r);};
+  behave @print(9001u64);
+  defer consume(r);
+}
+registration_failure();
+behave @print(9002u64);
+proc consume_verify(owned region r:Item)->void {
+  if(root(r).value != 22u64) {behave @print(999u64);} else {};
+}
+proc owned_stress(count:u64)->void {
+  for(i in 0u64..count) {{
+    owned region r:Item <-make Item(capacity=256u64){value<-22u64};
+    defer consume_verify(r);
+  }};
+}
+behave @print(9041u64);
+owned_stress(10000u64);
+behave @print(9042u64);
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
-                                        frontend_warnings=('[-Wmissing-return]',) if name in ('defer-blocks', 'defer-returns') else
+                                        frontend_warnings=('[-Wmissing-return]',) if name in ('defer-blocks', 'defer-returns', 'defer-owned-arguments') else
                                         ('[-Wshadow]', ': note: shadowed binding declared here') if name == 'defer-first-owner' else ())
             expected = next(case['stdout'].splitlines() for case in cases if case['file'] == 'scopes/' + name + '.cod')
             if name == 'defer-failures':
@@ -408,6 +431,9 @@ behave @print(9042u64);
                 expected += ['9001', '14', '9002', '9041', '9042']
                 assert evidence['layout']['record_failures'] == 1
                 assert evidence['layout']['peak_records'] == 3
+            if name == 'defer-owned-arguments':
+                expected += ['9001', '23', '9002', '9041', '9042']
+                assert evidence['layout']['record_failures'] == 1
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
             evidence['executed_source_sha256'] = hashlib.sha256(source.encode()).hexdigest()

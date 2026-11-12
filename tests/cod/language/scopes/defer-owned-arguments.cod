@@ -1,0 +1,117 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+using "std:exceptions" OutOfMemory;
+data Item {value:u64;}
+region symbol @arena;
+proc consume(owned region item:Item)->void {behave @print(root(item).value);}
+proc bad()->void {effect @arena <-region(0u64);}
+proc consume_bad(owned region item:Item)->void {consume(item); bad();}
+
+proc prepared()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-1u64};
+  defer consume(r);
+  behave @print(root(r).value);
+  root(r).value <-2u64;
+}
+prepared();
+proc delayed()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-3u64};
+  defer {consume(r);};
+  behave @print(root(r).value);
+}
+delayed();
+proc ordered(count:u64)->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-4u64};
+  defer consume(r);
+  for(i in 0u64..count) {defer {behave @print(root(r).value);};};
+}
+ordered(0u64); ordered(3u64);
+proc conditional(yes:bool)->void {
+  if(yes) {
+    owned region r:Item <-make Item(capacity=256u64){value<-5u64};
+    defer consume(r);
+  } else {};
+}
+conditional(false); conditional(true);
+proc iterations(count:u64)->void {
+  for(i in 0u64..count) {{
+    owned region r:Item <-make Item(capacity=256u64){value<-6u64};
+    defer consume(r);
+  }};
+}
+iterations(0u64); iterations(3u64);
+proc nested()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-7u64};
+  defer {{defer consume(r);}};
+}
+nested();
+proc failure()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-8u64};
+  defer catch(e:const InvalidCapacity) {behave @print(9u64);};
+  defer consume_bad(r);
+}
+failure();
+proc pending()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-10u64};
+  defer catch(e:const InvalidCapacity) {behave @print(11u64);};
+  defer consume(r);
+  defer bad();
+}
+pending();
+proc handler()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-12u64};
+  defer catch(e:const InvalidCapacity) {consume(r);};
+  bad();
+}
+handler();
+proc finalized()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-13u64};
+  defer catch(e:const InvalidCapacity) {behave @print(14u64);} finally {consume(r);};
+  bad();
+}
+finalized();
+proc preserved()->const u64 {
+  owned region r:Item <-make Item(capacity=256u64){value<-15u64};
+  defer catch(e:const InvalidCapacity) {behave @print(16u64);};
+  defer consume_bad(r);
+  return 17u64;
+}
+behave @print(preserved());
+proc replacement()->owned region :Item {
+  owned region r:Item <-make Item(capacity=256u64){value<-18u64};
+  ref view = root(r);
+  defer {behave @print(view.value);};
+  defer {return r;};
+  return make Item(capacity=256u64){value<-999u64};
+}
+{{owned region r:Item <-replacement(); behave @print(root(r).value);}};
+proc selected(yes:bool)->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-19u64};
+  proc action = if(yes) {
+    proc(owned region item:Item)->void {consume(item);}
+  } else {
+    proc(owned region item:Item)->void {behave @print(root(item).value+1u64);}
+  };
+  defer action(r);
+}
+selected(true); selected(false);
+proc retain(owned region item:Item)->owned region :Item {return item;}
+proc unused_result()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-21u64};
+  defer retain(r);
+  behave @print(root(r).value);
+}
+unused_result();
+proc recursive(owned region item:Item, count:u64)->void {
+  if(count == 0u64) {consume(item);} else {defer recursive(item,count-1u64);};
+}
+proc recursion()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-24u64};
+  defer recursive(r,3u64);
+}
+recursion();
+proc registered_while_draining()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-25u64};
+  defer {defer consume(r);};
+}
+registered_while_draining();
