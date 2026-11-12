@@ -455,7 +455,7 @@ class Compiler {
   struct CallableResult { size_t callee, result; };
   std::vector<CallableResult> callable_results_;
   std::vector<Value> direct_callables_;
-  struct LoopPointers { size_t boundary; std::vector<bool> initialized; };
+  struct LoopPointers { size_t boundary; };
   std::vector<LoopPointers> loop_pointers_;
   std::vector<bool> scopes_{true};
   size_t local_scope_ = 0;
@@ -740,6 +740,50 @@ class Compiler {
     pointer_initializations_.emplace(flow, proof);
     return proof;
   }
+  Value pointer_header_view(Value value, size_t cell_boundary, bool required) {
+    value.referent = nullptr;
+    value.nullable = !required;
+    if (value.storage && value.storage->scope) {
+      value.storage->cells.clear();
+      for (size_t cell = 0; cell < cell_boundary; ++cell)
+        if (!cells_[cell].selected_target && cells_[cell].scope == *value.storage->scope)
+          value.storage->cells.insert(cell);
+      value.storage->initialized_alternatives = true;
+    }
+    return value;
+  }
+  void connect_pointer(const Value &destination, const Value &source,
+                       const std::vector<size_t> *initialized = nullptr, size_t unreachable = 0) {
+    auto input = pointer_flow(source, initialized);
+    size_t guaranteed = unreachable;
+    if (initialized && source.target_flow) {
+      if (source.storage) {
+        size_t contents = 1;
+        for (const auto cell : source.storage->cells) {
+          const auto proof = cell < initialized->size() ? initialized->at(cell) : 0;
+          contents = join_initialization(contents, proof == 1 ? proof :
+              preserved_initialization(proof, target_initialization(source.target_flow, cell, true)));
+        }
+        guaranteed = preserved_initialization(guaranteed, contents);
+      }
+      const auto found = selected_cells_.find(source.target_flow);
+      if (found != selected_cells_.end() && found->second < initialized->size())
+        guaranteed = preserved_initialization(guaranteed, initialized->at(found->second));
+    }
+    if (guaranteed) {
+      pointer_flows_.push_back({{input}, nullptr, false, false, guaranteed});
+      input = pointer_flows_.size() - 1;
+    }
+    auto &inputs = pointer_flows_.at(destination.target_flow).inputs;
+    if (input != destination.target_flow && std::find(inputs.begin(), inputs.end(), input) == inputs.end())
+      inputs.push_back(input);
+    if (destination.callable_address) {
+      auto &addresses = callable_flows_.at(destination.callable_address).inputs;
+      if (source.callable_address != destination.callable_address &&
+          std::find(addresses.begin(), addresses.end(), source.callable_address) == addresses.end())
+        addresses.push_back(source.callable_address);
+    }
+  }
   size_t selected_cell(const Value &value, const Location &at) {
     if (const auto found = selected_cells_.find(value.target_flow); found != selected_cells_.end()) return found->second;
     const auto cell = cells_.size();
@@ -807,8 +851,11 @@ class Compiler {
       const auto known = node.source ? node.initialized : preserved_initialization(inherited, node.initialized);
       initialization_flows_.at(proof) = {{known}, node.open};
     }
+    std::map<size_t, PointerTargets> targets_by_flow;
     for (const auto &item : target_initializations_) {
-      const auto targets = pointer_targets(item.target);
+      auto [position, inserted] = targets_by_flow.try_emplace(item.target);
+      if (inserted) position->second = pointer_targets(item.target);
+      const auto &targets = position->second;
       auto &proof = initialization_flows_.at(item.proof);
       proof.open = !targets.closed;
       if (targets.closed) proof.inputs = {size_t(item.excludes ? !targets.cells.contains(item.cell) :
@@ -817,6 +864,7 @@ class Compiler {
   }
   size_t selected_initialization(const Value &value, size_t cell) {
     auto proof = cells_.at(cell).initialized;
+    if (proof == 1) return proof;
     if (value.target_flow) {
       proof = preserved_initialization(proof, target_initialization(value.target_flow, cell, true));
       proof = preserved_initialization(proof, cells_.at(selected_cell(value, cells_.at(cell).at)).initialized);
@@ -1546,6 +1594,34 @@ class Compiler {
     if (disproved(false)) return false;
     if (!open || !disproved(true)) return true;
     return {};
+  }
+  std::vector<bool> initialization_failures() const {
+    // Final reads share one fixed point over the closed proof graph. Propagate
+    // false inputs through conjunctions and only fully disproved disjunctions;
+    // an open producer cannot establish a guarantee. Write guarantees have
+    // already been resolved independently of their entering facts.
+    std::vector<std::vector<size_t>> dependents(initialization_flows_.size());
+    std::vector<size_t> remaining(initialization_flows_.size());
+    std::vector<bool> rejected(initialization_flows_.size());
+    std::vector<size_t> work;
+    const auto reject = [&](size_t proof) {
+      if (!rejected[proof]) { rejected[proof] = true; work.push_back(proof); }
+    };
+    reject(0);
+    for (size_t proof = 2; proof < initialization_flows_.size(); ++proof) {
+      const auto &node = initialization_flows_[proof];
+      remaining[proof] = node.inputs.size();
+      for (const auto input : node.inputs) dependents[input].push_back(proof);
+      if (node.open || (node.any && node.inputs.empty())) reject(proof);
+    }
+    while (!work.empty()) {
+      const auto input = work.back(); work.pop_back();
+      for (const auto proof : dependents[input]) {
+        if (rejected[proof]) continue;
+        if (!initialization_flows_[proof].any || --remaining[proof] == 0) reject(proof);
+      }
+    }
+    return rejected;
   }
   size_t initialization_guarantee(size_t proof, std::shared_ptr<const std::set<size_t>> inputs) {
     if (proof < 2) return proof;
@@ -4577,9 +4653,6 @@ class Compiler {
     valid_view(source, at);
     require_access(source.read_only, pointers_.at(*destination.pointer).read_only, at,
         "a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias");
-    for (const auto &loop : loop_pointers_)
-      if (*destination.pointer < loop.boundary && !loop.initialized[*destination.pointer])
-        fail(at, "loop-carried rebinding of an initially uninitialized target is not yet supported; initialize it before the loop");
   }
   Value rebind_pointer(const Value &destination, Value source) {
     if (destination.target_flow && !source.target_flow) source.target_flow = pointer_flow(source);
@@ -6184,15 +6257,7 @@ class Compiler {
           header.joined.pointers.push_back(original);
           continue;
         }
-        auto view = *original;
-        view.referent = nullptr;
-        view.nullable = !pointers_[i].required;
-        if (view.storage && view.storage->scope) {
-          view.storage->cells.clear();
-          for (size_t cell = 0; cell < entry_flow.initialized.size(); ++cell)
-            if (!cells_[cell].selected_target && cells_[cell].scope == *view.storage->scope) view.storage->cells.insert(cell);
-          view.storage->initialized_alternatives = true;
-        }
+        auto view = pointer_header_view(*original, entry_flow.initialized.size(), pointers_[i].required);
         std::vector<size_t> targets, addresses;
         for (auto &path : header.paths) {
           pointer_flows_.push_back({{}, nullptr, true});
@@ -6238,27 +6303,7 @@ class Compiler {
                                        const std::vector<size_t> *initialized = nullptr, size_t unreachable = 0) {
       for (size_t i = 0; i < std::min(destination.size(), source.size()); ++i) {
         if (!scope.rebound_pointers.contains(i) || entry_flow.pointers[i]->pending_owner) continue;
-        auto input = pointer_flow(*source[i], initialized);
-        size_t guaranteed = unreachable;
-        if (initialized && source[i]->target_flow) {
-          const auto found = selected_cells_.find(source[i]->target_flow);
-          if (found != selected_cells_.end() && found->second < initialized->size()) {
-            guaranteed = preserved_initialization(guaranteed, initialized->at(found->second));
-          }
-        }
-        if (guaranteed) {
-          pointer_flows_.push_back({{input}, nullptr, false, false, guaranteed});
-          input = pointer_flows_.size() - 1;
-        }
-        auto &inputs = pointer_flows_.at(destination[i]->target_flow).inputs;
-        if (input != destination[i]->target_flow && std::find(inputs.begin(), inputs.end(), input) == inputs.end())
-          inputs.push_back(input);
-        if (destination[i]->callable_address) {
-          auto &addresses = callable_flows_.at(destination[i]->callable_address).inputs;
-          if (source[i]->callable_address != destination[i]->callable_address &&
-              std::find(addresses.begin(), addresses.end(), source[i]->callable_address) == addresses.end())
-            addresses.push_back(source[i]->callable_address);
-        }
+        connect_pointer(*destination[i], *source[i], initialized, unreachable);
       }
     };
     cleanup_header(0);
@@ -7020,8 +7065,9 @@ class Compiler {
     }
 
     const auto rebound = rebound_pointers(*expr.children[body_index], locals);
-    LoopPointers loop_pointers{pointers_.size(), {}};
-    std::vector<std::pair<size_t, size_t>> callable_headers, address_headers, deferred_headers;
+    LoopPointers loop_pointers{pointers_.size()};
+    std::vector<std::pair<size_t, const Value *>> pointer_headers;
+    std::vector<std::pair<size_t, size_t>> callable_headers, deferred_headers;
     if (!one && !empty) {
       for (auto &[scope, queue] : registered_deferred_) {
         deferred_flows_.push_back({{{queue, before.initialized}}, {}});
@@ -7037,27 +7083,21 @@ class Compiler {
         callable_headers.emplace_back(holder, header);
       }
     }
-    for (auto &pointer : pointers_) {
-      const auto &current = *pointer.view;
-      const bool initialized = !current.storage || std::all_of(current.storage->cells.begin(), current.storage->cells.end(),
-          [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) == true; });
-      loop_pointers.initialized.push_back(initialized);
-      if (!one && !empty && !pointer.fixed_binding && initialized) {
-        auto view = current;
-        if (view.callable_address) {
-          callable_flows_.push_back({{}, {view.callable_address}, true});
-          callable_flows_.back().loop = true;
-          view.callable_address = callable_flows_.size() - 1;
-          address_headers.emplace_back(size_t(&pointer - pointers_.data()), view.callable_address);
-        }
-        if (!pointer.required && rebound.contains(size_t(&pointer - pointers_.data()))) view.nullable = true;
-        view.referent = nullptr;
-        if (view.storage) {
-          view.storage->cells.clear();
-          view.storage->initialized_alternatives = true;
-        }
-        pointer.view = snapshot_pointer(std::move(view));
+    if (!one && !empty) for (const auto id : rebound) {
+      auto &pointer = pointers_.at(id);
+      if (pointer.fixed_binding || pointer.view->pending_owner) continue;
+      auto view = pointer_header_view(*pointer.view, before.initialized.size(), pointer.required);
+      pointer_flows_.push_back({{}, nullptr, true});
+      view.target_flow = pointer_flows_.size() - 1;
+      if (view.callable_address) {
+        callable_flows_.push_back({{}, {}, true});
+        callable_flows_.back().loop = true;
+        view.callable_address = callable_flows_.size() - 1;
       }
+      const auto *header = snapshot_pointer(std::move(view));
+      connect_pointer(*header, *pointer.view, &before.initialized);
+      pointer.view = header;
+      pointer_headers.emplace_back(id, header);
     }
     if (!one && !empty) loop_pointers_.push_back(loop_pointers);
     const auto next = block(*expr.children[body_index], module, env, inner_locals, function_context,
@@ -7072,23 +7112,13 @@ class Compiler {
       if (next.type != Type::never && back && *back != id) header.inputs.push_back(*back);
       header.open = false;
     }
-    for (const auto &[pointer, id] : address_headers) {
-      auto &header = callable_flows_.at(id);
-      const auto back = pointers_[pointer].view->callable_address;
-      if (next.type != Type::never && back != id) header.inputs.push_back(back);
-      header.open = false;
+    const auto continuing = flow_state();
+    for (const auto &[pointer, header] : pointer_headers) {
+      if (next.type != Type::never) connect_pointer(*header, *pointers_[pointer].view, &continuing.initialized);
+      pointer_flows_.at(header->target_flow).open = false;
+      if (header->callable_address) callable_flows_.at(header->callable_address).open = false;
     }
-    if (!one && !empty) {
-      loop_pointers_.pop_back();
-      if (next.type != Type::never)
-        for (size_t i = 0; i < loop_pointers.boundary; ++i) {
-          const auto &view = *pointers_[i].view;
-          if (loop_pointers.initialized[i] && view.storage &&
-              !std::all_of(view.storage->cells.begin(), view.storage->cells.end(),
-                  [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) == true; }))
-            fail(expr.at, "loop-carried pointer target must remain definitely initialized on every continuing path");
-        }
-    }
+    if (!one && !empty) loop_pointers_.pop_back();
 
     if (expr.kind == K::fold && next.type != Type::never) {
       require(next.type, accumulator.type, expr.at);
@@ -9327,8 +9357,9 @@ public:
       }
       resolve_target_initialization();
       resolve_initialization_guarantees();
+      const auto uninitialized = initialization_failures();
       for (const auto &read : initialization_reads_) {
-        if (initialization_known(read.proof) != true)
+        if (uninitialized.at(read.proof))
           fail(read.at, "read of storage before definite initialization\n" + location_text(cells_.at(read.cell).at) +
                        ": note: local storage allocated here");
       }

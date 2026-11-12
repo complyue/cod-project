@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+proc run(count:u64, yes:bool)->void {
+  val first:u64 <- 1u64;
+  ptr second = make local u64;
+  ptr selected = first;
+  for(i in 0u64 .. count) {
+    behave @print(selected);
+    if(yes) {selected = second;} else {second <- 2u64;};
+  };
+}
+run(3u64, true);

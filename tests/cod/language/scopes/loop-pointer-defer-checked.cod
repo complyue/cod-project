@@ -1,0 +1,6 @@
+using symbol "std:io" @print;
+proc run(count:u64)->void {
+val first:u64 <- 1u64; ptr selected = first;
+for(i in 0u64 .. count) {{behave @print(selected); defer {selected = null;};}};
+}
+run(3u64);

@@ -1442,7 +1442,7 @@
     "file": "loop-rebind-uninitialized.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "loop-carried pointer target must remain definitely initialized"
+    "stderr_contains": "before definite initialization"
   },
   {
     "file": "swap-readonly.cod",
@@ -3191,5 +3191,46 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/loop-pointer-flow.cod",
+    "exit": 0,
+    "stdout": "1\n1\n2\n2\n2\n3\n3\n4\n3\n4\n3\n4\n3\n4\n3\n7\n7\n7\n8\n8\n8\n10\n11\n10\n11\n12\n13\n12\n13\n12\n14\n14\n14\n15\n16\n16\n16\n17\n17\n1\n2\n2\n0\n10\n22\n23\n22\n24\n24\n25\n"
+  },
+  {
+    "file": "scopes/loop-pointer-entry-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/loop-pointer-backedge-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/loop-pointer-defer-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/loop-pointer-defer-checked.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "NullPointerException"
+  },
+  {
+    "file": "scopes/loop-pointer-zero-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "scopes/loop-pointer-branch-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
   }
 ]

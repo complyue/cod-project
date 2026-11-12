@@ -1,0 +1,148 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+using "std:exceptions" OutOfMemory;
+proc show(value:u64 in O)->void where {owner O} {behave @print(value);}
+proc set(value:u64 in O)->void where {owner O} {value <- 7u64;}
+proc iteration(count:u64)->void {
+  val first:u64 <- 1u64;
+  val second:u64 <- 2u64;
+  ptr selected = first;
+  for(i in 0u64 .. count) {{
+    show(selected);
+    defer {selected = second;};
+  }};
+  show(selected);
+}
+iteration(0u64); iteration(3u64);
+proc swap(count:u64)->void {
+  val first:u64 <- 3u64;
+  val second:u64 <- 4u64;
+  ptr left = first;
+  ptr right = second;
+  for(i in 0u64 .. count) {
+    show(left);
+    left <=> right;
+  };
+  show(left);
+}
+swap(0u64); swap(3u64); swap(4u64);
+proc initialize(count:u64)->void {
+  ptr first = make local u64;
+  ptr second = make local u64;
+  ptr selected = first;
+  for(i in 0u64 .. count) {{
+    selected = second;
+    defer {show(selected);} catch(error:const OutOfMemory) {throw error;};
+    defer set(selected);
+  }};
+}
+initialize(0u64); initialize(3u64);
+proc write_before_read(count:u64)->void {
+  ptr first = make local u64;
+  ptr second = make local u64;
+  ptr selected = first;
+  for(i in 0u64 .. count) {
+    selected <- 8u64;
+    show(selected);
+    selected = second;
+  };
+}
+write_before_read(3u64);
+func one()->const u64 {return 10u64;}
+func two()->const u64 {return 11u64;}
+proc callables(count:u64)->void {
+  func first = one;
+  func second = two;
+  ptr left = first;
+  ptr right = second;
+  for(i in 0u64 .. count) {{
+    behave @print(left());
+    defer {left <=> right;};
+  }};
+  behave @print(left());
+}
+callables(3u64);
+proc nested(count:u64)->void {
+  val first:u64 <- 12u64;
+  val second:u64 <- 13u64;
+  ptr left = first;
+  ptr right = second;
+  for(i in 0u64 .. count) {
+    for(j in 0u64 .. count) {{
+      show(left);
+      defer {left <=> right;};
+    }};
+  };
+  show(left);
+}
+nested(2u64);
+proc nullable(count:u64)->void {
+  val target:u64 <- 14u64;
+  ptr selected = target;
+  for(i in 0u64 .. count) {{
+    try {show(selected);} catch(error:const NullPointerException) {show(target);};
+    defer {selected = null;};
+  }};
+}
+nullable(3u64);
+proc unused(count:u64)->void {
+  val first:u64 <- 15u64;
+  ptr second = make local u64;
+  ptr selected = first;
+  for(i in 0u64 .. count) {selected = second;};
+  show(first);
+}
+unused(3u64);
+proc range_else(count:u64)->void {
+  val first:u64 <- 16u64;
+  val second:u64 <- 17u64;
+  ptr selected = first;
+  for(i in 0u64 .. count) {{show(selected); defer {selected = second;};}}
+  else {show(selected);};
+  show(selected);
+}
+range_else(0u64); range_else(2u64);
+
+proc direct_write(count:u64)->void {
+ val first:u64 <- 1u64;
+ ptr second = make local u64;
+ ptr selected = first;
+ for(i in 0u64 .. count) {
+   behave @print(selected);
+   selected = second;
+   second <- 2u64;
+ };
+}
+direct_write(3u64);
+
+func folded(count:u64)->const u64 {
+  val first:u64 <- 3u64;
+  val second:u64 <- 4u64;
+  ptr left = first;
+  ptr right = second;
+  return fold(i in 0u64 .. count, total = 0u64) {{
+    defer {left <=> right;};
+    total + left
+  }};
+}
+behave @print(folded(0u64));
+behave @print(folded(3u64));
+proc accumulated(count:u64)->void {
+  val first:u64 <- 22u64;
+  val second:u64 <- 23u64;
+  ptr left = first;
+  ptr right = second;
+  for(i in 0u64 .. count) {defer show(left); left <=> right;};
+}
+accumulated(3u64);
+proc known_bounds()->void {
+  val first:u64 <- 24u64;
+  ptr second = make local u64;
+  ptr selected = first;
+  for(i in 0u64 .. 0u64) {selected = second;};
+  show(selected);
+  for(i in 0u64 .. 1u64) {show(selected); selected = second;};
+  selected <- 25u64;
+  show(selected);
+}
+known_bounds();

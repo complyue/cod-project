@@ -89,6 +89,8 @@ extern "C" void cod_lang_print_u64(std::uint64_t value) {
     assert(records.empty() && observed == 10000);
     assert(phase_peak == (phase == 1 ? 10000 : 1)); phase = 0;
   }
+  if (value == 9041) { assert(records.empty()); phase_peak = 0; }
+  if (value == 9042) assert(records.empty() && phase_peak == 1);
   cod_trace_u64(value);
 }
 extern "C" void cod_lang_exception_finish() {
@@ -207,7 +209,7 @@ def main():
         for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
                      'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization',
-                     'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow'):
+                     'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow', 'loop-pointer-flow'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -290,6 +292,32 @@ proc failed_registration()->void {
 try {failed_registration();} catch(error:const OutOfMemory) {behave @print(9002u64);};
 swap_repeated(10000u64);
 '''
+            if name == 'loop-pointer-flow':
+                source += '''
+proc failed_iteration()->void {
+  val first:u64 <- 18u64;
+  val second:u64 <- 19u64;
+  ptr selected = first;
+  try {for(i in 0u64 .. 3u64) {{
+    behave @print(9001u64);
+    defer {selected = second;};
+  }};} catch(error:const OutOfMemory) {show(selected);};
+}
+failed_iteration();
+behave @print(9002u64);
+proc stress(count:u64)->void {
+  val first:u64 <- 20u64;
+  val second:u64 <- 21u64;
+  ptr left = first;
+  ptr right = second;
+  for(i in 0u64 .. count) {{defer {left <=> right;};}};
+  show(left);
+  show(right);
+}
+behave @print(9041u64);
+stress(10000u64);
+behave @print(9042u64);
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -316,6 +344,10 @@ swap_repeated(10000u64);
                 expected += ['9001', '50', '9002', '14', '15']
                 assert evidence['layout']['record_failures'] == 1
                 assert evidence['layout']['peak_records'] == 10000
+            if name == 'loop-pointer-flow':
+                expected += ['9001', '18', '9002', '9041', '20', '21', '9042']
+                assert evidence['layout']['record_failures'] == 1
+                assert evidence['layout']['peak_records'] == 3
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
             evidence['executed_source_sha256'] = hashlib.sha256(source.encode()).hexdigest()
