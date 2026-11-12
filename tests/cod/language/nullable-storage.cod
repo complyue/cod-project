@@ -47,10 +47,10 @@ owned region r:Node <- make Node(capacity = 4096u64) { count <- 12; next = null;
   try { behave @assert(maybe == 6); } catch (e : const NullPointerException) { behave @assert(false); };
   p = a;
   val misses <- 0;
-  for (i in 0 .. 2) {
+  for (i in 0 .. 2) {{
     try { val sampled <- p; } catch (e : const NullPointerException) { misses <- misses + 1; {} };
     p = null;
-  };
+  }};
   behave @assert(misses == 1 && isnull(p));
   behave @print(3);
 };

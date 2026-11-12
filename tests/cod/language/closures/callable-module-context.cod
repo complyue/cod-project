@@ -20,10 +20,10 @@ proc adapted_value = adapted_procedure;
 behave @print(frozen_value(1u64));
 behave @print(adapted_value(1u64));
 proc selected = frozen_value;
-for (i in 0u64..2u64) {
+for (i in 0u64..2u64) {{
   behave @print(selected(1u64));
   selected <- adapted_value;
-};
+}};
 proc original_again = frozen_procedure;
 behave @print(original_again(1u64));
 symbol from "callable-module-base.cod" @recursive;

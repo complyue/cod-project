@@ -6,4 +6,4 @@ function access(region state:State)->const u64 {1u64}
 function access(const region state:State)->const u64 {state.ticks <- 99u64;2u64}
 owned region state:State <- make State(capacity=128u64){ticks <- 9u64};
 func current = reader(state);
-for(i in 0u64 .. 2u64){access(current -> state);};
+for(i in 0u64 .. 2u64){{access(current -> state);}};

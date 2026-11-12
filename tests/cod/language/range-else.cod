@@ -6,7 +6,7 @@ symbol @level:i64;
 effect @level <- 1;
 function last_or(first:i64, last:i64) -> const i64 {
   ptr result = make local i64;
-  for (i in first .. last) { result <- i; }
+  for (i in first .. last) {{ result <- i; }}
   else { result <- -1; };
   result
 }
@@ -17,7 +17,7 @@ function bound(count:i64 in O, value:i64) -> const i64 where {owner O} {
 proc fail_bound() -> i64 { effect @arena <- region(0u64); 0 }
 function checked(first:i64, last:i64, error:InvalidCapacity) -> const i64 {
   ptr result = make local i64;
-  for (i in first .. last) { result <- i; }
+  for (i in first .. last) {{ result <- i; }}
   else { throw error; };
   result
 }
@@ -26,15 +26,15 @@ behave @assert(last_or(3, 1) == -1);
 behave @assert(last_or(0, 1) == 0);
 behave @assert(last_or(0, 4) == 3);
 ptr count = 0, marker = 0;
-for (i in bound(count, 1) .. bound(count, 1)) { marker <- 99; }
+for (i in bound(count, 1) .. bound(count, 1)) {{ marker <- 99; }}
 else { effect @level <- 2; marker <- @level; };
 behave @assert(count == 2 && marker == 2 && @level == 1);
 try {
-  for (i in 0 .. fail_bound()) { marker <- 99; } else { marker <- 98; };
+  for (i in 0 .. fail_bound()) {{ marker <- 99; }} else { marker <- 98; };
 } catch (error:const InvalidCapacity) {};
 behave @assert(marker == 2);
 try {
-  for (i in 0 .. 1) { effect @arena <- region(0u64); } else { marker <- 98; };
+  for (i in 0 .. 1) {{ effect @arena <- region(0u64); }} else { marker <- 98; };
 } catch (error:const InvalidCapacity) {
   behave @assert(marker == 2 && checked(0, 2, error) == 1);
   try { checked(0, 0, error); }
@@ -43,7 +43,7 @@ try {
 };
 behave @assert(marker == 3);
 ptr known_empty = make local i64, known_nonempty = make local i64;
-for (i in 2u32 .. 1u32) {} else { known_empty <- 10; };
-for (i in 0u32 .. 1u32) { known_nonempty <- 20; } else {};
+for (i in 2u32 .. 1u32) {{}} else { known_empty <- 10; };
+for (i in 0u32 .. 1u32) {{ known_nonempty <- 20; }} else {};
 behave @assert(known_empty + known_nonempty == 30);
 behave @print(1);

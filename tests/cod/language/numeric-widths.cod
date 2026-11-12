@@ -1,7 +1,7 @@
 using symbol "std:io" @print;
 unit Slot;
 function sum(lo:u32(Slot), hi:u32(Slot)) -> u64 {
-  fold (i in lo .. hi, total = 0u64) { total + u64(scalar(i)) }
+  fold (i in lo .. hi, total = 0u64) {{ total + u64(scalar(i)) }}
 }
 behave @print(255u8);
 behave @print(4294967295u32);

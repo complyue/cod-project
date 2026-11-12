@@ -293,6 +293,7 @@ struct Expression {
   std::shared_ptr<Form> definition = {};
   bool intrinsic = false;
   bool fixed_binding = false;
+  bool scoped = false;
   std::string declaration_kind = {};
   std::string owner_name = {};
 };
@@ -1017,13 +1018,35 @@ class Parser {
   }
   Expr block() {
     auto result = make(Expression::Kind::block, expect("{"));
+    result->scoped = is("{") && peek().at.line == result->at.line &&
+        peek().at.column == result->at.column + 1;
+    if (result->scoped) expect("{");
     while (!take("}")) {
       if (peek().kind == TokenKind::end) fail(peek().at, "unterminated scope");
       result->children.push_back(expression());
       if (!is("}")) expect(";");
       else take(";");
     }
+    if (result->scoped) expect("}");
     return result;
+  }
+
+  static void validate_iteration_scopes(const Expression &expr, bool needs_scope = false) {
+    using K = Expression::Kind;
+    if (expr.kind == K::block && expr.scoped) needs_scope = false;
+    if (needs_scope && (expr.kind == K::pointer_group || expr.kind == K::region_binding ||
+                        expr.kind == K::alias ||
+                        (expr.kind == K::callable && !expr.definition->name.empty())))
+      fail(expr.at, "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope");
+    for (size_t i = 0; i < expr.children.size(); ++i) {
+      const bool iteration = (expr.kind == K::range_for && i == 2) ||
+                             (expr.kind == K::fold && i == 3);
+      validate_iteration_scopes(*expr.children[i], iteration || needs_scope);
+    }
+    // A callable body executes in its own call scope, independently of where
+    // its value is constructed. Loops inside it still need explicit scopes.
+    if (expr.definition && expr.definition->body)
+      validate_iteration_scopes(*expr.definition->body);
   }
 
 public:
@@ -1204,6 +1227,8 @@ public:
       }
       forms.push_back(std::move(form));
     }
+    for (const auto &form : forms)
+      if (form->body) validate_iteration_scopes(*form->body);
     return forms;
   }
 };

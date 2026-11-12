@@ -1,6 +1,6 @@
 function invalid(count:i64) -> const i64 {
   ptr current = 1, uninitialized = make local i64;
-  for (i in 0 .. count) { ptr held = current = uninitialized; };
+  for (i in 0 .. count) {{ ptr held = current = uninitialized; }};
   current
 }
 invalid(2);

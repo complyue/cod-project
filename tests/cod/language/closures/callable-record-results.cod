@@ -8,12 +8,12 @@ owned region arena:Arena <- make Arena(capacity=2048u64){count <- 0u64};
 ref tail=alloc arena Node(7u64,null);
 ref head=alloc arena Node(3u64,tail);
 func selected=first;
-for(i in 0u64..2u64){
+for(i in 0u64..2u64){{
  ref result=selected(head,tail);
  result.value <- result.value+1u64;
  behave @print(result.value);
  selected <- second;
-};
+}};
 function descend(node:Node in r,n:u64)->Node in r where {region r:Arena} {
  if(n==0u64){node}else{descend(node,n-1u64)}
 }

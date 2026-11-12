@@ -49,7 +49,7 @@ proc unused() -> i64 { behave @assert(false); 0 }
   if (flag) { alias = a; {} } else { alias = b; {} };
   alias <- 6;
   behave @assert(a == 6 && b == 7);
-  for (i in 0 .. 3) { a <- a + 1; };
+  for (i in 0 .. 3) {{ a <- a + 1; }};
   behave @assert(a == 9);
   behave @assert(digits(a, { a <- 2; a }) == 92);
 

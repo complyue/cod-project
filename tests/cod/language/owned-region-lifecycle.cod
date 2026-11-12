@@ -117,10 +117,10 @@ proc stable_join(flag:bool) -> void {
   behave @assert(view.sequence == root(selected).sequence);
   behave @print(9)
 }
-for(i in 0u64 .. 2u64) {
+for(i in 0u64 .. 2u64) {{
   owned region packet:Packet <- fresh(16u64, i);
   behave @print(9)
-};
+}};
 stable_join(false);
 proc borrowed_failure(bytes:u64) -> void {
   owned region packet:Packet <- fresh(16u64, 1u64);

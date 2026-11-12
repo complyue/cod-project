@@ -7,7 +7,7 @@ conversion function d(x:f64(right))->const f64(target){target(scalar(x)+20.0)}
 function first(x:f64(target*<-left<-start))->const f64 {scalar(x)}
 function second(x:f64(target*<-right<-start))->const f64 {scalar(x)}
 func selected=first;
-for(i in 0u64..2u64){behave @print(selected(start(1.0))); selected <- second;};
+for(i in 0u64..2u64){{behave @print(selected(start(1.0))); selected <- second;}};
 function factory(flag:bool)->func(f64(target))->const f64 {if(flag){first}else{second}}
 behave @print(factory(false)(start(2.0)));
 function keep(x:T)->const T where T {x}
@@ -15,7 +15,7 @@ func keeper=keep;
 func forwarded=keeper(selected);
 behave @print(forwarded(start(3u8)));
 function many(x:f64(target*<-left<-start)...)->const f64 {
- fold(i in 0u64..len(x), total=0.0){total+scalar(x[i])}
+ fold(i in 0u64..len(x), total=0.0){{total+scalar(x[i])}}
 }
 func sum=many;
 behave @print(sum(start(1.0),start(2.0)));

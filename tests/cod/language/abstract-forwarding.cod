@@ -23,9 +23,9 @@ try {
   behave @print(rank_entity(item(bundle)));
   behave @print(observe_maybe(reference, true));
   behave @print(same_type(sample, @arena));
-  ref continued = fold (i in 0u32 .. 3u32, current = reference) {
+  ref continued = fold (i in 0u32 .. 3u32, current = reference) {{
     make_extended_reference(@arena, i64(i))
-  };
+  }};
   behave @print(rank_entity(deref(continued)));
 } catch (unexpected:const NullPointerException) { behave @assert(false); };
 effect @held = make_alternate_reference(@arena);

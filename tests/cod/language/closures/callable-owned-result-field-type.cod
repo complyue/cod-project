@@ -4,8 +4,8 @@ data Link {ref state:State;}
 function first()->owned region:State {make Padded(capacity=256u64) {prefix<-99u64;value<-1u64}}
 function second()->owned region:State {make Padded(capacity=256u64) {prefix<-99u64;value<-2u64}}
 func selected=first;
-for(i in 0u64..2u64) {
+for(i in 0u64..2u64) {{
   owned region result<-selected();
   ref link=alloc result Link(root(result));
   selected<-second;
-};
+}};

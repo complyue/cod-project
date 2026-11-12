@@ -28,7 +28,7 @@ function owner_score(region state:MethodState)->const u64 {100u64}
 function owner_score(const region state:MethodState)->const u64 {score(state.ticks)}
 function owner_loop(region state:MethodState)->const u64 {
   func current = reader(state);
-  fold(i in 0u64 .. 2u64, total=0u64) {total+owner_score(current -> state)}
+  fold(i in 0u64 .. 2u64, total=0u64) {{total+owner_score(current -> state)}}
 }
 export MethodState;
 export owner_loop;

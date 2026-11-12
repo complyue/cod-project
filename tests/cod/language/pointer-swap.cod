@@ -12,11 +12,11 @@ proc (<->)(a:i64 in A, b:i64 in B) -> void where {owner A, owner B} {
 function rotate(count:i64, builtin_swap:bool) -> const i64 {
   const ptr first = 1, second = 10;
   ref a = first, b = second;
-  for (i in 0 .. count) {
+  for (i in 0 .. count) {{
     if (builtin_swap) { a <=> b; }
     else { const ptr temporary = a; a = b; b = temporary; {} };
     a <- a + 1;
-  };
+  }};
   a * 100 + b
 }
 behave @assert(rotate(0, false) == 110 && rotate(1, false) == 1101);
@@ -38,7 +38,7 @@ intrinsic (<->)(fixed, fixed);
   behave @assert(fixed == 20 && external == 10);
 };
 ref a = fixed, b = other;
-for (i in 0 .. 3) { for (j in 0 .. 3) { a <=> b; }; };
+for (i in 0 .. 3) {{ for (j in 0 .. 3) {{ a <=> b; }}; }};
 behave @assert(a == 3 && b == 20);
 a <=> a;
 behave @assert(a == 3);

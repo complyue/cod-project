@@ -18,9 +18,9 @@ function read(pool:Pool in O1, slot:u32(Slot)) -> i64 throws NullPointerExceptio
 function cell(pool:Pool in O1, slot:u32(Slot)) -> i64 throws NullPointerException where {owner O1} { ref_at(pool.payloads, slot) }
 
 function initialize(pool:Pool in O1) -> void throws NullPointerException where {owner O1} {
-  for (i in 0u32 .. scalar(end_slot(pool))) {
+  for (i in 0u32 .. scalar(end_slot(pool))) {{
     store(pool.links, Slot(i), Slot(i + 1u32));
-  };
+  }};
   setfield(pool, head, Slot(0u32));
   {}
 }

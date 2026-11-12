@@ -6,15 +6,15 @@ symbol @middle : Node;
 symbol @head : Node;
 function walk_value(start:Node in O1, count:u32) -> const i64 where {owner O1} {
   ptr node = start;
-  for (i in 0u32 .. count) {
+  for (i in 0u32 .. count) {{
     if (!isnull(node)) { node = node.next; {} } else {};
-  };
+  }};
   if (isnull(node)) { -1 } else { node.value }
 }
 effect @arena <- region(4096u64);
 effect @tail = alloc @arena Node(3, null);
 effect @middle = alloc @arena Node(2, @tail);
 effect @head = alloc @arena Node(1, @middle);
-for (i in 0u32 .. 5u32) { behave @print(walk_value(@head, i)); };
+for (i in 0u32 .. 5u32) {{ behave @print(walk_value(@head, i)); }};
 setfield(@tail, next, @head);
 behave @print(walk_value(@head, 4u32));

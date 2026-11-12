@@ -2,9 +2,9 @@ using symbol "std:io" @print;
 function initialize(x:u64 in O)->void where {owner O}{x <- 7u64;{}}
 function omit(x:u64 in O)->void where {owner O}{}
 func selected=initialize;
-for(i in 0u64..2u64){
+for(i in 0u64..2u64){{
  ref value=make local u64;
  selected(value);
  behave @print(value);
  selected <- omit;
-};
+}};

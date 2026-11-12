@@ -5,7 +5,7 @@ array Rates[u32(Neuron)]:f32;
 region symbol @arena;
 symbol @rates : Rates;
 function total(a:Rates in O1) -> f32 where {owner O1} {
-  fold (i in Neuron(0u32) .. Neuron(u32(len(a))), sum = 0.0f32) { sum + a[i] }
+  fold (i in Neuron(0u32) .. Neuron(u32(len(a))), sum = 0.0f32) {{ sum + a[i] }}
 }
 function choose(a:Rates in O1, i:u32(Neuron)) -> f32 where {owner O1} { ref_at(a, i) }
 function read(p:f32 in O1) -> f32 where {owner O1} { deref(p) }

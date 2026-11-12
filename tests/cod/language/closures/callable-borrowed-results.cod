@@ -8,12 +8,12 @@ function reverse(a:u64 in O,b:u64 in O,first:bool)->u64 in O where {owner O} {
 ref a = 3u64;
 ref b = 7u64;
 func selected = select;
-for(i in 0u64 .. 2u64) {
+for(i in 0u64 .. 2u64) {{
  ref cell = selected(a,b,true);
  cell <- cell+1u64;
  behave @print(a); behave @print(b);
  selected <- reverse;
-};
+}};
 ref saved = selected(a,b,true);
 b <- 13u64;
 behave @print(saved);

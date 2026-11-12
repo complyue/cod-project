@@ -8,12 +8,12 @@ owned region arena:Arena <- make Arena(capacity=2048u64){count <- 0u64};
 ref a=alloc arena Values(3u64,1.0f32);
 ref b=alloc arena Values(3u64,5.0f32);
 func selected=first;
-for(i in 0u64..2u64){
+for(i in 0u64..2u64){{
  ref values=selected(a,b);
  values[0u64] <- values[0u64]+1.0f32;
  behave @print(values[0u64]);
  selected <- second;
-};
+}};
 ref saved=selected(a,b);
 b[1u64] <- 20.0f32;
 behave @print(saved[1u64]);

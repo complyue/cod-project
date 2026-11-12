@@ -20,7 +20,7 @@ proc @captured_failure() -> void {
 function forward(error:InvalidCapacity) -> i64 { throw error }
 function forward_bool(error:InvalidCapacity) -> bool { throw error }
 
-for (i in 0 .. 2) {
+for (i in 0 .. 2) {{
   val answer = try {
     effect @level <- 2;
     effect @arena <- region(if (i == 0) { 0u64 } else { 128u64 });
@@ -39,7 +39,7 @@ for (i in 0 .. 2) {
     behave @print(90)
   };
   behave @print(answer)
-};
+}};
 
 try {
   try {
@@ -96,9 +96,9 @@ try {
       ref values = alloc @arena Values(100u64, 0u64);
       {}
     } catch (second) {
-      val selected = fold (i in 0 .. 2, error = first) {
+      val selected = fold (i in 0 .. 2, error = first) {{
         if (i == 0) { second } else { error }
-      };
+      }};
       throw selected;
     }
   }

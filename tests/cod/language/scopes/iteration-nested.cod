@@ -1,0 +1,4 @@
+for (i in 0u64 .. 2u64) {{
+  val outer <- i;
+  for (j in 0u64 .. 2u64) { val inner <- outer + j; };
+}};

@@ -4,7 +4,7 @@ conversion function normalize(x:u64(raw)) -> u64(normalized) {
   normalized(if (scalar(x) == 0u64) {
     10u64 / scalar(x)
   } else {
-    fold (i in 0u64 .. scalar(x), sum = 0u64) { sum + 2u64 }
+    fold (i in 0u64 .. scalar(x), sum = 0u64) {{ sum + 2u64 }}
   })
 }
 function combine(x:u64(normalized*), y:u64) -> u64 { scalar(x) + y }

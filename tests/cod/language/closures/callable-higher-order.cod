@@ -4,10 +4,10 @@ function second(x:u64)->const u64 { x + 10u64 }
 func plain = func(action:func(u64)->const u64, x:u64)->const u64 { action(x) };
 func twice = func(action:func(u64)->const u64, x:u64)->const u64 { action(action(x)) };
 func invoke = plain;
-for (i in 0u64 .. 2u64) {
+for (i in 0u64 .. 2u64) {{
   behave @print(invoke(first, i));
   invoke <- twice;
-};
+}};
 func selected = first;
 behave @print(plain(selected, { selected <- second; 3u64 }));
 behave @print(selected(3u64));

@@ -140,10 +140,10 @@ try { current <- wrap(current); {} }
 catch (e:const OutOfMemory) { behave @print(6202u64); };
 behave @print(current());
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{
   state.value <- i % 97u64;
   total + current() + copied() + nested() + retained()
-});
+}});
 behave @print(7002u64);
 ''')
         wrappers = ''.join(f"#define {original} {replacement}\n" for original, replacement in (
@@ -190,7 +190,7 @@ catch (e:const InvalidCapacity) {
 };
 behave @print(original());
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) { total + read_borrowed(original) });
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + read_borrowed(original) }});
 behave @print(7002u64);
 ''')
         parameter_output, parameter_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS, extra_wrappers=wrappers)
@@ -219,10 +219,10 @@ try { current({ current <- reader(state); later_argument(0u64) }); {} }
 catch (e:const InvalidCapacity) { behave @print(6102u64); };
 behave @print(current(0u64));
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{
   state.value <- i % 97u64;
   total + current(i) + saved(i) + nested(i)
-});
+}});
 behave @print(7002u64);
 ''')
         argument_output, argument_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS, extra_wrappers=wrappers)
@@ -266,11 +266,11 @@ try { copying_meter(8u64); {} }
 catch (e:const OutOfMemory) { behave @print(6302u64); };
 behave @print(copying_meter(8u64));
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{
   effect @bias <- i % 97u64;
   effect @action = selected;
   total + selected(i) + copied(i) + perform @action(i) + recursive_meter(i % 16u64)
-});
+}});
 behave @print(7002u64);
 ''')
         procedure_output, procedure_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS, extra_wrappers=wrappers)
@@ -304,7 +304,7 @@ try {
 effect @saved = snapshot;
 behave @print(perform @saved(2u64));
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) { total + perform @saved(i) });
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + perform @saved(i) }});
 behave @print(7002u64);
 ''')
         capture_output, capture_evidence = run_case(root, toolchain, entry, scratch, HARNESS, extra_wrappers=wrappers)
@@ -325,7 +325,7 @@ catch (e:const OutOfMemory) { behave @print(6002u64); };
 behave @print(current(2u64));
 proc stable = proc(n:u64)->const u64 { n + 1u64 };
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) { total + stable(i) });
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + stable(i) }});
 behave @print(7002u64);
 ''')
         invocation_output, invocation_evidence = run_case(root, toolchain, entry, scratch, HARNESS,
@@ -343,9 +343,9 @@ behave @print(6001u64);
 try { borrow(current)({ behave @print(999u64); current <- second; 2u64 }); {} }
 catch(e:const OutOfMemory) { behave @print(6002u64); };
 behave @print(borrow(current)(2u64));
-behave @print(fold(i in 0u64 .. 128u64, total = 0u64) { total + factory()(i) });
+behave @print(fold(i in 0u64 .. 128u64, total = 0u64) {{ total + factory()(i) }});
 behave @print(7001u64);
-behave @print(fold(i in 0u64 .. 10000u64, total = 0u64) { total + (base)(i) });
+behave @print(fold(i in 0u64 .. 10000u64, total = 0u64) {{ total + (base)(i) }});
 behave @print(7002u64);
 ''')
         expression_output, expression_evidence = run_case(root, toolchain, entry, scratch,
@@ -366,7 +366,7 @@ catch (e:const NullPointerException) {}
 catch (e:const OutOfMemory) { behave @print(6002u64); };
 behave @print(current(2u64));
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) { total + current(i) });
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + current(i) }});
 behave @print(7002u64);
 ''')
         effects_output, effects_evidence = run_case(root, toolchain, entry, scratch, HARNESS,
@@ -383,7 +383,7 @@ try { proc failed = snapshot; {} }
 catch (e:const OutOfMemory) { behave @print(6002u64); };
 behave @print(perform @saved(2u64));
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) { total + perform @saved(i) });
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + perform @saved(i) }});
 behave @print(7002u64);
 ''')
         regional_output, regional_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -408,7 +408,7 @@ try { chained <- compose(8u64); {} }
 catch (e:const OutOfMemory) { behave @print(6402u64); };
 behave @print(chained());
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) { total + chained() });
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + chained() }});
 behave @print(7002u64);
 ''')
         factory_output, factory_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -429,7 +429,7 @@ try { proc transient = factory(8u64); {} }
 catch (e:const OutOfMemory) { behave @print(6202u64); behave @print(@bias); };
 effect @selected = first;''') + '''
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) { total + first() });
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + first() }});
 behave @print(7002u64);
 ''')
         lexical_output, lexical_evidence = run_case(root, toolchain, entry, scratch, HARNESS,
@@ -460,7 +460,7 @@ try { walk(original,8u64); {} }
 catch (e:const OutOfMemory) { behave @print(6302u64); };
 behave @print(original(2u64));
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) { total + saved(2u64) });
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + saved(2u64) }});
 behave @print(7002u64);
 ''')
         higher_output, higher_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -483,7 +483,7 @@ try { iterate(originals,8u64,1u64); {} }
 catch(e:const OutOfMemory) { behave @print(6302u64); };
 behave @print(originals(3u64));
 behave @print(7001u64);
-behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) { total + selected(i) });
+behave @print(fold (i in 0u64 .. 10000u64, total = 0u64) {{ total + selected(i) }});
 behave @print(7002u64);
 ''')
         generic_output, generic_evidence = run_case(root, toolchain, entry, scratch, HARNESS,
@@ -502,7 +502,7 @@ try { higher(selected, first, { behave @print(999u64); 0u64 }); {} }
 catch(e:const OutOfMemory) { behave @print(6002u64); };
 behave @print(selected(first,0u64));
 behave @print(7001u64);
-behave @print(fold(i in 0u64 .. 10000u64, total=0u64) { total + readonly(second) });
+behave @print(fold(i in 0u64 .. 10000u64, total=0u64) {{ total + readonly(second) }});
 behave @print(7002u64);
 ''')
         regional_output, regional_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -520,7 +520,7 @@ try { func failed = integrate_view; {} }
 catch(e:const OutOfMemory) { behave @print(6002u64); };
 behave @print(integrate_view(values,0.0f32));
 behave @print(7001u64);
-behave @print(fold(i in 0u64 .. 10000u64,integrated=0.0f32) { integrated+integrate_view(values,0.0f32) });
+behave @print(fold(i in 0u64 .. 10000u64,integrated=0.0f32) {{ integrated+integrate_view(values,0.0f32) }});
 behave @print(7002u64);
 ''')
         owner_output, owner_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -540,7 +540,7 @@ ref after_failure = selected(a,b,true);
 after_failure <- 43u64;
 behave @print(b);
 behave @print(7001u64);
-behave @print(fold(i in 0u64 .. 10000u64,sum_returns=0u64) { sum_returns+selected(a,b,true) });
+behave @print(fold(i in 0u64 .. 10000u64,sum_returns=0u64) {{ sum_returns+selected(a,b,true) }});
 behave @print(7002u64);
 ''')
         borrowed_output, borrowed_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -562,9 +562,9 @@ ptr recovered = identity(maybe);
 try { recovered <- 31u64; behave @print(number); }
 catch(e:const NullPointerException) { behave @print(999u64); };
 behave @print(7001u64);
-behave @print(fold(i in 0u64 .. 10000u64,null_returns=0u64) {
+behave @print(fold(i in 0u64 .. 10000u64,null_returns=0u64) {{
   null_returns+if(isnull(identity(empty))) {1u64} else {0u64}
-});
+}});
 behave @print(7002u64);
 ''')
         nullable_output, nullable_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -583,7 +583,7 @@ behave @print(plain());
 generic(plain,decorated);
 behave @print(plain());
 behave @print(7001u64);
-behave @print(fold(i in 0u64 .. 10000u64,total=0u64) { total+observe(original,0u64) });
+behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{ total+observe(original,0u64) }});
 behave @print(7002u64);
 ''')
         holder_output, holder_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -600,10 +600,10 @@ behave @print(6001u64);
 try { func failed = captured; {} } catch(e:const OutOfMemory) { behave @print(6002u64); };
 behave @print(captured());
 behave @print(7001u64);
-behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {
+behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
  ptr lap_view = choose(a,b,i%2u64==0u64);
  total+lap_view()
-});
+}});
 behave @print(7002u64);
 ''')
         result_output, result_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -626,11 +626,11 @@ behave @print(6001u64);
 try { func failed = current; {} } catch(e:const OutOfMemory) { behave @print(6002u64); };
 behave @print(current());
 behave @print(7001u64);
-behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {
+behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
  region view:State = current -> state;
  view.ticks <- view.ticks;
  total+access(view)+inspect(view)
-});
+}});
 behave @print(7002u64);
 ''')
         owner_output, owner_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -651,10 +651,10 @@ behave @print(6201u64);
 try { func failed = stored_factory(item,8u64); {} } catch(e:const OutOfMemory) { behave @print(6202u64); };
 behave @print(result());
 behave @print(7001u64);
-behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {
+behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
  item.value <- i;
  total+result()
-});
+}});
 behave @print(7002u64);
 ''')
         factory_output, factory_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -678,11 +678,11 @@ try { func failed=selected; {} } catch(e:const OutOfMemory){behave @print(6002u6
 ref preserved=selected(a,b);
 behave @print(preserved[0u64]);
 behave @print(7001u64);
-behave @print(fold(i in 0u64..10000u64,total=0u64){
+behave @print(fold(i in 0u64..10000u64,total=0u64){{
  ref samples=selected(a,b);
  samples[0u64] <- f32(i%97u64);
  total+u64(samples[0u64])
-});
+}});
 behave @print(7002u64);
 ''')
         array_output, array_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -699,7 +699,7 @@ behave @print(6001u64);
 try { selected <- original; {} } catch(e:const OutOfMemory){behave @print(6002u64);};
 behave @print(selected(start(1.0)));
 behave @print(7001u64);
-behave @print(fold(i in 0u64..10000u64,total=0.0){total+selected(start(f64(i%97u64)))});
+behave @print(fold(i in 0u64..10000u64,total=0.0){{total+selected(start(f64(i%97u64)))}});
 behave @print(7002u64);
 ''')
         conversion_output, conversion_evidence = run_case(root, toolchain, entry, scratch, HARNESS,
@@ -717,11 +717,11 @@ try { func failed=selected; {} } catch(e:const OutOfMemory){behave @print(6002u6
 ref preserved=selected(head,tail);
 behave @print(preserved.value);
 behave @print(7001u64);
-behave @print(fold(i in 0u64..10000u64,total=0u64){
+behave @print(fold(i in 0u64..10000u64,total=0u64){{
  ref node=selected(head,tail);
  node.value <- i%97u64;
  total+node.value
-});
+}});
 behave @print(7002u64);
 ''')
         record_output, record_evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS,
@@ -740,11 +740,11 @@ ref initialized=make local u64;
 selected(initialized);
 behave @print(initialized);
 behave @print(7001u64);
-behave @print(fold(i in 0u64..10000u64,total=0u64){
+behave @print(fold(i in 0u64..10000u64,total=0u64){{
  ref slot=make local u64;
  selected(slot);
  total+slot
-});
+}});
 behave @print(7002u64);
 ''')
         initialization_output, initialization_evidence = run_case(
@@ -763,11 +763,11 @@ try {func failed=selected;{}} catch(e:const OutOfMemory){behave @print(6002u64);
 region preserved=selected(state);
 behave @print(preserved.value);
 behave @print(7001u64);
-behave @print(fold(i in 0u64..10000u64,total=0u64){
+behave @print(fold(i in 0u64..10000u64,total=0u64){{
  state.value<-i%97u64;
  region result=selected(state);
  total+result.value
-});
+}});
 behave @print(7002u64);
 ''')
         region_output, region_evidence = run_case(
@@ -801,10 +801,10 @@ try {
   behave @assert(false);
 } catch(e:const OutOfMemory) {};
 behave @print(7001u64);
-behave @print(fold(i in 0u64..10000u64,total=0u64){
+behave @print(fold(i in 0u64..10000u64,total=0u64){{
   owned region result<-selected(256u64,i%97u64);
   total+result.value
-});
+}});
 behave @print(7002u64);
 ''')
         owned_harness = 'static void verify_regions();\n' + HARNESS.replace(

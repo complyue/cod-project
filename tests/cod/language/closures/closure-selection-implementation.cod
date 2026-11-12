@@ -53,11 +53,11 @@ if (state.flag) { joined = replaced; {} } else { joined = second; {} };
 second <- func () -> const u64 { 26u64 };
 behave @print(joined());
 try {
-  for (i in 0u64 .. 2u64) {
+  for (i in 0u64 .. 2u64) {{
     behave @print(joined());
     joined <- func () -> const u64 { 31u64 };
     joined = replaced;
-  };
+  }};
 } catch (e:const NullPointerException) { behave @print(0u64); };
 behave @print(second());
 behave @print(replaced());
@@ -66,16 +66,16 @@ func saved = temporary;
 temporary <- func () -> const u64 { 23u64 };
 behave @print(temporary());
 behave @print(saved());
-behave @print(fold (i in 0u64 .. 3u64, total = 0u64) {
+behave @print(fold (i in 0u64 .. 3u64, total = 0u64) {{
   func local = reader(state);
   local <- alternate(state);
   total + local()
-});
+}});
 
 # The environment depth is runtime data, while the native body graph is finite.
 state.value <- 256u64;
 func growing = reader(state);
-for (i in 0u64 .. state.value) { growing <- wrap(growing); };
+for (i in 0u64 .. state.value) {{ growing <- wrap(growing); }};
 func retained = growing;
 growing <- reader(state);
 state.value <- 9u64;
@@ -86,9 +86,9 @@ func dead_a = func () -> const u64 { unavailable_a() };
 func dead_b = func () -> const u64 { unavailable_b() };
 ptr writer = dead_a;
 try {
-  for (i in 0u64 .. 2u64) {
+  for (i in 0u64 .. 2u64) {{
     writer <- saved;
     behave @print(writer());
     writer = dead_b;
-  };
+  }};
 } catch (e:const NullPointerException) { behave @print(0u64); };

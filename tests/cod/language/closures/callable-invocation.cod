@@ -40,7 +40,7 @@ proc failing = proc()->void throws NullPointerException {
 };
 try { failing(); } catch (e:const NullPointerException) { behave @print(42); };
 
-behave @print(fold (i in 0u64 .. 64u64, total = 0u64) {
+behave @print(fold (i in 0u64 .. 64u64, total = 0u64) {{
   current <- active;
   total + current(i)
-});
+}});

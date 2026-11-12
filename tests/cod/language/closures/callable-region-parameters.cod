@@ -9,11 +9,11 @@ function walk(region state:State, n:u64)->const u64 {
 owned region first:State <- make State(capacity=256u64) { ticks <- 10u64 };
 owned region second:Extended <- make Extended(capacity=256u64) { padding <- 99u64; ticks <- 20u64 };
 func selected = step;
-for(i in 0u64 .. 2u64) {
+for(i in 0u64 .. 2u64) {{
  behave @print(selected(first, 2u64));
  behave @print(selected(second, 3u64));
  selected <- alternate;
-};
+}};
 behave @print(first.ticks);
 behave @print(second.padding);
 func recursive = walk;

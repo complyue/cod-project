@@ -1,8 +1,14 @@
 # CoD exception control and regional cleanup
 
-Design revision: 20 · Recorded: 2026-11-12 · Status: accepted exception/lifecycle, checked-NPE and defer call/block contracts; scope/defer implementation outstanding.
+Design revision: 23 · Recorded: 2026-11-12 · Status: accepted exception/lifecycle, checked-NPE and defer requirements; explicit-return details pending; explicit loop declarations checked, grouping/defer implementation outstanding.
 
 ## Design authority
+
+- **Pending completion and explicit returns:** [H-360/H-361](DesignAuthorityRegistry.md#h-360)/[K-519](DesignAuthorityRegistry.md#k-519), C-63/P-323–P-324, confirms direct incoming-error catch dispatch, bodyless defer catch/finally, recovery from original scope-body failures and explicit value returns from callable bodies. Missing a required explicit return raises an unchecked exception, with static diagnostics where analysis permits. This serves visible business control and failure responsibility under charter §§2–3/§6/§12. Return targeting/replacement in deferred handlers, void fallthrough and concise expression-function syntax remain pending-human; no implicit recovered-result rule is inferred. Acceptance must compose return, throw, handlers, finally, deferred actions and exact retained-result cleanup.
+
+- **Deferred handlers and loop declarations:** [H-358/H-359](DesignAuthorityRegistry.md#h-358)/[K-518](DesignAuthorityRegistry.md#k-518) qualifies this revision’s catch/finally surface, retained normal completion and explicit per-iteration declaration boundary. C-63/P-286/P-323 serves explicit storage responsibility and recoverable business cleanup under charter §§2–3/§6/§12. Existing D-14/D-18 owner and value contracts remain dependencies. Acceptance requires result retention through handled cleanup failure, unconditional finally execution and rejection of loop-body declarations outside an iteration’s explicit scope. H-360 confirms incoming-error dispatch and original body-failure handling. H-361 requires explicit callable returns; return-target, void and concise-function choices remain pending. K-519 records bounded loop-declaration evidence; grouping/defer evidence is outstanding.
+
+- **Deferred cleanup failures:** [H-357](DesignAuthorityRegistry.md#h-357)/[K-517](DesignAuthorityRegistry.md#k-517) confirms continuing remaining actions in reverse registration order, replacement of an unhandled pending completion without automatic causes, and delivery of an earlier-running action's uncaught exception to a later-running deferred block's handler. This extends C-63/P-235–P-236's explicit failure/resource responsibility; D-14 ownership and D-18 retained values remain dependencies. H-358 confirms attached catch/finally clauses and resumption of the original normal result after recovery. H-360 confirms direct catch dispatch, skipping the deferred body when an exception is pending, and handling of original scope-body failures. H-361 supplies the explicit-return direction; its remaining integration choices are `pending-human`. Acceptance requires composed handled/rethrown/chained cleanup paths and exact cleanup of retained or abandoned results.
 
 - **Defer call/block contract:** [H-356](DesignAuthorityRegistry.md#h-356)/[K-515](DesignAuthorityRegistry.md#k-515), C-63/P-321–P-322, confirms this revision's deferred-work section: explicit delayed blocks, otherwise function/procedure calls with registration-time evaluation of callable and arguments. Preparing acquisition now and invoking its cleanup later serves explicit lifetime responsibility and readable effect ordering under charter §§1–3/§6/§8/§12. H-319's scopes and the existing owner/exception contracts govern; acceptance requires observable timing, saved callables/arguments and correct normal/exceptional cleanup. Immediate implementation is authorized; native evidence is still required. Native handles, `out` parameters and other D-20 proposals remain outside this confirmed scope.
 
@@ -27,7 +33,7 @@ Design revision: 20 · Recorded: 2026-11-12 · Status: accepted exception/lifecy
 
 - **Current continuity:** [K-414](DesignAuthorityRegistry.md#k-414) continues H-267/H-269 with [the completed E1–E5 audit](../tests/cod/language/exception-ownership-validation.json). Retained causes, fallible explicit creation, storage, cleanup and regional lifetimes have focused native evidence; no general RTTI or wider qualifier choice is made.
 
-- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 20, E1–E5, checked NPE, deferred-work and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. H-319/H-356 supplies the explicit scope and defer call/block contracts. K-515 records their integration without claiming implementation. K-408–K-413 retains the earlier acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
+- **Registry / scope:** [D-17](DesignAuthorityRegistry.md#d-17), revision 23, E1–E5, checked NPE, deferred-work and the compiler/runtime, lifetime and acceptance sections. H-267 accepts the bounded value path, ownership/effect preservation and explicit chaining only; [H-269](DesignAuthorityRegistry.md#h-269) confirms retained causes beyond catch exit and permits OOM during explicit creation. H-319/H-356 supplies the explicit scope and defer call/block contracts. K-515 records their integration without claiming implementation; H-357–H-359/K-517–K-518 adds deferred-error handling, retained normal completion and the loop declaration boundary; H-360 confirms deferred entry/body-failure handling and H-361 requires explicit returns, with detailed return integration pending. K-408–K-413 retains the earlier acceptance and intermediate evidence history. General user exception graphs, RTTI and the other stated non-goals remain outside this contract.
 - **Value path:** C-63/P-235 → C-10 and D-17/P-236 → C-63: recoverable business failure must preserve explicit regional responsibility, effects and inspectable lifetimes. H-267 confirms this bounded path and scope under charter §§2–4, 6.2–6.3 and 12; it does not qualify unrelated ownership proposals.
 - **Dependencies / constraints:** P-237 links D-14's ownership/borrowing, P-238 links D-10's scoped bindings, and P-239 links D-01's allocation, allocator symmetry and relocation. H-180/H-181 preserves hidden/captured owners; H-262/H-263 separates consumed names from valid local views. H-265/P-240 supplies the unchecked-OOM constraint. H-251 reserves RTTI decisions for human discussion.
 - **Invariants / non-goals:** one cleanup responsibility per region; no per-object ownership, implicit owner resurrection, allocation-dependent OOM delivery, graph rollback, foreign-world editing or general RTTI decision. No C++ exception type or ABI becomes a CoD user type by implication.
@@ -64,7 +70,7 @@ Acceptance covers direct/module and callee-boundary rejection, explicit propagat
 
 ## Deferred work and explicit scopes
 
-H-319 distinguishes expression grouping from scope creation. `{ ... }` groups expressions without starting a lexical or dynamic-effect scope. `{{ ... }}` starts both: it owns its local storage lifetimes, restores its effects on exit and runs its deferred work. Calls and module top levels remain inherent scopes. Direct defer in a loop body is rejected; `for (...) { {{ defer ...; ... }} }` is permitted because the explicit scope finishes on every iteration rather than accumulating actions in an outer scope.
+H-319 distinguishes expression grouping from scope creation. `{ ... }` groups expressions without starting a lexical or dynamic-effect scope. `{{ ... }}` starts both: it owns its local storage lifetimes, restores its effects on exit and runs its deferred work. Calls and module top levels remain inherent scopes. H-359 requires variable declarations in a loop body to be inside a nested per-iteration `{{ ... }}` scope. This includes val/ref/ptr, callable, alias and region declarations; loop-header bindings belong to the loop construct. Direct defer in a loop body is rejected; `for (...) { {{ defer ...; ... }} }` is permitted because the explicit scope finishes on every iteration rather than accumulating actions or storage in an outer scope. An explicit scope surrounding the loop does not provide that per-iteration boundary; nested loops require their own nested scope for body declarations.
 
 For resource-management idioms, `defer` is the explicit counterpart to C++ destructor-based scope cleanup. The cleanup obligation belongs to a registered action in a CoD scope; it is not an implicitly selected method on every object's type. Acquisition can supply the action with `defer init(...)()`. This analogy does not add independent destruction lifetimes to regional objects, replace intrinsic whole-region release, or make copied handles/callables acquire independent release authority.
 
@@ -82,6 +88,36 @@ Saving an argument follows its declared passing mode. A bits value is prepared n
 Registration succeeds only after the callable and arguments have been prepared. An exception during preparation does not register a partial call; already completed preparations retain their ordinary cleanup responsibilities. Skipped control-flow paths register nothing. Registered work runs in reverse registration order within its owning scope. Borrowed values must remain valid until invocation; saving a view never extends its region or lexical owner's lifetime. Owned-argument consumption across registration and invocation needs explicit integration with E4 before such paths can claim acceptance, rather than an implicit move hidden in argument saving.
 
 [Go's specification](https://go.dev/ref/spec#Defer_statements) similarly saves the function value and arguments before deferring the call. CoD retains its own explicit block scopes, checked exceptions, owner checks and delayed-block form. The earlier capture-list proposal is not needed for ordinary deferred calls; additional block-capture syntax is outside this bounded implementation item.
+
+### Exceptions between deferred actions
+
+H-357 confirms that an uncaught exception from an earlier-running deferred action is available to an exception handler of a later-running deferred block. The program can handle that failure or explicitly throw a new exception chained from it. Remaining registered actions still run in reverse registration order. An uncaught replacement exception supersedes the pending completion; no cause is attached automatically.
+
+H-358 selects attached handlers and unconditional cleanup:
+
+```text
+defer { body(); } catch (e : const E) { recover(e); } finally { cleanup(); }
+```
+
+The finally block runs whether the deferred body/handler finishes normally or throws. While deferred actions execute, the scope retains its original normal result. If a deferred exception is handled and the remaining actions finish normally, scope exit resumes that result. A final unhandled exception abandons the retained result with its ordinary cleanup responsibility. This applies equally to bits, owned-region and complete callable results; retained views must still satisfy their owner lifetimes.
+
+H-360 confirms that an already pending exception enters the matching catch directly, skipping the ordinary deferred body. With no pending exception, the deferred body runs and its own exceptions can enter its catches. Finally runs in either case. These handlers can also recover from an original scope-body exception. The recommended fallback form omits the normal body:
+
+```text
+defer catch (e : const E) { handle(e); } finally { cleanup(); }
+```
+
+The fallback is registered for its owning scope, with the same reverse-order and explicit-cause rules. H-361 requires explicit returns rather than silently treating a deferred catch's final expression as a missing callable result. The remaining result/return questions below must be resolved before activating their affected lowering. No arbitrary exception graph or RTTI policy is introduced.
+
+### Explicit callable returns
+
+H-361 requires proc/func brace bodies to provide returned values with `return`. A value supplied from finally likewise requires explicit return syntax. A callable that finishes without a required explicit return raises an unchecked exception at runtime; the compiler should diagnose statically detectable missing-return paths through errors or warnings. Static diagnosis does not turn this failure into a checked throws obligation.
+
+The user also requests consideration of a concise function form with an implicit expression result. A proposed `func add(x:u64, y:u64) -> const u64 => x + y;` form is pending-human. Whether void callables need `return;`, and whether return from deferred catches/finally targets the enclosing callable and replaces a pending completion while continuing cleanup, are also pending-human. Existing block-expression values and callable result storage/owner requirements remain distinct from these control-flow decisions. D-10/D-18 implicit callable-body result examples are superseded for future implementation, while their native checkpoint evidence retains its original source/compiler scope.
+
+### Bounded implementation evidence
+
+K-519 records explicit-scope AST representation and enforcement of H-359's loop-body declaration rule. The checker covers nested loops, declarations under conditional/grouping expressions, explicit iteration scopes and independent callable-body scopes. Existing loop fixtures spell out their intended lifetime boundaries. Native validation covers 386 language checks, 27 callable accounting cases and focused ownership/relocation checks. Ordinary grouping still uses the prototype's implicit-scope lowering; deferred registration/execution and explicit callable returns are outstanding. These results do not establish full H-319/H-356 acceptance.
 
 ### Immediate implementation and acceptance
 

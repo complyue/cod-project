@@ -17,11 +17,11 @@ current <- first;
 try { relay(true); } catch (e:const NullPointerException) {
   behave @print(current(2u64));
 };
-for (i in 0u64 .. 3u64) {
+for (i in 0u64 .. 3u64) {{
   current <- first;
   try { relay(false); } catch (e:const NullPointerException) {};
   behave @print(behave @action(i));
-};
+}};
 
 # Recursive calls propagate the base case's write to the returning caller.
 symbol @recur:proc(u64)->void;
@@ -44,7 +44,7 @@ behave @print(current(2u64));
 # A call can change which body that same loop site selects on the next lap.
 proc advancing = proc(n:u64)->const u64 { @action <- second; n + 1u64 };
 current <- advancing;
-for (i in 0u64 .. 3u64) { behave @print(current(i)); };
+for (i in 0u64 .. 3u64) {{ behave @print(current(i)); }};
 
 # Function images use the same holder-flow boundary and indirect ABI.
 symbol @function:func(u64)->const u64;

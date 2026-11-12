@@ -16,7 +16,7 @@ proc second = { effect @bias <- 7u64; additive() };
 proc multiplied = { effect @bias <- 7u64; proc (n:u64)->const u64 { @bias * n } };
 proc selected = first;
 proc copied = selected;
-for (i in 0u64 .. 3u64) {
+for (i in 0u64 .. 3u64) {{
   effect @bias <- 11u64;
   effect @action = selected;
   behave @print(selected(2u64));
@@ -24,7 +24,7 @@ for (i in 0u64 .. 3u64) {
   behave @print(perform @action(2u64));
   if (i == 0u64) { selected <- second; {} }
   else { selected <- multiplied; {} };
-};
+}};
 behave @print(@bias);
 { effect @action = copied; behave @print(perform @action(2u64)); };
 
@@ -69,11 +69,11 @@ catch (e:const NullPointerException) { behave @print(0u64); };
     else { effect @bias <- @bias + 1u64; behave @action(n - 1u64) + 1u64 }
   };
   proc chosen = down;
-  for (i in 0u64 .. 2u64) {
+  for (i in 0u64 .. 2u64) {{
     effect @action = chosen;
     behave @print(chosen(8u64));
     chosen <- copied;
-  };
+  }};
   behave @print(@bias);
 };
 {

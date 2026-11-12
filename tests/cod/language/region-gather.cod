@@ -13,14 +13,14 @@ global trace_values:bool = true;
 global weighted:bool = true;
 region symbol @arena;
 function checksum(frame:Frame in O1) -> f32 where {owner O1} {
-  fold (n in Neuron(0u32) .. Neuron(u32(len(frame))), total = 0.0f32) { total + frame[n] }
+  fold (n in Neuron(0u32) .. Neuron(u32(len(frame))), total = 0.0f32) {{ total + frame[n] }}
 }
 proc emit_frame(frame:Frame in O1) -> void where {owner O1} {
   behave @print(checksum(frame));
   if (trace_values) {
-    for (n in Neuron(0u32) .. Neuron(u32(len(frame)))) {
+    for (n in Neuron(0u32) .. Neuron(u32(len(frame)))) {{
       behave @print(frame[n]);
-    }
+    }}
   } else {};
 }
 effect @arena <- region(32768u64);
@@ -31,11 +31,11 @@ try {
   ref a = alloc arena Frame(scalar(class_set_begin(layout, ClassId(layout.classes))), 0.0f32);
   ref b = alloc arena Frame(len(a), 0.0f32);
   ref graph = create_graph(arena, layout, u32(len(a)), location, weighted);
-  for (n in 0u32 .. u32(len(a))) {
+  for (n in 0u32 .. u32(len(a))) {{
     store(a, Neuron(n), f32(n + 1u32));
-  };
+  }};
   emit_frame(deref(a));
-  for (frame in 0u32 .. 4u32) {
+  for (frame in 0u32 .. 4u32) {{
     if (frame % 2u32 == 0u32) {
       step(deref(a), b, graph, layout, location);
       emit_frame(deref(b));
@@ -43,6 +43,6 @@ try {
       step(deref(b), a, graph, layout, location);
       emit_frame(deref(a));
     };
-  };
+  }};
   behave @assert(used_bytes(@arena) < 12000u64);
 } catch (unexpected:const NullPointerException) { behave @assert(false); };

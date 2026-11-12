@@ -57,9 +57,9 @@ behave @print(original());
 behave @install(original);
 behave @print(original());
 function population(ptr first:const func()->const u64 in O,ptr rest:const func()->const u64 in O...)->const u64 where {owner O} {
- fold(i in 0u64 .. len(rest),total=if(isnull(first)){0u64}else{1u64}) {
+ fold(i in 0u64 .. len(rest),total=if(isnull(first)){0u64}else{1u64}) {{
   total+if(isnull(rest[i])){0u64}else{1u64}
- }
+ }}
 }
 func populated = population;
 ptr absent = original;

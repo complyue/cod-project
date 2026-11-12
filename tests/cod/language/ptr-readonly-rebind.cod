@@ -2,8 +2,8 @@
   ptr a = 1;
   ptr readonly = a <- 1;
   ref p = a;
-  for (i in 0 .. 2) {
+  for (i in 0 .. 2) {{
     p <- 3;
     p = readonly;
-  };
+  }};
 };

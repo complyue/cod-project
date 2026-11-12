@@ -1,7 +1,7 @@
 using units "pool-units.cod" {ClassId, ClassSetId, GlobalSetId, LocalSlot, GlobalSlot, SetCount, SlotCount, SlotsPerSet};
 using "pool-units.cod" (*);
 data Layout { classes:u32; top_count:u64; }
-function pow2(n:u32) -> u64 { fold (i in 0u32 .. n, value = 1u64) { value * 2u64 } }
+function pow2(n:u32) -> u64 { fold (i in 0u32 .. n, value = 1u64) {{ value * 2u64 }} }
 function capacity(j:u32(ClassId)) -> u32(SlotsPerSet) {
   val ordinal = scalar(j);
   val base = if (ordinal % 2u32 == 0u32) { 100u64 } else { 144u64 };
@@ -11,12 +11,12 @@ function sets(layout:Layout in O1, j:u32(ClassId)) -> u64(SetCount) where {owner
   SetCount(layout.top_count * pow2(layout.classes - 1u32 - scalar(j)))
 }
 function class_set_begin(layout:Layout in O1, j:u32(ClassId)) -> u64(GlobalSetId) where {owner O1} {
-  GlobalSetId(fold (i in 0u32 .. scalar(j), n = 0u64) { n + scalar(sets(layout, ClassId(i))) })
+  GlobalSetId(fold (i in 0u32 .. scalar(j), n = 0u64) {{ n + scalar(sets(layout, ClassId(i))) }})
 }
 function class_slot_begin(layout:Layout in O1, j:u32(ClassId)) -> u64(GlobalSlot) where {owner O1} {
-  GlobalSlot(fold (i in 0u32 .. scalar(j), n = 0u64) {
+  GlobalSlot(fold (i in 0u32 .. scalar(j), n = 0u64) {{
     n + scalar(capacity(ClassId(i)) * sets(layout, ClassId(i)))
-  })
+  }})
 }
 
 export (*);

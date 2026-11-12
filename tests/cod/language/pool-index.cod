@@ -10,14 +10,14 @@ function (u64)(index:u32(LocalSlot)) -> u64 { u64(scalar(index)) }
 function locate(layout:Layout in O1, index:u64(GlobalSetId), found:SetLocation in O3) -> SetLocation where {owner O1, owner O3} {
   setfield(found, class_id, ClassId(0u32));
   setfield(found, local, ClassSetId(0u64));
-  for (j in 0u32 .. layout.classes) {
+  for (j in 0u32 .. layout.classes) {{
     val first = scalar(class_set_begin(layout, ClassId(j)));
     if (scalar(index) >= first && scalar(index) < first + scalar(sets(layout, ClassId(j)))) {
       setfield(found, class_id, ClassId(j));
       setfield(found, local, ClassSetId(scalar(index) - first));
       {}
     } else {};
-  };
+  }};
   deref(found)
 }
 function global_slot(layout:Layout in O1, j:u32(ClassId), set:u64(ClassSetId), slot:u32(LocalSlot)) -> u64(GlobalSlot) where {owner O1} {

@@ -4,12 +4,12 @@ data Packet {value:u64;}
 function initialize(x:u64 in O)->void where {owner O}{x <- 7u64;{}}
 function alternate(x:u64 in O)->void where {owner O}{x <- 9u64;{}}
 func selected=initialize;
-for(i in 0u64..2u64){
+for(i in 0u64..2u64){{
  ref value=make local u64;
  selected(value);
  behave @print(value);
  selected <- alternate;
-};
+}};
 function recursive(x:u64 in O,n:u64)->void where {owner O}{
  if(n==0u64){x <- 23u64;{}}else{recursive(x,n-1u64);}
 }

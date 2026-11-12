@@ -32,9 +32,9 @@ function borrow(value:func(u64)->const u64 in O)->(func(u64)->const u64) in O wh
 # The selected environment survives replacement during argument evaluation.
 behave @print(borrow(current)({ current <- second; 2u64 }));
 behave @print((current)(2u64));
-for(i in 0u64 .. 2u64) {
+for(i in 0u64 .. 2u64) {{
   behave @print((if(i == 0u64) { first } else { second })(3u64));
-};
+}};
 
 function optional(ptr value:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O} { value }
 ptr absent:func(u64)->const u64 = current;

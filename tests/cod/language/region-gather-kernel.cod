@@ -16,24 +16,24 @@ function create_graph(region arena, layout:Layout in L, rows:u32,
   ref sources = alloc arena Sources(scalar(class_slot_begin(layout, ClassId(layout.classes))), Neuron(0u32));
   ref weights = alloc arena Weights(len(sources), 1u8);
   ref graph = deref(alloc arena Incoming(sources, weights));
-  for (n in 0u32 .. rows) {
+  for (n in 0u32 .. rows) {{
     ref position = locate(layout, GlobalSetId(u64(n)), location);
-    for (j in 0u32 .. scalar(capacity(position.class_id))) {
+    for (j in 0u32 .. scalar(capacity(position.class_id))) {{
       val slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
       store(sources, slot, Neuron((n + j) % rows));
       store(weights, slot, if (weighted) { u8(1u32 + (n + j) % 4u32) } else { 1u8 });
-    };
-  };
+    }};
+  }};
   graph
 }
 function gather(input:Frame in O1, graph:Incoming in O2, layout:Layout in O3, target:u64(GlobalSetId), location:SetLocation in O5) -> f32 throws NullPointerException where {owner O1, owner O2, owner O3, owner O5} {
   ref position = locate(layout, target, location);
   ref sources = deref(graph.sources);
   ref weights = deref(graph.weights);
-  fold (j in 0u32 .. scalar(capacity(position.class_id)), sum = 0.0f32) {
+  fold (j in 0u32 .. scalar(capacity(position.class_id)), sum = 0.0f32) {{
     val slot = global_slot(layout, position.class_id, position.local, LocalSlot(j));
     sum + input[sources[slot]] * f32(weights[slot]) / 256.0f32
-  }
+  }}
 }
 
 export ClassId;

@@ -1,0 +1,1 @@
+{{ for (i in 0u64 .. 2u64) { { val value <- i; } }; }};

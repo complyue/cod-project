@@ -5,8 +5,8 @@ function plain(region r:Arena)->region :Arena in r {r}
 function score(region r:Entity)->const u64 {r.count}
 owned region arena:Arena<-make Arena(capacity=256u64){count<-17u64};
 func selected=qualify_region;
-for(i in 0u64..2u64){
+for(i in 0u64..2u64){{
  region result=selected(arena);
  score(result);
  selected<-plain;
-};
+}};

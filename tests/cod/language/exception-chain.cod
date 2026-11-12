@@ -55,13 +55,13 @@ proc check() -> void throws NullPointerException {
     try {throw escaped} catch(error:const RegionCapacityExceeded) {
       behave @assert(error.cause_count == 1u64)
     };
-    for(i in 0u64 .. 2u64) {
+    for(i in 0u64 .. 2u64) {{
       val error = selected(i, secondary, second);
       behave @assert(error.category == 2u64 + i);
       try {throw error}
       catch(capacity_error:const RegionCapacityExceeded) {behave @assert(i == 0u64)}
       catch(invalid_error:const InvalidCapacity) {behave @assert(i == 1u64)}
-    };
+    }};
     try {try {throw second} catch(error) {throw;}}
     catch(error:const InvalidCapacity) {behave @assert(error.cause_count == 2u64)};
     try {try {throw second} finally {throw initial}}

@@ -23,13 +23,13 @@ ptr selected = current;
 behave @print(selected({ selected = saved; current <- reader(state); 5u64 }));
 behave @print(current(5u64));
 behave @print(saved(5u64));
-behave @print(fold (i in 0u64 .. 3u64, total = 0u64) {
+behave @print(fold (i in 0u64 .. 3u64, total = 0u64) {{
   total + current({
     if (i % 2u64 == 0u64) { current <- alternate(state); {} }
     else { current <- reader(state); {} };
     i
   })
-});
+}});
 func recursive = sum_down;
 behave @print(recursive(10u64));
 
@@ -46,8 +46,8 @@ try { checked(0); {} } catch (e:const NullPointerException) { behave @print(99u6
 try { behave @print(checked(7)); } catch (e:const NullPointerException) { behave @print(0u64); };
 func changing:func(i64)->const i64 throws NullPointerException = func (x:i64) -> const i64 { x };
 try {
-  for (i in 0u64 .. 2u64) {
+  for (i in 0u64 .. 2u64) {{
     behave @print(changing(0));
     changing <- checked;
-  };
+  }};
 } catch (e:const NullPointerException) { behave @print(98u64); };

@@ -17,7 +17,7 @@ function narrow_sibling(left:Weighted in O1, right:Alternate in O2, choice:bool)
   choose_sibling(left, right, choice)
 }
 function repeat(x:Weighted in O1, steps:u32) -> Weighted where {owner O1} {
-  fold (i in 0u32 .. steps, current = x) { relay(current, true) }
+  fold (i in 0u32 .. steps, current = x) {{ relay(current, true) }}
 }
 function unfinished(x:Entity in O1) -> i64 where {owner O1} { missing_implementation(x) }
 function paired(left:Weighted in O1, right:Weighted in O2) -> i64 where {owner O1, owner O2} { 3 }

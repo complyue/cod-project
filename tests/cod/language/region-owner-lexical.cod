@@ -3,7 +3,7 @@ data Cell { value:i64; }
 region symbol @a;
 function forward(region arena) -> region { region view = arena; view }
 function repeat(region arena, count:u32) -> region {
-  fold (i in 0u32 .. count, view = arena) { forward(view) }
+  fold (i in 0u32 .. count, view = arena) {{ forward(view) }}
 }
 function create(region arena, value:i64) -> Cell {
   deref(alloc arena Cell(value))

@@ -4,7 +4,7 @@ symbol original : u64;
 effect @a <- region(4096u64);
 effect @original <- capacity_bytes(@a);
 proc @inspect() -> u64 { capacity_bytes(@a) }
-for (i in 0u32 .. 3u32) {
+for (i in 0u32 .. 3u32) {{
   true && {
     effect @a <- region(8192u64 + u64(i) * 4096u64);
     behave @assert(perform @inspect() == @original);
@@ -15,7 +15,7 @@ for (i in 0u32 .. 3u32) {
     true
   };
   behave @assert(capacity_bytes(@a) == @original);
-};
+}};
 true || {
   effect @a <- region(32768u64);
   behave @assert(capacity_bytes(@a) > @original);

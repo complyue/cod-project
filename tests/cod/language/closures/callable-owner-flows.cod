@@ -13,15 +13,15 @@ func early = first(state,8u64);
 behave @print(early());
 func current = last(state,8u64);
 behave @print(current());
-for(i in 0u64 .. 3u64){
+for(i in 0u64 .. 3u64){{
  region view:State = current -> state;
  ptr ticks = view.ticks;
  ticks <- ticks+1u64;
-};
+}};
 behave @print(current());
-for(i in 0u64 .. 3u64){
+for(i in 0u64 .. 3u64){{
  region view:State = current -> state;
  current <- func()->const u64 {view.ticks};
  view.ticks <- view.ticks+1u64;
-};
+}};
 behave @print(current());

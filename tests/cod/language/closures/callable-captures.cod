@@ -13,16 +13,16 @@ behave @print(perform @saved(2u64));
 behave @print(behave @saved(2u64));
 proc other = proc(n:u64)->const u64 { relay(n) * 2u64 };
 proc selected = snapshot;
-for (i in 0u64 .. 2u64) {
+for (i in 0u64 .. 2u64) {{
   effect @saved = selected;
   behave @print(perform @saved(2u64));
   selected <- other;
-};
+}};
 proc idle = first;
-for (i in 0u64 .. 256u64) {
+for (i in 0u64 .. 256u64) {{
   effect @saved = idle;
   idle <- proc(n:u64)->const u64 { n + 1u64 };
-};
+}};
 behave @print(idle(2u64));
 
 # Each recursive activation selects and restores its own procedure holder.
@@ -44,10 +44,10 @@ behave @print(recur(2u64));
 # Captured procedure images can form a runtime-growing chain.
 symbol @previous:proc(u64)->const u64;
 proc chained = proc(n:u64)->const u64 { n };
-for (i in 0u64 .. 32u64) {
+for (i in 0u64 .. 32u64) {{
   effect @previous = chained;
   chained <- proc(n:u64)->const u64 { perform @previous(n) + 1u64 };
-};
+}};
 effect @saved = chained;
 behave @print(perform @saved(2u64));
 
