@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 127 · Recorded: 2026-11-12 · Phase: language/application co-design.
+Design revision: 128 · Recorded: 2026-11-12 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Callable-world and AOT scope:** [H-372–H-377](DesignAuthorityRegistry.md#h-372)/[K-534](DesignAuthorityRegistry.md#k-534), D-10r128, records definition/extension, callable materialization, explicit installation and family invocation as separate operations. C-35/C-36/C-37/C-57/C-59 and P-330–P-332/P-335/P-336 preserve explicit semantic construction, typed execution and inspectable business dispatch under charter §§2–3/§5.2/§6/§8/§12. [H-378](DesignAuthorityRegistry.md#h-378)/[K-535](DesignAuthorityRegistry.md#k-535) confirms [D-21](AheadOfTimeMultipleDispatch.md)'s P-333/P-334/P-337 value path for the stated behavioral scope. Detailed namespace, type-evidence/ABI, coverage and diagnostic mechanisms remain pending-human. H-379's entry-installation requirement is recorded separately; its operational cancellation boundary remains open. Existing qualified invariants continue only within their unchanged scopes. Acceptance requires the composed family/context, installation/capture and cleanup scenarios in D-21; current implementation evidence does not establish that new behavior. No root-charter change or whole-document qualification is inferred.
 
 - **Callable completion continuity:** [K-526](DesignAuthorityRegistry.md#k-526) continues H-361/H-362/C-63/P-324 and H-365/P-326 for revision 127's callable source and return/effect interaction. Proc/func values use explicit return; iteration and enclosing-scope effects restore on return, and one finally body can replace a pending return/error. D-17 owns completion semantics; D-14 ownership/access and D-18 typed complete values remain unchanged. [Return evidence](../tests/cod/language/return-validation.json) bounds acceptance. This serves readable business control and explicit lifetimes under charter §§2–3/§6/§8/§12; defer and unrelated pending designs remain unimplemented/unqualified in their recorded scopes.
 
@@ -39,7 +41,7 @@ Design revision: 127 · Recorded: 2026-11-12 · Phase: language/application co-d
 
 - **Local bits and assignment owners:** [H-292/H-293](DesignAuthorityRegistry.md#h-292)/[K-427](DesignAuthorityRegistry.md#k-427) confirms implicit enclosing-scope bits storage via `make local T { expression }`, preservation of read-only access through aliases, and mandatory explicit external owners on assignment-overload destinations. C-65/P-244/P-255 and C-64/P-256 retains lifetime and destination-view dependencies; acceptance must distinguish aliasing, independent bits and caller-visible assignment. [H-296/H-297](DesignAuthorityRegistry.md#h-296)/[K-428](DesignAuthorityRegistry.md#k-428) distinguishes individual value initialization from a comma-introduced declaration-group initializer and permits later initialization while rejecting reads before definite initialization. typeof remains compile-time only. K-429 records bounded native acceptance and the remaining analysis/source limits.
 
-- **Symbolic implementation scope:** [H-287–H-291](DesignAuthorityRegistry.md#h-287)/[K-426](DesignAuthorityRegistry.md#k-426) records the requested implementation and callable/result decisions: every effect yields void; procedure rebinding uses `=`, while inline `effect proc` introduces or signature-checks its symbol and captures at definition. C-36/C-54/C-65/C-66 and P-248–P-254 preserve typed dynamic context, actual-region lifetime and explicit capture. [Native evidence](../tests/cod/language/symbolic-context-validation.json) covers typed TLS payloads, staged groups, touch/replay checks and overload-backed object transfer. This bounded scope does not qualify whole-document drafts or implement ordinary ptr migration, transport, runtime closures or fractions.
+- **Symbolic implementation scope:** [H-287–H-291](DesignAuthorityRegistry.md#h-287)/[K-426](DesignAuthorityRegistry.md#k-426) records the requested implementation and callable/result decisions: every effect yields void; procedure rebinding uses `=`, while the recorded inline `effect proc` path constructs captured values and installs them. H-372/H-373 supersedes its implicit-registration/installation and no-extension interpretation; compiler migration remains outstanding. C-36/C-54/C-65/C-66 and P-248–P-254 preserve typed dynamic context, actual-region lifetime and explicit capture. [Native evidence](../tests/cod/language/symbolic-context-validation.json) covers typed TLS payloads, staged groups, touch/replay checks and overload-backed object transfer. This bounded scope does not qualify whole-document drafts or implement ordinary ptr migration, transport, runtime closures or fractions.
 
 - **Region declaration direction:** [H-274/H-275](DesignAuthorityRegistry.md#h-274)/[K-420](DesignAuthorityRegistry.md#k-420) requires root-constrained access to the actual region, confirms `where {region r:RootType}` and makes region a declaration keyword throughout user-facing region references. [D-14](RegionalOwnership.md#region-as-a-declaration-keyword-throughout-the-language) specifies the complete local/parameter/result/symbol surface under H-307. Generic owner remains a region-or-scope constraint; effects, cleanup and function restrictions are unchanged.
 
@@ -124,7 +126,7 @@ proc p() -> void {
 }
 ```
 
-Here work denotes an illustrative operation with a void result. The procedure captures the definition-time values of both the normally used @o1 and explicitly touched @o2, following ordinary capture rules. Under perform, their captured values are checked and replayed together, then the caller's preceding bindings are restored. Under behave, current caller bindings remain in force. Touch does not request captured replay when the call mode is behave.
+Here work denotes an illustrative operation with a void result. At value construction, the procedure captures the values of both the normally used @o1 and explicitly touched @o2, following ordinary capture rules. Under perform, their captured values are checked and replayed together, then the caller's preceding bindings are restored. Under behave, current caller bindings remain in force. Touch does not request captured replay when the call mode is behave.
 
 Touch uses the existing symbol identity and alias-resolution rules. It declares a dynamic dependency; it does not rebind TLS, dereference object fields, copy a regional graph, invoke an object method or take ownership. It has no meaningful computation result. Ordinary demanded binding, type, shared-owner and capture-lifetime checks still apply, and functions cannot use it to introduce dynamic dependencies. Adding a touched reference adds its lifetime dependency; it does not keep the region alive beyond its owner.
 
@@ -166,17 +168,25 @@ Acceptance covers one overload-backed update, persistent content after the enclo
 
 ## Callable effects
 
+A symbolic definition registers or extends a module-world family without installing a runtime value. The selected combined form performs definition/extension at compilation and compatible family-view installation at runtime:
+
 ```text
 symbol @selected:proc() -> i64;
-proc existing() -> i64 { return @gain }
-effect @selected = existing;
-effect proc @selected() -> i64 { return @gain + 1 };
-effect proc @empty() {};
+effect @selected() -> i64 { return @gain; };
+effect @selected;
+effect @selected = other;
+effect @selected = @other;
 ```
 
-Rebinding with `=` selects the existing procedure value, preserving its definition context and captured values. Inline `effect proc` defines a procedure at that execution point and installs it for the enclosing effect scope. A new name introduces a symbol with the procedure's signature; an already defined or imported name retains its identity and must match that signature. A mismatch is a compilation error, not a new overload or a replacement symbol. Parameter and result types, variadic/generic signature structure and supported owner/access qualifiers participate in the check. Owner binder spelling is not identity. An omitted result annotation in the empty inline form means void.
+Existing import/extension permissions, declaration promises, applicability and ambiguity checks govern method information. An existing symbol retains its identity and declared slot contract. That contract constrains the installed family view; it is not a blanket prohibition on adding methods. The combined form installs the compatible family selected in the current module context, including applicable methods, rather than only its added method.
 
-Both forms return void and restore the preceding binding on normal or exceptional scope exit. `effect @p <- existing` is rejected: rebinding a statically known procedure does not acquire region ownership. `perform @p` uses the selected procedure's captured values; `behave @p` uses current bindings. Bare symbolic assignment remains invalid. Introducing an identity does not provide an active binding outside the establishing effect scope or extend captured region lifetimes. Ordinary lexical calls retain current-binding behavior; inline syntax introduces no runtime closure ABI or heap closure allocation.
+`effect @selected;` adds no method. It materializes the current composed family, including admitted extensions/mixins, and installs it. Bare `other` denotes a registered symbol object whose selected module semantics supplies a family view. `@other` reads an existing TLS callable value; installing it retains its captures. An ordinary lexical callable value is also an installation source under its existing complete-value contract. Source/destination identities may differ without merging their methods or redirecting the source interpretation.
+
+All installation forms yield void and restore the prior binding on normal/exceptional scope exit. Procedure rebinding uses `=`, not owning-region transfer with `<-`. Captures arise at runtime value construction; bare symbol lookup or module registration performs no capture. Reinstalling a value neither recaptures nor extends expired owners. `perform` replays captures and `behave` uses current bindings. Functions retain their dynamic-context exclusion.
+
+The prototype currently accepts `effect proc`; treatment of that spelling, defaults and detailed grammar migration remains DD-AOT-07. The selected `effect @sym(...)` behavior is settled. A skipped runtime path installs nothing; repeated execution creates installations without repeatedly registering methods. Existing declaration/scope boundaries apply.
+
+H-379 requires the entry module to explicitly install a dependency callable that it extends; omission is a compile error. Correct entry installation cancels the applicable dependency installations so they do not retain unused world code. [D-21](AheadOfTimeMultipleDispatch.md#entry-installation-and-unused-dependency-code) owns cancellation scope, operand evaluation and LLVM reachability acceptance; those mechanisms remain under review.
 
 ## Bounded native typed bindings
 
@@ -199,13 +209,13 @@ H-236 requires architecture before local lookup fixes. H-247/H-248 makes that ar
 | `symbol tgt_neuron : T` | Introduce a first-class symbol with strict identity and an explicitly declared value type. The runtime use is `@tgt_neuron`. |
 | Import a symbol, optionally under a local alias | Refer to the same exported symbol identity. An alias does not create another symbol. This is distinct from redefining a procedure body with mixin. |
 | Vocabulary module | Define typed symbols, primarily abstract types with some supporting ADTs, and their method collections; document their meaning and publish intended shared identities explicitly. A symbol declaration does not supply a default TLS binding. |
-| `using` an external procedure | Refer to the procedure defined in the source module's lexical/dynamic scopes, preserving that definition and its captures. |
+| `using` an external procedure | Select source family information and interpretation without extension permission or implicit TLS installation. |
 | `import` an external definition | Select an exported source definition with extension permission. An imported helper uses the receiving module's callable implementation context under H-232; source body/non-callable lexical bindings remain. |
-| `mixin` an external procedure body | Define it again in the current module's lexical/dynamic scopes; capture effects used in that new definition context. |
+| `mixin` an external procedure body | Construct a receiving-context definition with its symbol mapping; runtime capture requires value materialization. |
 | `@var_name` | Read the value under the declared symbol identity; WPO requires a supplied dynamic binding. |
 | `effect @s <- value` | Scoped ownership/bits transfer; bits symbols require this form. Restore the preceding binding on scope exit; result is void. |
 | `effect @s = value` | Scoped non-consuming object-reference rebinding into a region-symbol-backed region; may change region owner while preserving type/lifetime checks. Rejected for bits symbols. |
-| Define a procedure value | Retain its definition's lexical environment and capture by value the symbolic effects it uses; capture payloads are bits or regional pointers. |
+| Materialize a procedure value | Retain the selected family/interpretation and required lexical/dynamic environment under existing owner rules. Module registration alone creates no runtime capture. |
 | `perform @p` | Resolve the procedure, temporarily install its captured effect values in its execution scope, execute its body, and restore the caller's bindings. |
 | `behave @p` | Resolve and execute the procedure with its definition's lexical environment and the current dynamic bindings. Its stored dynamic captures are not installed. |
 | Function | Lexically defined; compute from explicit inputs to outputs, with no symbolic effect access, `perform` or `behave`. |
@@ -229,7 +239,7 @@ symbol a : T1, b : T2;
 
 The names in this declaration introduce symbol identities in the module’s compile-time vocabulary. They do not declare runtime lexical values named `a` and `b`; symbolic reads remain `@a` and `@b`. Each identity has its declared value type before binding. A standalone `symbol` declaration does not supply a runtime value, even for an optional type. The compiler checks uses and installations against that type instead of choosing a permanent type from the first effect value.
 
-A combined `proc @p(...) -> RT { ... }` declaration also satisfies the explicit-type requirement: when `@p` has no prior declaration or import, its signature declares the new symbol's procedure type. The symbol identity is established at compile time; the procedure value and dynamic binding are established at the definition's execution event. No separate `symbol p : ...` declaration is required.
+A combined `proc @p(...) -> RT { ... }` declaration also satisfies the explicit-type requirement: when `@p` has no prior declaration or import, its signature declares the new symbol's procedure type. The identity and methods are established during compilation; a runtime value and binding require an explicit materialization/installation event. No separate `symbol p : ...` declaration is required.
 
 Identity-preserving aliases and vocabulary selections also preserve the declared type. Procedure selection/installation must respect the destination symbol’s declared procedure type. Mixin body maps translate identities at compile time, with typed uses checked in the receiving context. The implemented procedure-type notation is `proc(T1, T2) -> RT`; parameters/results retain their nominal type identities. Aliasing does not silently retype an identity. Broader callable subtyping remains outside this subset.
 
@@ -278,66 +288,31 @@ In declaration/selection syntax, `@name` identifies which symbol is meant. In an
 
 ### Identity introduction versus procedure installation
 
-Vocabulary selection and procedure installation have different jobs:
+A symbol declaration registers an identity, declared TLS contract and local access name. Bare `p` names that symbol object; it is not a second ordinary callable alias. A symbolic method declaration constructs the family’s semantic information. Neither supplies a current TLS binding. `@p` in a read expression accesses the binding; effect-destination syntax identifies the slot without reading it.
 
-```text
-symbol @step : proc() -> i64;
-symbol from "snn/vocabulary.cod" @tgt_neuron as @tgt;
-
-using "models/lif.cod" @update as @step;
-# Alternative definition route:
-mixin "models/lif.cod" @update as @step;
-```
-
-`symbol @step : proc() -> i64` creates a local identity. The `symbol from ...` form introduces a local compile-time alias for an identity declared by the vocabulary; omitting `as` keeps its spelling. It does not retain an incidental runtime value bound to that symbol in the source module.
-
-In the procedure forms, `@step` must already resolve to a symbol identity T, either from `symbol @step` or a vocabulary selection. The source module's `@update` selects the source procedure resource under some identity S. The operation installs the resulting procedure value under T. **S and T may be different identities.** `as @step` does not rename S, make S equal T, or create the missing destination symbol. Ordinary `using` without `as` requires an existing same-spelling destination with the source identity under H-120. Explicit `as` selects an existing destination even when its identity differs and its spelling is unchanged. The combined `using symbol` form below can introduce the source identity when the local name is absent. The corresponding outer `mixin` shorthand policy is not settled by this using-specific clarification.
-
-| Form | Compile-time action | Resulting execution |
+| Operation | Semantic result | Runtime installation |
 | --- | --- | --- |
-| `symbol @local : T` | Introduce a fresh nominal identity, its local name and value type | No initial runtime binding |
-| `symbol from "vocab" @src as @local` | Make `@local` denote the source identity | Source execution still follows H-109; no selected runtime value is retained |
-| `using "model" @src as @local` for a procedure | Resolve the source resource and existing destination identity | Install the source-defined procedure value under the destination identity, retaining its lexical context and captured values |
-| `mixin "model" @src as @local` for a procedure | Resolve destination and reinstantiate the body with receiving lexical names and symbol-alias translation | Create the receiving-context procedure value/captures and install it under the destination identity |
-| `effect @local <- value` | Resolve the local name to its identity and check the value | Evaluate the value, establish the dynamic binding, return that value and restore the old binding on scope exit |
+| Declare/select a symbol | Introduce or alias its identity and semantics. | None from selection alone. |
+| Define/extend a symbolic callable | Construct receiver-local method information under selection permissions. | None without effect. |
+| `effect @p;` or combined effect definition | Select a compatible family from the current module interpretation. | Materialize and install that view. |
+| `effect @p = source;` | Resolve source symbol semantics and destination compatibility. | Install a materialized source-family view. |
+| `effect @p = @source;` | Resolve typed source/destination slots. | Install the existing value and captures. |
 
-Procedure declaration and using/import/mixin are explicit selection/creation/installation forms; they are not exceptions permitting ordinary `@local = value` assignment. A source's declaration origin and the module providing a procedure can differ: a vocabulary may declare the symbol that several models bind. The destination identity is a further independent choice. Tooling should distinguish all three and retain source provenance for diagnostics.
+Two aliases of one identity address the same TLS slot. Different source/destination identities can intentionally participate in installation; that operation does not alias identities or extend destination methods. Alias selection and installation must be represented separately in the compiler.
 
-Two aliases of one identity cannot hold two independent procedure values simultaneously. If `@a` and `@b` both denote S, installing a procedure under `@b` changes the binding read through `@a` in that scope. Two independently usable model operations need two destination identities, which H-116's prior-declaration rule makes explicit.
+<a id="combined-using-and-identity-checked-abbreviation"></a>
+### Source selection and explicit installation
 
-### Combined using and identity-checked abbreviation
+Using/import/mixin composes module information according to existing permissions and selected contexts. Exporting a symbol-identified callable publishes its entire method set. Selecting a bodyless contract does not fabricate an implementation. Selection alone installs no receiver value; a dependency can still perform explicit effects in its once-only incorporated initialization.
 
-`using symbol "std:io" @print;` combines selecting the source identity with installing its source-defined procedure. H-120 permits an existing same-name local alias when it already denotes that identity. It rejects an accidental collision with an independent identity. This comparison uses resolved nominal identity, including aliases through a common vocabulary; matching spelling, type, procedure value or body is insufficient.
+The prototype’s `using symbol` and `... @source as @destination` paths combine selection with installation. Their old implicit-installation behavior requires coordinated grammar/example migration under H-372/H-373. Preserve intentional cross-identity installation through explicit effects and preserve aliases/contexts under the source-selection contract. A same-spelled distinct identity must not be silently merged; an installation destination is not a compile-time alias. Namespace collisions, shadowing and the final selection grammar remain scoped design work, not an assumed independent `@` lookup escape.
 
-Let S be the identity selected by the source module and T the identity already bound to the receiving name:
-
-| Form | Receiving name absent | T = S | T differs from S |
-| --- | --- | --- | --- |
-| `using symbol "m" @p;` | Introduce the local alias for S and install the procedure | Reuse the identity and install the procedure | Compilation error; require explicit destination selection |
-| `using "m" @p;` | Error: destination is not declared | Install the procedure | Compilation error; require explicit `as` |
-| `using "m" @p as @p;` | Error: destination is not declared | Install the procedure | Install the procedure under T, preserving S and T as distinct identities |
-
-For example, when both modules select `@print` from the same vocabulary, the receiving module can write `using "std:io" @print;`. When it independently declares `symbol @print : proc(i64) -> void;`, it must write:
-
-```text
-symbol @print : proc(i64) -> void;
-using "std:io" @print as @print;
-```
-
-Here `as` explicitly selects the destination; it need not change the printed name. It does not replace the receiving compile-time identity or merge it with the source identity. Usual type and required-binding checks still apply. The combined form likewise does not overwrite an existing alias's identity; adapting to a different destination uses ordinary explicit `using`.
-
-The source-identity-preserving renamed combined form, `using symbol "m" @p as @out;`, follows the same rule: it introduces a name for S, with same-identity reuse consistent with H-120; a different existing identity requires ordinary `using "m" @p as @out;`. This generalization is not a new identity-changing declaration form.
-
-The combined form represents one cross-module encounter: incorporate source initialization, retain its process-lifetime top-level scope and select the procedure under the receiving identity. Its two conceptual tasks must not be expanded into two source executions. Reusing a compile-time identity does not skip procedure installation, and H-140 makes incorporation once per module; a repeated selection reuses its incorporated resources. Definition captures, `perform`/`behave`, dynamic scope restoration and the scan-before-execution boundary remain unchanged.
-
-This rule concerns the outer using destination. H-115's implicit mappings inside a mixed-in body remain receiving-name resolution, including independently declared identities; the outer identity guard does not silently change those mappings. Extending the outer guard to mixin or specifying import extension declarations remains separate design scope.
-
-Acceptance for this refinement: a missing local name is introduced by the combined form; a shared vocabulary identity is accepted with or without `symbol`; a same-name distinct identity is rejected without `as`; explicit self-`as` installs under the existing destination without merging identities; renaming does not manufacture identity; and the combined form retains one source execution and the existing capture/restoration behavior. These cases are covered by the [native fixture results](../tests/cod/language/validation.json). The parser preserves whether `as` appeared, because normalizing an omitted alias to its source spelling would erase a semantic distinction. Mismatch diagnostics identify both resolved origins and show the explicit destination form.
+A vocabulary supplies identities without a default binding. In the selected model an integration selects those identities and source semantics, then explicitly installs the intended compatible view. This separation preserves H-109/H-140 once-only incorporation and H-166 resource lifetime while making the receiver’s runtime mutation visible.
 
 <a id="import-time-alias-translation"></a>
 ### Mixin-time alias translation
 
-H-115 adds a compile-time correspondence between source-body aliases and receiving-module symbols. Following H-117/H-118, the design spelling presents the supplied local symbol first and the source-body role second:
+H-115 adds a compile-time correspondence between source-body aliases and receiving-module symbols. The following prototype spelling presents the supplied local symbol first and source-body role second. Its outer implicit installation requires H-372/H-373 migration; the inner mapping direction remains the contract:
 
 ```text
 symbol @step : proc() -> i64;
@@ -359,15 +334,15 @@ The consistent reading of `A as B` is “use A in the role/name B.” For an out
 
 The coherent interpretation with H-105/H-115 is that an omitted entry uses the same receiving spelling. A same-spelling local alias may denote a different identity from the source alias: redefinition then uses the receiving identity; it does not equate the two original symbols. The prototype checks this case with independently declared source and receiving identities; spellings themselves do not determine identity. There is no fallback to a source binding when the intended receiving name or required value is unavailable; the missing requirement is diagnosed on the demanded whole-program path.
 
-The mapping is compiler input and creates no runtime alias relation. `using` keeps its source body/identities and captures; `mixin` translates the body and obtains captures in the receiving dynamic context. `perform` installs whichever values that resulting procedure captured; `behave` reads current dynamic bindings under that procedure's resolved identities. Capture values can be computed at runtime even though the set of identities and access locations is determined during compilation.
+The mapping is compiler input and creates no runtime alias relation. `using` keeps source body/identities and interpretation; `mixin` translates the body into the receiving context. Runtime materialization, not either selection statement, constructs captures; reinstallation preserves an existing value’s captures. `perform` installs whichever values that resulting procedure captured; `behave` reads current dynamic bindings under that procedure's resolved identities. Capture values can be computed at runtime even though the set of identities and access locations is determined during compilation.
 
-The outer `as @step` chooses the procedure's destination binding. The inner `@target as @tgt_neuron` supplies an existing local symbol for a role in the mixed-in body. Neither should be treated as an implicit text-wide rename. Translation must cover symbolic reads, effect targets and procedure-call symbols consistently. Source initialization and other already-created procedures are not silently rewritten by this body's map; H-109's source execution and its own binding checks remain separate.
+In that prototype form, outer `as @step` chooses the destination binding; the target language must expose installation as an effect, separately from alias selection. The inner `@target as @tgt_neuron` supplies an existing local symbol for a role in the mixed-in body. Neither should be treated as an implicit text-wide rename. Translation must cover symbolic reads, effect targets and procedure-call symbols consistently. Source initialization and other already-created procedures are not silently rewritten by this body's map; H-109's source execution and its own binding checks remain separate.
 
 The prototype requires each explicit source role to occur in the selected body, rejects duplicate source-role entries, and diagnoses attempts to split aliases of one source identity across different receiving identities. Mapping multiple such aliases to one receiving identity works. These are bounded diagnostic policies; the complete language policy for broader mappings remains open. No general symbol-mapping framework or runtime registry is required.
 
 ### Syntax and practical use
 
-The `using/mixin "module" @source as @local` spelling keeps the requested operation, origin, source resource and destination visible. `symbol @local : T` introduces a new identity; `symbol from "module" @source as @local` names an existing identity. This keeps compile-time symbol declarations together and uses using/import for source-preserving selection and mixin for receiving-context definition. Neither declaration permits `@local = ...` assignment. H-214 excludes a module-prefix namespace and qualified callable names. Grouped selections may be considered without binding a module name; callable use still goes through selected local names.
+The prototype `using/mixin "module" @source as @local` spelling exposes origin and destination but still conflates selection with installation. Coordinated migration must retain identity/context while making installation explicit. `symbol @local : T` introduces a new identity; `symbol from "module" @source as @local` names an existing identity. This keeps compile-time symbol declarations together and uses using/import for source-preserving selection and mixin for receiving-context definition. Neither declaration permits `@local = ...` assignment. H-214 excludes a module-prefix namespace and qualified callable names. Grouped selections may be considered without binding a module name; callable use still goes through selected local names.
 
 Keep source provenance at declarations/selections and short names in procedure bodies. A local alias rename accompanied by the corresponding explicit mixin-map update should preserve the selected identities and runtime behavior. Auto-matching source-body spellings is convenient, but a change to one side alone can change or break the correspondence; navigation and diagnostics should show the resolved identities, not just matching text. Ambiguous aliases should require explicit disambiguation instead of depending on selection order.
 
@@ -381,7 +356,7 @@ H-214 requires source modules to remain origins of selections rather than local 
 
 ### Explicit method aliases and implicit method names
 
-The form `import "module" operation as local_operation;` selects a source-preserving callable alias with extension permission. An alias names the selected callable in its import context. H-230/H-232 gives receiving-context callable adaptation and same-alias unions distinct identities while retaining source method definitions; this is not body redefinition as mixin does. Lexical aliases must not be confused with a symbolic procedure selection that installs a value under a predeclared destination identity. The local spelling is not the signature's identity.
+The form `import "module" operation as local_operation;` selects a source-preserving callable alias with extension permission. An alias names the selected callable in its import context. H-230/H-232 gives receiving-context callable adaptation and same-alias unions distinct identities while retaining source method definitions; this is not body redefinition as mixin does. Compile-time aliases must not be confused with an explicit effect that installs a value under a predeclared destination identity. The local spelling is not the signature's identity.
 
 H-217 gives automatically brought method names lower priority than explicit bindings in the same receiving scope. Name lookup first resolves the local binding, then argument-type dispatch uses that operation's visible method set. An explicit binding with no applicable method does not fall back to a hidden implicit name. Ordinary nested-scope shadowing and duplicate explicit-declaration rules remain; no new method is authorized merely by a using selection. Separate import-as can both supply an explicit alias and grant extension permission.
 
@@ -438,39 +413,29 @@ Mixin translates source-body symbol roles to receiving identities before checkin
 
 ## Vocabulary modules and procedure reuse
 
-The customary vocabulary module defines typed symbols, types (primarily abstract types, with a small number of supporting ADTs) and their method collections, with comments explaining their intended meanings (H-242). These declarations establish common symbol, type and callable identities for independent module worlds. Different modules can deliberately bind the same vocabulary symbol to compatible values from their own world copies. Selecting a symbol declaration does not install a default value; similarly spelled declarations from distinct origins remain distinct. Comments aid understanding; they do not substitute for the compiler's type and required-binding checks. The [vocabulary inventory](ModuleWorlds.md#vocabulary-modules-establish-shared-identities) keeps method-head and implementation choices within the architecture review.
+Vocabulary modules publish common symbol/type identities and callable contracts/methods. Primarily abstract types and supporting ADTs allow independent worlds to agree on meaning. Selecting a symbol supplies no default TLS value. Export of a symbol-identified callable includes its whole method family; view compatibility is separate from privacy.
 
-Definition reuse, callable implementation selection and capture are separate:
-
-| Operation | Body and non-callable lexical bindings | Ordinary callable implementations | Dynamic captures |
-| --- | --- | --- | --- |
-| `using` | Source definition | Preserve the selected context | Retain the source value's captures |
-| `import` | Source definition | Select the receiving context; permit extension | Retain the source value's captures |
-| `mixin` | Redefine the body in the receiving module | Resolve in that new definition | Capture at the receiving definition event |
-
-`mixin` is not merely a local alias for the existing procedure value. The body must be checked as a definition in the receiving module, including its lexical references, symbol identities, types and reachable call paths. It need not imply textual file copying or duplicated machine code: equivalent definitions can share generated code while preserving their semantics. The bounded selector/map syntax is described above; module-qualified callable names are excluded by H-214; private-by-default selection is required by H-231; explicit single-name export and export import are implemented; grouped selections remain outside this prototype.
-
-This distinction is independent of the invocation mode:
-
-| Definition route | `perform` | `behave` |
+| Semantic selection | Body and non-callable lexical context | Callable interpretation |
 | --- | --- | --- |
-| `using` | Preserved implementation context and source captured values | Preserved implementation context and current caller bindings |
-| `import` | Receiving callable implementation context and source captured values | Receiving callable implementation context and current caller bindings |
-| `mixin` | Receiving definition and newly captured values | Receiving definition and current caller bindings |
+| `using` | Preserve the source definition. | Preserve its selected interpretation; no extension permission. |
+| `import` | Preserve the source body and non-callable bindings. | Admit receiver-local extension and the selected receiving interpretation. |
+| `mixin` | Redefine the body in the receiver. | Resolve under that receiving definition, with explicit symbol mapping where supplied. |
 
-For example, a body's unqualified lexical helper can compute 4 in its source module and 9 in the receiving module. With the same vocabulary symbol `@x`, source capture 1, receiving definition capture 7 and later caller binding 8, the conceptual `(helper_result, @x)` results are: using/perform `(4,1)`, using/behave `(4,8)`, mixin/perform `(9,7)`, mixin/behave `(9,8)`. Import changes the helper implementation only through the receiving module's selection of that callable family; an unrelated helper with the same spelling does not replace the source helper. All three routes retain the selected procedure value when invoking perform/behave. These distinctions require no new pointer or runtime capture representation.
+These compile-time operations neither install a TLS value nor snapshot runtime bindings. A runtime operation that constructs a selected callable view supplies its environment under the capture contract; installing an already constructed value preserves that environment. Source lexical captures and actual owners cannot be replaced by same-spelled receiver variables. Family environment construction and grammar migration must reconcile these requirements rather than deriving captures from scanner state.
 
-H-116 requires the destination symbol to exist beforehand, either from a local declaration or an imported vocabulary identity. The outer `as @local` selects that destination for the resulting procedure value; it does not alias the source symbol identity. A compile-time alias alone never creates a fresh symbol identity. H-115 permits a separate source-body alias map during mixin. The compiler must retain enough source/semantic body information for redefinition; compiled machine code alone cannot supply the receiving lexical meaning. The entry-driven compilation phase incorporates module initialization semantics that determine these definition events and their required bindings. The earlier scan only registers declarations; none of `using`, `import` or `mixin` makes that scan an effectful definition event.
+Invocation remains separate: `perform` temporarily replays the selected value’s captures, while `behave` and ordinary direct procedure calls use current dynamic bindings. For a value captured with `@x = 1`, reinstallation after `@x = 7` retains 1 for perform; a fresh value constructed with 7 can capture 7. Both use the value’s selected family/context, and behave uses the current caller binding. These examples identify the construction event explicitly and do not ascribe capture to import itself.
+
+H-230’s base/extended/indirect `1,7,1` and H-232’s using/import interpretation remain acceptance constraints. Source body/non-callable bindings and independent identities persist. Equivalent definitions may share machine code, but merely removing the one-method guard or renaming an internal identity cannot implement family values.
 
 ## Functions and procedures
 
 H-197/H-198 establishes functions as lexical callables that may operate on explicit memory and explicit-argument system intrinsics without reading or writing dynamic bindings. Procedures may additionally use dynamic context. The ordinary function contract is mutable; a future const-function form would be a separate design.
 
-A function definition binds a lexical name and cannot access dynamic effect variables. Under H-184, a procedure may be defined with an ordinary name in lexical scope or with a symbol name in dynamic scope. Both procedure forms may use effects; lexical naming does not make a procedure a function. A function cannot call either procedure form, directly or indirectly.
+A function definition binds a lexical name and cannot access dynamic effect variables. A procedure may have an ordinary lexical name or belong to a symbol-identified module family. Explicit effects install family views into dynamic scope. Both procedure forms may use effects; lexical naming does not make a procedure a function. A function cannot call either procedure form, directly or indirectly.
 
 A lexical procedure keeps its lexical definition context and H-180’s captured values of the dynamic variables it uses. Installing that existing procedure with `effect @operation = local_procedure` preserves the selected definition and captures; assignment is not another definition event. The destination identity must have an explicitly declared compatible procedure type. Procedure `mixin` is the distinct operation that redefines a source body in receiving context.
 
-H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform @p(...)` and `behave @p(...)` resolve a procedure through its symbolic binding. H-189 makes direct lexical calls use the caller's current dynamic bindings. `perform` temporarily installs definition-time captured values; `behave` uses current values. `perform p(...)`, `behave p(...)` and direct `@p(...)` calls are invalid. Pure functions cannot invoke procedures through any form.
+H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform @p(...)` and `behave @p(...)` resolve a procedure through its symbolic binding. H-189 makes direct lexical calls use the caller's current dynamic bindings. `perform` temporarily installs the selected value’s captured values; `behave` uses current values. `perform p(...)`, `behave p(...)` and direct `@p(...)` calls are invalid. Pure functions cannot invoke procedures through any form.
 
 | Call form | Callee lookup | Established invocation rule |
 | --- | --- | --- |
@@ -516,29 +481,18 @@ LLVM lowering uses typed places for referent, field and element access, with com
 
 ### Direct symbolic procedure declaration
 
-H-186 permits defining the symbolic procedure directly:
-
 ```text
-proc @p(arg:T) -> RT {
-    ...
-}
-
+proc @p(arg:T) -> RT { ... }
+effect @p;
 perform @p(argument);
 behave @p(argument);
 ```
 
-`T`, `RT`, the argument and body stand for the chosen parameter type, result type, value and implementation. The declaration defines a procedure under the symbolic name `@p`; no intermediate lexical procedure or separate assignment of its value is required. H-187 also permits it without a preceding symbol declaration or import:
+The method declaration defines or extends the symbol’s module-world family without a runtime binding. If no symbol exists, its explicit signature can introduce the nominal identity and declared contract under the existing declaration rules; an existing/imported symbol retains its identity and permissions. Declaration promises and compatible view checks remain distinct from method addition.
 
-| Symbol availability | Meaning of the declaration |
-| --- | --- |
-| No declared or imported `@p` | Introduce a new nominal symbol identity, declare its procedure type from the explicit signature, and define the procedure under that identity. |
-| `@p` already resolves to a declared or imported identity | Retain that identity and check the procedure signature against its declared type; do not silently create a replacement identity or change its type. |
+Bare `p` denotes that symbol object, not an additional ordinary callable alias. Materializing a family view is a separate runtime operation; `effect @p;` performs that operation and installation without adding a method. Combined `effect @p(...) { ... }` requests both stages. Capture belongs to materialization, and installation of an existing callable value preserves its captures. Functions cannot gain dynamic access through either spelling.
 
-This is a combined declaration, not inference of a symbol type from an arbitrary runtime value. It does not introduce an ordinary lexical callable named `p`.
-
-Definition-time capture and scoped installation occur under the existing execution rules; scanning registers the declaration without executing it. Calls still use `perform @p(...)` or `behave @p(...)`, with their captured/current dynamic contexts respectively. This form does not permit direct `@p(...)` calls or dynamic-context access in functions.
-
-The implemented signature type is `proc(T1, T2) -> RT`. `proc` and `procedure` introduce the same callable kind; declarations require an explicit result type, including `void`. Definitions are currently module-level. Named lexical procedures participate in typed method dispatch; obtaining a procedure value by name requires one unambiguous declaration and its definition event. General procedure-valued scope results and persistent closures remain outside the prototype.
+The existing `proc(T1, T2) -> RT` view contract remains typed. Several methods do not make a callable value ambiguous: invocation dispatches by actual types within its selected interpretation. The compiler’s present one-method construction guard is an implementation gap, not a restriction of this contract. General view compatibility, concrete-type evidence and grammar migration are tracked in [D-21](AheadOfTimeMultipleDispatch.md).
 
 ### Callable context and memory access
 
@@ -556,22 +510,24 @@ The SNN support layer may use functions for numerical work and explicit array ed
 
 ## Captured values and call behavior
 
-Let `D` be the caller's current symbolic bindings, and let a procedure value `p` contain a body, lexical environment `L`, and captured values `C` indexed by its required symbols. These are semantic components, not a prescribed heap object layout.
+Let `D` be the caller's current symbolic bindings, and let a procedure value `p` retain its selected family/interpretation, lexical environment `L`, and captured values `C` indexed by its required symbols. These are semantic components, not a prescribed heap object layout.
 
 ```text
 perform @p:
     save caller bindings for the identities in C
     install C in the procedure's execution scope
-    evaluate body under L and those temporary bindings
+    select the method using actual arguments in the retained family/interpretation
+    evaluate that method under L and those temporary bindings
     restore the saved caller bindings on scope exit
 
 behave @p:
-    evaluate body under L and the current dynamic bindings
+    select the method using actual arguments in the retained family/interpretation
+    evaluate that method under L and the current dynamic bindings
 ```
 
 Only the captured identities are temporarily installed. `behave` does not erase lexical captures or turn lexical names into dynamic names. The callee can establish further `effect` bindings normally in either call mode.
 
-For a scalar example, evaluate `effect @x <- 1`, define `@p` whose body reads `@x`, then evaluate `effect @x <- 2` in the caller scope:
+For a scalar example, evaluate `effect @x <- 1`, materialize/install a view under `@p` whose selected method reads `@x`, then evaluate `effect @x <- 2` in the caller scope:
 
 | Observation | Result |
 | --- | --- |
@@ -627,13 +583,13 @@ H-106 separates registration of the complete dependency set from compilation of 
 | Phase | Required work | Meaning of a top-level procedure definition |
 | --- | --- | --- |
 | 1. Scan/load | Scan the entry and all its dependency modules, registering the permitted definitions and retaining initializers, executable expressions, procedure bodies and their origins. Finish this phase before compiling entry execution semantics. | Available to resolve and compile; no procedure invocation, dynamic binding installation or value capture occurs merely from scanning it. |
-| 2. Compile execution | Start from the entry module's execution semantics. As this compilation encounters dependency modules, incorporate their top-level execution semantics into the resulting program in that encounter order. | Its definition/binding semantics join global initialization and top-level effect/call expressions in the resulting program's module execution scope, with the appropriate source-preserving or mixin definition context. |
+| 2. Compile execution | Start from the entry module's execution semantics. As this compilation encounters dependency modules, incorporate their top-level execution semantics into the resulting program in that encounter order. | Its methods remain registered semantic information. Explicit materialization/installation and other executable expressions join module initialization under their selected contexts. |
 
 For a non-recursive example, suppose scanning loads dependencies A, B and C in that order, but compiling the entry encounters B and then A. The dependency execution-semantics incorporation order is **B, A**, independent of the earlier scan order. C's scan alone does not cause its execution semantics to be incorporated. Any cross-module reference qualifies as a trigger under H-109, including a vocabulary symbol, `using`, `import`, `mixin`, or a function/global reference. H-140 incorporates each module only once. These are compilation encounters after scanning, not immediate execution of user code by the compiler. A diamond dependency reuses the incorporated module; its initialization effects are not duplicated.
 
 The native diamond fixture uses export import to publish a selected symbolic procedure and later selects it under another alias after changing the caller’s binding. Its shared initializer runs once and perform still sees the original capture. [Recorded order evidence](../tests/cod/language/module-order-validation.json) separates the native output from the compiler’s verbose scan/incorporation report; --check emits no user-program output. The same record permutes local method declarations while keeping imported/type/conformance visibility fixed, without changing encounter availability.
 
-“Compile execution semantics” means constructing the resulting program, not running user initialization effects in the compiler. Capture values follow the definition event in that program's dynamic execution; they are not snapshots of the scanner's state. Required bindings are still checked at compile time over the resulting caller/initialization paths. Declaration availability therefore does not prove that a required dynamic value is available.
+“Compile execution semantics” means constructing the resulting program, not running user initialization effects in the compiler. Capture values follow runtime callable materialization in that program’s execution; they are not snapshots of the scanner's state. Required bindings are still checked at compile time over the resulting caller/initialization paths. Declaration availability therefore does not prove that a required dynamic value is available.
 
 The entry module and every incorporated dependency retain their top-level scopes until process exit under H-166. Finishing a dependency’s initialization body does not end that scope or release its still-held regions. Ordinary nested procedure/block scopes keep their own exit boundaries. A region explicitly transferred out of a top-level holder need not remain allocated until process exit.
 
@@ -649,7 +605,7 @@ Any kind of cross-module reference encountered during execution compilation trig
 
 For a bits global, a bits literal and a function call producing the required bits value are permitted initializer forms. A procedure invocation is not thereby a function-call initializer; top-level `perform`/`behave` remains a separate allowed expression form. Function initializers retain the no-dynamic-context contract, even though their evaluation belongs to module execution. This permits computed model constants without introducing scan-time user execution.
 
-Top-level `effect` establishes bindings in the module's execution scope, while `perform` and `behave` follow their ordinary capture/current-binding semantics there. Compiling these expressions places their behavior into the resulting program; it does not run them during dependency discovery. The registration/execution distinction applies to expressions as well as procedure declarations.
+Top-level `effect` establishes bindings in the module's execution scope, while `perform` and `behave` follow their ordinary capture/current-binding semantics there. Compiling these expressions places their behavior into the resulting program; it does not run them during dependency discovery. Bare symbolic method declarations contribute no implicit binding; combined effect declarations retain both stages. The registration/execution distinction applies to expressions as well as procedure declarations.
 
 The exact literal grammar, global mutability/sharing and physical realization remain to be specified alongside H-99's storage boundary and H-197/H-198's function boundary. Permitting bits globals or effectful module execution does not by itself introduce native-heap user objects or ambient mutable global reads in functions.
 
@@ -699,7 +655,7 @@ A symbolic read is `@var_name`; a symbolic binding write requires `effect @var_n
 
 H-280 admits `=` for scoped rebinding alongside `<-` for scoped transfer; bare symbolic binding assignment remains invalid. H-281 requires `<-` for bits and `=` for object references, as specified in [the storage contract](#symbolic-storage-and-regional-provenance). H-204/H-205 additionally develops an ordinary ownership/bits transfer operator with the same glyph. Prefix effect retains scoped installation/restoration and its typed procedure-binding case; ordinary bits stores persist, and ordinary owner moves require a separate admitted owning destination. Captured replay remains non-consuming. The prototype supports `<-` in effect bindings, fresh owning declarations and make root initializers; parameter conversion-route arrows retain their independent grammar. General transfer overloads, owner reassignment and reference-assignment migration remain unimplemented.
 
-Every effect expression evaluates to void. Read `@x` explicitly after `effect @x <- 3` when the value is needed. This applies equally to one binding, a grouped binding and inline `effect proc`; it supplies no implicit tuple, last-value result or chain of transfers. Binding lifetime follows the enclosing scope, not merely evaluation of the effect expression. Ordinary assignment/transfer overloads retain their separate destination-view result contract.
+Every effect expression evaluates to void. Read `@x` explicitly after `effect @x <- 3` when the value is needed. This applies equally to one binding, a grouped binding and combined callable installation; it supplies no implicit tuple, last-value result or chain of transfers. Binding lifetime follows the enclosing scope, not merely evaluation of the effect expression. Ordinary assignment/transfer overloads retain their separate destination-view result contract.
 
 H-148 specifies callable argument order: evaluate an argument exactly once and finish its selected automatic conversions before evaluating the next argument. A failed conversion prevents later argument effects. Functions, procedures and overloaded operator spellings share this rule; compile-time method/route selection does not execute those effects. The callable body begins after all arguments and conversions finish. [D-11](ScalarUnitsAndIndexTypes.md#argument-evaluation-and-automatic-conversions) records the conversion-specific scope. Other open expression conventions are not settled by this decision.
 
@@ -769,7 +725,7 @@ The value rationale is readable operation syntax with inspectable type, effect a
 
 ### Storage carriers, capture types and lifetime
 
-[Regional lexical captures](RegionalClosures.md) retain live regional slots or region access for named and anonymous callables. Capturing a slot observes its later writes/rebinding; capturing a lexical pointer cell is rejected. The table below describes the separate definition-time **dynamic** capture contract. Regional lexical capture does not turn perform into a memory snapshot or alter symbolic-value restoration.
+[Regional lexical captures](RegionalClosures.md) retain live regional slots or region access for named and anonymous callables. Capturing a slot observes its later writes/rebinding; capturing a lexical pointer cell is rejected. The table below describes **dynamic** capture at runtime callable-value construction, separate from module method registration. Regional lexical capture does not turn perform into a memory snapshot or alter symbolic-value restoration.
 
 Ordinary user-program storage has lexical and regional carriers; symbolic bits payloads use the dedicated TLS storage specified above. H-177 permits ordinary variables to own region handles; H-179 permits consuming installation into a dynamic resource owner. Neither copies a regional object onto the stack. Host-native heap allocation belongs to system code such as compiler/runtime infrastructure. It cannot serve as a hidden way to extend the lifetime of a user closure, captured object or environment. No user `malloc`/`free` lifetime, automatic heap box, user GC object or reference-counted heap capture is introduced.
 
@@ -821,7 +777,8 @@ A proposed lowering sequence is:
 2. Compile execution semantics from the entry, incorporating dependency top-level execution in encounter order. Follow these initialization/caller paths and check required symbols, types and captured/current bindings for each call mode. Compute reusable summaries where useful.
 3. Assign typed locations in the program's per-thread context, then lower known accesses to a base plus a constant offset.
 4. Lower `effect` and `perform` to scoped save/install/restore operations; `behave` retains the current context.
-5. Specialize/in-line known calls and promote bindings to ordinary values where their observations, addresses and foreign uses permit it. Retain the context representation where it remains observable.
+5. Establish the admissible actual-type combinations for each selected family/context and emit their implementations and dispatch before execution. Share equivalent targets and prune only proved-impossible alternatives; closure and concrete-evidence mechanisms require the D-21 contract.
+6. Specialize/in-line proven calls and promote bindings to ordinary values where their observations, addresses and foreign uses permit it. Retain the context representation where it remains observable.
 
 A simple evaluator of the same whole-program-checked representation can validate semantics before optimized lowering. This is a validation candidate, not a separate-compilation execution model. Collection and layout make accesses direct; optimization can then remove accesses or save/restore work. Neither guarantees every access becomes a register or a single instruction. [LLVM's TLS reference](https://llvm.org/docs/LangRef.html#thread-local-storage-models) distinguishes platform/linkage-dependent access models. [LLVM's LTO design](https://llvm.org/docs/LinkTimeOptimization.html) explains the importance of definitions, uses and visibility for intermodule optimization; it supplies no automatic implementation of CoD's scope semantics.
 
@@ -858,7 +815,7 @@ Proposed acceptance separates typed mail from region transfer. First check that 
 | A small checked GADT program core | Keep input/output/effect relationships in inspectable program data | Correct type indexes through pure and effectful operations; no full theorem solver required |
 | Functions versus procedures | Separate explicit-input computation/memory access from dynamically bound operations | Lexical/symbolic procedure naming, preserved captures on installation and transitive effect checking |
 | Expressions and `void` | Compose value-producing and effectful computation consistently | Explicit scope results, sequencing, effect-only writes and no meaningful-result use of `void` |
-| `effect`, `perform`, `behave` | Supply current execution context or restore definition-time values deliberately | Nested scopes, capture, mutation and restoration traces |
+| `effect`, `perform`, `behave` | Supply current execution context or replay captured values deliberately | Nested scopes, capture, mutation and restoration traces |
 | Regional ownership plus bounded read/write views | Keep state relocatable and distinguish source-frame reads from destination writes | Borrow lifetime and mutation checks; no copy/move of regional objects |
 | Typed arrays, loops and reductions | Execute incoming sparse gathers and frame computations | Bounds, reduction/numeric semantics and complete-frame publication |
 | Native primitive boundary | Reuse runtime facilities and eventually compile numerical kernels | Same contract under reference and native interpretations |

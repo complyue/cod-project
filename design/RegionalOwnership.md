@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 75 · Recorded: 2026-11-12 · Status: design draft with scoped confirmed requirements.
+Design revision: 76 · Recorded: 2026-11-12 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Callable-world and AOT scope:** [H-372–H-377](DesignAuthorityRegistry.md#h-372)/[K-534](DesignAuthorityRegistry.md#k-534), D-14r76, records runtime capture/materialization and typed installation while preserving actual-owner, access and lifetime requirements. C-65/C-35/C-36 and P-330/P-331/P-335/P-338 preserve explicit semantic construction, typed execution and inspectable business dispatch under charter §§2–3/§5.2/§6/§8/§12. [H-378](DesignAuthorityRegistry.md#h-378)/[K-535](DesignAuthorityRegistry.md#k-535) confirms [D-21](AheadOfTimeMultipleDispatch.md)'s P-333/P-334/P-337 value path for the stated behavioral scope. Detailed namespace, type-evidence/ABI, coverage and diagnostic mechanisms remain pending-human. H-379's entry-installation requirement is recorded separately; its operational cancellation boundary remains open. Existing qualified invariants continue only within their unchanged scopes. Acceptance requires the composed family/context, installation/capture and cleanup scenarios in D-21; current implementation evidence does not establish that new behavior. No root-charter change or whole-document qualification is inferred.
 
 - **Independent qualifiers:** [H-366–H-369](DesignAuthorityRegistry.md#h-366)/[P-327](DesignAuthorityRegistry.md)/[K-527](DesignAuthorityRegistry.md#k-527) covers revision75's independent binding/target qualifiers, ordinary parameter identity and propagated readonly access. C-65/C-48/P-173 and C-75 retain explicit storage/access/lifetime responsibility under charter §§1–3/§6/§8/§12. The normative qualifier section defines grammar, invariants and acceptance. H-272 default copies, H-293 no access escalation, H-302 target-access method selection and H-327 fixed alias places remain; only conflicting combined-qualifier prose is superseded. D-18 captures/values, D-17 cleanup and D-01/D-16 representation remain constraints. No global freezing, lifetime extension, new owner policy, pure/TCO or fractions. Implementation acceptance is recorded separately.
 
@@ -602,15 +604,16 @@ For this draft, the fresh/optional-source rule applies to resource-valued data e
 
 H-184 gives the symbol-declaration form `symbol a : T1, b : T2`; every symbol definition must declare its type, including procedure types. A symbol declaration introduces a compile-time identity/alias and its value type, not a runtime lexical variable or an initial value. Reads use `@a`; writes require `effect`, with `<-` for bits/ownership and `=` for object-reference rebinding. A symbol selected from another vocabulary retains that identity’s declared type.
 
-An ordinary named procedure enters lexical scope. A symbol-named procedure supplies a dynamic binding. Naming does not determine purity: both are procedures, may use effects and retain H-180 definition-time captures. Assigning an existing lexical procedure to a symbol selects that existing procedure value; it does not redefine the body or recapture current values. Procedure `mixin` supplies a new receiving-context definition. `using` preserves the selected implementation context; `import` retains source body/non-callable bindings/captures while adapting ordinary callable implementations under H-230/H-232.
+An ordinary named procedure can supply a lexical callable value. A symbol-named method registers or extends module-world semantics; explicit effects supply a dynamic binding. Naming does not determine purity: both forms may use effects. Runtime value construction captures required values under H-180; bare symbolic registration does not capture. Reinstalling an existing callable preserves its environment and actual owners. Using/import/mixin selects or constructs semantic information under H-230/H-232 without implicitly installing a receiver TLS value. Family views retain that interpretation when installed under another compatible symbol.
 
-The implemented callable forms are:
+The selected source contract separates method registration from installation; the family/stage compiler migration remains outstanding:
 
 ```text
-proc step(value:i64) -> i64 { value }
+proc step(value:i64) -> i64 { return value; }
 symbol step_effect : proc(i64) -> i64;
-effect @step_effect <- step;
-proc @direct(value:i64) -> i64 { value }
+effect @step_effect = step;
+proc @direct(value:i64) -> i64 { return value; }
+effect @direct;
 ```
 
 `step(...)` is a lexical call using current dynamic bindings under H-189. `perform @step_effect(...)` restores the existing procedure's captures; `behave @step_effect(...)` uses current bindings. H-186/H-187's `proc @direct` also declares its typed symbol if absent. Neither `perform step(...)` nor `behave step(...)` is admitted; functions cannot call either procedure form. Callable types and this syntax do not settle whole-region owning-result types or optional extraction.
@@ -1050,7 +1053,7 @@ A val/unmodified scalar field and a dense numeric array slot use <- for their di
 
 Symbolic bindings are separate from ordinary pointer destinations: `effect @x <- rhs` transfers bits/ownership, while `effect @x = rhs` rebinds a regional object reference or procedure. Bits symbols reject the `=` form. Both forms restore the preceding binding on scope exit. Its bits case installs a value; its owned-region case consumes an admitted owner into the dynamic scope. A previous binding/owner remains hidden and alive, then becomes reachable on scope exit. Ordinary bits stores are not rolled back on scope exit. Captured perform is a non-consuming replay path. Bare symbolic binding assignment remains forbidden. The proposed `@object <- rhs` edits its regional referent through an overload; it provides no second way to rebind @x.
 
-Procedure-valued effects use `effect @p = procedure_value`, or inline `effect proc`. They install the selected procedure and captured values without duplicating captured region ownership. They do not classify procedure descriptors as transferable owners or permit effect-arrow procedure binding. Typed effect installation, public owner transfer and captured replay retain separate checks.
+Procedure-valued effects install an existing value with `effect @p = procedure_value`, materialize a selected symbol family, or combine method definition/extension with installation. `effect @p;` installs without extension. Capture construction belongs to runtime materialization; module registration alone acquires no captured resource. Installation preserves the selected family/context and existing value captures without duplicating region ownership. They do not classify procedure descriptors as transferable owners or permit effect-arrow procedure binding. Typed effect installation, public owner transfer and captured replay retain separate checks.
 
 The concept is coherent, but these details must be chosen before lowering ordinary owner assignment:
 
@@ -1272,14 +1275,14 @@ The following proposed forms avoid a named transfer source; the resource shadow/
 ```text
 region symbol state:Packet;
 effect @state <- make_packet(1u64, 65536u64);
-proc read_state() -> u64 { deref(root(@state)).sequence }
+proc read_state() -> u64 { return deref(root(@state)).sequence; }
 symbol probe : proc() -> u64;
-effect @probe <- read_state;
-{
+effect @probe = read_state;
+{{
   effect @state <- make_packet(2u64, 65536u64);
-  behave @print(perform @probe()); # 1: definition-time captured access.
+  behave @print(perform @probe()); # 1: access captured when read_state was constructed.
   behave @print(behave @probe());  # 2: current access.
-}; # Release R2, restore lookup of still-owned R1.
+}}; # Release R2, restore lookup of still-owned R1.
 ```
 
 `perform` temporarily restores access to R1 and hides R2; it acquires or destroys neither. The top-level owner of R1 lasts until program exit. `effect @other <- @state`, sending `@state`, and routing it through a purported owning identity function remain invalid. Effect installation yields void; an explicit subsequent symbol read gives non-extractable access under the installed owner.
