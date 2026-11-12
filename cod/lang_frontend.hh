@@ -395,6 +395,12 @@ class Compiler {
   // no counterexample without a finite uninitialized exit.
   std::vector<InitializationFlow> initialization_flows_{{}, {}};
   std::vector<InitializationRead> initialization_reads_;
+  struct InitializationGuarantee {
+    size_t source, result;
+    std::shared_ptr<const std::set<size_t>> inputs;
+  };
+  std::vector<InitializationGuarantee> initialization_guarantees_;
+  using InitializationPaths = std::array<std::vector<size_t>, concrete_exception_count + 1>;
   std::vector<Pointer> pointers_;
   // Control-flow snapshots share unchanged views. A rebind or refinement adds
   // a version, leaving every saved branch/call/exception state intact.
@@ -528,6 +534,7 @@ class Compiler {
     std::shared_ptr<bool> recovers;
     size_t predecessors = 0;
     size_t registration = 0;
+    std::vector<size_t> initialized = {};
   };
   struct DeferredScope {
     llvm::AllocaInst *head;
@@ -537,9 +544,10 @@ class Compiler {
   };
   DeferredScope *deferred_scope_ = nullptr;
   std::set<llvm::Value *> deferred_loop_controls_;
+  struct CleanupEntry { FlowState state; std::optional<Value> error; };
   struct TryEmission {
     std::function<Value()> body;
-    std::function<Value(Value)> cleanup;
+    std::function<Value(Value, const std::vector<CleanupEntry> &)> cleanup;
     std::optional<Value> incoming;
     bool discard = false;
     std::function<bool(const FlowState &)> recovers;
@@ -932,7 +940,7 @@ class Compiler {
       facts->at(i) = FlowCondition::deferred([this, flow, i] { return bool(exception_flows_.at(flow)[i]); });
     return {flow, std::move(facts)};
   }
-  void raise_exception(Value error) {
+  void raise_exception(Value error, const InitializationPaths *paths = nullptr) {
     const auto possibilities = exception_possibilities(error);
     std::set<size_t> categories;
     for (size_t i = 0; i < possibilities.size(); ++i)
@@ -943,8 +951,13 @@ class Compiler {
       const auto memory = llvm::SaveAndRestore(callable_holders_);
       std::vector<std::pair<size_t, size_t>> initialized;
       const auto restore_initialization = llvm::scope_exit([&] {
-        for (const auto &[cell, proof] : initialized) cells_[cell].initialized = proof;
+        for (auto item = initialized.rbegin(); item != initialized.rend(); ++item)
+          cells_[item->first].initialized = item->second;
       });
+      if (paths) for (size_t cell = 0; cell < paths->at(category).size(); ++cell) {
+        initialized.emplace_back(cell, cells_.at(cell).initialized);
+        cells_[cell].initialized = paths->at(category)[cell];
+      }
       if (pending_callable_failure_) {
         for (const auto &[cell, proof] : pending_callable_failure_->failure_initialized.at(category - 1)) {
           initialized.emplace_back(cell, cells_.at(cell).initialized);
@@ -1273,7 +1286,9 @@ class Compiler {
     } else fail(at, "null requires a pointer to bits or regional data");
     return value;
   }
-  std::optional<bool> initialization_known(size_t proof) const {
+  std::optional<bool> initialization_known(size_t proof, const std::set<size_t> &uninitialized = {}) const {
+    const auto input_proof = [&](size_t input) { return uninitialized.contains(input) ? 0 : input; };
+    proof = input_proof(proof);
     if (proof < 2) return proof == 1;
     std::vector<size_t> pending{proof};
     std::set<size_t> visited;
@@ -1285,6 +1300,7 @@ class Compiler {
       const auto &node = initialization_flows_.at(id);
       open |= node.open;
       for (size_t input : node.inputs) {
+        input = input_proof(input);
         dependents[input].push_back(id);
         pending.push_back(input);
       }
@@ -1298,7 +1314,7 @@ class Compiler {
         const size_t id = work.back(); work.pop_back();
         if (rejected.contains(id)) continue;
         const auto &node = initialization_flows_.at(id);
-        const auto missing = [&](size_t input) { return rejected.contains(input); };
+        const auto missing = [&](size_t input) { return rejected.contains(input_proof(input)); };
         const bool fails = (unknown_exits && node.open) || (node.any ?
             std::all_of(node.inputs.begin(), node.inputs.end(), missing) :
             std::any_of(node.inputs.begin(), node.inputs.end(), missing));
@@ -1313,6 +1329,31 @@ class Compiler {
     if (disproved(false)) return false;
     if (!open || !disproved(true)) return true;
     return {};
+  }
+  size_t initialization_guarantee(size_t proof, std::shared_ptr<const std::set<size_t>> inputs) {
+    if (proof < 2) return proof;
+    if (inputs->contains(proof)) return 0;
+    initialization_flows_.push_back({{}, true});
+    const auto result = initialization_flows_.size() - 1;
+    initialization_guarantees_.push_back({proof, result, std::move(inputs)});
+    return result;
+  }
+  void resolve_initialization_guarantees() {
+    // A transfer guarantee must hold without its entering facts. Start with no
+    // such guarantees, then retain each independently established write. Cycles
+    // alone cannot establish a write; reads are checked after this closure.
+    for (const auto &item : initialization_guarantees_)
+      initialization_flows_.at(item.result) = {{0}};
+    bool changed;
+    do {
+      changed = false;
+      for (const auto &item : initialization_guarantees_)
+        if (initialization_flows_.at(item.result).inputs.front() == 0 &&
+            initialization_known(item.source, *item.inputs) == true) {
+          initialization_flows_.at(item.result).inputs = {1};
+          changed = true;
+        }
+    } while (changed);
   }
   size_t preserved_initialization(size_t before, size_t returned) {
     if (before == returned || returned == 0) return before;
@@ -5787,8 +5828,8 @@ class Compiler {
     }
     TryEmission emission;
     emission.body = body;
-    emission.cleanup = [&](Value incoming) {
-      return drain_deferred(scope, env, std::move(incoming));
+    emission.cleanup = [&](Value incoming, const std::vector<CleanupEntry> &entries) {
+      return drain_deferred(scope, env, std::move(incoming), entries);
     };
     emission.recovers = [&](const FlowState &path) {
       const auto queue = path.deferred.find(scope.owner_scope);
@@ -5796,7 +5837,8 @@ class Compiler {
     };
     return try_expression(guarded, module, env, locals, function_context, false, true, {}, nullptr, &emission);
   }
-  Value drain_deferred(DeferredScope &scope, Environment &env, Value incoming) {
+  Value drain_deferred(DeferredScope &scope, Environment &env, Value incoming,
+                       const std::vector<CleanupEntry> &entries) {
     const auto [flow, pending_facts] = pending_exception_flow(incoming);
     auto *error_payload = ir_.native_slot(ir_.type_of(exception_type(ExceptionCategory::system)), "defer.error");
     auto *error_category = ir_.native_slot(ir_.type_of(Type::uint64), "defer.category");
@@ -5843,21 +5885,30 @@ class Compiler {
     auto *site = ir_.pop_deferred(scope.head, record);
     const auto entry_flow = flow_state();
     const auto entry_env = env;
-    // Each registered action receives the facts from the actions that can run
-    // immediately before it. Queue joins only route edges; registration nodes
-    // stop them until that action's normal, return and failure exits are known.
-    std::map<size_t, std::vector<size_t>> initialization_headers;
-    const auto initialization_header = [&](size_t queue) -> const std::vector<size_t> & {
+    // Queue joins route facts to the next action. Successful completion and each
+    // pending error retain separate inputs, while one joined input checks the
+    // shared native body. Registration also preserves established allocation
+    // facts: an intervening branch without this registration cannot erase them.
+    struct InitializationHeader { InitializationPaths paths; std::vector<size_t> joined; };
+    std::map<size_t, InitializationHeader> initialization_headers;
+    const auto initialization_header = [&](size_t queue, const std::vector<size_t> &registered = {}) -> InitializationHeader & {
       auto [position, inserted] = initialization_headers.try_emplace(queue);
       if (inserted) for (size_t i = 0; i < entry_flow.initialized.size(); ++i) {
-        initialization_flows_.push_back({{}, true});
-        position->second.push_back(initialization_flows_.size() - 1);
+        std::vector<size_t> alternatives;
+        for (auto &path : position->second.paths) {
+          initialization_flows_.push_back({{}, true});
+          const auto input = initialization_flows_.size() - 1;
+          path.push_back(input);
+          alternatives.push_back(preserved_initialization(i < registered.size() ? registered[i] : 0, input));
+        }
+        initialization_flows_.push_back({std::move(alternatives)});
+        position->second.joined.push_back(initialization_flows_.size() - 1);
       }
       return position->second;
     };
     initialization_header(0);
-    const auto connect_initialization = [&](const FlowState &state) {
-      for (const auto &action : scope.actions) initialization_header(action.registration);
+    const auto connect_initialization = [&](const FlowState &state, size_t category) {
+      for (const auto &action : scope.actions) initialization_header(action.registration, action.initialized);
       const auto remaining = state.deferred.find(scope.owner_scope);
       std::vector<size_t> pending{remaining == state.deferred.end() ? 0 : remaining->second};
       std::set<size_t> visited;
@@ -5865,9 +5916,10 @@ class Compiler {
         const auto queue = pending.back(); pending.pop_back();
         if (!visited.insert(queue).second) continue;
         if (const auto found = initialization_headers.find(queue); found != initialization_headers.end()) {
-          for (size_t i = 0; i < found->second.size(); ++i) {
-            auto &inputs = initialization_flows_.at(found->second[i]).inputs;
-            const auto proof = state.initialized.at(i);
+          const auto &path = found->second.paths.at(category);
+          for (size_t i = 0; i < path.size(); ++i) {
+            auto &inputs = initialization_flows_.at(path[i]).inputs;
+            const auto proof = i < state.initialized.size() ? state.initialized[i] : 0;
             if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
           }
         } else {
@@ -5876,7 +5928,15 @@ class Compiler {
         }
       }
     };
-    connect_initialization(entry_flow);
+    const auto connect_failure = [&](const FlowState &state, const Value &error) {
+      const auto possibilities = exception_possibilities(error);
+      for (size_t i = 0; i < possibilities.size(); ++i)
+        if (possibilities[i].pending() || possibilities[i]) connect_initialization(state, i + 1);
+    };
+    for (const auto &entry : entries) {
+      if (entry.error) connect_failure(entry.state, *entry.error);
+      else connect_initialization(entry.state, 0);
+    }
     const auto check_flow = [&](const FlowState &exit, const DeferredAction &action) {
       const auto queue = exit.deferred.find(scope.owner_scope);
       if (queue != exit.deferred.end())
@@ -5890,7 +5950,6 @@ class Compiler {
         changed |= !after || *after != value;
       }
       if (changed) fail(action.at, "deferred action changes flow facts; deferred backedge checking is not implemented yet");
-      connect_initialization(exit);
     };
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &action = scope.actions[i];
@@ -5899,7 +5958,8 @@ class Compiler {
       ir_.choose(ir_.binary(Type::uint64, "==", site, ir_.bits(Type::uint64, i)), run, other);
       ir_.enter(run);
       restore_flow(entry_flow);
-      const auto &initialized = initialization_header(action.registration);
+      const auto &header = initialization_header(action.registration, action.initialized);
+      const auto &initialized = header.joined;
       for (size_t cell = 0; cell < initialized.size(); ++cell) cells_[cell].initialized = initialized[cell];
       registered_deferred_[scope.owner_scope] = action.predecessors;
       env = entry_env;
@@ -5929,7 +5989,24 @@ class Compiler {
         return_targets_.pop_back();
         handlers_.pop_back();
         if (result.type != Type::never) {
-          check_flow(flow_state(), action);
+          const auto exit = flow_state();
+          check_flow(exit, action);
+          if (action.handles_error) connect_initialization(exit, 0);
+          else {
+            const auto inputs = std::make_shared<const std::set<size_t>>(initialized.begin(), initialized.end());
+            std::vector<size_t> guarantees;
+            for (size_t cell = 0; cell < initialized.size(); ++cell)
+              guarantees.push_back(initialization_guarantee(exit.initialized[cell], inputs));
+            for (size_t category = 0; category < header.paths.size(); ++category) {
+              auto continued = exit;
+              for (size_t cell = 0; cell < initialized.size(); ++cell) {
+                const auto before = preserved_initialization(cell < action.initialized.size() ? action.initialized[cell] : 0,
+                                                             header.paths[category][cell]);
+                continued.initialized[cell] = preserved_initialization(before, guarantees[cell]);
+              }
+              connect_initialization(continued, category);
+            }
+          }
           close_holdings(holding_begin, {}, action.at);
           ir_.unwind(cleanup);
           release();
@@ -5938,6 +6015,7 @@ class Compiler {
         auto replaced = join_completions(replacement.incoming, action.at, false);
         if (replaced.type != Type::never) {
           check_flow(flow_state(), action);
+          connect_initialization(flow_state(), 0);
           save_return(std::move(replaced), action.at);
           close_holdings(holding_begin, {}, action.at);
           ir_.unwind(cleanup);
@@ -5949,6 +6027,7 @@ class Compiler {
           for (const auto &edge : landing.incoming) {
             merge_exception_possibilities(exception_flows_.at(flow), edge.error);
             check_flow(edge.regions, action);
+            connect_failure(edge.regions, edge.error);
             payloads.emplace_back(edge.error.native, edge.from);
             categories.emplace_back(exception_category(edge.error), edge.from);
           }
@@ -5963,10 +6042,11 @@ class Compiler {
     }
     ir_.unreachable();
     ir_.enter(done);
-    for (const auto &[queue, proofs] : initialization_headers)
-      for (const auto proof : proofs) initialization_flows_.at(proof).open = false;
+    for (const auto &[queue, header] : initialization_headers)
+      for (const auto &path : header.paths)
+        for (const auto proof : path) initialization_flows_.at(proof).open = false;
     auto completed_flow = entry_flow;
-    completed_flow.initialized = initialization_headers.at(0);
+    completed_flow.initialized = initialization_headers.at(0).paths[0];
     restore_flow(completed_flow);
     registered_deferred_.erase(scope.owner_scope);
     env = entry_env;
@@ -5979,7 +6059,7 @@ class Compiler {
     error.exception_category = category;
     error.exception_facts = pending_facts;
     clear_return_resource();
-    raise_exception(std::move(error));
+    raise_exception(std::move(error), &initialization_headers.at(0).paths);
     ir_.enter(resume);
     for (size_t i = 0; i < returned.size(); ++i) {
       auto *selected = ir_.label("defer.return.selected");
@@ -6035,6 +6115,7 @@ class Compiler {
   void register_deferred(DeferredScope &scope, const std::vector<llvm::Value *> &values,
                          std::set<size_t> catches = {}) {
     auto &action = scope.actions.back();
+    action.initialized = flow_state().initialized;
     action.predecessors = registered_deferred_[scope.owner_scope];
     ir_.register_deferred(scope.head, action.layout, scope.actions.size() - 1, values);
     deferred_flows_.push_back({{action.predecessors}, std::move(catches), action.recovers, {}});
@@ -7402,6 +7483,10 @@ class Compiler {
     Value finished;
     if (emission && emission->cleanup) {
       std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> payloads, categories;
+      std::vector<CleanupEntry> entries;
+      for (const auto &path : completions) entries.push_back({path.regions, {}});
+      for (const auto &path : returns.incoming) entries.push_back({path.regions, {}});
+      for (const auto &path : failures) entries.push_back({path.regions, path.error});
       auto facts = std::make_shared<ExceptionPossibilities>();
       for (const auto &path : pending) {
         if (path.kind == CompletionKind::failed) merge_exception_possibilities(*facts, path.value);
@@ -7414,7 +7499,7 @@ class Compiler {
           ir_.phi(ir_.type_of(exception_type(ExceptionCategory::system)), payloads));
       incoming.exception_category = ir_.phi(ir_.type_of(Type::uint64), categories);
       incoming.exception_facts = std::move(facts);
-      finished = emission->cleanup(std::move(incoming));
+      finished = emission->cleanup(std::move(incoming), entries);
     } else finished = block(*finally, module, env, locals, function_context);
     require(finished.type, Type::void_type, finally->at);
     if (finished.type == Type::never) return finished;
@@ -8712,6 +8797,7 @@ public:
           fail(pending.at, "selected record does not provide the declared field view");
         if (pending.offset) ir_.resolve_field(pending.offset, root, size_t(field - fields.begin()));
       }
+      resolve_initialization_guarantees();
       for (const auto &read : initialization_reads_) {
         if (initialization_known(read.proof) != true)
           fail(read.at, "read of storage before definite initialization\n" + location_text(cells_.at(read.cell).at) +

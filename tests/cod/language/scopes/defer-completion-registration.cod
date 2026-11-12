@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+using "std:exceptions" OutOfMemory;
+proc run()->void {
+  ptr value = make local u64;
+  try { {{defer {value <- 1u64;};}}; }
+  catch(error:const OutOfMemory) {behave @print(value);};
+}
+run();

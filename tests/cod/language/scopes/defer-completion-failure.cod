@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+proc bad()->void {effect @arena <- region(0u64);}
+proc run()->void {
+  ptr value = make local u64;
+  try { {{defer {bad(); value <- 1u64;};}}; }
+  catch(error:const InvalidCapacity) {behave @print(value);};
+}
+run();

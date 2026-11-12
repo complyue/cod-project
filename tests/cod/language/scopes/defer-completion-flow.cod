@@ -1,0 +1,68 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+proc bad()->void {effect @arena <- region(0u64);}
+function initialize(value:u64 in O)->void where {owner O} {value <- 5u64; {}}
+proc fill_later(value:u64 in O)->void where {owner O} {defer {value <- 9u64;};}
+proc after_scope()->void {
+  ptr value = make local u64;
+  {{defer {value <- 1u64;};}};
+  behave @print(value);
+}
+after_scope();
+proc conditional(yes:bool)->void {
+  ptr value = make local u64;
+  if(yes) {value <- 2u64; defer {behave @print(value);};} else {};
+}
+conditional(true);
+conditional(false);
+proc branches(yes:bool)->void {
+  ptr value = make local u64;
+  {{
+    if(yes) {defer {value <- 3u64;};} else {defer {value <- 4u64;};};
+  }};
+  behave @print(value);
+}
+branches(true);
+branches(false);
+proc through_call()->void {
+  ptr value = make local u64;
+  {{defer {initialize(value);};}};
+  behave @print(value);
+}
+through_call();
+proc failure()->void {
+  ptr value = make local u64;
+  try { {{defer {value <- 6u64; bad();};}}; }
+  catch(error:const InvalidCapacity) {behave @print(value);};
+}
+failure();
+proc recovered(yes:bool)->void {
+  ptr value = make local u64;
+  {{
+    defer {value <- 7u64;} catch(error:const InvalidCapacity) {value <- 8u64;};
+    if(yes) {bad();} else {};
+  }};
+  behave @print(value);
+}
+recovered(false);
+recovered(true);
+proc callable_exit()->void {
+  ptr value = make local u64;
+  fill_later(value);
+  behave @print(value);
+}
+callable_exit();
+proc retained_result()->void {
+  ptr value = make local u64;
+  val result:u64 <- {{defer {value <- 10u64;}; 11u64}};
+  behave @print(value);
+  behave @print(result);
+}
+retained_result();
+proc body_failure()->void {
+  ptr value = make local u64;
+  try { {{defer {}; value <- 13u64; bad();}}; }
+  catch(error:const InvalidCapacity) {behave @print(value);};
+}
+body_failure();

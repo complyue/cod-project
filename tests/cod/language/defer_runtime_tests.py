@@ -205,7 +205,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix='cod-defer-native-') as temporary:
         scratch = Path(temporary)
         for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
-                     'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization'):
+                     'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
+                     'defer-completion-flow'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -220,6 +221,12 @@ using "std:exceptions" OutOfMemory;
 behave @print(9001u64);
 try {behave @print(value());} catch(e:const OutOfMemory) {behave @print(9002u64);};
 '''
+            if name == 'defer-completion-flow':
+                source += '''
+using "std:exceptions" OutOfMemory;
+behave @print(9001u64);
+try {after_scope();} catch(error:const OutOfMemory) {behave @print(9002u64);};
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -230,7 +237,7 @@ try {behave @print(value());} catch(e:const OutOfMemory) {behave @print(9002u64)
                 assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
             if name == 'defer-returns':
                 expected += ['95', '96', '97', '98', '99', '100', '30', '60']
-            if name == 'defer-value-scope':
+            if name in ('defer-value-scope', 'defer-completion-flow'):
                 expected += ['9001', '9002']
                 assert evidence['layout']['record_failures'] == 1
             assert output == expected, (name, output, expected)

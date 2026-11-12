@@ -2976,5 +2976,51 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-completion-flow.cod",
+    "exit": 0,
+    "stdout": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n13\n"
+  },
+  {
+    "file": "scopes/defer-completion-failure.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-completion-registration.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-completion-optional.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-completion-recovery.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-recursive-guarantee.cod",
+    "exit": 0,
+    "stdout": "12\n"
+  },
+  {
+    "file": "scopes/defer-partial-guarantee.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-cyclic-guarantee.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
   }
 ]

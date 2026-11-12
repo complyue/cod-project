@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+function initialize(value:u64 in O, count:u64)->void where {owner O} {
+  if(count > 0u64) {initialize(value, count - 1u64);} else {value <- 12u64; {}}
+}
+proc run()->void {
+  ptr value = make local u64;
+  {{defer {initialize(value, 3u64);};}};
+  behave @print(value);
+}
+run();

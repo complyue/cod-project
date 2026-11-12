@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 189 · Recorded: 2026-11-12.
+Prototype reference revision: 190 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Cleanup completion facts:** [K-541](../../../design/DesignAuthorityRegistry.md#k-541), reference190 under D-17r40, retains initialization established at registration and separates successful cleanup from each pending error category. Independent write guarantees compose with native callable summaries while each action body is emitted once. [Verification](defer-completion-validation.json) covers post-scope reads, conditional registration, recursive initialization, recovery and failed registration/invocation. Queue/handler correlation and pointer/callable/owner mutation still have implementation gaps; no native storage, lifetime or checked-failure rule changes.
 
 - **Deferred initialization:** [K-540](../../../design/DesignAuthorityRegistry.md#k-540), reference189 under D-17r39, connects registered-action order to the existing allocation-initialization solver. Normal, return and failure exits retain their remaining queue; finally continuations preserve initialization already established on their path. [Verification](defer-initialization-validation.json) covers nested/repeated registration, conditional writes, failed registration/invocation, replacement returns and continuation refinement. Native records, ownership and cleanup are unchanged. Merged-entry/completion correlation and pointer/callable/owner mutation remain implementation gaps.
 
