@@ -1,0 +1,68 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+proc bad()->void {effect @arena <- region(0u64);}
+proc choose(yes:bool)->void {
+  ptr value = make local u64;
+  {{if(yes) {defer {value <- 1u64;};} else {value <- 2u64; {}};}};
+  behave @print(value);
+}
+choose(true);
+choose(false);
+proc nested(first:bool, second:bool)->void {
+  ptr value = make local u64;
+  {{
+    if(first) {
+      if(second) {defer {value <- 3u64;};} else {value <- 4u64; {}};
+    } else {value <- 5u64; {}};
+    defer {};
+  }};
+  behave @print(value);
+}
+nested(true, true);
+nested(true, false);
+nested(false, false);
+proc exceptional(yes:bool)->void {
+  ptr value = make local u64;
+  try {{
+    if(yes) {defer {value <- 6u64;};} else {value <- 7u64; {}};
+    bad();
+  }} catch(error:const InvalidCapacity) {behave @print(value);};
+}
+exceptional(true);
+exceptional(false);
+proc recovered(yes:bool)->void {
+  ptr value = make local u64;
+  {{
+    defer catch(error:const InvalidCapacity) {};
+    if(yes) {defer {value <- 8u64;};} else {value <- 9u64; {}};
+    bad();
+  }};
+  behave @print(value);
+}
+recovered(true);
+recovered(false);
+proc repeated(count:u64, yes:bool)->void {
+  ptr value = make local u64;
+  {{
+    for(i in 0u64 .. count) {
+      if(yes) {defer {value <- 11u64;};} else {value <- 12u64; {}};
+    } else {value <- 10u64;};
+  }};
+  behave @print(value);
+}
+repeated(0u64, true);
+repeated(4u64, true);
+repeated(4u64, false);
+proc separate_cells(yes:bool)->void {
+  ptr a = make local u64;
+  ptr b = make local u64;
+  {{
+    if(yes) {defer {a <- 13u64;}; b <- 14u64; {}}
+    else {a <- 15u64; defer {b <- 16u64;};};
+  }};
+  behave @print(a);
+  behave @print(b);
+}
+separate_cells(true);
+separate_cells(false);

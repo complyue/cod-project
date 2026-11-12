@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+proc run(first:bool, second:bool)->void {
+  ptr value = make local u64;
+  {{
+    if(first) {
+      if(second) {defer {value <- 1u64;};} else {};
+    } else {value <- 2u64; {}};
+  }};
+  behave @print(value);
+}
+run(true, false);

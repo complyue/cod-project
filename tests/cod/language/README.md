@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 191 · Recorded: 2026-11-12.
+Prototype reference revision: 192 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Queue-selected initialization:** [K-544](../../../design/DesignAuthorityRegistry.md#k-544), reference192 under D-17r43, retains branch/loop initialization on deferred-queue edges and routes those facts through shared cleanup equations. [Verification](defer-queue-initialization-validation.json) distinguishes deferred versus immediate writes, nested alternatives, error/recovery paths, loop fallbacks, independent cells and failed registration. Existing native artifact sizes and resource accounting remain unchanged. This does not supply arbitrary relational analysis or mutable pointer/callable/owner backedges.
 
 - **Deferred handler entry facts:** [K-543](../../../design/DesignAuthorityRegistry.md#k-543), reference191 under D-17r42, keeps normal-body initialization separate from pending exception categories. [Verification](defer-handler-initialization-validation.json) covers delayed setters, typed/fallback catches, original body failures, finally, preserved registration facts and injected registration failure. Unsafe catch/finally reads and optional setters still reject. Existing native artifact sizes and resource accounting are unchanged; queue correlation and mutable deferred-state analysis remain incomplete. No source-policy, runtime initialization flag or ABI change is introduced.
 

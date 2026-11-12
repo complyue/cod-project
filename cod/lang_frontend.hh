@@ -451,8 +451,9 @@ class Compiler {
     CallableMemory callables{nullptr};
     std::map<size_t, size_t> deferred;
   };
+  struct DeferredInput { size_t queue; std::vector<size_t> initialized = {}; };
   struct DeferredFlow {
-    std::vector<size_t> inputs;
+    std::vector<DeferredInput> inputs;
     std::set<size_t> catches;
     std::shared_ptr<bool> recovers = {};
     std::vector<size_t> continuations = {};
@@ -637,13 +638,14 @@ class Compiler {
       if (!visited.insert(node).second) continue;
       const auto &flow = deferred_flows_.at(node);
       if (flow.catches.contains(category)) continue;
-      pending.insert(pending.end(), flow.inputs.begin(), flow.inputs.end());
+      for (const auto &input : flow.inputs) pending.push_back(input.queue);
     }
     return true;
   }
-  size_t join_deferred_flow(size_t left, size_t right) {
+  size_t join_deferred_flow(size_t left, size_t right, const std::vector<size_t> &left_initialized,
+                            const std::vector<size_t> &right_initialized) {
     if (left == right) return left;
-    deferred_flows_.push_back({{left, right}, {}});
+    deferred_flows_.push_back({{{left, left_initialized}, {right, right_initialized}}, {}});
     return deferred_flows_.size() - 1;
   }
   bool deferred_may_recover(size_t queue) const {
@@ -654,7 +656,7 @@ class Compiler {
       if (!node || !visited.insert(node).second) continue;
       const auto &flow = deferred_flows_.at(node);
       if (flow.recovers && *flow.recovers) return true;
-      pending.insert(pending.end(), flow.inputs.begin(), flow.inputs.end());
+      for (const auto &input : flow.inputs) pending.push_back(input.queue);
       pending.insert(pending.end(), flow.continuations.begin(), flow.continuations.end());
     }
     return false;
@@ -828,10 +830,12 @@ class Compiler {
   void intersect_flow(FlowState &left, const FlowState &right) {
     for (auto &[scope, queue] : left.deferred) {
       const auto found = right.deferred.find(scope);
-      queue = join_deferred_flow(queue, found == right.deferred.end() ? 0 : found->second);
+      queue = join_deferred_flow(queue, found == right.deferred.end() ? 0 : found->second,
+                                 left.initialized, right.initialized);
     }
     for (const auto &[scope, queue] : right.deferred)
-      if (!left.deferred.contains(scope)) left.deferred.emplace(scope, join_deferred_flow(0, queue));
+      if (!left.deferred.contains(scope))
+        left.deferred.emplace(scope, join_deferred_flow(0, queue, left.initialized, right.initialized));
     left.live.resize(std::max(left.live.size(), right.live.size()), false);
     for (size_t i = 0; i < left.live.size(); ++i) left.live[i] = FlowCondition::both(left.live[i], i < right.live.size() ? right.live[i] : FlowCondition{false});
     left.holdings.resize(std::max(left.holdings.size(), right.holdings.size()), Presence::absent);
@@ -5908,24 +5912,38 @@ class Compiler {
       return position->second;
     };
     initialization_header(0);
+    std::set<size_t> action_headers{0}, routed_initialization;
     const auto connect_initialization = [&](const FlowState &state, size_t category) {
-      for (const auto &action : scope.actions) initialization_header(action.registration, action.initialized);
+      for (const auto &action : scope.actions) {
+        initialization_header(action.registration, action.initialized);
+        action_headers.insert(action.registration);
+      }
       const auto remaining = state.deferred.find(scope.owner_scope);
-      std::vector<size_t> pending{remaining == state.deferred.end() ? 0 : remaining->second};
-      std::set<size_t> visited;
+      const auto queue = remaining == state.deferred.end() ? 0 : remaining->second;
+      const auto &path = initialization_header(queue).paths.at(category);
+      for (size_t i = 0; i < path.size(); ++i) {
+        auto &inputs = initialization_flows_.at(path[i]).inputs;
+        const auto proof = i < state.initialized.size() ? state.initialized[i] : 0;
+        if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
+      }
+      // Queue alternatives retain the allocation facts established on their
+      // selecting branch. Route equations once per node, including cycles;
+      // later incoming completions extend those same equations.
+      std::vector<size_t> pending{queue};
       while (!pending.empty()) {
         const auto queue = pending.back(); pending.pop_back();
-        if (!visited.insert(queue).second) continue;
-        if (const auto found = initialization_headers.find(queue); found != initialization_headers.end()) {
-          const auto &path = found->second.paths.at(category);
-          for (size_t i = 0; i < path.size(); ++i) {
-            auto &inputs = initialization_flows_.at(path[i]).inputs;
-            const auto proof = i < state.initialized.size() ? state.initialized[i] : 0;
-            if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
-          }
-        } else {
-          const auto &inputs = deferred_flows_.at(queue).inputs;
-          pending.insert(pending.end(), inputs.begin(), inputs.end());
+        if (action_headers.contains(queue) || !routed_initialization.insert(queue).second) continue;
+        const auto &source = initialization_header(queue).paths;
+        for (const auto &input : deferred_flows_.at(queue).inputs) {
+          const auto &destination = initialization_header(input.queue).paths;
+          for (size_t mode = 0; mode < source.size(); ++mode)
+            for (size_t cell = 0; cell < source[mode].size(); ++cell) {
+              const auto proof = preserved_initialization(source[mode][cell],
+                  cell < input.initialized.size() ? input.initialized[cell] : 0);
+              auto &inputs = initialization_flows_.at(destination[mode][cell]).inputs;
+              if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
+            }
+          pending.push_back(input.queue);
         }
       }
     };
@@ -6123,7 +6141,7 @@ class Compiler {
     action.initialized = flow_state().initialized;
     action.predecessors = registered_deferred_[scope.owner_scope];
     ir_.register_deferred(scope.head, action.layout, scope.actions.size() - 1, values);
-    deferred_flows_.push_back({{action.predecessors}, std::move(catches), action.recovers, {}});
+    deferred_flows_.push_back({{{action.predecessors}}, std::move(catches), action.recovers, {}});
     action.registration = deferred_flows_.size() - 1;
     registered_deferred_[scope.owner_scope] = action.registration;
   }
@@ -6523,7 +6541,7 @@ class Compiler {
     std::vector<std::pair<size_t, size_t>> callable_headers, address_headers, deferred_headers;
     if (!one && !empty) {
       for (auto &[scope, queue] : registered_deferred_) {
-        deferred_flows_.push_back({{queue}, {}});
+        deferred_flows_.push_back({{{queue, before.initialized}}, {}});
         queue = deferred_flows_.size() - 1;
         deferred_headers.emplace_back(scope, queue);
       }
@@ -6563,7 +6581,7 @@ class Compiler {
                             expr.kind == K::range_for, {}, local_bits(accumulator.type), true, nullptr, true);
     if (next.type != Type::never) for (const auto &[scope, header] : deferred_headers) {
       const auto back = registered_deferred_.at(scope);
-      if (back != header) deferred_flows_[header].inputs.push_back(back);
+      if (back != header) deferred_flows_[header].inputs.push_back({back, flow_state().initialized});
     }
     for (const auto &[holder, id] : callable_headers) {
       auto &header = callable_flows_.at(id);

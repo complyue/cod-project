@@ -206,7 +206,7 @@ def main():
         scratch = Path(temporary)
         for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
-                     'defer-completion-flow', 'defer-handler-initialization'):
+                     'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -232,6 +232,12 @@ try {after_scope();} catch(error:const OutOfMemory) {behave @print(9002u64);};
 guarded(true);
 behave @print(9002u64);
 '''
+            if name == 'defer-queue-initialization':
+                source += '''
+using "std:exceptions" OutOfMemory;
+behave @print(9001u64);
+try {choose(true);} catch(error:const OutOfMemory) {behave @print(9002u64);};
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -242,7 +248,7 @@ behave @print(9002u64);
                 assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
             if name == 'defer-returns':
                 expected += ['95', '96', '97', '98', '99', '100', '30', '60']
-            if name in ('defer-value-scope', 'defer-completion-flow'):
+            if name in ('defer-value-scope', 'defer-completion-flow', 'defer-queue-initialization'):
                 expected += ['9001', '9002']
                 assert evidence['layout']['record_failures'] == 1
             if name == 'defer-handler-initialization':
