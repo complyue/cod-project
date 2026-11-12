@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 152
+Discussion revision: 153
 
 Recorded: 2026-10-22
 
@@ -9,6 +9,8 @@ Current discussion: 2026-11-11
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+- **Construction discussion decisions:** [H-386](DesignAuthorityRegistry.md#h-386)/[K-545](DesignAuthorityRegistry.md#k-545), D-07r153, accepts contextual owner inference without hidden allocation and records the user's preference for one coordinated source migration without compatibility staging. [D-22r2](ConstructionAndAcquisition.md) presents the remaining aggregate/allocator/DBMR topics for discussion and eventual whole-file approval. P-352/P-353 preserves C-39/C-54/C-65/C-72's explicit storage and resource distinctions; candidate value relationships remain pending until that review. No current compiler syntax, ABI or wider pending contract is qualified by implication.
 
 - **Construction requirements:** [H-383–H-385](DesignAuthorityRegistry.md#h-383)/[K-542](DesignAuthorityRegistry.md#k-542), D-07r152, records intrinsic-only resource ownership, borrowed ordinary references, lexical/regional bits ADTs, explicit construction owner checking and result-only const region access. [D-22](ConstructionAndAcquisition.md) carries the confirmed requirements, candidate P-348–P-350 value paths and pending inference/representation/migration/DBMR choices. C-39/C-54/C-65/C-72 and P-344–P-347 preserve explicit responsibility and relative non-bits graphs under charter §§2–5/§7–8. H-384 authorizes comparison of alternatives with final selection reserved. Acceptance requires D-22's composed matrix; no whole-document qualification or aggregate implementation is claimed. Existing unrelated qualified scope continues unchanged.
 

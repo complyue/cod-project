@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 78 · Recorded: 2026-11-12 · Status: design draft with scoped confirmed requirements.
+Design revision: 79 · Recorded: 2026-11-12 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Contextual construction and review:** [H-386](DesignAuthorityRegistry.md#h-386)/[K-545](DesignAuthorityRegistry.md#k-545), D-14r79, accepts omitted-owner inference from a unique receiver/containing-field owner with usable allocation capability. Without a destination, bits use the current full lexical scope and non-bits require a regional destination; missing capability supplies no hidden fallback and existing references retain provenance. P-352 preserves C-39/C-65/C-72's owner/access boundaries. The user prefers coordinated source migration with no transition phase (P-353). [D-22r2](ConstructionAndAcquisition.md) records these topic decisions; its complete file and candidate value rationale await final approval after unresolved topics are discussed. Existing qualified ownership/cleanup scopes remain unchanged; this is no aggregate/DBMR implementation claim.
 
 - **Construction and bits ADTs:** [H-383–H-385](DesignAuthorityRegistry.md#h-383)/[K-542](DesignAuthorityRegistry.md#k-542), D-14r78, records ordinary ref/ptr as borrowed, intrinsic-only ownership, recursively finite bits ADTs with lexical/regional placement, explicit `make T [in o]` and receiver-owner mismatch rejection. Non-bits ADTs remain regional; actual instance owners and same-owner fields remain required. [D-22](ConstructionAndAcquisition.md) separates these confirmed requirements from pending contextual inference, aggregate representation, source migration and DBMR protocols. C-39/C-54/C-65/C-72 and P-344–P-347 constrain the scope; P-348–P-350's new value paths remain pending-human. Existing qualified owner/access/cleanup contracts continue only within their unchanged boundaries; the broader D-14 draft remains unqualified. Acceptance is D-22's construction/composition matrix, not current scalar-only implementation evidence.
 

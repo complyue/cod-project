@@ -1,14 +1,14 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 1 · Recorded: 2026-11-12 · Status: confirmed requirements; integrated contract and value paths pending-human; implementation incomplete.
+Design revision: 2 · Recorded: 2026-11-12 · Status: discussion draft with confirmed requirements; whole-document approval pending; implementation incomplete.
 
 ## Design authority
 
-- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision1. [H-383–H-385](DesignAuthorityRegistry.md#h-383) records the reviewed RP-CONSTRUCTION-2026-11-12 revision2 handoff. The requirements in the next section are confirmed propositions. P-348–P-350 are candidate value relationships; this document is not yet a qualified delegated implementation contract. [K-542](DesignAuthorityRegistry.md#k-542) records evidence reconciliation and affected scopes, not a new human approval.
+- **Registry / coverage:** [D-22](DesignAuthorityRegistry.md#d-22), revision2. [H-383–H-385](DesignAuthorityRegistry.md#h-383) records the reviewed construction handoff; [H-386](DesignAuthorityRegistry.md#h-386) accepts contextual owner inference, prefers coordinated migration without a transition period, and requires topic discussion followed by whole-file approval. P-348–P-350 remain candidate value relationships. This document is not yet a qualified delegated implementation contract; [K-545](DesignAuthorityRegistry.md#k-545) records the discussion integration, not final document approval.
 - **Candidate value path:** C-39/C-65/C-72 → C-01/C-06 (P-348) makes storage, access and lifetime intent explicit and checkable in readable source; C-09/C-54 → C-05 (P-349) separates persistent data from acquisition responsibility and preserves inspectable preparation effects. D-22 organizes these responsibilities through P-350. Charter §§2–5/§7–8 governs those boundaries; §§6/12 requires practical native execution and measured costs. These scoped paths do not qualify the wider ownership or DBMR designs.
 - **Dependencies:** P-351: D-01 physical allocation/relative references; D-14 owners, capabilities, fields and qualifiers; D-17 initialization, failure and cleanup; D-10/D-15/D-18/D-21 dynamic context, values and native dispatch; D-16 bits validity, layout and numeric compatibility. Dependency edges grant no authority.
 - **Invariants / non-goals:** no ordinary reference ownership, per-object cleanup, non-bits lexical/general-heap allocation, hidden region, cross-owner stored edge, implicit graph copy, lifetime extension or native callable environment in a regional field. Regional C++ types remain region-only and noncopyable. Actual-owner unions, abstract-result RTTI, fraction execution, pure/TCO and the compiler pilot remain separate.
-- **Human baseline:** current project user in [the construction side chat](codex://threads/01a1d051-f608-7c13-b98a-684f065884d7), recorded 2026-11-12 America/Los_Angeles; exact message timestamps/personal name unavailable. H-383 preserves the ownership/allocation corrections; H-384 confirms R1, explicit R2 owner syntax/mismatch rejection and autonomous R3/R4 comparison with final selection reserved; H-385 confirms result-only constness. Handoff approval does not select candidate inference, DBMR protocols, migration or ABI.
+- **Human baseline:** current project user in [the construction side chat](codex://threads/01a1d051-f608-7c13-b98a-684f065884d7), recorded 2026-11-12 America/Los_Angeles; exact message timestamps/personal name unavailable. H-383 preserves the ownership/allocation corrections; H-384 confirms R1, explicit R2 owner syntax/mismatch rejection and autonomous R3/R4 comparison with final selection reserved; H-385 confirms result-only constness. The [active main chat](codex://threads/01a1cefe-fe25-7251-b25b-b3908d803ff6) subsequently accepts contextual inference and prefers one coordinated migration without compatibility staging (H-386). DBMR protocols, aggregate ABI and final whole-file approval remain outstanding.
 - **Acceptance:** the matrix below requires composed positive/rejection cases, exact acquisition/release accounting, relocation and measured compilation/runtime costs. No implementation or new performance result is claimed by this revision.
 
 ## Confirmed requirements
@@ -27,7 +27,7 @@ The ordinary construction direction is `make T [in o]`; intrinsic resource acqui
 
 Callable payloads retain D-18's complete intrinsic value category and scope-owned backing; they are not bits ADTs or ordinary independently owned references. Local ADTs do not authorize lexical-cell captures or lifetime extension. H-370's deferred owning-argument transfer at invocation and H-365/H-371's scope restrictions remain unchanged.
 
-## WP1: classification and representation obligations
+## Bits classification and representation obligations
 
 The proposed compiler separation is nominal type identity → resolved representation facts → placement/view → native transport. Classification must not replace nominal identity, actual-owner facts or abstract dispatch evidence.
 
@@ -43,16 +43,16 @@ The proposed compiler separation is nominal type identity → resolved represent
 
 The implementation dependency order is representation facts, aggregate places/initialization, payload operations, construction, then parameter/result/capture/TLS integration. Each increment must name incomplete admitted forms rather than present them as forbidden language. Classifying bits ADTs is not permission to make C++ `regional_*` objects stack-copyable.
 
-## WP2: owner-directed construction proposal
+## Owner-directed construction
 
-The proposed shared construction check carries the resolved target type, actual destination owner, allocation capability, ordered field initializers and result access. Source forms feed that check; ordinary storage construction and intrinsic acquisition have distinct cleanup responsibility. This is a compiler organization proposal, not a new runtime object or universal allocator interface.
+The proposed compiler check for the confirmed construction behavior carries the resolved target type, actual destination owner, allocation capability, ordered field initializers and result access. Source forms feed that check; ordinary storage construction and intrinsic acquisition have distinct cleanup responsibility. This is a compiler organization proposal, not a new runtime object or universal allocator interface.
 
-| Source situation | Proposed result |
+| Source situation | Required behavior and implementation boundary |
 | --- | --- |
 | Explicit `make T in r` | Use r only if it supplies the required placement/capability. Reject a conflicting receiver owner before runtime evaluation. H-384 confirms explicit selection and mismatch rejection; generic capability acquisition is not inferred. |
-| Omitted owner, receiver has one unique owner and suitable allocation access | Construct there. A field may supply its containing owner to an explicitly written nested make. This contextual inference requires confirmation. |
-| Omitted owner, no destination | Bits use the current full lexical scope. Non-bits diagnose the missing regional destination. No TLS fallback or hidden region. The bits baseline is confirmed; the integrated inference rule requires confirmation. |
-| Receiver names provenance without allocator capability | Do not manufacture capability from identity. Request an explicit usable region path for non-bits construction. |
+| Omitted owner, receiver has one unique owner and suitable allocation access | Construct there. A field may supply its containing owner to an explicitly written nested make. H-386 accepts this contextual inference. |
+| Omitted owner, no destination | Bits use the current full lexical scope. Non-bits diagnose the missing regional destination. No TLS fallback or hidden region. H-386 accepts this fallback boundary; missing capability never causes a hidden allocator or fallback. |
+| Receiver names provenance without allocator capability | Do not manufacture capability from identity. Require a usable allocation path; do not silently select another owner. |
 | Initializer is an existing reference | Check its actual owner/access; never promote, allocate or copy a graph to satisfy an expected owner. |
 | Ref/ptr field initialized without explicit make | Bind an existing admissible target; no automatic target allocation. |
 
@@ -67,7 +67,9 @@ owned region arena:Root <- make region Root(capacity = bytes) { ... };
 
 Construction must preserve initializer order and effects and publish only a valid initialized result. Existing D-17 failed acquisition cleanup does not promise rollback of effects or arbitrary reservations in an already-live region. Nested constructor naming/access, partial construction and allocator-policy interaction require review before implementing an uncovered case. Explicit owner spelling cannot bypass readonly allocation checks or same-owner stored edges.
 
-## WP3 / R4: source migration comparison
+## Source migration
+
+The user prefers a single coordinated migration with no transition stage, stating that CoD has no users yet and should acquire no legacy compatibility burden. The implementation plan follows that direction. The comparison below explains the trade-off; compatibility staging is not the selected direction. Final approval of this complete design remains separate.
 
 Both alternatives use one semantic construction model. Neither chooses allocation by guessing from a receiving variable's `owned` qualifier or treats the same bare make as both object and resource construction.
 
@@ -80,9 +82,9 @@ Both alternatives use one semantic construction model. Neither chooses allocatio
 | Runtime / generated code | No syntax-compatibility runtime cost expected. | No extra cost expected if compatibility resolves entirely during parsing; this is an estimate, not benchmark evidence. |
 | Compile / maintenance cost | Smaller ongoing parser surface; migration review is concentrated. | Additional parse/diagnostic work expected to be small but unmeasured; two supported spellings enlarge documentation and validation until removal. |
 
-**Recommendation: M1**, after owner inference and representation integration are qualified. The tracked prototype is amenable to a coordinated update; a permanent dual surface would obscure ordinary storage versus resource acquisition. M2 is credible if consumers outside the repository need a migration window. No external-consumer inventory or user selection is inferred. R4 selection does not approve incomplete aggregate ABI or DBMR protocols. Historical registry quotations/reports retain their original source; only current examples and live fixtures migrate.
+**Implementation direction: one coordinated cutover**, after this design and the necessary representation integration are qualified. Migrate live fixtures, generated programs and current examples together; reject legacy forms with actionable diagnostics. There is no compatibility period or permanent parallel syntax. This direction does not settle aggregate ABI or DBMR protocols. Historical registry quotations/reports retain their original source; only current examples and live fixtures migrate.
 
-## WP4 / R3: DBMR alternatives and protocol work
+## DBMR alternatives and protocol work
 
 These are comparison candidates. Both preserve confirmed result-only constness and keep acquisition, live resize, compaction and snapshot publication distinct.
 
@@ -146,4 +148,14 @@ No DBMR mutation, compiler change, build or test is part of this audit. No new p
 | File acquisition | Selected source/access/capacity operation matrix, invalid image rejection, exact handle/mapping release, relocation preserving sharing/cycles and observable preparation effects before const publication. |
 | Costs | Compile time, generated text/bitcode, stack/backing bytes, region/mapping count and peak extent; no accidental per-object cleanup or graph copy. No numeric target is assumed. |
 
-Review items: **CA-Q1** confirms P-348 and the ordinary-construction slice of P-350 for the requirements/constraints/acceptance above; DBMR P-349 and its P-350 slice remain pending until protocol review. **CA-Q2** selects the WP2 omitted-owner/capability rule. **CA-Q3** selects M1 or M2 under R4. R3 remains an authorized exploration task until a concrete operation/failure/coordination proposal is ready for final selection. Aggregate layout/ABI and unsupported sum/generic mechanisms remain explicitly separate decisions where existing contracts do not determine them.
+## Review process and remaining topics
+
+Discuss unresolved design topics in terms of source examples, behavior, alternatives and consequences. Registry identifiers are internal traceability, not items the user must approve individually. Once the topics are resolved, present the complete revised document for approval. This revision records the discussion decisions; it does not claim final approval or ask the user to approve competing alternatives.
+
+Contextual owner inference and the coordinated migration direction are recorded above and need no repeated preference question. The remaining topics are:
+
+- **Aggregate values and native calls:** define concrete product/sum representation, sufficient generic bits evidence, initialization granularity and parameter/result transport while preserving nominal identity, relative graphs, complete callable values and fraction validity. Distinguish internal compiler choices from observable layout or validity commitments.
+- **Construction and allocator access:** specify usable allocation capability, nested initializer access/order and the state left by partial construction in an existing region. Expected-owner inference must preserve the accepted no-fallback rule and cannot manufacture allocation permission.
+- **Persistent acquisition:** complete the source/access/capacity/failure/coordination matrix and compare its implementations before choosing the DBMR surface. Result-only constness is already confirmed; mapping protection, capacity units, partial effects, validation and release/durability outcomes remain explicit topics.
+
+The candidate value rationale, constraints, non-goals and acceptance remain part of the eventual whole-document review. No separate approval of internal relationship numbers is requested.
