@@ -433,7 +433,18 @@ class Compiler {
     std::vector<size_t> initialized;
     std::vector<const Value *> pointers;
     CallableMemory callables{nullptr};
+    std::map<size_t, size_t> deferred;
   };
+  struct DeferredFlow {
+    std::vector<size_t> inputs;
+    std::set<size_t> catches;
+    std::shared_ptr<bool> recovers = {};
+    std::vector<size_t> continuations = {};
+  };
+  // Node zero is an empty queue. Registration prepends an action; joins and
+  // loop headers retain every possible predecessor without copying stacks.
+  std::deque<DeferredFlow> deferred_flows_{{{}, {}}};
+  std::map<size_t, size_t> registered_deferred_;
   struct ConversionPoint {
     LLVMEmission::ConversionPoint native;
     FlowState regions;
@@ -465,7 +476,8 @@ class Compiler {
     std::vector<Value> arguments = {};
     struct Selection {
       std::string name;
-      bool function_context, npe_allowed;
+      bool function_context;
+      FlowCondition npe_allowed;
       ImplementationContext implementation;
       llvm::Instruction *image;
       Value result;
@@ -504,11 +516,14 @@ class Compiler {
     std::function<Value(llvm::Value *, Environment &, Value)> invoke;
     bool handles_error = false;
     std::shared_ptr<bool> recovers;
+    size_t predecessors = 0;
+    size_t registration = 0;
   };
   struct DeferredScope {
     llvm::AllocaInst *head;
     size_t owner_scope;
     std::deque<DeferredAction> actions;
+    DeferredScope *parent = nullptr;
   };
   DeferredScope *deferred_scope_ = nullptr;
   std::set<llvm::Value *> deferred_loop_controls_;
@@ -517,7 +532,7 @@ class Compiler {
     std::function<Value(Value)> cleanup;
     std::optional<Value> incoming;
     bool discard = false;
-    bool recovers = false;
+    std::function<bool(const FlowState &)> recovers;
     bool *recovered = nullptr;
   };
   struct EnvironmentEdge { Environment environment; llvm::BasicBlock *from; FlowState regions; };
@@ -572,9 +587,57 @@ class Compiler {
   static Type exception_type(ExceptionCategory category) {
     return exception_type(exception_id(category));
   }
+  FlowCondition npe_coverage() const {
+    if (npe_allowed_) return true;
+    std::vector<size_t> queues;
+    for (auto *scope = deferred_scope_; scope; scope = scope->parent)
+      if (const auto found = registered_deferred_.find(scope->owner_scope); found != registered_deferred_.end())
+        queues.push_back(found->second);
+    if (queues.empty()) return false;
+    return FlowCondition::deferred([this, queues = std::move(queues)] {
+      return std::any_of(queues.begin(), queues.end(), [&](size_t queue) {
+        return deferred_handles(queue, exception_id(ExceptionCategory::null_pointer));
+      });
+    });
+  }
   void require_npe_handler(const Location &at) {
-    if (!npe_allowed_)
-      fail(at, "checked NullPointerException requires a local catch or throws NullPointerException on the immediate func/proc; module top level must catch it");
+    const auto coverage = npe_coverage();
+    const std::string message = "checked NullPointerException requires a local catch or throws NullPointerException on the immediate func/proc; module top level must catch it";
+    if (coverage.pending()) deferred_checks_.push_back({[coverage] { return !bool(coverage); }, at, message});
+    else if (!coverage) fail(at, message);
+  }
+  bool deferred_handles(size_t queue, size_t category) const {
+    // A missing handler is witnessed by a finite path to the empty queue.
+    // Revisiting a loop alone cannot create such a path.
+    std::set<size_t> visited;
+    std::vector<size_t> pending{queue};
+    while (!pending.empty()) {
+      const auto node = pending.back(); pending.pop_back();
+      if (!node) return false;
+      if (!visited.insert(node).second) continue;
+      const auto &flow = deferred_flows_.at(node);
+      if (flow.catches.contains(category)) continue;
+      pending.insert(pending.end(), flow.inputs.begin(), flow.inputs.end());
+    }
+    return true;
+  }
+  size_t join_deferred_flow(size_t left, size_t right) {
+    if (left == right) return left;
+    deferred_flows_.push_back({{left, right}, {}});
+    return deferred_flows_.size() - 1;
+  }
+  bool deferred_may_recover(size_t queue) const {
+    std::set<size_t> visited;
+    std::vector<size_t> pending{queue};
+    while (!pending.empty()) {
+      const auto node = pending.back(); pending.pop_back();
+      if (!node || !visited.insert(node).second) continue;
+      const auto &flow = deferred_flows_.at(node);
+      if (flow.recovers && *flow.recovers) return true;
+      pending.insert(pending.end(), flow.inputs.begin(), flow.inputs.end());
+      pending.insert(pending.end(), flow.continuations.begin(), flow.continuations.end());
+    }
+    return false;
   }
   bool declares_npe(const std::vector<Type> &types, const Module &module, const Location &at) {
     for (const auto &type : types)
@@ -608,6 +671,7 @@ class Compiler {
     for (const auto &cell : cells_) result.initialized.push_back(cell.initialized);
     for (const auto &pointer : pointers_) result.pointers.push_back(pointer.view);
     result.callables = callable_holders_;
+    result.deferred = registered_deferred_;
     return result;
   }
   void restore_flow(const FlowState &state) {
@@ -618,6 +682,7 @@ class Compiler {
       cells_[i].initialized = i < state.initialized.size() ? state.initialized[i] : 0;
     for (size_t i = 0; i < state.pointers.size(); ++i) pointers_[i].view = state.pointers[i];
     callable_holders_ = state.callables;
+    registered_deferred_ = state.deferred;
     for (const auto &[holder, flow] : state.callables)
       if (!scopes_.at(callable_scopes_.at(holder)))
         callable_holders_ = callable_memory_factory_.remove(callable_holders_, holder);
@@ -741,6 +806,12 @@ class Compiler {
     ir_.write_pointer(definition.function->getArg(definition.context_argument + 1), image);
   }
   void intersect_flow(FlowState &left, const FlowState &right) {
+    for (auto &[scope, queue] : left.deferred) {
+      const auto found = right.deferred.find(scope);
+      queue = join_deferred_flow(queue, found == right.deferred.end() ? 0 : found->second);
+    }
+    for (const auto &[scope, queue] : right.deferred)
+      if (!left.deferred.contains(scope)) left.deferred.emplace(scope, join_deferred_flow(0, queue));
     left.live.resize(std::max(left.live.size(), right.live.size()), false);
     for (size_t i = 0; i < left.live.size(); ++i) left.live[i] = FlowCondition::both(left.live[i], i < right.live.size() ? right.live[i] : FlowCondition{false});
     left.holdings.resize(std::max(left.holdings.size(), right.holdings.size()), Presence::absent);
@@ -3824,7 +3895,7 @@ class Compiler {
     const auto index = native_call_demands_.size();
     auto result = contextual_call(selected, args, operands, env, module, at, false, destination);
     native_call_demands_.at(index).selection = NativeCallDemand::Selection{
-        name, function_context, npe_allowed_, implementation_context_, image, result};
+        name, function_context, npe_coverage(), implementation_context_, image, result};
     return result;
   }
   bool select_native_method(NativeCallDemand &demand) {
@@ -3832,7 +3903,7 @@ class Compiler {
       const auto &pending = *demand.selection;
       const auto context = llvm::SaveAndRestore(implementation_context_, pending.implementation);
       const auto conformances = llvm::SaveAndRestore(caller_conformances_, demand.conformances);
-      const auto checked = llvm::SaveAndRestore(npe_allowed_, pending.npe_allowed);
+      const auto checked = llvm::SaveAndRestore(npe_allowed_, bool(pending.npe_allowed));
       const auto calls = llvm::SaveAndRestore(call_path_, demand.calls);
       const auto selected = method(pending.name, *demand.caller, demand.arguments, demand.at);
       if (!selected) method_failure(pending.name, demand.arguments,
@@ -5626,7 +5697,8 @@ class Compiler {
   Value deferred_scope(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                         bool function_context, const std::function<Value()> &body, bool callable = false) {
     if (!contains_deferred(expr, !callable)) return body();
-    DeferredScope scope{ir_.deferred_stack(), local_scope_, {}};
+    DeferredScope scope{ir_.deferred_stack(), local_scope_, {}, deferred_scope_};
+    registered_deferred_[scope.owner_scope] = 0;
     const auto active = llvm::SaveAndRestore(deferred_scope_, &scope);
     Expression guarded{};
     guarded.kind = Expression::Kind::try_scope;
@@ -5640,10 +5712,11 @@ class Compiler {
     TryEmission emission;
     emission.body = body;
     emission.cleanup = [&](Value incoming) {
-      auto result = drain_deferred(scope, env, std::move(incoming));
-      emission.recovers = std::any_of(scope.actions.begin(), scope.actions.end(),
-          [](const auto &action) { return action.recovers && *action.recovers; });
-      return result;
+      return drain_deferred(scope, env, std::move(incoming));
+    };
+    emission.recovers = [&](const FlowState &path) {
+      const auto queue = path.deferred.find(scope.owner_scope);
+      return queue != path.deferred.end() && deferred_may_recover(queue->second);
     };
     return try_expression(guarded, module, env, locals, function_context, false, true, {}, nullptr, &emission);
   }
@@ -5693,7 +5766,10 @@ class Compiler {
     auto *site = ir_.pop_deferred(scope.head, record);
     const auto entry_flow = flow_state();
     const auto entry_env = env;
-    const auto check_flow = [&](const FlowState &exit, const Location &at) {
+    const auto check_flow = [&](const FlowState &exit, const DeferredAction &action) {
+      const auto queue = exit.deferred.find(scope.owner_scope);
+      if (queue != exit.deferred.end())
+        deferred_flows_[action.registration].continuations.push_back(queue->second);
       bool changed = false;
       for (size_t i = 0; i < entry_flow.live.size(); ++i) changed |= !entry_flow.live[i].same(exit.live[i]);
       for (size_t i = 0; i < entry_flow.holdings.size(); ++i) changed |= entry_flow.holdings[i] != exit.holdings[i];
@@ -5703,7 +5779,7 @@ class Compiler {
         const auto *after = exit.callables.lookup(holder);
         changed |= !after || *after != value;
       }
-      if (changed) fail(at, "deferred action changes flow facts; deferred backedge checking is not implemented yet");
+      if (changed) fail(action.at, "deferred action changes flow facts; deferred backedge checking is not implemented yet");
     };
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &action = scope.actions[i];
@@ -5712,6 +5788,7 @@ class Compiler {
       ir_.choose(ir_.binary(Type::uint64, "==", site, ir_.bits(Type::uint64, i)), run, other);
       ir_.enter(run);
       restore_flow(entry_flow);
+      registered_deferred_[scope.owner_scope] = action.predecessors;
       env = entry_env;
       const auto holding_begin = holdings_.size();
       const auto cleanup = ir_.scope();
@@ -5738,7 +5815,7 @@ class Compiler {
         return_targets_.pop_back();
         handlers_.pop_back();
         if (result.type != Type::never) {
-          check_flow(flow_state(), action.at);
+          check_flow(flow_state(), action);
           close_holdings(holding_begin, {}, action.at);
           ir_.unwind(cleanup);
           release();
@@ -5746,7 +5823,7 @@ class Compiler {
         ir_.enter(replacement.block);
         auto replaced = join_completions(replacement.incoming, action.at, false);
         if (replaced.type != Type::never) {
-          check_flow(flow_state(), action.at);
+          check_flow(flow_state(), action);
           save_return(std::move(replaced), action.at);
           close_holdings(holding_begin, {}, action.at);
           ir_.unwind(cleanup);
@@ -5756,7 +5833,7 @@ class Compiler {
           ir_.enter(landing.block);
           std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> payloads, categories;
           for (const auto &edge : landing.incoming) {
-            check_flow(edge.regions, action.at);
+            check_flow(edge.regions, action);
             payloads.emplace_back(edge.error.native, edge.from);
             categories.emplace_back(exception_category(edge.error), edge.from);
           }
@@ -5772,6 +5849,7 @@ class Compiler {
     ir_.unreachable();
     ir_.enter(done);
     restore_flow(entry_flow);
+    registered_deferred_.erase(scope.owner_scope);
     env = entry_env;
     auto *resume = ir_.label("defer.resume");
     auto *failed = ir_.label("defer.failed");
@@ -5789,6 +5867,7 @@ class Compiler {
       ir_.choose(ir_.binary(Type::uint64, "==", ir_.read_native(return_tag), ir_.bits(Type::uint64, i + 1)), selected, other);
       ir_.enter(selected);
       restore_flow(entry_flow);
+      registered_deferred_.erase(scope.owner_scope);
       auto value = returned[i].value;
       size_t field = 0;
       deferred_fields(value, [&](llvm::Value *&native) { native = ir_.read_native(returned[i].fields.at(field++)); });
@@ -5810,7 +5889,37 @@ class Compiler {
       ir_.enter(other);
     }
     restore_flow(entry_flow);
+    registered_deferred_.erase(scope.owner_scope);
     return {};
+  }
+  struct ExceptionHandlers {
+    std::array<const Expression *, concrete_exception_count> catches{};
+    const Expression *finally = nullptr;
+  };
+  ExceptionHandlers exception_handlers(const Expression &expr, const Module &module) {
+    ExceptionHandlers result;
+    for (size_t i = 1; i < expr.children.size(); ++i) {
+      const auto &clause = *expr.children[i];
+      if (clause.kind == Expression::Kind::block) { result.finally = &clause; continue; }
+      if (clause.annotation) {
+        const auto type = resolve(*clause.annotation, module, clause.at);
+        if (type.kind != Type::exception || !type.identity)
+          fail(clause.at, "a typed catch requires an exact intrinsic exception category");
+        auto &destination = result.catches.at(type.identity - 1);
+        if (destination) fail(clause.at, "duplicate exception category in catch clauses");
+        destination = &clause;
+      } else for (auto &destination : result.catches) if (!destination) destination = &clause;
+    }
+    return result;
+  }
+  void register_deferred(DeferredScope &scope, const std::vector<llvm::Value *> &values,
+                         std::set<size_t> catches = {}) {
+    auto &action = scope.actions.back();
+    action.predecessors = registered_deferred_[scope.owner_scope];
+    ir_.register_deferred(scope.head, action.layout, scope.actions.size() - 1, values);
+    deferred_flows_.push_back({{action.predecessors}, std::move(catches), action.recovers, {}});
+    action.registration = deferred_flows_.size() - 1;
+    registered_deferred_[scope.owner_scope] = action.registration;
   }
   void deferred_fields(Value &value, const std::function<void(llvm::Value *&)> &visit) {
     const auto field = [&](llvm::Value *&native) { if (native) visit(native); };
@@ -5884,9 +5993,11 @@ class Compiler {
       return try_expression(expr, module, env, locals, function_context, false, true, {}, nullptr, &emission);
     };
     auto &scope = *deferred_scope_;
-    const auto index = scope.actions.size();
     scope.actions.push_back({layout, expr.at, {}, std::move(invoke), expr.children.size() > 1, std::move(recovered)});
-    ir_.register_deferred(scope.head, layout, index, values);
+    std::set<size_t> catches;
+    const auto handlers = exception_handlers(expr, module);
+    for (size_t i = 0; i < handlers.catches.size(); ++i) if (handlers.catches[i]) catches.insert(i + 1);
+    register_deferred(scope, values, std::move(catches));
     return {};
   }
   Value deferred_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
@@ -5985,9 +6096,8 @@ class Compiler {
                       invoke_prepared_callable(*callable, module, current, at, captured);
     };
     auto &scope = *deferred_scope_;
-    const auto index = scope.actions.size();
     scope.actions.push_back({layout, expr.at, std::move(images), std::move(invoke), false, {}});
-    ir_.register_deferred(scope.head, layout, index, values);
+    register_deferred(scope, values);
     for (auto *slot : image_slots) ir_.take_callable(slot);
     return {};
   }
@@ -6197,8 +6307,13 @@ class Compiler {
     };
     changed(changed, *expr.children[body_index]);
     LoopPointers loop_pointers{pointers_.size(), {}};
-    std::vector<std::pair<size_t, size_t>> callable_headers, address_headers;
+    std::vector<std::pair<size_t, size_t>> callable_headers, address_headers, deferred_headers;
     if (!one && !empty) {
+      for (auto &[scope, queue] : registered_deferred_) {
+        deferred_flows_.push_back({{queue}, {}});
+        queue = deferred_flows_.size() - 1;
+        deferred_headers.emplace_back(scope, queue);
+      }
       const auto incoming = callable_holders_;
       for (const auto &[holder, flow] : incoming) {
         callable_flows_.push_back({{}, {flow}, true});
@@ -6233,6 +6348,10 @@ class Compiler {
     if (!one && !empty) loop_pointers_.push_back(loop_pointers);
     const auto next = block(*expr.children[body_index], module, env, inner_locals, function_context,
                             expr.kind == K::range_for, {}, local_bits(accumulator.type), true, nullptr, true);
+    if (next.type != Type::never) for (const auto &[scope, header] : deferred_headers) {
+      const auto back = registered_deferred_.at(scope);
+      if (back != header) deferred_flows_[header].inputs.push_back(back);
+    }
     for (const auto &[holder, id] : callable_headers) {
       auto &header = callable_flows_.at(id);
       const auto *back = callable_holders_.lookup(holder);
@@ -6932,6 +7051,12 @@ class Compiler {
   // A shared finally is checked against every entering completion. After it
   // finishes, unchanged facts can be refined to the selected continuation.
   FlowState continue_flow(const FlowState &path, const FlowState &entry, FlowState exit) {
+    for (auto &[scope, queue] : exit.deferred) {
+      const auto before = entry.deferred.find(scope);
+      const auto original = path.deferred.find(scope);
+      if (before != entry.deferred.end() && before->second == queue)
+        queue = original == path.deferred.end() ? 0 : original->second;
+    }
     for (size_t i = 0; i < std::min(path.live.size(), entry.live.size()); ++i)
       if (exit.live[i].same(entry.live[i])) exit.live[i] = path.live[i];
     for (size_t i = 0; i < std::min(path.holdings.size(), entry.holdings.size()); ++i)
@@ -6963,20 +7088,7 @@ class Compiler {
                        const TryEmission *emission = nullptr) {
     const bool parent_module = module_top_level_;
     bool recovered = false;
-    std::array<const Expression *, concrete_exception_count> catches{};
-    const Expression *finally = nullptr;
-    for (size_t i = 1; i < expr.children.size(); ++i) {
-      const auto &clause = *expr.children[i];
-      if (clause.kind == Expression::Kind::block) { finally = &clause; continue; }
-      if (clause.annotation) {
-        const auto type = resolve(*clause.annotation, module, clause.at);
-        if (type.kind != Type::exception || !type.identity)
-          fail(clause.at, "a typed catch requires an exact intrinsic exception category");
-        auto &destination = catches.at(type.identity - 1);
-        if (destination) fail(clause.at, "duplicate exception category in catch clauses");
-        destination = &clause;
-      } else for (auto &destination : catches) if (!destination) destination = &clause;
-    }
+    const auto [catches, finally] = exception_handlers(expr, module);
     auto *normal_join = ir_.label("try.result");
     auto *failure_join = finally ? ir_.label("try.failure") : nullptr;
     std::vector<Completion> completions;
@@ -7161,7 +7273,10 @@ class Compiler {
     if (emission && emission->recovered) *emission->recovered = recovered;
     const auto finalizer_exit = flow_state();
     const auto finalizer_exit_env = env;
-    auto *resumed = emission && emission->cleanup && emission->recovers ? ir_.label("cleanup.result") : nullptr;
+    const auto can_recover = [&](const Pending &path) {
+      return path.kind == CompletionKind::failed && emission && emission->recovers && emission->recovers(path.flow);
+    };
+    auto *resumed = std::any_of(pending.begin(), pending.end(), can_recover) ? ir_.label("cleanup.result") : nullptr;
     std::vector<Completion> resumed_values;
     std::vector<EnvironmentEdge> resumed_environments;
     for (size_t i = 0; i < pending.size(); ++i) {
@@ -7173,12 +7288,12 @@ class Compiler {
       restore_flow(continue_flow(path.flow, finalizer_entry, finalizer_exit));
       env = continue_environment(path.environment, finalizer_env, finalizer_exit_env);
       if (path.kind == CompletionKind::returned) route_return(path.value, expr.at);
+      else if (path.kind == CompletionKind::failed && !can_recover(path)) raise_exception(path.value);
       else if (resumed) {
         resumed_values.push_back({path.kind == CompletionKind::failed ? Value{} : path.value, ir_.here(), flow_state()});
         resumed_environments.push_back({env, ir_.here(), flow_state()});
         ir_.jump(resumed);
-      } else if (path.kind == CompletionKind::failed) raise_exception(path.value);
-      else return path.value;
+      } else return path.value;
       if (branch) { ir_.otherwise(*branch); ir_.merge(*branch, Type::void_type); }
     }
     if (resumed) {

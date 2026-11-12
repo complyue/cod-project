@@ -1,0 +1,50 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+proc bad()->void throws NullPointerException {
+  ptr absent:i64 = null;
+  behave @print(absent);
+}
+proc branch(mode:u64)->void {
+  if(mode == 0u64) {defer catch(e:const NullPointerException) {behave @print(1u64);};}
+  else {defer catch(e:const NullPointerException) {behave @print(2u64);};};
+  bad();
+}
+branch(0u64); branch(1u64);
+{{
+  defer catch(e:const NullPointerException) {behave @print(3u64);};
+  {{bad();}};
+}};
+{{
+  defer catch(e:const NullPointerException) {behave @print(4u64);};
+  defer {bad();};
+}};
+{{
+  for(i in 0u64 .. 3u64) {defer catch(e:const NullPointerException) {behave @print(5u64);};};
+  bad();
+}};
+{{
+  defer catch(e:const NullPointerException) {behave @print(6u64);};
+  defer {defer bad();};
+}};
+{{
+  defer catch(e:const NullPointerException) {behave @print(7u64);};
+  defer catch(e:const NullPointerException) {throw;};
+  bad();
+}};
+proc direct()->void {
+  defer catch(e:const NullPointerException) {behave @print(8u64);};
+  ptr absent:i64 = null;
+  behave @print(absent);
+}
+direct();
+{{
+  for(i in 0u64 .. 3u64) {
+    defer catch(e:const NullPointerException) {behave @print(9u64);};
+    defer bad();
+  };
+}};
+{{
+  proc selected = proc()->void throws NullPointerException {bad();};
+  defer catch(e:const NullPointerException) {behave @print(10u64);};
+  selected();
+}};

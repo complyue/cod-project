@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+using "std:exceptions" OutOfMemory;
+proc run()->void {
+  try {defer catch(e:const NullPointerException) {};}
+  catch(e:const OutOfMemory) {};
+  ptr absent:i64 = null;
+  behave @print(absent);
+}
+run();

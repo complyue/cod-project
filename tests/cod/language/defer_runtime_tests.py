@@ -204,7 +204,8 @@ def main():
     results = {}
     with tempfile.TemporaryDirectory(prefix='cod-defer-native-') as temporary:
         scratch = Path(temporary)
-        for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors'):
+        for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
+                     'defer-checked', 'defer-value-scope'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -213,6 +214,12 @@ def main():
                 source += BLOCK_RETURNS
             else:
                 source += '\nregion symbol @native_fixture; effect @native_fixture <- region(128u64);\n'
+            if name == 'defer-value-scope':
+                source += '''
+using "std:exceptions" OutOfMemory;
+behave @print(9001u64);
+try {behave @print(value());} catch(e:const OutOfMemory) {behave @print(9002u64);};
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -223,6 +230,9 @@ def main():
                 assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
             if name == 'defer-returns':
                 expected += ['95', '96', '97', '98', '99', '100', '30', '60']
+            if name == 'defer-value-scope':
+                expected += ['9001', '9002']
+                assert evidence['layout']['record_failures'] == 1
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
             evidence['executed_source_sha256'] = hashlib.sha256(source.encode()).hexdigest()

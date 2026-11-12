@@ -2731,5 +2731,63 @@
     "file": "scopes/defer-errors.cod",
     "exit": 0,
     "stdout": "101\n102\n103\n105\n104\n106\n1\n107\n108\n109\n110\n111\n"
+  },
+  {
+    "file": "scopes/defer-checked-conditional.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/defer-checked-self.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/defer-checked-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/defer-checked-loop-prefix.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/defer-checked-empty-loop.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/defer-checked-callable-boundary.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/defer-checked-popped.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "scopes/defer-checked.cod",
+    "exit": 0,
+    "stdout": "1\n2\n3\n4\n5\n6\n7\n8\n9\n9\n9\n10\n"
+  },
+  {
+    "file": "scopes/defer-value-scope.cod",
+    "exit": 0,
+    "stdout": "12\n"
+  },
+  {
+    "file": "scopes/defer-checked-registration-failure.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
   }
 ]

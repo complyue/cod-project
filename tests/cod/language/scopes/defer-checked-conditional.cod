@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+proc bad()->void throws NullPointerException {
+  ptr absent:i64 = null;
+  behave @print(absent);
+}
+proc run(mode:u64)->void {if(mode == 0u64) {defer catch(e:const NullPointerException) {};} else {}; bad();}
+run(1u64);
