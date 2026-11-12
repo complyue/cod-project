@@ -1,0 +1,20 @@
+using symbol "std:io" @print;
+symbol @gain:u64;
+effect @gain <- 7u64;
+proc read()->const u64 {return @gain;}
+proc add(gain:u64)->const u64 {return gain + read();}
+behave @print(add(3u64));
+{{
+  val gain:u64 <- @gain;
+  behave @print(gain);
+}};
+behave @print(@gain);
+{{
+  proc saved=proc()->const u64 {return @gain;};
+  {{
+    val gain:u64 <- 99u64;
+    behave @print(saved());
+    behave @print(gain);
+  }};
+}};
+behave @print(@gain);

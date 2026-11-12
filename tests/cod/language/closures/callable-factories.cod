@@ -2,9 +2,9 @@ using symbol "std:io" @print;
 function left()->func()->const u64 { return func()->const u64 { return 1u64 } }
 function right()->func()->const u64 { return func()->const u64 { return 2u64 } }
 for (i in 0u64 .. 2u64) {{
-  func factory = if (i == 0u64) {{ left }} else {{ right }};
-  func result = factory();
-  behave @print(result());
+  func factory_value = if (i == 0u64) {{ left }} else {{ right }};
+  func result_value = factory_value();
+  behave @print(result_value());
 }};
 # Each recursive result contains a complete nested callable value.
 function compose(n:u64)->func()->const u64 {
@@ -39,10 +39,10 @@ behave @print(parity());
 symbol @bias:u64;
 symbol @factory:proc()->func()->const u64;
 effect @bias <- 3u64;
-proc factory = proc()->func()->const u64 {
+proc factory_value = proc()->func()->const u64 {
   return if (@bias == 3u64) {{ left() }} else {{ right() }}
 };
-effect @factory = factory;
+effect @factory = factory_value;
 effect @bias <- 4u64;
 func saved = perform @factory();
 func current = behave @factory();
@@ -56,22 +56,22 @@ function bottom(n:u64)->(func()->const u64) throws NullPointerException {
   return if (n == 0u64) {{ ptr absent:i64 = null; val ignored = absent; local }}
   else {{ bottom(n - 1u64) }}
 }
-try {{ func result = bottom(8u64); behave @print(result()); }}
+try {{ func result_value = bottom(8u64); behave @print(result_value()); }}
 catch (e:const NullPointerException) {{ behave @print(100u64); }};
 symbol @recursive:proc(u64)->(proc()->const u64) throws NullPointerException;
 symbol @result:proc()->const u64;
 effect @bias <- 7u64;
-proc recursive = proc(n:u64)->(proc()->const u64) throws NullPointerException {
+proc recursive_value = proc(n:u64)->(proc()->const u64) throws NullPointerException {
   effect @bias <- @bias + 1u64;
   return if (n == 0u64) {{ proc()->const u64 { return @bias } }}
   else {{ behave @recursive(n - 1u64) }}
 };
-effect @recursive = recursive;
+effect @recursive = recursive_value;
 try {{
-  proc result = recursive(5u64);
-  effect @result = result;
+  proc result_value = recursive_value(5u64);
+  effect @result = result_value;
   behave @print(perform @result());
-  behave @print(result());
+  behave @print(result_value());
 }} catch (e:const NullPointerException) {{ behave @print(999u64); }};
 behave @print(@bias);
 proc failing = proc(n:u64)->(proc()->const u64) throws NullPointerException {
@@ -80,5 +80,5 @@ proc failing = proc(n:u64)->(proc()->const u64) throws NullPointerException {
   else {{ behave @recursive(n - 1u64) }}
 };
 effect @recursive = failing;
-try {{ proc result = failing(5u64); behave @print(result()); }}
+try {{ proc result_value = failing(5u64); behave @print(result_value()); }}
 catch (e:const NullPointerException) {{ behave @print(@bias); }};

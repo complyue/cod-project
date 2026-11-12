@@ -1,0 +1,8 @@
+data Pool {id:u64;}
+data Cell {value:u64;}
+function inspect(value:Cell in O)->const u64 where {owner O} {return capacity_bytes(O);}
+{{
+  owned region arena:Pool <- make Pool(capacity=512u64) {id <- 1u64};
+  ref cell = deref(alloc arena Cell(2u64));
+  inspect(cell);
+}};

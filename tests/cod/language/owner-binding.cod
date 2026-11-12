@@ -1,0 +1,17 @@
+using symbol "std:io" @print;
+data Pool {id:u64;}
+data Cell {value:u64;}
+function increment(value:u64 in O)->void where {owner O} {value <- value + 1u64;}
+function edit(value:Cell in O)->void where {owner O} {value.value <- value.value + 1u64;}
+function edit_root(value:Cell in r)->void where {region r:Pool} {root(r).id <- root(r).id + 1u64;}
+{{
+  val number:u64 <- 2u64;
+  increment(number);
+  behave @print(number);
+  owned region arena:Pool <- make Pool(capacity=512u64) {id <- 7u64};
+  ref cell = deref(alloc arena Cell(9u64));
+  edit(cell);
+  edit_root(cell);
+  behave @print(cell.value);
+  behave @print(root(arena).id);
+}};

@@ -1,0 +1,4 @@
+symbol @source:u64;
+effect @source <- 5u64;
+proc @work(target:u64)->const u64 {return @source + target;}
+export @work;

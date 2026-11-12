@@ -1,0 +1,5 @@
+symbol @target:u64;
+effect @target <- 7u64;
+symbol @mapped:proc(u64)->const u64;
+mixin "symbol-lookup-source.cod" @work as @mapped with {@target as @source;};
+behave @mapped(1u64);

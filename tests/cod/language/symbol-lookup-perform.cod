@@ -1,0 +1,3 @@
+proc @task()->void {}
+proc run(task:u64)->void {perform @task();}
+run(1u64);

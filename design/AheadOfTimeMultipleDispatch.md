@@ -1,6 +1,6 @@
 # Ahead-of-Time Multiple Dispatch
 
-Design revision: 3 · Recorded: 2026-11-12 · Status: behavioral contract, value path and initialization-cancellation boundary confirmed; detailed mechanisms pending-human.
+Design revision: 5 · Recorded: 2026-11-12 · Status: behavioral contract, value path and initialization-cancellation boundary confirmed; detailed mechanisms pending-human.
 
 **Prepare as much as makes sense, ahead of time.**
 
@@ -8,10 +8,14 @@ CoD callable values preserve a selected method family and its module interpretat
 
 ## Design authority
 
-- **Registry / scope:** [D-21](DesignAuthorityRegistry.md#d-21), revision3. H-372–H-377 records the stage, symbol, publication, dispatch, AOT and vision decisions. [H-378](DesignAuthorityRegistry.md#h-378) qualifies revision1's behavioral contract and P-333/P-334/P-337 value path, retained under K-535/[K-536](DesignAuthorityRegistry.md#k-536). H-379/H-380 adds the entry-installation rule and confirms initialization-only cancellation with operand evaluation preserved. Concrete type-evidence/ABI, namespace, coverage algorithms, uncovered diagnostics and entry-composition mechanisms remain pending-human; the qualification does not cover those mechanisms.
+- **Implicit owner bindings:** [H-382](DesignAuthorityRegistry.md#h-382)/[K-538](DesignAuthorityRegistry.md#k-538), D-21r5, confirms P-343: every inferred owner is a const lexical binding in the callable body, including generic region-or-scope owners. C-65's provenance/root-capability distinction and H-366's binding/target constness remain; H-381's nearest lookup includes these names. This preserves semantic identity, explicit permissions and lifetime under charter §§2–3/§4.3/§5/§6/§8 without requiring a runtime owner object. Acceptance covers shadowing, immutable binding, permitted target writes and absence of implicit region capability. Broader first-class owner storage, actual-owner union and native dispatch representation remain outside this clarification.
+
+- **Nearest symbol lookup and execution separation:** [H-381](DesignAuthorityRegistry.md#h-381)/[K-537](DesignAuthorityRegistry.md#k-537), D-21r4, records P-342: @ access follows the nearest lexical binding and rejects a non-symbol binding. Captured/current execution, cached identities and delayed bodies preserve that lookup. H-248/H-249/H-372 separates semantic ModuleWorld records from ModuleExecution values/progress; source behavior remains governed by the existing contracts. This continues explicit names/context under charter §§2–3/§5.2/§6/§8/§12 and the H-378 value path. Acceptance covers shadowing, capture/mixin lookup and preserved native ownership/context; full family/stage migration and physical dispatch mechanisms remain outstanding.
+
+- **Registry / scope:** [D-21](DesignAuthorityRegistry.md#d-21), revision5. H-372–H-377 records the stage, symbol, publication, dispatch, AOT and vision decisions. [H-378](DesignAuthorityRegistry.md#h-378) qualifies revision1's behavioral contract and P-333/P-334/P-337 value path, retained under K-535/K-536/[K-537](DesignAuthorityRegistry.md#k-537)/[K-538](DesignAuthorityRegistry.md#k-538). H-379/H-380 adds the entry-installation rule and confirms initialization-only cancellation with operand evaluation preserved. Concrete type-evidence/ABI, namespace, coverage algorithms, uncovered diagnostics and entry-composition mechanisms remain pending-human; the qualification does not cover those mechanisms.
 - **Confirmed value lineage:** C-82/P-333 → C-01 preserves abstract business operations and their selected interpretations independently of optimization. C-83/P-334 → C-02 prepares native execution for the admissible type combinations without compilation during covered calls. D-21/P-337 organizes those responsibilities before implementation. H-378 explicitly confirms this scoped path under charter §§2–3/§5.2/§6/§8/§12.
 - **Confirmed constraints:** P-330–P-332/P-335/P-336 separate module construction from explicit TLS installation, preserve symbol identity and whole-family publication, require actual-type dispatch, and specify WPO/AOT coverage. P-339–P-341 govern entry installation and initialization-only cancellation while preserving operands. C-35/C-36/C-37/C-57/C-59/C-60 and H-230 retain aliases, call modes, permissions, context and source isolation. P-338 depends on D-10/D-14/D-15/D-18; dependency does not confer authority. D-16 remains a compatibility constraint.
-- **Human baseline:** current project user, side chat [01a1cfc8-0910-7ce2-8e67-a0a037e31c95](codex://threads/01a1cfc8-0910-7ce2-8e67-a0a037e31c95) and active mainline [01a1cefe-fe25-7251-b25b-b3908d803ff6](codex://threads/01a1cefe-fe25-7251-b25b-b3908d803ff6), recorded 2026-11-12 America/Los_Angeles; exact message timestamps and personal identity unavailable. H-372–H-380 preserves the behavioral decisions, revision1 value-path confirmation and entry-installation/cancellation rules. External review revision10 and vision revision3 retain provenance only.
+- **Human baseline:** current project user, side chat [01a1cfc8-0910-7ce2-8e67-a0a037e31c95](codex://threads/01a1cfc8-0910-7ce2-8e67-a0a037e31c95) and active mainline [01a1cefe-fe25-7251-b25b-b3908d803ff6](codex://threads/01a1cefe-fe25-7251-b25b-b3908d803ff6), recorded 2026-11-12 America/Los_Angeles; exact message timestamps and personal identity unavailable. H-372–H-381 preserves the behavioral decisions, revision1 value-path confirmation and entry-installation/cancellation rules. External review revision10 and vision revision3 retain provenance only.
 - **Invariants / non-goals:** preserve selected family/context, module isolation, explicit effects, complete callable values, captures, owner/access/lifetime checks and zero-cost regional relocation. No JIT implementation, runtime method-table mutation, global aging world, general reflection API, object-header format, persistence ABI, owner union or fraction implementation is selected.
 - **Acceptance:** observable family dispatch through abstract arguments/results, equivalent specialized calls, complete coverage of the selected composition, context/capture preservation, exact cleanup and measured compilation/code growth. These are required outcomes; implementation acceptance remains outstanding.
 
@@ -91,6 +95,30 @@ The intended benefits are predictable code availability and inspectable dispatch
 
 JIT remains a future option if measured combination growth makes compilation or generated programs impractical. Assess sharing and pruning first. Any later JIT design must preserve family identity, interpretation and observable behavior; no threshold or automatic fallback is selected here.
 
+## Compiler construction and execution boundaries
+
+The implementation must keep semantic records independent of initialized values. `ModuleWorld` owns symbol/type/callable identities, aliases, selected methods, conformance, permissions and publication. `ModuleExecution` owns values produced while compiling initialization, their capture/storage provenance and once-only progress. These are compiler records, not additional runtime world objects or a persistent ABI.
+
+The source audit identifies the remaining coupling: symbolic selection currently obtains a procedure from dependency initialization results, `proc @p` implicitly installs it, and lexical callable-value lookup requires one method. Moving initialization values out of `ModuleWorld` makes that coupling explicit; it does not implement family construction or new installation syntax by itself.
+
+The required implementation sequence is:
+
+1. Scan/load the composition and register identities and declarations without executing user effects.
+2. Construct each receiver's semantic information from exported source identities, selections, extensions and mixin body maps. This must use methods/declarations, not a dependency's initialized TLS value. Whole-family publication and H-230/H-232 contexts constrain construction.
+3. Compile initialization once in H-140 encounter order. Construct runtime values at their specified events; preserve operand effects and omit only the H-380 canceled writes. Check demanded binding availability without moving a later entry effect ahead of dependency effects.
+4. Close demanded callable/type alternatives and emit their native entries/dispatch. Runtime recursion selects compiled code; it must not cause unbounded frontend source expansion. Keep complete environments and actual owners through preparation, invocation, results and cleanup.
+5. Present correct roots/linkage to LLVM and validate observable behavior plus final-image reachability and measured growth.
+
+Steps2–4 still need the concrete family/view compatibility, composition/closure and abstract-evidence mechanisms identified in DD-AOT-02/03/05/07. This sequence is an implementation dependency plan; it does not qualify those unresolved mechanisms.
+
+### Nearest binding for symbolic access
+
+H-382 includes inferred owner names: `where {owner o}` introduces a const lexical binding even without region-specific access. It shadows an outer symbol `o`, so `@o` rejects. Binding immutability neither freezes target contents nor grants a region capability; see [owner bindings](RegionalOwnership.md#region-owners-with-root-policy-access).
+
+Bare `p` and symbolic `@p` use the same nearest lexical binding. A parameter/local named `p` that is not a symbol object makes `@p` ill-typed; `@` does not skip it to find an outer module symbol. This also applies to effect destinations, touch, perform/behave and type inspection. A cached symbol identity is not permission to bypass lookup. Capture selection must preserve the lexical meaning even when the shadowing value would otherwise be omitted from the environment.
+
+The callable uses its definition's lexical bindings. A caller-local `p` does not change a separately defined callee's `@p`. Declaration initializers retain their existing before-introduction lookup, and leaving an explicit scope restores the outer name. H-381 settles this shadowing rule; same-scope module-category collision policy, broader symbol-value contexts and the runtime symbol ABI remain separate work.
+
 ## Delivery sequence and acceptance
 
 The backlog belongs to the active mainline. The confirmed behavior is not reopened by the remaining mechanism work. A pending item is not an imposed language restriction.
@@ -118,3 +146,5 @@ Acceptance scenarios must cover:
 6. Entry extension without explicit installation rejects. A valid entry installation omits the applicable dependency initialization TLS writes, preserves operand effects/failures and leaves procedure-local installations active. Final-image inspection demonstrates removal of genuinely unused code, while explicitly retained source-world views and code needed by preserved operand effects still work. Conditional coverage follows the specified entry-composition mechanism.
 
 Measure compiler wall time and peak memory, admitted combinations, unique emitted bodies, dispatcher and executable size, startup/first-call latency and steady-state throughput. Vary arity, leaf counts, sparse/dense method coverage, module-view count and generic instantiations. A Julia comparison must include a representative precompiled image and distinguish first-call from warmed execution on the same workload and target. No benchmark result is implied by this document.
+
+Nearest-binding acceptance additionally covers non-symbol parameters/locals across reads, writes, touch, direct/deferred symbolic invocation, type queries and mixin mappings; caller-local shadowing must not reinterpret a callee definition.

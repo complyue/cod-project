@@ -9,16 +9,16 @@ function reversed(a:func()->const u64 in O,b:func()->const u64 in O,second:bool)
  -> (func()->const u64) in O where {owner O} { return if(second){a}else{b} }
 func a = one;
 func b = two;
-func choose = select;
-ptr selected = choose(a,b,true);
+func choose_view = select;
+ptr selected = choose_view(a,b,true);
 behave @print(selected());
 selected <- three;
 behave @print(a());
 behave @print(b());
 b <- one;
 behave @print(selected());
-choose <- reversed;
-ptr other = choose(a,b,true);
+choose_view <- reversed;
+ptr other = choose_view(a,b,true);
 other <- two;
 behave @print(a());
 behave @print(b());

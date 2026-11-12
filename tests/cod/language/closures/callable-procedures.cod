@@ -30,16 +30,16 @@ behave @print(@bias);
 
 # Context adapters must retain the parent frame of a nested dynamic call.
 proc outer = proc(n:u64)->const u64 { return behave @middle(n) };
-proc middle = proc(n:u64)->const u64 { return behave @last(n) };
-proc last = proc(n:u64)->const u64 { return @bias + n };
-proc failing = proc()->const i64 throws NullPointerException {
+proc middle_value = proc(n:u64)->const u64 { return behave @last(n) };
+proc last_value = proc(n:u64)->const u64 { return @bias + n };
+proc failing_value = proc()->const i64 throws NullPointerException {
   effect @bias <- 100u64;
   ptr absent:i64 = null;
   return absent
 };
-{{ effect @middle = middle; effect @last = last; behave @print(outer(2u64)); }};
+{{ effect @middle = middle_value; effect @last = last_value; behave @print(outer(2u64)); }};
 try {{
-  effect @failing = failing;
+  effect @failing = failing_value;
   perform @failing();
   {}
 }} catch (e:const NullPointerException) {{ behave @print(@bias); }};

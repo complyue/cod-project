@@ -1,0 +1,2 @@
+function replace(value:u64 in O)->void where {owner O} {O = value;}
+{{ val number:u64 <- 2u64; replace(number); }};

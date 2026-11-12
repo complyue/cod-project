@@ -32,14 +32,14 @@ symbol @recur:proc(u64)->const u64;
 proc reader()->proc(u64)->const u64 { return proc(n:u64)->const u64 { return @bias } }
 proc left = { effect @bias <- 10u64; reader() };
 proc right = { effect @bias <- 20u64; reader() };
-proc recur = proc(n:u64)->const u64 {
+proc recursive_value = proc(n:u64)->const u64 {
   proc selected = if (n % 2u64 == 0u64) { left } else { right };
   effect @read = selected;
   return if (n == 0u64) { perform @read(0u64) }
   else { behave @recur(n - 1u64) + perform @read(0u64) }
 };
-effect @recur = recur;
-behave @print(recur(2u64));
+effect @recur = recursive_value;
+behave @print(recursive_value(2u64));
 
 # Captured procedure images can form a runtime-growing chain.
 symbol @previous:proc(u64)->const u64;
@@ -57,10 +57,10 @@ symbol @checked:proc()->const i64 throws NullPointerException;
 symbol @attempt:proc()->const i64 throws NullPointerException;
 proc fails = proc()->const i64 throws NullPointerException { ptr absent:i64 = null; return absent };
 effect @checked = fails;
-proc attempt = proc()->const i64 throws NullPointerException { return perform @checked() };
+proc attempt_value = proc()->const i64 throws NullPointerException { return perform @checked() };
 proc succeeds = proc()->const i64 { return 42 };
 effect @checked = succeeds;
-effect @attempt = attempt;
+effect @attempt = attempt_value;
 try { perform @attempt(); {} }
 catch (e:const NullPointerException) {
   try { behave @print(behave @checked()); {} }

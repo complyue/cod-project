@@ -1,0 +1,4 @@
+symbol @gain:u64;
+effect @gain <- 7u64;
+proc run(gain:u64)->const u64 {return @gain;}
+run(1u64);

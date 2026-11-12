@@ -1,8 +1,12 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 129 · Recorded: 2026-11-12 · Phase: language/application co-design.
+Design revision: 131 · Recorded: 2026-11-12 · Phase: language/application co-design.
 
 ## Design authority
+
+- **Implicit owner bindings:** [H-382](DesignAuthorityRegistry.md#h-382)/[K-538](DesignAuthorityRegistry.md#k-538), D-10r131, confirms P-343: every inferred owner is a const lexical binding in the callable body, including generic region-or-scope owners. C-65's provenance/root-capability distinction and H-366's binding/target constness remain; H-381's nearest lookup includes these names. This preserves semantic identity, explicit permissions and lifetime under charter §§2–3/§4.3/§5/§6/§8 without requiring a runtime owner object. Acceptance covers shadowing, immutable binding, permitted target writes and absence of implicit region capability. Broader first-class owner storage, actual-owner union and native dispatch representation remain outside this clarification.
+
+- **Nearest symbol lookup and execution separation:** [H-381](DesignAuthorityRegistry.md#h-381)/[K-537](DesignAuthorityRegistry.md#k-537), D-10r130, records P-342: @ access follows the nearest lexical binding and rejects a non-symbol binding. Captured/current execution, cached identities and delayed bodies preserve that lookup. H-248/H-249/H-372 separates semantic ModuleWorld records from ModuleExecution values/progress; source behavior remains governed by the existing contracts. This continues explicit names/context under charter §§2–3/§5.2/§6/§8/§12 and the H-378 value path. Acceptance covers shadowing, capture/mixin lookup and preserved native ownership/context; full family/stage migration and physical dispatch mechanisms remain outstanding.
 
 - **Initialization cancellation:** [H-380](DesignAuthorityRegistry.md#h-380)/[K-536](DesignAuthorityRegistry.md#k-536), D-10r129, confirms P-339–P-341: omit the affected dependency initialization TLS writes, preserve operand evaluation/effects/failures and procedure-local installations. The H-378 value path and existing owner/cleanup constraints continue under charter §§2–3/§5.2/§6.3/§8/§12. Acceptance distinguishes those observations and final-image removal of genuinely unused code; identity/conditional-coverage and detailed native mechanisms remain design work.
 
@@ -446,6 +450,10 @@ H-185 specifies the call forms: `p(...)` resolves a lexical procedure; `perform 
 | `behave @p(...)` | Procedure value currently bound to the symbol | Use current dynamic values. |
 
 ### Lexical calls and shadowing
+
+H-382 includes inferred owner names: `where {owner o}` introduces a const lexical binding even without region-specific access. It shadows an outer symbol `o`, so `@o` rejects. Binding immutability neither freezes target contents nor grants a region capability; see [owner bindings](RegionalOwnership.md#region-owners-with-root-policy-access).
+
+H-381 also applies nearest-binding lookup to symbolic access. If a parameter/local p shadows the module symbol object p, @p rejects because that nearest binding is not a symbol. Reads, effect destinations, touch, perform/behave, deferred uses and typeof inspection follow the same rule. Cached identities and capture pruning cannot bypass it. A separately defined callable still uses its own lexical context, not its caller's local p. Same-scope module-category collisions and general symbol-value storage remain outside this bounded rule.
 
 H-257 requires ordinary call syntax to respect the nearest lexical value binding. A procedure parameter or local procedure value supplies the callee; a same-spelled module callable does not bypass it. A non-callable local value makes the call ill-typed. Direct calls retain H-189's current dynamic bindings. Symbol-only `perform`/`behave` and the function/procedure effect boundary are unchanged.
 

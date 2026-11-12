@@ -16,14 +16,14 @@ proc @missing(ptr node:Node in O) -> const bool where {owner O} {return isnull(n
 owned region packet:Node <- make Node(capacity=128u64){value<-42; next=null};
 ref node=root(packet);
 ptr found=find(node,true);
-ptr missing=find(node,false);
-behave @print(empty(missing));
+ptr missing_value=find(node,false);
+behave @print(empty(missing_value));
 behave @print(isnull(absent(node)));
-behave @print(behave @missing(missing));
-behave @print(perform @missing(missing));
-ptr forwarded=forward(missing);
+behave @print(behave @missing(missing_value));
+behave @print(perform @missing(missing_value));
+ptr forwarded=forward(missing_value);
 behave @print(isnull(forwarded));
-try {behave @print(value(found)); value(missing)}
+try {behave @print(value(found)); value(missing_value)}
 catch(e:const NullPointerException){behave @print(7); 0};
 val number<-9;
 ptr number_view:i64=null;

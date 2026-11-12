@@ -2789,5 +2789,123 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "symbol-lookup-read.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+  },
+  {
+    "file": "symbol-lookup-effect.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+  },
+  {
+    "file": "symbol-lookup-touch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+  },
+  {
+    "file": "symbol-lookup-perform.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @task resolves to non-symbol lexical binding 'task'"
+  },
+  {
+    "file": "symbol-lookup-behave.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @task resolves to non-symbol lexical binding 'task'"
+  },
+  {
+    "file": "symbol-lookup-defer.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @task resolves to non-symbol lexical binding 'task'"
+  },
+  {
+    "file": "symbol-lookup-inline-effect.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @task resolves to non-symbol lexical binding 'task'"
+  },
+  {
+    "file": "symbol-lookup-query.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+  },
+  {
+    "file": "symbol-lookup-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+  },
+  {
+    "file": "symbol-lookup-loop.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+  },
+  {
+    "file": "symbol-lookup-mixin.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @target resolves to non-symbol lexical binding 'target'"
+  },
+  {
+    "file": "symbol-lookup.cod",
+    "exit": 0,
+    "stdout": "10\n7\n7\n7\n99\n7\n"
+  },
+  {
+    "file": "symbol-lookup-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @O resolves to non-symbol lexical binding 'O'"
+  },
+  {
+    "file": "symbol-lookup-owner-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "symbol access @O resolves to non-symbol lexical binding 'O'"
+  },
+  {
+    "file": "owner-binding-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot rebind a const binding or alias"
+  },
+  {
+    "file": "owner-binding-region-access.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "region size requires a whole region"
+  },
+  {
+    "file": "owner-binding-type-query.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "generic owner binding carries provenance"
+  },
+  {
+    "file": "owner-binding-region-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot rebind a const binding or alias"
+  },
+  {
+    "file": "owner-binding-duplicate.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "duplicate lexical value 'O'"
+  },
+  {
+    "file": "owner-binding.cod",
+    "exit": 0,
+    "stdout": "3\n10\n8\n"
   }
 ]

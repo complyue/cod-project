@@ -1,0 +1,7 @@
+symbol @O:u64;
+effect @O <- 5u64;
+proc inspect(value:u64 in O)->const u64 where {owner O} {
+  proc nested = proc []()->const u64 {return @O;};
+  return nested();
+}
+{{ val number:u64 <- 2u64; inspect(number); }};

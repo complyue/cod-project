@@ -59,8 +59,8 @@ behave @print(populated(empty));
 symbol @keep:bool;
 effect @keep <- true;
 proc @lookup(ptr value:u64 in O)->ptr u64 in O where {owner O} { return if(@keep) {value} else {null} }
-proc lookup = @lookup;
-effect @lookup = lookup;
+proc lookup_value = @lookup;
+effect @lookup = lookup_value;
 effect @keep <- false;
 behave @print(isnull(perform @lookup(maybe)));
 behave @print(isnull(behave @lookup(maybe)));

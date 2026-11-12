@@ -1,0 +1,786 @@
+{
+  "recorded_utc": "2026-11-12T15:23:47.531726+00:00",
+  "scope": "H-381/H-382 nearest lexical symbol lookup, const inferred owner bindings and ModuleWorld/ModuleExecution separation; no family/stage migration acceptance.",
+  "compiler_sha256": "667a00afa496984a7a29c0bd8802d4dcda3e82d6bf41727395655c1e260c2ca3",
+  "build": {
+    "command": "cmake --build ./build",
+    "passed": true,
+    "notes": "Existing incremental runtime steps authorized; existing LLVM deprecated-this-capture and CMake policy warnings."
+  },
+  "language": {
+    "passed": 487,
+    "total": 487,
+    "source_count": 577,
+    "all_sources_match": true,
+    "source_manifest_sha256": "77d7498aab5c59172f7476e763185cccea7e5529279a2141992aab301910ff21"
+  },
+  "verification_runs": {
+    "full_language_passed": 487,
+    "final_fixture_recheck": [
+      "symbol-lookup.cod",
+      "frontend-only"
+    ],
+    "reason": "Removed one trailing blank line from symbol-lookup.cod; this was the only source hash change after the full run."
+  },
+  "new_cases": [
+    {
+      "fixture": "symbol-lookup-read.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    },
+    {
+      "fixture": "symbol-lookup-effect.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    },
+    {
+      "fixture": "symbol-lookup-touch.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    },
+    {
+      "fixture": "symbol-lookup-perform.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @task resolves to non-symbol lexical binding 'task'"
+    },
+    {
+      "fixture": "symbol-lookup-behave.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @task resolves to non-symbol lexical binding 'task'"
+    },
+    {
+      "fixture": "symbol-lookup-defer.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @task resolves to non-symbol lexical binding 'task'"
+    },
+    {
+      "fixture": "symbol-lookup-inline-effect.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @task resolves to non-symbol lexical binding 'task'"
+    },
+    {
+      "fixture": "symbol-lookup-query.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    },
+    {
+      "fixture": "symbol-lookup-capture.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    },
+    {
+      "fixture": "symbol-lookup-loop.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @gain resolves to non-symbol lexical binding 'gain'"
+    },
+    {
+      "fixture": "symbol-lookup-mixin.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @target resolves to non-symbol lexical binding 'target'"
+    },
+    {
+      "fixture": "symbol-lookup.cod",
+      "passed": true,
+      "exit": 0,
+      "stdout": "10\n7\n7\n7\n99\n7\n",
+      "expected_diagnostic": null
+    },
+    {
+      "fixture": "symbol-lookup-owner.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @O resolves to non-symbol lexical binding 'O'"
+    },
+    {
+      "fixture": "symbol-lookup-owner-capture.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "symbol access @O resolves to non-symbol lexical binding 'O'"
+    },
+    {
+      "fixture": "owner-binding-rebind.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "cannot rebind a const binding or alias"
+    },
+    {
+      "fixture": "owner-binding-region-access.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "region size requires a whole region"
+    },
+    {
+      "fixture": "owner-binding-type-query.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "generic owner binding carries provenance"
+    },
+    {
+      "fixture": "owner-binding-region-rebind.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "cannot rebind a const binding or alias"
+    },
+    {
+      "fixture": "owner-binding-duplicate.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "duplicate lexical value 'O'"
+    },
+    {
+      "fixture": "owner-binding.cod",
+      "passed": true,
+      "exit": 0,
+      "stdout": "3\n10\n8\n",
+      "expected_diagnostic": null
+    }
+  ],
+  "source_sha256": {
+    "cod/lang_frontend.hh": "bbd684a18a21b92807e4d11981b8a200e1e60b5ac27a89314099f41572dd27f0",
+    "tests/cod/language/callable_runtime_tests.py": "0b09644784d1099ccd2ccc943bd8749faaf65b285bb82787a61db526f1116e4c",
+    "tests/cod/language/closures/callable-captures.cod": "5f4c80889db84d1033e2315e66f87106db2b8646c424391bba1792507118a3c7",
+    "tests/cod/language/closures/callable-factories.cod": "d99c30bf29a532ee67de0dc0cf320ca67e34a66f96e3f20095505bd90a493f14",
+    "tests/cod/language/closures/callable-holder-results.cod": "6f2faed0c51d82ce554acba8c2d8e3740b63373a007e1552a4bbf7c31fdd1b84",
+    "tests/cod/language/closures/callable-nullable-views.cod": "44e80d89bd6d26626811685cd3cef6fc2281360aef09cd0015b57cffea5a3854",
+    "tests/cod/language/closures/callable-procedures.cod": "9e67cf41fcf59c804441e691347c652d30361940557f9f67bb922b0745aa5a17",
+    "tests/cod/language/nullable-calls.cod": "7aa29c7751149a6a6c85d97b8ee73a44878372c21fc0a1bf531f1f9c4f6df7da",
+    "tests/cod/language/owner-binding-duplicate.cod": "0bc4165f47ad902d3b7e9d75648d568192b96890fce77b849c15727b9061b75e",
+    "tests/cod/language/owner-binding-rebind.cod": "b00b156073bb98b193cc91b49813da5cff2d3b3ad665be50a02788b4f6fc9ec5",
+    "tests/cod/language/owner-binding-region-access.cod": "297edec7f5dc0fdf28d3b4dc79eb81945a147485363024bf33201820f56cf278",
+    "tests/cod/language/owner-binding-region-rebind.cod": "fc8332a2d83acbe7824f9e973c3d5481171c4f6f9fa8683704011fe13cc5817f",
+    "tests/cod/language/owner-binding-type-query.cod": "adac0f38efd54ba674e2509c05ebd5fd1a1df98c3120e0ef8a1651b8e0258439",
+    "tests/cod/language/owner-binding.cod": "2fc4e8fe76fde078ce955cb576b3002e87c18f22355ca28520ae460777660bf5",
+    "tests/cod/language/region-gather.cod": "ae7145e1870cf0e175c10823a402609257cbeea4be8d0bde9f459ab59127d347",
+    "tests/cod/language/symbol-lookup-behave.cod": "52f831b0a105f0145500850d07749b966a9b6abcb4af597db64a1b93d277c251",
+    "tests/cod/language/symbol-lookup-capture.cod": "4b981333872abfbcfbe705798c3e5b345d7fbda60a37dedd304d47d7f1f70da8",
+    "tests/cod/language/symbol-lookup-defer.cod": "b5ffac556be22ed61fed6c22fc700e5d3f55560a873f01669d8e006aa21e1002",
+    "tests/cod/language/symbol-lookup-effect.cod": "933c76a52d8d70edda4eecaca8c48f60fef05cf031d8fa8d78c4179ca6801b12",
+    "tests/cod/language/symbol-lookup-inline-effect.cod": "690d60d1140d4e456bc5cb700a6b777e6614407b195f51ed5ad02223563649d5",
+    "tests/cod/language/symbol-lookup-loop.cod": "187dc3b2a713b9168904719df1bd5a23b9998bfc33ed08a3dab94285b8671eb3",
+    "tests/cod/language/symbol-lookup-mixin.cod": "52f311107e8bfce3e2ac4dd26c647c017c1f24241249595a6c458039aaffefeb",
+    "tests/cod/language/symbol-lookup-owner-capture.cod": "fa6b1b4b5d1efac7ea80c305d90e53fa0824f4d867760992886262b0a8b33ed6",
+    "tests/cod/language/symbol-lookup-owner.cod": "75238d0c28ec931c3cddd2e524ee5a882743348f85342fa9d7e3835ec3c967fb",
+    "tests/cod/language/symbol-lookup-perform.cod": "11f25c53db1e643ef1a504d6b1860eef25d24206c24ba734714be31a2b8fbc3b",
+    "tests/cod/language/symbol-lookup-query.cod": "a2ec8b2215cd49363e75205afd535a2140141793a80c90a084139ced47215869",
+    "tests/cod/language/symbol-lookup-read.cod": "8c1fb0c6b82235db66733724da12ca2d1a122ecfc97fef4cc867559b0cd73d7e",
+    "tests/cod/language/symbol-lookup-source.cod": "1f7d6870a3afc643395f62315ac59aafc275e521846e0a12846603577370a297",
+    "tests/cod/language/symbol-lookup-touch.cod": "988ef6cb7b3c07bd9611bda89922e17bae2dee4309197b60ce6a9fb3ec2917f0",
+    "tests/cod/language/symbol-lookup.cod": "72d1084e5cad2727494166ab4cd172beace2fba7a6bd9beb252eae7fd630386f"
+  },
+  "cases_sha256": "9289bd7569ccb902e123e4a6858687604390a8480802a90b06a38157684d6179",
+  "native_callable": {
+    "passed": true,
+    "case_count": 30,
+    "script_sha256": "0b09644784d1099ccd2ccc943bd8749faaf65b285bb82787a61db526f1116e4c",
+    "baseline_compiler_sha256": "581b6decc795a6e293e73734c7b250c6da77ecc742028fed99fa07009397c98a",
+    "all_accounting_unchanged": true,
+    "all_llvm_ir_and_bitcode_sizes_unchanged": true,
+    "cases": {
+      "base": {
+        "layout": {
+          "allocations": 802,
+          "releases": 802,
+          "peak_image_bytes": 33024,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 1,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 220007,
+        "bitcode_bytes": 44204,
+        "frontend_seconds": 0.029239266004879028,
+        "native_compile_link_seconds": 1.9489712190115824,
+        "native_process_seconds": 0.012258164992090315,
+        "fixture_sha256": "acf75c1a4bc6608dd0ca2f08ccdd6e34fa6fdda1b954e63e7151653818f44e30"
+      },
+      "parameters": {
+        "layout": {
+          "allocations": 21,
+          "releases": 21,
+          "peak_image_bytes": 112,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 193344,
+        "bitcode_bytes": 36452,
+        "frontend_seconds": 0.026186614006292075,
+        "native_compile_link_seconds": 1.8755150900105946,
+        "native_process_seconds": 0.0013117740163579583,
+        "fixture_sha256": "2e822ebcfefc7eb1cf51d83c6eb2cccb2df58b092b64b091145996379a4e733f"
+      },
+      "arguments": {
+        "layout": {
+          "allocations": 27,
+          "releases": 27,
+          "peak_image_bytes": 400,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 174806,
+        "bitcode_bytes": 34252,
+        "frontend_seconds": 0.02325547399232164,
+        "native_compile_link_seconds": 2.007508649956435,
+        "native_process_seconds": 0.0018740189843811095,
+        "fixture_sha256": "e4dd6199595a919c3f8c8b88b94e0d0eabdcf718dcd5acce2cadd36b46c49f97"
+      },
+      "procedures": {
+        "layout": {
+          "allocations": 55,
+          "releases": 55,
+          "peak_image_bytes": 504,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 1,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 428252,
+        "bitcode_bytes": 78024,
+        "frontend_seconds": 0.036194768035784364,
+        "native_compile_link_seconds": 1.9312333730049431,
+        "native_process_seconds": 0.0017152790096588433,
+        "fixture_sha256": "9e67cf41fcf59c804441e691347c652d30361940557f9f67bb922b0745aa5a17"
+      },
+      "captures": {
+        "layout": {
+          "allocations": 310,
+          "releases": 310,
+          "peak_image_bytes": 4104,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 1,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 338617,
+        "bitcode_bytes": 56696,
+        "frontend_seconds": 0.02988674200605601,
+        "native_compile_link_seconds": 0.7291393410414457,
+        "native_process_seconds": 0.001460946979932487,
+        "fixture_sha256": "5f4c80889db84d1033e2315e66f87106db2b8646c424391bba1792507118a3c7"
+      },
+      "invocation": {
+        "layout": {
+          "allocations": 283,
+          "releases": 283,
+          "peak_image_bytes": 448,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 160366,
+        "bitcode_bytes": 31100,
+        "frontend_seconds": 0.026553198986221105,
+        "native_compile_link_seconds": 0.7332367309718393,
+        "native_process_seconds": 0.0012519709998741746,
+        "fixture_sha256": "5de7ec6a61749cacb43c3be902b419bce65d2699278102d7a997d0e3ebc286fa"
+      },
+      "expression_targets": {
+        "layout": {
+          "allocations": 148,
+          "releases": 148,
+          "peak_image_bytes": 392,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 189930,
+        "bitcode_bytes": 39068,
+        "frontend_seconds": 0.024157040985301137,
+        "native_compile_link_seconds": 1.920407387020532,
+        "native_process_seconds": 0.0013427939848043025,
+        "fixture_sha256": "aaf196310c9808832addf0ac5e452a45fbe99e0796171dd10e969a436db58100"
+      },
+      "short_circuit": {
+        "layout": {
+          "allocations": 18,
+          "releases": 18,
+          "peak_image_bytes": 40,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 1,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 117769,
+        "bitcode_bytes": 26000,
+        "frontend_seconds": 0.02662024594610557,
+        "native_compile_link_seconds": 1.9037064769654535,
+        "native_process_seconds": 0.0013100110227242112,
+        "fixture_sha256": "ca6416f05425d979d2f484bfe6d7bdab5e0c466e8ba32650696b0c11b330bc4c"
+      },
+      "recursive_arguments": {
+        "layout": {
+          "allocations": 470,
+          "releases": 470,
+          "peak_image_bytes": 7240,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 1,
+          "recursive_create_failures": 1,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 642715,
+        "bitcode_bytes": 109360,
+        "frontend_seconds": 0.04482872999506071,
+        "native_compile_link_seconds": 2.0226460740086623,
+        "native_process_seconds": 0.0013560079969465733,
+        "fixture_sha256": "f04f820c51651ba63286fe92a44a8690b1141833d3a490cf8f7913bd2ca686ce"
+      },
+      "effects": {
+        "layout": {
+          "allocations": 42,
+          "releases": 42,
+          "peak_image_bytes": 672,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 176483,
+        "bitcode_bytes": 34168,
+        "frontend_seconds": 0.021315479010809213,
+        "native_compile_link_seconds": 0.7208645580103621,
+        "native_process_seconds": 0.0012684829998761415,
+        "fixture_sha256": "0435cbd429539a657d1c6c3fecfd83e63beb3181449ec049b48c7e05ddc1823e"
+      },
+      "regional_captures": {
+        "layout": {
+          "allocations": 12,
+          "releases": 12,
+          "peak_image_bytes": 600,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 206586,
+        "bitcode_bytes": 38332,
+        "frontend_seconds": 0.02468728501116857,
+        "native_compile_link_seconds": 1.894485472002998,
+        "native_process_seconds": 0.0012389459880068898,
+        "fixture_sha256": "3a682c224e64a0ddf2e00c042c94267c207769ecf726498659992612f488b97d"
+      },
+      "recursive_factories": {
+        "layout": {
+          "allocations": 56,
+          "releases": 56,
+          "peak_image_bytes": 1544,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 1,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 1,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 267496,
+        "bitcode_bytes": 47632,
+        "frontend_seconds": 0.035014824010431767,
+        "native_compile_link_seconds": 1.913844603986945,
+        "native_process_seconds": 0.002249019977170974,
+        "fixture_sha256": "d99c30bf29a532ee67de0dc0cf320ca67e34a66f96e3f20095505bd90a493f14"
+      },
+      "lexical_factory": {
+        "layout": {
+          "allocations": 13,
+          "releases": 13,
+          "peak_image_bytes": 312,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 1,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 86005,
+        "bitcode_bytes": 16860,
+        "frontend_seconds": 0.0181158899795264,
+        "native_compile_link_seconds": 0.6991918529965915,
+        "native_process_seconds": 0.0013749340432696044,
+        "fixture_sha256": "fe15b7b668fb7e9db15a27bba3cf4f02f5440b77a1df715cb47b6d0beb3d8cf3"
+      },
+      "higher_order": {
+        "layout": {
+          "allocations": 55,
+          "releases": 55,
+          "peak_image_bytes": 408,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 1,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 387308,
+        "bitcode_bytes": 70592,
+        "frontend_seconds": 0.031022482027765363,
+        "native_compile_link_seconds": 1.9765887720277533,
+        "native_process_seconds": 0.0012540349853225052,
+        "fixture_sha256": "bb8e4f1ba932a7e856b19cc8bcd69f29c88c6bcbde16353ceefccba96be381ac"
+      },
+      "generic": {
+        "layout": {
+          "allocations": 43,
+          "releases": 43,
+          "peak_image_bytes": 240,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 1,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 357817,
+        "bitcode_bytes": 64632,
+        "frontend_seconds": 0.037876332993619144,
+        "native_compile_link_seconds": 0.7296159919933416,
+        "native_process_seconds": 0.0013316019903868437,
+        "fixture_sha256": "96549b4661ec063269114c7aaa106806329044dfbc933670511718ba8f1394fa"
+      },
+      "regional_parameters": {
+        "layout": {
+          "allocations": 12,
+          "releases": 12,
+          "peak_image_bytes": 136,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 250641,
+        "bitcode_bytes": 50808,
+        "frontend_seconds": 0.026089991035405546,
+        "native_compile_link_seconds": 1.9343950119800866,
+        "native_process_seconds": 0.001374754006974399,
+        "fixture_sha256": "69105694f2becee4045fcd67884141f83d040642829d445e919efedda66f8900"
+      },
+      "owner_parameters": {
+        "layout": {
+          "allocations": 12,
+          "releases": 12,
+          "peak_image_bytes": 176,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 240263,
+        "bitcode_bytes": 48748,
+        "frontend_seconds": 0.02708655799506232,
+        "native_compile_link_seconds": 1.891740447958,
+        "native_process_seconds": 0.0012809659820050001,
+        "fixture_sha256": "dab65dfe2614d2ea6e029635a60b843b598d3400408eb20ba023f3d07202f99f"
+      },
+      "borrowed_results": {
+        "layout": {
+          "allocations": 11,
+          "releases": 11,
+          "peak_image_bytes": 160,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 141964,
+        "bitcode_bytes": 29264,
+        "frontend_seconds": 0.0229041280108504,
+        "native_compile_link_seconds": 1.9091981209930964,
+        "native_process_seconds": 0.0013200390385463834,
+        "fixture_sha256": "ba70600c58d5330e9b8f60ad7091428b75d118b879e83774de9a572261873dd3"
+      },
+      "nullable_views": {
+        "layout": {
+          "allocations": 12,
+          "releases": 12,
+          "peak_image_bytes": 176,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 189548,
+        "bitcode_bytes": 37348,
+        "frontend_seconds": 0.026210267969872802,
+        "native_compile_link_seconds": 1.9599747430183925,
+        "native_process_seconds": 0.0013373619876801968,
+        "fixture_sha256": "44e80d89bd6d26626811685cd3cef6fc2281360aef09cd0015b57cffea5a3854"
+      },
+      "borrowed_holders": {
+        "layout": {
+          "allocations": 52,
+          "releases": 52,
+          "peak_image_bytes": 480,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 331747,
+        "bitcode_bytes": 62516,
+        "frontend_seconds": 0.028138070018030703,
+        "native_compile_link_seconds": 1.915604870999232,
+        "native_process_seconds": 0.001378901011776179,
+        "fixture_sha256": "6ce8df5d5adfc54a61461592ae51928e1ba9f29de6aabb631062a4e566e4db97"
+      },
+      "holder_results": {
+        "layout": {
+          "allocations": 24,
+          "releases": 24,
+          "peak_image_bytes": 288,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 302362,
+        "bitcode_bytes": 56812,
+        "frontend_seconds": 0.03269978001480922,
+        "native_compile_link_seconds": 2.02124269498745,
+        "native_process_seconds": 0.0019329310161992908,
+        "fixture_sha256": "6f2faed0c51d82ce554acba8c2d8e3740b63373a007e1552a4bbf7c31fdd1b84"
+      },
+      "owner_flows": {
+        "layout": {
+          "allocations": 21,
+          "releases": 21,
+          "peak_image_bytes": 96,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 72794,
+        "bitcode_bytes": 17952,
+        "frontend_seconds": 0.01860625797417015,
+        "native_compile_link_seconds": 1.855814264039509,
+        "native_process_seconds": 0.0013514800230041146,
+        "fixture_sha256": "767deb1bbb3059996ad58aac33ed83548de40ba167ff95e33432869db8f62303"
+      },
+      "owner_factories": {
+        "layout": {
+          "allocations": 23,
+          "releases": 23,
+          "peak_image_bytes": 312,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 1,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 319390,
+        "bitcode_bytes": 58736,
+        "frontend_seconds": 0.028991957020480186,
+        "native_compile_link_seconds": 1.9075912830303423,
+        "native_process_seconds": 0.0012759470264427364,
+        "fixture_sha256": "0da4f245579872ae33377120501013274284f149f8284b6bdf4da51e357627c9"
+      },
+      "array_results": {
+        "layout": {
+          "allocations": 8,
+          "releases": 8,
+          "peak_image_bytes": 104,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 172959,
+        "bitcode_bytes": 37212,
+        "frontend_seconds": 0.021603372995741665,
+        "native_compile_link_seconds": 1.8358029730152339,
+        "native_process_seconds": 0.0016025859513320029,
+        "fixture_sha256": "f60599c9d80965adb54651bdbcdd8d9add23baf0c376a1bd9aae665df1edcd6f"
+      },
+      "conversions": {
+        "layout": {
+          "allocations": 16,
+          "releases": 16,
+          "peak_image_bytes": 184,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 182175,
+        "bitcode_bytes": 34552,
+        "frontend_seconds": 0.024700199952349067,
+        "native_compile_link_seconds": 0.6726711130468175,
+        "native_process_seconds": 0.001896672009024769,
+        "fixture_sha256": "e8348efef6f9720b3d8060d0c032e9875d7830ef4b4e9b4be55bfbe6f66f2410"
+      },
+      "record_results": {
+        "layout": {
+          "allocations": 12,
+          "releases": 12,
+          "peak_image_bytes": 184,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 146739,
+        "bitcode_bytes": 30464,
+        "frontend_seconds": 0.021848438016604632,
+        "native_compile_link_seconds": 1.8701737159863114,
+        "native_process_seconds": 0.0013710169587284327,
+        "fixture_sha256": "c36ed64a24f0eb6b7877f4b68f5ed7b444b5ef2cfd32af788d888aad14a33d20"
+      },
+      "initialization": {
+        "layout": {
+          "allocations": 10,
+          "releases": 10,
+          "peak_image_bytes": 136,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 141680,
+        "bitcode_bytes": 28424,
+        "frontend_seconds": 0.02023591398028657,
+        "native_compile_link_seconds": 1.885026593983639,
+        "native_process_seconds": 0.0012885910109616816,
+        "fixture_sha256": "ab697e030980443068c2ced70b54afd87555a6f4bad8f96ea2354c0b77480dec"
+      },
+      "region_results": {
+        "layout": {
+          "allocations": 15,
+          "releases": 15,
+          "peak_image_bytes": 216,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 257418,
+        "bitcode_bytes": 49564,
+        "frontend_seconds": 0.02637440903345123,
+        "native_compile_link_seconds": 1.936978523968719,
+        "native_process_seconds": 0.0014376830076798797,
+        "fixture_sha256": "603084e58e1d7368a941b27e879c31b25d8870e83e66c6f06484494c6ddebfb1"
+      },
+      "owned_results": {
+        "layout": {
+          "allocations": 779,
+          "releases": 779,
+          "peak_image_bytes": 6848,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 2324849,
+        "bitcode_bytes": 382220,
+        "frontend_seconds": 0.17348295397823676,
+        "native_compile_link_seconds": 2.4452889150124975,
+        "native_process_seconds": 0.0020981939742341638,
+        "fixture_sha256": "0569edf0aa58268ca62b990a16aa8356c7f42a37556f5609655af078222c371d"
+      },
+      "qualifiers": {
+        "layout": {
+          "allocations": 4,
+          "releases": 4,
+          "peak_image_bytes": 160,
+          "allocation_failure_preserves_source": true,
+          "factory_failures": 0,
+          "recursive_copy_failures": 0,
+          "recursive_create_failures": 0,
+          "call_laps": 10000,
+          "call_allocations": 0
+        },
+        "llvm_ir_bytes": 64534,
+        "bitcode_bytes": 16992,
+        "frontend_seconds": 0.026424685027450323,
+        "native_compile_link_seconds": 1.8132729509961791,
+        "native_process_seconds": 0.0018813119968399405,
+        "fixture_sha256": "34d1ee8e14394fc9d3a95c57801fdaea17a822934270cd6fd6814de43ea357d5"
+      }
+    }
+  },
+  "limits": [
+    "No fresh sanitizer run; the compiler changes do not alter native region allocation/layout or callable storage ABI.",
+    "Full family dispatch, semantic construction/initialization migration, entry installation cancellation, abstract evidence/ABI and WPO closure remain incomplete.",
+    "General owner runtime values/storage and actual-owner unions are not selected by this checkpoint.",
+    "Deferred category/registration correlation, mutable backedges, owning/external borrowed arguments, generic transport and process-lifetime queues remain separate required work."
+  ]
+}

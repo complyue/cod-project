@@ -1,0 +1,4 @@
+symbol @gain:u64;
+effect @gain <- 7u64;
+proc run()->void {for(gain in 0u64 .. 1u64) {touch @gain;}}
+run();

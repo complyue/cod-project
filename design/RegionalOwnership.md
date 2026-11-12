@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 76 · Recorded: 2026-11-12 · Status: design draft with scoped confirmed requirements.
+Design revision: 77 · Recorded: 2026-11-12 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Implicit owner bindings:** [H-382](DesignAuthorityRegistry.md#h-382)/[K-538](DesignAuthorityRegistry.md#k-538), D-14r77, confirms P-343: every inferred owner is a const lexical binding in the callable body, including generic region-or-scope owners. C-65's provenance/root-capability distinction and H-366's binding/target constness remain; H-381's nearest lookup includes these names. This preserves semantic identity, explicit permissions and lifetime under charter §§2–3/§4.3/§5/§6/§8 without requiring a runtime owner object. Acceptance covers shadowing, immutable binding, permitted target writes and absence of implicit region capability. Broader first-class owner storage, actual-owner union and native dispatch representation remain outside this clarification.
 
 - **Callable-world and AOT scope:** [H-372–H-377](DesignAuthorityRegistry.md#h-372)/[K-534](DesignAuthorityRegistry.md#k-534), D-14r76, records runtime capture/materialization and typed installation while preserving actual-owner, access and lifetime requirements. C-65/C-35/C-36 and P-330/P-331/P-335/P-338 preserve explicit semantic construction, typed execution and inspectable business dispatch under charter §§2–3/§5.2/§6/§8/§12. [H-378](DesignAuthorityRegistry.md#h-378)/[K-535](DesignAuthorityRegistry.md#k-535) confirms [D-21](AheadOfTimeMultipleDispatch.md)'s P-333/P-334/P-337 value path for the stated behavioral scope. Detailed namespace, type-evidence/ABI, coverage and diagnostic mechanisms remain pending-human. H-379's entry-installation requirement is recorded separately; its operational cancellation boundary remains open. Existing qualified invariants continue only within their unchanged scopes. Acceptance requires the composed family/context, installation/capture and cleanup scenarios in D-21; current implementation evidence does not establish that new behavior. No root-charter change or whole-document qualification is inferred.
 
@@ -248,7 +250,7 @@ function choose(a:Node in O, b:Node in O, second:bool)
 
 For example, `a:Node in O` and `ptr a:Node in O` are equivalent parameters. Likewise, `second:bool` and `ptr second:bool` both target a callee-local copy. This applies to function and procedure signatures, including signature-only declarations. These forms are confirmed source syntax. The prototype accepts both regional and lexical storage for generic owner constraints.
 
-`in O` associates a parameter or borrowed result with an owner variable. `where {owner O}` introduces that variable alongside, but distinct from, type parameters. One O constrains all of its occurrences to one actual owner; distinct variables D and S do not assert inequality. A caller need not pass an owner-ID value: the compiler checks the arguments' tracked provenance. O is neither a type identity, a TLS symbol, nor a requirement for RTTI. The same source method can be specialized for different owner instances without erasing their distinction within a call.
+`in O` associates a parameter or borrowed result with an owner variable. `where {owner O}` introduces an implicit const lexical binding in the callable body, alongside but distinct from type parameters. The binding is inferred per invocation and cannot be rebound. It participates in ordinary nearest-name lookup: `@O` cannot bypass it to find an outer symbol. Binding constness does not freeze contents, add access or ownership rights, or extend a lifetime. A semantic owner binding need not have a runtime object or ABI representation. One O constrains all of its occurrences to one actual owner; distinct variables D and S do not assert inequality. A caller need not pass an owner-ID value: the compiler checks the arguments' tracked provenance. O is neither a type identity, a TLS symbol, nor a requirement for RTTI. The same source method can be specialized for different owner instances without erasing their distinction within a call.
 
 An annotation describes the referent's owner, not where the callee happens to store its pointer metadata. This permits deep forwarding and same-owner graph operations while preserving the original lifetime. Borrowed results must name an owner that survives the call; returning a view into default callee-local bits is invalid. A separate owner parameter can also represent an external lexical scope, so the mechanism is not limited to regions. A borrowed pointer's owner annotation never grants whole-region ownership or extraction rights.
 
@@ -258,8 +260,8 @@ H-274 distinguishes two signature requirements:
 
 | Owner declaration | Accepted owner | What the body receives |
 | --- | --- | --- |
-| `owner O` | Region or lexical scope, without a root-type constraint | Provenance/lifetime constraints; the declaration alone supplies no region reference or root-policy operations. |
-| Region-specific owner constrained by RootType | A region whose concrete root satisfies the selected type constraint | The same owner constraint plus a usable borrowed reference to that actual region, permitting authorized calls to its root's memory-management methods. |
+| `owner O` | Region or lexical scope, without a root-type constraint | An implicit const lexical binding carrying provenance/lifetime constraints; the declaration alone supplies no region reference or root-policy operations. |
+| Region-specific owner constrained by RootType | A region whose concrete root satisfies the selected type constraint | An implicit const lexical binding with the same owner constraint plus a usable borrowed reference to that actual region, permitting authorized calls to its root's memory-management methods. |
 
 H-275 confirms the region-specific declaration spelling:
 

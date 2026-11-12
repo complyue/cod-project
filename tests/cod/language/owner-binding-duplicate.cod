@@ -1,0 +1,2 @@
+function duplicate(value:u64 in O)->void where {owner O} {val O:u64 <- 0u64;}
+{{ val number:u64 <- 2u64; duplicate(number); }};

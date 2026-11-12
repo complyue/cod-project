@@ -120,6 +120,7 @@ struct Value {
   size_t callable_flow = 0; // Frozen value-flow node; zero has no runtime callable.
   std::shared_ptr<CaptureUse> capture_use = {}; // Compile-time demand for an enclosing dynamic capture.
   bool replayed = false; // Captured bits/procedure values are installed in the active TLS scope.
+  bool provenance_only = false; // Erased owner binding; its actual owner is in Locals::owner_anchors.
   bool borrowed_arguments = false; // An external-owner variadic pack selects target views.
   size_t result_type_origin = 0;
   std::vector<size_t> result_fact_origins = {}; // Compiler-only checked returns, not runtime tags.
@@ -160,6 +161,7 @@ struct Locals {
   std::map<std::string, Value> owners() const {
     auto result = owner_anchors;
     for (const auto &[name, value] : visible) {
+      if (value.provenance_only) continue;
       result.erase(name);
       if (value.type.kind == Type::region) result.emplace(name, value);
     }
@@ -237,7 +239,7 @@ struct GlobalIdentity {
 using PublishedIdentity = std::variant<size_t, Type, CallableIdentity, GlobalIdentity>;
 // Each module owns its selected semantic information. Declaration identities
 // can be shared with other worlds; the selection containers are never shared.
-// Native values here describe the demanded program, not a runtime world ABI.
+// These records describe semantic selection, not lowered execution values.
 struct ModuleWorld {
   std::map<std::string, size_t> symbols;
   std::map<std::string, Form *> symbol_aliases;
@@ -256,8 +258,13 @@ struct ModuleWorld {
   std::vector<Method> conversions;
   std::set<const Module *> unit_sources;
   std::set<size_t> selected_units;
-  std::map<MethodOrigin, Value> global_values;
   std::map<std::string, MethodOrigin> global_aliases;
+};
+// Values produced while compiling a module's once-only initialization. They
+// retain runtime storage/capture provenance independently of semantic identity.
+struct ModuleExecution {
+  enum class State { pending, compiling, complete } state = State::pending;
+  std::map<MethodOrigin, Value> global_values;
   std::map<const Form *, Value> procedures;
   std::map<size_t, Value> symbolic_resources;
 };
@@ -266,7 +273,7 @@ struct Module {
   std::vector<std::unique_ptr<Form>> forms;
   std::map<const Form *, Module *> dependencies;
   ModuleWorld world;
-  enum class State { registered, executing, complete } state = State::registered;
+  ModuleExecution execution;
   bool builtin = false;
 };
 struct Compilation {
@@ -1300,7 +1307,12 @@ class Compiler {
   void require_argument_reads(const Value &value) {
     for (const auto &read : value.argument_reads) require_initialization(read);
   }
+  static void require_runtime_value(const Value &value, const Location &at) {
+    if (value.provenance_only)
+      fail(at, "generic owner binding carries provenance, not an ordinary runtime value; region access requires a region-specific owner");
+  }
   Value read_value(Value value, const Location &at, bool argument = false) {
+    require_runtime_value(value, at);
     if (!argument) { require_argument_reads(value); value.argument_reads.clear(); }
     valid_view(value, at);
     if (value.result_type_origin && region_definition(value.type)) {
@@ -1977,6 +1989,14 @@ class Compiler {
     if (expr.symbol_id) return *expr.symbol_id;
     return symbol(module, expr.text, expr.at);
   }
+  static void require_symbol_name(const Expression &expr, bool lexical_binding) {
+    if (lexical_binding)
+      fail(expr.at, "symbol access @" + expr.text + " resolves to non-symbol lexical binding '" + expr.text + "'");
+  }
+  size_t expression_symbol(const Expression &expr, const Module &module, const Locals &locals) {
+    require_symbol_name(expr, locals.visible.contains(expr.text));
+    return expression_symbol(expr, module);
+  }
   static bool uses_symbol(Expression::Kind kind) {
     using K = Expression::Kind;
     return kind == K::symbol || kind == K::effect || kind == K::perform || kind == K::behave || kind == K::touch ||
@@ -2335,14 +2355,16 @@ class Compiler {
   struct LexicalReferences {
     std::map<std::string, Location> required;
     std::map<std::string, Value> owners;
-    std::set<std::string> bound;
+    using Names = std::set<std::string>;
+    Names bound;
+    std::vector<const Expression *> touches;
   };
   LexicalReferences lexical_references(const Expression &body, const Locals &outer, const Form *signature = nullptr) {
     LexicalReferences result;
     auto &required = result.required;
     auto &bound = result.bound;
     const auto owners = outer.owners();
-    const auto type_owners = [&](auto &&self, const Type &type, const std::set<std::string> &bound) -> void {
+    const auto type_owners = [&](auto &&self, const Type &type, const LexicalReferences::Names &bound) -> void {
       for (const auto &name : type.capture_owners)
         if (!bound.contains(name))
           if (const auto found = owners.find(name); found != owners.end()) {
@@ -2352,11 +2374,15 @@ class Compiler {
       if (type.target) self(self, *type.target, bound);
       for (const auto &parameter : type.parameters) self(self, parameter, bound);
     };
-    const auto use = [&](const std::string &name, const Location &at, const std::set<std::string> &bound) {
+    const auto use = [&](const std::string &name, const Location &at, const LexicalReferences::Names &bound) {
       if (!bound.contains(name) && outer.visible.contains(name)) required.try_emplace(name, at);
     };
-    const auto scan = [&](auto &&self, const Expression &expr, std::set<std::string> &bound) -> void {
+    unsigned nested_callables = 0;
+    const auto scan = [&](auto &&self, const Expression &expr, LexicalReferences::Names &bound) -> void {
       using K = Expression::Kind;
+      if (uses_symbol(expr.kind))
+        require_symbol_name(expr, bound.contains(expr.text) || outer.visible.contains(expr.text));
+      if (expr.kind == K::touch && !nested_callables) result.touches.push_back(&expr);
       if (expr.kind == K::name || expr.kind == K::call) use(expr.text, expr.at, bound);
       if (!expr.owner_name.empty()) use(expr.owner_name, expr.at, bound);
       if (expr.annotation) type_owners(type_owners, *expr.annotation, bound);
@@ -2388,10 +2414,14 @@ class Compiler {
         for (const auto &capture : expr.definition->captures) use(capture.name, capture.at, bound);
         auto inner = bound;
         for (const auto &parameter : expr.definition->parameters) inner.insert(parameter.name);
-        for (const auto &owner : expr.definition->owner_parameters) inner.insert(owner.name);
+        for (const auto &owner : expr.definition->owner_parameters)
+          inner.insert(owner.name);
         for (const auto &parameter : expr.definition->parameters) type_owners(type_owners, parameter.type, inner);
         if (expr.definition->result_type) type_owners(type_owners, *expr.definition->result_type, inner);
-        self(self, *expr.definition->body, inner);
+        {
+          const auto nested = llvm::SaveAndRestore(nested_callables, nested_callables + 1);
+          self(self, *expr.definition->body, inner);
+        }
         if (expr.kind == K::callable && !expr.definition->name.empty()) bound.insert(expr.definition->name);
         return;
       }
@@ -2406,7 +2436,8 @@ class Compiler {
     };
     if (signature) {
       for (const auto &parameter : signature->parameters) bound.insert(parameter.name);
-      for (const auto &owner : signature->owner_parameters) bound.insert(owner.name);
+      for (const auto &owner : signature->owner_parameters)
+        bound.insert(owner.name);
       for (const auto &parameter : signature->parameters) type_owners(type_owners, parameter.type, bound);
       if (signature->result_type) type_owners(type_owners, *signature->result_type, bound);
     }
@@ -2432,6 +2463,7 @@ class Compiler {
     }
     for (const auto &[name, at] : selected) {
       auto value = outer.visible.at(name);
+      require_runtime_value(value, at);
       if (deferred_loop_controls_.contains(value.loop_control))
         fail(at, "a delayed defer block cannot capture a loop-control binding; prepare a deferred call argument instead");
       require_declaration(value, at);
@@ -3420,15 +3452,10 @@ class Compiler {
     const auto instantiated = *signature(form, lexical, args, caller, at, true, captures);
     const auto types = llvm::SaveAndRestore(type_context_, TypeContext{&lexical, instantiated.bindings});
     if (!form.body) fail(at, "callable '" + form.name + "' has no method implementation");
-    if (!function_context) {
-      const auto touches = [&](auto &&self, const Expression &expression) -> void {
-        if (expression.kind == Expression::Kind::touch)
-          read_symbol(expression_symbol(expression, lexical), env, expression.at, false);
-        // An inline definition's touches belong to that procedure, not this body.
-        for (const auto &child : expression.children) self(self, *child);
-      };
-      touches(touches, *form.body);
-    }
+    const auto references = lexical_references(*form.body, captures ? *captures : Locals{}, &form);
+    if (!function_context)
+      for (const auto *touch : references.touches)
+        read_symbol(expression_symbol(*touch, lexical), env, touch->at, false);
     // A using selection retains this context; import selects the receiving module.
     // The source body still resolves types, globals and symbols in lexical.
     const auto saved_context = llvm::SaveAndRestore(implementation_context_,
@@ -3500,7 +3527,17 @@ class Compiler {
     for (const auto &owner : form.owner_parameters) {
       const auto found = owner_values.find(owner.name);
       if (found == owner_values.end()) fail(owner.at, "cannot infer owner '" + owner.name + "' from the arguments");
-      if (owner.root && !owner.explicit_parameter) declare_local(locals, owner.name, found->second, lexical, owner.at);
+      if (!owner.explicit_parameter) {
+        Value binding;
+        if (owner.root) binding = found->second;
+        else {
+          binding.provenance_only = true;
+          binding.read_only = true;
+          locals.owner_anchors.insert_or_assign(owner.name, found->second);
+        }
+        binding.binding_read_only = true;
+        declare_local(locals, owner.name, std::move(binding), lexical, owner.at);
+      }
     }
     const auto fixed = form.parameters.size() - (variadic(form) ? 1 : 0);
     const bool rebind = form.operation && form.name == "=";
@@ -3861,8 +3898,8 @@ class Compiler {
         for (size_t i = 0; i < args.size(); ++i) exact &= accepts(args[i], instantiated->parameters[i], module, at);
         if (!exact) continue;
         if (!form.result_type || !instantiated->result || form.operation || !form.body) return {};
-        if (const auto source = candidate.lexical->world.procedures.find(&form);
-            source != candidate.lexical->world.procedures.end() &&
+        if (const auto source = candidate.lexical->execution.procedures.find(&form);
+            source != candidate.lexical->execution.procedures.end() &&
             (!source->second.procedure->lexical_captures.visible.empty() ||
              !source->second.procedure->lexical_captures.owner_anchors.empty())) return {};
         auto type = method_abi(instantiated_callable_type(form, *candidate.lexical, *instantiated, args.size()));
@@ -4071,8 +4108,8 @@ class Compiler {
     // Lexical procedure calls use current bindings; perform uses captured values.
     const Locals *captures = nullptr;
     if (!function && !form.operation) {
-      const auto definition = match.function.lexical->world.procedures.find(&form);
-      if (definition != match.function.lexical->world.procedures.end()) {
+      const auto definition = match.function.lexical->execution.procedures.find(&form);
+      if (definition != match.function.lexical->execution.procedures.end()) {
         valid_view(definition->second, at);
         captures = &definition->second.procedure->lexical_captures;
       }
@@ -4310,13 +4347,15 @@ class Compiler {
     // or emit an operand's loads, allocation, transfer or dynamic effects.
     using K = Expression::Kind;
     if (expr.kind == K::name) {
-      if (const auto found = locals.visible.find(expr.text); found != locals.visible.end())
+      if (const auto found = locals.visible.find(expr.text); found != locals.visible.end()) {
+        require_runtime_value(found->second, expr.at);
         return found->second.pointer ? *pointers_.at(*found->second.pointer).view : found->second;
+      }
       if (const auto found = module.world.global_aliases.find(expr.text); found != module.world.global_aliases.end())
-        return module.world.global_values.at(found->second);
+        return module.execution.global_values.at(found->second);
     }
     if (expr.kind == K::symbol) {
-      const auto id = expression_symbol(expr, module);
+      const auto id = expression_symbol(expr, module, locals);
       declare_symbol_type(id);
       return scalar(symbol_types_.at(id), nullptr);
     }
@@ -6016,7 +6055,7 @@ class Compiler {
       selected = expression(*invocation.children.front(), module, env, locals, function_context);
     else if (invocation.kind == K::perform || invocation.kind == K::behave) {
       if (function_context) fail(expr.at, "a function cannot invoke a procedure");
-      selected = read_symbol(expression_symbol(invocation, module), env, expr.at, false);
+      selected = read_symbol(expression_symbol(invocation, module, locals), env, expr.at, false);
       captured = invocation.kind == K::perform;
     } else if (const auto found = locals.visible.find(invocation.text); found != locals.visible.end()) {
       selected = found->second;
@@ -6135,7 +6174,7 @@ class Compiler {
   Value invoke(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                bool function_context) {
     if (function_context) fail(expr.at, "a function cannot invoke a procedure");
-    const auto id = expression_symbol(expr, module);
+    const auto id = expression_symbol(expr, module, locals);
     const auto value = read_symbol(id, env, expr.at, false);
     if (value.type.pure_callable) fail(expr.at, "perform/behave require a procedure, not a function");
     return invoke_procedure(value, expr, module, env, locals, function_context,
@@ -7723,14 +7762,14 @@ class Compiler {
         return local->second;
       }
       if (const auto global = module.world.global_aliases.find(expr.text); global != module.world.global_aliases.end())
-        return module.world.global_values.at(global->second);
+        return module.execution.global_values.at(global->second);
       if (const auto information = lookup_callable(module, expr.text, expr.at); !information.methods.empty()) {
         const auto &methods = information.methods;
         if (methods.size() != 1) fail(expr.at, "a procedure value requires an unambiguous lexical declaration");
         const auto &method = methods.front();
         if (method.form->kind == Form::Kind::procedure && !method.form->operation) {
-          const auto value = method.lexical->world.procedures.find(method.form);
-          if (value == method.lexical->world.procedures.end()) fail(expr.at, "lexical procedure used before its definition");
+          const auto value = method.lexical->execution.procedures.find(method.form);
+          if (value == method.lexical->execution.procedures.end()) fail(expr.at, "lexical procedure used before its definition");
           auto selected = value->second;
           auto procedure = std::make_shared<Procedure>(*selected.procedure);
           const auto original_context = procedure->implementation.empty()
@@ -7764,14 +7803,14 @@ class Compiler {
     }
     case K::symbol:
       if (function_context) fail(expr.at, "a function cannot read symbolic effects");
-      return read_symbol(expression_symbol(expr, module), env, expr.at);
+      return read_symbol(expression_symbol(expr, module, locals), env, expr.at);
     case K::touch:
       if (function_context) fail(expr.at, "a function cannot touch symbolic effects");
-      read_symbol(expression_symbol(expr, module), env, expr.at, false);
+      read_symbol(expression_symbol(expr, module, locals), env, expr.at, false);
       return {};
     case K::procedure_effect: {
       if (function_context) fail(expr.at, "a function cannot establish procedure effects");
-      const auto id = expression_symbol(expr, module);
+      const auto id = expression_symbol(expr, module, locals);
       auto value = define_procedure(*expr.definition, module, env, locals, implementation_context_);
       bind(id, std::move(value), module, env, expr.at);
       return {};
@@ -7784,7 +7823,7 @@ class Compiler {
       std::vector<std::pair<size_t, Value>> values;
       std::set<size_t> assigned;
       for (const auto *binding : bindings) {
-        const auto id = expression_symbol(*binding, module);
+        const auto id = expression_symbol(*binding, module, locals);
         if (!assigned.insert(id).second) fail(binding->at, "duplicate symbol identity in effect group");
         declare_symbol_type(id);
         const auto type = symbol_types_.at(id);
@@ -8238,8 +8277,8 @@ class Compiler {
   void execute_module(Module &module, const Environment &caller, const Location &at) {
     // This composes runtime code after the complete module scan. A repeated
     // encounter reuses the incorporated module's resources, never its effects.
-    if (module.state == Module::State::complete) return;
-    if (module.state == Module::State::executing) fail(at, "cyclic module execution is outside the first prototype");
+    if (module.execution.state == ModuleExecution::State::complete) return;
+    if (module.execution.state == ModuleExecution::State::compiling) fail(at, "cyclic module execution is outside the first prototype");
     const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, false);
     const auto module_scope = llvm::SaveAndRestore(module_top_level_, true);
     const auto scope_id = scopes_.size();
@@ -8247,16 +8286,16 @@ class Compiler {
     const auto lexical_scope = llvm::SaveAndRestore(local_scope_, scope_id);
     const auto cleanup_scope = llvm::SaveAndRestore(ir_.cleanup_owner(), scope_id);
     const auto holding_begin = holdings_.size();
-    module.state = Module::State::executing;
+    module.execution.state = ModuleExecution::State::compiling;
     execution_order_.push_back(module.path);
     if (module.builtin) {
       for (const auto &[name, id] : module.world.symbols) {
         auto proc = std::make_shared<Procedure>();
         proc->builtin = name;
         proc->lexical = &module;
-        module.world.symbolic_resources.emplace(id, Value{Type::procedure, {}, std::move(proc), &module});
+        module.execution.symbolic_resources.emplace(id, Value{Type::procedure, {}, std::move(proc), &module});
       }
-      module.state = Module::State::complete;
+      module.execution.state = ModuleExecution::State::complete;
       return;
     }
     const auto native_scope = ir_.scope();
@@ -8342,7 +8381,7 @@ class Compiler {
           bind(id, std::move(value), module, env, form.at);
         } else {
           value.callable_temporary = false;
-          module.world.procedures.emplace(&form, std::move(value));
+          module.execution.procedures.emplace(&form, std::move(value));
         }
         break;
       }
@@ -8358,7 +8397,7 @@ class Compiler {
         require(value.type, resolve(*form.result_type, module, form.at), form.at);
         const MethodOrigin identity{&module, form.name};
         value.global_slot = ir_.global_bits(value.type, stored_value(value, value.type, form.at));
-        module.world.global_values.emplace(identity, std::move(value));
+        module.execution.global_values.emplace(identity, std::move(value));
         module.world.global_aliases.emplace(form.name, identity);
         break;
       }
@@ -8374,8 +8413,8 @@ class Compiler {
         const auto &publication = published(source, form.name, form.symbolic, form.at);
         if (form.symbolic) {
           const auto source_id = published_symbol(source, form.name, form.at);
-          const auto resource = source.world.symbolic_resources.find(source_id);
-          if (resource == source.world.symbolic_resources.end() || !resource->second.procedure)
+          const auto resource = source.execution.symbolic_resources.find(source_id);
+          if (resource == source.execution.symbolic_resources.end() || !resource->second.procedure)
             fail(form.at, "source resource @" + form.name + " has no procedure value; use symbol from for identity");
           if (form.using_symbol) {
             const auto alias = module.world.symbol_aliases.find(form.alias);
@@ -8436,14 +8475,14 @@ class Compiler {
                 fail(form.at, "mixin requires a procedure body, not a function definition");
               if (candidate.form->operation || form.alias_operation)
                 fail(form.at, "mixin of operation overloads is outside this prototype");
-              const auto original = candidate.lexical->world.procedures.find(candidate.form);
-              if (original == candidate.lexical->world.procedures.end())
+              const auto original = candidate.lexical->execution.procedures.find(candidate.form);
+              if (original == candidate.lexical->execution.procedures.end())
                 fail(form.at, "procedure body requires its definition encounter before mixin");
               auto &body = mixin_body(*original->second.procedure, form, module);
               auto value = define_procedure(body, module, env, locals);
               declare_callable(module, body);
               value.callable_temporary = false;
-              module.world.procedures.emplace(&body, std::move(value));
+              module.execution.procedures.emplace(&body, std::move(value));
             }
           }
         } else if (const auto *identity = std::get_if<GlobalIdentity>(&publication)) {
@@ -8454,7 +8493,7 @@ class Compiler {
           const auto [alias, inserted] = module.world.global_aliases.emplace(form.alias, identity->origin);
           if (!inserted && alias->second != identity->origin)
             fail(form.at, "duplicate lexical alias '" + form.alias + "'");
-          module.world.global_values.emplace(identity->origin, source.world.global_values.at(identity->origin));
+          module.execution.global_values.emplace(identity->origin, source.execution.global_values.at(identity->origin));
           if (form.exporting) publish(module, form.alias, *identity, form.at);
         } else {
           fail(form.at, "unavailable module resource '" + form.name + "'");
@@ -8466,7 +8505,7 @@ class Compiler {
     } catch (const EndPath &) {
       close_holdings(holding_begin, {}, at);
       ir_.restore(native_scope);
-      module.state = Module::State::complete;
+      module.execution.state = ModuleExecution::State::complete;
       throw;
     }
     check_method_extensions(module);
@@ -8477,12 +8516,12 @@ class Compiler {
       if (value.type.kind != Type::procedure && value.type.kind != Type::region) {
         value.native = ir_.read_symbol(id, value.type);
       }
-      module.world.symbolic_resources.emplace(id, std::move(value));
+      module.execution.symbolic_resources.emplace(id, std::move(value));
     }
 
     close_holdings(holding_begin, {}, at);
     ir_.restore(native_scope);
-    module.state = Module::State::complete;
+    module.execution.state = ModuleExecution::State::complete;
   }
 
 public:

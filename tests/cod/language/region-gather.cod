@@ -25,12 +25,12 @@ proc emit_frame(frame:Frame in O1) -> void where {owner O1} {
 }
 effect @arena <- region(32768u64);
 try {
-  region arena = @arena;
-  ref layout = deref(alloc arena Layout(4u32, 1u64));
-  ref location = alloc arena SetLocation(ClassId(0u32), ClassSetId(0u64));
-  ref a = alloc arena Frame(scalar(class_set_begin(layout, ClassId(layout.classes))), 0.0f32);
-  ref b = alloc arena Frame(len(a), 0.0f32);
-  ref graph = create_graph(arena, layout, u32(len(a)), location, weighted);
+  region memory = @arena;
+  ref layout = deref(alloc memory Layout(4u32, 1u64));
+  ref location = alloc memory SetLocation(ClassId(0u32), ClassSetId(0u64));
+  ref a = alloc memory Frame(scalar(class_set_begin(layout, ClassId(layout.classes))), 0.0f32);
+  ref b = alloc memory Frame(len(a), 0.0f32);
+  ref graph = create_graph(memory, layout, u32(len(a)), location, weighted);
   for (n in 0u32 .. u32(len(a))) {{
     store(a, Neuron(n), f32(n + 1u32));
   }};

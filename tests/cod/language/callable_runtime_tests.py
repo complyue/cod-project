@@ -665,7 +665,7 @@ try {{ func failed = captured; {} }} catch(e:const OutOfMemory) {{ behave @print
 behave @print(captured());
 behave @print(7001u64);
 behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
- ptr lap_view = choose(a,b,i%2u64==0u64);
+ ptr lap_view = choose_view(a,b,i%2u64==0u64);
  total+lap_view()
 }});
 behave @print(7002u64);
