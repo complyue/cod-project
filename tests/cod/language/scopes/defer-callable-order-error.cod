@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+symbol @missing:u64;
+proc run()->void {
+  proc action = proc()->void {behave @print(@missing);};
+  {{
+    defer {action <- proc()->void {};};
+    defer {action();};
+  }};
+}
+run();

@@ -1,0 +1,6 @@
+func one()->const u64 {return 1u64;}
+proc run(action:const func()->const u64 in O)->void where {owner O} {
+  defer {action <- one;};
+}
+func target = one;
+run(target);

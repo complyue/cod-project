@@ -1,0 +1,12 @@
+using symbol "std:io" @print;
+using "std:exceptions" OutOfMemory;
+symbol @missing:u64;
+proc run()->void {
+  proc action = proc()->void {behave @print(@missing);};
+  {{
+    defer catch(error:const OutOfMemory) {};
+    defer {action <- proc()->void {};};
+  }};
+  action();
+}
+run();

@@ -207,7 +207,7 @@ def main():
         for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors',
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
                      'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization',
-                     'defer-borrowed-arguments'):
+                     'defer-borrowed-arguments', 'defer-callable-flow'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -250,6 +250,33 @@ proc registration_failure()->void {
 }
 try {registration_failure();} catch(error:const OutOfMemory) {behave @print(9002u64);};
 '''
+            if name == 'defer-callable-flow':
+                source += '''
+using "std:exceptions" OutOfMemory;
+proc failed_registration()->void {
+  func action = one;
+  {{
+    defer catch(error:const OutOfMemory) {behave @print(action());};
+    behave @print(9001u64);
+    defer {action <- two;};
+  }};
+  behave @print(action());
+}
+failed_registration();
+behave @print(9002u64);
+proc failed_copy()->void {
+  func action = one;
+  func replacement = two;
+  {{
+    defer show(action);
+    defer catch(error:const OutOfMemory) {behave @print(action());};
+    defer {behave @print(9011u64); action <- replacement;};
+  }};
+  behave @print(action());
+}
+failed_copy();
+behave @print(9012u64);
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -269,6 +296,9 @@ try {registration_failure();} catch(error:const OutOfMemory) {behave @print(9002
             if name == 'defer-borrowed-arguments':
                 expected += ['9001', '50', '9002']
                 assert evidence['layout']['record_failures'] == 1
+            if name == 'defer-callable-flow':
+                expected += ['9001', '1', '1', '9002', '9011', '1', '1', '1', '9012']
+                assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
             evidence['executed_source_sha256'] = hashlib.sha256(source.encode()).hexdigest()

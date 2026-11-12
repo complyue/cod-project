@@ -3121,5 +3121,28 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "region owner has been consumed"
+  },
+  {
+    "file": "scopes/defer-callable-flow.cod",
+    "exit": 0,
+    "stdout": "2\n1\n2\n2\n2\n4\n5\n2\n2\n3\n3\n1\n6\n3\n2\n3\n3\n2\n8\n2\n1\n2\n2\n3\n1\n2\n9\n"
+  },
+  {
+    "file": "scopes/defer-callable-order-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "scopes/defer-callable-registration-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "scopes/defer-callable-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
   }
 ]

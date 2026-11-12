@@ -1,0 +1,129 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+proc bad()->void {effect @arena <- region(0u64);}
+func one()->const u64 {return 1u64;}
+func two()->const u64 {return 2u64;}
+func three()->const u64 {return 3u64;}
+proc show(action:const func()->const u64 in O)->void where {owner O} {behave @print(action());}
+proc replace(action:func()->const u64 in O, value:func()->const u64)->void where {owner O} {
+  action <- value;
+}
+proc direct()->void {
+  func action = one;
+  {{defer {action <- two;};}};
+  behave @print(action());
+}
+direct();
+proc ordering()->void {
+  func action = one;
+  proc update = replace;
+  {{
+    defer show(action);
+    defer {behave @print(action());};
+    defer update(action, two);
+    defer show(action);
+  }};
+  behave @print(action());
+}
+ordering();
+proc selected()->void {
+  proc action = proc()->void {behave @print(4u64);};
+  {{
+    defer action();
+    defer {action <- proc()->void {behave @print(5u64);};};
+  }};
+  action();
+}
+selected();
+proc branches(yes:bool)->void {
+  func action = one;
+  {{
+    defer show(action);
+    if(yes) {defer replace(action,two);} else {defer replace(action,three);};
+  }};
+  behave @print(action());
+}
+branches(true); branches(false);
+func decorate(action:func()->const u64)->func()->const u64 {
+  return func()->const u64 {return action() + 1u64;};
+}
+proc repeated(count:u64)->void {
+  func action = one;
+  {{for(i in 0u64 .. count) {defer {action <- decorate(action);};};}};
+  behave @print(action());
+}
+repeated(0u64); repeated(5u64);
+proc recursive(action:func()->const u64 in O, count:u64)->void where {owner O} {
+  if(count == 0u64) {action <- three; {}} else {recursive(action,count-1u64);};
+}
+proc through_helper()->void {
+  func action = one;
+  proc update = recursive;
+  {{defer update(action,5u64);}};
+  behave @print(action());
+}
+through_helper();
+proc failure()->void {
+  func action = one;
+  try {{defer {action <- two; bad();};}} catch(error:const InvalidCapacity) {
+    behave @print(action());
+  };
+}
+failure();
+proc recovery()->void {
+  func action = one;
+  {{
+    defer catch(error:const InvalidCapacity) {action <- three;} finally {behave @print(action());};
+    defer {action <- two; bad();};
+  }};
+  behave @print(action());
+}
+recovery();
+proc original_error()->void {
+  func action = one;
+  {{
+    defer catch(error:const InvalidCapacity) {action <- two;};
+    bad();
+  }};
+  behave @print(action());
+}
+original_error();
+proc returning(action:func()->const u64 in O)->const u64 where {owner O} {
+  defer {action <- two; return 8u64;};
+  return 7u64;
+}
+func target = one;
+behave @print(returning(target));
+behave @print(target());
+proc aliases(yes:bool)->void {
+  func first = one;
+  func second = three;
+  ptr selected_holder = first;
+  if(yes) {selected_holder = second; {}} else {};
+  {{defer replace(selected_holder,two);}};
+  behave @print(first());
+  behave @print(second());
+}
+aliases(true); aliases(false);
+proc snapshot(action:func()->const u64 in O)->func()->const u64 where {owner O} {
+  defer replace(action,two);
+  return action;
+}
+{{
+  func action = one;
+  func saved = snapshot(action);
+  behave @print(saved());
+  behave @print(action());
+}};
+symbol @missing:u64;
+proc passthrough(action:proc()->void in O)->void where {owner O} {}
+proc categories()->void {
+  proc action = proc()->void {behave @print(@missing);};
+  try {{
+    defer passthrough(action);
+    defer {action <- proc()->void {behave @print(9u64);};};
+    bad();
+  }} catch(error:const InvalidCapacity) {action();};
+}
+categories();

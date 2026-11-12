@@ -400,7 +400,6 @@ class Compiler {
     std::shared_ptr<const std::set<size_t>> inputs;
   };
   std::vector<InitializationGuarantee> initialization_guarantees_;
-  using InitializationPaths = std::array<std::vector<size_t>, concrete_exception_count + 1>;
   std::vector<Pointer> pointers_;
   // Control-flow snapshots share unchanged views. A rebind or refinement adds
   // a version, leaving every saved branch/call/exception state intact.
@@ -408,6 +407,11 @@ class Compiler {
   using CallableAlternatives = std::vector<std::shared_ptr<const Procedure>>;
   using CallableMemory = llvm::ImmutableMap<size_t, size_t>;
   CallableMemory::Factory callable_memory_factory_;
+  struct CleanupState {
+    std::vector<size_t> initialized;
+    CallableMemory callables{nullptr};
+  };
+  using CleanupPaths = std::array<CleanupState, concrete_exception_count + 1>;
   struct NativeCallDemand;
   struct CallableFlow {
     std::shared_ptr<const Procedure> definition;
@@ -421,6 +425,11 @@ class Compiler {
     NativeCallDemand *producer = nullptr;
   };
   std::vector<CallableFlow> callable_flows_{CallableFlow{}};
+  struct CallableSubstitution {
+    std::map<size_t, size_t> inputs;
+    std::map<size_t, size_t> nodes;
+  };
+  std::deque<CallableSubstitution> callable_substitutions_;
   CallableMemory callable_holders_{nullptr};
   std::vector<size_t> callable_scopes_;
   struct CallableDemand { size_t flow; const Module *caller; Location at; };
@@ -530,7 +539,7 @@ class Compiler {
     llvm::StructType *layout;
     Location at;
     std::vector<size_t> images;
-    std::function<Value(llvm::Value *, Environment &, Value, const InitializationPaths &)> invoke;
+    std::function<Value(llvm::Value *, Environment &, Value, const CleanupPaths &)> invoke;
     bool handles_error = false;
     std::shared_ptr<bool> recovers;
     size_t predecessors = 0;
@@ -551,7 +560,7 @@ class Compiler {
     std::function<Value()> body;
     std::function<Value(Value, const std::vector<CleanupEntry> &)> cleanup;
     std::optional<Value> incoming;
-    const InitializationPaths *incoming_initialization = nullptr;
+    const CleanupPaths *incoming_states = nullptr;
     bool discard = false;
     std::function<bool(const FlowState &)> recovers;
     bool *recovered = nullptr;
@@ -718,6 +727,42 @@ class Compiler {
     if (inputs.size() == 1) return inputs.front();
     callable_flows_.push_back({{}, std::move(inputs)});
     return callable_flows_.size() - 1;
+  }
+  size_t substitute_callable_flow(size_t source, CallableSubstitution &substitution) {
+    if (!source) return 0;
+    if (const auto input = substitution.inputs.find(source); input != substitution.inputs.end()) return input->second;
+    const auto &node = callable_flows_.at(source);
+    if (!node.open && !node.producer && node.inputs.empty() && !node.address) return source;
+    if (const auto found = substitution.nodes.find(source); found != substitution.nodes.end()) return found->second;
+    callable_flows_.push_back({{}, {}, true});
+    const auto output = callable_flows_.size() - 1;
+    substitution.nodes.emplace(source, output);
+    return output;
+  }
+  bool resolve_callable_substitutions() {
+    bool changed = false;
+    for (auto &substitution : callable_substitutions_) {
+      // Native producers can extend these graphs after cleanup lowering. Copy
+      // equations, not just the currently known definitions, and stop at the
+      // action's formal inputs. Memoized nodes preserve finite recursive graphs.
+      for (auto position = substitution.nodes.begin(); position != substitution.nodes.end(); ++position) {
+        const auto [source, destination] = *position;
+        auto value = callable_flows_.at(source);
+        for (auto &input : value.inputs) input = substitute_callable_flow(input, substitution);
+        value.address = substitute_callable_flow(value.address, substitution);
+        const auto memory = value.memory;
+        for (const auto &[holder, input] : memory)
+          value.memory = callable_memory_factory_.add(value.memory, holder, substitute_callable_flow(input, substitution));
+        auto &output = callable_flows_.at(destination);
+        if (output.definition != value.definition || output.inputs != value.inputs || output.open != value.open ||
+            output.holder != value.holder || output.address != value.address || output.memory != value.memory ||
+            output.written_holder != value.written_holder || output.loop != value.loop || output.producer != value.producer) {
+          output = std::move(value);
+          changed = true;
+        }
+      }
+    }
+    return changed;
   }
   struct CallableChoices { CallableAlternatives definitions; bool closed = true; };
   struct CallableTargets { std::set<size_t> holders; bool closed = true; };
@@ -946,7 +991,7 @@ class Compiler {
       facts->at(i) = FlowCondition::deferred([this, flow, i] { return bool(exception_flows_.at(flow)[i]); });
     return {flow, std::move(facts)};
   }
-  void raise_exception(Value error, const InitializationPaths *paths = nullptr) {
+  void raise_exception(Value error, const CleanupPaths *paths = nullptr) {
     const auto possibilities = exception_possibilities(error);
     std::set<size_t> categories;
     for (size_t i = 0; i < possibilities.size(); ++i)
@@ -960,9 +1005,13 @@ class Compiler {
         for (auto item = initialized.rbegin(); item != initialized.rend(); ++item)
           cells_[item->first].initialized = item->second;
       });
-      if (paths) for (size_t cell = 0; cell < paths->at(category).size(); ++cell) {
-        initialized.emplace_back(cell, cells_.at(cell).initialized);
-        cells_[cell].initialized = paths->at(category)[cell];
+      if (paths) {
+        const auto &state = paths->at(category);
+        callable_holders_ = state.callables;
+        for (size_t cell = 0; cell < state.initialized.size(); ++cell) {
+          initialized.emplace_back(cell, cells_.at(cell).initialized);
+          cells_[cell].initialized = state.initialized[cell];
+        }
       }
       if (pending_callable_failure_) {
         for (const auto &[cell, proof] : pending_callable_failure_->failure_initialized.at(category - 1)) {
@@ -4771,9 +4820,9 @@ class Compiler {
   bool resolve_native_flow(size_t flow, std::set<NativeCallDemand *> &resolving) {
     bool progressed = false;
     for (;;) {
+      bool changed = resolve_callable_substitutions();
       std::set<size_t> unresolved;
-      if (callable_choices(flow, &unresolved).closed) return progressed;
-      bool changed = false;
+      if (callable_choices(flow, &unresolved).closed) return progressed || changed;
       for (const auto id : unresolved) {
         auto *demand = callable_flows_.at(id).producer;
         if (!demand || active_native_call(*demand) || !resolving.insert(demand).second) continue;
@@ -4788,21 +4837,6 @@ class Compiler {
       if (!changed) return progressed;
       progressed = true;
     }
-  }
-  bool forwards_callable_flow(size_t output, size_t input) const {
-    if (output == input) return true;
-    std::set<size_t> visited;
-    std::vector<size_t> pending{output};
-    while (!pending.empty()) {
-      const auto id = pending.back(); pending.pop_back();
-      if (id == input || !visited.insert(id).second) continue;
-      const auto &flow = callable_flows_.at(id);
-      // A call summary may forward the entering holder through joins or
-      // recursive calls. A load, write or new value needs full backedge flow.
-      if (!id || flow.open || flow.definition || flow.address || flow.holder) return false;
-      pending.insert(pending.end(), flow.inputs.begin(), flow.inputs.end());
-    }
-    return true;
   }
   CallableChoices bound_callable_choices(const Value &value, const CallableMemory &memory) {
     if (!value.callable_address) return callable_choices(value.callable_flow);
@@ -5937,55 +5971,80 @@ class Compiler {
     // pending error retain separate inputs. Plain actions use their join;
     // handlers select the input matching each entry. Registration preserves allocation
     // facts: an intervening branch without this registration cannot erase them.
-    struct InitializationHeader { InitializationPaths paths; std::vector<size_t> joined; };
-    std::map<size_t, InitializationHeader> initialization_headers;
-    const auto initialization_header = [&](size_t queue, const std::vector<size_t> &registered = {}) -> InitializationHeader & {
-      auto [position, inserted] = initialization_headers.try_emplace(queue);
-      if (inserted) for (size_t i = 0; i < entry_flow.initialized.size(); ++i) {
+    struct CleanupHeader { CleanupPaths paths; CleanupState joined; };
+    std::map<size_t, CleanupHeader> cleanup_headers;
+    const auto cleanup_header = [&](size_t queue, const std::vector<size_t> &registered = {}) -> CleanupHeader & {
+      auto [position, inserted] = cleanup_headers.try_emplace(queue);
+      if (!inserted) return position->second;
+      auto &header = position->second;
+      for (size_t i = 0; i < entry_flow.initialized.size(); ++i) {
         std::vector<size_t> alternatives;
-        for (auto &path : position->second.paths) {
+        for (auto &path : header.paths) {
           initialization_flows_.push_back({{}, true});
           const auto input = initialization_flows_.size() - 1;
-          path.push_back(input);
+          path.initialized.push_back(input);
           alternatives.push_back(preserved_initialization(i < registered.size() ? registered[i] : 0, input));
         }
         initialization_flows_.push_back({std::move(alternatives)});
-        position->second.joined.push_back(initialization_flows_.size() - 1);
+        header.joined.initialized.push_back(initialization_flows_.size() - 1);
       }
-      return position->second;
+      for (const auto &[holder, value] : entry_flow.callables) {
+        std::vector<size_t> alternatives;
+        for (auto &path : header.paths) {
+          callable_flows_.push_back({{}, {}, true});
+          callable_flows_.back().loop = true;
+          const auto input = callable_flows_.size() - 1;
+          path.callables = callable_memory_factory_.add(path.callables, holder, input);
+          alternatives.push_back(input);
+        }
+        header.joined.callables = callable_memory_factory_.add(header.joined.callables, holder,
+                                                               join_callable_flow(std::move(alternatives)));
+      }
+      return header;
     };
-    initialization_header(0);
-    std::set<size_t> action_headers{0}, routed_initialization;
-    const auto connect_initialization = [&](const FlowState &state, size_t category) {
+    const auto connect_callables = [&](const CallableMemory &destination, const CallableMemory &source) {
+      for (const auto &[holder, output] : destination) {
+        const auto *input = source.lookup(holder);
+        if (!input || *input == output) continue;
+        auto &inputs = callable_flows_.at(output).inputs;
+        if (std::find(inputs.begin(), inputs.end(), *input) == inputs.end()) inputs.push_back(*input);
+      }
+    };
+    cleanup_header(0);
+    std::set<size_t> action_headers{0}, routed_states;
+    const auto connect_states = [&](const FlowState &state, size_t category) {
       for (const auto &action : scope.actions) {
-        initialization_header(action.registration, action.initialized);
+        cleanup_header(action.registration, action.initialized);
         action_headers.insert(action.registration);
       }
       const auto remaining = state.deferred.find(scope.owner_scope);
       const auto queue = remaining == state.deferred.end() ? 0 : remaining->second;
-      const auto &path = initialization_header(queue).paths.at(category);
-      for (size_t i = 0; i < path.size(); ++i) {
-        auto &inputs = initialization_flows_.at(path[i]).inputs;
+      const auto &path = cleanup_header(queue).paths.at(category);
+      for (size_t i = 0; i < path.initialized.size(); ++i) {
+        auto &inputs = initialization_flows_.at(path.initialized[i]).inputs;
         const auto proof = i < state.initialized.size() ? state.initialized[i] : 0;
         if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
       }
-      // Queue alternatives retain the allocation facts established on their
-      // selecting branch. Route equations once per node, including cycles;
-      // later incoming completions extend those same equations.
+      connect_callables(path.callables, state.callables);
+      // Allocation initialization is monotonic; queue edges retain its earlier
+      // guarantees. Callable contents follow the incoming completion instead:
+      // an intervening replacement supersedes the earlier holder value.
       std::vector<size_t> pending{queue};
       while (!pending.empty()) {
         const auto queue = pending.back(); pending.pop_back();
-        if (action_headers.contains(queue) || !routed_initialization.insert(queue).second) continue;
-        const auto &source = initialization_header(queue).paths;
+        if (action_headers.contains(queue) || !routed_states.insert(queue).second) continue;
+        const auto &source = cleanup_header(queue).paths;
         for (const auto &input : deferred_flows_.at(queue).inputs) {
-          const auto &destination = initialization_header(input.queue).paths;
-          for (size_t mode = 0; mode < source.size(); ++mode)
-            for (size_t cell = 0; cell < source[mode].size(); ++cell) {
-              const auto proof = preserved_initialization(source[mode][cell],
+          const auto &destination = cleanup_header(input.queue).paths;
+          for (size_t mode = 0; mode < source.size(); ++mode) {
+            for (size_t cell = 0; cell < source[mode].initialized.size(); ++cell) {
+              const auto proof = preserved_initialization(source[mode].initialized[cell],
                   cell < input.initialized.size() ? input.initialized[cell] : 0);
-              auto &inputs = initialization_flows_.at(destination[mode][cell]).inputs;
+              auto &inputs = initialization_flows_.at(destination[mode].initialized[cell]).inputs;
               if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
             }
+            connect_callables(destination[mode].callables, source[mode].callables);
+          }
           pending.push_back(input.queue);
         }
       }
@@ -5993,11 +6052,21 @@ class Compiler {
     const auto connect_failure = [&](const FlowState &state, const Value &error) {
       const auto possibilities = exception_possibilities(error);
       for (size_t i = 0; i < possibilities.size(); ++i)
-        if (possibilities[i].pending() || possibilities[i]) connect_initialization(state, i + 1);
+        if (possibilities[i].pending() || possibilities[i]) connect_states(state, i + 1);
     };
+    std::set<size_t> source_holders;
+    for (const auto &entry : entries)
+      for (const auto &[holder, value] : entry.state.callables) source_holders.insert(holder);
     for (const auto &entry : entries) {
-      if (entry.error) connect_failure(entry.state, *entry.error);
-      else connect_initialization(entry.state, 0);
+      auto state = entry.state;
+      // Completion joins can materialize a holder for an already copied return
+      // value. Raw source edges precede that holder; retain its immutable input
+      // instead of treating it as an empty cleanup equation.
+      for (const auto &[holder, value] : entry_flow.callables)
+        if (!source_holders.contains(holder))
+          state.callables = callable_memory_factory_.add(state.callables, holder, value);
+      if (entry.error) connect_failure(state, *entry.error);
+      else connect_states(state, 0);
     }
     const auto check_flow = [&](const FlowState &exit, const DeferredAction &action, const FlowState &before) {
       const auto queue = exit.deferred.find(scope.owner_scope);
@@ -6008,13 +6077,6 @@ class Compiler {
       for (size_t i = 0; i < before.holdings.size(); ++i) changed |= before.holdings[i] != exit.holdings[i];
       for (size_t i = 0; i < before.pointers.size(); ++i) changed |= before.pointers[i] != exit.pointers[i];
       const std::string message = "deferred action changes flow facts; deferred backedge checking is not implemented yet";
-      for (const auto &[holder, value] : before.callables) {
-        const auto *after = exit.callables.lookup(holder);
-        if (!after) changed = true;
-        else if (*after != value)
-          deferred_checks_.push_back({[this, output = *after, value] { return !forwards_callable_flow(output, value); },
-                                      action.at, message});
-      }
       if (changed) fail(action.at, message);
     };
     for (size_t i = 0; i < scope.actions.size(); ++i) {
@@ -6030,12 +6092,13 @@ class Compiler {
               return region < entry.second.size() && (entry.second[region].pending() || entry.second[region]);
             }))
           regions_[region].live = live_at_action(action.registration, region);
-      const auto &header = initialization_header(action.registration, action.initialized);
-      const auto &initialized = header.joined;
+      const auto &header = cleanup_header(action.registration, action.initialized);
+      const auto &initialized = header.joined.initialized;
+      callable_holders_ = header.joined.callables;
       auto paths = header.paths;
       for (auto &path : paths)
-        for (size_t cell = 0; cell < path.size(); ++cell)
-          path[cell] = preserved_initialization(cell < action.initialized.size() ? action.initialized[cell] : 0, path[cell]);
+        for (size_t cell = 0; cell < path.initialized.size(); ++cell)
+          path.initialized[cell] = preserved_initialization(cell < action.initialized.size() ? action.initialized[cell] : 0, path.initialized[cell]);
       for (size_t cell = 0; cell < initialized.size(); ++cell) cells_[cell].initialized = initialized[cell];
       registered_deferred_[scope.owner_scope] = action.predecessors;
       env = entry_env;
@@ -6068,7 +6131,7 @@ class Compiler {
         if (result.type != Type::never) {
           const auto exit = flow_state();
           check_flow(exit, action, action_flow);
-          if (action.handles_error) connect_initialization(exit, 0);
+          if (action.handles_error) connect_states(exit, 0);
           else {
             const auto inputs = std::make_shared<const std::set<size_t>>(initialized.begin(), initialized.end());
             std::vector<size_t> guarantees;
@@ -6078,10 +6141,17 @@ class Compiler {
               auto continued = exit;
               for (size_t cell = 0; cell < initialized.size(); ++cell) {
                 const auto before = preserved_initialization(cell < action.initialized.size() ? action.initialized[cell] : 0,
-                                                             header.paths[category][cell]);
+                                                             header.paths[category].initialized[cell]);
                 continued.initialized[cell] = preserved_initialization(before, guarantees[cell]);
               }
-              connect_initialization(continued, category);
+              callable_substitutions_.emplace_back();
+              auto &substitution = callable_substitutions_.back();
+              for (const auto &[holder, input] : header.joined.callables)
+                substitution.inputs.emplace(input, *header.paths[category].callables.lookup(holder));
+              for (const auto &[holder, output] : exit.callables)
+                continued.callables = callable_memory_factory_.add(continued.callables, holder,
+                    substitute_callable_flow(output, substitution));
+              connect_states(continued, category);
             }
           }
           close_holdings(holding_begin, {}, action.at);
@@ -6092,7 +6162,7 @@ class Compiler {
         auto replaced = join_completions(replacement.incoming, action.at, false);
         if (replaced.type != Type::never) {
           check_flow(flow_state(), action, action_flow);
-          connect_initialization(flow_state(), 0);
+          connect_states(flow_state(), 0);
           save_return(std::move(replaced), action.at);
           close_holdings(holding_begin, {}, action.at);
           ir_.unwind(cleanup);
@@ -6119,11 +6189,14 @@ class Compiler {
     }
     ir_.unreachable();
     ir_.enter(done);
-    for (const auto &[queue, header] : initialization_headers)
-      for (const auto &path : header.paths)
-        for (const auto proof : path) initialization_flows_.at(proof).open = false;
+    for (const auto &[queue, header] : cleanup_headers)
+      for (const auto &path : header.paths) {
+        for (const auto proof : path.initialized) initialization_flows_.at(proof).open = false;
+        for (const auto &[holder, flow] : path.callables) callable_flows_.at(flow).open = false;
+      }
     auto completed_flow = entry_flow;
-    completed_flow.initialized = initialization_headers.at(0).paths[0];
+    completed_flow.initialized = cleanup_headers.at(0).paths[0].initialized;
+    completed_flow.callables = cleanup_headers.at(0).paths[0].callables;
     restore_flow(completed_flow);
     registered_deferred_.erase(scope.owner_scope);
     env = entry_env;
@@ -6136,7 +6209,7 @@ class Compiler {
     error.exception_category = category;
     error.exception_facts = pending_facts;
     clear_return_resource();
-    raise_exception(std::move(error), &initialization_headers.at(0).paths);
+    raise_exception(std::move(error), &cleanup_headers.at(0).paths);
     ir_.enter(resume);
     for (size_t i = 0; i < returned.size(); ++i) {
       auto *selected = ir_.label("defer.return.selected");
@@ -6238,7 +6311,7 @@ class Compiler {
     auto *layout = ir_.deferred_layout(values);
     auto recovered = std::make_shared<bool>(false);
     auto invoke = [this, selected, references, caught, controls, recovered, layout, &expr, &module, function_context]
-                  (llvm::Value *record, Environment &env, Value incoming, const InitializationPaths &paths) -> Value {
+                  (llvm::Value *record, Environment &env, Value incoming, const CleanupPaths &paths) -> Value {
       auto locals = selected;
       auto active_error = caught;
       size_t field = 0;
@@ -6266,7 +6339,7 @@ class Compiler {
         return block(*expr.children.front(), module, env, locals, function_context, true);
       TryEmission emission;
       emission.incoming = std::move(incoming);
-      emission.incoming_initialization = &paths;
+      emission.incoming_states = &paths;
       emission.discard = true;
       emission.recovered = recovered.get();
       return try_expression(expr, module, env, locals, function_context, false, true, {}, nullptr, &emission);
@@ -6383,7 +6456,7 @@ class Compiler {
     auto *layout = ir_.deferred_layout(values);
     const auto scope_id = deferred_scope_->owner_scope;
     auto invoke = [this, method_call, callable_call, borrowed_arguments, captured, layout, scope_id, &module, at = expr.at]
-                  (llvm::Value *record, Environment &current, Value, const InitializationPaths &) -> Value {
+                  (llvm::Value *record, Environment &current, Value, const CleanupPaths &) -> Value {
       auto method = method_call;
       auto callable = callable_call;
       size_t field = 0;
@@ -7486,10 +7559,12 @@ class Compiler {
         auto *error_entry = ir_.label("try.incoming");
         ir_.choose(ir_.is_null(exception_category(*emission->incoming)), body_entry, error_entry);
         ir_.enter(error_entry);
-        raise_exception(*emission->incoming, emission->incoming_initialization);
+        raise_exception(*emission->incoming, emission->incoming_states);
         ir_.enter(body_entry);
-        if (emission->incoming_initialization) {
-          const auto &initialized = emission->incoming_initialization->front();
+        if (emission->incoming_states) {
+          const auto &state = emission->incoming_states->front();
+          callable_holders_ = state.callables;
+          const auto &initialized = state.initialized;
           for (size_t cell = 0; cell < initialized.size(); ++cell) cells_[cell].initialized = initialized[cell];
         }
       }
@@ -8862,7 +8937,8 @@ public:
       // Loop headers now include their back edges. Check exactly the reachable
       // implementations; compiling a body can demand further callable nodes.
       for (;;) {
-        bool changed = resolve_native_calls(0);
+        bool changed = resolve_callable_substitutions();
+        changed |= resolve_native_calls(0);
         changed |= resolve_callable_results();
         for (size_t i = 0; i < callable_demands_.size(); ++i) {
           const auto demand = callable_demands_[i];
@@ -8872,7 +8948,8 @@ public:
         }
         if (changed) continue;
         for (auto &demand : native_call_demands_) close_callable_effects(demand);
-        if (resolve_native_calls(0) || resolve_callable_results() || refine_native_reuse()) continue;
+        if (resolve_native_calls(0) || resolve_callable_results() || refine_native_reuse() ||
+            resolve_callable_substitutions()) continue;
         break;
       }
       for (const auto &demand : callable_demands_)
