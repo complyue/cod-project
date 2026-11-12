@@ -3912,9 +3912,13 @@ class Compiler {
         require_npe_handler(at);
     }
   }
-  Value call_method(const MethodMatch &match, std::vector<Value> args, const Location &at,
-                    const Environment &env, bool function_context, const Module &caller,
-                    const std::vector<ConversionPoint> &points = {}) {
+  struct PreparedMethodCall {
+    MethodMatch method;
+    std::vector<Value> arguments;
+  };
+  PreparedMethodCall prepare_method_call(const MethodMatch &match, std::vector<Value> args, const Location &at,
+                                         bool function_context, const Module &caller,
+                                         const std::vector<ConversionPoint> &points = {}) {
     const auto &form = *match.function.form;
     if (form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=" || form.name == "[]<-") &&
         (form.parameters.empty() || form.parameters.front().owner.empty()))
@@ -3941,6 +3945,15 @@ class Compiler {
                    callable_name(form) + "' declared here");
     }
     require_declaration_handlers(match.declarations, args, caller, at);
+    return {match, std::move(args)};
+  }
+  Value invoke_prepared_method(const PreparedMethodCall &prepared, const Location &at,
+                                const Environment &env, const Module &caller) {
+    const auto &match = prepared.method;
+    const auto &args = prepared.arguments;
+    const auto &form = *match.function.form;
+    const bool function = form.kind == Form::Kind::function;
+    for (const auto &argument : args) valid_view(argument, at);
     // Lexical procedure calls use current bindings; perform uses captured values.
     const Locals *captures = nullptr;
     if (!function && !form.operation) {
@@ -3967,6 +3980,12 @@ class Compiler {
     }
     check_declarations(match.declarations, match.function.form->kind, args, result, caller, at, declares_npe(form.throws_types, *match.function.lexical, form.at));
     return result;
+  }
+  Value call_method(const MethodMatch &match, std::vector<Value> args, const Location &at,
+                    const Environment &env, bool function_context, const Module &caller,
+                    const std::vector<ConversionPoint> &points = {}) {
+    auto prepared = prepare_method_call(match, std::move(args), at, function_context, caller, points);
+    return invoke_prepared_method(prepared, at, env, caller);
   }
   Value transfer_callable(Value destination, Value source, const Location &at) {
     require_writable(destination.read_only, at, "cannot transfer into a read-only destination view");
@@ -5445,6 +5464,33 @@ class Compiler {
   PreparedCallableCall prepare_callable_call(Value selected, const Expression &expr,
                                                const Module &module, Environment &env,
                                                Locals &locals, bool function_context) {
+    if (!native_callable(selected)) {
+      const auto proc = selected.procedure; // Resolve before arguments/capture installation.
+      std::vector<ConversionPoint> points;
+      auto args = arguments(expr, module, env, locals, function_context, proc->form ? &points : nullptr,
+          proc->form ? std::vector<Method>{{proc->form, proc->lexical}} : std::vector<Method>{});
+      if (!proc->builtin.empty()) {
+        if (args.size() != 1) fail(expr.at, "@" + proc->builtin + " expects one argument");
+        require_argument_reads(args[0]);
+        if (!args[0].native) fail(expr.at, "read of storage before definite initialization in an argument");
+        if (selected.type.target) require(args[0].type, selected.type.parameters[0], expr.at);
+        if (proc->builtin == "assert") require(args[0].type, Type::boolean, expr.at);
+        else if (!numeric(args[0].type) && args[0].type != Type::boolean)
+          fail(expr.at, "@print expects a numeric scalar or bool");
+        return {std::move(selected), std::move(args), false};
+      }
+      {
+        const auto instantiated = *signature(*proc->form, *proc->lexical, args, module, expr.at, true, &proc->lexical_captures);
+        const auto types = llvm::SaveAndRestore(type_context_, TypeContext{proc->lexical, instantiated.bindings});
+        for (size_t i = 0; i < args.size(); ++i) {
+          if (const auto path = route(args[i].type, parameter_at(*proc->form, i), *proc->lexical, module, expr.at))
+            args[i] = converted(args[i], *path, expr.at, module, points.empty() ? nullptr : &points[i],
+                !points.empty() && points[i].raw_view && !(parameter_at(*proc->form, i).declaration_kind == "ptr" && !parameter_at(*proc->form, i).owner.empty()),
+                parameter_at(*proc->form, i).owner.empty());
+        }
+      }
+      return {std::move(selected), std::move(args), false};
+    }
     const bool contextual = contextual_callable(selected.type);
     std::vector<ConversionPoint> points;
     auto args = arguments(expr, module, env, locals, function_context, &points, {}, &selected.type);
@@ -5469,6 +5515,26 @@ class Compiler {
     const auto &args = prepared.arguments;
     valid_view(selected, at);
     for (const auto &argument : args) valid_view(argument, at);
+    if (!native_callable(selected)) {
+      const auto &proc = selected.procedure;
+      if (!proc->builtin.empty()) {
+        if (proc->builtin == "assert") ir_.assert_value(args[0].native);
+        else ir_.print(args[0].type, args[0].native);
+        return {};
+      }
+      auto call_env = captured ? proc->captures : env;
+      if (captured) {
+        call_env.replay = std::make_shared<CaptureReplay>(CaptureReplay{
+            env, proc->captures.captured_bindings, proc->captures.replay, {}});
+        binding_check(call_env, at);
+      }
+      const bool pure = selected.type.pure_callable;
+      auto *native_body = ir_.begin_callable();
+      auto result = call(*proc->form, *proc->lexical, pure ? Environment{} : std::move(call_env), args, pure, at, module, proc->implementation, &proc->lexical_captures);
+      ir_.end_callable(native_body);
+      check_declarations(proc->declarations, pure ? Form::Kind::function : Form::Kind::procedure, args, result, module, at, declares_npe(proc->form->throws_types, *proc->lexical, proc->form->at));
+      return result;
+    }
     std::vector<llvm::Value *> operands;
     for (size_t i = 0; i < args.size(); ++i) {
       const auto target = selected.type.parameters[i];
@@ -5534,48 +5600,10 @@ class Compiler {
       if (protection && result.type != Type::never) ir_.release_callable_protection(*protection);
       return result;
     }
-    const auto proc = value.procedure; // Resolve before arguments/capture installation.
-    std::vector<ConversionPoint> points;
-    auto args = arguments(expr, module, env, locals, function_context, proc->form ? &points : nullptr,
-        proc->form ? std::vector<Method>{{proc->form, proc->lexical}} : std::vector<Method>{});
-    if (!proc->builtin.empty()) {
-      if (args.size() != 1) fail(expr.at, "@" + proc->builtin + " expects one argument");
-      require_argument_reads(args[0]);
-      if (!args[0].native) fail(expr.at, "read of storage before definite initialization in an argument");
-      if (value.type.target) require(args[0].type, value.type.parameters[0], expr.at);
-      if (proc->builtin == "assert") {
-        require(args[0].type, Type::boolean, expr.at);
-        ir_.assert_value(args[0].native);
-      } else {
-        if (!numeric(args[0].type) && args[0].type != Type::boolean)
-          fail(expr.at, "@print expects a numeric scalar or bool");
-        ir_.print(args[0].type, args[0].native);
-      }
-      return {};
-    }
-    {
-      const auto instantiated = *signature(*proc->form, *proc->lexical, args, module, expr.at, true, &proc->lexical_captures);
-      const auto types = llvm::SaveAndRestore(type_context_, TypeContext{proc->lexical, instantiated.bindings});
-      for (size_t i = 0; i < args.size(); ++i) {
-        if (const auto path = route(args[i].type, parameter_at(*proc->form, i), *proc->lexical, module, expr.at))
-          args[i] = converted(args[i], *path, expr.at, module, points.empty() ? nullptr : &points[i],
-              !points.empty() && points[i].raw_view && !(parameter_at(*proc->form, i).declaration_kind == "ptr" && !parameter_at(*proc->form, i).owner.empty()),
-              parameter_at(*proc->form, i).owner.empty());
-      }
-    }
-    auto call_env = captured ? proc->captures : env;
-    if (captured) {
-      call_env.replay = std::make_shared<CaptureReplay>(CaptureReplay{
-          env, proc->captures.captured_bindings, proc->captures.replay, {}});
-      binding_check(call_env, expr.at);
-    }
-    const bool pure = value.type.pure_callable;
-    auto *native_body = ir_.begin_callable();
-    auto result = call(*proc->form, *proc->lexical, pure ? Environment{} : std::move(call_env), args, pure, expr.at, module, proc->implementation, &proc->lexical_captures);
-    ir_.end_callable(native_body);
-    check_declarations(proc->declarations, pure ? Form::Kind::function : Form::Kind::procedure, args, result, module, expr.at, declares_npe(proc->form->throws_types, *proc->lexical, proc->form->at));
-    return result;
+    auto prepared = prepare_callable_call(std::move(value), expr, module, env, locals, function_context);
+    return invoke_prepared_callable(prepared, module, env, expr.at, captured);
   }
+
   Value invoke(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                bool function_context) {
     if (function_context) fail(expr.at, "a function cannot invoke a procedure");

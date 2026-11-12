@@ -1,0 +1,465 @@
+{
+  "recorded_utc": "2026-11-12T13:00:12.912663+00:00",
+  "compiler_sha256": "c855e23c0d7b961b5945cab963c14a0695b3823fa27d599acc6ee9c5c461a574",
+  "language": {
+    "passed": 445,
+    "total": 445
+  },
+  "native_callable_cases": 30,
+  "source_count": 535,
+  "all_sources_match": true,
+  "native_accounting_and_ir_sizes_match_previous": true,
+  "previous_compiler_sha256": "e31e739620251b5e9aae2ceeb7b00fa0575c48016fa696daad16502d4d11b419",
+  "comparisons": {
+    "selection": {
+      "llvm_ir_bytes": 220007,
+      "bitcode_bytes": 44204,
+      "layout": {
+        "allocations": 802,
+        "releases": 802,
+        "peak_image_bytes": 33024,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 1,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "parameters": {
+      "llvm_ir_bytes": 193344,
+      "bitcode_bytes": 36452,
+      "layout": {
+        "allocations": 21,
+        "releases": 21,
+        "peak_image_bytes": 112,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "arguments": {
+      "llvm_ir_bytes": 174806,
+      "bitcode_bytes": 34252,
+      "layout": {
+        "allocations": 27,
+        "releases": 27,
+        "peak_image_bytes": 400,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "procedures": {
+      "llvm_ir_bytes": 428252,
+      "bitcode_bytes": 78024,
+      "layout": {
+        "allocations": 55,
+        "releases": 55,
+        "peak_image_bytes": 504,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 1,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "captures": {
+      "llvm_ir_bytes": 338617,
+      "bitcode_bytes": 56696,
+      "layout": {
+        "allocations": 310,
+        "releases": 310,
+        "peak_image_bytes": 4104,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 1,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "invocation": {
+      "llvm_ir_bytes": 160366,
+      "bitcode_bytes": 31100,
+      "layout": {
+        "allocations": 283,
+        "releases": 283,
+        "peak_image_bytes": 448,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "expression_targets": {
+      "llvm_ir_bytes": 189930,
+      "bitcode_bytes": 39068,
+      "layout": {
+        "allocations": 148,
+        "releases": 148,
+        "peak_image_bytes": 392,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "short_circuit": {
+      "llvm_ir_bytes": 117769,
+      "bitcode_bytes": 26000,
+      "layout": {
+        "allocations": 18,
+        "releases": 18,
+        "peak_image_bytes": 40,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 1,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "recursive_arguments": {
+      "llvm_ir_bytes": 642715,
+      "bitcode_bytes": 109360,
+      "layout": {
+        "allocations": 470,
+        "releases": 470,
+        "peak_image_bytes": 7240,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 1,
+        "recursive_create_failures": 1,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "effects": {
+      "llvm_ir_bytes": 176483,
+      "bitcode_bytes": 34168,
+      "layout": {
+        "allocations": 42,
+        "releases": 42,
+        "peak_image_bytes": 672,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "regional_captures": {
+      "llvm_ir_bytes": 206582,
+      "bitcode_bytes": 38332,
+      "layout": {
+        "allocations": 12,
+        "releases": 12,
+        "peak_image_bytes": 600,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "recursive_factories": {
+      "llvm_ir_bytes": 267496,
+      "bitcode_bytes": 47632,
+      "layout": {
+        "allocations": 56,
+        "releases": 56,
+        "peak_image_bytes": 1544,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 1,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 1,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "lexical_factory": {
+      "llvm_ir_bytes": 86005,
+      "bitcode_bytes": 16860,
+      "layout": {
+        "allocations": 13,
+        "releases": 13,
+        "peak_image_bytes": 312,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 1,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "higher_order": {
+      "llvm_ir_bytes": 387308,
+      "bitcode_bytes": 70592,
+      "layout": {
+        "allocations": 55,
+        "releases": 55,
+        "peak_image_bytes": 408,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 1,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "generic": {
+      "llvm_ir_bytes": 357817,
+      "bitcode_bytes": 64632,
+      "layout": {
+        "allocations": 43,
+        "releases": 43,
+        "peak_image_bytes": 240,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 1,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "regional_parameters": {
+      "llvm_ir_bytes": 250641,
+      "bitcode_bytes": 50808,
+      "layout": {
+        "allocations": 12,
+        "releases": 12,
+        "peak_image_bytes": 136,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "owner_parameters": {
+      "llvm_ir_bytes": 240263,
+      "bitcode_bytes": 48748,
+      "layout": {
+        "allocations": 12,
+        "releases": 12,
+        "peak_image_bytes": 176,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "borrowed_results": {
+      "llvm_ir_bytes": 141964,
+      "bitcode_bytes": 29264,
+      "layout": {
+        "allocations": 11,
+        "releases": 11,
+        "peak_image_bytes": 160,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "nullable_views": {
+      "llvm_ir_bytes": 189548,
+      "bitcode_bytes": 37348,
+      "layout": {
+        "allocations": 12,
+        "releases": 12,
+        "peak_image_bytes": 176,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "borrowed_holders": {
+      "llvm_ir_bytes": 331747,
+      "bitcode_bytes": 62516,
+      "layout": {
+        "allocations": 52,
+        "releases": 52,
+        "peak_image_bytes": 480,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "holder_results": {
+      "llvm_ir_bytes": 302362,
+      "bitcode_bytes": 56812,
+      "layout": {
+        "allocations": 24,
+        "releases": 24,
+        "peak_image_bytes": 288,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "owner_flows": {
+      "llvm_ir_bytes": 72794,
+      "bitcode_bytes": 17952,
+      "layout": {
+        "allocations": 21,
+        "releases": 21,
+        "peak_image_bytes": 96,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "owner_factories": {
+      "llvm_ir_bytes": 319390,
+      "bitcode_bytes": 58736,
+      "layout": {
+        "allocations": 23,
+        "releases": 23,
+        "peak_image_bytes": 312,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 1,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "array_results": {
+      "llvm_ir_bytes": 172959,
+      "bitcode_bytes": 37212,
+      "layout": {
+        "allocations": 8,
+        "releases": 8,
+        "peak_image_bytes": 104,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "conversions": {
+      "llvm_ir_bytes": 182175,
+      "bitcode_bytes": 34552,
+      "layout": {
+        "allocations": 16,
+        "releases": 16,
+        "peak_image_bytes": 184,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "record_results": {
+      "llvm_ir_bytes": 146739,
+      "bitcode_bytes": 30464,
+      "layout": {
+        "allocations": 12,
+        "releases": 12,
+        "peak_image_bytes": 184,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "initialization": {
+      "llvm_ir_bytes": 141680,
+      "bitcode_bytes": 28424,
+      "layout": {
+        "allocations": 10,
+        "releases": 10,
+        "peak_image_bytes": 136,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "region_results": {
+      "llvm_ir_bytes": 257418,
+      "bitcode_bytes": 49564,
+      "layout": {
+        "allocations": 15,
+        "releases": 15,
+        "peak_image_bytes": 216,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "owned_results": {
+      "llvm_ir_bytes": 2324849,
+      "bitcode_bytes": 382220,
+      "layout": {
+        "allocations": 779,
+        "releases": 779,
+        "peak_image_bytes": 6848,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    },
+    "qualifiers": {
+      "llvm_ir_bytes": 64534,
+      "bitcode_bytes": 16992,
+      "layout": {
+        "allocations": 4,
+        "releases": 4,
+        "peak_image_bytes": 160,
+        "allocation_failure_preserves_source": true,
+        "factory_failures": 0,
+        "recursive_copy_failures": 0,
+        "recursive_create_failures": 0,
+        "call_laps": 10000,
+        "call_allocations": 0
+      }
+    }
+  }
+}
