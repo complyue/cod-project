@@ -2397,5 +2397,10 @@
     "file": "scopes/iteration-effects.cod",
     "exit": 0,
     "stdout": "3\n3\n2\n3\n3\n2\n3\n3\n2\n1\n2\n1\n2\n1\n2\n1\n"
+  },
+  {
+    "file": "closures/callable-short-circuit.cod",
+    "exit": 0,
+    "stdout": "16\n"
   }
 ]

@@ -356,6 +356,36 @@ behave @print(7002u64);
         assert expression_evidence['layout']['peak_image_bytes'] < 2048, expression_evidence
         expression_evidence['fixture_sha256'] = hashlib.sha256(expression_targets.read_bytes()).hexdigest()
         evidence['expression_targets'] = expression_evidence
+        short_circuit = directory / "closures/callable-short-circuit.cod"
+        entry.write_text(short_circuit.read_text() + '''
+using "std:exceptions" OutOfMemory;
+behave @print(6001u64);
+try {
+  false && evaluate(stable);
+  true && evaluate(stable);
+  {}
+} catch(e:const OutOfMemory) { behave @print(6002u64); };
+behave @print(6201u64);
+try {
+  true || build(state)();
+  false || build(state)();
+  {}
+} catch(e:const OutOfMemory) { behave @print(6202u64); };
+behave @print(state.created);
+behave @print(state.called);
+behave @print(7001u64);
+behave @print(fold(i in 0u64 .. 10000u64,total=0u64) {{
+  total + if (i % 2u64 == 0u64 && stable()) { 1u64 } else { 0u64 }
+}});
+behave @print(7002u64);
+''')
+        short_output, short_evidence = run_case(root, toolchain, entry, scratch,
+                                               HARNESS + REGION_HARNESS, extra_wrappers=wrappers)
+        assert short_output == ['16', '6001', '6002', '6201', '6202', '17', '16',
+                                '7001', '5000', '7002'], short_output
+        assert short_evidence['layout']['factory_failures'] == 1, short_evidence
+        short_evidence['fixture_sha256'] = hashlib.sha256(short_circuit.read_bytes()).hexdigest()
+        evidence['short_circuit'] = short_evidence
         recursive_arguments = directory / "closures/callable-recursive-factory-argument.cod"
         entry.write_text(recursive_arguments.read_text() + '''
 using "std:exceptions" OutOfMemory;

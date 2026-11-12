@@ -259,7 +259,8 @@ def main():
         ir, runtime = scratch / "uncaught.ll", scratch / "uncaught-runtime.cc"
         uncaught_source = scratch / "uncaught-callables.cod"
         uncaught_source.write_text('function identity(n:u64)->const u64 { n }\n'
-            'func module_value = identity;\n' +
+            'func module_value = identity;\n'
+            'false && (func()->const bool { true })();\n' +
             (directory / "exception-reraise.cod").read_text().replace(
                 'try {', 'try {\n  func local_value = module_value;', 1))
         checked([toolchain / "bin/cod", "--check", uncaught_source,

@@ -6031,14 +6031,13 @@ class Compiler {
       auto right_locals = locals.nested();
       const auto rebound = llvm::SaveAndRestore(scope_rebound_, false);
 
-      const auto native_scope = ir_.scope();
       const auto before = flow_state();
       auto native_branch = ir_.branch(left.native, expr.text == "||");
       Value right;
       try { right = expression(*expr.children[1], module, right_env, right_locals, function_context); }
       catch (const EndPath &) { right = scalar(Type::never, nullptr); }
       require(right.type, Type::boolean, expr.at);
-      if (scope_rebound_ || ir_.scope() != native_scope)
+      if (scope_rebound_)
         fail(expr.at, "conditional rebinding in a logical operand needs an explicit scope");
       ir_.otherwise(native_branch, right.native);
       auto joined = right.type == Type::never ? before : flow_state();

@@ -51,10 +51,11 @@ class LLVMEmission {
   const Location *source_location_ = nullptr;
   struct Cleanup {
     llvm::Value *address;
-    llvm::Value *saved; // nullptr identifies a region-owner slot to release.
+    llvm::AllocaInst *saved; // nullptr identifies an owned image/region slot.
     bool callable = false;
     std::shared_ptr<std::vector<llvm::StoreInst *>> effect_writes = {};
     std::shared_ptr<std::vector<llvm::Instruction *>> protection = {};
+    llvm::Value *active = nullptr;
   };
   struct CallableProtection {
     llvm::Value *source, *image, *slot;
@@ -92,9 +93,37 @@ class LLVMEmission {
   llvm::StructType *exception_payload_type() {
     return llvm::StructType::get(context(), {i64(), i64(), i64(), i64()});
   }
-  llvm::Value *entry_slot(llvm::Type *type, const char *name) {
+  llvm::AllocaInst *entry_slot(llvm::Type *type, const char *name, bool initialize = false) {
     llvm::IRBuilder<> storage(&entry_->getEntryBlock(), entry_->getEntryBlock().begin());
-    return storage.CreateAlloca(type, nullptr, name);
+    auto *slot = storage.CreateAlloca(type, nullptr, name);
+    if (initialize) storage.CreateStore(llvm::Constant::getNullValue(type), slot);
+    return slot;
+  }
+  void release_slot(llvm::Value *slot, bool callable,
+                    const std::shared_ptr<std::vector<llvm::Instruction *>> &protection = {}) {
+    auto *release = call_runtime(callable ? "cod_lang_callable_free" : "cod_lang_region_free",
+                                 void_type(), {b().CreateLoad(pointer_type(), slot)});
+    auto *cleared = b().CreateStore(llvm::ConstantPointerNull::get(pointer_type()), slot);
+    if (protection) {
+      protection->push_back(llvm::cast<llvm::Instruction>(release));
+      protection->push_back(cleared);
+    }
+  }
+  void emit_cleanup(const Cleanup &cleanup) {
+    if (!cleanup.saved) {
+      release_slot(cleanup.address, cleanup.callable, cleanup.protection);
+      return;
+    }
+    auto *restore = label("effect.restore"), *done = label("effect.restored");
+    auto *active = b().CreateLoad(llvm::Type::getInt1Ty(context()), cleanup.active);
+    b().CreateCondBr(active, restore, done);
+    enter(restore);
+    auto *saved = b().CreateLoad(cleanup.saved->getAllocatedType(), cleanup.saved);
+    auto *store = b().CreateStore(saved, cleanup.address);
+    if (cleanup.effect_writes) cleanup.effect_writes->push_back(store);
+    b().CreateStore(llvm::ConstantInt::getFalse(context()), cleanup.active);
+    jump(done);
+    enter(done);
   }
   llvm::Value *source_context() {
     if (source_location_) return b().CreateGlobalString(location_text(*source_location_));
@@ -289,7 +318,11 @@ public:
     // WPO fixes each slot's type. Save the payload for scoped restoration;
     // bits never borrow a lexical cell, and object views retain region provenance.
     auto *address = slot(id, type);
-    cleanups_.push_back({address, b().CreateLoad(type_of(type), address), false, writes});
+    auto *saved = entry_slot(type_of(type), "effect.saved");
+    auto *active = entry_slot(llvm::Type::getInt1Ty(context()), "effect.active", true);
+    b().CreateStore(b().CreateLoad(type_of(type), address), saved);
+    b().CreateStore(llvm::ConstantInt::getTrue(context()), active);
+    cleanups_.push_back({address, saved, false, writes, {}, active});
     auto *store = b().CreateStore(source, address);
     if (writes) writes->push_back(store);
   }
@@ -300,18 +333,7 @@ public:
   }
   size_t scope() const { return cleanups_.size(); }
   void unwind(size_t mark) {
-    for (size_t i = cleanups_.size(); i > mark; --i) {
-      const auto &cleanup = cleanups_[i - 1];
-      if (cleanup.saved) {
-        auto *store = b().CreateStore(cleanup.saved, cleanup.address);
-        if (cleanup.effect_writes) cleanup.effect_writes->push_back(store);
-      }
-      else {
-        auto *release = call_runtime(cleanup.callable ? "cod_lang_callable_free" : "cod_lang_region_free",
-                                     void_type(), {b().CreateLoad(pointer_type(), cleanup.address)});
-        if (cleanup.protection) cleanup.protection->push_back(llvm::cast<llvm::Instruction>(release));
-      }
-    }
+    for (size_t i = cleanups_.size(); i > mark; --i) emit_cleanup(cleanups_[i - 1]);
   }
   void restore(size_t mark) {
     if (reachable()) unwind(mark);
@@ -716,7 +738,7 @@ public:
   size_t protect_callable(llvm::Value *image) {
     auto *allocation = here();
     auto *copy = copy_callable(image);
-    auto *slot = entry_slot(pointer_type(), "invocation.image");
+    auto *slot = entry_slot(pointer_type(), "invocation.image", true);
     auto *installed = b().CreateStore(copy, slot);
     auto cleanup = std::make_shared<std::vector<llvm::Instruction *>>();
     cleanups_.push_back({slot, nullptr, true, {}, cleanup});
@@ -738,9 +760,7 @@ public:
   }
   void release_callable_protection(size_t id) {
     auto &protection = callable_protections_.at(id);
-    protection.cleanup->push_back(llvm::cast<llvm::Instruction>(call_runtime("cod_lang_callable_free", void_type(),
-        {b().CreateLoad(pointer_type(), protection.slot)})));
-    protection.cleanup->push_back(b().CreateStore(null_pointer(), protection.slot));
+    release_slot(protection.slot, true, protection.cleanup);
   }
   void callable_write() {
     callable_writers_.insert(entry_);
@@ -774,7 +794,7 @@ public:
     }
   }
   llvm::Value *hold_callable(llvm::Value *image, bool module_lifetime) {
-    auto *slot = entry_slot(pointer_type(), "callable.owner");
+    auto *slot = entry_slot(pointer_type(), "callable.owner", true);
     b().CreateStore(image, slot);
     if (module_lifetime) module_callables_.push_back(slot);
     else cleanups_.push_back({slot, nullptr, true});
@@ -902,7 +922,7 @@ public:
       using ResourceKey = std::pair<llvm::Value *, llvm::BasicBlock *>;
       std::map<ResourceKey, std::pair<llvm::BasicBlock *, size_t>> region_nodes, callable_nodes;
       const auto resources = [&](const auto &slots, auto &nodes, llvm::BasicBlock *end,
-                                 llvm::SwitchInst *selection, const char *release) {
+                                 llvm::SwitchInst *selection, bool callable) {
         auto *next = end;
         size_t id = 0;
         for (auto *slot : slots) {
@@ -914,7 +934,7 @@ public:
             found = nodes.emplace(key, std::pair{block, index}).first;
             selection->addCase(integer(i64(), index), block);
             enter(block);
-            call_runtime(release, void_type(), {b().CreateLoad(pointer_type(), slot)});
+            release_slot(slot, callable);
             jump(next);
           }
           next = found->second.first;
@@ -925,8 +945,8 @@ public:
       using CleanupKey = std::tuple<llvm::Value *, llvm::Value *, bool, const EffectWrites *, llvm::BasicBlock *>;
       std::map<CleanupKey, llvm::BasicBlock *> cleanup_nodes;
       for (const auto *site : sites) {
-        const auto region_id = resources(site->regions, region_nodes, terminal, region_switch, "cod_lang_region_free");
-        const auto callable_id = resources(site->callables, callable_nodes, regions, callable_switch, "cod_lang_callable_free");
+        const auto region_id = resources(site->regions, region_nodes, terminal, region_switch, false);
+        const auto callable_id = resources(site->callables, callable_nodes, regions, callable_switch, true);
         auto *next = callables;
         for (const auto &cleanup : site->cleanups) {
           const CleanupKey key{cleanup.address, cleanup.saved, cleanup.callable, cleanup.effect_writes.get(), next};
@@ -935,14 +955,7 @@ public:
             auto *block = label("uncaught.restore");
             found = cleanup_nodes.emplace(key, block).first;
             enter(block);
-            if (cleanup.saved) {
-              auto *store = b().CreateStore(cleanup.saved, cleanup.address);
-              if (cleanup.effect_writes) cleanup.effect_writes->push_back(store);
-            } else {
-              auto *release = call_runtime(cleanup.callable ? "cod_lang_callable_free" : "cod_lang_region_free",
-                  void_type(), {b().CreateLoad(pointer_type(), cleanup.address)});
-              if (cleanup.protection) cleanup.protection->push_back(llvm::cast<llvm::Instruction>(release));
-            }
+            emit_cleanup(cleanup);
             jump(next);
           }
           next = found->second;
@@ -1190,8 +1203,7 @@ public:
     return checked_service("cod_lang_region_new", pointer_type(), {bytes}, bytes, {ExceptionCategory::out_of_memory, ExceptionCategory::invalid_capacity});
   }
   llvm::Value *hold_region(llvm::Value *region, bool module_lifetime) {
-    llvm::IRBuilder<> allocations(&entry_->getEntryBlock(), entry_->getEntryBlock().begin());
-    auto *slot = allocations.CreateAlloca(pointer_type(), nullptr, "region.owner");
+    auto *slot = entry_slot(pointer_type(), "region.owner", true);
     b().CreateStore(region, slot);
     if (module_lifetime) module_regions_.push_back(slot);
     else cleanups_.push_back({slot, nullptr});
@@ -1308,9 +1320,9 @@ public:
     if (!cleanups_.empty()) throw std::logic_error("unclosed LLVM resource scope");
     if (reachable()) {
       for (auto slot = module_callables_.rbegin(); slot != module_callables_.rend(); ++slot)
-        call_runtime("cod_lang_callable_free", void_type(), {b().CreateLoad(pointer_type(), *slot)});
+        release_slot(*slot, true);
       for (auto region = module_regions_.rbegin(); region != module_regions_.rend(); ++region)
-        call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), *region)});
+        release_slot(*region, false);
       call_runtime("cod_lang_exception_finish", void_type(), {});
       b().CreateRet(integer(llvm::Type::getInt32Ty(context()), 0));
     }

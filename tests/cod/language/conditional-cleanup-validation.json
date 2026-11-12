@@ -1,0 +1,195 @@
+{
+  "compiler_sha256": "c3ad7ac22a200b1b4676681d72cc2e6f1eb00915a374347e7c491b7231c44004",
+  "short_circuit": {
+    "layout": {
+      "allocations": 18,
+      "releases": 18,
+      "peak_image_bytes": 40,
+      "allocation_failure_preserves_source": true,
+      "factory_failures": 1,
+      "recursive_copy_failures": 0,
+      "recursive_create_failures": 0,
+      "call_laps": 10000,
+      "call_allocations": 0
+    },
+    "frontend_seconds": 0.021287409006617963,
+    "native_compile_link_seconds": 1.9013064589817077,
+    "native_process_seconds": 0.0015143670025281608,
+    "llvm_ir_bytes": 112665,
+    "bitcode_bytes": 25416,
+    "fixture_sha256": "df5edc0a39d907cfb19acb233817cee97ebbbc236f1fe343ac77e7ed14736a97"
+  },
+  "optimization": {
+    "loop.ll": {
+      "bytes": 91032,
+      "effect_active_slots": 10,
+      "effect_saved_slots": 10
+    },
+    "loop-opt.ll": {
+      "bytes": 37513,
+      "effect_active_slots": 0,
+      "effect_saved_slots": 0
+    }
+  },
+  "asan": {
+    "compiler_sha256": "c3ad7ac22a200b1b4676681d72cc2e6f1eb00915a374347e7c491b7231c44004",
+    "results": [
+      {
+        "fixture": "tests/cod/language/closures/callable-short-circuit.cod",
+        "fixture_sha256": "df5edc0a39d907cfb19acb233817cee97ebbbc236f1fe343ac77e7ed14736a97",
+        "llvm_ir_sha256": "f4476d69fe51140903d078a9fc02645bff0dfb0bdcb40dee40ca6e971c1e478d",
+        "instrumented_definitions": 11,
+        "cyclic_functions": [],
+        "steps": [
+          {
+            "stage": "frontend",
+            "code": 0,
+            "seconds": 0.021351770992623642,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "stage": "instrument_ir",
+            "code": 0,
+            "seconds": 0.041434057988226414,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "stage": "verify_instrumentation",
+            "code": 0,
+            "seconds": 0.010768579988507554,
+            "stdout": "                 U __asan_init\n                 U __asan_memset\n                 U __asan_option_detect_stack_use_after_return\n                 U __asan_register_elf_globals\n                 U __asan_report_load8\n                 U __asan_report_store1\n                 U __asan_report_store8\n                 U __asan_stack_malloc_0\n                 U __asan_stack_malloc_2\n                 U __asan_unregister_elf_globals\n                 U __asan_version_mismatch_check_v8\n                 w __start_asan_globals\n                 w __stop_asan_globals\n                 U __tls_get_addr\n                 U cod_lang_callable_create\n                 U cod_lang_callable_free\n                 U cod_lang_exception_finish\n                 U cod_lang_fail\n                 U cod_lang_print_u64\n                 U cod_lang_region_free\n                 U cod_lang_region_new\n                 U cod_lang_region_reserve_root\n                 U cod_lang_region_root\n                 U cod_lang_uncaught\n",
+            "stderr": ""
+          },
+          {
+            "stage": "link",
+            "code": 0,
+            "seconds": 1.6233582919812761,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "stage": "execute",
+            "code": 0,
+            "seconds": 0.01106060401070863,
+            "stdout": "16\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "fixture": "tests/cod/language/closures/callable-recursive-factory-argument.cod",
+        "fixture_sha256": "0186125164676d8c280a91b52668fa1bdfd257c9243a447f6a3cc82330123972",
+        "llvm_ir_sha256": "861b7d94fbd355651684134ba992a28c1b3742c839f081852552c02901c580ef",
+        "instrumented_definitions": 66,
+        "cyclic_functions": [
+          "cod.call.function.context",
+          "cod.call.function.context.44",
+          "cod.call.function.context.59",
+          "cod.call.function.context.9",
+          "cod.call.procedure.context",
+          "cod.call.procedure.context.31"
+        ],
+        "steps": [
+          {
+            "stage": "frontend",
+            "code": 0,
+            "seconds": 0.03310760098975152,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "stage": "instrument_ir",
+            "code": 0,
+            "seconds": 0.20926034700823948,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "stage": "verify_instrumentation",
+            "code": 0,
+            "seconds": 0.019086601008893922,
+            "stdout": "                 U __asan_init\n                 U __asan_memset\n                 U __asan_option_detect_stack_use_after_return\n                 U __asan_register_elf_globals\n                 U __asan_report_load8\n                 U __asan_report_store8\n                 U __asan_set_shadow_f5\n                 U __asan_stack_malloc_0\n                 U __asan_stack_malloc_1\n                 U __asan_stack_malloc_2\n                 U __asan_stack_malloc_4\n                 U __asan_unregister_elf_globals\n                 U __asan_version_mismatch_check_v8\n                 w __start_asan_globals\n                 w __stop_asan_globals\n                 U __tls_get_addr\n                 U cod_lang_callable_copy\n                 U cod_lang_callable_create\n                 U cod_lang_callable_free\n                 U cod_lang_exception_finish\n                 U cod_lang_fail\n                 U cod_lang_print_u64\n                 U cod_lang_region_free\n                 U cod_lang_region_new\n                 U cod_lang_region_reserve_root\n                 U cod_lang_region_root\n                 U cod_lang_uncaught\n",
+            "stderr": ""
+          },
+          {
+            "stage": "link",
+            "code": 0,
+            "seconds": 1.6790950330032501,
+            "stdout": "",
+            "stderr": ""
+          },
+          {
+            "stage": "execute",
+            "code": 0,
+            "seconds": 0.01557913000578992,
+            "stdout": "39\n67\n105\n72\n15\n39\n",
+            "stderr": ""
+          }
+        ]
+      }
+    ]
+  },
+  "source_sha256": {
+    "cod/lang_frontend.hh": "f019c7e17cc72483fc67b3bcf0793be232a47bfa031999fadbf5083453903449",
+    "cod/lang_llvm.hh": "9e0dfcdd5b7a9596755e221facfc72c9f0f99f115264c2c1e391abf95f381fd7",
+    "cod/lang_syntax.hh": "c8149c9d49c2e41768b87ee03360985b393947c65e05c47ef312e3f1f27ba9d3",
+    "cod/lang_native_runtime.hh": "041aeea37aa18d33787c516f0284f7362032c0f89e0653b21b066d4224e92e55",
+    "cod/lang_exceptions.hh": "d4e23dea9d7d69bf4645b15c9848e484488c7ea6c7be556397e7c746e6375e68",
+    "tests/cod/language/closures/callable-short-circuit.cod": "df5edc0a39d907cfb19acb233817cee97ebbbc236f1fe343ac77e7ed14736a97",
+    "tests/cod/language/callable_runtime_tests.py": "9dcc022e9d3deb2fd711877b1ff2fc0d5ea1d9457ee0357a55dd34a17acc6a0d",
+    "tests/cod/language/exception_runtime_tests.py": "d839c02333f5f4c5dd6c0740331f9e4d774f07bd70c3597dc3824ac758fae4e5"
+  },
+  "loop_effects": {
+    "layout": {
+      "owners_acquired": 13,
+      "owners_released": 13,
+      "failed_acquisitions": 2,
+      "peak_live_owners": 3
+    },
+    "frontend_seconds": 0.022445092006819323,
+    "native_compile_link_seconds": 1.8915316920029,
+    "native_process_seconds": 0.001205212000058964,
+    "llvm_ir_bytes": 91032,
+    "bitcode_bytes": 20904,
+    "recorded_utc": "2026-11-12T10:45:54.494303+00:00",
+    "toolchain": "build",
+    "trace": [
+      "3",
+      "3",
+      "2",
+      "3",
+      "3",
+      "2",
+      "3",
+      "3",
+      "2",
+      "1",
+      "2",
+      "1",
+      "2",
+      "1",
+      "2",
+      "1"
+    ],
+    "compiler_sha256": "c3ad7ac22a200b1b4676681d72cc2e6f1eb00915a374347e7c491b7231c44004",
+    "source_sha256": {
+      "cod/lang_exceptions.hh": "d4e23dea9d7d69bf4645b15c9848e484488c7ea6c7be556397e7c746e6375e68",
+      "cod/lang_syntax.hh": "c8149c9d49c2e41768b87ee03360985b393947c65e05c47ef312e3f1f27ba9d3",
+      "cod/lang_frontend.hh": "f019c7e17cc72483fc67b3bcf0793be232a47bfa031999fadbf5083453903449",
+      "cod/lang_llvm.hh": "9e0dfcdd5b7a9596755e221facfc72c9f0f99f115264c2c1e391abf95f381fd7",
+      "cod/lang_native_runtime.hh": "041aeea37aa18d33787c516f0284f7362032c0f89e0653b21b066d4224e92e55",
+      "tests/cod/language/scopes/iteration-effects.cod": "019a86f4e98059ad786067ae761fd65930138b53eaa0f73c1474116e31417338",
+      "tests/cod/language/loop_scope_tests.py": "9eadbb12f7dce379843e5d6d66f382cafa88dbcb25bc0049745dbe5554000bca",
+      "tests/cod/language/regional_runtime_tests.py": "ce3c4c0a7e5c3050735e776105249c4b604c79ab8c6481c22063879afa77e11b",
+      "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241"
+    }
+  },
+  "language": {
+    "passed": 400,
+    "total": 400,
+    "recorded_source_hashes": 490
+  },
+  "native_callable_cases": 29
+}
