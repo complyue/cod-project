@@ -1,0 +1,24 @@
+import "callable-module-base.cod" score;
+function score(x:u64) -> const u64 { 7u64 }
+using "callable-module-base.cod" twice as frozen;
+export import "callable-module-base.cod" twice as adapted;
+using "callable-module-base.cod" factory as frozen_factory;
+export import "callable-module-base.cod" factory as adapted_factory;
+export frozen;
+export frozen_factory;
+using "callable-module-base.cod" procedure_twice as frozen_procedure;
+export frozen_procedure;
+export import "callable-module-base.cod" procedure_twice as adapted_procedure;
+using "callable-module-base.cod" recursive_value as frozen_recursive;
+export frozen_recursive;
+export import "callable-module-base.cod" recursive_value as adapted_recursive;
+
+using "callable-module-base.cod" generic_twice as frozen_generic;
+export frozen_generic;
+export import "callable-module-base.cod" generic_twice as adapted_generic;
+
+using "callable-module-base.cod" MethodState;
+export MethodState;
+using "callable-module-base.cod" owner_loop as frozen_owner;
+export frozen_owner;
+export import "callable-module-base.cod" owner_loop as adapted_owner;

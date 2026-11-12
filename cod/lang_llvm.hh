@@ -16,15 +16,21 @@
 #include <llvm/Support/SaveAndRestore.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/TargetParser/Host.h>
+#include <llvm/Transforms/Utils/CodeExtractor.h>
+#include <llvm/Transforms/Utils/Local.h>
 
+#include <algorithm>
 #include <map>
 #include <cmath>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace cod::language {
@@ -45,11 +51,37 @@ class LLVMEmission {
   struct Cleanup {
     llvm::Value *address;
     llvm::Value *saved; // nullptr identifies a region-owner slot to release.
+    bool callable = false;
+    std::shared_ptr<std::vector<llvm::StoreInst *>> effect_writes = {};
+    std::shared_ptr<std::vector<llvm::Instruction *>> protection = {};
   };
+  struct CallableProtection {
+    llvm::Value *source, *image, *slot;
+    llvm::StoreInst *installed;
+    llvm::CondBrInst *failure;
+    std::shared_ptr<std::vector<llvm::Instruction *>> cleanup;
+    std::vector<llvm::CallBase *> calls;
+    bool required = false;
+  };
+  std::vector<CallableProtection> callable_protections_;
+  std::vector<size_t> active_protections_;
+  std::set<llvm::Function *> callable_writers_;
   std::vector<Cleanup> cleanups_;
+  struct UncaughtSite {
+    llvm::BasicBlock *block;
+    size_t category;
+    llvm::Value *payload;
+    std::vector<Cleanup> cleanups;
+    std::vector<llvm::Value *> regions, callables;
+  };
+  std::vector<UncaughtSite> uncaught_sites_;
   std::vector<llvm::Value *> module_regions_;
+  std::vector<llvm::Value *> module_callables_;
   std::vector<llvm::Value *> exception_sites_;
   std::function<void(size_t, llvm::Value *)> exception_handler_;
+  size_t callable_depth_ = 0;
+  std::vector<std::vector<llvm::BasicBlock *>> callable_bodies_;
+  std::set<llvm::Function *> callable_entries_;
 
   llvm::LLVMContext &context() { return *context_; }
   llvm::IRBuilder<> &b() { return *builder_; }
@@ -207,7 +239,7 @@ public:
     case Type::boolean: return llvm::Type::getInt1Ty(context());
     case Type::float32: return llvm::Type::getFloatTy(context());
     case Type::float64: return llvm::Type::getDoubleTy(context());
-    case Type::region: return pointer_type();
+    case Type::region: case Type::procedure: return pointer_type();
     case Type::void_type: return void_type();
     case Type::exception: return exception_payload_type();
     default: throw std::logic_error("unresolved LLVM type");
@@ -249,20 +281,34 @@ public:
   llvm::Value *read_symbol(size_t id, Type type) {
     return b().CreateLoad(type_of(type), slot(id, type));
   }
-  void effect(size_t id, Type type, llvm::Value *source) {
-    if (type.kind == Type::region || type.kind == Type::procedure) return;
+  using EffectWrites = std::vector<llvm::StoreInst *>;
+  void effect(size_t id, Type type, llvm::Value *source, std::shared_ptr<EffectWrites> writes = {}) {
+    if (type.kind == Type::region || (type.kind == Type::procedure && !source)) return;
     // WPO fixes each slot's type. Save the payload for scoped restoration;
     // bits never borrow a lexical cell, and object views retain region provenance.
     auto *address = slot(id, type);
-    cleanups_.push_back({address, b().CreateLoad(type_of(type), address)});
-    b().CreateStore(source, address);
+    cleanups_.push_back({address, b().CreateLoad(type_of(type), address), false, writes});
+    auto *store = b().CreateStore(source, address);
+    if (writes) writes->push_back(store);
+  }
+  void captured_procedure(size_t id, llvm::Value *image, const std::shared_ptr<EffectWrites> &writes) {
+    auto *holder = entry_slot(pointer_type(), "capture.holder");
+    writes->push_back(b().CreateStore(image, holder));
+    effect(id, Type::procedure, holder, writes);
   }
   size_t scope() const { return cleanups_.size(); }
   void unwind(size_t mark) {
     for (size_t i = cleanups_.size(); i > mark; --i) {
       const auto &cleanup = cleanups_[i - 1];
-      if (cleanup.saved) b().CreateStore(cleanup.saved, cleanup.address);
-      else call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), cleanup.address)});
+      if (cleanup.saved) {
+        auto *store = b().CreateStore(cleanup.saved, cleanup.address);
+        if (cleanup.effect_writes) cleanup.effect_writes->push_back(store);
+      }
+      else {
+        auto *release = call_runtime(cleanup.callable ? "cod_lang_callable_free" : "cod_lang_region_free",
+                                     void_type(), {b().CreateLoad(pointer_type(), cleanup.address)});
+        if (cleanup.protection) cleanup.protection->push_back(llvm::cast<llvm::Instruction>(release));
+      }
     }
   }
   void restore(size_t mark) {
@@ -282,6 +328,478 @@ public:
   }
   void on_exception(std::function<void(size_t, llvm::Value *)> handler) {
     exception_handler_ = std::move(handler);
+  }
+  llvm::BasicBlock *begin_callable() {
+    if (callable_depth_++) return nullptr;
+    auto *body = label("callable.body");
+    jump(body);
+    enter(body);
+    return body;
+  }
+  void end_callable(llvm::BasicBlock *body) {
+    --callable_depth_;
+    if (!body) return;
+    auto *continuation = label("callable.continue");
+    if (reachable()) jump(continuation);
+    std::vector<llvm::BasicBlock *> blocks;
+    for (auto it = body->getIterator(); &*it != continuation; ++it) {
+      // An enclosing catch may acquire an empty landing block during this
+      // call. Its body is emitted later and belongs to the caller.
+      if (!it->empty()) blocks.push_back(&*it);
+    }
+    callable_bodies_.push_back(std::move(blocks));
+    enter(continuation);
+  }
+  struct NativeDefinition {
+    llvm::Function *function = nullptr;
+    Type result;
+    bool returns = true;
+    bool complete = false;
+    bool checked_null = false;
+    std::set<size_t> failures;
+    unsigned context_argument = 0;
+    llvm::FunctionType *signature = nullptr;
+    bool borrowed_result = false;
+  };
+  struct NativeContext {
+    unsigned argument = 0;
+    std::vector<llvm::Value *> inputs;
+    llvm::StructType *layout = nullptr;
+    bool closed = false;
+  };
+  std::map<llvm::Function *, NativeContext> native_contexts_;
+  std::map<llvm::Instruction *, llvm::Function *> context_uses_;
+  std::set<llvm::Function *> context_free_entries_;
+  static bool external_value(llvm::Value *value, llvm::Function *function) {
+    if (auto *instruction = llvm::dyn_cast<llvm::Instruction>(value)) return instruction->getFunction() != function;
+    if (auto *argument = llvm::dyn_cast<llvm::Argument>(value)) return argument->getParent() != function;
+    return false;
+  }
+  static bool add_context_input(NativeContext &context, llvm::Value *value, llvm::Function *function) {
+    if (!external_value(value, function) ||
+        std::find(context.inputs.begin(), context.inputs.end(), value) != context.inputs.end()) return false;
+    context.inputs.push_back(value);
+    return true;
+  }
+  bool context_free(const NativeDefinition &definition) const {
+    const auto &context = native_contexts_.at(definition.function);
+    return context.closed && context.inputs.empty();
+  }
+  void require_context_free(const NativeDefinition &definition) {
+    context_free_entries_.insert(definition.function);
+  }
+  struct NativeBody {
+    llvm::Function *parent;
+    llvm::IRBuilderBase::InsertPoint insertion;
+    std::vector<Cleanup> cleanups;
+    std::vector<llvm::Value *> modules;
+    std::vector<llvm::Value *> callables;
+    size_t callable_depth;
+    std::vector<size_t> protections;
+  };
+  llvm::FunctionType *native_signature(const std::vector<Type> &parameters, Type result, bool separate_context = false,
+                                       const std::vector<bool> &borrowed = {}, bool borrowed_result = false) {
+    std::vector<llvm::Type *> arguments{pointer_type()};
+    if (separate_context) arguments.push_back(pointer_type());
+    if (result.kind == Type::procedure && !borrowed_result) arguments.push_back(pointer_type());
+    for (size_t i = 0; i < parameters.size(); ++i)
+      arguments.push_back(!borrowed.empty() && borrowed[i] ? pointer_type() : storage_type(parameters[i]));
+    std::vector<llvm::Type *> returned{i64(), exception_payload_type()};
+    if (result != Type::void_type && (result.kind != Type::procedure || borrowed_result))
+      returned.push_back(borrowed_result ? pointer_type() : storage_type(result));
+    return llvm::FunctionType::get(llvm::StructType::get(context(), returned), arguments, false);
+  }
+  NativeDefinition indirect_signature(const std::vector<Type> &parameters, Type result, bool checked_null) {
+    return {nullptr, result, true, false, checked_null, {}, 0, native_signature(parameters, result)};
+  }
+  NativeDefinition native_declaration(const std::string &name, const std::vector<Type> &parameters, Type result,
+                                      bool separate_context = false, const std::vector<bool> &borrowed = {},
+                                      bool borrowed_result = false) {
+    auto *signature = native_signature(parameters, result, separate_context, borrowed, borrowed_result);
+    auto *function = llvm::Function::Create(signature, llvm::GlobalValue::InternalLinkage,
+                                           "cod.call." + name, *module_);
+    const auto argument = separate_context ? 1u : 0u;
+    native_contexts_.emplace(function, NativeContext{argument, {}});
+    return {function, result, true, false, false, {}, argument, nullptr, borrowed_result};
+  }
+  NativeBody begin_native(NativeDefinition &definition, llvm::BasicBlock *resume = nullptr) {
+    NativeBody previous{entry_, b().saveIP(), std::move(cleanups_), std::move(module_regions_),
+                        std::move(module_callables_), callable_depth_, std::move(active_protections_)};
+    cleanups_.clear(); module_regions_.clear(); module_callables_.clear(); callable_depth_ = 0;
+    active_protections_.clear();
+    entry_ = definition.function;
+    if (resume) { resume->getTerminator()->eraseFromParent(); enter(resume); }
+    else enter(llvm::BasicBlock::Create(context(), "entry", entry_));
+    return previous;
+  }
+  void native_return(llvm::Value *value = nullptr, size_t category = 0, llvm::Value *error = nullptr) {
+    llvm::Value *returned = llvm::PoisonValue::get(entry_->getReturnType());
+    returned = b().CreateInsertValue(returned, integer(i64(), category), {0});
+    if (error) returned = b().CreateInsertValue(returned, error, {1});
+    if (value) returned = b().CreateInsertValue(returned, value, {2});
+    b().CreateRet(returned);
+  }
+  void end_native(NativeDefinition &definition, NativeBody previous) {
+    if (!cleanups_.empty()) throw std::logic_error("unclosed native callable resource scope");
+    // Record known inputs for reuse checks. Their layout and loads wait until
+    // every demanded body and context edge is available.
+    auto &context = native_contexts_.at(definition.function);
+    context.inputs.clear();
+    context.closed = true;
+    for (auto &block : *definition.function)
+      for (auto &instruction : block)
+        for (const auto &operand : instruction.operands())
+          add_context_input(context, operand.get(), definition.function);
+    for (const auto &[use, target] : context_uses_) {
+      if (use->getFunction() != definition.function) continue;
+      if (!target || !native_contexts_.at(target).closed) { context.closed = false; continue; }
+      for (auto *input : native_contexts_.at(target).inputs)
+        add_context_input(context, input, definition.function);
+    }
+    entry_ = previous.parent;
+    cleanups_ = std::move(previous.cleanups);
+    module_regions_ = std::move(previous.modules);
+    module_callables_ = std::move(previous.callables);
+    active_protections_ = std::move(previous.protections);
+    callable_depth_ = previous.callable_depth;
+    b().restoreIP(previous.insertion);
+    definition.complete = true;
+  }
+  llvm::Value *native_environment(const NativeDefinition &definition) {
+    if (context_free(definition)) return null_pointer();
+    auto *pending = pending_context();
+    context_uses_.at(pending) = definition.function;
+    return pending;
+  }
+  llvm::Value *native_call(const NativeDefinition &definition, llvm::Value *environment,
+                           const std::vector<llvm::Value *> &parameters, llvm::Value *callee = nullptr,
+                           llvm::Value *destination = nullptr, llvm::Value *context = nullptr) {
+    std::vector<llvm::Value *> arguments{environment};
+    if (definition.context_argument) {
+      if (!context) throw std::logic_error("procedure adapter requires caller context");
+      arguments.push_back(context);
+    }
+    if (definition.result.kind == Type::procedure && !definition.borrowed_result) {
+      if (!destination) throw std::logic_error("native callable result requires caller storage");
+      arguments.push_back(destination);
+    }
+    arguments.insert(arguments.end(), parameters.begin(), parameters.end());
+    auto *returned = b().CreateCall(definition.signature ? definition.signature : definition.function->getFunctionType(),
+                                    callee ? callee : definition.function, arguments);
+    for (size_t protection : active_protections_) callable_protections_[protection].calls.push_back(returned);
+    const auto result = [&]() -> llvm::Value * {
+      if (definition.result == Type::void_type) return nullptr;
+      if (destination) return b().CreateLoad(pointer_type(), destination);
+      return b().CreateExtractValue(returned, {2});
+    };
+    if (definition.complete && definition.failures.empty()) {
+      if (!definition.returns) { unreachable(); return nullptr; }
+      return result();
+    }
+    auto *category = b().CreateExtractValue(returned, {0});
+    auto *failure = label("call.failure");
+    auto *success = label("call.success");
+    b().CreateCondBr(is_null(category), success, failure);
+    enter(failure);
+    auto *error = b().CreateExtractValue(returned, {1});
+    dispatch_exception(category, [&](size_t kind) {
+      const bool possible = definition.complete ? definition.failures.contains(kind) :
+                            kind != 4 || definition.checked_null;
+      if (possible) exception_handler_(kind, error);
+      else unreachable();
+    });
+    enter(success);
+    if (!definition.returns) { unreachable(); return nullptr; }
+    return result();
+  }
+  llvm::Instruction *pending_context() {
+    auto *pending = b().Insert(new llvm::FreezeInst(null_pointer()), "procedure.context.pending");
+    context_uses_.emplace(pending, nullptr);
+    return pending;
+  }
+  llvm::Instruction *pending_callable() {
+    return b().Insert(new llvm::FreezeInst(null_pointer()), "callable.selection.pending");
+  }
+  void resolve_context(llvm::Instruction *pending, const NativeDefinition &definition) {
+    context_uses_.at(pending) = definition.function;
+  }
+  void finish_native_contexts() {
+    // A context's external inputs include those needed to construct its
+    // callees' contexts. Close that dependency graph before choosing layouts.
+    std::map<llvm::Function *, std::set<llvm::Function *>> callers;
+    for (const auto &[use, target] : context_uses_) {
+      if (!target) throw std::logic_error("unresolved native context");
+      if (native_contexts_.contains(use->getFunction())) callers[target].insert(use->getFunction());
+    }
+    std::vector<llvm::Function *> pending;
+    std::set<llvm::Function *> queued;
+    for (auto &[function, context] : native_contexts_) {
+      context.inputs.clear();
+      for (auto &block : *function)
+        for (auto &instruction : block)
+          for (const auto &operand : instruction.operands())
+            add_context_input(context, operand.get(), function);
+      pending.push_back(function);
+      queued.insert(function);
+    }
+    while (!pending.empty()) {
+      auto *function = pending.back(); pending.pop_back(); queued.erase(function);
+      for (auto *caller : callers[function]) {
+        auto &context = native_contexts_.at(caller);
+        bool changed = false;
+        for (auto *input : native_contexts_.at(function).inputs)
+          changed |= add_context_input(context, input, caller);
+        if (changed && queued.insert(caller).second) pending.push_back(caller);
+      }
+    }
+    for (auto &[function, context] : native_contexts_) {
+      if (context_free_entries_.contains(function) && !context.inputs.empty())
+        throw std::logic_error("callable adapter retained an uncaptured native dependency");
+      std::vector<llvm::Type *> fields;
+      for (auto *input : context.inputs) fields.push_back(input->getType());
+      context.layout = llvm::StructType::create(this->context(), fields, "cod.context");
+    }
+    for (const auto &[use, target] : context_uses_) {
+      const auto &context = native_contexts_.at(target);
+      llvm::Value *storage = null_pointer();
+      if (!context.inputs.empty()) {
+        auto &entry = use->getFunction()->getEntryBlock();
+        llvm::IRBuilder<> allocate(&entry, entry.begin()), write(use);
+        storage = allocate.CreateAlloca(context.layout, nullptr, "call.context");
+        for (size_t i = 0; i < context.inputs.size(); ++i)
+          write.CreateStore(context.inputs[i], write.CreateStructGEP(context.layout, storage, unsigned(i)));
+      }
+      use->replaceAllUsesWith(storage);
+      use->eraseFromParent();
+    }
+    context_uses_.clear();
+    for (const auto &[function, context] : native_contexts_) {
+      if (function->empty()) continue;
+      llvm::IRBuilder<> loads(&function->getEntryBlock(), function->getEntryBlock().begin());
+      for (size_t index = 0; index < context.inputs.size(); ++index) {
+        auto *input = context.inputs[index];
+        auto *address = loads.CreateStructGEP(context.layout, function->getArg(context.argument), unsigned(index));
+        auto *loaded = loads.CreateLoad(input->getType(), address, "context.value");
+        for (auto use = input->use_begin(); use != input->use_end();) {
+          auto &current = *use++;
+          if (const auto *instruction = llvm::dyn_cast<llvm::Instruction>(current.getUser());
+              instruction && instruction->getFunction() == function) current.set(loaded);
+        }
+      }
+    }
+  }
+  void reuse_native_context(NativeDefinition &target, const NativeDefinition &source,
+                            llvm::Instruction *pending, bool recursive = true) {
+    if (target.function->getFunctionType() != source.function->getFunctionType())
+      throw std::logic_error("recursive adapter signature mismatch");
+    target.function->replaceAllUsesWith(source.function);
+    native_contexts_.erase(target.function);
+    target.function->eraseFromParent();
+    if (recursive) {
+      context_uses_.erase(pending);
+      pending->replaceAllUsesWith(source.function->getArg(source.context_argument));
+      pending->eraseFromParent();
+    } else context_uses_.at(pending) = source.function;
+    target = source;
+  }
+  llvm::Constant *callable_key() {
+    return new llvm::GlobalVariable(*module_, llvm::Type::getInt8Ty(context()), true,
+        llvm::GlobalValue::PrivateLinkage, llvm::ConstantInt::get(llvm::Type::getInt8Ty(context()), 0), "callable.body");
+  }
+  struct CallableMatch {
+    llvm::Value *entry;
+    llvm::BranchInst *branch;
+    llvm::BasicBlock *next;
+  };
+  CallableMatch match_callable(llvm::Value *image, llvm::Constant *entry) {
+    auto *match = label("procedure.selected"), *next = label("procedure.other");
+    auto *selected = callable_entry(image);
+    auto *branch = b().CreateCondBr(b().CreateICmpEQ(selected, entry), match, next);
+    enter(match);
+    return {selected, branch, next};
+  }
+  void extend_callable_match(const CallableMatch &match, llvm::Constant *entry) {
+    llvm::IRBuilder<> builder(match.branch);
+    match.branch->setCondition(builder.CreateOr(match.branch->getCondition(),
+        builder.CreateICmpEQ(match.entry, entry)));
+  }
+  llvm::StructType *callable_layout(const std::vector<llvm::Value *> &values,
+                                   const std::set<size_t> &nested) {
+    std::vector<llvm::Type *> fields{i64(), pointer_type()};
+    for (size_t i = 0; i < values.size(); ++i)
+      fields.push_back(nested.contains(i) ? i64() : values[i]->getType());
+    return llvm::StructType::create(context(), fields, "cod.callable");
+  }
+  llvm::Constant *static_callable(llvm::StructType *layout, llvm::Constant *key) {
+    // Direct named calls carry no environment image and allocate no user value.
+    auto *descriptor = llvm::ConstantStruct::get(layout,
+        {llvm::ConstantInt::get(i64(), module_->getDataLayout().getTypeAllocSize(layout)), key});
+    return new llvm::GlobalVariable(*module_, layout, true, llvm::GlobalValue::PrivateLinkage,
+                                    descriptor, "callable.direct");
+  }
+  llvm::Value *callable_field(llvm::Value *image, llvm::StructType *layout, size_t field, bool nested) {
+    auto *address = b().CreateStructGEP(layout, image, unsigned(field + 2));
+    auto *value = b().CreateLoad(layout->getElementType(unsigned(field + 2)), address);
+    return nested ? b().CreateGEP(llvm::Type::getInt8Ty(context()), image, value) : value;
+  }
+  struct CallableConstruction {
+    struct Child {
+      size_t field;
+      llvm::StoreInst *value, *offset;
+    };
+    llvm::Instruction *count = nullptr;
+    llvm::Value *values = nullptr, *offsets = nullptr;
+    std::vector<Child> children;
+  };
+  llvm::Value *create_callable(llvm::Function *entry, llvm::StructType *layout,
+                               const std::vector<llvm::Value *> &values, const std::set<size_t> &nested,
+                               llvm::Constant *key = nullptr, CallableConstruction *construction = nullptr) {
+    if (entry) callable_entries_.insert(entry);
+    const auto &data = module_->getDataLayout();
+    auto *children = entry_slot(llvm::ArrayType::get(pointer_type(), nested.size()), "callable.children");
+    auto *offsets = entry_slot(llvm::ArrayType::get(i64(), nested.size()), "callable.offsets");
+    if (construction) { construction->values = children; construction->offsets = offsets; }
+    size_t child = 0;
+    for (size_t i : nested) {
+      auto *value = b().CreateStore(values[i], b().CreateConstGEP1_64(pointer_type(), children, child));
+      auto *offset = b().CreateStore(integer(i64(), data.getStructLayout(layout)->getElementOffset(unsigned(i + 2))),
+                                    b().CreateConstGEP1_64(i64(), offsets, child++));
+      if (construction) construction->children.push_back({i, value, offset});
+    }
+    auto *bytes = integer(i64(), data.getTypeAllocSize(layout));
+    llvm::Value *count = integer(i64(), nested.size());
+    if (construction) count = construction->count = b().Insert(new llvm::FreezeInst(count), "capture.count");
+    auto *image = checked_service("cod_lang_callable_create", pointer_type(),
+        {bytes, count, children, offsets}, bytes, {1});
+    b().CreateStore(key ? key : entry, b().CreateStructGEP(layout, image, 1));
+    for (size_t i = 0; i < values.size(); ++i)
+      if (!nested.contains(i)) b().CreateStore(values[i], b().CreateStructGEP(layout, image, unsigned(i + 2)));
+    return image;
+  }
+  void finish_callable(CallableConstruction &construction, const std::set<size_t> &required) {
+    if (!construction.count) return;
+    // Body checking decides which dynamic values are captured. Compact the
+    // constructor's child list before LLVM sees it; the copy still executes
+    // at the original definition point, with its original exception cleanup.
+    size_t count = 0;
+    for (auto &child : construction.children) {
+      if (required.contains(child.field)) {
+        for (auto *store : {child.value, child.offset})
+          llvm::cast<llvm::GetElementPtrInst>(store->getPointerOperand())->setOperand(1, integer(i64(), count));
+        ++count;
+      } else {
+        child.value->eraseFromParent();
+        child.offset->eraseFromParent();
+      }
+    }
+    construction.count->replaceAllUsesWith(integer(i64(), count));
+    construction.count->eraseFromParent();
+    construction.count = nullptr;
+    for (auto *storage : {construction.values, construction.offsets}) {
+      auto *allocation = llvm::cast<llvm::AllocaInst>(storage);
+      llvm::Value *replacement = null_pointer();
+      if (count) {
+        llvm::IRBuilder<> builder(allocation);
+        auto *element = llvm::cast<llvm::ArrayType>(allocation->getAllocatedType())->getElementType();
+        replacement = builder.CreateAlloca(llvm::ArrayType::get(element, count));
+      }
+      allocation->replaceAllUsesWith(replacement);
+      allocation->eraseFromParent();
+    }
+  }
+  llvm::Value *copy_callable(llvm::Value *image) {
+    auto *bytes = b().CreateLoad(i64(), image);
+    return checked_service("cod_lang_callable_copy", pointer_type(), {image}, bytes, {1});
+  }
+  size_t protect_callable(llvm::Value *image) {
+    auto *allocation = here();
+    auto *copy = copy_callable(image);
+    auto *slot = entry_slot(pointer_type(), "invocation.image");
+    auto *installed = b().CreateStore(copy, slot);
+    auto cleanup = std::make_shared<std::vector<llvm::Instruction *>>();
+    cleanups_.push_back({slot, nullptr, true, {}, cleanup});
+    const auto id = callable_protections_.size();
+    callable_protections_.push_back({image, copy, slot, installed,
+        llvm::cast<llvm::CondBrInst>(allocation->getTerminator()), std::move(cleanup), {}});
+    active_protections_.push_back(id);
+    return id;
+  }
+  llvm::Value *protected_callable(size_t id) { return callable_protections_.at(id).image; }
+  void leave_callable_protection(size_t id) {
+    if (active_protections_.empty() || active_protections_.back() != id) {
+      // An error can leave checking inside an unfinished native body. Keep
+      // its original diagnostic instead of throwing from the caller's guard.
+      if (std::uncaught_exceptions()) return;
+      throw std::logic_error("unbalanced callable invocation protection");
+    }
+    active_protections_.pop_back();
+  }
+  void release_callable_protection(size_t id) {
+    auto &protection = callable_protections_.at(id);
+    protection.cleanup->push_back(llvm::cast<llvm::Instruction>(call_runtime("cod_lang_callable_free", void_type(),
+        {b().CreateLoad(pointer_type(), protection.slot)})));
+    protection.cleanup->push_back(b().CreateStore(null_pointer(), protection.slot));
+  }
+  void callable_write() {
+    callable_writers_.insert(entry_);
+    for (size_t protection : active_protections_) callable_protections_[protection].required = true;
+  }
+  void resolve_callable_protections() {
+    // Body checking has finished: propagate actual replacement operations
+    // through native calls, including recursive cycles. Invocation snapshots
+    // are retained only where arguments or a selected body can reach a write.
+    std::map<llvm::Function *, std::set<llvm::Function *>> callers;
+    for (auto &function : *module_)
+      for (auto &block : function)
+        for (auto &instruction : block)
+          if (auto *call = llvm::dyn_cast<llvm::CallBase>(&instruction))
+            if (auto *target = call->getCalledFunction()) callers[target].insert(&function);
+    std::vector<llvm::Function *> pending(callable_writers_.begin(), callable_writers_.end());
+    while (!pending.empty()) {
+      auto *function = pending.back(); pending.pop_back();
+      for (auto *caller : callers[function])
+        if (callable_writers_.insert(caller).second) pending.push_back(caller);
+    }
+    for (auto &protection : callable_protections_) {
+      for (auto *call : protection.calls)
+        protection.required |= callable_writers_.contains(call->getCalledFunction());
+      if (protection.required) continue;
+      protection.failure->setCondition(llvm::ConstantInt::getFalse(context()));
+      for (auto *instruction : *protection.cleanup) instruction->eraseFromParent();
+      protection.installed->eraseFromParent();
+      protection.image->replaceAllUsesWith(protection.source);
+      llvm::cast<llvm::Instruction>(protection.image)->eraseFromParent();
+    }
+  }
+  llvm::Value *hold_callable(llvm::Value *image, bool module_lifetime) {
+    auto *slot = entry_slot(pointer_type(), "callable.owner");
+    b().CreateStore(image, slot);
+    if (module_lifetime) module_callables_.push_back(slot);
+    else cleanups_.push_back({slot, nullptr, true});
+    return slot;
+  }
+  llvm::Value *take_callable(llvm::Value *slot) {
+    auto *image = b().CreateLoad(pointer_type(), slot);
+    b().CreateStore(null_pointer(), slot);
+    return image;
+  }
+  void replace_callable(llvm::Value *slot, llvm::Value *image) {
+    call_runtime("cod_lang_callable_free", void_type(), {b().CreateLoad(pointer_type(), slot)});
+    b().CreateStore(image, slot);
+  }
+  llvm::Value *callable_entry(llvm::Value *image) {
+    auto *header = llvm::StructType::get(context(), {i64(), pointer_type()});
+    return b().CreateLoad(pointer_type(), b().CreateStructGEP(header, image, 1));
+  }
+  void set_callable_entry(llvm::Value *image, llvm::Constant *entry) {
+    auto *header = llvm::StructType::get(context(), {i64(), pointer_type()});
+    b().CreateStore(entry, b().CreateStructGEP(header, image, 1));
+  }
+  llvm::Value *global_bits(Type type, llvm::Value *value) {
+    auto *slot = new llvm::GlobalVariable(*module_, storage_type(type), false, llvm::GlobalValue::InternalLinkage,
+        llvm::Constant::getNullValue(storage_type(type)), "global.bits");
+    b().CreateStore(value, slot);
+    return slot;
   }
   void dispatch_exception(llvm::Value *category, const std::function<void(size_t)> &emit) {
     if (const auto *known = llvm::dyn_cast<llvm::ConstantInt>(category)) {
@@ -348,13 +866,96 @@ public:
             b().CreateLoad(i64(), b().CreateConstGEP1_64(i64(), storage, 4))};
   }
   void uncaught(size_t category, llvm::Value *payload) {
-    unwind(0);
-    for (auto region = module_regions_.rbegin(); region != module_regions_.rend(); ++region)
-      call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), *region)});
-    call_runtime("cod_lang_uncaught", void_type(),
-                 {integer(i64(), category), exception_field(payload, 0), exception_field(payload, 1),
-                  exception_field(payload, 2), exception_field(payload, 3)});
-    b().CreateUnreachable();
+    auto *pending = label("uncaught.pending");
+    uncaught_sites_.push_back({pending, category, payload, cleanups_, module_regions_, module_callables_});
+    jump(pending);
+  }
+  void resolve_uncaught() {
+    // Each acquisition adds a cleanup prefix. Share those prefixes instead of
+    // cloning the entire module's cleanup at every potentially failing call.
+    // The three phases preserve local restoration, callable release, then
+    // regional release. Only failure paths carry the selectors and payload.
+    const auto insertion = b().saveIP();
+    auto *parent = entry_;
+    std::map<llvm::Function *, std::vector<const UncaughtSite *>> functions;
+    for (const auto &site : uncaught_sites_) functions[site.block->getParent()].push_back(&site);
+    for (const auto &[function, sites] : functions) {
+      entry_ = function;
+      auto *category = entry_slot(i64(), "uncaught.category");
+      auto *payload = entry_slot(exception_payload_type(), "uncaught.payload");
+      auto *callable_selection = entry_slot(i64(), "uncaught.callables");
+      auto *region_selection = entry_slot(i64(), "uncaught.regions");
+      auto *terminal = label("uncaught.report");
+      enter(terminal);
+      auto *error = b().CreateLoad(exception_payload_type(), payload);
+      call_runtime("cod_lang_uncaught", void_type(), {b().CreateLoad(i64(), category),
+          exception_field(error, 0), exception_field(error, 1), exception_field(error, 2), exception_field(error, 3)});
+      b().CreateUnreachable();
+      auto *regions = label("uncaught.regions");
+      enter(regions);
+      auto *region_switch = b().CreateSwitch(b().CreateLoad(i64(), region_selection), terminal);
+      auto *callables = label("uncaught.callables");
+      enter(callables);
+      auto *callable_switch = b().CreateSwitch(b().CreateLoad(i64(), callable_selection), regions);
+      using ResourceKey = std::pair<llvm::Value *, llvm::BasicBlock *>;
+      std::map<ResourceKey, std::pair<llvm::BasicBlock *, size_t>> region_nodes, callable_nodes;
+      const auto resources = [&](const auto &slots, auto &nodes, llvm::BasicBlock *end,
+                                 llvm::SwitchInst *selection, const char *release) {
+        auto *next = end;
+        size_t id = 0;
+        for (auto *slot : slots) {
+          const auto key = ResourceKey{slot, next};
+          auto found = nodes.find(key);
+          if (found == nodes.end()) {
+            auto *block = label("uncaught.release");
+            const auto index = nodes.size() + 1;
+            found = nodes.emplace(key, std::pair{block, index}).first;
+            selection->addCase(integer(i64(), index), block);
+            enter(block);
+            call_runtime(release, void_type(), {b().CreateLoad(pointer_type(), slot)});
+            jump(next);
+          }
+          next = found->second.first;
+          id = found->second.second;
+        }
+        return id;
+      };
+      using CleanupKey = std::tuple<llvm::Value *, llvm::Value *, bool, const EffectWrites *, llvm::BasicBlock *>;
+      std::map<CleanupKey, llvm::BasicBlock *> cleanup_nodes;
+      for (const auto *site : sites) {
+        const auto region_id = resources(site->regions, region_nodes, terminal, region_switch, "cod_lang_region_free");
+        const auto callable_id = resources(site->callables, callable_nodes, regions, callable_switch, "cod_lang_callable_free");
+        auto *next = callables;
+        for (const auto &cleanup : site->cleanups) {
+          const CleanupKey key{cleanup.address, cleanup.saved, cleanup.callable, cleanup.effect_writes.get(), next};
+          auto found = cleanup_nodes.find(key);
+          if (found == cleanup_nodes.end()) {
+            auto *block = label("uncaught.restore");
+            found = cleanup_nodes.emplace(key, block).first;
+            enter(block);
+            if (cleanup.saved) {
+              auto *store = b().CreateStore(cleanup.saved, cleanup.address);
+              if (cleanup.effect_writes) cleanup.effect_writes->push_back(store);
+            } else {
+              auto *release = call_runtime(cleanup.callable ? "cod_lang_callable_free" : "cod_lang_region_free",
+                  void_type(), {b().CreateLoad(pointer_type(), cleanup.address)});
+              if (cleanup.protection) cleanup.protection->push_back(llvm::cast<llvm::Instruction>(release));
+            }
+            jump(next);
+          }
+          next = found->second;
+        }
+        enter(site->block);
+        b().CreateStore(integer(i64(), site->category), category);
+        b().CreateStore(site->payload, payload);
+        b().CreateStore(integer(i64(), region_id), region_selection);
+        b().CreateStore(integer(i64(), callable_id), callable_selection);
+        jump(next);
+      }
+    }
+    uncaught_sites_.clear();
+    entry_ = parent;
+    b().restoreIP(insertion);
   }
   void print(Type type, llvm::Value *source) {
     auto *number = source;
@@ -438,23 +1039,28 @@ public:
     llvm::BasicBlock *before, *after;
     std::vector<Cleanup> cleanups;
     std::vector<llvm::Value *> modules;
+    std::vector<llvm::Value *> callables;
   };
   struct ConversionResume {
+    llvm::Function *function;
     llvm::IRBuilderBase::InsertPoint insertion;
     std::vector<Cleanup> cleanups;
     std::vector<llvm::Value *> modules;
+    std::vector<llvm::Value *> callables;
   };
   ConversionPoint conversion_point() {
     auto *before = b().GetInsertBlock();
     auto *after = llvm::BasicBlock::Create(context(), "argument.next", entry_);
     b().CreateBr(after);
     b().SetInsertPoint(after);
-    return {before, after, cleanups_, module_regions_};
+    return {before, after, cleanups_, module_regions_, module_callables_};
   }
   ConversionResume begin_conversion(const ConversionPoint &point) {
-    ConversionResume resume{b().saveIP(), cleanups_, module_regions_};
+    ConversionResume resume{entry_, b().saveIP(), cleanups_, module_regions_, module_callables_};
+    entry_ = point.before->getParent();
     cleanups_ = point.cleanups;
     module_regions_ = point.modules;
+    module_callables_ = point.callables;
     point.before->getTerminator()->eraseFromParent();
     b().SetInsertPoint(point.before);
     return resume;
@@ -463,6 +1069,8 @@ public:
     if (reachable()) b().CreateBr(point.after);
     cleanups_ = resume.cleanups;
     module_regions_ = resume.modules;
+    module_callables_ = resume.callables;
+    entry_ = resume.function;
     b().restoreIP(resume.insertion);
   }
   Branch branch(llvm::Value *condition, bool invert = false) {
@@ -656,6 +1264,17 @@ public:
   Place field(llvm::Value *owner, llvm::Value *source, Type record, size_t index, Type type) {
     return {type, owner, b().CreateStructGEP(record_type(record), checked_address(owner, source), unsigned(index))};
   }
+  std::pair<Place, llvm::Instruction *> pending_field(llvm::Value *owner, llvm::Value *source, Type type) {
+    auto *offset = b().Insert(new llvm::FreezeInst(integer(i64(), 0)), "root.field.offset");
+    auto *address = b().CreateGEP(llvm::Type::getInt8Ty(context()), checked_address(owner, source), offset);
+    return {{type, owner, address}, offset};
+  }
+  void resolve_field(llvm::Instruction *offset, Type record, size_t index) {
+    const auto *layout = module_->getDataLayout().getStructLayout(record_type(record));
+    // Keep the instruction stable for native context descriptors. LLVM folds
+    // the now-constant offset when optimizing the finished module.
+    offset->setOperand(0, integer(i64(), layout->getElementOffset(unsigned(index))));
+  }
   Place element(llvm::Value *owner, llvm::Value *source, Type index_type, llvm::Value *index, Type type) {
     return {type, owner, array_address(owner, source, index_type, index, type)};
   }
@@ -683,14 +1302,26 @@ public:
     return result;
   }
 
-  std::pair<std::string, std::string> finish() {
+  std::pair<std::string, std::string> finish(bool emit_text, bool emit_bitcode) {
     if (!cleanups_.empty()) throw std::logic_error("unclosed LLVM resource scope");
     if (reachable()) {
+      for (auto slot = module_callables_.rbegin(); slot != module_callables_.rend(); ++slot)
+        call_runtime("cod_lang_callable_free", void_type(), {b().CreateLoad(pointer_type(), *slot)});
       for (auto region = module_regions_.rbegin(); region != module_regions_.rend(); ++region)
         call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), *region)});
       call_runtime("cod_lang_exception_finish", void_type(), {});
       b().CreateRet(integer(llvm::Type::getInt32Ty(context()), 0));
     }
+    finish_native_contexts();
+    resolve_callable_protections();
+    // Demand pruning leaves provisional loads/GEPs for omitted captures. Drop
+    // them before serialization and native optimization, not in a later host pass.
+    llvm::SmallVector<llvm::WeakTrackingVH> unused;
+    for (auto &function : *module_)
+      for (auto &block : function)
+        for (auto &instruction : block)
+          if (llvm::isInstructionTriviallyDead(&instruction)) unused.emplace_back(&instruction);
+    llvm::RecursivelyDeleteTriviallyDeadInstructions(unused);
     // Resolve sites against the complete program, including sites emitted after
     // an earlier throw whose cause may originate on a previous loop iteration.
     auto *lookup = llvm::Function::Create(llvm::FunctionType::get(pointer_type(), {i64()}, false),
@@ -706,14 +1337,33 @@ public:
     }
     sites.SetInsertPoint(unknown);
     sites.CreateRet(llvm::ConstantPointerNull::get(pointer_type()));
+    // The checker specializes callable bodies with their actual module/effect
+    // context. Outline those checked regions after all escaping SSA uses are
+    // known, including captured values returned by nested factories. LLVM
+    // derives typed inputs/outputs and represents exceptional exits explicitly.
+    std::map<llvm::Function *, std::unique_ptr<llvm::CodeExtractorAnalysisCache>> extraction;
+    for (const auto &body : callable_bodies_) {
+      auto &cache = extraction[body.front()->getParent()];
+      if (!cache) cache = std::make_unique<llvm::CodeExtractorAnalysisCache>(*body.front()->getParent());
+      llvm::CodeExtractor extractor(body, nullptr, false, nullptr, nullptr, nullptr,
+                                    false, false, nullptr, {}, "callable");
+      if (!extractor.extractCodeRegion(*cache))
+        throw std::logic_error("cannot outline checked callable body");
+    }
     std::string errors;
+    // A constructed but never invoked callable does not demand its body.
+    for (auto *function : callable_entries_)
+      if (function->empty()) {
+        llvm::IRBuilder<> unused(llvm::BasicBlock::Create(context(), "undemanded", function));
+        unused.CreateUnreachable();
+      }
     llvm::raw_string_ostream diagnostics(errors);
     if (llvm::verifyModule(*module_, &diagnostics))
       throw std::runtime_error("invalid emitted LLVM IR: " + errors);
     std::string text, bitcode;
     llvm::raw_string_ostream text_stream(text), bitcode_stream(bitcode);
-    module_->print(text_stream, nullptr);
-    llvm::WriteBitcodeToFile(*module_, bitcode_stream);
+    if (emit_text) module_->print(text_stream, nullptr);
+    if (emit_bitcode) llvm::WriteBitcodeToFile(*module_, bitcode_stream);
     return {std::move(text), std::move(bitcode)};
   }
 };

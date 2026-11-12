@@ -1,0 +1,75 @@
+using symbol "std:io" @print;
+function first(x:u64)->const u64 { x + 1u64 }
+function second(x:u64)->const u64 { x + 10u64 }
+func plain = func(action:func(u64)->const u64, x:u64)->const u64 { action(x) };
+func twice = func(action:func(u64)->const u64, x:u64)->const u64 { action(action(x)) };
+func invoke = plain;
+for (i in 0u64 .. 2u64) {
+  behave @print(invoke(first, i));
+  invoke <- twice;
+};
+func selected = first;
+behave @print(plain(selected, { selected <- second; 3u64 }));
+behave @print(selected(3u64));
+
+# Returned wrappers own complete copies of their callable parameters.
+func wrap = func(action:func(u64)->const u64)->func(u64)->const u64 {
+  func(x:u64)->const u64 { action(x) + 100u64 }
+};
+func saved = wrap(first);
+func newer = wrap(second);
+behave @print(saved(2u64));
+behave @print(newer(2u64));
+func replace = func(action:func(u64)->const u64, replacement:func(u64)->const u64)->func(u64)->const u64 {
+  action <- replacement;
+  action
+};
+func original = first;
+func result = replace(original, second);
+behave @print(original(2u64));
+behave @print(result(2u64));
+symbol @bias:u64;
+symbol @call:proc(u64)->const u64;
+effect @bias <- 3u64;
+proc action = proc(x:u64)->const u64 { @bias + x };
+effect @bias <- 10u64;
+proc use = proc(callback:proc(u64)->const u64, x:u64)->const u64 {
+  effect @call = callback;
+  perform @call(x) + behave @call(x)
+};
+behave @print(use(action, 2u64));
+
+# Returning one argument must not demand a body returned by another call.
+symbol @missing:u64;
+function invalid(x:u64)->const u64 { @missing }
+func identity = func(action:func(u64)->const u64)->func(u64)->const u64 { action };
+func called = identity(first);
+func unused = identity(invalid);
+behave @print(called(1u64));
+
+# Named higher-order calls and runtime procedure values retain native recursion.
+function walk(action:func(u64)->const u64,n:u64)->const u64 {
+  if(n == 0u64) { action(0u64) } else { walk(action,n-1u64) + action(n) }
+}
+behave @print(walk(first,3u64));
+behave @print(walk(second,3u64));
+func named = walk;
+behave @print(named(first,3u64));
+symbol @walk:proc(func(u64)->const u64,u64)->const u64;
+proc recursive = proc(action:func(u64)->const u64,n:u64)->const u64 {
+  if(n == 0u64) { action(@bias) }
+  else { effect @bias <- @bias + 1u64; behave @walk(action,n-1u64) + action(n) }
+};
+effect @walk = recursive;
+behave @print(recursive(first,3u64));
+behave @print(@bias);
+
+using "std:exceptions" NullPointerException;
+func failing = func(n:u64)->const u64 throws NullPointerException {
+  ptr absent:u64 = null;
+  absent + n
+};
+func checked = func(action:func(u64)->const u64 throws NullPointerException,n:u64)
+    ->const u64 throws NullPointerException { action(n) };
+try { checked(failing,1u64); {} }
+catch(e:const NullPointerException) { behave @print(99u64); };

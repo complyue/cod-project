@@ -1,0 +1,7 @@
+function read(ptr value:u64 in O)->const u64 where {owner O} { value }
+func callback = read;
+ref value = 3u64;
+val valid = callback(value);
+ptr missing = value;
+missing = null;
+val invalid = callback(missing);

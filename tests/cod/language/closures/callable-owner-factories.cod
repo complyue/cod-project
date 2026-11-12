@@ -1,0 +1,79 @@
+using symbol "std:io" @print;
+data Item {value:u64;}
+region Store {ticks:u64;}
+function reader(item:Item in r,n:u64) where {region r:Store}
+ ->func()->const u64 with {region r} {
+ if(n==0u64){
+  val var value:u64 in r -> item.value;
+  func()->const u64 {value}
+ }else{reader(item,n-1u64)}
+}
+owned region state:Store <- make Store(capacity=512u64){ticks <- 0u64};
+ref item = alloc state Item(7u64);
+func result = reader(item,32u64);
+behave @print(result());
+
+function counter(value:const u64 in r) where {region r:Store}
+ ->func()->const u64 with {region r} {
+ val var ticks:u64 in r -> r.ticks;
+ func()->const u64 {ticks}
+}
+func counted=counter(item.value);
+state.ticks <- 3u64;
+behave @print(counted());
+region observed:Store = result -> r;
+observed.ticks <- 5u64;
+behave @print(counted());
+func stored_factory=reader;
+func stored_result=stored_factory(item,16u64);
+item.value <- 11u64;
+behave @print(result());
+behave @print(stored_result());
+symbol @bias:u64;
+proc updater(item:Item in r,n:u64) where {region r:Store}
+ ->proc()->const u64 with {region r} {
+ if(n==0u64){
+  val var value:u64 in r -> item.value;
+  proc()->const u64 {value <- value+@bias;value}
+ }else{updater(item,n-1u64)}
+}
+effect @bias <- 2u64;
+proc update=updater(item,16u64);
+behave @print(update());
+{{effect @bias <- 3u64;behave @print(update());}};
+behave @print(update());
+
+function alternate(item:Item in arena,n:u64) where {region arena:Store}
+ ->func()->const u64 with {region arena} {
+ val var ticks:u64 in arena -> arena.ticks;
+ func()->const u64 {ticks+100u64}
+}
+for(i in 0u64..2u64){
+ func value=stored_factory(item,2u64);
+ behave @print(value());
+ region projected:Store=value -> r;
+ projected.ticks <- projected.ticks+1u64;
+ stored_factory <- alternate;
+};
+function keep(value:T)->const T where T {value}
+func keeper=keep;
+func copied_factory=keeper(stored_factory);
+func copied_result=copied_factory(item,0u64);
+behave @print(copied_result());
+
+function from_callback(cb:func()->const u64 with {region r}) where {region r:Store}
+ ->func()->const u64 with {region r} {
+ val var ticks:u64 in r -> r.ticks;
+ func()->const u64 {ticks}
+}
+function next_callback(cb:func()->const u64 with {region s}) where {region s:Store}
+ ->func()->const u64 with {region s} {
+ val var ticks:u64 in s -> s.ticks;
+ func()->const u64 {ticks+10u64}
+}
+func inferred_factory=from_callback;
+for(i in 0u64..2u64){
+ func value=inferred_factory(result);
+ behave @print(value());
+ inferred_factory <- next_callback;
+};

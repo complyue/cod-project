@@ -28,9 +28,9 @@ function select_cursor(ref a:Cursor in state, ref b:Cursor in state, flag:bool)
 owned region state:State <- make State(capacity = 512u64) { choose_first <- true };
 ref first = alloc state CounterCell(1u64);
 ref second = alloc state CounterCell(2u64);
-const ref left = select(first, second, state.choose_first);
+func left = select(first, second, state.choose_first);
 state.choose_first <- false;
-const ref right = select(first, second, state.choose_first);
+func right = select(first, second, state.choose_first);
 behave @print(left());
 behave @print(right());
 first.ticks <- 3u64;
@@ -39,7 +39,7 @@ behave @print(left());
 behave @print(right());
 ref a = alloc state Cursor(first);
 ref b = alloc state Cursor(second);
-const ref cursor = select_cursor(a, b, state.choose_first);
+func cursor = select_cursor(a, b, state.choose_first);
 # The selected slot follows b.current, not its target at callback creation.
 b.current = first;
 try {
@@ -63,7 +63,7 @@ function pair(region later:State, region earlier:State)
   func [later, earlier] () -> const bool { later.choose_first && earlier.choose_first }
 }
 owned region extra:State <- make State(capacity = 128u64) { choose_first <- false };
-const ref paired = pair(extra, state);
+func paired = pair(extra, state);
 # Named roles must not be recovered from sorted region identities.
 behave @print((paired -> later).choose_first);
 behave @print((paired -> earlier).choose_first);
@@ -79,7 +79,7 @@ proc choose_incrementer(ref a:CounterCell in state, ref b:CounterCell in state, 
     where {region state:State} -> proc()->void with {region state} {
   if (flag) { incrementer(a) } else { incrementer(b) }
 }
-const ref increment = choose_incrementer(first, second, state.choose_first);
+proc increment = choose_incrementer(first, second, state.choose_first);
 increment();
 behave @print(left());
 behave @print(right());

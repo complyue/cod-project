@@ -27,14 +27,14 @@ def main():
             (scratch / name).write_text(f'using "{previous}" reader as previous;\n'
                 'using "base.cod" Shape;\n'
                 'function reader(region state:Shape) -> func()->const u64 with {region state} {\n'
-                '  const ref prior = previous(state);\n'
+                '  func prior = previous(state);\n'
                 f'  func{capture} () -> const u64 {{ prior() + 1u64 }}\n}}\nexport reader;\n')
             previous = name
         entry = scratch / "entry.cod"
         entry.write_text(f'using "{previous}" reader;\nusing symbol "std:io" @print;\n'
             'region Concrete { tag:u8; value:u64; spare:u64; }\n'
             'owned region state:Concrete <- make Concrete(capacity = 256u64) { tag <- 1u8; value <- 5u64; spare <- 7u64 };\n'
-            'const ref callback = reader(state);\nbehave @print(callback());\n'
+            'func callback = reader(state);\nbehave @print(callback());\n'
             'state.value <- 21u64;\nbehave @print(callback());\n')
         start = time.monotonic()
         run = subprocess.run([compiler, "--run", entry, "--emit-llvm", scratch / "deep.ll"],
@@ -48,8 +48,8 @@ def main():
         frame = Path(__file__).with_name("closure-frames.cod").read_text()
         frame = frame.replace('using symbol "std:io" @print;',
                               'using symbol "std:io" @print;\nusing symbol "std:io" @assert;')
-        frame = frame.replace('const ref step = updater(state);',
-                              'const val occupied = used_bytes(state);\nconst ref step = updater(state);')
+        frame = frame.replace('func step = updater(state);',
+                              'const val occupied = used_bytes(state);\nfunc step = updater(state);')
         frame = frame.replace('frame in 0 .. 3', 'frame in 0 .. 10000')
         frame += '\nbehave @assert(used_bytes(state) == occupied);\n'
         entry.write_text(frame)

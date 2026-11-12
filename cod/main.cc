@@ -628,7 +628,8 @@ std::vector<std::string> CodTool::buildCompilerArgs(const CodReplConfig &config)
 int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
                             const LanguageEmission &emission, const cod::language::WarningOptions &warnings) const {
   try {
-    const auto compilation = cod::language::Compiler{warnings}.compile(fs::absolute(entry));
+    auto compilation = cod::language::Compiler{warnings}.compile(fs::absolute(entry),
+        emission.ir.has_value(), !check_only || emission.bitcode.has_value());
     for (const auto &warning : compilation.warnings) std::cerr << warning << '\n';
     if (config.verbose) {
       for (const auto &module : compilation.scanned_modules)
@@ -670,6 +671,9 @@ int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry,
     cod::cache::BitcodeCompiler compiler;
     write(bitcode, compilation.bitcode);
     write(source, cod::language::native_runtime_source(compilation.uses_regions));
+    // Native optimization needs the files, not duplicate in-memory encodings.
+    std::string{}.swap(compilation.llvm_ir);
+    std::string{}.swap(compilation.bitcode);
     if (!compiler.compile_to_bitcode(source, runtime_bitcode, buildCompilerArgs(config))) return 3;
     auto linker_args = buildLinkerArgs(config);
     linker_args.push_back("-O2");

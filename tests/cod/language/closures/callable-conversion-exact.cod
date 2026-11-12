@@ -1,0 +1,6 @@
+unit raw; unit normalized;
+conversion function normalize(x:u64(raw))->const u64(normalized){normalized(scalar(x))}
+function automatic(x:u64(normalized*))->const u64{scalar(x)}
+function exact(x:u64(normalized))->const u64{scalar(x)}
+func selected=automatic;
+for(i in 0u64..2u64){selected(raw(i));selected <- exact;};

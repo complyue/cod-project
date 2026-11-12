@@ -1,0 +1,11 @@
+array Values[u64]:u64;
+region State {tag:u64;}
+owned region state:State <- make State(capacity=256u64){tag<-0u64};
+ref values=alloc state Values(2u64,0u64);
+function omit(x:u64 in O)->void where{owner O}{}
+function later(x:u64 in O)->const u64 where{owner O}{x<-0u64;9u64}
+func selected=omit;
+ref index=make local u64;
+selected(index);
+# A later value argument cannot justify the earlier index payload read.
+values[index] <- later(index);

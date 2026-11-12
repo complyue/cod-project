@@ -1,0 +1,42 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+region State {ticks:u64;}
+function reader(region state:State)->func()->const u64 with {region state} {
+  func()->const u64 {state.ticks}
+}
+function frozen(const region state:State)->func()->const u64 with {region state} {
+  func()->const u64 {state.ticks}
+}
+function inspect(const region state:State)->const u64 {state.ticks}
+function inspect_value(value:const u64 in O)->const u64 where {owner O} {value}
+function project(value:u64 in O)->const u64 in O where {owner O} {value}
+function project(value:const u64 in O)->const u64 in O where {owner O} {value}
+function one()->const u64 {1u64}
+function two()->const u64 {2u64}
+function access(action:func()->const u64, const region state:State, unused:u64)->const u64 throws NullPointerException;
+function access(action:func()->const u64, region state:State, unused:u64)->const u64 {100u64+action()}
+function access(action:func()->const u64, const region state:State, unused:u64)->const u64 {action()}
+symbol @bias:u64, @missing:u64;
+proc report(region state:State)->const u64 {@missing}
+proc report(const region state:State)->const u64 {state.ticks+@bias}
+owned region state:State <- make State(capacity=128u64){ticks <- 9u64};
+func current = reader(state);
+func see = inspect;
+func see_value = inspect_value;
+func action = one;
+for(i in 0u64 .. 2u64) {{
+  {
+    region view:State = current -> state;
+    behave @print(inspect(view));
+    behave @print(see(view));
+    behave @print(see_value(view.ticks));
+    try { behave @print(access(action,view,{action <- two;0u64})); }
+    catch(e:const NullPointerException) { behave @print(999u64); };
+    effect @bias <- i;
+    behave @print(report(view));
+    const ref observed = project(view.ticks);
+    state.ticks <- state.ticks+1u64;
+    behave @print(observed);
+    current <- frozen(state);
+  }
+}};

@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+func first = func () -> const u64 { 3u64 };
+func invalid = func () -> const u64 { unavailable() };
+ptr selected = first;
+try {
+  for (i in 0u64 .. 2u64) {
+    behave @print(selected());
+    selected = invalid;
+  };
+} catch (e:const NullPointerException) { behave @print(0u64); };

@@ -1,0 +1,198 @@
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+using "std:exceptions" InvalidCapacity;
+region State { value:u64; }
+region Extended { prefix:u64; value:u64; extra:u64; }
+data Link { ref state:Extended; }
+
+function first(bytes:u64, n:u64) -> owned region:State {
+  make Extended(capacity=bytes) { prefix<-99u64; value<-n+1u64; extra<-12u64 }
+}
+function second(bytes:u64, n:u64) -> owned region:State {
+  make Extended(capacity=bytes) { prefix<-99u64; value<-n+2u64; extra<-12u64 }
+}
+function inspect(ref node:State in r)->const u64 where {region r:State} {node.value}
+function read(region r:State)->const u64 {root(r).value}
+func observe=read;
+func inspect_value=inspect;
+func selected=first;
+for(i in 0u64..2u64) {
+  owned region result<-selected(256u64,7u64);
+  ref view=root(result);
+  behave @print(inspect(view));
+  behave @assert(inspect_value(view)==8u64+i);
+  setfield(view,value,3u64);
+  behave @print(observe(result));
+  ref extra=make local typeof(root(result).extra) {root(result).extra};
+  behave @assert(extra==12u64);
+  setfield(view,extra,extra+i);
+  behave @assert(view.extra==12u64+i);
+  ptr absent:Extended in result = null;
+  ref queried=make local typeof(absent.extra) {0u64};
+  behave @assert(queried==0u64);
+  ref link=alloc result Link(root(result));
+  behave @assert(link.state.value==3u64);
+  selected<-second;
+};
+owned region extended<-selected(256u64,35u64);
+behave @print(root(extended).extra);
+
+function recursive(owned region packet:State,n:u64) -> owned region:State {
+  if(n==0u64) { packet }
+  else { recursive(recursive(packet,n-1u64),0u64) }
+}
+func recurse=recursive;
+owned region input<-first(256u64,18u64);
+ref saved=root(input);
+owned region completed<-recurse(input,1000u64);
+val var payload:u64 in completed -> saved.value;
+payload<-19u64;
+ref retained=alloc completed Link(saved);
+behave @assert(retained.state.value==completed.value);
+behave @print(completed.value);
+
+symbol @callback:proc()->const u64;
+proc one()->const u64 {1u64}
+proc two()->const u64 {2u64}
+proc current=one;
+effect @callback=current;
+effect proc @factory(bytes:u64)->owned region:State {
+  make State(capacity=bytes) {value<-perform @callback()}
+};
+current<-two;
+owned region captured<-perform @factory(256u64);
+behave @print(captured.value);
+owned region dynamic<-behave @factory(256u64);
+behave @print(dynamic.value);
+
+region symbol installed:State;
+{{
+  owned region local<-selected(256u64,21u64);
+  ref view=root(local);
+  effect @installed<-local;
+  view.value<-29u64;
+  behave @print(@installed.value);
+}};
+
+function staged(bytes:u64,n:u64)->owned region:State {
+  owned region temporary<-first(256u64,n);
+  second(bytes,temporary.value)
+}
+func failing=staged;
+try {owned region rejected<-failing(0u64,0u64);}
+catch(e:const InvalidCapacity) {behave @print(31u64);};
+
+function current_reader(region r:State)->func()->const u64 with {region r} {
+  val var value:u64 in r -> r.value;
+  func()->const u64 {value}
+}
+function wrapped_reader(region r:State)->func()->const u64 with {region r} {
+  func source=current_reader(r);
+  func()->const u64 {source()}
+}
+function rotate(ref fixed:State in a,ref current:State in r,owned region r:State,
+    cb:func()->const u64 with {region r},n:u64,bytes:u64)
+    ->owned region:State where {region a:State} {
+  current.value <- cb();
+  if(n==0u64){r}else{
+    owned region next<-make State(capacity=if(n==1u64){bytes}else{256u64}) {
+      value<-current.value+fixed.value
+    };
+    func successor=if(n%2u64==0u64){current_reader(next)}else{wrapped_reader(next)};
+    rotate(fixed,root(next),next,successor,n-1u64,bytes)
+  }
+}
+{{
+  owned region seed<-make State(capacity=256u64){value<-7u64};
+  ref fixed=root(seed);
+  owned region final<-rotate(fixed,fixed,seed,current_reader(seed),32u64,256u64);
+  behave @assert(final.value==231u64);
+}};
+
+symbol @step_bias:u64;
+symbol @step_action:proc()->const u64;
+effect @step_bias<-1u64;
+effect proc @step_action()->const u64 {@step_bias};
+proc staged_reader(region r:State)->proc(bool)->const u64 with {region r} {
+  val var value:u64 in r -> r.value;
+  effect @step_bias<-111u64;
+  effect proc @step_action()->const u64 {@step_bias};
+  proc(captured:bool)->const u64 {
+    value+if(captured){perform @step_action()}else{behave @step_action()}
+  }
+}
+proc nested_reader(region r:State)->proc(bool)->const u64 with {region r} {
+  proc inner=staged_reader(r);
+  proc(captured:bool)->const u64 {inner(captured)+2u64}
+}
+proc staged_step(owned region r:State,cb:proc(bool)->const u64 with {region r},
+    n:u64,bytes:u64,captured:bool)->const u64 {
+  effect @step_bias<-99u64;
+  if(n==0u64){cb(captured)}else{
+    owned region next<-make State(capacity=if(n==1u64){bytes}else{256u64}) {
+      value<-cb(captured)+1u64
+    };
+    proc successor=if(n%2u64==0u64){staged_reader(next)}else{nested_reader(next)};
+    staged_step(next,successor,n-1u64,bytes,captured)
+  }
+}
+for(mode in 0u64..2u64) {
+  owned region seed<-make State(capacity=256u64){value<-7u64};
+  const val result=staged_step(seed,staged_reader(seed),32u64,256u64,mode==0u64);
+  behave @assert(result==if(mode==0u64){104u64}else{3338u64});
+};
+
+# Returned environments retain only the external state after scratch cleanup.
+proc staged_factory(owned region work:State,region state:State,
+    cb:proc(bool)->const u64 with {region work},n:u64,bytes:u64)
+    ->proc(bool)->const u64 with {region state} {
+  if(n==0u64){staged_reader(state)}else{
+    owned region next<-make State(capacity=if(n==1u64){bytes}else{256u64}) {
+      value<-cb(true)+1u64
+    };
+    proc successor=if(n%2u64==0u64){staged_reader(next)}else{nested_reader(next)};
+    staged_factory(next,state,successor,n-1u64,bytes)
+  }
+}
+proc forwarded_factory(owned region work:State,region state:State,
+    cb:proc(bool)->const u64 with {region state},n:u64,wrapped:bool)
+    ->proc(bool)->const u64 with {region state} {
+  if(n==0u64){
+    if(wrapped){proc(captured:bool)->const u64 {cb(captured)+2u64}}else{cb}
+  }else{
+    owned region next<-make State(capacity=256u64){value<-cb(true)+1u64};
+    proc successor=if(n%2u64==0u64){staged_reader(state)}else{nested_reader(state)};
+    forwarded_factory(next,state,successor,n-1u64,wrapped)
+  }
+}
+owned region stable<-first(256u64,12u64);
+for(mode in 0u64..3u64) {
+  owned region seed<-make State(capacity=256u64){value<-7u64};
+  proc returned=if(mode==0u64){staged_factory(seed,stable,staged_reader(seed),32u64,256u64)}
+    else{forwarded_factory(seed,stable,staged_reader(stable),32u64,mode==2u64)};
+  effect @step_bias<-9u64;
+  behave @assert(returned(true)==14u64+2u64*mode);
+  behave @assert(returned(false)==22u64+2u64*mode);
+  region projected=returned -> state;
+  projected.value<-14u64;
+  behave @assert(returned(true)==15u64+2u64*mode);
+  projected.value<-13u64;
+};
+
+function forwarded_function(owned region work:State,region state:State,
+    cb:func()->const u64 with {region state},n:u64)
+    ->func()->const u64 with {region state} {
+  if(n==0u64){func()->const u64 {cb()+2u64}}else{
+    owned region next<-make State(capacity=256u64){value<-cb()+1u64};
+    func successor=if(n%2u64==0u64){current_reader(state)}else{wrapped_reader(state)};
+    forwarded_function(next,state,successor,n-1u64)
+  }
+}
+{{
+  owned region seed<-make State(capacity=256u64){value<-7u64};
+  func returned=forwarded_function(seed,stable,current_reader(stable),32u64);
+  behave @assert(returned()==15u64);
+  region projected=returned -> state;
+  projected.value<-21u64;
+  behave @assert(returned()==23u64);
+}};

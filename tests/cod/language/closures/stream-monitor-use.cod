@@ -16,14 +16,14 @@ owned region receiver:Receiver <- make Receiver(capacity = 2048u64) {
 ref stream = alloc receiver Stream(17u64);
 ref first = alloc receiver Packet(64u64);
 ref second = alloc receiver Packet(128u64);
-const ref count = reader(stream);
-const ref mean = mean_size(stream);
-const ref selected = selected_size(stream);
+func count = reader(stream);
+func mean = mean_size(stream);
+func selected = selected_size(stream);
 behave @print(count());
 behave @print(mean());
 try {
   receiver.current = first;
-  const ref pinned = pinned_size(stream);
+  func pinned = pinned_size(stream);
   record(stream, selected());
   receiver.current = second;
   record(stream, selected());

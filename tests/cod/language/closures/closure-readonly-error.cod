@@ -4,5 +4,5 @@ function writer(const region state:Counter) -> (func()->void with {region state}
   func [ticks] () -> void { ticks <- 1u64; {} }
 }
 owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
-const ref callback = writer(state);
+func callback = writer(state);
 callback();

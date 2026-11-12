@@ -1,0 +1,6 @@
+region State { ticks:u64; }
+function step(region state:State)->const u64 { state.ticks <- 9u64; state.ticks }
+function read(const region state:State)->const u64 { func cb = step; cb(state) }
+owned region state:State <- make State(capacity=128u64) { ticks <- 3u64 };
+val valid = step(state);
+val rejected = read(state);

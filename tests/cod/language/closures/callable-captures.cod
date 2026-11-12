@@ -1,0 +1,68 @@
+using symbol "std:io" @print;
+symbol @action:proc(u64)->const u64;
+symbol @saved:proc(u64)->const u64;
+proc relay(n:u64)->const u64 { perform @action(n) }
+proc first = proc(n:u64)->const u64 { n + 1u64 };
+proc second = proc(n:u64)->const u64 { n + 10u64 };
+proc current = first;
+effect @action = current;
+proc snapshot = proc(n:u64)->const u64 { relay(n) };
+current <- second;
+effect @saved = snapshot;
+behave @print(perform @saved(2u64));
+behave @print(behave @saved(2u64));
+proc other = proc(n:u64)->const u64 { relay(n) * 2u64 };
+proc selected = snapshot;
+for (i in 0u64 .. 2u64) {
+  effect @saved = selected;
+  behave @print(perform @saved(2u64));
+  selected <- other;
+};
+proc idle = first;
+for (i in 0u64 .. 256u64) {
+  effect @saved = idle;
+  idle <- proc(n:u64)->const u64 { n + 1u64 };
+};
+behave @print(idle(2u64));
+
+# Each recursive activation selects and restores its own procedure holder.
+symbol @bias:u64;
+symbol @read:proc(u64)->const u64;
+symbol @recur:proc(u64)->const u64;
+proc reader()->proc(u64)->const u64 { proc(n:u64)->const u64 { @bias } }
+proc left = { effect @bias <- 10u64; reader() };
+proc right = { effect @bias <- 20u64; reader() };
+proc recur = proc(n:u64)->const u64 {
+  proc selected = if (n % 2u64 == 0u64) { left } else { right };
+  effect @read = selected;
+  if (n == 0u64) { perform @read(0u64) }
+  else { behave @recur(n - 1u64) + perform @read(0u64) }
+};
+effect @recur = recur;
+behave @print(recur(2u64));
+
+# Captured procedure images can form a runtime-growing chain.
+symbol @previous:proc(u64)->const u64;
+proc chained = proc(n:u64)->const u64 { n };
+for (i in 0u64 .. 32u64) {
+  effect @previous = chained;
+  chained <- proc(n:u64)->const u64 { perform @previous(n) + 1u64 };
+};
+effect @saved = chained;
+behave @print(perform @saved(2u64));
+
+# Failure inside a performed image restores the caller's procedural binding.
+using "std:exceptions" NullPointerException;
+symbol @checked:proc()->const i64 throws NullPointerException;
+symbol @attempt:proc()->const i64 throws NullPointerException;
+proc fails = proc()->const i64 throws NullPointerException { ptr absent:i64 = null; absent };
+effect @checked = fails;
+proc attempt = proc()->const i64 throws NullPointerException { perform @checked() };
+proc succeeds = proc()->const i64 { 42 };
+effect @checked = succeeds;
+effect @attempt = attempt;
+try { perform @attempt(); {} }
+catch (e:const NullPointerException) {
+  try { behave @print(behave @checked()); {} }
+  catch (again:const NullPointerException) { behave @print(0); };
+};

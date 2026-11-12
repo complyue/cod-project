@@ -1,0 +1,5 @@
+function borrow(value:const u64 in O)->const u64 in O where {owner O} { value }
+func selected = borrow;
+ref value = 1u64;
+ref rejected = selected(value);
+rejected <- 2u64;

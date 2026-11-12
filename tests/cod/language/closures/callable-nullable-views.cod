@@ -1,0 +1,71 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+function absent(ptr value:const u64 in O)->const bool where {owner O} { isnull(value) }
+function present(ptr value:const u64 in O)->const bool where {owner O} { !isnull(value) }
+ref number = 5u64;
+ptr maybe = number;
+maybe = null;
+func predicate = absent;
+for(i in 0u64 .. 2u64) { behave @print(predicate(maybe)); predicate <- present; };
+function forward(ptr value:u64 in O)->ptr u64 in O where {owner O} { value }
+func identity = forward;
+ptr nothing = identity(maybe);
+behave @print(isnull(nothing));
+maybe = number;
+ptr something = identity(maybe);
+try { something <- 9u64; behave @print(something); }
+catch(e:const NullPointerException) { behave @print(999u64); };
+behave @print(number);
+function optional(value:u64 in O,keep:bool)->ptr u64 in O where {owner O} { if(keep) { value } else { null } }
+func choose = optional;
+behave @print(isnull(choose(number,false)));
+try { behave @print(choose(number,true)); behave @print(choose(number,false)); }
+catch(e:const NullPointerException) { behave @print(17u64); };
+data Node { value:u64; ptr next:Node; }
+region Arena { ptr head:Node; }
+owned region arena:Arena <- make Arena(capacity=512u64) { head = null };
+ref tail = alloc arena Node(2u64,null);
+ref head = alloc arena Node(3u64,tail);
+arena.head = head;
+function count(ptr node:Node in r)->const u64 throws NullPointerException where {region r:Arena} {
+ if(isnull(node)) { 0u64 } else { 1u64+count(node.next) }
+}
+func length = count;
+try { behave @print(length(head)); arena.head = null; behave @print(length(arena.head)); }
+catch(e:const NullPointerException) { behave @print(999u64); };
+ref unset = make local u64;
+func test = absent;
+behave @print(test(unset));
+unset <- 23u64;
+behave @print(unset);
+
+function generic_absent(ptr value:const T in O)->const bool where {T,owner O} { isnull(value) }
+func generic = generic_absent;
+ref fraction = 0.5f32;
+ptr missing_fraction = fraction;
+missing_fraction = null;
+behave @print(generic(missing_fraction));
+behave @print(generic(number));
+function population(ptr first:const u64 in O,ptr rest:const u64 in O...)->const u64 where {owner O} {
+ fold(i in 0u64 .. len(rest),total=if(isnull(first)) {0u64} else {1u64}) {
+  total+if(isnull(rest[i])) {0u64} else {1u64}
+ }
+}
+func populated = population;
+ptr empty = number;
+empty = null;
+behave @print(populated(number,empty,maybe));
+behave @print(populated(empty));
+symbol @keep:bool;
+effect @keep <- true;
+proc @lookup(ptr value:u64 in O)->ptr u64 in O where {owner O} { if(@keep) {value} else {null} }
+proc lookup = @lookup;
+effect @lookup = lookup;
+effect @keep <- false;
+behave @print(isnull(perform @lookup(maybe)));
+behave @print(isnull(behave @lookup(maybe)));
+function readonly(ptr value:const u64 in O)->const ptr u64 in O where {owner O} { value }
+func borrow_readonly = readonly;
+const ptr observed = borrow_readonly(number);
+number <- 29u64;
+try { behave @print(observed); } catch(e:const NullPointerException) { behave @print(999u64); };

@@ -15,20 +15,20 @@ function mode(action:func()->const u64) -> const u64 { 0u64 }
 function mode(action:(func()->const u64 with {region r})) -> const u64 where {region r:Counter} { 1u64 }
 owned region first:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
 owned region second:Extended <- make Extended(capacity = 128u64) { extra <- 1u8; ticks <- 7u64 };
-const ref typed:(func()->const u64 with {region first}) = reader(first);
-const ref forwarded = generic(relay(typed));
+func typed:(func()->const u64 with {region first}) = reader(first);
+func forwarded = generic(relay(typed));
 first.ticks <- 5u64;
 behave @print(forwarded());
-const ref combined = pair(first, second);
+func combined = pair(first, second);
 behave @print(both(first, second, combined));
 behave @print(mode(typed));
-const ref independent = func () -> const u64 { 42u64 };
+func independent = func () -> const u64 { 42u64 };
 behave @print(mode(independent));
-const ref factory:(func()->(func()->const u64 with {region first}) with {region first}) =
+func factory:(func()->(func()->const u64 with {region first}) with {region first}) =
   func [first] () -> (func()->const u64 with {region first}) {
     func [first] () -> const u64 { first.ticks }
   };
-const ref nested = factory();
+func nested = factory();
 behave @print(nested());
 function score(action:(func()->const u64 with {region specific})) -> const u64 where {region specific:Extended} { 2u64 }
 function score(action:(func()->const u64 with {region general})) -> const u64 where {region general:Counter} { 1u64 }

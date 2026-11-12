@@ -42,6 +42,8 @@ def run(executable, root, entry, expected, label):
     text_bytes = sections.get('.text', sections.get('__text'))
     result = {'case': label, 'backend': 'llvm', 'phases': phases, 'expected_stdout': expected,
               'llvm_ir_bytes': generated.stat().st_size if generated.exists() else None,
+              'native_definitions': sum(line.startswith('define internal ') and '@cod.call.' in line
+                                        for line in generated.read_text().splitlines()) if generated.exists() else None,
               'bitcode_bytes': bitcode.stat().st_size if bitcode.exists() else None,
               'native_executable_bytes': program.stat().st_size if program.exists() else None,
               'native_text_bytes': text_bytes}
@@ -140,6 +142,57 @@ def main():
         entry = directory / 'dag-main.cod'
         entry.write_text('using symbol "std:io" @print;\nusing "dag-0-a.cod" f;\nbehave @print(f(2));\n')
         results.append(run(executable, root, entry, f'{3 * 2**layers}\n', 'layered-diamond-22-modules-2047-calls'))
+        # Shared source dependencies must stay a native graph, rather than
+        # duplicating the full call tree before LLVM can optimize it.
+        results[-1]['shared_graph_bound'] = 4 * (layers + 1)
+        results[-1]['passed'] &= (results[-1]['native_definitions'] is not None and
+                                  results[-1]['native_definitions'] <= results[-1]['shared_graph_bound'])
+
+        (directory / 'factory-state.cod').write_text('region State { value:u64; }\nexport State;\n')
+        for level in range(layers, -1, -1):
+            for side in ('a', 'b'):
+                body = 'using "factory-state.cod" State;\n'
+                if level < layers:
+                    body += (f'using "factory-{level+1}-a.cod" f as a;\n'
+                             f'using "factory-{level+1}-b.cod" f as b;\n')
+                body += 'function f(region s:State) -> func()->const u64 with {region s} { '
+                body += ('func discarded = a(s); b(s)' if level < layers else
+                         'func () -> const u64 { s.value }')
+                (directory / f'factory-{level}-{side}.cod').write_text(body + ' }\nexport f;\n')
+        entry = directory / 'factory-main.cod'
+        entry.write_text('using symbol "std:io" @print;\nusing "factory-state.cod" State;\n'
+                         'using "factory-0-a.cod" f;\n'
+                         'owned region state:State <- make State(capacity = 64u64) { value <- 3u64 };\n'
+                         'func selected = f(state);\nbehave @print(selected());\n')
+        results.append(run(executable, root, entry, '3\n', 'layered-callable-factories-2047-calls'))
+        results[-1]['shared_graph_bound'] = 4 * (layers + 2)
+        results[-1]['passed'] &= (results[-1]['native_definitions'] is not None and
+                                  results[-1]['native_definitions'] <= results[-1]['shared_graph_bound'])
+
+        # Both branches reach the same record adapter. Its checked result must
+        # retain the leaf module's interface facts without expanding all paths.
+        record_fixtures = root / 'tests/cod/language/closures'
+        (directory / 'record-vocabulary.cod').write_text((record_fixtures / 'record-vocabulary.cod').read_text())
+        (directory / 'record-adapter.cod').write_text((record_fixtures / 'record-adapter.cod').read_text())
+        depth = 32
+        lines = ['using symbol "std:io" @print;', 'using "record-vocabulary.cod" Node;',
+                 'using "record-vocabulary.cod" Entity;', 'using "record-vocabulary.cod" Arena;',
+                 'using "record-adapter.cod" qualify;']
+        for level in range(depth + 1):
+            body = 'node.value <- node.value+1u64; '
+            body += (f'if(b){{step{level-1}(node,b)}}else{{step{level-1}(node,!b)}}' if level else 'qualify(node)')
+            lines.append(f'function step{level}(node:Node in r,b:bool)->Node in r where {{region r:Arena}} {{{body}}}')
+        lines += ['function score(node:Entity in r)->const u64 where {region r:Arena}{node.value}',
+                  'owned region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};',
+                  'ref node=alloc arena Node(5u64);', f'func selected=step{depth};',
+                  'ref first=selected(node,true); behave @print(score(first));',
+                  'ref second=selected(node,false); behave @print(score(second));']
+        entry = directory / 'record-main.cod'
+        entry.write_text('\n'.join(lines) + '\n')
+        results.append(run(executable, root, entry, f'{5+depth+1}\n{5+2*(depth+1)}\n', 'shared-record-return-32-levels'))
+        results[-1]['shared_graph_bound'] = 4 * (depth + 2)
+        results[-1]['passed'] &= (results[-1]['native_definitions'] is not None and
+                                  results[-1]['native_definitions'] <= results[-1]['shared_graph_bound'])
 
         units = 32
         names = ', '.join(f'unit{i}' for i in range(units))

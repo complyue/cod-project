@@ -1,0 +1,7 @@
+function partial(x:u64 in O,b:bool)->void where {owner O}{if(b){x <- 1u64;{}}else{}}
+function later(x:u64 in O)->const u64 where {owner O}{x <- 5u64;0u64}
+function sink(x:u64,y:u64)->void{}
+func selected=partial;
+ref value=make local u64;
+selected(value,false);
+sink(value,later(value));

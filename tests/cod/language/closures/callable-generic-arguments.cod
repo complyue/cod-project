@@ -1,0 +1,3 @@
+function same(x:T,y:T)->const T where T { x }
+func selected = same;
+selected(1,true);

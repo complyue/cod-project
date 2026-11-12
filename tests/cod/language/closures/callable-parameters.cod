@@ -1,0 +1,45 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+function replace_local(action:func()->const u64) -> void {
+  action <- func () -> const u64 { 5u64 };
+  {}
+}
+function read_after(action:func()->const u64, ignored:u64) -> const u64 { action() }
+function read_mode(action:func()->const u64, ignored:u64) -> const u64 { action() }
+function read_mode(action:func()->const u64 in O, ignored:bool) -> const u64 where {owner O} { action() }
+function replace_borrowed(action:func()->const u64 in O) -> void where {owner O} {
+  action <- func () -> const u64 { 9u64 };
+  {}
+}
+function copy_result(action:func()->const u64) -> func()->const u64 { action }
+function forward(actions:func()->const u64...) -> func()->const u64 { copy_result(actions...) }
+function present(ptr action:func()->const u64 in O) -> const bool where {owner O} { !isnull(action) }
+
+func original = func () -> const u64 { 1u64 };
+replace_local(original);
+behave @print(original());
+
+# Selection decides value versus borrow; aliases observe later argument writes.
+behave @print(read_mode(original, { original <- func () -> const u64 { 11u64 }; 0u64 }));
+behave @print(read_mode(original, { original <- func () -> const u64 { 13u64 }; true }));
+behave @print(read_after(original, { original <- func () -> const u64 { 7u64 }; 0u64 }));
+behave @print(original());
+func returned = forward(original);
+replace_borrowed(original);
+behave @print(original());
+behave @print(returned());
+
+# A callable-valued callee and a named method share parameter construction.
+func indirect = func (action:func()->const u64) -> void {
+  replace_local(action);
+};
+indirect(original);
+behave @print(original());
+ptr optional = original;
+optional = null;
+behave @print(present(optional));
+optional = original;
+try {
+  behave @print(read_after(optional, { optional <- returned; 0u64 }));
+} catch (e:const NullPointerException) { behave @print(0u64); };
+behave @print(original());

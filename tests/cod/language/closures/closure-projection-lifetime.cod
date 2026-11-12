@@ -4,6 +4,6 @@ function reader(region state:State) -> func()->const bool with {region state} {
 }
 region escaped:State = {
   owned region local:State <- make State(capacity = 128u64) { flag <- true };
-  const ref cb = reader(local);
+  func cb = reader(local);
   cb -> state
 };

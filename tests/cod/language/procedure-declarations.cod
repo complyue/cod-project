@@ -23,4 +23,4 @@ proc callback(x:i64) -> i64 { x + 1 }
 proc selected(x:i64) -> i64 { @bias + x }
 proc apply(callback:proc(i64)->i64, x:i64) -> i64 { callback(x) }
 behave @print(apply(selected, 3));
-{ const ref callback = selected; effect @bias <- 40; behave @print(callback(3)); };
+{ proc callback = selected; effect @bias <- 40; behave @print(callback(3)); };

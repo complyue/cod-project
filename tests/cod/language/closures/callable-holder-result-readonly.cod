@@ -1,0 +1,6 @@
+function one()->const u64 {1u64}
+function view(a:const func()->const u64 in O)->const (func()->const u64) in O where {owner O} {a}
+func a = one;
+func select_view = view;
+ptr readonly = select_view(a);
+readonly <- one;

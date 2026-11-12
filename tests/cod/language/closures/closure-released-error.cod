@@ -2,6 +2,6 @@ using "structural-api.cod" Counter;
 using "owner-closure-library.cod" reader;
 function discard(owned region state:Counter) -> void {}
 owned region state:Counter <- make Counter(capacity = 128u64) { ticks <- 3u64 };
-const ref callback = reader(state);
+func callback = reader(state);
 discard(state);
 callback();

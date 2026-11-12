@@ -1,11 +1,11 @@
 # LLVM bindings, handles and scoped cleanup
 
-Revision: 3 · Recorded: 2026-11-11 · Status: planning draft; examples are proposed source notation, not executable fixtures.
+Revision: 4 · Recorded: 2026-11-12 · Status: planning draft; examples are proposed source notation, not executable fixtures.
 
 ## Design authority
 
-- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 3, all sections; native handle, provider, output-parameter and registration-time evaluation contracts are `pending-human`.
-- **Baseline / assessment:** [H-353](../../../design/DesignAuthorityRegistry.md#h-353) requests selective LLVM bindings, scoped release and explicit generic-owner ref access. [H-354](../../../design/DesignAuthorityRegistry.md#h-354) proposes a write-only `out` modifier and uninitialized local handle storage. [H-355](../../../design/DesignAuthorityRegistry.md#h-355) selects the term registration-time evaluation within defer and requests syntax alternatives; [K-475](../../../design/DesignAuthorityRegistry.md#k-475) records those unselected candidates. C-80/P-314/P-316–P-318 connects native integration to C-02/C-11/C-79 and charter §6; C-81/P-319/P-320 relates output initialization to C-65's explicit storage/owner contract.
+- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 4, all sections. Native handle, provider and output-parameter contracts remain `pending-human`. The call/block distinction and registration-time evaluation are confirmed language requirements under [D-17](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes), not implementation evidence for this application.
+- **Baseline / assessment:** [H-353](../../../design/DesignAuthorityRegistry.md#h-353) requests selective LLVM bindings, scoped release and explicit generic-owner ref access. [H-354](../../../design/DesignAuthorityRegistry.md#h-354) proposes a write-only `out` modifier and uninitialized local handle storage. [H-355](../../../design/DesignAuthorityRegistry.md#h-355) supplies registration-time evaluation terminology; [H-356](../../../design/DesignAuthorityRegistry.md#h-356) selects `defer init(...)()` and authorizes immediate language work. [K-515](../../../design/DesignAuthorityRegistry.md#k-515) records this plan update. C-80/P-314/P-316–P-318 connects native integration to C-02/C-11/C-79 and charter §6; C-81/P-319/P-320 relates output initialization to C-65's explicit storage/owner contract.
 - **Dependencies / invariants:** [D-14](../../../design/RegionalOwnership.md) owner/access and initialization, [D-17](../../../design/ExceptionControl.md) exceptions/scopes, and [D-18](../../../design/RegionalClosures.md) callable values/captures remain authoritative within their recorded scopes. Preserve relocation and distinguish native-resource lifetime from handle storage. No general lexical-reference capture or implicit lifetime extension follows.
 - **Acceptance / exclusions:** a future binding must demonstrate valid argument access, normal/exceptional release and no use after native invalidation. This document neither selects a C versus C++ shim ABI nor changes parsing, closure representation, provider registration or runtime code loading.
 
@@ -39,7 +39,7 @@ proc llvm_context_init(out ref ctx: LLVMContextHandle in o)
 }
 
 ref ctx: LLVMContextHandle;
-defer ((llvm_context_init(ctx)))();
+defer llvm_context_init(ctx)();
 ```
 
 `owner o` permits caller storage in a lexical scope or a region when the handle's own storage rules permit it. A `region` binder would unnecessarily require the latter. `out` describes access and initialization, while `in o` identifies the actual caller destination; neither substitutes for the other. The call site still passes `ctx` normally, without a separate output argument expression or a read of its payload.
@@ -54,30 +54,19 @@ Exceptional exit does not grant the normal-return initialization postcondition. 
 
 ## Registration-time evaluation within defer
 
-The candidate `defer ((llvm_context_init(ctx)))();` separates two moments:
+The selected language forms are `defer call(...)` and `defer { ... }`. Outside the explicit block form, the operand must be a function/procedure call. Registration evaluates the selected callable and its arguments once; scope exit executes the final invocation using the retained values. In a call chain, only the outermost invocation is deferred. Parentheses retain ordinary grouping semantics and introduce no timing marker.
 
-| When | Proposed operation |
-| --- | --- |
-| Registration | Evaluate the inner initializer once, initialize caller storage and retain its returned callable value. |
-| Scope exit | Invoke that retained value in the scope's deferred-cleanup order. |
+This supplies the scope-cleanup role commonly implemented by C++ destructors: initialization returns the particular cleanup action, and `defer` attaches it to the acquiring scope. The native binding must still establish who may release the resource; merely copying its handle or cleanup callable does not establish another release obligation.
 
-Plain `defer f(x)` remains delayed evaluation under [D-17](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes). Registration-time evaluation means runtime evaluation when control reaches the defer expression, not compile-time evaluation. The spelling, nesting and applicability beyond this pattern remain open.
-
-### Syntax candidates
-
-All three sketches retain the returned callable value now and invoke it at scope exit. None is selected.
-
-| Form | Example | Practical trade-off |
+| Source | At registration | At scope exit |
 | --- | --- | --- |
-| Double-parenthesis boundary | `defer ((init(ctx)))();` | Compact and shows the invocation outside the registration-time expression. Repeated parentheses gain timing significance, requiring preservation during parsing and clear limits on nested markers. |
-| Named registration clause | `defer (proc cleanup = init(ctx)) { cleanup(); }` | Names the retained value and extends the existing explicit-capture direction `defer (x) { f(x) }`. Longer, but supports several preparations and a readable cleanup body without expression-level staging markers. |
-| Bracketed boundary | `defer [init(ctx)]();` | Compact and visually distinct from grouping. Adds a special expression-list meaning beside existing callable capture lists; list elements, indexing and capture-versus-invocation grammar need precise separation. |
+| `defer llvm_context_init(ctx)();` | Run the initializer and retain its returned cleanup callable. | Invoke that cleanup callable. |
+| `defer release(select_handle());` | Select `release` and evaluate its argument. | Call it with the prepared argument. |
+| `defer { release(select_handle()); }` | Register the block. | Evaluate the whole block, including handle selection. |
 
-The named clause is the initial recommendation for further discussion, not an accepted syntax. Its initializer executes at registration; the binding is available only to the deferred body, whose invocation occurs later. A callable declaration retains a callable value rather than capturing a mutable lexical ref cell. An illustrative extension is `defer (val saved = value) { report(saved); }`, using explicit value semantics for a saved bits argument. Any reference form must retain its ordinary owner/lifetime obligations.
+This follows [D-17](../../../design/ExceptionControl.md#deferred-work-and-explicit-scopes). Registration-time evaluation is runtime work when control reaches `defer`, not compile-time evaluation. Normal argument conversion and passing rules still apply: saving a borrowed reference preserves the reference and its owner obligations; it does not snapshot the referenced memory. Bits and callable values retain their ordinary value semantics. Selecting a procedure now does not turn its eventual direct/current-binding call into `perform`.
 
-Named clauses need declaration/cleanup scope handling; boundary forms need AST markers that survive ordinary grouping/index parsing. All forms share the substantial implementation requirements: correct scope exit, callable storage, definite initialization and exceptional cleanup. No measured implementation-cost claim follows from this grammar comparison. Additional preparation expressions, evaluation order and failure between preparations need a contract before those generalizations are implemented.
-
-The candidate lowering uses scope-owned callable storage plus deferred invocation. It should not reread a later-replaced callable holder. Selecting a procedure early does not silently change direct-call/current-binding semantics into `perform` semantics.
+The implementation should prepare the call through the existing typed call path and retain its operands in the owning scope. It must not evaluate the outer call during registration, reevaluate its arguments during cleanup, or reread a subsequently replaced callable holder. The language scope/defer work can proceed independently of the proposed LLVM handle and `out` features.
 
 For native release, retaining the acquired opaque handle value rather than the lexical `ctx` reference avoids retargeting cleanup if that slot changes. This is a proposed binding-provided cleanup representation, not permission for ordinary closures to capture lexical ref cells. Native-resource ownership, captures, copying and callable allocation failure must be resolved together.
 
@@ -85,4 +74,6 @@ If acquisition throws, no cleanup for that failed acquisition is registered; par
 
 ## Review before implementation
 
-Select handle storage and invalidation rules, initializer/cleanup contracts, and registration-time syntax before implementing this idiom. Validate it on one actual native-resource lifecycle, including failure paths and nesting, before expanding the binding surface. General scope/defer lowering and runtime callable support are dependencies; neither is supplied by this application plan. No independent lifetime framework, native pointer registry or general mechanism for evaluating arbitrary expressions early is presumed necessary.
+The language refactor is authorized as the next implementation item: implement the call/block timing contract together with the explicit scope rules and focused lifetime/exception checks in D-17. Current source has neither a defer AST/lowering path nor the accepted distinction between grouping braces and explicit block scopes; successful callable tests alone do not establish this feature.
+
+Handle storage/invalidation, `out` syntax and initializer/cleanup resource contracts still need selection before the LLVM lifecycle example becomes executable. Validate that binding on one actual native-resource lifecycle, including failure paths and nesting, before expanding the API surface. No independent lifetime framework, native pointer registry or general early-evaluation operator is required by the selected defer syntax.

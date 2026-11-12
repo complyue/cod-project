@@ -1,0 +1,6 @@
+type Entity;
+data Node {value:u64;}
+region Arena {count:u64;}
+export Entity;
+export Node;
+export Arena;

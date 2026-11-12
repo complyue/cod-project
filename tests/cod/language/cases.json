@@ -1794,9 +1794,29 @@
   },
   {
     "file": "closures/closure-selection-implementation.cod",
+    "exit": 0,
+    "stdout": "99\n107\n7\n17\n107\n109\n9\n19\n109\n98\n97\n24\n26\n26\n24\n31\n31\n23\n19\n327\n2569\n19\n19\n"
+  },
+  {
+    "file": "closures/callable-parameters.cod",
+    "exit": 0,
+    "stdout": "1\n1\n13\n13\n7\n9\n7\n9\nfalse\n9\n7\n"
+  },
+  {
+    "file": "closures/callable-arguments.cod",
+    "exit": 0,
+    "stdout": "13\n14\n24\n25\n15\n25\n43\n55\n209\n3.5\n99\n7\n0\n98\n"
+  },
+  {
+    "file": "closures/callable-module-context.cod",
+    "exit": 0,
+    "stdout": "2\n14\n2\n14\n2\n14\n2\n14\n2\n14\n2\n6\n42\n2\n14\n2\n2\n14\n"
+  },
+  {
+    "file": "closures/callable-contract-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "different callable implementations"
+    "stderr_contains": "method result violates callable declaration"
   },
   {
     "file": "closures/closure-selection-owner.cod",
@@ -1809,5 +1829,464 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "regional result would outlive its owning scope"
+  },
+  {
+    "file": "closures/callable-kind-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "must match its function/procedure kind"
+  },
+  {
+    "file": "closures/callable-ref-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "non-null callable values use func or proc, not ref"
+  },
+  {
+    "file": "recursive-calls.cod",
+    "exit": 0,
+    "stdout": "720\ntrue\nfalse\n16\n10\n1\n99\n100\n"
+  },
+  {
+    "file": "closures/callable-loop-demand-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "unavailable lexical function 'unavailable'"
+  },
+  {
+    "file": "closures/callable-procedures.cod",
+    "exit": 0,
+    "stdout": "13\n13\n5\n13\n13\n9\n22\n22\n14\n3\n5\n5\n3\n99\n6\n12\n4\n5\n19\n11\n3\n27\n3\n3\n9\n1\n5\n6\n"
+  },
+  {
+    "file": "closures/callable-procedure-binding-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "closures/callable-captures.cod",
+    "exit": 0,
+    "stdout": "3\n12\n3\n24\n3\n40\n34\n42\n"
+  },
+  {
+    "file": "closures/callable-invocation.cod",
+    "exit": 0,
+    "stdout": "112\n212\n312\n13\n42\n9056\n"
+  },
+  {
+    "file": "closures/callable-effects.cod",
+    "exit": 0,
+    "stdout": "3\n12\n12\n10\n11\n12\n12\n12\n1\n11\n12\n22\n"
+  },
+  {
+    "file": "closures/callable-effects-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "closures/callable-regions.cod",
+    "exit": 0,
+    "stdout": "13\n52\n13\n152\n14\n4\n33\n44\n"
+  },
+  {
+    "file": "closures/callable-region-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional value requires a live owning region"
+  },
+  {
+    "file": "closures/callable-factories.cod",
+    "exit": 0,
+    "stdout": "1\n2\n33\n17\n19\n20\n1\n2\n100\n13\n7\n7\n7\n"
+  },
+  {
+    "file": "closures/callable-factory-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-lexical-factory.cod",
+    "exit": 0,
+    "stdout": "10\n9\n13\n10\n"
+  },
+  {
+    "file": "closures/callable-higher-order.cod",
+    "exit": 0,
+    "stdout": "1\n3\n4\n13\n103\n112\n3\n12\n17\n2\n10\n46\n10\n23\n10\n99\n"
+  },
+  {
+    "file": "closures/callable-generic.cod",
+    "exit": 0,
+    "stdout": "6\n3\n9\n4.5\n10\n60\n4\n16\n16\n6\n6\n10\n0\n12\n6\n10\n4\n10\n4\n3\n4\n6\n3\n7\n9\n4.5\n"
+  },
+  {
+    "file": "closures/callable-generic-arguments.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "inconsistent type-parameter arguments"
+  },
+  {
+    "file": "closures/callable-generic-bound.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "type argument does not satisfy callable bound"
+  },
+  {
+    "file": "closures/callable-region-parameters.cod",
+    "exit": 0,
+    "stdout": "12\n23\n16\n29\n16\n99\n24\n38\n30\n46\n34\n45\n46\n46\n97\n48\n49\n51\n"
+  },
+  {
+    "file": "closures/callable-region-parameter-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-region-parameter-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "requires a live owning region"
+  },
+  {
+    "file": "closures/callable-owner-parameters.cod",
+    "exit": 0,
+    "stdout": "3\n7\n14\n14\n17\n3.5\n22\n22\n8\n8\n4\n7\n7\n25\n35\n5\n5\n41\n6\n7\n43\n41\n"
+  },
+  {
+    "file": "closures/callable-owner-parameter-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "requires the same actual owner"
+  },
+  {
+    "file": "closures/callable-owner-parameter-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot pass a read-only view to a writable parameter"
+  },
+  {
+    "file": "closures/callable-owner-parameter-root.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "does not satisfy its root constraint"
+  },
+  {
+    "file": "closures/callable-borrowed-results.cod",
+    "exit": 0,
+    "stdout": "4\n7\n4\n8\n13\n1.25\n19\n2.5\n1\n23\n31\n37\n41\n53\n31\n"
+  },
+  {
+    "file": "closures/callable-result-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "result does not belong to its declared owner"
+  },
+  {
+    "file": "closures/callable-result-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-result-escape.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional result would outlive its owning scope"
+  },
+  {
+    "file": "closures/callable-nullable-views.cod",
+    "exit": 0,
+    "stdout": "true\nfalse\ntrue\n9\n9\ntrue\n9\n17\n2\n0\nfalse\n23\ntrue\nfalse\n2\n0\nfalse\ntrue\n29\n"
+  },
+  {
+    "file": "closures/callable-nullable-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "closures/callable-nullable-npe.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch or throws NullPointerException"
+  },
+  {
+    "file": "closures/callable-nullable-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional value requires a live owning region"
+  },
+  {
+    "file": "closures/callable-borrowed-holders.cod",
+    "exit": 0,
+    "stdout": "3\n2\nfalse\ntrue\n1\n2\n1\n3\n2\n3\n2\n0\n51\n53\n43\n21\n16\n"
+  },
+  {
+    "file": "closures/callable-borrowed-holder-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot pass a read-only view to a writable parameter"
+  },
+  {
+    "file": "closures/callable-borrowed-holder-effects.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "closures/callable-borrowed-holder-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "requires a live region owner"
+  },
+  {
+    "file": "closures/callable-holder-results.cod",
+    "exit": 0,
+    "stdout": "2\n1\n3\n1\n2\n1\ntrue\n1\n3\n17\ntrue\n2\n2\n1\n2\n3\n43\n2\n3\n2\n3\n43\n"
+  },
+  {
+    "file": "closures/callable-holder-result-escape.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "result does not belong to its declared owner"
+  },
+  {
+    "file": "closures/callable-holder-result-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-holder-result-effects.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "missing required binding"
+  },
+  {
+    "file": "closures/callable-holder-owner-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-owner-flows.cod",
+    "exit": 0,
+    "stdout": "18\n26\n29\n32\n"
+  },
+  {
+    "file": "closures/callable-owner-loop-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-owner-methods.cod",
+    "exit": 0,
+    "stdout": "9\n9\n9\n1\n9\n10\n10\n10\n10\n2\n11\n11\n"
+  },
+  {
+    "file": "closures/callable-owner-method-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-owner-method-npe.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "closures/callable-owner-factories.cod",
+    "exit": 0,
+    "stdout": "7\n3\n5\n11\n11\n13\n16\n18\n18\n106\n107\n7\n17\n"
+  },
+  {
+    "file": "closures/callable-owner-factory-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-array-results.cod",
+    "exit": 0,
+    "stdout": "2\n6\n20\n7\n4\n2\n1.5\ntrue\n99\n9\n2\n6\n"
+  },
+  {
+    "file": "closures/callable-array-result-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-array-result-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "result does not belong to its declared owner"
+  },
+  {
+    "file": "closures/callable-array-result-escape.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional result would outlive its owning scope"
+  },
+  {
+    "file": "closures/callable-array-result-npe.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "closures/callable-conversions.cod",
+    "exit": 0,
+    "stdout": "11\n21\n22\n23\n23\n0\n12\n13\n14\n24\n7\n5\n"
+  },
+  {
+    "file": "closures/callable-conversion-exact.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "selected callable body has no applicable argument conversion"
+  },
+  {
+    "file": "closures/callable-conversion-npe.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "checked NullPointerException requires a local catch"
+  },
+  {
+    "file": "closures/callable-record-results.cod",
+    "exit": 0,
+    "stdout": "4\n8\n11\n4\ntrue\n99\n4\n37\n1\n2\n"
+  },
+  {
+    "file": "closures/callable-record-facts.cod",
+    "exit": 0,
+    "stdout": "77\n77\n"
+  },
+  {
+    "file": "closures/callable-record-facts-error.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "no matching method 'score'"
+  },
+  {
+    "file": "closures/callable-record-result-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only destination"
+  },
+  {
+    "file": "closures/callable-record-result-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "result does not belong to its declared owner"
+  },
+  {
+    "file": "closures/callable-initialization.cod",
+    "exit": 0,
+    "stdout": "7\n9\n23\n31\n19\n9\n13\n17\n29\n7\n5\n"
+  },
+  {
+    "file": "closures/callable-initialization-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "closures/callable-initialization-exception.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "closures/callable-initialization-order.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "closures/callable-initialization-index.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "before definite initialization"
+  },
+  {
+    "file": "closures/callable-region-results.cod",
+    "exit": 0,
+    "stdout": "5\n7\n7\n7\n7\n39\n12\n41\n41\n1\n2\n33\n17\n"
+  },
+  {
+    "file": "closures/callable-region-result-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "closures/callable-region-result-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "result does not belong"
+  },
+  {
+    "file": "closures/callable-region-result-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "outlive"
+  },
+  {
+    "file": "closures/callable-region-result-facts.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "no matching method"
+  },
+  {
+    "file": "closures/callable-region-result-nullability.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "isnull requires a ptr"
+  },
+  {
+    "file": "closures/callable-owned-results.cod",
+    "exit": 0,
+    "stdout": "8\n3\n9\n3\n12\n19\n1\n2\n29\n31\n"
+  },
+  {
+    "file": "closures/callable-owned-result-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-owned-result-field-type.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "reference field requires exact concrete target type"
+  },
+  {
+    "file": "closures/callable-expression-targets.cod",
+    "exit": 0,
+    "stdout": "5\n6\n8\n42\n123\n103\n12\n104\n13\n21\n14\n1231\n9\n13\n104\n"
+  },
+  {
+    "file": "closures/callable-expression-npe.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "NullPointerException"
+  },
+  {
+    "file": "closures/callable-expression-kind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "call target must be a function or procedure value"
+  },
+  {
+    "file": "closures/callable-expression-effects.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a function cannot invoke a procedure"
   }
 ]

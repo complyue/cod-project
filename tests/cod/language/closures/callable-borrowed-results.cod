@@ -1,0 +1,72 @@
+using symbol "std:io" @print;
+function select(a:u64 in O,b:u64 in O,first:bool)->u64 in O where {owner O} {
+ if(first) { a } else { b }
+}
+function reverse(a:u64 in O,b:u64 in O,first:bool)->u64 in O where {owner O} {
+ if(first) { b } else { a }
+}
+ref a = 3u64;
+ref b = 7u64;
+func selected = select;
+for(i in 0u64 .. 2u64) {
+ ref cell = selected(a,b,true);
+ cell <- cell+1u64;
+ behave @print(a); behave @print(b);
+ selected <- reverse;
+};
+ref saved = selected(a,b,true);
+b <- 13u64;
+behave @print(saved);
+function identity(value:T in O)->T in O where {T,owner O} { value }
+func generic = identity;
+ref gain = 0.5f32;
+ref borrowed = generic(gain);
+borrowed <- 1.25f32;
+behave @print(gain);
+function descend(value:u64 in O,steps:u64)->u64 in O where {owner O} {
+ if(steps == 0u64) { value } else { descend(value,steps-1u64) }
+}
+func recursive = descend;
+ref deepest = recursive(a,32u64);
+deepest <- 19u64;
+behave @print(a);
+region Arena { calls:u64; }
+array Values[u64]:f32;
+owned region arena:Arena <- make Arena(capacity=512u64) { calls <- 0u64 };
+ref values = alloc arena Values(4u64,1.0f32);
+function element(values:Values in r,index:u64)->f32 in r where {region r:Arena} {
+ r.calls <- r.calls+1u64;
+ values[index]
+}
+func at = element;
+ref slot = at(values,2u64);
+slot <- 2.5f32;
+behave @print(values[2u64]); behave @print(arena.calls);
+function readonly(value:const u64 in O)->const u64 in O where {owner O} { value }
+func reader = readonly;
+const ref observed = reader(a);
+a <- 23u64;
+behave @print(observed);
+
+symbol @first:bool;
+effect @first <- true;
+proc @pick(a:u64 in O,b:u64 in O)->u64 in O where {owner O} { if(@first) { a } else { b } }
+proc picker = @pick;
+effect @pick = picker;
+effect @first <- false;
+ref captured = perform @pick(a,b);
+ref current = behave @pick(a,b);
+captured <- 31u64; current <- 37u64;
+behave @print(a); behave @print(b);
+ref independent = { func local = select; local(a,b,false) };
+independent <- 41u64;
+behave @print(b);
+using "std:exceptions" NullPointerException;
+function checked(value:u64 in O)->u64 in O throws NullPointerException where {owner O} {
+ ptr missing = value;
+ missing = null;
+ missing
+}
+func throwing = checked;
+try { throwing(a); {} } catch(e:const NullPointerException) { behave @print(53u64); };
+behave @print(a);

@@ -1,0 +1,5 @@
+function add(a:u64 in O)->const u64 where {owner O} { a <- a+1u64; a }
+function read(a:const u64 in O)->const u64 where {owner O} { func operation = add; operation(a) }
+ref value = 1u64;
+val valid = add(value);
+val rejected = read(value);

@@ -1,0 +1,57 @@
+using symbol "std:io" @print;
+region State { ticks:u64; }
+region Extended { padding:u64; ticks:u64; }
+function step(region state:State, n:u64)->const u64 { state.ticks <- state.ticks + n; state.ticks }
+function alternate(region state:State, n:u64)->const u64 { state.ticks <- state.ticks + n + n; state.ticks }
+function walk(region state:State, n:u64)->const u64 {
+ if(n == 0u64) { state.ticks } else { state.ticks <- state.ticks + 1u64; walk(state, n - 1u64) }
+}
+owned region first:State <- make State(capacity=256u64) { ticks <- 10u64 };
+owned region second:Extended <- make Extended(capacity=256u64) { padding <- 99u64; ticks <- 20u64 };
+func selected = step;
+for(i in 0u64 .. 2u64) {
+ behave @print(selected(first, 2u64));
+ behave @print(selected(second, 3u64));
+ selected <- alternate;
+};
+behave @print(first.ticks);
+behave @print(second.padding);
+func recursive = walk;
+behave @print(recursive(first, 8u64));
+behave @print(walk(second, 9u64));
+function apply(action:func(region :State,u64)->const u64, region state:State, n:u64)->const u64 { action(state,n) }
+func higher = apply;
+behave @print(higher(selected, first, 3u64));
+behave @print(apply(selected, second, 4u64));
+symbol @bias:u64;
+symbol @update:proc(region :State,u64)->const u64;
+effect @bias <- 3u64;
+proc updater = proc(region state:State,n:u64)->const u64 { state.ticks <- state.ticks + n + @bias; state.ticks };
+effect @update = updater;
+effect @bias <- 10u64;
+behave @print(perform @update(first, 1u64));
+behave @print(behave @update(first, 1u64));
+behave @print(second.ticks);
+function read(const region state:State)->const u64 { state.ticks }
+func readonly = read;
+behave @print(readonly(second));
+
+# Recursive calls can exchange two borrowed owners without conflating their layouts.
+function shuffle(region a:State, region b:State, n:u64)->const u64 {
+ if(n == 0u64) { a.ticks + b.ticks }
+ else { a.ticks <- a.ticks + 1u64; shuffle(b,a,n-1u64) }
+}
+func swapped = shuffle;
+behave @print(swapped(first,second,6u64));
+function generic(region state:T)->const u64 where T { state.ticks }
+func inspect = generic;
+behave @print(inspect(first));
+behave @print(inspect(second));
+using "std:exceptions" NullPointerException;
+function checked(region state:State, n:u64)->const u64 throws NullPointerException {
+ if(n == 0u64) { ptr absent:u64 = null; val value = absent; value }
+ else { state.ticks <- state.ticks + 1u64; checked(state,n-1u64) }
+}
+func failing = checked;
+try { behave @print(failing(first,3u64)); }
+catch(e:const NullPointerException) { behave @print(first.ticks); };

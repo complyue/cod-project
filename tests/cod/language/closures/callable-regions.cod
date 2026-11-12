@@ -1,0 +1,63 @@
+using symbol "std:io" @print;
+data Pool { tag:u64; }
+data Node { value:u64; }
+region symbol @arena:Pool;
+symbol @node:Node;
+symbol @action:proc(u64)->const u64;
+symbol @saved:proc(u64)->const u64;
+effect @arena <- make Pool(capacity = 8192u64) { tag <- 4u64 };
+effect @node = deref(alloc @arena Node(10u64));
+ref initial = @node;
+proc first = proc(n:u64)->const u64 { n + 1u64 };
+proc second = proc(n:u64)->const u64 { n + 20u64 };
+proc current = first;
+effect @action = current;
+proc snapshot = proc(n:u64)->const u64 { perform @action(n) + @node.value };
+current <- second;
+effect @node = deref(alloc @arena Node(30u64));
+effect @saved = snapshot;
+behave @print(perform @saved(2u64));
+behave @print(behave @saved(2u64));
+proc other = proc(n:u64)->const u64 { perform @action(n) + @node.value + 100u64 };
+proc selected = snapshot;
+for (i in 0u64 .. 2u64) {
+  effect @saved = selected;
+  behave @print(perform @saved(2u64));
+  selected <- other;
+};
+
+# A captured object is borrowed; later edits to that object remain observable.
+initial.value <- 11u64;
+effect @saved = snapshot;
+behave @print(perform @saved(2u64));
+
+# Current-context invocation need not use an expired definition-time region.
+symbol @view:proc()->const u64;
+proc from_dead_scope = {
+  effect @arena <- make Pool(capacity = 4096u64) { tag <- 90u64 };
+  proc()->const u64 { root(@arena).tag }
+};
+effect @view = from_dead_scope;
+behave @print(behave @view());
+
+symbol @walk:proc(u64)->const u64;
+proc walker = proc(n:u64)->const u64 {
+  if (n == 0u64) { @node.value } else { behave @walk(n - 1u64) + 1u64 }
+};
+effect @walk = walker;
+behave @print(behave @walk(3u64));
+
+# A failing performed body restores the caller's object binding.
+using "std:exceptions" NullPointerException;
+symbol @failing:proc()->const u64 throws NullPointerException;
+proc fail = proc()->const u64 throws NullPointerException {
+  val observed = @node.value;
+  ptr absent:u64 = null;
+  observed + absent
+};
+effect @failing = fail;
+{
+  effect @node = deref(alloc @arena Node(44u64));
+  try { perform @failing(); {} }
+  catch (e:const NullPointerException) { behave @print(@node.value); };
+};

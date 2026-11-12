@@ -1,11 +1,11 @@
 # Compiler artifacts and persistent stage reuse
 
-Revision: 3 · Recorded: 2026-11-11 · Status: planning draft.
+Revision: 4 · Recorded: 2026-11-12 · Status: planning draft.
 
 ## Design authority
 
-- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 3, all sections; detailed representation, caching and validation contracts are `pending-human`.
-- **Baseline / assessment:** [H-353](../../../design/DesignAuthorityRegistry.md#h-353) selects a CoD-native compiler pilot and investigation of DBMR stage caches. [K-473](../../../design/DesignAuthorityRegistry.md#k-473) records the draft; [K-475](../../../design/DesignAuthorityRegistry.md#k-475) preserves this pipeline scope while updating the set's deferred-registration discussion. C-80/P-314/P-315/P-317 links typed compiler intent and reusable structured results to C-01/C-05 and charter §§2, 5.3–5.4, 7 and 12.
+- **Registry / coverage:** [D-20](../../../design/DesignAuthorityRegistry.md#d-20), revision 4, all sections; detailed representation, caching and validation contracts are `pending-human`.
+- **Baseline / assessment:** [H-353](../../../design/DesignAuthorityRegistry.md#h-353) selects a CoD-native compiler pilot and investigation of DBMR stage caches. [K-473](../../../design/DesignAuthorityRegistry.md#k-473) records the draft; [K-515](../../../design/DesignAuthorityRegistry.md#k-515) preserves this pipeline scope while the set adopts H-356's separately authorized defer prerequisite. C-80/P-314/P-315/P-317 links typed compiler intent and reusable structured results to C-01/C-05 and charter §§2, 5.3–5.4, 7 and 12.
 - **Dependencies / invariants:** P-316/P-318, D-01 regional representation, D-14 owners, D-15 independent module worlds and D-16 numerical/syntax compatibility. Preserve identities, selected interpretations and relocation; no native addresses in persistent artifacts and no cross-module world editing.
 - **Acceptance / exclusions:** future cached and uncached paths must preserve applicable semantic observations and reject stale/incompatible reuse, with actual time/memory measurements. No cache schema, partition algorithm, checksum, file API or implementation is selected here.
 

@@ -1,0 +1,6 @@
+import "record-vocabulary.cod" Node;
+using "record-vocabulary.cod" Entity;
+using "record-vocabulary.cod" Arena;
+data Node <: Entity;
+function qualify(value:Node in r)->Node in r where {region r:Arena} {value}
+export qualify;

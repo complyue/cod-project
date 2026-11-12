@@ -16,7 +16,7 @@ function updater(region state:Buffers) -> (func()->void with {region state} thro
 owned region state:Buffers <- make Buffers(capacity = 4096u64) { input = null; output = null };
 state.input = alloc state Frame(4u64, 1.0f32);
 state.output = alloc state Frame(4u64, 0.0f32);
-const ref step = updater(state);
+func step = updater(state);
 try {
   for (frame in 0 .. 3) {
     step();

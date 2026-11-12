@@ -4,5 +4,5 @@ function bad() -> func()->const u64 {
   val var ticks -> state.ticks;
   func [ticks] () -> const u64 { ticks }
 }
-const ref callback = bad();
+func callback = bad();
 callback();

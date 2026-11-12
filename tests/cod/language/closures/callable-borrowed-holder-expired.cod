@@ -1,0 +1,11 @@
+region State {value:u64;}
+function reader(region state:State)->func()->const u64 with {region state} {
+ val var value -> state.value;
+ func()->const u64 {value}
+}
+function inspect(action:T in O,side:u64)->const bool where {T,owner O} {true}
+function release(owned region state)->const u64 {0u64}
+owned region state:State <- make State(capacity=128u64){value <- 3u64};
+func current = reader(state);
+func inspect_value = inspect;
+inspect_value(current,release(state));

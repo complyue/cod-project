@@ -1,0 +1,3 @@
+function bounded(x:T)->const T where T <: u64 { x }
+func selected = bounded;
+selected(1.5f32);

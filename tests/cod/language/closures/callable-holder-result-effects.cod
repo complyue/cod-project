@@ -1,0 +1,9 @@
+symbol @missing:u64;
+proc first = proc()->const u64 {1u64};
+proc unavailable = proc()->const u64 {@missing};
+function select(a:proc()->const u64 in O,b:proc()->const u64 in O,second:bool)
+ -> (proc()->const u64) in O where {owner O} {if(second){b}else{a}}
+func choose = select;
+ptr target = choose(first,first,true);
+target <- unavailable;
+first();

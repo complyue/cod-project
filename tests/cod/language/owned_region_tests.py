@@ -71,6 +71,29 @@ REJECTS = {
                                    'owned region p:Packet <- make Packet(capacity=64u64){sequence<-1u64};'
                                    'ref n=alloc p Node(2u64); match(n, {drop(p); 0u64})} compare();',
                                    "requires a live owning region"),
+    "recursive-replacement-borrow": ('function replace(owned region p:Packet,n:u64)->owned region:Packet {'
+                                     'if(n==0u64){p}else{replace(fresh(),n-1u64)}} '
+                                     'owned region p<-fresh(); ref v=root(p); '
+                                     'owned region q<-replace(p,3u64); v.sequence;',
+                                     "requires a live owning region"),
+    "recursive-owner-alias": ('function next(ref v:Packet in p,owned region p:Packet,n:u64)->owned region:Packet {'
+                              'if(n==0u64){p}else{next(v,fresh(),n-1u64)}} '
+                              'owned region p<-fresh(); next(root(p),p,3u64);',
+                              "requires the same actual owner"),
+    "callable-owner-argument": ('function callback(region r:Packet)->func()->const u64 with {region r} {'
+                                'val var sequence:u64 in r -> r.sequence; func()->const u64 {sequence}} '
+                                'function apply(owned region r:Packet,cb:func()->const u64 with {region r})->const u64 {cb()} '
+                                'owned region first<-fresh(); owned region second<-fresh(); '
+                                'apply(second,callback(first));', "callable environment owner mismatch"),
+    "recursive-callback-readonly": ('function writable(region r:Packet)->func()->const u64 with {region r} {'
+                                    'val var value:u64 in r -> r.sequence; func()->const u64 {value}} '
+                                    'function readonly(region r:Packet)->func()->const u64 with {region r} {'
+                                    'val var value:const u64 in r -> r.sequence; func()->const u64 {value}} '
+                                    'function step(owned region r:Packet,cb:func()->const u64 with {region r},n:u64)->const u64 {'
+                                    'region projected=cb -> r; projected.sequence<-cb(); '
+                                    'if(n==0u64){cb()}else{owned region next<-fresh(); step(next,readonly(next),n-1u64)}} '
+                                    'owned region seed<-fresh(); step(seed,writable(seed),3u64);',
+                                    "cannot transfer into a read-only destination view"),
     "consumed-name": ('proc test()->void {owned region p:Packet <- fresh(); drop(p); read(p); {}} test();',
                       "owner has been consumed"),
     "escaping-view": ('function bad() -> Packet {owned region p:Packet <- fresh(); root(p)} bad();',
@@ -101,6 +124,12 @@ REJECTS = {
     "missing-field": ('make Packet(capacity=8u64){};', "initialize every root field exactly once"),
     "duplicate-field": ('make Packet(capacity=8u64){sequence<-1u64; sequence<-2u64};', "duplicate root initializer"),
 }
+
+# Both native entry calls and contextual procedure adapters must preserve these
+# owner/access checks when a recursive frame constructs a new callback image.
+for _name in ("callable-owner-argument", "recursive-callback-readonly"):
+    _body, _diagnostic = REJECTS[_name]
+    REJECTS["procedure-" + _name] = (_body.replace("function ", "proc ").replace("func()", "proc()"), _diagnostic)
 
 
 def main():

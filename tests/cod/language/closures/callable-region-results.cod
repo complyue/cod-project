@@ -1,0 +1,79 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+region State {value:u64;}
+function first(region r:State)->region :State in r {r.value <- r.value+1u64;r}
+function second(region r:State)->region :State in r {r.value <- r.value+2u64;r}
+owned region state:State <- make State(capacity=512u64){value<-4u64};
+func selected=first;
+for(i in 0u64..2u64){
+ region view=selected(state);
+ behave @print(view.value);
+ selected<-second;
+};
+function echo(region r:R)->region :R in r where R {r}
+func generic=echo;
+region same=generic(state);
+behave @print(same.value);
+function relay(region r:State,n:u64)->region :State in r {recursive(r,n)}
+function recursive(region r:State,n:u64)->region :State in r {
+ if(n==0u64){r}else{relay(recursive(r,n-1u64),0u64)}
+}
+func recurse=recursive;
+region deep=recurse(state,32u64);
+behave @print(deep.value);
+
+data Node {value:u64;}
+function origin(node:Node in r)->region :State in r where {region r:State} {r}
+ref node=alloc state Node(9u64);
+func owner=origin;
+region inferred=owner(node);
+behave @print(inferred.value);
+
+# A structural root requirement retains the concrete offsets and extra fields.
+region Concrete {padding:u64;value:u64;extra:u64;}
+owned region concrete:Concrete <- make Concrete(capacity=256u64){padding<-99u64;value<-37u64;extra<-12u64};
+region view=selected(concrete);
+behave @print(view.value);
+behave @print(view.extra);
+view.value<-41u64;
+behave @print(concrete.value);
+function readonly(const region r:State)->const region :State in r {r}
+func read=readonly;
+region immutable=read(concrete);
+behave @print(immutable.value);
+
+symbol @callback:proc()->const u64;
+proc one()->const u64{1u64}
+proc two()->const u64{2u64}
+proc current=one;
+effect @callback=current;
+effect proc @outer(region r:State)->region :State in r {
+ r.value<-perform @callback();r
+};
+current<-two;
+region captured=perform @outer(state);
+behave @print(captured.value);
+region live=behave @outer(state);
+behave @print(live.value);
+function fail_after(region r:State)->region :State in r {
+ r.value<-33u64;
+ owned region invalid:State<-make State(capacity=0u64){value<-0u64};
+ r
+}
+func failing=fail_after;
+try {region discarded=failing(state);} catch(e:const InvalidCapacity){behave @print(state.value);};
+
+# The result retains an interface established only in the selected adapter.
+using "record-vocabulary.cod" Arena;
+using "record-vocabulary.cod" Entity;
+using "region-result-adapter.cod" qualify_region;
+function score(region r:Entity)->const u64 {r.count}
+owned region arena:Arena<-make Arena(capacity=256u64){count<-17u64};
+func qualify=qualify_region;
+region qualified=qualify(arena);
+function forward(region r:R,n:u64)->region :R in r where R {
+ if(n==0u64){qualify_region(r)}else{forward(forward(r,n-1u64),0u64)}
+}
+func again=forward;
+region forwarded=again(arena,8u64);
+behave @print(score(forwarded));

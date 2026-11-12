@@ -1,0 +1,9 @@
+array Values[u64]:f32;
+region Arena {count:u64;}
+function wrong(a:Values in A,b:Values in B)->Values in A where {region A:Arena,region B:Arena} {b}
+owned region first:Arena <- make Arena(capacity=256u64){count <- 0u64};
+owned region second:Arena <- make Arena(capacity=256u64){count <- 0u64};
+ref a=alloc first Values(1u64,1.0f32);
+ref b=alloc second Values(1u64,2.0f32);
+func selected=wrong;
+selected(a,b);

@@ -199,6 +199,36 @@ extern "C" void cod_lang_exception_finish() noexcept {
 '''
 
 
+RECURSION_HARNESS = r'''
+#undef cod_lang_region_new
+#undef cod_lang_region_free
+#undef cod_lang_exception_finish
+#include <cassert>
+static void *frames[5]{};
+static unsigned live_frames = 0, frame_allocations = 0, frame_releases = 0;
+extern "C" void *cod_lang_region_new(std::uint64_t capacity, std::uint64_t *status) {
+  auto *owner = cod_lang_region_acquire(capacity, status);
+  if (owner) {
+    assert(capacity == 128 && live_frames < 5);
+    frames[live_frames++] = owner;
+    ++frame_allocations;
+  }
+  return owner;
+}
+extern "C" void cod_lang_region_free(void *owner) {
+  if (!owner) return;
+  assert(live_frames && frames[--live_frames] == owner);
+  ++frame_releases;
+  cod_lang_region_release(owner);
+}
+extern "C" void cod_lang_exception_finish() noexcept {
+  assert(!live_frames && frame_allocations == 5 && frame_releases == 5);
+  cod_lang_exception_release();
+  std::puts("{\"recursive_frames\":5,\"released_once_in_reverse_order\":true}");
+}
+'''
+
+
 def main():
     directory = Path(__file__).resolve().parent
     root = directory.parents[2]
@@ -227,13 +257,47 @@ def main():
         evidence["chain_allocation_failure"] = chain_failure
         print("PASS: real chain-allocation OOM, preserved prior chain, retry and exact cleanup")
         ir, runtime = scratch / "uncaught.ll", scratch / "uncaught-runtime.cc"
-        checked([toolchain / "bin/cod", "--check", directory / "exception-reraise.cod",
+        uncaught_source = scratch / "uncaught-callables.cod"
+        uncaught_source.write_text('function identity(n:u64)->const u64 { n }\n'
+            'func module_value = identity;\n' +
+            (directory / "exception-reraise.cod").read_text().replace(
+                'try {', 'try {\n  func local_value = module_value;', 1))
+        checked([toolchain / "bin/cod", "--check", uncaught_source,
                  "--emit-llvm", ir, "--emit-runtime", runtime], root)
         source, executable = scratch / "uncaught.cc", scratch / "uncaught"
-        source.write_text("#define cod_lang_region_free cod_lang_region_release\n" + runtime.read_text() + r'''
+        source.write_text("#define cod_lang_region_free cod_lang_region_release\n"
+            "#define cod_lang_callable_create cod_image_create\n"
+            "#define cod_lang_callable_copy cod_image_copy\n"
+            "#define cod_lang_callable_free cod_image_free\n" + runtime.read_text() + r'''
 #undef cod_lang_region_free
+#undef cod_lang_callable_create
+#undef cod_lang_callable_copy
+#undef cod_lang_callable_free
+#include <cassert>
+#include <set>
+static std::set<void *> images;
+static unsigned acquired = 0, released = 0;
+static void *record_image(void *image) {
+  if (image) { assert(images.insert(image).second); ++acquired; }
+  return image;
+}
+extern "C" void *cod_lang_callable_create(std::uint64_t fixed, std::uint64_t count,
+    void *const *children, const std::uint64_t *offsets, std::uint64_t *status) {
+  return record_image(cod_image_create(fixed, count, children, offsets, status));
+}
+extern "C" void *cod_lang_callable_copy(const void *image, std::uint64_t *status) {
+  return record_image(cod_image_copy(image, status));
+}
+extern "C" void cod_lang_callable_free(void *image) {
+  if (!image) return;
+  assert(images.erase(image) == 1);
+  ++released;
+  cod_image_free(image);
+}
 extern "C" void cod_lang_region_free(void *owner) {
   if (!owner) return;
+  if (cod_lang_region_capacity(owner) == sizeof(CoDRegion) + 4096)
+    assert(images.empty() && acquired >= 2 && released == acquired);
   std::printf("release %llu\n", static_cast<unsigned long long>(
       cod_lang_region_capacity(owner) - sizeof(CoDRegion)));
   cod_lang_region_release(owner);
@@ -245,8 +309,8 @@ extern "C" void cod_lang_region_free(void *owner) {
         assert uncaught.returncode == 70 and "uncaught InvalidCapacity" in uncaught.stderr, uncaught
         assert uncaught.stdout.splitlines() == ["release 64", "10", "20", "release 4096"], uncaught.stdout
         evidence["uncaught"] = {"exit": uncaught.returncode, "trace": uncaught.stdout.splitlines(),
-                                "stderr": uncaught.stderr}
-        print("PASS: uncaught rethrow runs inner cleanup, both finally blocks and module cleanup")
+                                "stderr": uncaught.stderr, "callable_cleanup_before_module_region": True}
+        print("PASS: uncaught rethrow runs local cleanup, finally blocks, callable release and module cleanup")
         loop = scratch / "uncaught-chain.cod"
         loop.write_text('''using "std:exceptions" SystemException;
 using "std:exceptions" NullPointerException;
@@ -297,6 +361,12 @@ static const int audit = [] {
         evidence["uncaught_chain"] = {"exit": 70, "diagnostics": diagnostic, "released_owners": 2,
                                       "later_emitted_cause_site_resolved": True, "chain_storage_released": True}
         print("PASS: uncaught chain sites from a preceding iteration and complete execution cleanup")
+        output, recursive = run_case(root, toolchain, directory / "recursive-calls.cod", scratch,
+            RECURSION_HARNESS, extra_wrappers=("#define cod_lang_region_new cod_lang_region_acquire\n"
+                                              "#define cod_lang_exception_finish cod_lang_exception_release\n"))
+        assert output == ["720", "true", "false", "16", "10", "1", "99", "100"], output
+        evidence["recursive_calls"] = recursive
+        print("PASS: recursive native frames, effect captures, checked NPE and exact LIFO region cleanup")
         rejects = {
             "non-exception-cause": ('region symbol arena; try {effect @arena <- region(0u64); {}} '
                                     'catch(error) {throw error from 42;};',
@@ -326,7 +396,7 @@ static const int audit = [] {
                 for path in [root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
                              root / "cod/lang_native_runtime.hh", root / "include/shilos/region.hh",
                              directory / "exception-allocation.cod", directory / "exception-chain.cod",
-                             directory / "exception-reraise.cod", directory / "regional_runtime_tests.py",
+                             directory / "exception-reraise.cod", directory / "recursive-calls.cod", directory / "regional_runtime_tests.py",
                              Path(__file__).resolve()]}
             Path(report).write_text(json.dumps(evidence, indent=2) + "\n")
 

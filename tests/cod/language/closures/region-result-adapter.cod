@@ -1,0 +1,5 @@
+import "record-vocabulary.cod" Arena;
+using "record-vocabulary.cod" Entity;
+data Arena <: Entity;
+function qualify_region(region r:Arena)->region :Arena in r {r}
+export qualify_region;

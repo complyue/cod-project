@@ -1,0 +1,6 @@
+function increment(n:u64)->const u64 { n + 1u64 }
+func current = increment;
+function optional(ptr value:func(u64)->const u64 in O)->ptr (func(u64)->const u64) in O where {owner O} { value }
+ptr absent:func(u64)->const u64 = current;
+absent = null;
+optional(absent)(1u64);

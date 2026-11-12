@@ -1,0 +1,8 @@
+function one()->const u64 {1u64}
+function change(action:func()->const u64 in O)->void where {owner O} { action <- one; {} }
+function read(action:const func()->const u64 in O)->void where {owner O} {
+ func update = change;
+ update(action);
+}
+func current = one;
+read(current);

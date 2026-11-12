@@ -1,0 +1,15 @@
+using symbol "std:io" @print;
+using "record-vocabulary.cod" Node;
+using "record-vocabulary.cod" Entity;
+using "record-vocabulary.cod" Arena;
+using "record-forward.cod" recursive;
+using "record-forward.cod" plain;
+function score(value:Entity in r)->const u64 where {region r:Arena} {77u64}
+owned region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};
+ref item=alloc arena Node(5u64);
+func selected=recursive;
+for(i in 0u64..2u64){
+ ref result=selected(item,2u64);
+ behave @print(score(result));
+ selected <- plain;
+};

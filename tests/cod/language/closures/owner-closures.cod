@@ -7,7 +7,7 @@ using "owner-closure-library.cod" current_reader;
 using "owner-closure-library.cod" apply;
 region State { val ticks:u64; ptr current:Node; }
 owned region state:State <- make State(capacity = 512u64) { ticks <- 3u64; current = null };
-const ref read = reader(state);
+func read = reader(state);
 behave @print(apply(read));
 state.ticks <- 9u64;
 behave @print(read());
@@ -16,12 +16,12 @@ proc exercise(region r:Counter) -> void {
   ;
   behave @print(named());
   val var ticks -> r.ticks;
-  const ref increment = func [ticks] () -> const u64 { ticks <- ticks + 1u64; ticks };
+  func increment = func [ticks] () -> const u64 { ticks <- ticks + 1u64; ticks };
   behave @print(apply(increment));
 }
 exercise(state);
 try {
-  const ref target = current_reader(state);
+  proc target = current_reader(state);
   try { behave @print(target()); } catch (e:const NullPointerException) { behave @print(0); };
   ptr first = alloc state Node(42);
   ptr second = alloc state Node(7);
@@ -31,7 +31,7 @@ try {
   behave @print(target());
 } catch (e:const NullPointerException) { behave @print(-1); };
 using "owner-closure-library.cod" wrap;
-const ref wrapped = wrap(read);
+func wrapped = wrap(read);
 behave @print(wrapped());
 region symbol @resource:State;
 effect @resource <- state;

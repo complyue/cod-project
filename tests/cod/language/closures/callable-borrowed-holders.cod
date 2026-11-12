@@ -1,0 +1,105 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+function one()->const u64 {1u64}
+function two()->const u64 {2u64}
+function three()->const u64 {3u64}
+function replace(action:func()->const u64 in O)->void where {owner O} {
+ action <- two; {}
+}
+function replace_more(action:func()->const u64 in O)->void where {owner O} {
+ action <- three; {}
+}
+func original = one;
+func update = replace;
+update <- replace_more;
+update(original);
+behave @print(original());
+function after(action:func()->const u64 in O,ignored:u64)->const u64 where {owner O} {action()}
+func observe = after;
+behave @print(observe(original,{ original <- two; 0u64 }));
+function present(ptr action:func()->const u64 in O)->const bool where {owner O} {!isnull(action)}
+func inspect = present;
+ptr optional = original;
+optional = null;
+behave @print(inspect(optional));
+optional = original;
+behave @print(inspect(optional));
+function repeat(action:func()->const u64 in O,n:u64)->void where {owner O} {
+ if(n==0u64) { action <- one; {} } else { repeat(action,n-1u64); {} }
+}
+func recursive = repeat;
+recursive(original,8u64);
+behave @print(original());
+function edit_then_read(target:func()->const u64 in O,other:const func()->const u64 in O)->const u64 where {owner O} {
+ target <- two; other()
+}
+func sharing = edit_then_read;
+func separate = one;
+behave @print(sharing(original,original));
+behave @print(sharing(original,separate));
+function fail_after(action:func()->const u64 in O)->void throws NullPointerException where {owner O} {
+ action <- three;
+ ptr missing:u64 = null;
+ missing; {}
+}
+func failing = fail_after;
+try { failing(original); } catch(e:const NullPointerException) { behave @print(original()); };
+symbol @choose:bool;
+effect @choose <- true;
+proc @install(action:func()->const u64 in O)->void where {owner O} {
+ if(@choose) {action <- two;} else {action <- three;}; {}
+}
+proc installer = @install;
+effect @install = installer;
+effect @choose <- false;
+perform @install(original);
+behave @print(original());
+behave @install(original);
+behave @print(original());
+function population(ptr first:const func()->const u64 in O,ptr rest:const func()->const u64 in O...)->const u64 where {owner O} {
+ fold(i in 0u64 .. len(rest),total=if(isnull(first)){0u64}else{1u64}) {
+  total+if(isnull(rest[i])){0u64}else{1u64}
+ }
+}
+func populated = population;
+ptr absent = original;
+absent = null;
+behave @print(populated(original,absent,separate));
+behave @print(populated(absent));
+function install_value(target:T in O,replacement:T)->void where {T,owner O} {target <- replacement;{}}
+func generic = install_value;
+region State {value:u64;}
+owned region state:State <- make State(capacity=128u64){value <- 41u64};
+function reader(region state:State)->func()->const u64 with {region state} {
+ val var value -> state.value;
+ func()->const u64 {value}
+}
+function decorate(region state:State)->func()->const u64 with {region state} {
+ func inner = reader(state);
+ func()->const u64 {inner()+10u64}
+}
+func plain = reader(state);
+func decorated = decorate(state);
+generic(plain,decorated);
+behave @print(plain());
+decorated <- reader(state);
+state.value <- 43u64;
+behave @print(plain());
+behave @print(decorated());
+
+function sample()->func()->const u64 {func()->const u64 {7u64}}
+function borrow_copy(action:func()->const u64 in O)->const u64 where {owner O} {
+ func first = action;
+ func second = action;
+ first()+second()+action()
+}
+func copy_twice = borrow_copy;
+behave @print(copy_twice(sample()));
+function pack(head:func()->const u64 in O,rest:func()->const u64 in O...)->const u64 where {owner O} {
+ func first = rest[0u64];
+ func second = rest[0u64];
+ first <- func()->const u64 {2u64};
+ first()+second()+head()
+}
+func borrow_pack = pack;
+behave @print(borrow_pack(sample(),sample()));

@@ -1,13 +1,13 @@
 # CoD booter: a compiler application written in CoD
 
-Document set: revision 3 · Recorded: 2026-11-11 · Phase: planning only.
+Document set: revision 4 · Recorded: 2026-11-12 · Phase: application planning; prerequisite defer implementation authorized separately.
 
 ## Design authority
 
-- **Registry / scope:** [D-20](../../design/DesignAuthorityRegistry.md#d-20), revision 3, this README and both linked planning documents. Detailed designs are `pending-human`; this set is not an implementation contract.
-- **Human baseline:** [H-353](../../design/DesignAuthorityRegistry.md#h-353) requests a parallel compiler application, CoD-native design, regional stage caches and incremental LLVM bindings, with documentation only at this stage. [H-354](../../design/DesignAuthorityRegistry.md#h-354) proposes write-only `out` parameters and allocated-but-uninitialized local handle storage. [H-355](../../design/DesignAuthorityRegistry.md#h-355) selects the term registration-time evaluation within defer and requests syntax alternatives. [K-475](../../design/DesignAuthorityRegistry.md#k-475) records the draft update, not implementation qualification.
+- **Registry / scope:** [D-20](../../design/DesignAuthorityRegistry.md#d-20), revision 4, this README and both linked planning documents. Detailed application designs are `pending-human`; the selected defer call/block rule is governed by D-17, not by a broader implementation qualification of this set.
+- **Human baseline:** [H-353](../../design/DesignAuthorityRegistry.md#h-353) requests a parallel compiler application, CoD-native design, regional stage caches and incremental LLVM bindings, with documentation only at this stage. [H-354](../../design/DesignAuthorityRegistry.md#h-354) proposes write-only `out` parameters and allocated-but-uninitialized local handle storage. [H-355](../../design/DesignAuthorityRegistry.md#h-355) supplies registration-time terminology. [H-356](../../design/DesignAuthorityRegistry.md#h-356) selects call/block defer timing and immediate language implementation; [K-515](../../design/DesignAuthorityRegistry.md#k-515) records this application-plan update.
 - **Value:** C-80/P-314–P-318 connects inspectable compiler semantics to C-01, reusable structured artifacts to C-05, and native integration to C-02/C-11/C-79. The charter's §§2, 5.3–5.4, 6–7 and 12 provide the context; detailed derivation and trade-offs remain pending.
-- **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects. Keep confirmed direction, proposals and missing evidence distinguishable. No source port, language grammar change, native ABI, build/bootstrap operation or performance claim is authorized by this plan.
+- **Boundaries / acceptance:** preserve regional relocation, owner/access checks, independent module worlds and explicit TLS effects. Keep confirmed direction, proposals and missing evidence distinguishable. D-17 supplies the separately authorized defer work. No compiler-application source port, native ABI, toolchain/bootstrap operation or performance claim is authorized by this plan.
 
 ## Purpose
 
@@ -27,6 +27,8 @@ This application should expose useful language opportunities through real work: 
 Reusable language decisions belong in the relevant `design/` contracts after discussion. These application documents describe requirements and candidate uses without silently extending those contracts. The application name does not refer to the repository's existing native toolchain bootstrap scripts.
 
 ## Proposed progression
+
+The immediate language prerequisite is [D-17's scope/defer implementation](../../design/ExceptionControl.md#immediate-implementation-and-acceptance): `defer init(...)()` evaluates acquisition and saves its returned callable now, then invokes it at scope exit. `defer { ... }` delays the whole block. This work does not need to wait for the application's cache schemas, native-handle representation or `out` parameter proposal.
 
 These are planning checkpoints, not an approved implementation schedule. A checkpoint can advance only when its necessary language/runtime contract is selected and qualified.
 
@@ -48,6 +50,6 @@ Full LLVM coverage, byte-identical compiler binaries, independent module compila
 | LLVM surface | Bind APIs as compiler operations need them. | First end-to-end operation, provider boundary, typed ownership/error signatures. |
 | Native handles | Investigate pointer-backed opaque CoD handles with scoped release. | Storage admissibility, native dependency lifetimes, release authority and invalidation. |
 | Initialization | Explicit generic-owner reference access, with a proposed write-only `out` modifier; a bare local handle declaration allocates uninitialized storage. | Exact modifier grammar, supported storage categories and proof that every normal return initializes the output. |
-| One-line cleanup | Evaluate acquisition now and invoke its returned cleanup at scope exit. | Registration-time syntax, capture contract, registration failure and cleanup timing. |
+| One-line cleanup | Use `defer init(...)()` under D-17's selected call/block timing. | Native cleanup capture/release contract, leak-free registration failure and actual binding evidence. |
 
 No implementation, cache artifact, LLVM binding or runtime validation is supplied by this initial document set.

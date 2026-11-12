@@ -1,0 +1,8 @@
+array Values[u64]:f32;
+region Arena {count:u64;}
+function observe(values:const Values in r)->const Values in r where {region r:Arena} {values}
+owned region arena:Arena <- make Arena(capacity=256u64){count <- 0u64};
+ref values=alloc arena Values(1u64,1.0f32);
+func selected=observe;
+ref view=selected(values);
+view[0u64] <- 2.0f32;

@@ -10,6 +10,7 @@ inline std::string native_runtime_source(bool regions) {
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <new>
@@ -35,6 +36,37 @@ extern "C" void cod_lang_exception_finish() noexcept {
 }
 extern "C" {
 [[noreturn]] void cod_lang_fail(const char *message) { runtime_failure(message); }
+void *cod_lang_callable_create(std::uint64_t fixed, std::uint64_t count, void *const *children,
+                               const std::uint64_t *offsets, std::uint64_t *status) {
+  auto bytes = fixed;
+  for (std::uint64_t i = 0; i < count; ++i) {
+    const auto child_bytes = *static_cast<const std::uint64_t *>(children[i]);
+    if (child_bytes > std::numeric_limits<std::size_t>::max() - bytes) {
+      status[0] = 1;
+      return nullptr;
+    }
+    bytes += child_bytes;
+  }
+  auto *image = static_cast<unsigned char *>(std::malloc(static_cast<std::size_t>(bytes)));
+  if (!image) { status[0] = 1; return nullptr; }
+  std::memcpy(image, &bytes, sizeof(bytes));
+  auto position = fixed;
+  for (std::uint64_t i = 0; i < count; ++i) {
+    const auto child_bytes = *static_cast<const std::uint64_t *>(children[i]);
+    std::memcpy(image + offsets[i], &position, sizeof(position));
+    std::memcpy(image + position, children[i], static_cast<std::size_t>(child_bytes));
+    position += child_bytes;
+  }
+  return image;
+}
+void *cod_lang_callable_copy(const void *source, std::uint64_t *status) {
+  const auto bytes = *static_cast<const std::uint64_t *>(source);
+  auto *image = std::malloc(static_cast<std::size_t>(bytes));
+  if (!image) { status[0] = 1; return nullptr; }
+  std::memcpy(image, source, static_cast<std::size_t>(bytes));
+  return image;
+}
+void cod_lang_callable_free(void *image) { std::free(image); }
 std::uint64_t cod_lang_exception_chain(std::uint64_t category, std::uint64_t site,
                                        std::uint64_t requested, std::uint64_t available,
                                        std::uint64_t cause, std::uint64_t *status) {

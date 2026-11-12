@@ -1,4 +1,94 @@
-region State { flag:bool; }
-owned region state:State <- make State(capacity = 128u64) { flag <- true };
-const ref callback = if (state.flag) { func () -> const u64 { 1u64 } } else { func () -> const u64 { 2u64 } };
-callback();
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+region State { flag:bool; value:u64; }
+function reader(region state:State) -> func()->const u64 with {region state} {
+  val var value -> state.value;
+  func () -> const u64 { value }
+}
+function alternate(region state:State) -> func()->const u64 with {region state} {
+  val var value -> state.value;
+  func () -> const u64 { value + 100u64 }
+}
+function choose(region state:State) -> func()->const u64 with {region state} {
+  if (state.flag) { reader(state) } else { alternate(state) }
+}
+function wrap(action:func()->const u64 with {region r}) where {region r:State}
+    -> func()->const u64 with {region r} {
+  func inner = action;
+  func () -> const u64 { inner() + 10u64 }
+}
+owned region state:State <- make State(capacity = 128u64) { flag <- true; value <- 7u64 };
+func current = choose(state);
+func copied = current;
+func wrapper = wrap(current);
+func nested = wrapper;
+wrapper <- reader(state);
+ptr selected:func()->const u64 with {region state} = null;
+try { selected(); {} } catch (e:const NullPointerException) { behave @print(99u64); };
+selected = current;
+state.flag <- false;
+if (state.flag) { current <- reader(state); {} }
+else { current <- alternate(state); {} };
+behave @print(current());
+behave @print(copied());
+behave @print(nested());
+try { behave @print(selected()); } catch (e:const NullPointerException) { behave @print(0u64); };
+state.value <- 9u64;
+behave @print(current());
+behave @print(copied());
+behave @print(nested());
+try { behave @print(selected()); } catch (e:const NullPointerException) { behave @print(0u64); };
+selected = null;
+try { selected(); {} } catch (e:const NullPointerException) { behave @print(98u64); };
+try { selected <- current; {} } catch (e:const NullPointerException) { behave @print(97u64); };
+
+# Reaching values control demand checking, including holder aliases after joins.
+func replaced = func () -> const u64 { unavailable() };
+if (state.flag) { replaced <- func () -> const u64 { 23u64 }; {} }
+else { replaced <- func () -> const u64 { 24u64 }; {} };
+behave @print(replaced());
+func second = func () -> const u64 { 25u64 };
+ptr joined = replaced;
+if (state.flag) { joined = replaced; {} } else { joined = second; {} };
+second <- func () -> const u64 { 26u64 };
+behave @print(joined());
+try {
+  for (i in 0u64 .. 2u64) {
+    behave @print(joined());
+    joined <- func () -> const u64 { 31u64 };
+    joined = replaced;
+  };
+} catch (e:const NullPointerException) { behave @print(0u64); };
+behave @print(second());
+behave @print(replaced());
+ptr temporary = func () -> const u64 { 19u64 };
+func saved = temporary;
+temporary <- func () -> const u64 { 23u64 };
+behave @print(temporary());
+behave @print(saved());
+behave @print(fold (i in 0u64 .. 3u64, total = 0u64) {
+  func local = reader(state);
+  local <- alternate(state);
+  total + local()
+});
+
+# The environment depth is runtime data, while the native body graph is finite.
+state.value <- 256u64;
+func growing = reader(state);
+for (i in 0u64 .. state.value) { growing <- wrap(growing); };
+func retained = growing;
+growing <- reader(state);
+state.value <- 9u64;
+behave @print(retained());
+
+# A read after a write through the same selected address sees the new value.
+func dead_a = func () -> const u64 { unavailable_a() };
+func dead_b = func () -> const u64 { unavailable_b() };
+ptr writer = dead_a;
+try {
+  for (i in 0u64 .. 2u64) {
+    writer <- saved;
+    behave @print(writer());
+    writer = dead_b;
+  };
+} catch (e:const NullPointerException) { behave @print(0u64); };

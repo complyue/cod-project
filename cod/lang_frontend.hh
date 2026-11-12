@@ -5,6 +5,7 @@
 #include "lang_llvm.hh"
 
 #include <llvm/ADT/ImmutableMap.h>
+#include <llvm/ADT/ScopeExit.h>
 #include <clang/Basic/Stack.h>
 
 #include <algorithm>
@@ -15,19 +16,30 @@
 #include <cstdint>
 #include <deque>
 #include <fstream>
+#include <functional>
 #include <exception>
 #include <iterator>
 #include <map>
 #include <queue>
 #include <set>
 #include <string_view>
+#include <tuple>
 #include <variant>
 
 namespace cod::language {
 
 struct Module;
 struct Procedure;
+struct CallableCode;
 struct CaptureReplay;
+struct CaptureUse {
+  bool used = false;
+  std::shared_ptr<CaptureUse> source;
+
+  void require() {
+    for (auto *capture = this; capture && !capture->used; capture = capture->source.get()) capture->used = true;
+  }
+};
 struct Conformance {
   Type data, interface;
   bool operator==(const Conformance &) const = default;
@@ -38,9 +50,50 @@ struct StorageView {
   std::set<size_t> cells; // Possible lexical allocations, for definite initialization.
   bool initialized_alternatives = false; // Other targets are initialized, but have no exact allocation identity.
 };
+struct UnresolvedAccess : std::runtime_error {
+  explicit UnresolvedAccess(const Location &at) : std::runtime_error(location_text(at) +
+      ": callable owner permissions still depend on an unresolved return or loop flow") {}
+};
+class FlowCondition {
+  struct Deferred {
+    std::function<bool()> evaluate;
+    bool active = false;
+  };
+  bool constant_ = false;
+  std::shared_ptr<Deferred> deferred_;
+public:
+  FlowCondition(bool value = false) : constant_(value) {}
+  static FlowCondition deferred(std::function<bool()> evaluate) {
+    FlowCondition value;
+    value.deferred_ = std::make_shared<Deferred>(Deferred{std::move(evaluate)});
+    return value;
+  }
+  bool pending() const { return bool(deferred_); }
+  operator bool() const {
+    if (!deferred_) return constant_;
+    // Positive boolean equations need a concrete fact; a cycle alone cannot
+    // establish either an access restriction or a surviving owner.
+    if (deferred_->active) return false;
+    const auto active = llvm::SaveAndRestore(deferred_->active, true);
+    return deferred_->evaluate();
+  }
+  static FlowCondition either(FlowCondition left, FlowCondition right) {
+    if (!left.pending()) return left.constant_ ? left : right;
+    if (!right.pending()) return right.constant_ ? right : left;
+    return deferred([left, right] { return bool(left) || bool(right); });
+  }
+  static FlowCondition both(FlowCondition left, FlowCondition right) {
+    if (!left.pending()) return left.constant_ ? right : left;
+    if (!right.pending()) return right.constant_ ? left : right;
+    return deferred([left, right] { return bool(left) && bool(right); });
+  }
+  FlowCondition &operator|=(FlowCondition other) { return *this = either(*this, std::move(other)); }
+};
+using ReadOnly = FlowCondition;
+struct InitializationRead { size_t proof, cell; Location at; };
 struct Value {
   Type type = Type::void_type;
-  llvm::Value *native = nullptr; // Procedure bindings are compile-time metadata.
+  llvm::Value *native = nullptr; // Scalar payload, regional offset or native callable image.
   std::shared_ptr<const Procedure> procedure;
   const Module *owner = nullptr;
   std::optional<size_t> region_id = {};
@@ -48,7 +101,7 @@ struct Value {
   std::vector<Conformance> conformances = {}; // Selected type facts carried by a borrowed view, never runtime metadata.
   std::shared_ptr<const std::vector<Value>> arguments = {}; // WPO argument pack; no user allocation or runtime container.
   llvm::Value *exception_category = nullptr; // Propagation context, separate from the scalar payload.
-  bool read_only = false;
+  ReadOnly read_only = {};
   std::optional<StorageView> storage = {};
   std::optional<size_t> pointer = {}; // Lexical binding, distinct from its current referent.
   bool nullable = false;
@@ -59,6 +112,16 @@ struct Value {
   bool pointer_view = false;
   llvm::Value *referent = nullptr; // Stable object expression identity across lexical pointer loads.
   bool binding_read_only = false; // A const var view cannot rebind the selected binding.
+  llvm::Value *global_slot = nullptr;
+  bool callable_temporary = false;
+  size_t callable_address = 0; // Flow of lexical holder addresses, separate from their values.
+  size_t callable_flow = 0; // Frozen value-flow node; zero has no runtime callable.
+  std::shared_ptr<CaptureUse> capture_use = {}; // Compile-time demand for an enclosing dynamic capture.
+  bool replayed = false; // Captured bits/procedure values are installed in the active TLS scope.
+  bool borrowed_arguments = false; // An external-owner variadic pack selects target views.
+  size_t result_type_origin = 0;
+  std::vector<size_t> result_fact_origins = {}; // Compiler-only checked returns, not runtime tags.
+  std::vector<InitializationRead> argument_reads = {};
 };
 using Bindings = llvm::ImmutableMap<size_t, const Value *>;
 struct Environment {
@@ -126,6 +189,21 @@ struct Procedure {
   Locals lexical_captures;
   ImplementationContext implementation{};
   std::vector<CallableDeclaration> declarations;
+  std::shared_ptr<CallableCode> code;
+};
+struct CallableCode {
+  LLVMEmission::NativeDefinition entry;
+  llvm::StructType *layout;
+  std::set<size_t> nested;
+  std::vector<size_t> regions;
+  std::vector<size_t> dynamic_values;
+  llvm::Constant *dispatch_key = nullptr;
+  std::vector<size_t> dynamic_procedures;
+  std::vector<std::pair<size_t, std::shared_ptr<CaptureUse>>> capture_fields;
+  std::shared_ptr<LLVMEmission::CallableConstruction> construction;
+  std::vector<size_t> dynamic_regions;
+  size_t result_flow = 0;
+  bool direct = false;
 };
 using MethodOrigin = std::pair<const Module *, std::string>;
 struct CallableIdentity {
@@ -255,12 +333,23 @@ class Compiler {
   struct Region {
     llvm::Value *owner;
     Location acquired;
-    bool live = true;
+    FlowCondition live = true;
     std::set<size_t> origins;
     bool symbolic = false;
     std::optional<Type> root = {};
+    size_t root_origin = 0;
+    size_t owner_origin = 0;
+    std::set<size_t> owner_inputs;
   };
   std::vector<Region> regions_;
+  struct PendingField {
+    Type record;
+    size_t result_origin;
+    Parameter field;
+    llvm::Instruction *offset;
+    Location at;
+  };
+  std::vector<PendingField> pending_fields_;
   struct Holding {
     size_t region;
     bool module_lifetime;
@@ -269,12 +358,56 @@ class Compiler {
     bool movable = false;
   };
   std::vector<Holding> holdings_;
-  struct LocalCell { size_t scope; Location at; bool initialized = false; };
+  struct LocalCell { size_t scope; Location at; size_t initialized = 0; };
   // The slot is the runtime address; the view carries checked owner/type/access
   // constraints and initialization facts, not an exact runtime target identity.
-  struct Pointer { llvm::Value *slot; Value view; bool read_only = false; bool fixed_binding = false; bool required = false; Location at; };
+  struct Pointer { llvm::Value *slot; const Value *view; ReadOnly read_only; bool fixed_binding = false; bool required = false; Location at; };
+  struct DeferredCheck { std::function<bool()> rejected; Location at; std::string message; };
+  std::vector<DeferredCheck> deferred_checks_;
+  std::vector<ReadOnly> projection_permissions_;
+  void require_writable(const ReadOnly &permission, const Location &at, std::string message) {
+    if (permission.pending()) deferred_checks_.push_back({[permission] { return bool(permission); }, at, std::move(message)});
+    else if (permission) fail(at, message);
+  }
+  void require_access(const ReadOnly &source, const ReadOnly &destination, const Location &at, std::string message) {
+    const auto rejected = [source, destination] { return bool(source) && !bool(destination); };
+    if (source.pending() || destination.pending()) deferred_checks_.push_back({rejected, at, std::move(message)});
+    else if (rejected()) fail(at, message);
+  }
   std::vector<LocalCell> cells_;
+  struct InitializationFlow { std::vector<size_t> inputs; bool open = false; bool any = false; };
+  // IDs 0/1 are false/true. Returning alternatives conjoin; preserving prior
+  // initialization alongside a callee guarantee disjoins. Recursion contributes
+  // no counterexample without a finite uninitialized exit.
+  std::vector<InitializationFlow> initialization_flows_{{}, {}};
+  std::vector<InitializationRead> initialization_reads_;
   std::vector<Pointer> pointers_;
+  // Control-flow snapshots share unchanged views. A rebind or refinement adds
+  // a version, leaving every saved branch/call/exception state intact.
+  std::deque<Value> pointer_views_;
+  using CallableAlternatives = std::vector<std::shared_ptr<const Procedure>>;
+  using CallableMemory = llvm::ImmutableMap<size_t, size_t>;
+  CallableMemory::Factory callable_memory_factory_;
+  struct NativeCallDemand;
+  struct CallableFlow {
+    std::shared_ptr<const Procedure> definition;
+    std::vector<size_t> inputs;
+    bool open = false;
+    std::optional<size_t> holder = {};
+    size_t address = 0;
+    CallableMemory memory{nullptr};
+    std::optional<size_t> written_holder = {};
+    bool loop = false;
+    NativeCallDemand *producer = nullptr;
+  };
+  std::vector<CallableFlow> callable_flows_{CallableFlow{}};
+  CallableMemory callable_holders_{nullptr};
+  std::vector<size_t> callable_scopes_;
+  struct CallableDemand { size_t flow; const Module *caller; Location at; };
+  std::vector<CallableDemand> callable_demands_;
+  struct CallableResult { size_t callee, result; };
+  std::vector<CallableResult> callable_results_;
+  std::vector<Value> direct_callables_;
   struct LoopPointers { size_t boundary; std::vector<bool> initialized; };
   std::vector<LoopPointers> loop_pointers_;
   std::vector<bool> scopes_{true};
@@ -291,16 +424,65 @@ class Compiler {
   bool scope_rebound_ = false; // Includes bindings with no native TLS slot.
   struct EndPath {};
   struct FlowState {
-    std::vector<bool> live;
+    std::vector<FlowCondition> live;
     std::vector<Presence> holdings;
-    std::vector<bool> initialized;
-    std::vector<Value> pointers;
+    std::vector<size_t> initialized;
+    std::vector<const Value *> pointers;
+    CallableMemory callables{nullptr};
   };
   struct ConversionPoint {
     LLVMEmission::ConversionPoint native;
     FlowState regions;
     bool raw_view = false;
+    std::optional<StorageView> callable_destination = {};
+    bool callable_prepared = false;
   };
+  struct NativeCallDemand {
+    size_t flow;
+    const Module *caller;
+    Location at;
+    Environment environment;
+    bool captured;
+    Type type;
+    FlowState state;
+    LLVMEmission::NativeDefinition definition;
+    llvm::Instruction *context;
+    std::vector<Conformance> conformances;
+    std::vector<bool> scopes;
+    std::vector<CallSite> calls;
+    NativeCallDemand *parent = nullptr;
+    std::map<size_t, size_t> returns = {};
+    std::array<std::map<size_t, size_t>, 4> failures = {};
+    std::set<const Procedure *> emitted = {};
+    std::map<const Procedure *, LLVMEmission::CallableMatch> matches = {};
+    llvm::BasicBlock *tail = nullptr;
+    const NativeCallDemand *reused = nullptr;
+    size_t result_flow = 0;
+    std::vector<Value> arguments = {};
+    struct Selection {
+      std::string name;
+      bool function_context, npe_allowed;
+      ImplementationContext implementation;
+      llvm::Instruction *image;
+      Value result;
+    };
+    std::optional<Selection> selection = {};
+    std::optional<size_t> conversion_parameter = {}; // Argument conversion uses the selected body's declaration.
+    size_t record_result = 0;
+    bool pending_argument_facts = false;
+    std::map<size_t, size_t> initialized = {};
+    std::array<std::map<size_t, size_t>, 4> failure_initialized = {};
+  };
+  std::deque<NativeCallDemand> native_call_demands_;
+  std::set<const NativeCallDemand *> checking_native_calls_;
+  const NativeCallDemand *pending_callable_failure_ = nullptr;
+  struct ReturnFacts {
+    NativeCallDemand *producer = nullptr;
+    std::vector<Value> alternatives;
+  };
+  std::deque<ReturnFacts> return_facts_;
+  bool possible_result_facts_ = false;
+  std::vector<std::pair<std::shared_ptr<CaptureUse>, std::shared_ptr<LLVMEmission::EffectWrites>>> capture_effects_;
   ConversionPoint conversion_point() { return {ir_.conversion_point(), flow_state()}; }
   struct ExceptionalEdge { Value error; llvm::BasicBlock *from; FlowState regions; };
   struct Landing { llvm::BasicBlock *block = nullptr; std::vector<ExceptionalEdge> incoming; };
@@ -310,6 +492,32 @@ class Compiler {
   };
   std::vector<HandlerScope *> handlers_;
   std::optional<Value> caught_exception_;
+  struct NativeActivation {
+    Form *form;
+    const Module *lexical;
+    ImplementationContext implementation;
+    std::vector<Type> parameters;
+    std::map<size_t, std::pair<Type, const Value *>> bindings;
+    LLVMEmission::NativeDefinition definition;
+    NativeCallDemand *call = nullptr;
+  };
+  std::deque<NativeActivation> native_activations_;
+  struct CheckedNative {
+    NativeActivation activation;
+    const Module *caller;
+    std::vector<Conformance> conformances;
+  };
+  std::map<const Form *, std::vector<CheckedNative>> checked_natives_;
+  struct CheckedFactory {
+    NativeActivation activation;
+    const Module *caller;
+    std::vector<Conformance> conformances;
+    std::vector<std::tuple<Type, std::optional<size_t>, size_t, bool>> arguments;
+    Value result;
+    bool checking = true;
+  };
+  std::deque<CheckedFactory> factories_;
+  NativeActivation *native_context_ = nullptr;
 
   static Type exception_type(size_t category) {
     static const std::array names{"SystemException", "OutOfMemory", "RegionCapacityExceeded", "InvalidCapacity", "NullPointerException"};
@@ -337,8 +545,12 @@ class Compiler {
   size_t new_region(llvm::Value *owner, const Location &at, std::set<size_t> origins = {}) {
     const auto id = regions_.size();
     if (origins.empty()) origins.insert(id);
-    regions_.push_back({owner, at, true, std::move(origins)});
+    regions_.push_back({owner, at, true, std::move(origins), false, {}, 0, 0, {}});
     return id;
+  }
+  const Value *snapshot_pointer(Value value) {
+    pointer_views_.push_back(std::move(value));
+    return &pointer_views_.back();
   }
   FlowState flow_state() const {
     FlowState result;
@@ -346,30 +558,154 @@ class Compiler {
     for (const auto &holding : holdings_) result.holdings.push_back(holding.presence);
     for (const auto &cell : cells_) result.initialized.push_back(cell.initialized);
     for (const auto &pointer : pointers_) result.pointers.push_back(pointer.view);
+    result.callables = callable_holders_;
     return result;
   }
   void restore_flow(const FlowState &state) {
-    for (size_t i = 0; i < regions_.size(); ++i) regions_[i].live = i < state.live.size() && state.live[i];
+    for (size_t i = 0; i < regions_.size(); ++i) regions_[i].live = i < state.live.size() ? state.live[i] : FlowCondition{false};
     for (size_t i = 0; i < holdings_.size(); ++i)
       holdings_[i].presence = i < state.holdings.size() ? state.holdings[i] : Presence::absent;
     for (size_t i = 0; i < cells_.size(); ++i)
-      cells_[i].initialized = i < state.initialized.size() && state.initialized[i];
+      cells_[i].initialized = i < state.initialized.size() ? state.initialized[i] : 0;
     for (size_t i = 0; i < state.pointers.size(); ++i) pointers_[i].view = state.pointers[i];
+    callable_holders_ = state.callables;
+    for (const auto &[holder, flow] : state.callables)
+      if (!scopes_.at(callable_scopes_.at(holder)))
+        callable_holders_ = callable_memory_factory_.remove(callable_holders_, holder);
+  }
+  size_t join_callable_flow(std::vector<size_t> inputs) {
+    std::sort(inputs.begin(), inputs.end());
+    inputs.erase(std::unique(inputs.begin(), inputs.end()), inputs.end());
+    std::erase(inputs, size_t(0));
+    if (inputs.empty()) return 0;
+    if (inputs.size() == 1) return inputs.front();
+    callable_flows_.push_back({{}, std::move(inputs)});
+    return callable_flows_.size() - 1;
+  }
+  struct CallableChoices { CallableAlternatives definitions; bool closed = true; };
+  struct CallableTargets { std::set<size_t> holders; bool closed = true; };
+  CallableTargets callable_targets(size_t address, std::set<size_t> *unresolved = nullptr) const {
+    CallableTargets result;
+    std::vector<size_t> pending{address};
+    std::set<size_t> visited;
+    while (!pending.empty()) {
+      const auto id = pending.back(); pending.pop_back();
+      if (!id || !visited.insert(id).second) continue;
+      const auto &node = callable_flows_.at(id);
+      result.closed &= !node.open;
+      if (node.open && unresolved) unresolved->insert(id);
+      if (node.holder) result.holders.insert(*node.holder);
+      pending.insert(pending.end(), node.inputs.begin(), node.inputs.end());
+    }
+    return result;
+  }
+  CallableChoices callable_choices(size_t flow, std::set<size_t> *unresolved = nullptr) const {
+    CallableChoices result;
+    using Read = std::tuple<size_t, size_t, size_t>; // Flow, selected address, selected holder.
+    std::vector<Read> pending{{flow, 0, 0}};
+    std::set<Read> visited;
+    std::set<const Procedure *> definitions;
+    while (!pending.empty()) {
+      auto [id, address, holder] = pending.back(); pending.pop_back();
+      if (!id) continue;
+      const auto &node = callable_flows_.at(id);
+      // A prior iteration may have selected another holder at this same site.
+      if (node.loop) { address = 0; holder = 0; }
+      if (!visited.emplace(id, address, holder).second) continue;
+      result.closed &= !node.open;
+      if (node.open && unresolved) unresolved->insert(id);
+      if (node.address) {
+        const auto targets = callable_targets(node.address, unresolved);
+        result.closed &= targets.closed;
+        if (node.written_holder) {
+          if (address == node.address && holder == *node.written_holder) {
+            pending.emplace_back(node.inputs.at(1), 0, 0);
+            continue;
+          }
+          const bool selected = targets.holders.contains(*node.written_holder);
+          if (selected) pending.emplace_back(node.inputs.at(1), 0, 0);
+          if (!selected || targets.holders.size() != 1) pending.emplace_back(node.inputs.at(0), address, holder);
+        } else for (const auto target : targets.holders)
+          if (const auto *value = node.memory.lookup(target)) pending.emplace_back(*value, node.address, target);
+        continue;
+      }
+      if (node.definition && definitions.insert(node.definition.get()).second)
+        result.definitions.push_back(node.definition);
+      for (const auto input : node.inputs) pending.emplace_back(input, address, holder);
+    }
+    return result;
+  }
+  void register_callable_holder(Value &value) {
+    const auto holder = callable_scopes_.size();
+    callable_scopes_.push_back(*value.storage->scope);
+    callable_holders_ = callable_memory_factory_.add(callable_holders_, holder, value.callable_flow);
+    CallableFlow node; node.holder = holder;
+    callable_flows_.push_back(std::move(node));
+    value.callable_address = callable_flows_.size() - 1;
+  }
+  size_t callable_result_flow(size_t callee) {
+    callable_flows_.push_back({{}, {}, true});
+    const auto result = callable_flows_.size() - 1;
+    callable_results_.push_back({callee, result});
+    return result;
+  }
+  bool resolve_callable_results() {
+    bool changed = false;
+    for (const auto &[callee, result] : callable_results_) {
+      const auto choices = callable_choices(callee);
+      auto &output = callable_flows_.at(result);
+      for (const auto &candidate : choices.definitions) {
+        const auto input = candidate->code->result_flow;
+        if (!input) throw std::logic_error("callable result has no value-flow output");
+        if (std::find(output.inputs.begin(), output.inputs.end(), input) == output.inputs.end()) {
+          output.inputs.push_back(input);
+          changed = true;
+        }
+      }
+      if (output.open != !choices.closed) { output.open = !choices.closed; changed = true; }
+    }
+    return changed;
+  }
+  Value held_callable(Type type, size_t flow, llvm::Value *image, const StorageView &destination) {
+    auto result = scalar(std::move(type), image);
+    const auto choices = callable_choices(flow);
+    if (!choices.definitions.empty()) result.procedure = choices.definitions.front();
+    result.callable_flow = flow;
+    result.storage = destination;
+    result.callable_temporary = true;
+    register_callable_holder(result);
+    return result;
+  }
+  Value native_parameter(Type type, size_t flow, llvm::Value *argument) {
+    if (type.kind != Type::procedure) return loaded_value(std::move(type), argument);
+    return held_callable(std::move(type), flow, argument,
+        StorageView{ir_.hold_callable(argument, false), local_scope_, {}});
+  }
+  void return_callable(const Value &result, size_t flow, const LLVMEmission::NativeDefinition &definition,
+                       const Location &at) {
+    if (!native_callable(result) || !result.storage)
+      fail(at, "native factory result has no complete callable representation");
+    auto &inputs = callable_flows_.at(flow).inputs;
+    if (std::find(inputs.begin(), inputs.end(), result.callable_flow) == inputs.end())
+      inputs.push_back(result.callable_flow);
+    auto *image = ir_.take_callable(result.storage->address);
+    ir_.write_pointer(definition.function->getArg(definition.context_argument + 1), image);
   }
   void intersect_flow(FlowState &left, const FlowState &right) {
     left.live.resize(std::max(left.live.size(), right.live.size()), false);
-    for (size_t i = 0; i < left.live.size(); ++i) left.live[i] = left.live[i] && i < right.live.size() && right.live[i];
+    for (size_t i = 0; i < left.live.size(); ++i) left.live[i] = FlowCondition::both(left.live[i], i < right.live.size() ? right.live[i] : FlowCondition{false});
     left.holdings.resize(std::max(left.holdings.size(), right.holdings.size()), Presence::absent);
     for (size_t i = 0; i < left.holdings.size(); ++i) {
       const auto other = i < right.holdings.size() ? right.holdings[i] : Presence::absent;
       if (left.holdings[i] != other) left.holdings[i] = Presence::conditional;
     }
-    left.initialized.resize(std::max(left.initialized.size(), right.initialized.size()), false);
+    left.initialized.resize(std::max(left.initialized.size(), right.initialized.size()), 0);
     for (size_t i = 0; i < left.initialized.size(); ++i)
-      left.initialized[i] = left.initialized[i] && i < right.initialized.size() && right.initialized[i];
+      left.initialized[i] = join_initialization(left.initialized[i], i < right.initialized.size() ? right.initialized[i] : 0);
     for (size_t i = 0; i < std::min(left.pointers.size(), right.pointers.size()); ++i) {
-      auto &target = left.pointers[i];
-      const auto &other = right.pointers[i];
+      if (left.pointers[i] == right.pointers[i]) continue;
+      auto target = *left.pointers[i];
+      const auto &other = *right.pointers[i];
       if (target.pending_owner && !other.pending_owner) {
         target = other;
         target.nullable = true;
@@ -377,12 +713,19 @@ class Compiler {
         fail(pointers_[i].at, "pointer paths establish different owners; the first non-null assignment must establish one consistent owner");
       }
       target.nullable = target.nullable || other.nullable;
-      target.read_only = target.read_only || other.read_only;
+      target.read_only |= other.read_only;
+      target.callable_address = join_callable_flow({target.callable_address, other.callable_address});
       if (target.referent != other.referent) target.referent = nullptr;
       if (target.storage && other.storage) {
         target.storage->cells.insert(other.storage->cells.begin(), other.storage->cells.end());
         target.storage->initialized_alternatives |= other.storage->initialized_alternatives;
       }
+      left.pointers[i] = snapshot_pointer(std::move(target));
+    }
+    for (const auto &[holder, flow] : right.callables) {
+      const auto *previous = left.callables.lookup(holder);
+      left.callables = callable_memory_factory_.add(left.callables, holder,
+          previous ? join_callable_flow({*previous, flow}) : flow);
     }
   }
   void close_state(FlowState &state, size_t begin, std::optional<size_t> result_owner = {}) {
@@ -402,8 +745,13 @@ class Compiler {
         return holding.region == i && state.holdings[&holding - holdings_.data()] == Presence::present;
       });
       if (!protected_owner && std::any_of(regions_[i].origins.begin(), regions_[i].origins.end(),
-                                         [&](size_t origin) { return released.contains(origin); }))
-        state.live[i] = false;
+                                         [&](size_t origin) { return released.contains(origin); })) {
+        auto preserved = result_owner ? region_alias(*result_owner, i) : FlowCondition{false};
+        for (size_t holder = 0; holder < holdings_.size(); ++holder)
+          if (state.holdings[holder] == Presence::present)
+            preserved |= region_alias(holdings_[holder].region, i);
+        state.live[i] = FlowCondition::both(state.live[i], preserved);
+      }
     }
   }
   Value hold_region(Value value, bool module_lifetime, bool movable) {
@@ -449,7 +797,31 @@ class Compiler {
   }
   void raise_exception(Value error) {
     ir_.dispatch_exception(exception_category(error), [&](size_t category) {
-      if (handlers_.empty()) { ir_.uncaught(category, error.native); return; }
+      const auto memory = llvm::SaveAndRestore(callable_holders_);
+      std::vector<std::pair<size_t, size_t>> initialized;
+      const auto restore_initialization = llvm::scope_exit([&] {
+        for (const auto &[cell, proof] : initialized) cells_[cell].initialized = proof;
+      });
+      if (pending_callable_failure_) {
+        for (const auto &[cell, proof] : pending_callable_failure_->failure_initialized.at(category - 1)) {
+          initialized.emplace_back(cell, cells_.at(cell).initialized);
+          cells_[cell].initialized = preserved_initialization(cells_[cell].initialized, proof);
+        }
+        callable_holders_ = callable_effects(*pending_callable_failure_,
+            pending_callable_failure_->failures.at(category - 1));
+      }
+      if (handlers_.empty()) {
+        if (native_context_) {
+          native_context_->definition.failures.insert(category);
+          if (native_context_->call) {
+            record_callable_effects(native_context_->call->failures.at(category - 1));
+            record_initialization(native_context_->call->failure_initialized.at(category - 1));
+          }
+          ir_.unwind(0);
+          ir_.native_return(nullptr, category, error.native);
+        } else ir_.uncaught(category, error.native);
+        return;
+      }
       auto &scope = *handlers_.back();
       auto &landing = scope.landing.at(category - 1);
       if (!landing.block) landing.block = ir_.label("exception.handler");
@@ -507,56 +879,201 @@ class Compiler {
     if (!region) return {};
     return "\n" + location_text(regions_.at(*region).acquired) + ": note: " + std::string(message);
   }
+  bool possible_region_alias(size_t region, size_t target, std::set<size_t> visited = {}) const {
+    if (region == target) return true;
+    if (!visited.insert(region).second) return false;
+    return std::any_of(regions_.at(region).owner_inputs.begin(), regions_.at(region).owner_inputs.end(),
+        [&](size_t input) { return possible_region_alias(input, target, visited); });
+  }
+  std::optional<size_t> returned_owner(size_t origin, const std::set<size_t> &inputs, const Location &at) {
+    // A return is fresh or comes from an owning parameter. Recursive adapters
+    // preserve parameter roles, not the allocation IDs of their first caller.
+    using Provenance = std::set<size_t>; // Zero is fresh; parameter i is i + 1.
+    using InputRoles = std::map<size_t, size_t>;
+    std::map<const NativeCallDemand *, Provenance> summaries;
+    InputRoles outer;
+    for (size_t input : inputs) outer.emplace(input, outer.size() + 1);
+    std::function<Provenance(size_t, const InputRoles &, std::set<size_t>)> region_value;
+    const auto merge = [](Provenance &into, const Provenance &from) { into.insert(from.begin(), from.end()); };
+    const auto result_value = [&](size_t id, const InputRoles &roles, const std::set<size_t> &visited) {
+      const auto &returns = checked_returns(id, at);
+      Provenance result;
+      if (const auto *producer = return_facts_.at(id - 1).producer) {
+        const auto summary = summaries.try_emplace(producer).first->second;
+        for (size_t role : summary) {
+          if (!role) result.insert(0);
+          else merge(result, region_value(*producer->arguments.at(role - 1).region_id, roles, visited));
+        }
+      } else for (const auto &value : returns)
+        if (value.region_id) merge(result, region_value(*value.region_id, roles, visited));
+      return result;
+    };
+    region_value = [&](size_t id, const InputRoles &roles, std::set<size_t> visited) -> Provenance {
+      if (const auto found = roles.find(id); found != roles.end()) return {found->second};
+      if (!visited.insert(id).second) return {};
+      const auto &region = regions_.at(id);
+      if (!region.owner_origin || region.owner_inputs.empty()) return {0};
+      return result_value(region.owner_origin, roles, visited);
+    };
+    Provenance result;
+    for (;;) {
+      const auto before = summaries.size();
+      result = result_value(origin, outer, {});
+      bool changed = false;
+      for (auto &[demand, summary] : summaries) {
+        const auto &returns = checked_returns(demand->record_result, at);
+        Provenance next;
+        if (demand->reused) next = summaries.try_emplace(demand->reused).first->second;
+        else {
+          InputRoles roles;
+          for (size_t i = 0; i < demand->arguments.size(); ++i)
+            if (demand->type.parameters[i].owned) roles.emplace(*demand->arguments[i].region_id, i + 1);
+          for (const auto &value : returns)
+            if (value.region_id) merge(next, region_value(*value.region_id, roles, {}));
+        }
+        const auto size = summary.size();
+        merge(summary, next);
+        changed |= size != summary.size();
+      }
+      if (!changed && summaries.size() == before) break;
+    }
+    if (result.size() != 1 || result.contains(0)) return {};
+    for (const auto &[owner, role] : outer) if (result.contains(role)) return owner;
+    return {};
+  }
+  size_t region_identity(size_t id, const Location &at) {
+    const auto &region = regions_.at(id);
+    if (!region.owner_origin || region.owner_inputs.empty()) return id;
+    const auto inputs = region.owner_inputs;
+    const auto owner = returned_owner(region.owner_origin, inputs, at);
+    if (owner && *owner != id && possible_region_alias(id, *owner)) return region_identity(*owner, at);
+    return id;
+  }
+  FlowCondition region_alias(size_t region, size_t target) {
+    if (region == target) return true;
+    if (!possible_region_alias(region, target)) return false;
+    return FlowCondition::deferred([this, region, target] {
+      const auto &at = regions_.at(region).acquired;
+      return region_identity(region, at) == region_identity(target, at);
+    });
+  }
+  void require_same_region(size_t first, size_t second, const Location &at, std::string message) {
+    if (first == second) return;
+    const auto rejected = [this, first, second, at] {
+      return region_identity(first, at) != region_identity(second, at);
+    };
+    if (regions_.at(first).owner_origin || regions_.at(second).owner_origin)
+      deferred_checks_.push_back({rejected, at, std::move(message)});
+    else if (rejected()) fail(at, message);
+  }
+  void require_live(FlowCondition live, const Location &at, std::string message) {
+    if (live.pending()) deferred_checks_.push_back({[live] { return !bool(live); }, at, std::move(message)});
+    else if (!live) fail(at, message);
+  }
   llvm::Value *region_pointer(const Value &value, const Location &at) {
     if (value.type.owned && (!value.holding_id || holdings_.at(*value.holding_id).presence != Presence::present))
       fail(at, "region owner has been consumed on a path reaching this use" +
                    region_note(value.region_id, "the region was acquired here"));
-    if (!value.region_id || !regions_.at(*value.region_id).live)
-      fail(at, "regional value requires a live owning region in this caller scope" +
-                   region_note(value.region_id, "the referenced region was acquired here"));
+    require_live(value.region_id ? regions_.at(*value.region_id).live : FlowCondition{false}, at,
+        "regional value requires a live owning region in this caller scope" +
+        region_note(value.region_id, "the referenced region was acquired here"));
     return regions_.at(*value.region_id).owner;
   }
+  static bool native_callable(const Value &value) {
+    return value.type.kind == Type::procedure && (value.callable_flow || value.callable_address);
+  }
   static bool local_bits(Type type) { return numeric(representation(type)) || type == Type::boolean || type.kind == Type::exception; }
-  static std::optional<std::pair<bool, size_t>> storage_owner(const Value &value) {
-    if (value.region_id) return std::pair(true, *value.region_id);
+  std::optional<std::pair<bool, size_t>> storage_owner(const Value &value) {
+    if (value.region_id) return std::pair(true, region_identity(*value.region_id, regions_.at(*value.region_id).acquired));
     if (value.storage && value.storage->scope) return std::pair(false, *value.storage->scope);
     return {};
   }
   void valid_view(const Value &value, const Location &at) {
     for (const auto region : value.type.capture_regions)
-      if (!regions_.at(region).live)
-        fail(at, "callable owner contract " + type_name(value.type) + " requires a live region owner" +
-                 region_note(region, "this captured region's owner was acquired here"));
+      require_live(regions_.at(region).live, at,
+          "callable owner contract " + type_name(value.type) + " requires a live region owner" +
+          region_note(region, "this captured region's owner was acquired here"));
     if (value.procedure)
       for (const auto &[name, capture] : value.procedure->lexical_captures.visible) valid_view(capture, at);
     if (value.region_id) region_pointer(value, at);
     if (value.storage && value.storage->scope && !scopes_.at(*value.storage->scope))
       fail(at, "borrowed value would outlive its lexical storage owner");
   }
-  std::map<size_t, Value> closure_regions(const Value &value) {
+  std::map<size_t, Value> closure_regions(const Value &value, std::set<const Procedure *> active = {},
+                                        const Location *complete_at = nullptr) {
     std::map<size_t, Value> result;
+    if (native_callable(value)) {
+      if (value.type.capture_regions.empty()) return result;
+      if (complete_at) {
+        if (!callable_choices(value.callable_flow).closed)
+          throw UnresolvedAccess(*complete_at);
+      }
+      for (const auto &candidate : callable_choices(value.callable_flow).definitions) {
+        auto source = value;
+        source.procedure = candidate;
+        source.callable_flow = 0;
+        source.callable_address = 0;
+        for (const auto &[id, access] : closure_regions(source, active, complete_at)) {
+          const auto [found, inserted] = result.emplace(id, access);
+          if (!inserted) found->second.read_only |= access.read_only;
+        }
+      }
+      return result;
+    }
     if (!value.procedure) return result;
+    if (!active.insert(value.procedure.get()).second) return result;
     for (const auto &[name, owner] : value.procedure->lexical_captures.owner_anchors)
       if (owner.region_id) result.emplace(*owner.region_id, owner);
     for (const auto &[name, capture] : value.procedure->lexical_captures.visible) {
-      auto dependencies = closure_regions(capture);
+      auto dependencies = closure_regions(capture, active, complete_at);
       if (capture.region_id) dependencies.emplace(*capture.region_id, borrowed(capture));
       for (const auto &[id, access] : dependencies) {
         const auto [found, inserted] = result.emplace(id, access);
-        if (!inserted) found->second.read_only = found->second.read_only && access.read_only;
+        if (!inserted) found->second.read_only = ReadOnly::both(found->second.read_only, access.read_only);
       }
+    }
+    return result;
+  }
+  Value callable_owner(const Value &callable, size_t id, const Location &at) {
+    valid_view(callable, at);
+    if (native_callable(callable)) {
+      std::set<NativeCallDemand *> resolving;
+      resolve_native_flow(callable.callable_flow, resolving);
+    }
+    const auto retained = closure_regions(callable);
+    const auto access = retained.find(id);
+    Type type{Type::region}; type.target = std::make_shared<Type>(*regions_.at(id).root);
+    auto result = scalar(type, nullptr, id);
+    if (native_callable(callable)) {
+      result.read_only = ReadOnly::deferred([this, callable, id, at] {
+        const auto complete = closure_regions(callable, {}, &at);
+        const auto permission = complete.find(id);
+        if (permission == complete.end()) fail(at, "callable does not retain its declared region owner");
+        return bool(permission->second.read_only);
+      });
+      projection_permissions_.push_back(result.read_only);
+    } else {
+      if (access == retained.end()) fail(at, "callable does not retain its declared region owner");
+      result.read_only = access->second.read_only;
+    }
+    if (access != retained.end()) {
+      result.conformances = access->second.conformances;
+      result.result_fact_origins = access->second.result_fact_origins;
     }
     return result;
   }
   Type bind_capture_type(Type type, const std::map<std::string, Value> &owners, const Location &at, bool partial = false) {
     if (type.kind != Type::procedure) return type;
-    if (type.capture_regions.empty() && (!partial || std::all_of(type.capture_owners.begin(), type.capture_owners.end(),
-        [&](const std::string &name) { return owners.contains(name); }))) {
-      for (const auto &name : type.capture_owners) {
+    if (!type.capture_owners.empty()) {
+      type.capture_owner_regions.resize(type.capture_owners.size());
+      for (size_t i = 0; i < type.capture_owners.size(); ++i) {
+        if (type.capture_owner_regions[i] || (!type.capture_formals.empty() && type.capture_formals[i])) continue;
+        const auto &name = type.capture_owners[i];
         const auto found = owners.find(name);
+        if (found == owners.end() && partial) continue;
         if (found == owners.end() || !found->second.region_id)
           fail(at, "callable environment owner '" + name + "' must name a declared, inferred region owner");
-        type.capture_owner_regions.push_back(*found->second.region_id);
+        type.capture_owner_regions[i] = *found->second.region_id;
         type.capture_regions.push_back(*found->second.region_id);
       }
       std::sort(type.capture_regions.begin(), type.capture_regions.end());
@@ -586,27 +1103,113 @@ class Compiler {
     Value value; value.type = type; value.nullable = true; value.pointer_view = true;
     value.pending_owner = !owner || !storage_owner(*owner);
     if (owner) value.region_id = owner->region_id;
-    if (local_bits(type)) {
+    if (owner && type.kind == Type::procedure) {
+      value.procedure = owner->procedure;
+      value.callable_address = owner->callable_address;
+      value.callable_flow = owner->callable_flow;
+    }
+    if (local_bits(type) || type.kind == Type::procedure) {
       value.storage = StorageView{ir_.null_pointer(), owner && owner->storage ? owner->storage->scope : std::nullopt, {}};
     } else if (type.kind == Type::regional || type.kind == Type::array || type.kind == Type::reference) {
       value.native = ir_.bits(Type::null_ref, 0);
     } else fail(at, "null requires a pointer to bits or regional data");
     return value;
   }
-  Value read_value(Value value, const Location &at) {
+  std::optional<bool> initialization_known(size_t proof) const {
+    if (proof < 2) return proof == 1;
+    std::vector<size_t> pending{proof};
+    std::set<size_t> visited;
+    std::map<size_t, std::vector<size_t>> dependents;
+    bool open = false;
+    while (!pending.empty()) {
+      const size_t id = pending.back(); pending.pop_back();
+      if (id < 2 || !visited.insert(id).second) continue;
+      const auto &node = initialization_flows_.at(id);
+      open |= node.open;
+      for (size_t input : node.inputs) {
+        dependents[input].push_back(id);
+        pending.push_back(input);
+      }
+    }
+    // Open producers may still add a returning alternative. Check both bounds
+    // before accepting a proof or rejecting a read while bodies remain unchecked.
+    const auto disproved = [&](bool unknown_exits) {
+      std::set<size_t> rejected{0};
+      std::vector<size_t> work(visited.begin(), visited.end());
+      while (!work.empty()) {
+        const size_t id = work.back(); work.pop_back();
+        if (rejected.contains(id)) continue;
+        const auto &node = initialization_flows_.at(id);
+        const auto missing = [&](size_t input) { return rejected.contains(input); };
+        const bool fails = (unknown_exits && node.open) || (node.any ?
+            std::all_of(node.inputs.begin(), node.inputs.end(), missing) :
+            std::any_of(node.inputs.begin(), node.inputs.end(), missing));
+        if (fails) {
+          rejected.insert(id);
+          const auto found = dependents.find(id);
+          if (found != dependents.end()) work.insert(work.end(), found->second.begin(), found->second.end());
+        }
+      }
+      return rejected.contains(proof);
+    };
+    if (disproved(false)) return false;
+    if (!open || !disproved(true)) return true;
+    return {};
+  }
+  size_t preserved_initialization(size_t before, size_t returned) {
+    if (before == returned || returned == 0) return before;
+    if (before == 0) return returned;
+    if (before == 1 || returned == 1) return 1;
+    initialization_flows_.push_back({{before, returned}, false, true});
+    return initialization_flows_.size() - 1;
+  }
+  size_t join_initialization(size_t a, size_t b) {
+    if (a == b || b == 1) return a;
+    if (a == 1) return b;
+    if (!a || !b) return 0;
+    initialization_flows_.push_back({{a, b}});
+    return initialization_flows_.size() - 1;
+  }
+  void require_initialization(const InitializationRead &read) {
+    const auto known = initialization_known(read.proof);
+    if (known == false)
+      fail(read.at, "read of storage before definite initialization\n" + location_text(cells_.at(read.cell).at) +
+                   ": note: local storage allocated here");
+    if (!known) initialization_reads_.push_back(read);
+  }
+  void require_argument_reads(const Value &value) {
+    for (const auto &read : value.argument_reads) require_initialization(read);
+  }
+  Value read_value(Value value, const Location &at, bool argument = false) {
+    if (!argument) { require_argument_reads(value); value.argument_reads.clear(); }
     valid_view(value, at);
+    if (value.result_type_origin && region_definition(value.type)) {
+      try { resolve_result_type(value, at); }
+      catch (const UnresolvedAccess &) { /* A reference read does not require its concrete layout. */ }
+    }
+    if (value.global_slot) {
+      value.native = ir_.read({value.type, nullptr, value.global_slot});
+      value.global_slot = nullptr;
+    }
     if (value.type.kind != Type::reference) {
       check_nullable(value, at);
       value.nullable = false;
     }
     if (value.storage) {
-      for (const auto cell : value.storage->cells)
-        if (!cells_.at(cell).initialized)
-          fail(at, "read of storage before definite initialization\n" + location_text(cells_[cell].at) +
-                       ": note: local storage allocated here");
+      for (const auto cell : value.storage->cells) {
+        InitializationRead read{cells_.at(cell).initialized, cell, at};
+        if (argument) {
+          if (initialization_known(read.proof) != true) value.argument_reads.push_back(read);
+        } else require_initialization(read);
+      }
       const auto loaded = loaded_value(value.type, ir_.read(place(value, at)));
       value.native = loaded.native;
       value.exception_category = loaded.exception_category;
+    }
+    if (value.callable_address) {
+      CallableFlow load; load.address = value.callable_address; load.memory = callable_holders_;
+      callable_flows_.push_back(std::move(load));
+      value.callable_flow = callable_flows_.size() - 1;
     }
     return value;
   }
@@ -623,15 +1226,16 @@ class Compiler {
     return value;
   }
   void write_bits(Value destination, Value source, const Location &at) {
-    if (destination.read_only) fail(at, "cannot transfer into a read-only destination view");
+    if (!local_bits(destination.type)) fail(at, "bits transfer requires bits storage");
+    require_writable(destination.read_only, at, "cannot transfer into a read-only destination view");
     source = read_value(std::move(source), at);
     require(source.type, destination.type, at);
     ir_.write(place(destination, at), stored_value(source, destination.type, at));
     if (destination.storage->cells.size() == 1 && !destination.storage->initialized_alternatives)
-      cells_.at(*destination.storage->cells.begin()).initialized = true;
+      cells_.at(*destination.storage->cells.begin()).initialized = 1;
   }
   Value pointer_value(size_t id, const Location &at) {
-    auto value = pointers_.at(id).view;
+    auto value = *pointers_.at(id).view;
     valid_view(value, at);
     auto *current = ir_.read_pointer(pointers_[id].slot, value.storage ? value.storage->address : value.native);
     if (value.storage) value.storage->address = current;
@@ -646,32 +1250,71 @@ class Compiler {
     value.required_reference = false;
     value.binding_read_only = false;
     value.pointer_view = true;
+    value.callable_temporary = false;
     valid_view(value, at);
     if (!storage_owner(value) && !value.pending_owner) fail(at, "ptr requires storage with a known owner");
     const auto id = pointers_.size();
     if (!value.referent) value.referent = value.storage ? value.storage->address : value.native;
-    pointers_.push_back({ir_.pointer_storage(value.storage ? value.storage->address : value.native), value,
-                         read_only || value.read_only, fixed_binding, required, at});
+    pointers_.push_back({ir_.pointer_storage(value.storage ? value.storage->address : value.native), snapshot_pointer(value),
+                         ReadOnly::either(read_only, value.read_only), fixed_binding, required, at});
     value.pointer = id;
     declare_local(locals, name, std::move(value), module, at);
   }
   void close_holdings(size_t begin, const Value &result, const Location &at) {
     auto state = flow_state();
     close_state(state, begin, result.type.owned ? result.region_id : std::nullopt);
-    if (result.region_id && !state.live.at(*result.region_id))
-      fail(at, "regional result would outlive its owning scope" +
-                   region_note(result.region_id, "the escaping value depends on this region acquisition"));
+    if (result.region_id) require_live(state.live.at(*result.region_id), at,
+        "regional result would outlive its owning scope" +
+        region_note(result.region_id, "the escaping value depends on this region acquisition"));
     restore_flow(state);
   }
   Value finish_scope(size_t holding_begin, size_t native_scope, Value result, const Location &at,
-                     bool parent_module) {
+                     bool parent_module, size_t parent_scope) {
+    bool carry_callable = false;
+    if (native_callable(result) && result.storage && result.storage->scope &&
+        !scopes_.at(*result.storage->scope) && !result.pointer_view) {
+      result.native = ir_.take_callable(result.storage->address);
+      result.storage.reset();
+      result.callable_address = 0;
+      result.callable_temporary = true;
+      carry_callable = true;
+    }
+    valid_view(result, at);
     const bool owns = result.type.kind == Type::region && result.type.owned;
     if (owns) result = take_owner(result, at);
     close_holdings(holding_begin, result, at);
-    if (result.procedure) valid_view(result, at);
+    if (result.type.kind == Type::procedure) valid_view(result, at);
     ir_.restore(native_scope);
+    if (carry_callable) {
+      result.storage = StorageView{ir_.hold_callable(result.native, parent_module), parent_scope, {}};
+      register_callable_holder(result);
+    }
     if (owns) result = hold_region(std::move(result), parent_module, true);
     return result;
+  }
+  Value detach_callable(Value value, const Location &at) {
+    value = read_value(std::move(value), at);
+    value.native = value.callable_temporary && value.storage
+        ? ir_.take_callable(value.storage->address) : ir_.copy_callable(value.native);
+    value.storage.reset(); value.pointer.reset(); value.pointer_view = false;
+    value.callable_address = 0;
+    value.callable_temporary = true;
+    return value;
+  }
+  Value prepare_callable_argument(Value value, const std::optional<StorageView> &destination) {
+    // value.native is the already evaluated argument, not a reload of its
+    // potentially replaced holder. Fresh unaliased images can transfer directly.
+    value.native = value.callable_temporary && value.storage
+        ? ir_.take_callable(value.storage->address) : ir_.copy_callable(value.native);
+    if (destination) {
+      value.storage = destination;
+      ir_.write_pointer(value.storage->address, value.native);
+    } else value.storage = StorageView{ir_.hold_callable(value.native, module_top_level_), local_scope_, {}};
+    value.pointer.reset();
+    value.pointer_view = false;
+    value.callable_address = 0;
+    value.callable_temporary = true;
+    return value;
   }
   Type resolve_name(Type type, const Module &module, const Location &at) {
     if (type.kind != Type::named) return type;
@@ -760,10 +1403,15 @@ class Compiler {
     }
     return value;
   }
-  bool establishes(const Value &value, Conformance required, const Location &at) {
-    return std::any_of(value.conformances.begin(), value.conformances.end(), [&](const Conformance &relation) {
+  bool establishes(const Value &source, Conformance required, const Location &at) {
+    if (possible_result_facts_ && !source.result_fact_origins.empty()) return true;
+    const auto matches = [&](const Conformance &relation) {
       return relation.data == required.data && nominal_subtype(relation.interface, required.interface, at);
-    });
+    };
+    if (std::any_of(source.conformances.begin(), source.conformances.end(), matches)) return true;
+    auto value = source;
+    resolve_result_facts(value, at);
+    return std::any_of(value.conformances.begin(), value.conformances.end(), matches);
   }
   bool accepts(const Value &actual, Type expected, const Module &visible, const Location &at) {
     if (actual.type == Type::never) return true;
@@ -895,8 +1543,9 @@ class Compiler {
     return {type, native, {}, nullptr, region_id};
   }
   llvm::Value *stored_value(const Value &value, Type destination, const Location &at) {
-    if (destination.kind == Type::reference && value.read_only)
-      fail(at, "cannot store a read-only view in a writable reference field");
+    if (local_bits(destination)) require_argument_reads(value);
+    if (destination.kind == Type::reference)
+      require_writable(value.read_only, at, "cannot store a read-only view in a writable reference field");
     if (destination.kind == Type::exception && !destination.identity)
       return ir_.store_exception(value.native, exception_category(value));
     return value.native;
@@ -915,6 +1564,8 @@ class Compiler {
     if (!widens(value.type, target))
       fail(at, "no lossless numeric widening from " + type_name(value.type) + " to " + type_name(target));
     if (!value.native) fail(at, "read of storage before definite initialization in a conversion");
+    require_argument_reads(value);
+    value.argument_reads.clear();
     value.native = ir_.cast(value.type, target, value.native);
     value = bits_value(std::move(value));
     value.type = std::move(target);
@@ -937,7 +1588,8 @@ class Compiler {
     return form.parameters[std::min(index, form.parameters.size() - 1)];
   }
   std::optional<Signature> signature(const Form &form, const Module &lexical, const std::vector<Value> &args,
-                                      const Module &caller, const Location &at, bool required = false, const Locals *captures = nullptr) {
+                                      const Module &caller, const Location &at, bool required = false,
+                                      const Locals *captures = nullptr, bool check_access = true) {
     const auto reject = [&](const std::string &reason) -> std::optional<Signature> {
       if (required) fail(at, reason + " for '" + form.name + "'\n" + location_text(form.at) + ": note: signature declared here");
       return {};
@@ -966,7 +1618,10 @@ class Compiler {
       if (found == type_context_.bindings.end()) return reject("cannot infer type parameter '" + parameter.name + "'");
       if (parameter.bound) {
         Value value; value.type = found->second;
-        for (const auto &arg : args) merge_conformances(value.conformances, arg.conformances);
+        for (const auto &arg : args) {
+          merge_conformances(value.conformances, arg.conformances);
+          merge_result_origins(value, arg);
+        }
         if (!accepts(value, resolve(*parameter.bound, lexical, parameter.at), caller, at))
           return reject("type argument does not satisfy bound for '" + parameter.name + "'");
       }
@@ -982,28 +1637,28 @@ class Compiler {
       if (!actual) return "owner '" + name + "' requires storage with known provenance";
       if (declaration->root) {
         if (!value.region_id) return "region owner '" + name + "' cannot bind lexical storage";
+        if (!possible_result_facts_) resolve_region_root(*value.region_id, at);
         const auto &metadata = regions_.at(*value.region_id);
         if (!metadata.root || !accepts(contextual(scalar(*metadata.root, nullptr), caller),
             resolve(*declaration->root, lexical, declaration->at), caller, at))
           return "region owner '" + name + "' does not satisfy its root constraint";
         Type type{Type::region}; type.target = std::make_shared<Type>(*metadata.root);
         auto region = scalar(type, metadata.owner, value.region_id);
-        region.read_only = value.read_only; region.conformances = value.conformances;
+        region.read_only = value.read_only; region.conformances = value.conformances; region.result_fact_origins = value.result_fact_origins;
         value = std::move(region);
       }
       const auto [found, inserted] = result.owner_values.emplace(name, borrowed(value));
       if (!inserted) {
         if (storage_owner(found->second) != actual) return "owner '" + name + "' requires the same actual owner";
-        found->second.read_only = found->second.read_only && value.read_only;
+        found->second.read_only = ReadOnly::both(found->second.read_only, value.read_only);
       }
       return {};
     };
     for (size_t i = 0; i < args.size(); ++i) {
       const auto &parameter = parameter_at(form, i);
-      if (form.operation && ((form.name == "=" && i == 0) || swap_operation(form.name)) && args[i].read_only != parameter.read_only)
+      if (check_access && form.operation && ((form.name == "=" && i == 0) || swap_operation(form.name)) && args[i].read_only != parameter.read_only)
         return reject("reference-assignment destination requires an exact const qualifier");
-      if (args[i].read_only && !parameter.read_only &&
-          (object_type(args[i].type) || !parameter.owner.empty()))
+      if (check_access && !parameter.read_only && (object_type(args[i].type) || !parameter.owner.empty()) && args[i].read_only)
         return reject("cannot pass a read-only view to a writable parameter");
       if (!parameter.owner.empty())
         if (const auto error = bind_owner(parameter.owner, args[i])) return reject(*error);
@@ -1024,10 +1679,8 @@ class Compiler {
       if (!unknown.empty()) {
         if (unknown.size() != 1 || remaining.size() != 1)
           return reject("cannot uniquely infer callable environment owners; supply explicit region arguments");
-        const auto dependencies = closure_regions(args[i]);
-        const auto found = dependencies.find(*remaining.begin());
-        if (found == dependencies.end()) return reject("callable environment lacks its declared region provenance");
-        if (const auto error = bind_owner(unknown.front(), found->second)) return reject(*error);
+        const auto owner = callable_owner(args[i], *remaining.begin(), at);
+        if (const auto error = bind_owner(unknown.front(), owner)) return reject(*error);
       }
     }
     const auto check_names = [&](auto &&self, const Type &type) -> std::optional<std::string> {
@@ -1298,6 +1951,25 @@ class Compiler {
       type.nullable_views.push_back(parameter.declaration_kind == "ptr" && !parameter.owner.empty());
     }
     type.owners.push_back(owner_index(form.result_owner));
+    const auto capture_parameters = [&](auto &&self, Type &value) -> void {
+      if (value.kind != Type::procedure) return;
+      value.capture_formals.resize(value.capture_owners.size());
+      for (size_t i = 0; i < value.capture_owners.size(); ++i) {
+        const auto &name = value.capture_owners[i];
+        if (std::any_of(form.owner_parameters.begin(), form.owner_parameters.end(),
+            [&](const auto &owner) { return owner.name == name; }))
+          value.capture_formals[i] = owner_index(name);
+      }
+      if (std::none_of(value.capture_formals.begin(), value.capture_formals.end(), [](size_t id) { return id; }))
+        value.capture_formals.clear();
+      for (auto &parameter : value.parameters) self(self, parameter);
+      if (value.target) {
+        value.target = std::make_shared<Type>(*value.target);
+        self(self, *value.target);
+      }
+    };
+    for (auto &parameter : type.parameters) capture_parameters(capture_parameters, parameter);
+    capture_parameters(capture_parameters, *type.target);
     type.const_views.push_back(form.result_const);
     type.nullable_views.push_back(form.result_kind == "ptr");
     if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool x) { return x; })) type.nullable_views.clear();
@@ -1403,8 +2075,9 @@ class Compiler {
       if (!value) continue;
       if (!value->region_id) fail(at, "symbolic object has no proven region owner: " + symbol_names_[id]);
       const auto [found, inserted] = owners.emplace(group, std::pair{*value->region_id, id});
-      if (!inserted && found->second.first != *value->region_id)
-        fail(at, "shared-region constraint violated by " + symbol_names_[found->second.second] + " and " + symbol_names_[id] +
+      if (!inserted)
+        require_same_region(found->second.first, *value->region_id, at,
+            "shared-region constraint violated by " + symbol_names_[found->second.second] + " and " + symbol_names_[id] +
             "; a partial perform replay may require explicit touch of its companion symbol\n" +
             location_text(group->at) + ": note: shared region '" + group->name + "' declared here");
     }
@@ -1427,6 +2100,7 @@ class Compiler {
     const auto *found = env.lookup(id);
     if (!found) fail(at, (env.captured_context
         ? "perform requires an unavailable definition-time capture " : "missing required binding ") + symbol_names_[id]);
+    if (found->capture_use) found->capture_use->require();
     if (env.replay && env.captured(id, found)) {
       for (auto replay = env.replay; replay; replay = replay->defining_replay) {
         const auto origin = replay->captured_values.lookup(id);
@@ -1435,10 +2109,22 @@ class Compiler {
       }
     }
     if (found->region_id) region_pointer(*found, at);
-    if (!materialize || found->type.kind == Type::procedure || found->type.kind == Type::region) return *found;
+    if (found->type.kind == Type::region) return *found;
+    if (found->type.kind == Type::procedure) {
+      auto value = *found;
+      if (native_callable(value)) {
+        if (value.replayed) value.native = ir_.read({value.type, nullptr, ir_.read_symbol(id, value.type)});
+        else if (value.storage && !env.captured(id, found)) {
+          value.storage->address = ir_.read_symbol(id, value.type);
+          value.pointer.reset();
+        }
+      }
+      return value;
+    }
+    if (!materialize) return *found;
     const auto type = found->type;
-    auto result = scalar(type, env.captured(id, found) ? found->native : ir_.read_symbol(id, type), found->region_id);
-    result.conformances = found->conformances;
+    auto result = scalar(type, env.captured(id, found) && !found->replayed ? found->native : ir_.read_symbol(id, type), found->region_id);
+    result.conformances = found->conformances; result.result_fact_origins = found->result_fact_origins;
     result.exception_category = found->exception_category;
     result.read_only = found->read_only;
     return result;
@@ -1469,7 +2155,6 @@ class Compiler {
       value.type.owned = false;
       value = hold_region(value, module_top_level_, false);
       regions_.at(*value.region_id).symbolic = true;
-      if (value.type.target) regions_.at(*value.region_id).root = *value.type.target;
     }
     if (object_type(value.type)) {
       if (!value.region_id || !regions_.at(*value.region_id).symbolic)
@@ -1496,8 +2181,12 @@ class Compiler {
       if (!permitted) fail(at, "procedure checked NullPointerException exceeds symbolic declaration");
       value.type = symbol_types_.at(id);
     } else fix_type(id, value.type, at);
-    ir_.effect(id, value.type, value.native);
+    ir_.effect(id, value.type, value.type.kind == Type::procedure
+        ? (native_callable(value) && value.storage ? value.storage->address : nullptr) : value.native);
+    if (value.type.kind == Type::procedure) value.pointer.reset();
+    value.replayed = false;
     value.owner = &owner;
+    value.callable_temporary = false;
     binding_values_.push_back(std::move(value));
     env.bindings = binding_factory_.add(env.bindings, id, &binding_values_.back());
     if (!grouped) binding_check(env, at);
@@ -1598,9 +2287,16 @@ class Compiler {
       auto value = outer.visible.at(name);
       const bool slot = outer.regional_slots.contains(name);
       if (value.type.kind == Type::region) value = borrowed(std::move(value));
-      else if (!value.procedure && !slot)
+      else if (value.type.kind != Type::procedure && !slot)
         fail(at, "a closure cannot capture lexical variable storage; declare a var alias to regional storage");
       valid_view(value, at);
+      if (native_callable(value)) {
+        value = read_value(std::move(value), at);
+        std::set<NativeCallDemand *> resolving;
+        resolve_native_flow(value.callable_flow, resolving);
+        value.pointer.reset(); value.pointer_view = false;
+        value.callable_address = 0;
+      }
       captures.declare(name, std::move(value), outer.locations.at(name));
       if (slot) captures.regional_slots.insert(name);
       if (form.explicit_captures && !required.contains(name))
@@ -1620,24 +2316,146 @@ class Compiler {
     }
     return value;
   }
-  Value define_procedure(Form &form, const Module &lexical, const Environment &env, const Locals &locals = {}) {
+  static void callable_fields(Procedure &procedure, const std::function<void(llvm::Value *&, bool)> &visit) {
+    const auto value_fields = [&](Value &value) {
+      if (value.procedure && !value.procedure->code) {
+        // An unmaterialized generic function has a statically selected body.
+        // Its captured fields still belong to the complete enclosing value.
+        auto captured = std::make_shared<Procedure>(*value.procedure);
+        callable_fields(*captured, visit);
+        value.procedure = std::move(captured);
+        return;
+      }
+      const auto field = [&](llvm::Value *&native, bool nested = false) { if (native) visit(native, nested); };
+      field(value.native, native_callable(value));
+      if (value.type.kind == Type::procedure) return;
+      field(value.exception_category);
+      if (value.storage) field(value.storage->address);
+      if (value.reference_field) {
+        field(value.reference_field->owner); field(value.reference_field->address);
+      }
+    };
+    for (auto &[name, value] : procedure.lexical_captures.visible) value_fields(value);
+    for (auto &[name, value] : procedure.lexical_captures.owner_anchors) value_fields(value);
+  }
+  Value materialize_callable(Value value, const Environment &environment, const Location &at) {
+    const auto &type = value.type;
+    bool native = value.procedure->form->result_type && native_callable_type(type, false);
+    if (!type.pure_callable)
+      for (const auto &[id, binding] : value.procedure->captures.bindings)
+        native &= local_bits(binding->type) || object_type(binding->type) || binding->type.kind == Type::region ||
+            (native_callable(*binding) && !binding->nullable) || (binding->procedure && !binding->procedure->builtin.empty());
+    for (const auto &[name, capture] : value.procedure->lexical_captures.visible)
+      if (capture.procedure && !capture.procedure->code && !capture.type.pure_callable) native = false;
+    auto procedure = std::make_shared<Procedure>(*value.procedure);
+    for (auto &[name, capture] : procedure->lexical_captures.visible)
+      if (native_callable(capture)) {
+        if (!native) {
+          capture.native = ir_.copy_callable(capture.native);
+          capture.storage = StorageView{ir_.hold_callable(capture.native, module_top_level_), local_scope_, {}};
+        } else capture.storage.reset();
+      }
+    value.procedure = procedure;
+    if (!native) return value;
+    std::vector<llvm::Value *> fields;
+    std::set<size_t> nested;
+    callable_fields(*procedure, [&](llvm::Value *&field, bool child) {
+      if (child) nested.insert(fields.size());
+      fields.push_back(field);
+    });
+    std::vector<size_t> dynamic_values;
+    std::set<size_t> dynamic_regions;
+    if (!type.pure_callable)
+      for (const auto &[id, binding] : procedure->captures.bindings)
+        if (local_bits(binding->type) || object_type(binding->type) || binding->type.kind == Type::region) {
+          dynamic_values.push_back(id);
+          fields.push_back(stored_value(*binding, binding->type, at));
+          if (binding->region_id) dynamic_regions.insert(*binding->region_id);
+        }
+    std::vector<size_t> dynamic_procedures;
+    std::vector<std::pair<size_t, std::shared_ptr<CaptureUse>>> capture_fields;
+    if (!type.pure_callable) {
+      const auto captures = procedure->captures.bindings;
+      for (const auto &[id, binding] : captures)
+        if (native_callable(*binding)) {
+          auto captured = *binding;
+          if (captured.replayed) captured.native = ir_.read({captured.type, nullptr, ir_.read_symbol(id, captured.type)});
+          else if (captured.storage && !environment.captured(id, binding))
+            captured.storage->address = ir_.read_symbol(id, captured.type);
+          captured = read_value(std::move(captured), at);
+          captured.storage.reset(); captured.pointer.reset(); captured.pointer_view = false;
+          captured.callable_address = 0;
+          captured.callable_temporary = false;
+          captured.replayed = false;
+          captured.capture_use = std::make_shared<CaptureUse>(CaptureUse{false, binding->capture_use});
+          capture_fields.emplace_back(fields.size(), captured.capture_use);
+          dynamic_procedures.push_back(id);
+          nested.insert(fields.size());
+          fields.push_back(captured.native);
+          binding_values_.push_back(std::move(captured));
+          procedure->captures.bindings = binding_factory_.add(procedure->captures.bindings, id, &binding_values_.back());
+          procedure->captures.captured_bindings = binding_factory_.add(
+              procedure->captures.captured_bindings, id, &binding_values_.back());
+        }
+    }
+    std::vector<size_t> regions;
+    for (const auto &[id, owner] : closure_regions(value)) {
+      regions.push_back(id);
+      fields.push_back(region_pointer(owner, at));
+    }
+    for (const auto id : dynamic_regions) fields.push_back(regions_.at(id).owner);
+    LLVMEmission::NativeDefinition entry;
+    if (!contextual_callable(type)) entry = ir_.native_declaration("callback", type.parameters, *type.target);
+    entry.checked_null = !type.throws_types.empty();
+    auto *layout = ir_.callable_layout(fields, nested);
+    auto *key = contextual_callable(type) ? ir_.callable_key() : entry.function;
+    auto construction = dynamic_procedures.empty() ? nullptr : std::make_shared<LLVMEmission::CallableConstruction>();
+    value.native = ir_.create_callable(entry.function, layout, fields, nested, key, construction.get());
+    procedure->code = std::make_shared<CallableCode>(CallableCode{
+        std::move(entry), layout, std::move(nested), std::move(regions), std::move(dynamic_values), key,
+        std::move(dynamic_procedures), std::move(capture_fields), std::move(construction),
+        {dynamic_regions.begin(), dynamic_regions.end()}});
+    if (type.target->kind == Type::procedure && !borrowed_result(type)) {
+      callable_flows_.push_back({{}, {}, true});
+      procedure->code->result_flow = callable_flows_.size() - 1;
+    }
+    value.procedure = std::move(procedure);
+    callable_flows_.push_back({value.procedure, {}});
+    value.callable_flow = callable_flows_.size() - 1;
+    value.storage = StorageView{ir_.hold_callable(value.native, module_top_level_), local_scope_, {}};
+    register_callable_holder(value);
+    value.callable_temporary = true;
+    return value;
+  }
+  Value define_procedure(Form &form, const Module &lexical, const Environment &env, const Locals &locals = {},
+                         ImplementationContext implementation = {}, std::vector<CallableDeclaration> declarations = {}) {
     resolve_procedure_symbols(*form.body, lexical);
     auto proc = std::make_shared<Procedure>();
     proc->form = &form;
     proc->lexical = &lexical;
+    proc->implementation = std::move(implementation);
+    proc->declarations = std::move(declarations);
     proc->lexical_captures = capture_variables(form, locals);
-    // This is compiler metadata, not a runtime closure or a retained region.
-    // SSA values already represent each binding's value at its definition.
-    // Only demanded reads generate native uses, after typed method selection.
+    // Snapshot dynamic payloads at definition time. Native materialization embeds
+    // the procedural snapshots demanded by checked reads or explicit touches.
     if (form.kind == Form::Kind::procedure) {
       proc->captures = env;
+      for (const auto &[id, value] : env.bindings) {
+        if ((!local_bits(value->type) && !object_type(value->type)) ||
+            (env.captured(id, value) && !value->replayed)) continue;
+        auto snapshot = *value;
+        snapshot.native = ir_.read_symbol(id, value->type);
+        snapshot.replayed = false;
+        binding_values_.push_back(std::move(snapshot));
+        proc->captures.bindings = binding_factory_.add(proc->captures.bindings, id, &binding_values_.back());
+      }
       proc->captures.captured_context = true;
-      proc->captures.captured_bindings = env.bindings;
+      proc->captures.captured_bindings = proc->captures.bindings;
     }
     Value result{procedure_type(form, lexical), {}, std::move(proc), &lexical};
     result.type = bind_capture_type(result.type, result.procedure->lexical_captures.owners(), form.at, true);
     for (const auto &[id, access] : closure_regions(result)) result.type.capture_regions.push_back(id);
-    return result;
+    return materialize_callable(std::move(result), env, form.at);
   }
   Value block(const Expression &expr, const Module &module, Environment env, Locals locals,
               bool function_context, bool discard_result = false, std::optional<Type> result_type = {}, bool copy_result = false,
@@ -1651,6 +2469,7 @@ class Compiler {
     const auto native_scope = ir_.scope();
     const auto scope_id = scopes_.size();
     scopes_.push_back(true);
+    const auto parent_scope = local_scope_;
     const auto lexical_scope = llvm::SaveAndRestore(local_scope_, scope_id);
 
     Value result;
@@ -1663,7 +2482,10 @@ class Compiler {
                             (!assignment || (!discard_result && i + 1 == expr.children.size())) &&
                                 (read_result || i + 1 != expr.children.size()),
                             copy_result && i + 1 == expr.children.size(),
-                            read_result || i + 1 != expr.children.size());
+                            read_result || i + 1 != expr.children.size(),
+                            i + 1 == expr.children.size() && result_type && result_type->kind == Type::procedure
+                                ? result_type : std::nullopt,
+                            i + 1 == expr.children.size() ? null_owner : nullptr);
       }
     } catch (const EndPath &) { result = scalar(Type::never, nullptr); }
     if (discard_result && result.type != Type::never) result = {};
@@ -1671,23 +2493,66 @@ class Compiler {
       result = null_target(*result_type, *null_owner, expr.at);
     if (result_type && result.type != Type::never) result = admit(std::move(result), *result_type, module, expr.at);
     if (copy_result && local_bits(result.type)) result = bits_value(read_value(std::move(result), expr.at));
+    if (copy_result && native_callable(result)) {
+      result = detach_callable(std::move(result), expr.at);
+      result.storage = StorageView{ir_.hold_callable(result.native, false), local_scope_, {}};
+      register_callable_holder(result);
+    }
     if (destination_binding && result.type != Type::never && result.pointer != destination_binding)
       fail(expr.at, "a (=) overload must return its destination binding's resulting view; finish the body with the lhs parameter");
     result.pointer.reset();
     scopes_[scope_id] = false;
-    valid_view(result, expr.at);
-    result = finish_scope(holding_begin, native_scope, std::move(result), expr.at, parent_module);
+    result = finish_scope(holding_begin, native_scope, std::move(result), expr.at, parent_module, parent_scope);
     if (result.arguments) fail(expr.at, "a variadic argument pack cannot escape its call scope");
     return result;
   }
   std::vector<Value> arguments(const Expression &expr, const Module &module, Environment &env,
                                Locals &locals, bool function_context,
                                std::vector<ConversionPoint> *points = nullptr,
-                               const std::vector<Method> &nullable_candidates = {}) {
+                               const std::vector<Method> &nullable_candidates = {},
+                               const Type *native_type = nullptr) {
     const auto region_initializer = llvm::SaveAndRestore(region_initializer_, false);
     std::vector<Value> values;
-    for (const auto &arg : expr.children) {
-      const bool forward = std::any_of(nullable_candidates.begin(), nullable_candidates.end(), [&](const Method &method) {
+    auto append = [&](Value value, bool forward) {
+      try { resolve_region_type(value, expr.at); }
+      catch (const UnresolvedAccess &) { /* Layout-dependent dispatch is checked at the call boundary. */ }
+      // Reserve cleanup before lowering later arguments. A selected by-value
+      // parameter constructs its snapshot here, even when a later argument
+      // replaces the source holder or exits exceptionally.
+      std::optional<StorageView> destination;
+      bool local = false, borrowed = false;
+      if (native_type && (values.size() < native_type->parameters.size() || native_type->variadic)) {
+        borrowed = borrowed_parameter(*native_type, values.size());
+        local = !borrowed;
+      }
+      for (const auto &method : nullable_candidates)
+        if (!method.form->parameters.empty() && (variadic(*method.form) || values.size() < method.form->parameters.size())) {
+          const bool external = !parameter_at(*method.form, values.size()).owner.empty();
+          local |= !external;
+          borrowed |= external;
+        }
+      if (points && native_callable(value) && local)
+        destination = StorageView{ir_.hold_callable(ir_.null_pointer(), module_top_level_), local_scope_, {}};
+      const bool prepared = destination && !borrowed;
+      if (prepared) {
+        value = prepare_callable_argument(std::move(value), destination);
+        register_callable_holder(value);
+      }
+      values.push_back(std::move(value));
+      if (points) {
+        points->push_back(conversion_point());
+        points->back().raw_view = forward;
+        points->back().callable_destination = destination;
+        points->back().callable_prepared = prepared;
+      }
+    };
+    const size_t first_argument = expr.kind == Expression::Kind::value_call ? 1 : 0;
+    for (size_t index = first_argument; index < expr.children.size(); ++index) {
+      const auto &arg = expr.children[index];
+      const bool native_forward = native_type && !native_type->nullable_views.empty() &&
+          (values.size() < native_type->parameters.size() || native_type->variadic) &&
+          native_type->nullable_views[std::min(values.size(), native_type->parameters.size() - 1)];
+      const bool forward = native_forward || std::any_of(nullable_candidates.begin(), nullable_candidates.end(), [&](const Method &method) {
         return !method.form->parameters.empty() && (variadic(*method.form) || values.size() < method.form->parameters.size()) &&
                parameter_at(*method.form, values.size()).declaration_kind == "ptr" &&
                !parameter_at(*method.form, values.size()).owner.empty();
@@ -1695,22 +2560,17 @@ class Compiler {
       auto value = expression(*arg, module, env, locals, function_context, false, false, !forward);
       if (!forward && value.storage) {
         const bool initialized = std::all_of(value.storage->cells.begin(), value.storage->cells.end(),
-            [&](size_t cell) { return cells_.at(cell).initialized; });
-        if (initialized) value = read_value(std::move(value), arg->at);
+            [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) != false; });
+        if (initialized) value = read_value(std::move(value), arg->at, true);
         else value.native = nullptr;
       } else if (!forward && value.type.kind != Type::reference && value.nullable) {
         value = read_value(std::move(value), arg->at);
       }
       if (arg->spread) {
         if (!value.arguments) fail(arg->at, "argument expansion requires a variadic parameter pack");
-        for (const auto &element : *value.arguments) {
-          values.push_back(forward ? element : read_value(element, arg->at));
-          if (points) { points->push_back(conversion_point()); points->back().raw_view = forward; }
-        }
-      } else {
-        values.push_back(std::move(value));
-        if (points) { points->push_back(conversion_point()); points->back().raw_view = forward; }
-      }
+        for (const auto &element : *value.arguments)
+          append(forward ? element : read_value(element, arg->at), forward);
+      } else append(std::move(value), forward);
     }
     return values;
   }
@@ -1725,9 +2585,672 @@ class Compiler {
       return converting_parameters(*function.form);
     });
   }
+  static bool borrowed_parameter(const Type &type, size_t index) {
+    return !type.owners.empty() && type.owners[std::min(index, type.parameters.size() - 1)] &&
+        type.parameters[std::min(index, type.parameters.size() - 1)].kind != Type::region;
+  }
+  static bool borrowed_result(const Type &type) {
+    return !type.owners.empty() && type.owners.back();
+  }
+  static bool native_callable_type(const Type &type, bool concrete = true) {
+    const auto supported = [concrete](const Type &value) {
+      return local_bits(value) || (!concrete && representation(value).kind == Type::parameter) ||
+          native_callable_type(value, false);
+    };
+    if (type.kind != Type::procedure || !type.target ||
+        !(supported(*type.target) || *type.target == Type::void_type ||
+          (type.target->kind == Type::region && type.target->owned) ||
+          (borrowed_result(type) && (type.target->kind == Type::array || type.target->kind == Type::regional ||
+                                    (type.target->kind == Type::region && !type.target->owned)))) ||
+        (concrete && (!type.bounds.empty() || type.variadic))) return false;
+    if (borrowed_result(type) &&
+        !local_bits(*type.target) && type.target->kind != Type::procedure && type.target->kind != Type::array &&
+        type.target->kind != Type::regional && type.target->kind != Type::region &&
+        (concrete || representation(*type.target).kind != Type::parameter)) return false;
+    // Unqualified borrowed results still need body-derived provenance.
+    if (!borrowed_result(type) && !type.owner_bounds.empty() &&
+        *type.target != Type::void_type && type.target->kind != Type::procedure &&
+        !(type.target->kind == Type::region && type.target->owned) &&
+        (type.const_views.empty() || !type.const_views.back())) return false;
+    for (size_t i = 0; i < type.parameters.size(); ++i) {
+      const auto &parameter = type.parameters[i];
+      if (borrowed_parameter(type, i)) {
+        if (!supported(parameter) && !object_type(parameter)) return false;
+      } else if (!supported(parameter) && parameter.kind != Type::region) return false;
+    }
+    return true;
+  }
+  static bool contextual_callable(const Type &type) {
+    return !type.pure_callable || !type.bounds.empty() || !type.owner_bounds.empty() || type.variadic ||
+        (type.target && type.target->kind == Type::region && type.target->owned) ||
+        std::any_of(type.parameters.begin(), type.parameters.end(),
+        [](const Type &parameter) { return parameter.kind == Type::procedure || parameter.kind == Type::region; });
+  }
+  Type instantiate_callable(Type type, const std::vector<Value> &args, const Module &caller, const Location &at) {
+    const size_t fixed = type.parameters.size() - size_t(type.variadic);
+    if (args.size() < fixed || (!type.variadic && args.size() != fixed))
+      fail(at, "callable argument count mismatch");
+    const auto parameter = [&](size_t i) -> const Type & { return type.parameters[std::min(i, type.parameters.size() - 1)]; };
+    std::vector<std::optional<Type>> bindings(type.bounds.size());
+    const auto infer = [&](auto &&self, const Type &pattern, const Type &actual) -> void {
+      // A supplied polymorphic value owns its binders; they are not variables
+      // of this invocation. Nested signatures without binders can mention ours.
+      if (pattern.kind == Type::procedure && (!pattern.bounds.empty() || !pattern.owner_bounds.empty())) return;
+      if (pattern.kind == Type::parameter) {
+        auto &bound = bindings.at(pattern.identity);
+        if (bound && *bound != actual) fail(at, "inconsistent type-parameter arguments");
+        bound = actual;
+        return;
+      }
+      if (pattern.target && actual.target) self(self, *pattern.target, *actual.target);
+      if (pattern.parameters.size() == actual.parameters.size())
+        for (size_t i = 0; i < pattern.parameters.size(); ++i) self(self, pattern.parameters[i], actual.parameters[i]);
+    };
+    for (size_t i = 0; i < args.size(); ++i) infer(infer, parameter(i), args[i].type);
+    const auto substitute = [&](auto &&self, Type value) -> Type {
+      if (value.kind == Type::procedure && (!value.bounds.empty() || !value.owner_bounds.empty())) return value;
+      if (value.kind == Type::parameter) {
+        if (!bindings.at(value.identity)) fail(at, "cannot infer callable type parameter " + std::to_string(value.identity + 1));
+        return *bindings[value.identity];
+      }
+      if (value.target) value.target = std::make_shared<Type>(self(self, *value.target));
+      for (auto &parameter : value.parameters) parameter = self(self, parameter);
+      return value;
+    };
+    for (size_t i = 0; i < bindings.size(); ++i) {
+      if (!bindings[i]) fail(at, "cannot infer callable type parameter " + std::to_string(i + 1));
+      if (type.bounds[i] == Type::void_type) continue;
+      auto value = scalar(*bindings[i], nullptr);
+      for (const auto &arg : args) {
+        merge_conformances(value.conformances, arg.conformances);
+        merge_result_origins(value, arg);
+      }
+      if (!accepts(value, substitute(substitute, type.bounds[i]), caller, at))
+        fail(at, "type argument does not satisfy callable bound");
+    }
+    std::vector<Type> parameters;
+    std::vector<bool> qualifiers, nullable;
+    std::vector<size_t> owners;
+    for (size_t i = 0; i < args.size(); ++i) {
+      parameters.push_back(substitute(substitute, parameter(i)));
+      const auto formal = std::min(i, type.parameters.size() - 1);
+      if (!type.const_views.empty()) qualifiers.push_back(type.const_views[formal]);
+      if (!type.nullable_views.empty()) nullable.push_back(type.nullable_views[formal]);
+      if (!type.owners.empty()) owners.push_back(type.owners[formal]);
+    }
+    if (!type.const_views.empty()) qualifiers.push_back(type.const_views.back());
+    if (!type.nullable_views.empty()) nullable.push_back(type.nullable_views.back());
+    if (!type.owners.empty()) owners.push_back(type.owners.back());
+    type.parameters = std::move(parameters);
+    type.const_views = std::move(qualifiers);
+    type.nullable_views = std::move(nullable);
+    type.owners = std::move(owners);
+    for (auto &bound : type.owner_bounds) bound = substitute(substitute, bound);
+    type.target = std::make_shared<Type>(substitute(substitute, *type.target));
+    type.bounds.clear(); type.variadic = false;
+    std::map<size_t, std::pair<bool, size_t>> owner_values;
+    const auto bind_owner = [&](size_t owner, const Value &value) {
+      valid_view(value, at);
+      const auto actual = storage_owner(value);
+      if (!actual) fail(at, "callable owner parameter requires storage with known provenance");
+      if (owner_values.emplace(owner, *actual).first->second != *actual)
+        fail(at, "callable owner parameter requires the same actual owner");
+      const auto &bound = type.owner_bounds.at(owner - 1);
+      if (bound == Type::void_type) return;
+      if (!value.region_id) fail(at, "region owner parameter cannot bind lexical storage");
+      const auto &region = regions_.at(*value.region_id);
+      if (!region.root || !accepts(contextual(scalar(*region.root, nullptr), caller), bound, caller, at))
+        fail(at, "region owner parameter does not satisfy its root constraint");
+    };
+    for (size_t i = 0; i < args.size() && !type.owners.empty(); ++i) {
+      const auto owner = type.owners[i];
+      if (!owner) continue;
+      bind_owner(owner, args[i]);
+      if (type.const_views.empty() || !type.const_views[i])
+        require_writable(args[i].read_only, at, "cannot pass a read-only view to a writable parameter");
+    }
+    for (size_t i = 0; i < args.size(); ++i) {
+      const auto &pattern = type.parameters[i];
+      if (pattern.capture_formals.empty()) continue;
+      std::set<size_t> remaining(args[i].type.capture_regions.begin(), args[i].type.capture_regions.end());
+      for (const auto id : pattern.capture_regions) remaining.erase(id);
+      std::set<size_t> unknown;
+      for (const auto formal : pattern.capture_formals) {
+        if (!formal) continue;
+        if (const auto found = owner_values.find(formal); found != owner_values.end()) {
+          if (!found->second.first) fail(at, "callable environment owner must be regional");
+          remaining.erase(found->second.second);
+        } else unknown.insert(formal);
+      }
+      if (unknown.empty()) continue;
+      if (unknown.size() != 1 || remaining.size() != 1)
+        fail(at, "cannot uniquely infer callable environment owners; supply explicit region arguments");
+      bind_owner(*unknown.begin(), callable_owner(args[i], *remaining.begin(), at));
+    }
+    const auto bind_captures = [&](auto &&self, Type &value) -> void {
+      // A nested generic callable retains its own owner binder namespace.
+      if (value.kind != Type::procedure || !value.bounds.empty() || !value.owner_bounds.empty()) return;
+      value.capture_owner_regions.resize(value.capture_owners.size());
+      for (size_t i = 0; i < value.capture_formals.size(); ++i) {
+        const auto formal = value.capture_formals[i];
+        if (!formal) continue;
+        const auto found = owner_values.find(formal);
+        if (found == owner_values.end()) fail(at, "cannot infer callable result environment owner from the arguments");
+        if (!found->second.first) fail(at, "callable environment owner must be regional");
+        value.capture_owner_regions[i] = found->second.second;
+        value.capture_regions.push_back(found->second.second);
+      }
+      value.capture_formals.clear();
+      std::sort(value.capture_regions.begin(), value.capture_regions.end());
+      value.capture_regions.erase(std::unique(value.capture_regions.begin(), value.capture_regions.end()), value.capture_regions.end());
+      for (const auto &owner : value.capture_owner_regions)
+        if (!owner) fail(at, "callable environment owner has no argument or captured region anchor");
+      for (auto &parameter : value.parameters) self(self, parameter);
+      if (value.target) {
+        value.target = std::make_shared<Type>(*value.target);
+        self(self, *value.target);
+      }
+    };
+    for (auto &parameter : type.parameters) bind_captures(bind_captures, parameter);
+    bind_captures(bind_captures, *type.target);
+    if (!native_callable_type(type)) fail(at, "this instantiated callable signature needs native parameter/result support");
+    return type;
+  }
+  llvm::Value *borrowed_operand(const Value &value, const Location &at) {
+    valid_view(value, at);
+    if (value.type.kind == Type::region) return region_pointer(value, at);
+    if (value.storage) return value.storage->address;
+    return ir_.nullable_address(region_pointer(value, at), value.native);
+  }
+  const std::vector<Value> &checked_returns(size_t id, const Location &at) {
+    auto &facts = return_facts_.at(id - 1);
+    if (!facts.producer) return facts.alternatives;
+    auto &demand = *facts.producer;
+    if (active_native_call(demand)) throw UnresolvedAccess(at);
+    std::set<NativeCallDemand *> resolving;
+    resolve_native_flow(demand.flow, resolving);
+    compile_native_call(demand);
+    if (demand.reused) return checked_returns(demand.reused->record_result, at);
+    const auto choices = callable_choices(demand.flow);
+    if (!choices.closed || demand.selection || std::any_of(choices.definitions.begin(), choices.definitions.end(),
+        [&](const auto &source) { return !demand.emitted.contains(source.get()); })) throw UnresolvedAccess(at);
+    return facts.alternatives;
+  }
+  std::optional<Type> result_layout(size_t origin, const Location &at, bool complete) {
+    std::set<size_t> visited;
+    std::optional<Type> concrete;
+    const auto visit = [&](auto &&self, size_t id) -> void {
+      if (!visited.insert(id).second) return;
+      const auto &facts = return_facts_.at(id - 1);
+      if (!complete && facts.producer && facts.producer->reused) {
+        self(self, facts.producer->reused->record_result);
+        return;
+      }
+      // Partial evidence comes only from already checked bodies. Every use of
+      // it retains its origin for validation against the closed return graph.
+      const auto &alternatives = complete ? checked_returns(id, at) : facts.alternatives;
+      for (const auto &result : alternatives) {
+        if (result.result_type_origin) self(self, result.result_type_origin);
+        else {
+          const auto actual = result.type.kind == Type::region && result.type.target ? *result.type.target : result.type;
+          if (!concrete) concrete = actual;
+          else if (*concrete != actual)
+            fail(at, "native regional results with different concrete types need further result-dispatch support");
+        }
+      }
+    };
+    visit(visit, origin);
+    return concrete;
+  }
+  void resolve_result_type(Value &value, const Location &at, bool allow_partial = false) {
+    if (!value.result_type_origin) return;
+    std::optional<Type> concrete;
+    bool partial = false;
+    try { concrete = result_layout(value.result_type_origin, at, true); }
+    catch (const UnresolvedAccess &) {
+      if (!allow_partial) throw;
+      concrete = result_layout(value.result_type_origin, at, false);
+      partial = true;
+    }
+    if (!concrete) throw UnresolvedAccess(at);
+    deferred_checks_.push_back({[this, origin = value.result_type_origin, concrete, at] {
+      return result_layout(origin, at, true) != concrete;
+    }, at, "native result layout changed after recursive context refinement"});
+    if (value.type.kind == Type::region) {
+      value.type.target = std::make_shared<Type>(*concrete);
+      if (!partial) {
+        regions_.at(*value.region_id).root = *concrete;
+        regions_.at(*value.region_id).root_origin = 0;
+      }
+    } else value.type = *concrete;
+    value.result_type_origin = 0;
+  }
+  void resolve_region_root(size_t id, const Location &at) {
+    const auto origin = regions_.at(id).root_origin;
+    if (!origin) return;
+    auto value = scalar(Type{Type::region}, nullptr, id);
+    value.result_type_origin = origin;
+    resolve_result_type(value, at);
+  }
+  void resolve_region_type(Value &value, const Location &at) {
+    if (value.type.kind != Type::region || !value.region_id) return;
+    resolve_region_root(*value.region_id, at);
+    const auto &root = regions_.at(*value.region_id).root;
+    value.type.target = root ? std::make_shared<Type>(*root) : nullptr;
+    value.result_type_origin = 0;
+  }
+  std::vector<Conformance> result_conformances(const std::vector<size_t> &origins, const Location &at) {
+    std::vector<Conformance> common;
+    std::set<size_t> visited;
+    std::vector<Conformance> candidates;
+    const auto collect = [&](auto &&self, size_t id) -> void {
+      if (!visited.insert(id).second) return;
+      for (const auto &result : checked_returns(id, at)) {
+        for (const auto &fact : result.conformances) {
+          auto interface = std::optional(fact.interface);
+          while (interface) {
+            append_conformance(candidates, {fact.data, *interface});
+            resolve_abstract(*interface, at);
+            interface = abstracts_.at(interface->identity).parent;
+          }
+        }
+        for (size_t input : result.result_fact_origins) self(self, input);
+      }
+    };
+    for (size_t id : origins) collect(collect, id);
+    std::map<size_t, std::vector<size_t>> dependents;
+    for (size_t id : visited)
+      for (const auto &result : checked_returns(id, at))
+        for (size_t input : result.result_fact_origins) dependents[input].push_back(id);
+    for (const auto &candidate : candidates) {
+      // Begin with the recursive hypothesis, then remove facts contradicted by
+      // a returning exit. Shared return graphs are checked as graphs, not paths.
+      std::set<size_t> rejected;
+      std::vector<size_t> pending(visited.begin(), visited.end());
+      while (!pending.empty()) {
+        const size_t id = pending.back(); pending.pop_back();
+        if (rejected.contains(id)) continue;
+        const auto &results = checked_returns(id, at);
+        const bool holds = std::all_of(results.begin(), results.end(), [&](const Value &result) {
+          return std::any_of(result.conformances.begin(), result.conformances.end(), [&](const Conformance &fact) {
+            return fact.data == candidate.data && nominal_subtype(fact.interface, candidate.interface, at);
+          }) || std::any_of(result.result_fact_origins.begin(), result.result_fact_origins.end(),
+              [&](size_t input) { return !rejected.contains(input); });
+        });
+        if (!holds) {
+          rejected.insert(id);
+          const auto &parents = dependents[id];
+          pending.insert(pending.end(), parents.begin(), parents.end());
+        }
+      }
+      if (std::any_of(origins.begin(), origins.end(),
+          [&](size_t id) { return !rejected.contains(id); })) append_conformance(common, candidate);
+    }
+    return common;
+  }
+  void resolve_result_facts(Value &value, const Location &at) {
+    if (possible_result_facts_ || value.result_fact_origins.empty()) return;
+    if (value.result_type_origin && region_definition(value.type)) resolve_result_type(value, at);
+    const auto facts = result_conformances(value.result_fact_origins, at);
+    deferred_checks_.push_back({[this, origins = value.result_fact_origins, facts, at] {
+      const auto current = result_conformances(origins, at);
+      return !std::is_permutation(facts.begin(), facts.end(), current.begin(), current.end());
+    }, at, "native result interface facts changed after recursive context refinement"});
+    for (const auto &fact : facts) append_conformance(value.conformances, fact);
+    value.result_fact_origins.clear();
+  }
+  static void merge_result_origins(Value &into, const Value &from) {
+    for (size_t id : from.result_fact_origins)
+      if (std::find(into.result_fact_origins.begin(), into.result_fact_origins.end(), id) == into.result_fact_origins.end())
+        into.result_fact_origins.push_back(id);
+  }
+  void join_result_facts(Value &result, std::vector<Value> alternatives) {
+    if (!(result.type.kind == Type::region && result.type.owned && alternatives.size() > 1) &&
+        std::none_of(alternatives.begin(), alternatives.end(),
+            [](const Value &value) { return !value.result_fact_origins.empty(); })) return;
+    return_facts_.push_back({nullptr, std::move(alternatives)});
+    result.result_fact_origins = {return_facts_.size()};
+    if (std::any_of(return_facts_.back().alternatives.begin(), return_facts_.back().alternatives.end(),
+        [](const Value &value) { return value.result_type_origin != 0; }))
+      result.result_type_origin = return_facts_.size();
+  }
+  Value borrowed_call_result(const Type &type, const std::vector<Value> &args,
+                             llvm::Value *address, const Location &at, size_t callable_address = 0,
+                             size_t record_result = 0) {
+    const auto owner = type.owners.back();
+    for (size_t i = 0; i < args.size(); ++i) {
+      if (type.owners[i] != owner) continue;
+      valid_view(args[i], at);
+      auto result = scalar(*type.target, nullptr, args[i].region_id);
+      result.read_only = !type.const_views.empty() && type.const_views.back();
+      if (result.type.kind == Type::region) {
+        region_pointer(result, at);
+        result.native = address;
+        const auto &root = regions_.at(*result.region_id).root;
+        result.type.target = root ? std::make_shared<Type>(*root) : nullptr;
+      } else if (result.type.kind == Type::array || result.type.kind == Type::regional) {
+        result.native = ir_.nullable_offset(region_pointer(result, at), address);
+        result.conformances = args[i].conformances; result.result_fact_origins = args[i].result_fact_origins;
+      } else result.storage = StorageView{address, args[i].storage ? args[i].storage->scope : std::nullopt, {}, true};
+      result.nullable = !type.nullable_views.empty() && type.nullable_views.back();
+      result.pointer_view = result.type.kind != Type::region;
+      result.callable_address = callable_address;
+      if (record_result) {
+        result.conformances.clear();
+        if (result.type.kind == Type::regional) result.result_type_origin = record_result;
+        result.result_fact_origins = {record_result};
+      }
+      if (result.nullable) {
+        // Forwarding a pointer does not establish initialization of its target.
+        for (size_t j = 0; result.storage && j < args.size(); ++j)
+          if (type.owners[j] == owner && args[j].type == *type.target && args[j].storage)
+            result.storage->cells.insert(args[j].storage->cells.begin(), args[j].storage->cells.end());
+        return result;
+      }
+      return read_value(std::move(result), at);
+    }
+    fail(at, "cannot infer borrowed result owner from the arguments");
+  }
+  Value call_factory(Form &form, const Module &lexical, Environment env, const std::vector<Value> &args,
+                     bool function_context, const Location &at, const Module &caller,
+                     ImplementationContext implementation,
+                     std::map<size_t, std::pair<Type, const Value *>> binding_shape) {
+    const auto instantiated = *signature(form, lexical, args, caller, at, true);
+    if (declares_npe(form.throws_types, lexical, form.at)) require_npe_handler(at);
+    const StorageView destination{ir_.hold_callable(ir_.null_pointer(), module_top_level_), local_scope_, {}};
+    std::vector<Value> parameters;
+    std::vector<llvm::Value *> operands;
+    std::vector<std::tuple<Type, std::optional<size_t>, size_t, bool>> shapes;
+    auto conformances = caller_conformances_;
+    for (size_t i = 0; i < args.size(); ++i) {
+      valid_view(args[i], at);
+      auto value = admit(args[i], instantiated.parameters[i], caller, at);
+      if (parameter_at(form, i).read_only && storage_owner(value)) value.read_only = true;
+      shapes.emplace_back(value.type, value.region_id, value.callable_flow, value.read_only);
+      for (const auto &fact : contextual(value, caller).conformances) append_conformance(conformances, fact);
+      if (native_callable(value)) {
+        if (!value.callable_temporary || !value.storage)
+          fail(at, "internal error: native callable argument has no prepared value");
+        operands.push_back(ir_.take_callable(value.storage->address));
+      } else operands.push_back(stored_value(value, value.type, at));
+      parameters.push_back(std::move(value));
+    }
+    const auto selected_context = implementation.empty() ? ImplementationContext{&lexical} : implementation;
+    const auto invoke = [&](const LLVMEmission::NativeDefinition &definition, const Value &result) {
+      auto *image = ir_.native_call(definition, ir_.native_environment(definition), operands, nullptr, destination.address);
+      if (!definition.returns) return scalar(Type::never, nullptr);
+      return held_callable(result.type, result.callable_flow, image, destination);
+    };
+    for (const auto &checked : factories_)
+      if (checked.activation.form == &form && checked.activation.lexical == &lexical &&
+          checked.activation.implementation == selected_context && checked.activation.parameters == instantiated.parameters &&
+          checked.activation.bindings == binding_shape &&
+          (checked.checking || (checked.caller == &caller && ir_.context_free(checked.activation.definition))) &&
+          checked.conformances == conformances && checked.arguments == shapes)
+        return invoke(checked.activation.definition, checked.result);
+    callable_flows_.push_back({{}, {}, true});
+    const auto result_flow = callable_flows_.size() - 1;
+    auto pending = scalar(*instantiated.result, nullptr);
+    pending.callable_flow = result_flow;
+    factories_.push_back({{&form, &lexical, selected_context, instantiated.parameters, std::move(binding_shape),
+        ir_.native_declaration(form.name, instantiated.parameters, *instantiated.result)},
+        &caller, conformances, shapes, pending});
+    auto &factory = factories_.back();
+    factory.activation.definition.checked_null = declares_npe(form.throws_types, lexical, form.at);
+    native_activations_.push_back(factory.activation);
+    auto &active = native_activations_.back();
+    auto previous_ir = ir_.begin_native(active.definition);
+    const auto call_begin = native_call_demands_.size();
+    const auto previous_flow = flow_state();
+    std::map<size_t, llvm::Value *> region_bases;
+    Value result;
+    {
+      // Source expansion guards belong to one native frame, not the checker's call stack.
+      const auto expansion = llvm::SaveAndRestore(active_calls_, std::set<const Form *>{});
+      const auto context = llvm::SaveAndRestore(native_context_, &active);
+      const auto handlers = llvm::SaveAndRestore(handlers_, std::vector<HandlerScope *>{});
+      const auto loops = llvm::SaveAndRestore(loop_pointers_, std::vector<LoopPointers>{});
+      const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
+      const auto cleanup = ir_.scope();
+      for (size_t i = 0; i < parameters.size(); ++i) {
+        auto &value = parameters[i];
+        auto *argument = active.definition.function->getArg(unsigned(i + 2));
+        if (local_bits(value.type)) value = loaded_value(value.type, argument);
+        else {
+          value.native = argument;
+          value.pointer.reset();
+          value.pointer_view = false;
+          if (value.type.kind == Type::region) {
+            region_bases.try_emplace(*value.region_id, regions_[*value.region_id].owner);
+            regions_[*value.region_id].owner = argument;
+          } else {
+            value.storage = StorageView{ir_.hold_callable(argument, false), local_scope_, {}};
+            value.callable_address = 0;
+            register_callable_holder(value);
+          }
+        }
+      }
+      result = inline_call(form, lexical, std::move(env), parameters, function_context, at, caller,
+                           std::move(implementation), nullptr);
+      active.definition.returns = result.type != Type::never;
+      if (active.definition.returns) {
+        return_callable(result, result_flow, active.definition, at);
+        ir_.restore(cleanup);
+        ir_.native_return();
+      } else ir_.restore(cleanup);
+    }
+    resolve_native_calls(call_begin);
+    ir_.end_native(active.definition, std::move(previous_ir));
+    for (const auto &[region, base] : region_bases) regions_[region].owner = base;
+    restore_flow(previous_flow);
+    callable_flows_.at(result_flow).open = false;
+    factory.activation = active;
+    factory.checking = false;
+    if (result.type != Type::never) factory.result = result;
+    factory.result.callable_flow = result_flow;
+    native_activations_.pop_back();
+    return invoke(factory.activation.definition, factory.result);
+  }
+  Value direct_callable(Form &form, const Module &lexical, Type type,
+                        const ImplementationContext &implementation) {
+    for (const auto &value : direct_callables_)
+      if (value.procedure->form == &form && value.procedure->lexical == &lexical &&
+          value.procedure->implementation == implementation) {
+        // The immutable descriptor identifies this body/context. Instantiated
+        // argument and owner types belong to its checked call, not its image.
+        auto selected = value;
+        selected.type = std::move(type);
+        return selected;
+      }
+    auto procedure = std::make_shared<Procedure>();
+    procedure->form = &form;
+    procedure->lexical = &lexical;
+    procedure->implementation = implementation;
+    auto *layout = ir_.callable_layout({}, {});
+    auto *key = ir_.callable_key();
+    procedure->code = std::make_shared<CallableCode>();
+    procedure->code->layout = layout;
+    procedure->code->dispatch_key = key;
+    procedure->code->direct = true;
+    auto value = scalar(std::move(type), ir_.static_callable(layout, key));
+    value.procedure = std::move(procedure);
+    callable_flows_.push_back({value.procedure, {}});
+    value.callable_flow = callable_flows_.size() - 1;
+    direct_callables_.push_back(value);
+    return value;
+  }
+  Type instantiated_callable_type(const Form &form, const Module &lexical,
+                                  const Signature &instantiated, size_t arity) {
+    auto type = procedure_type(form, lexical);
+    const auto bind_type = [&](auto &&self, Type value) -> Type {
+      if (value.kind == Type::parameter)
+        return instantiated.bindings.at(form.type_parameters.at(value.identity).name);
+      if (value.target) value.target = std::make_shared<Type>(self(self, *value.target));
+      return value;
+    };
+    for (auto &bound : type.owner_bounds) bound = bind_type(bind_type, bound);
+    type.parameters = instantiated.parameters;
+    type.target = std::make_shared<Type>(*instantiated.result);
+    type.bounds.clear(); type.variadic = false;
+    type.const_views.clear();
+    if (!type.owners.empty()) {
+      const auto owners = type.owners;
+      type.owners.clear();
+      for (size_t i = 0; i < arity; ++i) type.owners.push_back(owners[std::min(i, form.parameters.size() - 1)]);
+      type.owners.push_back(owners.back());
+    }
+    if (!type.nullable_views.empty()) {
+      const auto nullable = type.nullable_views;
+      type.nullable_views.clear();
+      for (size_t i = 0; i < arity; ++i)
+        type.nullable_views.push_back(nullable[std::min(i, form.parameters.size() - 1)]);
+      type.nullable_views.push_back(nullable.back());
+    }
+    for (size_t i = 0; i < arity; ++i) type.const_views.push_back(parameter_at(form, i).read_only);
+    type.const_views.push_back(form.result_const);
+    if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool value) { return value; }))
+      type.const_views.clear();
+    return type;
+  }
   Value call(Form &form, const Module &lexical, Environment env, const std::vector<Value> &args,
              bool function_context, const Location &at, const Module &caller, ImplementationContext implementation = {},
              const Locals *captures = nullptr) {
+    const auto instantiated = *signature(form, lexical, args, caller, at, true, captures);
+    bool native_environment = true;
+    std::map<size_t, std::pair<Type, const Value *>> binding_shape;
+    for (const auto &[id, value] : env.bindings) {
+      native_environment &= local_bits(value->type) || (value->procedure && !value->procedure->builtin.empty());
+      native_environment &= value->type.kind != Type::exception || value->type.identity != 0;
+      binding_shape.emplace(id, std::pair(value->type, env.captured(id, value) ? value : nullptr));
+    }
+    bool factory = native_environment && instantiated.result && native_callable_type(*instantiated.result) &&
+        form.result_owner.empty() && form.result_kind != "ptr" && form.body && !form.operation &&
+        (!captures || (captures->visible.empty() && captures->owner_anchors.empty()));
+    for (size_t i = 0; i < args.size(); ++i) {
+      const auto &value = args[i];
+      factory &= value.native && !value.nullable && !instantiated.parameters[i].owned &&
+          ((local_bits(value.type) && parameter_at(form, i).owner.empty()) ||
+           value.type.kind == Type::region ||
+           (native_callable(value) && parameter_at(form, i).owner.empty()));
+    }
+    const bool contextual_parameters = (instantiated.result && instantiated.result->kind == Type::region && instantiated.result->owned) ||
+        !form.owner_parameters.empty() || std::any_of(args.begin(), args.end(), [](const Value &value) {
+      return value.type.kind == Type::procedure || value.type.kind == Type::region;
+    });
+    // Keep reusable closed factories on their shared-specialization path.
+    if (contextual_parameters && !(factory && !form.owner_parameters.empty()) &&
+        form.body && !form.operation && form.result_type &&
+        (!captures || (captures->visible.empty() && captures->owner_anchors.empty()))) {
+      auto type = instantiated_callable_type(form, lexical, instantiated, args.size());
+      bool native = native_callable_type(type);
+      for (size_t i = 0; i < args.size(); ++i) {
+        const auto &value = args[i];
+        if (borrowed_parameter(type, i)) {
+          native &= value.storage || value.native;
+        } else native &= value.native && !value.nullable &&
+            (local_bits(value.type) || object_type(value.type) || value.type.kind == Type::region ||
+             (native_callable(value) && value.callable_temporary && value.storage));
+      }
+      if (native) {
+        if (!type.throws_types.empty()) require_npe_handler(at);
+        auto selected = direct_callable(form, lexical, type,
+            implementation.empty() ? ImplementationContext{&lexical} : implementation);
+        auto parameters = args;
+        std::vector<llvm::Value *> operands;
+        for (size_t i = 0; i < args.size(); ++i) {
+          valid_view(args[i], at);
+          if (type.parameters[i].kind == Type::region)
+            parameters[i] = admit(args[i], type.parameters[i], caller, at);
+          operands.push_back(borrowed_parameter(type, i) ? borrowed_operand(args[i], at) :
+              native_callable(args[i]) ? ir_.take_callable(args[i].storage->address)
+              : stored_value(args[i], type.parameters[i], at));
+        }
+        std::optional<StorageView> destination;
+        if (type.target->kind == Type::procedure && !borrowed_result(type))
+          destination = StorageView{ir_.hold_callable(ir_.null_pointer(), module_top_level_), local_scope_, {}};
+        return contextual_call(selected, parameters, operands, env, caller, at, false, destination);
+      }
+    }
+    if (factory) return call_factory(form, lexical, std::move(env), args, function_context, at, caller,
+                                     std::move(implementation), std::move(binding_shape));
+    const bool value_result = instantiated.result &&
+        (local_bits(*instantiated.result) || *instantiated.result == Type::void_type) && form.result_owner.empty();
+    bool native = native_environment && value_result && form.body && !form.operation && !caught_exception_ &&
+        (!captures || (captures->visible.empty() && captures->owner_anchors.empty()));
+    for (size_t i = 0; i < args.size(); ++i)
+      native &= local_bits(args[i].type) && !args[i].nullable && args[i].native &&
+                parameter_at(form, i).owner.empty();
+    if (!native)
+      return inline_call(form, lexical, std::move(env), args, function_context, at, caller,
+                         std::move(implementation), captures);
+    if (declares_npe(form.throws_types, lexical, form.at)) require_npe_handler(at);
+    auto selected_context = implementation.empty() ? ImplementationContext{&lexical} : implementation;
+    std::vector<Value> values;
+    std::vector<llvm::Value *> operands;
+    for (size_t i = 0; i < args.size(); ++i) {
+      valid_view(args[i], at);
+      auto value = admit(args[i], instantiated.parameters[i], caller, at);
+      operands.push_back(stored_value(value, value.type, at));
+      values.push_back(bits_value(std::move(value)));
+    }
+    for (auto &active : native_activations_)
+      if (active.form == &form && active.lexical == &lexical && active.implementation == selected_context &&
+          active.parameters == instantiated.parameters && active.bindings == binding_shape) {
+        auto *returned = ir_.native_call(active.definition, active.definition.function->getArg(0), operands);
+        return *instantiated.result == Type::void_type ? Value{} : loaded_value(*instantiated.result, returned);
+      }
+
+    auto conformances = caller_conformances_;
+    for (const auto &argument : args)
+      for (const auto &fact : contextual(argument, caller).conformances)
+        append_conformance(conformances, fact);
+    for (const auto &checked : checked_natives_[&form]) {
+      const auto &active = checked.activation;
+      if (active.form != &form || active.lexical != &lexical || active.implementation != selected_context ||
+          active.parameters != instantiated.parameters || active.bindings != binding_shape ||
+          checked.caller != &caller || checked.conformances != conformances) continue;
+      auto *returned = ir_.native_call(active.definition, ir_.null_pointer(), operands);
+      if (!active.definition.returns) return scalar(Type::never, nullptr);
+      return active.definition.result == Type::void_type ? Value{} : loaded_value(active.definition.result, returned);
+    }
+
+    native_activations_.push_back({&form, &lexical, selected_context, instantiated.parameters,
+        std::move(binding_shape), ir_.native_declaration(form.name, instantiated.parameters, *instantiated.result)});
+    auto &active = native_activations_.back();
+    active.definition.checked_null = declares_npe(form.throws_types, lexical, form.at);
+    auto previous_ir = ir_.begin_native(active.definition);
+    const auto call_begin = native_call_demands_.size();
+    const auto previous_flow = flow_state();
+    {
+      // Source expansion guards belong to one native frame, not the checker's call stack.
+      const auto expansion = llvm::SaveAndRestore(active_calls_, std::set<const Form *>{});
+      const auto context = llvm::SaveAndRestore(native_context_, &active);
+      const auto handlers = llvm::SaveAndRestore(handlers_, std::vector<HandlerScope *>{});
+      for (size_t i = 0; i < values.size(); ++i)
+        values[i] = loaded_value(values[i].type, active.definition.function->getArg(unsigned(i + 1)));
+      auto result = inline_call(form, lexical, std::move(env), values, function_context, at, caller,
+                                std::move(implementation), captures);
+      active.definition.returns = result.type != Type::never;
+      if (active.definition.returns)
+        ir_.native_return(result.type == Type::void_type ? nullptr : stored_value(result, result.type, at));
+    }
+    resolve_native_calls(call_begin);
+    ir_.end_native(active.definition, std::move(previous_ir));
+    restore_flow(previous_flow);
+    // A closed native definition has no SSA dependency on its first caller.
+    // Reuse it only under the same semantic view; aliases and extension worlds
+    // must not accidentally share a specialization.
+    if (function_context && active.bindings.empty() && ir_.context_free(active.definition))
+      checked_natives_[&form].push_back({active, &caller, std::move(conformances)});
+    auto definition = std::move(active.definition);
+    native_activations_.pop_back();
+    auto *returned = ir_.native_call(definition, ir_.native_environment(definition), operands);
+    if (!definition.returns) return scalar(Type::never, nullptr);
+    return definition.result == Type::void_type ? Value{} : loaded_value(definition.result, returned);
+  }
+  Value inline_call(Form &form, const Module &lexical, Environment env, const std::vector<Value> &args,
+                    bool function_context, const Location &at, const Module &caller, ImplementationContext implementation,
+                    const Locals *captures) {
     const bool throws_npe = declares_npe(form.throws_types, lexical, form.at);
     if (throws_npe) require_npe_handler(at);
     const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, throws_npe);
@@ -1764,6 +3287,7 @@ class Compiler {
     const auto native_scope = ir_.scope();
     const auto scope_id = scopes_.size();
     scopes_.push_back(true);
+    const auto parent_scope = local_scope_;
     const auto lexical_scope = llvm::SaveAndRestore(local_scope_, scope_id);
     std::vector<Value> parameters;
     std::set<size_t> transferring;
@@ -1777,12 +3301,25 @@ class Compiler {
         fail(formal.at, "a non-bits parameter requires an explicit external owner: use 'in O' and 'where {owner O}'");
       if (formal.declaration_kind == "val" && !local_bits(parameter.type))
         fail(formal.at, "val parameters require bits; regional objects are borrowed through an explicit owner");
+      if (!formal.owner.empty()) parameter.argument_reads.clear();
       if (formal.owner.empty() && local_bits(parameter.type)) {
         if (!parameter.native) fail(at, "read of storage before definite initialization in a local parameter argument");
         const auto source = bits_value(parameter);
         parameter = local_storage(parameter.type, formal.at);
         write_bits(parameter, source, at);
       }
+      if (formal.owner.empty() && native_callable(parameter)) {
+        if (!parameter.callable_temporary || !parameter.storage)
+          fail(at, "internal error: callable argument has no prepared value");
+        parameter.native = ir_.take_callable(parameter.storage->address);
+        parameter.storage = StorageView{ir_.hold_callable(parameter.native, false), local_scope_, {}};
+        parameter.pointer.reset();
+        parameter.pointer_view = false;
+        parameter.callable_temporary = false;
+        parameter.read_only = false;
+        register_callable_holder(parameter);
+      }
+      if (!formal.owner.empty() && native_callable(parameter)) parameter.callable_temporary = false;
       if (formal.read_only && storage_owner(parameter)) parameter.read_only = true;
       if (parameter.type.owned && (!parameter.holding_id || !transferring.insert(*parameter.holding_id).second))
         fail(at, "one region owner cannot be consumed by multiple parameters");
@@ -1825,17 +3362,19 @@ class Compiler {
       Value pack; pack.type = Type::arguments;
       pack.type.target = std::make_shared<Type>(resolve(form.parameters.back().type, lexical, form.at));
       pack.arguments = std::make_shared<const std::vector<Value>>(std::move(tail));
+      pack.borrowed_arguments = !form.parameters.back().owner.empty();
       declare_local(locals, form.parameters.back().name, std::move(pack), lexical, form.parameters.back().at);
     }
     const bool assignment = form.operation && (form.name == "=" || form.name == "<-" || form.name == "[]=" || form.name == "[]<-");
     const Value *result_owner = form.result_owner.empty() ? nullptr : &owner_values.at(form.result_owner);
     auto result = block(*form.body, lexical, std::move(env), std::move(locals), function_context, false,
-                        instantiated.result, form.result_const && form.result_owner.empty() && !assignment,
+                        instantiated.result, form.result_owner.empty() && !assignment &&
+                          (form.result_const || (instantiated.result && instantiated.result->kind == Type::procedure &&
+                                                  form.result_kind != "ptr")),
                         rebind ? args.front().pointer : std::nullopt, form.result_kind != "ptr", result_owner);
     if (form.result_kind != "ptr" && result.nullable) result = read_value(std::move(result), at);
     scopes_[scope_id] = false;
-    valid_view(result, at);
-    result = finish_scope(holding_begin, native_scope, std::move(result), at, parent_module);
+    result = finish_scope(holding_begin, native_scope, std::move(result), at, parent_module, parent_scope);
     active_calls_.erase(&form);
     if (instantiated.result) result = admit(std::move(result), *instantiated.result, lexical, form.at);
     if (!form.result_owner.empty()) {
@@ -1844,8 +3383,8 @@ class Compiler {
         fail(form.at, "result does not belong to its declared owner");
     }
     if (form.result_const && storage_owner(result)) result.read_only = true;
-    if (!form.result_const && !form.result_owner.empty() && result.read_only)
-      fail(form.at, "a writable borrowed result cannot return a read-only view");
+    if (!form.result_const && !form.result_owner.empty())
+      require_writable(result.read_only, form.at, "a writable borrowed result cannot return a read-only view");
     result.pointer.reset();
     call_path_.pop_back();
     return result;
@@ -1915,9 +3454,8 @@ class Compiler {
     }
     return {};
   }
-  std::optional<Route> route(Type actual, const Parameter &parameter, const Module &lexical,
+  std::optional<Route> route_to(Type actual, Type target, const Parameter &parameter, const Module &lexical,
                               const Module &caller, const Location &at, bool diagnose_unavailable = true) {
-    const auto target = resolve(parameter.type, lexical, parameter.at);
     if (parameter.automatic_conversion && target.kind != Type::quantity)
       fail(parameter.at, "a starred parameter requires a UoM quantity type");
     if (widens(actual, target)) return Route{{}, {}, target};
@@ -1964,6 +3502,11 @@ class Compiler {
       }
     }
     return result;
+  }
+  std::optional<Route> route(Type actual, const Parameter &parameter, const Module &lexical,
+                              const Module &caller, const Location &at, bool diagnose_unavailable = true) {
+    return route_to(actual, resolve(parameter.type, lexical, parameter.at), parameter,
+                    lexical, caller, at, diagnose_unavailable);
   }
   static std::string callable_name(const Form &form) {
     if (form.operation) return "(" + form.name + ")";
@@ -2014,10 +3557,16 @@ class Compiler {
     fail(at, message);
   }
   std::optional<MethodMatch> method(const std::string &name, const Module &module,
-                                    const std::vector<Value> &args, const Location &at) {
+                                    const std::vector<Value> &provided, const Location &at) {
     const auto information = lookup_callable(module, name, at);
     const auto &candidates = information.methods;
     if (candidates.empty()) return {};
+    auto args = provided;
+    for (auto &value : args) {
+      try { resolve_region_type(value, at); }
+      catch (const UnresolvedAccess &) { resolve_result_type(value, at, true); }
+      if (value.result_type_origin && region_definition(value.type)) resolve_result_type(value, at);
+    }
     for (size_t i = 0; i < candidates.size(); ++i) {
       const auto first = signature(*candidates[i].form, *candidates[i].lexical, args, module, at);
       if (!first) continue;
@@ -2109,9 +3658,103 @@ class Compiler {
     }
     return converted.front();
   }
+  static Type method_abi(Type type) {
+    for (size_t i = 0; i < type.parameters.size() && !type.const_views.empty(); ++i) type.const_views[i] = false;
+    if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool value) { return value; }))
+      type.const_views.clear();
+    return type;
+  }
+  std::optional<Value> defer_method(const std::string &name, const Module &module, const std::vector<Value> &args,
+                                    const Environment &env, const Location &at, bool function_context,
+                                    const std::vector<ConversionPoint> &points) {
+    std::optional<Type> prototype;
+    {
+      const auto possible = llvm::SaveAndRestore(possible_result_facts_, true);
+      for (const auto &candidate : lookup_callable(module, name, at).methods) {
+        const auto &form = *candidate.form;
+        const auto instantiated = signature(form, *candidate.lexical, args, module, at, false, nullptr, false);
+        if (!instantiated) continue;
+        bool exact = true;
+        for (size_t i = 0; i < args.size(); ++i) exact &= accepts(args[i], instantiated->parameters[i], module, at);
+        if (!exact) continue;
+        if (!form.result_type || !instantiated->result || form.operation || !form.body) return {};
+        if (const auto source = candidate.lexical->world.procedures.find(&form);
+            source != candidate.lexical->world.procedures.end() &&
+            (!source->second.procedure->lexical_captures.visible.empty() ||
+             !source->second.procedure->lexical_captures.owner_anchors.empty())) return {};
+        auto type = method_abi(instantiated_callable_type(form, *candidate.lexical, *instantiated, args.size()));
+        if (!native_callable_type(type) || (prototype && *prototype != type)) return {};
+        prototype = std::move(type);
+      }
+    }
+    if (!prototype) return {};
+    std::vector<llvm::Value *> operands;
+    for (size_t i = 0; i < args.size(); ++i) {
+      const auto &value = args[i];
+      valid_view(value, at);
+      if (borrowed_parameter(*prototype, i)) operands.push_back(borrowed_operand(value, at));
+      else if (native_callable(value)) {
+        if (!value.storage || !value.callable_temporary || !points.at(i).callable_prepared) return {};
+        operands.push_back(ir_.take_callable(value.storage->address));
+      } else {
+        if (!value.native || value.nullable) return {};
+        operands.push_back(stored_value(value, prototype->parameters[i], at));
+      }
+    }
+    if (!prototype->throws_types.empty()) require_npe_handler(at);
+    auto *image = ir_.pending_callable();
+    auto selected = scalar(*prototype, image);
+    callable_flows_.push_back({{}, {}, true});
+    selected.callable_flow = callable_flows_.size() - 1;
+    std::optional<StorageView> destination;
+    if (prototype->target->kind == Type::procedure && !borrowed_result(*prototype))
+      destination = StorageView{ir_.hold_callable(ir_.null_pointer(), module_top_level_), local_scope_, {}};
+    const auto index = native_call_demands_.size();
+    auto result = contextual_call(selected, args, operands, env, module, at, false, destination);
+    native_call_demands_.at(index).selection = NativeCallDemand::Selection{
+        name, function_context, npe_allowed_, implementation_context_, image, result};
+    return result;
+  }
+  bool select_native_method(NativeCallDemand &demand) {
+    try {
+      const auto &pending = *demand.selection;
+      const auto context = llvm::SaveAndRestore(implementation_context_, pending.implementation);
+      const auto conformances = llvm::SaveAndRestore(caller_conformances_, demand.conformances);
+      const auto checked = llvm::SaveAndRestore(npe_allowed_, pending.npe_allowed);
+      const auto calls = llvm::SaveAndRestore(call_path_, demand.calls);
+      const auto selected = method(pending.name, *demand.caller, demand.arguments, demand.at);
+      if (!selected) method_failure(pending.name, demand.arguments,
+          lookup_callable(*demand.caller, pending.name, demand.at).methods, demand.at, false, *demand.caller);
+      const auto &source = selected->function;
+      const auto instantiated = *signature(*source.form, *source.lexical, demand.arguments, *demand.caller, demand.at, true);
+      auto type = instantiated_callable_type(*source.form, *source.lexical, instantiated, demand.arguments.size());
+      if (method_abi(type) != demand.type || std::any_of(selected->routes.begin(), selected->routes.end(),
+          [](const Route &route) { return !route.steps.empty() || route.target; }))
+        fail(demand.at, "access-dependent result types or argument conversions need further staging");
+      if (!type.pure_callable && pending.function_context)
+        fail(demand.at, "a function cannot invoke a procedure");
+      require_declaration_handlers(selected->declarations, demand.arguments, *demand.caller, demand.at);
+      check_declarations(selected->declarations, source.form->kind, demand.arguments, pending.result,
+          *demand.caller, demand.at, declares_npe(source.form->throws_types, *source.lexical, source.form->at));
+      auto callable = direct_callable(*source.form, *source.lexical, type, source.implementation);
+      callable_flows_.at(demand.flow).inputs = {callable.callable_flow};
+      callable_flows_.at(demand.flow).open = false;
+      pending.image->replaceAllUsesWith(callable.native);
+      pending.image->eraseFromParent();
+      demand.type = std::move(type);
+      for (size_t i = 0; i < demand.arguments.size(); ++i)
+        if (!demand.type.const_views.empty() && demand.type.const_views[i] && storage_owner(demand.arguments[i]))
+          demand.arguments[i].read_only = true;
+      demand.selection.reset();
+      return true;
+    } catch (const UnresolvedAccess &) { return false; }
+  }
   Value converted(Value value, const Route &route, const Location &at, const Module &caller,
-                  const ConversionPoint *point = nullptr, bool read_argument = false) {
-    if (route.steps.empty() && !route.target && !read_argument) return value;
+                  const ConversionPoint *point = nullptr, bool read_argument = false,
+                  bool local_parameter = false) {
+    const bool copy_callable = local_parameter && native_callable(value) &&
+                               !(point && point->callable_prepared);
+    if (route.steps.empty() && !route.target && !read_argument && !copy_callable) return value;
     if (!route.alternative.empty()) {
       auto describe = [&](const std::vector<Method> &path) {
         std::string result = type_name(value.type);
@@ -2130,8 +3773,8 @@ class Compiler {
     if (point) restore_flow(point->regions);
     if (read_argument) {
       const bool initialized = !value.storage || std::all_of(value.storage->cells.begin(), value.storage->cells.end(),
-          [&](size_t cell) { return cells_.at(cell).initialized; });
-      if (initialized) value = read_value(std::move(value), at);
+          [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) != false; });
+      if (initialized) value = read_value(std::move(value), at, true);
       else value.native = nullptr;
     }
     for (const auto &step : route.steps) {
@@ -2140,12 +3783,17 @@ class Compiler {
       if (value.type == Type::never) break;
     }
     if (route.target && value.type != Type::never) value = widened(value, *route.target, at);
+    if (copy_callable && value.type != Type::never) {
+      if (point && !point->callable_destination) fail(at, "internal error: callable argument cleanup was not reserved");
+      value = prepare_callable_argument(std::move(value), point ? point->callable_destination : std::nullopt);
+    }
     if (resume) {
       ir_.end_conversion(point->native, *resume);
       restore_flow(state);
       if (value.type == Type::never) ir_.unreachable();
     }
     if (value.type == Type::never) throw EndPath{};
+    if (copy_callable) register_callable_holder(value);
     return value;
   }
   void check_declarations(const std::vector<CallableDeclaration> &declarations, Form::Kind kind,
@@ -2167,8 +3815,8 @@ class Compiler {
       if (contract->result && !accepts(result, *contract->result, caller, at))
         fail(at, "method result violates callable declaration: expected " + type_name(*contract->result) +
                      ", got " + type_name(result.type) + "\n" + location_text(declaration.form->at) + ": note: callable signature declared here");
-      if (!declaration.form->result_const && !declaration.form->result_owner.empty() && result.read_only)
-        fail(at, "read-only method result violates writable callable declaration\n" +
+      if (!declaration.form->result_const && !declaration.form->result_owner.empty())
+        require_writable(result.read_only, at, "read-only method result violates writable callable declaration\n" +
                      location_text(declaration.form->at) + ": note: result access promised here");
       if (!declaration.form->result_owner.empty()) {
         bool inferred = false;
@@ -2181,6 +3829,18 @@ class Compiler {
           }
         if (!inferred) fail(declaration.form->at, "cannot infer callable declaration result owner from its arguments");
       }
+    }
+  }
+  void require_declaration_handlers(const std::vector<CallableDeclaration> &declarations,
+                                     const std::vector<Value> &args, const Module &caller, const Location &at) {
+    for (const auto &declaration : declarations) {
+      const auto contract = signature(*declaration.form, *declaration.lexical, args, caller, at);
+      if (!contract) continue;
+      bool applicable = true;
+      for (size_t i = 0; i < args.size(); ++i)
+        applicable &= accepts(args[i], contract->parameters[i], caller, at);
+      if (applicable && declares_npe(declaration.form->throws_types, *declaration.lexical, declaration.form->at))
+        require_npe_handler(at);
     }
   }
   Value call_method(const MethodMatch &match, std::vector<Value> args, const Location &at,
@@ -2201,7 +3861,8 @@ class Compiler {
       }
     for (size_t i = 0; i < args.size(); ++i)
       args[i] = converted(args[i], match.routes[i], at, caller, points.empty() ? nullptr : &points[i],
-          !points.empty() && points[i].raw_view && !(parameter_at(form, i).declaration_kind == "ptr" && !parameter_at(form, i).owner.empty()));
+          !points.empty() && points[i].raw_view && !(parameter_at(form, i).declaration_kind == "ptr" && !parameter_at(form, i).owner.empty()),
+          parameter_at(form, i).owner.empty());
     const bool function = match.function.form->kind == Form::Kind::function;
     if (!function && function_context) {
       const auto &form = *match.function.form;
@@ -2210,15 +3871,7 @@ class Compiler {
       fail(at, message + "\n" + location_text(form.at) + ": note: selected procedure '" +
                    callable_name(form) + "' declared here");
     }
-    for (const auto &declaration : match.declarations) {
-      const auto contract = signature(*declaration.form, *declaration.lexical, args, caller, at);
-      if (!contract) continue;
-      bool applicable = true;
-      for (size_t i = 0; i < args.size(); ++i)
-        applicable &= accepts(args[i], contract->parameters[i], caller, at);
-      if (applicable && declares_npe(declaration.form->throws_types, *declaration.lexical, declaration.form->at))
-        require_npe_handler(at);
-    }
+    require_declaration_handlers(match.declarations, args, caller, at);
     // Lexical procedure calls use current bindings; perform uses captured values.
     const Locals *captures = nullptr;
     if (!function && !form.operation) {
@@ -2246,15 +3899,45 @@ class Compiler {
     check_declarations(match.declarations, match.function.form->kind, args, result, caller, at, declares_npe(form.throws_types, *match.function.lexical, form.at));
     return result;
   }
+  Value transfer_callable(Value destination, Value source, const Location &at) {
+    require_writable(destination.read_only, at, "cannot transfer into a read-only destination view");
+    require(source.type, destination.type, at);
+    if (!native_callable(source)) fail(at, "callable transfer requires a compatible native value");
+    auto *slot = place(destination, at).address;
+    auto transferred = detach_callable(std::move(source), at);
+    ir_.callable_write();
+    ir_.replace_callable(slot, transferred.native);
+    if (!destination.callable_address) fail(at, "callable replacement requires a lexical value holder");
+    const auto targets = callable_targets(destination.callable_address);
+    const auto memory = callable_holders_;
+    for (const auto &[holder, previous] : memory) {
+      if (targets.closed && !targets.holders.contains(holder)) continue;
+      size_t flow = transferred.callable_flow;
+      if (!targets.closed) {
+        CallableFlow write;
+        write.inputs = {previous, transferred.callable_flow};
+        write.address = destination.callable_address;
+        write.written_holder = holder;
+        callable_flows_.push_back(std::move(write));
+        flow = callable_flows_.size() - 1;
+      } else if (targets.holders.size() != 1) flow = join_callable_flow({previous, flow});
+      callable_holders_ = callable_memory_factory_.add(callable_holders_, holder, flow);
+    }
+    destination.read_only = true;
+    destination.pointer.reset();
+    return destination;
+  }
   Value transfer_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                             bool function_context) {
     if (expr.children.size() != 2) fail(expr.at, "object transfer requires a destination and source");
     auto destination = expression(*expr.children[0], module, env, locals, function_context, false);
-    if (destination.read_only) fail(expr.at, "cannot transfer into a read-only destination view");
+    require_writable(destination.read_only, expr.at, "cannot transfer into a read-only destination view");
     auto source = expression(*expr.children[1], module, env, locals, function_context);
     if (!expr.intrinsic)
       if (const auto selected = method("<-", module, {destination, source}, expr.at))
         return call_method(*selected, {destination, source}, expr.at, env, function_context, module);
+    if (destination.type.kind == Type::procedure && destination.storage)
+      return transfer_callable(std::move(destination), std::move(source), expr.at);
     if (local_bits(destination.type) && destination.storage) {
       write_bits(destination, source, expr.at);
       destination.read_only = true;
@@ -2267,6 +3950,21 @@ class Compiler {
     fail(expr.at, "object transfer requires a user-defined (<-) overload");
   }
   Value reference_source(Value value, Type target, size_t owner, bool required, const Location &at) {
+    if (value.result_type_origin && region_definition(value.type)) {
+      try { resolve_result_type(value, at); }
+      catch (const UnresolvedAccess &) {
+        const auto origin = value.result_type_origin;
+        const auto declared = value.type;
+        deferred_checks_.push_back({[this, origin, declared, target, at] {
+          auto actual = scalar(declared, nullptr);
+          actual.result_type_origin = origin;
+          resolve_result_type(actual, at);
+          return actual.type != target;
+        }, at, "reference field requires exact concrete target type " + type_name(target)});
+        value.type = target;
+        value.result_type_origin = 0;
+      }
+    }
     if (value.type == Type::null_ref) {
       if (required) fail(at, "a ref field cannot contain null");
       value = scalar(reference(target), ir_.bits(Type::null_ref, 0), owner);
@@ -2274,9 +3972,12 @@ class Compiler {
       return value;
     }
     if (required && value.nullable) fail(at, "a ref field requires a proven non-null target");
-    if (value.read_only) fail(at, "cannot store a read-only view in a writable reference field");
-    if (value.region_id != owner) fail(at, "cross-region reference fields require a target in the same owner; use '<-' for bits transfer");
+    require_writable(value.read_only, at, "cannot store a read-only view in a writable reference field");
+    if (!value.region_id) fail(at, "a regional reference field requires a regional target");
+    require_same_region(*value.region_id, owner, at,
+        "cross-region reference fields require a target in the same owner; use '<-' for bits transfer");
     valid_view(value, at);
+    value.region_id = owner;
     if (value.type == target) {
       if (local_bits(target)) {
         if (!value.storage) fail(at, "a reference field requires existing target storage");
@@ -2291,7 +3992,7 @@ class Compiler {
     return value;
   }
   Value rebind_field(Value destination, Value source, const Location &at) {
-    if (destination.read_only) fail(at, "cannot rebind a field through a read-only view");
+    require_writable(destination.read_only, at, "cannot rebind a field through a read-only view");
     auto stored = reference_source(source, *destination.reference_field->type.target,
                                    *destination.region_id, destination.required_reference, at);
     if (destination.required_reference) ir_.require_representable_reference(*destination.reference_field, stored.native);
@@ -2315,7 +4016,7 @@ class Compiler {
     if (!destination.pointer) fail(expr.at, "reference assignment requires an ordinary ptr binding; use '<-' for bits transfer");
     if (pointers_.at(*destination.pointer).fixed_binding) fail(expr.at, "cannot rebind a const ptr binding");
     if (!source.nullable && source.storage && std::all_of(source.storage->cells.begin(), source.storage->cells.end(),
-        [&](size_t cell) { return cells_.at(cell).initialized; })) source = read_value(std::move(source), expr.at);
+        [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) == true; })) source = read_value(std::move(source), expr.at);
     // Select user methods before checking the builtin alias operation. A method
     // may use a read-only source to choose an independently writable target.
     if (!expr.intrinsic) {
@@ -2333,8 +4034,8 @@ class Compiler {
     if (!destination.pending_owner && storage_owner(destination) != storage_owner(source))
       fail(at, "reference assignment cannot cross owners; you may want '<-' for bits transfer");
     valid_view(source, at);
-    if (!destination.read_only && source.read_only)
-      fail(at, "a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias");
+    require_access(source.read_only, destination.read_only, at,
+        "a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias");
     for (const auto &loop : loop_pointers_)
       if (*destination.pointer < loop.boundary && !loop.initialized[*destination.pointer])
         fail(at, "loop-carried rebinding of an initially uninitialized target is not yet supported; initialize it before the loop");
@@ -2346,7 +4047,7 @@ class Compiler {
     auto &binding = pointers_.at(*destination.pointer);
     source.read_only = binding.read_only;
     ir_.write_pointer(binding.slot, source.storage ? source.storage->address : source.native);
-    binding.view = source;
+    binding.view = snapshot_pointer(source);
     return source;
   }
   Value swap_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
@@ -2374,7 +4075,7 @@ class Compiler {
     if (expr.text == "<=>") {
       const auto check = [&](const Value &destination, const Value &source) {
         if (!destination.reference_field) { check_rebind(destination, source, expr.at); return; }
-        if (destination.read_only) fail(expr.at, "cannot rebind a read-only reference field");
+        require_writable(destination.read_only, expr.at, "cannot rebind a read-only reference field");
         reference_source(source, *destination.reference_field->type.target, *destination.region_id,
                          destination.required_reference, expr.at);
       };
@@ -2385,7 +4086,8 @@ class Compiler {
     } else {
       if (!local_bits(left.type) || !local_bits(right.type) || !left.storage || !right.storage)
         fail(expr.at, "builtin bits swap requires two bits storage destinations");
-      if (left.read_only || right.read_only) fail(expr.at, "cannot swap bits through a read-only view");
+      require_writable(ReadOnly::either(left.read_only, right.read_only), expr.at,
+          "cannot swap bits through a read-only view");
       require(left.type, right.type, expr.at);
       const auto left_bits = bits_value(read_value(left, expr.at));
       const auto right_bits = bits_value(read_value(right, expr.at));
@@ -2400,7 +4102,7 @@ class Compiler {
     using K = Expression::Kind;
     if (expr.kind == K::name) {
       if (const auto found = locals.visible.find(expr.text); found != locals.visible.end())
-        return found->second.pointer ? pointers_.at(*found->second.pointer).view : found->second;
+        return found->second.pointer ? *pointers_.at(*found->second.pointer).view : found->second;
       if (const auto found = module.world.global_aliases.find(expr.text); found != module.world.global_aliases.end())
         return module.world.global_values.at(found->second);
     }
@@ -2416,17 +4118,11 @@ class Compiler {
     if (expr.kind == K::null_ref) return scalar(Type::null_ref, nullptr);
     if (expr.kind == K::field) {
       auto value = query_value(*expr.children.front(), module, locals);
-      if (value.type.kind == Type::region && value.type.target) value.type = *value.type.target;
-      if (value.type.kind == Type::regional) resolve(value.type, module, expr.at);
-      if (value.type.kind == Type::regional)
-        for (const auto &field : products_.at(value.type.identity).fields)
-          if (field.name == expr.text) {
-            const bool view = field.declaration_kind == "ref" || field.declaration_kind == "ptr";
-            auto result = scalar(view ? *field.type.target : field.type, nullptr, value.region_id);
-            result.pointer_view = view;
-            return result;
-          }
-      fail(expr.at, "typeof: unavailable field '" + expr.text + "'");
+      const auto [field, place] = record_field(value, expr.text, module, expr.at, false);
+      const bool view = field.declaration_kind == "ref" || field.declaration_kind == "ptr";
+      auto result = scalar(view ? *field.type.target : field.type, nullptr, value.region_id);
+      result.pointer_view = view;
+      return result;
     }
     if (expr.kind == K::index) {
       auto value = query_value(*expr.children.front(), module, locals);
@@ -2480,7 +4176,9 @@ class Compiler {
         if (expr.text == "root") {
           if (args.size() == 1 && args[0].type.target &&
               args[0].type.kind == (expr.text == "root" ? Type::region : Type::reference)) {
-            auto value = args[0]; value.type = *value.type.target; return value;
+            auto value = args[0]; value.type = *value.type.target;
+            if (value.region_id) value.result_type_origin = regions_.at(*value.region_id).root_origin;
+            return value;
           }
           fail(expr.at, "typeof: root/deref requires its declared reference kind");
         }
@@ -2515,6 +4213,9 @@ class Compiler {
     return type;
   }
   Value array_element(Value array, Value index, const Location &at, bool as_reference = false) {
+    require_argument_reads(index);
+    if (index.storage && !index.native)
+      fail(at, "read of storage before definite initialization in an index");
     if (array.arguments) {
       if (as_reference) fail(at, "a variadic argument pack has no regional element address");
       require(index.type, Type::uint64, at);
@@ -2527,27 +4228,84 @@ class Compiler {
       }
       if (elements.empty()) {
         const auto type = *array.type.target;
-        if (!numeric(type) && type != Type::boolean && type.kind != Type::quantity)
+        if (!numeric(type) && type != Type::boolean && type.kind != Type::quantity && type.kind != Type::procedure)
           fail(at, "an empty argument pack has no regional owner to borrow");
-        return scalar(type, ir_.argument_element(type, index.native, {}));
+        auto result = scalar(type, ir_.argument_element(type, index.native, {}));
+        if (type.kind == Type::procedure) {
+          callable_flows_.push_back({});
+          result.callable_flow = callable_flows_.size() - 1;
+          // The bounds guard makes this path unreachable. A local placeholder
+          // still permits ordinary view checking in a zero-iteration loop.
+          result.storage = StorageView{result.native, local_scope_, {}};
+          result.callable_address = result.callable_flow;
+          result.pointer_view = array.borrowed_arguments;
+        } else if (array.borrowed_arguments) {
+          result.storage = StorageView{llvm::PoisonValue::get(ir_.null_pointer()->getType()), local_scope_, {}, true};
+          result.pointer_view = true;
+        }
+        return result;
       }
       auto result = elements.front();
+      if (native_callable(result)) {
+        std::vector<llvm::Value *> slots;
+        std::vector<size_t> addresses;
+        for (const auto &element : elements) {
+          valid_view(element, at);
+          require(element.type, result.type, at);
+          if (!element.storage || !element.callable_address || storage_owner(element) != storage_owner(result))
+            fail(at, "a dynamic callable argument index requires one live storage owner");
+          slots.push_back(element.storage->address);
+          addresses.push_back(element.callable_address);
+          result.read_only |= element.read_only;
+          result.nullable |= element.nullable;
+        }
+        result.storage->address = ir_.argument_element(Type::null_ref, index.native, slots);
+        result.callable_address = join_callable_flow(std::move(addresses));
+        result.pointer.reset();
+        result.callable_temporary = false;
+        if (array.borrowed_arguments) {
+          result.native = nullptr;
+          result.pointer_view = true;
+          return result;
+        }
+        return read_value(std::move(result), at);
+      }
       if (result.procedure) fail(at, "a dynamic argument index cannot select a procedure");
       std::vector<llvm::Value *> native, categories;
+      result.pointer.reset(); result.reference_field.reset(); result.referent = nullptr;
+      result.nullable = false; result.read_only = false;
+      if (std::any_of(elements.begin(), elements.end(), [](const Value &value) {
+            return !value.result_fact_origins.empty();
+          })) result.conformances.clear();
+      if (result.storage) { result.storage->cells.clear(); result.storage->initialized_alternatives = false; }
       for (const auto &stored : elements) {
-        const auto element = read_value(stored, at);
+        const auto element = array.borrowed_arguments ? stored : read_value(stored, at);
+        valid_view(element, at);
         require(element.type, result.type, at);
-        if (element.region_id != result.region_id) fail(at, "a dynamic argument index requires one owning region");
-        if (element.region_id) region_pointer(element, at);
+        if (storage_owner(element) != storage_owner(result) || bool(element.storage) != bool(result.storage))
+          fail(at, "a dynamic argument index requires one live storage owner");
+        result.nullable |= element.nullable;
+        result.read_only |= element.read_only;
         std::erase_if(result.conformances, [&](const Conformance &relation) {
           return !establishes(element, relation, at);
         });
-        native.push_back(element.native);
-        if (result.type.kind == Type::exception) categories.push_back(exception_category(element));
+        if (array.borrowed_arguments && element.storage) {
+          native.push_back(element.storage->address);
+          result.storage->cells.insert(element.storage->cells.begin(), element.storage->cells.end());
+          result.storage->initialized_alternatives |= element.storage->initialized_alternatives;
+        } else {
+          native.push_back(element.native);
+          if (result.type.kind == Type::exception) categories.push_back(exception_category(element));
+        }
       }
-      result.native = ir_.argument_element(result.type, index.native, native);
+      if (array.borrowed_arguments && result.storage) {
+        result.storage->address = ir_.argument_element(Type::null_ref, index.native, native);
+        result.native = nullptr;
+      } else result.native = ir_.argument_element(result.type, index.native, native);
       if (!categories.empty()) result.exception_category = ir_.argument_element(Type::uint64, index.native, categories);
-      if (local_bits(result.type)) result = bits_value(std::move(result));
+      result.pointer_view = true;
+      if (!array.borrowed_arguments && local_bits(result.type)) result = bits_value(std::move(result));
+      join_result_facts(result, elements);
       return result;
     }
     const auto type = array_type(array, at);
@@ -2560,18 +4318,1123 @@ class Compiler {
     result.read_only = array.read_only;
     return result;
   }
-  Value invoke_procedure(const Value &value, const Expression &expr, const Module &module,
+  bool resolve_native_calls(size_t begin) {
+    bool changed = false;
+    for (size_t i = begin; i < native_call_demands_.size(); ++i)
+      changed |= compile_native_call(native_call_demands_[i]);
+    return changed;
+  }
+  void record_callable_effects(const std::map<size_t, size_t> &outputs) {
+    for (const auto &[holder, output] : outputs)
+      if (const auto *value = callable_holders_.lookup(holder)) {
+        auto &inputs = callable_flows_.at(output).inputs;
+        if (std::find(inputs.begin(), inputs.end(), *value) == inputs.end()) inputs.push_back(*value);
+      }
+  }
+  CallableMemory callable_effects(const NativeCallDemand &demand, const std::map<size_t, size_t> &outputs) {
+    auto memory = demand.state.callables;
+    for (const auto &[holder, output] : outputs)
+      memory = callable_memory_factory_.add(memory, holder, output);
+    return memory;
+  }
+  void prepare_initialization(NativeCallDemand &demand) {
+    for (size_t i = 0; i < demand.arguments.size(); ++i) {
+      auto &argument = demand.arguments[i];
+      if (!borrowed_parameter(demand.type, i)) continue;
+      argument.argument_reads.clear();
+      if (!argument.storage) continue;
+      for (size_t cell : argument.storage->cells) {
+        if (initialization_known(demand.state.initialized.at(cell)) == true || demand.initialized.contains(cell)) continue;
+        const auto create = [&] {
+          initialization_flows_.push_back({{}, true});
+          return initialization_flows_.size() - 1;
+        };
+        demand.initialized.emplace(cell, create());
+        for (auto &failure : demand.failure_initialized) failure.emplace(cell, create());
+      }
+    }
+  }
+  void record_initialization(const std::map<size_t, size_t> &outputs) {
+    for (const auto &[cell, id] : outputs) {
+      auto &inputs = initialization_flows_.at(id).inputs;
+      const auto proof = cells_.at(cell).initialized;
+      if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
+    }
+  }
+  void apply_initialization(const std::map<size_t, size_t> &outputs) {
+    for (const auto &[cell, proof] : outputs)
+      cells_.at(cell).initialized = preserved_initialization(cells_.at(cell).initialized, proof);
+  }
+  void reuse_initialization(NativeCallDemand &to, const NativeCallDemand &from) {
+    const auto connect = [&](const auto &target, const auto &source) {
+      for (const auto &[cell, id] : target) {
+        auto &node = initialization_flows_.at(id);
+        node.inputs = {source.contains(cell) ? source.at(cell) : from.state.initialized.at(cell)};
+        node.open = false;
+      }
+    };
+    connect(to.initialized, from.initialized);
+    for (size_t i = 0; i < to.failure_initialized.size(); ++i)
+      connect(to.failure_initialized[i], from.failure_initialized[i]);
+  }
+  void prepare_callable_effects(NativeCallDemand &demand) {
+    std::set<size_t> holders;
+    const auto collect = [&](const Value &value) {
+      if (!value.storage || !value.callable_address || value.read_only) return;
+      const auto targets = callable_targets(value.callable_address);
+      if (!targets.closed) {
+        for (const auto &[holder, flow] : demand.state.callables) holders.insert(holder);
+        return;
+      }
+      for (const auto holder : targets.holders)
+        if (demand.state.callables.lookup(holder)) holders.insert(holder);
+    };
+    if (!demand.captured)
+      for (const auto &[id, value] : demand.environment.bindings) collect(*value);
+    for (size_t i = 0; i < demand.arguments.size(); ++i)
+      if (borrowed_parameter(demand.type, i) &&
+          (demand.type.const_views.empty() || !demand.type.const_views[i])) collect(demand.arguments[i]);
+    for (size_t holder : holders) {
+      const auto create = [&] {
+        callable_flows_.push_back({{}, {}, true});
+        callable_flows_.back().producer = &demand;
+        return callable_flows_.size() - 1;
+      };
+      demand.returns.emplace(holder, create());
+      for (auto &failure : demand.failures) failure.emplace(holder, create());
+    }
+  }
+  bool close_callable_effects(NativeCallDemand &demand) {
+    if (demand.selection) return false;
+    bool changed = false;
+    const auto choices = callable_choices(demand.flow);
+    if (choices.closed && (demand.reused || std::all_of(choices.definitions.begin(), choices.definitions.end(),
+        [&](const auto &source) { return demand.emitted.contains(source.get()); }))) {
+      const auto close = [&](const auto &outputs) {
+        for (const auto &[cell, id] : outputs) {
+          changed |= initialization_flows_.at(id).open;
+          initialization_flows_.at(id).open = false;
+        }
+      };
+      close(demand.initialized);
+      for (const auto &failure : demand.failure_initialized) close(failure);
+    }
+    const auto close_flow = [&](size_t output) {
+      changed |= callable_flows_.at(output).open;
+      callable_flows_.at(output).open = false;
+    };
+    const auto close = [&](const auto &outputs) {
+      for (const auto &[holder, output] : outputs) close_flow(output);
+    };
+    close(demand.returns);
+    if (demand.result_flow) close_flow(demand.result_flow);
+    for (const auto &failure : demand.failures) close(failure);
+    return changed;
+  }
+  bool active_native_call(const NativeCallDemand &demand) const {
+    return checking_native_calls_.contains(&demand) ||
+        std::any_of(native_activations_.begin(), native_activations_.end(),
+        [&](const auto &active) { return active.call == &demand; });
+  }
+  bool resolve_native_flow(size_t flow, std::set<NativeCallDemand *> &resolving) {
+    bool progressed = false;
+    for (;;) {
+      std::set<size_t> unresolved;
+      if (callable_choices(flow, &unresolved).closed) return progressed;
+      bool changed = false;
+      for (const auto id : unresolved) {
+        auto *demand = callable_flows_.at(id).producer;
+        if (!demand || active_native_call(*demand) || !resolving.insert(demand).second) continue;
+        changed |= resolve_native_flow(demand->flow, resolving);
+        changed |= compile_native_call(*demand);
+        const auto choices = callable_choices(demand->flow);
+        if (choices.closed && (demand->reused || std::all_of(choices.definitions.begin(), choices.definitions.end(),
+            [&](const auto &source) { return demand->emitted.contains(source.get()); })))
+          changed |= close_callable_effects(*demand);
+        resolving.erase(demand);
+      }
+      if (!changed) return progressed;
+      progressed = true;
+    }
+  }
+  CallableChoices bound_callable_choices(const Value &value, const CallableMemory &memory) {
+    if (!value.callable_address) return callable_choices(value.callable_flow);
+    const auto targets = callable_targets(value.callable_address);
+    CallableChoices result; result.closed = targets.closed;
+    for (size_t holder : targets.holders) {
+      const auto *flow = memory.lookup(holder);
+      if (!flow) { result.closed = false; continue; }
+      auto choices = callable_choices(*flow);
+      result.closed &= choices.closed;
+      for (auto &definition : choices.definitions)
+        if (std::find(result.definitions.begin(), result.definitions.end(), definition) == result.definitions.end())
+          result.definitions.push_back(std::move(definition));
+    }
+    return result;
+  }
+  bool same_native_context(const NativeCallDemand &left, const NativeCallDemand &right, bool values,
+                              std::map<size_t, size_t> *correspondence = nullptr, bool pending_facts = false,
+                              std::vector<std::pair<const Procedure *, const Procedure *>> *images = nullptr,
+                              std::set<const CallableCode *> *escaping_images = nullptr) {
+    if (left.caller != right.caller || left.captured != right.captured ||
+        left.conformances != right.conformances || left.conversion_parameter != right.conversion_parameter) return false;
+    bool recursive = false;
+    for (auto *parent = right.parent; parent; parent = parent->parent) recursive |= parent == &left;
+    std::map<size_t, size_t> owners, reverse_owners, holders, reverse_holders;
+    const auto associate = [](auto &forward, auto &reverse, size_t a, size_t b) {
+      return forward.emplace(a, b).first->second == b && reverse.emplace(b, a).first->second == a;
+    };
+    if (left.arguments.size() != right.arguments.size()) return false;
+    std::map<size_t, size_t> regional_owners, reverse_regional_owners;
+    const auto identity = [&](size_t owner) {
+      try { return region_identity(owner, right.at); }
+      catch (const UnresolvedAccess &) { if (!pending_facts || !recursive) throw; return owner; }
+    };
+    const auto fixed = [&](size_t owner) {
+      owner = identity(owner);
+      regional_owners.emplace(owner, owner);
+      reverse_regional_owners.emplace(owner, owner);
+    };
+    const auto retain = [&](const Value &value) {
+      if (value.region_id) fixed(*value.region_id);
+      for (size_t owner : value.type.capture_regions) fixed(owner);
+    };
+    for (const auto *demand : {&left, &right}) {
+      for (const auto &[id, value] : demand->environment.bindings) retain(*value);
+      for (const auto &source : callable_choices(demand->flow).definitions) if (source->code) {
+        for (size_t owner : source->code->regions) fixed(owner);
+        if (demand->captured) for (size_t owner : source->code->dynamic_regions) fixed(owner);
+      }
+    }
+    for (size_t i = 0; i < left.arguments.size(); ++i) if (left.type.parameters[i].owned) {
+      const auto a = identity(*left.arguments[i].region_id);
+      auto b = identity(*right.arguments[i].region_id);
+      if (pending_facts && recursive && regional_owners.contains(a) && regional_owners.at(a) != b &&
+          possible_region_alias(*right.arguments[i].region_id, *left.arguments[i].region_id)) b = a;
+      if (!associate(regional_owners, reverse_regional_owners, a, b)) return false;
+    }
+    const auto same_region = [&](size_t first, size_t second) {
+      const auto a = identity(first), b = identity(second);
+      const auto found = regional_owners.find(a);
+      if ((found == regional_owners.end() ? a : found->second) == b) {
+        const auto reverse = reverse_regional_owners.find(b);
+        return reverse == reverse_regional_owners.end() || reverse->second == a;
+      }
+      return pending_facts && recursive &&
+          (possible_region_alias(first, second) || possible_region_alias(second, first));
+    };
+    const auto mapped_type = [&](auto &&self, Type type) -> Type {
+      const auto mapped_owner = [&](size_t owner) {
+        owner = identity(owner);
+        const auto found = regional_owners.find(owner);
+        return found == regional_owners.end() ? owner : found->second;
+      };
+      for (auto &owner : type.capture_regions) owner = mapped_owner(owner);
+      std::sort(type.capture_regions.begin(), type.capture_regions.end());
+      for (auto &owner : type.capture_owner_regions) if (owner) owner = mapped_owner(*owner);
+      for (auto &parameter : type.parameters) parameter = self(self, parameter);
+      if (type.target) type.target = std::make_shared<Type>(self(self, *type.target));
+      return type;
+    };
+    if (mapped_type(mapped_type, left.type) != right.type) return false;
+    std::vector<std::pair<const Procedure *, const Procedure *>> matched_images;
+    std::set<const CallableCode *> changed_inputs, escaping;
+    const auto pair_images = [&](const CallableChoices &a, const CallableChoices &b, const auto &matches) {
+      if (!a.closed || !b.closed || a.definitions.size() != b.definitions.size()) return false;
+      std::set<const Procedure *> selected;
+      for (const auto &first : a.definitions) {
+        bool found = false;
+        for (const auto &second : b.definitions) {
+          if (selected.contains(second.get())) continue;
+          const size_t checkpoint = matched_images.size();
+          if (matches(*first, *second)) { selected.insert(second.get()); found = true; break; }
+          matched_images.resize(checkpoint);
+        }
+        if (!found) return false;
+      }
+      return true;
+    };
+    // Contextual images are interpreted by this caller's adapters. Compare
+    // their complete typed schema under the declared owner correspondence;
+    // runtime field contents may differ, but metadata and slot order may not.
+    const auto same_image = [&](auto &&self, const Procedure &a, const Procedure &b) -> bool {
+      if (&a == &b) return true;
+      if (!a.code || !b.code || a.form != b.form || a.lexical != b.lexical ||
+          a.implementation != b.implementation || a.declarations != b.declarations) return false;
+      const auto pair = std::pair{&a, &b};
+      if (std::find(matched_images.begin(), matched_images.end(), pair) != matched_images.end()) return true;
+      const auto &ac = *a.code, &bc = *b.code;
+      if (ac.direct != bc.direct || ac.capture_fields.size() != bc.capture_fields.size()) return false;
+      for (size_t i = 0; i < ac.capture_fields.size(); ++i)
+        if (ac.capture_fields[i].first != bc.capture_fields[i].first) return false;
+      if (ac.layout->elements() != bc.layout->elements() || ac.nested != bc.nested ||
+          ac.dynamic_values != bc.dynamic_values || ac.dynamic_procedures != bc.dynamic_procedures ||
+          ac.result_flow || bc.result_flow || ac.regions.size() != bc.regions.size() ||
+          ac.dynamic_regions.size() != bc.dynamic_regions.size() ||
+          a.lexical_captures.regional_slots != b.lexical_captures.regional_slots ||
+          a.captures.replay != b.captures.replay) return false;
+      for (size_t i = 0; i < ac.regions.size(); ++i) {
+        if (!same_region(ac.regions[i], bc.regions[i])) return false;
+        resolve_region_root(ac.regions[i], left.at); resolve_region_root(bc.regions[i], right.at);
+        if (regions_.at(ac.regions[i]).root != regions_.at(bc.regions[i]).root) return false;
+      }
+      for (size_t i = 0; i < ac.dynamic_regions.size(); ++i)
+        if (!same_region(ac.dynamic_regions[i], bc.dynamic_regions[i])) return false;
+      matched_images.push_back(pair);
+      const auto same_value = [&](const Value &x, const Value &y) {
+        if (mapped_type(mapped_type, x.type) != y.type || x.read_only != y.read_only ||
+            x.nullable != y.nullable || x.pending_owner != y.pending_owner ||
+            x.pointer_view != y.pointer_view || x.required_reference != y.required_reference ||
+            x.binding_read_only != y.binding_read_only || x.replayed != y.replayed ||
+            bool(x.native) != bool(y.native) || bool(x.storage) != bool(y.storage) ||
+            bool(x.reference_field) != bool(y.reference_field) ||
+            bool(x.exception_category) != bool(y.exception_category) ||
+            bool(x.region_id) != bool(y.region_id) || x.holding_id || y.holding_id ||
+            !x.argument_reads.empty() || !y.argument_reads.empty()) return false;
+        if (x.region_id && !same_region(*x.region_id, *y.region_id)) return false;
+        if (x.storage && (x.storage->scope || y.storage->scope ||
+            x.storage->cells != y.storage->cells ||
+            x.storage->initialized_alternatives != y.storage->initialized_alternatives)) return false;
+        auto xc = x, yc = y;
+        resolve_result_facts(xc, left.at); resolve_result_facts(yc, right.at);
+        if (xc.conformances != yc.conformances) return false;
+        if (x.type.kind != Type::procedure) return true;
+        // Symbolic snapshots are demanded by checked bodies. An unused
+        // snapshot may contain an arbitrarily old enclosing image; it supplies
+        // no field to execution. Reuse is rechecked after capture demand closes.
+        if (x.capture_use && !x.capture_use->used) return true;
+        const auto xs = callable_choices(x.callable_flow), ys = callable_choices(y.callable_flow);
+        if (!xs.closed || !ys.closed || xs.definitions.size() != ys.definitions.size()) return false;
+        if (xs.definitions.empty()) return x.procedure == y.procedure;
+        return pair_images(xs, ys, [&](const auto &u, const auto &v) { return self(self, u, v); });
+      };
+      const auto same_locals = [&](const auto &x, const auto &y) {
+        if (x.size() != y.size()) return false;
+        auto other = y.begin();
+        for (const auto &[name, value] : x) {
+          if (name != other->first || !same_value(value, other->second)) return false;
+          ++other;
+        }
+        return true;
+      };
+      if (!same_locals(a.lexical_captures.visible, b.lexical_captures.visible) ||
+          !same_locals(a.lexical_captures.owner_anchors, b.lexical_captures.owner_anchors)) return false;
+      auto other = b.captures.bindings.begin();
+      for (const auto &[id, value] : a.captures.bindings) {
+        if (other == b.captures.bindings.end() || id != other->first ||
+            a.captures.captured(id, value) != b.captures.captured(id, other->second) ||
+            !same_value(*value, *other->second)) return false;
+        ++other;
+      }
+      return other == b.captures.bindings.end();
+    };
+    const auto preserved_outputs = [&](const NativeCallDemand &demand) {
+      const auto preserved = [&](const auto &outputs) {
+        for (const auto &[holder, flow] : outputs) {
+          const auto *input = demand.state.callables.lookup(holder);
+          if (!input) return false;
+          const auto initial = callable_choices(*input), returned = callable_choices(flow);
+          if ((!initial.closed || !returned.closed) && !active_native_call(demand)) return false;
+          for (const auto &source : returned.definitions)
+            if (std::find(initial.definitions.begin(), initial.definitions.end(), source) == initial.definitions.end())
+              return false;
+        }
+        return true;
+      };
+      if (!preserved(demand.returns)) return false;
+      return std::all_of(demand.failures.begin(), demand.failures.end(), preserved);
+    };
+    const auto same_callback = [&](const Value &a, const Value &b,
+                                     const CallableChoices &first, const CallableChoices &second) {
+      // Non-contextual function images carry their own typed entry. Their
+      // bodies/layouts may differ; projection and failure facts must still
+      // agree in this caller after formal owner substitution.
+      const auto ac = closure_regions(a), bc = closure_regions(b);
+      if (ac.size() != bc.size()) return false;
+      for (const auto &[owner, access] : ac) {
+        const auto other = std::find_if(bc.begin(), bc.end(), [&](const auto &item) {
+          return same_region(owner, item.first);
+        });
+        if (other == bc.end() || access.read_only != other->second.read_only) return false;
+        resolve_region_root(owner, left.at);
+        resolve_region_root(other->first, right.at);
+        auto first_access = access, second_access = other->second;
+        resolve_result_facts(first_access, left.at);
+        resolve_result_facts(second_access, right.at);
+        if (regions_.at(owner).root != regions_.at(other->first).root ||
+            first_access.conformances != second_access.conformances) return false;
+      }
+      const auto contract = [&](const CallableChoices &choices, const NativeCallDemand &demand) {
+        std::pair<bool, std::set<size_t>> result;
+        for (const auto &source : choices.definitions) {
+          if (!source->code || !source->code->entry.function) return std::optional<decltype(result)>{};
+          compile_callable(*source, *demand.caller, demand.at);
+          const auto &entry = source->code->entry;
+          if (!entry.complete) return std::optional<decltype(result)>{};
+          result.first |= entry.returns;
+          result.second.insert(entry.failures.begin(), entry.failures.end());
+        }
+        return std::optional(result);
+      };
+      const auto expected = contract(first, left), actual = contract(second, right);
+      return expected && actual && expected == actual;
+    };
+    for (size_t i = 0; i < left.arguments.size(); ++i) {
+      const auto &first = left.arguments[i], &second = right.arguments[i];
+      // Recursive return facts can depend on this very adapter. Its reuse is
+      // provisional until the closed facts pass the final context comparison.
+      const bool same_facts = first.conformances == second.conformances ||
+          (pending_facts && recursive &&
+           (!first.result_fact_origins.empty() || !second.result_fact_origins.empty()));
+      if (first.type.kind == Type::region) {
+        const bool same_owner = first.region_id && second.region_id && same_region(*first.region_id, *second.region_id);
+        bool same_access;
+        try { same_access = first.read_only == second.read_only; }
+        catch (const UnresolvedAccess &) {
+          if (!pending_facts || !recursive) throw;
+          same_access = true;
+        }
+        if (first.type != second.type || !same_owner || !same_access || !same_facts) return false;
+      }
+      if (borrowed_parameter(left.type, i)) {
+        const bool same_storage = first.region_id && second.region_id
+            ? same_region(*first.region_id, *second.region_id) : storage_owner(first) == storage_owner(second);
+        if (first.type != second.type || !same_storage ||
+            first.read_only != second.read_only || !same_facts ||
+            first.nullable != second.nullable || first.pending_owner != second.pending_owner ||
+            bool(first.storage) != bool(second.storage)) return false;
+        if (first.storage) {
+          if (first.storage->cells != second.storage->cells ||
+              first.storage->initialized_alternatives != second.storage->initialized_alternatives) return false;
+          // These same live allocations cannot become uninitialized along a
+          // recursive call path. Sibling calls have no such entry invariant.
+          if (!recursive) for (size_t cell : first.storage->cells)
+            if (left.state.initialized.at(cell) != right.state.initialized.at(cell)) return false;
+        }
+        if (native_callable(first)) {
+          const auto a = callable_targets(first.callable_address), b = callable_targets(second.callable_address);
+          if (!a.closed || !b.closed || a.holders != b.holders) return false;
+          for (size_t holder : a.holders)
+            if (!associate(holders, reverse_holders, holder, holder)) return false;
+        }
+      }
+      const auto a = borrowed_parameter(left.type, i) ? bound_callable_choices(first, left.state.callables) :
+          callable_choices(first.callable_flow);
+      const auto b = borrowed_parameter(right.type, i) ? bound_callable_choices(second, right.state.callables) :
+          callable_choices(second.callable_flow);
+      if (!a.closed || !b.closed) {
+        if (values) return false;
+      } else if (!std::is_permutation(a.definitions.begin(), a.definitions.end(),
+          b.definitions.begin(), b.definitions.end())) {
+        // Function images carry their own entry; contextual images need a
+        // matching checked schema and caller-local dispatch adaptation.
+        if (first.type.target->kind == Type::procedure ||
+            !preserved_outputs(left) || !preserved_outputs(right)) return false;
+        for (const auto *choices : {&a, &b})
+          for (const auto &source : choices->definitions) changed_inputs.insert(source->code.get());
+        if (contextual_callable(first.type)) {
+          if (!pair_images(a, b, [&](const auto &x, const auto &y) { return same_image(same_image, x, y); }))
+            return false;
+        } else {
+          if (!same_callback(first, second, a, b)) return false;
+          if (left.result_flow || right.result_flow) {
+            const size_t checkpoint = matched_images.size();
+            if (!pair_images(a, b, [&](const auto &x, const auto &y) { return same_image(same_image, x, y); }))
+              matched_images.resize(checkpoint);
+          }
+        }
+      }
+    }
+    if (!changed_inputs.empty() && (left.result_flow || right.result_flow)) {
+      // A returned environment must not retain substituted scratch owners.
+      // Inspect complete nested values and demanded dynamic captures; forwarded
+      // equivalent inputs also require dispatch support after this call exits.
+      const auto independent = [&](const NativeCallDemand &demand) {
+        std::set<const Procedure *> visited;
+        const auto check = [&](auto &&self, size_t flow) -> bool {
+          const auto choices = callable_choices(flow);
+          if (!choices.closed && !active_native_call(demand)) return false;
+          for (const auto &source : choices.definitions) {
+            if (!visited.insert(source.get()).second) continue;
+            if (!source->code) return false;
+            // A forwarded image, including a nested environment, retains its
+            // key after this caller exits. Its schema must match and all owners
+            // must remain unchanged below before downstream calls accept it.
+            const bool matched = std::any_of(matched_images.begin(), matched_images.end(), [&](const auto &pair) {
+              return pair.first->code == source->code || pair.second->code == source->code;
+            });
+            if (changed_inputs.contains(source->code.get()) && !matched) return false;
+            if (matched) escaping.insert(source->code.get());
+            const auto &code = *source->code;
+            for (size_t owner : code.regions) if (!same_region(owner, owner)) return false;
+            for (size_t owner : code.dynamic_regions) if (!same_region(owner, owner)) return false;
+            const auto value = [&](const Value &capture) {
+              if (mapped_type(mapped_type, capture.type) != capture.type ||
+                  (capture.region_id && !same_region(*capture.region_id, *capture.region_id))) return false;
+              if (capture.type.kind != Type::procedure ||
+                  (capture.capture_use && !capture.capture_use->used)) return true;
+              if (native_callable(capture)) return self(self, capture.callable_flow);
+              return capture.procedure && !capture.procedure->builtin.empty();
+            };
+            for (const auto &[name, capture] : source->lexical_captures.visible)
+              if (!value(capture)) return false;
+            for (const auto &[name, capture] : source->lexical_captures.owner_anchors)
+              if (!value(capture)) return false;
+            for (const auto &[id, capture] : source->captures.bindings)
+              if (!value(*capture)) return false;
+          }
+          return true;
+        };
+        return check(check, demand.result_flow);
+      };
+      if (!independent(left) || !independent(right)) return false;
+    }
+    const auto image_context = [](const Environment &environment) {
+      for (auto *current = &environment; current; current = current->replay ? &current->replay->caller : nullptr)
+        for (const auto &[id, value] : current->bindings)
+          if (value->region_id || value->type.kind == Type::region || object_type(value->type) ||
+              !value->type.capture_regions.empty()) return false;
+      return true;
+    };
+    // A perform adapter obtains its bits/procedure captures from the selected
+    // image on each invocation. Caller values are irrelevant to that body;
+    // regional overlays still require the caller-dependent owner proof below.
+    if (left.captured && image_context(left.environment) && image_context(right.environment)) {
+      if (correspondence) *correspondence = std::move(holders);
+      if (images) *images = std::move(matched_images);
+      if (escaping_images) *escaping_images = std::move(escaping);
+      return true;
+    }
+    if (left.environment.captured_context != right.environment.captured_context) return false;
+    if (values) {
+      if (left.environment.replay != right.environment.replay) return false;
+      // A recursive frame may construct local callable values. It cannot
+      // reuse this context if any pre-existing holder has changed or expired.
+      for (const auto &[holder, flow] : left.state.callables) {
+        const auto *current = right.state.callables.lookup(holder);
+        if (!current) return false;
+        if (*current != flow) {
+          const auto a = callable_choices(flow), b = callable_choices(*current);
+          if (!a.closed || !b.closed || !std::is_permutation(a.definitions.begin(), a.definitions.end(),
+              b.definitions.begin(), b.definitions.end())) return false;
+        }
+      }
+    }
+    auto l = left.environment.bindings.begin(), r = right.environment.bindings.begin();
+    for (; l != left.environment.bindings.end() && r != right.environment.bindings.end(); ++l, ++r) {
+      if (l->first != r->first) return false;
+      const auto *a = l->second, *b = r->second;
+      if (a->type != b->type || left.environment.captured(l->first, a) !=
+          right.environment.captured(r->first, b)) return false;
+      if (native_callable(*a) && native_callable(*b) &&
+          a->storage && b->storage && !left.environment.captured(l->first, a)) {
+        if (a->read_only != b->read_only || a->nullable != b->nullable ||
+            a->pointer_view != b->pointer_view || a->binding_read_only != b->binding_read_only ||
+            a->required_reference != b->required_reference ||
+            !a->storage->scope || !b->storage->scope) return false;
+        if (values && (*b->storage->scope >= right.scopes.size() || !right.scopes[*b->storage->scope])) return false;
+        const auto ac = bound_callable_choices(*a, left.state.callables);
+        const auto bc = bound_callable_choices(*b, right.state.callables);
+        if (!ac.closed || !bc.closed) {
+          if (values) return false;
+        } else if (!std::is_permutation(ac.definitions.begin(), ac.definitions.end(),
+            bc.definitions.begin(), bc.definitions.end(), [values](const auto &x, const auto &y) {
+              return values ? x == y : x->form == y->form && x->lexical == y->lexical && x->implementation == y->implementation;
+            })) return false;
+        const auto at = callable_targets(a->callable_address), bt = callable_targets(b->callable_address);
+        if (!at.closed || !bt.closed || at.holders.size() != 1 || bt.holders.size() != 1) {
+          if (values) {
+            if (!at.closed || !bt.closed || a != b) return false;
+            for (size_t holder : at.holders)
+              if (!associate(holders, reverse_holders, holder, holder)) return false;
+          }
+        } else if (!associate(holders, reverse_holders, *at.holders.begin(), *bt.holders.begin())) return false;
+        if (!associate(owners, reverse_owners, *a->storage->scope, *b->storage->scope)) return false;
+        continue;
+      }
+      if (!values || a == b) continue;
+      // Live numeric effects are read from TLS in every activation. Captured
+      // values and other resources must retain the same checked provenance.
+      if (!local_bits(a->type) || a->type.kind == Type::exception ||
+          left.environment.captured(l->first, a) || right.environment.captured(r->first, b)) return false;
+    }
+    if (l != left.environment.bindings.end() || r != right.environment.bindings.end()) return false;
+    if (correspondence) *correspondence = std::move(holders);
+    if (images) *images = std::move(matched_images);
+    if (escaping_images) *escaping_images = std::move(escaping);
+    return true;
+  }
+  bool refine_native_reuse() {
+    bool changed = false;
+    for (size_t i = 0; i < native_call_demands_.size(); ++i) {
+      auto &demand = native_call_demands_[i];
+      if (!demand.reused) continue;
+      for (auto &argument : demand.arguments) resolve_result_facts(argument, demand.at);
+      std::vector<std::pair<const Procedure *, const Procedure *>> images;
+      if (same_native_context(*demand.reused, demand, true, nullptr, false, &images)) {
+        for (const auto &[first, second] : images)
+          for (size_t j = 0; j < first->code->capture_fields.size(); ++j) {
+            const auto &a = first->code->capture_fields[j].second, &b = second->code->capture_fields[j].second;
+            if (a->used && !b->used) { b->require(); changed = true; }
+          }
+        continue;
+      }
+      // The recursive hypothesis has supplied enough return information to
+      // check this distinct context. Its IR declaration has not been replaced.
+      demand.reused = nullptr;
+      demand.pending_argument_facts = false;
+      const auto reopen = [&](const auto &outputs) {
+        for (const auto &[holder, id] : outputs) {
+          auto &flow = callable_flows_.at(id);
+          flow.inputs.clear(); flow.open = true;
+        }
+      };
+      reopen(demand.returns);
+      for (const auto &failure : demand.failures) reopen(failure);
+      if (demand.result_flow) {
+        auto &flow = callable_flows_.at(demand.result_flow);
+        flow.inputs.clear(); flow.open = true;
+      }
+      const auto reopen_initialization = [&](const auto &outputs) {
+        for (const auto &[cell, id] : outputs) {
+          auto &flow = initialization_flows_.at(id);
+          flow.inputs.clear(); flow.open = true;
+        }
+      };
+      reopen_initialization(demand.initialized);
+      for (const auto &failure : demand.failure_initialized) reopen_initialization(failure);
+      changed = true;
+    }
+    return changed;
+  }
+  bool compile_native_call(NativeCallDemand &demand) {
+    if (demand.reused || active_native_call(demand)) return false;
+    checking_native_calls_.insert(&demand);
+    const auto checking = llvm::scope_exit([&] { checking_native_calls_.erase(&demand); });
+    if (demand.selection && !select_native_method(demand)) return false;
+    const auto choices = callable_choices(demand.flow);
+    if (choices.definitions.empty() || std::all_of(choices.definitions.begin(), choices.definitions.end(),
+        [&](const auto &source) { return demand.emitted.contains(source.get()); })) return false;
+    bool pending_facts = demand.pending_argument_facts;
+    if (!pending_facts) for (auto &argument : demand.arguments) {
+      try {
+        if (argument.result_type_origin &&
+            (argument.type.kind == Type::region || region_definition(argument.type)))
+          resolve_result_type(argument, demand.at, true);
+        resolve_result_facts(argument, demand.at);
+      }
+      catch (const UnresolvedAccess &) { pending_facts = true; }
+    }
+    // Repeated calls in one native caller can share a checked record adapter.
+    // Its lexical context is rebuilt at each call, not borrowed from its frame.
+    if (!pending_facts && demand.type.pure_callable && demand.record_result && demand.emitted.empty() && choices.closed &&
+        demand.returns.empty() && std::none_of(demand.arguments.begin(), demand.arguments.end(), native_callable)) {
+      for (auto &checked : native_call_demands_) {
+        if (&checked == &demand) break;
+        if (checked.parent != demand.parent || checked.reused || checked.selection ||
+            !checked.definition.complete || active_native_call(checked) || !checked.returns.empty()) continue;
+        const auto reaching = callable_choices(checked.flow);
+        if (!reaching.closed || !std::is_permutation(choices.definitions.begin(), choices.definitions.end(),
+            reaching.definitions.begin(), reaching.definitions.end()) ||
+            !std::all_of(reaching.definitions.begin(), reaching.definitions.end(),
+                [&](const auto &source) { return checked.emitted.contains(source.get()); })) continue;
+        if (!same_native_context(checked, demand, true)) continue;
+        demand.reused = &checked;
+        reuse_initialization(demand, checked);
+        return true;
+      }
+    }
+    auto previous_calls = std::move(call_path_);
+    call_path_ = demand.calls;
+    std::vector<const NativeCallDemand *> ancestors;
+    for (auto *parent = demand.parent; parent; parent = parent->parent) ancestors.push_back(parent);
+    std::reverse(ancestors.begin(), ancestors.end());
+    for (const auto *ancestor : ancestors) {
+      const auto reaching = callable_choices(ancestor->flow);
+      if (!std::is_permutation(choices.definitions.begin(), choices.definitions.end(),
+                               reaching.definitions.begin(), reaching.definitions.end())) continue;
+      if (!demand.emitted.empty()) continue;
+      std::map<size_t, size_t> holders;
+      if (!same_native_context(*ancestor, demand, true, &holders, pending_facts)) continue;
+      const auto connect = [&](const auto &from, const auto &to) {
+        for (const auto &[a, b] : holders)
+          if (from.contains(a) && to.contains(b)) callable_flows_.at(to.at(b)).inputs = {from.at(a)};
+      };
+      connect(ancestor->returns, demand.returns);
+      if (demand.result_flow) callable_flows_.at(demand.result_flow).inputs = {ancestor->result_flow};
+      for (size_t i = 0; i < demand.failures.size(); ++i) connect(ancestor->failures[i], demand.failures[i]);
+      demand.reused = ancestor;
+      reuse_initialization(demand, *ancestor);
+      call_path_ = std::move(previous_calls);
+      return true;
+    }
+    for (const auto *ancestor : ancestors) {
+      const auto reaching = callable_choices(ancestor->flow);
+      if (std::is_permutation(choices.definitions.begin(), choices.definitions.end(),
+          reaching.definitions.begin(), reaching.definitions.end(), [](const auto &a, const auto &b) {
+            // A named recursive call can leave an image adapter for its
+            // static descriptor once; that is not changing captured state.
+            return a->code->direct == b->code->direct &&
+                a->form == b->form && a->lexical == b->lexical && a->implementation == b->implementation;
+          }) && same_native_context(*ancestor, demand, false)) {
+        const auto unresolved = [&](const FlowState &state) {
+          return std::any_of(state.callables.begin(), state.callables.end(),
+              [&](const auto &entry) { return !callable_choices(entry.second).closed; });
+        };
+        if (!choices.closed || unresolved(ancestor->state) || unresolved(demand.state)) {
+          call_path_ = std::move(previous_calls);
+          return false;
+        }
+        fail(demand.at, "recursive callable adaptation with changing captures or callable storage is not yet implemented");
+      }
+    }
+    demand.pending_argument_facts = pending_facts;
+    native_activations_.push_back({nullptr, demand.caller, {}, demand.type.parameters, {}, demand.definition});
+    auto &active = native_activations_.back();
+    active.call = &demand;
+    auto previous_ir = ir_.begin_native(active.definition, demand.tail);
+    const auto previous_flow = flow_state();
+    const auto previous_scopes = scopes_;
+    for (size_t i = 0; i < scopes_.size(); ++i)
+      scopes_[i] = i < demand.scopes.size() && demand.scopes[i];
+    {
+      // Source expansion guards belong to one native frame, not the checker's call stack.
+      const auto expansion = llvm::SaveAndRestore(active_calls_, std::set<const Form *>{});
+      const auto context = llvm::SaveAndRestore(native_context_, &active);
+      const auto handlers = llvm::SaveAndRestore(handlers_, std::vector<HandlerScope *>{});
+      const auto checked = llvm::SaveAndRestore(npe_allowed_, !demand.type.throws_types.empty());
+      const auto loops = llvm::SaveAndRestore(loop_pointers_, std::vector<LoopPointers>{});
+      const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
+      const auto conformances = llvm::SaveAndRestore(caller_conformances_, demand.conformances);
+      auto *image = active.definition.function->getArg(0);
+      for (const auto &source : choices.definitions) {
+        if (!demand.emitted.insert(source.get()).second) continue;
+        if (!source->code) fail(demand.at, "procedure alternatives require compatible native representations");
+        const auto match = ir_.match_callable(image, source->code->dispatch_key);
+        demand.matches.emplace(source.get(), match);
+        auto *next = match.next;
+        const auto capture_scope = ir_.scope();
+        restore_flow(demand.state);
+        if (demand.conversion_parameter) {
+          const auto &parameter = parameter_at(*source->form, *demand.conversion_parameter);
+          const auto path = route_to(demand.type.parameters.front(), *demand.type.target, parameter,
+                                      *source->lexical, *demand.caller, demand.at);
+          if (!path) fail(demand.at, "selected callable body has no applicable argument conversion from " +
+              type_name(demand.type.parameters.front()) + " to " + type_name(*demand.type.target) +
+              "\n" + location_text(parameter.at) + ": note: parameter declared here");
+          auto argument = loaded_value(demand.type.parameters.front(), active.definition.function->getArg(2));
+          try {
+            auto result = converted(std::move(argument), *path, demand.at, *demand.caller);
+            ir_.restore(capture_scope);
+            ir_.native_return(stored_value(result, *demand.type.target, demand.at));
+          } catch (const EndPath &) { /* The conversion has no successful continuation. */ }
+          ir_.enter(next);
+          continue;
+        }
+        auto procedure = *source;
+        const auto &code = *source->code;
+        size_t index = 0;
+        callable_fields(procedure, [&](llvm::Value *&field, bool nested) {
+          field = ir_.callable_field(image, code.layout, index++, nested);
+        });
+        for (size_t id : code.dynamic_values) {
+          if (!demand.captured) { ++index; continue; }
+          const auto *original = procedure.captures.lookup(id);
+          auto value = *original;
+          auto loaded = loaded_value(value.type, ir_.callable_field(image, code.layout, index++, false));
+          value.native = loaded.native;
+          value.exception_category = loaded.exception_category;
+          value.replayed = true;
+          ir_.effect(id, value.type, value.native);
+          binding_values_.push_back(std::move(value));
+          procedure.captures.bindings = binding_factory_.add(procedure.captures.bindings, id, &binding_values_.back());
+          procedure.captures.captured_bindings = binding_factory_.add(
+              procedure.captures.captured_bindings, id, &binding_values_.back());
+        }
+        for (size_t id : code.dynamic_procedures) {
+          if (!demand.captured) { ++index; continue; }
+          auto value = *procedure.captures.lookup(id);
+          value.native = ir_.callable_field(image, code.layout, index++, true);
+          value.replayed = true;
+          auto writes = std::make_shared<LLVMEmission::EffectWrites>();
+          ir_.captured_procedure(id, value.native, writes);
+          capture_effects_.emplace_back(value.capture_use, std::move(writes));
+          binding_values_.push_back(std::move(value));
+          procedure.captures.bindings = binding_factory_.add(procedure.captures.bindings, id, &binding_values_.back());
+          procedure.captures.captured_bindings = binding_factory_.add(
+              procedure.captures.captured_bindings, id, &binding_values_.back());
+        }
+        std::map<size_t, llvm::Value *> owners;
+        for (size_t region : code.regions) {
+          owners.try_emplace(region, regions_[region].owner);
+          regions_[region].live = true;
+          regions_[region].owner = ir_.callable_field(image, code.layout, index++, false);
+        }
+        for (size_t region : code.dynamic_regions) {
+          if (!demand.captured) { ++index; continue; }
+          owners.try_emplace(region, regions_[region].owner);
+          // Captured dynamic resources remain borrowed. A demanded read must
+          // still prove this region live in the invocation's flow state.
+          regions_[region].owner = ir_.callable_field(image, code.layout, index++, false);
+        }
+        auto environment = demand.type.pure_callable ? Environment{} :
+                           demand.captured ? procedure.captures : demand.environment;
+        if (demand.captured) {
+          environment.replay = std::make_shared<CaptureReplay>(CaptureReplay{
+              demand.environment, procedure.captures.captured_bindings, procedure.captures.replay, {}});
+          binding_check(environment, demand.at);
+        }
+        // Owner bases must already be formal inputs when constructing an
+        // interior argument, independently of parameter declaration order.
+        for (size_t i = 0; i < demand.type.parameters.size(); ++i) {
+          if (demand.type.parameters[i].kind != Type::region) continue;
+          const auto &value = demand.arguments[i];
+          region_pointer(borrowed(value), demand.at);
+          auto *argument = active.definition.function->getArg(
+              unsigned(i + 2 + bool(demand.result_flow && !active.definition.borrowed_result)));
+          for (const auto &input : demand.arguments) if (input.region_id) {
+            bool same = input.region_id == value.region_id;
+            if (!same) try {
+              same = region_identity(*input.region_id, demand.at) == region_identity(*value.region_id, demand.at);
+            } catch (const UnresolvedAccess &) { /* Unresolved aliases retain their final owner proof. */ }
+            if (!same) continue;
+            owners.try_emplace(*input.region_id, regions_[*input.region_id].owner);
+            regions_[*input.region_id].owner = argument;
+          }
+        }
+        std::vector<Value> parameters;
+        for (size_t i = 0; i < demand.type.parameters.size(); ++i) {
+          auto *argument = active.definition.function->getArg(
+              unsigned(i + 2 + bool(demand.result_flow && !active.definition.borrowed_result)));
+          if (borrowed_parameter(demand.type, i)) {
+            auto value = demand.arguments[i];
+            value.pointer.reset(); value.reference_field.reset();
+            if (value.storage) { value.storage->address = argument; value.native = nullptr; }
+            else value.native = ir_.nullable_offset(region_pointer(value, demand.at), argument);
+            parameters.push_back(std::move(value));
+          } else if (demand.type.parameters[i].kind == Type::region) {
+            auto value = demand.arguments[i];
+            value.native = argument;
+            if (value.type.owned) value = hold_region(std::move(value), false, true);
+            parameters.push_back(std::move(value));
+          } else parameters.push_back(native_parameter(demand.type.parameters[i], demand.arguments[i].callable_flow, argument));
+        }
+        auto result = inline_call(*procedure.form, *procedure.lexical, std::move(environment), parameters,
+                                  demand.type.pure_callable, demand.at, *demand.caller,
+                                  procedure.implementation, &procedure.lexical_captures);
+        check_declarations(procedure.declarations,
+                            demand.type.pure_callable ? Form::Kind::function : Form::Kind::procedure, parameters, result,
+                            *demand.caller, demand.at, declares_npe(procedure.form->throws_types,
+                                                                 *procedure.lexical, procedure.form->at));
+        if (result.type != Type::never && demand.record_result)
+          return_facts_.at(demand.record_result - 1).alternatives.push_back(result);
+        if (result.type != Type::never && demand.result_flow) {
+          if (active.definition.borrowed_result) {
+            if (!result.callable_address) fail(demand.at, "borrowed callable result requires a live holder view");
+            auto &inputs = callable_flows_.at(demand.result_flow).inputs;
+            if (std::find(inputs.begin(), inputs.end(), result.callable_address) == inputs.end())
+              inputs.push_back(result.callable_address);
+          } else return_callable(result, demand.result_flow, active.definition, demand.at);
+        }
+        if (result.type.kind == Type::region && result.type.owned) result = take_owner(result, demand.at);
+        ir_.restore(capture_scope);
+        if (result.type != Type::never) {
+          record_callable_effects(demand.returns);
+          record_initialization(demand.initialized);
+          ir_.native_return(active.definition.borrowed_result ? borrowed_operand(result, demand.at) :
+              result.type == Type::void_type || demand.result_flow ? nullptr : stored_value(result, result.type, demand.at));
+        }
+        for (const auto &[region, owner] : owners) regions_[region].owner = owner;
+        ir_.enter(next);
+      }
+      demand.tail = ir_.here();
+      ir_.unreachable(); // Additional reaching definitions can extend this dispatch.
+    }
+    ir_.end_native(active.definition, std::move(previous_ir));
+    restore_flow(previous_flow);
+    for (size_t i = 0; i < scopes_.size(); ++i)
+      scopes_[i] = i < previous_scopes.size() && previous_scopes[i];
+    demand.definition = std::move(active.definition);
+    native_activations_.pop_back();
+    if (demand.context) {
+      ir_.resolve_context(demand.context, demand.definition);
+      demand.context = nullptr;
+    }
+    call_path_ = std::move(previous_calls);
+    return true;
+  }
+  bool compile_callable(const Procedure &source, const Module &caller, const Location &at) {
+    auto &code = *source.code;
+    if (code.entry.complete || !code.entry.function->empty()) return false;
+    auto procedure = source;
+    const auto type = procedure_type(*source.form, *source.lexical);
+    native_activations_.push_back({source.form, source.lexical,
+        source.implementation.empty() ? ImplementationContext{source.lexical} : source.implementation,
+        type.parameters, {}, code.entry});
+    auto &activation = native_activations_.back();
+    auto previous_ir = ir_.begin_native(activation.definition);
+    const auto call_begin = native_call_demands_.size();
+    const auto previous_flow = flow_state();
+    std::vector<llvm::Value *> owner_values;
+    {
+      const auto expansion = llvm::SaveAndRestore(active_calls_, std::set<const Form *>{});
+      const auto context = llvm::SaveAndRestore(native_context_, &activation);
+      const auto handlers = llvm::SaveAndRestore(handlers_, std::vector<HandlerScope *>{});
+      const auto checked = llvm::SaveAndRestore(npe_allowed_, code.entry.checked_null);
+      const auto loops = llvm::SaveAndRestore(loop_pointers_, std::vector<LoopPointers>{});
+      const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
+      const auto cleanup = ir_.scope();
+      size_t index = 0;
+      auto *image = code.entry.function->getArg(0);
+      callable_fields(procedure, [&](llvm::Value *&field, bool nested) {
+        field = ir_.callable_field(image, code.layout, index++, nested);
+      });
+      for (size_t region : code.regions) {
+        owner_values.push_back(regions_[region].owner);
+        regions_[region].live = true; // Invocation checks the captured owner's live view.
+        regions_[region].owner = ir_.callable_field(image, code.layout, index++, false);
+      }
+      std::vector<Value> parameters;
+      for (size_t i = 0; i < type.parameters.size(); ++i)
+        parameters.push_back(loaded_value(type.parameters[i],
+            code.entry.function->getArg(unsigned(i + 1 + bool(code.result_flow)))));
+      auto result = inline_call(*procedure.form, *procedure.lexical, {}, parameters, true, at, caller,
+                                procedure.implementation, &procedure.lexical_captures);
+      check_declarations(procedure.declarations, Form::Kind::function, parameters, result, caller, at,
+                          code.entry.checked_null);
+      activation.definition.returns = result.type != Type::never;
+      if (activation.definition.returns && code.result_flow)
+        return_callable(result, code.result_flow, activation.definition, at);
+      ir_.restore(cleanup);
+      if (activation.definition.returns)
+        ir_.native_return(result.type == Type::void_type || code.result_flow ? nullptr : stored_value(result, result.type, at));
+    }
+    resolve_native_calls(call_begin);
+    ir_.end_native(activation.definition, std::move(previous_ir));
+    for (size_t i = 0; i < code.regions.size(); ++i) regions_[code.regions[i]].owner = owner_values[i];
+    restore_flow(previous_flow);
+    ir_.require_context_free(activation.definition);
+    code.entry = std::move(activation.definition);
+    native_activations_.pop_back();
+    if (code.result_flow) callable_flows_.at(code.result_flow).open = false;
+    return true;
+  }
+  Value contextual_call(const Value &selected, const std::vector<Value> &args,
+                         const std::vector<llvm::Value *> &operands, const Environment &env,
+                         const Module &module, const Location &at, bool captured,
+                         const std::optional<StorageView> &destination,
+                         std::optional<size_t> conversion_parameter = {}) {
+    const auto &type = selected.type;
+    std::vector<bool> borrowed;
+    for (size_t i = 0; i < type.parameters.size(); ++i) borrowed.push_back(borrowed_parameter(type, i));
+    auto definition = ir_.native_declaration(type.pure_callable ? "function.context" : "procedure.context",
+        type.parameters, *type.target, true, borrowed, borrowed_result(type));
+    definition.checked_null = !type.throws_types.empty();
+    auto *context = ir_.pending_context();
+    auto parameters = args;
+    std::set<size_t> transferred, inputs;
+    for (size_t i = 0; i < parameters.size(); ++i) {
+      valid_view(parameters[i], at);
+      // Preserve the supplied callable's owner evidence until admission. The
+      // callee's formal type must not overwrite a mismatched environment.
+      if (parameters[i].type.kind == Type::procedure || type.parameters[i].kind == Type::procedure)
+        parameters[i] = admit(std::move(parameters[i]), type.parameters[i], module, at);
+      if (type.parameters[i].owned) {
+        if (!parameters[i].holding_id || !transferred.insert(*parameters[i].holding_id).second)
+          fail(at, "one region owner cannot be consumed by multiple parameters");
+        inputs.insert(*parameters[i].region_id);
+      }
+    }
+    for (size_t i = 0; i < parameters.size(); ++i)
+      if (type.parameters[i].owned) parameters[i] = take_owner(std::move(parameters[i]), at);
+    native_call_demands_.push_back({selected.callable_flow, &module, at,
+        type.pure_callable ? Environment{} : env, captured, type,
+        flow_state(), definition, context, caller_conformances_, scopes_, call_path_});
+    auto &demand = native_call_demands_.back();
+    demand.conversion_parameter = conversion_parameter;
+    demand.arguments = parameters;
+    for (size_t i = 0; i < demand.arguments.size(); ++i)
+      if (!type.const_views.empty() && type.const_views[i] && storage_owner(demand.arguments[i]))
+        demand.arguments[i].read_only = true;
+    demand.parent = native_context_ ? native_context_->call : nullptr;
+    if ((definition.borrowed_result && definition.result.kind == Type::regional) ||
+        definition.result.kind == Type::region) {
+      return_facts_.push_back({&demand, {}});
+      demand.record_result = return_facts_.size();
+    }
+    prepare_callable_effects(demand);
+    prepare_initialization(demand);
+    if (destination || (definition.borrowed_result && definition.result.kind == Type::procedure)) {
+      callable_flows_.push_back({{}, {}, true});
+      demand.result_flow = callable_flows_.size() - 1;
+      callable_flows_.back().producer = &demand;
+    }
+    if (!inputs.empty() && callable_choices(demand.flow).closed) {
+      compile_native_call(demand);
+      if (!demand.reused) definition = demand.definition;
+    }
+    // The exceptional caller edge cannot retain a consumed region. Normal
+    // return may restore access through a returned owning value of that region.
+    for (size_t region : inputs) regions_[region].live = false;
+    llvm::Value *returned;
+    {
+      const auto failures = llvm::SaveAndRestore(pending_callable_failure_,
+          static_cast<const NativeCallDemand *>(&demand));
+      returned = ir_.native_call(definition, selected.native, operands, nullptr,
+                                 destination ? destination->address : nullptr, context);
+    }
+    callable_holders_ = callable_effects(demand, demand.returns);
+    apply_initialization(demand.initialized);
+    if (destination) return held_callable(definition.result, demand.result_flow, returned, *destination);
+    if (definition.borrowed_result) return borrowed_call_result(type, args, returned, at, demand.result_flow, demand.record_result);
+    if (definition.result.kind == Type::region && definition.result.owned) {
+      const auto id = new_region(returned, at);
+      regions_[id].root = definition.result.target ? std::optional(*definition.result.target) : std::nullopt;
+      regions_[id].root_origin = demand.record_result;
+      regions_[id].owner_origin = demand.record_result;
+      regions_[id].owner_inputs = inputs;
+      for (size_t input : inputs) {
+        const auto origins = regions_[input].origins;
+        regions_[id].origins.insert(origins.begin(), origins.end());
+        regions_[input].live = FlowCondition::both(demand.state.live[input], region_alias(id, input));
+      }
+      auto result = scalar(definition.result, returned, id);
+      result.result_type_origin = demand.record_result;
+      result.result_fact_origins = {demand.record_result};
+      result.read_only = !type.const_views.empty() && type.const_views.back();
+      if (!result.read_only) {
+        result.read_only = ReadOnly::deferred([this, origin = demand.record_result, at] {
+          const auto &results = checked_returns(origin, at);
+          return std::any_of(results.begin(), results.end(), [](const Value &value) { return bool(value.read_only); });
+        });
+        projection_permissions_.push_back(result.read_only);
+      }
+      return hold_region(std::move(result), module_top_level_, true);
+    }
+    return definition.result == Type::void_type ? Value{} : loaded_value(definition.result, returned);
+  }
+  Value callable_conversion(const Value &selected, Value value, Type target, size_t index,
+                             const Module &caller, const Location &at, const ConversionPoint &point) {
+    const auto state = flow_state();
+    const auto resume = ir_.begin_conversion(point.native);
+    restore_flow(point.regions);
+    Type type{Type::procedure};
+    type.pure_callable = true;
+    type.parameters = {value.type};
+    type.target = std::make_shared<Type>(target);
+    if (npe_allowed_) type.throws_types = {exception_type(4)};
+    auto conversion = selected;
+    conversion.type = std::move(type);
+    auto result = contextual_call(conversion, {value}, {stored_value(value, value.type, at)},
+                                   {}, caller, at, false, {}, index);
+    ir_.end_conversion(point.native, resume);
+    restore_flow(state);
+    return result;
+  }
+  struct PreparedCallableCall {
+    Value callee;
+    std::vector<Value> arguments;
+    bool contextual;
+  };
+  PreparedCallableCall prepare_callable_call(Value selected, const Expression &expr,
+                                               const Module &module, Environment &env,
+                                               Locals &locals, bool function_context) {
+    const bool contextual = contextual_callable(selected.type);
+    std::vector<ConversionPoint> points;
+    auto args = arguments(expr, module, env, locals, function_context, &points, {}, &selected.type);
+    selected.type = instantiate_callable(selected.type, args, module, expr.at);
+    for (size_t i = 0; i < args.size(); ++i) {
+      const auto target = selected.type.parameters[i];
+      if (target.kind == Type::region || borrowed_parameter(selected.type, i))
+        args[i] = admit(std::move(args[i]), target, module, expr.at);
+      else if (args[i].type.kind == Type::quantity && target.kind == Type::quantity &&
+               !widens(args[i].type, target))
+        args[i] = callable_conversion(selected, std::move(args[i]), target, i, module, expr.at, points[i]);
+      else {
+        if (!widens(args[i].type, target)) require(args[i].type, target, expr.at);
+        args[i] = converted(std::move(args[i]), {{}, {}, target}, expr.at, module, &points[i]);
+      }
+    }
+    return {std::move(selected), std::move(args), contextual};
+  }
+  Value invoke_prepared_callable(const PreparedCallableCall &prepared, const Module &module,
+                                  const Environment &env, const Location &at, bool captured) {
+    const auto &selected = prepared.callee;
+    const auto &args = prepared.arguments;
+    valid_view(selected, at);
+    for (const auto &argument : args) valid_view(argument, at);
+    std::vector<llvm::Value *> operands;
+    for (size_t i = 0; i < args.size(); ++i) {
+      const auto target = selected.type.parameters[i];
+      if (borrowed_parameter(selected.type, i)) operands.push_back(borrowed_operand(args[i], at));
+      else if (!args[i].native) fail(at, "read of storage before definite initialization in a local parameter argument");
+      else if (target.kind == Type::procedure) {
+        if (!native_callable(args[i]) || !args[i].storage || !args[i].callable_temporary)
+          fail(at, "native callable parameter requires a complete prepared value");
+        operands.push_back(ir_.take_callable(args[i].storage->address));
+      } else operands.push_back(stored_value(args[i], target, at));
+    }
+    const bool returns_callable = selected.type.target->kind == Type::procedure && !borrowed_result(selected.type);
+    std::optional<StorageView> destination;
+    if (returns_callable) destination = StorageView{ir_.hold_callable(ir_.null_pointer(), module_top_level_), local_scope_, {}};
+    if (prepared.contextual)
+      return contextual_call(selected, args, operands, env, module, at, captured, destination);
+    auto choices = callable_choices(selected.callable_flow);
+    if (choices.closed) {
+      for (const auto &candidate : choices.definitions) compile_callable(*candidate, module, at);
+    }
+    callable_demands_.push_back({selected.callable_flow, &module, at});
+    auto signature = ir_.indirect_signature(selected.type.parameters, *selected.type.target, !selected.type.throws_types.empty());
+    signature.complete = choices.closed;
+    signature.returns = !choices.closed;
+    signature.checked_null = !selected.type.throws_types.empty();
+    signature.failures.clear();
+    for (const auto &candidate : choices.definitions) {
+      signature.complete &= candidate->code->entry.complete;
+      signature.failures.insert(candidate->code->entry.failures.begin(), candidate->code->entry.failures.end());
+      signature.returns |= candidate->code->entry.returns;
+    }
+    const auto result_flow = destination ? callable_result_flow(selected.callable_flow) : 0;
+    resolve_callable_results();
+    auto *returned = ir_.native_call(signature, selected.native, operands, ir_.callable_entry(selected.native),
+                                     destination ? destination->address : nullptr);
+    if (!signature.returns) return scalar(Type::never, nullptr);
+    if (destination) return held_callable(signature.result, result_flow, returned, *destination);
+    return signature.result == Type::void_type ? Value{} : loaded_value(signature.result, returned);
+  }
+  Value invoke_procedure(Value value, const Expression &expr, const Module &module,
                          Environment &env, Locals &locals, bool function_context, bool captured) {
+    if (value.pointer) value = pointer_value(*value.pointer, expr.at);
+    if (value.type.kind == Type::procedure && value.storage) value = read_value(std::move(value), expr.at);
+    if (value.type.kind != Type::procedure)
+      fail(expr.at, expr.kind == Expression::Kind::value_call ? "call target must be a function or procedure value" :
+           "binding '" + expr.text + "' is not callable");
     if (function_context && !value.type.pure_callable) fail(expr.at, "a function cannot invoke a procedure");
     valid_view(value, expr.at);
-    if (!value.procedure) fail(expr.at, "binding '" + expr.text + "' is not callable");
+    if (!value.procedure && !native_callable(value)) fail(expr.at, "binding '" + expr.text + "' is not callable");
     if (!value.type.throws_types.empty()) require_npe_handler(expr.at);
+    if (native_callable(value)) {
+      auto selected = value;
+      std::optional<size_t> protection;
+      if (selected.callable_address) {
+        protection = ir_.protect_callable(selected.native);
+        selected.native = ir_.protected_callable(*protection);
+      }
+      const auto leave_protection = llvm::scope_exit([&] {
+        if (protection) ir_.leave_callable_protection(*protection);
+      });
+      auto prepared = prepare_callable_call(std::move(selected), expr, module, env, locals, function_context);
+      auto result = invoke_prepared_callable(prepared, module, env, expr.at, captured);
+      if (protection && result.type != Type::never) ir_.release_callable_protection(*protection);
+      return result;
+    }
     const auto proc = value.procedure; // Resolve before arguments/capture installation.
     std::vector<ConversionPoint> points;
     auto args = arguments(expr, module, env, locals, function_context, proc->form ? &points : nullptr,
         proc->form ? std::vector<Method>{{proc->form, proc->lexical}} : std::vector<Method>{});
     if (!proc->builtin.empty()) {
       if (args.size() != 1) fail(expr.at, "@" + proc->builtin + " expects one argument");
+      require_argument_reads(args[0]);
       if (!args[0].native) fail(expr.at, "read of storage before definite initialization in an argument");
       if (value.type.target) require(args[0].type, value.type.parameters[0], expr.at);
       if (proc->builtin == "assert") {
@@ -2590,7 +5453,8 @@ class Compiler {
       for (size_t i = 0; i < args.size(); ++i) {
         if (const auto path = route(args[i].type, parameter_at(*proc->form, i), *proc->lexical, module, expr.at))
           args[i] = converted(args[i], *path, expr.at, module, points.empty() ? nullptr : &points[i],
-              !points.empty() && points[i].raw_view && !(parameter_at(*proc->form, i).declaration_kind == "ptr" && !parameter_at(*proc->form, i).owner.empty()));
+              !points.empty() && points[i].raw_view && !(parameter_at(*proc->form, i).declaration_kind == "ptr" && !parameter_at(*proc->form, i).owner.empty()),
+              parameter_at(*proc->form, i).owner.empty());
       }
     }
     auto call_env = captured ? proc->captures : env;
@@ -2600,7 +5464,9 @@ class Compiler {
       binding_check(call_env, expr.at);
     }
     const bool pure = value.type.pure_callable;
+    auto *native_body = ir_.begin_callable();
     auto result = call(*proc->form, *proc->lexical, pure ? Environment{} : std::move(call_env), args, pure, expr.at, module, proc->implementation, &proc->lexical_captures);
+    ir_.end_callable(native_body);
     check_declarations(proc->declarations, pure ? Form::Kind::function : Form::Kind::procedure, args, result, module, expr.at, declares_npe(proc->form->throws_types, *proc->lexical, proc->form->at));
     return result;
   }
@@ -2660,7 +5526,7 @@ class Compiler {
                           bool function_context) {
     auto owner = expression(*expr.children[0], module, env, locals, function_context);
     if (owner.type.kind != Type::region) fail(expr.at, "alloc requires a whole region");
-    if (owner.read_only) fail(expr.at, "cannot allocate through a read-only region view");
+    require_writable(owner.read_only, expr.at, "cannot allocate through a read-only region view");
     region_pointer(owner, expr.at);
     auto type = resolve({Type::named, expr.text}, module, expr.at);
     if (type.kind != Type::array && type.kind != Type::regional)
@@ -2708,7 +5574,10 @@ class Compiler {
         if (fields[i].declaration_kind == "ref")
           ir_.require_representable_reference(ir_.field(region_pointer(owner, expr.at), result.native, type, i, fields[i].type), args[i].native);
     }
-    for (const auto &arg : args) merge_conformances(result.conformances, arg.conformances);
+    for (const auto &arg : args) {
+      merge_conformances(result.conformances, arg.conformances);
+      merge_result_origins(result, arg);
+    }
     return contextual(std::move(result), module);
   }
   Value loop_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
@@ -2723,6 +5592,7 @@ class Compiler {
     if (expr.kind == K::fold) {
       accumulator = contextual(expression(*expr.children[2], module, env, locals, function_context), module);
       accumulator.pointer.reset();
+      resolve_result_facts(accumulator, expr.at);
       if (local_bits(accumulator.type)) accumulator = bits_value(std::move(accumulator));
       if (accumulator.type == Type::void_type || accumulator.type.kind == Type::procedure || accumulator.arguments ||
           accumulator.type == Type::null_ref)
@@ -2771,31 +5641,62 @@ class Compiler {
     };
     changed(changed, *expr.children[body_index]);
     LoopPointers loop_pointers{pointers_.size(), {}};
+    std::vector<std::pair<size_t, size_t>> callable_headers, address_headers;
+    if (!one && !empty) {
+      const auto incoming = callable_holders_;
+      for (const auto &[holder, flow] : incoming) {
+        callable_flows_.push_back({{}, {flow}, true});
+        callable_flows_.back().loop = true;
+        const auto header = callable_flows_.size() - 1;
+        callable_holders_ = callable_memory_factory_.add(callable_holders_, holder, header);
+        callable_headers.emplace_back(holder, header);
+      }
+    }
     for (auto &pointer : pointers_) {
-      auto &view = pointer.view;
-      const bool initialized = !view.storage || std::all_of(view.storage->cells.begin(), view.storage->cells.end(),
-          [&](size_t cell) { return cells_.at(cell).initialized; });
+      const auto &current = *pointer.view;
+      const bool initialized = !current.storage || std::all_of(current.storage->cells.begin(), current.storage->cells.end(),
+          [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) == true; });
       loop_pointers.initialized.push_back(initialized);
       if (!one && !empty && !pointer.fixed_binding && initialized) {
+        auto view = current;
+        if (view.callable_address) {
+          callable_flows_.push_back({{}, {view.callable_address}, true});
+          callable_flows_.back().loop = true;
+          view.callable_address = callable_flows_.size() - 1;
+          address_headers.emplace_back(size_t(&pointer - pointers_.data()), view.callable_address);
+        }
         if (!pointer.required && rebound_pointers.contains(size_t(&pointer - pointers_.data()))) view.nullable = true;
         view.referent = nullptr;
         if (view.storage) {
           view.storage->cells.clear();
           view.storage->initialized_alternatives = true;
         }
+        pointer.view = snapshot_pointer(std::move(view));
       }
     }
     if (!one && !empty) loop_pointers_.push_back(loop_pointers);
     const auto next = block(*expr.children[body_index], module, env, std::move(inner_locals), function_context,
                             expr.kind == K::range_for, {}, local_bits(accumulator.type));
+    for (const auto &[holder, id] : callable_headers) {
+      auto &header = callable_flows_.at(id);
+      const auto *back = callable_holders_.lookup(holder);
+      if (next.type != Type::never && back && *back != id) header.inputs.push_back(*back);
+      header.open = false;
+    }
+    for (const auto &[pointer, id] : address_headers) {
+      auto &header = callable_flows_.at(id);
+      const auto back = pointers_[pointer].view->callable_address;
+      if (next.type != Type::never && back != id) header.inputs.push_back(back);
+      header.open = false;
+    }
     if (!one && !empty) {
       loop_pointers_.pop_back();
       if (next.type != Type::never)
         for (size_t i = 0; i < loop_pointers.boundary; ++i) {
-          const auto &view = pointers_[i].view;
+          const auto &view = *pointers_[i].view;
           if (loop_pointers.initialized[i] && view.storage &&
               !std::all_of(view.storage->cells.begin(), view.storage->cells.end(),
-                  [&](size_t cell) { return cells_.at(cell).initialized; }))
+                  [&](size_t cell) { return initialization_known(cells_.at(cell).initialized) == true; }))
             fail(expr.at, "loop-carried pointer target must remain definitely initialized on every continuing path");
         }
     }
@@ -2806,8 +5707,8 @@ class Compiler {
         fail(expr.at, "a fold reference must retain its owning region" +
                          region_note(accumulator.region_id, "initial accumulator's region acquired here") +
                          region_note(next.region_id, "iteration result's region acquired here"));
-      if (next.read_only && !accumulator.read_only)
-        fail(expr.at, "a fold cannot feed a read-only view into a writable accumulator");
+      require_access(next.read_only, accumulator.read_only, expr.at,
+          "a fold cannot feed a read-only view into a writable accumulator");
       for (const auto &relation : accumulator.conformances)
         if (!establishes(next, relation, expr.at) && !subtype(relation.data, relation.interface, module, expr.at))
           fail(expr.at, "a fold result must retain established conformance " + type_name(relation.data) +
@@ -2880,7 +5781,13 @@ class Compiler {
     std::vector<ConversionPoint> points;
     const auto args = arguments(expr, module, env, locals, function_context,
         &points, functions);
-    auto selected = method(expr.text, module, args, expr.at);
+    std::optional<MethodMatch> selected;
+    try { selected = method(expr.text, module, args, expr.at); }
+    catch (const UnresolvedAccess &) {
+      if (auto result = defer_method(expr.text, module, args, env, expr.at,
+                                     function_context || function_result, points)) return *result;
+      throw;
+    }
     if (!selected && functions.size() == 1) {
       const auto &candidate = functions.front();
       return call_method({candidate, std::vector<Route>(args.size()), information.declarations}, args, expr.at, env, function_context || function_result, module, points);
@@ -2910,8 +5817,10 @@ class Compiler {
     const auto values = [&](bool read = true) -> const std::vector<Value> & {
       if (!evaluated) evaluated = arguments(expr, module, env, locals, function_context,
           !expr.intrinsic && converting_method(expr.text, module, expr.at) ? &points : nullptr);
-      if (read) for (const auto &value : *evaluated)
+      if (read) for (const auto &value : *evaluated) {
+        require_argument_reads(value);
         if (value.storage && !value.native) fail(expr.at, "read of storage before definite initialization in an argument");
+      }
       return *evaluated;
     };
     if (!expr.intrinsic && intrinsic_name(expr.text) && expr.text != "setfield") {
@@ -2926,6 +5835,8 @@ class Compiler {
         if (const auto selected = method(expr.text, module, args, expr.at))
           return call_method(*selected, args, expr.at, env, function_context || function_result, module, points);
       auto destination = array_element(args[0], args[1], expr.at);
+      if (destination.type.kind == Type::procedure && destination.storage)
+        return transfer_callable(std::move(destination), args[2], expr.at);
       write_bits(destination, args[2], expr.at);
       destination.read_only = true;
       return destination;
@@ -2946,7 +5857,8 @@ class Compiler {
         fail(expr.at, "root requires one typed region");
       const auto &owner = args[0];
       auto value = scalar(*owner.type.target, ir_.region_root(region_pointer(owner, expr.at)), owner.region_id);
-      value.conformances = owner.conformances;
+      value.conformances = owner.conformances; value.result_fact_origins = owner.result_fact_origins;
+      value.result_type_origin = regions_.at(*owner.region_id).root_origin;
       value.read_only = owner.read_only;
       return contextual(std::move(value), module);
     }
@@ -2982,7 +5894,7 @@ class Compiler {
     }
     if (expr.text == "store") {
       const auto &args = values();
-      if (!args.empty() && args[0].read_only) fail(expr.at, "cannot store through a read-only view");
+      if (!args.empty()) require_writable(args[0].read_only, expr.at, "cannot store through a read-only view");
       if (args.size() == 2 && args[0].storage && local_bits(args[0].type)) {
         write_bits(args[0], args[1], expr.at);
         return args[1];
@@ -2999,39 +5911,29 @@ class Compiler {
       if (expr.children.size() != 3 || expr.children[1]->kind != K::name)
         fail(expr.at, "setfield requires a reference, field name and value");
       const auto object = expression(*expr.children[0], module, env, locals, function_context);
-      if (object.read_only) fail(expr.at, "cannot change fields through a read-only view");
+      require_writable(object.read_only, expr.at, "cannot change fields through a read-only view");
       const auto target = object.type.kind == Type::reference ? *object.type.target : object.type;
       if (target.kind != Type::regional)
         fail(expr.at, "setfield requires a regional record view or reference");
       check_nullable(object, expr.at);
-      const auto type = resolve(target, module, expr.at);
       auto value = expression(*expr.children[2], module, env, locals, function_context, false);
-      const auto &fields = products_.at(type.identity).fields;
-      for (size_t i = 0; i < fields.size(); ++i) {
-        if (fields[i].name != expr.children[1]->text) continue;
-        const auto field = fields[i].type;
-        if (field.kind == Type::reference) value = reference_source(std::move(value), *field.target, *object.region_id, fields[i].declaration_kind == "ref", expr.at);
-        else value = read_value(std::move(value), expr.at);
-        if (field.kind == Type::exception) value = admit(std::move(value), field, module, expr.at);
-        else require(value.type, field, expr.at);
-        if (field.kind == Type::reference && value.region_id && value.region_id != object.region_id)
-          fail(expr.at, "cross-region reference fields are outside this prototype" +
-                           region_note(object.region_id, "destination object's region acquired here") +
-                           region_note(value.region_id, "referenced target's region acquired here"));
-        region_pointer(object, expr.at);
-
-        if (field.kind == Type::reference) {
-          value.region_id = object.region_id;
-          merge_conformances(value.conformances, object.conformances);
-          value = contextual(std::move(value), module);
-        }
-
-        const auto slot = ir_.field(region_pointer(object, expr.at), object.native, type, i, field);
-        if (fields[i].declaration_kind == "ref") ir_.require_representable_reference(slot, value.native);
-        ir_.write(slot, stored_value(value, field, expr.at));
-        return field.kind == Type::reference ? target_view(std::move(value), expr.at) : value;
+      const auto [declaration, slot] = record_field(object, expr.children[1]->text, module, expr.at);
+      const auto field = declaration.type;
+      if (field.kind == Type::reference)
+        value = reference_source(std::move(value), *field.target, *object.region_id, declaration.declaration_kind == "ref", expr.at);
+      else value = read_value(std::move(value), expr.at);
+      if (field.kind == Type::exception) value = admit(std::move(value), field, module, expr.at);
+      else require(value.type, field, expr.at);
+      region_pointer(object, expr.at);
+      if (field.kind == Type::reference) {
+        value.region_id = object.region_id;
+        merge_conformances(value.conformances, object.conformances);
+        merge_result_origins(value, object);
+        value = contextual(std::move(value), module);
       }
-      fail(expr.at, "no such regional field '" + expr.children[1]->text + "'");
+      if (declaration.declaration_kind == "ref") ir_.require_representable_reference(slot, value.native);
+      ir_.write(slot, stored_value(value, field, expr.at));
+      return field.kind == Type::reference ? target_view(std::move(value), expr.at) : value;
     }
     static const std::map<std::string, Type> casts{{"i64", Type::integer}, {"u8", Type::uint8},
         {"u32", Type::uint32}, {"u64", Type::uint64}, {"f32", Type::float32}, {"f64", Type::float64}};
@@ -3127,7 +6029,8 @@ class Compiler {
       if (left.region_id) region_pointer(left, expr.at);
       if (right.region_id) region_pointer(right, expr.at);
       return scalar(Type::boolean, ir_.reference_equal(expr.text, left.native, right.native,
-                      left.region_id && right.region_id && left.region_id != right.region_id));
+                      left.region_id && right.region_id &&
+                      region_identity(*left.region_id, expr.at) != region_identity(*right.region_id, expr.at)));
     }
     if (left.type != right.type && numeric(left.type) && numeric(right.type)) {
       const auto common = common_number(left.type, right.type, expr.at);
@@ -3192,6 +6095,9 @@ class Compiler {
         result.storage->initialized_alternatives |= value.storage->initialized_alternatives;
       }
     }
+    std::vector<Value> fact_alternatives;
+    for (const auto &alternative : alternatives) fact_alternatives.push_back(*alternative.value);
+    join_result_facts(result, std::move(fact_alternatives));
     result.nonnull_when.reset();
     result.referent = nullptr;
     result.native = select([](const Value &value) { return value.native; });
@@ -3202,6 +6108,17 @@ class Compiler {
       for (const auto &alternative : alternatives) require(alternative.value->reference_field->type, result.reference_field->type, at);
       result.reference_field->owner = select([](const Value &value) { return value.reference_field->owner; });
       result.reference_field->address = select([](const Value &value) { return value.reference_field->address; });
+    }
+    if (native_callable(result)) {
+      std::vector<size_t> inputs, addresses;
+      for (const auto &alternative : alternatives) {
+        if (!native_callable(*alternative.value)) fail(at, "callable alternatives require compatible native representations");
+        inputs.push_back(alternative.value->callable_flow);
+        addresses.push_back(alternative.value->callable_address);
+      }
+      result.callable_flow = join_callable_flow(std::move(inputs));
+      result.callable_address = join_callable_flow(std::move(addresses));
+      return result;
     }
     if (std::all_of(alternatives.begin(), alternatives.end(), [&](const CaptureAlternative &alternative) {
           return alternative.value->procedure == result.procedure;
@@ -3253,7 +6170,10 @@ class Compiler {
       return join_completions(values, at, module_lifetime);
     }
     auto result = completions.front().value;
-    if (result.procedure) {
+    if (std::any_of(completions.begin(), completions.end(), [](const Completion &item) {
+          return !item.value.result_fact_origins.empty();
+        })) result.conformances.clear();
+    if (result.type.kind == Type::procedure) {
       std::vector<CaptureAlternative> alternatives;
       for (const auto &completion : completions) alternatives.push_back({&completion.value, completion.from});
       result = join_captures(alternatives, at);
@@ -3266,8 +6186,16 @@ class Compiler {
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> values, categories;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> addresses;
     for (const auto &completion : completions) {
-      require(completion.value.type, result.type, at);
-      result.read_only = result.read_only || completion.value.read_only;
+      if (completion.value.type != result.type && completion.value.type.kind == Type::region &&
+          result.type.kind == Type::region && completion.value.type.owned && result.type.owned &&
+          (completion.value.result_type_origin || result.result_type_origin)) {
+        deferred_checks_.push_back({[this, first = result, second = completion.value, at]() mutable {
+          resolve_result_type(first, at);
+          resolve_result_type(second, at);
+          return first.type != second.type;
+        }, at, "owning control-flow results require one concrete root layout"});
+      } else require(completion.value.type, result.type, at);
+      result.read_only |= completion.value.read_only;
       result.nullable = result.nullable || completion.value.nullable;
       result.nonnull_when.reset();
       if (!result.type.owned && (storage_owner(completion.value) != storage_owner(result) ||
@@ -3297,22 +6225,40 @@ class Compiler {
       if (result.type.kind == Type::exception && result.native)
         categories.emplace_back(exception_category(completion.value), completion.from);
     }
+    std::vector<Value> fact_alternatives;
+    for (const auto &completion : completions) fact_alternatives.push_back(completion.value);
+    join_result_facts(result, std::move(fact_alternatives));
     restore_flow(state);
     if (!values.empty()) result.native = ir_.phi(ir_.type_of(result.type), values);
     if (!addresses.empty()) result.storage->address = ir_.phi(addresses.front().first->getType(), addresses);
     if (!categories.empty()) result.exception_category = ir_.phi(ir_.type_of(Type::uint64), categories);
+    if (native_callable(result) && !result.storage) {
+      result.storage = StorageView{ir_.hold_callable(result.native, module_lifetime), local_scope_, {}};
+      register_callable_holder(result);
+      result.callable_temporary = true;
+    }
     if (result.type.owned) {
       if (std::any_of(completions.begin(), completions.end(), [&](const Completion &completion) {
             return completion.value.region_id != result.region_id;
           })) result.region_id = new_region(result.native, at, std::move(origins));
       regions_.at(*result.region_id).live = true;
       if (result.type.target) regions_.at(*result.region_id).root = *result.type.target;
+      regions_.at(*result.region_id).root_origin = result.result_type_origin;
+      if (result.result_fact_origins.size() == 1 &&
+          std::any_of(completions.begin(), completions.end(), [&](const Completion &completion) {
+            return completion.value.region_id != result.region_id;
+          })) {
+        auto &region = regions_.at(*result.region_id);
+        region.owner_origin = result.result_fact_origins.front();
+        for (const auto &completion : completions) region.owner_inputs.insert(*completion.value.region_id);
+      }
       result = hold_region(std::move(result), module_lifetime, true);
     }
     return result;
   }
   Value try_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                       bool function_context, bool copy_bits = false, bool read_result = true) {
+                       bool function_context, bool copy_bits = false, bool read_result = true,
+                          std::optional<Type> callable_result = {}, const Value *result_owner = nullptr) {
     const bool parent_module = module_top_level_;
     const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
     std::array<const Expression *, 4> catches{};
@@ -3336,7 +6282,7 @@ class Compiler {
     Value normal;
     {
       const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, npe_allowed_ || catches[3]);
-      normal = block(*expr.children.front(), module, env, locals.nested(), function_context, false, {}, copy_bits, {}, read_result);
+      normal = block(*expr.children.front(), module, env, locals.nested(), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
     }
     handlers_.pop_back();
 
@@ -3351,6 +6297,7 @@ class Compiler {
       }
       if (result.region_id) region_pointer(result, expr.at);
       if (result.type.owned) result = take_owner(result, expr.at);
+      if (native_callable(result) && !result_owner) result = detach_callable(std::move(result), expr.at);
       ir_.restore(protected_scope.cleanup);
       completions.push_back({result, ir_.here(), flow_state()});
       ir_.jump(join);
@@ -3394,7 +6341,7 @@ class Compiler {
       Value result;
       {
         const auto active = llvm::SaveAndRestore(caught_exception_, std::optional(error));
-        result = block(*clause->children.front(), module, env, std::move(inner_locals), function_context, false, {}, copy_bits, {}, read_result);
+        result = block(*clause->children.front(), module, env, std::move(inner_locals), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
       }
       if (finally) handlers_.pop_back();
       complete(result);
@@ -3405,7 +6352,8 @@ class Compiler {
     return join_completions(completions, expr.at, parent_module);
   }
   Value conditional_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                          bool function_context, bool copy_bits = false, bool read_result = true) {
+                          bool function_context, bool copy_bits = false, bool read_result = true,
+                          std::optional<Type> callable_result = {}, const Value *result_owner = nullptr) {
     const auto condition = expression(*expr.children[0], module, env, locals, function_context);
     require(condition.type, Type::boolean, expr.at);
 
@@ -3414,16 +6362,26 @@ class Compiler {
     const auto before = flow_state();
     const auto native_scope = ir_.scope();
     auto native_branch = ir_.branch(condition.native);
-    if (condition.nonnull_when && condition.nonnull_when->second) pointers_.at(condition.nonnull_when->first).view.nullable = false;
-    auto first = block(*expr.children[1], module, env, locals.nested(), function_context, false, {}, copy_bits, {}, read_result);
+    if (condition.nonnull_when && condition.nonnull_when->second) {
+      auto &pointer = pointers_.at(condition.nonnull_when->first);
+      auto view = *pointer.view; view.nullable = false;
+      pointer.view = snapshot_pointer(std::move(view));
+    }
+    auto first = block(*expr.children[1], module, env, locals.nested(), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
     if (first.type.owned) first = take_owner(first, expr.at);
+    if (native_callable(first) && !result_owner) first = detach_callable(std::move(first), expr.at);
     ir_.restore(native_scope);
     auto first_state = flow_state();
     ir_.otherwise(native_branch);
     restore_flow(before);
-    if (condition.nonnull_when && !condition.nonnull_when->second) pointers_.at(condition.nonnull_when->first).view.nullable = false;
-    auto second = block(*expr.children[2], module, env, locals.nested(), function_context, false, {}, copy_bits, {}, read_result);
+    if (condition.nonnull_when && !condition.nonnull_when->second) {
+      auto &pointer = pointers_.at(condition.nonnull_when->first);
+      auto view = *pointer.view; view.nullable = false;
+      pointer.view = snapshot_pointer(std::move(view));
+    }
+    auto second = block(*expr.children[2], module, env, locals.nested(), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
     if (second.type.owned) second = take_owner(second, expr.at);
+    if (native_callable(second) && !result_owner) second = detach_callable(std::move(second), expr.at);
     ir_.restore(native_scope);
     if (first.type == Type::null_ref && storage_owner(second))
       first = null_target(second.type, second, expr.at);
@@ -3439,7 +6397,8 @@ class Compiler {
     return join_completions(completions, expr.at, parent_module);
   }
   Value expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                   bool function_context, bool read = true, bool copy_bits = false, bool read_nested = true) {
+                   bool function_context, bool read = true, bool copy_bits = false, bool read_nested = true,
+                   std::optional<Type> callable_result = {}, const Value *result_owner = nullptr) {
     if (clang::isStackNearlyExhausted()) {
 #if LLVM_ENABLE_THREADS
       Value result;
@@ -3447,7 +6406,7 @@ class Compiler {
       // WPO can have deep source call paths. Use Clang's existing stack
       // support, and resume C++ diagnostics on the originating stack.
       clang::runWithSufficientStackSpace([] {}, [&] {
-        try { result = expression(expr, module, env, locals, function_context, read, copy_bits, read_nested); }
+        try { result = expression(expr, module, env, locals, function_context, read, copy_bits, read_nested, callable_result, result_owner); }
         catch (...) { error = std::current_exception(); }
       });
       if (error) std::rethrow_exception(error);
@@ -3456,7 +6415,7 @@ class Compiler {
       fail(expr.at, "compiler stack capacity exhausted while elaborating this expression");
 #endif
     }
-    auto result = evaluate(expr, module, env, locals, function_context, copy_bits, read_nested);
+    auto result = evaluate(expr, module, env, locals, function_context, copy_bits, read_nested, callable_result, result_owner);
     if (result.type == Type::never) throw EndPath{};
     if (copy_bits && local_bits(result.type)) return bits_value(read_value(std::move(result), expr.at));
     return read ? read_value(std::move(result), expr.at) : result;
@@ -3478,13 +6437,32 @@ class Compiler {
         if (expr.declaration_kind == "ptr" && value.type.kind == Type::reference && declaration->annotation &&
             declaration->annotation->kind != Type::reference)
           value = target_view(std::move(value), declaration->at);
-        if (value.procedure && expr.declaration_kind == "ref" && expr.fixed_binding) {
+        if (expr.declaration_kind == "func" || expr.declaration_kind == "proc") {
+          if (value.type.kind != Type::procedure || (!value.procedure && !native_callable(value)))
+            fail(declaration->at, "a func/proc initializer must be callable");
+          if (value.type.pure_callable != (expr.declaration_kind == "func"))
+            fail(declaration->at, "a callable declaration must match its function/procedure kind");
+          if (value.nullable) fail(declaration->at, "a func/proc value requires a proven non-null callable");
           if (declaration->annotation)
             value = admit(std::move(value), bind_capture_type(resolve(*declaration->annotation, module, declaration->at),
                           locals.owners(), declaration->at), module, declaration->at);
+          if (native_callable(value)) {
+            value = read_value(std::move(value), declaration->at);
+            if (!value.callable_temporary) {
+              value.native = ir_.copy_callable(value.native);
+              value.storage = StorageView{ir_.hold_callable(value.native, module_top_level_), local_scope_, {}};
+              register_callable_holder(value);
+            }
+            value.callable_temporary = false;
+            value.pointer.reset();
+            value.pointer_view = false;
+            value.read_only = false;
+          }
           declare_local(locals, declaration->text, std::move(value), module, declaration->at);
           continue;
         }
+        if (value.type.kind == Type::procedure && expr.declaration_kind == "ref")
+          fail(declaration->at, "non-null callable values use func or proc, not ref");
         std::optional<Value> owner;
         if (!declaration->owner_name.empty()) {
           const auto found = locals.visible.find(declaration->owner_name);
@@ -3495,9 +6473,11 @@ class Compiler {
         if (value.type == Type::null_ref) {
           if (expr.declaration_kind != "ptr" || declaration->binding != "=" || !declaration->annotation)
             fail(declaration->at, "null initialization requires ptr, an explicit target type, and '='");
-          value = null_target(resolve(*declaration->annotation, module, declaration->at), owner, declaration->at);
+          value = null_target(bind_capture_type(resolve(*declaration->annotation, module, declaration->at),
+                              locals.owners(), declaration->at), owner, declaration->at);
         } else {
-          if (declaration->annotation) value = admit(std::move(value), resolve(*declaration->annotation, module, declaration->at), module, declaration->at);
+          if (declaration->annotation) value = admit(std::move(value), bind_capture_type(resolve(*declaration->annotation, module, declaration->at),
+                                        locals.owners(), declaration->at), module, declaration->at);
           if (owner && storage_owner(value) != storage_owner(*owner)) fail(declaration->at, "pointer initializer does not belong to its declared owner");
           const bool explicit_local = declaration->children.front()->kind == K::make_local;
           if (declaration->binding == "<-" || (expr.declaration_kind == "val" && !explicit_local) ||
@@ -3547,8 +6527,10 @@ class Compiler {
       if (owner == locals.visible.end() || owner->second.type.kind != Type::region)
         fail(expr.at, "unavailable region owner '" + expr.owner_name + "' for var alias");
       valid_view(owner->second, expr.at);
-      if (value.pointer || !value.region_id || value.region_id != owner->second.region_id)
+      if (value.pointer || !value.region_id)
         fail(expr.at, "var storage does not belong to declared region owner '" + expr.owner_name + "'");
+      require_same_region(*value.region_id, *owner->second.region_id, expr.at,
+          "var storage does not belong to declared region owner '" + expr.owner_name + "'");
     }
     const bool regional = !value.pointer && value.region_id.has_value();
     if (expr.fixed_binding) { value.read_only = true; value.binding_read_only = true; }
@@ -3560,65 +6542,89 @@ class Compiler {
     if (regional) locals.regional_slots.insert(expr.text);
     return {};
   }
+  std::pair<Parameter, LLVMEmission::Place> record_field(Value object, const std::string &name,
+      const Module &module, const Location &at, bool materialize = true) {
+    bool pending_layout = false;
+    try {
+      resolve_region_type(object, at);
+      if (object.result_type_origin && region_definition(object.type)) resolve_result_type(object, at);
+    } catch (const UnresolvedAccess &) { pending_layout = true; }
+    if (object.type.kind == Type::region && object.type.target) {
+      if (materialize) object.native = ir_.region_root(region_pointer(object, at));
+      object.type = *object.type.target;
+      if (object.region_id) object.result_type_origin = regions_.at(*object.region_id).root_origin;
+    } else if (object.type.kind == Type::reference) {
+      if (materialize) check_nullable(object, at);
+      object.type = *object.type.target;
+    }
+    if (pending_layout && object.result_type_origin)
+      if (const auto known = result_layout(object.result_type_origin, at, false)) object.type = *known;
+    if (object.type.kind != Type::regional)
+      fail(at, "field access requires a product value; dereference regional pointers first");
+    resolve(object.type, module, at);
+    const auto &fields = products_.at(object.type.identity).fields;
+    for (size_t i = 0; i < fields.size(); ++i) {
+      if (fields[i].name != name) continue;
+      if (!materialize) {
+        if (pending_layout) pending_fields_.push_back({object.type, object.result_type_origin, fields[i], nullptr, at});
+        return {fields[i], {fields[i].type, nullptr, nullptr}};
+      }
+      if (!pending_layout)
+        return {fields[i], ir_.field(region_pointer(object, at), object.native, object.type, i, fields[i].type)};
+      auto [place, offset] = ir_.pending_field(region_pointer(object, at), object.native, fields[i].type);
+      pending_fields_.push_back({object.type, object.result_type_origin, fields[i], offset, at});
+      return {fields[i], place};
+    }
+    fail(at, "no field '" + name + "' in " + type_name(object.type));
+  }
   Value field_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                         bool function_context) {
-      auto value = expression(*expr.children[0], module, env, locals, function_context);
-      if (value.type.kind == Type::region && value.type.target) {
-        value.native = ir_.region_root(region_pointer(value, expr.at));
-        value.type = *value.type.target;
-        value.holding_id.reset();
-      }
-      if (value.type.kind == Type::exception) {
-        if (expr.text == "category") return scalar(Type::uint64, exception_category(value));
-        if (expr.text == "cause_count") return scalar(Type::uint64, ir_.cause_count(value.native));
-        const std::array<std::string_view, 3> fields{"site", "requested", "available"};
-        const auto field = std::find(fields.begin(), fields.end(), expr.text);
-        if (field == fields.end()) fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
-        return scalar(Type::uint64, ir_.exception_field(value.native, unsigned(field - fields.begin())));
-      }
-      if (value.type.kind != Type::regional)
-        fail(expr.at, "field access requires a product value; dereference regional pointers first");
-      resolve(value.type, module, expr.at);
-      const auto &fields = products_.at(value.type.identity).fields;
-      for (size_t i = 0; i < fields.size(); ++i) {
-        if (fields[i].name != expr.text) continue;
-        if (fields[i].type.kind == Type::reference) {
-          const auto slot = ir_.field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type);
-          const auto offset = ir_.read(slot);
-          auto result = scalar(fields[i].type, offset, value.region_id);
-          result.nullable = true;
-          result.reference_field = slot;
-          result.pointer_view = true;
-          result.required_reference = fields[i].declaration_kind == "ref";
-          if (fields[i].declaration_kind == "ref" || fields[i].declaration_kind == "ptr") {
-            result.type = *fields[i].type.target;
-            result.nullable = fields[i].declaration_kind == "ptr";
-            if (local_bits(result.type)) {
-              result.storage = StorageView{ir_.nullable_address(slot.owner, offset), {}, {}};
-              result.native = nullptr;
-            }
-          }
-          result.conformances = value.conformances;
-          result.read_only = value.read_only;
-          return contextual(std::move(result), module);
+                          bool function_context) {
+    auto value = expression(*expr.children[0], module, env, locals, function_context);
+    if (value.type.kind == Type::exception) {
+      if (expr.text == "category") return scalar(Type::uint64, exception_category(value));
+      if (expr.text == "cause_count") return scalar(Type::uint64, ir_.cause_count(value.native));
+      const std::array<std::string_view, 3> fields{"site", "requested", "available"};
+      const auto field = std::find(fields.begin(), fields.end(), expr.text);
+      if (field == fields.end()) fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
+      return scalar(Type::uint64, ir_.exception_field(value.native, unsigned(field - fields.begin())));
+    }
+    const auto [field, place] = record_field(value, expr.text, module, expr.at);
+    if (field.type.kind == Type::reference) {
+      const auto slot = place;
+      const auto offset = ir_.read(slot);
+      auto result = scalar(field.type, offset, value.region_id);
+      result.nullable = true;
+      result.reference_field = slot;
+      result.pointer_view = true;
+      result.required_reference = field.declaration_kind == "ref";
+      if (field.declaration_kind == "ref" || field.declaration_kind == "ptr") {
+        result.type = *field.type.target;
+        result.nullable = field.declaration_kind == "ptr";
+        if (local_bits(result.type)) {
+          result.storage = StorageView{ir_.nullable_address(slot.owner, offset), {}, {}};
+          result.native = nullptr;
         }
-        const auto target = ir_.field(region_pointer(value, expr.at), value.native, value.type, i, fields[i].type);
-        if (local_bits(fields[i].type)) {
-          auto result = scalar(fields[i].type, nullptr, value.region_id);
-          result.storage = StorageView{target.address, {}, {}};
-          result.read_only = value.read_only;
-          return result;
-        }
-        return loaded_value(fields[i].type, ir_.read(target));
       }
-      fail(expr.at, "no field '" + expr.text + "' in " + type_name(value.type));
+      result.conformances = value.conformances; result.result_fact_origins = value.result_fact_origins;
+      result.read_only = value.read_only;
+      return contextual(std::move(result), module);
+    }
+    const auto target = place;
+    if (local_bits(field.type)) {
+      auto result = scalar(field.type, nullptr, value.region_id);
+      result.storage = StorageView{target.address, {}, {}};
+      result.read_only = value.read_only;
+      return result;
+    }
+    return loaded_value(field.type, ir_.read(target));
   }
   Value evaluate(const Expression &expr, const Module &module, Environment &env, Locals &locals,
-                 bool function_context, bool copy_bits = false, bool read_result = true) {
+                 bool function_context, bool copy_bits = false, bool read_result = true,
+                 std::optional<Type> callable_result = {}, const Value *result_owner = nullptr) {
     const auto location = ir_.source_location(expr.at);
     using K = Expression::Kind;
     switch (expr.kind) {
-    case K::try_scope: return try_expression(expr, module, env, locals, function_context, copy_bits, read_result);
+    case K::try_scope: return try_expression(expr, module, env, locals, function_context, copy_bits, read_result, callable_result, result_owner);
     case K::handler: fail(expr.at, "catch requires an enclosing try");
     case K::raise: {
       Value error;
@@ -3673,8 +6679,9 @@ class Compiler {
     }
     case K::boolean: return scalar(Type::boolean, ir_.bits(Type::boolean, expr.text == "true"));
     case K::callable: {
-      auto value = define_procedure(*expr.definition, module, env, locals);
+      auto value = define_procedure(*expr.definition, module, env, locals, implementation_context_);
       if (expr.definition->name.empty()) return value;
+      value.callable_temporary = false;
       declare_local(locals, expr.definition->name, std::move(value), module, expr.at);
       return {};
     }
@@ -3706,19 +6713,16 @@ class Compiler {
     case K::capture_owner: {
       const auto callable = expression(*expr.children.front(), module, env, locals, function_context);
       valid_view(callable, expr.at);
-      if (!callable.procedure) fail(expr.at, "owner projection requires a callable value");
+      if (callable.type.kind != Type::procedure) fail(expr.at, "owner projection requires a callable value");
       const auto &names = callable.type.capture_owners;
       const auto found = std::find(names.begin(), names.end(), expr.text);
       if (found == names.end() || callable.type.capture_owner_regions.size() != names.size())
         fail(expr.at, "callable type has no associated owner '" + expr.text + "'; use a name from its visible with clause");
-      const auto id = callable.type.capture_owner_regions[size_t(found - names.begin())];
-      const auto retained = closure_regions(callable);
-      const auto access = retained.find(id);
-      if (access == retained.end()) fail(expr.at, "callable does not retain its declared region owner");
-      Type type{Type::region}; type.target = std::make_shared<Type>(*regions_.at(id).root);
-      auto result = scalar(type, region_pointer(access->second, expr.at), id);
-      result.read_only = access->second.read_only;
-      result.conformances = access->second.conformances;
+      const auto association = callable.type.capture_owner_regions[size_t(found - names.begin())];
+      if (!association) fail(expr.at, "callable owner projection requires an instantiated region association");
+      const auto id = *association;
+      auto result = callable_owner(callable, id, expr.at);
+      result.native = region_pointer(result, expr.at);
       return result;
     }
     case K::field: return field_expression(expr, module, env, locals, function_context);
@@ -3750,18 +6754,31 @@ class Compiler {
           if (value == method.lexical->world.procedures.end()) fail(expr.at, "lexical procedure used before its definition");
           auto selected = value->second;
           auto procedure = std::make_shared<Procedure>(*selected.procedure);
+          const auto original_context = procedure->implementation.empty()
+              ? ImplementationContext{procedure->lexical} : procedure->implementation;
+          const auto selected_context = method.implementation.empty()
+              ? ImplementationContext{method.lexical} : method.implementation;
+          const bool adapted = original_context != selected_context ||
+              procedure->declarations != information.declarations;
           procedure->implementation = method.implementation;
           procedure->declarations = information.declarations;
+          if (procedure->code && adapted) {
+            selected = detach_callable(std::move(selected), expr.at);
+            procedure->code = std::make_shared<CallableCode>(*procedure->code);
+            procedure->code->dispatch_key = ir_.callable_key();
+            ir_.set_callable_entry(selected.native, procedure->code->dispatch_key);
+            selected.storage = StorageView{ir_.hold_callable(selected.native, module_top_level_), local_scope_, {}};
+          }
           selected.procedure = std::move(procedure);
+          if (selected.procedure->code && adapted) {
+            callable_flows_.push_back({selected.procedure, {}});
+            selected.callable_flow = callable_flows_.size() - 1;
+            register_callable_holder(selected);
+          }
           return selected;
         }
         if (method.form->kind == Form::Kind::function && method.form->body) {
-          auto value = define_procedure(*method.form, *method.lexical, {});
-          auto function = std::make_shared<Procedure>(*value.procedure);
-          function->implementation = method.implementation;
-          function->declarations = information.declarations;
-          value.procedure = std::move(function);
-          return value;
+          return define_procedure(*method.form, *method.lexical, {}, {}, method.implementation, information.declarations);
         }
       }
       fail(expr.at, "unavailable lexical value '" + expr.text + "'");
@@ -3776,7 +6793,7 @@ class Compiler {
     case K::procedure_effect: {
       if (function_context) fail(expr.at, "a function cannot establish procedure effects");
       const auto id = expression_symbol(expr, module);
-      auto value = define_procedure(*expr.definition, module, env, locals);
+      auto value = define_procedure(*expr.definition, module, env, locals, implementation_context_);
       bind(id, std::move(value), module, env, expr.at);
       scope_rebound_ = true;
       return {};
@@ -3811,12 +6828,16 @@ class Compiler {
     case K::rebind: return rebind_expression(expr, module, env, locals, function_context);
     case K::allocate: return allocate_expression(expr, module, env, locals, function_context);
     case K::range_for: case K::fold: return loop_expression(expr, module, env, locals, function_context);
-    case K::block: return block(expr, module, env, locals.nested(), function_context, false, {}, copy_bits, {}, read_result);
+    case K::block: return block(expr, module, env, locals.nested(), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
     case K::call: return call_expression(expr, module, env, locals, function_context);
+    case K::value_call: {
+      auto callee = expression(*expr.children.front(), module, env, locals, function_context, false);
+      return invoke_procedure(std::move(callee), expr, module, env, locals, function_context, false);
+    }
     case K::perform: case K::behave: return invoke(expr, module, env, locals, function_context);
     case K::unary: return unary_expression(expr, module, env, locals, function_context);
     case K::binary: return binary_expression(expr, module, env, locals, function_context);
-    case K::conditional: return conditional_expression(expr, module, env, locals, function_context, copy_bits, read_result);
+    case K::conditional: return conditional_expression(expr, module, env, locals, function_context, copy_bits, read_result, callable_result, result_owner);
     }
     fail(expr.at, "unsupported expression");
   }
@@ -3979,6 +7000,16 @@ class Compiler {
         !lexical.world.types.contains(expr.text)) return true;
     if (expr.kind == Expression::Kind::name && !locals.contains(expr.text) &&
         !lexical_callable(lexical, expr.text).methods.empty()) return true;
+    if (expr.definition) {
+      auto nested = locals;
+      if (!expr.definition->name.empty()) nested.insert(expr.definition->name);
+      for (const auto &parameter : expr.definition->parameters) nested.insert(parameter.name);
+      for (const auto &parameter : expr.definition->type_parameters) nested.insert(parameter.name);
+      for (const auto &owner : expr.definition->owner_parameters) nested.insert(owner.name);
+      if (expr.definition->body && context_dependent(*expr.definition->body, lexical, nested)) return true;
+      if (expr.kind == Expression::Kind::callable && !expr.definition->name.empty())
+        locals.insert(expr.definition->name);
+    }
     if (expr.kind == Expression::Kind::block) {
       auto nested = locals;
       for (const auto &child : expr.children)
@@ -4332,6 +7363,7 @@ class Compiler {
           module.world.available_symbols.insert(form.name);
           bind(id, std::move(value), module, env, form.at);
         } else {
+          value.callable_temporary = false;
           module.world.procedures.emplace(&form, std::move(value));
         }
         break;
@@ -4347,6 +7379,7 @@ class Compiler {
           fail(form.at, "module globals contain bits values, not regional resources or references");
         require(value.type, resolve(*form.result_type, module, form.at), form.at);
         const MethodOrigin identity{&module, form.name};
+        value.global_slot = ir_.global_bits(value.type, stored_value(value, value.type, form.at));
         module.world.global_values.emplace(identity, std::move(value));
         module.world.global_aliases.emplace(form.name, identity);
         break;
@@ -4431,6 +7464,7 @@ class Compiler {
               auto &body = mixin_body(*original->second.procedure, form, module);
               auto value = define_procedure(body, module, env, locals);
               declare_callable(module, body);
+              value.callable_temporary = false;
               module.world.procedures.emplace(&body, std::move(value));
             }
           }
@@ -4479,15 +7513,91 @@ public:
       raise_exception(scalar(exception_type(category), payload));
     });
   }
-  Compilation compile(const std::filesystem::path &entry) {
+  Compilation compile(const std::filesystem::path &entry, bool emit_text, bool emit_bitcode) {
     clang::noteBottomOfStack(true);
     auto &module = load(entry.string(), {entry.string()});
     // All source files have been parsed before any execution semantics are lowered.
 
     try {
-      execute_module(module, {}, {module.path});
-    } catch (const EndPath &) {
-      // The emitted program exits exceptionally; no later runtime forms execute.
+      try { execute_module(module, {}, {module.path}); }
+      catch (const EndPath &) { /* No later runtime forms execute. */ }
+      // Loop headers now include their back edges. Check exactly the reachable
+      // implementations; compiling a body can demand further callable nodes.
+      for (;;) {
+        bool changed = resolve_native_calls(0);
+        changed |= resolve_callable_results();
+        for (size_t i = 0; i < callable_demands_.size(); ++i) {
+          const auto demand = callable_demands_[i];
+          const auto choices = callable_choices(demand.flow);
+          for (const auto &candidate : choices.definitions)
+            changed |= compile_callable(*candidate, *demand.caller, demand.at);
+        }
+        if (changed) continue;
+        for (auto &demand : native_call_demands_) close_callable_effects(demand);
+        if (resolve_native_calls(0) || resolve_callable_results() || refine_native_reuse()) continue;
+        break;
+      }
+      for (const auto &demand : callable_demands_)
+        if (!callable_choices(demand.flow).closed) throw std::logic_error("unclosed callable result flow");
+      for (auto &demand : native_call_demands_) {
+        if (demand.selection)
+          fail(demand.at, "access-dependent method selection still depends on an unfinished recursive flow");
+        for (auto &argument : demand.arguments) {
+          auto resolved = argument;
+          resolve_result_facts(resolved, demand.at);
+          if (demand.pending_argument_facts && resolved.conformances != argument.conformances)
+            fail(demand.at, "recursive argument interface facts require a distinct checking context");
+          argument = std::move(resolved);
+        }
+        const auto choices = callable_choices(demand.flow);
+        if (!choices.closed) throw std::logic_error("unresolved procedure effects");
+        if (demand.context && !demand.reused) {
+          if (!choices.definitions.empty()) throw std::logic_error("unchecked reaching procedure body");
+          auto previous = ir_.begin_native(demand.definition);
+          ir_.unreachable();
+          ir_.end_native(demand.definition, std::move(previous));
+          ir_.resolve_context(demand.context, demand.definition);
+          demand.context = nullptr;
+        }
+        if (demand.reused) {
+          const auto reaching = callable_choices(demand.reused->flow);
+          if (!std::is_permutation(choices.definitions.begin(), choices.definitions.end(),
+                                  reaching.definitions.begin(), reaching.definitions.end()) ||
+              !same_native_context(*demand.reused, demand, true))
+            fail(demand.at, "recursive callable arguments or effects require a distinct context");
+        }
+      }
+      for (size_t i = 0; i < pending_fields_.size(); ++i) {
+        const auto pending = pending_fields_[i];
+        auto record = scalar(pending.record, nullptr);
+        record.result_type_origin = pending.result_origin;
+        resolve_result_type(record, pending.at);
+        const auto root = record.type;
+        resolve(root, *products_.at(root.identity).module, pending.at);
+        const auto &fields = products_.at(root.identity).fields;
+        const auto field = std::find_if(fields.begin(), fields.end(), [&](const Parameter &field) {
+          return field.name == pending.field.name;
+        });
+        const auto kind = [](const Parameter &field) {
+          return field.declaration_kind.empty() ? std::string_view("val") : field.declaration_kind;
+        };
+        if (field == fields.end() || field->type != pending.field.type || kind(*field) != kind(pending.field))
+          fail(pending.at, "selected record does not provide the declared field view");
+        if (pending.offset) ir_.resolve_field(pending.offset, root, size_t(field - fields.begin()));
+      }
+      for (const auto &read : initialization_reads_) {
+        if (initialization_known(read.proof) != true)
+          fail(read.at, "read of storage before definite initialization\n" + location_text(cells_.at(read.cell).at) +
+                       ": note: local storage allocated here");
+      }
+      for (size_t i = 0; i < projection_permissions_.size(); ++i) {
+        const auto permission = projection_permissions_[i];
+        (void)bool(permission);
+      }
+      for (size_t i = 0; i < deferred_checks_.size(); ++i) {
+        const auto check = deferred_checks_[i];
+        if (check.rejected()) fail(check.at, check.message);
+      }
     } catch (const std::runtime_error &error) {
       // Successful calls pop their sites. An error leaves the demanded path
       // intact, so format it once without copying a growing message on unwind.
@@ -4506,9 +7616,61 @@ public:
       throw std::runtime_error(message);
     }
     for (const auto &check : binding_checks_) check_binding_owners(check.environment, check.at);
+    // A reused caller may receive newly constructed contextual images with
+    // equivalent schemas. Owner substitution applies only in that caller's
+    // descendants. An escaping image with proven unchanged owners also needs
+    // its equivalent keys accepted by downstream consumers.
+    using ImagePair = std::pair<const Procedure *, const Procedure *>;
+    std::vector<std::pair<const NativeCallDemand *, ImagePair>> adaptations;
+    for (const auto &demand : native_call_demands_) if (demand.reused) {
+      std::vector<ImagePair> pairs;
+      std::set<const CallableCode *> escaping;
+      if (!same_native_context(*demand.reused, demand, true, nullptr, false, &pairs, &escaping))
+        fail(demand.at, "recursive callable context changed after checking");
+      for (const auto &pair : pairs) {
+        const bool escapes = escaping.contains(pair.first->code.get()) || escaping.contains(pair.second->code.get());
+        adaptations.emplace_back(escapes ? nullptr : demand.reused, pair);
+      }
+    }
+    bool matches_changed;
+    do {
+      matches_changed = false;
+      for (const auto &[caller, pair] : adaptations)
+        for (auto &child : native_call_demands_) {
+          bool inside = !caller;
+          for (auto *parent = child.parent; parent; parent = parent->parent) inside |= parent == caller;
+          if (!inside || child.matches.contains(pair.second)) continue;
+          if (const auto match = child.matches.find(pair.first); match != child.matches.end()) {
+            ir_.extend_callable_match(match->second, pair.second->code->dispatch_key);
+            child.matches.emplace(pair.second, match->second);
+            matches_changed = true;
+          }
+        }
+    } while (matches_changed);
+    // Erasing an adapter is irreversible. Commit sharing only after return
+    // evidence and every checked context have reached their final meaning.
+    for (auto &demand : native_call_demands_) {
+      if (!demand.reused) continue;
+      bool recursive = false;
+      for (auto *parent = demand.parent; parent; parent = parent->parent) recursive |= parent == demand.reused;
+      ir_.reuse_native_context(demand.definition, demand.reused->definition, demand.context, recursive);
+      demand.context = nullptr;
+    }
+    ir_.resolve_uncaught();
+    for (const auto &[capture, writes] : capture_effects_)
+      if (!capture->used)
+        for (auto *store : *writes) store->eraseFromParent();
+    for (const auto &flow : callable_flows_)
+      if (flow.definition && flow.definition->code && flow.definition->code->construction) {
+        const auto &code = *flow.definition->code;
+        auto required = code.nested;
+        for (const auto &[field, capture] : code.capture_fields)
+          if (!capture->used) required.erase(field);
+        ir_.finish_callable(*code.construction, required);
+      }
     // Owner/type errors take precedence over warnings for unused listed captures.
     for (const auto &[at, message] : capture_warnings_) warn(Warning::unused_capture, at, message);
-    auto [llvm_ir, bitcode] = ir_.finish();
+    auto [llvm_ir, bitcode] = ir_.finish(emit_text, emit_bitcode);
     return {scanned_, execution_order_, warnings_, std::move(llvm_ir), std::move(bitcode), regional_runtime_};
   }
 };

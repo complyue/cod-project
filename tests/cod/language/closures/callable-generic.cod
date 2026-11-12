@@ -1,0 +1,70 @@
+using symbol "std:io" @print;
+function twice(x:T)->const T where T { x + x }
+function thrice(x:U)->const U where U { x + x + x }
+func selected = twice;
+for (i in 0u64 .. 2u64) {
+  behave @print(selected(3u64));
+  behave @print(selected(1.5f32));
+  selected <- thrice;
+};
+function sum(head:T, rest:T...)->const T where T {
+  fold (i in 0u64 .. len(rest), total = head) { total + rest[i] }
+}
+func add = sum;
+behave @print(add(10u64));
+behave @print(add(10u64,20u64,30u64));
+behave @print(add(1.5f32,2.5f32));
+function double_u64(n:u64)->const u64 { n + n }
+function iterate(action:func(T)->const T,n:u64,value:T)->const T where T {
+  if(n == 0u64) { value } else { iterate(action,n-1u64,action(value)) }
+}
+behave @print(iterate(double_u64,3u64,2u64));
+func walk = iterate;
+behave @print(walk(double_u64,3u64,2u64));
+function forward(n:u64, actions:func(u64)->const u64...)->const u64 {
+  if(n == 0u64) { one(actions...) } else { forward(n-1u64,actions...) }
+}
+function one(action:func(u64)->const u64)->const u64 { action(3u64) }
+func relay = forward;
+behave @print(forward(3u64,double_u64));
+behave @print(relay(3u64,double_u64));
+
+function increment(n:u64)->const u64 { n + 1u64 }
+function visit(actions:func(u64)->const u64...)->const u64 {
+  fold (i in 0u64 .. len(actions), total = 0u64) { ptr action = actions[i]; total + action(3u64) }
+}
+func visit_selected = visit;
+behave @print(visit_selected(double_u64, increment));
+behave @print(visit_selected());
+function replace_pack(actions:func(u64)->const u64...)->const u64 {
+  fold (i in 0u64 .. len(actions), total = 0u64) {
+    ptr action = actions[i]; total + action({ actions[0u64] <- increment; 3u64 })
+  }
+}
+func originals = double_u64;
+behave @print(replace_pack(originals, originals));
+behave @print(originals(3u64));
+symbol @bias:u64;
+effect @bias <- 3u64;
+proc @contextual(value:T)->const T where T { behave @print(@bias); value + value }
+proc generic_proc = @contextual;
+effect @bias <- 10u64;
+behave @print(generic_proc(2u64));
+behave @print(generic_proc(2.0f64));
+behave @print(perform @contextual(2u64));
+
+unit m;
+function twice_quantity(x:T(m))->const T(m) where T { m(scalar(x) + scalar(x)) }
+func quantity_value = twice_quantity;
+behave @print(scalar(quantity_value(m(3u64))));
+behave @print(scalar(quantity_value(m(1.5f32))));
+function bounded(x:T)->const T where T <: u64 { x }
+func bound_value = bounded;
+behave @print(bound_value(7u64));
+
+# A generic callable retains its own binders through another generic callable.
+function keep(x:T)->const T where T { x }
+func identity = keep;
+func copied = identity(selected);
+behave @print(copied(3u64));
+behave @print(copied(1.5f32));

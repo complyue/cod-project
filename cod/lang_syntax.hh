@@ -170,7 +170,8 @@ struct Type {
   std::vector<Type> throws_types;
   std::vector<size_t> owners;
   std::vector<std::string> capture_owners; // Source names anchoring a callable environment's regional dependencies.
-  std::vector<size_t> capture_owner_regions; // Actual owner for each visible with-name, in declaration order.
+  std::vector<std::optional<size_t>> capture_owner_regions; // Bound actual owner for each visible with-name.
+  std::vector<size_t> capture_formals; // Nonzero indices refer to the enclosing callable's owner binders.
   std::vector<size_t> capture_regions; // Concrete WPO region identities, never runtime type information.
   std::vector<bool> const_views;
   std::vector<bool> nullable_views;
@@ -179,11 +180,26 @@ struct Type {
   bool pure_callable = false;
   Type(Kind kind = void_type, std::string name = {}, size_t identity = 0)
       : kind(kind), name(std::move(name)), identity(identity) {}
+  bool same_capture_contract(const Type &other) const {
+    if (capture_regions != other.capture_regions) return false;
+    if (kind != procedure) return true;
+    const auto unresolved = [](const Type &type) {
+      std::pair<std::set<size_t>, std::set<std::string>> result;
+      for (size_t i = 0; i < type.capture_owners.size(); ++i) {
+        if (!type.capture_formals.empty() && type.capture_formals[i])
+          result.first.insert(type.capture_formals[i]);
+        else if (i >= type.capture_owner_regions.size() || !type.capture_owner_regions[i])
+          result.second.insert(type.capture_owners[i]);
+      }
+      return result;
+    };
+    return unresolved(*this) == unresolved(other);
+  }
   bool operator==(const Type &other) const {
     return kind == other.kind && name == other.name && identity == other.identity &&
            parameters == other.parameters && bounds == other.bounds && variadic == other.variadic && owned == other.owned && pure_callable == other.pure_callable &&
            throws_types == other.throws_types && owner_bounds == other.owner_bounds && owners == other.owners && const_views == other.const_views && nullable_views == other.nullable_views &&
-           capture_regions == other.capture_regions && (!capture_regions.empty() || capture_owners == other.capture_owners) &&
+           same_capture_contract(other) &&
            ((!target && !other.target) || (target && other.target && *target == *other.target));
   }
 };
@@ -262,7 +278,7 @@ inline std::string type_name(const Type &type) {
 
 struct Form;
 struct Expression {
-  enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, perform, behave, effect,
+  enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
                     block, conditional, field, range_for, fold, allocate, index, null_ref,
                     try_scope, handler, raise, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner };
@@ -679,8 +695,25 @@ class Parser {
     if (inline_effect && (!form.symbolic || declaration || function))
       fail(form.at, "effect proc requires a symbolic procedure definition");
   }
+  bool callable_binding() const {
+    return (is("func") || is("proc")) && tokens_[cursor_ + 1].kind == TokenKind::identifier &&
+           (is("=", 2) || is(":", 2));
+  }
   Expr primary() {
     auto token = peek();
+    if (callable_binding()) {
+      const auto mode = tokens_[cursor_++].text;
+      auto group = make(Expression::Kind::pointer_group, token);
+      group->declaration_kind = mode;
+      auto binding = make(Expression::Kind::pointer, value_name());
+      binding->declaration_kind = mode;
+      if (take(":")) binding->annotation = parse_type();
+      expect("=");
+      binding->binding = "=";
+      binding->children.push_back(expression());
+      group->children.push_back(std::move(binding));
+      return group;
+    }
     if (is("proc") || is("procedure") || is("func") || is("function")) {
       auto definition = std::make_shared<Form>();
       definition->at = token.at;
@@ -926,7 +959,12 @@ class Parser {
   Expr expression(int minimum = 0) {
     auto left = primary();
     while (true) {
-      if (take(".")) {
+      if (is("(")) {
+        auto call = make(Expression::Kind::value_call, peek());
+        call->children.push_back(std::move(left));
+        arguments(*call);
+        left = std::move(call);
+      } else if (take(".")) {
         auto member = make(Expression::Kind::field, name(TokenKind::identifier));
         member->children.push_back(std::move(left));
         left = std::move(member);
@@ -1101,7 +1139,7 @@ public:
           if (!is("}")) expect(";");
         }
         take(";");
-      } else if (is("function") || is("func") || is("procedure") || is("proc") || is("conversion")) {
+      } else if (!callable_binding() && (is("function") || is("func") || is("procedure") || is("proc") || is("conversion"))) {
         callable(*form);
       } else if (take("global")) {
         form->kind = Form::Kind::global;

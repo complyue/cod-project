@@ -8,5 +8,5 @@ function reader(region state:Counter, region spare:Counter)
 }
 owned region first:Counter <- make Counter(capacity = 128u64) { count <- 1u64 };
 owned region second:Counter <- make Counter(capacity = 128u64) { count <- 2u64 };
-const ref read = reader(first, second);
+func read = reader(first, second);
 behave @print(read());

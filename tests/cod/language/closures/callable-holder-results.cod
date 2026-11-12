@@ -1,0 +1,99 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+function one()->const u64 {1u64}
+function two()->const u64 {2u64}
+function three()->const u64 {3u64}
+function select(a:func()->const u64 in O,b:func()->const u64 in O,second:bool)
+ -> (func()->const u64) in O where {owner O} { if(second){b}else{a} }
+function reversed(a:func()->const u64 in O,b:func()->const u64 in O,second:bool)
+ -> (func()->const u64) in O where {owner O} { if(second){a}else{b} }
+func a = one;
+func b = two;
+func choose = select;
+ptr selected = choose(a,b,true);
+behave @print(selected());
+selected <- three;
+behave @print(a());
+behave @print(b());
+b <- one;
+behave @print(selected());
+choose <- reversed;
+ptr other = choose(a,b,true);
+other <- two;
+behave @print(a());
+behave @print(b());
+function forward(ptr value:func()->const u64 in O)->ptr (func()->const u64) in O where {owner O} {value}
+func identity = forward;
+ptr missing = a;
+missing = null;
+ptr absent = identity(missing);
+behave @print(isnull(absent));
+ptr present = identity(b);
+try { behave @print(present()); present <- three; behave @print(b()); absent(); {} }
+catch(e:const NullPointerException) {behave @print(17u64);};
+function optional(value:func()->const u64 in O,keep:bool)->ptr (func()->const u64) in O where {owner O} {
+ if(keep){value}else{null}
+}
+func maybe = optional;
+behave @print(isnull(maybe(a,false)));
+ptr kept = maybe(a,true);
+try { behave @print(kept()); } catch(e:const NullPointerException) {behave @print(999u64);};
+function recursive(a:func()->const u64 in O,b:func()->const u64 in O,n:u64)
+ -> (func()->const u64) in O where {owner O} {
+ if(n==0u64){b}else{recursive(a,b,n-1u64)}
+}
+func recurse = recursive;
+ptr deep = recurse(a,b,16u64);
+deep <- one;
+behave @print(a());
+behave @print(b());
+function recover(a:func()->const u64 in O,b:func()->const u64 in O,fail:bool)
+ -> (func()->const u64) in O where {owner O} {
+ try { if(fail){ptr absent:u64 = null; absent; a}else{a} }
+ catch(e:const NullPointerException){b}
+}
+func recover_view = recover;
+ptr recovered = recover_view(a,b,true);
+recovered <- two;
+behave @print(b());
+function readonly(a:const func()->const u64 in O)->const (func()->const u64) in O where {owner O} {a}
+func readonly_view = readonly;
+ptr observed = readonly_view(a);
+a <- three;
+behave @print(observed());
+function generic(value:T in O)->T in O where {T,owner O} {value}
+func generic_view = generic;
+region State {value:u64;}
+owned region state:State <- make State(capacity=128u64){value <- 41u64};
+function reader(region state:State)->func()->const u64 with {region state} {
+ val var value -> state.value;
+ func()->const u64 {value}
+}
+func current = reader(state);
+ptr regional_view = generic_view(current);
+(regional_view -> state).value <- 43u64;
+behave @print(regional_view());
+function recursive_view(value:T in O,n:u64)->T in O where {T,owner O} {
+ if(n==0u64){value}else{recursive_view(value,n-1u64)}
+}
+func owner_view = recursive_view;
+ptr recursive_owner = owner_view(current,8u64);
+(recursive_owner -> state).value <- 43u64;
+symbol @second:bool;
+effect @second <- true;
+proc @choose(a:func()->const u64 in O,b:func()->const u64 in O)->(func()->const u64) in O where {owner O} {
+ if(@second){b}else{a}
+}
+proc picker = @choose;
+effect @choose = picker;
+effect @second <- false;
+ptr captured = perform @choose(a,b);
+ptr contextual = behave @choose(a,b);
+behave @print(captured());
+behave @print(contextual());
+func copied = select(a,b,true);
+b <- three;
+behave @print(copied());
+behave @print(b());
+ptr fresh = generic_view(reader(state));
+behave @print(fresh());

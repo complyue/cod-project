@@ -1,0 +1,26 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+symbol @bias:u64;
+symbol @selected:proc()->const u64;
+effect @bias <- 3u64;
+proc factory(n:u64)->proc()->const u64 {
+  effect @bias <- @bias + 1u64;
+  if (n == 0u64) { proc()->const u64 { @bias } }
+  else { factory(n - 1u64) }
+}
+proc first = factory(5u64);
+effect @bias <- 10u64;
+proc second = factory(2u64);
+proc fail(n:u64)->(proc()->const u64) throws NullPointerException {
+  effect @bias <- @bias + 1u64;
+  proc temporary = proc()->const u64 { @bias };
+  if (n == 0u64) { ptr absent:i64 = null; val ignored = absent; temporary }
+  else { fail(n - 1u64) }
+}
+try { proc result = fail(8u64); behave @print(result()); }
+catch (e:const NullPointerException) { behave @print(@bias); };
+effect @selected = first;
+behave @print(perform @selected());
+effect @selected = second;
+behave @print(perform @selected());
+behave @print(first());

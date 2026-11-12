@@ -1,0 +1,9 @@
+function one()->const u64 {1u64}
+function escape(anchor:func()->const u64 in O)->(func()->const u64) in O where {owner O} {
+ func local = one;
+ local
+}
+func anchor = one;
+func borrow = escape;
+ptr dangling = borrow(anchor);
+dangling();

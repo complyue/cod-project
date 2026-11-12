@@ -1,0 +1,56 @@
+using symbol "std:io" @print;
+using "callable-module-extension.cod" frozen;
+using "callable-module-extension.cod" adapted;
+using "callable-module-extension.cod" frozen_factory;
+using "callable-module-extension.cod" adapted_factory;
+func first = frozen;
+func second = adapted;
+func third = frozen_factory();
+func fourth = adapted_factory();
+behave @print(frozen(1u64));
+behave @print(adapted(1u64));
+behave @print(first(1u64));
+behave @print(second(1u64));
+behave @print(third(1u64));
+behave @print(fourth(1u64));
+using "callable-module-extension.cod" frozen_procedure;
+using "callable-module-extension.cod" adapted_procedure;
+proc frozen_value = frozen_procedure;
+proc adapted_value = adapted_procedure;
+behave @print(frozen_value(1u64));
+behave @print(adapted_value(1u64));
+proc selected = frozen_value;
+for (i in 0u64..2u64) {
+  behave @print(selected(1u64));
+  selected <- adapted_value;
+};
+proc original_again = frozen_procedure;
+behave @print(original_again(1u64));
+symbol from "callable-module-base.cod" @recursive;
+using "callable-module-extension.cod" frozen_recursive;
+using "callable-module-extension.cod" adapted_recursive;
+proc original_recursive = frozen_recursive;
+proc selected_recursive = adapted_recursive;
+{
+  effect @recursive = original_recursive;
+  behave @print(original_recursive(5u64));
+};
+{
+  effect @recursive = selected_recursive;
+  behave @print(selected_recursive(5u64));
+};
+
+using "callable-module-extension.cod" frozen_generic;
+using "callable-module-extension.cod" adapted_generic;
+func generic_frozen = frozen_generic;
+func generic_adapted = adapted_generic;
+behave @print(generic_frozen(1u64));
+behave @print(generic_adapted(1u64));
+behave @print(generic_adapted(1.0f64));
+
+using "callable-module-extension.cod" MethodState;
+using "callable-module-extension.cod" frozen_owner;
+using "callable-module-extension.cod" adapted_owner;
+owned region state:MethodState <- make MethodState(capacity=128u64){ticks <- 9u64};
+behave @print(frozen_owner(state));
+behave @print(adapted_owner(state));

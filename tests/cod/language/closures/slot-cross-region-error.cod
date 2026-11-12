@@ -5,5 +5,5 @@ owned region second:Cursor <- make Cursor(capacity = 256u64) { ticks <- 0u64; cu
 second.current = alloc second Node(3);
 ptr var left -> first.current;
 ptr var right -> second.current;
-const ref wrong = func [left, right] () -> void { left = right; {} };
+func wrong = func [left, right] () -> void { left = right; {} };
 wrong();

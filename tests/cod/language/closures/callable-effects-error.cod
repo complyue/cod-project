@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+symbol @action:proc(u64)->const u64, @missing:u64;
+proc first = proc(n:u64)->const u64 { n + 1u64 };
+proc second = proc(n:u64)->const u64 { @missing + n };
+proc current = first;
+effect @action = current;
+proc change = proc()->void { @action <- second; {} };
+change();
+# The replacement's body must be checked, even though its caller was native.
+behave @print(current(2u64));

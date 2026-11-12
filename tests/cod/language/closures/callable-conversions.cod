@@ -1,0 +1,47 @@
+using symbol "std:io" @print;
+unit start; unit left; unit right; unit target;
+conversion function a(x:f64(start))->const f64(left){left(scalar(x))}
+conversion function b(x:f64(left))->const f64(target){target(scalar(x)+10.0)}
+conversion function c(x:f64(start))->const f64(right){right(scalar(x))}
+conversion function d(x:f64(right))->const f64(target){target(scalar(x)+20.0)}
+function first(x:f64(target*<-left<-start))->const f64 {scalar(x)}
+function second(x:f64(target*<-right<-start))->const f64 {scalar(x)}
+func selected=first;
+for(i in 0u64..2u64){behave @print(selected(start(1.0))); selected <- second;};
+function factory(flag:bool)->func(f64(target))->const f64 {if(flag){first}else{second}}
+behave @print(factory(false)(start(2.0)));
+function keep(x:T)->const T where T {x}
+func keeper=keep;
+func forwarded=keeper(selected);
+behave @print(forwarded(start(3u8)));
+function many(x:f64(target*<-left<-start)...)->const f64 {
+ fold(i in 0u64..len(x), total=0.0){total+scalar(x[i])}
+}
+func sum=many;
+behave @print(sum(start(1.0),start(2.0)));
+behave @print(sum());
+symbol @bias:f64;
+effect @bias <- 1.0;
+proc adjust(x:f64(target*<-left<-start))->const f64 {scalar(x)+@bias}
+proc held=adjust;
+effect proc @calc(x:f64(target*<-left<-start))->const f64 {scalar(x)+@bias};
+effect @calc = held;
+{{effect @bias <- 2.0; behave @print(perform @calc(start(1.0))); behave @print(behave @calc(start(1.0)));}};
+
+selected <- first;
+behave @print(selected({selected <- second; start(4.0)}));
+behave @print(selected(start(4.0)));
+using "std:exceptions" NullPointerException;
+unit raw; unit scaled;
+conversion function scale(x:u64(raw))->const u64(scaled) throws NullPointerException {
+ ptr missing:u64 = null;
+ scaled(if(scalar(x)==0u64){missing}else{scalar(x)*2u64})
+}
+function combine(x:u64(scaled*),y:u64)->const u64 {scalar(x)+y}
+func checked=combine;
+try {
+ checked(raw(0u64),{behave @print(99u64);1u64});
+ {}
+} catch(e:const NullPointerException){behave @print(7u64);};
+try {behave @print(checked(raw(2u64),1u64));}
+catch(e:const NullPointerException){behave @print(99u64);};
