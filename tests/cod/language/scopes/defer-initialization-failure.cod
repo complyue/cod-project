@@ -1,0 +1,12 @@
+using symbol "std:io" @print;
+region symbol @arena;
+proc bad()->void {effect @arena <- region(0u64);}
+proc run()->void {
+  ptr value = make local u64;
+  defer {
+    defer {behave @print(value);};
+    bad();
+    value <- 1u64;
+  };
+}
+run();

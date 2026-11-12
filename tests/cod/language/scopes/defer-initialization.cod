@@ -1,0 +1,71 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+proc bad()->void {effect @arena <- region(0u64);}
+proc nested()->void {
+  ptr value = make local u64;
+  defer {
+    value <- 11u64;
+    defer {behave @print(value);};
+    behave @print(value);
+  };
+}
+nested();
+proc registered_before_write()->void {
+  ptr value = make local u64;
+  defer {
+    defer {behave @print(value);};
+    value <- 12u64;
+  };
+}
+registered_before_write();
+proc repeated(count:u64)->void {
+  ptr value = make local u64;
+  for(i in 0u64 .. count) {
+    defer {value <- 13u64; defer {behave @print(value);};};
+  };
+}
+repeated(0u64);
+repeated(3u64);
+proc branch(yes:bool)->void {
+  ptr value = make local u64;
+  defer {
+    if(yes) {value <- 14u64;} else {value <- 15u64;};
+    if(yes) {defer {behave @print(value);};} else {defer {behave @print(value);};};
+  };
+}
+branch(true);
+branch(false);
+proc replace()->const u64 {
+  ptr value = make local u64;
+  defer {value <- 16u64; return value;};
+  return 99u64;
+}
+behave @print(replace());
+proc failure()->void {
+  ptr value = make local u64;
+  defer {
+    value <- 17u64;
+    defer {behave @print(value);};
+    bad();
+  };
+}
+try {failure();} catch(error:const InvalidCapacity) {behave @print(18u64);};
+proc handled()->void {
+  ptr value = make local u64;
+  defer {value <- 19u64;} catch(error) {value <- 20u64;} finally {behave @print(value);};
+}
+handled();
+proc scoped()->void {
+  ptr value = make local u64;
+  defer { {{value <- 21u64;}}; behave @print(value); };
+}
+scoped();
+proc continuation(yes:bool)->void {
+  ptr value = make local u64;
+  try {if(yes) {bad();} else {}; value <- 22u64; {}}
+  finally { {{defer {};}}; };
+  behave @print(value);
+}
+continuation(false);
+try {continuation(true);} catch(error:const InvalidCapacity) {behave @print(23u64);};

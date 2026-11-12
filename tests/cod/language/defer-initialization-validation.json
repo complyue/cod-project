@@ -1,0 +1,625 @@
+{
+  "recorded_utc": "2026-11-12T16:06:34.069808+00:00",
+  "scope": "Allocation initialization through deferred registration order, normal/return/failure edges, and shared finally continuation refinement.",
+  "compiler_sha256": "51d3646795c67388564b2f07223b4bd9a386897830f90fe73c634156ea4bd217",
+  "build": {
+    "command": "cmake --build ./build",
+    "passed": true,
+    "warnings": "Existing LLVM deprecated-this-capture and CMake policy warnings only.",
+    "log_sha256": "d2cb19392fd957ead73532a59d1e1cfbdddc613cd4307129a7f8f80b1b52bf20"
+  },
+  "language": {
+    "passed": 499,
+    "total": 499,
+    "source_count": 589,
+    "all_sources_match": true,
+    "source_manifest_sha256": "0e39c968eb16f3406206a9d65d94df666793d387f00f70682ddef34036923c06"
+  },
+  "new_cases": [
+    {
+      "fixture": "scopes/defer-initialization-registration.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "read of storage before definite initialization"
+    },
+    {
+      "fixture": "scopes/defer-initialization-branch.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "read of storage before definite initialization"
+    },
+    {
+      "fixture": "scopes/defer-initialization-cycle.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "read of storage before definite initialization"
+    },
+    {
+      "fixture": "scopes/defer-initialization-failure.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "read of storage before definite initialization"
+    },
+    {
+      "fixture": "scopes/defer-initialization.cod",
+      "passed": true,
+      "exit": 0,
+      "stdout": "11\n11\n12\n13\n13\n13\n14\n15\n16\n17\n18\n19\n21\n22\n23\n",
+      "expected_diagnostic": null
+    },
+    {
+      "fixture": "scopes/defer-initialization-order.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": "read of storage before definite initialization"
+    }
+  ],
+  "source_sha256": {
+    "cod/lang_frontend.hh": "e61094e71c3c2662e171c975c17b68b40618f11a7474ce52ca44b597a25c3c2d",
+    "tests/cod/language/defer_runtime_tests.py": "3cafe077d3e1336a7f23f2f63526ece535fcbbb7e48ef5e24fd8499301264df8",
+    "tests/cod/language/scopes/defer-initialization-branch.cod": "ba635fd7259629368ac7a65d3802fd1be5537be9bfc92c92f07fd11ab48ce971",
+    "tests/cod/language/scopes/defer-initialization-cycle.cod": "2cc7dca4b54afaa81f54574cf38238b0a6afe5e87f53c12812ac9d2dce4d6804",
+    "tests/cod/language/scopes/defer-initialization-failure.cod": "cd255f7038d5db8308dfed371d3abcc9096f418e139f8e822da047bda578d787",
+    "tests/cod/language/scopes/defer-initialization-order.cod": "96e6f6bc087f57bb20757f495486a56938ef8e4a98e5243a71cd6a2ce522b402",
+    "tests/cod/language/scopes/defer-initialization-registration.cod": "d7500fd6e6942e49447a3f572c55533269089cfc1e0ccff130bbb979eb28ce00",
+    "tests/cod/language/scopes/defer-initialization.cod": "fa20cb1c07b8b0725750b97c62a9ce780a75855e4fdac508e63b9f8f515c4763"
+  },
+  "cases_sha256": "bdc6f341b15fdfb70ebf11f19b9ae593f3912462b2455f6ba49b14947c04e2fa",
+  "native_defer": {
+    "schema_version": 1,
+    "recorded_utc": "2026-11-12T16:04:23.982107+00:00",
+    "toolchain": "build",
+    "passed": true,
+    "cases": {
+      "defer-order": {
+        "layout": {
+          "registrations": 5,
+          "drained": 5,
+          "peak_records": 5,
+          "peak_record_bytes": 120,
+          "images": 2,
+          "images_released": 2,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.020343585987575352,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 2.0490648970007896,
+        "native_process_seconds": 0.0015240960055962205,
+        "llvm_ir_bytes": 32856,
+        "bitcode_bytes": 8172,
+        "fixture_sha256": "dc383a227e3802a792e6b9fd369cd8cf02f63d8334439ca29ba6e739406d2273",
+        "executed_source_sha256": "fa0be150c386da42e40ebdc706559e6d6129da8ca9a0c7c8d3cdba0542113556"
+      },
+      "defer-snapshots": {
+        "layout": {
+          "registrations": 7,
+          "drained": 7,
+          "peak_records": 7,
+          "peak_record_bytes": 208,
+          "images": 11,
+          "images_released": 11,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.021212621999438852,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 2.050082214002032,
+        "native_process_seconds": 0.001335959997959435,
+        "llvm_ir_bytes": 105413,
+        "bitcode_bytes": 20428,
+        "fixture_sha256": "d06513373da6db88377783ef69eb5c50a8c7e1e367a7cd4cdc52f65b131b6712",
+        "executed_source_sha256": "ac825f2759e555f641d08f7099cad9f8aed160f43c35ddb1af2209c1e20a27fd"
+      },
+      "defer-failures": {
+        "layout": {
+          "registrations": 20015,
+          "drained": 20015,
+          "peak_records": 10000,
+          "peak_record_bytes": 240000,
+          "images": 16,
+          "images_released": 16,
+          "record_failures": 1,
+          "copy_failures": 1,
+          "owners": 4,
+          "owners_released": 4
+        },
+        "frontend_seconds": 0.03215270896907896,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 2.048583013995085,
+        "native_process_seconds": 0.003484878980088979,
+        "llvm_ir_bytes": 244298,
+        "bitcode_bytes": 44056,
+        "fixture_sha256": "abf1f263295007664c5665ac69f6e9f62074b38f777daf1dfa091ef5a3cd2515",
+        "executed_source_sha256": "4e132357b53f89aeabef62bd65c55fd9c3cd8a608f284a38863351512480b318"
+      },
+      "defer-blocks": {
+        "layout": {
+          "registrations": 10,
+          "drained": 10,
+          "peak_records": 3,
+          "peak_record_bytes": 72,
+          "images": 3,
+          "images_released": 3,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.019984686048701406,
+        "frontend_diagnostics": [
+          "/tmp/cod-defer-native-186wmtl8/program.cod:6:1: warning: value-returning callable may finish without an explicit return [-Wmissing-return]\n"
+        ],
+        "native_compile_link_seconds": 2.0661911200149916,
+        "native_process_seconds": 0.001996419974602759,
+        "llvm_ir_bytes": 62760,
+        "bitcode_bytes": 12556,
+        "fixture_sha256": "1f9f50c4d9659724fbb1aa8e0254a64d9b44afa9b2a06f68abd4ba0d355ed1e7",
+        "executed_source_sha256": "203d4b8efee8796a2ce3431cda40bb88bccb34a9860bc321288dee4c73c9f6c6"
+      },
+      "defer-returns": {
+        "layout": {
+          "registrations": 2014,
+          "drained": 2014,
+          "peak_records": 1000,
+          "peak_record_bytes": 16000,
+          "images": 1015,
+          "images_released": 1015,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1006,
+          "owners_released": 1006
+        },
+        "frontend_seconds": 0.0322748200269416,
+        "frontend_diagnostics": [
+          "/tmp/cod-defer-native-186wmtl8/program.cod:26:1: warning: value-returning callable may finish without an explicit return [-Wmissing-return]\n"
+        ],
+        "native_compile_link_seconds": 2.1367005679639988,
+        "native_process_seconds": 0.0024801569525152445,
+        "llvm_ir_bytes": 241763,
+        "bitcode_bytes": 43284,
+        "fixture_sha256": "9d37e12eb18b432a58e49ad1e4b157154bfa56c47bc4772558131fa8d91f2cf0",
+        "executed_source_sha256": "89b991803a75d442188f0e839c22a77db16f60d2dc7bfb351db6eb41eb579c60"
+      },
+      "defer-errors": {
+        "layout": {
+          "registrations": 12,
+          "drained": 12,
+          "peak_records": 3,
+          "peak_record_bytes": 56,
+          "images": 1,
+          "images_released": 1,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.023663372034206986,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 2.1149271730100736,
+        "native_process_seconds": 0.00196366902673617,
+        "llvm_ir_bytes": 148337,
+        "bitcode_bytes": 25392,
+        "fixture_sha256": "65095dd105b85b338f9bfa26d4dd7479ecdf5d404efe6c265fbb4ad770303086",
+        "executed_source_sha256": "78fc98b3ff0245661090449fc7d07651c3dde2f095b562751be7364428673d51"
+      },
+      "defer-checked": {
+        "layout": {
+          "registrations": 21,
+          "drained": 21,
+          "peak_records": 6,
+          "peak_record_bytes": 96,
+          "images": 4,
+          "images_released": 4,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.025632061006035656,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 2.045681589981541,
+        "native_process_seconds": 0.001568150008097291,
+        "llvm_ir_bytes": 191645,
+        "bitcode_bytes": 32556,
+        "fixture_sha256": "28094c511f12c8922788a6a3c0cb3d7bf2a8db1ed9f5f01a4a2560d28bc881ae",
+        "executed_source_sha256": "0da9a530ce2a29aa227be5b01789ba1dfc5e5580bb139b5f130131816f81a157"
+      },
+      "defer-value-scope": {
+        "layout": {
+          "registrations": 1,
+          "drained": 1,
+          "peak_records": 1,
+          "peak_record_bytes": 16,
+          "images": 0,
+          "images_released": 0,
+          "record_failures": 1,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.018505965010263026,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 2.023246773984283,
+        "native_process_seconds": 0.0014920959947630763,
+        "llvm_ir_bytes": 22612,
+        "bitcode_bytes": 5932,
+        "fixture_sha256": "46f63d26bab9a3debe1a6df9e0f5d61c674b620a6bbfbbea1d18f9edb9fcf26b",
+        "executed_source_sha256": "c504f1b40932bfb5b1b031e918d8d9d715716c9b2acf46089c40a01cacd407af"
+      },
+      "defer-category-flow": {
+        "layout": {
+          "registrations": 8,
+          "drained": 8,
+          "peak_records": 3,
+          "peak_record_bytes": 48,
+          "images": 5,
+          "images_released": 5,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.02113536500837654,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 1.9953953799558803,
+        "native_process_seconds": 0.0015778180095367134,
+        "llvm_ir_bytes": 118315,
+        "bitcode_bytes": 20364,
+        "fixture_sha256": "6adf193e8eac7cf2473c395061d2d5b4c52ddf7e83c101844f8326156b6856b7",
+        "executed_source_sha256": "ff9a7a2abd8dd5e325a950160c056bbb3d0d45cf097c1dc55a83f39a84070c7e"
+      },
+      "defer-initialization": {
+        "layout": {
+          "registrations": 21,
+          "drained": 21,
+          "peak_records": 4,
+          "peak_record_bytes": 96,
+          "images": 10,
+          "images_released": 10,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.025459133030381054,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 2.1151590840308927,
+        "native_process_seconds": 0.0014878580113872886,
+        "llvm_ir_bytes": 193796,
+        "bitcode_bytes": 32112,
+        "fixture_sha256": "fa20cb1c07b8b0725750b97c62a9ce780a75855e4fdac508e63b9f8f515c4763",
+        "executed_source_sha256": "33da96d08d60a892f8e2a052b8ea6ba7f51a5cc80909f80eb2cc36e81f6b7151"
+      }
+    },
+    "compiler_sha256": "51d3646795c67388564b2f07223b4bd9a386897830f90fe73c634156ea4bd217",
+    "script_sha256": "3cafe077d3e1336a7f23f2f63526ece535fcbbb7e48ef5e24fd8499301264df8",
+    "harness_helper_sha256": "67f9e7d0994d0f1c3b6f609506326403673cd59be0f6c2db494be2d1113ab168"
+  },
+  "defer_comparison": {
+    "baseline": "exception-category-validation.json",
+    "baseline_compiler_sha256": "2f834bacdcc52c4708ae0ce6abf2d43b629c411041d3510af59e2e32a1848b98",
+    "previous_case_count": 9,
+    "all_previous_accounting_and_artifact_sizes_unchanged": true
+  },
+  "native_callable": {
+    "passed": true,
+    "case_count": 30,
+    "script_sha256": "0b09644784d1099ccd2ccc943bd8749faaf65b285bb82787a61db526f1116e4c",
+    "baseline": "exception-category-validation.json",
+    "baseline_compiler_sha256": "2f834bacdcc52c4708ae0ce6abf2d43b629c411041d3510af59e2e32a1848b98",
+    "raw_report_sha256": "d5d04facb7972bacb32c7a8db7a57419d6acf5a2c9d57d695d19deb828f1c45e",
+    "all_accounting_and_artifact_sizes_unchanged": true,
+    "cases": {
+      "base": {
+        "frontend_seconds": 0.03691298398189247,
+        "native_compile_link_seconds": 2.051785919989925,
+        "native_process_seconds": 0.014029939018655568,
+        "fixture_sha256": "acf75c1a4bc6608dd0ca2f08ccdd6e34fa6fdda1b954e63e7151653818f44e30",
+        "llvm_ir_bytes": 220007,
+        "bitcode_bytes": 44204,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "parameters": {
+        "frontend_seconds": 0.033608627039939165,
+        "native_compile_link_seconds": 1.9739016470266506,
+        "native_process_seconds": 0.001365486008580774,
+        "fixture_sha256": "2e822ebcfefc7eb1cf51d83c6eb2cccb2df58b092b64b091145996379a4e733f",
+        "llvm_ir_bytes": 193344,
+        "bitcode_bytes": 36452,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "arguments": {
+        "frontend_seconds": 0.02685021801153198,
+        "native_compile_link_seconds": 1.9794038670370355,
+        "native_process_seconds": 0.0016591820167377591,
+        "fixture_sha256": "e4dd6199595a919c3f8c8b88b94e0d0eabdcf718dcd5acce2cadd36b46c49f97",
+        "llvm_ir_bytes": 174806,
+        "bitcode_bytes": 34252,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "procedures": {
+        "frontend_seconds": 0.039978229033295065,
+        "native_compile_link_seconds": 2.073628313955851,
+        "native_process_seconds": 0.0023984319996088743,
+        "fixture_sha256": "9e67cf41fcf59c804441e691347c652d30361940557f9f67bb922b0745aa5a17",
+        "llvm_ir_bytes": 428252,
+        "bitcode_bytes": 78024,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "captures": {
+        "frontend_seconds": 0.031029762991238385,
+        "native_compile_link_seconds": 0.7722605790477246,
+        "native_process_seconds": 0.0017375200404785573,
+        "fixture_sha256": "5f4c80889db84d1033e2315e66f87106db2b8646c424391bba1792507118a3c7",
+        "llvm_ir_bytes": 338617,
+        "bitcode_bytes": 56696,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "invocation": {
+        "frontend_seconds": 0.023362803040072322,
+        "native_compile_link_seconds": 0.7653932640096173,
+        "native_process_seconds": 0.0014393760357052088,
+        "fixture_sha256": "5de7ec6a61749cacb43c3be902b419bce65d2699278102d7a997d0e3ebc286fa",
+        "llvm_ir_bytes": 160366,
+        "bitcode_bytes": 31100,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "expression_targets": {
+        "frontend_seconds": 0.030297266028355807,
+        "native_compile_link_seconds": 2.0738729969598353,
+        "native_process_seconds": 0.0013738319976255298,
+        "fixture_sha256": "aaf196310c9808832addf0ac5e452a45fbe99e0796171dd10e969a436db58100",
+        "llvm_ir_bytes": 189930,
+        "bitcode_bytes": 39068,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "short_circuit": {
+        "frontend_seconds": 0.02095898101106286,
+        "native_compile_link_seconds": 2.02820401097415,
+        "native_process_seconds": 0.001630286977160722,
+        "fixture_sha256": "ca6416f05425d979d2f484bfe6d7bdab5e0c466e8ba32650696b0c11b330bc4c",
+        "llvm_ir_bytes": 117769,
+        "bitcode_bytes": 26000,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "recursive_arguments": {
+        "frontend_seconds": 0.04939554299926385,
+        "native_compile_link_seconds": 2.1913785240030847,
+        "native_process_seconds": 0.0016485920059494674,
+        "fixture_sha256": "f04f820c51651ba63286fe92a44a8690b1141833d3a490cf8f7913bd2ca686ce",
+        "llvm_ir_bytes": 642715,
+        "bitcode_bytes": 109360,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "effects": {
+        "frontend_seconds": 0.023900531989056617,
+        "native_compile_link_seconds": 0.7728331229882315,
+        "native_process_seconds": 0.0015757940127514303,
+        "fixture_sha256": "0435cbd429539a657d1c6c3fecfd83e63beb3181449ec049b48c7e05ddc1823e",
+        "llvm_ir_bytes": 176483,
+        "bitcode_bytes": 34168,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "regional_captures": {
+        "frontend_seconds": 0.033529117004945874,
+        "native_compile_link_seconds": 2.0890686440397985,
+        "native_process_seconds": 0.0013598949881270528,
+        "fixture_sha256": "3a682c224e64a0ddf2e00c042c94267c207769ecf726498659992612f488b97d",
+        "llvm_ir_bytes": 206582,
+        "bitcode_bytes": 38332,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "recursive_factories": {
+        "frontend_seconds": 0.031063275993801653,
+        "native_compile_link_seconds": 2.0083288730238564,
+        "native_process_seconds": 0.0024706690455786884,
+        "fixture_sha256": "d99c30bf29a532ee67de0dc0cf320ca67e34a66f96e3f20095505bd90a493f14",
+        "llvm_ir_bytes": 267496,
+        "bitcode_bytes": 47632,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "lexical_factory": {
+        "frontend_seconds": 0.02137317496817559,
+        "native_compile_link_seconds": 0.7295450160163455,
+        "native_process_seconds": 0.0013787810457870364,
+        "fixture_sha256": "fe15b7b668fb7e9db15a27bba3cf4f02f5440b77a1df715cb47b6d0beb3d8cf3",
+        "llvm_ir_bytes": 86005,
+        "bitcode_bytes": 16860,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "higher_order": {
+        "frontend_seconds": 0.03431028500199318,
+        "native_compile_link_seconds": 2.154992877971381,
+        "native_process_seconds": 0.0014902419643476605,
+        "fixture_sha256": "bb8e4f1ba932a7e856b19cc8bcd69f29c88c6bcbde16353ceefccba96be381ac",
+        "llvm_ir_bytes": 387308,
+        "bitcode_bytes": 70592,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "generic": {
+        "frontend_seconds": 0.03409841301618144,
+        "native_compile_link_seconds": 0.8344998540123925,
+        "native_process_seconds": 0.0015845409943722188,
+        "fixture_sha256": "96549b4661ec063269114c7aaa106806329044dfbc933670511718ba8f1394fa",
+        "llvm_ir_bytes": 357817,
+        "bitcode_bytes": 64632,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "regional_parameters": {
+        "frontend_seconds": 0.030672725988551974,
+        "native_compile_link_seconds": 2.01360368198948,
+        "native_process_seconds": 0.0015885489992797375,
+        "fixture_sha256": "69105694f2becee4045fcd67884141f83d040642829d445e919efedda66f8900",
+        "llvm_ir_bytes": 250641,
+        "bitcode_bytes": 50808,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "owner_parameters": {
+        "frontend_seconds": 0.029157707002013922,
+        "native_compile_link_seconds": 2.013271422998514,
+        "native_process_seconds": 0.002189427032135427,
+        "fixture_sha256": "dab65dfe2614d2ea6e029635a60b843b598d3400408eb20ba023f3d07202f99f",
+        "llvm_ir_bytes": 240263,
+        "bitcode_bytes": 48748,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "borrowed_results": {
+        "frontend_seconds": 0.02354694198584184,
+        "native_compile_link_seconds": 2.014269374019932,
+        "native_process_seconds": 0.0014104709844104946,
+        "fixture_sha256": "ba70600c58d5330e9b8f60ad7091428b75d118b879e83774de9a572261873dd3",
+        "llvm_ir_bytes": 141964,
+        "bitcode_bytes": 29264,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "nullable_views": {
+        "frontend_seconds": 0.026318429969251156,
+        "native_compile_link_seconds": 1.9597098309895955,
+        "native_process_seconds": 0.0015913730021566153,
+        "fixture_sha256": "44e80d89bd6d26626811685cd3cef6fc2281360aef09cd0015b57cffea5a3854",
+        "llvm_ir_bytes": 189548,
+        "bitcode_bytes": 37348,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "borrowed_holders": {
+        "frontend_seconds": 0.03609866200713441,
+        "native_compile_link_seconds": 2.1386428749538027,
+        "native_process_seconds": 0.0014324630028568208,
+        "fixture_sha256": "6ce8df5d5adfc54a61461592ae51928e1ba9f29de6aabb631062a4e566e4db97",
+        "llvm_ir_bytes": 331747,
+        "bitcode_bytes": 62516,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "holder_results": {
+        "frontend_seconds": 0.03313106199493632,
+        "native_compile_link_seconds": 2.066310867026914,
+        "native_process_seconds": 0.001290824031457305,
+        "fixture_sha256": "6f2faed0c51d82ce554acba8c2d8e3740b63373a007e1552a4bbf7c31fdd1b84",
+        "llvm_ir_bytes": 302362,
+        "bitcode_bytes": 56812,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "owner_flows": {
+        "frontend_seconds": 0.019198185997083783,
+        "native_compile_link_seconds": 2.033364024013281,
+        "native_process_seconds": 0.0018379900138825178,
+        "fixture_sha256": "767deb1bbb3059996ad58aac33ed83548de40ba167ff95e33432869db8f62303",
+        "llvm_ir_bytes": 72794,
+        "bitcode_bytes": 17952,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "owner_factories": {
+        "frontend_seconds": 0.032875357021111995,
+        "native_compile_link_seconds": 2.115197846025694,
+        "native_process_seconds": 0.0014071439509280026,
+        "fixture_sha256": "0da4f245579872ae33377120501013274284f149f8284b6bdf4da51e357627c9",
+        "llvm_ir_bytes": 319402,
+        "bitcode_bytes": 58740,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "array_results": {
+        "frontend_seconds": 0.02689711598213762,
+        "native_compile_link_seconds": 2.0271511279861443,
+        "native_process_seconds": 0.0013447160017676651,
+        "fixture_sha256": "f60599c9d80965adb54651bdbcdd8d9add23baf0c376a1bd9aae665df1edcd6f",
+        "llvm_ir_bytes": 172959,
+        "bitcode_bytes": 37212,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "conversions": {
+        "frontend_seconds": 0.023104694031644613,
+        "native_compile_link_seconds": 0.7282737389905378,
+        "native_process_seconds": 0.001336179964710027,
+        "fixture_sha256": "e8348efef6f9720b3d8060d0c032e9875d7830ef4b4e9b4be55bfbe6f66f2410",
+        "llvm_ir_bytes": 182175,
+        "bitcode_bytes": 34552,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "record_results": {
+        "frontend_seconds": 0.029359098989516497,
+        "native_compile_link_seconds": 2.025912662036717,
+        "native_process_seconds": 0.0013257700484246016,
+        "fixture_sha256": "c36ed64a24f0eb6b7877f4b68f5ed7b444b5ef2cfd32af788d888aad14a33d20",
+        "llvm_ir_bytes": 146739,
+        "bitcode_bytes": 30464,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "initialization": {
+        "frontend_seconds": 0.023157804971560836,
+        "native_compile_link_seconds": 2.003028324979823,
+        "native_process_seconds": 0.001672137004788965,
+        "fixture_sha256": "ab697e030980443068c2ced70b54afd87555a6f4bad8f96ea2354c0b77480dec",
+        "llvm_ir_bytes": 141680,
+        "bitcode_bytes": 28424,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "region_results": {
+        "frontend_seconds": 0.029472332971636206,
+        "native_compile_link_seconds": 2.02545471501071,
+        "native_process_seconds": 0.0013533829478546977,
+        "fixture_sha256": "603084e58e1d7368a941b27e879c31b25d8870e83e66c6f06484494c6ddebfb1",
+        "llvm_ir_bytes": 257418,
+        "bitcode_bytes": 49564,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "owned_results": {
+        "frontend_seconds": 0.20657483098329976,
+        "native_compile_link_seconds": 2.444526682025753,
+        "native_process_seconds": 0.0021060280269011855,
+        "fixture_sha256": "0569edf0aa58268ca62b990a16aa8356c7f42a37556f5609655af078222c371d",
+        "llvm_ir_bytes": 2324849,
+        "bitcode_bytes": 382220,
+        "accounting_and_artifact_sizes_match_baseline": true
+      },
+      "qualifiers": {
+        "frontend_seconds": 0.022478728962596506,
+        "native_compile_link_seconds": 1.9035649370052852,
+        "native_process_seconds": 0.002169859013520181,
+        "fixture_sha256": "34d1ee8e14394fc9d3a95c57801fdaea17a822934270cd6fd6814de43ea357d5",
+        "llvm_ir_bytes": 64534,
+        "bitcode_bytes": 16992,
+        "accounting_and_artifact_sizes_match_baseline": true
+      }
+    }
+  },
+  "retained_limit_probes": [
+    {
+      "path": "/tmp/cod-defer-initialization/post-scope.cod",
+      "source": "using symbol \"std:io\" @print;\nproc run()->void {\n  ptr value = make local u64;\n  {{defer {value <- 1u64;};}};\n  behave @print(value);\n}\nrun();\n",
+      "exit": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-defer-initialization/post-scope.cod:5:10: read of storage before definite initialization in an argument\n/tmp/cod-defer-initialization/post-scope.cod:7:1: note: in call to procedure 'run' defined at /tmp/cod-defer-initialization/post-scope.cod:2:1\n"
+    },
+    {
+      "path": "/tmp/cod-defer-initialization/branch-entry.cod",
+      "source": "using symbol \"std:io\" @print;\nproc run(yes:bool)->void {\n  ptr value = make local u64;\n  if(yes) {value <- 1u64; defer {behave @print(value);};} else {};\n}\nrun(true);\n",
+      "exit": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-defer-initialization/branch-entry.cod:4:41: read of storage before definite initialization in an argument\n/tmp/cod-defer-initialization/branch-entry.cod:6:1: note: in call to procedure 'run' defined at /tmp/cod-defer-initialization/branch-entry.cod:2:1\n"
+    },
+    {
+      "path": "/tmp/cod-defer-handlers/pointer-flow.cod",
+      "source": "proc run()->void {\n  val a:u64 <- 1u64;\n  val b:u64 <- 2u64;\n  ptr selected = a;\n  defer {selected = b;};\n}\nrun();\n",
+      "exit": 2,
+      "stdout": "",
+      "stderr": "/tmp/cod-defer-handlers/pointer-flow.cod:5:3: deferred action changes flow facts; deferred backedge checking is not implemented yet\n/tmp/cod-defer-handlers/pointer-flow.cod:7:1: note: in call to procedure 'run' defined at /tmp/cod-defer-handlers/pointer-flow.cod:1:1\n"
+    }
+  ],
+  "limits": [
+    "Cleanup entry and pending-completion joins are conservative; conditional registration and successful scope-exit initialization can still reject valid programs.",
+    "Pointer rebinding, callable replacement and owning transfers during cleanup retain implementation guards.",
+    "Owning/external borrowed deferred arguments, generic transport and process-lifetime queues remain required work.",
+    "No new sanitizer run; no native payload, owner, region allocation/layout or callable storage ABI change.",
+    "Full callable-family construction, explicit-installation migration, entry cancellation, abstract evidence/ABI and WPO closure remain incomplete."
+  ]
+}

@@ -5843,6 +5843,40 @@ class Compiler {
     auto *site = ir_.pop_deferred(scope.head, record);
     const auto entry_flow = flow_state();
     const auto entry_env = env;
+    // Each registered action receives the facts from the actions that can run
+    // immediately before it. Queue joins only route edges; registration nodes
+    // stop them until that action's normal, return and failure exits are known.
+    std::map<size_t, std::vector<size_t>> initialization_headers;
+    const auto initialization_header = [&](size_t queue) -> const std::vector<size_t> & {
+      auto [position, inserted] = initialization_headers.try_emplace(queue);
+      if (inserted) for (size_t i = 0; i < entry_flow.initialized.size(); ++i) {
+        initialization_flows_.push_back({{}, true});
+        position->second.push_back(initialization_flows_.size() - 1);
+      }
+      return position->second;
+    };
+    initialization_header(0);
+    const auto connect_initialization = [&](const FlowState &state) {
+      for (const auto &action : scope.actions) initialization_header(action.registration);
+      const auto remaining = state.deferred.find(scope.owner_scope);
+      std::vector<size_t> pending{remaining == state.deferred.end() ? 0 : remaining->second};
+      std::set<size_t> visited;
+      while (!pending.empty()) {
+        const auto queue = pending.back(); pending.pop_back();
+        if (!visited.insert(queue).second) continue;
+        if (const auto found = initialization_headers.find(queue); found != initialization_headers.end()) {
+          for (size_t i = 0; i < found->second.size(); ++i) {
+            auto &inputs = initialization_flows_.at(found->second[i]).inputs;
+            const auto proof = state.initialized.at(i);
+            if (std::find(inputs.begin(), inputs.end(), proof) == inputs.end()) inputs.push_back(proof);
+          }
+        } else {
+          const auto &inputs = deferred_flows_.at(queue).inputs;
+          pending.insert(pending.end(), inputs.begin(), inputs.end());
+        }
+      }
+    };
+    connect_initialization(entry_flow);
     const auto check_flow = [&](const FlowState &exit, const DeferredAction &action) {
       const auto queue = exit.deferred.find(scope.owner_scope);
       if (queue != exit.deferred.end())
@@ -5850,13 +5884,13 @@ class Compiler {
       bool changed = false;
       for (size_t i = 0; i < entry_flow.live.size(); ++i) changed |= !entry_flow.live[i].same(exit.live[i]);
       for (size_t i = 0; i < entry_flow.holdings.size(); ++i) changed |= entry_flow.holdings[i] != exit.holdings[i];
-      for (size_t i = 0; i < entry_flow.initialized.size(); ++i) changed |= entry_flow.initialized[i] != exit.initialized[i];
       for (size_t i = 0; i < entry_flow.pointers.size(); ++i) changed |= entry_flow.pointers[i] != exit.pointers[i];
       for (const auto &[holder, value] : entry_flow.callables) {
         const auto *after = exit.callables.lookup(holder);
         changed |= !after || *after != value;
       }
       if (changed) fail(action.at, "deferred action changes flow facts; deferred backedge checking is not implemented yet");
+      connect_initialization(exit);
     };
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &action = scope.actions[i];
@@ -5865,6 +5899,8 @@ class Compiler {
       ir_.choose(ir_.binary(Type::uint64, "==", site, ir_.bits(Type::uint64, i)), run, other);
       ir_.enter(run);
       restore_flow(entry_flow);
+      const auto &initialized = initialization_header(action.registration);
+      for (size_t cell = 0; cell < initialized.size(); ++cell) cells_[cell].initialized = initialized[cell];
       registered_deferred_[scope.owner_scope] = action.predecessors;
       env = entry_env;
       const auto holding_begin = holdings_.size();
@@ -5927,7 +5963,11 @@ class Compiler {
     }
     ir_.unreachable();
     ir_.enter(done);
-    restore_flow(entry_flow);
+    for (const auto &[queue, proofs] : initialization_headers)
+      for (const auto proof : proofs) initialization_flows_.at(proof).open = false;
+    auto completed_flow = entry_flow;
+    completed_flow.initialized = initialization_headers.at(0);
+    restore_flow(completed_flow);
     registered_deferred_.erase(scope.owner_scope);
     env = entry_env;
     auto *resume = ir_.label("defer.resume");
@@ -5946,7 +5986,7 @@ class Compiler {
       auto *other = ir_.label("defer.return.other");
       ir_.choose(ir_.binary(Type::uint64, "==", ir_.read_native(return_tag), ir_.bits(Type::uint64, i + 1)), selected, other);
       ir_.enter(selected);
-      restore_flow(entry_flow);
+      restore_flow(completed_flow);
       registered_deferred_.erase(scope.owner_scope);
       auto value = returned[i].value;
       size_t field = 0;
@@ -5968,7 +6008,7 @@ class Compiler {
       route_return(std::move(value), returned[i].at);
       ir_.enter(other);
     }
-    restore_flow(entry_flow);
+    restore_flow(completed_flow);
     registered_deferred_.erase(scope.owner_scope);
     return {};
   }
@@ -7161,8 +7201,10 @@ class Compiler {
       if (exit.live[i].same(entry.live[i])) exit.live[i] = path.live[i];
     for (size_t i = 0; i < std::min(path.holdings.size(), entry.holdings.size()); ++i)
       if (exit.holdings[i] == entry.holdings[i]) exit.holdings[i] = path.holdings[i];
+    // A live allocation stays initialized along a continuation even when a
+    // shared cleanup expresses its guarantees through different proof nodes.
     for (size_t i = 0; i < std::min(path.initialized.size(), entry.initialized.size()); ++i)
-      if (exit.initialized[i] == entry.initialized[i]) exit.initialized[i] = path.initialized[i];
+      exit.initialized[i] = preserved_initialization(path.initialized[i], exit.initialized[i]);
     for (size_t i = 0; i < std::min(path.pointers.size(), entry.pointers.size()); ++i)
       if (exit.pointers[i] == entry.pointers[i]) exit.pointers[i] = path.pointers[i];
     auto callables = path.callables;

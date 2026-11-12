@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 188 · Recorded: 2026-11-12.
+Prototype reference revision: 189 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Deferred initialization:** [K-540](../../../design/DesignAuthorityRegistry.md#k-540), reference189 under D-17r39, connects registered-action order to the existing allocation-initialization solver. Normal, return and failure exits retain their remaining queue; finally continuations preserve initialization already established on their path. [Verification](defer-initialization-validation.json) covers nested/repeated registration, conditional writes, failed registration/invocation, replacement returns and continuation refinement. Native records, ownership and cleanup are unchanged. Merged-entry/completion correlation and pointer/callable/owner mutation remain implementation gaps.
 
 - **Exception category flow:** [K-539](../../../design/DesignAuthorityRegistry.md#k-539), reference188 under D-17r38, preserves catch-all/deferred/fold category possibilities until flow closure. [Verification](exception-category-validation.json) distinguishes valid unchecked rethrows from real checked NPEs, including later loop iterations and mutable reloads. Native exception storage, callable checked contracts and cleanup are unchanged. Registration-order/category correlation and the remaining defer integration are separate work.
 

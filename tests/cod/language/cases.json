@@ -2941,5 +2941,40 @@
     "file": "scopes/exception-category-loop.cod",
     "exit": 0,
     "stdout": "4\n"
+  },
+  {
+    "file": "scopes/defer-initialization.cod",
+    "exit": 0,
+    "stdout": "11\n11\n12\n13\n13\n13\n14\n15\n16\n17\n18\n19\n21\n22\n23\n"
+  },
+  {
+    "file": "scopes/defer-initialization-order.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-initialization-registration.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-initialization-branch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-initialization-cycle.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-initialization-failure.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
   }
 ]

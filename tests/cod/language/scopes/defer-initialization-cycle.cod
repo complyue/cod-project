@@ -1,0 +1,5 @@
+proc run(count:u64)->void {
+  ptr value = make local u64;
+  for(i in 0u64 .. count) {defer {value <- value + 1u64;};};
+}
+run(3u64);
