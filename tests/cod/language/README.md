@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 190 · Recorded: 2026-11-12.
+Prototype reference revision: 191 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Deferred handler entry facts:** [K-543](../../../design/DesignAuthorityRegistry.md#k-543), reference191 under D-17r42, keeps normal-body initialization separate from pending exception categories. [Verification](defer-handler-initialization-validation.json) covers delayed setters, typed/fallback catches, original body failures, finally, preserved registration facts and injected registration failure. Unsafe catch/finally reads and optional setters still reject. Existing native artifact sizes and resource accounting are unchanged; queue correlation and mutable deferred-state analysis remain incomplete. No source-policy, runtime initialization flag or ABI change is introduced.
 
 - **Cleanup completion facts:** [K-541](../../../design/DesignAuthorityRegistry.md#k-541), reference190 under D-17r40, retains initialization established at registration and separates successful cleanup from each pending error category. Independent write guarantees compose with native callable summaries while each action body is emitted once. [Verification](defer-completion-validation.json) covers post-scope reads, conditional registration, recursive initialization, recovery and failed registration/invocation. Queue/handler correlation and pointer/callable/owner mutation still have implementation gaps; no native storage, lifetime or checked-failure rule changes.
 

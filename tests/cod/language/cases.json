@@ -3022,5 +3022,34 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-handler-initialization.cod",
+    "exit": 0,
+    "stdout": "1\n71\n2\n72\n3\n73\n4\n74\n5\n6\n"
+  },
+  {
+    "file": "scopes/defer-handler-uninitialized-catch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-handler-uninitialized-finally.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-handler-optional-setter.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "scopes/defer-handler-wrong-category.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
   }
 ]

@@ -529,7 +529,7 @@ class Compiler {
     llvm::StructType *layout;
     Location at;
     std::vector<size_t> images;
-    std::function<Value(llvm::Value *, Environment &, Value)> invoke;
+    std::function<Value(llvm::Value *, Environment &, Value, const InitializationPaths &)> invoke;
     bool handles_error = false;
     std::shared_ptr<bool> recovers;
     size_t predecessors = 0;
@@ -549,6 +549,7 @@ class Compiler {
     std::function<Value()> body;
     std::function<Value(Value, const std::vector<CleanupEntry> &)> cleanup;
     std::optional<Value> incoming;
+    const InitializationPaths *incoming_initialization = nullptr;
     bool discard = false;
     std::function<bool(const FlowState &)> recovers;
     bool *recovered = nullptr;
@@ -5886,8 +5887,8 @@ class Compiler {
     const auto entry_flow = flow_state();
     const auto entry_env = env;
     // Queue joins route facts to the next action. Successful completion and each
-    // pending error retain separate inputs, while one joined input checks the
-    // shared native body. Registration also preserves established allocation
+    // pending error retain separate inputs. Plain actions use their join;
+    // handlers select the input matching each entry. Registration preserves allocation
     // facts: an intervening branch without this registration cannot erase them.
     struct InitializationHeader { InitializationPaths paths; std::vector<size_t> joined; };
     std::map<size_t, InitializationHeader> initialization_headers;
@@ -5960,6 +5961,10 @@ class Compiler {
       restore_flow(entry_flow);
       const auto &header = initialization_header(action.registration, action.initialized);
       const auto &initialized = header.joined;
+      auto paths = header.paths;
+      for (auto &path : paths)
+        for (size_t cell = 0; cell < path.size(); ++cell)
+          path[cell] = preserved_initialization(cell < action.initialized.size() ? action.initialized[cell] : 0, path[cell]);
       for (size_t cell = 0; cell < initialized.size(); ++cell) cells_[cell].initialized = initialized[cell];
       registered_deferred_[scope.owner_scope] = action.predecessors;
       env = entry_env;
@@ -5985,7 +5990,7 @@ class Compiler {
         pending.exception_category = ir_.read_native(error_category);
         pending.exception_facts = pending_facts;
         if (action.handles_error) ir_.write_native(error_category, ir_.bits(Type::uint64, 0));
-        const auto result = action.invoke(record, env, std::move(pending));
+        const auto result = action.invoke(record, env, std::move(pending), paths);
         return_targets_.pop_back();
         handlers_.pop_back();
         if (result.type != Type::never) {
@@ -6161,7 +6166,7 @@ class Compiler {
     auto *layout = ir_.deferred_layout(values);
     auto recovered = std::make_shared<bool>(false);
     auto invoke = [this, selected, references, caught, controls, recovered, layout, &expr, &module, function_context]
-                  (llvm::Value *record, Environment &env, Value incoming) -> Value {
+                  (llvm::Value *record, Environment &env, Value incoming, const InitializationPaths &paths) -> Value {
       auto locals = selected;
       auto active_error = caught;
       size_t field = 0;
@@ -6189,6 +6194,7 @@ class Compiler {
         return block(*expr.children.front(), module, env, locals, function_context, true);
       TryEmission emission;
       emission.incoming = std::move(incoming);
+      emission.incoming_initialization = &paths;
       emission.discard = true;
       emission.recovered = recovered.get();
       return try_expression(expr, module, env, locals, function_context, false, true, {}, nullptr, &emission);
@@ -6278,7 +6284,7 @@ class Compiler {
     auto *layout = ir_.deferred_layout(values);
     const auto scope_id = deferred_scope_->owner_scope;
     auto invoke = [this, method_call, callable_call, captured, layout, scope_id, &module, at = expr.at]
-                  (llvm::Value *record, Environment &current, Value) -> Value {
+                  (llvm::Value *record, Environment &current, Value, const InitializationPaths &) -> Value {
       auto method = method_call;
       auto callable = callable_call;
       size_t field = 0;
@@ -7363,8 +7369,12 @@ class Compiler {
         auto *error_entry = ir_.label("try.incoming");
         ir_.choose(ir_.is_null(exception_category(*emission->incoming)), body_entry, error_entry);
         ir_.enter(error_entry);
-        raise_exception(*emission->incoming);
+        raise_exception(*emission->incoming, emission->incoming_initialization);
         ir_.enter(body_entry);
+        if (emission->incoming_initialization) {
+          const auto &initialized = emission->incoming_initialization->front();
+          for (size_t cell = 0; cell < initialized.size(); ++cell) cells_[cell].initialized = initialized[cell];
+        }
       }
       normal = emission && emission->body ? emission->body() : block(*expr.children.front(), module, env, locals,
           function_context, emission && emission->discard, callable_result, copy_bits, read_result, result_owner);

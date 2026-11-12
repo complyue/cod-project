@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+using "std:exceptions" OutOfMemory;
+region symbol @arena;
+proc bad()->void {effect @arena <- region(0u64);}
+proc run()->void {
+  ptr value = make local u64;
+  defer {} catch(error:const OutOfMemory) {behave @print(value);};
+  defer {value <- 1u64; bad();};
+}
+run();
