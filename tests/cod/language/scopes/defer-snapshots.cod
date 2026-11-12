@@ -1,0 +1,21 @@
+using symbol "std:io" @print;
+symbol @bias:u64;
+symbol @saved:proc(u64)->void;
+proc direct(x:u64) -> void { behave @print(x + @bias); }
+proc factory() -> proc(u64)->void { behave @print(20u64); return proc(x:u64)->void { behave @print(x + 30u64); }; }
+proc use(f:proc(u64)->void, x:u64) -> void { f(x); }
+proc run() -> void {
+  effect @bias <- 10u64;
+  proc current = proc(x:u64)->void { behave @print(x + @bias); };
+  effect @saved = current;
+  defer direct(1u64);
+  defer perform @saved(2u64);
+  defer behave @saved(3u64);
+  defer current(4u64);
+  defer factory()(5u64);
+  defer use(current, 6u64);
+  current <- proc(x:u64)->void { behave @print(100u64 + x); };
+  effect @bias <- 40u64;
+  defer behave @print(7u64);
+}
+run();

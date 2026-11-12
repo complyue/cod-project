@@ -74,6 +74,16 @@ void *cod_lang_callable_copy(const void *source, std::uint64_t *status) {
   return image;
 }
 void cod_lang_callable_free(void *image) { std::free(image); }
+void *cod_lang_defer_allocate(std::uint64_t bytes, std::uint64_t *status) {
+  if (bytes > std::numeric_limits<std::size_t>::max()) {
+    status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
+    return nullptr;
+  }
+  auto *record = std::malloc(static_cast<std::size_t>(bytes));
+  if (!record) status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
+  return record;
+}
+void cod_lang_defer_free(void *record) { std::free(record); }
 std::uint64_t cod_lang_exception_chain(std::uint64_t category, std::uint64_t site,
                                        std::uint64_t requested, std::uint64_t available,
                                        std::uint64_t cause, std::uint64_t *status) {

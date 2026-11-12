@@ -1,0 +1,34 @@
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+data Packet {value:u64;}
+proc good(x:u64) -> void { behave @print(x); }
+proc bad(x:u64, capacity:u64) -> void {
+  behave @print(x);
+  effect @arena <- region(capacity);
+}
+func argument(capacity:u64) -> const u64 {
+  owned region p <- make Packet(capacity=capacity) {value<-0u64};
+  return 99u64;
+}
+proc use(action:proc(u64)->void, x:u64) -> void { action(x); }
+proc fail(mode:u64) -> const u64 {
+  defer good(1u64);
+  defer bad(2u64, 18446744073709551615u64);
+  defer bad(3u64, 0u64);
+  if (mode == 1u64) { effect @arena <- region(0u64); } else {};
+  return 7u64;
+}
+for(i in 0u64 .. 2u64) {{
+  try { behave @print(fail(i)); }
+  catch(e:const InvalidCapacity) {
+    behave @assert(e.requested == 18446744073709551615u64);
+    behave @assert(e.cause_count == 0u64);
+    behave @print(8u64);
+  };
+}};
+try {{
+  defer good(10u64);
+  defer use(proc(x:u64)->void { behave @print(x); }, argument(0u64));
+}} catch(e:const InvalidCapacity) { behave @print(11u64); };

@@ -1,0 +1,3 @@
+symbol @x:u64;
+proc run() -> void { defer { if (true) { effect @x <- 1u64; } else {}; }; }
+run();

@@ -340,6 +340,39 @@ public:
     effect(id, Type::procedure, holder, writes);
   }
   size_t scope() const { return cleanups_.size(); }
+  llvm::AllocaInst *native_slot(llvm::Type *type, const char *name) {
+    return entry_slot(type, name, true);
+  }
+  void write_native(llvm::Value *slot, llvm::Value *value) { b().CreateStore(value, slot); }
+  llvm::Value *read_native(llvm::AllocaInst *slot) { return b().CreateLoad(slot->getAllocatedType(), slot); }
+  llvm::AllocaInst *deferred_stack() { return entry_slot(pointer_type(), "defer.head", true); }
+  llvm::StructType *deferred_layout(const std::vector<llvm::Value *> &values) {
+    std::vector<llvm::Type *> fields{pointer_type(), i64()};
+    for (auto *value : values) fields.push_back(value->getType());
+    return llvm::StructType::get(context(), fields);
+  }
+  llvm::Value *deferred_field(llvm::StructType *layout, llvm::Value *record, size_t index) {
+    return b().CreateStructGEP(layout, record, unsigned(index + 2));
+  }
+  llvm::Value *read_deferred_field(llvm::StructType *layout, llvm::Value *record, size_t index) {
+    return b().CreateLoad(layout->getElementType(unsigned(index + 2)), deferred_field(layout, record, index));
+  }
+  void register_deferred(llvm::Value *head, llvm::StructType *layout, size_t site,
+                         const std::vector<llvm::Value *> &values) {
+    auto *bytes = integer(i64(), module_->getDataLayout().getTypeAllocSize(layout));
+    auto *record = checked_service("cod_lang_defer_allocate", pointer_type(), {bytes}, bytes,
+                                  {ExceptionCategory::out_of_memory});
+    b().CreateStore(b().CreateLoad(pointer_type(), head), b().CreateStructGEP(layout, record, 0));
+    b().CreateStore(integer(i64(), site), b().CreateStructGEP(layout, record, 1));
+    for (size_t i = 0; i < values.size(); ++i) b().CreateStore(values[i], deferred_field(layout, record, i));
+    b().CreateStore(record, head);
+  }
+  llvm::Value *pop_deferred(llvm::Value *head, llvm::Value *record) {
+    auto *header = llvm::StructType::get(context(), {pointer_type(), i64()});
+    b().CreateStore(b().CreateLoad(pointer_type(), b().CreateStructGEP(header, record, 0)), head);
+    return b().CreateLoad(i64(), b().CreateStructGEP(header, record, 1));
+  }
+  void free_deferred(llvm::Value *record) { call_runtime("cod_lang_defer_free", void_type(), {record}); }
   size_t &cleanup_owner() { return cleanup_owner_; }
   void unwind(size_t mark, std::optional<size_t> preserve = {}) {
     for (size_t i = cleanups_.size(); i > mark; --i)
@@ -354,6 +387,9 @@ public:
   llvm::BasicBlock *label(const char *name) { return llvm::BasicBlock::Create(context(), name, entry_); }
   void enter(llvm::BasicBlock *block) { b().SetInsertPoint(block); }
   void jump(llvm::BasicBlock *block) { b().CreateBr(block); }
+  void choose(llvm::Value *condition, llvm::BasicBlock *yes, llvm::BasicBlock *no) {
+    b().CreateCondBr(condition, yes, no);
+  }
   void unreachable() { b().CreateUnreachable(); }
   llvm::Value *phi(llvm::Type *type, const std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> &edges) {
     auto *result = llvm::PHINode::Create(type, unsigned(edges.size()), "", here()->getFirstNonPHIIt());

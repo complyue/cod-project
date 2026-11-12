@@ -2666,5 +2666,43 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "expected region :"
+  },
+  {
+    "file": "scopes/defer-order.cod",
+    "exit": 0,
+    "stdout": "5\n6\n4\n3\n2\n1\n7\n"
+  },
+  {
+    "file": "scopes/defer-snapshots.cod",
+    "exit": 0,
+    "stdout": "20\n7\n46\n35\n44\n43\n12\n41\n"
+  },
+  {
+    "file": "scopes/defer-failures.cod",
+    "exit": 0,
+    "stdout": "3\n2\n1\n8\n3\n2\n1\n8\n10\n11\n"
+  },
+  {
+    "file": "scopes/defer-block-explicit-syntax.cod",
+    "exit": 0,
+    "stdout": "1\n"
+  },
+  {
+    "file": "scopes/defer-block-declaration.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a deferred-block variable declaration requires a nested explicit {{ ... }} scope"
+  },
+  {
+    "file": "scopes/defer-block-effect.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "effect installation in a deferred block requires a nested explicit {{ ... }} scope"
+  },
+  {
+    "file": "scopes/defer-block-procedure-effect.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "effect installation in a deferred block requires a nested explicit {{ ... }} scope"
   }
 ]

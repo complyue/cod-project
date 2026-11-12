@@ -281,7 +281,7 @@ struct Form;
 struct Expression {
   enum class Kind { integer, real, boolean, name, symbol, unary, binary, call, value_call, perform, behave, effect,
                     block, conditional, field, range_for, fold, allocate, index, null_ref,
-                    try_scope, handler, raise, return_value, make_region, touch, effect_group, transfer, procedure_effect,
+                    try_scope, handler, raise, return_value, deferred, make_region, touch, effect_group, transfer, procedure_effect,
                     pointer_group, pointer, make_local, rebind, region_binding, callable, alias, capture_owner };
   Kind kind;
   Location at;
@@ -380,7 +380,7 @@ inline bool expression_keyword(std::string_view name) {
          name == "for" || name == "fold" || name == "var" || name == "let" || name == "effect" ||
          name == "perform" || name == "behave" || name == "if" || name == "procedure" ||
          name == "function" || name == "func" || name == "proc" || name == "global" || name == "symbol" ||
-         name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "return" || name == "from" ||
+         name == "try" || name == "catch" || name == "finally" || name == "throw" || name == "return" || name == "defer" || name == "from" ||
          name == "val" || name == "ref" || name == "throws" || name == "make" || name == "owned" || name == "touch" || name == "ptr" || name == "typeof" || name == "intrinsic" || name == "const";
 }
 
@@ -782,9 +782,24 @@ class Parser {
       }
       return expr;
     }
-    if (take("try")) {
-      auto expr = make(Expression::Kind::try_scope, token);
-      expr->children.push_back(block());
+    if (is("try") || is("defer")) {
+      const bool deferred = take("defer");
+      if (!deferred) expect("try");
+      auto expr = make(deferred ? Expression::Kind::deferred : Expression::Kind::try_scope, token);
+      if (deferred && !is("{")) {
+        if (is("catch") || is("finally")) {
+          expr->binding = "fallback";
+          expr->children.push_back(make(Expression::Kind::block, token));
+        } else {
+          auto call = expression();
+          const auto kind = call->kind;
+          if (kind != Expression::Kind::call && kind != Expression::Kind::value_call &&
+              kind != Expression::Kind::perform && kind != Expression::Kind::behave)
+            fail(token.at, "defer requires a callable invocation or an explicit delayed block");
+          expr->children.push_back(std::move(call));
+          return expr;
+        }
+      } else expr->children.push_back(block());
       bool catch_all = false;
       while (take("catch")) {
         if (catch_all) fail(peek().at, "catch-all must be the final catch clause");
@@ -799,7 +814,7 @@ class Parser {
         expr->children.push_back(std::move(handler));
       }
       if (take("finally")) expr->children.push_back(block());
-      if (expr->children.size() == 1) fail(token.at, "try requires catch, finally, or both");
+      if (!deferred && expr->children.size() == 1) fail(token.at, "try requires catch, finally, or both");
       return expr;
     }
     if (take("throw")) {
@@ -1057,22 +1072,27 @@ class Parser {
     return result;
   }
 
-  static void validate_iteration_scopes(const Expression &expr, bool needs_scope = false) {
+  static void validate_explicit_scopes(const Expression &expr, bool iteration = false, bool deferred = false) {
     using K = Expression::Kind;
-    if (expr.kind == K::block && expr.scoped) needs_scope = false;
-    if (needs_scope && (expr.kind == K::pointer_group || expr.kind == K::region_binding ||
-                        expr.kind == K::alias ||
-                        (expr.kind == K::callable && !expr.definition->name.empty())))
+    if (expr.kind == K::block && expr.scoped) iteration = deferred = false;
+    const bool declaration = expr.kind == K::pointer_group || expr.kind == K::region_binding ||
+        expr.kind == K::alias || (expr.kind == K::callable && !expr.definition->name.empty());
+    if (deferred && declaration)
+      fail(expr.at, "a deferred-block variable declaration requires a nested explicit {{ ... }} scope");
+    if (deferred && (expr.kind == K::effect || expr.kind == K::effect_group || expr.kind == K::procedure_effect))
+      fail(expr.at, "effect installation in a deferred block requires a nested explicit {{ ... }} scope");
+    if (iteration && declaration)
       fail(expr.at, "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope");
     for (size_t i = 0; i < expr.children.size(); ++i) {
-      const bool iteration = (expr.kind == K::range_for && i >= 2) ||
-                             (expr.kind == K::fold && i == 3);
-      validate_iteration_scopes(*expr.children[i], iteration || needs_scope);
+      const bool loop_body = (expr.kind == K::range_for && i >= 2) ||
+                            (expr.kind == K::fold && i == 3);
+      const bool deferred_body = expr.kind == K::deferred && expr.children.front()->kind == K::block;
+      validate_explicit_scopes(*expr.children[i], loop_body || iteration, deferred_body || deferred);
     }
     // A callable body executes in its own call scope, independently of where
     // its value is constructed. Loops inside it still need explicit scopes.
     if (expr.definition && expr.definition->body)
-      validate_iteration_scopes(*expr.definition->body);
+      validate_explicit_scopes(*expr.definition->body);
   }
 
 public:
@@ -1258,7 +1278,7 @@ public:
       forms.push_back(std::move(form));
     }
     for (const auto &form : forms)
-      if (form->body) validate_iteration_scopes(*form->body);
+      if (form->body) validate_explicit_scopes(*form->body);
     return forms;
   }
 };
