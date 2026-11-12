@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 199 · Recorded: 2026-11-12.
+Prototype reference revision: 200 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Body-derived callable results:** [K-553](../../../design/DesignAuthorityRegistry.md#k-553), reference200 under D-18r71/D-17r51, continues complete values, definition-time captures and eager deferred preparation. [Verification](defer-body-result-validation.json) covers explicit callable signatures using the existing image representation independently of native entry support, shared capture decoding and dispatch-identity adaptation, closed runtime selections, recursive nested/factory values, failure cleanup and owner/access rejection. Open/recursive body-result staging, inferred-signature payloads and general cleanup environments remain unfinished; existing actual-owner/result-discrimination and lifetime boundaries are unchanged.
 
 - **Deferred ownership flow:** [K-552](../../../design/DesignAuthorityRegistry.md#k-552), reference199 under D-14r82/D-17r50, continues the qualified owner/access/initialization, entry-time transfer and cleanup-order contracts with D-18 complete values. [Verification](defer-owned-validation.json) covers selected owning references, late transfer, ownership changes through queue/category/completion equations, recursive and runtime-selected native calls, failed registration and pending-result release. Invalid duplicate/early consumption, repeating outer-owner consumption and expired borrows reject. No new runtime ownership storage or source policy is introduced; broader relational, generic/module and family/AOT work remains incomplete.
 

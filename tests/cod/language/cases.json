@@ -3396,5 +3396,34 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "regional value requires a live owning region"
+  },
+  {
+    "file": "scopes/defer-body-results.cod",
+    "exit": 0,
+    "stdout": "1\n2\n2\n3\n1\n3\n1\n20\n20\n20\n20\n21\n20\n20\n21\n20\n20\n20\n21\n21\n21\n32\n30\n44\n46\n46\n46\n47\n46\n47\n"
+  },
+  {
+    "file": "scopes/defer-body-expired-lexical.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "requires a live region owner"
+  },
+  {
+    "file": "scopes/defer-body-local-result.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional result would outlive its owning scope"
+  },
+  {
+    "file": "scopes/defer-body-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "scopes/defer-body-expired-dynamic.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional value requires a live owning region"
   }
 ]

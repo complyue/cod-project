@@ -546,6 +546,11 @@ class Compiler {
     std::optional<StorageView> callable_destination = {};
     bool callable_prepared = false;
   };
+  struct CallableDispatch {
+    const NativeCallDemand *parent;
+    std::map<const Procedure *, LLVMEmission::CallableMatch> matches;
+  };
+  std::deque<CallableDispatch> callable_dispatches_;
   struct NativeCallDemand {
     size_t flow;
     const Module *caller;
@@ -563,7 +568,7 @@ class Compiler {
     std::map<size_t, size_t> returns = {};
     std::array<std::map<size_t, size_t>, concrete_exception_count> failures = {};
     std::set<const Procedure *> emitted = {};
-    std::map<const Procedure *, LLVMEmission::CallableMatch> matches = {};
+    CallableDispatch *dispatch = nullptr;
     llvm::BasicBlock *tail = nullptr;
     const NativeCallDemand *reused = nullptr;
     size_t result_flow = 0;
@@ -3134,25 +3139,76 @@ class Compiler {
     for (auto &[name, value] : procedure.lexical_captures.visible) value_fields(value);
     for (auto &[name, value] : procedure.lexical_captures.owner_anchors) value_fields(value);
   }
+  std::map<size_t, llvm::Value *> load_callable_captures(Procedure &procedure, llvm::Value *image,
+                                                        bool captured, bool formal_owners) {
+    const auto &code = *procedure.code;
+    size_t index = 0;
+    callable_fields(procedure, [&](llvm::Value *&field, bool nested) {
+      field = ir_.callable_field(image, code.layout, index++, nested);
+    });
+    for (size_t id : code.dynamic_values) {
+      if (!captured) { ++index; continue; }
+      const auto *original = procedure.captures.lookup(id);
+      auto value = *original;
+      auto loaded = loaded_value(value.type, ir_.callable_field(image, code.layout, index++, false));
+      value.native = loaded.native;
+      value.exception_category = loaded.exception_category;
+      value.replayed = true;
+      ir_.effect(id, value.type, value.native);
+      binding_values_.push_back(std::move(value));
+      procedure.captures.bindings = binding_factory_.add(procedure.captures.bindings, id, &binding_values_.back());
+      procedure.captures.captured_bindings = binding_factory_.add(
+          procedure.captures.captured_bindings, id, &binding_values_.back());
+    }
+    for (size_t id : code.dynamic_procedures) {
+      if (!captured) { ++index; continue; }
+      auto value = *procedure.captures.lookup(id);
+      value.native = ir_.callable_field(image, code.layout, index++, true);
+      value.replayed = true;
+      auto writes = std::make_shared<LLVMEmission::EffectWrites>();
+      ir_.captured_procedure(id, value.native, writes);
+      capture_effects_.emplace_back(value.capture_use, std::move(writes));
+      binding_values_.push_back(std::move(value));
+      procedure.captures.bindings = binding_factory_.add(procedure.captures.bindings, id, &binding_values_.back());
+      procedure.captures.captured_bindings = binding_factory_.add(
+          procedure.captures.captured_bindings, id, &binding_values_.back());
+    }
+    std::map<size_t, llvm::Value *> owners;
+    for (size_t region : code.regions) {
+      owners.try_emplace(region, regions_[region].owner);
+      if (formal_owners) regions_[region].live = true;
+      regions_[region].owner = ir_.callable_field(image, code.layout, index++, false);
+    }
+    for (size_t region : code.dynamic_regions) {
+      if (!captured) { ++index; continue; }
+      owners.try_emplace(region, regions_[region].owner);
+      // Captured dynamic resources remain borrowed. A demanded read must
+      // still prove this region live in the invocation's flow state.
+      regions_[region].owner = ir_.callable_field(image, code.layout, index++, false);
+    }
+    return owners;
+  }
   Value materialize_callable(Value value, const Environment &environment, const Location &at) {
     const auto &type = value.type;
-    bool native = value.procedure->form->result_type && native_callable_type(type, false);
+    // A complete value does not depend on whether its invocation signature
+    // already has a typed native entry. Body-derived results use the same image.
+    bool complete = bool(value.procedure->form->result_type);
     if (!type.pure_callable)
       for (const auto &[id, binding] : value.procedure->captures.bindings)
-        native &= local_bits(binding->type) || object_type(binding->type) || binding->type.kind == Type::region ||
+        complete &= local_bits(binding->type) || object_type(binding->type) || binding->type.kind == Type::region ||
             (native_callable(*binding) && !binding->nullable) || (binding->procedure && !binding->procedure->builtin.empty());
     for (const auto &[name, capture] : value.procedure->lexical_captures.visible)
-      if (capture.procedure && !capture.procedure->code && !capture.type.pure_callable) native = false;
+      if (capture.procedure && !capture.procedure->code && !capture.type.pure_callable) complete = false;
     auto procedure = std::make_shared<Procedure>(*value.procedure);
     for (auto &[name, capture] : procedure->lexical_captures.visible)
       if (native_callable(capture)) {
-        if (!native) {
+        if (!complete) {
           capture.native = ir_.copy_callable(capture.native);
           capture.storage = StorageView{ir_.hold_callable(capture.native, module_top_level_), local_scope_, {}};
         } else capture.storage.reset();
       }
     value.procedure = procedure;
-    if (!native) return value;
+    if (!complete) return value;
     std::vector<llvm::Value *> fields;
     std::set<size_t> nested;
     callable_fields(*procedure, [&](llvm::Value *&field, bool child) {
@@ -3430,7 +3486,7 @@ class Compiler {
     return true;
   }
   static bool contextual_callable(const Type &type) {
-    return !type.pure_callable || !type.bounds.empty() || !type.owner_bounds.empty() || type.variadic ||
+    return !native_callable_type(type, false) || !type.pure_callable || !type.bounds.empty() || !type.owner_bounds.empty() || type.variadic ||
         (type.target && type.target->kind == Type::region && type.target->owned) ||
         std::any_of(type.parameters.begin(), type.parameters.end(),
         [](const Type &parameter) { return parameter.kind == Type::procedure || parameter.kind == Type::region; });
@@ -3562,7 +3618,6 @@ class Compiler {
     };
     for (auto &parameter : type.parameters) bind_captures(bind_captures, parameter);
     bind_captures(bind_captures, *type.target);
-    if (!native_callable_type(type)) fail(at, "this instantiated callable signature needs native parameter/result support");
     return type;
   }
   llvm::Value *borrowed_operand(const Value &value, const Location &at) {
@@ -5966,7 +6021,11 @@ class Compiler {
         if (!demand.emitted.insert(source.get()).second) continue;
         if (!source->code) fail(demand.at, "procedure alternatives require compatible native representations");
         const auto match = ir_.match_callable(image, source->code->dispatch_key);
-        demand.matches.emplace(source.get(), match);
+        if (!demand.dispatch) {
+          callable_dispatches_.push_back({demand.parent, {}});
+          demand.dispatch = &callable_dispatches_.back();
+        }
+        demand.dispatch->matches.emplace(source.get(), match);
         auto *next = match.next;
         const auto capture_scope = ir_.scope();
         restore_flow(demand.state);
@@ -5987,51 +6046,7 @@ class Compiler {
           continue;
         }
         auto procedure = *source;
-        const auto &code = *source->code;
-        size_t index = 0;
-        callable_fields(procedure, [&](llvm::Value *&field, bool nested) {
-          field = ir_.callable_field(image, code.layout, index++, nested);
-        });
-        for (size_t id : code.dynamic_values) {
-          if (!demand.captured) { ++index; continue; }
-          const auto *original = procedure.captures.lookup(id);
-          auto value = *original;
-          auto loaded = loaded_value(value.type, ir_.callable_field(image, code.layout, index++, false));
-          value.native = loaded.native;
-          value.exception_category = loaded.exception_category;
-          value.replayed = true;
-          ir_.effect(id, value.type, value.native);
-          binding_values_.push_back(std::move(value));
-          procedure.captures.bindings = binding_factory_.add(procedure.captures.bindings, id, &binding_values_.back());
-          procedure.captures.captured_bindings = binding_factory_.add(
-              procedure.captures.captured_bindings, id, &binding_values_.back());
-        }
-        for (size_t id : code.dynamic_procedures) {
-          if (!demand.captured) { ++index; continue; }
-          auto value = *procedure.captures.lookup(id);
-          value.native = ir_.callable_field(image, code.layout, index++, true);
-          value.replayed = true;
-          auto writes = std::make_shared<LLVMEmission::EffectWrites>();
-          ir_.captured_procedure(id, value.native, writes);
-          capture_effects_.emplace_back(value.capture_use, std::move(writes));
-          binding_values_.push_back(std::move(value));
-          procedure.captures.bindings = binding_factory_.add(procedure.captures.bindings, id, &binding_values_.back());
-          procedure.captures.captured_bindings = binding_factory_.add(
-              procedure.captures.captured_bindings, id, &binding_values_.back());
-        }
-        std::map<size_t, llvm::Value *> owners;
-        for (size_t region : code.regions) {
-          owners.try_emplace(region, regions_[region].owner);
-          regions_[region].live = true;
-          regions_[region].owner = ir_.callable_field(image, code.layout, index++, false);
-        }
-        for (size_t region : code.dynamic_regions) {
-          if (!demand.captured) { ++index; continue; }
-          owners.try_emplace(region, regions_[region].owner);
-          // Captured dynamic resources remain borrowed. A demanded read must
-          // still prove this region live in the invocation's flow state.
-          regions_[region].owner = ir_.callable_field(image, code.layout, index++, false);
-        }
+        auto owners = load_callable_captures(procedure, image, demand.captured, true);
         auto environment = demand.type.pure_callable ? Environment{} :
                            demand.captured ? procedure.captures : demand.environment;
         if (demand.captured) {
@@ -6340,6 +6355,53 @@ class Compiler {
     }
     return {std::move(selected), std::move(args), contextual};
   }
+  Value expanded_callable_call(const PreparedCallableCall &prepared, const Module &module,
+                                 const Environment &env, const Location &at, bool captured) {
+    const auto &selected = prepared.callee;
+    const auto choices = callable_choices(selected.callable_flow);
+    if (!choices.closed)
+      fail(at, "body-derived callable signature requires closed implementation flow; native result staging is not implemented yet");
+    const auto before = flow_state();
+    auto *merge = ir_.label("callable.expanded.return");
+    std::vector<Completion> completions;
+    callable_dispatches_.push_back({native_context_ ? native_context_->call : nullptr, {}});
+    auto &dispatch = callable_dispatches_.back();
+    for (const auto &source : choices.definitions) {
+      const auto match = ir_.match_callable(selected.native, source->code->dispatch_key);
+      dispatch.matches.emplace(source.get(), match);
+      restore_flow(before);
+      const auto capture_scope = ir_.scope();
+      auto procedure = *source;
+      const auto owners = load_callable_captures(procedure, selected.native, captured, false);
+      const auto restore_owners = llvm::scope_exit([&] {
+        for (const auto &[id, owner] : owners) regions_[id].owner = owner;
+      });
+      auto environment = captured ? procedure.captures : env;
+      if (captured) {
+        environment.replay = std::make_shared<CaptureReplay>(CaptureReplay{
+            env, procedure.captures.captured_bindings, procedure.captures.replay, {}});
+        binding_check(environment, at);
+      }
+      auto result = call(*procedure.form, *procedure.lexical,
+          selected.type.pure_callable ? Environment{} : std::move(environment), prepared.arguments,
+          selected.type.pure_callable, at, module, procedure.implementation, &procedure.lexical_captures);
+      check_declarations(procedure.declarations,
+          selected.type.pure_callable ? Form::Kind::function : Form::Kind::procedure,
+          prepared.arguments, result, module, at,
+          declares_npe(procedure.form->throws_types, *procedure.lexical, procedure.form->at));
+      if (result.type.owned) result = take_owner(result, at);
+      if (native_callable(result) && !borrowed_result(selected.type)) result = detach_callable(std::move(result), at);
+      ir_.restore(capture_scope);
+      if (result.type != Type::never) {
+        completions.push_back({std::move(result), ir_.here(), flow_state()});
+        ir_.jump(merge);
+      }
+      ir_.enter(match.next);
+    }
+    ir_.unreachable();
+    ir_.enter(merge);
+    return join_completions(completions, at, module_top_level_);
+  }
   Value invoke_prepared_callable(const PreparedCallableCall &prepared, const Module &module,
                                   const Environment &env, const Location &at, bool captured) {
     const auto &selected = prepared.callee;
@@ -6366,6 +6428,8 @@ class Compiler {
       check_declarations(proc->declarations, pure ? Form::Kind::function : Form::Kind::procedure, args, result, module, at, declares_npe(proc->form->throws_types, *proc->lexical, proc->form->at));
       return result;
     }
+    if (!native_callable_type(selected.type))
+      return expanded_callable_call(prepared, module, env, at, captured);
     std::vector<llvm::Value *> operands;
     for (size_t i = 0; i < args.size(); ++i) {
       const auto target = selected.type.parameters[i];
@@ -9896,7 +9960,7 @@ public:
     do {
       matches_changed = false;
       for (const auto &[caller, pair] : adaptations)
-        for (auto &child : native_call_demands_) {
+        for (auto &child : callable_dispatches_) {
           bool inside = !caller;
           for (auto *parent = child.parent; parent; parent = parent->parent) inside |= parent == caller;
           if (!inside || child.matches.contains(pair.second)) continue;
