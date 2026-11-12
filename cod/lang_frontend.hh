@@ -147,6 +147,7 @@ struct Value {
   std::shared_ptr<const ExceptionPossibilities> exception_facts = {}; // Compiler reachability, independent of the native category.
   bool borrowed_arguments = false; // An external-owner variadic pack selects target views.
   size_t result_type_origin = 0;
+  size_t region_result_origin = 0; // Owner alternatives of a joined borrowed result.
   std::vector<size_t> result_fact_origins = {}; // Compiler-only checked returns, not runtime tags.
   std::vector<InitializationRead> argument_reads = {};
   std::optional<size_t> declaration_cell = {};
@@ -379,8 +380,16 @@ class Compiler {
     size_t owner_origin = 0;
     std::set<size_t> owner_inputs;
     std::optional<size_t> alias = {};
+    size_t borrowed_origin = 0;
   };
   std::vector<Region> regions_;
+  struct PendingBorrowedRegion {
+    size_t region;
+    llvm::Instruction *base;
+    std::map<size_t, llvm::WeakTrackingVH> owners;
+    Location at;
+  };
+  std::vector<PendingBorrowedRegion> pending_borrowed_regions_;
   struct PendingField {
     Type record;
     size_t result_origin;
@@ -1566,12 +1575,21 @@ class Compiler {
     type.target = std::make_shared<Type>(std::move(target));
     return type;
   }
-  std::string region_note(std::optional<size_t> region, std::string_view message) const {
+  std::string region_note(std::optional<size_t> region, std::string_view message) {
     if (!region) return {};
+    if (regions_.at(*region).borrowed_origin) {
+      try { region = region_identity(*region, regions_.at(*region).acquired); }
+      catch (const UnresolvedAccess &) { /* An open result still has its call-site origin. */ }
+    }
     return "\n" + location_text(regions_.at(*region).acquired) + ": note: " + std::string(message);
   }
   bool possible_region_alias(size_t region, size_t target, std::set<size_t> visited = {}) const {
     if (region == target) return true;
+    if (regions_.at(region).borrowed_origin || regions_.at(target).borrowed_origin) {
+      const auto &origins = regions_.at(target).origins;
+      return std::any_of(regions_.at(region).origins.begin(), regions_.at(region).origins.end(),
+          [&](size_t id) { return origins.contains(id); });
+    }
     if (!visited.insert(region).second) return false;
     return std::any_of(regions_.at(region).owner_inputs.begin(), regions_.at(region).owner_inputs.end(),
         [&](size_t input) { return possible_region_alias(input, target, visited); });
@@ -1636,9 +1654,74 @@ class Compiler {
     while (regions_.at(id).alias) id = *regions_.at(id).alias;
     return id;
   }
+  size_t borrowed_region_owner(size_t origin, const Location &at, bool complete) {
+    using Origin = std::pair<bool, size_t>; // Argument role or fixed external region.
+    using Provenance = std::set<Origin>;
+    using Roles = std::map<size_t, size_t>;
+    std::map<const NativeCallDemand *, Provenance> summaries;
+    const auto returns = [&](size_t id) -> const std::vector<Value> & {
+      if (complete) return checked_returns(id, at);
+      try { return checked_returns(id, at); }
+      catch (const UnresolvedAccess &) { return return_facts_.at(id - 1).alternatives; }
+    };
+    const auto merge = [](Provenance &into, const Provenance &from) { into.insert(from.begin(), from.end()); };
+    std::function<Provenance(size_t, const Roles &, std::set<size_t>)> region_value;
+    std::function<Provenance(const Value &, const Roles &, std::set<size_t>)> value_owner;
+    const auto result_value = [&](size_t id, const Roles &roles, const std::set<size_t> &visited) {
+      const auto &values = returns(id);
+      Provenance result;
+      if (const auto *producer = return_facts_.at(id - 1).producer) {
+        const auto summary = summaries.try_emplace(producer).first->second;
+        for (const auto &[argument, value] : summary) {
+          const auto region = argument ? *producer->arguments.at(value).region_id : value;
+          merge(result, region_value(region, roles, visited));
+        }
+      } else for (const auto &value : values) merge(result, value_owner(value, roles, visited));
+      return result;
+    };
+    region_value = [&](size_t id, const Roles &roles, std::set<size_t> visited) -> Provenance {
+      id = region_source(id);
+      if (const auto found = roles.find(id); found != roles.end()) return {{true, found->second}};
+      if (!visited.insert(id).second) return {};
+      if (const auto origin = regions_.at(id).borrowed_origin) return result_value(origin, roles, visited);
+      return {{false, region_identity(id, at)}};
+    };
+    value_owner = [&](const Value &value, const Roles &roles, std::set<size_t> visited) -> Provenance {
+      if (!value.region_id) return {};
+      if (roles.contains(region_source(*value.region_id))) return region_value(*value.region_id, roles, visited);
+      if (value.region_result_origin) return result_value(value.region_result_origin, roles, visited);
+      return region_value(*value.region_id, roles, visited);
+    };
+    Provenance result;
+    for (;;) {
+      const auto count = summaries.size();
+      result = result_value(origin, {}, {});
+      bool changed = false;
+      for (auto &[demand, summary] : summaries) {
+        const auto &values = returns(demand->record_result);
+        Provenance next;
+        if (demand->reused) next = summaries.try_emplace(demand->reused).first->second;
+        else {
+          Roles roles;
+          for (size_t i = 0; i < demand->arguments.size(); ++i)
+            if (demand->arguments[i].region_id) roles.try_emplace(region_source(*demand->arguments[i].region_id), i);
+          for (const auto &value : values) merge(next, value_owner(value, roles, {}));
+        }
+        const auto size = summary.size();
+        merge(summary, next);
+        changed |= size != summary.size();
+      }
+      if (!changed && count == summaries.size()) break;
+    }
+    if (result.empty()) throw UnresolvedAccess(at);
+    if (result.size() != 1 || result.begin()->first)
+      fail(at, "native borrowed results with different actual region owners need further owner-selection support");
+    return result.begin()->second;
+  }
   size_t region_identity(size_t id, const Location &at) {
     id = region_source(id);
     const auto &region = regions_.at(id);
+    if (region.borrowed_origin) return borrowed_region_owner(region.borrowed_origin, at, false);
     if (!region.owner_origin || region.owner_inputs.empty()) return id;
     const auto inputs = region.owner_inputs;
     const auto owner = returned_owner(region.owner_origin, inputs, at);
@@ -1658,7 +1741,8 @@ class Compiler {
     const auto rejected = [this, first, second, at] {
       return region_identity(first, at) != region_identity(second, at);
     };
-    if (regions_.at(first).owner_origin || regions_.at(second).owner_origin)
+    if (regions_.at(first).owner_origin || regions_.at(second).owner_origin ||
+        regions_.at(first).borrowed_origin || regions_.at(second).borrowed_origin)
       deferred_checks_.push_back({rejected, at, std::move(message)});
     else if (rejected()) fail(at, message);
   }
@@ -1686,6 +1770,9 @@ class Compiler {
     return value.type.kind == Type::procedure && (value.callable_flow || value.callable_address);
   }
   static bool local_bits(Type type) { return numeric(representation(type)) || type == Type::boolean || type.kind == Type::exception; }
+  static bool has_storage_owner(const Value &value) {
+    return value.region_id || (value.storage && value.storage->scope);
+  }
   std::optional<std::pair<bool, size_t>> storage_owner(const Value &value) {
     if (value.region_id) return std::pair(true, region_identity(*value.region_id, regions_.at(*value.region_id).acquired));
     if (value.storage && value.storage->scope) return std::pair(false, *value.storage->scope);
@@ -1804,7 +1891,7 @@ class Compiler {
   }
   Value null_target(Type type, std::optional<Value> owner, const Location &at) {
     Value value; value.type = type; value.nullable = true; value.pointer_view = true;
-    value.pending_owner = !owner || !storage_owner(*owner);
+    value.pending_owner = !owner || !has_storage_owner(*owner);
     if (owner) value.region_id = owner->region_id;
     if (owner && type.kind == Type::procedure) {
       value.procedure = owner->procedure;
@@ -2027,7 +2114,7 @@ class Compiler {
     value.callable_temporary = false;
     value.read_only |= read_only;
     valid_view(value, at);
-    if (!storage_owner(value) && !value.pending_owner) fail(at, "ptr requires storage with a known owner");
+    if (!has_storage_owner(value) && !value.pending_owner) fail(at, "ptr requires storage with a known owner");
     const auto id = pointers_.size();
     if (!value.referent) value.referent = value.storage ? value.storage->address : value.native;
     pointers_.push_back({ir_.pointer_storage(value.storage ? value.storage->address : value.native), snapshot_pointer(value),
@@ -2953,14 +3040,25 @@ class Compiler {
       regions_.at(*value.region_id).symbolic = true;
     }
     if (object_type(value.type)) {
-      if (!value.region_id || !regions_.at(*value.region_id).symbolic)
-        fail(at, "a symbolic object reference requires a region supplied by a region symbol");
+      const std::string message = "a symbolic object reference requires a region supplied by a region symbol";
+      if (value.region_id && regions_.at(*value.region_id).borrowed_origin) {
+        auto supplied = FlowCondition{false};
+        for (size_t region = 0; region < regions_.size(); ++region)
+          if (regions_[region].symbolic)
+            supplied |= FlowCondition::both(regions_[region].live, region_alias(region, *value.region_id));
+        require_live(supplied, at, message);
+      } else if (!value.region_id || !regions_.at(*value.region_id).symbolic) fail(at, message);
       if (const auto declaration = symbol_declarations_.find(id); declaration != symbol_declarations_.end()) {
         if (const auto &group = declaration->second.form->symbol_owner) {
-          const auto &root = regions_.at(*value.region_id).root;
           const auto expected = resolve(group->root, *declaration->second.lexical, group->at);
-          if (!root || !accepts(contextual(scalar(*root, nullptr), owner), expected, owner, at))
-            fail(at, "symbolic object's region root does not satisfy " + type_name(expected));
+          const auto rejected = [this, region = *value.region_id, &owner, expected, at] {
+            if (regions_.at(region).borrowed_origin) resolve_region_root(region, at);
+            const auto root = regions_.at(region).root;
+            return !root || !accepts(contextual(scalar(*root, nullptr), owner), expected, owner, at);
+          };
+          const auto message = "symbolic object's region root does not satisfy " + type_name(expected);
+          if (regions_.at(*value.region_id).borrowed_origin) deferred_checks_.push_back({rejected, at, message});
+          else if (rejected()) fail(at, message);
         }
       }
       const auto declared = symbol_types_.find(id);
@@ -3485,13 +3583,18 @@ class Compiler {
   static bool borrowed_result(const Type &type) {
     return !type.owners.empty() && type.owners.back();
   }
+  static bool body_borrowed_result(const Type &type) {
+    return type.kind == Type::procedure && type.target && !borrowed_result(type) &&
+        (type.target->kind == Type::regional || type.target->kind == Type::array ||
+         (type.target->kind == Type::region && !type.target->owned));
+  }
   static bool native_callable_type(const Type &type, bool concrete = true) {
     const auto supported = [concrete](const Type &value) {
       return local_bits(value) || (!concrete && representation(value).kind == Type::parameter) ||
           native_callable_type(value, false);
     };
     if (type.kind != Type::procedure || !type.target ||
-        !(supported(*type.target) || *type.target == Type::void_type ||
+        !(supported(*type.target) || *type.target == Type::void_type || body_borrowed_result(type) ||
           (type.target->kind == Type::region && type.target->owned) ||
           (borrowed_result(type) && (type.target->kind == Type::array || type.target->kind == Type::regional ||
                                     (type.target->kind == Type::region && !type.target->owned)))) ||
@@ -3501,7 +3604,7 @@ class Compiler {
         type.target->kind != Type::regional && type.target->kind != Type::region &&
         (concrete || representation(*type.target).kind != Type::parameter)) return false;
     // Unqualified borrowed results still need body-derived provenance.
-    if (!borrowed_result(type) && !type.owner_bounds.empty() &&
+    if (!borrowed_result(type) && !body_borrowed_result(type) && !type.owner_bounds.empty() &&
         *type.target != Type::void_type && type.target->kind != Type::procedure &&
         !(type.target->kind == Type::region && type.target->owned) &&
         (type.const_views.empty() || !type.const_views.back())) return false;
@@ -3514,7 +3617,7 @@ class Compiler {
     return true;
   }
   static bool contextual_callable(const Type &type) {
-    return !native_callable_type(type, false) || !type.pure_callable || !type.bounds.empty() || !type.owner_bounds.empty() || type.variadic ||
+    return !native_callable_type(type, false) || body_borrowed_result(type) || !type.pure_callable || !type.bounds.empty() || !type.owner_bounds.empty() || type.variadic ||
         (type.target && type.target->kind == Type::region && type.target->owned) ||
         std::any_of(type.parameters.begin(), type.parameters.end(),
         [](const Type &parameter) { return parameter.kind == Type::procedure || parameter.kind == Type::region; });
@@ -3584,16 +3687,23 @@ class Compiler {
     std::map<size_t, std::pair<bool, size_t>> owner_values;
     const auto bind_owner = [&](size_t owner, const Value &value) {
       valid_view(value, at);
-      const auto actual = storage_owner(value);
+      const auto actual = value.region_id ? std::optional(std::pair(true, *value.region_id)) : storage_owner(value);
       if (!actual) fail(at, "callable owner parameter requires storage with known provenance");
-      if (owner_values.emplace(owner, *actual).first->second != *actual)
-        fail(at, "callable owner parameter requires the same actual owner");
+      const auto previous = owner_values.emplace(owner, *actual).first->second;
+      if (previous.first && actual->first)
+        require_same_region(previous.second, actual->second, at, "callable owner parameter requires the same actual owner");
+      else if (previous != *actual) fail(at, "callable owner parameter requires the same actual owner");
       const auto &bound = type.owner_bounds.at(owner - 1);
       if (bound == Type::void_type) return;
       if (!value.region_id) fail(at, "region owner parameter cannot bind lexical storage");
-      const auto &region = regions_.at(*value.region_id);
-      if (!region.root || !accepts(contextual(scalar(*region.root, nullptr), caller), bound, caller, at))
-        fail(at, "region owner parameter does not satisfy its root constraint");
+      const auto rejected = [this, id = *value.region_id, &caller, bound, at] {
+        if (regions_.at(id).borrowed_origin) resolve_region_root(id, at);
+        const auto root = regions_.at(id).root;
+        return !root || !accepts(contextual(scalar(*root, nullptr), caller), bound, caller, at);
+      };
+      if (regions_.at(*value.region_id).borrowed_origin)
+        deferred_checks_.push_back({rejected, at, "region owner parameter does not satisfy its root constraint"});
+      else if (rejected()) fail(at, "region owner parameter does not satisfy its root constraint");
     };
     for (size_t i = 0; i < args.size() && !type.owners.empty(); ++i) {
       const auto owner = type.owners[i];
@@ -3709,15 +3819,20 @@ class Compiler {
       return result_layout(origin, at, true) != concrete;
     }, at, "native result layout changed after recursive context refinement"});
     if (value.type.kind == Type::region) {
-      value.type.target = std::make_shared<Type>(*concrete);
+      value.type.target = concrete->kind == Type::region && !concrete->target ? nullptr : std::make_shared<Type>(*concrete);
       if (!partial) {
-        regions_.at(*value.region_id).root = *concrete;
+        regions_.at(*value.region_id).root = value.type.target ? std::optional(*value.type.target) : std::nullopt;
         regions_.at(*value.region_id).root_origin = 0;
       }
     } else value.type = *concrete;
     value.result_type_origin = 0;
   }
   void resolve_region_root(size_t id, const Location &at) {
+    if (regions_.at(id).borrowed_origin && !regions_.at(id).root) {
+      const auto owner = region_identity(id, at);
+      resolve_region_root(owner, at);
+      regions_.at(id).root = regions_.at(owner).root;
+    }
     const auto origin = regions_.at(id).root_origin;
     if (!origin) return;
     auto value = scalar(Type{Type::region}, nullptr, id);
@@ -3802,6 +3917,7 @@ class Compiler {
             [](const Value &value) { return !value.result_fact_origins.empty(); })) return;
     return_facts_.push_back({nullptr, std::move(alternatives)});
     result.result_fact_origins = {return_facts_.size()};
+    if (result.region_id && !result.type.owned) result.region_result_origin = return_facts_.size();
     if (std::any_of(return_facts_.back().alternatives.begin(), return_facts_.back().alternatives.end(),
         [](const Value &value) { return value.result_type_origin != 0; }))
       result.result_type_origin = return_facts_.size();
@@ -3857,7 +3973,7 @@ class Compiler {
     for (size_t i = 0; i < args.size(); ++i) {
       valid_view(args[i], at);
       auto value = admit(args[i], instantiated.parameters[i], caller, at);
-      if (parameter_at(form, i).read_only && storage_owner(value)) value.read_only = true;
+      if (parameter_at(form, i).read_only && has_storage_owner(value)) value.read_only = true;
       shapes.emplace_back(value.type, value.region_id, value.callable_flow, value.read_only);
       for (const auto &fact : contextual(value, caller).conformances) append_conformance(conformances, fact);
       if (native_callable(value)) {
@@ -4162,7 +4278,11 @@ class Compiler {
         implementation.empty() ? ImplementationContext{&lexical} : std::move(implementation));
     const auto saved_conformances = llvm::SaveAndRestore(caller_conformances_);
     for (const auto &arg : args) {
-      const auto value = contextual(arg, caller);
+      auto value = contextual(arg, caller);
+      try { resolve_result_facts(value, at); }
+      catch (const UnresolvedAccess &) {
+        if (!native_context_ || !native_context_->call || !native_context_->call->pending_argument_facts) throw;
+      }
       const auto type = (value.type.kind == Type::reference || value.type.kind == Type::region) && value.type.target ?
           *value.type.target : value.type;
       for (const auto &relation : value.conformances)
@@ -4211,7 +4331,7 @@ class Compiler {
         register_callable_holder(parameter);
       }
       if (!formal.owner.empty() && native_callable(parameter)) parameter.callable_temporary = false;
-      if (formal.read_only && storage_owner(parameter)) parameter.read_only = true;
+      if (formal.read_only && has_storage_owner(parameter)) parameter.read_only = true;
       if (formal.fixed_binding && (formal.declaration_kind == "val" ||
           (native_callable(parameter) && formal.owner.empty()))) parameter.read_only = true;
       if (parameter.type.owned && (!parameter.holding_id || !transferring.insert(*parameter.holding_id).second))
@@ -4302,7 +4422,7 @@ class Compiler {
       if (owner == owner_values.end() || storage_owner(result) != storage_owner(owner->second))
         fail(form.at, "result does not belong to its declared owner");
     }
-    if (form.result_const && storage_owner(result)) result.read_only = true;
+    if (form.result_const && has_storage_owner(result)) result.read_only = true;
     if (!form.result_const && !form.result_owner.empty())
       require_writable(result.read_only, form.at, "a writable borrowed result cannot return a read-only view");
     result.pointer.reset();
@@ -4663,7 +4783,7 @@ class Compiler {
       pending.image->eraseFromParent();
       demand.type = std::move(type);
       for (size_t i = 0; i < demand.arguments.size(); ++i)
-        if (!demand.type.const_views.empty() && demand.type.const_views[i] && storage_owner(demand.arguments[i]))
+        if (!demand.type.const_views.empty() && demand.type.const_views[i] && has_storage_owner(demand.arguments[i]))
           demand.arguments[i].read_only = true;
       demand.selection.reset();
       return true;
@@ -5956,6 +6076,14 @@ class Compiler {
     const auto choices = callable_choices(demand.flow);
     if (choices.definitions.empty() || std::all_of(choices.definitions.begin(), choices.definitions.end(),
         [&](const auto &source) { return demand.emitted.contains(source.get()); })) return false;
+    for (const auto &argument : demand.arguments) if (argument.region_id && regions_.at(*argument.region_id).borrowed_origin) {
+      try {
+        (void)region_identity(*argument.region_id, demand.at);
+        resolve_region_root(*argument.region_id, demand.at);
+        (void)bool(argument.read_only);
+      }
+      catch (const UnresolvedAccess &) { return false; }
+    }
     bool pending_facts = demand.pending_argument_facts;
     if (!pending_facts) for (auto &argument : demand.arguments) {
       try {
@@ -6230,7 +6358,7 @@ class Compiler {
     std::vector<bool> borrowed;
     for (size_t i = 0; i < type.parameters.size(); ++i) borrowed.push_back(borrowed_parameter(type, i));
     auto definition = ir_.native_declaration(type.pure_callable ? "function.context" : "procedure.context",
-        type.parameters, *type.target, true, borrowed, borrowed_result(type));
+        type.parameters, *type.target, true, borrowed, borrowed_result(type) || body_borrowed_result(type));
     definition.checked_null = !type.throws_types.empty();
     auto *context = ir_.pending_context();
     auto parameters = args;
@@ -6256,10 +6384,10 @@ class Compiler {
     demand.conversion_parameter = conversion_parameter;
     demand.arguments = parameters;
     for (size_t i = 0; i < demand.arguments.size(); ++i)
-      if (!type.const_views.empty() && type.const_views[i] && storage_owner(demand.arguments[i]))
+      if (!type.const_views.empty() && type.const_views[i] && has_storage_owner(demand.arguments[i]))
         demand.arguments[i].read_only = true;
     demand.parent = native_context_ ? native_context_->call : nullptr;
-    if ((definition.borrowed_result && definition.result.kind == Type::regional) ||
+    if (body_borrowed_result(type) || (definition.borrowed_result && definition.result.kind == Type::regional) ||
         definition.result.kind == Type::region) {
       return_facts_.push_back({&demand, {}});
       demand.record_result = return_facts_.size();
@@ -6271,7 +6399,7 @@ class Compiler {
       demand.result_flow = callable_flows_.size() - 1;
       callable_flows_.back().producer = &demand;
     }
-    if (!inputs.empty() && callable_choices(demand.flow).closed) {
+    if (body_borrowed_result(type) || (!inputs.empty() && callable_choices(demand.flow).closed)) {
       compile_native_call(demand);
       if (!demand.reused) definition = demand.definition;
     }
@@ -6288,6 +6416,49 @@ class Compiler {
     callable_holders_ = callable_effects(demand, demand.returns);
     apply_initialization(demand.initialized);
     if (destination) return held_callable(definition.result, demand.result_flow, returned, *destination);
+    if (body_borrowed_result(type)) {
+      const auto choices = callable_choices(demand.flow);
+      if (choices.closed && !demand.reused && !demand.selection &&
+          return_facts_.at(demand.record_result - 1).alternatives.empty() &&
+          std::all_of(choices.definitions.begin(), choices.definitions.end(),
+              [&](const auto &source) { return demand.emitted.contains(source.get()); })) {
+        ir_.unreachable();
+        return scalar(Type::never, nullptr);
+      }
+      auto *base = ir_.pending_region();
+      std::map<size_t, llvm::WeakTrackingVH> owners;
+      std::set<size_t> origins;
+      const auto state = flow_state();
+      for (size_t i = 0; i < state.live.size(); ++i) {
+        if (!state.live[i].pending() && !state.live[i]) continue;
+        owners.emplace(i, regions_[i].owner);
+        origins.insert(regions_[i].origins.begin(), regions_[i].origins.end());
+      }
+      const auto id = new_region(base, at, std::move(origins));
+      regions_[id].borrowed_origin = demand.record_result;
+      regions_[id].live = false;
+      for (const auto &[owner, pointer] : owners) {
+        regions_[id].owner_inputs.insert(owner);
+        regions_[id].live |= FlowCondition::both(state.live[owner], region_alias(id, owner));
+      }
+      pending_borrowed_regions_.push_back({id, base, std::move(owners), at});
+      auto result = scalar(definition.result,
+          definition.result.kind == Type::region ? returned : ir_.nullable_offset(base, returned), id);
+      if (definition.result.kind == Type::region) {
+        regions_[id].root = definition.result.target ? std::optional(*definition.result.target) : std::nullopt;
+        regions_[id].root_origin = demand.record_result;
+      }
+      if (definition.result.kind != Type::array) result.result_type_origin = demand.record_result;
+      result.result_fact_origins = {demand.record_result};
+      result.pointer_view = definition.result.kind != Type::region;
+      result.nullable = !type.nullable_views.empty() && type.nullable_views.back();
+      result.read_only = ReadOnly::deferred([this, origin = demand.record_result, at] {
+        const auto &values = checked_returns(origin, at);
+        return std::any_of(values.begin(), values.end(), [](const Value &value) { return bool(value.read_only); });
+      });
+      projection_permissions_.push_back(result.read_only);
+      return result;
+    }
     if (definition.borrowed_result) return borrowed_call_result(type, args, returned, at, demand.result_flow, demand.record_result);
     if (definition.result.kind == Type::region && definition.result.owned) {
       const auto id = new_region(returned, at);
@@ -7737,10 +7908,14 @@ class Compiler {
 
     if (expr.kind == K::fold && next.type != Type::never) {
       require(next.type, accumulator.type, expr.at);
-      if (next.region_id != accumulator.region_id)
-        fail(expr.at, "a fold reference must retain its owning region" +
+      if (next.region_id != accumulator.region_id) {
+        const auto message = "a fold reference must retain its owning region" +
                          region_note(accumulator.region_id, "initial accumulator's region acquired here") +
-                         region_note(next.region_id, "iteration result's region acquired here"));
+                         region_note(next.region_id, "iteration result's region acquired here");
+        if (next.region_id && accumulator.region_id)
+          require_same_region(*next.region_id, *accumulator.region_id, expr.at, message);
+        else fail(expr.at, message);
+      }
       require_access(next.read_only, accumulator.read_only, expr.at,
           "a fold cannot feed a read-only view into a writable accumulator");
       for (const auto &relation : accumulator.conformances)
@@ -8409,6 +8584,7 @@ class Compiler {
         [](const Completion &completion) { return !completion.value.native; })) result.native = nullptr;
     result.pointer.reset();
     auto state = completions.front().regions;
+    auto result_live = result.region_id ? state.live.at(region_source(*result.region_id)) : FlowCondition{false};
     std::set<size_t> origins;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> values, categories;
     std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> addresses;
@@ -8428,9 +8604,13 @@ class Compiler {
       result.target_flow = join_pointer_flow(result, completion.value);
       result.nullable = result.nullable || completion.value.nullable;
       result.nonnull_when.reset();
-      if (!result.type.owned && (storage_owner(completion.value) != storage_owner(result) ||
-                                bool(completion.value.storage) != bool(result.storage)))
-        fail(at, "borrowed control-flow results require one storage owner and reference category");
+      if (!result.type.owned) {
+        const std::string message = "borrowed control-flow results require one storage owner and reference category";
+        if (bool(completion.value.storage) != bool(result.storage)) fail(at, message);
+        if (completion.value.region_id && result.region_id)
+          require_same_region(*completion.value.region_id, *result.region_id, at, message);
+        else if (storage_owner(completion.value) != storage_owner(result)) fail(at, message);
+      }
       if (result.storage) {
         addresses.emplace_back(completion.value.storage->address, completion.from);
         result.storage->cells.insert(completion.value.storage->cells.begin(), completion.value.storage->cells.end());
@@ -8439,6 +8619,11 @@ class Compiler {
       if (result.type.owned) {
         const auto &source = regions_.at(*completion.value.region_id).origins;
         origins.insert(source.begin(), source.end());
+      }
+      if (result.region_id && completion.value.region_id) {
+        const auto choice = join_flow_paths(state.path, completion.regions.path).second;
+        result_live = FlowCondition::choice(choice, result_live,
+            completion.regions.live.at(region_source(*completion.value.region_id)));
       }
       intersect_flow(state, completion.regions);
       std::vector<Conformance> common;
@@ -8458,6 +8643,7 @@ class Compiler {
     std::vector<Value> fact_alternatives;
     for (const auto &completion : completions) fact_alternatives.push_back(completion.value);
     join_result_facts(result, std::move(fact_alternatives));
+    if (result.region_id && !result.type.owned) state.live.at(region_source(*result.region_id)) = result_live;
     restore_flow(state);
     if (!values.empty()) result.native = ir_.phi(ir_.type_of(result.type), values);
     if (!addresses.empty()) result.storage->address = ir_.phi(addresses.front().first->getType(), addresses);
@@ -10078,6 +10264,17 @@ public:
             field->read_only != pending.field.read_only || field->fixed_binding != pending.field.fixed_binding)
           fail(pending.at, "selected record does not provide the declared field view");
         if (pending.offset) ir_.resolve_field(pending.offset, root, size_t(field - fields.begin()));
+      }
+      for (const auto &pending : pending_borrowed_regions_) {
+        const auto owner = borrowed_region_owner(regions_[pending.region].borrowed_origin, pending.at, true);
+        const auto found = std::find_if(pending.owners.begin(), pending.owners.end(), [&](const auto &entry) {
+          return region_identity(entry.first, pending.at) == owner;
+        });
+        if (found == pending.owners.end()) fail(pending.at, "borrowed result has no surviving caller region owner");
+        llvm::Value *replacement = found->second;
+        pending.base->replaceAllUsesWith(replacement);
+        for (auto &region : regions_) if (region.owner == pending.base) region.owner = replacement;
+        pending.base->eraseFromParent();
       }
       resolve_target_initialization();
       resolve_initialization_guarantees();

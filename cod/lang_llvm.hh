@@ -626,6 +626,9 @@ public:
     context_uses_.emplace(pending, nullptr);
     return pending;
   }
+  llvm::Instruction *pending_region() {
+    return b().Insert(new llvm::FreezeInst(null_pointer()), "region.result.pending");
+  }
   llvm::Instruction *pending_callable() {
     return b().Insert(new llvm::FreezeInst(null_pointer()), "callable.selection.pending");
   }

@@ -210,7 +210,7 @@ def main():
                      'defer-checked', 'defer-value-scope', 'defer-category-flow', 'defer-initialization',
                      'defer-completion-flow', 'defer-handler-initialization', 'defer-queue-initialization',
                      'defer-borrowed-arguments', 'defer-callable-flow', 'defer-pointer-flow', 'loop-pointer-flow', 'defer-first-owner',
-                     'defer-owner-queue', 'defer-owned-arguments', 'defer-body-results', 'defer-context'):
+                     'defer-owner-queue', 'defer-owned-arguments', 'defer-body-results', 'defer-context', 'defer-native-results'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
@@ -466,6 +466,37 @@ behave @print(9041u64);
 context_stress(10000u64);
 behave @print(9042u64);
 '''
+            if name == 'defer-native-results':
+                source += '''
+using "std:exceptions" OutOfMemory;
+proc registration_failure()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-60u64};
+  proc view=proc()->Item {return root(r);};
+  defer {{behave @print(view().value);}};
+  behave @print(9001u64);
+  defer view();
+}
+try {registration_failure();} catch(e:const OutOfMemory) {behave @print(9002u64);};
+proc copy_failure()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-61u64};
+  proc view=proc()->Item {return root(r);};
+  defer {{behave @print(view().value);}};
+  behave @print(9011u64);
+  defer view();
+}
+try {copy_failure();} catch(e:const OutOfMemory) {behave @print(9012u64);};
+proc repeated(count:u64)->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-0u64};
+  proc view=proc()->Item {return root(r);};
+  for(i in 0u64..count) {{
+    defer {{ref selected=view(); selected.value <-selected.value+1u64;}};
+  }};
+  behave @assert(root(r).value==count);
+}
+behave @print(9041u64);
+repeated(10000u64);
+behave @print(9042u64);
+'''
             entry = scratch / 'program.cod'
             entry.write_text(source)
             output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
@@ -513,6 +544,9 @@ behave @print(9042u64);
                 assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
             if name == 'defer-context':
                 expected += ['9001', '21', '9002', '9011', '22', '9012', '9041', '9042']
+                assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
+            if name == 'defer-native-results':
+                expected += ['9001', '60', '9002', '9011', '61', '9012', '9041', '9042']
                 assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()

@@ -1,0 +1,10 @@
+using symbol "std:io" @print;
+data Item {value:u64;}
+proc discard(owned region r:Item)->void{}
+proc run()->void {
+ owned region r:Item<-make Item(capacity=256u64){value<-1u64};
+ proc selected=proc()->Item{return root(r);};
+ defer {{ref value=selected(); behave @print(value.value);}};
+ defer discard(r);
+}
+run();

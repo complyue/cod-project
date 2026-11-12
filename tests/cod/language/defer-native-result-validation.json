@@ -1,0 +1,229 @@
+{
+  "recorded_utc": "2026-11-12T22:54:44.507825+00:00",
+  "scope": "Compiler-staged actual-owner provenance for explicitly typed regional, array and non-owning whole-region native results, composed with open deferred selections, recursion, live symbolic installation and existing completion proofs.",
+  "baseline_commit": "dfb4dd93f5d0b434c30a39c91592b600597281d8",
+  "compiler_sha256": "3857f9366e3cd8790addfac9779615e1bf313c98b873c3352f197e9e7a1869ce",
+  "implementation_sha256": {
+    "cod/lang_frontend.hh": "b7ed9231d3b5be8b70443964bf505dc991bdf8ec3179541c74cd3296f3945d47",
+    "cod/lang_llvm.hh": "cf205a072670b5d9ca3d8a456ca32cfb29957602959f948ae13b2719a3f41c94",
+    "tests/cod/language/defer_runtime_tests.py": "a5d6f9968fd7aa11c03f0a810c190e3d488ddc3007b1a05cda145b8a7849e6f9"
+  },
+  "build": {
+    "command": "cmake --build ./build",
+    "passed": true,
+    "log_sha256": "d2cb19392fd957ead73532a59d1e1cfbdddc613cd4307129a7f8f80b1b52bf20",
+    "warnings": "Existing LLVM deprecated-this-capture and CMake policy warnings only."
+  },
+  "language": {
+    "passed": 587,
+    "total": 587,
+    "source_count": 677,
+    "all_sources_match": true,
+    "source_manifest_sha256": "cd3ffa4a759d8410b7e9eddfd73cff0123d7f18e6f94065a7ba957444811fd1c"
+  },
+  "new_cases": [
+    {
+      "fixture": "scopes/defer-native-result-readonly.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": [
+        "cannot transfer into a read-only destination view"
+      ]
+    },
+    {
+      "fixture": "scopes/defer-native-result-expired.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": [
+        "requires a live region owner"
+      ]
+    },
+    {
+      "fixture": "scopes/defer-native-result-selection.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": [
+        "native borrowed results with different actual region owners need further owner-selection support"
+      ]
+    },
+    {
+      "fixture": "scopes/defer-native-results.cod",
+      "passed": true,
+      "exit": 0,
+      "stdout": "20\n21\n8\n21\n11\n8\n31\n30\n40\n41\ntrue\n51\n50\n70\n",
+      "expected_diagnostic": ""
+    },
+    {
+      "fixture": "scopes/defer-native-result-local.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": [
+        "regional result would outlive its owning scope"
+      ]
+    },
+    {
+      "fixture": "scopes/defer-native-result-owner.cod",
+      "passed": true,
+      "exit": 2,
+      "stdout": "",
+      "expected_diagnostic": [
+        "requires the same actual owner"
+      ]
+    }
+  ],
+  "native": {
+    "callable_cases": 30,
+    "defer_cases": 23,
+    "new_case": {
+      "layout": {
+        "registrations": 10009,
+        "drained": 10009,
+        "peak_records": 2,
+        "peak_record_bytes": 120,
+        "images": 41,
+        "images_released": 41,
+        "record_failures": 1,
+        "copy_failures": 1,
+        "owners": 10,
+        "owners_released": 10
+      },
+      "frontend_seconds": 0.13205607800045982,
+      "frontend_diagnostics": [],
+      "native_compile_link_seconds": 2.1397140879998915,
+      "native_process_seconds": 0.0016204690327867866,
+      "llvm_ir_bytes": 507094,
+      "bitcode_bytes": 89288,
+      "fixture_sha256": "2c76dfc3cacd2ba9b2cec6c9371ee24cbb6094428d86cf602a9098842a1f0e80",
+      "executed_source_sha256": "af3693be20b64fa115dac3c7b8341b6c5fb1c1ae23143bb17df8ae21c103227e"
+    },
+    "comparisons": {
+      "runtime": {
+        "baseline_cases": 22,
+        "current_cases": 23,
+        "preexisting_changes": [
+          {
+            "case": "defer-body-results",
+            "field": "llvm_ir_bytes",
+            "before": 718688,
+            "after": 755175
+          },
+          {
+            "case": "defer-body-results",
+            "field": "bitcode_bytes",
+            "before": 119200,
+            "after": 125220
+          },
+          {
+            "case": "defer-context",
+            "field": "llvm_ir_bytes",
+            "before": 558385,
+            "after": 564693
+          },
+          {
+            "case": "defer-context",
+            "field": "bitcode_bytes",
+            "before": 90604,
+            "after": 91652
+          }
+        ],
+        "baseline_frontend_seconds": 1.1232925030053593,
+        "current_preexisting_frontend_seconds": 1.176650352019351
+      },
+      "callables": {
+        "baseline_cases": 30,
+        "current_cases": 30,
+        "preexisting_changes": [],
+        "baseline_frontend_seconds": 1.0431718031177297,
+        "current_preexisting_frontend_seconds": 1.075958613830153
+      }
+    }
+  },
+  "asan": {
+    "passed": true,
+    "instrumented_definitions": 35,
+    "source_sha256": "2c76dfc3cacd2ba9b2cec6c9371ee24cbb6094428d86cf602a9098842a1f0e80"
+  },
+  "regional": {
+    "passed": true,
+    "report_sha256": "397ae3f210f5bf7c1e9049ed6e99677a3f8fad321f61d7ff17d6f3102061565d"
+  },
+  "exceptions": {
+    "passed": true,
+    "report_sha256": "89c61b6b61c0ec5a44745fbff40bed3a16bed00e63aef782d5903bf05b38621e"
+  },
+  "scale": {
+    "observations": [
+      {
+        "n": 1,
+        "seconds": 0.02686713298317045,
+        "exit": 0,
+        "err": "",
+        "source_sha256": "6f417b9826f45aba485018dfbe80f4cad129911331690b69a8ff9873889ee9ab",
+        "ir_bytes": 27866,
+        "bitcode_bytes": 7924
+      },
+      {
+        "n": 4,
+        "seconds": 0.022053306049201638,
+        "exit": 0,
+        "err": "",
+        "source_sha256": "80d9235b755f2f5ae7aad82dc2a84198826d2995d18f5d0e964c7bb7dbccd70a",
+        "ir_bytes": 35732,
+        "bitcode_bytes": 9620
+      },
+      {
+        "n": 8,
+        "seconds": 0.02327681303722784,
+        "exit": 0,
+        "err": "",
+        "source_sha256": "2816f61cfbe8e0fd59325da29b70a2e2875ef6a92d980e24ff8ea8e80b29c5ff",
+        "ir_bytes": 46233,
+        "bitcode_bytes": 11880
+      },
+      {
+        "n": 16,
+        "seconds": 0.03801583795575425,
+        "exit": 0,
+        "err": "",
+        "source_sha256": "7281a05564b34a6964a0f4159476a70d782caf7c8d7992ad55daae266f938a49",
+        "ir_bytes": 67344,
+        "bitcode_bytes": 16496
+      },
+      {
+        "n": 32,
+        "seconds": 0.07803323597181588,
+        "exit": 0,
+        "err": "",
+        "source_sha256": "d17210b9a37a44aae607f6b9793fdac946d2b8d7753e5b5a5d46fe7707b20a9f",
+        "ir_bytes": 109632,
+        "bitcode_bytes": 25664
+      },
+      {
+        "n": 64,
+        "seconds": 0.3004037489881739,
+        "exit": 0,
+        "err": "",
+        "source_sha256": "0fd71071dff58ced85cf65914daebba89df1009289a5c64129cf1f396e4203b9",
+        "ir_bytes": 194228,
+        "bitcode_bytes": 44324
+      }
+    ],
+    "qualification": "Single frontend observations for repeated result-producing calls in a deferred action, not a general complexity or speedup guarantee."
+  },
+  "remaining": "Broader result-dependent contexts and inferred-signature transport, module cleanup queues and family/AOT integration remain incomplete. Different actual returned owners still require the unresolved owner-selection design; differing-concrete result evidence/ABI remains separate.",
+  "continuity": {
+    "registry_revision": 556,
+    "event": "K-555",
+    "design_revisions": {
+      "D-17": 53,
+      "D-18": 73,
+      "prototype": 202
+    },
+    "preserved_human_events": 358,
+    "preserved_continuity_events": 533
+  }
+}

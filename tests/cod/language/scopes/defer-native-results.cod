@@ -1,0 +1,105 @@
+using symbol "std:io" @print;
+using symbol "std:io" @assert;
+using "std:exceptions" InvalidCapacity;
+using "std:exceptions" NullPointerException;
+data Item {value:u64;}
+array Values[u64]:u64;
+region symbol @arena:Item;
+region symbol @scratch;
+
+proc down_first(region r:Item,n:u64)->Item {
+  if(n==0u64){return root(r);}else{};
+  return down_first(r,n-1u64);
+}
+proc down_last(region r:Item,n:u64)->Item {
+  if(n!=0u64){return down_last(r,n-1u64);}else{};
+  return root(r);
+}
+proc down_owner(region r:Item,n:u64)->region :Item {
+  if(n!=0u64){return down_owner(r,n-1u64);}else{};
+  return r;
+}
+proc echo(v:Item in r)->Item where {region r:Item} {return v;}
+proc values(v:Values in r,n:u64)->Values where {region r:Item} {
+  if(n!=0u64){return values(v,n-1u64);}else{};
+  return v;
+}
+proc composition(flag:bool)->void {
+  owned region r:Item <-make Item(capacity=1024u64){value<-10u64};
+  proc first=proc()->Item {return root(r);};
+  proc second=proc()->Item {return alloc r Item(11u64);};
+  proc action=first;
+  proc forward=echo;
+  proc recurse=if(flag){down_first}else{down_last};
+  proc whole=down_owner;
+  proc array_view=values;
+  ref buffer=alloc r Values(3u64,7u64);
+  defer {{
+    ref got=forward(action());
+    got.value <-got.value+10u64;
+    behave @print(got.value);
+    ref deep=recurse(r,200u64);
+    deep.value <-deep.value+1u64;
+    region owner=whole(r,20u64);
+    behave @print(root(owner).value);
+    ref selected_array=array_view(buffer,20u64);
+    selected_array[0u64] <-8u64;
+    behave @print(buffer[0u64]);
+  }};
+  action <-if(flag){first}else{second};
+}
+composition(true);
+composition(false);
+
+proc dynamic()->void {
+  effect @arena <-make Item(capacity=256u64){value<-30u64};
+  effect proc @view()->Item {return root(@arena);};
+  {{
+    effect @arena <-make Item(capacity=256u64){value<-31u64};
+    defer {{behave @print((perform @view()).value);}};
+    defer {{behave @print((behave @view()).value);}};
+  }};
+}
+dynamic();
+
+proc throwing(e:const InvalidCapacity)->Item {throw e;}
+proc recover()->void {
+  try {effect @scratch <-region(0u64);}
+  catch(original:const InvalidCapacity) {{
+    proc action=throwing;
+    defer catch(failure:const InvalidCapacity) {behave @print(40u64);} finally {behave @print(41u64);};
+    defer action(original);
+  }};
+}
+recover();
+
+proc maybe(region r:Item,present:bool)->ptr Item in r {
+  return if(present){root(r)}else{null};
+}
+proc nullable()->void {
+  owned region r:Item <-make Item(capacity=256u64){value<-50u64};
+  proc action=maybe;
+  proc whole=down_owner;
+  defer {{
+    region owner=whole(r,10u64);
+    ptr absent=action(owner,false);
+    behave @print(isnull(absent));
+    try {behave @print(absent.value);} catch(e:const NullPointerException){behave @print(51u64);};
+    ptr present=action(owner,true);
+    try {behave @print(present.value);} catch(e:const NullPointerException){behave @assert(false);};
+  }};
+}
+nullable();
+
+# Native owner forwarding retains the active symbolic installation.
+function keep(owned region r:Item)->owned region :Item {return r;}
+function installed_view(region r:Item)->Item {return root(r);}
+symbol @installed:Item;
+proc installed_owner()->void {
+  owned region r:Item<-make Item(capacity=256u64){value<-70u64};
+  func transfer=keep;
+  effect @arena <-transfer(r);
+  effect @installed=installed_view(@arena);
+  behave @print(@installed.value);
+}
+installed_owner();

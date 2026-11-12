@@ -3460,5 +3460,50 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "shared-region constraint violated"
+  },
+  {
+    "file": "scopes/defer-native-results.cod",
+    "exit": 0,
+    "stdout": "20\n21\n8\n21\n11\n8\n31\n30\n40\n41\ntrue\n51\n50\n70\n"
+  },
+  {
+    "file": "scopes/defer-native-result-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "cannot transfer into a read-only destination view"
+    ]
+  },
+  {
+    "file": "scopes/defer-native-result-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "requires a live region owner"
+    ]
+  },
+  {
+    "file": "scopes/defer-native-result-local.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional result would outlive its owning scope"
+    ]
+  },
+  {
+    "file": "scopes/defer-native-result-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "requires the same actual owner"
+    ]
+  },
+  {
+    "file": "scopes/defer-native-result-selection.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "native borrowed results with different actual region owners need further owner-selection support"
+    ]
   }
 ]
