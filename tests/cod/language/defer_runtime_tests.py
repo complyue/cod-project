@@ -150,6 +150,45 @@ behave @print(9032u64);
 '''
 
 
+BLOCK_RETURNS = """
+using "std:exceptions" MissingReturnException;
+proc recovered_without_result() -> const u64 {
+  defer catch(e:const InvalidCapacity) { behave @print(95u64); };
+  bad();
+}
+try { behave @print(recovered_without_result()); }
+catch(e:const MissingReturnException) { behave @print(96u64); };
+proc failed_replacement() -> owned region :Packet {
+  defer {bad();};
+  defer {return make Packet(capacity=128u64){value<-999u64};};
+  return make Packet(capacity=128u64){value<-999u64};
+}
+try { owned region failed <- failed_replacement(); }
+catch(e:const InvalidCapacity) { behave @print(97u64); };
+proc failed_callback() -> func()->const u64 {
+  defer {bad();};
+  defer {return func()->const u64 {return 999u64;};};
+  return func()->const u64 {return 999u64;};
+}
+try { func callback_failure = failed_callback(); }
+catch(e:const InvalidCapacity) { behave @print(98u64); };
+{{
+  defer {behave @print(100u64);};
+  defer {defer {behave @print(99u64);};};
+}};
+proc repeated_owner() -> owned region :Packet {
+  for(i in 0u64 .. 1000u64) {defer {return make Packet(capacity=128u64){value<-30u64};};};
+  return make Packet(capacity=128u64){value<-10u64};
+}
+proc repeated_callback() -> func()->const u64 {
+  for(i in 0u64 .. 1000u64) {defer {return func()->const u64 {return 60u64;};};};
+  return func()->const u64 {return 40u64;};
+}
+{{ owned region result <- repeated_owner(); behave @print(result.value); }};
+{{ func result = repeated_callback(); behave @print(result()); }};
+"""
+
+
 def main():
     directory = Path(__file__).resolve().parent
     root = directory.parents[2]
@@ -165,20 +204,25 @@ def main():
     results = {}
     with tempfile.TemporaryDirectory(prefix='cod-defer-native-') as temporary:
         scratch = Path(temporary)
-        for name in ('defer-order', 'defer-snapshots', 'defer-failures'):
+        for name in ('defer-order', 'defer-snapshots', 'defer-failures', 'defer-blocks', 'defer-returns', 'defer-errors'):
             fixture = directory / 'scopes' / (name + '.cod')
             source = fixture.read_text()
             if name == 'defer-failures':
                 source += EXERCISE
+            elif name == 'defer-returns':
+                source += BLOCK_RETURNS
             else:
                 source += '\nregion symbol @native_fixture; effect @native_fixture <- region(128u64);\n'
             entry = scratch / 'program.cod'
             entry.write_text(source)
-            output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers)
+            output, evidence = run_case(root, root / mode, entry, scratch, HARNESS, extra_wrappers=wrappers,
+                                        frontend_warnings=('[-Wmissing-return]',) if name in ('defer-blocks', 'defer-returns') else ())
             expected = next(case['stdout'].splitlines() for case in cases if case['file'] == 'scopes/' + name + '.cod')
             if name == 'defer-failures':
                 expected += ['9001', '81', '9002', '9011', '82', '9012', '84', '83', '85', '86', '87', '88', '89', '86', '90', '88', '91', '9021', '9022', '9031', '9032']
                 assert evidence['layout']['record_failures'] == evidence['layout']['copy_failures'] == 1
+            if name == 'defer-returns':
+                expected += ['95', '96', '97', '98', '99', '100', '30', '60']
             assert output == expected, (name, output, expected)
             evidence['fixture_sha256'] = hashlib.sha256(fixture.read_bytes()).hexdigest()
             evidence['executed_source_sha256'] = hashlib.sha256(source.encode()).hexdigest()
@@ -187,7 +231,8 @@ def main():
     report = dict(schema_version=1, recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   toolchain=mode, passed=True, cases=results,
                   compiler_sha256=hashlib.sha256((root / mode / 'bin/cod').read_bytes()).hexdigest(),
-                  script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
+                  script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                  harness_helper_sha256=hashlib.sha256((directory / 'regional_runtime_tests.py').read_bytes()).hexdigest())
     if path := os.environ.get('COD_DEFER_REPORT'):
         Path(path).write_text(json.dumps(report, indent=2) + '\n')
 

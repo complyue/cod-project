@@ -2704,5 +2704,32 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "effect installation in a deferred block requires a nested explicit {{ ... }} scope"
+  },
+  {
+    "file": "scopes/defer-blocks.cod",
+    "exit": 0,
+    "stdout": "2\n11\n9\n7\n3\n2\n10\n11\n9\n7\n3\n2\n10\n11\n9\n7\n22\n12\n42\n",
+    "stderr_contains": "value-returning callable may finish without an explicit return [-Wmissing-return]"
+  },
+  {
+    "file": "scopes/defer-returns.cod",
+    "exit": 0,
+    "stdout": "30\n60\n70\n80\n"
+  },
+  {
+    "file": "scopes/defer-loop-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a delayed defer block cannot capture a loop-control binding"
+  },
+  {
+    "file": "scopes/defer-inner-loop.cod",
+    "exit": 0,
+    "stdout": "0\n1\n"
+  },
+  {
+    "file": "scopes/defer-errors.cod",
+    "exit": 0,
+    "stdout": "101\n102\n103\n105\n104\n106\n1\n107\n108\n109\n110\n111\n"
   }
 ]

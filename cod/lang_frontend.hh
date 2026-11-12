@@ -125,6 +125,7 @@ struct Value {
   std::vector<size_t> result_fact_origins = {}; // Compiler-only checked returns, not runtime tags.
   std::vector<InitializationRead> argument_reads = {};
   std::optional<size_t> declaration_cell = {};
+  llvm::Value *loop_control = nullptr; // Identity of an enclosing loop binding, never a runtime field.
 };
 using Bindings = llvm::ImmutableMap<size_t, const Value *>;
 struct Environment {
@@ -500,7 +501,9 @@ class Compiler {
     llvm::StructType *layout;
     Location at;
     std::vector<size_t> images;
-    std::function<Value(llvm::Value *, Environment &)> invoke;
+    std::function<Value(llvm::Value *, Environment &, Value)> invoke;
+    bool handles_error = false;
+    std::shared_ptr<bool> recovers;
   };
   struct DeferredScope {
     llvm::AllocaInst *head;
@@ -508,6 +511,15 @@ class Compiler {
     std::deque<DeferredAction> actions;
   };
   DeferredScope *deferred_scope_ = nullptr;
+  std::set<llvm::Value *> deferred_loop_controls_;
+  struct TryEmission {
+    std::function<Value()> body;
+    std::function<Value(Value)> cleanup;
+    std::optional<Value> incoming;
+    bool discard = false;
+    bool recovers = false;
+    bool *recovered = nullptr;
+  };
   struct EnvironmentEdge { Environment environment; llvm::BasicBlock *from; FlowState regions; };
   struct Completion { Value value; llvm::BasicBlock *from; FlowState regions; };
   struct ReturnTarget {
@@ -2249,16 +2261,22 @@ class Compiler {
     for (const auto &child : expr.children) resolve_procedure_symbols(*child, module);
     if (expr.definition) resolve_procedure_symbols(*expr.definition->body, module);
   }
-  Locals capture_variables(const Form &form, const Locals &outer) {
+  struct LexicalReferences {
     std::map<std::string, Location> required;
-    Locals captures;
+    std::map<std::string, Value> owners;
+    std::set<std::string> bound;
+  };
+  LexicalReferences lexical_references(const Expression &body, const Locals &outer, const Form *signature = nullptr) {
+    LexicalReferences result;
+    auto &required = result.required;
+    auto &bound = result.bound;
     const auto owners = outer.owners();
     const auto type_owners = [&](auto &&self, const Type &type, const std::set<std::string> &bound) -> void {
       for (const auto &name : type.capture_owners)
         if (!bound.contains(name))
           if (const auto found = owners.find(name); found != owners.end()) {
-            valid_view(found->second, form.at);
-            captures.owner_anchors.emplace(name, borrowed(found->second));
+            valid_view(found->second, body.at);
+            result.owners.emplace(name, borrowed(found->second));
           }
       if (type.target) self(self, *type.target, bound);
       for (const auto &parameter : type.parameters) self(self, parameter, bound);
@@ -2315,13 +2333,21 @@ class Compiler {
       for (const auto &child : expr.children) self(self, *child, bound);
       if (expr.kind == K::region_binding || expr.kind == K::alias) bound.insert(expr.text);
     };
-    std::set<std::string> bound;
-    for (const auto &parameter : form.parameters) bound.insert(parameter.name);
-    for (const auto &owner : form.owner_parameters) bound.insert(owner.name);
-    for (const auto &parameter : form.parameters) type_owners(type_owners, parameter.type, bound);
-    if (form.result_type) type_owners(type_owners, *form.result_type, bound);
-    scan(scan, *form.body, bound);
-
+    if (signature) {
+      for (const auto &parameter : signature->parameters) bound.insert(parameter.name);
+      for (const auto &owner : signature->owner_parameters) bound.insert(owner.name);
+      for (const auto &parameter : signature->parameters) type_owners(type_owners, parameter.type, bound);
+      if (signature->result_type) type_owners(type_owners, *signature->result_type, bound);
+    }
+    scan(scan, body, bound);
+    return result;
+  }
+  Locals capture_variables(const Form &form, const Locals &outer) {
+    auto references = lexical_references(*form.body, outer, &form);
+    const auto &required = references.required;
+    const auto &bound = references.bound;
+    Locals captures;
+    captures.owner_anchors = std::move(references.owners);
     std::map<std::string, Location> selected;
     if (!form.explicit_captures) selected = required;
     else {
@@ -2335,6 +2361,8 @@ class Compiler {
     }
     for (const auto &[name, at] : selected) {
       auto value = outer.visible.at(name);
+      if (deferred_loop_controls_.contains(value.loop_control))
+        fail(at, "a delayed defer block cannot capture a loop-control binding; prepare a deferred call argument instead");
       require_declaration(value, at);
       value.declaration_cell.reset();
       const bool slot = outer.regional_slots.contains(name);
@@ -5609,13 +5637,51 @@ class Compiler {
       clause->at = expr.at;
       guarded.children.push_back(std::move(clause));
     }
-    return try_expression(guarded, module, env, locals, function_context, false, true, {}, nullptr, body,
-        [&] { return drain_deferred(scope, env); });
+    TryEmission emission;
+    emission.body = body;
+    emission.cleanup = [&](Value incoming) {
+      auto result = drain_deferred(scope, env, std::move(incoming));
+      emission.recovers = std::any_of(scope.actions.begin(), scope.actions.end(),
+          [](const auto &action) { return action.recovers && *action.recovers; });
+      return result;
+    };
+    return try_expression(guarded, module, env, locals, function_context, false, true, {}, nullptr, &emission);
   }
-  Value drain_deferred(DeferredScope &scope, Environment &env) {
+  Value drain_deferred(DeferredScope &scope, Environment &env, Value incoming) {
     auto *error_payload = ir_.native_slot(ir_.type_of(exception_type(ExceptionCategory::system)), "defer.error");
     auto *error_category = ir_.native_slot(ir_.type_of(Type::uint64), "defer.category");
-    ir_.write_native(error_category, ir_.bits(Type::uint64, 0));
+    ir_.write_native(error_payload, incoming.native);
+    ir_.write_native(error_category, exception_category(incoming));
+    auto *return_tag = ir_.native_slot(ir_.type_of(Type::uint64), "defer.return.tag");
+    ir_.write_native(return_tag, ir_.bits(Type::uint64, 0));
+    struct SavedReturn { Value value; std::vector<llvm::AllocaInst *> fields; Location at; };
+    std::vector<SavedReturn> returned;
+    llvm::AllocaInst *return_resource = nullptr;
+    bool callable_resource = false;
+    const auto clear_return_resource = [&] {
+      if (!return_resource) return;
+      if (callable_resource) ir_.replace_callable(return_resource, ir_.null_pointer());
+      else ir_.replace_region(return_resource, ir_.null_pointer());
+    };
+    const auto save_return = [&](Value value, const Location &at) {
+      if (native_callable(value)) value = detach_callable(std::move(value), at);
+      if (value.type.owned) value = take_owner(std::move(value), at);
+      if ((native_callable(value) || value.type.owned) && !return_resource) {
+        return_resource = ir_.native_slot(value.native->getType(), "defer.return.owner");
+        callable_resource = native_callable(value);
+      }
+      clear_return_resource();
+      SavedReturn saved{std::move(value), {}, at};
+      deferred_fields(saved.value, [&](llvm::Value *&native) {
+        auto *slot = &native == &saved.value.native && return_resource ? return_resource :
+            ir_.native_slot(native->getType(), "defer.return.value");
+        saved.fields.push_back(slot);
+        ir_.write_native(slot, native);
+      });
+      returned.push_back(std::move(saved));
+      ir_.write_native(return_tag, ir_.bits(Type::uint64, returned.size()));
+      ir_.write_native(error_category, ir_.bits(Type::uint64, 0));
+    };
     auto *next = ir_.label("defer.next");
     auto *dispatch = ir_.label("defer.dispatch");
     auto *done = ir_.label("defer.done");
@@ -5658,15 +5724,30 @@ class Compiler {
         ir_.jump(next);
       };
       HandlerScope failures{cleanup, holding_begin, local_scope_, &env, {}};
+      ReturnTarget replacement{cleanup, holding_begin, action_scope, &env, ir_.label("defer.return")};
       {
         const auto local = llvm::SaveAndRestore(local_scope_, action_scope);
         const auto owner = llvm::SaveAndRestore(ir_.cleanup_owner(), action_scope);
         const auto top = llvm::SaveAndRestore(module_top_level_, false);
         handlers_.push_back(&failures);
-        const auto result = action.invoke(record, env);
+        return_targets_.push_back(&replacement);
+        auto pending = scalar(exception_type(ExceptionCategory::system), ir_.read_native(error_payload));
+        pending.exception_category = ir_.read_native(error_category);
+        if (action.handles_error) ir_.write_native(error_category, ir_.bits(Type::uint64, 0));
+        const auto result = action.invoke(record, env, std::move(pending));
+        return_targets_.pop_back();
         handlers_.pop_back();
         if (result.type != Type::never) {
           check_flow(flow_state(), action.at);
+          close_holdings(holding_begin, {}, action.at);
+          ir_.unwind(cleanup);
+          release();
+        }
+        ir_.enter(replacement.block);
+        auto replaced = join_completions(replacement.incoming, action.at, false);
+        if (replaced.type != Type::never) {
+          check_flow(flow_state(), action.at);
+          save_return(std::move(replaced), action.at);
           close_holdings(holding_begin, {}, action.at);
           ir_.unwind(cleanup);
           release();
@@ -5699,18 +5780,123 @@ class Compiler {
     ir_.enter(failed);
     auto error = scalar(exception_type(ExceptionCategory::system), ir_.read_native(error_payload));
     error.exception_category = category;
+    clear_return_resource();
     raise_exception(std::move(error));
     ir_.enter(resume);
+    for (size_t i = 0; i < returned.size(); ++i) {
+      auto *selected = ir_.label("defer.return.selected");
+      auto *other = ir_.label("defer.return.other");
+      ir_.choose(ir_.binary(Type::uint64, "==", ir_.read_native(return_tag), ir_.bits(Type::uint64, i + 1)), selected, other);
+      ir_.enter(selected);
+      restore_flow(entry_flow);
+      auto value = returned[i].value;
+      size_t field = 0;
+      deferred_fields(value, [&](llvm::Value *&native) { native = ir_.read_native(returned[i].fields.at(field++)); });
+      if (value.type.owned) {
+        ir_.write_native(return_resource, ir_.null_pointer());
+        auto region = regions_.at(*value.region_id);
+        value.region_id = new_region(value.native, returned[i].at, region.origins);
+        region.owner = value.native;
+        region.live = true;
+        regions_.at(*value.region_id) = std::move(region);
+        value = hold_region(std::move(value), false, true);
+      } else if (native_callable(value)) {
+        ir_.write_native(return_resource, ir_.null_pointer());
+        value.storage = StorageView{ir_.hold_callable(value.native, false), local_scope_, {}};
+        value.callable_temporary = true;
+        register_callable_holder(value);
+      }
+      route_return(std::move(value), returned[i].at);
+      ir_.enter(other);
+    }
+    restore_flow(entry_flow);
+    return {};
+  }
+  void deferred_fields(Value &value, const std::function<void(llvm::Value *&)> &visit) {
+    const auto field = [&](llvm::Value *&native) { if (native) visit(native); };
+    field(value.native);
+    field(value.exception_category);
+    field(value.global_slot);
+    if (value.storage) field(value.storage->address);
+    if (value.reference_field) {
+      field(value.reference_field->owner);
+      field(value.reference_field->address);
+    }
+    if (value.procedure && !native_callable(value)) {
+      auto procedure = std::make_shared<Procedure>(*value.procedure);
+      callable_fields(*procedure, [&](llvm::Value *&native, bool) { visit(native); });
+      value.procedure = std::move(procedure);
+    }
+  }
+  Value deferred_block(const Expression &expr, const Module &module, const Locals &locals, bool function_context) {
+    auto selected = locals;
+    const auto references = lexical_references(expr, locals);
+    auto caught = caught_exception_;
+    std::set<llvm::Value *> controls = deferred_loop_controls_;
+    std::vector<llvm::Value *> values;
+    std::map<size_t, size_t> owners;
+    const auto save = [&](Value &value) {
+      if (value.loop_control) { controls.insert(value.loop_control); return; }
+      deferred_fields(value, [&](llvm::Value *&native) { values.push_back(native); });
+      if (value.region_id && !owners.contains(*value.region_id)) {
+        owners.emplace(*value.region_id, values.size());
+        values.push_back(regions_.at(*value.region_id).owner);
+      }
+    };
+    for (auto &[name, value] : selected.visible)
+      if (references.required.contains(name)) save(value);
+    for (auto &[name, value] : selected.owner_anchors)
+      if (references.owners.contains(name)) save(value);
+    if (caught) save(*caught);
+    auto *layout = ir_.deferred_layout(values);
+    auto recovered = std::make_shared<bool>(false);
+    auto invoke = [this, selected, references, caught, controls, recovered, layout, &expr, &module, function_context]
+                  (llvm::Value *record, Environment &env, Value incoming) -> Value {
+      auto locals = selected;
+      auto active_error = caught;
+      size_t field = 0;
+      std::map<size_t, llvm::Value *> previous_owners;
+      const auto restore = [&](Value &value) {
+        if (value.loop_control) return;
+        deferred_fields(value, [&](llvm::Value *&native) { native = ir_.read_deferred_field(layout, record, field++); });
+        if (value.region_id && !previous_owners.contains(*value.region_id)) {
+          auto &owner = regions_.at(*value.region_id).owner;
+          previous_owners.emplace(*value.region_id, owner);
+          owner = ir_.read_deferred_field(layout, record, field++);
+        }
+      };
+      for (auto &[name, value] : locals.visible)
+        if (references.required.contains(name)) restore(value);
+      for (auto &[name, value] : locals.owner_anchors)
+        if (references.owners.contains(name)) restore(value);
+      if (active_error) restore(*active_error);
+      const auto owner_restore = llvm::scope_exit([&] {
+        for (const auto &[id, owner] : previous_owners) regions_.at(id).owner = owner;
+      });
+      const auto blocked_controls = llvm::SaveAndRestore(deferred_loop_controls_, controls);
+      const auto active_catch = llvm::SaveAndRestore(caught_exception_, active_error);
+      if (expr.children.size() == 1)
+        return block(*expr.children.front(), module, env, locals, function_context, true);
+      TryEmission emission;
+      emission.incoming = std::move(incoming);
+      emission.discard = true;
+      emission.recovered = recovered.get();
+      return try_expression(expr, module, env, locals, function_context, false, true, {}, nullptr, &emission);
+    };
+    auto &scope = *deferred_scope_;
+    const auto index = scope.actions.size();
+    scope.actions.push_back({layout, expr.at, {}, std::move(invoke), expr.children.size() > 1, std::move(recovered)});
+    ir_.register_deferred(scope.head, layout, index, values);
     return {};
   }
   Value deferred_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                              bool function_context) {
     using K = Expression::Kind;
     const auto &invocation = *expr.children.front();
-    if (invocation.kind == K::block)
-      fail(expr.at, "deferred block and handler lowering is not implemented yet");
     if (!deferred_scope_)
       fail(expr.at, "process-lifetime module defer lowering is not implemented yet");
+    if (invocation.kind == K::block)
+      return deferred_block(expr, module, locals, function_context);
     std::optional<PreparedMethodCall> method_call;
     std::optional<PreparedCallableCall> callable_call;
     bool captured = false;
@@ -5780,7 +5966,7 @@ class Compiler {
     auto *layout = ir_.deferred_layout(values);
     const auto scope_id = deferred_scope_->owner_scope;
     auto invoke = [this, method_call, callable_call, captured, layout, scope_id, &module, at = expr.at]
-                  (llvm::Value *record, Environment &current) mutable -> Value {
+                  (llvm::Value *record, Environment &current, Value) -> Value {
       auto method = method_call;
       auto callable = callable_call;
       size_t field = 0;
@@ -5800,7 +5986,7 @@ class Compiler {
     };
     auto &scope = *deferred_scope_;
     const auto index = scope.actions.size();
-    scope.actions.push_back({layout, expr.at, std::move(images), std::move(invoke)});
+    scope.actions.push_back({layout, expr.at, std::move(images), std::move(invoke), false, {}});
     ir_.register_deferred(scope.head, layout, index, values);
     for (auto *slot : image_slots) ir_.take_callable(slot);
     return {};
@@ -5986,9 +6172,12 @@ class Compiler {
     auto native_loop = ir_.loop(first.type, first.native, last.native, accumulator.native,
         accumulator.type.kind == Type::exception ? exception_category(accumulator) : nullptr);
     auto inner_locals = locals.nested();
-    declare_local(inner_locals, expr.text, {first.type, native_loop.index, {}, nullptr}, module, expr.at);
+    auto index_value = scalar(first.type, native_loop.index);
+    index_value.loop_control = native_loop.index;
+    declare_local(inner_locals, expr.text, std::move(index_value), module, expr.at);
     if (expr.kind == K::fold) {
       accumulator.native = native_loop.accumulator;
+      accumulator.loop_control = native_loop.accumulator;
       accumulator.referent = native_loop.accumulator;
       accumulator.exception_category = native_loop.exception_category;
       declare_local(inner_locals, expr.binding, accumulator, module, expr.at);
@@ -6116,6 +6305,7 @@ class Compiler {
       ir_.unreachable();
       return scalar(Type::never, nullptr);
     }
+    accumulator.loop_control = nullptr;
     return accumulator;
   }
   Value call_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
@@ -6770,8 +6960,9 @@ class Compiler {
   Value try_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
                        bool function_context, bool copy_bits = false, bool read_result = true,
                        std::optional<Type> callable_result = {}, const Value *result_owner = nullptr,
-                       const std::function<Value()> &body = {}, const std::function<Value()> &cleanup = {}) {
+                       const TryEmission *emission = nullptr) {
     const bool parent_module = module_top_level_;
+    bool recovered = false;
     std::array<const Expression *, concrete_exception_count> catches{};
     const Expression *finally = nullptr;
     for (size_t i = 1; i < expr.children.size(); ++i) {
@@ -6829,7 +7020,16 @@ class Compiler {
     Value normal;
     {
       const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, npe_allowed_ || catches[exception_id(ExceptionCategory::null_pointer) - 1]);
-      normal = body ? body() : block(*expr.children.front(), module, env, locals, function_context, false, callable_result, copy_bits, read_result, result_owner);
+      if (emission && emission->incoming) {
+        auto *body_entry = ir_.label("try.body");
+        auto *error_entry = ir_.label("try.incoming");
+        ir_.choose(ir_.is_null(exception_category(*emission->incoming)), body_entry, error_entry);
+        ir_.enter(error_entry);
+        raise_exception(*emission->incoming);
+        ir_.enter(body_entry);
+      }
+      normal = emission && emission->body ? emission->body() : block(*expr.children.front(), module, env, locals,
+          function_context, emission && emission->discard, callable_result, copy_bits, read_result, result_owner);
     }
     handlers_.pop_back();
     complete(normal);
@@ -6865,7 +7065,8 @@ class Compiler {
       Value result;
       {
         const auto active = llvm::SaveAndRestore(caught_exception_, std::optional(error));
-        result = block(*clause->children.front(), module, env, inner_locals, function_context, false, callable_result, copy_bits, read_result, result_owner);
+        result = block(*clause->children.front(), module, env, inner_locals, function_context,
+                       emission && emission->discard, callable_result, copy_bits, read_result, result_owner);
       }
       if (finally) handlers_.pop_back();
       const auto restore_binding = [&](auto &destination, const auto &source) {
@@ -6877,6 +7078,7 @@ class Compiler {
       restore_binding(inner_locals.declared, locals.declared);
       restore_binding(inner_locals.regional_slots, locals.regional_slots);
       locals = std::move(inner_locals);
+      recovered |= result.type != Type::never;
       complete(result);
       for (auto &landing : catch_scope.landing) if (landing.block) {
         ir_.enter(landing.block);
@@ -6887,7 +7089,10 @@ class Compiler {
     ir_.enter(normal_join);
     auto result = join_completions(completions, expr.at, parent_module);
     if (result.type != Type::never) env = join_environments(environments, expr.at);
-    if (!finally) return result;
+    if (!finally) {
+      if (emission && emission->recovered) *emission->recovered = recovered;
+      return result;
+    }
 
     enum class CompletionKind { returned, failed, normal };
     struct Pending {
@@ -6937,11 +7142,28 @@ class Compiler {
     auto *tag = ir_.phi(ir_.type_of(Type::uint64), tags);
     const auto finalizer_entry = flow_state();
     const auto finalizer_env = env;
-    const auto finished = cleanup ? cleanup() : block(*finally, module, env, locals, function_context);
+    Value finished;
+    if (emission && emission->cleanup) {
+      std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> payloads, categories;
+      for (const auto &path : pending) {
+        payloads.emplace_back(path.kind == CompletionKind::failed ? path.value.native :
+            llvm::Constant::getNullValue(ir_.type_of(exception_type(ExceptionCategory::system))), path.from);
+        categories.emplace_back(path.kind == CompletionKind::failed ? exception_category(path.value) :
+            ir_.bits(Type::uint64, 0), path.from);
+      }
+      auto incoming = scalar(exception_type(ExceptionCategory::system),
+          ir_.phi(ir_.type_of(exception_type(ExceptionCategory::system)), payloads));
+      incoming.exception_category = ir_.phi(ir_.type_of(Type::uint64), categories);
+      finished = emission->cleanup(std::move(incoming));
+    } else finished = block(*finally, module, env, locals, function_context);
     require(finished.type, Type::void_type, finally->at);
     if (finished.type == Type::never) return finished;
+    if (emission && emission->recovered) *emission->recovered = recovered;
     const auto finalizer_exit = flow_state();
     const auto finalizer_exit_env = env;
+    auto *resumed = emission && emission->cleanup && emission->recovers ? ir_.label("cleanup.result") : nullptr;
+    std::vector<Completion> resumed_values;
+    std::vector<EnvironmentEdge> resumed_environments;
     for (size_t i = 0; i < pending.size(); ++i) {
       const auto &path = pending[i];
       std::optional<LLVMEmission::Branch> branch;
@@ -6951,9 +7173,19 @@ class Compiler {
       restore_flow(continue_flow(path.flow, finalizer_entry, finalizer_exit));
       env = continue_environment(path.environment, finalizer_env, finalizer_exit_env);
       if (path.kind == CompletionKind::returned) route_return(path.value, expr.at);
-      else if (path.kind == CompletionKind::failed) raise_exception(path.value);
+      else if (resumed) {
+        resumed_values.push_back({path.kind == CompletionKind::failed ? Value{} : path.value, ir_.here(), flow_state()});
+        resumed_environments.push_back({env, ir_.here(), flow_state()});
+        ir_.jump(resumed);
+      } else if (path.kind == CompletionKind::failed) raise_exception(path.value);
       else return path.value;
       if (branch) { ir_.otherwise(*branch); ir_.merge(*branch, Type::void_type); }
+    }
+    if (resumed) {
+      ir_.enter(resumed);
+      auto value = join_completions(resumed_values, expr.at, parent_module);
+      if (value.type != Type::never) env = join_environments(resumed_environments, expr.at);
+      return value;
     }
     return scalar(Type::never, nullptr);
   }
@@ -7362,6 +7594,8 @@ class Compiler {
     }
     case K::name: {
       if (const auto local = locals.visible.find(expr.text); local != locals.visible.end()) {
+        if (deferred_loop_controls_.contains(local->second.loop_control))
+          fail(expr.at, "a delayed defer block cannot capture a loop-control binding; prepare a deferred call argument instead");
         require_declaration(local->second, expr.at);
         if (locals.regional_slots.contains(expr.text)) return captured_view(local->second, expr.at);
         if (local->second.pointer) {

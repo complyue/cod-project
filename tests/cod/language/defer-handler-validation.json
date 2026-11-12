@@ -1,0 +1,392 @@
+{
+  "recorded_utc": "2026-11-12T14:00:41.060332+00:00",
+  "compiler_sha256": "c8b472e8af7a91123a0911992feb9a96ae0f833c9c36ba195a174ee0dc597670",
+  "language": {
+    "passed": 457,
+    "total": 457,
+    "source_count": 546,
+    "all_sources_match": true
+  },
+  "native_defer": {
+    "schema_version": 1,
+    "recorded_utc": "2026-11-12T13:53:57.194369+00:00",
+    "toolchain": "build",
+    "passed": true,
+    "cases": {
+      "defer-order": {
+        "layout": {
+          "registrations": 5,
+          "drained": 5,
+          "peak_records": 5,
+          "peak_record_bytes": 120,
+          "images": 2,
+          "images_released": 2,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.016863594006281346,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 1.8713683219975792,
+        "native_process_seconds": 0.0013866350054740906,
+        "llvm_ir_bytes": 33214,
+        "bitcode_bytes": 8208,
+        "fixture_sha256": "dc383a227e3802a792e6b9fd369cd8cf02f63d8334439ca29ba6e739406d2273",
+        "executed_source_sha256": "fa0be150c386da42e40ebdc706559e6d6129da8ca9a0c7c8d3cdba0542113556"
+      },
+      "defer-snapshots": {
+        "layout": {
+          "registrations": 7,
+          "drained": 7,
+          "peak_records": 7,
+          "peak_record_bytes": 208,
+          "images": 11,
+          "images_released": 11,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.01928304397733882,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 1.9129833359911572,
+        "native_process_seconds": 0.0012992600095458329,
+        "llvm_ir_bytes": 105771,
+        "bitcode_bytes": 20464,
+        "fixture_sha256": "d06513373da6db88377783ef69eb5c50a8c7e1e367a7cd4cdc52f65b131b6712",
+        "executed_source_sha256": "ac825f2759e555f641d08f7099cad9f8aed160f43c35ddb1af2209c1e20a27fd"
+      },
+      "defer-failures": {
+        "layout": {
+          "registrations": 20015,
+          "drained": 20015,
+          "peak_records": 10000,
+          "peak_record_bytes": 240000,
+          "images": 16,
+          "images_released": 16,
+          "record_failures": 1,
+          "copy_failures": 1,
+          "owners": 4,
+          "owners_released": 4
+        },
+        "frontend_seconds": 0.030655863985884935,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 1.9450575379887596,
+        "native_process_seconds": 0.003572643006918952,
+        "llvm_ir_bytes": 246471,
+        "bitcode_bytes": 44304,
+        "fixture_sha256": "abf1f263295007664c5665ac69f6e9f62074b38f777daf1dfa091ef5a3cd2515",
+        "executed_source_sha256": "4e132357b53f89aeabef62bd65c55fd9c3cd8a608f284a38863351512480b318"
+      },
+      "defer-blocks": {
+        "layout": {
+          "registrations": 10,
+          "drained": 10,
+          "peak_records": 3,
+          "peak_record_bytes": 72,
+          "images": 3,
+          "images_released": 3,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.017428324004868045,
+        "frontend_diagnostics": [
+          "/tmp/cod-defer-native-6t6r0mtw/program.cod:6:1: warning: value-returning callable may finish without an explicit return [-Wmissing-return]\n"
+        ],
+        "native_compile_link_seconds": 1.9340974939987063,
+        "native_process_seconds": 0.00147100500180386,
+        "llvm_ir_bytes": 63476,
+        "bitcode_bytes": 12628,
+        "fixture_sha256": "1f9f50c4d9659724fbb1aa8e0254a64d9b44afa9b2a06f68abd4ba0d355ed1e7",
+        "executed_source_sha256": "203d4b8efee8796a2ce3431cda40bb88bccb34a9860bc321288dee4c73c9f6c6"
+      },
+      "defer-returns": {
+        "layout": {
+          "registrations": 2014,
+          "drained": 2014,
+          "peak_records": 1000,
+          "peak_record_bytes": 16000,
+          "images": 1015,
+          "images_released": 1015,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1006,
+          "owners_released": 1006
+        },
+        "frontend_seconds": 0.02537826300249435,
+        "frontend_diagnostics": [
+          "/tmp/cod-defer-native-6t6r0mtw/program.cod:26:1: warning: value-returning callable may finish without an explicit return [-Wmissing-return]\n"
+        ],
+        "native_compile_link_seconds": 1.913564435992157,
+        "native_process_seconds": 0.0016251970082521439,
+        "llvm_ir_bytes": 243928,
+        "bitcode_bytes": 43524,
+        "fixture_sha256": "9d37e12eb18b432a58e49ad1e4b157154bfa56c47bc4772558131fa8d91f2cf0",
+        "executed_source_sha256": "89b991803a75d442188f0e839c22a77db16f60d2dc7bfb351db6eb41eb579c60"
+      },
+      "defer-errors": {
+        "layout": {
+          "registrations": 12,
+          "drained": 12,
+          "peak_records": 3,
+          "peak_record_bytes": 56,
+          "images": 1,
+          "images_released": 1,
+          "record_failures": 0,
+          "copy_failures": 0,
+          "owners": 1,
+          "owners_released": 1
+        },
+        "frontend_seconds": 0.024595602008048445,
+        "frontend_diagnostics": [],
+        "native_compile_link_seconds": 1.8583569059846923,
+        "native_process_seconds": 0.0011800439970102161,
+        "llvm_ir_bytes": 147680,
+        "bitcode_bytes": 25304,
+        "fixture_sha256": "65095dd105b85b338f9bfa26d4dd7479ecdf5d404efe6c265fbb4ad770303086",
+        "executed_source_sha256": "78fc98b3ff0245661090449fc7d07651c3dde2f095b562751be7364428673d51"
+      }
+    },
+    "compiler_sha256": "c8b472e8af7a91123a0911992feb9a96ae0f833c9c36ba195a174ee0dc597670",
+    "script_sha256": "6ea8bbc63f2212b13356d514d716b604538f2da881a94f148323d70b49b61056",
+    "harness_helper_sha256": "67f9e7d0994d0f1c3b6f609506326403673cd59be0f6c2db494be2d1113ab168"
+  },
+  "native_callable_cases": 30,
+  "native_callable_accounting_unchanged": true,
+  "callable_artifact_size_differences": {
+    "regional_captures": {
+      "llvm_ir_bytes": {
+        "previous": 206582,
+        "current": 206586
+      }
+    },
+    "owner_factories": {
+      "llvm_ir_bytes": {
+        "previous": 319390,
+        "current": 319402
+      },
+      "bitcode_bytes": {
+        "previous": 58736,
+        "current": 58740
+      }
+    }
+  },
+  "returns": {
+    "layout": {
+      "owners_acquired": 5,
+      "owners_released": 5,
+      "failed_acquisitions": 2,
+      "peak_live_owners": 2,
+      "images_acquired": 7,
+      "images_released": 7,
+      "peak_image_bytes": 48
+    },
+    "frontend_seconds": 0.028065915015758947,
+    "frontend_diagnostics": [],
+    "native_compile_link_seconds": 1.9459540419920813,
+    "native_process_seconds": 0.001265455997781828,
+    "llvm_ir_bytes": 70287,
+    "bitcode_bytes": 16320,
+    "recorded_utc": "2026-11-12T13:56:34.046699+00:00",
+    "toolchain": "build",
+    "trace": [
+      "10",
+      "30",
+      "20",
+      "40",
+      "70",
+      "80",
+      "6201",
+      "90",
+      "71",
+      "72"
+    ],
+    "compiler_sha256": "c8b472e8af7a91123a0911992feb9a96ae0f833c9c36ba195a174ee0dc597670",
+    "source_sha256": {
+      "cod/lang_exceptions.hh": "402d846a16afb41ef5f9eb7974232000c37245b72f49cb02349a94b123dca1ba",
+      "cod/lang_syntax.hh": "a21cb12e3a8a0ee028dc48d8db5d581ad92e17e9185a1d0402b5975c72264abc",
+      "cod/lang_frontend.hh": "4c23003d287e3d96e2c693ffffcfb01fd6938c7c8fee6f1786b8b33c40aed672",
+      "cod/lang_llvm.hh": "62629e72759c0fbc2c551b45eb269a891bd0689517a314a43d9ab2c994355cac",
+      "cod/lang_native_runtime.hh": "9d79aaf4d327758b531accbb5942cb2a9428e237135282521025e2552eca0992",
+      "tests/cod/language/scopes/return-resources.cod": "436220d5ce8e62537f252daca2412c9d25862f1a877373e21f6800939c5b2195",
+      "tests/cod/language/return_runtime_tests.py": "4bcfd7515709f2867ff042d099cd67a71a292f1cf5b5a021700269caf988eb33",
+      "tests/cod/language/callable_runtime_tests.py": "575f6f3a6e680d4822b6512638c525926a0920b6bed9b6b52e9178299ab0048b",
+      "tests/cod/language/regional_runtime_tests.py": "67f9e7d0994d0f1c3b6f609506326403673cd59be0f6c2db494be2d1113ab168",
+      "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241"
+    }
+  },
+  "loops": {
+    "layout": {
+      "owners_acquired": 13,
+      "owners_released": 13,
+      "failed_acquisitions": 2,
+      "peak_live_owners": 3
+    },
+    "frontend_seconds": 0.026683015981689095,
+    "frontend_diagnostics": [],
+    "native_compile_link_seconds": 1.9042044029920362,
+    "native_process_seconds": 0.0013996000052429736,
+    "llvm_ir_bytes": 93778,
+    "bitcode_bytes": 21224,
+    "recorded_utc": "2026-11-12T13:56:33.994816+00:00",
+    "toolchain": "build",
+    "trace": [
+      "3",
+      "3",
+      "2",
+      "3",
+      "3",
+      "2",
+      "3",
+      "3",
+      "2",
+      "1",
+      "2",
+      "1",
+      "2",
+      "1",
+      "2",
+      "1"
+    ],
+    "compiler_sha256": "c8b472e8af7a91123a0911992feb9a96ae0f833c9c36ba195a174ee0dc597670",
+    "source_sha256": {
+      "cod/lang_exceptions.hh": "402d846a16afb41ef5f9eb7974232000c37245b72f49cb02349a94b123dca1ba",
+      "cod/lang_syntax.hh": "a21cb12e3a8a0ee028dc48d8db5d581ad92e17e9185a1d0402b5975c72264abc",
+      "cod/lang_frontend.hh": "4c23003d287e3d96e2c693ffffcfb01fd6938c7c8fee6f1786b8b33c40aed672",
+      "cod/lang_llvm.hh": "62629e72759c0fbc2c551b45eb269a891bd0689517a314a43d9ab2c994355cac",
+      "cod/lang_native_runtime.hh": "9d79aaf4d327758b531accbb5942cb2a9428e237135282521025e2552eca0992",
+      "tests/cod/language/scopes/iteration-effects.cod": "793e8bda996df45352c5dc4da5e89271eb27a85119294756e4505d9285e5aa59",
+      "tests/cod/language/loop_scope_tests.py": "9eadbb12f7dce379843e5d6d66f382cafa88dbcb25bc0049745dbe5554000bca",
+      "tests/cod/language/regional_runtime_tests.py": "67f9e7d0994d0f1c3b6f609506326403673cd59be0f6c2db494be2d1113ab168",
+      "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241"
+    }
+  },
+  "asan": {
+    "compiler_sha256": "c8b472e8af7a91123a0911992feb9a96ae0f833c9c36ba195a174ee0dc597670",
+    "cases": [
+      {
+        "fixture": "defer-returns",
+        "executed_source_sha256": "89b991803a75d442188f0e839c22a77db16f60d2dc7bfb351db6eb41eb579c60",
+        "instrumented_definitions": 21,
+        "steps": [
+          {
+            "stage": "frontend",
+            "exit": 0,
+            "stdout": "",
+            "stderr": "/tmp/cod-defer-handlers/asan/defer-returns.cod:26:1: warning: value-returning callable may finish without an explicit return [-Wmissing-return]\n",
+            "seconds": 0.030076130002271384
+          },
+          {
+            "stage": "instrument",
+            "exit": 0,
+            "stdout": "",
+            "stderr": "",
+            "seconds": 0.15061383799184114
+          },
+          {
+            "stage": "verify_instrumentation",
+            "exit": 0,
+            "stdout": "                 U __asan_init\n                 U __asan_memset\n                 U __asan_option_detect_stack_use_after_return\n                 U __asan_register_elf_globals\n                 U __asan_report_load8\n                 U __asan_report_store8\n                 U __asan_set_shadow_00\n                 U __asan_stack_free_5\n                 U __asan_stack_malloc_5\n                 U __asan_unregister_elf_globals\n                 U __asan_version_mismatch_check_v8\n                 w __start_asan_globals\n                 w __stop_asan_globals\n                 U cod_lang_callable_create\n                 U cod_lang_callable_free\n                 U cod_lang_defer_allocate\n                 U cod_lang_defer_free\n                 U cod_lang_exception_finish\n                 U cod_lang_fail\n                 U cod_lang_print_u64\n                 U cod_lang_region_free\n                 U cod_lang_region_new\n                 U cod_lang_region_reserve_root\n                 U cod_lang_region_root\n                 U cod_lang_uncaught\n",
+            "stderr": "",
+            "seconds": 0.010111613024491817
+          },
+          {
+            "stage": "link",
+            "exit": 0,
+            "stdout": "",
+            "stderr": "",
+            "seconds": 1.8329639320145361
+          },
+          {
+            "stage": "execute",
+            "exit": 0,
+            "stdout": "30\n60\n70\n80\n95\n96\n97\n98\n99\n100\n30\n60\n",
+            "stderr": "",
+            "seconds": 0.014599619986256585
+          }
+        ]
+      },
+      {
+        "fixture": "defer-errors",
+        "executed_source_sha256": "65095dd105b85b338f9bfa26d4dd7479ecdf5d404efe6c265fbb4ad770303086",
+        "instrumented_definitions": 8,
+        "steps": [
+          {
+            "stage": "frontend",
+            "exit": 0,
+            "stdout": "",
+            "stderr": "",
+            "seconds": 0.02503519700258039
+          },
+          {
+            "stage": "instrument",
+            "exit": 0,
+            "stdout": "",
+            "stderr": "",
+            "seconds": 0.07292846599011682
+          },
+          {
+            "stage": "verify_instrumentation",
+            "exit": 0,
+            "stdout": "                 U __asan_init\n                 U __asan_memset\n                 U __asan_option_detect_stack_use_after_return\n                 U __asan_register_elf_globals\n                 U __asan_report_load8\n                 U __asan_report_store8\n                 U __asan_set_shadow_f5\n                 U __asan_stack_malloc_4\n                 U __asan_unregister_elf_globals\n                 U __asan_version_mismatch_check_v8\n                 w __start_asan_globals\n                 w __stop_asan_globals\n                 U cod_lang_callable_create\n                 U cod_lang_callable_free\n                 U cod_lang_defer_allocate\n                 U cod_lang_defer_free\n                 U cod_lang_exception_chain\n                 U cod_lang_exception_count\n                 U cod_lang_exception_finish\n                 U cod_lang_print_u64\n                 U cod_lang_region_free\n                 U cod_lang_region_new\n                 U cod_lang_uncaught\n",
+            "stderr": "",
+            "seconds": 0.011856625991640612
+          },
+          {
+            "stage": "link",
+            "exit": 0,
+            "stdout": "",
+            "stderr": "",
+            "seconds": 1.8122948340023868
+          },
+          {
+            "stage": "execute",
+            "exit": 0,
+            "stdout": "101\n102\n103\n105\n104\n106\n1\n107\n108\n109\n110\n111\n",
+            "stderr": "",
+            "seconds": 0.01381047599716112
+          }
+        ]
+      }
+    ]
+  },
+  "remaining_analysis_reproducers": {
+    "compiler_sha256": "c8b472e8af7a91123a0911992feb9a96ae0f833c9c36ba195a174ee0dc597670",
+    "cases": {
+      "checked-body": {
+        "source": "using symbol \"std:io\" @print;\nusing \"std:exceptions\" NullPointerException;\nproc run()->void {\n  defer catch(e:const NullPointerException) {};\n  ptr absent:i64 = null;\n  behave @print(absent);\n}\nrun();\n",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-defer-handlers/checked-body.cod:6:17: checked NullPointerException requires a local catch or throws NullPointerException on the immediate func/proc; module top level must catch it\n/tmp/cod-defer-handlers/checked-body.cod:8:1: note: in call to procedure 'run' defined at /tmp/cod-defer-handlers/checked-body.cod:3:1\n"
+      },
+      "normal-scope-result": {
+        "source": "using \"std:exceptions\" InvalidCapacity;\nfunc run()->const u64 {return {{defer catch(e:const InvalidCapacity) {}; 1u64}};}\nrun();\n",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-defer-handlers/normal-scope-result.cod:2:31: expected void, got u64\n/tmp/cod-defer-handlers/normal-scope-result.cod:3:1: note: in call to function 'run' defined at /tmp/cod-defer-handlers/normal-scope-result.cod:2:1\n"
+      },
+      "generic-rethrow": {
+        "source": "using \"std:exceptions\" InvalidCapacity;\nregion symbol @arena;\nproc bad()->void {effect @arena <- region(0u64);}\nproc run()->void {defer catch(e) {throw;}; bad();}\ntry {run();} catch(e:const InvalidCapacity) {};\n",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-defer-handlers/generic-rethrow.cod:4:35: checked NullPointerException requires a local catch or throws NullPointerException on the immediate func/proc; module top level must catch it\n/tmp/cod-defer-handlers/generic-rethrow.cod:5:6: note: in call to procedure 'run' defined at /tmp/cod-defer-handlers/generic-rethrow.cod:4:1\n"
+      },
+      "pointer-flow": {
+        "source": "proc run()->void {\n  val a:u64 <- 1u64;\n  val b:u64 <- 2u64;\n  ptr selected = a;\n  defer {selected = b;};\n}\nrun();\n",
+        "exit": 2,
+        "stdout": "",
+        "stderr": "/tmp/cod-defer-handlers/pointer-flow.cod:5:3: deferred action changes flow facts; deferred backedge checking is not implemented yet\n/tmp/cod-defer-handlers/pointer-flow.cod:7:1: note: in call to procedure 'run' defined at /tmp/cod-defer-handlers/pointer-flow.cod:1:1\n"
+      }
+    }
+  },
+  "exclusions": [
+    "Owning/external borrowed argument integration and general mutable flow backedges remain unfinished.",
+    "Process-lifetime module queues and general unmaterialized generic capture transport remain unfinished.",
+    "Checked body coverage, catch-all rethrow categories and value-producing recovered scopes need precise registration/completion analysis.",
+    "The retained missing-return warning can be conservative when a partially registered queue cannot recover a preparation failure; no new language restriction is selected.",
+    "Actual-owner unions, differing-concrete abstract result discrimination/RTTI, purity/TCO/fractions and compiler-pilot implementation remain outside this checkpoint."
+  ]
+}

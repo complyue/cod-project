@@ -1,0 +1,21 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+symbol @level:u64;
+proc bad() -> void { effect @arena <- region(0u64); }
+proc run(mode:u64) -> const u64 {
+  val value:u64 <- 1u64;
+  defer { {{ val local:u64 <- 9u64; effect @level <- local; behave @print(@level); }}; behave @print(value); };
+  defer catch(e:const InvalidCapacity) { behave @print(10u64); if(mode == 2u64) {return 22u64;} else {}; }
+  finally { behave @print(11u64); };
+  defer { behave @print(2u64); if(mode > 0u64) {bad();} else {}; };
+  value <- 7u64;
+  return 3u64;
+}
+for(i in 0u64 .. 3u64) {{ behave @print(run(i)); }};
+proc recovery() -> const u64 {
+  defer catch(e:const InvalidCapacity) { return 42u64; } finally { behave @print(12u64); };
+  bad();
+  return 999u64;
+}
+behave @print(recovery());

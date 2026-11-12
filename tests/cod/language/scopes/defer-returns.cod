@@ -1,0 +1,23 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+data Packet { value:u64; }
+region symbol @arena;
+proc bad() -> void { effect @arena <- region(0u64); }
+proc owned_result() -> owned region :Packet {
+  defer { {{ return make Packet(capacity=128u64){value<-30u64}; }} };
+  defer { return make Packet(capacity=128u64){value<-20u64}; };
+  return make Packet(capacity=128u64){value<-10u64};
+}
+proc callable() -> func()->const u64 {
+  defer { return func()->const u64 { return 60u64; }; };
+  defer { return func()->const u64 { return 50u64; }; };
+  return func()->const u64 { return 40u64; };
+}
+{{ owned region result <- owned_result(); behave @print(result.value); }};
+{{ func result = callable(); behave @print(result()); }};
+proc replace_error() -> const u64 {
+  defer { behave @print(70u64); };
+  defer {bad();} finally {return 80u64;};
+  return 90u64;
+}
+behave @print(replace_error());

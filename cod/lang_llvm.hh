@@ -1322,6 +1322,10 @@ public:
   void relinquish_region(llvm::Value *slot) {
     b().CreateStore(llvm::ConstantPointerNull::get(pointer_type()), slot);
   }
+  void replace_region(llvm::Value *slot, llvm::Value *owner) {
+    call_runtime("cod_lang_region_free", void_type(), {b().CreateLoad(pointer_type(), slot)});
+    b().CreateStore(owner, slot);
+  }
   llvm::Value *region_root(llvm::Value *owner) {
     return call_runtime("cod_lang_region_root", i64(), {owner});
   }

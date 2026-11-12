@@ -1,0 +1,35 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+using "std:exceptions" MissingReturnException;
+using "std:exceptions" NullPointerException;
+region symbol @arena;
+proc bad() -> void { effect @arena <- region(0u64); }
+{{
+  defer { behave @print(999u64); } catch(e:const InvalidCapacity) { behave @print(101u64); };
+  defer bad();
+}};
+{{ defer { bad(); } catch(e:const InvalidCapacity) { behave @print(102u64); }
+   finally { behave @print(103u64); }; }};
+{{
+  defer catch(e:const InvalidCapacity) { behave @print(104u64); };
+  defer { behave @print(999u64); } catch(e:const MissingReturnException) { behave @print(999u64); }
+  finally { behave @print(105u64); };
+  defer bad();
+}};
+{{
+  defer catch(e:const InvalidCapacity) { behave @print(e.cause_count); };
+  defer catch(original:const InvalidCapacity) {
+    try {bad();} catch(replacement:const InvalidCapacity) {throw replacement from original;};
+  } finally {behave @print(106u64);};
+  defer bad();
+}};
+try {
+  try {bad();} catch(original:const InvalidCapacity) { {{ defer {throw;}; }}; };
+} catch(e:const InvalidCapacity) {behave @print(107u64);};
+{{
+  defer { {{ ptr absent:i64 = null; behave @print(absent); }} }
+  catch(e:const NullPointerException) {behave @print(108u64);}
+  finally {behave @print(109u64);};
+}};
+{{ defer catch(e:const InvalidCapacity) {behave @print(110u64);}; bad(); }};
+behave @print(111u64);
