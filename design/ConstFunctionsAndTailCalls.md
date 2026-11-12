@@ -1,10 +1,12 @@
 # Const functions and tail calls: deferred research plan
 
-Design revision: 1 · Recorded: 2026-11-11 · Status: deferred pre-research; no implementation scheduled.
+Design revision: 2 · Recorded: 2026-11-11 · Status: deferred pre-research; no implementation scheduled.
 
 ## Design authority
 
-- **Registry / covered scope:** [D-19](DesignAuthorityRegistry.md#d-19), with human evidence [H-345–H-348](DesignAuthorityRegistry.md#h-345) and review [K-464](DesignAuthorityRegistry.md#k-464). The confirmed scope is the direction, outer-call boundary, deferred priority and conflict-review requirement. Detailed syntax, static checking and TCO eligibility remain pending-human before implementation.
+- **Pure declaration surface:** [H-363](DesignAuthorityRegistry.md#h-363)/[K-520](DesignAuthorityRegistry.md#k-520) selects `pure` to declare a const function whose final body expression provides its result without requiring `return`. C-76/P-305/P-325 preserves the readonly-external/private-mutation boundary under charter §§2–3/§6/§12. The user explicitly keeps purity implementation and TCO deferred. Acceptance and unresolved callable-type/checking details remain those below; this syntax choice does not qualify an optimizer purity attribute or authorize implementation.
+
+- **Registry / covered scope:** [D-19](DesignAuthorityRegistry.md#d-19), with human evidence [H-345–H-348](DesignAuthorityRegistry.md#h-345) and review [K-464](DesignAuthorityRegistry.md#k-464). The confirmed scope is the direction, outer-call boundary, deferred priority and conflict-review requirement. H-363 selects the pure declaration keyword and implicit final-expression result. Callable-type details, static checking and TCO eligibility remain pending-human before implementation.
 - **Value path:** C-76/P-304/P-305 derives from C-36's explicit function/effect boundary and C-65's checked storage/access/lifetimes, serving charter §§1–3/§6/§8: readable functional computation with explicit effects and safe native execution. P-306 records dependencies; P-307 requires human review of material conflicts. Dependencies do not confer authority.
 - **Invariants / non-goals:** Preserve regional relocation, owner validity, ordinary function/procedure semantics and module-world/TLS separation. No implicit snapshot copy, permanent freezing, caller-state rollback, blanket optimizer purity attribute, persisted native callable or general continuation runtime is selected. Const-function/TCO implementation and persistent-data libraries are deferred.
 - **Acceptance / baseline:** H-345 requires recursion in current work; H-346 restricts the future TCO exploration to const functions; H-347 supplies the immediate-return and private-mutation boundary; H-348 authorizes this plan and requires consultation over material conflicts. Future acceptance below is a proposed research checklist, not test evidence or an instruction to start implementation.
@@ -16,6 +18,10 @@ Recursive calls are a required part of the current callable/runtime work, for fu
 The optional functional-programming direction combines const functions with persistent data structures. Its initial TCO exploration is confined to const functions. TCO for ordinary functions or procedures is not planned here. Complexity or cost may justify narrowing or abandoning the optional direction after human review; the recursion requirement remains.
 
 Current development needs to remain materially compatible with this direction. It need not implement a const qualifier, persistence, tail-call checking or a speculative optimization framework now.
+
+## Declaration surface
+
+`pure f(...) -> T { ...; expression }` declares a const function with its final body expression as the result. H-361/H-362 requires explicit value returns from ordinary proc/func brace bodies and permits void fallthrough. The pure form preserves concise functional definitions without changing the ordinary function/procedure result contract. This declaration spelling is recorded for future implementation; callable-type syntax, helper/callback admission and purity checking remain unimplemented.
 
 ## Boundary of a const function
 
@@ -85,7 +91,7 @@ D-16 review: no fraction syntax, representation, promotion, overflow behavior, f
 
 Before implementation, settle only what the selected increment needs:
 
-- Const declaration/callable-type syntax and its distinction from const bindings, access views and result qualifiers.
+- Callable-type syntax and its distinction from const bindings, access views and result qualifiers; the declaration keyword is pure.
 - Checking of private state, helper calls, callbacks, overload dispatch and native services, including input stability assumptions.
 - Supported output construction/escape forms and exception/resource-failure behavior; no implicit rollback or ignored cleanup.
 - TCO eligibility, guarantee and diagnostics, including generic/mutual/indirect recursion and ABI restrictions.
