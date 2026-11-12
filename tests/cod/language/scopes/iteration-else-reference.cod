@@ -1,0 +1,1 @@
+{{ for (i in 0u64 .. 0u64) {} else { ptr value = 1u64; }; }};

@@ -1,0 +1,1 @@
+{{ for (i in 0u64 .. 0u64) {} else { var value:u64 -> missing; }; }};

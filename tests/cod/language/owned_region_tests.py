@@ -155,7 +155,7 @@ def main():
         evidence.update(recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                         toolchain=mode, trace=output, compile_rejections=list(REJECTS))
         evidence["compiler_sha256"] = hashlib.sha256((toolchain / "bin/cod").read_bytes()).hexdigest()
-        paths = [root / "cod" / name for name in ("lang_syntax.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_native_runtime.hh")]
+        paths = [root / "cod" / name for name in ("lang_exceptions.hh", "lang_syntax.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_native_runtime.hh")]
         paths += [directory / name for name in ("owned-region-library.cod", "owned-region-lifecycle.cod", "owned_region_tests.py")]
         evidence["source_sha256"] = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
         if report := os.environ.get("COD_OWNERSHIP_REPORT"):

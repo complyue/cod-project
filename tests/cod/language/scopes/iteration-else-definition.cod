@@ -1,0 +1,1 @@
+{{ for (i in 0u64 .. 0u64) {} else { function value() -> const u64 { 1u64 } }; }};

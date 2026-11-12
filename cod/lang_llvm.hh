@@ -2,6 +2,7 @@
 #pragma once
 
 #include "lang_syntax.hh"
+#include "lang_exceptions.hh"
 
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/DiagnosticOptions.h>
@@ -112,7 +113,7 @@ class LLVMEmission {
   }
   llvm::Value *checked_service(const std::string &name, llvm::Type *result,
                               std::vector<llvm::Value *> args, llvm::Value *requested,
-                              std::initializer_list<size_t> failures) {
+                              std::initializer_list<ExceptionCategory> failures) {
     auto *status_type = llvm::ArrayType::get(i64(), 2);
     auto *status = entry_slot(status_type, "service.status");
     b().CreateStore(llvm::ConstantAggregateZero::get(status_type), status);
@@ -123,7 +124,8 @@ class LLVMEmission {
     const auto site = exception_sites_.size();
     exception_sites_.push_back(source_context());
     auto *payload = exception_payload(integer(i64(), site), requested, available);
-    for (auto category : failures) {
+    for (auto failure : failures) {
+      const auto category = exception_id(failure);
       auto *bad = label("exception.raise");
       auto *next = label("service.continue");
       b().CreateCondBr(b().CreateICmpEQ(code, integer(i64(), category)), bad, next);
@@ -504,7 +506,7 @@ public:
     auto *error = b().CreateExtractValue(returned, {1});
     dispatch_exception(category, [&](size_t kind) {
       const bool possible = definition.complete ? definition.failures.contains(kind) :
-                            kind != 4 || definition.checked_null;
+                            !exception_categories.at(kind).checked || definition.checked_null;
       if (possible) exception_handler_(kind, error);
       else unreachable();
     });
@@ -608,7 +610,7 @@ public:
   }
   struct CallableMatch {
     llvm::Value *entry;
-    llvm::BranchInst *branch;
+    llvm::CondBrInst *branch;
     llvm::BasicBlock *next;
   };
   CallableMatch match_callable(llvm::Value *image, llvm::Constant *entry) {
@@ -670,7 +672,7 @@ public:
     llvm::Value *count = integer(i64(), nested.size());
     if (construction) count = construction->count = b().Insert(new llvm::FreezeInst(count), "capture.count");
     auto *image = checked_service("cod_lang_callable_create", pointer_type(),
-        {bytes, count, children, offsets}, bytes, {1});
+        {bytes, count, children, offsets}, bytes, {ExceptionCategory::out_of_memory});
     b().CreateStore(key ? key : entry, b().CreateStructGEP(layout, image, 1));
     for (size_t i = 0; i < values.size(); ++i)
       if (!nested.contains(i)) b().CreateStore(values[i], b().CreateStructGEP(layout, image, unsigned(i + 2)));
@@ -709,7 +711,7 @@ public:
   }
   llvm::Value *copy_callable(llvm::Value *image) {
     auto *bytes = b().CreateLoad(i64(), image);
-    return checked_service("cod_lang_callable_copy", pointer_type(), {image}, bytes, {1});
+    return checked_service("cod_lang_callable_copy", pointer_type(), {image}, bytes, {ExceptionCategory::out_of_memory});
   }
   size_t protect_callable(llvm::Value *image) {
     auto *allocation = here();
@@ -806,7 +808,7 @@ public:
       emit(known->getZExtValue());
       return;
     }
-    for (size_t kind = 1; kind <= 4; ++kind) {
+    for (size_t kind = 1; kind < exception_categories.size(); ++kind) {
       auto *match = label("exception.type");
       auto *next = label("exception.next");
       b().CreateCondBr(b().CreateICmpEQ(category, integer(i64(), kind)), match, next);
@@ -826,7 +828,7 @@ public:
     enter(bad);
     const auto site = exception_sites_.size();
     exception_sites_.push_back(source_context());
-    exception_handler_(4, exception_payload(integer(i64(), site), integer(i64(), 0), integer(i64(), 0)));
+    exception_handler_(exception_id(ExceptionCategory::null_pointer), exception_payload(integer(i64(), site), integer(i64(), 0), integer(i64(), 0)));
     enter(next);
   }
   llvm::Value *nullable_address(llvm::Value *owner, llvm::Value *offset) {
@@ -853,7 +855,7 @@ public:
   llvm::Value *exception_chain(llvm::Value *primary, llvm::Value *cause, llvm::Value *category) {
     auto *handle = checked_service("cod_lang_exception_chain", i64(),
         {category, exception_field(cause, 0), exception_field(cause, 1), exception_field(cause, 2), exception_field(cause, 3)},
-        integer(i64(), 5 * sizeof(uint64_t)), {1});
+        integer(i64(), 5 * sizeof(uint64_t)), {ExceptionCategory::out_of_memory});
     return b().CreateInsertValue(primary, handle, {3});
   }
   llvm::Value *cause_count(llvm::Value *payload) {
@@ -1158,7 +1160,7 @@ private:
   }
   llvm::Value *allocate(llvm::Value *owner, llvm::Value *bytes, uint64_t alignment) {
     return checked_service("cod_lang_region_alloc", i64(), {owner, bytes, integer(i64(), alignment)},
-                           bytes, {2});
+                           bytes, {ExceptionCategory::region_capacity_exceeded});
   }
   void store_reference(llvm::Value *region, llvm::Value *field, llvm::Value *offset) {
     auto *target = address(region, offset);
@@ -1185,7 +1187,7 @@ private:
 public:
   llvm::Value *region_new(Type capacity_type, llvm::Value *capacity) {
     auto *bytes = b().CreateZExtOrTrunc(capacity, i64());
-    return checked_service("cod_lang_region_new", pointer_type(), {bytes}, bytes, {1, 3});
+    return checked_service("cod_lang_region_new", pointer_type(), {bytes}, bytes, {ExceptionCategory::out_of_memory, ExceptionCategory::invalid_capacity});
   }
   llvm::Value *hold_region(llvm::Value *region, bool module_lifetime) {
     llvm::IRBuilder<> allocations(&entry_->getEntryBlock(), entry_->getEntryBlock().begin());
@@ -1206,7 +1208,7 @@ public:
     auto *record = record_type(type);
     auto *bytes = integer(i64(), std::max<uint64_t>(1, layout.getTypeAllocSize(record).getFixedValue()));
     return checked_service("cod_lang_region_reserve_root", i64(),
-        {owner, bytes, integer(i64(), layout.getABITypeAlign(record).value())}, bytes, {2});
+        {owner, bytes, integer(i64(), layout.getABITypeAlign(record).value())}, bytes, {ExceptionCategory::region_capacity_exceeded});
   }
   llvm::Value *region_size(llvm::Value *owner, bool capacity) {
     return call_runtime(capacity ? "cod_lang_region_capacity" : "cod_lang_region_used", i64(), {owner});

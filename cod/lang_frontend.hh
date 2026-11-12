@@ -452,7 +452,7 @@ class Compiler {
     std::vector<CallSite> calls;
     NativeCallDemand *parent = nullptr;
     std::map<size_t, size_t> returns = {};
-    std::array<std::map<size_t, size_t>, 4> failures = {};
+    std::array<std::map<size_t, size_t>, concrete_exception_count> failures = {};
     std::set<const Procedure *> emitted = {};
     std::map<const Procedure *, LLVMEmission::CallableMatch> matches = {};
     llvm::BasicBlock *tail = nullptr;
@@ -471,7 +471,7 @@ class Compiler {
     size_t record_result = 0;
     bool pending_argument_facts = false;
     std::map<size_t, size_t> initialized = {};
-    std::array<std::map<size_t, size_t>, 4> failure_initialized = {};
+    std::array<std::map<size_t, size_t>, concrete_exception_count> failure_initialized = {};
   };
   std::deque<NativeCallDemand> native_call_demands_;
   size_t callable_compilations_ = 0;
@@ -489,7 +489,7 @@ class Compiler {
   struct Landing { llvm::BasicBlock *block = nullptr; std::vector<ExceptionalEdge> incoming; };
   struct HandlerScope {
     size_t cleanup, holding_begin;
-    std::array<Landing, 4> landing;
+    std::array<Landing, concrete_exception_count> landing;
   };
   std::vector<HandlerScope *> handlers_;
   std::optional<Value> caught_exception_;
@@ -521,8 +521,10 @@ class Compiler {
   NativeActivation *native_context_ = nullptr;
 
   static Type exception_type(size_t category) {
-    static const std::array names{"SystemException", "OutOfMemory", "RegionCapacityExceeded", "InvalidCapacity", "NullPointerException"};
-    return {Type::exception, names.at(category), category};
+    return {Type::exception, exception_categories.at(category).name, category};
+  }
+  static Type exception_type(ExceptionCategory category) {
+    return exception_type(exception_id(category));
   }
   void require_npe_handler(const Location &at) {
     if (!npe_allowed_)
@@ -530,7 +532,7 @@ class Compiler {
   }
   bool declares_npe(const std::vector<Type> &types, const Module &module, const Location &at) {
     for (const auto &type : types)
-      if (resolve(type, module, at) != exception_type(4))
+      if (resolve(type, module, at) != exception_type(ExceptionCategory::null_pointer))
         fail(at, "throws requires the NullPointerException identity from std:exceptions");
     return !types.empty();
   }
@@ -787,7 +789,7 @@ class Compiler {
       auto *next = pending.back(); pending.pop_back();
       if (!visited.insert(next).second) continue;
       if (const auto *constant = llvm::dyn_cast<llvm::ConstantInt>(next)) {
-        if (constant->getZExtValue() == 4) return true;
+        if (constant->getZExtValue() == exception_id(ExceptionCategory::null_pointer)) return true;
       } else if (const auto *phi = llvm::dyn_cast<llvm::PHINode>(next)) {
         for (auto &incoming : phi->incoming_values()) pending.push_back(incoming.get());
       } else if (const auto *select = llvm::dyn_cast<llvm::SelectInst>(next)) {
@@ -1488,7 +1490,7 @@ class Compiler {
         if (parameter == Type::void_type) fail(at, "a procedure parameter must have a value type");
       }
       type.target = std::make_shared<Type>(resolve(*type.target, module, at));
-      if (declares_npe(type.throws_types, module, at)) type.throws_types = {exception_type(4)};
+      if (declares_npe(type.throws_types, module, at)) type.throws_types = {exception_type(ExceptionCategory::null_pointer)};
       return type;
     }
     if (type.kind == Type::reference) {
@@ -1727,7 +1729,7 @@ class Compiler {
     scanned_.push_back(canonical);
     if (builtin) {
       if (path == "std:exceptions") {
-        for (size_t category = 0; category <= 4; ++category) {
+        for (size_t category = 0; category < exception_categories.size(); ++category) {
           const auto type = exception_type(category);
           result.world.types.emplace(type.name, type);
           result.world.exports.emplace(type.name, type);
@@ -1929,7 +1931,7 @@ class Compiler {
       type_context_.bindings.emplace(form.type_parameters[i].name, Type{Type::parameter, {}, i});
     for (const auto &parameter : form.type_parameters)
       type.bounds.push_back(parameter.bound ? resolve(*parameter.bound, module, parameter.at) : Type::void_type);
-    if (declares_npe(form.throws_types, module, form.at)) type.throws_types = {exception_type(4)};
+    if (declares_npe(form.throws_types, module, form.at)) type.throws_types = {exception_type(ExceptionCategory::null_pointer)};
     type.variadic = variadic(form);
     for (const auto &parameter : form.parameters)
       type.parameters.push_back(resolve(parameter.type, module, parameter.at));
@@ -5353,7 +5355,7 @@ class Compiler {
     type.pure_callable = true;
     type.parameters = {value.type};
     type.target = std::make_shared<Type>(target);
-    if (npe_allowed_) type.throws_types = {exception_type(4)};
+    if (npe_allowed_) type.throws_types = {exception_type(ExceptionCategory::null_pointer)};
     auto conversion = selected;
     conversion.type = std::move(type);
     auto result = contextual_call(conversion, {value}, {stored_value(value, value.type, at)},
@@ -5878,7 +5880,7 @@ class Compiler {
         fail(expr.at, "cause_at requires an exception and a u64 index");
       require(args[1].type, Type::uint64, expr.at);
       const auto [payload, category] = ir_.cause_at(args[0].native, args[1].native);
-      auto result = scalar(exception_type(0), payload);
+      auto result = scalar(exception_type(ExceptionCategory::system), payload);
       result.exception_category = category;
       return result;
     }
@@ -6292,7 +6294,7 @@ class Compiler {
                           std::optional<Type> callable_result = {}, const Value *result_owner = nullptr) {
     const bool parent_module = module_top_level_;
     const auto module_scope = llvm::SaveAndRestore(module_top_level_, false);
-    std::array<const Expression *, 4> catches{};
+    std::array<const Expression *, concrete_exception_count> catches{};
     const Expression *finally = nullptr;
     for (size_t i = 1; i < expr.children.size(); ++i) {
       const auto &clause = *expr.children[i];
@@ -6312,7 +6314,7 @@ class Compiler {
     handlers_.push_back(&protected_scope);
     Value normal;
     {
-      const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, npe_allowed_ || catches[3]);
+      const auto checked_scope = llvm::SaveAndRestore(npe_allowed_, npe_allowed_ || catches[exception_id(ExceptionCategory::null_pointer) - 1]);
       normal = block(*expr.children.front(), module, env, locals.nested(), function_context, false, callable_result, copy_bits, {}, read_result, result_owner);
     }
     handlers_.pop_back();
@@ -6366,7 +6368,7 @@ class Compiler {
       // still run this try's finally before proceeding to an outer handler.
       HandlerScope catch_scope{ir_.scope(), holdings_.size(), {}};
       if (finally) handlers_.push_back(&catch_scope);
-      if (!clause->annotation) error.type = exception_type(0);
+      if (!clause->annotation) error.type = exception_type(ExceptionCategory::system);
       auto inner_locals = locals.nested();
       declare_local(inner_locals, clause->text, error, module, clause->at);
       Value result;

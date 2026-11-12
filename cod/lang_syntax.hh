@@ -1039,7 +1039,7 @@ class Parser {
                         (expr.kind == K::callable && !expr.definition->name.empty())))
       fail(expr.at, "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope");
     for (size_t i = 0; i < expr.children.size(); ++i) {
-      const bool iteration = (expr.kind == K::range_for && i == 2) ||
+      const bool iteration = (expr.kind == K::range_for && i >= 2) ||
                              (expr.kind == K::fold && i == 3);
       validate_iteration_scopes(*expr.children[i], iteration || needs_scope);
     }

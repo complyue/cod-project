@@ -1,0 +1,1 @@
+{{ for (i in 0u64 .. 0u64) {} else { func value = func () -> const u64 { 1u64 }; }; }};

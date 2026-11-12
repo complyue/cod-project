@@ -393,7 +393,7 @@ static const int audit = [] {
             evidence["compile_rejections"] = list(rejects)
             evidence["compiler_sha256"] = hashlib.sha256((toolchain / "bin/cod").read_bytes()).hexdigest()
             evidence["source_sha256"] = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-                for path in [root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
+                for path in [root / "cod/lang_exceptions.hh", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
                              root / "cod/lang_native_runtime.hh", root / "include/shilos/region.hh",
                              directory / "exception-allocation.cod", directory / "exception-chain.cod",
                              directory / "exception-reraise.cod", directory / "recursive-calls.cod", directory / "regional_runtime_tests.py",

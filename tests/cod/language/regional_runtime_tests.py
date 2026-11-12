@@ -286,7 +286,7 @@ def main():
                               "Three loop iterations preserve captured/hidden owners, restore the outer binding and release each inner owner before the next acquisition.",
                               "An untaken branch acquires no owner; the module owner releases last. Allocation-address reuse is allowed after release."],
                     "source_sha256": {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
-                                      for path in [root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
+                                      for path in [root / "cod/lang_exceptions.hh", root / "cod/lang_syntax.hh", root / "cod/lang_frontend.hh", root / "cod/lang_llvm.hh",
                                                    root / "cod/lang_native_runtime.hh", root / "include/shilos/region.hh",
                                                    directory / "region-records.cod", directory / "region-pool.cod",
                                                    directory / "reusable-pool.cod", directory / "pool-interface.cod",

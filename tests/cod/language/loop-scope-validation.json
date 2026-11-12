@@ -1,0 +1,61 @@
+{
+  "layout": {
+    "owners_acquired": 13,
+    "owners_released": 13,
+    "failed_acquisitions": 2,
+    "peak_live_owners": 3
+  },
+  "frontend_seconds": 0.019476973015116528,
+  "native_compile_link_seconds": 1.922978479997255,
+  "native_process_seconds": 0.0014496350195258856,
+  "llvm_ir_bytes": 76282,
+  "bitcode_bytes": 18928,
+  "recorded_utc": "2026-11-12T10:34:31.670255+00:00",
+  "toolchain": "build",
+  "trace": [
+    "3",
+    "3",
+    "2",
+    "3",
+    "3",
+    "2",
+    "3",
+    "3",
+    "2",
+    "1",
+    "2",
+    "1",
+    "2",
+    "1",
+    "2",
+    "1"
+  ],
+  "compiler_sha256": "3af19a729eb96a728dec3ffa63b3da51a8610136410696123d9af45a909b89d9",
+  "source_sha256": {
+    "cod/lang_exceptions.hh": "d4e23dea9d7d69bf4645b15c9848e484488c7ea6c7be556397e7c746e6375e68",
+    "cod/lang_syntax.hh": "c8149c9d49c2e41768b87ee03360985b393947c65e05c47ef312e3f1f27ba9d3",
+    "cod/lang_frontend.hh": "ae341a41196d634e2b483fbc2f8f50ab0b00dd84312439242966f46f9f850558",
+    "cod/lang_llvm.hh": "c578259bd40934e164461b7ce3a8d12cb4bf6cabb2bc6b24b141815af18f8011",
+    "cod/lang_native_runtime.hh": "041aeea37aa18d33787c516f0284f7362032c0f89e0653b21b066d4224e92e55",
+    "tests/cod/language/scopes/iteration-effects.cod": "019a86f4e98059ad786067ae761fd65930138b53eaa0f73c1474116e31417338",
+    "tests/cod/language/loop_scope_tests.py": "9eadbb12f7dce379843e5d6d66f382cafa88dbcb25bc0049745dbe5554000bca",
+    "tests/cod/language/regional_runtime_tests.py": "ce3c4c0a7e5c3050735e776105249c4b604c79ab8c6481c22063879afa77e11b",
+    "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241"
+  },
+  "coverage": {
+    "design": "D-17r27 / H-365",
+    "verified": [
+      "ordinary loop effects restored at normal and throwing iteration exits",
+      "nested iteration owners released without freeing hidden outer owners",
+      "zero-iteration else normal and throwing effect/resource restoration",
+      "captured procedure replay preserves the outer owner",
+      "mutations of pre-existing regional data survive binding restoration"
+    ],
+    "outstanding": [
+      "explicit return completion and cleanup",
+      "ordinary grouping without implicit lexical/effect scopes",
+      "defer registration, accumulation, handlers and cleanup",
+      "deferred loop-control capture and borrowed-owner checking"
+    ]
+  }
+}

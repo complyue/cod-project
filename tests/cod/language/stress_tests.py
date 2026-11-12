@@ -326,7 +326,7 @@ def main():
         print(json.dumps({'case': 'deep-import-implementation-conflict', 'passed': diagnostic_passed}), flush=True)
 
     if report := os.environ.get('COD_LANGUAGE_STRESS_REPORT'):
-        sources = [root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh', root / 'cod/lang_llvm.hh',
+        sources = [root / 'cod/lang_exceptions.hh', root / 'cod/lang_syntax.hh', root / 'cod/lang_frontend.hh', root / 'cod/lang_llvm.hh',
                    root / 'cod/lang_native_runtime.hh', root / 'include/shilos/region.hh', Path(__file__).resolve()]
         Path(report).write_text(json.dumps({
             'schema_version': 2, 'recorded_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),

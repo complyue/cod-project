@@ -2333,5 +2333,69 @@
     "file": "closures/callable-recursive-unused-factory.cod",
     "exit": 0,
     "stdout": "0\n"
+  },
+  {
+    "file": "scopes/iteration-else-value.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "scopes/iteration-else-reference.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "scopes/iteration-else-region.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "scopes/iteration-else-alias.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "scopes/iteration-else-callable.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "scopes/iteration-else-definition.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "scopes/iteration-else-group.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "scopes/iteration-else-branch.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "scopes/iteration-else-nested.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a loop-body variable declaration requires a nested per-iteration {{ ... }} scope"
+  },
+  {
+    "file": "scopes/iteration-else-explicit.cod",
+    "exit": 0,
+    "stdout": "41\n42\n43\n"
+  },
+  {
+    "file": "scopes/iteration-effects.cod",
+    "exit": 0,
+    "stdout": "3\n3\n2\n3\n3\n2\n3\n3\n2\n1\n2\n1\n2\n1\n2\n1\n"
   }
 ]

@@ -1,0 +1,60 @@
+using symbol "std:io" @assert;
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+region symbol @arena;
+symbol @value:u64;
+array Values[u32]:u64;
+effect @arena <- region(1024u64);
+effect @value <- 42u64;
+val outer_capacity <- capacity_bytes(@arena);
+ref outer = alloc @arena Values(1u64, 0u64);
+procedure @saved() -> const u64 { capacity_bytes(@arena) }
+for (i in 0u64 .. 3u64) {
+  behave @assert(@value == 42u64 && capacity_bytes(@arena) == outer_capacity);
+  effect @value <- i + 1u64;
+  effect @arena <- region(128u64);
+  outer[0u32] <- outer[0u32] + 1u64;
+  behave @assert(perform @saved() == outer_capacity);
+  behave @assert(behave @saved() < outer_capacity);
+  for (j in 0u64 .. 2u64) {
+    effect @arena <- region(256u64);
+    effect @value <- 100u64;
+    behave @assert(perform @saved() == outer_capacity);
+    behave @print(3);
+  };
+  behave @assert(@value == i + 1u64);
+  behave @print(2);
+};
+behave @assert(@value == 42u64 && capacity_bytes(@arena) == outer_capacity && outer[0u32] == 3u64);
+behave @print(1);
+try {
+  for (i in 0u64 .. 3u64) {
+    effect @value <- 99u64;
+    effect @arena <- region(192u64);
+    behave @print(2);
+    effect @arena <- region(0u64);
+  };
+} catch (e:const InvalidCapacity) {
+  behave @assert(@value == 42u64 && capacity_bytes(@arena) == outer_capacity);
+  behave @print(1);
+};
+for (i in 0u64 .. 0u64) {} else {
+  effect @value <- 77u64;
+  effect @arena <- region(160u64);
+  behave @assert(perform @saved() == outer_capacity);
+  behave @assert(behave @saved() < outer_capacity);
+  behave @print(2);
+};
+behave @assert(@value == 42u64 && capacity_bytes(@arena) == outer_capacity);
+behave @print(1);
+try {
+  for (i in 0u64 .. 0u64) {} else {
+    effect @value <- 66u64;
+    effect @arena <- region(224u64);
+    behave @print(2);
+    effect @arena <- region(0u64);
+  };
+} catch (e:const InvalidCapacity) {
+  behave @assert(@value == 42u64 && capacity_bytes(@arena) == outer_capacity);
+  behave @print(1);
+};

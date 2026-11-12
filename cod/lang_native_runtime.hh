@@ -1,13 +1,20 @@
 //===--- lang_native_runtime.hh - Native system-service boundary ----===//
 #pragma once
 
+#include "lang_exceptions.hh"
+
 #include <string>
 
 namespace cod::language {
 
 inline std::string native_runtime_source(bool regions) {
-  std::string source = R"CPP(
-#include <cstdint>
+  std::string source = "#include <cstdint>\nenum class CoDException : std::uint64_t {\n";
+  for (const auto &category : exception_categories)
+    source += std::string(category.name) + " = " + std::to_string(exception_id(category.category)) + ",\n";
+  source += "};\nstatic constexpr const char *cod_exception_names[] = {\n";
+  for (const auto &category : exception_categories) source += "\"" + std::string(category.name) + "\",\n";
+  source += "};\n";
+  source += R"CPP(
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -42,13 +49,13 @@ void *cod_lang_callable_create(std::uint64_t fixed, std::uint64_t count, void *c
   for (std::uint64_t i = 0; i < count; ++i) {
     const auto child_bytes = *static_cast<const std::uint64_t *>(children[i]);
     if (child_bytes > std::numeric_limits<std::size_t>::max() - bytes) {
-      status[0] = 1;
+      status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
       return nullptr;
     }
     bytes += child_bytes;
   }
   auto *image = static_cast<unsigned char *>(std::malloc(static_cast<std::size_t>(bytes)));
-  if (!image) { status[0] = 1; return nullptr; }
+  if (!image) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory); return nullptr; }
   std::memcpy(image, &bytes, sizeof(bytes));
   auto position = fixed;
   for (std::uint64_t i = 0; i < count; ++i) {
@@ -62,7 +69,7 @@ void *cod_lang_callable_create(std::uint64_t fixed, std::uint64_t count, void *c
 void *cod_lang_callable_copy(const void *source, std::uint64_t *status) {
   const auto bytes = *static_cast<const std::uint64_t *>(source);
   auto *image = std::malloc(static_cast<std::size_t>(bytes));
-  if (!image) { status[0] = 1; return nullptr; }
+  if (!image) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory); return nullptr; }
   std::memcpy(image, source, static_cast<std::size_t>(bytes));
   return image;
 }
@@ -79,7 +86,7 @@ std::uint64_t cod_lang_exception_chain(std::uint64_t category, std::uint64_t sit
     if (initial) cod_causes = initial.release();
     return static_cast<std::uint64_t>(records.size());
   } catch (const std::bad_alloc &) {
-    status[0] = 1;
+    status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory);
     return 0;
   }
 }
@@ -108,9 +115,9 @@ void cod_lang_exception_cause(std::uint64_t cause, std::uint64_t index, std::uin
 [[noreturn]] void cod_lang_uncaught(std::uint64_t category, std::uint64_t site,
                                   std::uint64_t requested, std::uint64_t available, std::uint64_t cause) {
   const auto print = [](const char *prefix, const CoDCause &value) {
-    const char *name = value.category == 1 ? "OutOfMemory" :
-                       value.category == 2 ? "RegionCapacityExceeded" :
-                       value.category == 3 ? "InvalidCapacity" : "NullPointerException";
+    if (!value.category || value.category >= sizeof(cod_exception_names) / sizeof(*cod_exception_names))
+      runtime_failure("invalid intrinsic exception category");
+    const char *name = cod_exception_names[value.category];
     if (const char *context = cod_lang_exception_site(value.site)) std::fprintf(stderr, "%s: ", context);
     std::fprintf(stderr, "%s %s (site=%llu, requested=%llu, available=%llu)\n", prefix, name,
                  static_cast<unsigned long long>(value.site), static_cast<unsigned long long>(value.requested),
@@ -153,11 +160,11 @@ using CoDRegionOwner = shilos::auto_region<CoDRegionRoot>;
 extern "C" {
 void *cod_lang_region_new(std::uint64_t capacity, std::uint64_t *status) {
   if (capacity < sizeof(CoDRegionRoot) || capacity > std::numeric_limits<std::size_t>::max() - sizeof(CoDRegion)) {
-    status[0] = 3;
+    status[0] = static_cast<std::uint64_t>(CoDException::InvalidCapacity);
     return nullptr;
   }
   try { return CoDRegion::alloc_region(static_cast<std::size_t>(capacity)); }
-  catch (const std::bad_alloc &) { status[0] = 1; return nullptr; }
+  catch (const std::bad_alloc &) { status[0] = static_cast<std::uint64_t>(CoDException::OutOfMemory); return nullptr; }
 }
 void cod_lang_region_free(void *region) { CoDRegion::free_region(static_cast<CoDRegion *>(region)); }
 std::uint64_t cod_lang_region_root(void *owner) {
@@ -179,7 +186,7 @@ std::uint64_t cod_lang_region_reserve_root(void *owner, std::uint64_t bytes, std
     region.allocate(static_cast<std::size_t>(bytes - sizeof(CoDRegionRoot)), 1);
     return offset;
   } catch (const std::bad_alloc &) {
-    status[0] = 2;
+    status[0] = static_cast<std::uint64_t>(CoDException::RegionCapacityExceeded);
     status[1] = region.free_capacity() + sizeof(CoDRegionRoot);
     return 0;
   }
@@ -191,7 +198,7 @@ std::uint64_t cod_lang_region_alloc(void *owner, std::uint64_t bytes, std::uint6
     auto *storage = region.allocate(static_cast<std::size_t>(bytes), static_cast<std::size_t>(alignment));
     return static_cast<std::uint64_t>(static_cast<std::byte *>(storage) - reinterpret_cast<std::byte *>(&region));
   } catch (const std::bad_alloc &) {
-    status[0] = 2;
+    status[0] = static_cast<std::uint64_t>(CoDException::RegionCapacityExceeded);
     status[1] = region.capacity() - region.occupation();
     return 0;
   }
