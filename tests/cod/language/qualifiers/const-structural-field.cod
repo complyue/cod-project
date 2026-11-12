@@ -1,0 +1,5 @@
+data Store {ptr ticks:const u64;}
+data Writable {ptr ticks:u64;}
+owned region source <- make Store(capacity=128u64){ticks=null};
+function replace(region value:Writable)->void {}
+replace(source);

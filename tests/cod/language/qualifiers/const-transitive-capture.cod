@@ -1,0 +1,2 @@
+data Arena {seed:u64;} data Node {value:u64; ref child:u64;} owned region arena <- make Arena(capacity=4096u64){seed<-0u64}; ref node=alloc arena Node(1u64,arena.seed);
+ref observed:const Node=node; ref var alias in arena -> observed.child; func bad=func()->void{alias <- 2u64;}; bad();

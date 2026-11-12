@@ -2,7 +2,7 @@ region State { ticks:u64; }
 function writable(region state:State)->func()->const u64 with {region state} {
   return func()->const u64 { return state.ticks }
 }
-function readonly(const region state:State)->func()->const u64 with {region state} {
+function readonly(region state:const State)->func()->const u64 with {region state} {
   return func()->const u64 { return state.ticks }
 }
 function select(region state:State, choose:bool)->func()->const u64 with {region state} {

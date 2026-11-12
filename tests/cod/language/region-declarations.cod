@@ -12,7 +12,7 @@ function edit(region arena:Arena, cell:Cell in arena, value:i64) -> void {
   deref(cell).value <- value;
   {}
 }
-function inspect(const region arena:Arena) -> const u64 { return root(arena).id }
+function inspect(region arena:const Arena) -> const u64 { return root(arena).id }
 function origin(cell:Cell in r) -> region :Arena in r where {region r:Arena} { return r }
 function echo(region arena:Arena) -> region :Arena in arena { return arena }
 effect proc @factory(bytes:u64) -> owned region :Arena { return create(bytes) };

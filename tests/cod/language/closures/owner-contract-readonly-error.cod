@@ -1,5 +1,5 @@
 using "structural-api.cod" Counter;
-function reader(const region state:Counter) -> (func()->const u64 with {region state}) {
+function reader(region state:const Counter) -> (func()->const u64 with {region state}) {
   return func [state] () -> const u64 { return state.ticks }
 }
 function mutate(action:(func()->const u64 with {region r})) -> void where {region r:Counter} {

@@ -37,7 +37,7 @@ behave @print(view.value);
 behave @print(view.extra);
 view.value<-41u64;
 behave @print(concrete.value);
-function readonly(const region r:State)->const region :State in r {return r}
+function readonly(region r:const State)->region :const State in r {return r}
 func read=readonly;
 region immutable=read(concrete);
 behave @print(immutable.value);

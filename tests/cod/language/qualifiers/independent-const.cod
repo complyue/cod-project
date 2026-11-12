@@ -1,0 +1,43 @@
+using symbol "std:io" @print;
+val first:u64 <- 1u64;
+val second:u64 <- 2u64;
+ptr mutable:u64 = first;
+const ptr fixed:u64 = first;
+ptr observed:const u64 = first;
+const ptr both:const u64 = first;
+mutable <- 5u64;
+fixed <- 6u64;
+observed = second;
+behave @print(both);
+behave @print(observed);
+ptr var observer:const u64 -> mutable;
+observer = second;
+mutable <- 7u64;
+behave @print(observer);
+const ptr var pinned:u64 -> mutable;
+pinned <- 8u64;
+behave @print(second);
+mutable = first;
+behave @print(pinned);
+ref observed_ref:const u64 = first;
+observed_ref = second;
+const ref fixed_ref:u64 = first;
+fixed_ref <- 9u64;
+const ref both_ref:const u64 = first;
+behave @print(both_ref);
+behave @print(observed_ref);
+function local(const ptr x:u64) -> const u64 { x <- 10u64; return x; }
+function borrowed(const ref x:u64 in O) -> void where {owner O} { x <- 11u64; }
+function declared(ptr x:u64) -> const u64;
+function declared(const ptr x:u64) -> const u64 { x <- 12u64; return x; }
+behave @print(local(first));
+behave @print(first);
+borrowed(first);
+behave @print(first);
+behave @print(declared(first));
+func callback = func(const ptr x:u64)->const u64 { x <- 13u64; return x; };
+function apply(action:func(u64)->const u64, x:u64)->const u64 { return action(x); }
+behave @print(apply(callback,first));
+func read = func(x:const u64)->const u64 { return x; };
+function inspect(action:func(const u64)->const u64, x:u64)->const u64 { return action(x); }
+behave @print(inspect(read,first));

@@ -1,0 +1,2 @@
+val first:u64 <- 1u64; val second:u64 <- 2u64;
+ptr observed:const u64=first; observed <- 3u64;

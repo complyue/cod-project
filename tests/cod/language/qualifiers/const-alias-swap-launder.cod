@@ -1,0 +1,2 @@
+val first:u64 <- 1u64; val second:u64 <- 2u64;
+ptr mutable=first; ptr var observed:const u64 -> mutable; ptr readonly:const u64=second; intrinsic (<=>)(observed,readonly);

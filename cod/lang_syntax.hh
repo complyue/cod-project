@@ -1,6 +1,7 @@
 //===--- lang_syntax.hh - CoD source-language prototype syntax ------===//
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <memory>
@@ -293,6 +294,7 @@ struct Expression {
   std::shared_ptr<Form> definition = {};
   bool intrinsic = false;
   bool fixed_binding = false;
+  bool read_only = false;
   bool scoped = false;
   std::string declaration_kind = {};
   std::string owner_name = {};
@@ -309,6 +311,7 @@ struct Parameter {
   std::string owner = {};
   bool read_only = false;
   std::string declaration_kind = {};
+  bool fixed_binding = false;
 };
 struct TypeParameter { std::string name; std::optional<Type> bound; Location at; };
 struct OwnerParameter { std::string name; std::optional<Type> root; Location at; bool explicit_parameter = false; };
@@ -471,17 +474,24 @@ class Parser {
       if (!take(")")) {
         do {
           if (type.variadic) fail(peek().at, "only the last procedure parameter can be variadic");
-          type.parameters.push_back(signature_type());
+          bool read_only = false;
+          std::string mode;
+          type.parameters.push_back(signature_type(read_only, mode));
+          type.const_views.push_back(read_only);
+          type.nullable_views.push_back(mode == "ptr");
           type.variadic = take("...");
         } while (take(","));
         expect(")");
       }
       expect("->");
-      if (take("const")) {
-        type.const_views.resize(type.parameters.size() + 1);
-        type.const_views.back() = true;
-      }
-      type.target = std::make_shared<Type>(signature_type());
+      bool result_const = false;
+      std::string result_mode;
+      type.target = std::make_shared<Type>(signature_type(result_const, result_mode));
+      if (result_mode == "val") fail(token.at, "val declares storage or a parameter, not a result binding");
+      type.const_views.push_back(result_const);
+      type.nullable_views.push_back(result_mode == "ptr");
+      if (std::none_of(type.const_views.begin(), type.const_views.end(), [](bool value) { return value; })) type.const_views.clear();
+      if (std::none_of(type.nullable_views.begin(), type.nullable_views.end(), [](bool value) { return value; })) type.nullable_views.clear();
       if (take("with")) {
         expect("{");
         do {
@@ -547,21 +557,25 @@ class Parser {
       expect(")");
     }
   }
-  Type region_annotation(bool owned) {
+  Type region_annotation(bool owned, bool *read_only = nullptr) {
     Type type{Type::region};
     type.owned = owned;
     if (is("<")) fail(peek().at, "region root annotations use ':Root', not '<Root>'");
     if (is(":")) {
       type_separator();
+      if (read_only) *read_only = take("const");
       type.target = std::make_shared<Type>(parse_type());
     }
     return type;
   }
-  Type signature_type() {
+  Type signature_type(bool &read_only, std::string &mode) {
+    if (is("ptr") || is("ref") || is("val")) mode = tokens_[cursor_++].text;
+    read_only = take("const");
     if (is("region") || is("owned")) {
+      if (read_only) fail(peek().at, "region target const belongs after the root annotation colon");
       const bool owned = take("owned");
       expect("region");
-      return region_annotation(owned);
+      return region_annotation(owned, &read_only);
     }
     return parse_type();
   }
@@ -612,8 +626,7 @@ class Parser {
     if (parameter_list) {
       if (!take(")")) {
         do {
-          const bool const_region = is("const") && (is("region", 1) || (is("owned", 1) && is("region", 2)));
-          if (const_region) expect("const");
+          const bool fixed_binding = take("const");
           const bool owned_region = take("owned");
           const bool regional = take("region");
           if (owned_region && !regional) fail(peek().at, "owned requires a region declaration");
@@ -621,9 +634,9 @@ class Parser {
           if (!regional && (is("ptr") || is("ref") || is("val"))) mode = tokens_[cursor_++].text;
           auto param = value_name();
           Parameter parameter{param.text, Type::void_type, param.at, false, {}};
+          parameter.fixed_binding = fixed_binding;
           if (regional) {
-            parameter.type = region_annotation(owned_region);
-            parameter.read_only = const_region;
+            parameter.type = region_annotation(owned_region, &parameter.read_only);
           } else {
             type_separator();
             parameter.read_only = take("const");
@@ -644,9 +657,8 @@ class Parser {
     const bool preceding_where = take("where");
     if (preceding_where) generic_clause(form);
     if (take("->")) {
-      form.result_const = take("const");
-      if (is("ptr") || is("ref")) form.result_kind = tokens_[cursor_++].text;
-      form.result_type = signature_type();
+      form.result_type = signature_type(form.result_const, form.result_kind);
+      if (form.result_kind == "val") fail(form.at, "val declares storage or a parameter, not a result binding");
       if (take("in")) form.result_owner = ordinary_name().text;
     }
     if (!form.result_kind.empty() && form.result_owner.empty())
@@ -697,18 +709,21 @@ class Parser {
       fail(form.at, "effect proc requires a symbolic procedure definition");
   }
   bool callable_binding() const {
-    return (is("func") || is("proc")) && tokens_[cursor_ + 1].kind == TokenKind::identifier &&
-           (is("=", 2) || is(":", 2));
+    const size_t prefix = is("const") ? 1 : 0;
+    return (is("func", prefix) || is("proc", prefix)) && tokens_[cursor_ + prefix + 1].kind == TokenKind::identifier &&
+           (is("=", prefix + 2) || is(":", prefix + 2));
   }
   Expr primary() {
     auto token = peek();
     if (callable_binding()) {
+      const bool fixed_binding = take("const");
       const auto mode = tokens_[cursor_++].text;
       auto group = make(Expression::Kind::pointer_group, token);
       group->declaration_kind = mode;
+      group->fixed_binding = fixed_binding;
       auto binding = make(Expression::Kind::pointer, value_name());
       binding->declaration_kind = mode;
-      if (take(":")) binding->annotation = parse_type();
+      if (take(":")) { binding->read_only = take("const"); binding->annotation = parse_type(); }
       expect("=");
       binding->binding = "=";
       binding->children.push_back(expression());
@@ -725,11 +740,14 @@ class Parser {
       expr->definition = std::move(definition);
       return expr;
     }
-    if (is("owned") || (is("region") && !is("(", 1))) {
+    if (is("owned") || (is("region") && !is("(", 1)) ||
+        (is("const") && (is("owned", 1) || is("region", 1)))) {
+      const bool fixed_binding = take("const");
       const bool owned = take("owned");
       expect("region");
       auto expr = make(Expression::Kind::region_binding, value_name());
-      expr->annotation = region_annotation(owned);
+      expr->fixed_binding = fixed_binding;
+      expr->annotation = region_annotation(owned, &expr->read_only);
       expr->binding = owned ? "<-" : "=";
       expect(expr->binding);
       expr->children.push_back(expression());
@@ -831,16 +849,19 @@ class Parser {
       }
       return expr;
     }
-    if (is("var") || ((is("val") || is("ref") || is("ptr")) && is("var", 1))) {
+    const size_t qualifier = is("const") ? 1 : 0;
+    if (is("var", qualifier) || ((is("val", qualifier) || is("ref", qualifier) || is("ptr", qualifier)) && is("var", qualifier + 1))) {
+      const bool fixed_binding = take("const");
       std::string mode;
       if (!is("var")) mode = tokens_[cursor_++].text;
       expect("var");
       auto expr = make(Expression::Kind::alias, value_name());
       expr->declaration_kind = mode;
+      expr->fixed_binding = fixed_binding;
       if (take(":")) {
-        expr->fixed_binding = take("const");
+        expr->read_only = take("const");
         if (!is("->") && !is("in")) expr->annotation = parse_type();
-        else if (!expr->fixed_binding) fail(peek().at, "an alias colon requires a type or const qualifier");
+        else if (!expr->read_only) fail(peek().at, "an alias colon requires a type or const qualifier");
       }
       if (take("in")) expr->owner_name = ordinary_name().text;
       if (!take("->")) fail(peek().at, "var aliases require '-> lvalue'; use ref/ptr for reference bindings or val for independent bits storage");
@@ -857,7 +878,7 @@ class Parser {
         if (is("{")) { group->children.push_back(block()); break; }
         auto expr = make(Expression::Kind::pointer, value_name());
         expr->declaration_kind = mode;
-        if (take(":")) expr->annotation = parse_type();
+        if (take(":")) { expr->read_only = take("const"); expr->annotation = parse_type(); }
         if (take("in")) expr->owner_name = ordinary_name().text;
         if (take("<-")) expr->binding = "<-";
         else { expect("="); expr->binding = "="; }
@@ -1154,16 +1175,20 @@ public:
           fail(start.at, "abstract type declarations have no body; use data for a representation");
         expect("{");
         while (!take("}")) {
+          const bool fixed_binding = take("const");
           if (is("region") || (is("owned") && is("region", 1)))
             fail(peek().at, "region handles cannot be stored in user data fields");
           std::string mode;
           if (is("ref") || is("ptr") || is("val")) mode = tokens_[cursor_++].text;
           auto field = name(TokenKind::identifier);
           type_separator();
+          const bool read_only = take("const");
           auto type = parse_type();
           if (type == Type::void_type) fail(field.at, "a product field must have a value type");
           form->parameters.push_back({field.text, type, field.at, false, {}});
           form->parameters.back().declaration_kind = mode;
+          form->parameters.back().fixed_binding = fixed_binding;
+          form->parameters.back().read_only = read_only;
           if (!is("}")) expect(";");
         }
         take(";");

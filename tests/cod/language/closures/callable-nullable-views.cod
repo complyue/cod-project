@@ -64,7 +64,7 @@ effect @lookup = lookup;
 effect @keep <- false;
 behave @print(isnull(perform @lookup(maybe)));
 behave @print(isnull(behave @lookup(maybe)));
-function readonly(ptr value:const u64 in O)->const ptr u64 in O where {owner O} { return value }
+function readonly(ptr value:const u64 in O)->ptr const u64 in O where {owner O} { return value }
 func borrow_readonly = readonly;
 const ptr observed = borrow_readonly(number);
 number <- 29u64;

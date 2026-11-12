@@ -683,8 +683,8 @@ behave @print(7002u64);
         owner_flows = directory / "closures/callable-owner-flows.cod"
         entry.write_text(owner_flows.read_text() + '''
 function access(region state:State)->const u64 {return state.ticks}
-function access(const region state:State)->const u64 {return state.ticks+100u64}
-function inspect(const region state:State)->const u64 {return state.ticks}
+function access(region state:const State)->const u64 {return state.ticks+100u64}
+function inspect(region state:const State)->const u64 {return state.ticks}
 using "std:exceptions" OutOfMemory;
 behave @print(6001u64);
 try {{ func failed = current; {} }} catch(e:const OutOfMemory) {{ behave @print(6002u64); }};
@@ -881,6 +881,22 @@ behave @print(7002u64);
                                 str(sum(i % 97 + 2 for i in range(10000))), '7002'], owned_output
         owned_evidence['fixture_sha256'] = hashlib.sha256(owned_results.read_bytes()).hexdigest()
         evidence['owned_results'] = owned_evidence
+        qualifiers = directory / "qualifiers/const-fields-captures.cod"
+        entry.write_text(qualifiers.read_text() + '''
+using "std:exceptions" OutOfMemory;
+behave @print(6001u64);
+try {{ const func failed=read; }} catch(e:const OutOfMemory) { behave @print(6002u64); };
+func independent=borrowed_read;
+behave @print(independent());
+behave @print(7001u64);
+behave @print(fold(i in 0u64..10000u64,total=0u64) {{ total+borrowed_read() }});
+behave @print(7002u64);
+''')
+        qualifier_output, qualifier_evidence = run_case(
+            root, toolchain, entry, scratch, HARNESS + REGION_HARNESS, extra_wrappers=wrappers)
+        assert qualifier_output == ['9', '5', '14', '9', '9', '6001', '6002', '9', '7001', '90000', '7002'], qualifier_output
+        qualifier_evidence['fixture_sha256'] = hashlib.sha256(qualifiers.read_bytes()).hexdigest()
+        evidence['qualifiers'] = qualifier_evidence
         print(json.dumps(evidence, indent=2))
         if report := os.environ.get("COD_CALLABLE_REPORT"):
             Path(report).write_text(json.dumps(evidence, indent=2) + "\n")

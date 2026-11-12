@@ -2,13 +2,13 @@ region State {ticks:u64;}
 function writable(region state:State)->func()->const u64 with {region state} {
  return func()->const u64 {return state.ticks}
 }
-function readonly(const region state:State)->func()->const u64 with {region state} {
+function readonly(region state:const State)->func()->const u64 with {region state} {
  return func()->const u64 {return state.ticks}
 }
 owned region state:State <- make State(capacity=128u64){ticks <- 1u64};
 func current = writable(state);
 for(i in 0u64 .. 2u64){{
- region view:State = current -> state;
+ region view = current -> state;
  ptr ticks = view.ticks;
  ticks <- 2u64;
  current <- readonly(state);

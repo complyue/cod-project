@@ -1,0 +1,38 @@
+using symbol "std:io" @print;
+data Arena {seed:u64;}
+data Node {value:u64; ptr child:Node;}
+data Links {const ref fixed:Node; ref observed:const Node; const ref both:const Node; const count:u64; val score:const u64;}
+owned region arena <- make Arena(capacity=4096u64){seed<-0u64};
+ref first = alloc arena Node(1u64,null);
+ref second = alloc arena Node(2u64,null);
+ref links = alloc arena Links(first,first,first,3u64,4u64);
+links.fixed.value <- 5u64;
+links.observed = second;
+region readonly_arena:const Arena=arena;
+const region fixed_arena:Arena=arena;
+fixed_arena.seed <- 3u64;
+ref readonly:const Links = links;
+second.value <- 9u64;
+behave @print(readonly.observed.value);
+ref var observer:const Node in arena -> links.observed;
+ref first_readonly:const Node = first;
+observer = first_readonly;
+behave @print(observer.value);
+func read = func()->const u64 { return observer.value; };
+const ref var pinned:Node in arena -> links.fixed;
+func write = func()->void { pinned.value <- 14u64; };
+const func writer=write;
+writer();
+ptr borrowed_write:const func()->void with {region arena}=write;
+borrowed_write();
+ptr borrowed_read:const func()->const u64 with {region arena}=read;
+behave @print(borrowed_read());
+links.observed = second;
+behave @print(read());
+function child(const region arena:Arena, parent:const Node in arena)->ptr const Node in arena {
+  return parent.child;
+}
+setfield(first,child,second);
+using "std:exceptions" NullPointerException;
+try { behave @print(child(arena,first).value); }
+catch(e:const NullPointerException) { behave @print(999u64); };

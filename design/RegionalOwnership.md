@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 74 · Recorded: 2026-11-12 · Status: design draft with scoped confirmed requirements.
+Design revision: 75 · Recorded: 2026-11-12 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+- **Independent qualifiers:** [H-366–H-369](DesignAuthorityRegistry.md#h-366)/[P-327](DesignAuthorityRegistry.md)/[K-527](DesignAuthorityRegistry.md#k-527) covers revision75's independent binding/target qualifiers, ordinary parameter identity and propagated readonly access. C-65/C-48/P-173 and C-75 retain explicit storage/access/lifetime responsibility under charter §§1–3/§6/§8/§12. The normative qualifier section defines grammar, invariants and acceptance. H-272 default copies, H-293 no access escalation, H-302 target-access method selection and H-327 fixed alias places remain; only conflicting combined-qualifier prose is superseded. D-18 captures/values, D-17 cleanup and D-01/D-16 representation remain constraints. No global freezing, lifetime extension, new owner policy, pure/TCO or fractions. Implementation acceptance is recorded separately.
 
 - **Current regional captures:** [D-18](RegionalClosures.md)/[K-459](DesignAuthorityRegistry.md#k-459) is the bounded contract for structural region requirements, aliases, captures and owner projection under H-327–H-335. This revision updates only that navigation and removes superseded research text under H-336; C-65/C-73/C-75 and P-294–P-298 retain their confirmed scope. Owner/access/relocation, dynamic effects and D-16 remain constraints. Acceptance and unresolved limits stay explicit in D-18; unrelated pending contracts are not qualified.
 
@@ -77,6 +79,35 @@ H-309/H-313 requires compile-time rejection before initialization. A readable re
 No target absence policy makes a dangling reference acceptable. A null check cannot establish that an already-consumed or expired owner is live. NPE delivery should integrate with the established exception/cleanup mechanism rather than rely on a host segmentation fault. Its checked status is specified separately in [D-17](ExceptionControl.md#checked-nullpointerexception); the accepted allocation failures remain unchecked. NullPointerException is the accepted intrinsic checked category; broader pointer-conversion syntax remains separate.
 
 The keyword distinction does not imply that ref bindings are immutable or ptr bindings own their targets. The existing const-binding versus readonly-target distinction should remain orthogonal. Ref rebinding requires a proven non-null target with the same owner and admissible access. Declaration groups retain definite payload initialization; parameter omission retains the accepted callee-local default.
+
+### Independent binding and target qualifiers
+
+The compiler implements this scoped contract; [qualifier validation](../tests/cod/language/qualifier-validation.json) records native and rejection coverage under [K-527](DesignAuthorityRegistry.md#k-527). The wider ownership draft retains its separate qualification and implementation boundaries.
+
+H-366–H-369 give one qualifier rule for ordinary declarations, parameters, fields and aliases. Declaration-leading `const` restricts mutation of the declared binding/storage. Type-leading `const` restricts access to its target. The two restrictions combine independently; neither freezes storage globally or extends a lifetime.
+
+| Reference declaration | Rebind this slot | Write through the resulting view |
+| --- | --- | --- |
+| `ptr p:T` / `ref p:T` | Allowed by owner/type/nullability constraints | Allowed by target access |
+| `const ptr p:T` / `const ref p:T` | Forbidden | Allowed by target access |
+| `ptr p:const T` / `ref p:const T` | Allowed by the underlying slot contract | Forbidden |
+| `const ptr p:const T` / `const ref p:const T` | Forbidden | Forbidden |
+
+A readonly source never becomes writable through a declaration, cast, alias, rebind, helper call, capture or returned view. With an omitted annotation, the initializer supplies its target-access restriction. An explicit writable target annotation must be satisfied by the source. Initializers establish a const binding once; target payload initialization remains a separate operation. Group-leading const applies to every declared binding, while each type annotation controls its own target access.
+
+Ordinary parameter syntax is `[const] [val | ref | ptr] name : [const] T [in O]`. Leading const restricts the callee-local parameter binding and is excluded from callable signature identity and ordinary overload selection. Type const remains an access contract and retains H-302's qualifier-sensitive method selection. H-272 default bits arguments still materialize independent callee-local storage; an explicit owner selects an external borrow. Weakening writable access to readonly does not copy or freeze the borrowed target. Assignment-family destination parameters still select the caller's destination slot under their separate contract; a local qualifier cannot bypass that slot's access/type constraints.
+
+For val storage there is no separate reference slot: declaration const protects its own bits payload; type const also restricts access to that payload. Copies can create independent writable bits storage when their destination contract allows it. For a complete callable value, readonly holder access prevents holder replacement without making its invocation pure or changing independently permitted captured-owner access. Ref/ptr bindings referring to callable holders retain the two independent dimensions and existing nullable rules.
+
+Aliases use `[const] [val | ref | ptr] var name [: [const] T] [in O] -> lvalue`; `:const` may infer the target type. Alias selection always denotes the same place. Leading const restricts writes to the selected slot through that alias; target const restricts accesses derived from its target. Other writable names remain usable. Rebinding through a readonly-target alias still has to satisfy the underlying slot's declared target permission: it cannot store a readonly target in a slot that supplies writable views through another name.
+
+Field qualifiers obey the same rule. A const reference field can be initialized during construction, then cannot be rebound; its writable-declared target remains writable through an otherwise writable path. A readonly-target field may be rebound through a writable containing object, subject to its declared target access. A readonly containing-object path prohibits both field mutation and target writes reached through reference fields. Stored field qualifier contracts participate in structural field matching, so a generic view cannot change the permissions of the actual slot. Qualifiers do not change field layout or relative-reference representation.
+
+Target readonly access propagates through reference fields to other objects, arrays, aliases and further derived views. `p:const Parent` forbids `p.child.value <- 7` even when Parent declares `ref child:Child`. The shallow alternative is explicitly rejected by H-368. Independently obtained writable aliases may still change those objects; readonly readers can observe those changes under H-202. This is access-path restriction, not immutable memory or an optimizer invariant.
+
+Dedicated region carriers retain existing ownership/consumption rules. Leading const does not replace those rules with a new ownership policy; target access is written after the root annotation, such as `region r:const Root`. Ordinary result qualifiers have no named result binding: `[ref | ptr] const T in O` describes readonly target access, while `const T` retains the accepted bits-value result contract. Callable-type parameters/results record target access and nullable modes, not a callee-local binding qualifier. Pure callable behavior is separate and remains deferred under D-19.
+
+Acceptance covers the four reference combinations, fields and grouped/inferred declarations, ordinary parameter signature identity, aliases of reference slots, no access laundering through helpers/captures/results, transitive readonly access with independent writable aliases, same-owner rebind/swaps, default copies versus explicit borrows, callable holder replacement, checked nullability and owner lifetime. D-16 numeric types/promotion, fraction layout, intrinsics, transfers and formatting are unchanged. No regional copy/move, ownership extension, allocator/toolchain change or purity implementation follows.
 
 ### Field storage: val, ref and ptr
 
@@ -278,7 +309,7 @@ symbol @step:u64;
 
 Grouping shares only the declaration kind. It does not require the symbols to bind the same region, allocate a region or install a dynamic value. Their values still come from effect bindings with the established capture, shadow and restoration semantics. A line break is formatting; the declaration ends at its terminator.
 
-For explicit parameters, `region` identifies a whole-region reference rather than a root-object parameter. `function edit(region r:Pool, node:Node in r)` requires both arguments to denote the same actual region; it also makes r available for root-policy operations. `const region r:Pool` restricts writes through that borrowed parameter. Bodyless signatures, callable selections and generic root aliases preserve this distinction. A plain generic value parameter cannot hide a whole-region argument. No user-data field can store a whole-region handle.
+For explicit parameters, `region` identifies a whole-region reference rather than a root-object parameter. `function edit(region r:Pool, node:Node in r)` requires both arguments to denote the same actual region; it also makes r available for root-policy operations. `region r:const Pool` restricts writes through that borrowed parameter; leading `const region r:Pool` restricts its binding and preserves independently writable target access. Bodyless signatures, callable selections and generic root aliases preserve this distinction. A plain generic value parameter cannot hide a whole-region argument. No user-data field can store a whole-region handle.
 
 A borrowed result uses `-> region :Pool in r`; an owning result uses `-> owned region :Pool`. A symbolic procedure signature uses forms such as `proc(owned region :Pool) -> owned region :Pool`. Locals use `region view = existing` or `owned region value <- fresh`; omitting the root annotation infers it without omitting the declaration keyword. Region declarations yield void. Whole-region values cannot be held by ordinary ref/ptr/val declarations or expressed by the former angle-bracket type constructor. There is no compatibility parser path. Resource installation, captured shadows, no-extraction, single cleanup responsibility and zero-cost relocation retain their established contracts. General owner-bearing optional/results remain separate design work.
 
@@ -292,7 +323,7 @@ Acceptance should demonstrate same-owner local rebinding and rejection across ow
 
 ### Bounded pointer and initialization implementation
 
-Ordinary `ptr` bindings retain target storage independently of a loaded numeric value. Local scalar/quantity/bool targets lower to LLVM storage places; default bits parameters receive independent callee-local targets. `where {owner O}` accepts a region or lexical owner, while `where {region r:Root}` accepts only a qualifying region and exposes its borrowed reference. Non-bits parameters require an explicit external owner. A const parameter remains read-only after rebinding within that owner. Signature-only result-owner promises are checked against the selected method's actual returned storage.
+Ordinary `ptr` bindings retain target storage independently of a loaded numeric value. Local scalar/quantity/bool targets lower to LLVM storage places; default bits parameters receive independent callee-local targets. `where {owner O}` accepts a region or lexical owner, while `where {region r:Root}` accepts only a qualifying region and exposes its borrowed reference. Non-bits parameters require an explicit external owner. A parameter with target-qualified const remains read-only after rebinding within that owner. Leading parameter const instead prevents rebinding that local slot. Signature-only result-owner promises are checked against the selected method's actual returned storage.
 
 `make local`, individual value blocks, final comma group blocks, inferred fresh-bits initializers and `ptr n <- rhs` are implemented. A plain alias initializer retains its source target, owner and permissions. Bits `<-` writes the target; ordinary-pointer `=` rebinds within its fixed owner. Both associate rightward; builtin `=` preserves the destination access and `<-` yields a read-only target view. A fresh ordinary const bits result is copied; an explicitly owner-qualified result remains a view. A group block's result is discarded. Initializer names resolve before the new declaration enters scope, and each runtime RHS is evaluated once.
 
@@ -943,7 +974,7 @@ Initialization follows actual storage identity through aliases and explicit-owne
 
 Acceptance must distinguish the two block positions, preserve source order and shadowing, permit deferred initialization and reject premature reads across branches/calls, while preserving alias identity and enclosing-scope lifetime. These are confirmed source obligations covered by the bounded implementation below; no new per-value runtime initialization flags or allocator protocol is selected.
 
-Under H-272, default bits parameters target independent callee-local storage. H-201's const bits results still supply independent values; H-270's assignment-family results instead retain destination views. An explicit external-owner parameter is needed to retain a caller's slot. H-273 confirms the owner grammar above; external read-only bits-access spelling remains separate. Ownership transfer through owned region is a separate resource case; no bits argument rule grants a copyable owner or regional object.
+Under H-272, default bits parameters target independent callee-local storage. H-201's const bits results still supply independent values; H-270's assignment-family results instead retain destination views. An explicit external-owner parameter is needed to retain a caller's slot. H-273 confirms the owner grammar above; `x:const T in O` provides readonly external bits access under the independent qualifier contract. Ownership transfer through owned region is a separate resource case; no bits argument rule grants a copyable owner or regional object.
 
 Bits arguments must be obtained during that argument's evaluation/conversion, before evaluating the next argument under the established sequencing rule. A later argument's mutation cannot retroactively change an earlier copied value. An explicitly borrowed external argument preserves access to its owner's slot; all supplied views still need valid storage at the call boundary. This distinguishes a callee-local bits copy from a read-only view of external storage.
 
@@ -957,7 +988,7 @@ The resulting obligations are:
 
 Const bits results can be lowered through the native value ABI without preserving callee stack addresses. H-292 gives fresh scalar ptr initializers enclosing-scope storage; existing borrowed results retain their source owner and cannot escape it. An owned i64 is not required merely to return a computed scalar.
 
-For non-bits objects, H-202 defines `const Packet` as read-only borrowed access. It does not copy/freeze the object or promise unchanged contents; a writable alias may change what later reads observe. This preserves the region lifetime dependency and narrows H-201's independent-value rule to bits. `const owned region :RT` qualifier composition remains a separate question; no owner may be duplicated through a const view.
+For non-bits objects, H-202 defines `const Packet` as read-only borrowed access. It does not copy/freeze the object or promise unchanged contents; a writable alias may change what later reads observe. This preserves the region lifetime dependency and narrows H-201's independent-value rule to bits. `owned region :const RT` retains the existing single-owner consumption/result rules while restricting target access; no owner may be duplicated through a const view.
 
 Semantic borrowing also does not mandate a physical pointer or stack slot for every scalar. Once source aliasing and lifetime behavior are fixed, LLVM can keep unobservable storage in registers and eliminate loads/stores as usual. This is ordinary lowering, not permission to erase observable aliases or rescue an invalid escaping reference through WPO.
 
@@ -969,7 +1000,7 @@ Acceptance must distinguish caller-visible external borrows from default callee-
 | --- | --- |
 | ptr variable initialized from existing T storage | Borrow with the initializer-fixed owner and permitted access; no lifetime extension. |
 | Default bits parameter | Pointer to an independent callee-local bits copy under H-272. |
-| Explicit external-owner parameter | Borrow external storage under its declared owner constraint; H-273 confirms the owner grammar, while const annotation remains separate. |
+| Explicit external-owner parameter | Borrow external storage under its declared owner constraint; type-leading const restricts the target, independently of a leading binding qualifier. |
 | Ordinary const bits result | Independent evaluated bits value under H-201; H-270 separately specifies assignment destination views. |
 | const non-bits T | Read-only borrow under H-202; writable aliases may still change the target. |
 | owned region :RT | One whole-region release-or-transfer responsibility. |
@@ -1101,7 +1132,7 @@ The following are semantic probes for the target design, not runnable prototype 
 | Pass that view to an ordinary x:const i64 parameter, then mutate a while the call remains active. | H-201's parameter observes its evaluated bits value, although the separate view still denotes mutable storage. |
 | Chain destination conversion across different value types. | The outer overload receives the inner destination's type/result, not the unconverted original source or a new owning handle. |
 
-H-201 makes ordinary const bits parameters/results independent values; H-202 makes const non-bits access read-only borrowing. H-206 separately requires a destination-reference result for transfer, and H-224 supplies the const destination-typed assignment overload shape. The implementation must distinguish the assignment expression's retained storage target from a normal const bits function result. Reading a const source does not discard the need to track where a borrowed result points, nor allow a reference to a callee-local bits copy to escape.
+H-272 makes default bits parameters independent callee-local values; explicit-owner parameters borrow external storage with their declared target access. H-201 makes ordinary const bits results independent values; H-202 makes const non-bits access read-only borrowing. H-206 separately requires a destination-reference result for transfer, and H-224 supplies the const destination-typed assignment overload shape. The implementation must distinguish the assignment expression's retained storage target from a normal const bits function result. Reading a const source does not discard the need to track where a borrowed result points, nor allow a reference to a callee-local bits copy to escape.
 
 **Confirmed RO-Q1 — assignment-method result category.** H-270 requires destination-view results rather than ordinary copied const bits. H-302 refines `=` access: builtin reference assignment preserves the destination permission, and an overload's declared result may retain or restrict proven access. A writable borrowed result cannot return a readonly view. Transfer `<-` keeps its readonly destination result. A normal `-> const i64` result still copies bits; assignment-family results retain destination storage and lifetime.
 
@@ -1123,7 +1154,7 @@ For bits transfer, right-nested chaining is useful:
 a <- (b <- c);
 ```
 
-H-209 makes the unparenthesized `a <- b <- c` parse as `a <- (b <- c)`. The inner operation finishes writing/converting b; the outer one reads the resulting const view of b. The outer dispatch therefore uses b's value type and owner, not c's. A const bits parameter of a subsequently called function obtains an independent bits value when evaluated; the transfer expression's const reference is itself a view. The compiler must distinguish reference-result expression category from ordinary const bits call results. This distinction does not yet select an extra public ref wrapper or overload-result syntax.
+H-209 makes the unparenthesized `a <- b <- c` parse as `a <- (b <- c)`. The inner operation finishes writing/converting b; the outer one reads the resulting const view of b. The outer dispatch therefore uses b's value type and owner, not c's. A default bits parameter of a subsequently called function obtains an independent bits value when evaluated; the transfer expression's const reference is itself a view. The compiler must distinguish reference-result expression category from ordinary const bits call results. This distinction does not yet select an extra public ref wrapper or overload-result syntax.
 
 H-207 requires ownership moves to use explicit steps:
 
@@ -1177,7 +1208,7 @@ A proposed graph-overload parameter layout pairs each object with its region:
 ```text
 function (<-)(
   region destination_region:WritableNodeStore, destination:Node,
-  const region source_region:ReadableNodeStore, source:const Node
+  region source_region:const ReadableNodeStore, source:const Node
 ) { ... }
 ```
 

@@ -112,7 +112,8 @@ struct Value {
   bool required_reference = false;
   bool pointer_view = false;
   llvm::Value *referent = nullptr; // Stable object expression identity across lexical pointer loads.
-  bool binding_read_only = false; // A const var view cannot rebind the selected binding.
+  ReadOnly binding_read_only = {}; // Permission to mutate the selected binding, independently of its target.
+  bool reference_read_only = false; // Declared target access of a stored reference slot.
   llvm::Value *global_slot = nullptr;
   bool callable_temporary = false;
   size_t callable_address = 0; // Flow of lexical holder addresses, separate from their values.
@@ -1240,6 +1241,7 @@ class Compiler {
   static Value bits_value(Value value) {
     value.storage.reset(); value.pointer.reset(); value.region_id.reset(); value.read_only = false; value.referent = nullptr; value.nullable = false; value.reference_field.reset(); value.nonnull_when.reset(); value.pointer_view = false;
     value.binding_read_only = false;
+    value.reference_read_only = false;
     return value;
   }
   Value local_storage(Type type, const Location &at) {
@@ -1271,16 +1273,18 @@ class Compiler {
                        const Module &module, const Location &at, bool read_only = false, bool fixed_binding = false, bool required = false) {
     value.pointer.reset();
     value.reference_field.reset();
+    value.reference_read_only = false;
     value.required_reference = false;
     value.binding_read_only = false;
     value.pointer_view = true;
     value.callable_temporary = false;
+    value.read_only |= read_only;
     valid_view(value, at);
     if (!storage_owner(value) && !value.pending_owner) fail(at, "ptr requires storage with a known owner");
     const auto id = pointers_.size();
     if (!value.referent) value.referent = value.storage ? value.storage->address : value.native;
     pointers_.push_back({ir_.pointer_storage(value.storage ? value.storage->address : value.native), snapshot_pointer(value),
-                         ReadOnly::either(read_only, value.read_only), fixed_binding, required, at});
+                         value.read_only, fixed_binding, required, at});
     value.pointer = id;
     declare_local(locals, name, std::move(value), module, at);
   }
@@ -1393,7 +1397,8 @@ class Compiler {
       };
       return std::all_of(required.begin(), required.end(), [&](const Parameter &field) {
         return std::any_of(available.begin(), available.end(), [&](const Parameter &candidate) {
-          return candidate.name == field.name && candidate.type == field.type && kind(candidate) == kind(field);
+          return candidate.name == field.name && candidate.type == field.type && kind(candidate) == kind(field) &&
+                 candidate.read_only == field.read_only && candidate.fixed_binding == field.fixed_binding;
         });
       });
     }
@@ -1555,6 +1560,8 @@ class Compiler {
           field_type = resolve(field_type, *product.module, field.at);
           product.fields.push_back({field.name, field_type, field.at, false, {}});
           product.fields.back().declaration_kind = field.declaration_kind;
+          product.fields.back().read_only = field.read_only;
+          product.fields.back().fixed_binding = field.fixed_binding;
         }
         regional_runtime_ = true;
         std::vector<Type> field_types;
@@ -1568,9 +1575,9 @@ class Compiler {
   Value scalar(Type type, llvm::Value *native, std::optional<size_t> region_id = {}) {
     return {type, native, {}, nullptr, region_id};
   }
-  llvm::Value *stored_value(const Value &value, Type destination, const Location &at) {
+  llvm::Value *stored_value(const Value &value, Type destination, const Location &at, bool read_only = false) {
     if (local_bits(destination)) require_argument_reads(value);
-    if (destination.kind == Type::reference)
+    if (destination.kind == Type::reference && !read_only)
       require_writable(value.read_only, at, "cannot store a read-only view in a writable reference field");
     if (destination.kind == Type::exception && !destination.identity)
       return ir_.store_exception(value.native, exception_category(value));
@@ -1684,10 +1691,14 @@ class Compiler {
       const auto &parameter = parameter_at(form, i);
       if (check_access && form.operation && ((form.name == "=" && i == 0) || swap_operation(form.name)) && args[i].read_only != parameter.read_only)
         return reject("reference-assignment destination requires an exact const qualifier");
-      if (check_access && !parameter.read_only && (object_type(args[i].type) || !parameter.owner.empty()) && args[i].read_only)
+      if (check_access && !parameter.read_only &&
+          (object_type(args[i].type) || args[i].type.kind == Type::region || !parameter.owner.empty()) && args[i].read_only)
         return reject("cannot pass a read-only view to a writable parameter");
-      if (!parameter.owner.empty())
-        if (const auto error = bind_owner(parameter.owner, args[i])) return reject(*error);
+      if (!parameter.owner.empty()) {
+        auto view = args[i];
+        view.read_only |= parameter.read_only;
+        if (const auto error = bind_owner(parameter.owner, std::move(view))) return reject(*error);
+      }
     }
     // Infer a single unbound environment owner from a callable argument. Multiple
     // unknown roles need explicit owner arguments; never assign roles by slot order.
@@ -1903,6 +1914,7 @@ class Compiler {
         source_expr.spread, source_expr.annotation});
     expr->intrinsic = source_expr.intrinsic;
     expr->fixed_binding = source_expr.fixed_binding;
+    expr->read_only = source_expr.read_only;
     expr->declaration_kind = source_expr.declaration_kind;
     expr->owner_name = source_expr.owner_name;
     if (uses_symbol(expr->kind)) {
@@ -3361,6 +3373,8 @@ class Compiler {
       }
       if (!formal.owner.empty() && native_callable(parameter)) parameter.callable_temporary = false;
       if (formal.read_only && storage_owner(parameter)) parameter.read_only = true;
+      if (formal.fixed_binding && (formal.declaration_kind == "val" ||
+          (native_callable(parameter) && formal.owner.empty()))) parameter.read_only = true;
       if (parameter.type.owned && (!parameter.holding_id || !transferring.insert(*parameter.holding_id).second))
         fail(at, "one region owner cannot be consumed by multiple parameters");
       parameters.push_back(std::move(parameter));
@@ -3385,13 +3399,14 @@ class Compiler {
           fail(at, "a reference operation overload requires a pointer binding destination");
         // Destinations denote caller bindings, including regional reference slots.
         const bool regional = bool(argument.reference_field);
+        argument.binding_read_only |= form.parameters[i].fixed_binding;
         declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
         if (regional) locals.regional_slots.insert(form.parameters[i].name);
       } else if (form.parameters[i].declaration_kind == "val")
         declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
       else if (argument.storage || (!form.parameters[i].owner.empty() && object_type(argument.type)))
         declare_pointer(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at,
-                        form.parameters[i].read_only, false, form.parameters[i].declaration_kind == "ref");
+                        form.parameters[i].read_only, form.parameters[i].fixed_binding, form.parameters[i].declaration_kind == "ref");
       else declare_local(locals, form.parameters[i].name, std::move(argument), lexical, form.parameters[i].at);
     }
     if (variadic(form)) {
@@ -3909,7 +3924,7 @@ class Compiler {
       fail(form.at, "a swap overload requires two destinations with explicit external owners");
     if (form.operation && (form.name == "=" || form.name == "<=>"))
       for (size_t i = 0; i < (form.name == "=" ? 1u : 2u) && i < args.size(); ++i) {
-        if (args[i].binding_read_only) fail(at, "cannot rebind through a const var alias");
+        require_writable(args[i].binding_read_only, at, "cannot rebind a const binding or alias");
         if (args[i].pointer && pointers_.at(*args[i].pointer).fixed_binding)
           fail(at, "cannot rebind a const ptr binding");
       }
@@ -4003,7 +4018,7 @@ class Compiler {
     if (expr.intrinsic) fail(expr.at, "intrinsic (<-) requires a bits destination; object transfer requires a user-defined overload");
     fail(expr.at, "object transfer requires a user-defined (<-) overload");
   }
-  Value reference_source(Value value, Type target, size_t owner, bool required, const Location &at) {
+  Value reference_source(Value value, Type target, size_t owner, bool required, const Location &at, bool read_only = false) {
     if (value.result_type_origin && region_definition(value.type)) {
       try { resolve_result_type(value, at); }
       catch (const UnresolvedAccess &) {
@@ -4026,7 +4041,7 @@ class Compiler {
       return value;
     }
     if (required && value.nullable) fail(at, "a ref field requires a proven non-null target");
-    require_writable(value.read_only, at, "cannot store a read-only view in a writable reference field");
+    if (!read_only) require_writable(value.read_only, at, "cannot store a read-only view in a writable reference field");
     if (!value.region_id) fail(at, "a regional reference field requires a regional target");
     require_same_region(*value.region_id, owner, at,
         "cross-region reference fields require a target in the same owner; use '<-' for bits transfer");
@@ -4046,9 +4061,9 @@ class Compiler {
     return value;
   }
   Value rebind_field(Value destination, Value source, const Location &at) {
-    require_writable(destination.read_only, at, "cannot rebind a field through a read-only view");
+    require_writable(destination.binding_read_only, at, "cannot rebind a const field or a field through a read-only view");
     auto stored = reference_source(source, *destination.reference_field->type.target,
-                                   *destination.region_id, destination.required_reference, at);
+                                   *destination.region_id, destination.required_reference, at, destination.reference_read_only);
     if (destination.required_reference) ir_.require_representable_reference(*destination.reference_field, stored.native);
     ir_.write(*destination.reference_field, stored.native);
     destination.native = stored.native;
@@ -4064,7 +4079,7 @@ class Compiler {
     if (expr.children.size() != 2) fail(expr.at, "reference assignment requires a destination and source");
     auto destination = expression(*expr.children[0], module, env, locals, function_context, false);
     auto source = expression(*expr.children[1], module, env, locals, function_context, false);
-    if (destination.binding_read_only) fail(expr.at, "cannot rebind through a const var alias");
+    require_writable(destination.binding_read_only, expr.at, "cannot rebind a const binding or alias");
     if (destination.reference_field) return rebind_field(destination, source, expr.at);
     if (source.type == Type::null_ref && destination.pointer) source = null_target(destination.type, destination, expr.at);
     if (!destination.pointer) fail(expr.at, "reference assignment requires an ordinary ptr binding; use '<-' for bits transfer");
@@ -4088,7 +4103,7 @@ class Compiler {
     if (!destination.pending_owner && storage_owner(destination) != storage_owner(source))
       fail(at, "reference assignment cannot cross owners; you may want '<-' for bits transfer");
     valid_view(source, at);
-    require_access(source.read_only, destination.read_only, at,
+    require_access(source.read_only, pointers_.at(*destination.pointer).read_only, at,
         "a writable ptr cannot rebind to a read-only view; use '<-' to copy bits or declare a separate read-only alias");
     for (const auto &loop : loop_pointers_)
       if (*destination.pointer < loop.boundary && !loop.initialized[*destination.pointer])
@@ -4097,11 +4112,14 @@ class Compiler {
   Value rebind_pointer(const Value &destination, Value source) {
     source.pointer.reset();
     source.reference_field.reset();
+    source.reference_read_only = false;
+    source.binding_read_only = false;
     source.pointer_view = true;
     auto &binding = pointers_.at(*destination.pointer);
     source.read_only = binding.read_only;
     ir_.write_pointer(binding.slot, source.storage ? source.storage->address : source.native);
     binding.view = snapshot_pointer(source);
+    source.read_only |= destination.read_only;
     return source;
   }
   Value swap_expression(const Expression &expr, const Module &module, Environment &env, Locals &locals,
@@ -4110,11 +4128,15 @@ class Compiler {
     auto left = expression(*expr.children[0], module, env, locals, function_context, false);
     auto right = expression(*expr.children[1], module, env, locals, function_context, false);
     if (expr.text == "<=>") {
-      if (left.binding_read_only || right.binding_read_only) fail(expr.at, "cannot rebind through a const var alias");
+      require_writable(ReadOnly::either(left.binding_read_only, right.binding_read_only), expr.at,
+                       "cannot rebind a const binding or alias");
       const auto reload = [&](Value value) {
         if (value.pointer) {
           if (pointers_.at(*value.pointer).fixed_binding) fail(expr.at, "cannot rebind a const ptr binding");
-          return pointer_value(*value.pointer, expr.at);
+          auto current = pointer_value(*value.pointer, expr.at);
+          current.read_only |= value.read_only;
+          current.binding_read_only |= value.binding_read_only;
+          return current;
         }
         if (value.reference_field) return captured_view(std::move(value), expr.at);
         fail(expr.at, "reference swap requires pointer binding destinations");
@@ -4129,9 +4151,9 @@ class Compiler {
     if (expr.text == "<=>") {
       const auto check = [&](const Value &destination, const Value &source) {
         if (!destination.reference_field) { check_rebind(destination, source, expr.at); return; }
-        require_writable(destination.read_only, expr.at, "cannot rebind a read-only reference field");
+        require_writable(destination.binding_read_only, expr.at, "cannot rebind a const field or a field through a read-only view");
         reference_source(source, *destination.reference_field->type.target, *destination.region_id,
-                         destination.required_reference, expr.at);
+                         destination.required_reference, expr.at, destination.reference_read_only);
       };
       check(left, right);
       check(right, left);
@@ -4639,7 +4661,7 @@ class Compiler {
         if (mapped_type(mapped_type, x.type) != y.type || x.read_only != y.read_only ||
             x.nullable != y.nullable || x.pending_owner != y.pending_owner ||
             x.pointer_view != y.pointer_view || x.required_reference != y.required_reference ||
-            x.binding_read_only != y.binding_read_only || x.replayed != y.replayed ||
+            x.binding_read_only != y.binding_read_only || x.reference_read_only != y.reference_read_only || x.replayed != y.replayed ||
             bool(x.native) != bool(y.native) || bool(x.storage) != bool(y.storage) ||
             bool(x.reference_field) != bool(y.reference_field) ||
             bool(x.exception_category) != bool(y.exception_category) ||
@@ -4912,7 +4934,7 @@ class Compiler {
           a->storage && b->storage && !left.environment.captured(l->first, a)) {
         if (a->read_only != b->read_only || a->nullable != b->nullable ||
             a->pointer_view != b->pointer_view || a->binding_read_only != b->binding_read_only ||
-            a->required_reference != b->required_reference ||
+            a->required_reference != b->required_reference || a->reference_read_only != b->reference_read_only ||
             !a->storage->scope || !b->storage->scope) return false;
         if (values && (*b->storage->scope >= right.scopes.size() || !right.scopes[*b->storage->scope])) return false;
         const auto ac = bound_callable_choices(*a, left.state.callables);
@@ -5597,12 +5619,12 @@ class Compiler {
       if (!field.declaration_kind.empty() && (field.declaration_kind == "ref" || field.declaration_kind == "ptr") && initializer.binding != "=")
         fail(initializer.at, "initialize a reference field with '='; '<-' writes an existing target");
       if (!edge && initializer.binding == "=") fail(initializer.at, "a bits field uses '<-' for payload initialization");
-      if (edge) value = reference_source(std::move(value), *field.type.target, *owner.region_id, field.declaration_kind == "ref", initializer.at);
+      if (edge) value = reference_source(std::move(value), *field.type.target, *owner.region_id, field.declaration_kind == "ref", initializer.at, field.read_only);
       else if (field.type.kind == Type::exception) value = admit(std::move(value), field.type, module, initializer.at);
       else require(value.type, field.type, initializer.at);
       const auto slot = ir_.field(native, offset, root, order[i], field.type);
       if (field.declaration_kind == "ref") ir_.require_representable_reference(slot, value.native);
-      ir_.write(slot, stored_value(value, field.type, initializer.at));
+      ir_.write(slot, stored_value(value, field.type, initializer.at, field.read_only));
     }
     return contextual(std::move(owner), module);
   }
@@ -5632,7 +5654,7 @@ class Compiler {
       for (size_t i = 0; i < args.size(); ++i) {
         if (fields[i].type.kind == Type::reference)
           args[i] = reference_source(std::move(args[i]), *fields[i].type.target, *owner.region_id,
-                                     fields[i].declaration_kind == "ref", expr.at);
+                                     fields[i].declaration_kind == "ref", expr.at, fields[i].read_only);
         if (fields[i].type.kind == Type::exception) args[i] = admit(std::move(args[i]), fields[i].type, module, expr.at);
         else if (!(args[i].type == Type::null_ref && fields[i].type.kind == Type::reference))
           require(args[i].type, fields[i].type, expr.at);
@@ -5645,7 +5667,8 @@ class Compiler {
     }
     std::vector<llvm::Value *> native_args;
     for (size_t i = 0; i < args.size(); ++i)
-      native_args.push_back(type.kind == Type::regional ? stored_value(args[i], products_.at(type.identity).fields[i].type, expr.at) : args[i].native);
+      native_args.push_back(type.kind == Type::regional ? stored_value(args[i], products_.at(type.identity).fields[i].type, expr.at,
+          products_.at(type.identity).fields[i].read_only) : args[i].native);
     auto *native = type.kind == Type::array ?
         ir_.array_new(region_pointer(owner, expr.at), arrays_.at(type.identity).element,
                       args[0].type, args[0].native, args[1].native) :
@@ -6004,8 +6027,10 @@ class Compiler {
       auto value = expression(*expr.children[2], module, env, locals, function_context, false);
       const auto [declaration, slot] = record_field(object, expr.children[1]->text, module, expr.at);
       const auto field = declaration.type;
+      if (declaration.fixed_binding || (field.kind != Type::reference && declaration.read_only))
+        fail(expr.at, "cannot mutate a const field after initialization");
       if (field.kind == Type::reference)
-        value = reference_source(std::move(value), *field.target, *object.region_id, declaration.declaration_kind == "ref", expr.at);
+        value = reference_source(std::move(value), *field.target, *object.region_id, declaration.declaration_kind == "ref", expr.at, declaration.read_only);
       else value = read_value(std::move(value), expr.at);
       if (field.kind == Type::exception) value = admit(std::move(value), field, module, expr.at);
       else require(value.type, field, expr.at);
@@ -6017,7 +6042,8 @@ class Compiler {
         value = contextual(std::move(value), module);
       }
       if (declaration.declaration_kind == "ref") ir_.require_representable_reference(slot, value.native);
-      ir_.write(slot, stored_value(value, field, expr.at));
+      ir_.write(slot, stored_value(value, field, expr.at, declaration.read_only));
+      value.read_only |= declaration.read_only;
       return field.kind == Type::reference ? target_view(std::move(value), expr.at) : value;
     }
     static const std::map<std::string, Type> casts{{"i64", Type::integer}, {"u8", Type::uint8},
@@ -6170,6 +6196,7 @@ class Compiler {
         fail(at, "callable capture alternatives require the same owner and storage kind");
       result.read_only |= value.read_only;
       result.binding_read_only |= value.binding_read_only;
+      result.reference_read_only &= value.reference_read_only;
       result.nullable |= value.nullable;
       std::erase_if(result.conformances, [&](const Conformance &fact) {
         return std::find(value.conformances.begin(), value.conformances.end(), fact) == value.conformances.end();
@@ -6783,7 +6810,7 @@ class Compiler {
             value.callable_temporary = false;
             value.pointer.reset();
             value.pointer_view = false;
-            value.read_only = false;
+            value.read_only = expr.fixed_binding || declaration->read_only;
           }
           declare_local(locals, declaration->text, std::move(value), module, declaration->at);
           continue;
@@ -6818,13 +6845,15 @@ class Compiler {
         if (expr.declaration_kind == "val") {
           if (!local_bits(value.type)) fail(declaration->at, "val declarations require bits storage");
           if (owner) fail(declaration->at, "val local storage belongs to its lexical scope");
-          value.read_only = expr.fixed_binding;
+          value.read_only = expr.fixed_binding || declaration->read_only;
           value.pointer.reset();
           declare_local(locals, declaration->text, std::move(value), module, declaration->at);
         } else {
           if (expr.declaration_kind == "ref" && value.nullable)
             fail(declaration->at, "ref requires a proven non-null target");
-          declare_pointer(locals, declaration->text, std::move(value), module, declaration->at, false, expr.fixed_binding,
+          if (declaration->annotation && !declaration->read_only)
+            require_writable(value.read_only, declaration->at, "a writable target annotation cannot bind a read-only view");
+          declare_pointer(locals, declaration->text, std::move(value), module, declaration->at, declaration->read_only, expr.fixed_binding,
                           expr.declaration_kind == "ref");
         }
       }
@@ -6862,7 +6891,10 @@ class Compiler {
           "var storage does not belong to declared region owner '" + expr.owner_name + "'");
     }
     const bool regional = !value.pointer && value.region_id.has_value();
-    if (expr.fixed_binding) { value.read_only = true; value.binding_read_only = true; }
+    if (expr.annotation && !expr.read_only)
+      require_writable(value.read_only, expr.at, "a writable alias annotation cannot expose a read-only view");
+    value.binding_read_only |= expr.fixed_binding;
+    value.read_only |= expr.read_only || (kind == "val" && expr.fixed_binding);
     if (regional) {
       value.native = nullptr;
       if (value.reference_field) value.storage.reset();
@@ -6926,6 +6958,8 @@ class Compiler {
       result.reference_field = slot;
       result.pointer_view = true;
       result.required_reference = field.declaration_kind == "ref";
+      result.binding_read_only = ReadOnly::either(value.read_only, field.fixed_binding);
+      result.reference_read_only = field.read_only;
       if (field.declaration_kind == "ref" || field.declaration_kind == "ptr") {
         result.type = *field.type.target;
         result.nullable = field.declaration_kind == "ptr";
@@ -6935,14 +6969,14 @@ class Compiler {
         }
       }
       result.conformances = value.conformances; result.result_fact_origins = value.result_fact_origins;
-      result.read_only = value.read_only;
+      result.read_only = ReadOnly::either(value.read_only, field.read_only);
       return contextual(std::move(result), module);
     }
     const auto target = place;
     if (local_bits(field.type)) {
       auto result = scalar(field.type, nullptr, value.region_id);
       result.storage = StorageView{target.address, {}, {}};
-      result.read_only = value.read_only;
+      result.read_only = ReadOnly::either(value.read_only, field.read_only || field.fixed_binding);
       return result;
     }
     return loaded_value(field.type, ir_.read(target));
@@ -7033,6 +7067,9 @@ class Compiler {
       const auto type = resolve(*expr.annotation, module, expr.at);
       const auto initializer = llvm::SaveAndRestore(region_initializer_, type.owned);
       auto value = admit(expression(*expr.children[0], module, env, locals, function_context), type, module, expr.at);
+      if (type.target && !expr.read_only)
+        require_writable(value.read_only, expr.at, "a writable region annotation cannot expose a read-only owner view");
+      value.read_only |= expr.read_only;
       if (type.owned) value = hold_region(take_owner(value, expr.at), module_top_level_, true);
       else value = borrowed(std::move(value));
       value.pointer.reset();
@@ -7068,7 +7105,7 @@ class Compiler {
         if (local->second.pointer) {
           auto value = pointer_value(*local->second.pointer, expr.at);
           value.binding_read_only = local->second.binding_read_only;
-          value.read_only |= value.binding_read_only;
+          value.read_only |= local->second.read_only;
           return value;
         }
         if (local->second.region_id) region_pointer(local->second, expr.at);
@@ -7911,7 +7948,8 @@ public:
         const auto kind = [](const Parameter &field) {
           return field.declaration_kind.empty() ? std::string_view("val") : field.declaration_kind;
         };
-        if (field == fields.end() || field->type != pending.field.type || kind(*field) != kind(pending.field))
+        if (field == fields.end() || field->type != pending.field.type || kind(*field) != kind(pending.field) ||
+            field->read_only != pending.field.read_only || field->fixed_binding != pending.field.fixed_binding)
           fail(pending.at, "selected record does not provide the declared field view");
         if (pending.offset) ir_.resolve_field(pending.offset, root, size_t(field - fields.begin()));
       }

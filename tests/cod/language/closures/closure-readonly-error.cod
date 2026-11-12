@@ -1,5 +1,5 @@
 using "structural-api.cod" Counter;
-function writer(const region state:Counter) -> (func()->void with {region state}) {
+function writer(region state:const Counter) -> (func()->void with {region state}) {
   val var ticks -> state.ticks;
   return func [ticks] () -> void { ticks <- 1u64; {} }
 }

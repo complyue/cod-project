@@ -1,8 +1,10 @@
 # Const functions and tail calls: deferred research plan
 
-Design revision: 2 · Recorded: 2026-11-11 · Status: deferred pre-research; no implementation scheduled.
+Design revision: 3 · Recorded: 2026-11-12 · Status: deferred pre-research; no implementation scheduled.
 
 ## Design authority
+
+- **Qualifier separation:** [H-366–H-369](DesignAuthorityRegistry.md#h-366)/[K-527](DesignAuthorityRegistry.md#k-527) continues this deferred plan at revision3 with D-14's independent binding and propagated target-access qualifiers. Const storage/access and const results do not imply a pure invocation. H-368 resolves propagation through referenced objects as readonly access, not permanent freezing. C-65/C-48/C-76 and P-173/P-327 preserve readable permissions and the distinct external-state purity boundary; H-363's pure syntax and deferred implementation/TCO status remain unchanged. Acceptance for ordinary qualifiers belongs to D-14/D-18, not this deferred research scope.
 
 - **Pure declaration surface:** [H-363](DesignAuthorityRegistry.md#h-363)/[K-520](DesignAuthorityRegistry.md#k-520) selects `pure` to declare a const function whose final body expression provides its result without requiring `return`. C-76/P-305/P-325 preserves the readonly-external/private-mutation boundary under charter §§2–3/§6/§12. The user explicitly keeps purity implementation and TCO deferred. Acceptance and unresolved callable-type/checking details remain those below; this syntax choice does not qualify an optimizer purity attribute or authorize implementation.
 
@@ -17,11 +19,13 @@ Recursive calls are a required part of the current callable/runtime work, for fu
 
 The optional functional-programming direction combines const functions with persistent data structures. Its initial TCO exploration is confined to const functions. TCO for ordinary functions or procedures is not planned here. Complexity or cost may justify narrowing or abandoning the optional direction after human review; the recursion requirement remains.
 
-Current development needs to remain materially compatible with this direction. It need not implement a const qualifier, persistence, tail-call checking or a speculative optimization framework now.
+Current development implements ordinary binding/target qualifiers under D-14 while remaining compatible with this direction. Persistence, purity checking, tail-call checking and speculative optimization remain deferred.
 
 ## Declaration surface
 
 `pure f(...) -> T { ...; expression }` declares a const function with its final body expression as the result. H-361/H-362 requires explicit value returns from ordinary proc/func brace bodies and permits void fallthrough. The pure form preserves concise functional definitions without changing the ordinary function/procedure result contract. This declaration spelling is recorded for future implementation; callable-type syntax, helper/callback admission and purity checking remain unimplemented.
+
+Binding const, target readonly access (including reference traversal) and result qualifiers follow [D-14](RegionalOwnership.md#independent-binding-and-target-qualifiers). None alone establishes a pure callable. A readonly callable holder can still invoke a body with separately permitted effects; pure is a behavioral boundary across the whole invocation.
 
 ## Boundary of a const function
 

@@ -15,7 +15,7 @@ behave @print(result());
 
 function counter(value:const u64 in r) where {region r:Store}
  ->func()->const u64 with {region r} {
- val var ticks:u64 in r -> r.ticks;
+ val var ticks:const u64 in r -> r.ticks;
  return func()->const u64 {return ticks}
 }
 func counted=counter(item.value);
@@ -63,7 +63,7 @@ behave @print(copied_result());
 
 function from_callback(cb:func()->const u64 with {region r}) where {region r:Store}
  ->func()->const u64 with {region r} {
- val var ticks:u64 in r -> r.ticks;
+ val var ticks:const u64 in r -> r.ticks;
  return func()->const u64 {return ticks}
 }
 function next_callback(cb:func()->const u64 with {region s}) where {region s:Store}

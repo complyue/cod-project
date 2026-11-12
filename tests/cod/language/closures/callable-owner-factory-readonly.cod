@@ -1,7 +1,7 @@
 region Store {ticks:u64;}
 function counter(value:const u64 in r) where {region r:Store}
  ->func()->const u64 with {region r} {
- val var ticks:u64 in r -> r.ticks;
+ val var ticks:const u64 in r -> r.ticks;
  return func()->const u64 {return ticks}
 }
 owned region state:Store <- make Store(capacity=128u64){ticks <- 3u64};

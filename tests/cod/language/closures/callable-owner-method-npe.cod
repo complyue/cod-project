@@ -1,11 +1,11 @@
 using "std:exceptions" NullPointerException;
 region State {ticks:u64;}
-function reader(const region state:State)->func()->const u64 with {region state} {
+function reader(region state:const State)->func()->const u64 with {region state} {
   return func()->const u64 {return state.ticks}
 }
-function access(const region state:State)->const u64 throws NullPointerException;
+function access(region state:const State)->const u64 throws NullPointerException;
 function access(region state:State)->const u64 {return 1u64}
-function access(const region state:State)->const u64 {return 2u64}
+function access(region state:const State)->const u64 {return 2u64}
 owned region state:State <- make State(capacity=128u64){ticks <- 9u64};
 func current = reader(state);
 for(i in 0u64 .. 2u64){{access(current -> state);}};

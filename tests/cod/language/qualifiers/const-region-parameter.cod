@@ -1,0 +1,5 @@
+data Store {ticks:u64;}
+owned region state <- make Store(capacity=128u64){ticks<-1u64};
+region observed:const Store=state;
+function accept(region value:Store)->void {}
+accept(observed);

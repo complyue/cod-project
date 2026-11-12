@@ -1772,7 +1772,7 @@
     "file": "closures/alias-readonly-error.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "cannot rebind through a const var alias"
+    "stderr_contains": "cannot rebind a const binding or alias"
   },
   {
     "file": "closures/closure-projection-readonly.cod",
@@ -1943,7 +1943,7 @@
     "file": "closures/callable-region-parameter-readonly.cod",
     "exit": 2,
     "stdout": "",
-    "stderr_contains": "cannot transfer into a read-only destination view"
+    "stderr_contains": "cannot pass a read-only view to a writable parameter"
   },
   {
     "file": "closures/callable-region-parameter-expired.cod",
@@ -2530,5 +2530,141 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "live region owner"
+  },
+  {
+    "file": "qualifiers/independent-const.cod",
+    "exit": 0,
+    "stdout": "6\n2\n7\n8\n6\n9\n8\n10\n9\n11\n12\n13\n11\n"
+  },
+  {
+    "file": "qualifiers/const-fields-captures.cod",
+    "exit": 0,
+    "stdout": "9\n5\n14\n9\n9\n"
+  },
+  {
+    "file": "qualifiers/const-binding-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot rebind a const ptr binding"
+  },
+  {
+    "file": "qualifiers/const-target-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-alias-target-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-alias-launder.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "writable ptr cannot rebind"
+  },
+  {
+    "file": "qualifiers/const-alias-swap-launder.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "writable ptr cannot rebind"
+  },
+  {
+    "file": "qualifiers/const-parameter-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot rebind a const ptr binding"
+  },
+  {
+    "file": "qualifiers/const-parameter-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-val-parameter-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-holder-replace.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-transitive-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-transitive-alias.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-transitive-capture.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-transitive-helper.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-field-rebind.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "const"
+  },
+  {
+    "file": "qualifiers/const-field-setfield.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "const field"
+  },
+  {
+    "file": "qualifiers/const-field-target-write.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read-only"
+  },
+  {
+    "file": "qualifiers/const-writable-annotation.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "writable target annotation"
+  },
+  {
+    "file": "qualifiers/const-region-parameter.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot pass a read-only view to a writable parameter"
+  },
+  {
+    "file": "qualifiers/const-owner-helper.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "qualifiers/const-region-annotation.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "a writable region annotation cannot expose a read-only owner view"
+  },
+  {
+    "file": "qualifiers/const-structural-field.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "expected region :"
   }
 ]

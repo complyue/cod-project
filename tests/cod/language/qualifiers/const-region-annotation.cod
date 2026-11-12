@@ -1,0 +1,4 @@
+data Store {ticks:u64;}
+owned region state <- make Store(capacity=128u64){ticks<-1u64};
+region observed:const Store=state;
+region writable:Store=observed;

@@ -32,7 +32,7 @@ effect @bias <- 10u64;
 behave @print(perform @update(first, 1u64));
 behave @print(behave @update(first, 1u64));
 behave @print(second.ticks);
-function read(const region state:State)->const u64 { return state.ticks }
+function read(region state:const State)->const u64 { return state.ticks }
 func readonly = read;
 behave @print(readonly(second));
 

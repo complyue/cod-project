@@ -1,0 +1,6 @@
+data Store {ticks:u64;}
+owned region state <- make Store(capacity=128u64){ticks<-1u64};
+function mutate(value:const u64 in r) where {region r:Store}->void {
+  r.ticks <- 9u64;
+}
+mutate(state.ticks);
