@@ -1,0 +1,8 @@
+symbol @missing:u64;
+proc walk(n:u64,callback:proc(u64)->const u64)->const u64 {
+ if(n==0u64){return callback(1u64);}else{};
+ {{proc next=proc(x:u64)->const u64{return callback(x)+@missing;};
+ return walk(n-1u64,next);}}
+}
+proc first=proc(x:u64)->const u64{return x;};
+walk(20u64,first);

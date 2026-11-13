@@ -3800,5 +3800,41 @@
       "regional value requires a live owning region in this caller scope",
       "note: the referenced region was acquired here"
     ]
+  },
+  {
+    "file": "closures/callable-growing-parameter-selection.cod",
+    "exit": 0,
+    "stdout": "1029\n15708\n1\n700\n777\n700\n7\n15708\n1029\n"
+  },
+  {
+    "file": "closures/callable-growing-parameter-regional.cod",
+    "exit": 0,
+    "stdout": "218\n280\n10\n280\n"
+  },
+  {
+    "file": "closures/callable-growing-parameter-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "cannot transfer into a read-only destination view"
+    ]
+  },
+  {
+    "file": "closures/callable-growing-parameter-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "missing required binding",
+      "::@missing"
+    ]
+  },
+  {
+    "file": "closures/callable-growing-parameter-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region",
+      "note: the referenced region was acquired here"
+    ]
   }
 ]

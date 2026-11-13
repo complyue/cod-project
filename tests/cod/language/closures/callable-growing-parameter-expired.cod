@@ -1,0 +1,21 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @leaf:proc(u64)->const u64;
+proc walk(n:u64,callback:proc(u64)->const u64)->proc(u64)->const u64 {
+  if(n==0u64){return callback;}else{};
+  {{proc next=proc(x:u64)->const u64{return callback(x)+1u64;};
+    return walk(n-1u64,next);
+  }}
+}
+proc make_expired()->proc(u64)->const u64 {
+  effect @arena<-make Item(capacity=256u64){value<-7u64};
+  proc first=proc(x:u64)->const u64{return @arena.value+x;};
+  return walk(20u64,first);
+}
+proc run()->void {
+  proc selected=make_expired();
+  effect @leaf=selected;
+  behave @print(perform @leaf(1u64));
+}
+run();

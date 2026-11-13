@@ -498,7 +498,7 @@ class Compiler {
     size_t address = 0;
     CallableMemory memory{nullptr};
     std::optional<size_t> written_holder = {};
-    bool loop = false;
+    bool reentry = false;
     NativeCallDemand *producer = nullptr;
   };
   std::vector<CallableFlow> callable_flows_{CallableFlow{}};
@@ -601,6 +601,7 @@ class Compiler {
     const NativeCallDemand *reused = nullptr;
     size_t result_flow = 0;
     std::vector<Value> arguments = {};
+    std::map<size_t, size_t> parameter_flows = {}; // Complete copied inputs shared by recursive activations.
     struct Selection {
       std::string name;
       bool function_context;
@@ -1211,7 +1212,7 @@ class Compiler {
         auto &output = callable_flows_.at(destination);
         if (output.definition != value.definition || output.inputs != value.inputs || output.open != value.open ||
             output.holder != value.holder || output.address != value.address || output.memory != value.memory ||
-            output.written_holder != value.written_holder || output.loop != value.loop || output.producer != value.producer) {
+            output.written_holder != value.written_holder || output.reentry != value.reentry || output.producer != value.producer) {
           output = std::move(value);
           changed = true;
         }
@@ -1246,8 +1247,8 @@ class Compiler {
       auto [id, address, holder] = pending.back(); pending.pop_back();
       if (!id) continue;
       const auto &node = callable_flows_.at(id);
-      // A prior iteration may have selected another holder at this same site.
-      if (node.loop) { address = 0; holder = 0; }
+      // An earlier loop, cleanup or recursive activation can select another holder.
+      if (node.reentry) { address = 0; holder = 0; }
       if (!visited.emplace(id, address, holder).second) continue;
       result.closed &= !node.open;
       if (node.open && unresolved) unresolved->insert(id);
@@ -5746,7 +5747,8 @@ class Compiler {
                               std::map<size_t, size_t> *correspondence = nullptr, bool pending_facts = false,
                               std::vector<std::pair<const Procedure *, const Procedure *>> *images = nullptr,
                               std::set<const CallableCode *> *escaping_images = nullptr,
-                              std::map<size_t, size_t> *context_owners = nullptr) {
+                              std::map<size_t, size_t> *context_owners = nullptr,
+                              const std::map<size_t, CallableChoices> *parameter_choices = nullptr) {
     if (left.caller != right.caller || left.captured != right.captured ||
         left.conformances != right.conformances || left.conversion_parameter != right.conversion_parameter) return false;
     bool recursive = false;
@@ -6159,10 +6161,19 @@ class Compiler {
             if (!associate(holders, reverse_holders, holder, holder)) return false;
         }
       }
-      const auto a = borrowed_parameter(left.type, i) ? bound_callable_choices(first, left.state.callables) :
+      const auto parameter = left.parameter_flows.find(i);
+      const auto a = parameter_choices && parameter_choices->contains(i) ? parameter_choices->at(i) :
+          parameter != left.parameter_flows.end() ? callable_choices(parameter->second) :
+          borrowed_parameter(left.type, i) ? bound_callable_choices(first, left.state.callables) :
           callable_choices(first.callable_flow);
       const auto b = borrowed_parameter(right.type, i) ? bound_callable_choices(second, right.state.callables) :
           callable_choices(second.callable_flow);
+      // A formal input graph checks each reaching body independently. Its
+      // alternatives need no schema substitution or equivalent dispatch key.
+      if (parameter != left.parameter_flows.end() && a.closed && b.closed &&
+          std::all_of(b.definitions.begin(), b.definitions.end(), [&](const auto &source) {
+            return std::find(a.definitions.begin(), a.definitions.end(), source) != a.definitions.end();
+          })) continue;
       if (!same_callable_input(first, second, a, b)) return false;
     }
     const bool renamed_regions = std::any_of(regional_owners.begin(), regional_owners.end(),
@@ -6243,6 +6254,7 @@ class Compiler {
       if (correspondence) *correspondence = std::move(holders);
       if (images) *images = std::move(matched_images);
       if (escaping_images) *escaping_images = std::move(escaping);
+      if (context_owners) *context_owners = std::move(regional_owners);
       return true;
     }
     if (left.environment.captured_context != right.environment.captured_context) return false;
@@ -6321,6 +6333,35 @@ class Compiler {
     }
     return changed;
   }
+  bool extend_native_inputs(const NativeCallDemand &from, const NativeCallDemand &to,
+                            std::map<size_t, size_t> &holders, bool pending_facts) {
+    if (from.arguments.size() != to.arguments.size()) return false;
+    std::map<size_t, CallableChoices> proposed;
+    for (const auto &[index, flow] : from.parameter_flows) {
+      auto choices = callable_choices(flow);
+      const auto incoming = callable_choices(to.arguments[index].callable_flow);
+      if (!choices.closed || !incoming.closed) return false;
+      bool added = false;
+      for (const auto &source : incoming.definitions)
+        if (std::find(choices.definitions.begin(), choices.definitions.end(), source) == choices.definitions.end()) {
+          choices.definitions.push_back(source); added = true;
+        }
+      if (added) proposed.emplace(index, std::move(choices));
+    }
+    if (proposed.empty()) return false;
+    std::map<size_t, size_t> owners;
+    if (!same_native_context(from, to, true, &holders, pending_facts, nullptr, nullptr, &owners, &proposed) ||
+        std::any_of(owners.begin(), owners.end(), [](const auto &entry) { return entry.first != entry.second; }))
+      return false;
+    // Copied parameters carry complete values. As at a loop header, a back
+    // edge adds possible inputs without merging their runtime storage.
+    for (const auto &[index, choices] : proposed) {
+      auto &inputs = callable_flows_.at(from.parameter_flows.at(index)).inputs;
+      const auto incoming = to.arguments[index].callable_flow;
+      if (std::find(inputs.begin(), inputs.end(), incoming) == inputs.end()) inputs.push_back(incoming);
+    }
+    return true;
+  }
   bool refine_native_reuse() {
     bool changed = false;
     const auto compiled = callable_compilations_;
@@ -6373,6 +6414,14 @@ class Compiler {
     checking_native_calls_.insert(&demand);
     const auto checking = llvm::scope_exit([&] { checking_native_calls_.erase(&demand); });
     if (demand.selection && !select_native_method(demand)) return false;
+    if (demand.parameter_flows.empty())
+      for (size_t i = 0; i < demand.arguments.size(); ++i)
+        if (native_callable(demand.arguments[i]) && !borrowed_parameter(demand.type, i) &&
+            contextual_callable(demand.arguments[i].type)) {
+          callable_flows_.push_back({{}, {demand.arguments[i].callable_flow}});
+          callable_flows_.back().reentry = true;
+          demand.parameter_flows.emplace(i, callable_flows_.size() - 1);
+        }
     const auto choices = callable_choices(demand.flow);
     if (choices.definitions.empty() || std::all_of(choices.definitions.begin(), choices.definitions.end(),
         [&](const auto &source) { return demand.emitted.contains(source.get()); })) return false;
@@ -6421,7 +6470,8 @@ class Compiler {
     for (const auto *ancestor : ancestors) {
       if (!demand.emitted.empty()) continue;
       std::map<size_t, size_t> holders;
-      if (!same_native_context(*ancestor, demand, true, &holders, pending_facts)) continue;
+      if (!same_native_context(*ancestor, demand, true, &holders, pending_facts) &&
+          !extend_native_inputs(*ancestor, demand, holders, pending_facts)) continue;
       const auto connect = [&](const auto &from, const auto &to) {
         for (const auto &[a, b] : holders)
           if (from.contains(a) && to.contains(b)) callable_flows_.at(to.at(b)).inputs = {from.at(a)};
@@ -6557,7 +6607,9 @@ class Compiler {
             value.native = argument;
             if (value.type.owned) value = hold_region(std::move(value), false, true);
             parameters.push_back(std::move(value));
-          } else parameters.push_back(native_parameter(demand.type.parameters[i], demand.arguments[i].callable_flow, argument));
+          } else parameters.push_back(native_parameter(demand.type.parameters[i],
+              demand.parameter_flows.contains(i) ? demand.parameter_flows.at(i) : demand.arguments[i].callable_flow,
+              argument));
         }
         auto result = inline_call(*procedure.form, *procedure.lexical, std::move(environment), parameters,
                                   demand.type.pure_callable, demand.at, *demand.caller,
@@ -7254,7 +7306,7 @@ class Compiler {
           targets.push_back(view.target_flow);
           if (view.callable_address) {
             callable_flows_.push_back({{}, {}, true});
-            callable_flows_.back().loop = true;
+            callable_flows_.back().reentry = true;
             view.callable_address = callable_flows_.size() - 1;
             addresses.push_back(view.callable_address);
           }
@@ -7269,7 +7321,7 @@ class Compiler {
         std::vector<size_t> alternatives;
         for (auto &path : header.paths) {
           callable_flows_.push_back({{}, {}, true});
-          callable_flows_.back().loop = true;
+          callable_flows_.back().reentry = true;
           const auto input = callable_flows_.size() - 1;
           path.callables = callable_memory_factory_.add(path.callables, holder, input);
           alternatives.push_back(input);
@@ -8219,7 +8271,7 @@ class Compiler {
       const auto incoming = callable_holders_;
       for (const auto &[holder, flow] : incoming) {
         callable_flows_.push_back({{}, {flow}, true});
-        callable_flows_.back().loop = true;
+        callable_flows_.back().reentry = true;
         const auto header = callable_flows_.size() - 1;
         callable_holders_ = callable_memory_factory_.add(callable_holders_, holder, header);
         callable_headers.emplace_back(holder, header);
@@ -8236,7 +8288,7 @@ class Compiler {
       view.target_flow = pointer_flows_.size() - 1;
       if (view.callable_address) {
         callable_flows_.push_back({{}, {}, true});
-        callable_flows_.back().loop = true;
+        callable_flows_.back().reentry = true;
         view.callable_address = callable_flows_.size() - 1;
       }
       const auto *header = snapshot_pointer(std::move(view));
@@ -10585,7 +10637,7 @@ public:
     try {
       try { execute_module(module, {}, {module.path}); }
       catch (const EndPath &) { /* No later runtime forms execute. */ }
-      // Loop headers now include their back edges. Check exactly the reachable
+      // Shared entry graphs include their back edges. Check all reaching
       // implementations; compiling a body can demand further callable nodes.
       for (;;) {
         bool changed = resolve_pointer_substitutions();
