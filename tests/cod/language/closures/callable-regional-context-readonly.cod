@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @item:Item;
+proc walk(n:u64)->void {
+ @item.value<-1u64;
+ if(n==0u64){return;}else{};
+ {{region readonly:const Item=@arena;effect @item=root(readonly);walk(n-1u64);}}
+}
+proc run()->void {effect @arena<-make Item(capacity=256u64){value<-99u64};effect @item=root(@arena);walk(3u64);}
+run();

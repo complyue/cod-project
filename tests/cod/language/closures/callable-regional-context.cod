@@ -1,0 +1,91 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+data Item {value:u64;}
+region symbol @arena:Item;
+region symbol @other:Item;
+region symbol @objects:Item;
+symbol @item:Item;
+
+proc walk(n:u64)->const u64 {
+  defer {@arena.value <- @arena.value+1u64;};
+  if(n==0u64){return @arena.value;}else{};
+  {{
+    effect @arena <- make Item(capacity=256u64){value<-n};
+    return walk(n-1u64)+@arena.value;
+  }}
+}
+proc reverse(n:u64)->const u64 {
+  if(n!=0u64){
+    {{
+      effect @arena <- make Item(capacity=256u64){value<-n};
+      return reverse(n-1u64)+@arena.value;
+    }}
+  }else{};
+  return @arena.value;
+}
+proc object_walk(n:u64)->const u64 {
+  defer {@item.value <- @item.value+1u64;};
+  if(n==0u64){return @item.value;}else{};
+  {{
+    effect @objects <- make Item(capacity=256u64){value<-n};
+    effect @item = root(@objects);
+    return object_walk(n-1u64)+@item.value;
+  }}
+}
+proc first(n:u64)->const u64 {
+  if(n==0u64){return @arena.value+@other.value;}else{};
+  {{
+    effect @arena <- make Item(capacity=256u64){value<-n};
+    effect @other <- make Item(capacity=256u64){value<-n+10u64};
+    return second(n-1u64);
+  }}
+}
+proc second(n:u64)->const u64 {
+  if(n!=0u64){
+    {{
+      effect @arena <- make Item(capacity=256u64){value<-n};
+      effect @other <- make Item(capacity=256u64){value<-n+10u64};
+      return first(n-1u64);
+    }}
+  }else{};
+  return @arena.value+@other.value;
+}
+proc failing(n:u64)->void {
+  defer {@arena.value <- @arena.value+1u64;};
+  if(n==0u64){{effect @arena <- make Item(capacity=0u64){value<-0u64};}}else{};
+  {{
+    effect @arena <- make Item(capacity=256u64){value<-n};
+    failing(n-1u64);
+  }}
+}
+proc run()->void {
+  effect @arena <- make Item(capacity=256u64){value<-99u64};
+  effect @other <- make Item(capacity=256u64){value<-199u64};
+  effect @item = root(@arena);
+  behave @print(walk(20u64));
+  behave @print(@arena.value);
+  for(i in 0u64..2u64) {{
+    proc selected=if(i==0u64){walk}else{reverse};
+    defer {{behave @print(selected(20u64));}};
+  }};
+  behave @print(object_walk(20u64));
+  behave @print(@arena.value);
+  behave @print(first(20u64));
+  behave @print(@other.value);
+  try {failing(20u64);} catch(e:const InvalidCapacity){behave @print(@arena.value);};
+}
+run();
+
+proc captured_walk(n:u64)->const u64 {
+  if(n==0u64){return perform @read();}else{};
+  {{
+    effect @arena <- make Item(capacity=256u64){value<-n};
+    return captured_walk(n-1u64);
+  }}
+}
+proc captured()->void {
+  effect @arena <- make Item(capacity=256u64){value<-99u64};
+  effect proc @read()->const u64 {return @arena.value;};
+  defer {behave @print(captured_walk(20u64));};
+}
+captured();

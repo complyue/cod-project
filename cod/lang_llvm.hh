@@ -479,6 +479,7 @@ public:
   };
   std::map<llvm::Function *, NativeContext> native_contexts_;
   std::map<llvm::Instruction *, llvm::Function *> context_uses_;
+  std::map<llvm::Instruction *, std::map<llvm::Value *, llvm::Value *>> context_inputs_;
   std::set<llvm::Function *> context_free_entries_;
   static bool external_value(llvm::Value *value, llvm::Function *function) {
     if (auto *instruction = llvm::dyn_cast<llvm::Instruction>(value)) return instruction->getFunction() != function;
@@ -666,10 +667,16 @@ public:
   void finish_native_contexts() {
     // A context's external inputs include those needed to construct its
     // callees' contexts. Close that dependency graph before choosing layouts.
-    std::map<llvm::Function *, std::set<llvm::Function *>> callers;
+    std::map<llvm::Function *, std::vector<llvm::Instruction *>> callers;
+    const auto input_at = [&](llvm::Instruction *use, llvm::Value *input) {
+      const auto found = context_inputs_.find(use);
+      if (found != context_inputs_.end())
+        if (const auto value = found->second.find(input); value != found->second.end()) return value->second;
+      return input;
+    };
     for (const auto &[use, target] : context_uses_) {
       if (!target) throw std::logic_error("unresolved native context");
-      if (native_contexts_.contains(use->getFunction())) callers[target].insert(use->getFunction());
+      if (native_contexts_.contains(use->getFunction())) callers[target].push_back(use);
     }
     std::vector<llvm::Function *> pending;
     std::set<llvm::Function *> queued;
@@ -684,11 +691,12 @@ public:
     }
     while (!pending.empty()) {
       auto *function = pending.back(); pending.pop_back(); queued.erase(function);
-      for (auto *caller : callers[function]) {
+      for (auto *use : callers[function]) {
+        auto *caller = use->getFunction();
         auto &context = native_contexts_.at(caller);
         bool changed = false;
         for (auto *input : native_contexts_.at(function).inputs)
-          changed |= add_context_input(context, input, caller);
+          changed |= add_context_input(context, input_at(use, input), caller);
         if (changed && queued.insert(caller).second) pending.push_back(caller);
       }
     }
@@ -707,12 +715,13 @@ public:
         llvm::IRBuilder<> allocate(&entry, entry.begin()), write(use);
         storage = allocate.CreateAlloca(context.layout, nullptr, "call.context");
         for (size_t i = 0; i < context.inputs.size(); ++i)
-          write.CreateStore(context.inputs[i], write.CreateStructGEP(context.layout, storage, unsigned(i)));
+          write.CreateStore(input_at(use, context.inputs[i]), write.CreateStructGEP(context.layout, storage, unsigned(i)));
       }
       use->replaceAllUsesWith(storage);
       use->eraseFromParent();
     }
     context_uses_.clear();
+    context_inputs_.clear();
     for (const auto &[function, context] : native_contexts_) {
       if (function->empty()) continue;
       llvm::IRBuilder<> loads(&function->getEntryBlock(), function->getEntryBlock().begin());
@@ -729,17 +738,21 @@ public:
     }
   }
   void reuse_native_context(NativeDefinition &target, const NativeDefinition &source,
-                            llvm::Instruction *pending, bool recursive = true) {
+                            llvm::Instruction *pending, bool recursive = true,
+                            std::map<llvm::Value *, llvm::Value *> inputs = {}) {
     if (target.function->getFunctionType() != source.function->getFunctionType())
       throw std::logic_error("recursive adapter signature mismatch");
     target.function->replaceAllUsesWith(source.function);
     native_contexts_.erase(target.function);
     target.function->eraseFromParent();
-    if (recursive) {
+    if (recursive && inputs.empty()) {
       context_uses_.erase(pending);
       pending->replaceAllUsesWith(source.function->getArg(source.context_argument));
       pending->eraseFromParent();
-    } else context_uses_.at(pending) = source.function;
+    } else {
+      context_uses_.at(pending) = source.function;
+      if (!inputs.empty()) context_inputs_.emplace(pending, std::move(inputs));
+    }
     target = source;
   }
   llvm::Constant *callable_key() {

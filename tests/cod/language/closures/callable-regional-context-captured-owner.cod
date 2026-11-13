@@ -1,0 +1,14 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+region symbol @arena:Item;
+func same(a:Item in o,b:Item in o)->const u64 where {owner o} {return a.value+b.value;}
+proc walk(n:u64)->const u64 {
+ if(n==0u64){return perform @check(root(@arena));}else{};
+ {{effect @arena<-make Item(capacity=256u64){value<-n};return walk(n-1u64);}}
+}
+proc run()->void {
+ effect @arena<-make Item(capacity=256u64){value<-99u64};
+ effect proc @check(v:Item in o)->const u64 where {owner o} {return same(v,root(@arena));};
+ behave @print(walk(3u64));
+}
+run();

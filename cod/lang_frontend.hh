@@ -616,6 +616,7 @@ class Compiler {
     bool pending_argument_facts = false;
     std::map<size_t, size_t> initialized = {};
     std::array<std::map<size_t, size_t>, concrete_exception_count> failure_initialized = {};
+    std::map<size_t, llvm::WeakTrackingVH> environment_bases = {};
   };
   std::deque<NativeCallDemand> native_call_demands_;
   size_t callable_compilations_ = 0;
@@ -4233,7 +4234,7 @@ class Compiler {
     }
     const bool scalar_result = instantiated.result && local_bits(*instantiated.result) && instantiated.result->kind != Type::exception && !form.result_const &&
         form.result_owner.empty() && form.result_kind != "ptr";
-    const bool contextual_parameters = scalar_result || (instantiated.result && instantiated.result->kind == Type::region && instantiated.result->owned) ||
+    const bool contextual_parameters = form.kind == Form::Kind::procedure || scalar_result || (instantiated.result && instantiated.result->kind == Type::region && instantiated.result->owned) ||
         !form.owner_parameters.empty() || std::any_of(args.begin(), args.end(), [](const Value &value) {
       return value.type.kind == Type::procedure || value.type.kind == Type::region;
     });
@@ -5709,7 +5710,8 @@ class Compiler {
   bool same_native_context(const NativeCallDemand &left, const NativeCallDemand &right, bool values,
                               std::map<size_t, size_t> *correspondence = nullptr, bool pending_facts = false,
                               std::vector<std::pair<const Procedure *, const Procedure *>> *images = nullptr,
-                              std::set<const CallableCode *> *escaping_images = nullptr) {
+                              std::set<const CallableCode *> *escaping_images = nullptr,
+                              std::map<size_t, size_t> *context_owners = nullptr) {
     if (left.caller != right.caller || left.captured != right.captured ||
         left.conformances != right.conformances || left.conversion_parameter != right.conversion_parameter) return false;
     bool recursive = false;
@@ -5729,16 +5731,56 @@ class Compiler {
       regional_owners.emplace(owner, owner);
       reverse_regional_owners.emplace(owner, owner);
     };
-    const auto retain = [&](const Value &value) {
-      if (value.region_id) fixed(*value.region_id);
-      for (size_t owner : value.type.capture_regions) fixed(owner);
-    };
     for (const auto *demand : {&left, &right}) {
-      for (const auto &[id, value] : demand->environment.bindings) retain(*value);
+      // Procedure-valued bindings can retain definition-time regional bases
+      // even when their visible callable type has no lexical with-owner.
+      std::set<const Procedure *> retained;
+      const auto retain_images = [&](auto &&self, const CallableChoices &choices) -> void {
+        for (const auto &source : choices.definitions) {
+          if (!retained.insert(source.get()).second || !source->code) continue;
+          for (size_t owner : source->code->regions) fixed(owner);
+          for (size_t owner : source->code->dynamic_regions) fixed(owner);
+          for (const auto &[name, capture] : source->lexical_captures.visible)
+            if (native_callable(capture)) self(self, callable_choices(capture.callable_flow));
+          for (const auto &[id, capture] : source->captures.bindings)
+            if (native_callable(*capture)) self(self, callable_choices(capture->callable_flow));
+        }
+      };
+      for (const auto &[id, value] : demand->environment.bindings) {
+        if (value->region_id && (demand->captured || demand->environment.replay ||
+            demand->environment.captured(id, value))) fixed(*value->region_id);
+        for (size_t owner : value->type.capture_regions) fixed(owner);
+        if (native_callable(*value)) retain_images(retain_images, bound_callable_choices(*value, demand->state.callables));
+      }
       for (const auto &source : callable_choices(demand->flow).definitions) if (source->code) {
         for (size_t owner : source->code->regions) fixed(owner);
         if (demand->captured) for (size_t owner : source->code->dynamic_regions) fixed(owner);
       }
+    }
+    // Current regional bindings are invocation inputs. Reuse may rename their
+    // live owners, but must preserve alias relationships and checked access.
+    // Escaping results still require their separate owner-substitution proof.
+    for (const auto &[id, a] : left.environment.bindings) {
+      const auto *b = right.environment.lookup(id);
+      if (!a->region_id || !b || !b->region_id) continue;
+      const auto first = identity(*a->region_id), second = identity(*b->region_id);
+      if (first != second) {
+        if (left.captured || right.captured || left.environment.replay || right.environment.replay ||
+            left.environment.captured(id, a) || right.environment.captured(id, b) ||
+            left.record_result || right.record_result || left.result_flow || right.result_flow) return false;
+      }
+      if (a != b) {
+        resolve_region_root(*a->region_id, left.at);
+        resolve_region_root(*b->region_id, right.at);
+        auto av = *a, bv = *b;
+        resolve_result_facts(av, left.at); resolve_result_facts(bv, right.at);
+        if (a->type != b->type || a->read_only != b->read_only || a->nullable != b->nullable ||
+            av.conformances != bv.conformances ||
+            regions_.at(*a->region_id).root != regions_.at(*b->region_id).root ||
+            !left.state.live.at(region_source(*a->region_id)) ||
+            !right.state.live.at(region_source(*b->region_id))) return false;
+      }
+      if (!associate(regional_owners, reverse_regional_owners, first, second)) return false;
     }
     for (size_t i = 0; i < left.arguments.size(); ++i) if (left.type.parameters[i].owned) {
       const auto a = identity(*left.arguments[i].region_id);
@@ -6137,6 +6179,8 @@ class Compiler {
         continue;
       }
       if (!values || a == b) continue;
+      if (a->region_id && b->region_id && !left.environment.captured(l->first, a) &&
+          !right.environment.captured(r->first, b) && same_region(*a->region_id, *b->region_id)) continue;
       // Live numeric effects are read from TLS in every activation. Captured
       // values and other resources must retain the same checked provenance.
       if (!local_bits(a->type) || a->type.kind == Type::exception ||
@@ -6146,6 +6190,7 @@ class Compiler {
     if (correspondence) *correspondence = std::move(holders);
     if (images) *images = std::move(matched_images);
     if (escaping_images) *escaping_images = std::move(escaping);
+    if (context_owners) *context_owners = std::move(regional_owners);
     return true;
   }
   bool refine_native_reuse() {
@@ -6517,6 +6562,8 @@ class Compiler {
         type.pure_callable ? Environment{} : env, captured, type,
         flow_state(), definition, context, caller_conformances_, scopes_, call_path_});
     auto &demand = native_call_demands_.back();
+    for (const auto &[id, value] : demand.environment.bindings)
+      if (value->region_id) demand.environment_bases.emplace(*value->region_id, regions_.at(*value->region_id).owner);
     demand.conversion_parameter = conversion_parameter;
     demand.arguments = parameters;
     for (size_t i = 0; i < demand.arguments.size(); ++i)
@@ -10557,7 +10604,22 @@ public:
       if (!demand.reused) continue;
       bool recursive = false;
       for (auto *parent = demand.parent; parent; parent = parent->parent) recursive |= parent == demand.reused;
-      ir_.reuse_native_context(demand.definition, demand.reused->definition, demand.context, recursive);
+      std::map<size_t, size_t> owners;
+      if (!same_native_context(*demand.reused, demand, true, nullptr, false, nullptr, nullptr, &owners))
+        fail(demand.at, "native context owner correspondence changed after checking");
+      std::map<llvm::Value *, llvm::Value *> inputs;
+      for (const auto &[region, base] : demand.reused->environment_bases) {
+        const auto owner = region_identity(region, demand.at);
+        const auto found = owners.find(owner);
+        if (found == owners.end() || found->second == owner) continue;
+        for (const auto &[actual, address] : demand.environment_bases)
+          if (region_identity(actual, demand.at) == found->second) {
+            const auto [input, added] = inputs.emplace(base, address);
+            if (!added && input->second != address) throw std::logic_error("conflicting native context owner bases");
+            break;
+          }
+      }
+      ir_.reuse_native_context(demand.definition, demand.reused->definition, demand.context, recursive, std::move(inputs));
       demand.context = nullptr;
     }
     ir_.resolve_uncaught();

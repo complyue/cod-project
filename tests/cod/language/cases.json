@@ -3574,5 +3574,22 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "requires the same actual owner"
+  },
+  {
+    "file": "closures/callable-regional-context.cod",
+    "exit": 0,
+    "stdout": "231\n100\n231\n211\n231\n102\n12\n199\n103\n99\n"
+  },
+  {
+    "file": "closures/callable-regional-context-captured-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "owner 'o' requires the same actual owner"
+  },
+  {
+    "file": "closures/callable-regional-context-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
   }
 ]

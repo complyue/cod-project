@@ -18,7 +18,7 @@ def main():
         capture = " [state]"
         (scratch / "base.cod").write_text('region Shape { val value:u64; }\n'
             'export Shape;\nfunction reader(region state:Shape) -> func()->const u64 with {region state} {\n'
-            f'  func{capture} () -> const u64 {{ state.value }}\n}}\nexport reader;\n')
+            f'  return func{capture} () -> const u64 {{ return state.value; }};\n}}\nexport reader;\n')
         previous = "base.cod"
         levels = 64
         for index in range(levels):
@@ -28,7 +28,7 @@ def main():
                 'using "base.cod" Shape;\n'
                 'function reader(region state:Shape) -> func()->const u64 with {region state} {\n'
                 '  func prior = previous(state);\n'
-                f'  func{capture} () -> const u64 {{ prior() + 1u64 }}\n}}\nexport reader;\n')
+                f'  return func{capture} () -> const u64 {{ return prior() + 1u64; }};\n}}\nexport reader;\n')
             previous = name
         entry = scratch / "entry.cod"
         entry.write_text(f'using "{previous}" reader;\nusing symbol "std:io" @print;\n'

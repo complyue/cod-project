@@ -673,6 +673,39 @@ stress();
                                  '33', '32', '33', '51', '6001', '6002', '7001', '7002', '9999'], scalar_output
         scalar_evidence['fixture_sha256'] = hashlib.sha256(scalar_results.read_bytes()).hexdigest()
         evidence['scalar_results'] = scalar_evidence
+        regional_context = directory / "closures/callable-regional-context.cod"
+        entry.write_text(regional_context.read_text() + '''
+using "std:exceptions" OutOfMemory;
+proc allocation_failure(n:u64)->void {
+  defer {@arena.value <- @arena.value+1u64;};
+  {{
+    effect @arena <- make Item(capacity=if(n==0u64){31337u64}else{256u64}){value<-n};
+    allocation_failure(n-1u64);
+  }}
+}
+proc stress()->void {
+  effect @arena <- make Item(capacity=256u64){value<-50u64};
+  proc selected=walk;
+  behave @print(6001u64);
+  try {{proc failed=selected;}} catch(e:const OutOfMemory){behave @print(6002u64);};
+  try {allocation_failure(20u64);} catch(e:const OutOfMemory){behave @print(@arena.value);};
+  behave @print(7001u64);
+  for(i in 0u64..10000u64) {{selected(4u64);}};
+  behave @print(7002u64);
+  behave @print(@arena.value);
+}
+stress();
+''')
+        context_harness = 'static void verify_regions();\n' + HARNESS.replace(
+            '  cod_exception_release();', '  verify_regions();\n  cod_exception_release();') + OWNED_REGION_HARNESS.replace(
+            'regions_acquired == 10250 && region_failures == 4', 'regions_acquired == 40184 && region_failures == 1')
+        context_output, context_evidence = run_case(root, toolchain, entry, scratch, context_harness,
+            extra_wrappers=wrappers + '#define cod_lang_region_new cod_lang_region_acquire\n')
+        context_evidence['regions'] = json.loads(context_output.pop())
+        assert context_output == ['231', '100', '231', '211', '231', '102', '12', '199', '103', '99',
+                                  '6001', '6002', '51', '7001', '7002', '10051'], context_output
+        context_evidence['fixture_sha256'] = hashlib.sha256(regional_context.read_bytes()).hexdigest()
+        evidence['regional_context'] = context_evidence
         nullable_views = directory / "closures/callable-nullable-views.cod"
         entry.write_text(nullable_views.read_text() + '''
 using "std:exceptions" OutOfMemory;

@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 205 · Recorded: 2026-11-12.
+Prototype reference revision: 206 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Recursive regional contexts:** [K-559](../../../design/DesignAuthorityRegistry.md#k-559), reference206 under D-18r77/D-10r133, preserves current region bases and their checked alias/access relationships across native recursive calls. [Verification](callable-regional-context-validation.json) covers fresh scoped installations, object bindings, selected and mutual recursion, performed snapshots, deferred cleanup and failure restoration. Captured owners remain fixed; a captured/current owner mismatch still rejects. [Composition validation](closures/composition_tests.py) uses explicit returns for its 64-module and 10,000-update programs. Independent results are covered; escaping-result owner substitution, broader context proofs and pending language choices remain separate.
 
 - **Native scalar results:** [K-558](../../../design/DesignAuthorityRegistry.md#k-558), reference205 under D-18r76, continues the established borrowed-result, const-value, owner/access/initialization and completion contracts. [Verification](callable-native-scalar-validation.json) covers regional and lexical aliases through captured, runtime-selected, recursive and deferred calls, cleanup-time writes, independent const snapshots and invalid escape/access/owner use. The native carrier transports payload/address while compiler-only category evidence closes before emission. [Native acceptance](callable_runtime_tests.py) checks 10,000 returned-view writes without invocation-time image allocation, failed-copy preservation and balanced image/region releases. [Pointer-target](callable-pointer-result-validation.json) and [shared-provenance](callable-result-provenance-validation.json) evidence retain their scope. Fresh ordinary scalar results and mixed value/view policy remain under [topic review](../../../design/ScalarCallResults.md); observed fresh-result behavior is not normative acceptance.
 
