@@ -1,18 +1,20 @@
 # Ahead-of-Time Multiple Dispatch
 
-Design revision: 5 · Recorded: 2026-11-12 · Status: behavioral contract, value path and initialization-cancellation boundary confirmed; detailed mechanisms pending-human.
+Design revision: 6 · Recorded: 2026-11-12 · Status: behavioral contract, value path and initialization-cancellation boundary confirmed; detailed mechanisms pending-human.
 
 **Prepare as much as makes sense, ahead of time.**
 
-CoD callable values preserve a selected method family and its module interpretation. Calls select methods using actual argument types. Whole-program compilation prepares the admissible leaf-ADT combinations and their dispatch before execution. Independent module worlds coexist; runtime installation chooses a compatible callable view without changing those worlds.
+CoD callable values preserve a selected method family and its module interpretation. Calls select methods using actual argument types. The recorded AOT baseline prepares admissible leaf-ADT combinations and dispatch before execution; replacement code-generation timing is under the explicitly authorized architecture review. Independent module worlds coexist; runtime installation chooses a compatible callable view without changing those worlds.
 
 ## Design authority
+
+- **Architecture exploration scope:** [H-387](DesignAuthorityRegistry.md#h-387)/[K-573](DesignAuthorityRegistry.md#k-573) authorizes [alternative designs and isolated prototypes](CompilationRuntimeArchitectureExploration.md). Compilation produces one complete fused type-level artifact retaining reachable dependency-local interpretations and procedure-local effects; this is not just the entry module's world. Semantic/checking completeness, native-code readiness, dispatch and specialization are separate responsibilities. The AOT timing below records the existing baseline; replacement timing remains under review, and its earlier measured-growth gate does not restrict exploration. Family/context identity, entry installation, initialization-only TLS-write suppression with operands preserved, owners and cleanup remain. Candidate mechanisms and final architecture need whole-file approval. No production JIT/RTTI, layout, external-input integration or world-evolution protocol is selected.
 
 - **Implicit owner bindings:** [H-382](DesignAuthorityRegistry.md#h-382)/[K-538](DesignAuthorityRegistry.md#k-538), D-21r5, confirms P-343: every inferred owner is a const lexical binding in the callable body, including generic region-or-scope owners. C-65's provenance/root-capability distinction and H-366's binding/target constness remain; H-381's nearest lookup includes these names. This preserves semantic identity, explicit permissions and lifetime under charter §§2–3/§4.3/§5/§6/§8 without requiring a runtime owner object. Acceptance covers shadowing, immutable binding, permitted target writes and absence of implicit region capability. Broader first-class owner storage, actual-owner union and native dispatch representation remain outside this clarification.
 
 - **Nearest symbol lookup and execution separation:** [H-381](DesignAuthorityRegistry.md#h-381)/[K-537](DesignAuthorityRegistry.md#k-537), D-21r4, records P-342: @ access follows the nearest lexical binding and rejects a non-symbol binding. Captured/current execution, cached identities and delayed bodies preserve that lookup. H-248/H-249/H-372 separates semantic ModuleWorld records from ModuleExecution values/progress; source behavior remains governed by the existing contracts. This continues explicit names/context under charter §§2–3/§5.2/§6/§8/§12 and the H-378 value path. Acceptance covers shadowing, capture/mixin lookup and preserved native ownership/context; full family/stage migration and physical dispatch mechanisms remain outstanding.
 
-- **Registry / scope:** [D-21](DesignAuthorityRegistry.md#d-21), revision5. H-372–H-377 records the stage, symbol, publication, dispatch, AOT and vision decisions. [H-378](DesignAuthorityRegistry.md#h-378) qualifies revision1's behavioral contract and P-333/P-334/P-337 value path, retained under K-535/K-536/[K-537](DesignAuthorityRegistry.md#k-537)/[K-538](DesignAuthorityRegistry.md#k-538). H-379/H-380 adds the entry-installation rule and confirms initialization-only cancellation with operand evaluation preserved. Concrete type-evidence/ABI, namespace, coverage algorithms, uncovered diagnostics and entry-composition mechanisms remain pending-human; the qualification does not cover those mechanisms.
+- **Registry / scope:** [D-21](DesignAuthorityRegistry.md#d-21), revision6. H-372–H-377 records the stage, symbol, publication, dispatch, AOT and vision decisions. [H-378](DesignAuthorityRegistry.md#h-378) qualifies revision1's behavioral contract and P-333/P-334/P-337 value path, retained under K-535/K-536/[K-537](DesignAuthorityRegistry.md#k-537)/[K-538](DesignAuthorityRegistry.md#k-538). H-379/H-380 adds the entry-installation rule and confirms initialization-only cancellation with operand evaluation preserved. Concrete type-evidence/ABI, namespace, coverage algorithms, uncovered diagnostics and entry-composition mechanisms remain pending-human; the qualification does not cover those mechanisms.
 - **Confirmed value lineage:** C-82/P-333 → C-01 preserves abstract business operations and their selected interpretations independently of optimization. C-83/P-334 → C-02 prepares native execution for the admissible type combinations without compilation during covered calls. D-21/P-337 organizes those responsibilities before implementation. H-378 explicitly confirms this scoped path under charter §§2–3/§5.2/§6/§8/§12.
 - **Confirmed constraints:** P-330–P-332/P-335/P-336 separate module construction from explicit TLS installation, preserve symbol identity and whole-family publication, require actual-type dispatch, and specify WPO/AOT coverage. P-339–P-341 govern entry installation and initialization-only cancellation while preserving operands. C-35/C-36/C-37/C-57/C-59/C-60 and H-230 retain aliases, call modes, permissions, context and source isolation. P-338 depends on D-10/D-14/D-15/D-18; dependency does not confer authority. D-16 remains a compatibility constraint.
 - **Human baseline:** current project user, side chat [01a1cfc8-0910-7ce2-8e67-a0a037e31c95](codex://threads/01a1cfc8-0910-7ce2-8e67-a0a037e31c95) and active mainline [01a1cefe-fe25-7251-b25b-b3908d803ff6](codex://threads/01a1cefe-fe25-7251-b25b-b3908d803ff6), recorded 2026-11-12 America/Los_Angeles; exact message timestamps and personal identity unavailable. H-372–H-381 preserves the behavioral decisions, revision1 value-path confirmation and entry-installation/cancellation rules. External review revision10 and vision revision3 retain provenance only.
@@ -93,7 +95,7 @@ Julia supports AOT compilation for system/package images as well as JIT. Its doc
 
 The intended benefits are predictable code availability and inspectable dispatch coverage. Costs include compilation work, possible code growth and composition-closure requirements. No universal throughput, startup, size or memory advantage is asserted. Regional storage, ownership and relocation are separate dimensions; AOT does not eliminate runtime environments, type evidence, TLS or cleanup.
 
-JIT remains a future option if measured combination growth makes compilation or generated programs impractical. Assess sharing and pruning first. Any later JIT design must preserve family identity, interpretation and observable behavior; no threshold or automatic fallback is selected here.
+The AOT baseline treats sharing/pruning as primary tools and JIT as a possible response to growth. H-387 now authorizes JIT and other architecture experiments without that scheduling prerequisite. Final code-generation timing is unselected for the replacement architecture; family identity, interpretation and observable behavior remain constraints. No threshold or automatic fallback is selected.
 
 ## Compiler construction and execution boundaries
 
@@ -121,7 +123,7 @@ The callable uses its definition's lexical bindings. A caller-local `p` does not
 
 ## Delivery sequence and acceptance
 
-The backlog belongs to the active mainline. The confirmed behavior is not reopened by the remaining mechanism work. A pending item is not an imposed language restriction.
+This table records the AOT baseline backlog. H-387 redirects the active mainline to architecture exploration after the current smallest increment; it need not complete this backlog first. Dispatch/context and installation behavior remain; replacement native-code timing requires explicit review. A pending item is not a language restriction.
 
 | Item | Deliverable and gate |
 | --- | --- |
@@ -134,7 +136,7 @@ The backlog belongs to the active mainline. The confirmed behavior is not reopen
 | DD-AOT-04 | Replace one-method value construction with family dispatcher values, preserving context, capture and complete-value semantics. |
 | DD-AOT-06 | Lower precompiled targets/dispatch, shared implementations, surviving installation roots and proven direct calls; expose unused dependency-world code to LLVM elimination. |
 | DD-AOT-09 | Verify composed behavior, including source isolation, cross-identity installation, abstract multi-dispatch and cleanup. |
-| DD-AOT-10 | Measure growth and assess JIT only if later evidence warrants a separate design. |
+| DD-AOT-10 | Measure growth; H-387 authorizes alternative execution/JIT experiments now, with final production selection pending. |
 
 Acceptance scenarios must cover:
 

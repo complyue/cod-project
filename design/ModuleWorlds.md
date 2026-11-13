@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 19 · Recorded: 2026-11-12 · Status: module-world architecture audited; bounded typed symbolic bindings implemented.
+Design revision: 20 · Recorded: 2026-11-12 · Status: module-world architecture audited; bounded typed symbolic bindings implemented.
 
 ## Design authority
+
+- **Architecture exploration scope:** [H-387](DesignAuthorityRegistry.md#h-387)/[K-573](DesignAuthorityRegistry.md#k-573) authorizes [alternative designs and isolated prototypes](CompilationRuntimeArchitectureExploration.md). Compilation produces one complete fused type-level artifact retaining reachable dependency-local interpretations and procedure-local effects; this is not just the entry module's world. Semantic/checking completeness, native-code readiness, dispatch and specialization are separate responsibilities. The AOT timing below records the existing baseline; replacement timing remains under review, and its earlier measured-growth gate does not restrict exploration. Family/context identity, entry installation, initialization-only TLS-write suppression with operands preserved, owners and cleanup remain. Candidate mechanisms and final architecture need whole-file approval. No production JIT/RTTI, layout, external-input integration or world-evolution protocol is selected.
 
 - **Nearest symbol lookup and execution separation:** [H-381](DesignAuthorityRegistry.md#h-381)/[K-537](DesignAuthorityRegistry.md#k-537), D-15r19, records P-342: @ access follows the nearest lexical binding and rejects a non-symbol binding. Captured/current execution, cached identities and delayed bodies preserve that lookup. H-248/H-249/H-372 separates semantic ModuleWorld records from ModuleExecution values/progress; source behavior remains governed by the existing contracts. This continues explicit names/context under charter §§2–3/§5.2/§6/§8/§12 and the H-378 value path. Acceptance covers shadowing, capture/mixin lookup and preserved native ownership/context; full family/stage migration and physical dispatch mechanisms remain outstanding.
 
