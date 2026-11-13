@@ -836,7 +836,9 @@ stress();
                 ('growing_parameter_regional', ['218', '280', '10', '280'], 2, 0),
                 ('borrowed_factory_procedure', ['218', '280', '10', '777', '9', '280'], 2, 1),
                 ('borrowed_factory_function', ['218', '280', '10', '777', '9', '280'], 2, 1),
-                ('borrowed_factory_shared', ['257', '1792', '2304', '9', '777', '260', '2304'], 2, 1)):
+                ('borrowed_factory_shared', ['257', '1792', '2304', '9', '777', '260', '2304'], 2, 1),
+                ('nested_perform_scalar', ['1310', '2009', '1', '700', '777', '700', '2009', '1310'], 1, 1),
+                ('nested_perform_regional', ['1317', '2016', '1', '700', '777', '700', '7000', '2016', '1317'], 3, 1)):
             captured = directory / f"closures/callable-{name.replace('_', '-')}.cod"
             source = captured.read_text()
             if region_failures:

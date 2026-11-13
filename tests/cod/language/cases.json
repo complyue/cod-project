@@ -3867,5 +3867,39 @@
     "file": "closures/callable-borrowed-factory-shared.cod",
     "exit": 0,
     "stdout": "257\n1792\n2304\n9\n777\n260\n2304\n"
+  },
+  {
+    "file": "closures/callable-nested-perform-scalar.cod",
+    "exit": 0,
+    "stdout": "1310\n2009\n1\n700\n777\n700\n2009\n1310\n"
+  },
+  {
+    "file": "closures/callable-nested-perform-regional.cod",
+    "exit": 0,
+    "stdout": "1317\n2016\n1\n700\n777\n700\n7000\n2016\n1317\n"
+  },
+  {
+    "file": "closures/callable-nested-perform-partial.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "shared-region constraint violated",
+      "a partial perform replay may require explicit touch"
+    ]
+  },
+  {
+    "file": "closures/callable-nested-perform-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region",
+      "note: the referenced region was acquired here"
+    ]
+  },
+  {
+    "file": "closures/callable-nested-perform-missing.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "perform requires an unavailable definition-time capture"
   }
 ]

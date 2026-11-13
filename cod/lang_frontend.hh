@@ -6091,9 +6091,10 @@ class Compiler {
       }
       return true;
     };
-    // TLS supplies complete procedure values from current holders or an
-    // inherited replay. Prove both before checking returned-image safety.
-    for (const auto &[id, a] : left.environment.bindings) {
+    // Current invocation reads complete values from its caller's holders or
+    // inherited replay. Captured invocation reads the selected image instead;
+    // its caller's unrelated callable bindings are not body inputs.
+    if (!left.captured) for (const auto &[id, a] : left.environment.bindings) {
       const bool current_holder = a->storage && !left.environment.captured(id, a);
       if (!native_callable(*a) || (!a->replayed && !(values && current_holder))) continue;
       const auto *b = right.environment.lookup(id);
@@ -6253,17 +6254,10 @@ class Compiler {
       };
       if (!independent(left) || !independent(right)) return false;
     }
-    const auto image_context = [](const Environment &environment) {
-      for (auto *current = &environment; current; current = current->replay ? &current->replay->caller : nullptr)
-        for (const auto &[id, value] : current->bindings)
-          if (value->region_id || value->type.kind == Type::region || object_type(value->type) ||
-              !value->type.capture_regions.empty()) return false;
-      return true;
-    };
-    // A perform adapter obtains its bits/procedure captures from the selected
-    // image on each invocation. Caller values are irrelevant to that body;
-    // regional overlays still require the caller-dependent owner proof below.
-    if (left.captured && image_context(left.environment) && image_context(right.environment)) {
+    // A captured adapter loads its body inputs from the selected image.
+    // Regional owner/group relations and returned-image safety are proved
+    // above; each reused invocation also validates its actual replay overlay.
+    if (left.captured) {
       if (query.correspondence) *query.correspondence = std::move(holders);
       if (query.images) *query.images = std::move(matched_images);
       if (query.escaping_images) *query.escaping_images = std::move(escaping);
