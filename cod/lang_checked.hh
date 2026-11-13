@@ -3,6 +3,7 @@
 
 #include "lang_syntax.hh"
 #include "lang_diagnostics.hh"
+#include "lang_exceptions.hh"
 
 #include <charconv>
 #include <bit>
@@ -19,6 +20,19 @@ namespace cod::language {
 }
 
 inline bool scalar_type(const Type &type) { return numeric(type) || type == Type::boolean; }
+inline bool bits_type(const Type &type) { return scalar_type(type) || type.kind == Type::exception; }
+inline Type exception_type(size_t category) { return {Type::exception, exception_categories.at(category).name, category}; }
+inline bool accepts_exception(const Type &source, const Type &target) {
+  return source.kind == Type::exception && target.kind == Type::exception && (!target.identity || source == target);
+}
+inline bool transfers_bits(const Type &source, const Type &target) { return widens(source, target) || accepts_exception(source, target); }
+inline std::set<size_t> exception_possibilities(const Type &type) {
+  if (type.kind != Type::exception) return {};
+  if (type.identity) return {type.identity};
+  std::set<size_t> result;
+  for (size_t i = 1; i < exception_categories.size(); ++i) result.insert(i);
+  return result;
+}
 
 struct CheckedOperation {
   Type type;
@@ -31,6 +45,8 @@ struct CheckedOperation {
   std::uint64_t integer = 0;
   bool minimum_literal = false;
   bool initializes = false;
+  std::set<size_t> exceptions;
+  bool cause_at = false;
 };
 
 struct CheckedStorage {
@@ -42,9 +58,10 @@ struct CheckedStorage {
 };
 
 struct LexicalState {
-  struct Scope { size_t id; std::map<std::string, size_t> bindings; };
+  struct Scope { size_t id; std::map<std::string, size_t> bindings; bool declarations = true; };
   std::vector<Scope> scopes{{0, {}}};
   std::set<size_t> available, initialized;
+  std::map<size_t, std::set<size_t>> exceptions;
 
   std::optional<size_t> lookup(const std::string &name) const {
     for (auto scope = scopes.rbegin(); scope != scopes.rend(); ++scope)
@@ -65,6 +82,9 @@ struct CheckedInstance {
 struct CheckedMethod {
   const Form *source;
   std::vector<size_t> instances;
+  std::vector<Type> parameters;
+  Type result;
+  std::set<size_t> throws_categories;
 };
 struct CheckedProgram {
   std::vector<CheckedMethod> methods;
@@ -73,6 +93,7 @@ struct CheckedProgram {
   std::vector<const Expression *> initializers;
   std::vector<WarningDiagnostic> warnings;
   std::vector<CheckedStorage> entry_storage;
+  bool exception_values = false;
 };
 
 class ScalarChecker {
@@ -80,19 +101,29 @@ class ScalarChecker {
   std::map<std::string, std::vector<size_t>> families_;
   std::set<std::string> print_symbols_;
   std::set<std::string> module_values_;
+  std::map<std::string, Type> exception_types_;
   std::set<size_t> warned_missing_return_;
   std::set<const Expression *> warned_shadow_;
   LexicalState lexical_;
   std::vector<CheckedStorage> *storage_ = nullptr;
-  struct AbruptFlow { size_t depth; std::vector<LexicalState> paths; };
+  struct AbruptPath { LexicalState state; std::set<size_t> exceptions; };
+  struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; };
   AbruptFlow *abrupt_ = nullptr;
-  std::set<size_t> loop_controls_, delayed_controls_;
+  std::optional<size_t> caught_;
+  std::set<size_t> catch_bindings_;
+  const CheckedMethod *checking_method_ = nullptr;
+  std::set<size_t> loop_controls_, delayed_controls_, delayed_catches_;
   bool delayed_ = false;
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
 
   size_t declare(const std::string &name, const Type &type, bool read_only, bool value_binding, const Location &at) {
-    auto &scope = lexical_.scopes.back();
+    auto selected = lexical_.scopes.rbegin();
+    while (!selected->declarations) {
+      if (selected->bindings.contains(name)) fail(at, "duplicate declaration of catch parameter '" + name + "'");
+      ++selected;
+    }
+    auto &scope = *selected;
     if (scope.bindings.contains(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
     const auto id = storage_->size();
     storage_->push_back({name, type, scope.id, read_only, value_binding});
@@ -114,26 +145,36 @@ class ScalarChecker {
       }
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
+    lexical_.exceptions = a_exits ? b.exceptions : a.exceptions;
+    if (!a_exits && !b_exits) for (const auto &[id, categories] : b.exceptions)
+      lexical_.exceptions[id].insert(categories.begin(), categories.end());
   }
   void leave_scope() {
     for (const auto &[name, id] : lexical_.scopes.back().bindings) {
       lexical_.available.erase(id);
       lexical_.initialized.erase(id);
       loop_controls_.erase(id);
+      lexical_.exceptions.erase(id);
     }
     lexical_.scopes.pop_back();
   }
-  void note_abrupt() {
-    if (!abrupt_) return;
+  void note_abrupt(std::set<size_t> exceptions = {}) {
+    if (!abrupt_) {
+      for (const auto category : exceptions)
+        if (exception_categories.at(category).checked && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
+          fail(checking_method_ ? checking_method_->source->at : Location{}, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
+      return;
+    }
     auto state = lexical_;
     while (state.scopes.size() > abrupt_->depth) {
       for (const auto &[name, id] : state.scopes.back().bindings) {
         state.available.erase(id);
         state.initialized.erase(id);
+        state.exceptions.erase(id);
       }
       state.scopes.pop_back();
     }
-    abrupt_->paths.push_back(std::move(state));
+    abrupt_->paths.push_back({std::move(state), std::move(exceptions)});
   }
   static std::optional<std::uint64_t> constant_integer(const Expression &expr,
       const std::map<const Expression *, CheckedOperation> &operations) {
@@ -148,9 +189,14 @@ class ScalarChecker {
   Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at) const {
     if (instance) {
       const auto &method = *program_.methods[instance->method].source;
-      if (const auto index = binder(method, type)) return (*match(method, instance->arguments))[*index];
+      if (const auto index = binder(method, type)) return (*match(program_.methods[instance->method], instance->arguments))[*index];
     }
-    if (!scalar_type(type)) implementation_gap(at, "non-scalar local storage type '" + type_name(type) + "'");
+    const auto resolved = resolve_type(type);
+    if (!bits_type(resolved)) implementation_gap(at, "non-bits local storage type '" + type_name(type) + "'");
+    return resolved;
+  }
+  Type resolve_type(const Type &type) const {
+    if (type.kind == Type::named) if (const auto found = exception_types_.find(type.name); found != exception_types_.end()) return found->second;
     return type;
   }
 
@@ -161,51 +207,54 @@ class ScalarChecker {
     return {};
   }
   static void signature_type(const Form &method, const Type &type, const Location &at, bool result = false) {
-    if (scalar_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
+    if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
     implementation_gap(at, "non-scalar signature type '" + type_name(type) + "'");
   }
-  static std::optional<std::vector<Type>> match(const Form &method, const std::vector<Type> &arguments) {
+  static std::optional<std::vector<Type>> match(const CheckedMethod &method, const std::vector<Type> &arguments) {
     if (method.parameters.size() != arguments.size()) return {};
-    std::vector<Type> substitutions(method.type_parameters.size());
+    std::vector<Type> substitutions(method.source->type_parameters.size());
     for (size_t i = 0; i < arguments.size(); ++i) {
-      const auto &parameter = method.parameters[i].type;
-      if (const auto index = binder(method, parameter)) {
+      const auto &parameter = method.parameters[i];
+      if (const auto index = binder(*method.source, parameter)) {
         auto &bound = substitutions[*index];
         if (bound != Type::void_type && bound != arguments[i]) return {};
         bound = arguments[i];
-      } else if (parameter != arguments[i]) return {};
+      } else if (parameter != arguments[i] && !accepts_exception(arguments[i], parameter)) return {};
     }
     return substitutions;
   }
   // Signature containment includes repeated binders; layout equality is irrelevant.
-  static bool implies(const Form &narrow, const Form &broad) {
+  static bool implies(const CheckedMethod &narrow, const CheckedMethod &broad) {
     if (narrow.parameters.size() != broad.parameters.size()) return false;
     const auto same_narrow = [&](size_t a, size_t b) {
-      const auto x = binder(narrow, narrow.parameters[a].type);
-      const auto y = binder(narrow, narrow.parameters[b].type);
-      return x && y ? x == y : !x && !y && narrow.parameters[a].type == narrow.parameters[b].type;
+      const auto x = binder(*narrow.source, narrow.parameters[a]);
+      const auto y = binder(*narrow.source, narrow.parameters[b]);
+      return x && y ? x == y : !x && !y && narrow.parameters[a] == narrow.parameters[b] &&
+          !(narrow.parameters[a].kind == Type::exception && !narrow.parameters[a].identity);
     };
     for (size_t i = 0; i < broad.parameters.size(); ++i) {
-      const auto broad_binder = binder(broad, broad.parameters[i].type);
+      const auto broad_binder = binder(*broad.source, broad.parameters[i]);
       if (!broad_binder) {
-        if (binder(narrow, narrow.parameters[i].type) || narrow.parameters[i].type != broad.parameters[i].type)
+        if (binder(*narrow.source, narrow.parameters[i]) || (narrow.parameters[i] != broad.parameters[i] && !accepts_exception(narrow.parameters[i], broad.parameters[i])))
           return false;
       } else {
         for (size_t j = 0; j < i; ++j)
-          if (binder(broad, broad.parameters[j].type) == broad_binder && !same_narrow(i, j)) return false;
+          if (binder(*broad.source, broad.parameters[j]) == broad_binder && !same_narrow(i, j)) return false;
       }
     }
     return true;
   }
-  size_t demand(size_t method, const std::vector<Type> &arguments, const Location &at) {
+  size_t demand(size_t method, std::vector<Type> arguments, const Location &at) {
     auto &definition = program_.methods[method];
+    for (size_t i = 0; i < arguments.size(); ++i)
+      if (accepts_exception(arguments[i], definition.parameters[i])) arguments[i] = definition.parameters[i];
     for (const auto id : definition.instances)
       if (program_.instances[id].arguments == arguments) return id;
     if (program_.instances.size() == instance_limit)
       fail(at, "compiler resource limit: 4096 scalar checking obligations while preparing '" + definition.source->name + "'");
-    const auto substitutions = match(*definition.source, arguments);
+    const auto substitutions = match(definition, arguments);
     if (!substitutions) throw std::logic_error("unchecked method demand");
-    auto result = *definition.source->result_type;
+    auto result = definition.result;
     if (const auto index = binder(*definition.source, result)) {
       result = (*substitutions)[*index];
       if (result == Type::void_type)
@@ -221,12 +270,12 @@ class ScalarChecker {
     if (family == families_.end()) fail(expr.at, "unknown callable '" + expr.text + "'");
     std::vector<size_t> applicable;
     for (const auto method : family->second)
-      if (match(*program_.methods[method].source, arguments)) applicable.push_back(method);
+      if (match(program_.methods[method], arguments)) applicable.push_back(method);
     std::vector<size_t> best;
     for (const auto candidate : applicable) {
-      const auto &definition = *program_.methods[candidate].source;
+      const auto &definition = program_.methods[candidate];
       const bool dominated = std::any_of(applicable.begin(), applicable.end(), [&](size_t other) {
-        const auto &alternative = *program_.methods[other].source;
+        const auto &alternative = program_.methods[other];
         return implies(alternative, definition) && !implies(definition, alternative);
       });
       if (!dominated) best.push_back(candidate);
@@ -235,30 +284,120 @@ class ScalarChecker {
     if (best.size() != 1) fail(expr.at, "ambiguous methods for '" + expr.text + "'");
     return demand(best.front(), arguments, expr.at);
   }
-  CheckedOperation check_finally(const Expression &expr, CheckedInstance *instance,
+  CheckedOperation check_guarded(const Expression &expr, CheckedInstance *instance,
       std::map<const Expression *, CheckedOperation> &operations, bool read = true) {
-    if (expr.children.size() != 2 || expr.children[1]->kind != Expression::Kind::block)
-      implementation_gap(expr.at, "typed exception handlers and exception values");
+    if (expr.kind == Expression::Kind::deferred)
+      for (size_t i = 1; i < expr.children.size(); ++i)
+        if (expr.children[i]->kind == Expression::Kind::handler) implementation_gap(expr.at, "deferred handler recovery and retained normal completion");
+    const auto before = lexical_;
     auto *outer = abrupt_;
     AbruptFlow incoming{lexical_.scopes.size(), {}};
-    if (expr.kind == Expression::Kind::deferred) incoming.paths.push_back(lexical_);
+    if (expr.kind == Expression::Kind::deferred) incoming.paths.push_back({lexical_, {}});
     abrupt_ = &incoming;
     const auto body = check(*expr.children[0], instance, operations, read);
-    const auto normal = lexical_;
-    // Finally must be valid on every normal, return and failure path that enters it.
-    for (const auto &path : incoming.paths) {
-      const auto joined = lexical_;
-      join(joined, false, path, false, expr.at);
+    const auto body_state = lexical_;
+    std::vector<LexicalState> control_inputs;
+    for (const auto &path : incoming.paths) if (path.exceptions.empty()) control_inputs.push_back(path.state);
+    std::vector<LexicalState> normals;
+    std::vector<const CheckedOperation *> views;
+    if (body != Type::never) { normals.push_back(body_state); views.push_back(&operations.at(expr.children[0].get())); }
+    Type result_type = body;
+    auto result_exceptions = body == Type::never ? std::set<size_t>{} : operations.at(expr.children[0].get()).exceptions;
+    std::set<size_t> handled;
+    AbruptFlow outgoing{before.scopes.size(), {}};
+    const Expression *finalizer = nullptr;
+    for (size_t i = 1; i < expr.children.size(); ++i) {
+      const auto &handler = *expr.children[i];
+      if (handler.kind == Expression::Kind::block) { finalizer = &handler; break; }
+      program_.exception_values = true;
+      if (handler.annotation && instance && binder(*program_.methods[instance->method].source, *handler.annotation))
+        implementation_gap(handler.at, "generic typed-catch selection");
+      const auto type = handler.annotation ? resolve_type(*handler.annotation) : exception_type(0);
+      if (type.kind != Type::exception) fail(handler.at, "catch requires a selected intrinsic exception type");
+      if (handler.annotation && !type.identity) fail(handler.at, "use an untyped catch for SystemException");
+      if (!handled.insert(type.identity).second) fail(handler.at, "duplicate exception category in catch clauses");
+      std::vector<LexicalState> entries;
+      std::set<size_t> categories;
+      for (auto &path : incoming.paths) {
+        auto selected = type.identity ? intersect(path.exceptions, {type.identity}) : path.exceptions;
+        if (selected.empty()) continue;
+        entries.push_back(path.state);
+        categories.insert(selected.begin(), selected.end());
+        for (const auto category : selected) path.exceptions.erase(category);
+      }
+      lexical_ = body_state;
+      if (entries.empty()) join(body_state, true, before, false, handler.at);
+      else {
+        join(body_state, true, entries.front(), false, handler.at);
+        for (size_t p = 1; p < entries.size(); ++p) { const auto joined = lexical_; join(joined, false, entries[p], false, handler.at); }
+      }
+      lexical_.scopes.push_back({next_scope_++, {}});
+      const auto id = declare(handler.text, type, true, true, handler.at);
+      lexical_.scopes.back().declarations = false;
+      lexical_.initialized.insert(id);
+      lexical_.exceptions[id] = categories.empty() ? exception_possibilities(type) : categories;
+      auto active = caught_; caught_ = id; catch_bindings_.insert(id);
+      AbruptFlow handler_exits{before.scopes.size(), {}};
+      abrupt_ = &handler_exits;
+      const auto handled_type = check(*handler.children.front(), instance, operations, read);
+      caught_ = active; catch_bindings_.erase(id);
+      leave_scope();
+      CheckedOperation fact; fact.type = type; fact.place = id; fact.exceptions = categories;
+      operations[&handler] = fact;
+      if (handled_type != Type::never) {
+        if (result_type != Type::never && result_type != handled_type && expr.kind != Expression::Kind::deferred)
+          fail(handler.at, "try body and catch arms must have the same result type");
+        result_type = handled_type;
+        if (!entries.empty()) {
+          normals.push_back(lexical_);
+          views.push_back(&operations.at(handler.children.front().get()));
+          const auto &values = operations.at(handler.children.front().get()).exceptions;
+          result_exceptions.insert(values.begin(), values.end());
+        }
+      }
+      if (!entries.empty()) outgoing.paths.insert(outgoing.paths.end(), handler_exits.paths.begin(), handler_exits.paths.end());
+    }
+    for (auto &path : incoming.paths) if (!path.exceptions.empty()) outgoing.paths.push_back(path);
+    // Empty-category paths include returns and terminal numeric failures; catches cannot handle them.
+    std::vector<LexicalState> final_inputs = normals;
+    final_inputs.insert(final_inputs.end(), control_inputs.begin(), control_inputs.end());
+    for (const auto &path : outgoing.paths) final_inputs.push_back(path.state);
+    lexical_ = body_state;
+    if (!final_inputs.empty()) {
+      join(body_state, true, final_inputs.front(), false, expr.at);
+      for (size_t i = 1; i < final_inputs.size(); ++i) { const auto joined = lexical_; join(joined, false, final_inputs[i], false, expr.at); }
     }
     abrupt_ = outer;
-    const auto cleanup = check(*expr.children[1], instance, operations);
+    const auto cleanup = finalizer ? check(*finalizer, instance, operations) : Type{Type::void_type};
     if (cleanup != Type::void_type && cleanup != Type::never) fail(expr.at, "finally must complete with void or an explicit return");
-    if (!incoming.paths.empty()) note_abrupt();
-    // Exceptional paths cannot reach the expression's normal continuation.
-    lexical_.available.insert(normal.available.begin(), normal.available.end());
-    lexical_.initialized.insert(normal.initialized.begin(), normal.initialized.end());
-    auto result = operations.at(expr.children[0].get());
-    result.type = cleanup == Type::never ? Type{Type::never} : body;
+    const auto final_state = lexical_;
+    if (cleanup != Type::never) {
+      for (const auto &path : outgoing.paths) { lexical_ = finalizer ? final_state : path.state; note_abrupt(path.exceptions); }
+      lexical_ = final_state;
+      if (!control_inputs.empty()) note_abrupt();
+    }
+    lexical_ = body_state;
+    if (!normals.empty()) {
+      join(body_state, true, normals.front(), false, expr.at);
+      for (size_t i = 1; i < normals.size(); ++i) { const auto joined = lexical_; join(joined, false, normals[i], false, expr.at); }
+    }
+    if (finalizer) {
+      const auto normal = lexical_;
+      lexical_ = final_state;
+      lexical_.available.insert(normal.available.begin(), normal.available.end());
+      lexical_.initialized.insert(normal.initialized.begin(), normal.initialized.end());
+    }
+    CheckedOperation result;
+    result.type = cleanup == Type::never || normals.empty() ? Type{Type::never} : result_type;
+    if (!views.empty()) {
+      result.place = views.front()->place;
+      for (const auto *view : views) {
+        result.view = result.view || view->view;
+        result.read_only = result.read_only || view->read_only;
+        if (result.place != view->place) result.place.reset();
+      }
+    }
+    result.exceptions = std::move(result_exceptions);
     return result;
   }
   Type check(const Expression &expr, CheckedInstance *instance,
@@ -272,7 +411,7 @@ class ScalarChecker {
       operation.read_only = source.read_only;
     };
     const auto require_value = [&](const Type &type) {
-      if (!scalar_type(type)) implementation_gap(expr.at, "non-scalar or abruptly completing operand");
+      if (!bits_type(type)) implementation_gap(expr.at, "non-bits or abruptly completing operand");
     };
     const auto &method = instance ? program_.methods[instance->method].source : nullptr;
     if (instance && !lexical_.lookup(expr.text) && module_values_.contains(expr.text) &&
@@ -312,6 +451,7 @@ class ScalarChecker {
       if (!binding) fail(expr.at, "unknown scalar value '" + expr.text + "'");
       if (!lexical_.available.contains(*binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
       if (delayed_controls_.contains(*binding)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
+      if (delayed_catches_.contains(*binding)) implementation_gap(expr.at, "delayed block snapshots of catch values");
       if (read && !lexical_.initialized.contains(*binding)) {
         if (delayed_) implementation_gap(expr.at, "deferred read requires initialization proved before registration");
         fail(expr.at, "read of '" + expr.text + "' before definite initialization");
@@ -320,6 +460,8 @@ class ScalarChecker {
       operation.type = (*storage_)[*binding].type;
       operation.read_only = (*storage_)[*binding].read_only;
       operation.view = true;
+      if (operation.type.kind == Type::exception)
+        operation.exceptions = delayed_ ? exception_possibilities(operation.type) : lexical_.exceptions.at(*binding);
       break;
     }
     case K::unary: {
@@ -371,12 +513,21 @@ class ScalarChecker {
         fail(expr.at, "nearest binding '" + expr.text + "' is not callable");
       std::vector<Type> arguments;
       for (size_t i = 0; i < expr.children.size(); ++i) { arguments.push_back(child(i)); require_value(arguments.back()); }
+      if (expr.text == "cause_at" && !families_.contains(expr.text)) {
+        if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
+          fail(expr.at, "cause_at requires an exception and a u64 index");
+        operation.type = exception_type(0); operation.exceptions = exception_possibilities(operation.type); operation.cause_at = true;
+        break;
+      }
       operation.callee = select(expr, arguments);
       const auto &target = program_.instances[*operation.callee];
       if (method && method->kind == Form::Kind::function && program_.methods[target.method].source->kind == Form::Kind::procedure)
         fail(expr.at, "a function cannot invoke a procedure");
       operation.type = target.result;
-      note_abrupt();
+      operation.exceptions = exception_possibilities(operation.type);
+      auto failures = program_.methods[target.method].throws_categories;
+      for (size_t i = 1; i < exception_categories.size(); ++i) if (!exception_categories[i].checked) failures.insert(i);
+      note_abrupt(std::move(failures));
       break;
     }
     case K::behave: case K::perform: {
@@ -385,7 +536,7 @@ class ScalarChecker {
       if (!print_symbols_.contains(expr.text)) implementation_gap(expr.at, "dynamic procedure call other than selected std:io print");
       if (method && method->kind == Form::Kind::function) fail(expr.at, "a function cannot invoke a dynamic procedure");
       if (expr.children.size() != 1) fail(expr.at, "print requires one scalar argument");
-      require_value(child(0));
+      if (!scalar_type(child(0))) fail(expr.at, "print requires one primitive scalar argument");
       operation.type = Type::void_type;
       break;
     }
@@ -402,6 +553,8 @@ class ScalarChecker {
       else if (no == Type::never || yes == no) operation.type = yes;
       else implementation_gap(expr.at, "conditional join with different scalar result types");
       const auto &yes_fact = operations.at(expr.children[1].get()), &no_fact = operations.at(expr.children[2].get());
+      operation.exceptions = yes == Type::never ? no_fact.exceptions : yes_fact.exceptions;
+      if (yes != Type::never && no != Type::never) operation.exceptions.insert(no_fact.exceptions.begin(), no_fact.exceptions.end());
       if (yes == Type::never) view(no_fact);
       else if (no == Type::never) view(yes_fact);
       else {
@@ -419,7 +572,13 @@ class ScalarChecker {
         exits = exits || operation.type == Type::never;
       }
       if (!expr.children.empty()) view(operations.at(expr.children.back().get()));
-      if (expr.scoped) { leave_scope(); note_abrupt(); }
+      if (!expr.children.empty()) operation.exceptions = operations.at(expr.children.back().get()).exceptions;
+      if (expr.scoped) {
+        leave_scope();
+        std::set<size_t> failures;
+        for (size_t i = 1; i < exception_categories.size(); ++i) if (!exception_categories[i].checked) failures.insert(i);
+        note_abrupt(std::move(failures));
+      }
       if (exits) operation.type = Type::never;
       break;
     }
@@ -438,6 +597,7 @@ class ScalarChecker {
       if (fold) {
         operation.accumulator = declare(expr.binding, accumulator, true, true, expr.at);
         lexical_.initialized.insert(*operation.accumulator);
+        lexical_.exceptions[*operation.accumulator] = exception_possibilities(accumulator);
         loop_controls_.insert(*operation.accumulator);
       }
       const auto body = child(fold ? 3 : 2);
@@ -461,6 +621,7 @@ class ScalarChecker {
       join(body_state, body_exits, empty_state, empty_exits, expr.at);
       operation.type = body_exits && empty_exits ? Type{Type::never} : fold ? accumulator : Type{Type::void_type};
       operation.operand_type = first;
+      operation.exceptions = exception_possibilities(operation.type);
       break;
     }
     case K::pointer_group: {
@@ -484,21 +645,23 @@ class ScalarChecker {
           initialized = initializer.children.size() > value_index;
           if (initialized) {
             const auto value_type = check(*initializer.children[value_index], instance, operations);
-            if (!widens(value_type, initial_type)) fail(initializer.at, "initializer does not satisfy local storage type");
+            if (!transfers_bits(value_type, initial_type)) fail(initializer.at, "initializer does not satisfy local storage type");
           }
           CheckedOperation allocation;
           allocation.type = initial_type;
           allocation.initializes = initialized;
+          if (initialized) allocation.exceptions = operations.at(initializer.children[value_index].get()).exceptions;
           operations[&initializer] = allocation;
         } else initial_type = check(initializer, instance, operations);
         require_value(initial_type);
         const auto type = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : initial_type;
-        if (!widens(initial_type, type)) fail(declaration->at, "initializer does not satisfy declared val type");
+        if (!transfers_bits(initial_type, type)) fail(declaration->at, "initializer does not satisfy declared val type");
         if (lexical_.lookup(declaration->text) && !lexical_.scopes.back().bindings.contains(declaration->text) &&
             warned_shadow_.insert(declaration.get()).second)
           program_.warnings.push_back({Warning::shadow, declaration->at, "declaration shadows outer binding '" + declaration->text + "'"});
         const auto id = declare(declaration->text, type, declaration->read_only || expr.fixed_binding, true, declaration->at);
         if (initialized) lexical_.initialized.insert(id);
+        if (type.kind == Type::exception) lexical_.exceptions[id] = initialized ? operations.at(&initializer).exceptions : exception_possibilities(type);
         CheckedOperation binding;
         binding.place = id;
         binding.operand_type = type;
@@ -523,41 +686,77 @@ class ScalarChecker {
       }
       if (target.read_only) fail(expr.at, "cannot write through a readonly destination");
       const auto source = child(1);
-      if (!widens(source, destination)) fail(expr.at, "bits transfer source does not satisfy destination type");
+      if (!transfers_bits(source, destination)) fail(expr.at, "bits transfer source does not satisfy destination type");
       lexical_.initialized.insert(id);
       operation.type = operation.operand_type = destination;
       operation.place = id;
       operation.read_only = operation.view = true;
+      operation.exceptions = operations.at(expr.children[1].get()).exceptions;
+      if (destination.kind == Type::exception) lexical_.exceptions[id] = operation.exceptions;
       break;
     }
     case K::return_value: {
       if (!instance) fail(expr.at, "return requires an enclosing callable");
       const auto value = expr.children.empty() ? Type{Type::void_type} : child(0);
-      if (value != Type::never && !widens(value, instance->result))
+      if (value != Type::never && !transfers_bits(value, instance->result))
         fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(instance->result) + "'");
       operation.type = Type::never;
       operation.operand_type = instance->result;
       note_abrupt();
       break;
     }
-    case K::try_scope: operation = check_finally(expr, instance, operations, read); break;
+    case K::field: {
+      if (child(0).kind != Type::exception) implementation_gap(expr.at, "non-exception field selection");
+      if (expr.text != "category" && expr.text != "site" && expr.text != "requested" && expr.text != "available" && expr.text != "cause_count")
+        fail(expr.at, "unknown intrinsic exception field '" + expr.text + "'");
+      operation.type = Type::uint64;
+      break;
+    }
+    case K::raise: {
+      Type type;
+      if (expr.children.empty()) {
+        if (!caught_) fail(expr.at, "bare throw requires an active catch");
+        if (delayed_catches_.contains(*caught_)) implementation_gap(expr.at, "delayed block snapshots of catch values");
+        operation.place = caught_; type = (*storage_)[*caught_].type; operation.exceptions = lexical_.exceptions.at(*caught_);
+      } else {
+        type = child(0); operation.exceptions = operations.at(expr.children[0].get()).exceptions;
+      }
+      if (type.kind != Type::exception) fail(expr.at, "throw requires an intrinsic exception value");
+      if (expr.children.size() == 2) {
+        if (child(1).kind != Type::exception) fail(expr.at, "explicit cause requires an exception value");
+        note_abrupt({exception_id(ExceptionCategory::out_of_memory)});
+      }
+      note_abrupt(operation.exceptions);
+      operation.type = Type::never;
+      break;
+    }
+    case K::try_scope: operation = check_guarded(expr, instance, operations, read); break;
     case K::deferred: {
       if (expr.children.front()->kind == K::block) {
         const auto before = lexical_;
         const auto controls = delayed_controls_;
+        const auto catches = delayed_catches_;
         const auto was_delayed = delayed_;
         auto *outer = abrupt_;
         delayed_controls_.insert(loop_controls_.begin(), loop_controls_.end());
+        delayed_catches_.insert(catch_bindings_.begin(), catch_bindings_.end());
         delayed_ = true;
         abrupt_ = nullptr;
         if (expr.children.size() == 1) child(0);
-        else check_finally(expr, instance, operations);
+        else check_guarded(expr, instance, operations);
         lexical_ = before;
         delayed_controls_ = controls;
+        delayed_catches_ = catches;
         delayed_ = was_delayed;
         abrupt_ = outer;
-      } else child(0);
-      note_abrupt();
+      } else {
+        child(0);
+        const auto &call = operations.at(expr.children.front().get());
+        if (call.callee) for (const auto category : program_.methods[program_.instances[*call.callee].method].throws_categories)
+          if (exception_categories[category].checked && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
+            implementation_gap(expr.at, "deferred checked-exception scope proof requires a callable throws declaration");
+      }
+      note_abrupt({exception_id(ExceptionCategory::out_of_memory)});
       operation.type = Type::void_type;
       break;
     }
@@ -570,7 +769,15 @@ class ScalarChecker {
 public:
   CheckedProgram check(const std::vector<std::unique_ptr<Form>> &forms) {
     for (const auto &form : forms) {
+      if ((form->kind != Form::Kind::using_resource && form->kind != Form::Kind::import_resource) || form->path != "std:exceptions" || form->using_symbol) continue;
+      const auto found = std::find_if(exception_categories.begin(), exception_categories.end(), [&](const ExceptionDescriptor &entry) { return form->name == entry.name; });
+      if (found == exception_categories.end()) fail(form->at, "unknown intrinsic exception selection '" + form->name + "'");
+      if (!exception_types_.emplace(form->alias, exception_type(exception_id(found->category))).second) fail(form->at, "duplicate exception type selection");
+      program_.exception_values = true;
+    }
+    for (const auto &form : forms) {
       if (form->kind == Form::Kind::expression) { program_.initializers.push_back(form->body.get()); continue; }
+      if ((form->kind == Form::Kind::using_resource || form->kind == Form::Kind::import_resource) && form->path == "std:exceptions" && !form->using_symbol) continue;
       if (form->kind == Form::Kind::using_resource && form->using_symbol && form->path == "std:io" && form->name == "print") {
         if (!print_symbols_.insert(form->alias).second) fail(form->at, "duplicate print symbol binding");
         continue;
@@ -578,33 +785,42 @@ public:
       if (form->kind != Form::Kind::function && form->kind != Form::Kind::procedure)
         implementation_gap(form->at, "module declaration or selection '" + form->name + "'");
       if (form->symbolic || form->operation || form->conversion || form->explicit_captures || !form->owner_parameters.empty() ||
-          !form->throws_types.empty() || !form->body || !form->result_owner.empty())
+          !form->body || !form->result_owner.empty())
         implementation_gap(form->at, "callable captures, effects, declarations, operators, owners or throws contracts");
       if (!form->result_type) implementation_gap(form->at, "omitted callable result type");
       if (*form->result_type != Type::void_type && (!form->result_const || !form->result_kind.empty()))
         implementation_gap(form->at, "non-const scalar result contract");
-      signature_type(*form, *form->result_type, form->at, true);
+      const auto resolve_signature = [&](const Type &type) { return binder(*form, type) ? type : resolve_type(type); };
+      CheckedMethod prepared{form.get(), {}, {}, resolve_signature(*form->result_type), {}};
+      signature_type(*form, prepared.result, form->at, true);
+      for (const auto &type : form->throws_types) {
+        const auto resolved = resolve_type(type);
+        if (resolved.kind != Type::exception) implementation_gap(form->at, "throws contracts require selected intrinsic exception types");
+        const auto categories = exception_possibilities(resolved);
+        prepared.throws_categories.insert(categories.begin(), categories.end());
+      }
       std::set<std::string> names;
       for (const auto &parameter : form->parameters) {
         if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate parameter name");
         if (parameter.variadic || parameter.automatic_conversion || !parameter.owner.empty())
           implementation_gap(parameter.at, "variadic, conversion or borrowed parameter contract");
-        signature_type(*form, parameter.type, parameter.at);
+        prepared.parameters.push_back(resolve_signature(parameter.type));
+        signature_type(*form, prepared.parameters.back(), parameter.at);
       }
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
       const auto id = program_.methods.size();
       for (const auto other : families_[form->name]) {
-        const auto &definition = *program_.methods[other].source;
-        if (implies(*form, definition) && implies(definition, *form)) {
+        const auto &definition = program_.methods[other];
+        if (implies(prepared, definition) && implies(definition, prepared)) {
           for (size_t p = 0; p < form->parameters.size(); ++p)
-            if (form->parameters[p].read_only != definition.parameters[p].read_only)
+            if (form->parameters[p].read_only != definition.source->parameters[p].read_only)
               implementation_gap(form->at, "target-access-qualified overload selection");
           fail(form->at, "duplicate method signature for '" + form->name + "'");
         }
-        if (definition.kind != form->kind) implementation_gap(form->at, "mixed function/procedure family");
+        if (definition.source->kind != form->kind) implementation_gap(form->at, "mixed function/procedure family");
       }
-      program_.methods.push_back({form.get(), {}});
+      program_.methods.push_back(std::move(prepared));
       families_[form->name].push_back(id);
     }
     for (const auto &symbol : print_symbols_)
@@ -612,9 +828,7 @@ public:
     for (size_t i = 0; i < program_.methods.size(); ++i) {
       const auto &method = *program_.methods[i].source;
       if (!method.type_parameters.empty()) continue;
-      std::vector<Type> arguments;
-      for (const auto &parameter : method.parameters) arguments.push_back(parameter.type);
-      demand(i, arguments, method.at);
+      demand(i, program_.methods[i].parameters, method.at);
     }
     storage_ = &program_.entry_storage;
     lexical_ = {};
@@ -624,6 +838,7 @@ public:
     for (size_t i = 0; i < program_.instances.size(); ++i) {
       auto &instance = program_.instances[i];
       const auto &method = *program_.methods[instance.method].source;
+      checking_method_ = &program_.methods[instance.method];
       storage_ = &instance.storage;
       lexical_ = {};
       next_scope_ = 1;
@@ -632,6 +847,7 @@ public:
         const bool value = parameter.declaration_kind == "val";
         const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
         lexical_.initialized.insert(id);
+        lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
       }
       const auto completion = check(*method.body, &instance, instance.operations);
       if (instance.result != Type::void_type && completion != Type::never && warned_missing_return_.insert(instance.method).second)

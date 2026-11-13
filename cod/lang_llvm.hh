@@ -28,10 +28,11 @@ class LLVMEmission {
   llvm::LLVMContext context_;
   llvm::Module module_{"cod.program", context_};
   llvm::IRBuilder<> b_{context_};
-  // Private execution-local scalar transport. No region, DBMR or public ABI uses these tags.
+  // Private execution-local bits transport. Exception payloads contain no host pointers.
+  llvm::StructType *exception_ = llvm::StructType::get(context_, std::vector<llvm::Type *>(5, b_.getInt64Ty()));
   llvm::StructType *scalar_ = llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt32Ty()}, "cod.scalar");
   llvm::StructType *outcome_ = llvm::StructType::create(context_,
-      {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy()}, "cod.outcome");
+      {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty(), b_.getInt64Ty()}, "cod.outcome");
   const CheckedProgram *program_ = nullptr;
   bool specialize_ = true;
   std::vector<llvm::Function *> general_, specialized_;
@@ -41,6 +42,7 @@ class LLVMEmission {
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
   llvm::AllocaInst *result_ = nullptr, *category_ = nullptr, *site_ = nullptr, *fatal_ = nullptr, *exit_ = nullptr;
+  llvm::AllocaInst *requested_ = nullptr, *available_ = nullptr, *cause_ = nullptr;
   std::vector<Location> sites_;
   struct Deferred {
     const Expression *action;
@@ -79,6 +81,7 @@ class LLVMEmission {
     case Type::integer: return 1; case Type::uint8: return 2; case Type::uint32: return 3;
     case Type::uint64: return 4; case Type::boolean: return 5; case Type::float32: return 6;
     case Type::float64: return 7; case Type::void_type: return 0;
+    case Type::exception: return 8 + type.identity;
     default: throw std::logic_error("non-scalar checked native type");
     }
   }
@@ -88,16 +91,22 @@ class LLVMEmission {
     case Type::uint8: return b_.getInt8Ty(); case Type::uint32: return b_.getInt32Ty();
     case Type::boolean: return b_.getInt1Ty(); case Type::float32: return b_.getFloatTy();
     case Type::float64: return b_.getDoubleTy();
+    case Type::exception: return exception_;
     default: throw std::logic_error("non-scalar native payload");
     }
   }
   llvm::Value *pack(llvm::Value *value, const Type &type) {
+    if (type.kind == Type::exception) {
+      auto *result = b_.CreateInsertValue(empty_scalar(), value, 2);
+      return b_.CreateInsertValue(result, b_.getInt32(tag(type)), 1);
+    }
     if (floating(type)) value = b_.CreateBitCast(value, b_.getIntNTy(type == Type::float32 ? 32 : 64));
     value = b_.CreateZExtOrTrunc(value, b_.getInt64Ty());
     auto *result = b_.CreateInsertValue(empty_scalar(), value, 0);
     return b_.CreateInsertValue(result, b_.getInt32(tag(type)), 1);
   }
   llvm::Value *unpack(llvm::Value *value, const Type &type) {
+    if (type.kind == Type::exception) return b_.CreateExtractValue(value, 2);
     value = b_.CreateExtractValue(value, 0);
     if (floating(type)) {
       value = b_.CreateTruncOrBitCast(value, b_.getIntNTy(type == Type::float32 ? 32 : 64));
@@ -107,7 +116,7 @@ class LLVMEmission {
   }
   llvm::Value *convert(llvm::Value *value, const Type &from, const Type &to) {
     value = unpack(value, from);
-    if (from == to) return value;
+    if (from == to || from.kind == Type::exception) return value;
     if (floating(from)) return b_.CreateFPExt(value, native_type(to));
     if (floating(to)) return from == Type::integer ? b_.CreateSIToFP(value, native_type(to)) : b_.CreateUIToFP(value, native_type(to));
     return b_.CreateZExt(value, native_type(to));
@@ -116,12 +125,16 @@ class LLVMEmission {
     return module_.getOrInsertFunction(name, llvm::FunctionType::get(result, arguments, false));
   }
   std::uint64_t site(const Location &at) { sites_.push_back(at); return sites_.size(); }
-  llvm::Value *outcome(llvm::Value *value, llvm::Value *category, llvm::Value *where, llvm::Value *fatal) {
+  llvm::Value *outcome(llvm::Value *value, llvm::Value *category, llvm::Value *where, llvm::Value *fatal,
+      llvm::Value *requested = nullptr, llvm::Value *available = nullptr, llvm::Value *cause = nullptr) {
     llvm::Value *result = llvm::UndefValue::get(outcome_);
     result = b_.CreateInsertValue(result, value, 0);
     result = b_.CreateInsertValue(result, category, 1);
     result = b_.CreateInsertValue(result, where, 2);
-    return b_.CreateInsertValue(result, fatal, 3);
+    result = b_.CreateInsertValue(result, fatal, 3);
+    result = b_.CreateInsertValue(result, requested ? requested : integer(0), 4);
+    result = b_.CreateInsertValue(result, available ? available : integer(0), 5);
+    return b_.CreateInsertValue(result, cause ? cause : integer(0), 6);
   }
   llvm::Value *failed(llvm::Value *result) {
     return b_.CreateOr(b_.CreateICmpNE(b_.CreateExtractValue(result, 1), integer(0)),
@@ -131,10 +144,24 @@ class LLVMEmission {
     b_.CreateStore(b_.CreateExtractValue(result, 1), category_);
     b_.CreateStore(b_.CreateExtractValue(result, 2), site_);
     b_.CreateStore(b_.CreateExtractValue(result, 3), fatal_);
+    b_.CreateStore(b_.CreateExtractValue(result, 4), requested_);
+    b_.CreateStore(b_.CreateExtractValue(result, 5), available_);
+    b_.CreateStore(b_.CreateExtractValue(result, 6), cause_);
     b_.CreateStore(b_.getInt8(2), exit_);
   }
   void fail_path(ExceptionCategory category, const Location &at, llvm::Value *fatal = nullptr) {
     save_failure(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
+    b_.CreateBr(control_->exit);
+  }
+  llvm::Value *active_exception() {
+    llvm::Value *value = llvm::UndefValue::get(exception_);
+    unsigned index = 0;
+    for (auto *place : {category_, site_, requested_, available_, cause_}) value = b_.CreateInsertValue(value, load(place), index++);
+    return value;
+  }
+  void raise_exception(llvm::Value *value) {
+    save_failure(outcome(empty_scalar(), b_.CreateExtractValue(value, 0), b_.CreateExtractValue(value, 1), null_pointer(),
+        b_.CreateExtractValue(value, 2), b_.CreateExtractValue(value, 3), b_.CreateExtractValue(value, 4)));
     b_.CreateBr(control_->exit);
   }
   void require(llvm::Value *condition, const Location &at, const std::string &message) {
@@ -235,18 +262,37 @@ class LLVMEmission {
     std::vector<const Expression *> source_inputs;
     for (const auto &argument : expr.children) source_inputs.push_back(argument.get());
     const auto cases = choices(expr, source_inputs);
+    const auto call = [&](llvm::Function *target, size_t method) {
+      auto prepared = arguments;
+      for (size_t i = 0; i < prepared.size(); ++i) {
+        const auto &type = program_->methods[method].parameters[i];
+        if (type.kind == Type::exception) prepared[i] = pack(unpack(prepared[i], type), type);
+      }
+      return b_.CreateCall(target, prepared);
+    };
     if (cases.front().operation->callee && (cases.size() > 1 || !specialize_)) {
       const auto method = program_->instances[*cases.front().operation->callee].method;
       if (std::all_of(cases.begin(), cases.end(), [&](const Choice &choice) {
             return choice.operation->callee && program_->instances[*choice.operation->callee].method == method;
           }))
-        return b_.CreateCall(general_[method], arguments);
+        return call(general_[method], method);
     }
     return choose(expr, arguments, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
       if (choice.operation->callee) {
         const auto id = *choice.operation->callee;
         auto *target = specialize_ && cases.size() == 1 ? specialized_[id] : general_[program_->instances[id].method];
-        return b_.CreateCall(target, arguments);
+        return call(target, program_->instances[id].method);
+      }
+      if (choice.operation->cause_at) {
+        auto *payload = unpack(arguments[0], choice.inputs[0]);
+        auto *buffer = slot(exception_, "exception.cause");
+        b_.CreateCall(runtime("cod_lang_exception_cause", b_.getVoidTy(), {b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy()}),
+            {b_.CreateExtractValue(payload, 4), unpack(arguments[1], Type::uint64), buffer});
+        auto *loaded = load(buffer);
+        llvm::Value *result = llvm::UndefValue::get(exception_);
+        result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, 4), 0);
+        for (unsigned i = 0; i < 4; ++i) result = b_.CreateInsertValue(result, b_.CreateExtractValue(loaded, i), i + 1);
+        return outcome(pack(result, exception_type(0)), integer(0), integer(0), null_pointer());
       }
       const auto type = choice.inputs.front();
       auto *argument = unpack(arguments.front(), type);
@@ -279,7 +325,7 @@ class LLVMEmission {
   void complete_cleanup(const std::function<void()> &emit) {
     // Suspend the pending completion while cleanup executes its own control flow.
     std::vector<std::pair<llvm::AllocaInst *, llvm::Value *>> pending;
-    for (auto *place : {result_, category_, site_, fatal_, exit_}) pending.emplace_back(place, load(place));
+    for (auto *place : {result_, category_, site_, fatal_, requested_, available_, cause_, exit_}) pending.emplace_back(place, load(place));
     b_.CreateStore(b_.getInt8(0), exit_);
     b_.CreateStore(integer(0), category_);
     b_.CreateStore(null_pointer(), fatal_);
@@ -391,7 +437,30 @@ class LLVMEmission {
     if (reachable()) { b_.CreateStore(value, saved); b_.CreateBr(guarded.exit); }
     b_.SetInsertPoint(guarded.exit);
     control_ = guarded.parent;
-    complete_cleanup([&] { emit_expression(*expr.children[1]); });
+    auto *handled = block("try.handled"), *dispatch = block("catch.dispatch");
+    auto *catchable = b_.CreateAnd(b_.CreateICmpNE(load(category_), integer(0)), b_.CreateICmpEQ(load(fatal_), null_pointer()));
+    b_.CreateCondBr(catchable, dispatch, handled);
+    b_.SetInsertPoint(dispatch);
+    const Expression *finalizer = nullptr;
+    for (size_t i = 1; i < expr.children.size(); ++i) {
+      const auto &handler = *expr.children[i];
+      if (handler.kind == Expression::Kind::block) { finalizer = &handler; break; }
+      const auto &fact = facts_.front()->at(&handler);
+      auto *selected = block("catch.selected"), *next = block("catch.next");
+      b_.CreateCondBr(fact.type.identity ? b_.CreateICmpEQ(load(category_), integer(fact.type.identity)) : b_.getTrue(), selected, next);
+      b_.SetInsertPoint(selected);
+      b_.CreateStore(pack(active_exception(), fact.type), storage_.at(*fact.place));
+      b_.CreateStore(b_.getInt8(0), exit_); b_.CreateStore(integer(0), category_); b_.CreateStore(null_pointer(), fatal_);
+      Control catching{control_, handled};
+      control_ = &catching;
+      auto *result = emit_expression(*handler.children.front(), read);
+      if (reachable()) { b_.CreateStore(result, saved); b_.CreateBr(handled); }
+      control_ = catching.parent;
+      b_.SetInsertPoint(next);
+    }
+    b_.CreateBr(handled);
+    b_.SetInsertPoint(handled);
+    if (finalizer) complete_cleanup([&] { emit_expression(*finalizer); });
     auto *done = block("try.continue");
     b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), done, control_->exit);
     b_.SetInsertPoint(done);
@@ -572,6 +641,40 @@ class LLVMEmission {
       b_.CreateStore(b_.getInt8(1), exit_); b_.CreateBr(control_->exit);
       return nullptr;
     }
+    case K::field: {
+      auto *value = emit_expression(*expr.children[0]);
+      if (!reachable()) return nullptr;
+      const auto &type = facts_.front()->at(expr.children[0].get()).type;
+      auto *payload = unpack(value, type);
+      const unsigned index = expr.text == "category" ? 0 : expr.text == "site" ? 1 : expr.text == "requested" ? 2 : expr.text == "available" ? 3 : 4;
+      auto *field = b_.CreateExtractValue(payload, index);
+      if (expr.text == "cause_count") field = b_.CreateCall(runtime("cod_lang_exception_count", b_.getInt64Ty(), {b_.getInt64Ty()}), {field});
+      return pack(field, Type::uint64);
+    }
+    case K::raise: {
+      llvm::Value *value = expr.children.empty() ? load(storage_.at(*fact.place)) : emit_expression(*expr.children[0]);
+      if (!reachable()) return nullptr;
+      value = unpack(value, exception_type(0));
+      if (expr.children.size() == 2) {
+        auto *cause = emit_expression(*expr.children[1]);
+        if (!reachable()) return nullptr;
+        cause = unpack(cause, exception_type(0));
+        auto *status = slot(b_.getInt64Ty(), "exception.chain.status");
+        b_.CreateStore(integer(0), status);
+        std::vector<llvm::Value *> operands;
+        for (unsigned i = 0; i < 5; ++i) operands.push_back(b_.CreateExtractValue(cause, i));
+        operands.push_back(status);
+        auto types = std::vector<llvm::Type *>(5, b_.getInt64Ty()); types.push_back(b_.getPtrTy());
+        auto *handle = b_.CreateCall(runtime("cod_lang_exception_chain", b_.getInt64Ty(), types), operands);
+        auto *ready = block("exception.chained"), *failed = block("exception.chain.failed");
+        b_.CreateCondBr(b_.CreateICmpEQ(load(status), integer(0)), ready, failed);
+        b_.SetInsertPoint(failed); fail_path(ExceptionCategory::out_of_memory, expr.at);
+        b_.SetInsertPoint(ready);
+        value = b_.CreateInsertValue(value, handle, 4);
+      }
+      raise_exception(value);
+      return nullptr;
+    }
     case K::try_scope: return emit_finally(expr, read);
     case K::deferred: {
       const auto &body = *expr.children.front();
@@ -609,9 +712,11 @@ class LLVMEmission {
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     result_ = slot(scalar_, "return.value"); category_ = slot(b_.getInt64Ty(), "exception.category");
     site_ = slot(b_.getInt64Ty(), "exception.site"); fatal_ = slot(b_.getPtrTy(), "numeric.failure");
+    requested_ = slot(b_.getInt64Ty(), "exception.requested"); available_ = slot(b_.getInt64Ty(), "exception.available"); cause_ = slot(b_.getInt64Ty(), "exception.cause");
     exit_ = slot(b_.getInt8Ty(), "completion.kind");
     b_.CreateStore(empty_scalar(), result_); b_.CreateStore(integer(0), category_);
     b_.CreateStore(integer(0), site_); b_.CreateStore(null_pointer(), fatal_); b_.CreateStore(b_.getInt8(0), exit_);
+    for (auto *place : {requested_, available_, cause_}) b_.CreateStore(integer(0), place);
     storage_.clear();
     for (const auto &binding : storage) storage_.push_back(slot(scalar_, binding.name + ".storage"));
     for (size_t i = 0; i < arguments_.size(); ++i) b_.CreateStore(arguments_[i], storage_[i]);
@@ -634,7 +739,7 @@ class LLVMEmission {
     }
     full_scope({method.source->body.get()}, true, method.source->at, *method.source->result_type != Type::void_type);
     b_.SetInsertPoint(finish_);
-    b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_)));
+    b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_), load(requested_), load(available_), load(cause_)));
   }
   void emit_sites() {
     function_ = llvm::Function::Create(llvm::FunctionType::get(b_.getPtrTy(), {b_.getInt64Ty()}, false),
@@ -652,6 +757,7 @@ class LLVMEmission {
 public:
   std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true) {
     program_ = &program; specialize_ = specialize;
+    if (program.exception_values) scalar_->setBody({b_.getInt64Ty(), b_.getInt32Ty(), exception_});
     for (const auto &instance : program.instances)
       if (!instance.complete) throw std::logic_error("incomplete checking obligation reached native emission");
     const llvm::Triple triple(llvm::sys::getDefaultTargetTriple());
@@ -699,7 +805,7 @@ public:
     b_.CreateCondBr(b_.CreateICmpNE(load(category_), integer(0)), uncaught, normal);
     b_.SetInsertPoint(uncaught);
     b_.CreateCall(runtime("cod_lang_uncaught", b_.getVoidTy(), std::vector<llvm::Type *>(5, b_.getInt64Ty())),
-        {load(category_), load(site_), integer(0), integer(0), integer(0)}); b_.CreateUnreachable();
+        {load(category_), load(site_), load(requested_), load(available_), load(cause_)}); b_.CreateUnreachable();
     b_.SetInsertPoint(normal);
     b_.CreateCall(runtime("cod_lang_exception_finish", b_.getVoidTy(), {})); b_.CreateRet(b_.getInt32(0));
     emit_sites();
