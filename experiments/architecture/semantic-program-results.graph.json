@@ -1,0 +1,762 @@
+{
+  "schema": 1,
+  "entry": "checkout",
+  "initial_view": 0,
+  "views": [
+    {
+      "id": 0,
+      "origin": "entry",
+      "families": {
+        "stock": "stock_base"
+      }
+    },
+    {
+      "id": 1,
+      "origin": "dependency-a",
+      "families": {
+        "stock": "stock_a"
+      }
+    },
+    {
+      "id": 2,
+      "origin": "dependency-b",
+      "families": {
+        "stock": "stock_b"
+      }
+    }
+  ],
+  "families": {
+    "stock": {
+      "params": [
+        "i64"
+      ],
+      "result": "bool"
+    }
+  },
+  "functions": {
+    "stock_base": {
+      "origin": "entry",
+      "params": {
+        "n": "i64"
+      },
+      "result": "bool",
+      "body": [
+        {
+          "op": "return",
+          "value": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "mod",
+                "args": [
+                  {
+                    "var": "n"
+                  },
+                  {
+                    "const": 2,
+                    "type": "i64"
+                  }
+                ]
+              },
+              {
+                "const": 0,
+                "type": "i64"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stock_a": {
+      "origin": "dependency-a",
+      "params": {
+        "n": "i64"
+      },
+      "result": "bool",
+      "body": [
+        {
+          "op": "return",
+          "value": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "mod",
+                "args": [
+                  {
+                    "var": "n"
+                  },
+                  {
+                    "const": 3,
+                    "type": "i64"
+                  }
+                ]
+              },
+              {
+                "const": 0,
+                "type": "i64"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stock_b": {
+      "origin": "dependency-b",
+      "params": {
+        "n": "i64"
+      },
+      "result": "bool",
+      "body": [
+        {
+          "op": "return",
+          "value": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "mod",
+                "args": [
+                  {
+                    "var": "n"
+                  },
+                  {
+                    "const": 5,
+                    "type": "i64"
+                  }
+                ]
+              },
+              {
+                "const": 0,
+                "type": "i64"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "dependency_helper": {
+      "origin": "dependency-a",
+      "params": {
+        "n": "i64",
+        "source": "i64"
+      },
+      "result": "bool",
+      "body": [
+        {
+          "op": "let",
+          "name": "local_view",
+          "type": "view",
+          "value": {
+            "op": "select",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "mod",
+                    "args": [
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "var": "n"
+                          },
+                          {
+                            "var": "source"
+                          }
+                        ]
+                      },
+                      {
+                        "const": 2,
+                        "type": "i64"
+                      }
+                    ]
+                  },
+                  {
+                    "const": 0,
+                    "type": "i64"
+                  }
+                ]
+              },
+              {
+                "const": 1,
+                "type": "view"
+              },
+              {
+                "const": 2,
+                "type": "view"
+              }
+            ]
+          }
+        },
+        {
+          "op": "install",
+          "view": {
+            "var": "local_view"
+          }
+        },
+        {
+          "op": "event",
+          "tag": {
+            "const": 20,
+            "type": "i64"
+          },
+          "a": {
+            "var": "n"
+          },
+          "b": {
+            "var": "local_view"
+          }
+        },
+        {
+          "op": "invoke",
+          "name": "available",
+          "type": "bool",
+          "family": "stock",
+          "view": {
+            "op": "current_view",
+            "args": []
+          },
+          "args": [
+            {
+              "var": "n"
+            }
+          ]
+        },
+        {
+          "op": "return",
+          "value": {
+            "var": "available"
+          }
+        }
+      ]
+    },
+    "checkout": {
+      "origin": "entry",
+      "params": {
+        "n": "i64",
+        "source": "i64",
+        "fail_at": "i64",
+        "cleanup_at": "i64",
+        "mode": "i64"
+      },
+      "result": "i64",
+      "body": [
+        {
+          "op": "if",
+          "condition": {
+            "op": "eq",
+            "args": [
+              {
+                "var": "n"
+              },
+              {
+                "const": 0,
+                "type": "i64"
+              }
+            ]
+          },
+          "yes": [
+            {
+              "op": "return",
+              "value": {
+                "const": 0,
+                "type": "i64"
+              }
+            }
+          ],
+          "no": []
+        },
+        {
+          "op": "lease",
+          "name": "lease"
+        },
+        {
+          "op": "defer",
+          "name": "release",
+          "body": [],
+          "catch": null,
+          "finally_": [
+            {
+              "op": "event",
+              "tag": {
+                "const": 50,
+                "type": "i64"
+              },
+              "a": {
+                "var": "n"
+              },
+              "b": {
+                "var": "lease"
+              }
+            },
+            {
+              "op": "release",
+              "value": {
+                "var": "lease"
+              }
+            }
+          ]
+        },
+        {
+          "op": "defer",
+          "name": "recover",
+          "body": [],
+          "catch": [
+            {
+              "op": "event",
+              "tag": {
+                "const": 40,
+                "type": "i64"
+              },
+              "a": {
+                "var": "n"
+              },
+              "b": {
+                "var": "error"
+              }
+            },
+            {
+              "op": "if",
+              "condition": {
+                "op": "eq",
+                "args": [
+                  {
+                    "var": "mode"
+                  },
+                  {
+                    "const": 0,
+                    "type": "i64"
+                  }
+                ]
+              },
+              "yes": [
+                {
+                  "op": "throw",
+                  "value": {
+                    "var": "error"
+                  }
+                }
+              ],
+              "no": []
+            },
+            {
+              "op": "if",
+              "condition": {
+                "op": "eq",
+                "args": [
+                  {
+                    "var": "mode"
+                  },
+                  {
+                    "const": 2,
+                    "type": "i64"
+                  }
+                ]
+              },
+              "yes": [
+                {
+                  "op": "return",
+                  "value": {
+                    "const": 777,
+                    "type": "i64"
+                  }
+                }
+              ],
+              "no": []
+            }
+          ],
+          "finally_": [
+            {
+              "op": "event",
+              "tag": {
+                "const": 41,
+                "type": "i64"
+              },
+              "a": {
+                "var": "n"
+              },
+              "b": {
+                "var": "mode"
+              }
+            },
+            {
+              "op": "if",
+              "condition": {
+                "op": "eq",
+                "args": [
+                  {
+                    "var": "mode"
+                  },
+                  {
+                    "const": 3,
+                    "type": "i64"
+                  }
+                ]
+              },
+              "yes": [
+                {
+                  "op": "return",
+                  "value": {
+                    "const": 888,
+                    "type": "i64"
+                  }
+                }
+              ],
+              "no": []
+            }
+          ]
+        },
+        {
+          "op": "defer",
+          "name": "cleanup_failure",
+          "body": [
+            {
+              "op": "if",
+              "condition": {
+                "op": "eq",
+                "args": [
+                  {
+                    "var": "n"
+                  },
+                  {
+                    "var": "cleanup_at"
+                  }
+                ]
+              },
+              "yes": [
+                {
+                  "op": "throw",
+                  "value": {
+                    "const": 901,
+                    "type": "i64"
+                  }
+                }
+              ],
+              "no": []
+            }
+          ],
+          "catch": null,
+          "finally_": [
+            {
+              "op": "event",
+              "tag": {
+                "const": 30,
+                "type": "i64"
+              },
+              "a": {
+                "var": "n"
+              },
+              "b": {
+                "const": 0,
+                "type": "i64"
+              }
+            }
+          ]
+        },
+        {
+          "op": "let",
+          "name": "captured_view",
+          "type": "view",
+          "value": {
+            "op": "current_view",
+            "args": []
+          }
+        },
+        {
+          "op": "let",
+          "name": "local_view",
+          "type": "view",
+          "value": {
+            "op": "select",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "mod",
+                    "args": [
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "var": "n"
+                          },
+                          {
+                            "var": "source"
+                          }
+                        ]
+                      },
+                      {
+                        "const": 3,
+                        "type": "i64"
+                      }
+                    ]
+                  },
+                  {
+                    "const": 0,
+                    "type": "i64"
+                  }
+                ]
+              },
+              {
+                "const": 0,
+                "type": "view"
+              },
+              {
+                "op": "select",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "mod",
+                        "args": [
+                          {
+                            "op": "add",
+                            "args": [
+                              {
+                                "var": "n"
+                              },
+                              {
+                                "var": "source"
+                              }
+                            ]
+                          },
+                          {
+                            "const": 3,
+                            "type": "i64"
+                          }
+                        ]
+                      },
+                      {
+                        "const": 1,
+                        "type": "i64"
+                      }
+                    ]
+                  },
+                  {
+                    "const": 1,
+                    "type": "view"
+                  },
+                  {
+                    "const": 2,
+                    "type": "view"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "install",
+          "view": {
+            "var": "local_view"
+          }
+        },
+        {
+          "op": "event",
+          "tag": {
+            "const": 10,
+            "type": "i64"
+          },
+          "a": {
+            "var": "n"
+          },
+          "b": {
+            "var": "local_view"
+          }
+        },
+        {
+          "op": "if",
+          "condition": {
+            "op": "eq",
+            "args": [
+              {
+                "var": "n"
+              },
+              {
+                "var": "fail_at"
+              }
+            ]
+          },
+          "yes": [
+            {
+              "op": "throw",
+              "value": {
+                "const": 902,
+                "type": "i64"
+              }
+            }
+          ],
+          "no": []
+        },
+        {
+          "op": "invoke",
+          "name": "captured",
+          "type": "bool",
+          "family": "stock",
+          "view": {
+            "var": "captured_view"
+          },
+          "args": [
+            {
+              "var": "n"
+            }
+          ]
+        },
+        {
+          "op": "call",
+          "name": "available",
+          "type": "bool",
+          "target": "dependency_helper",
+          "args": [
+            {
+              "var": "n"
+            },
+            {
+              "var": "source"
+            }
+          ]
+        },
+        {
+          "op": "invoke",
+          "name": "restored",
+          "type": "bool",
+          "family": "stock",
+          "view": {
+            "op": "current_view",
+            "args": []
+          },
+          "args": [
+            {
+              "var": "n"
+            }
+          ]
+        },
+        {
+          "op": "event",
+          "tag": {
+            "const": 21,
+            "type": "i64"
+          },
+          "a": {
+            "var": "captured"
+          },
+          "b": {
+            "var": "available"
+          }
+        },
+        {
+          "op": "event",
+          "tag": {
+            "const": 22,
+            "type": "i64"
+          },
+          "a": {
+            "var": "restored"
+          },
+          "b": {
+            "op": "current_view",
+            "args": []
+          }
+        },
+        {
+          "op": "let",
+          "name": "score",
+          "type": "i64",
+          "value": {
+            "const": 1,
+            "type": "i64"
+          }
+        },
+        {
+          "op": "if",
+          "condition": {
+            "var": "available"
+          },
+          "yes": [
+            {
+              "op": "set",
+              "name": "score",
+              "value": {
+                "var": "n"
+              }
+            }
+          ],
+          "no": []
+        },
+        {
+          "op": "if",
+          "condition": {
+            "var": "captured"
+          },
+          "yes": [
+            {
+              "op": "set",
+              "name": "score",
+              "value": {
+                "op": "add",
+                "args": [
+                  {
+                    "var": "score"
+                  },
+                  {
+                    "const": 2,
+                    "type": "i64"
+                  }
+                ]
+              }
+            }
+          ],
+          "no": []
+        },
+        {
+          "op": "call",
+          "name": "rest",
+          "type": "i64",
+          "target": "checkout",
+          "args": [
+            {
+              "op": "sub",
+              "args": [
+                {
+                  "var": "n"
+                },
+                {
+                  "const": 1,
+                  "type": "i64"
+                }
+              ]
+            },
+            {
+              "var": "source"
+            },
+            {
+              "var": "fail_at"
+            },
+            {
+              "var": "cleanup_at"
+            },
+            {
+              "var": "mode"
+            }
+          ]
+        },
+        {
+          "op": "return",
+          "value": {
+            "op": "add",
+            "args": [
+              {
+                "var": "score"
+              },
+              {
+                "var": "rest"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

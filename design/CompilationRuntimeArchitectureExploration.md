@@ -1,10 +1,10 @@
 # Compilation and runtime architecture exploration
 
-Design revision: 2 · Recorded: 2026-11-12 America/Los_Angeles · Status: authorized exploration; candidate production designs pending whole-file review.
+Design revision: 3 · Recorded: 2026-11-13 America/Los_Angeles · Status: authorized exploration; candidate production designs pending whole-file review.
 
 ## Design authority
 
-- **Record and scope:** [D-25](DesignAuthorityRegistry.md#d-25), all sections. [H-387](DesignAuthorityRegistry.md#h-387) directly authorizes multiple architecture designs and isolated prototype validation; [K-573](DesignAuthorityRegistry.md#k-573) records scope and affected qualifications; [K-574](DesignAuthorityRegistry.md#k-574) records revision2 experimental evidence without qualifying candidate mechanisms. It does not approve any candidate mechanism or final architecture.
+- **Record and scope:** [D-25](DesignAuthorityRegistry.md#d-25), all sections. [H-387](DesignAuthorityRegistry.md#h-387) directly authorizes multiple architecture designs and isolated prototype validation; [K-573](DesignAuthorityRegistry.md#k-573) records scope and affected qualifications; [K-574](DesignAuthorityRegistry.md#k-574)/[K-575](DesignAuthorityRegistry.md#k-575) record revisions2–3 experimental evidence without qualifying candidate mechanisms. It does not approve any candidate mechanism or final architecture.
 - **Candidate value path:** C-85/P-359 → C-01/C-04 and D-25/P-360 → C-85/C-02: preserve inspectable typed business intent, separate program/interpretation/execution state, and find an affordable route to native execution. These detailed agent-proposed derivations remain pending-human. The governing charter is [§§1–3, 4.3, 5–6, 8 and 12](RegionalSemanticPlatformCharter.md).
 - **Constraints/dependencies:** P-361 depends on D-01/D-10/D-14/D-15/D-17/D-18/D-21; D-16 additionally constrains numeric and semantic identity. P-362 records the user's fused-artifact, open-input and experimental RTTI boundaries. Preserve actual owners, independent complete callable values, zero-cost regional relocation, selected interpretations, perform/behave/touch, return/exception/defer and initialization operand effects.
 - **Baseline:** the current project user explicitly redirected work in the [architecture side chat](codex://threads/01a1d360-c1b0-7ca0-bd02-ea7ef88d2e0f), through the authorized [work package](../../.codex-handoffs/cod-project/2026-11-12-architecture-exploration/WORK_PACKAGE.md). Exact message timestamps and personal identity are unavailable. H-387 records excerpts and exclusions; H-386 requires topic discussion followed by whole-file approval.
@@ -30,7 +30,7 @@ Reusable material includes the observable context/ownership/cleanup cases, diagn
 
 The [existing AOT contract](AheadOfTimeMultipleDispatch.md) commits to native targets/dispatch before covered execution. Shared generic native bodies can satisfy that commitment without separate machine code for every tuple if coverage is proved. Interpreter or lazy-native alternatives change the timing contract and need final approval. H-387 authorizes investigating that change; it does not silently approve a weaker meaning of AOT.
 
-An entry extension still requires explicit entry installation. Only affected dependency **initialization TLS writes** are suppressed. Operand construction, effects, failures and cleanup remain; dependency procedure-local installations and explicit source views remain reachable when used. Fusion therefore starts at entry reachability but follows these local interpretations too. Runtime TLS values, captures, region instances and scope changes are execution state, not new copies of the fused type artifact.
+An entry extension still requires explicit entry installation. Only affected dependency **initialization TLS writes** are suppressed. Operand construction, effects, failures and cleanup remain; dependency procedure-local installations and explicit source views remain reachable when used. Fusion therefore starts at entry reachability but follows these local interpretations too. Runtime TLS values, captures, region instances and scope changes are execution state, not new copies of the fused type artifact. A candidate must preserve required static owner/access/initialization rejection; experimental runtime assertions do not authorize moving those checks to runtime or introducing owner unions.
 
 Runtime DBMR content graphs, future mailbox packets and possible file/network graphs can supply actual type combinations invisible to source construction paths. A carrier graph's representation type is distinct from the business types it describes. This document does not decide whether such inputs can introduce new semantic definitions or how they would be integrated. Experiments must state their local assumptions and retain at least one externally supplied combination absent from source-observed pairs.
 
@@ -68,7 +68,7 @@ Fifteen checks cover entry installation, complete fusion, two-argument semantic 
 
 A separate LLVM probe uses real TLS, dependency-local rebinding/restoration, preserved operand effects and captured/current inputs. The same independently generated IR runs through ORC with whole-module or function-level materialization. The function dumps record which cold definitions reach the native layer. This tests code-generation granularity, not a CoD checker, final-image dead-code elimination or a whole-language interpreter.
 
-**Status distinction:** execution state, kernel bytecode, layout records, method descriptors and the native boundary are implemented in the experiments. Full program control/defer is host scaffolding in the first model. WebAssembly native kernels are real, but a complete semantic-program executor, production native-readiness proof, regional integration, OSR/deoptimization and general semantic checking remain unverified. Truffle, RPython, Sulong and OMR have research evidence only.
+**Status distinction:** execution state, kernel bytecode, layout records, method descriptors and the native boundary are implemented in the experiments. Full program control/defer is host scaffolding in the first model; the second experiment below represents those operations as data. WebAssembly native kernels are real, but production native-readiness, regional integration, OSR/deoptimization and general semantic checking remain unverified. The whole-program executor below covers its stated finite language only. Truffle, RPython, Sulong and OMR have research evidence only.
 
 ## Observations
 
@@ -100,6 +100,37 @@ These include JS dispatch, owner checks, temporary argument objects and native c
 
 Both paths receive the same full IR:2,023/9,673/87,973 bytes. Laziness saves materialization in this probe and has overhead at the smallest size. It does not remove generation, parsing or checking of those definitions. ORC supports custom program representations, so a later semantic-level materializer can move the boundary earlier; that is a design/implementation task, not a benefit already obtained by switching the existing backend. [ORC representations and materialization](https://llvm.org/docs/ORCv2.html)
 
+## Whole-program graph and completion experiment
+
+[Program graph](../experiments/architecture/semantic-program-results.graph.json) · [Reference/checker/lowering source](../experiments/architecture/semantic_program.py) · [Generated LLVM](../experiments/architecture/semantic-program-results.ll) · [Results](../experiments/architecture/semantic-program-results.json)
+
+The second experiment places the complete small checkout program, branches, calls, selected effects, deferred bodies/handlers/finally and explicit returns into a typed data graph. Inventory availability from a selected interpretation determines the business score. A dependency procedure temporarily installs either of two dependency-local interpretations, and the caller verifies its own binding after that procedure returns. Captured and current view selection produce independently observed results.
+
+A reference machine uses explicit execution frames and task lists; Python recursion is not used for guest calls. A separate lowering walks each reachable definition once and emits ordinary recursive LLVM functions with explicit pending completion and cleanup paths. The experiment's aggregate carrier and scalar view IDs are temporary choices, not a production ABI or complete captured-value representation. Both engines execute the same graph; neither uses the current CoD frontend.
+
+**66 complete trace comparisons passed** across22 input scenarios and three repetitions. Every event, logical resource token and release order is compared before retaining trace hashes. A separate business recurrence supplies expected results beyond engine agreement. The graph and LLVM artifact remain unchanged across all executions.
+
+| Runtime recursion depth | Reference peak frames | Events per execution | Checked graph / generated code |
+| --- | ---: | ---: | --- |
+| 4 | 6 | 28 | 5 definitions,45 statements;7 LLVM definitions |
+| 20 | 22 | 140 | Same |
+| 200 | 202 | 1,400 | Same |
+| 1000 | 1002 | 7,000 | Same |
+
+The graph is16,381 serialized bytes; emitted LLVM is19,976 bytes. These numbers are fixed across the inputs because execution values do not participate in definition generation. Every recursive execution still performs its own effects and cleanup. This establishes a finite shared lowering for this explicit-signature fixture; it does not solve generic recursion, growing captured schemas, abstract result evidence or owner inference in the complete language.
+
+The failure cases distinguish body failure, deferred failure, normal recovery with an original return, explicit return from a catch, return replacement in finally, and missing return after recovery without a prior result. Later cleanup runs after replacement. All logical acquisitions release exactly once in reverse scope order and TLS restores to the entry binding. These are checked obligations and integer error codes, not actual memory regions, typed catch matching or native C++ exception unwinding.
+
+Negative controls provide stronger distinctions than a successful execution alone:
+
+- An entry-only artifact, a wrong family result and an unknown family are rejected by the finite checker.
+- Flattening all selected interpretations to the same signature-compatible method still passes type checking but changes a result from82 to140 and changes the trace. Preserving selected interpretation is therefore an independent requirement.
+- A type-correct wrong resource token is rejected by both machines; the native experiment exits97 on an invariant violation. That assertion code is not a language exception policy.
+
+At depth1000, local median reference execution is approximately49.95ms and native process time30.66ms. Reference timing includes interpretation/trace collection; native timing includes `lli` startup, code generation and complete trace output. At smaller depths native startup dominates. These are deliberately reported with different cost boundaries and are not a runtime performance ranking.
+
+This experiment closes the first model's host-control gap for a small program. The main remaining integration gap is actual regional program/state storage and native boundary behavior, including borrowed captures and failures. Required static checks remain required; the finite checker and dynamic token assertions do not substitute for the full language's owner proof.
+
 ## Criteria derived from the evidence
 
 These are provisional selection criteria produced by the exploration, not human-approved thresholds or language policies.
@@ -110,8 +141,9 @@ These are provisional selection criteria produced by the exploration, not human-
 | Remain correct on admitted but unobserved input tuples | Observed-only control misses the injected pair; generic semantic dispatch executes it. | Source-observed specialization alone cannot be the executable contract. Preserve a coverage proof or a general path; new-definition admission remains open. |
 | Bound native work separately from semantic metadata | Three kernels handle increasing tuple products, while metadata grows; earlier CoD recomposition artifacts also grow. | Compare checked records, code bodies and bytes independently. Shared native AOT remains a serious candidate; tuple count alone does not justify JIT. |
 | Avoid mandatory full frontend lowering before a cold path can execute | ORC saves native work but receives identical complete IR in both modes. | Merely changing the current backend to lazy LLVM/Sulong fails this criterion. A semantic executor or demand-driven semantic-to-native boundary addresses the missing responsibility. |
-| Preserve real binding/owner/completion boundaries | Model modes agree under rebinding, remapping and failure/recovery checks. Production native unwinding/borrowing remain untested. | Any candidate must pass integrated region/exception tests before promotion. Native throughput alone is insufficient. |
+| Preserve real binding/owner/completion boundaries | Boundary models agree under rebinding/remapping; whole-program engines match66 full traces with explicit completion and checked logical resource tokens. Actual regional storage, native unwinding and borrow proofs remain untested. | Any candidate must pass integrated region/exception tests before promotion. Native throughput alone is insufficient. |
 | Demonstrate useful work per native crossing | Native kernel gains are modest in the host-controlled workload; cold costs differ. | Investigate whole semantic blocks/functions and state-transfer cost before a framework or tiering policy is chosen. |
+| Share program structure without sharing execution | A fixed45-statement graph executes7,000 events at recursion depth1000 with independent cleanup; flattened signature-compatible interpretations change behavior. | Share definitions under retained semantic identity. Do not infer shared execution or erase selected views from code sharing. |
 | Make implementation burden explicit | ORC reuses linking/materialization; Truffle/RPython reuse interpreter optimization; all leave CoD semantic integration work. | Compare owned subsystems and measured adapter effort. No measured labor ranking exists, so installation availability and sunk costs cannot pick a winner. |
 
 No numerical elimination cutoff, weighted score or universal performance claim is established. The two eliminated controls are incomplete semantics; the backend-only change is insufficient to solve the stated frontend problem. None of the three architectural candidates is eliminated by these bounded experiments.
@@ -120,8 +152,8 @@ No numerical elimination cutoff, weighted score or universal performance claim i
 
 **Recommendation:** retain a checked semantic program representation and make native generation a consumer of that representation. Keep execution values, TLS bindings, actual owners and pending completion separate. Preserve both shared-native readiness and cold semantic execution as alternatives until an integrated program demonstrates their engineering costs. This is an exploratory recommendation, not approval of a production IR, checker or runtime ABI.
 
-The next decisive prototype should put the **whole small business program and completion flow into inspectable data**, not just method kernels. It should retain one finite recursive graph across changing runtime contexts, select at least two dependency-local interpretations, and execute an effect-result-dependent business branch. Run the same graph through a reference executor and a shared native lowering boundary; compare checking work, materialized bodies, state-transfer costs and trace/resource behavior. This addresses the largest evidence gap in the present common host scaffold.
+The whole-program experiment now supplies a reference executor and shared native lowering for finite explicit control/completion. The next bounded stage should integrate **actual regional graph/state storage and borrowed native views**, retaining independent execution state and complete captured values. It should test the cost and correctness of crossing a reusable runtime boundary, including failure cleanup, without substituting host object references for relocation-safe edges. This is exploratory work; it does not authorize a new storage ABI or a weaker static checker.
 
 For reusable optimizing runtimes, the discriminating follow-up is an actual region-memory and cleanup adapter in a candidate framework, not an arithmetic speed test. Truffle/RPython/OMR require separate environment preparation under the existing toolchain restrictions; no installation or production commitment follows from this recommendation. ORC can be probed further with the existing tree, but convenience alone does not make it the winner.
 
-Whole-file review should eventually decide the production checking/execution boundary and native-before-execution contract, informed by those additional results. Layout/checksum/ABI choices, external graph admission and world evolution remain separate topics. Exploration remains active; this revision records the first evidence milestone, not a completed architecture selection.
+Whole-file review should eventually decide the production checking/execution boundary and native-before-execution contract, informed by those additional results. Layout/checksum/ABI choices, external graph admission and world evolution remain separate topics. Exploration remains active; this revision records boundary and whole-program evidence, not a completed architecture selection.

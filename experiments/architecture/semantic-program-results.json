@@ -1,0 +1,7830 @@
+{
+  "schema": 1,
+  "recorded_utc": "2026-11-13T07:56:46.802835+00:00",
+  "baseline_commit": "2ea81d9dee1b7e6d196d7e975db18d57f7d3622f",
+  "source_sha256": "a075971a264e839e07ca899b15e14c725976e02fc9aa7c9cbfe1439c141938bf",
+  "compiler": "experimental graph lowering",
+  "lli_sha256": "55c25dad0013f981bce76fba9b00be055ac1e58b84d1652b73b81824e0d4f09f",
+  "artifact_sha256": "d66917441d4dcd08699b3e22696f1627f6921035123a369b32d6f49bafcecd34",
+  "artifact_bytes": 16381,
+  "checking": {
+    "checked_definitions": 5,
+    "checked_statements": 45,
+    "reachable": [
+      "checkout",
+      "dependency_helper",
+      "stock_a",
+      "stock_b",
+      "stock_base"
+    ]
+  },
+  "checking_seconds": 0.00010288495104759932,
+  "lowering_seconds": 0.00036266696406528354,
+  "llvm_sha256": "6e3415a36dbc682dc4caf5d943d5fc4a143d1e76217ea8ed0dd248835765ef67",
+  "llvm_bytes": 19976,
+  "native_definitions": 7,
+  "repetitions": 3,
+  "controls": {
+    "entry_only": "missing selected interpretation",
+    "wrong_result": "result type mismatch",
+    "missing_family": "unknown family",
+    "flattened_interpretations": {
+      "type_checks": true,
+      "expected_result": 82,
+      "incorrect_result": 140,
+      "trace_equal": false
+    },
+    "wrong_lease_token": {
+      "type_checks": true,
+      "reference_rejected": true,
+      "native_exit": 97
+    }
+  },
+  "cases": [
+    {
+      "name": "depth",
+      "inputs": [
+        4,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        10,
+        0,
+        4,
+        4
+      ],
+      "trace_count": 28,
+      "trace_sha256": "a04b5632eede8149e4cf3321ddfe94ce8db5520fc350285d3589c35896f3cbe8",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          1
+        ],
+        [
+          20,
+          4,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          3,
+          0
+        ],
+        [
+          20,
+          3,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          2,
+          0
+        ],
+        [
+          50,
+          2,
+          3
+        ],
+        [
+          30,
+          3,
+          0
+        ],
+        [
+          41,
+          3,
+          0
+        ],
+        [
+          50,
+          3,
+          2
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          41,
+          4,
+          0
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 141,
+      "max_reference_frames": 6,
+      "reference_seconds": 0.00025124603416770697,
+      "native_process_seconds": 0.030411735991947353,
+      "native_stdout_bytes": 270,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        4,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        8,
+        0,
+        4,
+        4
+      ],
+      "trace_count": 28,
+      "trace_sha256": "226f5e607591752bcb3a606a558755ff036ba6f7b11b1520bb6bf1782a9c3515",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          2
+        ],
+        [
+          20,
+          4,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ],
+        [
+          10,
+          3,
+          1
+        ],
+        [
+          20,
+          3,
+          1
+        ],
+        [
+          21,
+          0,
+          1
+        ],
+        [
+          22,
+          1,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          2,
+          0
+        ],
+        [
+          50,
+          2,
+          3
+        ],
+        [
+          30,
+          3,
+          0
+        ],
+        [
+          41,
+          3,
+          0
+        ],
+        [
+          50,
+          3,
+          2
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          41,
+          4,
+          0
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 140,
+      "max_reference_frames": 6,
+      "reference_seconds": 0.0002919029793702066,
+      "native_process_seconds": 0.028097514994442463,
+      "native_stdout_bytes": 269,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        4,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        6,
+        0,
+        4,
+        4
+      ],
+      "trace_count": 28,
+      "trace_sha256": "bb3e3ac27890f488d9c3ec551e028582f30b970dac65b4c24169a0ff66c789af",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          0
+        ],
+        [
+          20,
+          4,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          3,
+          2
+        ],
+        [
+          20,
+          3,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          2,
+          0
+        ],
+        [
+          50,
+          2,
+          3
+        ],
+        [
+          30,
+          3,
+          0
+        ],
+        [
+          41,
+          3,
+          0
+        ],
+        [
+          50,
+          3,
+          2
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          41,
+          4,
+          0
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 139,
+      "max_reference_frames": 6,
+      "reference_seconds": 0.00026407995028421283,
+      "native_process_seconds": 0.030675436020828784,
+      "native_stdout_bytes": 269,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        20,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        93,
+        0,
+        20,
+        20
+      ],
+      "trace_count": 140,
+      "trace_sha256": "0afcd62348b2ea010e9ee333c881987fc8ed35319b488ca5681fd8cdd96addea",
+      "trace_prefix": [
+        [
+          10,
+          20,
+          2
+        ],
+        [
+          20,
+          20,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          2
+        ],
+        [
+          10,
+          19,
+          1
+        ],
+        [
+          20,
+          19,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          18,
+          0
+        ],
+        [
+          50,
+          18,
+          3
+        ],
+        [
+          30,
+          19,
+          0
+        ],
+        [
+          41,
+          19,
+          0
+        ],
+        [
+          50,
+          19,
+          2
+        ],
+        [
+          30,
+          20,
+          0
+        ],
+        [
+          41,
+          20,
+          0
+        ],
+        [
+          50,
+          20,
+          1
+        ]
+      ],
+      "reference_steps": 698,
+      "max_reference_frames": 22,
+      "reference_seconds": 0.0013856029836460948,
+      "native_process_seconds": 0.02996014099335298,
+      "native_stdout_bytes": 1346,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "20",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        20,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        82,
+        0,
+        20,
+        20
+      ],
+      "trace_count": 140,
+      "trace_sha256": "acde6764f3f48d5ffffca0c593f4b1080e7559fd9203ebcb777ac9e4a6492d3a",
+      "trace_prefix": [
+        [
+          10,
+          20,
+          0
+        ],
+        [
+          20,
+          20,
+          2
+        ],
+        [
+          21,
+          1,
+          1
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          19,
+          2
+        ],
+        [
+          20,
+          19,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          18,
+          0
+        ],
+        [
+          50,
+          18,
+          3
+        ],
+        [
+          30,
+          19,
+          0
+        ],
+        [
+          41,
+          19,
+          0
+        ],
+        [
+          50,
+          19,
+          2
+        ],
+        [
+          30,
+          20,
+          0
+        ],
+        [
+          41,
+          20,
+          0
+        ],
+        [
+          50,
+          20,
+          1
+        ]
+      ],
+      "reference_steps": 692,
+      "max_reference_frames": 22,
+      "reference_seconds": 0.001068943995051086,
+      "native_process_seconds": 0.02910293801687658,
+      "native_stdout_bytes": 1346,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "20",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        20,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        81,
+        0,
+        20,
+        20
+      ],
+      "trace_count": 140,
+      "trace_sha256": "27a305b21a8d9a175c2601a12d431e56b11ce977d841f3438d953aff317d914e",
+      "trace_prefix": [
+        [
+          10,
+          20,
+          1
+        ],
+        [
+          20,
+          20,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          19,
+          0
+        ],
+        [
+          20,
+          19,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          18,
+          0
+        ],
+        [
+          50,
+          18,
+          3
+        ],
+        [
+          30,
+          19,
+          0
+        ],
+        [
+          41,
+          19,
+          0
+        ],
+        [
+          50,
+          19,
+          2
+        ],
+        [
+          30,
+          20,
+          0
+        ],
+        [
+          41,
+          20,
+          0
+        ],
+        [
+          50,
+          20,
+          1
+        ]
+      ],
+      "reference_steps": 692,
+      "max_reference_frames": 22,
+      "reference_seconds": 0.0019300440326333046,
+      "native_process_seconds": 0.029306564014405012,
+      "native_stdout_bytes": 1346,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "20",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        200,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        5739,
+        0,
+        200,
+        200
+      ],
+      "trace_count": 1400,
+      "trace_sha256": "f6076fde2061d31f721f5a7673167602c9214849aab1df701f3bb4132bbf4a22",
+      "trace_prefix": [
+        [
+          10,
+          200,
+          2
+        ],
+        [
+          20,
+          200,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          2
+        ],
+        [
+          10,
+          199,
+          1
+        ],
+        [
+          20,
+          199,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          198,
+          0
+        ],
+        [
+          50,
+          198,
+          3
+        ],
+        [
+          30,
+          199,
+          0
+        ],
+        [
+          41,
+          199,
+          0
+        ],
+        [
+          50,
+          199,
+          2
+        ],
+        [
+          30,
+          200,
+          0
+        ],
+        [
+          41,
+          200,
+          0
+        ],
+        [
+          50,
+          200,
+          1
+        ]
+      ],
+      "reference_steps": 6968,
+      "max_reference_frames": 202,
+      "reference_seconds": 0.011831519019324332,
+      "native_process_seconds": 0.03434948099311441,
+      "native_stdout_bytes": 14376,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "200",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        200,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        5608,
+        0,
+        200,
+        200
+      ],
+      "trace_count": 1400,
+      "trace_sha256": "8a6589eca78877b61a948c5aacaceb3c577dc5bbb80c81f90f94b2a736683401",
+      "trace_prefix": [
+        [
+          10,
+          200,
+          0
+        ],
+        [
+          20,
+          200,
+          2
+        ],
+        [
+          21,
+          1,
+          1
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          199,
+          2
+        ],
+        [
+          20,
+          199,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          198,
+          0
+        ],
+        [
+          50,
+          198,
+          3
+        ],
+        [
+          30,
+          199,
+          0
+        ],
+        [
+          41,
+          199,
+          0
+        ],
+        [
+          50,
+          199,
+          2
+        ],
+        [
+          30,
+          200,
+          0
+        ],
+        [
+          41,
+          200,
+          0
+        ],
+        [
+          50,
+          200,
+          1
+        ]
+      ],
+      "reference_steps": 6902,
+      "max_reference_frames": 202,
+      "reference_seconds": 0.010963606997393072,
+      "native_process_seconds": 0.03078164701582864,
+      "native_stdout_bytes": 14376,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "200",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        200,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        5607,
+        0,
+        200,
+        200
+      ],
+      "trace_count": 1400,
+      "trace_sha256": "200eed77527154e80db23d38f6b2b82e442211382f04d1328e3864500ef8a9dc",
+      "trace_prefix": [
+        [
+          10,
+          200,
+          1
+        ],
+        [
+          20,
+          200,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          199,
+          0
+        ],
+        [
+          20,
+          199,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          198,
+          0
+        ],
+        [
+          50,
+          198,
+          3
+        ],
+        [
+          30,
+          199,
+          0
+        ],
+        [
+          41,
+          199,
+          0
+        ],
+        [
+          50,
+          199,
+          2
+        ],
+        [
+          30,
+          200,
+          0
+        ],
+        [
+          41,
+          200,
+          0
+        ],
+        [
+          50,
+          200,
+          1
+        ]
+      ],
+      "reference_steps": 6902,
+      "max_reference_frames": 202,
+      "reference_seconds": 0.013269593007862568,
+      "native_process_seconds": 0.030759234039578587,
+      "native_stdout_bytes": 14376,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "200",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        1000,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        135034,
+        0,
+        1000,
+        1000
+      ],
+      "trace_count": 7000,
+      "trace_sha256": "5a8394eb4614ec16b2c68f7a9526319caceacecf6b866c7c269bdc45d16ee225",
+      "trace_prefix": [
+        [
+          10,
+          1000,
+          1
+        ],
+        [
+          20,
+          1000,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          999,
+          0
+        ],
+        [
+          20,
+          999,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          998,
+          0
+        ],
+        [
+          50,
+          998,
+          3
+        ],
+        [
+          30,
+          999,
+          0
+        ],
+        [
+          41,
+          999,
+          0
+        ],
+        [
+          50,
+          999,
+          2
+        ],
+        [
+          30,
+          1000,
+          0
+        ],
+        [
+          41,
+          1000,
+          0
+        ],
+        [
+          50,
+          1000,
+          1
+        ]
+      ],
+      "reference_steps": 34835,
+      "max_reference_frames": 1002,
+      "reference_seconds": 0.05078462703386322,
+      "native_process_seconds": 0.03564458305481821,
+      "native_stdout_bytes": 74386,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "1000",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        1000,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        135366,
+        0,
+        1000,
+        1000
+      ],
+      "trace_count": 7000,
+      "trace_sha256": "a459ad7f6ff8b26fef92d9118ca7de928b6b184b1d03f8ebe0010b288683e7cf",
+      "trace_prefix": [
+        [
+          10,
+          1000,
+          2
+        ],
+        [
+          20,
+          1000,
+          2
+        ],
+        [
+          21,
+          1,
+          1
+        ],
+        [
+          22,
+          1,
+          2
+        ],
+        [
+          10,
+          999,
+          1
+        ],
+        [
+          20,
+          999,
+          1
+        ],
+        [
+          21,
+          0,
+          1
+        ],
+        [
+          22,
+          1,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          998,
+          0
+        ],
+        [
+          50,
+          998,
+          3
+        ],
+        [
+          30,
+          999,
+          0
+        ],
+        [
+          41,
+          999,
+          0
+        ],
+        [
+          50,
+          999,
+          2
+        ],
+        [
+          30,
+          1000,
+          0
+        ],
+        [
+          41,
+          1000,
+          0
+        ],
+        [
+          50,
+          1000,
+          1
+        ]
+      ],
+      "reference_steps": 34502,
+      "max_reference_frames": 1002,
+      "reference_seconds": 0.04995371401309967,
+      "native_process_seconds": 0.03141298203263432,
+      "native_stdout_bytes": 74386,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "1000",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        1000,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        134368,
+        0,
+        1000,
+        1000
+      ],
+      "trace_count": 7000,
+      "trace_sha256": "2d9a04db53806b141c44518287b9f3854fdf83dfdede71f6ac052f632b70b6ad",
+      "trace_prefix": [
+        [
+          10,
+          1000,
+          0
+        ],
+        [
+          20,
+          1000,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          999,
+          2
+        ],
+        [
+          20,
+          999,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          998,
+          0
+        ],
+        [
+          50,
+          998,
+          3
+        ],
+        [
+          30,
+          999,
+          0
+        ],
+        [
+          41,
+          999,
+          0
+        ],
+        [
+          50,
+          999,
+          2
+        ],
+        [
+          30,
+          1000,
+          0
+        ],
+        [
+          41,
+          1000,
+          0
+        ],
+        [
+          50,
+          1000,
+          1
+        ]
+      ],
+      "reference_steps": 34502,
+      "max_reference_frames": 1002,
+      "reference_seconds": 0.05121080402750522,
+      "native_process_seconds": 0.03065575798973441,
+      "native_stdout_bytes": 74386,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "1000",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "body_failure_mode_0",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        1,
+        902,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 53,
+      "trace_sha256": "6bb79acfe0e13631dec83829d7cf637e7c12af4f79e58b86b02add16a67e9886",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          40,
+          7,
+          902
+        ],
+        [
+          41,
+          7,
+          0
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          40,
+          8,
+          902
+        ],
+        [
+          41,
+          8,
+          0
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 232,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.00035923003451898694,
+      "native_process_seconds": 0.027009595010895282,
+      "native_stdout_bytes": 510,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "body_failure_mode_1",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        1
+      ],
+      "repeat": 0,
+      "result": [
+        1,
+        903,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 53,
+      "trace_sha256": "5295cc7cf504afd2fcb501c0188fc443342c4575616f7919b206c8aa485956ae",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          40,
+          7,
+          903
+        ],
+        [
+          41,
+          7,
+          1
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          40,
+          8,
+          903
+        ],
+        [
+          41,
+          8,
+          1
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 232,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.0003722549881786108,
+      "native_process_seconds": 0.030081690987572074,
+      "native_stdout_bytes": 510,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "1"
+      ]
+    },
+    {
+      "name": "body_failure_mode_2",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        2
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        789,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 47,
+      "trace_sha256": "765058cfad60a80d3501d84abd962d011364bfaf31be00da67a6e29924513dd3",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          2
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          2
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          2
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 227,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.0004984430270269513,
+      "native_process_seconds": 0.027185657992959023,
+      "native_stdout_bytes": 444,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "2"
+      ]
+    },
+    {
+      "name": "body_failure_mode_3",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        3
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        888,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 47,
+      "trace_sha256": "371b8fe63ddec00d0f4129121a2351c063de40d06f63a4c4b5dcbd6280886800",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          3
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          3
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          3
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 233,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.0004374479758553207,
+      "native_process_seconds": 0.030882707971613854,
+      "native_stdout_bytes": 444,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "3"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_0",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        0
+      ],
+      "repeat": 0,
+      "result": [
+        1,
+        901,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 63,
+      "trace_sha256": "7db7ef720735387e80cf1a17d42f1e40cd2ab52790b718099703b403c012caf2",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          40,
+          7,
+          901
+        ],
+        [
+          41,
+          7,
+          0
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          40,
+          8,
+          901
+        ],
+        [
+          41,
+          8,
+          0
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 287,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.0008422639803029597,
+      "native_process_seconds": 0.029939863015897572,
+      "native_stdout_bytes": 600,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "0"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_1",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        1
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        14,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 57,
+      "trace_sha256": "e62af48906579464d1c764955297da356e81c29f8c44381768183aab88b3c899",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          1
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          1
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          1
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 281,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.0008389189606532454,
+      "native_process_seconds": 0.029071599012240767,
+      "native_stdout_bytes": 533,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "1"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_2",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        2
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        789,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 57,
+      "trace_sha256": "f4def2c57adfad1409cf3fe2809de93207e5f24b50f483e6ad3cdba20844b8d9",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          2
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          2
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          2
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 282,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.0011223749606870115,
+      "native_process_seconds": 0.02895210200222209,
+      "native_stdout_bytes": 534,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "2"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_3",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        3
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        888,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 57,
+      "trace_sha256": "f673f2f1ed451a865599957e9f8265319402c5820d1cd5bafcb0ac1a3894ae2e",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          3
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          3
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          3
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 289,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.0005278889439068735,
+      "native_process_seconds": 0.029442422033753246,
+      "native_stdout_bytes": 534,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "name": "both_failures",
+      "inputs": [
+        8,
+        2,
+        3,
+        5,
+        2
+      ],
+      "repeat": 0,
+      "result": [
+        0,
+        789,
+        0,
+        6,
+        6
+      ],
+      "trace_count": 41,
+      "trace_sha256": "af62fb3b5e18497a96040581c65f5938b5b86507f70fe59cb902182b83487456",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          1
+        ],
+        [
+          20,
+          8,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          7,
+          0
+        ],
+        [
+          20,
+          7,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          2
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          2
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          2
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 200,
+      "max_reference_frames": 7,
+      "reference_seconds": 0.0005382389645092189,
+      "native_process_seconds": 0.027060701977461576,
+      "native_stdout_bytes": 392,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "2",
+        "3",
+        "5",
+        "2"
+      ]
+    },
+    {
+      "name": "missing_return",
+      "inputs": [
+        4,
+        0,
+        4,
+        -1,
+        1
+      ],
+      "repeat": 0,
+      "result": [
+        1,
+        903,
+        0,
+        1,
+        1
+      ],
+      "trace_count": 5,
+      "trace_sha256": "27a05960a864c71c49106099109466540ebc7fb672b9ce4cbf4ed14e98e30742",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          1
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          40,
+          4,
+          902
+        ],
+        [
+          41,
+          4,
+          1
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          10,
+          4,
+          1
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          40,
+          4,
+          902
+        ],
+        [
+          41,
+          4,
+          1
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 19,
+      "max_reference_frames": 1,
+      "reference_seconds": 7.258704863488674e-05,
+      "native_process_seconds": 0.028322691039647907,
+      "native_stdout_bytes": 66,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "0",
+        "4",
+        "-1",
+        "1"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        4,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        10,
+        0,
+        4,
+        4
+      ],
+      "trace_count": 28,
+      "trace_sha256": "a04b5632eede8149e4cf3321ddfe94ce8db5520fc350285d3589c35896f3cbe8",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          1
+        ],
+        [
+          20,
+          4,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          3,
+          0
+        ],
+        [
+          20,
+          3,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          2,
+          0
+        ],
+        [
+          50,
+          2,
+          3
+        ],
+        [
+          30,
+          3,
+          0
+        ],
+        [
+          41,
+          3,
+          0
+        ],
+        [
+          50,
+          3,
+          2
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          41,
+          4,
+          0
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 141,
+      "max_reference_frames": 6,
+      "reference_seconds": 0.0004872429999522865,
+      "native_process_seconds": 0.03227678796974942,
+      "native_stdout_bytes": 270,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        4,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        8,
+        0,
+        4,
+        4
+      ],
+      "trace_count": 28,
+      "trace_sha256": "226f5e607591752bcb3a606a558755ff036ba6f7b11b1520bb6bf1782a9c3515",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          2
+        ],
+        [
+          20,
+          4,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ],
+        [
+          10,
+          3,
+          1
+        ],
+        [
+          20,
+          3,
+          1
+        ],
+        [
+          21,
+          0,
+          1
+        ],
+        [
+          22,
+          1,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          2,
+          0
+        ],
+        [
+          50,
+          2,
+          3
+        ],
+        [
+          30,
+          3,
+          0
+        ],
+        [
+          41,
+          3,
+          0
+        ],
+        [
+          50,
+          3,
+          2
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          41,
+          4,
+          0
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 140,
+      "max_reference_frames": 6,
+      "reference_seconds": 0.00045873899944126606,
+      "native_process_seconds": 0.03014616301516071,
+      "native_stdout_bytes": 269,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        4,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        6,
+        0,
+        4,
+        4
+      ],
+      "trace_count": 28,
+      "trace_sha256": "bb3e3ac27890f488d9c3ec551e028582f30b970dac65b4c24169a0ff66c789af",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          0
+        ],
+        [
+          20,
+          4,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          3,
+          2
+        ],
+        [
+          20,
+          3,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          2,
+          0
+        ],
+        [
+          50,
+          2,
+          3
+        ],
+        [
+          30,
+          3,
+          0
+        ],
+        [
+          41,
+          3,
+          0
+        ],
+        [
+          50,
+          3,
+          2
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          41,
+          4,
+          0
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 139,
+      "max_reference_frames": 6,
+      "reference_seconds": 0.00045670504914596677,
+      "native_process_seconds": 0.03143660700879991,
+      "native_stdout_bytes": 269,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        20,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        93,
+        0,
+        20,
+        20
+      ],
+      "trace_count": 140,
+      "trace_sha256": "0afcd62348b2ea010e9ee333c881987fc8ed35319b488ca5681fd8cdd96addea",
+      "trace_prefix": [
+        [
+          10,
+          20,
+          2
+        ],
+        [
+          20,
+          20,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          2
+        ],
+        [
+          10,
+          19,
+          1
+        ],
+        [
+          20,
+          19,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          18,
+          0
+        ],
+        [
+          50,
+          18,
+          3
+        ],
+        [
+          30,
+          19,
+          0
+        ],
+        [
+          41,
+          19,
+          0
+        ],
+        [
+          50,
+          19,
+          2
+        ],
+        [
+          30,
+          20,
+          0
+        ],
+        [
+          41,
+          20,
+          0
+        ],
+        [
+          50,
+          20,
+          1
+        ]
+      ],
+      "reference_steps": 698,
+      "max_reference_frames": 22,
+      "reference_seconds": 0.0010842119809240103,
+      "native_process_seconds": 0.028628970962017775,
+      "native_stdout_bytes": 1346,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "20",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        20,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        82,
+        0,
+        20,
+        20
+      ],
+      "trace_count": 140,
+      "trace_sha256": "acde6764f3f48d5ffffca0c593f4b1080e7559fd9203ebcb777ac9e4a6492d3a",
+      "trace_prefix": [
+        [
+          10,
+          20,
+          0
+        ],
+        [
+          20,
+          20,
+          2
+        ],
+        [
+          21,
+          1,
+          1
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          19,
+          2
+        ],
+        [
+          20,
+          19,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          18,
+          0
+        ],
+        [
+          50,
+          18,
+          3
+        ],
+        [
+          30,
+          19,
+          0
+        ],
+        [
+          41,
+          19,
+          0
+        ],
+        [
+          50,
+          19,
+          2
+        ],
+        [
+          30,
+          20,
+          0
+        ],
+        [
+          41,
+          20,
+          0
+        ],
+        [
+          50,
+          20,
+          1
+        ]
+      ],
+      "reference_steps": 692,
+      "max_reference_frames": 22,
+      "reference_seconds": 0.002572159981355071,
+      "native_process_seconds": 0.034382042998913676,
+      "native_stdout_bytes": 1346,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "20",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        20,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        81,
+        0,
+        20,
+        20
+      ],
+      "trace_count": 140,
+      "trace_sha256": "27a305b21a8d9a175c2601a12d431e56b11ce977d841f3438d953aff317d914e",
+      "trace_prefix": [
+        [
+          10,
+          20,
+          1
+        ],
+        [
+          20,
+          20,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          19,
+          0
+        ],
+        [
+          20,
+          19,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          18,
+          0
+        ],
+        [
+          50,
+          18,
+          3
+        ],
+        [
+          30,
+          19,
+          0
+        ],
+        [
+          41,
+          19,
+          0
+        ],
+        [
+          50,
+          19,
+          2
+        ],
+        [
+          30,
+          20,
+          0
+        ],
+        [
+          41,
+          20,
+          0
+        ],
+        [
+          50,
+          20,
+          1
+        ]
+      ],
+      "reference_steps": 692,
+      "max_reference_frames": 22,
+      "reference_seconds": 0.0010174160124734044,
+      "native_process_seconds": 0.031114647048525512,
+      "native_stdout_bytes": 1346,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "20",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        200,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        5739,
+        0,
+        200,
+        200
+      ],
+      "trace_count": 1400,
+      "trace_sha256": "f6076fde2061d31f721f5a7673167602c9214849aab1df701f3bb4132bbf4a22",
+      "trace_prefix": [
+        [
+          10,
+          200,
+          2
+        ],
+        [
+          20,
+          200,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          2
+        ],
+        [
+          10,
+          199,
+          1
+        ],
+        [
+          20,
+          199,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          198,
+          0
+        ],
+        [
+          50,
+          198,
+          3
+        ],
+        [
+          30,
+          199,
+          0
+        ],
+        [
+          41,
+          199,
+          0
+        ],
+        [
+          50,
+          199,
+          2
+        ],
+        [
+          30,
+          200,
+          0
+        ],
+        [
+          41,
+          200,
+          0
+        ],
+        [
+          50,
+          200,
+          1
+        ]
+      ],
+      "reference_steps": 6968,
+      "max_reference_frames": 202,
+      "reference_seconds": 0.009793029981665313,
+      "native_process_seconds": 0.03215310204541311,
+      "native_stdout_bytes": 14376,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "200",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        200,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        5608,
+        0,
+        200,
+        200
+      ],
+      "trace_count": 1400,
+      "trace_sha256": "8a6589eca78877b61a948c5aacaceb3c577dc5bbb80c81f90f94b2a736683401",
+      "trace_prefix": [
+        [
+          10,
+          200,
+          0
+        ],
+        [
+          20,
+          200,
+          2
+        ],
+        [
+          21,
+          1,
+          1
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          199,
+          2
+        ],
+        [
+          20,
+          199,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          198,
+          0
+        ],
+        [
+          50,
+          198,
+          3
+        ],
+        [
+          30,
+          199,
+          0
+        ],
+        [
+          41,
+          199,
+          0
+        ],
+        [
+          50,
+          199,
+          2
+        ],
+        [
+          30,
+          200,
+          0
+        ],
+        [
+          41,
+          200,
+          0
+        ],
+        [
+          50,
+          200,
+          1
+        ]
+      ],
+      "reference_steps": 6902,
+      "max_reference_frames": 202,
+      "reference_seconds": 0.011354266025591642,
+      "native_process_seconds": 0.028209145995788276,
+      "native_stdout_bytes": 14376,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "200",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        200,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        5607,
+        0,
+        200,
+        200
+      ],
+      "trace_count": 1400,
+      "trace_sha256": "200eed77527154e80db23d38f6b2b82e442211382f04d1328e3864500ef8a9dc",
+      "trace_prefix": [
+        [
+          10,
+          200,
+          1
+        ],
+        [
+          20,
+          200,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          199,
+          0
+        ],
+        [
+          20,
+          199,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          198,
+          0
+        ],
+        [
+          50,
+          198,
+          3
+        ],
+        [
+          30,
+          199,
+          0
+        ],
+        [
+          41,
+          199,
+          0
+        ],
+        [
+          50,
+          199,
+          2
+        ],
+        [
+          30,
+          200,
+          0
+        ],
+        [
+          41,
+          200,
+          0
+        ],
+        [
+          50,
+          200,
+          1
+        ]
+      ],
+      "reference_steps": 6902,
+      "max_reference_frames": 202,
+      "reference_seconds": 0.009683673037216067,
+      "native_process_seconds": 0.02979968802537769,
+      "native_stdout_bytes": 14376,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "200",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        1000,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        135034,
+        0,
+        1000,
+        1000
+      ],
+      "trace_count": 7000,
+      "trace_sha256": "5a8394eb4614ec16b2c68f7a9526319caceacecf6b866c7c269bdc45d16ee225",
+      "trace_prefix": [
+        [
+          10,
+          1000,
+          1
+        ],
+        [
+          20,
+          1000,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          999,
+          0
+        ],
+        [
+          20,
+          999,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          998,
+          0
+        ],
+        [
+          50,
+          998,
+          3
+        ],
+        [
+          30,
+          999,
+          0
+        ],
+        [
+          41,
+          999,
+          0
+        ],
+        [
+          50,
+          999,
+          2
+        ],
+        [
+          30,
+          1000,
+          0
+        ],
+        [
+          41,
+          1000,
+          0
+        ],
+        [
+          50,
+          1000,
+          1
+        ]
+      ],
+      "reference_steps": 34835,
+      "max_reference_frames": 1002,
+      "reference_seconds": 0.04927872499683872,
+      "native_process_seconds": 0.02997714397497475,
+      "native_stdout_bytes": 74386,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "1000",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        1000,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        135366,
+        0,
+        1000,
+        1000
+      ],
+      "trace_count": 7000,
+      "trace_sha256": "a459ad7f6ff8b26fef92d9118ca7de928b6b184b1d03f8ebe0010b288683e7cf",
+      "trace_prefix": [
+        [
+          10,
+          1000,
+          2
+        ],
+        [
+          20,
+          1000,
+          2
+        ],
+        [
+          21,
+          1,
+          1
+        ],
+        [
+          22,
+          1,
+          2
+        ],
+        [
+          10,
+          999,
+          1
+        ],
+        [
+          20,
+          999,
+          1
+        ],
+        [
+          21,
+          0,
+          1
+        ],
+        [
+          22,
+          1,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          998,
+          0
+        ],
+        [
+          50,
+          998,
+          3
+        ],
+        [
+          30,
+          999,
+          0
+        ],
+        [
+          41,
+          999,
+          0
+        ],
+        [
+          50,
+          999,
+          2
+        ],
+        [
+          30,
+          1000,
+          0
+        ],
+        [
+          41,
+          1000,
+          0
+        ],
+        [
+          50,
+          1000,
+          1
+        ]
+      ],
+      "reference_steps": 34502,
+      "max_reference_frames": 1002,
+      "reference_seconds": 0.04872838401934132,
+      "native_process_seconds": 0.03208206902490929,
+      "native_stdout_bytes": 74386,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "1000",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        1000,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        134368,
+        0,
+        1000,
+        1000
+      ],
+      "trace_count": 7000,
+      "trace_sha256": "2d9a04db53806b141c44518287b9f3854fdf83dfdede71f6ac052f632b70b6ad",
+      "trace_prefix": [
+        [
+          10,
+          1000,
+          0
+        ],
+        [
+          20,
+          1000,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          999,
+          2
+        ],
+        [
+          20,
+          999,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          998,
+          0
+        ],
+        [
+          50,
+          998,
+          3
+        ],
+        [
+          30,
+          999,
+          0
+        ],
+        [
+          41,
+          999,
+          0
+        ],
+        [
+          50,
+          999,
+          2
+        ],
+        [
+          30,
+          1000,
+          0
+        ],
+        [
+          41,
+          1000,
+          0
+        ],
+        [
+          50,
+          1000,
+          1
+        ]
+      ],
+      "reference_steps": 34502,
+      "max_reference_frames": 1002,
+      "reference_seconds": 0.04880420700646937,
+      "native_process_seconds": 0.031617499014828354,
+      "native_stdout_bytes": 74386,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "1000",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "body_failure_mode_0",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        1,
+        902,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 53,
+      "trace_sha256": "6bb79acfe0e13631dec83829d7cf637e7c12af4f79e58b86b02add16a67e9886",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          40,
+          7,
+          902
+        ],
+        [
+          41,
+          7,
+          0
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          40,
+          8,
+          902
+        ],
+        [
+          41,
+          8,
+          0
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 232,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.00036567298229783773,
+      "native_process_seconds": 0.028420777001883835,
+      "native_stdout_bytes": 510,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "body_failure_mode_1",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        1
+      ],
+      "repeat": 1,
+      "result": [
+        1,
+        903,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 53,
+      "trace_sha256": "5295cc7cf504afd2fcb501c0188fc443342c4575616f7919b206c8aa485956ae",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          40,
+          7,
+          903
+        ],
+        [
+          41,
+          7,
+          1
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          40,
+          8,
+          903
+        ],
+        [
+          41,
+          8,
+          1
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 232,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.000362557009793818,
+      "native_process_seconds": 0.028186593030113727,
+      "native_stdout_bytes": 510,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "1"
+      ]
+    },
+    {
+      "name": "body_failure_mode_2",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        2
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        789,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 47,
+      "trace_sha256": "765058cfad60a80d3501d84abd962d011364bfaf31be00da67a6e29924513dd3",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          2
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          2
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          2
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 227,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.00035715597914531827,
+      "native_process_seconds": 0.030832984019070864,
+      "native_stdout_bytes": 444,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "2"
+      ]
+    },
+    {
+      "name": "body_failure_mode_3",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        3
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        888,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 47,
+      "trace_sha256": "371b8fe63ddec00d0f4129121a2351c063de40d06f63a4c4b5dcbd6280886800",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          3
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          3
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          3
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 233,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.0003595409798435867,
+      "native_process_seconds": 0.030346361978445202,
+      "native_stdout_bytes": 444,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "3"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_0",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        0
+      ],
+      "repeat": 1,
+      "result": [
+        1,
+        901,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 63,
+      "trace_sha256": "7db7ef720735387e80cf1a17d42f1e40cd2ab52790b718099703b403c012caf2",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          40,
+          7,
+          901
+        ],
+        [
+          41,
+          7,
+          0
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          40,
+          8,
+          901
+        ],
+        [
+          41,
+          8,
+          0
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 287,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.00045697501627728343,
+      "native_process_seconds": 0.02887611900223419,
+      "native_stdout_bytes": 600,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "0"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_1",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        1
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        14,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 57,
+      "trace_sha256": "e62af48906579464d1c764955297da356e81c29f8c44381768183aab88b3c899",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          1
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          1
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          1
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 281,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.000438561022747308,
+      "native_process_seconds": 0.030842031002976,
+      "native_stdout_bytes": 533,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "1"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_2",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        2
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        789,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 57,
+      "trace_sha256": "f4def2c57adfad1409cf3fe2809de93207e5f24b50f483e6ad3cdba20844b8d9",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          2
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          2
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          2
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 282,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.00043054495472460985,
+      "native_process_seconds": 0.031131848983932287,
+      "native_stdout_bytes": 534,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "2"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_3",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        3
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        888,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 57,
+      "trace_sha256": "f673f2f1ed451a865599957e9f8265319402c5820d1cd5bafcb0ac1a3894ae2e",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          3
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          3
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          3
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 289,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.0005467250011861324,
+      "native_process_seconds": 0.03058686904842034,
+      "native_stdout_bytes": 534,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "name": "both_failures",
+      "inputs": [
+        8,
+        2,
+        3,
+        5,
+        2
+      ],
+      "repeat": 1,
+      "result": [
+        0,
+        789,
+        0,
+        6,
+        6
+      ],
+      "trace_count": 41,
+      "trace_sha256": "af62fb3b5e18497a96040581c65f5938b5b86507f70fe59cb902182b83487456",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          1
+        ],
+        [
+          20,
+          8,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          7,
+          0
+        ],
+        [
+          20,
+          7,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          2
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          2
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          2
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 200,
+      "max_reference_frames": 7,
+      "reference_seconds": 0.0003137140301987529,
+      "native_process_seconds": 0.028439513000193983,
+      "native_stdout_bytes": 392,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "2",
+        "3",
+        "5",
+        "2"
+      ]
+    },
+    {
+      "name": "missing_return",
+      "inputs": [
+        4,
+        0,
+        4,
+        -1,
+        1
+      ],
+      "repeat": 1,
+      "result": [
+        1,
+        903,
+        0,
+        1,
+        1
+      ],
+      "trace_count": 5,
+      "trace_sha256": "27a05960a864c71c49106099109466540ebc7fb672b9ce4cbf4ed14e98e30742",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          1
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          40,
+          4,
+          902
+        ],
+        [
+          41,
+          4,
+          1
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          10,
+          4,
+          1
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          40,
+          4,
+          902
+        ],
+        [
+          41,
+          4,
+          1
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 19,
+      "max_reference_frames": 1,
+      "reference_seconds": 5.406298441812396e-05,
+      "native_process_seconds": 0.02638195699546486,
+      "native_stdout_bytes": 66,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "0",
+        "4",
+        "-1",
+        "1"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        4,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        10,
+        0,
+        4,
+        4
+      ],
+      "trace_count": 28,
+      "trace_sha256": "a04b5632eede8149e4cf3321ddfe94ce8db5520fc350285d3589c35896f3cbe8",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          1
+        ],
+        [
+          20,
+          4,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          3,
+          0
+        ],
+        [
+          20,
+          3,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          2,
+          0
+        ],
+        [
+          50,
+          2,
+          3
+        ],
+        [
+          30,
+          3,
+          0
+        ],
+        [
+          41,
+          3,
+          0
+        ],
+        [
+          50,
+          3,
+          2
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          41,
+          4,
+          0
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 141,
+      "max_reference_frames": 6,
+      "reference_seconds": 0.0002445629797875881,
+      "native_process_seconds": 0.02888299198821187,
+      "native_stdout_bytes": 270,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        4,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        8,
+        0,
+        4,
+        4
+      ],
+      "trace_count": 28,
+      "trace_sha256": "226f5e607591752bcb3a606a558755ff036ba6f7b11b1520bb6bf1782a9c3515",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          2
+        ],
+        [
+          20,
+          4,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ],
+        [
+          10,
+          3,
+          1
+        ],
+        [
+          20,
+          3,
+          1
+        ],
+        [
+          21,
+          0,
+          1
+        ],
+        [
+          22,
+          1,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          2,
+          0
+        ],
+        [
+          50,
+          2,
+          3
+        ],
+        [
+          30,
+          3,
+          0
+        ],
+        [
+          41,
+          3,
+          0
+        ],
+        [
+          50,
+          3,
+          2
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          41,
+          4,
+          0
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 140,
+      "max_reference_frames": 6,
+      "reference_seconds": 0.0002448130398988724,
+      "native_process_seconds": 0.02977287699468434,
+      "native_stdout_bytes": 269,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        4,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        6,
+        0,
+        4,
+        4
+      ],
+      "trace_count": 28,
+      "trace_sha256": "bb3e3ac27890f488d9c3ec551e028582f30b970dac65b4c24169a0ff66c789af",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          0
+        ],
+        [
+          20,
+          4,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          3,
+          2
+        ],
+        [
+          20,
+          3,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          2,
+          0
+        ],
+        [
+          50,
+          2,
+          3
+        ],
+        [
+          30,
+          3,
+          0
+        ],
+        [
+          41,
+          3,
+          0
+        ],
+        [
+          50,
+          3,
+          2
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          41,
+          4,
+          0
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 139,
+      "max_reference_frames": 6,
+      "reference_seconds": 0.000285961024928838,
+      "native_process_seconds": 0.02846418903209269,
+      "native_stdout_bytes": 269,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        20,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        93,
+        0,
+        20,
+        20
+      ],
+      "trace_count": 140,
+      "trace_sha256": "0afcd62348b2ea010e9ee333c881987fc8ed35319b488ca5681fd8cdd96addea",
+      "trace_prefix": [
+        [
+          10,
+          20,
+          2
+        ],
+        [
+          20,
+          20,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          2
+        ],
+        [
+          10,
+          19,
+          1
+        ],
+        [
+          20,
+          19,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          18,
+          0
+        ],
+        [
+          50,
+          18,
+          3
+        ],
+        [
+          30,
+          19,
+          0
+        ],
+        [
+          41,
+          19,
+          0
+        ],
+        [
+          50,
+          19,
+          2
+        ],
+        [
+          30,
+          20,
+          0
+        ],
+        [
+          41,
+          20,
+          0
+        ],
+        [
+          50,
+          20,
+          1
+        ]
+      ],
+      "reference_steps": 698,
+      "max_reference_frames": 22,
+      "reference_seconds": 0.0012493350077420473,
+      "native_process_seconds": 0.02772414800710976,
+      "native_stdout_bytes": 1346,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "20",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        20,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        82,
+        0,
+        20,
+        20
+      ],
+      "trace_count": 140,
+      "trace_sha256": "acde6764f3f48d5ffffca0c593f4b1080e7559fd9203ebcb777ac9e4a6492d3a",
+      "trace_prefix": [
+        [
+          10,
+          20,
+          0
+        ],
+        [
+          20,
+          20,
+          2
+        ],
+        [
+          21,
+          1,
+          1
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          19,
+          2
+        ],
+        [
+          20,
+          19,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          18,
+          0
+        ],
+        [
+          50,
+          18,
+          3
+        ],
+        [
+          30,
+          19,
+          0
+        ],
+        [
+          41,
+          19,
+          0
+        ],
+        [
+          50,
+          19,
+          2
+        ],
+        [
+          30,
+          20,
+          0
+        ],
+        [
+          41,
+          20,
+          0
+        ],
+        [
+          50,
+          20,
+          1
+        ]
+      ],
+      "reference_steps": 692,
+      "max_reference_frames": 22,
+      "reference_seconds": 0.0010373740224167705,
+      "native_process_seconds": 0.029814846988301724,
+      "native_stdout_bytes": 1346,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "20",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        20,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        81,
+        0,
+        20,
+        20
+      ],
+      "trace_count": 140,
+      "trace_sha256": "27a305b21a8d9a175c2601a12d431e56b11ce977d841f3438d953aff317d914e",
+      "trace_prefix": [
+        [
+          10,
+          20,
+          1
+        ],
+        [
+          20,
+          20,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          19,
+          0
+        ],
+        [
+          20,
+          19,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          18,
+          0
+        ],
+        [
+          50,
+          18,
+          3
+        ],
+        [
+          30,
+          19,
+          0
+        ],
+        [
+          41,
+          19,
+          0
+        ],
+        [
+          50,
+          19,
+          2
+        ],
+        [
+          30,
+          20,
+          0
+        ],
+        [
+          41,
+          20,
+          0
+        ],
+        [
+          50,
+          20,
+          1
+        ]
+      ],
+      "reference_steps": 692,
+      "max_reference_frames": 22,
+      "reference_seconds": 0.0010096410405822098,
+      "native_process_seconds": 0.029525697987992316,
+      "native_stdout_bytes": 1346,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "20",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        200,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        5739,
+        0,
+        200,
+        200
+      ],
+      "trace_count": 1400,
+      "trace_sha256": "f6076fde2061d31f721f5a7673167602c9214849aab1df701f3bb4132bbf4a22",
+      "trace_prefix": [
+        [
+          10,
+          200,
+          2
+        ],
+        [
+          20,
+          200,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          2
+        ],
+        [
+          10,
+          199,
+          1
+        ],
+        [
+          20,
+          199,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          198,
+          0
+        ],
+        [
+          50,
+          198,
+          3
+        ],
+        [
+          30,
+          199,
+          0
+        ],
+        [
+          41,
+          199,
+          0
+        ],
+        [
+          50,
+          199,
+          2
+        ],
+        [
+          30,
+          200,
+          0
+        ],
+        [
+          41,
+          200,
+          0
+        ],
+        [
+          50,
+          200,
+          1
+        ]
+      ],
+      "reference_steps": 6968,
+      "max_reference_frames": 202,
+      "reference_seconds": 0.009574757015798241,
+      "native_process_seconds": 0.028410057013388723,
+      "native_stdout_bytes": 14376,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "200",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        200,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        5608,
+        0,
+        200,
+        200
+      ],
+      "trace_count": 1400,
+      "trace_sha256": "8a6589eca78877b61a948c5aacaceb3c577dc5bbb80c81f90f94b2a736683401",
+      "trace_prefix": [
+        [
+          10,
+          200,
+          0
+        ],
+        [
+          20,
+          200,
+          2
+        ],
+        [
+          21,
+          1,
+          1
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          199,
+          2
+        ],
+        [
+          20,
+          199,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          198,
+          0
+        ],
+        [
+          50,
+          198,
+          3
+        ],
+        [
+          30,
+          199,
+          0
+        ],
+        [
+          41,
+          199,
+          0
+        ],
+        [
+          50,
+          199,
+          2
+        ],
+        [
+          30,
+          200,
+          0
+        ],
+        [
+          41,
+          200,
+          0
+        ],
+        [
+          50,
+          200,
+          1
+        ]
+      ],
+      "reference_steps": 6902,
+      "max_reference_frames": 202,
+      "reference_seconds": 0.009582180995494127,
+      "native_process_seconds": 0.03115383198019117,
+      "native_stdout_bytes": 14376,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "200",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        200,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        5607,
+        0,
+        200,
+        200
+      ],
+      "trace_count": 1400,
+      "trace_sha256": "200eed77527154e80db23d38f6b2b82e442211382f04d1328e3864500ef8a9dc",
+      "trace_prefix": [
+        [
+          10,
+          200,
+          1
+        ],
+        [
+          20,
+          200,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          199,
+          0
+        ],
+        [
+          20,
+          199,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          198,
+          0
+        ],
+        [
+          50,
+          198,
+          3
+        ],
+        [
+          30,
+          199,
+          0
+        ],
+        [
+          41,
+          199,
+          0
+        ],
+        [
+          50,
+          199,
+          2
+        ],
+        [
+          30,
+          200,
+          0
+        ],
+        [
+          41,
+          200,
+          0
+        ],
+        [
+          50,
+          200,
+          1
+        ]
+      ],
+      "reference_steps": 6902,
+      "max_reference_frames": 202,
+      "reference_seconds": 0.009499303007032722,
+      "native_process_seconds": 0.02929942001355812,
+      "native_stdout_bytes": 14376,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "200",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        1000,
+        0,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        135034,
+        0,
+        1000,
+        1000
+      ],
+      "trace_count": 7000,
+      "trace_sha256": "5a8394eb4614ec16b2c68f7a9526319caceacecf6b866c7c269bdc45d16ee225",
+      "trace_prefix": [
+        [
+          10,
+          1000,
+          1
+        ],
+        [
+          20,
+          1000,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          999,
+          0
+        ],
+        [
+          20,
+          999,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          998,
+          0
+        ],
+        [
+          50,
+          998,
+          3
+        ],
+        [
+          30,
+          999,
+          0
+        ],
+        [
+          41,
+          999,
+          0
+        ],
+        [
+          50,
+          999,
+          2
+        ],
+        [
+          30,
+          1000,
+          0
+        ],
+        [
+          41,
+          1000,
+          0
+        ],
+        [
+          50,
+          1000,
+          1
+        ]
+      ],
+      "reference_steps": 34835,
+      "max_reference_frames": 1002,
+      "reference_seconds": 0.05609597300644964,
+      "native_process_seconds": 0.02974660601466894,
+      "native_stdout_bytes": 74386,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "1000",
+        "0",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        1000,
+        1,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        135366,
+        0,
+        1000,
+        1000
+      ],
+      "trace_count": 7000,
+      "trace_sha256": "a459ad7f6ff8b26fef92d9118ca7de928b6b184b1d03f8ebe0010b288683e7cf",
+      "trace_prefix": [
+        [
+          10,
+          1000,
+          2
+        ],
+        [
+          20,
+          1000,
+          2
+        ],
+        [
+          21,
+          1,
+          1
+        ],
+        [
+          22,
+          1,
+          2
+        ],
+        [
+          10,
+          999,
+          1
+        ],
+        [
+          20,
+          999,
+          1
+        ],
+        [
+          21,
+          0,
+          1
+        ],
+        [
+          22,
+          1,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          998,
+          0
+        ],
+        [
+          50,
+          998,
+          3
+        ],
+        [
+          30,
+          999,
+          0
+        ],
+        [
+          41,
+          999,
+          0
+        ],
+        [
+          50,
+          999,
+          2
+        ],
+        [
+          30,
+          1000,
+          0
+        ],
+        [
+          41,
+          1000,
+          0
+        ],
+        [
+          50,
+          1000,
+          1
+        ]
+      ],
+      "reference_steps": 34502,
+      "max_reference_frames": 1002,
+      "reference_seconds": 0.04945476999273524,
+      "native_process_seconds": 0.02938884001923725,
+      "native_stdout_bytes": 74386,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "1000",
+        "1",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "depth",
+      "inputs": [
+        1000,
+        2,
+        -1,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        134368,
+        0,
+        1000,
+        1000
+      ],
+      "trace_count": 7000,
+      "trace_sha256": "2d9a04db53806b141c44518287b9f3854fdf83dfdede71f6ac052f632b70b6ad",
+      "trace_prefix": [
+        [
+          10,
+          1000,
+          0
+        ],
+        [
+          20,
+          1000,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          999,
+          2
+        ],
+        [
+          20,
+          999,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          998,
+          0
+        ],
+        [
+          50,
+          998,
+          3
+        ],
+        [
+          30,
+          999,
+          0
+        ],
+        [
+          41,
+          999,
+          0
+        ],
+        [
+          50,
+          999,
+          2
+        ],
+        [
+          30,
+          1000,
+          0
+        ],
+        [
+          41,
+          1000,
+          0
+        ],
+        [
+          50,
+          1000,
+          1
+        ]
+      ],
+      "reference_steps": 34502,
+      "max_reference_frames": 1002,
+      "reference_seconds": 0.051640035992022604,
+      "native_process_seconds": 0.029891490994486958,
+      "native_stdout_bytes": 74386,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "1000",
+        "2",
+        "-1",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "body_failure_mode_0",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        1,
+        902,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 53,
+      "trace_sha256": "6bb79acfe0e13631dec83829d7cf637e7c12af4f79e58b86b02add16a67e9886",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          40,
+          7,
+          902
+        ],
+        [
+          41,
+          7,
+          0
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          40,
+          8,
+          902
+        ],
+        [
+          41,
+          8,
+          0
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 232,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.00035777699667960405,
+      "native_process_seconds": 0.028760709974449128,
+      "native_stdout_bytes": 510,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "0"
+      ]
+    },
+    {
+      "name": "body_failure_mode_1",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        1
+      ],
+      "repeat": 2,
+      "result": [
+        1,
+        903,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 53,
+      "trace_sha256": "5295cc7cf504afd2fcb501c0188fc443342c4575616f7919b206c8aa485956ae",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          40,
+          7,
+          903
+        ],
+        [
+          41,
+          7,
+          1
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          40,
+          8,
+          903
+        ],
+        [
+          41,
+          8,
+          1
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 232,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.00036084302701056004,
+      "native_process_seconds": 0.030072825029492378,
+      "native_stdout_bytes": 510,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "1"
+      ]
+    },
+    {
+      "name": "body_failure_mode_2",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        2
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        789,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 47,
+      "trace_sha256": "765058cfad60a80d3501d84abd962d011364bfaf31be00da67a6e29924513dd3",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          2
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          2
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          2
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 227,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.0005904680001549423,
+      "native_process_seconds": 0.03163545299321413,
+      "native_stdout_bytes": 444,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "2"
+      ]
+    },
+    {
+      "name": "body_failure_mode_3",
+      "inputs": [
+        8,
+        1,
+        2,
+        -1,
+        3
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        888,
+        0,
+        7,
+        7
+      ],
+      "trace_count": 47,
+      "trace_sha256": "371b8fe63ddec00d0f4129121a2351c063de40d06f63a4c4b5dcbd6280886800",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          3
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          3
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          3
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 233,
+      "max_reference_frames": 8,
+      "reference_seconds": 0.0006924810004420578,
+      "native_process_seconds": 0.03161298995837569,
+      "native_stdout_bytes": 444,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "2",
+        "-1",
+        "3"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_0",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        0
+      ],
+      "repeat": 2,
+      "result": [
+        1,
+        901,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 63,
+      "trace_sha256": "7db7ef720735387e80cf1a17d42f1e40cd2ab52790b718099703b403c012caf2",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          40,
+          7,
+          901
+        ],
+        [
+          41,
+          7,
+          0
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          40,
+          8,
+          901
+        ],
+        [
+          41,
+          8,
+          0
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 287,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.0008359519997611642,
+      "native_process_seconds": 0.027770004991907626,
+      "native_stdout_bytes": 600,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "0"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_1",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        1
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        14,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 57,
+      "trace_sha256": "e62af48906579464d1c764955297da356e81c29f8c44381768183aab88b3c899",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          1
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          1
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          1
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 281,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.0008866289863362908,
+      "native_process_seconds": 0.027919879008550197,
+      "native_stdout_bytes": 533,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "1"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_2",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        2
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        789,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 57,
+      "trace_sha256": "f4def2c57adfad1409cf3fe2809de93207e5f24b50f483e6ad3cdba20844b8d9",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          2
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          2
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          2
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 282,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.0008444680133834481,
+      "native_process_seconds": 0.03402491600718349,
+      "native_stdout_bytes": 534,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "2"
+      ]
+    },
+    {
+      "name": "cleanup_failure_mode_3",
+      "inputs": [
+        8,
+        1,
+        -1,
+        2,
+        3
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        888,
+        0,
+        8,
+        8
+      ],
+      "trace_count": 57,
+      "trace_sha256": "f673f2f1ed451a865599957e9f8265319402c5820d1cd5bafcb0ac1a3894ae2e",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          0
+        ],
+        [
+          20,
+          8,
+          2
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          1,
+          0
+        ],
+        [
+          10,
+          7,
+          2
+        ],
+        [
+          20,
+          7,
+          1
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          2
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          3
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          3
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          3
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 289,
+      "max_reference_frames": 10,
+      "reference_seconds": 0.0005404730327427387,
+      "native_process_seconds": 0.029229858017060906,
+      "native_stdout_bytes": 534,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "1",
+        "-1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "name": "both_failures",
+      "inputs": [
+        8,
+        2,
+        3,
+        5,
+        2
+      ],
+      "repeat": 2,
+      "result": [
+        0,
+        789,
+        0,
+        6,
+        6
+      ],
+      "trace_count": 41,
+      "trace_sha256": "af62fb3b5e18497a96040581c65f5938b5b86507f70fe59cb902182b83487456",
+      "trace_prefix": [
+        [
+          10,
+          8,
+          1
+        ],
+        [
+          20,
+          8,
+          1
+        ],
+        [
+          21,
+          1,
+          0
+        ],
+        [
+          22,
+          0,
+          1
+        ],
+        [
+          10,
+          7,
+          0
+        ],
+        [
+          20,
+          7,
+          2
+        ],
+        [
+          21,
+          0,
+          0
+        ],
+        [
+          22,
+          0,
+          0
+        ]
+      ],
+      "trace_suffix": [
+        [
+          41,
+          6,
+          2
+        ],
+        [
+          50,
+          6,
+          3
+        ],
+        [
+          30,
+          7,
+          0
+        ],
+        [
+          41,
+          7,
+          2
+        ],
+        [
+          50,
+          7,
+          2
+        ],
+        [
+          30,
+          8,
+          0
+        ],
+        [
+          41,
+          8,
+          2
+        ],
+        [
+          50,
+          8,
+          1
+        ]
+      ],
+      "reference_steps": 200,
+      "max_reference_frames": 7,
+      "reference_seconds": 0.0002961709978990257,
+      "native_process_seconds": 0.030053728027269244,
+      "native_stdout_bytes": 392,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "8",
+        "2",
+        "3",
+        "5",
+        "2"
+      ]
+    },
+    {
+      "name": "missing_return",
+      "inputs": [
+        4,
+        0,
+        4,
+        -1,
+        1
+      ],
+      "repeat": 2,
+      "result": [
+        1,
+        903,
+        0,
+        1,
+        1
+      ],
+      "trace_count": 5,
+      "trace_sha256": "27a05960a864c71c49106099109466540ebc7fb672b9ce4cbf4ed14e98e30742",
+      "trace_prefix": [
+        [
+          10,
+          4,
+          1
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          40,
+          4,
+          902
+        ],
+        [
+          41,
+          4,
+          1
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "trace_suffix": [
+        [
+          10,
+          4,
+          1
+        ],
+        [
+          30,
+          4,
+          0
+        ],
+        [
+          40,
+          4,
+          902
+        ],
+        [
+          41,
+          4,
+          1
+        ],
+        [
+          50,
+          4,
+          1
+        ]
+      ],
+      "reference_steps": 19,
+      "max_reference_frames": 1,
+      "reference_seconds": 8.907803567126393e-05,
+      "native_process_seconds": 0.031886398035567254,
+      "native_stdout_bytes": 66,
+      "command": [
+        "/ws/EvtWorks/cod-project/build/bin/lli",
+        "--jit-kind=orc",
+        "/tmp/cod-semantic-program-90j8sdhi/program.ll",
+        "4",
+        "0",
+        "4",
+        "-1",
+        "1"
+      ]
+    }
+  ],
+  "graph_unchanged": true,
+  "llvm_unchanged": true,
+  "limitations": [
+    "Handwritten explicit-signature finite graph; no CoD parser or general type/owner inference.",
+    "Logical lease obligations and exact token/order traces are tested; no shilos allocation, actual region payload or lifetime proof is implemented here.",
+    "Pending return/throw/missing-return and cleanup are explicit in both engines. Exception payloads are integer codes and catches match all; no production exception ABI or native C++ unwinding is selected.",
+    "Selected callable context is represented by a view ID; complete captured environments and region remapping are separate boundary-model evidence.",
+    "All selected definitions are lowered once before native execution. This proves finite shared lowering for the fixture, not general AOT coverage or lazy semantic lowering.",
+    "Native timing includes lli startup, compilation and full trace output; reference timing includes explicit frame interpretation and trace collection. These are not throughput comparisons.",
+    "No persistent continuation, world-evolution or external-definition admission protocol is implemented."
+  ],
+  "environment": {
+    "python": "3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0]",
+    "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41"
+  },
+  "build_verification": {
+    "command": "cmake --build ./build",
+    "exit": 0,
+    "log_sha256": "1f3d16f02a6177838bd9b70d057b6c9af4ae41562104c6896588480e85d5dd65",
+    "scope": "Existing main build; experiment uses unchanged build/bin/lli. No build configuration or toolchain changes."
+  }
+}
