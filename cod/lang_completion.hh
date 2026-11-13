@@ -25,7 +25,8 @@ struct Completion {
 class CleanupEquations {
   static_assert(exception_categories.size() < 64);
 public:
-  struct Effects { std::set<size_t> reads, initialized; };
+  using Reads = std::map<size_t, std::set<size_t>>;
+  struct Effects { Reads reads; std::set<size_t> initialized; };
   struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
   struct Action { bool guarded = false; std::vector<Path> paths; };
 private:
@@ -38,8 +39,11 @@ private:
   std::vector<Relation> solved_;
   Effects compose(const Effects &first, const Effects &second) const {
     auto result = first;
-    for (const auto read : second.reads)
-      if (!first.initialized.contains(reads_.at(read))) result.reads.insert(read);
+    for (const auto &[read, known] : second.reads) if (!first.initialized.contains(reads_.at(read))) {
+      auto before = known;
+      before.insert(first.initialized.begin(), first.initialized.end());
+      merge_read(result.reads, read, before);
+    }
     result.initialized.insert(second.initialized.begin(), second.initialized.end());
     return result;
   }
@@ -47,12 +51,17 @@ private:
     auto [found, inserted] = result.try_emplace(completion, effects);
     if (inserted) return true;
     auto &known = found->second;
-    const auto previous_reads = known.reads.size(), previous_initialized = known.initialized.size();
-    known.reads.insert(effects.reads.begin(), effects.reads.end());
+    const auto previous_reads = known.reads;
+    const auto previous_initialized = known.initialized.size();
+    for (const auto &[read, before] : effects.reads) merge_read(known.reads, read, before);
     std::erase_if(known.initialized, [&](size_t id) { return !effects.initialized.contains(id); });
-    return previous_reads != known.reads.size() || previous_initialized != known.initialized.size();
+    return previous_reads != known.reads || previous_initialized != known.initialized.size();
   }
 public:
+  static void merge_read(Reads &reads, size_t read, const std::set<size_t> &before) {
+    auto [found, inserted] = reads.emplace(read, before);
+    if (!inserted) std::erase_if(found->second, [&](size_t id) { return !before.contains(id); });
+  }
   size_t read(size_t binding) { solved_.clear(); reads_.push_back(binding); return reads_.size() - 1; }
   size_t binding(size_t read) const { return reads_.at(read); }
   bool has_actions(size_t queue) const {

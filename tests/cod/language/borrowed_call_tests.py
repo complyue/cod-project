@@ -28,7 +28,7 @@ runner.CASES = {
     'const_parameter_binding': ('proc f(const x:i64 in O,y:i64 in O)->void where {owner O}{x=y;}', 2, '', 'const reference binding'),
     'const_binding_writable_target': (IO + 'proc f(const x:i64 in O)->void where {owner O}{x<-11;}val a=1;f(a);behave @print(a);', 0, '11\n', ''),
     'fresh_borrow_argument_gap': ('proc f(x:i64 in O)->void where {owner O}{}f(1);', 2, '', 'existing target views'),
-    'uninitialized_borrow_gap': ('func f(ptr x:i64 in O)->const bool where {owner O}{return isnull(x);}val a=make local i64;f(a);', 2, '', 'borrowed-call initialization effects'),
+    'uninitialized_null_test': ('func f(ptr x:i64 in O)->const bool where {owner O}{return isnull(x);}val a=make local i64;f(a);', 0, '', ''),
     'ownerless_borrow_gap': ('func f(ptr x:i64 in O)->const bool where {owner O}{return isnull(x);}ptr p:i64=null;f(p);', 2, '', 'one established owner'),
     'expired_borrow': ('proc f(x:i64 in O)->void where {owner O}{}f({{val a=1;a}});', 2, '', 'lexical owner has ended'),
     'nullable_forwarding': (IO + PTR + 'val a=12;ptr p=a;p=null;ptr q=forward(p);behave @print(isnull(q));p=a;ptr r=forward(p);if(!isnull(r)){behave @print(r);}else{};', 0, 'true\n12\n', ''),

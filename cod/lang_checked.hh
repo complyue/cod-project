@@ -67,6 +67,7 @@ struct CheckedOperation {
   bool is_null = false;
   bool borrowed_result = false;
   std::vector<ArgumentMode> arguments;
+  std::map<size_t, CleanupEquations::Effects> invocation;
   struct NullTest { size_t binding; std::set<size_t> versions; bool null_when_true = true; };
   std::optional<NullTest> null_test;
 };
@@ -93,7 +94,8 @@ struct LexicalState {
   std::vector<Scope> scopes{{0, {}}};
   std::set<size_t> bindings_available, available, initialized;
   std::map<size_t, std::set<size_t>> input_initialized{{0, {}}};
-  std::map<size_t, std::uint64_t> requirements;
+  struct Requirement { std::uint64_t inputs; std::set<size_t> before; };
+  std::map<size_t, Requirement> requirements;
   std::map<size_t, std::set<size_t>> exceptions;
   std::map<size_t, std::set<size_t>> targets;
   std::map<size_t, std::set<size_t>> owners;
@@ -112,6 +114,10 @@ struct LexicalState {
 };
 
 // Substitutions are checking obligations, not semantic methods or activation records.
+struct CallEffects {
+  std::set<std::pair<size_t, std::set<size_t>>> reads;
+  std::map<size_t, std::set<size_t>> initialized;
+};
 struct CheckedInstance {
   size_t method;
   std::vector<Type> arguments;
@@ -120,6 +126,7 @@ struct CheckedInstance {
   bool complete = false;
   std::vector<CheckedStorage> storage;
   std::vector<CheckedBinding> bindings;
+  CallEffects effects;
 };
 struct CheckedMethod {
   const Form *source;
@@ -152,6 +159,8 @@ class ScalarChecker {
   std::vector<CheckedBinding> *bindings_ = nullptr;
   std::map<size_t, std::vector<size_t>> scope_storage_;
   bool proving_ = false;
+  bool validating_ = false;
+  CallEffects observed_;
   std::vector<std::set<size_t>> possible_targets_, target_dependencies_;
   std::vector<CheckedStorage> catalog_storage_;
   size_t next_target_version_ = 0;
@@ -306,17 +315,93 @@ class ScalarChecker {
     lexical_.initialized.insert(id);
     for (const auto input : inputs(lexical_.inputs)) lexical_.input_initialized[input].insert(id);
   }
+  static void add_requirement(LexicalState &state, size_t read, std::uint64_t inputs, const std::set<size_t> &before) {
+    auto [found, inserted] = state.requirements.emplace(read, LexicalState::Requirement{inputs, before});
+    if (!inserted) {
+      found->second.inputs |= inputs;
+      found->second.before = intersect(found->second.before, before);
+    }
+  }
+  void observe_read(size_t place, const std::set<size_t> &known) {
+    if (delayed_ || !storage(place).borrowed) return;
+    std::set<size_t> external;
+    for (const auto id : known) if (storage(id).borrowed) external.insert(id);
+    observed_.reads.emplace(place, std::move(external));
+  }
+  void apply_effects(LexicalState &state, const CleanupEquations::Effects &effects) {
+    if (proving_) for (const auto &[read, before] : effects.reads) {
+      const auto place = cleanup_.binding(read);
+      if (state.initialized.contains(place) || before.contains(place)) continue;
+      auto known = before;
+      known.insert(state.initialized.begin(), state.initialized.end());
+      if (!storage(place).borrowed && (!delayed_ || !deferred_inputs_.contains(place)) && validating_)
+        fail(read_sites_.at(read), "cannot prove initialization of '" + storage(place).name + "' for deferred or borrowed read");
+      add_requirement(state, read, state.inputs, known);
+      observe_read(place, known);
+    }
+    for (const auto id : effects.initialized) if (state.available.contains(id)) {
+      state.initialized.insert(id);
+      for (const auto input : inputs(state.inputs)) state.input_initialized[input].insert(id);
+    }
+  }
+  static std::set<size_t> call_reasons(const CheckedMethod &method) {
+    std::set<size_t> reasons{0, 2};
+    for (size_t category = 1; category < exception_categories.size(); ++category)
+      if (!exception_categories[category].checked || method.throws_categories.contains(category)) reasons.insert(3 + category);
+    return reasons;
+  }
+  static std::set<size_t> written_targets(const std::set<size_t> &parameters, const std::vector<CheckedOperation> &views) {
+    std::set<size_t> written;
+    for (const auto parameter : parameters) {
+      auto targets = views.at(parameter).targets; targets.erase(null_target);
+      if (targets.size() == 1) written.insert(*targets.begin());
+    }
+    return written;
+  }
+  std::map<size_t, CleanupEquations::Effects> invocation_effects(const CheckedInstance &target,
+      const std::vector<CheckedOperation> &views, const Location &at) {
+    CleanupEquations::Reads reads;
+    if (proving_) for (const auto &[parameter, before] : target.effects.reads) {
+      const auto &view = views.at(parameter);
+      if (view.initialized_target) continue;
+      const bool same_selection = view.binding && std::any_of(before.begin(), before.end(), [&](size_t other) {
+        return view.binding == views.at(other).binding && view.selection_versions == views.at(other).selection_versions;
+      });
+      if (same_selection) continue;
+      const auto known = written_targets(before, views);
+      for (const auto place : view.targets) if (place != null_target && !known.contains(place)) {
+        const auto read = cleanup_.read(place); read_sites_.push_back(at);
+        reads.emplace(read, known);
+      }
+    }
+    std::map<size_t, CleanupEquations::Effects> effects;
+    for (const auto reason : call_reasons(program_.methods[target.method])) {
+      const auto found = target.effects.initialized.find(reason);
+      effects.emplace(reason, CleanupEquations::Effects{reads,
+          found == target.effects.initialized.end() ? std::set<size_t>{} : written_targets(found->second, views)});
+    }
+    return effects;
+  }
+  static void initialize_selections(LexicalState &state, const std::set<size_t> &parameters,
+      const std::vector<CheckedOperation> &views) {
+    for (const auto parameter : parameters) {
+      const auto &view = views.at(parameter);
+      if (view.binding && state.target_versions.contains(*view.binding) && state.target_versions.at(*view.binding) == view.selection_versions)
+        state.initialized_targets.insert(*view.binding);
+    }
+  }
   void require_initialized(size_t place, const Location &at, const std::string &name) {
     if (place == null_target || !proving_ || lexical_.initialized.contains(place)) return;
     std::uint64_t missing = 0;
     for (const auto input : inputs(lexical_.inputs))
       if (!lexical_.input_initialized.at(input).contains(place)) missing |= std::uint64_t{1} << input;
     if (!missing) return;
-    if (!delayed_ || !deferred_inputs_.contains(place))
+    if (!storage(place).borrowed && (!delayed_ || !deferred_inputs_.contains(place)) && validating_)
       fail(at, "read of '" + name + "' before definite initialization of every possible target");
     const auto obligation = cleanup_.read(place);
     read_sites_.push_back(at);
-    lexical_.requirements[obligation] |= missing;
+    add_requirement(lexical_, obligation, missing, lexical_.initialized);
+    observe_read(place, lexical_.initialized);
   }
   static void refresh_initialized(LexicalState &state) {
     bool first = true;
@@ -345,7 +430,8 @@ class ScalarChecker {
         auto &known = lexical_.input_initialized[input];
         known = a.inputs & (std::uint64_t{1} << input) ? intersect(known, b.input_initialized.at(input)) : b.input_initialized.at(input);
       }
-      for (const auto &[read, mask] : b.requirements) lexical_.requirements[read] |= mask;
+      for (const auto &[read, requirement] : b.requirements)
+        add_requirement(lexical_, read, requirement.inputs, requirement.before);
     }
     lexical_.exceptions = a_exits ? b.exceptions : a.exceptions;
     if (!a_exits && !b_exits) for (const auto &[id, categories] : b.exceptions)
@@ -467,15 +553,8 @@ class ScalarChecker {
         auto state = path.state;
         state.inputs = std::uint64_t{1} << origin;
         state.initialized = path.state.input_initialized.at(origin);
-        for (auto &[read, mask] : state.requirements) mask &= state.inputs;
-        for (const auto read : effects.reads) {
-          const auto binding = cleanup_.binding(read);
-          if (state.initialized.contains(binding)) continue;
-          if (!delayed_ || !deferred_inputs_.contains(binding))
-            fail(read_sites_.at(read), "cannot prove initialization of '" + storage(binding).name + "' for deferred read");
-          state.requirements[read] |= state.inputs;
-        }
-        for (const auto id : effects.initialized) if (state.available.contains(id)) state.initialized.insert(id);
+        for (auto &[read, requirement] : state.requirements) requirement.inputs &= state.inputs;
+        apply_effects(state, effects);
         state.input_initialized = {{origin, state.initialized}};
         if (cleanup_.has_actions(queue)) {
           widen_targets(state);
@@ -596,6 +675,10 @@ class ScalarChecker {
     }
     const auto id = program_.instances.size();
     program_.instances.push_back({method, arguments, result, {}, false, {}});
+    std::set<size_t> borrowed;
+    for (size_t p = 0; p < definition.source->parameters.size(); ++p)
+      if (!definition.source->parameters[p].owner.empty()) borrowed.insert(p);
+    for (const auto reason : call_reasons(definition)) program_.instances.back().effects.initialized[reason] = borrowed;
     definition.instances.push_back(id);
     return id;
   }
@@ -958,9 +1041,8 @@ class ScalarChecker {
         if (mode == ArgumentMode::borrowed_read) read_view(view, expr.children[i]->at, "borrowed argument");
         if (mode == ArgumentMode::borrowed_ref && proving_ && lexical_.live && view.targets.contains(null_target))
           fail(expr.children[i]->at, "ref argument requires a proven non-null target");
-        if (proving_ && !view.initialized_target) for (const auto place : view.targets)
-          if (place != null_target && !lexical_.initialized.contains(place))
-            implementation_gap(expr.children[i]->at, "borrowed-call initialization effects for an uninitialized target");
+        if (mode == ArgumentMode::borrowed_ref && !view.initialized_target)
+          for (const auto place : view.targets) require_initialized(place, expr.children[i]->at, "ref argument");
       }
       if (expr.text == "cause_at" && !families_.contains(expr.text)) {
         if (arguments.size() != 2 || arguments[0].kind != Type::exception || arguments[1] != Type::uint64)
@@ -995,18 +1077,25 @@ class ScalarChecker {
       }
       operation.type = target.result;
       operation.exceptions = exception_possibilities(operation.type);
-      auto failures = program_.methods[target.method].throws_categories;
-      for (size_t i = 1; i < exception_categories.size(); ++i) if (!exception_categories[i].checked) failures.insert(i);
+      operation.invocation = invocation_effects(target, views, expr.at);
       if (&expr != prepared_call_) {
-        note_abrupt(expr.at, std::move(failures));
-        note_abrupt(expr.at);
+        const auto before = lexical_;
+        for (const auto &[reason, effects] : operation.invocation) if (reason) {
+          lexical_ = before; apply_effects(lexical_, effects);
+          if (const auto found = target.effects.initialized.find(reason); found != target.effects.initialized.end())
+            initialize_selections(lexical_, found->second, views);
+          note_abrupt(expr.at, reason >= 3 ? std::set<size_t>{reason - 3} : std::set<size_t>{}, {reason, false});
+        }
+        lexical_ = before; apply_effects(lexical_, operation.invocation.at(0));
+        if (const auto found = target.effects.initialized.find(0); found != target.effects.initialized.end())
+          initialize_selections(lexical_, found->second, views);
       }
       if (borrowed_result(definition)) {
         if (!owners.contains(definition.result_owner)) implementation_gap(expr.at, "result owner is not determined by borrowed arguments");
         operation.borrowed_result = operation.view = true;
         operation.read_only = definition.result_const;
         operation.owners = {owners.at(definition.result_owner)};
-        operation.initialized_target = true;
+        operation.initialized_target = definition.result_kind != "ptr";
         for (size_t i = 0; i < views.size(); ++i)
           if (definition.parameters[i].owner == definition.result_owner && arguments[i] == operation.type) {
             operation.targets.insert(views[i].targets.begin(), views[i].targets.end());
@@ -1015,6 +1104,10 @@ class ScalarChecker {
         if (definition.result_kind == "ptr") operation.targets.insert(null_target);
         else operation.targets.erase(null_target);
         select_targets(operation, operation.targets);
+        operation.initialized_target = operation.initialized_target ||
+            std::all_of(operation.targets.begin(), operation.targets.end(), [&](size_t place) {
+              return place == null_target || lexical_.initialized.contains(place);
+            });
         if (read && !discard && &expr != prepared_call_) read_view(operation, expr.at, "borrowed result");
       }
       break;
@@ -1219,7 +1312,7 @@ class ScalarChecker {
         if (!borrowed && !initialized && expr.declaration_kind == "ref")
           fail(declaration->at, "ref requires definitely initialized target storage");
         if (lexical_.lookup(declaration->text) && !lexical_.scopes.back().bindings.contains(declaration->text) &&
-            warned_shadow_.insert(declaration.get()).second)
+            validating_ && warned_shadow_.insert(declaration.get()).second)
           program_.warnings.push_back({Warning::shadow, declaration->at, "declaration shadows outer binding '" + declaration->text + "'"});
         const bool read_only = declaration->read_only || (value && expr.fixed_binding) || (borrowed && source.read_only);
         std::optional<size_t> place;
@@ -1324,7 +1417,8 @@ class ScalarChecker {
           fail(expr.at, "borrowed result does not retain its declared external owner");
         if (method->result_kind != "ptr" && proving_ && lexical_.live && selected.targets.contains(null_target))
           fail(expr.at, "borrowed ref result requires a proven non-null target");
-        if (!selected.initialized_target) for (const auto place : selected.targets) require_initialized(place, expr.at, "borrowed result");
+        if (method->result_kind != "ptr" && !selected.initialized_target)
+          for (const auto place : selected.targets) require_initialized(place, expr.at, "borrowed result");
         operation.borrowed_result = true;
       } else if (value != Type::never && !transfers_bits(value, instance->result))
         fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(instance->result) + "'");
@@ -1402,7 +1496,8 @@ class ScalarChecker {
           for (const auto input : inputs(path.state.inputs)) {
             const auto selected = std::uint64_t{1} << input;
             CleanupEquations::Effects effects{{}, path.state.input_initialized.at(input)};
-            for (const auto &[read, mask] : path.state.requirements) if (mask & selected) effects.reads.insert(read);
+            for (const auto &[read, requirement] : path.state.requirements) if (requirement.inputs & selected)
+              effects.reads.emplace(read, requirement.before);
             if (path.exceptions.empty()) summary.paths.push_back({selected, path.completion, queue, effects});
             else for (const auto category : path.exceptions)
               summary.paths.push_back({selected, {3 + category, path.completion.returned}, queue, effects});
@@ -1422,14 +1517,9 @@ class ScalarChecker {
         child(0);
         prepared_call_ = prepared;
         const auto &call = operations.at(expr.children.front().get());
-        summary.paths.push_back({1, {0, false}, 0});
         if (call.callee) {
-          auto failures = program_.methods[program_.instances[*call.callee].method].throws_categories;
-          for (size_t category = 1; category < exception_categories.size(); ++category)
-            if (!exception_categories[category].checked) failures.insert(category);
-          for (const auto category : failures) summary.paths.push_back({1, Completion::failure(category), 0});
-          summary.paths.push_back({1, {2, false}, 0});
-        }
+          for (const auto &[reason, effects] : call.invocation) summary.paths.push_back({1, {reason, false}, 0, effects});
+        } else summary.paths.push_back({1, {0, false}, 0});
       }
       cleanup_.define(action, std::move(summary));
       note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
@@ -1445,7 +1535,7 @@ class ScalarChecker {
 
   void begin_check(std::vector<CheckedStorage> &storage, std::vector<CheckedBinding> &bindings,
                    std::map<const Expression *, CheckedOperation> &operations, bool proving) {
-    proving_ = proving;
+    proving_ = proving; observed_ = {};
     storage_ = &storage; bindings_ = &bindings;
     storage.clear(); bindings.clear(); operations.clear();
     if (!proving) { possible_targets_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); loop_owners_.clear(); }
@@ -1455,6 +1545,83 @@ class ScalarChecker {
     captures_ = nullptr; delayed_ = false; prepared_call_ = nullptr;
     cleanup_scope_ = 0; next_scope_ = 1;
     next_target_version_ = 0;
+  }
+
+  void check_entry() {
+    checking_method_ = nullptr;
+    for (const bool proving : {false, true}) {
+      begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
+      AbruptFlow entry_flow{1, {}};
+      abrupt_ = &entry_flow;
+      for (const auto *expr : program_.initializers)
+        if (check(*expr, nullptr, program_.entry, true, true) == Type::never) lexical_.live = false;
+      CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
+      finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front()->at);
+      if (!proving) solve_targets();
+    }
+    for (const auto &[name, id] : lexical_.scopes.front().bindings) module_values_.insert(name);
+  }
+  void observe_outcome(size_t reason, const LexicalState &state) {
+    std::set<size_t> known;
+    for (const auto id : state.initialized) if (storage(id).borrowed) known.insert(id);
+    const auto [found, inserted] = observed_.initialized.emplace(reason, known);
+    if (!inserted) found->second = intersect(found->second, known);
+    for (const auto &[read, requirement] : state.requirements)
+      if (requirement.inputs & state.inputs) observe_read(cleanup_.binding(read), requirement.before);
+  }
+  CallEffects check_instance(size_t i) {
+    auto &instance = program_.instances[i];
+    const auto &method = *program_.methods[instance.method].source;
+    checking_method_ = &program_.methods[instance.method];
+    for (const bool proving : {false, true}) {
+      begin_check(instance.storage, instance.bindings, instance.operations, proving);
+      for (size_t i = 0; i < method.owner_parameters.size(); ++i)
+        external_owners_[method.owner_parameters[i].name] = null_target - 1 - i;
+      for (size_t p = 0; p < method.parameters.size(); ++p) {
+        const auto &parameter = method.parameters[p];
+        const bool value = parameter.declaration_kind == "val";
+        const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
+        bindings_->back().fixed = parameter.fixed_binding;
+        bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
+        if (!parameter.owner.empty()) {
+          const auto owner = external_owners_.at(parameter.owner);
+          storage_->at(id).scope = owner; storage_->at(id).borrowed = true;
+          std::erase(scope_storage_[0], id);
+          lexical_.owners[p] = {owner};
+          if (parameter.declaration_kind == "ptr") {
+            lexical_.targets[p].insert(null_target);
+            if (!proving) possible_targets_[p].insert(null_target);
+          }
+        }
+        if (argument_mode(parameter) != ArgumentMode::borrowed_ptr) initialize(id);
+        lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
+      }
+      for (const auto &owner : method.owner_parameters) {
+        const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at);
+        bindings_->at(id).owner_binding = true;
+      }
+      AbruptFlow flow{1, {}}, outcomes{1, {}};
+      abrupt_ = &flow;
+      CheckedOperation completed;
+      completed.type = check(*method.body, &instance, instance.operations, true, true) == Type::never ? Type{Type::never} : Type{Type::void_type};
+      const auto completion = finish_scope(completed, flow, &outcomes, 0, method.at).type;
+      if (validating_ && proving && instance.result != Type::void_type && completion != Type::never && warned_missing_return_.insert(instance.method).second)
+        program_.warnings.push_back({Warning::missing_return, method.at, "callable may finish without an explicit return"});
+      if (proving) {
+        if (completion != Type::never && lexical_.live)
+          observe_outcome(instance.result == Type::void_type ? 0 : 3 + exception_id(ExceptionCategory::missing_return), lexical_);
+        const auto normal = lexical_;
+        for (const auto &path : outcomes.paths) {
+          observe_outcome(path.completion.reason == 1 ? 0 : path.completion.reason, path.state);
+          lexical_ = path.state; abrupt_ = nullptr;
+          note_abrupt(path.at, path.exceptions, path.completion);
+        }
+        lexical_ = normal;
+      } else solve_targets();
+    }
+    instance.complete = validating_;
+    for (const auto reason : call_reasons(*checking_method_)) observed_.initialized.try_emplace(reason);
+    return observed_;
   }
 
 public:
@@ -1537,59 +1704,25 @@ public:
       if (!method.type_parameters.empty()) continue;
       demand(i, program_.methods[i].parameters, method.at);
     }
-    for (const bool proving : {false, true}) {
-      begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
-      AbruptFlow entry_flow{1, {}};
-      abrupt_ = &entry_flow;
-      for (const auto *expr : program_.initializers)
-        if (check(*expr, nullptr, program_.entry, true, true) == Type::never) lexical_.live = false;
-      CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
-      finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front()->at);
-      if (!proving) solve_targets();
-    }
-    for (const auto &[name, id] : lexical_.scopes.front().bindings) module_values_.insert(name);
-    for (size_t i = 0; i < program_.instances.size(); ++i) {
-      auto &instance = program_.instances[i];
-      const auto &method = *program_.methods[instance.method].source;
-      checking_method_ = &program_.methods[instance.method];
-      for (const bool proving : {false, true}) {
-        begin_check(instance.storage, instance.bindings, instance.operations, proving);
-        for (size_t i = 0; i < method.owner_parameters.size(); ++i)
-          external_owners_[method.owner_parameters[i].name] = null_target - 1 - i;
-        for (size_t p = 0; p < method.parameters.size(); ++p) {
-          const auto &parameter = method.parameters[p];
-          const bool value = parameter.declaration_kind == "val";
-          const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
-          bindings_->back().fixed = parameter.fixed_binding;
-          bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
-          if (!parameter.owner.empty()) {
-            const auto owner = external_owners_.at(parameter.owner);
-            storage_->at(id).scope = owner; storage_->at(id).borrowed = true;
-            std::erase(scope_storage_[0], id);
-            lexical_.owners[p] = {owner};
-            if (parameter.declaration_kind == "ptr") {
-              lexical_.targets[p].insert(null_target);
-              if (!proving) possible_targets_[p].insert(null_target);
-            }
-          }
-          initialize(id);
-          lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
+    check_entry();
+    // Terminating-path guarantees descend from all external inputs. Reads then
+    // grow from actual obligations, retaining writes that precede each read.
+    for (const bool reads : {false, true}) {
+      bool changed;
+      do {
+        changed = false;
+        for (size_t i = 0; i < program_.instances.size(); ++i) {
+          const auto effects = check_instance(i);
+          auto &known = program_.instances[i].effects;
+          if (reads) {
+            if (known.reads != effects.reads) { known.reads = effects.reads; changed = true; }
+          } else if (known.initialized != effects.initialized) { known.initialized = effects.initialized; changed = true; }
         }
-        for (const auto &owner : method.owner_parameters) {
-          const auto id = bind(owner.name, Type::void_type, {}, true, true, true, owner.at);
-          bindings_->at(id).owner_binding = true;
-        }
-        AbruptFlow flow{1, {}};
-        abrupt_ = &flow;
-        CheckedOperation completed;
-        completed.type = check(*method.body, &instance, instance.operations, true, true) == Type::never ? Type{Type::never} : Type{Type::void_type};
-        const auto completion = finish_scope(completed, flow, nullptr, 0, method.at).type;
-        if (proving && instance.result != Type::void_type && completion != Type::never && warned_missing_return_.insert(instance.method).second)
-          program_.warnings.push_back({Warning::missing_return, method.at, "callable may finish without an explicit return"});
-        if (!proving) solve_targets();
-      }
-      instance.complete = true;
+      } while (changed);
     }
+    validating_ = true;
+    check_entry();
+    for (size_t i = 0; i < program_.instances.size(); ++i) check_instance(i);
     for (const auto &method : program_.methods) if (!method.instances.empty()) {
       const auto &first = program_.instances[method.instances.front()];
       for (const auto id : method.instances) {
