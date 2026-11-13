@@ -616,6 +616,28 @@ behave @print(7002u64);
         borrowed_evidence['borrowed_result_abi'] = True
         borrowed_evidence['fixture_sha256'] = hashlib.sha256(borrowed_results.read_bytes()).hexdigest()
         evidence['borrowed_results'] = borrowed_evidence
+        pointer_results = directory / "closures/callable-pointer-results.cod"
+        entry.write_text(pointer_results.read_text() + '''
+using "std:exceptions" OutOfMemory;
+proc stress()->void {
+  val a:u64<-1u64;
+  val b:u64<-2u64;
+  proc copy_source=first;
+  behave @print(6001u64);
+  try {{proc failed=copy_source;}} catch(e:const OutOfMemory) {behave @print(6002u64);};
+  behave @print(7001u64);
+  for(i in 0u64 .. 10000u64) {first(a,b)<-i;};
+  behave @print(7002u64);
+  behave @print(a);
+}
+stress();
+''')
+        pointer_output, pointer_evidence = run_case(root, toolchain, entry, scratch, HARNESS,
+                                                   extra_wrappers=wrappers)
+        assert pointer_output == ['7', '7', '9', '9', '9', '13', '17', '13', '0', '23', '23', '19',
+                                  '6001', '6002', '7001', '7002', '9999'], pointer_output
+        pointer_evidence['fixture_sha256'] = hashlib.sha256(pointer_results.read_bytes()).hexdigest()
+        evidence['pointer_results'] = pointer_evidence
         nullable_views = directory / "closures/callable-nullable-views.cod"
         entry.write_text(nullable_views.read_text() + '''
 using "std:exceptions" OutOfMemory;

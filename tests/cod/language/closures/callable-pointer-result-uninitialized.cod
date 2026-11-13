@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+proc second(ptr a:u64 in o,ptr b:u64 in o)->ptr u64 in o where {owner o} {return b;}
+proc run()->void {
+  ref a=make local u64;
+  ref b=make local u64;
+  a<-7u64;
+  ptr selected=second(a,b);
+  try {behave @print(selected);} catch(e:const NullPointerException) {behave @print(0u64);};
+}
+run();

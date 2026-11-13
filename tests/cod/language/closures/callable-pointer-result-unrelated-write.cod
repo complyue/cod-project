@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+proc first(ptr a:u64 in o,ptr b:u64 in o)->ptr u64 in o where {owner o} {return a;}
+proc run()->void {
+  ref a=make local u64;
+  ref b=make local u64;
+  a<-7u64;
+  ptr selected=first(a,b);
+  selected<-9u64;
+  behave @print(b);
+}
+run();

@@ -1,8 +1,10 @@
 # CoD LLVM source prototype
 
-Prototype reference revision: 203 · Recorded: 2026-11-12.
+Prototype reference revision: 204 · Recorded: 2026-11-12.
 
 ## Design authority
+
+- **Borrowed pointer results:** [K-557](../../../design/DesignAuthorityRegistry.md#k-557), reference204 under D-18r75, continues the established owner/access/initialization contract. [Verification](callable-pointer-result-validation.json) covers body-derived targets, nullable forwarding, native recursion and deferred selection; returning one initialized argument imposes no read obligation on an unrelated uninitialized argument. Reads of possibly uninitialized returned storage still reject. [Native acceptance](callable_runtime_tests.py) exercises 10,000 writes without invocation-time callable-image allocation and checks failed-copy cleanup. General unqualified scalar-result staging and the separate pending scalar-result policy are outside this increment.
 
 - **Result provenance:** [K-556](../../../design/DesignAuthorityRegistry.md#k-556), reference203 under D-18r74, continues the existing storage, owner and callable value contract. [Verification](callable-result-provenance-validation.json) checks the shared argument-relative owner analysis, native cleanup regressions and [closed scalar result behavior](closures/callable-scalar-result-semantics.cod). Borrowed aliases, independent materialization and cleanup timing remain distinct. Open owner-bound scalar results still need native category staging. Native captured scalar returns have an aliasing defect; fresh ordinary results and mixed categories are under [topic review](../../../design/ScalarCallResults.md). No observed copying policy is approved by these regressions.
 

@@ -1,0 +1,59 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+proc first(ptr a:u64 in o,ptr b:u64 in o)->ptr u64 in o where {owner o} {return a;}
+proc second(ptr a:u64 in o,ptr b:u64 in o)->ptr u64 in o where {owner o} {return b;}
+proc pick(ptr a:u64 in o,ptr b:u64 in o,choose:bool)->ptr u64 in o where {owner o} {
+  return if(choose) {a} else {b};
+}
+proc forward(ptr a:u64 in o,ptr b:u64 in o)->ptr u64 in o where {owner o} {return first(a,b);}
+proc show(ptr value:u64 in o)->void throws NullPointerException where {owner o} {behave @print(value);}
+proc initialize(ptr a:u64 in o,ptr b:u64 in o)->ptr u64 in o where {owner o} {a<-13u64; return a;}
+proc finish(ptr a:u64 in o,ptr b:u64 in o)->ptr u64 in o where {owner o} {
+  defer {a<-17u64;};
+  return a;
+}
+proc absent(ptr a:u64 in o,ptr b:u64 in o)->ptr u64 in o where {owner o} {
+  ptr missing=a;
+  missing=null;
+  return missing;
+}
+proc descend(ptr a:u64 in o,ptr b:u64 in o,n:u64)->ptr u64 in o where {owner o} {
+  return if(n==0u64) {a} else {descend(first(a,b),b,n-1u64)};
+}
+proc reverse(ptr a:u64 in o,ptr b:u64 in o,n:u64)->ptr u64 in o where {owner o} {
+  return if(n!=0u64) {reverse(first(a,b),b,n-1u64)} else {a};
+}
+proc choose_recursive(ptr a:u64 in o,ptr b:u64 in o,n:u64)->ptr u64 in o where {owner o} {
+  return if(n==0u64) {a} else {choose_recursive(pick(a,b,n==1u64),b,n-1u64)};
+}
+proc run()->void {
+  ref a=make local u64;
+  ref b=make local u64;
+  a<-7u64;
+  try {
+    show(first(a,b));
+    show(forward(a,b));
+    first(a,b)<-9u64;
+    show(a);
+    show(descend(a,b,200u64));
+    show(reverse(a,b,200u64));
+    show(initialize(b,a));
+    show(finish(a,b));
+    show(choose_recursive(a,b,200u64));
+    show(absent(a,b));
+  } catch(e:const NullPointerException) {behave @print(0u64);};
+  b<-23u64;
+  proc selected=first;
+  for(i in 0u64 .. 2u64) {{
+    defer {try {show(selected(a,b));} catch(e:const NullPointerException) {behave @print(0u64);};};
+    selected<-second;
+  }};
+}
+run();
+proc unread()->void {
+  ref a=make local u64;
+  ref b=make local u64;
+  ptr unused=choose_recursive(a,b,200u64);
+  behave @print(19u64);
+}
+unread();

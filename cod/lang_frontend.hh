@@ -608,6 +608,7 @@ class Compiler {
     std::optional<Selection> selection = {};
     std::optional<size_t> conversion_parameter = {}; // Argument conversion uses the selected body's declaration.
     size_t record_result = 0;
+    size_t result_target_flow = 0;
     bool pending_argument_facts = false;
     std::map<size_t, size_t> initialized = {};
     std::array<std::map<size_t, size_t>, concrete_exception_count> failure_initialized = {};
@@ -905,6 +906,10 @@ class Compiler {
       pending.insert(pending.end(), node.inputs.begin(), node.inputs.end());
     }
     return result;
+  }
+  PointerTargets pointer_targets(const Value &value) const {
+    return value.target_flow ? pointer_targets(value.target_flow) :
+        value.storage ? PointerTargets{value.storage->cells, value.storage->initialized_alternatives} : PointerTargets{};
   }
   bool pointer_nullable(size_t flow) const {
     std::set<size_t> visited;
@@ -3918,7 +3923,7 @@ class Compiler {
   }
   Value borrowed_call_result(const Type &type, const std::vector<Value> &args,
                              llvm::Value *address, const Location &at, size_t callable_address = 0,
-                             size_t record_result = 0) {
+                             size_t record_result = 0, size_t target_flow = 0) {
     const auto owner = type.owners.back();
     for (size_t i = 0; i < args.size(); ++i) {
       if (type.owners[i] != owner) continue;
@@ -3937,7 +3942,8 @@ class Compiler {
       result.nullable = !type.nullable_views.empty() && type.nullable_views.back();
       result.pointer_view = result.type.kind != Type::region;
       result.callable_address = callable_address;
-      if (record_result) {
+      result.target_flow = target_flow;
+      if (record_result && !local_bits(result.type)) {
         result.conformances.clear();
         if (result.type.kind == Type::regional) result.result_type_origin = record_result;
         result.result_fact_origins = {record_result};
@@ -5488,14 +5494,26 @@ class Compiler {
   void reuse_initialization(NativeCallDemand &to, const NativeCallDemand &from) {
     const auto connect = [&](const auto &target, const auto &source) {
       for (const auto &[cell, id] : target) {
+        bool initialized_target = false;
+        for (size_t i = 0; i < to.arguments.size(); ++i) {
+          const auto &argument = to.arguments[i];
+          if (!argument.target_flow || argument.target_flow == from.arguments[i].target_flow) continue;
+          const auto selected = selected_cells_.find(argument.target_flow);
+          if (selected != selected_cells_.end() && selected->second == cell)
+            initialized_target = true;
+        }
         auto &node = initialization_flows_.at(id);
-        node.inputs = {source.contains(cell) ? source.at(cell) : from.state.initialized.at(cell)};
+        // Distinct pointer graphs reuse a context only when every possible
+        // target was already initialized at both entries.
+        node.inputs = {initialized_target ? 1 : source.contains(cell) ? source.at(cell) : from.state.initialized.at(cell)};
         node.open = false;
       }
     };
     connect(to.initialized, from.initialized);
     for (size_t i = 0; i < to.failure_initialized.size(); ++i)
       connect(to.failure_initialized[i], from.failure_initialized[i]);
+    if (to.result_target_flow)
+      pointer_flows_.at(to.result_target_flow) = {{from.result_target_flow}};
   }
   void prepare_callable_effects(NativeCallDemand &demand) {
     std::set<size_t> holders;
@@ -5538,6 +5556,10 @@ class Compiler {
       };
       close(demand.initialized);
       for (const auto &failure : demand.failure_initialized) close(failure);
+      if (demand.result_target_flow) {
+        changed |= pointer_flows_.at(demand.result_target_flow).open;
+        pointer_flows_.at(demand.result_target_flow).open = false;
+      }
     }
     const auto close_flow = [&](size_t output) {
       changed |= callable_flows_.at(output).open;
@@ -5846,18 +5868,34 @@ class Compiler {
         if (first.type != second.type || !same_owner || !same_access || !same_facts) return false;
       }
       if (borrowed_parameter(left.type, i)) {
+        // Initialized scalar targets need no selected-target initialization
+        // hypothesis. Equivalent closed target sets can share an adapter;
+        // otherwise preserve graph identity and its alias correlations.
+        bool same_target = false;
+        if (local_bits(first.type) && first.target_flow != second.target_flow) {
+          const auto a = pointer_targets(first), b = pointer_targets(second);
+          same_target = a.closed && b.closed && !a.other && !b.other && a.cells == b.cells &&
+              std::all_of(a.cells.begin(), a.cells.end(), [&](size_t cell) {
+                return cell < left.state.initialized.size() && cell < right.state.initialized.size() &&
+                    initialization_known(left.state.initialized[cell]) == true &&
+                    initialization_known(right.state.initialized[cell]) == true;
+              }) &&
+              (first.target_flow ? pointer_nullable(first.target_flow) : first.nullable) ==
+              (second.target_flow ? pointer_nullable(second.target_flow) : second.nullable);
+        }
         const bool same_storage = first.region_id && second.region_id
             ? same_region(*first.region_id, *second.region_id) : storage_owner(first) == storage_owner(second);
         if (first.type != second.type || !same_storage ||
             first.read_only != second.read_only || !same_facts ||
-            first.nullable != second.nullable || first.target_flow != second.target_flow || first.pending_owner != second.pending_owner ||
+            first.nullable != second.nullable || (!same_target && first.target_flow != second.target_flow) ||
+            first.pending_owner != second.pending_owner ||
             bool(first.storage) != bool(second.storage)) return false;
         if (first.storage) {
-          if (first.storage->cells != second.storage->cells ||
-              first.storage->initialized_alternatives != second.storage->initialized_alternatives) return false;
+          if (!same_target && (first.storage->cells != second.storage->cells ||
+              first.storage->initialized_alternatives != second.storage->initialized_alternatives)) return false;
           // These same live allocations cannot become uninitialized along a
           // recursive call path. Sibling calls have no such entry invariant.
-          if (!recursive) {
+          if (!recursive && !same_target) {
             auto cells = first.storage->cells;
             if (const auto selected = selected_cells_.find(first.target_flow); selected != selected_cells_.end())
               cells.insert(selected->second);
@@ -6058,6 +6096,8 @@ class Compiler {
       };
       reopen_initialization(demand.initialized);
       for (const auto &failure : demand.failure_initialized) reopen_initialization(failure);
+      if (demand.result_target_flow)
+        pointer_flows_.at(demand.result_target_flow) = {{}, nullptr, true};
       changed = true;
     }
     return changed || compiled != callable_compilations_;
@@ -6251,6 +6291,12 @@ class Compiler {
                                                                  *procedure.lexical, procedure.form->at));
         if (result.type != Type::never && demand.record_result)
           return_facts_.at(demand.record_result - 1).alternatives.push_back(result);
+        if (result.type != Type::never && demand.result_target_flow) {
+          Value destination;
+          destination.target_flow = demand.result_target_flow;
+          const auto state = flow_state();
+          connect_pointer(destination, result, &state.initialized);
+        }
         if (result.type != Type::never && demand.result_flow) {
           if (active.definition.borrowed_result) {
             if (!result.callable_address) fail(demand.at, "borrowed callable result requires a live holder view");
@@ -6284,6 +6330,8 @@ class Compiler {
       demand.context = nullptr;
     }
     call_path_ = std::move(previous_calls);
+    if (demand.result_target_flow && choices.closed)
+      pointer_flows_.at(demand.result_target_flow).open = false;
     return true;
   }
   bool compile_callable(const Procedure &source, const Module &caller, const Location &at) {
@@ -6381,19 +6429,25 @@ class Compiler {
       if (!type.const_views.empty() && type.const_views[i] && has_storage_owner(demand.arguments[i]))
         demand.arguments[i].read_only = true;
     demand.parent = native_context_ ? native_context_->call : nullptr;
-    if (body_borrowed_result(type) || (definition.borrowed_result && definition.result.kind == Type::regional) ||
+    if (body_borrowed_result(type) || (definition.borrowed_result &&
+        (definition.result.kind == Type::regional || local_bits(definition.result))) ||
         definition.result.kind == Type::region) {
       return_facts_.push_back({&demand, {}});
       demand.record_result = return_facts_.size();
     }
     prepare_callable_effects(demand);
     prepare_initialization(demand);
+    if (definition.borrowed_result && local_bits(definition.result)) {
+      pointer_flows_.push_back({{}, nullptr, true});
+      demand.result_target_flow = pointer_flows_.size() - 1;
+    }
     if (destination || (definition.borrowed_result && definition.result.kind == Type::procedure)) {
       callable_flows_.push_back({{}, {}, true});
       demand.result_flow = callable_flows_.size() - 1;
       callable_flows_.back().producer = &demand;
     }
-    if (body_borrowed_result(type) || (!inputs.empty() && callable_choices(demand.flow).closed)) {
+    if (body_borrowed_result(type) ||
+        ((demand.result_target_flow || !inputs.empty()) && callable_choices(demand.flow).closed)) {
       compile_native_call(demand);
       if (!demand.reused) definition = demand.definition;
     }
@@ -6453,7 +6507,22 @@ class Compiler {
       projection_permissions_.push_back(result.read_only);
       return result;
     }
-    if (definition.borrowed_result) return borrowed_call_result(type, args, returned, at, demand.result_flow, demand.record_result);
+    if (definition.borrowed_result) {
+      auto result = borrowed_call_result(type, args, returned, at, demand.result_flow, demand.record_result, demand.result_target_flow);
+      if (demand.result_target_flow && !demand.reused && callable_choices(demand.flow).closed) {
+        const auto &alternatives = return_facts_.at(demand.record_result - 1).alternatives;
+        if (alternatives.size() == 1 && alternatives.front().storage && !alternatives.front().target_flow) {
+          // A checked body can already identify its result storage. Preserve
+          // that evidence directly; open and recursive results keep their flow.
+          const auto &source = alternatives.front();
+          result.storage->cells = source.storage->cells;
+          result.storage->initialized_alternatives = source.storage->initialized_alternatives;
+          result.target_flow = 0;
+          result.nullable = source.nullable;
+        }
+      }
+      return result;
+    }
     if (definition.result.kind == Type::region && definition.result.owned) {
       const auto id = new_region(returned, at);
       regions_[id].root = definition.result.target ? std::optional(*definition.result.target) : std::nullopt;
