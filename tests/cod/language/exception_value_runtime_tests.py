@@ -86,6 +86,8 @@ extern "C" void cod_lang_exception_finish() noexcept {
       (unsigned long long)chain_calls,(unsigned long long)chain_failures);
 }
 '''
+EXPECTED_VALUES = ['1', '1', '0', '1', '1', '0', '0', '1', '5']
+EXTRA_SOURCES = []
 
 
 def main():
@@ -114,7 +116,7 @@ def main():
             _, compile_seconds = checked(compile_command, ROOT)
             output, execution_seconds = checked([executable], ROOT)
             *values, metrics = output.splitlines()
-            if values != ['1', '1', '0', '1', '1', '0', '0', '1', '5']:
+            if values != EXPECTED_VALUES:
                 raise RuntimeError(f"Unexpected exception trace: {values}")
             results.append({"name": "general" if general else "default", "passed": True, "metrics": json.loads(metrics),
                             "stdout": values, "frontend_seconds": frontend_seconds, "compile_seconds": compile_seconds,
@@ -123,7 +125,7 @@ def main():
             print(f"PASS {results[-1]['name']}: {metrics}", flush=True)
     if report := os.environ.get("COD_LANGUAGE_REPORT"):
         sources = [ROOT / "cod" / name for name in ("main.cc", "lang_checked.hh", "lang_diagnostics.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_syntax.hh", "lang_exceptions.hh", "lang_native_runtime.hh")]
-        sources += [Path(__file__), Path(__file__).with_name("foundation_tests.py"), Path(__file__).with_name("regional_runtime_tests.py")]
+        sources += [Path(__file__), Path(__file__).with_name("foundation_tests.py"), Path(__file__).with_name("regional_runtime_tests.py"), *EXTRA_SOURCES]
         Path(report).write_text(json.dumps({"recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "toolchain": MODE,
                                          "passed": len(results), "total": len(results), "results": results,
                                          "executable_sha256": hashlib.sha256(COD.read_bytes()).hexdigest(),

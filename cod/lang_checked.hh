@@ -46,6 +46,7 @@ struct CheckedOperation {
   bool minimum_literal = false;
   bool initializes = false;
   std::set<size_t> exceptions;
+  std::set<size_t> captures;
   bool cause_at = false;
 };
 
@@ -106,13 +107,18 @@ class ScalarChecker {
   std::set<const Expression *> warned_shadow_;
   LexicalState lexical_;
   std::vector<CheckedStorage> *storage_ = nullptr;
-  struct AbruptPath { LexicalState state; std::set<size_t> exceptions; };
+  struct AbruptPath { LexicalState state; std::set<size_t> exceptions; Location at; };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; };
   AbruptFlow *abrupt_ = nullptr;
   std::optional<size_t> caught_;
   std::set<size_t> catch_bindings_;
   const CheckedMethod *checking_method_ = nullptr;
-  std::set<size_t> loop_controls_, delayed_controls_, delayed_catches_;
+  std::set<size_t> loop_controls_, delayed_controls_;
+  struct CatchCapture {
+    CatchCapture *parent;
+    std::set<size_t> bindings, required;
+  };
+  CatchCapture *captures_ = nullptr;
   bool delayed_ = false;
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
@@ -158,11 +164,17 @@ class ScalarChecker {
     }
     lexical_.scopes.pop_back();
   }
-  void note_abrupt(std::set<size_t> exceptions = {}) {
+  bool capture_catch(size_t id) {
+    bool captured = false;
+    for (auto *frame = captures_; frame; frame = frame->parent)
+      if (frame->bindings.contains(id)) { frame->required.insert(id); captured = true; }
+    return captured;
+  }
+  void note_abrupt(const Location &at, std::set<size_t> exceptions = {}) {
     if (!abrupt_) {
       for (const auto category : exceptions)
         if (exception_categories.at(category).checked && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
-          fail(checking_method_ ? checking_method_->source->at : Location{}, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
+          fail(at, "checked exception '" + std::string(exception_categories[category].name) + "' requires a covering catch or throws declaration");
       return;
     }
     auto state = lexical_;
@@ -174,7 +186,7 @@ class ScalarChecker {
       }
       state.scopes.pop_back();
     }
-    abrupt_->paths.push_back({std::move(state), std::move(exceptions)});
+    abrupt_->paths.push_back({std::move(state), std::move(exceptions), at});
   }
   static std::optional<std::uint64_t> constant_integer(const Expression &expr,
       const std::map<const Expression *, CheckedOperation> &operations) {
@@ -292,7 +304,7 @@ class ScalarChecker {
     const auto before = lexical_;
     auto *outer = abrupt_;
     AbruptFlow incoming{lexical_.scopes.size(), {}};
-    if (expr.kind == Expression::Kind::deferred) incoming.paths.push_back({lexical_, {}});
+    if (expr.kind == Expression::Kind::deferred) incoming.paths.push_back({lexical_, {}, expr.at});
     abrupt_ = &incoming;
     const auto body = check(*expr.children[0], instance, operations, read);
     const auto body_state = lexical_;
@@ -372,9 +384,9 @@ class ScalarChecker {
     if (cleanup != Type::void_type && cleanup != Type::never) fail(expr.at, "finally must complete with void or an explicit return");
     const auto final_state = lexical_;
     if (cleanup != Type::never) {
-      for (const auto &path : outgoing.paths) { lexical_ = finalizer ? final_state : path.state; note_abrupt(path.exceptions); }
+      for (const auto &path : outgoing.paths) { lexical_ = finalizer ? final_state : path.state; note_abrupt(path.at, path.exceptions); }
       lexical_ = final_state;
-      if (!control_inputs.empty()) note_abrupt();
+      if (!control_inputs.empty()) note_abrupt(expr.at);
     }
     lexical_ = body_state;
     if (!normals.empty()) {
@@ -451,7 +463,7 @@ class ScalarChecker {
       if (!binding) fail(expr.at, "unknown scalar value '" + expr.text + "'");
       if (!lexical_.available.contains(*binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
       if (delayed_controls_.contains(*binding)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
-      if (delayed_catches_.contains(*binding)) implementation_gap(expr.at, "delayed block snapshots of catch values");
+      const bool captured = capture_catch(*binding);
       if (read && !lexical_.initialized.contains(*binding)) {
         if (delayed_) implementation_gap(expr.at, "deferred read requires initialization proved before registration");
         fail(expr.at, "read of '" + expr.text + "' before definite initialization");
@@ -461,7 +473,7 @@ class ScalarChecker {
       operation.read_only = (*storage_)[*binding].read_only;
       operation.view = true;
       if (operation.type.kind == Type::exception)
-        operation.exceptions = delayed_ ? exception_possibilities(operation.type) : lexical_.exceptions.at(*binding);
+        operation.exceptions = delayed_ && !captured ? exception_possibilities(operation.type) : lexical_.exceptions.at(*binding);
       break;
     }
     case K::unary: {
@@ -481,7 +493,7 @@ class ScalarChecker {
       } else if (argument != Type::integer && !(expr.text == "-" && floating(argument)))
         fail(expr.at, "numeric unary operation requires i64, or floating point for negation");
       operation.type = operation.operand_type = argument;
-      if (expr.text == "-" && argument == Type::integer) note_abrupt();
+      if (expr.text == "-" && argument == Type::integer) note_abrupt(expr.at);
       break;
     }
     case K::binary: {
@@ -505,7 +517,7 @@ class ScalarChecker {
         if (expr.text == "%" && floating(operation.operand_type)) fail(expr.at, "remainder requires integer operands");
       }
       operation.type = comparison || logical ? Type{Type::boolean} : operation.operand_type;
-      if (!comparison && !logical && integral(operation.operand_type)) note_abrupt();
+      if (!comparison && !logical && integral(operation.operand_type)) note_abrupt(expr.at);
       break;
     }
     case K::call: {
@@ -527,7 +539,7 @@ class ScalarChecker {
       operation.exceptions = exception_possibilities(operation.type);
       auto failures = program_.methods[target.method].throws_categories;
       for (size_t i = 1; i < exception_categories.size(); ++i) if (!exception_categories[i].checked) failures.insert(i);
-      note_abrupt(std::move(failures));
+      note_abrupt(expr.at, std::move(failures));
       break;
     }
     case K::behave: case K::perform: {
@@ -577,7 +589,7 @@ class ScalarChecker {
         leave_scope();
         std::set<size_t> failures;
         for (size_t i = 1; i < exception_categories.size(); ++i) if (!exception_categories[i].checked) failures.insert(i);
-        note_abrupt(std::move(failures));
+        note_abrupt(expr.at, std::move(failures));
       }
       if (exits) operation.type = Type::never;
       break;
@@ -702,7 +714,7 @@ class ScalarChecker {
         fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(instance->result) + "'");
       operation.type = Type::never;
       operation.operand_type = instance->result;
-      note_abrupt();
+      note_abrupt(expr.at);
       break;
     }
     case K::field: {
@@ -716,7 +728,7 @@ class ScalarChecker {
       Type type;
       if (expr.children.empty()) {
         if (!caught_) fail(expr.at, "bare throw requires an active catch");
-        if (delayed_catches_.contains(*caught_)) implementation_gap(expr.at, "delayed block snapshots of catch values");
+        capture_catch(*caught_);
         operation.place = caught_; type = (*storage_)[*caught_].type; operation.exceptions = lexical_.exceptions.at(*caught_);
       } else {
         type = child(0); operation.exceptions = operations.at(expr.children[0].get()).exceptions;
@@ -724,9 +736,9 @@ class ScalarChecker {
       if (type.kind != Type::exception) fail(expr.at, "throw requires an intrinsic exception value");
       if (expr.children.size() == 2) {
         if (child(1).kind != Type::exception) fail(expr.at, "explicit cause requires an exception value");
-        note_abrupt({exception_id(ExceptionCategory::out_of_memory)});
+        note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
-      note_abrupt(operation.exceptions);
+      note_abrupt(expr.at, operation.exceptions);
       operation.type = Type::never;
       break;
     }
@@ -735,18 +747,19 @@ class ScalarChecker {
       if (expr.children.front()->kind == K::block) {
         const auto before = lexical_;
         const auto controls = delayed_controls_;
-        const auto catches = delayed_catches_;
+        CatchCapture captures{captures_, catch_bindings_, {}};
+        captures_ = &captures;
         const auto was_delayed = delayed_;
         auto *outer = abrupt_;
         delayed_controls_.insert(loop_controls_.begin(), loop_controls_.end());
-        delayed_catches_.insert(catch_bindings_.begin(), catch_bindings_.end());
         delayed_ = true;
         abrupt_ = nullptr;
         if (expr.children.size() == 1) child(0);
         else check_guarded(expr, instance, operations);
         lexical_ = before;
         delayed_controls_ = controls;
-        delayed_catches_ = catches;
+        operation.captures = std::move(captures.required);
+        captures_ = captures.parent;
         delayed_ = was_delayed;
         abrupt_ = outer;
       } else {
@@ -756,7 +769,7 @@ class ScalarChecker {
           if (exception_categories[category].checked && (!checking_method_ || !checking_method_->throws_categories.contains(category)))
             implementation_gap(expr.at, "deferred checked-exception scope proof requires a callable throws declaration");
       }
-      note_abrupt({exception_id(ExceptionCategory::out_of_memory)});
+      note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       operation.type = Type::void_type;
       break;
     }

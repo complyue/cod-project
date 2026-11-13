@@ -319,7 +319,10 @@ class LLVMEmission {
     if (expr.kind != Expression::Kind::deferred) return;
     const auto &body = *expr.children.front();
     std::vector<llvm::Type *> fields{deferred_header_};
-    if (body.kind != Expression::Kind::block) fields.insert(fields.end(), body.children.size(), scalar_);
+    const auto &captures = facts_.front()->at(&expr).captures;
+    for (const auto *facts : facts_)
+      if (facts->at(&expr).captures != captures) throw std::logic_error("inconsistent checked catch captures");
+    fields.insert(fields.end(), body.kind == Expression::Kind::block ? captures.size() : body.children.size(), scalar_);
     scope.deferred.push_back({&expr, llvm::StructType::get(context_, fields)});
   }
   void complete_cleanup(const std::function<void()> &emit) {
@@ -361,12 +364,21 @@ class LLVMEmission {
       dispatch->addCase(integer(i), run);
       b_.SetInsertPoint(run);
       if (body.kind == Expression::Kind::block) {
+        std::vector<std::pair<size_t, llvm::AllocaInst *>> bindings;
+        size_t field = 1;
+        for (const auto id : facts_.front()->at(descriptor.action).captures) {
+          auto *captured = slot(scalar_, "defer.caught");
+          b_.CreateStore(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, field++)), captured);
+          bindings.emplace_back(id, storage_.at(id));
+          storage_[id] = captured;
+        }
         b_.CreateCall(release, {record});
         auto *pending_failure = b_.CreateICmpEQ(load(exit_), b_.getInt8(2));
         complete_cleanup([&] {
           if (descriptor.action->children.size() == 1) emit_expression(body);
           else emit_finally(*descriptor.action, false, true, pending_failure);
         });
+        for (const auto &[id, place] : bindings) storage_[id] = place;
         b_.CreateBr(scope.cleanup);
         continue;
       }
@@ -681,7 +693,8 @@ class LLVMEmission {
       auto record = std::find_if(scope_->deferred.begin(), scope_->deferred.end(), [&](const Deferred &entry) { return entry.action == &expr; });
       if (record == scope_->deferred.end()) throw std::logic_error("uncollected deferred action");
       std::vector<llvm::Value *> arguments;
-      if (body.kind != K::block) for (const auto &argument : body.children) {
+      if (body.kind == K::block) for (const auto id : fact.captures) arguments.push_back(load(storage_.at(id)));
+      else for (const auto &argument : body.children) {
         arguments.push_back(emit_expression(*argument)); if (!reachable()) return nullptr;
       }
       auto *status = slot(b_.getInt64Ty(), "defer.status");
