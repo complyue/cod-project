@@ -3836,5 +3836,36 @@
       "regional value requires a live owning region",
       "note: the referenced region was acquired here"
     ]
+  },
+  {
+    "file": "closures/callable-borrowed-factory-procedure.cod",
+    "exit": 0,
+    "stdout": "218\n280\n10\n777\n9\n280\n"
+  },
+  {
+    "file": "closures/callable-borrowed-factory-function.cod",
+    "exit": 0,
+    "stdout": "218\n280\n10\n777\n9\n280\n"
+  },
+  {
+    "file": "closures/callable-borrowed-factory-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-borrowed-factory-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "callable environment owner mismatch",
+      "the returned or supplied callable retains this region owner",
+      "the callable signature requires this actual region owner"
+    ]
+  },
+  {
+    "file": "closures/callable-borrowed-factory-shared.cod",
+    "exit": 0,
+    "stdout": "257\n1792\n2304\n9\n777\n260\n2304\n"
   }
 ]

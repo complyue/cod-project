@@ -153,10 +153,18 @@ behave @print(7002u64);
             ("cod_lang_print_u64", "cod_trace_u64"),
             ("cod_lang_exception_finish", "cod_exception_release")))
         output, evidence = run_case(root, toolchain, entry, scratch, HARNESS + REGION_HARNESS, extra_wrappers=wrappers)
-        factories = [line for line in (scratch / "main.ll").read_text().splitlines()
-                     if re.match(r"define internal .*@cod\.call\.(reader|alternate|choose|wrap)(?:\.|\()", line)]
-        assert factories and all(re.match(r"define internal \{ i64, \{ i64, i64, i64, i64 \} \} .*\(ptr [^,]+, ptr ", line)
-                                 for line in factories), factories
+        definitions = re.findall(r"^(define internal [^\n]+) \{\n(.*?)^\}",
+                                 (scratch / "main.ll").read_text(), re.M | re.S)
+        factories = [(header, body) for header, body in definitions if re.search(
+            r"@cod\.call\.(reader|alternate|choose|wrap|function\.context)(?:\.|\()", header)]
+        assert factories
+        for header, body in factories:
+            assert header.startswith("define internal { i64, { i64, i64, i64, i64 } } "), header
+            parameters = header[header.index('(') + 1:-1].split(', ')
+            destination = 2 if '@cod.call.function.context' in header else 1
+            assert len(parameters) == destination + 2 and all(p.startswith('ptr ') for p in parameters), header
+            address = parameters[destination].removeprefix('ptr ')
+            assert re.search(r"store ptr [^,]+, ptr " + re.escape(address) + r",", body), header
         evidence['native_factory_definitions'] = len(factories)
         evidence['caller_destination_abi'] = True
         assert output == ['99', '107', '7', '17', '107', '109', '9', '19', '109', '98', '97', '24', '26',
@@ -825,7 +833,10 @@ stress();
                 ('context_factory_selection', ['7811213', '99', '3', '777', '99', '3', '7811213', '99'], 5, 1),
                 ('context_factory_owned', ['69', '2'], 22, 0),
                 ('growing_parameter_selection', ['1029', '15708', '1', '700', '777', '700', '7', '15708', '1029'], 2, 1),
-                ('growing_parameter_regional', ['218', '280', '10', '280'], 2, 0)):
+                ('growing_parameter_regional', ['218', '280', '10', '280'], 2, 0),
+                ('borrowed_factory_procedure', ['218', '280', '10', '777', '9', '280'], 2, 1),
+                ('borrowed_factory_function', ['218', '280', '10', '777', '9', '280'], 2, 1),
+                ('borrowed_factory_shared', ['257', '1792', '2304', '9', '777', '260', '2304'], 2, 1)):
             captured = directory / f"closures/callable-{name.replace('_', '-')}.cod"
             source = captured.read_text()
             if region_failures:

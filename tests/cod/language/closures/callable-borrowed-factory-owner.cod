@@ -1,0 +1,26 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+data Item{value:u64;}
+region State{value:u64;}
+proc walk(region state:State,callback:proc(u64)->const u64 with {region state},n:u64)
+ ->proc(u64)->const u64 with {region state} {
+  if(n==0u64){return callback;}else{};
+  {{proc next=proc(x:u64)->const u64 {return callback(x)+state.value;};
+    return turn(state,next,n-1u64);
+  }}
+}
+proc turn(region state:State,callback:proc(u64)->const u64 with {region state},n:u64)
+ ->proc(u64)->const u64 with {region state} {
+  if(n==0u64){return callback;}else{};
+  {{proc next=proc(x:u64)->const u64 {return callback(x)+2u64*state.value;};
+    return walk(state,next,n-1u64);
+  }}
+}
+proc wrong(region outside:State)->proc(u64)->const u64 with {region outside} {
+  owned region inner:State<-make State(capacity=256u64){value<-7u64};
+  proc first=proc(x:u64)->const u64{return inner.value+x;};
+  return walk(inner,first,20u64);
+}
+owned region outside:State<-make State(capacity=256u64){value<-1u64};
+proc rejected=wrong(outside);
+behave @print(rejected(1u64));

@@ -1,0 +1,37 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+data Item{value:u64;}
+region State{value:u64;}
+function walk(region state:State,callback:proc(u64)->const u64 with {region state},n:u64)
+ ->proc(u64)->const u64 with {region state} {
+  if(n==0u64){return callback;}else{};
+  {{proc next=proc(x:u64)->const u64 {return callback(x)+state.value;};
+    return turn(state,next,n-1u64);
+  }}
+}
+function turn(region state:State,callback:proc(u64)->const u64 with {region state},n:u64)
+ ->proc(u64)->const u64 with {region state} {
+  if(n==0u64){return callback;}else{};
+  {{proc next=proc(x:u64)->const u64 {return callback(x)+2u64*state.value;};
+    return walk(state,next,n-1u64);
+  }}
+}
+proc run()->void {
+  owned region state:State<-make State(capacity=256u64){value<-7u64};
+  proc first=proc(x:u64)->const u64 {
+    if(x==2u64){{owned region failed:Item<-make Item(capacity=0u64){value<-0u64};}}else{};
+    return state.value+x;
+  };
+  proc selected=walk(state,first,20u64);
+  proc copy=selected;
+  selected<-first;
+  behave @print(copy(1u64));
+  region projected=copy->state;
+  projected.value<-9u64;
+  behave @print(copy(1u64));
+  behave @print(selected(1u64));
+  try {copy(2u64);{}}catch(e:const InvalidCapacity){behave @print(777u64);};
+  behave @print(state.value);
+  defer behave @print(copy(1u64));
+}
+run();

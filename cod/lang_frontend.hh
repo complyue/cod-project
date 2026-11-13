@@ -599,6 +599,7 @@ class Compiler {
     CallableDispatch *dispatch = nullptr;
     llvm::BasicBlock *tail = nullptr;
     const NativeCallDemand *reused = nullptr;
+    bool speculative_reuse = false;
     size_t result_flow = 0;
     std::vector<Value> arguments = {};
     std::map<size_t, size_t> parameter_flows = {}; // Complete copied inputs shared by recursive activations.
@@ -4271,9 +4272,7 @@ class Compiler {
         !form.owner_parameters.empty() || std::any_of(args.begin(), args.end(), [](const Value &value) {
       return value.type.kind == Type::procedure || value.type.kind == Type::region;
     });
-    // Keep reusable closed factories on their shared-specialization path.
-    if (contextual_parameters && !(factory && !form.owner_parameters.empty()) &&
-        form.body && !form.operation && form.result_type &&
+    if (contextual_parameters && form.body && !form.operation && form.result_type &&
         (!captures || (captures->visible.empty() && captures->owner_anchors.empty()))) {
       auto type = instantiated_callable_type(form, lexical, instantiated, args.size());
       bool native = native_callable_type(type);
@@ -5743,12 +5742,17 @@ class Compiler {
     }
     return result;
   }
+  struct NativeContextQuery {
+    std::map<size_t, size_t> *correspondence = nullptr;
+    bool pending_facts = false;
+    std::vector<std::pair<const Procedure *, const Procedure *>> *images = nullptr;
+    std::set<const CallableCode *> *escaping_images = nullptr;
+    std::map<size_t, size_t> *context_owners = nullptr;
+    const std::map<size_t, CallableChoices> *parameter_choices = nullptr;
+    bool demand_entries = true; // Optional sharing must use already demanded bodies.
+  };
   bool same_native_context(const NativeCallDemand &left, const NativeCallDemand &right, bool values,
-                              std::map<size_t, size_t> *correspondence = nullptr, bool pending_facts = false,
-                              std::vector<std::pair<const Procedure *, const Procedure *>> *images = nullptr,
-                              std::set<const CallableCode *> *escaping_images = nullptr,
-                              std::map<size_t, size_t> *context_owners = nullptr,
-                              const std::map<size_t, CallableChoices> *parameter_choices = nullptr) {
+                           const NativeContextQuery &query) {
     if (left.caller != right.caller || left.captured != right.captured ||
         left.conformances != right.conformances || left.conversion_parameter != right.conversion_parameter) return false;
     bool recursive = false;
@@ -5761,7 +5765,7 @@ class Compiler {
     std::map<size_t, size_t> regional_owners, reverse_regional_owners;
     const auto identity = [&](size_t owner) {
       try { return region_identity(owner, right.at); }
-      catch (const UnresolvedAccess &) { if (!pending_facts || !recursive) throw; return owner; }
+      catch (const UnresolvedAccess &) { if (!query.pending_facts || !recursive) throw; return owner; }
     };
     const auto fixed = [&](size_t owner) {
       owner = identity(owner);
@@ -5840,7 +5844,7 @@ class Compiler {
     for (size_t i = 0; i < left.arguments.size(); ++i) if (left.type.parameters[i].owned) {
       const auto a = identity(*left.arguments[i].region_id);
       auto b = identity(*right.arguments[i].region_id);
-      if (pending_facts && recursive && regional_owners.contains(a) && regional_owners.at(a) != b &&
+      if (query.pending_facts && recursive && regional_owners.contains(a) && regional_owners.at(a) != b &&
           possible_region_alias(*right.arguments[i].region_id, *left.arguments[i].region_id)) b = a;
       if (!associate(regional_owners, reverse_regional_owners, a, b)) return false;
     }
@@ -5851,7 +5855,7 @@ class Compiler {
         const auto reverse = reverse_regional_owners.find(b);
         return reverse == reverse_regional_owners.end() || reverse->second == a;
       }
-      return pending_facts && recursive &&
+      return query.pending_facts && recursive &&
           (possible_region_alias(first, second) || possible_region_alias(second, first));
     };
     const auto mapped_type = [&](auto &&self, Type type) -> Type {
@@ -5884,6 +5888,13 @@ class Compiler {
         if (!found) return false;
       }
       return true;
+    };
+    const auto image_results = [&](const CallableCode &code) {
+      // Independent entries can return values produced by contextual helper
+      // calls. Resolve that evidence before comparing complete result images.
+      std::set<NativeCallDemand *> resolving;
+      if (query.demand_entries) resolve_native_flow(code.result_flow, resolving);
+      return callable_choices(code.result_flow);
     };
     // Contextual images are interpreted by this caller's adapters. Compare
     // their complete typed schema under the declared owner correspondence;
@@ -5971,6 +5982,7 @@ class Compiler {
       if (ac.result_flow || !ac.entry.function->empty() || !bc.entry.function->empty()) {
         // Reuse must emit an entry reached by its peer, without demanding a
         // returned leaf body that neither checked caller ever invokes.
+        if (!query.demand_entries && (!ac.entry.complete || !bc.entry.complete)) return false;
         compile_callable(a, *left.caller, left.at);
         compile_callable(b, *right.caller, right.at);
         if (!ac.entry.complete || !bc.entry.complete || ac.entry.returns != bc.entry.returns ||
@@ -5979,7 +5991,7 @@ class Compiler {
       if (!ac.result_flow) return true;
       // A factory's returned images are part of its checked contract. A native
       // entry fixes that result graph independently of this caller's adapter.
-      return pair_images(callable_choices(ac.result_flow), callable_choices(bc.result_flow),
+      return pair_images(image_results(ac), image_results(bc),
           [&](const auto &x, const auto &y) { return self(self, x, y); });
     };
     const auto preserved_outputs = [&](const NativeCallDemand &demand) {
@@ -6033,6 +6045,7 @@ class Compiler {
         std::pair<bool, std::set<size_t>> result;
         for (const auto &source : choices.definitions) {
           if (!source->code || !source->code->entry.function) return std::optional<decltype(result)>{};
+          if (!query.demand_entries && !source->code->entry.complete) return std::optional<decltype(result)>{};
           compile_callable(*source, *demand.caller, demand.at);
           const auto &entry = source->code->entry;
           if (!entry.complete) return std::optional<decltype(result)>{};
@@ -6047,7 +6060,7 @@ class Compiler {
       const auto results = [&](const CallableChoices &sources) {
         CallableChoices result;
         for (const auto &source : sources.definitions) {
-          const auto choices = callable_choices(source->code->result_flow);
+          const auto choices = image_results(*source->code);
           result.closed &= choices.closed;
           for (const auto &definition : choices.definitions)
             if (std::find(result.definitions.begin(), result.definitions.end(), definition) == result.definitions.end())
@@ -6105,14 +6118,14 @@ class Compiler {
       // Recursive return facts can depend on this very adapter. Its reuse is
       // provisional until the closed facts pass the final context comparison.
       const bool same_facts = first.conformances == second.conformances ||
-          (pending_facts && recursive &&
+          (query.pending_facts && recursive &&
            (!first.result_fact_origins.empty() || !second.result_fact_origins.empty()));
       if (first.type.kind == Type::region) {
         const bool same_owner = first.region_id && second.region_id && same_region(*first.region_id, *second.region_id);
         bool same_access;
         try { same_access = first.read_only == second.read_only; }
         catch (const UnresolvedAccess &) {
-          if (!pending_facts || !recursive) throw;
+          if (!query.pending_facts || !recursive) throw;
           same_access = true;
         }
         if (first.type != second.type || !same_owner || !same_access || !same_facts) return false;
@@ -6162,7 +6175,7 @@ class Compiler {
         }
       }
       const auto parameter = left.parameter_flows.find(i);
-      const auto a = parameter_choices && parameter_choices->contains(i) ? parameter_choices->at(i) :
+      const auto a = query.parameter_choices && query.parameter_choices->contains(i) ? query.parameter_choices->at(i) :
           parameter != left.parameter_flows.end() ? callable_choices(parameter->second) :
           borrowed_parameter(left.type, i) ? bound_callable_choices(first, left.state.callables) :
           callable_choices(first.callable_flow);
@@ -6251,10 +6264,10 @@ class Compiler {
     // image on each invocation. Caller values are irrelevant to that body;
     // regional overlays still require the caller-dependent owner proof below.
     if (left.captured && image_context(left.environment) && image_context(right.environment)) {
-      if (correspondence) *correspondence = std::move(holders);
-      if (images) *images = std::move(matched_images);
-      if (escaping_images) *escaping_images = std::move(escaping);
-      if (context_owners) *context_owners = std::move(regional_owners);
+      if (query.correspondence) *query.correspondence = std::move(holders);
+      if (query.images) *query.images = std::move(matched_images);
+      if (query.escaping_images) *query.escaping_images = std::move(escaping);
+      if (query.context_owners) *query.context_owners = std::move(regional_owners);
       return true;
     }
     if (left.environment.captured_context != right.environment.captured_context) return false;
@@ -6315,10 +6328,10 @@ class Compiler {
           (right.environment.captured(r->first, b) && !b->replayed)) return false;
     }
     if (l != left.environment.bindings.end() || r != right.environment.bindings.end()) return false;
-    if (correspondence) *correspondence = std::move(holders);
-    if (images) *images = std::move(matched_images);
-    if (escaping_images) *escaping_images = std::move(escaping);
-    if (context_owners) *context_owners = std::move(regional_owners);
+    if (query.correspondence) *query.correspondence = std::move(holders);
+    if (query.images) *query.images = std::move(matched_images);
+    if (query.escaping_images) *query.escaping_images = std::move(escaping);
+    if (query.context_owners) *query.context_owners = std::move(regional_owners);
     return true;
   }
   static bool reuse_capture_demand(const NativeCallDemand &from, const NativeCallDemand &to) {
@@ -6350,7 +6363,8 @@ class Compiler {
     }
     if (proposed.empty()) return false;
     std::map<size_t, size_t> owners;
-    if (!same_native_context(from, to, true, &holders, pending_facts, nullptr, nullptr, &owners, &proposed) ||
+    if (!same_native_context(from, to, true, {.correspondence = &holders, .pending_facts = pending_facts,
+          .context_owners = &owners, .parameter_choices = &proposed}) ||
         std::any_of(owners.begin(), owners.end(), [](const auto &entry) { return entry.first != entry.second; }))
       return false;
     // Copied parameters carry complete values. As at a loop header, a back
@@ -6370,7 +6384,8 @@ class Compiler {
       if (!demand.reused) continue;
       for (auto &argument : demand.arguments) resolve_result_facts(argument, demand.at);
       std::vector<std::pair<const Procedure *, const Procedure *>> images;
-      if (same_native_context(*demand.reused, demand, true, nullptr, false, &images)) {
+      if (same_native_context(*demand.reused, demand, true,
+          {.images = &images, .demand_entries = !demand.speculative_reuse})) {
         changed |= reuse_capture_demand(*demand.reused, demand);
         for (const auto &[first, second] : images)
           for (size_t j = 0; j < first->code->capture_fields.size(); ++j) {
@@ -6382,6 +6397,7 @@ class Compiler {
       // The recursive hypothesis has supplied enough return information to
       // check this distinct context. Its IR declaration has not been replaced.
       demand.reused = nullptr;
+      demand.speculative_reuse = false;
       demand.pending_argument_facts = false;
       const auto reopen = [&](const auto &outputs) {
         for (const auto &[holder, id] : outputs) {
@@ -6443,22 +6459,34 @@ class Compiler {
       }
       catch (const UnresolvedAccess &) { pending_facts = true; }
     }
-    // Repeated calls in one native caller can share a checked record adapter.
-    // Its lexical context is rebuilt at each call, not borrowed from its frame.
-    if (!pending_facts && demand.type.pure_callable && demand.record_result && demand.emitted.empty() && choices.closed &&
-        demand.returns.empty() && std::none_of(demand.arguments.begin(), demand.arguments.end(), native_callable)) {
-      for (auto &checked : native_call_demands_) {
+    // Completed factories share checked adapters across equivalent contexts.
+    // Each invocation constructs its own complete result in caller storage.
+    const bool factory_result = demand.result_flow && !demand.definition.borrowed_result;
+    if (!pending_facts && demand.type.pure_callable && (factory_result || demand.record_result) &&
+        demand.emitted.empty() && choices.closed && demand.returns.empty() &&
+        (factory_result || std::none_of(demand.arguments.begin(), demand.arguments.end(), native_callable))) {
+      for (size_t i = 0; i < native_call_demands_.size(); ++i) {
+        auto &checked = native_call_demands_[i];
         if (&checked == &demand) break;
-        if (checked.parent != demand.parent || checked.reused || checked.selection ||
+        if ((!factory_result && checked.parent != demand.parent) || checked.reused || checked.selection ||
             !checked.definition.complete || active_native_call(checked) || !checked.returns.empty()) continue;
         const auto reaching = callable_choices(checked.flow);
         if (!reaching.closed || !std::is_permutation(choices.definitions.begin(), choices.definitions.end(),
             reaching.definitions.begin(), reaching.definitions.end()) ||
             !std::all_of(reaching.definitions.begin(), reaching.definitions.end(),
                 [&](const auto &source) { return checked.emitted.contains(source.get()); })) continue;
-        if (!same_native_context(checked, demand, true)) continue;
+        if (factory_result) {
+          if (!checked.result_flow || checked.definition.borrowed_result) continue;
+          std::set<NativeCallDemand *> resolving;
+          resolve_native_flow(checked.result_flow, resolving);
+          if (!callable_choices(checked.result_flow).closed) continue;
+        }
+        if (!same_native_context(checked, demand, true, {.demand_entries = false})) continue;
+        if (factory_result) callable_flows_.at(demand.result_flow).inputs = {checked.result_flow};
         demand.reused = &checked;
+        demand.speculative_reuse = true;
         reuse_initialization(demand, checked);
+        reuse_capture_demand(checked, demand);
         return true;
       }
     }
@@ -6470,7 +6498,8 @@ class Compiler {
     for (const auto *ancestor : ancestors) {
       if (!demand.emitted.empty()) continue;
       std::map<size_t, size_t> holders;
-      if (!same_native_context(*ancestor, demand, true, &holders, pending_facts) &&
+      if (!same_native_context(*ancestor, demand, true,
+          {.correspondence = &holders, .pending_facts = pending_facts}) &&
           !extend_native_inputs(*ancestor, demand, holders, pending_facts)) continue;
       const auto connect = [&](const auto &from, const auto &to) {
         for (const auto &[a, b] : holders)
@@ -6480,6 +6509,7 @@ class Compiler {
       if (demand.result_flow) callable_flows_.at(demand.result_flow).inputs = {ancestor->result_flow};
       for (size_t i = 0; i < demand.failures.size(); ++i) connect(ancestor->failures[i], demand.failures[i]);
       demand.reused = ancestor;
+      demand.speculative_reuse = false;
       reuse_initialization(demand, *ancestor);
       reuse_capture_demand(*ancestor, demand);
       call_path_ = std::move(previous_calls);
@@ -6494,7 +6524,7 @@ class Compiler {
             // static descriptor once; that is not changing captured state.
             return a->code->direct == b->code->direct &&
                 a->form == b->form && a->lexical == b->lexical && a->implementation == b->implementation;
-          }) && same_native_context(*ancestor, demand, false, nullptr, false, nullptr, nullptr, &owners)) {
+          }) && same_native_context(*ancestor, demand, false, {.context_owners = &owners})) {
         // A distinct captured caller frame may reach a reusable helper.
         // The partial cycle check cannot reject it as an unchanged context.
         if (demand.captured && std::any_of(owners.begin(), owners.end(),
@@ -10680,7 +10710,7 @@ public:
           demand.context = nullptr;
         }
         if (demand.reused) {
-          if (!same_native_context(*demand.reused, demand, true))
+          if (!same_native_context(*demand.reused, demand, true, {.demand_entries = !demand.speculative_reuse}))
             fail(demand.at, "recursive callable arguments or effects require a distinct context");
           if (demand.captured) for (const auto &source : choices.definitions) {
             auto environment = source->captures;
@@ -10773,7 +10803,8 @@ public:
     for (const auto &demand : native_call_demands_) if (demand.reused) {
       std::vector<ImagePair> pairs;
       std::set<const CallableCode *> escaping;
-      if (!same_native_context(*demand.reused, demand, true, nullptr, false, &pairs, &escaping))
+      if (!same_native_context(*demand.reused, demand, true,
+            {.images = &pairs, .escaping_images = &escaping, .demand_entries = !demand.speculative_reuse}))
         fail(demand.at, "recursive callable context changed after checking");
       for (const auto &pair : pairs) {
         const bool escapes = escaping.contains(pair.first->code.get()) || escaping.contains(pair.second->code.get());
@@ -10802,7 +10833,8 @@ public:
       bool recursive = false;
       for (auto *parent = demand.parent; parent; parent = parent->parent) recursive |= parent == demand.reused;
       std::map<size_t, size_t> owners;
-      if (!same_native_context(*demand.reused, demand, true, nullptr, false, nullptr, nullptr, &owners))
+      if (!same_native_context(*demand.reused, demand, true,
+            {.context_owners = &owners, .demand_entries = !demand.speculative_reuse}))
         fail(demand.at, "native context owner correspondence changed after checking");
       std::map<llvm::Value *, llvm::Value *> inputs;
       for (const auto &[region, base] : demand.reused->environment_bases) {
