@@ -1,0 +1,3663 @@
+{
+  "schema": 1,
+  "experiment": "actual regional graph/state and native borrowed-policy boundary",
+  "status": "passed",
+  "recorded_utc": "2026-11-13T08:24:16.818325+00:00",
+  "base_commit": "c817ba5c3f93ae606f2821d112b14c6ad4d8368f",
+  "smoke": false,
+  "sources": {
+    "experiments/architecture/regional_program.py": "274f13ec8677a78c5957c663b58a8075f67ad329f517e9a91e9eb3b41aad4d3b",
+    "experiments/architecture/regional_program.cc": "ac08b362064b4a561aa15fb7a928a952a2f4fcd2da5381e4f799c1107af86e1f",
+    "experiments/architecture/semantic_program.py": "a075971a264e839e07ca899b15e14c725976e02fc9aa7c9cbfe1439c141938bf",
+    "include/shilos/region.hh": "394052502bba88b2144141e43b95177be439b8ab4b4ac13407af3c478cfd4241",
+    "include/shilos/vector.hh": "97b9fd153386307362e9c1e45216acb3cfe63c01ca9d521847a2ebc2505678ca",
+    "include/shilos/dbmr.hh": "359670983bd16eac024341cb33034c38389d4672b769f7b20a73618f20e14f1a"
+  },
+  "compiler": {
+    "path": "/ws/EvtWorks/cod-project/build/bin/clang++",
+    "sha256": "647024102b2aec917f7f279d0b7ff2cccd0edad20e4ab4abf738e3381332dc0d",
+    "version": "clang version 23.1.3 (https://github.com/llvm/llvm-project.git 0d261d1ca552c95a8f007e061c787ac7132fbcbc)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /ws/EvtWorks/cod-project/build/bin\nConfiguration file: /ws/EvtWorks/cod-project/build/bin/clang++.cfg\n"
+  },
+  "checked": {
+    "checked_definitions": 5,
+    "checked_statements": 45,
+    "reachable": [
+      "checkout",
+      "dependency_helper",
+      "stock_a",
+      "stock_b",
+      "stock_base"
+    ]
+  },
+  "nodes": 168,
+  "procedures": 5,
+  "generated_header_sha256": "9860259b398ee46a74a810977a4f976b457fac9e2bcb6b4c786871fe59a75ec6",
+  "boundaries": {
+    "value": {
+      "llvm_bytes": 21299,
+      "sha256": "bab108aac4bc16727257412201fd9fe464353d1f1c58ce9d51898a29a737204b",
+      "definitions": 6,
+      "regular": {
+        "executable_bytes": 809880,
+        "harness_compile_link_seconds": 2.457636684004683,
+        "flags": [
+          "-O1",
+          "-g"
+        ]
+      },
+      "asan_llvm_load_store_instrumented": true,
+      "asan_llvm_memory_report_symbols": [
+        "__asan_report_load_n",
+        "__asan_report_store_n"
+      ],
+      "asan": {
+        "executable_bytes": 4226408,
+        "harness_compile_link_seconds": 2.9422249859781004,
+        "flags": [
+          "-O1",
+          "-g",
+          "-fsanitize=address",
+          "-fno-omit-frame-pointer"
+        ]
+      }
+    },
+    "address": {
+      "llvm_bytes": 21218,
+      "sha256": "b6ce0467cbbf4f1d5a6d05025a1584dd745454a9ddc5d5f5b17018de6e25bb77",
+      "definitions": 6,
+      "regular": {
+        "executable_bytes": 809856,
+        "harness_compile_link_seconds": 2.371447261015419,
+        "flags": [
+          "-O1",
+          "-g"
+        ]
+      },
+      "asan_llvm_load_store_instrumented": true,
+      "asan_llvm_memory_report_symbols": [
+        "__asan_report_load_n",
+        "__asan_report_store_n"
+      ],
+      "asan": {
+        "executable_bytes": 4226000,
+        "harness_compile_link_seconds": 2.7297990639926866,
+        "flags": [
+          "-O1",
+          "-g",
+          "-fsanitize=address",
+          "-fno-omit-frame-pointer"
+        ]
+      }
+    }
+  },
+  "rows": [
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-4-source-0",
+      "arguments": [
+        4,
+        0,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        10,
+        0,
+        4,
+        4
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21960,
+        "region_entries": 17,
+        "region_frees": 17,
+        "peak_live_regions": 8,
+        "events": 28,
+        "trace_fingerprint": 11412795466005714018,
+        "policy_reads": 12
+      },
+      "trace_sha256": "3590a4611880a9d6ad713e7b49d195bab8af4e6fd74895df1357b6a720981adb",
+      "process_seconds": 0.0017123619909398258,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-4-source-1",
+      "arguments": [
+        4,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        8,
+        0,
+        4,
+        4
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21944,
+        "region_entries": 17,
+        "region_frees": 17,
+        "peak_live_regions": 8,
+        "events": 28,
+        "trace_fingerprint": 15946750808529256003,
+        "policy_reads": 12
+      },
+      "trace_sha256": "137e84d95270ad70c3520a219d79c4effbb23cb8e1d1c52772a7a6dd5bd56d50",
+      "process_seconds": 0.0016511459834873676,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-4-source-2",
+      "arguments": [
+        4,
+        2,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        6,
+        0,
+        4,
+        4
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21928,
+        "region_entries": 17,
+        "region_frees": 17,
+        "peak_live_regions": 8,
+        "events": 28,
+        "trace_fingerprint": 2765419246629087427,
+        "policy_reads": 12
+      },
+      "trace_sha256": "50c914300f62f0c0609896612869648b63a292b3e1845671d21d1fa754761929",
+      "process_seconds": 0.0015423200093209743,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-20-source-0",
+      "arguments": [
+        20,
+        0,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        93,
+        0,
+        20,
+        20
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 46248,
+        "region_entries": 65,
+        "region_frees": 65,
+        "peak_live_regions": 24,
+        "events": 140,
+        "trace_fingerprint": 8887955407441065730,
+        "policy_reads": 60
+      },
+      "trace_sha256": "ec059dd06f7340166b462b00c3df0fd16ce5957a5e1136228d71aaae19f06605",
+      "process_seconds": 0.002229760983027518,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-20-source-1",
+      "arguments": [
+        20,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        82,
+        0,
+        20,
+        20
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 46152,
+        "region_entries": 65,
+        "region_frees": 65,
+        "peak_live_regions": 24,
+        "events": 140,
+        "trace_fingerprint": 3902523256398259810,
+        "policy_reads": 60
+      },
+      "trace_sha256": "03254bd009b90dbab2e94449e297192567d5ca8a034051373692ad7f636a356e",
+      "process_seconds": 0.0022364140022546053,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-20-source-2",
+      "arguments": [
+        20,
+        2,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        81,
+        0,
+        20,
+        20
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 46152,
+        "region_entries": 65,
+        "region_frees": 65,
+        "peak_live_regions": 24,
+        "events": 140,
+        "trace_fingerprint": 9847782616989898883,
+        "policy_reads": 60
+      },
+      "trace_sha256": "6e48d4cf2e3a761e9a17c73bf4694bb913470af2f0091091a2277ce59c582bf1",
+      "process_seconds": 0.00293142901500687,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-200-source-0",
+      "arguments": [
+        200,
+        0,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        5739,
+        0,
+        200,
+        200
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 377320,
+        "region_entries": 605,
+        "region_frees": 605,
+        "peak_live_regions": 204,
+        "events": 1400,
+        "trace_fingerprint": 17720058952196703298,
+        "policy_reads": 600
+      },
+      "trace_sha256": "869fdb11c8edb99e7565d1ad6a4202eb5c02f05a478f89a9830b5a2be63d5f28",
+      "process_seconds": 0.009718047047499567,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-200-source-1",
+      "arguments": [
+        200,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        5608,
+        0,
+        200,
+        200
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 376264,
+        "region_entries": 605,
+        "region_frees": 605,
+        "peak_live_regions": 204,
+        "events": 1400,
+        "trace_fingerprint": 7309767818024981602,
+        "policy_reads": 600
+      },
+      "trace_sha256": "402b845701a71c5054844e0b680c48440961ce779328fa9fcb47dec52fbfa983",
+      "process_seconds": 0.009243909968063235,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-200-source-2",
+      "arguments": [
+        200,
+        2,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        5607,
+        0,
+        200,
+        200
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 376264,
+        "region_entries": 605,
+        "region_frees": 605,
+        "peak_live_regions": 204,
+        "events": 1400,
+        "trace_fingerprint": 4136355154111370819,
+        "policy_reads": 600
+      },
+      "trace_sha256": "a099f462eed3105a419ad1819b6d42ad694d750056365c9caea0ec82ebad6280",
+      "process_seconds": 0.010885197028983384,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-1000-source-0",
+      "arguments": [
+        1000,
+        0,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        135034,
+        0,
+        1000,
+        1000
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 1865096,
+        "region_entries": 3005,
+        "region_frees": 3005,
+        "peak_live_regions": 1004,
+        "events": 7000,
+        "trace_fingerprint": 6091852651011882551,
+        "policy_reads": 3000
+      },
+      "trace_sha256": "95f08100863b9681b004ec4dae0fd05ec4d0dda80afc3109094b93e385971237",
+      "process_seconds": 0.044304852024652064,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-1000-source-1",
+      "arguments": [
+        1000,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        135366,
+        0,
+        1000,
+        1000
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 1859768,
+        "region_entries": 3005,
+        "region_frees": 3005,
+        "peak_live_regions": 1004,
+        "events": 7000,
+        "trace_fingerprint": 7650457844884058618,
+        "policy_reads": 3000
+      },
+      "trace_sha256": "b8f424eb0139f50184e0d1db78c4bb6203a5a8c48d69b4801ae9720d82cacdec",
+      "process_seconds": 0.04462915699696168,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "depth-1000-source-2",
+      "arguments": [
+        1000,
+        2,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        134368,
+        0,
+        1000,
+        1000
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 1859768,
+        "region_entries": 3005,
+        "region_frees": 3005,
+        "peak_live_regions": 1004,
+        "events": 7000,
+        "trace_fingerprint": 10928847096549953466,
+        "policy_reads": 3000
+      },
+      "trace_sha256": "2685c25b902c62691901fbc1f225523fb31c077663092097628681ed602a22cf",
+      "process_seconds": 0.04424928699154407,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "body-mode-0",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        902,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22120,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 37,
+        "trace_fingerprint": 17682864675514057821,
+        "policy_reads": 12
+      },
+      "trace_sha256": "d40b2a28b2c39a51474117846990a4343a8cbb52be8db09f75f9b32bd38b5d64",
+      "process_seconds": 0.001861683966126293,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "cleanup-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        901,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22840,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 61,
+        "trace_fingerprint": 11630872988042802634,
+        "policy_reads": 24
+      },
+      "trace_sha256": "66e2a79d9c7c098926f56089f1c159f5cbf14fdb95d8519c3c9ad84827510b65",
+      "process_seconds": 0.002552282006945461,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "body-mode-1",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        1,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        903,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22040,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 37,
+        "trace_fingerprint": 9915543420522624604,
+        "policy_reads": 12
+      },
+      "trace_sha256": "880c928dc4810966dfd8d5f107780367861488911ac9eaa017934122a650127d",
+      "process_seconds": 0.0016327910125255585,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "cleanup-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        1,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        14,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22760,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 57,
+        "trace_fingerprint": 8545375181626562586,
+        "policy_reads": 24
+      },
+      "trace_sha256": "237f6071ae98e02e61f6d0bf2b7a7fadb5882800e7861cacf2a0cfdad9973235",
+      "process_seconds": 0.003055294044315815,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "body-mode-2",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        2,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        783,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22056,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 33,
+        "trace_fingerprint": 10789194298002282071,
+        "policy_reads": 12
+      },
+      "trace_sha256": "eb503421819e4439137c80f8756a28d135bd79a3fbc7af4310c24e4392ea1192",
+      "process_seconds": 0.0015384230064228177,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "cleanup-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        2,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        783,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22776,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 57,
+        "trace_fingerprint": 15425156434367968494,
+        "policy_reads": 24
+      },
+      "trace_sha256": "b8dc5b7d913a7084e0666afb713bd250afe9963d8d9e9d40030b0ff31050df1e",
+      "process_seconds": 0.0016319190035574138,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "body-mode-3",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        3,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        888,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22120,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 33,
+        "trace_fingerprint": 5707570891954845590,
+        "policy_reads": 12
+      },
+      "trace_sha256": "9a37d479d2d6cc939e69f314adaaebc9bc71028806f7dbb3178955b4d9710888",
+      "process_seconds": 0.002520191017538309,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "cleanup-mode-3",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        3,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        888,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22888,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 57,
+        "trace_fingerprint": 14365731636476433910,
+        "policy_reads": 24
+      },
+      "trace_sha256": "1153d331c68de24d253be1670e39384e936b7fdd2798ae91d1a99f2690984930",
+      "process_seconds": 0.0026591139612719417,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "body-and-cleanup",
+      "arguments": [
+        8,
+        1,
+        4,
+        4,
+        2,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        783,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22056,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 33,
+        "trace_fingerprint": 10789194298002282071,
+        "policy_reads": 12
+      },
+      "trace_sha256": "eb503421819e4439137c80f8756a28d135bd79a3fbc7af4310c24e4392ea1192",
+      "process_seconds": 0.0016704720328561962,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "copied-selected-view-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        1,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        12,
+        1,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 3172651313133404643,
+        "policy_reads": 24
+      },
+      "trace_sha256": "016c1bfd46c7c7d9330a40ab8429cecd33044b56af991f32e2bab483acd25d4b",
+      "process_seconds": 0.0015707930433563888,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "copied-selected-view-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        2,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        12,
+        2,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 3172651313133404643,
+        "policy_reads": 24
+      },
+      "trace_sha256": "016c1bfd46c7c7d9330a40ab8429cecd33044b56af991f32e2bab483acd25d4b",
+      "process_seconds": 0.001615088025573641,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "policy-payload-7",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        7
+      ],
+      "result": [
+        0,
+        12,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 1551190834567963811,
+        "policy_reads": 24
+      },
+      "trace_sha256": "06cc7d3ffd1a30ad6405b647beb0555a9031c032df4ff17cbc3ded3017d03081",
+      "process_seconds": 0.0015676079783588648,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "two-views-one-owner",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        1,
+        0,
+        7
+      ],
+      "result": [
+        0,
+        16,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 12878678108260500515,
+        "policy_reads": 24
+      },
+      "trace_sha256": "0cc62eff055d67378f68b70e99c1563372f3f0d7b88617c8a6c3d28b29b6a992",
+      "process_seconds": 0.0016195359639823437,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "acquire-1-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.0015097379800863564,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "acquire-1-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.0014386330149136484,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "acquire-1-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.0025523719959892333,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "acquire-1-mode-3",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        3,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.001363010029308498,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "acquire-3-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21560,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 16,
+        "trace_fingerprint": 11370635066361832399,
+        "policy_reads": 6
+      },
+      "trace_sha256": "efd4613cdf555a9e699e6669918ed3f65474fa96764095597d5b67f0247458bc",
+      "process_seconds": 0.0013601039536297321,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "acquire-3-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        1,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        903,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21528,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 16,
+        "trace_fingerprint": 12804687946296020564,
+        "policy_reads": 6
+      },
+      "trace_sha256": "d2bddf1bf0a94558cf5ed8fde4ff16e53a0d18655f54794e65820856353c4b27",
+      "process_seconds": 0.0017909909947775304,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "acquire-3-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        780,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21544,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 15,
+        "trace_fingerprint": 17049232982255918646,
+        "policy_reads": 6
+      },
+      "trace_sha256": "475b07d93418689b6a028e1d86de659ca6446b0ed2291599c77cd2e4867d8cc2",
+      "process_seconds": 0.0014648940414190292,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "acquire-3-mode-3",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        3,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        888,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21560,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 15,
+        "trace_fingerprint": 1483439847236116374,
+        "policy_reads": 6
+      },
+      "trace_sha256": "dcbe7360de70c471023f0c3283eb373bf3d7309953ea2877b141cf319b3e6f0c",
+      "process_seconds": 0.0013370309607125819,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "expired-owner-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        1,
+        905,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 17804775798951050969,
+        "policy_reads": 1
+      },
+      "trace_sha256": "2e4e5eb60df8ea7f775622d70bdbbc3fd39c123bd80aba6fa280214a6c47e583",
+      "process_seconds": 0.0012735199998132885,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "expired-owner-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        1,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        1,
+        903,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21256,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 1481714129920070360,
+        "policy_reads": 1
+      },
+      "trace_sha256": "b0098bd50642b1ec27a32a89d9971dc5e8073e23424d7a1ea895c1aac4865955",
+      "process_seconds": 0.0013563979882746935,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "expired-owner-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        777,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 9729046656060368731,
+        "policy_reads": 1
+      },
+      "trace_sha256": "74ff805dc7d7694370ea6a1ef7b7d9807a5b5ebf3af4457b5202b89fe4fac76b",
+      "process_seconds": 0.001367277989629656,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "expired-owner-mode-3",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        3,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        888,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 11852729060738939738,
+        "policy_reads": 1
+      },
+      "trace_sha256": "3dc5ec07ba9436235cb4a3bbcdb65bc285e0cd49ef01006eff77b57aede1edc7",
+      "process_seconds": 0.0013701439602300525,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "regular",
+      "name": "expired-aliased-owner",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        1,
+        -1,
+        1,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        777,
+        1,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 9729046656060368731,
+        "policy_reads": 1
+      },
+      "trace_sha256": "74ff805dc7d7694370ea6a1ef7b7d9807a5b5ebf3af4457b5202b89fe4fac76b",
+      "process_seconds": 0.0013579810038208961,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "depth-1000-source-1",
+      "arguments": [
+        1000,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        135366,
+        0,
+        1000,
+        1000
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 1859768,
+        "region_entries": 3005,
+        "region_frees": 3005,
+        "peak_live_regions": 1004,
+        "events": 7000,
+        "trace_fingerprint": 7650457844884058618,
+        "policy_reads": 3000
+      },
+      "trace_sha256": "b8f424eb0139f50184e0d1db78c4bb6203a5a8c48d69b4801ae9720d82cacdec",
+      "process_seconds": 0.07973966497229412,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "cleanup-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        1,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        14,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22760,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 57,
+        "trace_fingerprint": 8545375181626562586,
+        "policy_reads": 24
+      },
+      "trace_sha256": "237f6071ae98e02e61f6d0bf2b7a7fadb5882800e7861cacf2a0cfdad9973235",
+      "process_seconds": 0.013828419032506645,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "body-mode-2",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        2,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        783,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22056,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 33,
+        "trace_fingerprint": 10789194298002282071,
+        "policy_reads": 12
+      },
+      "trace_sha256": "eb503421819e4439137c80f8756a28d135bd79a3fbc7af4310c24e4392ea1192",
+      "process_seconds": 0.014774180017411709,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "copied-selected-view-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        2,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        12,
+        2,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 3172651313133404643,
+        "policy_reads": 24
+      },
+      "trace_sha256": "016c1bfd46c7c7d9330a40ab8429cecd33044b56af991f32e2bab483acd25d4b",
+      "process_seconds": 0.013007693982217461,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "two-views-one-owner",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        1,
+        0,
+        7
+      ],
+      "result": [
+        0,
+        16,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 12878678108260500515,
+        "policy_reads": 24
+      },
+      "trace_sha256": "0cc62eff055d67378f68b70e99c1563372f3f0d7b88617c8a6c3d28b29b6a992",
+      "process_seconds": 0.01345858903368935,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "acquire-1-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.012379585998132825,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "acquire-3-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        780,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21544,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 15,
+        "trace_fingerprint": 17049232982255918646,
+        "policy_reads": 6
+      },
+      "trace_sha256": "475b07d93418689b6a028e1d86de659ca6446b0ed2291599c77cd2e4867d8cc2",
+      "process_seconds": 0.014820015989243984,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "expired-owner-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        1,
+        905,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 17804775798951050969,
+        "policy_reads": 1
+      },
+      "trace_sha256": "2e4e5eb60df8ea7f775622d70bdbbc3fd39c123bd80aba6fa280214a6c47e583",
+      "process_seconds": 0.013951121014542878,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "expired-owner-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        777,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 9729046656060368731,
+        "policy_reads": 1
+      },
+      "trace_sha256": "74ff805dc7d7694370ea6a1ef7b7d9807a5b5ebf3af4457b5202b89fe4fac76b",
+      "process_seconds": 0.012869874015450478,
+      "stderr": ""
+    },
+    {
+      "boundary": "value",
+      "configuration": "asan",
+      "name": "expired-aliased-owner",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        1,
+        -1,
+        1,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        777,
+        1,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 9729046656060368731,
+        "policy_reads": 1
+      },
+      "trace_sha256": "74ff805dc7d7694370ea6a1ef7b7d9807a5b5ebf3af4457b5202b89fe4fac76b",
+      "process_seconds": 0.01363555301213637,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-4-source-0",
+      "arguments": [
+        4,
+        0,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        10,
+        0,
+        4,
+        4
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21960,
+        "region_entries": 17,
+        "region_frees": 17,
+        "peak_live_regions": 8,
+        "events": 28,
+        "trace_fingerprint": 11412795466005714018,
+        "policy_reads": 12
+      },
+      "trace_sha256": "3590a4611880a9d6ad713e7b49d195bab8af4e6fd74895df1357b6a720981adb",
+      "process_seconds": 0.0016379309818148613,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-4-source-1",
+      "arguments": [
+        4,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        8,
+        0,
+        4,
+        4
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21944,
+        "region_entries": 17,
+        "region_frees": 17,
+        "peak_live_regions": 8,
+        "events": 28,
+        "trace_fingerprint": 15946750808529256003,
+        "policy_reads": 12
+      },
+      "trace_sha256": "137e84d95270ad70c3520a219d79c4effbb23cb8e1d1c52772a7a6dd5bd56d50",
+      "process_seconds": 0.0015999689931049943,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-4-source-2",
+      "arguments": [
+        4,
+        2,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        6,
+        0,
+        4,
+        4
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21928,
+        "region_entries": 17,
+        "region_frees": 17,
+        "peak_live_regions": 8,
+        "events": 28,
+        "trace_fingerprint": 2765419246629087427,
+        "policy_reads": 12
+      },
+      "trace_sha256": "50c914300f62f0c0609896612869648b63a292b3e1845671d21d1fa754761929",
+      "process_seconds": 0.0014739999896846712,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-20-source-0",
+      "arguments": [
+        20,
+        0,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        93,
+        0,
+        20,
+        20
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 46248,
+        "region_entries": 65,
+        "region_frees": 65,
+        "peak_live_regions": 24,
+        "events": 140,
+        "trace_fingerprint": 8887955407441065730,
+        "policy_reads": 60
+      },
+      "trace_sha256": "ec059dd06f7340166b462b00c3df0fd16ce5957a5e1136228d71aaae19f06605",
+      "process_seconds": 0.0020254029659554362,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-20-source-1",
+      "arguments": [
+        20,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        82,
+        0,
+        20,
+        20
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 46152,
+        "region_entries": 65,
+        "region_frees": 65,
+        "peak_live_regions": 24,
+        "events": 140,
+        "trace_fingerprint": 3902523256398259810,
+        "policy_reads": 60
+      },
+      "trace_sha256": "03254bd009b90dbab2e94449e297192567d5ca8a034051373692ad7f636a356e",
+      "process_seconds": 0.0022197419893927872,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-20-source-2",
+      "arguments": [
+        20,
+        2,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        81,
+        0,
+        20,
+        20
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 46152,
+        "region_entries": 65,
+        "region_frees": 65,
+        "peak_live_regions": 24,
+        "events": 140,
+        "trace_fingerprint": 9847782616989898883,
+        "policy_reads": 60
+      },
+      "trace_sha256": "6e48d4cf2e3a761e9a17c73bf4694bb913470af2f0091091a2277ce59c582bf1",
+      "process_seconds": 0.0024550280068069696,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-200-source-0",
+      "arguments": [
+        200,
+        0,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        5739,
+        0,
+        200,
+        200
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 377320,
+        "region_entries": 605,
+        "region_frees": 605,
+        "peak_live_regions": 204,
+        "events": 1400,
+        "trace_fingerprint": 17720058952196703298,
+        "policy_reads": 600
+      },
+      "trace_sha256": "869fdb11c8edb99e7565d1ad6a4202eb5c02f05a478f89a9830b5a2be63d5f28",
+      "process_seconds": 0.00929862301563844,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-200-source-1",
+      "arguments": [
+        200,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        5608,
+        0,
+        200,
+        200
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 376264,
+        "region_entries": 605,
+        "region_frees": 605,
+        "peak_live_regions": 204,
+        "events": 1400,
+        "trace_fingerprint": 7309767818024981602,
+        "policy_reads": 600
+      },
+      "trace_sha256": "402b845701a71c5054844e0b680c48440961ce779328fa9fcb47dec52fbfa983",
+      "process_seconds": 0.009601616999134421,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-200-source-2",
+      "arguments": [
+        200,
+        2,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        5607,
+        0,
+        200,
+        200
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 376264,
+        "region_entries": 605,
+        "region_frees": 605,
+        "peak_live_regions": 204,
+        "events": 1400,
+        "trace_fingerprint": 4136355154111370819,
+        "policy_reads": 600
+      },
+      "trace_sha256": "a099f462eed3105a419ad1819b6d42ad694d750056365c9caea0ec82ebad6280",
+      "process_seconds": 0.010352979996241629,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-1000-source-0",
+      "arguments": [
+        1000,
+        0,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        135034,
+        0,
+        1000,
+        1000
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 1865096,
+        "region_entries": 3005,
+        "region_frees": 3005,
+        "peak_live_regions": 1004,
+        "events": 7000,
+        "trace_fingerprint": 6091852651011882551,
+        "policy_reads": 3000
+      },
+      "trace_sha256": "95f08100863b9681b004ec4dae0fd05ec4d0dda80afc3109094b93e385971237",
+      "process_seconds": 0.04090164095396176,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-1000-source-1",
+      "arguments": [
+        1000,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        135366,
+        0,
+        1000,
+        1000
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 1859768,
+        "region_entries": 3005,
+        "region_frees": 3005,
+        "peak_live_regions": 1004,
+        "events": 7000,
+        "trace_fingerprint": 7650457844884058618,
+        "policy_reads": 3000
+      },
+      "trace_sha256": "b8f424eb0139f50184e0d1db78c4bb6203a5a8c48d69b4801ae9720d82cacdec",
+      "process_seconds": 0.048430643044412136,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "depth-1000-source-2",
+      "arguments": [
+        1000,
+        2,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        134368,
+        0,
+        1000,
+        1000
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 1859768,
+        "region_entries": 3005,
+        "region_frees": 3005,
+        "peak_live_regions": 1004,
+        "events": 7000,
+        "trace_fingerprint": 10928847096549953466,
+        "policy_reads": 3000
+      },
+      "trace_sha256": "2685c25b902c62691901fbc1f225523fb31c077663092097628681ed602a22cf",
+      "process_seconds": 0.046079582010861486,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "body-mode-0",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        902,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22120,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 37,
+        "trace_fingerprint": 17682864675514057821,
+        "policy_reads": 12
+      },
+      "trace_sha256": "d40b2a28b2c39a51474117846990a4343a8cbb52be8db09f75f9b32bd38b5d64",
+      "process_seconds": 0.0030502540175803006,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "cleanup-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        901,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22840,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 61,
+        "trace_fingerprint": 11630872988042802634,
+        "policy_reads": 24
+      },
+      "trace_sha256": "66e2a79d9c7c098926f56089f1c159f5cbf14fdb95d8519c3c9ad84827510b65",
+      "process_seconds": 0.0031925339717417955,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "body-mode-1",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        1,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        903,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22040,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 37,
+        "trace_fingerprint": 9915543420522624604,
+        "policy_reads": 12
+      },
+      "trace_sha256": "880c928dc4810966dfd8d5f107780367861488911ac9eaa017934122a650127d",
+      "process_seconds": 0.002753241977188736,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "cleanup-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        1,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        14,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22760,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 57,
+        "trace_fingerprint": 8545375181626562586,
+        "policy_reads": 24
+      },
+      "trace_sha256": "237f6071ae98e02e61f6d0bf2b7a7fadb5882800e7861cacf2a0cfdad9973235",
+      "process_seconds": 0.0017050380120053887,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "body-mode-2",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        2,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        783,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22056,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 33,
+        "trace_fingerprint": 10789194298002282071,
+        "policy_reads": 12
+      },
+      "trace_sha256": "eb503421819e4439137c80f8756a28d135bd79a3fbc7af4310c24e4392ea1192",
+      "process_seconds": 0.0014817549963481724,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "cleanup-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        2,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        783,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22776,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 57,
+        "trace_fingerprint": 15425156434367968494,
+        "policy_reads": 24
+      },
+      "trace_sha256": "b8dc5b7d913a7084e0666afb713bd250afe9963d8d9e9d40030b0ff31050df1e",
+      "process_seconds": 0.0016587299760431051,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "body-mode-3",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        3,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        888,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22120,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 33,
+        "trace_fingerprint": 5707570891954845590,
+        "policy_reads": 12
+      },
+      "trace_sha256": "9a37d479d2d6cc939e69f314adaaebc9bc71028806f7dbb3178955b4d9710888",
+      "process_seconds": 0.0017735279980115592,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "cleanup-mode-3",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        3,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        888,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22888,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 57,
+        "trace_fingerprint": 14365731636476433910,
+        "policy_reads": 24
+      },
+      "trace_sha256": "1153d331c68de24d253be1670e39384e936b7fdd2798ae91d1a99f2690984930",
+      "process_seconds": 0.0019530269782990217,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "body-and-cleanup",
+      "arguments": [
+        8,
+        1,
+        4,
+        4,
+        2,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        783,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22056,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 33,
+        "trace_fingerprint": 10789194298002282071,
+        "policy_reads": 12
+      },
+      "trace_sha256": "eb503421819e4439137c80f8756a28d135bd79a3fbc7af4310c24e4392ea1192",
+      "process_seconds": 0.0028284250292927027,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "copied-selected-view-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        1,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        12,
+        1,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 3172651313133404643,
+        "policy_reads": 24
+      },
+      "trace_sha256": "016c1bfd46c7c7d9330a40ab8429cecd33044b56af991f32e2bab483acd25d4b",
+      "process_seconds": 0.0015198469627648592,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "copied-selected-view-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        2,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        12,
+        2,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 3172651313133404643,
+        "policy_reads": 24
+      },
+      "trace_sha256": "016c1bfd46c7c7d9330a40ab8429cecd33044b56af991f32e2bab483acd25d4b",
+      "process_seconds": 0.0017402039957232773,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "policy-payload-7",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        7
+      ],
+      "result": [
+        0,
+        12,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 1551190834567963811,
+        "policy_reads": 24
+      },
+      "trace_sha256": "06cc7d3ffd1a30ad6405b647beb0555a9031c032df4ff17cbc3ded3017d03081",
+      "process_seconds": 0.0018438610131852329,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "two-views-one-owner",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        1,
+        0,
+        7
+      ],
+      "result": [
+        0,
+        16,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 12878678108260500515,
+        "policy_reads": 24
+      },
+      "trace_sha256": "0cc62eff055d67378f68b70e99c1563372f3f0d7b88617c8a6c3d28b29b6a992",
+      "process_seconds": 0.0015438030241057277,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "acquire-1-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.001513526018243283,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "acquire-1-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.0014725979999639094,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "acquire-1-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.0013974159955978394,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "acquire-1-mode-3",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        3,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.0014413379831239581,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "acquire-3-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21560,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 16,
+        "trace_fingerprint": 11370635066361832399,
+        "policy_reads": 6
+      },
+      "trace_sha256": "efd4613cdf555a9e699e6669918ed3f65474fa96764095597d5b67f0247458bc",
+      "process_seconds": 0.0014603350427933037,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "acquire-3-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        1,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        903,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21528,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 16,
+        "trace_fingerprint": 12804687946296020564,
+        "policy_reads": 6
+      },
+      "trace_sha256": "d2bddf1bf0a94558cf5ed8fde4ff16e53a0d18655f54794e65820856353c4b27",
+      "process_seconds": 0.0014948699972592294,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "acquire-3-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        780,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21544,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 15,
+        "trace_fingerprint": 17049232982255918646,
+        "policy_reads": 6
+      },
+      "trace_sha256": "475b07d93418689b6a028e1d86de659ca6446b0ed2291599c77cd2e4867d8cc2",
+      "process_seconds": 0.0014981459826231003,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "acquire-3-mode-3",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        3,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        888,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21560,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 15,
+        "trace_fingerprint": 1483439847236116374,
+        "policy_reads": 6
+      },
+      "trace_sha256": "dcbe7360de70c471023f0c3283eb373bf3d7309953ea2877b141cf319b3e6f0c",
+      "process_seconds": 0.0014419800136238337,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "expired-owner-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        1,
+        905,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 17804775798951050969,
+        "policy_reads": 1
+      },
+      "trace_sha256": "2e4e5eb60df8ea7f775622d70bdbbc3fd39c123bd80aba6fa280214a6c47e583",
+      "process_seconds": 0.0013935379683971405,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "expired-owner-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        1,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        1,
+        903,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21256,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 1481714129920070360,
+        "policy_reads": 1
+      },
+      "trace_sha256": "b0098bd50642b1ec27a32a89d9971dc5e8073e23424d7a1ea895c1aac4865955",
+      "process_seconds": 0.00244092004140839,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "expired-owner-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        777,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 9729046656060368731,
+        "policy_reads": 1
+      },
+      "trace_sha256": "74ff805dc7d7694370ea6a1ef7b7d9807a5b5ebf3af4457b5202b89fe4fac76b",
+      "process_seconds": 0.0013788799988105893,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "expired-owner-mode-3",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        3,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        888,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 11852729060738939738,
+        "policy_reads": 1
+      },
+      "trace_sha256": "3dc5ec07ba9436235cb4a3bbcdb65bc285e0cd49ef01006eff77b57aede1edc7",
+      "process_seconds": 0.0012537729926407337,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "regular",
+      "name": "expired-aliased-owner",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        1,
+        -1,
+        1,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        777,
+        1,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 9729046656060368731,
+        "policy_reads": 1
+      },
+      "trace_sha256": "74ff805dc7d7694370ea6a1ef7b7d9807a5b5ebf3af4457b5202b89fe4fac76b",
+      "process_seconds": 0.0012542849872261286,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "depth-1000-source-1",
+      "arguments": [
+        1000,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        135366,
+        0,
+        1000,
+        1000
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 1859768,
+        "region_entries": 3005,
+        "region_frees": 3005,
+        "peak_live_regions": 1004,
+        "events": 7000,
+        "trace_fingerprint": 7650457844884058618,
+        "policy_reads": 3000
+      },
+      "trace_sha256": "b8f424eb0139f50184e0d1db78c4bb6203a5a8c48d69b4801ae9720d82cacdec",
+      "process_seconds": 0.08433398202760145,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "cleanup-mode-1",
+      "arguments": [
+        8,
+        1,
+        -1,
+        4,
+        1,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        14,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22760,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 57,
+        "trace_fingerprint": 8545375181626562586,
+        "policy_reads": 24
+      },
+      "trace_sha256": "237f6071ae98e02e61f6d0bf2b7a7fadb5882800e7861cacf2a0cfdad9973235",
+      "process_seconds": 0.016014717984944582,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "body-mode-2",
+      "arguments": [
+        8,
+        1,
+        4,
+        -1,
+        2,
+        0,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        783,
+        0,
+        5,
+        5
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22056,
+        "region_entries": 20,
+        "region_frees": 20,
+        "peak_live_regions": 9,
+        "events": 33,
+        "trace_fingerprint": 10789194298002282071,
+        "policy_reads": 12
+      },
+      "trace_sha256": "eb503421819e4439137c80f8756a28d135bd79a3fbc7af4310c24e4392ea1192",
+      "process_seconds": 0.014451057009864599,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "copied-selected-view-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        2,
+        -1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        12,
+        2,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 3172651313133404643,
+        "policy_reads": 24
+      },
+      "trace_sha256": "016c1bfd46c7c7d9330a40ab8429cecd33044b56af991f32e2bab483acd25d4b",
+      "process_seconds": 0.015026857028715312,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "two-views-one-owner",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        1,
+        0,
+        7
+      ],
+      "result": [
+        0,
+        16,
+        0,
+        8,
+        8
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 22712,
+        "region_entries": 29,
+        "region_frees": 29,
+        "peak_live_regions": 12,
+        "events": 56,
+        "trace_fingerprint": 12878678108260500515,
+        "policy_reads": 24
+      },
+      "trace_sha256": "0cc62eff055d67378f68b70e99c1563372f3f0d7b88617c8a6c3d28b29b6a992",
+      "process_seconds": 0.013953955029137433,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "acquire-1-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        1,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        1,
+        904,
+        0,
+        0,
+        0
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21128,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 5,
+        "events": 0,
+        "trace_fingerprint": 1469598103934665603,
+        "policy_reads": 0
+      },
+      "trace_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "process_seconds": 0.016283745993860066,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "acquire-3-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        3,
+        0,
+        0,
+        2
+      ],
+      "result": [
+        0,
+        780,
+        0,
+        2,
+        2
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21544,
+        "region_entries": 14,
+        "region_frees": 14,
+        "peak_live_regions": 7,
+        "events": 15,
+        "trace_fingerprint": 17049232982255918646,
+        "policy_reads": 6
+      },
+      "trace_sha256": "475b07d93418689b6a028e1d86de659ca6446b0ed2291599c77cd2e4867d8cc2",
+      "process_seconds": 0.013987378973979503,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "expired-owner-mode-0",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        0,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        1,
+        905,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 17804775798951050969,
+        "policy_reads": 1
+      },
+      "trace_sha256": "2e4e5eb60df8ea7f775622d70bdbbc3fd39c123bd80aba6fa280214a6c47e583",
+      "process_seconds": 0.013853435986675322,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "expired-owner-mode-2",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        0,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        777,
+        0,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 9729046656060368731,
+        "policy_reads": 1
+      },
+      "trace_sha256": "74ff805dc7d7694370ea6a1ef7b7d9807a5b5ebf3af4457b5202b89fe4fac76b",
+      "process_seconds": 0.013561362982727587,
+      "stderr": ""
+    },
+    {
+      "boundary": "address",
+      "configuration": "asan",
+      "name": "expired-aliased-owner",
+      "arguments": [
+        8,
+        1,
+        -1,
+        -1,
+        2,
+        1,
+        -1,
+        1,
+        1,
+        2
+      ],
+      "result": [
+        0,
+        777,
+        1,
+        1,
+        1
+      ],
+      "metrics": {
+        "program_bytes": 16056,
+        "state_bytes": 21272,
+        "region_entries": 8,
+        "region_frees": 8,
+        "peak_live_regions": 4,
+        "events": 5,
+        "trace_fingerprint": 9729046656060368731,
+        "policy_reads": 1
+      },
+      "trace_sha256": "74ff805dc7d7694370ea6a1ef7b7d9807a5b5ebf3af4457b5202b89fe4fac76b",
+      "process_seconds": 0.013351494970265776,
+      "stderr": ""
+    }
+  ],
+  "limitations": [
+    "Known fixture mappings only; no external admission, persistent format or world evolution protocol.",
+    "Finite explicit signatures, scalar policy reads and simple copied image header; not complete CoD inference or capture ABI.",
+    "Runtime expiry guards are assertions for this experiment; required static owner/access checks remain a separate obligation.",
+    "State region is monotonic and includes finished frames/tasks; no frame-reuse or reclaim design is selected.",
+    "Native completion uses integer status and explicit cleanup; a throwing C++ root is caught inside the native callback, not across generated LLVM frames.",
+    "Value and address callbacks run on one thread with no concurrent owner destruction; no concurrent borrow protocol is selected.",
+    "No runtime-performance or framework-engineering ranking follows from process duration or this fixed fixture."
+  ],
+  "comparisons": 96,
+  "repository_validation": {
+    "command": "cmake --build ./build",
+    "exit_code": 0,
+    "log_sha256": "01fcc1092019659ffe7017d74e3e88df97439adc13c3e77a09869e299f7c52e1",
+    "scope": "Existing incremental runtime steps authorized; no main source/configuration changes in this experiment."
+  }
+}
