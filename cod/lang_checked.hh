@@ -40,6 +40,7 @@ struct CheckedOperation {
   Type operand_type;
   std::optional<size_t> callee;
   std::optional<size_t> place;
+  std::optional<size_t> binding;
   std::optional<size_t> accumulator;
   bool read_only = false;
   bool view = false;
@@ -56,13 +57,19 @@ struct CheckedStorage {
   Type type;
   size_t scope;
   bool read_only;
+};
+
+struct CheckedBinding {
+  size_t place;
+  bool read_only;
   bool value_binding;
+  bool fixed;
 };
 
 struct LexicalState {
   struct Scope { size_t id; std::map<std::string, size_t> bindings; bool declarations = true; };
   std::vector<Scope> scopes{{0, {}}};
-  std::set<size_t> available, initialized;
+  std::set<size_t> bindings_available, available, initialized;
   std::map<size_t, std::set<size_t>> input_initialized{{0, {}}};
   std::map<size_t, std::uint64_t> requirements;
   std::map<size_t, std::set<size_t>> exceptions;
@@ -85,6 +92,7 @@ struct CheckedInstance {
   std::map<const Expression *, CheckedOperation> operations;
   bool complete = false;
   std::vector<CheckedStorage> storage;
+  std::vector<CheckedBinding> bindings;
 };
 struct CheckedMethod {
   const Form *source;
@@ -100,6 +108,7 @@ struct CheckedProgram {
   std::vector<const Expression *> initializers;
   std::vector<WarningDiagnostic> warnings;
   std::vector<CheckedStorage> entry_storage;
+  std::vector<CheckedBinding> entry_bindings;
   bool exception_values = false;
 };
 
@@ -113,6 +122,8 @@ class ScalarChecker {
   std::set<const Expression *> warned_shadow_;
   LexicalState lexical_;
   std::vector<CheckedStorage> *storage_ = nullptr;
+  std::vector<CheckedBinding> *bindings_ = nullptr;
+  std::map<size_t, std::vector<size_t>> scope_storage_;
   struct AbruptPath { LexicalState state; std::set<size_t> exceptions; Location at; Completion completion{2, false}; };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; };
   AbruptFlow *abrupt_ = nullptr;
@@ -135,7 +146,7 @@ class ScalarChecker {
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
 
-  size_t declare(const std::string &name, const Type &type, bool read_only, bool value_binding, const Location &at) {
+  LexicalState::Scope &declaration_scope(const std::string &name, const Location &at) {
     auto selected = lexical_.scopes.rbegin();
     while (!selected->declarations) {
       if (selected->bindings.contains(name)) fail(at, "duplicate declaration of catch parameter '" + name + "'");
@@ -143,9 +154,22 @@ class ScalarChecker {
     }
     auto &scope = *selected;
     if (scope.bindings.contains(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
-    const auto id = storage_->size();
-    storage_->push_back({name, type, scope.id, read_only, value_binding});
+    return scope;
+  }
+  size_t bind(const std::string &name, size_t place, bool read_only, bool value_binding, bool fixed, const Location &at) {
+    auto &scope = declaration_scope(name, at);
+    const auto id = bindings_->size();
+    bindings_->push_back({place, read_only, value_binding, fixed});
     scope.bindings.emplace(name, id);
+    lexical_.bindings_available.insert(id);
+    return id;
+  }
+  size_t declare(const std::string &name, const Type &type, bool read_only, bool value_binding, const Location &at) {
+    const auto scope = declaration_scope(name, at).id;
+    const auto id = storage_->size();
+    storage_->push_back({name, type, scope, read_only});
+    scope_storage_[scope].push_back(id);
+    bind(name, id, read_only, value_binding, false, at);
     lexical_.available.insert(id);
     return id;
   }
@@ -180,6 +204,7 @@ class ScalarChecker {
         auto [found, inserted] = lexical_.scopes[i].bindings.emplace(name, id);
         if (!inserted && found->second != id) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
       }
+    lexical_.bindings_available = a_exits ? b.bindings_available : b_exits ? a.bindings_available : intersect(a.bindings_available, b.bindings_available);
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
     lexical_.input_initialized = a_exits ? b.input_initialized : a.input_initialized;
@@ -202,16 +227,22 @@ class ScalarChecker {
     lexical_.live = !a_exits || !b_exits;
     refresh_initialized(lexical_);
   }
-  void leave_scope() {
-    for (const auto &[name, id] : lexical_.scopes.back().bindings) {
-      lexical_.available.erase(id);
-      lexical_.initialized.erase(id);
-      for (auto &[input, initialized] : lexical_.input_initialized) initialized.erase(id);
-      loop_controls_.erase(id);
-      lexical_.exceptions.erase(id);
+  void retire_scope(LexicalState &state) {
+    const auto &scope = state.scopes.back();
+    for (const auto &[name, id] : scope.bindings) state.bindings_available.erase(id);
+    if (const auto owned = scope_storage_.find(scope.id); owned != scope_storage_.end()) for (const auto id : owned->second) {
+      state.available.erase(id);
+      state.initialized.erase(id);
+      for (auto &[input, initialized] : state.input_initialized) initialized.erase(id);
+      state.exceptions.erase(id);
     }
-    lexical_.queues.erase(lexical_.scopes.back().id);
-    lexical_.scopes.pop_back();
+    state.queues.erase(scope.id);
+    state.scopes.pop_back();
+  }
+  void leave_scope() {
+    if (const auto owned = scope_storage_.find(lexical_.scopes.back().id); owned != scope_storage_.end())
+      for (const auto id : owned->second) loop_controls_.erase(id);
+    retire_scope(lexical_);
   }
   bool capture_catch(size_t id) {
     bool captured = false;
@@ -229,16 +260,7 @@ class ScalarChecker {
       return;
     }
     auto state = lexical_;
-    while (state.scopes.size() > abrupt_->depth) {
-      for (const auto &[name, id] : state.scopes.back().bindings) {
-        state.available.erase(id);
-        state.initialized.erase(id);
-        for (auto &[input, initialized] : state.input_initialized) initialized.erase(id);
-        state.exceptions.erase(id);
-      }
-      state.queues.erase(state.scopes.back().id);
-      state.scopes.pop_back();
-    }
+    while (state.scopes.size() > abrupt_->depth) retire_scope(state);
     abrupt_->paths.push_back({std::move(state), std::move(exceptions), at, completion});
   }
   CheckedOperation finish_scope(CheckedOperation result, AbruptFlow &flow, AbruptFlow *outer,
@@ -292,7 +314,7 @@ class ScalarChecker {
       join(body, true, normals.front(), false, at);
       for (size_t i = 1; i < normals.size(); ++i) { const auto previous = lexical_; join(previous, false, normals[i], false, at); }
       result.type = *normal_type;
-      if (result.type == Type::void_type) { result.place.reset(); result.view = result.read_only = false; result.exceptions.clear(); }
+      if (result.type == Type::void_type) { result.place.reset(); result.binding.reset(); result.view = result.read_only = false; result.exceptions.clear(); }
     }
     return result;
   }
@@ -533,6 +555,7 @@ class ScalarChecker {
     if (finalizer) {
       const auto normal = lexical_;
       lexical_ = final_state;
+      lexical_.bindings_available.insert(normal.bindings_available.begin(), normal.bindings_available.end());
       lexical_.available.insert(normal.available.begin(), normal.available.end());
       lexical_.initialized.insert(normal.initialized.begin(), normal.initialized.end());
       lexical_.inputs = normal.inputs;
@@ -549,10 +572,12 @@ class ScalarChecker {
         expr.kind == Expression::Kind::deferred ? Type{Type::void_type} : result_type;
     if (!views.empty()) {
       result.place = views.front()->place;
+      result.binding = views.front()->binding;
       for (const auto *view : views) {
         result.view = result.view || view->view;
         result.read_only = result.read_only || view->read_only;
         if (result.place != view->place) result.place.reset();
+        if (result.binding != view->binding) result.binding.reset();
       }
     }
     result.exceptions = std::move(result_exceptions);
@@ -565,6 +590,7 @@ class ScalarChecker {
     const auto child = [&](size_t i, bool read_value = true) { return check(*expr.children.at(i), instance, operations, read_value); };
     const auto view = [&](const CheckedOperation &source) {
       operation.place = source.place;
+      operation.binding = source.binding;
       operation.view = source.view;
       operation.read_only = source.read_only;
     };
@@ -607,26 +633,30 @@ class ScalarChecker {
     case K::name: {
       const auto binding = lexical_.lookup(expr.text);
       if (!binding) fail(expr.at, "unknown scalar value '" + expr.text + "'");
-      if (!lexical_.available.contains(*binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
-      if (delayed_controls_.contains(*binding)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
-      const bool captured = capture_catch(*binding);
-      if (read && !lexical_.initialized.contains(*binding)) {
+      if (!lexical_.bindings_available.contains(*binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
+      const auto &slot = (*bindings_)[*binding];
+      const auto place = slot.place;
+      if (!lexical_.available.contains(place)) fail(expr.at, "binding '" + expr.text + "' refers to storage whose lexical owner has ended");
+      if (delayed_controls_.contains(place)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
+      const bool captured = capture_catch(place);
+      if (read && !lexical_.initialized.contains(place)) {
         std::uint64_t missing = 0;
         for (const auto input : inputs(lexical_.inputs))
-          if (!lexical_.input_initialized.at(input).contains(*binding)) missing |= std::uint64_t{1} << input;
+          if (!lexical_.input_initialized.at(input).contains(place)) missing |= std::uint64_t{1} << input;
         if (missing) {
-          if (!delayed_ || !deferred_inputs_.contains(*binding)) fail(expr.at, "read of '" + expr.text + "' before definite initialization");
-          const auto obligation = cleanup_.read(*binding);
+          if (!delayed_ || !deferred_inputs_.contains(place)) fail(expr.at, "read of '" + expr.text + "' before definite initialization");
+          const auto obligation = cleanup_.read(place);
           read_sites_.push_back(expr.at);
           lexical_.requirements[obligation] |= missing;
         }
       }
-      operation.place = binding;
-      operation.type = (*storage_)[*binding].type;
-      operation.read_only = (*storage_)[*binding].read_only;
+      operation.binding = binding;
+      operation.place = place;
+      operation.type = (*storage_)[place].type;
+      operation.read_only = slot.read_only;
       operation.view = true;
       if (operation.type.kind == Type::exception)
-        operation.exceptions = delayed_ && !captured ? exception_possibilities(operation.type) : lexical_.exceptions.at(*binding);
+        operation.exceptions = delayed_ && !captured ? exception_possibilities(operation.type) : lexical_.exceptions.at(place);
       break;
     }
     case K::unary: {
@@ -729,6 +759,7 @@ class ScalarChecker {
         operation.view = yes_fact.view || no_fact.view;
         operation.read_only = yes_fact.read_only || no_fact.read_only;
         if (yes_fact.place == no_fact.place) operation.place = yes_fact.place;
+        if (yes_fact.binding == no_fact.binding) operation.binding = yes_fact.binding;
       }
       break;
     }
@@ -809,11 +840,15 @@ class ScalarChecker {
       break;
     }
     case K::pointer_group: {
-      if (expr.declaration_kind != "val") implementation_gap(expr.at, "reference bindings and alias lifetime tracking");
+      const bool value = expr.declaration_kind == "val";
       for (const auto &declaration : expr.children) {
         if (declaration->kind == K::block) { check(*declaration, instance, operations); continue; }
-        if (!declaration->owner_name.empty()) fail(declaration->at, "val storage belongs to its lexical scope, not an external owner");
+        if (!declaration->owner_name.empty()) {
+          if (value) fail(declaration->at, "val storage belongs to its lexical scope, not an external owner");
+          implementation_gap(declaration->at, "explicit owner annotations on local reference bindings");
+        }
         const auto &initializer = *declaration->children.front();
+        const bool copy = value || declaration->binding == "<-";
         Type initial_type;
         bool initialized = true;
         if (initializer.kind == K::make_local) {
@@ -823,7 +858,8 @@ class ScalarChecker {
             if (query.kind != K::name) implementation_gap(query.at, "typeof on a non-name local initializer");
             const auto binding = lexical_.lookup(query.text);
             if (!binding) fail(query.at, "unknown value in typeof: '" + query.text + "'");
-            initial_type = (*storage_)[*binding].type;
+            if (!lexical_.bindings_available.contains(*binding)) fail(query.at, "binding '" + query.text + "' is not available on every reaching path");
+            initial_type = (*storage_)[(*bindings_)[*binding].place].type;
           }
           const size_t value_index = initializer.annotation ? 0 : 1;
           initialized = initializer.children.size() > value_index;
@@ -836,20 +872,39 @@ class ScalarChecker {
           allocation.initializes = initialized;
           if (initialized) allocation.exceptions = operations.at(initializer.children[value_index].get()).exceptions;
           operations[&initializer] = allocation;
-        } else initial_type = check(initializer, instance, operations);
+        } else initial_type = check(initializer, instance, operations, copy || expr.declaration_kind == "ref");
         require_value(initial_type);
         const auto type = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : initial_type;
-        if (!transfers_bits(initial_type, type)) fail(declaration->at, "initializer does not satisfy declared val type");
+        const auto &source = operations.at(&initializer);
+        const bool borrowed = !copy && source.view;
+        if (borrowed && !source.place) implementation_gap(initializer.at, "reference binding to runtime-selected storage");
+        if (borrowed ? initial_type != type : !transfers_bits(initial_type, type))
+          fail(declaration->at, "initializer does not satisfy declared " + expr.declaration_kind + " type");
+        if (borrowed && !lexical_.available.contains(*source.place))
+          fail(initializer.at, "reference initializer's lexical owner has ended");
+        if (borrowed && declaration->annotation && !declaration->read_only && source.read_only)
+          fail(declaration->at, "readonly source cannot initialize a writable reference target");
+        if (!borrowed && !initialized && expr.declaration_kind == "ref")
+          fail(declaration->at, "ref requires definitely initialized target storage");
         if (lexical_.lookup(declaration->text) && !lexical_.scopes.back().bindings.contains(declaration->text) &&
             warned_shadow_.insert(declaration.get()).second)
           program_.warnings.push_back({Warning::shadow, declaration->at, "declaration shadows outer binding '" + declaration->text + "'"});
-        const auto id = declare(declaration->text, type, declaration->read_only || expr.fixed_binding, true, declaration->at);
-        if (initialized) initialize(id);
-        if (type.kind == Type::exception) lexical_.exceptions[id] = initialized ? operations.at(&initializer).exceptions : exception_possibilities(type);
+        const bool read_only = declaration->read_only || (value && expr.fixed_binding) || (borrowed && source.read_only);
+        size_t place;
+        if (borrowed) {
+          place = *source.place;
+          bind(declaration->text, place, read_only, false, expr.fixed_binding, declaration->at);
+        } else {
+          place = declare(declaration->text, type, read_only, value, declaration->at);
+          bindings_->back().fixed = expr.fixed_binding;
+          if (initialized) initialize(place);
+          if (type.kind == Type::exception) lexical_.exceptions[place] = initialized ? source.exceptions : exception_possibilities(type);
+        }
         CheckedOperation binding;
-        binding.place = id;
+        binding.place = place;
         binding.operand_type = type;
-        binding.initializes = initialized;
+        binding.view = borrowed;
+        binding.initializes = !borrowed && initialized;
         operations[declaration.get()] = binding;
       }
       break;
@@ -865,8 +920,11 @@ class ScalarChecker {
           [&](const LexicalState::Scope &scope) { return scope.id == storage.scope; }))
         fail(expr.at, "assignment destination's lexical owner has ended");
       if (expr.kind == K::rebind) {
-        if (storage.value_binding) fail(expr.at, "val storage has no reference binding; use '<-' for bits transfer");
-        implementation_gap(expr.at, "reference rebinding and alias lifetime tracking");
+        if (!target.binding) fail(expr.at, "rebinding requires a reference binding destination");
+        const auto &binding = (*bindings_)[*target.binding];
+        if (binding.value_binding) fail(expr.at, "val storage has no reference binding; use '<-' for bits transfer");
+        if (binding.fixed) fail(expr.at, "cannot rebind a const reference binding");
+        implementation_gap(expr.at, "mutable reference targets and fixed-owner flow");
       }
       if (target.read_only) fail(expr.at, "cannot write through a readonly destination");
       const auto source = child(1);
@@ -910,7 +968,7 @@ class ScalarChecker {
         if (child(1).kind != Type::exception) fail(expr.at, "explicit cause requires an exception value");
         note_abrupt(expr.at, {exception_id(ExceptionCategory::out_of_memory)});
       }
-      const auto binding = expr.children.empty() ? caught_ : expr.children[0]->kind == K::name ? lexical_.lookup(expr.children[0]->text) : std::optional<size_t>{};
+      const auto binding = expr.children.empty() ? caught_ : expr.children[0]->kind == K::name ? operations.at(expr.children[0].get()).place : std::optional<size_t>{};
       if (binding && caught_inputs_.contains(*binding)) {
         const auto inputs = lexical_.inputs;
         for (const auto category : operation.exceptions) {
@@ -1060,6 +1118,7 @@ public:
       demand(i, program_.methods[i].parameters, method.at);
     }
     storage_ = &program_.entry_storage;
+    bindings_ = &program_.entry_bindings;
     lexical_ = {};
     next_scope_ = 1;
     AbruptFlow entry_flow{1, {}};
@@ -1074,6 +1133,8 @@ public:
       const auto &method = *program_.methods[instance.method].source;
       checking_method_ = &program_.methods[instance.method];
       storage_ = &instance.storage;
+      bindings_ = &instance.bindings;
+      scope_storage_.clear();
       lexical_ = {};
       cleanup_ = {};
       read_sites_.clear();
@@ -1083,6 +1144,7 @@ public:
         const auto &parameter = method.parameters[p];
         const bool value = parameter.declaration_kind == "val";
         const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
+        bindings_->back().fixed = parameter.fixed_binding;
         initialize(id);
         lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
       }

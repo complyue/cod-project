@@ -634,6 +634,11 @@ class LLVMEmission {
           continue;
         }
         const auto &binding = facts_.front()->at(declaration.get());
+        if (binding.view) {
+          emit_expression(*declaration->children.front(), false);
+          if (!reachable()) return nullptr;
+          continue;
+        }
         if (!binding.initializes) continue;
         const auto *initializer = declaration->children.front().get();
         if (initializer->kind == K::make_local)
