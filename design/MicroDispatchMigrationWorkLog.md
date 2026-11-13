@@ -39,3 +39,6 @@ The first exact build failed on a constructor mismatch in the new entry pipeline
 
 
 Final removal-checkpoint validation: `cmake --build ./build` passed after the runtime link-interface fix. Empty-source LLVM and bitcode emission, actual `--run` native execution and preserved malformed-source diagnostics passed; `/tmp/cod-source-foundation-smoke.json` records the observations. The expected legacy failures remain explicit. A source audit finds no `NativeCallDemand`, `same_native_context`, speculative native reuse or CodeExtractor path in the replacement frontend/emitter. Historical registry payloads, unique anchors, new document links and diff whitespace audits passed.
+
+
+Removal checkpoint committed as `8048666` on `codex/source-micro-dispatch`; main and the `multi-dispatch` tag are unchanged. The validation index now describes current capability and directs historical source-form details to the immutable baseline, so old passing reports do not imply current support. The closure contract remains pending whole-file review; its revision 2 incorporates the confirmed removal-first stage boundary without reopening that priority.

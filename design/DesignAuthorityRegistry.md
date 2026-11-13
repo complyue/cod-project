@@ -1,10 +1,10 @@
 # Design authority and value lineage
 
-Registry revision: 588 · Audit date: 2026-11-13 (America/Los_Angeles)
+Registry revision: 589 · Audit date: 2026-11-13 (America/Los_Angeles)
 
 ## Design authority
 
-[D-GOV](#d-gov), all registry-maintenance sections. Value path: V-03 → GOV-01 → GOV-02 through E-11/E-12. H-05 establishes human-scoped delegation; H-388/H-391 authorizes concise audit records; [K-587](#k-587) records revision 588 and H-399’s removal-first stage acceptance. The [charter](RegionalSemanticPlatformCharter.md) and [AGENTS.md](../AGENTS.md) govern.
+[D-GOV](#d-gov), all registry-maintenance sections. Value path: V-03 → GOV-01 → GOV-02 through E-11/E-12. H-05 establishes human-scoped delegation; H-388/H-391 authorizes concise audit records; [K-588](#k-588) records revision 589 and H-399’s source-availability correction. The [charter](RegionalSemanticPlatformCharter.md) and [AGENTS.md](../AGENTS.md) govern.
 
 Acceptance: preserve stable IDs, relationship endpoints/kinds, current qualification, exclusions and unresolved decisions; resolve historical evidence to immutable Git sources. No product proposal gains qualification through this maintenance. Historical registry: `061a4a684770`; original event payloads: `0c0efbfde4dc`, both at this file's path. Newer decisions remain below verbatim.
 
@@ -25,7 +25,7 @@ Revision labels identify inspected text, not approval of every section. **Pendin
 | Contract / inspected revision | Authority and lineage | Boundary, acceptance and open work |
 | --- | --- | --- |
 | <a id="d-00"></a>**D-00** [Charter](RegionalSemanticPlatformCharter.md) | H-01–H-04 confirms V-01–V-03/E-01–E-10 directions; H-04 authorizes the charter’s creation. Initial charter commit `3fe2cd1dfd06ec41481f265386d23f3dce7e2ff6`, blob `9f0154035d52f976232000ab1601088b91948c0b`. | Value root, not blanket approval of generated details, examples, roadmap or §14 mechanisms. |
-| <a id="d-gov"></a>**D-GOV** registry r588; AGENTS governance | **Continued** H-05/E-11/E-12 under H-388/H-391; K-587. | Traceable scoped delegation, current decisions and recoverable evidence. No product qualification, charter or operational-permission change. |
+| <a id="d-gov"></a>**D-GOV** registry r589; AGENTS governance | **Continued** H-05/E-11/E-12 under H-388/H-391; K-588. | Traceable scoped delegation, current decisions and recoverable evidence. No product qualification, charter or operational-permission change. |
 | <a id="d-01"></a>**D-01** [Regional storage](MemoryRegionAndRegionalTypes.md); blob `8dc4ed4012d1127087d83faf9e13ed49db5345d5` | **Pending-human**, P-01/P-02. | Find a confirmed pointer/lifetime/acceptance baseline before delegating this whole file. AGENTS regional invariants remain mandatory independently. |
 | <a id="d-02"></a>**D-02** [C++ driver](CompileOnDemand.md); blob `cbd294de3eb9825c8522b9eb7781e44a5ba8d844` | **Pending-human**, P-03/P-04. | Stage-specific build-and-run facility; its no-JIT boundary does not define the platform’s long-term execution strategy. |
 | <a id="d-03"></a>**D-03** [Package management](CodProjectStructureAndPkgMgmt.md); blob `4146412997de5179146a7010b5b034e32fcebfb9` | **Pending-human**, P-05. | Git/UUID/branch/lock mechanisms and semantic-unit distribution need scoped confirmation. Existing code is not approval. |
@@ -1788,3 +1788,9 @@ Preserve confirmed language contracts as the target and report gaps/results hone
 
 - H-399 changes the current stage’s ordering and completion conditions, not the target language. Charter §§2/§5.3–5.4/§6.3/§12 continues to require a coherent checked meaning and truthful supported-path evidence. The new instruction supersedes the incremental-retirement paragraph drafted under H-398.
 - Registry/D-GOV587→588 preserves prior human/continuity evidence. D-26r1→r2 records the confirmed removal-first constraint without qualifying its pending closure proposal; D-25’s task index and migration work log record permitted capability gaps. No additional downstream semantic scope or ABI is qualified. The 12-case pre-edit baseline remains historical comparison evidence only.
+
+### K-588 — Validation reference reflects the removal checkpoint (2026-11-13)
+<a id="k-588"></a>
+
+- Registry/D-GOV588→589 and tests/cod/language/README.md reference218→219 continue evidence maintenance under H-05/H-388/H-391 and H-399. Charter §§2–3/§6.3/§12 requires current support to be distinguished from intended contracts and historical observations.
+- The test reference now states the removal checkpoint's actual availability and unchanged legacy expectations. Its complete prior reference and scoped authority remain recoverable at immutable commit 2ab762d617b742f4fba7c2c617bacd303739ccef, tests/cod/language/README.md. Fixtures/assertions/reports and all human evidence remain intact. No new semantics or qualification follows; detailed progress stays in MicroDispatchMigrationWorkLog.md.
