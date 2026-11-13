@@ -41,6 +41,7 @@ struct CheckedOperation {
   std::optional<size_t> callee;
   std::optional<size_t> place;
   std::optional<size_t> binding;
+  std::set<size_t> targets, origins, selection_versions;
   std::optional<size_t> accumulator;
   bool read_only = false;
   bool view = false;
@@ -50,6 +51,8 @@ struct CheckedOperation {
   std::set<size_t> exceptions;
   std::set<size_t> captures;
   bool cause_at = false;
+  bool snapshot = false;
+  bool initialized_target = false;
 };
 
 struct CheckedStorage {
@@ -64,6 +67,7 @@ struct CheckedBinding {
   bool read_only;
   bool value_binding;
   bool fixed;
+  bool requires_initialized = false;
 };
 
 struct LexicalState {
@@ -73,6 +77,9 @@ struct LexicalState {
   std::map<size_t, std::set<size_t>> input_initialized{{0, {}}};
   std::map<size_t, std::uint64_t> requirements;
   std::map<size_t, std::set<size_t>> exceptions;
+  std::map<size_t, std::set<size_t>> targets;
+  std::map<size_t, std::set<size_t>> target_versions;
+  std::set<size_t> initialized_targets;
   std::map<size_t, size_t> queues{{0, 0}};
   std::uint64_t inputs = 1;
   bool live = true;
@@ -124,6 +131,11 @@ class ScalarChecker {
   std::vector<CheckedStorage> *storage_ = nullptr;
   std::vector<CheckedBinding> *bindings_ = nullptr;
   std::map<size_t, std::vector<size_t>> scope_storage_;
+  bool proving_ = false;
+  std::vector<std::set<size_t>> possible_targets_, target_dependencies_;
+  std::vector<CheckedStorage> catalog_storage_;
+  size_t next_target_version_ = 0;
+  std::set<size_t> rebound_;
   struct AbruptPath { LexicalState state; std::set<size_t> exceptions; Location at; Completion completion{2, false}; };
   struct AbruptFlow { size_t depth; std::vector<AbruptPath> paths; };
   AbruptFlow *abrupt_ = nullptr;
@@ -160,6 +172,12 @@ class ScalarChecker {
     auto &scope = declaration_scope(name, at);
     const auto id = bindings_->size();
     bindings_->push_back({place, read_only, value_binding, fixed});
+    lexical_.targets[id] = {place};
+    lexical_.target_versions[id] = {next_target_version_++};
+    if (!proving_) {
+      possible_targets_.push_back({place});
+      target_dependencies_.push_back({});
+    }
     scope.bindings.emplace(name, id);
     lexical_.bindings_available.insert(id);
     return id;
@@ -178,6 +196,45 @@ class ScalarChecker {
     for (const auto id : a) if (b.contains(id)) result.insert(id);
     return result;
   }
+  const CheckedStorage &storage(size_t place) const {
+    return place < storage_->size() ? storage_->at(place) : catalog_storage_.at(place);
+  }
+  void select_targets(CheckedOperation &operation, const std::set<size_t> &targets) const {
+    operation.targets = targets;
+    operation.place = targets.size() == 1 ? std::optional<size_t>{*targets.begin()} : std::nullopt;
+  }
+  void assign_targets(size_t binding, const CheckedOperation &source) {
+    lexical_.targets[binding] = source.targets;
+    lexical_.target_versions[binding] = {next_target_version_++};
+    lexical_.initialized_targets.erase(binding);
+    if (source.initialized_target) lexical_.initialized_targets.insert(binding);
+    if (!proving_) {
+      possible_targets_.at(binding).insert(source.targets.begin(), source.targets.end());
+      target_dependencies_.at(binding).insert(source.origins.begin(), source.origins.end());
+    }
+  }
+  void widen_targets(LexicalState &state) {
+    if (!proving_) return;
+    for (auto &[binding, targets] : state.targets) {
+      targets = possible_targets_.at(binding);
+      if (rebound_.contains(binding)) {
+        state.initialized_targets.erase(binding);
+        state.target_versions[binding] = {next_target_version_++};
+      }
+    }
+  }
+  void solve_targets() {
+    bool changed;
+    do {
+      changed = false;
+      for (size_t i = 0; i < possible_targets_.size(); ++i) for (const auto source : target_dependencies_[i]) {
+        const auto before = possible_targets_[i].size();
+        possible_targets_[i].insert(possible_targets_[source].begin(), possible_targets_[source].end());
+        changed = changed || before != possible_targets_[i].size();
+      }
+    } while (changed);
+    catalog_storage_ = *storage_;
+  }
   static std::vector<size_t> inputs(std::uint64_t mask) {
     std::vector<size_t> result;
     for (size_t i = 0; i <= exception_categories.size(); ++i) if (mask & (std::uint64_t{1} << i)) result.push_back(i);
@@ -186,6 +243,18 @@ class ScalarChecker {
   void initialize(size_t id) {
     lexical_.initialized.insert(id);
     for (const auto input : inputs(lexical_.inputs)) lexical_.input_initialized[input].insert(id);
+  }
+  void require_initialized(size_t place, const Location &at, const std::string &name) {
+    if (!proving_ || lexical_.initialized.contains(place)) return;
+    std::uint64_t missing = 0;
+    for (const auto input : inputs(lexical_.inputs))
+      if (!lexical_.input_initialized.at(input).contains(place)) missing |= std::uint64_t{1} << input;
+    if (!missing) return;
+    if (!delayed_ || !deferred_inputs_.contains(place))
+      fail(at, "read of '" + name + "' before definite initialization of every possible target");
+    const auto obligation = cleanup_.read(place);
+    read_sites_.push_back(at);
+    lexical_.requirements[obligation] |= missing;
   }
   static void refresh_initialized(LexicalState &state) {
     bool first = true;
@@ -219,6 +288,14 @@ class ScalarChecker {
     lexical_.exceptions = a_exits ? b.exceptions : a.exceptions;
     if (!a_exits && !b_exits) for (const auto &[id, categories] : b.exceptions)
       lexical_.exceptions[id].insert(categories.begin(), categories.end());
+    lexical_.targets = a_exits ? b.targets : a.targets;
+    lexical_.target_versions = a_exits ? b.target_versions : a.target_versions;
+    lexical_.initialized_targets = a_exits ? b.initialized_targets : b_exits ? a.initialized_targets : intersect(a.initialized_targets, b.initialized_targets);
+    if (!a_exits && !b_exits) for (const auto &[id, targets] : b.targets) {
+      lexical_.targets[id].insert(targets.begin(), targets.end());
+      const auto &versions = b.target_versions.at(id);
+      lexical_.target_versions[id].insert(versions.begin(), versions.end());
+    }
     lexical_.queues = a_exits ? b.queues : a.queues;
     if (!a_exits && !b_exits) for (const auto &[scope, queue] : b.queues)
       if (lexical_.queues.at(scope) != queue)
@@ -229,7 +306,12 @@ class ScalarChecker {
   }
   void retire_scope(LexicalState &state) {
     const auto &scope = state.scopes.back();
-    for (const auto &[name, id] : scope.bindings) state.bindings_available.erase(id);
+    for (const auto &[name, id] : scope.bindings) {
+      state.bindings_available.erase(id);
+      state.targets.erase(id);
+      state.target_versions.erase(id);
+      state.initialized_targets.erase(id);
+    }
     if (const auto owned = scope_storage_.find(scope.id); owned != scope_storage_.end()) for (const auto id : owned->second) {
       state.available.erase(id);
       state.initialized.erase(id);
@@ -286,13 +368,16 @@ class ScalarChecker {
           const auto binding = cleanup_.binding(read);
           if (state.initialized.contains(binding)) continue;
           if (!delayed_ || !deferred_inputs_.contains(binding))
-            fail(read_sites_.at(read), "cannot prove initialization of '" + (*storage_)[binding].name + "' for deferred read");
+            fail(read_sites_.at(read), "cannot prove initialization of '" + storage(binding).name + "' for deferred read");
           state.requirements[read] |= state.inputs;
         }
         for (const auto id : effects.initialized) if (state.available.contains(id)) state.initialized.insert(id);
         state.input_initialized = {{origin, state.initialized}};
-        if (cleanup_.has_actions(queue)) for (auto &[id, categories] : state.exceptions)
-          if (!(*storage_)[id].read_only) categories = exception_possibilities((*storage_)[id].type);
+        if (cleanup_.has_actions(queue)) {
+          widen_targets(state);
+          for (auto &[id, categories] : state.exceptions)
+            if (!(*storage_)[id].read_only) categories = exception_possibilities((*storage_)[id].type);
+        }
         state.queues[scope] = 0;
         if (!completion.reason) {
           const auto type = path.completion.reason ? Type{Type::void_type} : result.type;
@@ -314,7 +399,10 @@ class ScalarChecker {
       join(body, true, normals.front(), false, at);
       for (size_t i = 1; i < normals.size(); ++i) { const auto previous = lexical_; join(previous, false, normals[i], false, at); }
       result.type = *normal_type;
-      if (result.type == Type::void_type) { result.place.reset(); result.binding.reset(); result.view = result.read_only = false; result.exceptions.clear(); }
+      if (result.type == Type::void_type) {
+        result.place.reset(); result.binding.reset(); result.targets.clear(); result.origins.clear();
+        result.view = result.read_only = false; result.exceptions.clear();
+      }
     }
     return result;
   }
@@ -427,7 +515,7 @@ class ScalarChecker {
     return demand(best.front(), arguments, expr.at);
   }
   CheckedOperation check_guarded(const Expression &expr, CheckedInstance *instance,
-      std::map<const Expression *, CheckedOperation> &operations, bool read = true) {
+      std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false) {
     const auto before = lexical_;
     auto *outer = abrupt_;
     AbruptFlow incoming{lexical_.scopes.size(), {}};
@@ -442,7 +530,7 @@ class ScalarChecker {
       incoming.paths.push_back({std::move(state), {}, expr.at, {2, false}});
     }
     abrupt_ = &incoming;
-    const auto body = check(*expr.children[0], instance, operations, read);
+    const auto body = check(*expr.children[0], instance, operations, read, discard);
     const auto body_state = lexical_;
     std::vector<AbruptPath> control_inputs;
     for (const auto &path : incoming.paths) if (path.exceptions.empty()) control_inputs.push_back(path);
@@ -490,7 +578,7 @@ class ScalarChecker {
       caught_inputs_[id] = std::move(category_inputs);
       AbruptFlow handler_exits{before.scopes.size(), {}};
       abrupt_ = &handler_exits;
-      const auto handled_type = check(*handler.children.front(), instance, operations, read);
+      const auto handled_type = check(*handler.children.front(), instance, operations, read, discard);
       caught_ = active; catch_bindings_.erase(id);
       caught_inputs_.erase(id);
       leave_scope();
@@ -573,24 +661,35 @@ class ScalarChecker {
     if (!views.empty()) {
       result.place = views.front()->place;
       result.binding = views.front()->binding;
+      result.initialized_target = true;
       for (const auto *view : views) {
         result.view = result.view || view->view;
         result.read_only = result.read_only || view->read_only;
         if (result.place != view->place) result.place.reset();
         if (result.binding != view->binding) result.binding.reset();
+        result.targets.insert(view->targets.begin(), view->targets.end());
+        result.origins.insert(view->origins.begin(), view->origins.end());
+        result.selection_versions.insert(view->selection_versions.begin(), view->selection_versions.end());
+        result.initialized_target = result.initialized_target && view->initialized_target;
       }
+      if (std::any_of(views.begin(), views.end(), [](const auto *view) { return !view->view; })) result.targets.clear();
+      select_targets(result, result.targets);
     }
     result.exceptions = std::move(result_exceptions);
     return result;
   }
   Type check(const Expression &expr, CheckedInstance *instance,
-             std::map<const Expression *, CheckedOperation> &operations, bool read = true) {
+             std::map<const Expression *, CheckedOperation> &operations, bool read = true, bool discard = false) {
     using K = Expression::Kind;
     CheckedOperation operation;
-    const auto child = [&](size_t i, bool read_value = true) { return check(*expr.children.at(i), instance, operations, read_value); };
+    const auto child = [&](size_t i, bool read_value = true, bool discarded = false) { return check(*expr.children.at(i), instance, operations, read_value, discarded); };
     const auto view = [&](const CheckedOperation &source) {
       operation.place = source.place;
       operation.binding = source.binding;
+      operation.targets = source.targets;
+      operation.origins = source.origins;
+      operation.selection_versions = source.selection_versions;
+      operation.initialized_target = source.initialized_target;
       operation.view = source.view;
       operation.read_only = source.read_only;
     };
@@ -635,28 +734,29 @@ class ScalarChecker {
       if (!binding) fail(expr.at, "unknown scalar value '" + expr.text + "'");
       if (!lexical_.bindings_available.contains(*binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
       const auto &slot = (*bindings_)[*binding];
-      const auto place = slot.place;
-      if (!lexical_.available.contains(place)) fail(expr.at, "binding '" + expr.text + "' refers to storage whose lexical owner has ended");
-      if (delayed_controls_.contains(place)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
-      const bool captured = capture_catch(place);
-      if (read && !lexical_.initialized.contains(place)) {
-        std::uint64_t missing = 0;
-        for (const auto input : inputs(lexical_.inputs))
-          if (!lexical_.input_initialized.at(input).contains(place)) missing |= std::uint64_t{1} << input;
-        if (missing) {
-          if (!delayed_ || !deferred_inputs_.contains(place)) fail(expr.at, "read of '" + expr.text + "' before definite initialization");
-          const auto obligation = cleanup_.read(place);
-          read_sites_.push_back(expr.at);
-          lexical_.requirements[obligation] |= missing;
-        }
-      }
+      const auto owner = storage(slot.place).scope;
+      if (std::none_of(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &scope) { return scope.id == owner; }))
+        fail(expr.at, "binding '" + expr.text + "' refers to storage whose lexical owner has ended");
       operation.binding = binding;
-      operation.place = place;
-      operation.type = (*storage_)[place].type;
+      operation.selection_versions = lexical_.target_versions.at(*binding);
+      select_targets(operation, lexical_.targets.at(*binding));
+      operation.origins = {*binding};
+      operation.type = storage(slot.place).type;
       operation.read_only = slot.read_only;
       operation.view = true;
-      if (operation.type.kind == Type::exception)
-        operation.exceptions = delayed_ && !captured ? exception_possibilities(operation.type) : lexical_.exceptions.at(place);
+      operation.initialized_target = lexical_.initialized_targets.contains(*binding) ||
+          std::all_of(operation.targets.begin(), operation.targets.end(), [&](size_t place) { return lexical_.initialized.contains(place); });
+      for (const auto place : operation.targets) {
+        if (delayed_controls_.contains(place)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
+        const bool captured = capture_catch(place);
+        operation.snapshot = operation.snapshot || captured;
+        if (read && !operation.initialized_target) require_initialized(place, expr.at, expr.text);
+        if (operation.type.kind == Type::exception) {
+          const auto known = lexical_.exceptions.find(place);
+          const auto categories = (delayed_ && !captured) || known == lexical_.exceptions.end() ? exception_possibilities(operation.type) : known->second;
+          operation.exceptions.insert(categories.begin(), categories.end());
+        }
+      }
       break;
     }
     case K::unary: {
@@ -741,10 +841,10 @@ class ScalarChecker {
     case K::conditional: {
       if (child(0) != Type::boolean) fail(expr.at, "if condition requires bool");
       const auto before = lexical_;
-      const auto yes = child(1, read);
+      const auto yes = child(1, read, discard);
       const auto yes_state = lexical_;
       lexical_ = before;
-      const auto no = child(2, read);
+      const auto no = child(2, read, discard);
       const auto no_state = lexical_;
       join(yes_state, yes == Type::never, no_state, no == Type::never, expr.at);
       if (yes == Type::never) operation.type = no;
@@ -758,8 +858,17 @@ class ScalarChecker {
       else {
         operation.view = yes_fact.view || no_fact.view;
         operation.read_only = yes_fact.read_only || no_fact.read_only;
-        if (yes_fact.place == no_fact.place) operation.place = yes_fact.place;
+        if (yes_fact.view && no_fact.view) {
+          auto targets = yes_fact.targets;
+          targets.insert(no_fact.targets.begin(), no_fact.targets.end());
+          select_targets(operation, targets);
+        }
+        operation.origins = yes_fact.origins;
+        operation.origins.insert(no_fact.origins.begin(), no_fact.origins.end());
+        operation.initialized_target = yes_fact.initialized_target && no_fact.initialized_target;
         if (yes_fact.binding == no_fact.binding) operation.binding = yes_fact.binding;
+        operation.selection_versions = yes_fact.selection_versions;
+        operation.selection_versions.insert(no_fact.selection_versions.begin(), no_fact.selection_versions.end());
       }
       break;
     }
@@ -775,7 +884,7 @@ class ScalarChecker {
       if (expr.scoped) abrupt_ = &flow;
       bool exits = false;
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        operation.type = child(i, i + 1 == expr.children.size() ? read : true);
+        operation.type = child(i, i + 1 == expr.children.size() ? read : true, i + 1 == expr.children.size() ? discard : true);
         exits = exits || operation.type == Type::never;
         if (exits) lexical_.live = false;
       }
@@ -797,14 +906,16 @@ class ScalarChecker {
       Type accumulator;
       if (fold) { accumulator = child(2); require_value(accumulator); }
       const auto before = lexical_;
-      bool body_possible = true, empty_possible = true;
+      bool body_possible = true, empty_possible = true, repeat_possible = true;
       const auto start = constant_integer(*expr.children[0], operations), end = constant_integer(*expr.children[1], operations);
       if (start && end) {
         body_possible = first == Type::integer ? std::bit_cast<std::int64_t>(*start) < std::bit_cast<std::int64_t>(*end) : *start < *end;
         empty_possible = !body_possible;
+        repeat_possible = body_possible && *end - *start > 1;
       }
       const auto header = cleanup_.header(lexical_.queues.at(cleanup_scope_));
       lexical_.queues[cleanup_scope_] = header;
+      if (repeat_possible) widen_targets(lexical_);
       lexical_.live = lexical_.live && body_possible;
       for (auto &[id, categories] : lexical_.exceptions)
         if (!(*storage_)[id].read_only) categories = exception_possibilities((*storage_)[id].type);
@@ -818,18 +929,18 @@ class ScalarChecker {
         lexical_.exceptions[*operation.accumulator] = exception_possibilities(accumulator);
         loop_controls_.insert(*operation.accumulator);
       }
-      const auto body = child(fold ? 3 : 2);
+      const auto body = child(fold ? 3 : 2, true, !fold);
       if (fold && body != Type::never && body != accumulator) {
         if (widens(body, accumulator)) implementation_gap(expr.at, "fold accumulator conversion");
         fail(expr.at, "fold body does not satisfy the accumulator type");
       }
       leave_scope();
       const auto body_state = lexical_;
-      if (body != Type::never && lexical_.live)
+      if (repeat_possible && body != Type::never && lexical_.live)
         cleanup_.backedge(header, cleanup_.known(lexical_.queues.at(cleanup_scope_), lexical_.initialized));
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
-      const auto otherwise = !fold && expr.children.size() == 4 ? child(3) : Type{Type::void_type};
+      const auto otherwise = !fold && expr.children.size() == 4 ? child(3, true, true) : Type{Type::void_type};
       const auto empty_state = lexical_;
       const bool body_exits = !body_possible || body == Type::never;
       const bool empty_exits = !empty_possible || otherwise == Type::never;
@@ -842,7 +953,7 @@ class ScalarChecker {
     case K::pointer_group: {
       const bool value = expr.declaration_kind == "val";
       for (const auto &declaration : expr.children) {
-        if (declaration->kind == K::block) { check(*declaration, instance, operations); continue; }
+        if (declaration->kind == K::block) { check(*declaration, instance, operations, true, true); continue; }
         if (!declaration->owner_name.empty()) {
           if (value) fail(declaration->at, "val storage belongs to its lexical scope, not an external owner");
           implementation_gap(declaration->at, "explicit owner annotations on local reference bindings");
@@ -877,11 +988,17 @@ class ScalarChecker {
         const auto type = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : initial_type;
         const auto &source = operations.at(&initializer);
         const bool borrowed = !copy && source.view;
-        if (borrowed && !source.place) implementation_gap(initializer.at, "reference binding to runtime-selected storage");
+        if (borrowed && source.targets.empty()) implementation_gap(initializer.at, "reference join mixing fresh values and storage views");
         if (borrowed ? initial_type != type : !transfers_bits(initial_type, type))
           fail(declaration->at, "initializer does not satisfy declared " + expr.declaration_kind + " type");
-        if (borrowed && !lexical_.available.contains(*source.place))
-          fail(initializer.at, "reference initializer's lexical owner has ended");
+        if (borrowed) {
+          const auto owner = storage(*source.targets.begin()).scope;
+          for (const auto place : source.targets) {
+            if (storage(place).scope != owner) fail(initializer.at, "reference initializer joins different owners");
+            if (std::none_of(lexical_.scopes.begin(), lexical_.scopes.end(), [&](const auto &scope) { return scope.id == owner; }))
+              fail(initializer.at, "reference initializer's lexical owner has ended");
+          }
+        }
         if (borrowed && declaration->annotation && !declaration->read_only && source.read_only)
           fail(declaration->at, "readonly source cannot initialize a writable reference target");
         if (!borrowed && !initialized && expr.declaration_kind == "ref")
@@ -892,15 +1009,18 @@ class ScalarChecker {
         const bool read_only = declaration->read_only || (value && expr.fixed_binding) || (borrowed && source.read_only);
         size_t place;
         if (borrowed) {
-          place = *source.place;
-          bind(declaration->text, place, read_only, false, expr.fixed_binding, declaration->at);
+          place = *source.targets.begin();
+          const auto id = bind(declaration->text, place, read_only, false, expr.fixed_binding, declaration->at);
+          assign_targets(id, source);
         } else {
           place = declare(declaration->text, type, read_only, value, declaration->at);
           bindings_->back().fixed = expr.fixed_binding;
           if (initialized) initialize(place);
           if (type.kind == Type::exception) lexical_.exceptions[place] = initialized ? source.exceptions : exception_possibilities(type);
         }
+        bindings_->back().requires_initialized = expr.declaration_kind == "ref";
         CheckedOperation binding;
+        binding.binding = *lexical_.lookup(declaration->text);
         binding.place = place;
         binding.operand_type = type;
         binding.view = borrowed;
@@ -911,30 +1031,58 @@ class ScalarChecker {
     }
     case K::transfer: case K::rebind: {
       const auto destination = child(0, false);
-      const auto &target = operations.at(expr.children[0].get());
+      const auto target = operations.at(expr.children[0].get());
       if (!target.view) fail(expr.at, "assignment requires a storage destination");
-      if (!target.place) implementation_gap(expr.at, "assignment through a runtime-selected storage view");
-      const auto id = *target.place;
-      const auto &storage = (*storage_)[id];
-      if (std::none_of(lexical_.scopes.begin(), lexical_.scopes.end(),
-          [&](const LexicalState::Scope &scope) { return scope.id == storage.scope; }))
-        fail(expr.at, "assignment destination's lexical owner has ended");
+      if (target.targets.empty()) implementation_gap(expr.at, "assignment through a mixed value/storage view");
+      for (const auto place : target.targets)
+        if (std::none_of(lexical_.scopes.begin(), lexical_.scopes.end(),
+            [&](const auto &scope) { return scope.id == storage(place).scope; }))
+          fail(expr.at, "assignment destination's lexical owner has ended");
+      const bool binding_live = target.binding && lexical_.bindings_available.contains(*target.binding);
+      const auto versions = target.selection_versions;
       if (expr.kind == K::rebind) {
-        if (!target.binding) fail(expr.at, "rebinding requires a reference binding destination");
-        const auto &binding = (*bindings_)[*target.binding];
+        if (!target.binding) implementation_gap(expr.at, "runtime-selected reference binding destination");
+        if (!binding_live) fail(expr.at, "reference binding's lexical scope has ended");
+        const auto binding = (*bindings_)[*target.binding];
         if (binding.value_binding) fail(expr.at, "val storage has no reference binding; use '<-' for bits transfer");
         if (binding.fixed) fail(expr.at, "cannot rebind a const reference binding");
-        implementation_gap(expr.at, "mutable reference targets and fixed-owner flow");
+        const auto source = child(1, false);
+        const auto &selected = operations.at(expr.children[1].get());
+        if (!selected.view || selected.targets.empty()) implementation_gap(expr.at, "rebinding from a fresh value without an existing target");
+        if (source != destination) fail(expr.at, "reference rebinding requires the exact target type");
+        if (!binding.read_only && selected.read_only) fail(expr.at, "readonly source cannot rebind a writable reference target");
+        for (const auto place : selected.targets) {
+          if (storage(place).scope != storage(binding.place).scope) fail(expr.at, "reference rebinding cannot change the initializer-fixed owner");
+          if (std::none_of(lexical_.scopes.begin(), lexical_.scopes.end(),
+              [&](const auto &scope) { return scope.id == storage(place).scope; }))
+            fail(expr.at, "reference source's lexical owner has ended");
+          if (!selected.initialized_target && (binding.requires_initialized || (read && !discard))) require_initialized(place, expr.at, expr.children[0]->text);
+        }
+        assign_targets(*target.binding, selected);
+        if (!proving_) rebound_.insert(*target.binding);
+        operation = selected;
+        operation.binding = target.binding;
+        operation.selection_versions = lexical_.target_versions.at(*target.binding);
+        operation.origins = {*target.binding};
+        operation.read_only = binding.read_only;
+        break;
       }
       if (target.read_only) fail(expr.at, "cannot write through a readonly destination");
       const auto source = child(1);
       if (!transfers_bits(source, destination)) fail(expr.at, "bits transfer source does not satisfy destination type");
-      initialize(id);
+      if (target.place) initialize(*target.place);
+      if (binding_live && lexical_.target_versions.contains(*target.binding) && lexical_.target_versions.at(*target.binding) == versions)
+        lexical_.initialized_targets.insert(*target.binding);
       operation.type = operation.operand_type = destination;
-      operation.place = id;
+      select_targets(operation, target.targets);
+      operation.origins = target.origins;
       operation.read_only = operation.view = true;
+      operation.initialized_target = true;
       operation.exceptions = operations.at(expr.children[1].get()).exceptions;
-      if (destination.kind == Type::exception) lexical_.exceptions[id] = operation.exceptions;
+      if (destination.kind == Type::exception) for (const auto place : target.targets) {
+        if (target.place) lexical_.exceptions[place] = operation.exceptions;
+        else lexical_.exceptions[place].insert(operation.exceptions.begin(), operation.exceptions.end());
+      }
       break;
     }
     case K::return_value: {
@@ -980,7 +1128,7 @@ class ScalarChecker {
       operation.type = Type::never;
       break;
     }
-    case K::try_scope: operation = check_guarded(expr, instance, operations, read); break;
+    case K::try_scope: operation = check_guarded(expr, instance, operations, read, discard); break;
     case K::deferred: {
       const auto action = cleanup_.action();
       CleanupEquations::Action summary;
@@ -997,6 +1145,10 @@ class ScalarChecker {
         delayed_controls_.insert(loop_controls_.begin(), loop_controls_.end());
         delayed_ = true;
         deferred_inputs_ = before.available;
+        if (proving_) for (size_t place = 0; place < catalog_storage_.size(); ++place)
+          if (std::any_of(before.scopes.begin(), before.scopes.end(), [&](const auto &scope) { return scope.id == catalog_storage_[place].scope; }))
+            deferred_inputs_.insert(place);
+        widen_targets(lexical_);
         lexical_.queues[cleanup_scope_] = 0;
         lexical_.inputs = 1;
         lexical_.input_initialized = {{0, lexical_.initialized}};
@@ -1005,7 +1157,7 @@ class ScalarChecker {
         AbruptFlow flow{lexical_.scopes.size(), {}};
         abrupt_ = &flow;
         summary.guarded = expr.children.size() > 1;
-        const auto completed = summary.guarded ? check_guarded(expr, instance, operations).type : child(0);
+        const auto completed = summary.guarded ? check_guarded(expr, instance, operations, true, true).type : child(0, true, true);
         if (completed != Type::never && lexical_.live) flow.paths.push_back({lexical_, {}, expr.at, {0, false}});
         for (const auto &path : flow.paths) {
           const auto queue = path.state.queues.at(cleanup_scope_);
@@ -1051,6 +1203,20 @@ class ScalarChecker {
     }
     operations[&expr] = operation;
     return operation.type;
+  }
+
+  void begin_check(std::vector<CheckedStorage> &storage, std::vector<CheckedBinding> &bindings,
+                   std::map<const Expression *, CheckedOperation> &operations, bool proving) {
+    proving_ = proving;
+    storage_ = &storage; bindings_ = &bindings;
+    storage.clear(); bindings.clear(); operations.clear();
+    if (!proving) { possible_targets_.clear(); target_dependencies_.clear(); catalog_storage_.clear(); rebound_.clear(); }
+    lexical_ = {}; cleanup_ = {}; scope_storage_.clear(); read_sites_.clear();
+    loop_controls_.clear(); delayed_controls_.clear(); deferred_inputs_.clear();
+    caught_.reset(); catch_bindings_.clear(); caught_inputs_.clear();
+    captures_ = nullptr; delayed_ = false; prepared_call_ = nullptr;
+    cleanup_scope_ = 0; next_scope_ = 1;
+    next_target_version_ = 0;
   }
 
 public:
@@ -1117,44 +1283,41 @@ public:
       if (!method.type_parameters.empty()) continue;
       demand(i, program_.methods[i].parameters, method.at);
     }
-    storage_ = &program_.entry_storage;
-    bindings_ = &program_.entry_bindings;
-    lexical_ = {};
-    next_scope_ = 1;
-    AbruptFlow entry_flow{1, {}};
-    abrupt_ = &entry_flow;
-    for (const auto *expr : program_.initializers)
-      if (check(*expr, nullptr, program_.entry) == Type::never) lexical_.live = false;
-    CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
-    finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front()->at);
+    for (const bool proving : {false, true}) {
+      begin_check(program_.entry_storage, program_.entry_bindings, program_.entry, proving);
+      AbruptFlow entry_flow{1, {}};
+      abrupt_ = &entry_flow;
+      for (const auto *expr : program_.initializers)
+        if (check(*expr, nullptr, program_.entry, true, true) == Type::never) lexical_.live = false;
+      CheckedOperation entry_result; entry_result.type = lexical_.live ? Type{Type::void_type} : Type{Type::never};
+      finish_scope(entry_result, entry_flow, nullptr, 0, program_.initializers.empty() ? Location{} : program_.initializers.front()->at);
+      if (!proving) solve_targets();
+    }
     for (const auto &[name, id] : lexical_.scopes.front().bindings) module_values_.insert(name);
     for (size_t i = 0; i < program_.instances.size(); ++i) {
       auto &instance = program_.instances[i];
       const auto &method = *program_.methods[instance.method].source;
       checking_method_ = &program_.methods[instance.method];
-      storage_ = &instance.storage;
-      bindings_ = &instance.bindings;
-      scope_storage_.clear();
-      lexical_ = {};
-      cleanup_ = {};
-      read_sites_.clear();
-      cleanup_scope_ = 0;
-      next_scope_ = 1;
-      for (size_t p = 0; p < method.parameters.size(); ++p) {
-        const auto &parameter = method.parameters[p];
-        const bool value = parameter.declaration_kind == "val";
-        const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
-        bindings_->back().fixed = parameter.fixed_binding;
-        initialize(id);
-        lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
+      for (const bool proving : {false, true}) {
+        begin_check(instance.storage, instance.bindings, instance.operations, proving);
+        for (size_t p = 0; p < method.parameters.size(); ++p) {
+          const auto &parameter = method.parameters[p];
+          const bool value = parameter.declaration_kind == "val";
+          const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
+          bindings_->back().fixed = parameter.fixed_binding;
+          bindings_->back().requires_initialized = parameter.declaration_kind == "ref";
+          initialize(id);
+          lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
+        }
+        AbruptFlow flow{1, {}};
+        abrupt_ = &flow;
+        CheckedOperation completed;
+        completed.type = check(*method.body, &instance, instance.operations, true, true) == Type::never ? Type{Type::never} : Type{Type::void_type};
+        const auto completion = finish_scope(completed, flow, nullptr, 0, method.at).type;
+        if (proving && instance.result != Type::void_type && completion != Type::never && warned_missing_return_.insert(instance.method).second)
+          program_.warnings.push_back({Warning::missing_return, method.at, "callable may finish without an explicit return"});
+        if (!proving) solve_targets();
       }
-      AbruptFlow flow{1, {}};
-      abrupt_ = &flow;
-      CheckedOperation completed;
-      completed.type = check(*method.body, &instance, instance.operations) == Type::never ? Type{Type::never} : Type{Type::void_type};
-      const auto completion = finish_scope(completed, flow, nullptr, 0, method.at).type;
-      if (instance.result != Type::void_type && completion != Type::never && warned_missing_return_.insert(instance.method).second)
-        program_.warnings.push_back({Warning::missing_return, method.at, "callable may finish without an explicit return"});
       instance.complete = true;
     }
     return std::move(program_);
