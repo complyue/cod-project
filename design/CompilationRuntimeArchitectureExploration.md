@@ -1,10 +1,10 @@
 # Compilation and runtime architecture exploration
 
-Design revision: 1 · Recorded: 2026-11-12 America/Los_Angeles · Status: authorized exploration; candidate production designs pending whole-file review.
+Design revision: 2 · Recorded: 2026-11-12 America/Los_Angeles · Status: authorized exploration; candidate production designs pending whole-file review.
 
 ## Design authority
 
-- **Record and scope:** [D-25](DesignAuthorityRegistry.md#d-25), all sections. [H-387](DesignAuthorityRegistry.md#h-387) directly authorizes multiple architecture designs and isolated prototype validation; [K-573](DesignAuthorityRegistry.md#k-573) records scope and affected qualifications. It does not approve any candidate mechanism or final architecture.
+- **Record and scope:** [D-25](DesignAuthorityRegistry.md#d-25), all sections. [H-387](DesignAuthorityRegistry.md#h-387) directly authorizes multiple architecture designs and isolated prototype validation; [K-573](DesignAuthorityRegistry.md#k-573) records scope and affected qualifications; [K-574](DesignAuthorityRegistry.md#k-574) records revision2 experimental evidence without qualifying candidate mechanisms. It does not approve any candidate mechanism or final architecture.
 - **Candidate value path:** C-85/P-359 → C-01/C-04 and D-25/P-360 → C-85/C-02: preserve inspectable typed business intent, separate program/interpretation/execution state, and find an affordable route to native execution. These detailed agent-proposed derivations remain pending-human. The governing charter is [§§1–3, 4.3, 5–6, 8 and 12](RegionalSemanticPlatformCharter.md).
 - **Constraints/dependencies:** P-361 depends on D-01/D-10/D-14/D-15/D-17/D-18/D-21; D-16 additionally constrains numeric and semantic identity. P-362 records the user's fused-artifact, open-input and experimental RTTI boundaries. Preserve actual owners, independent complete callable values, zero-cost regional relocation, selected interpretations, perform/behave/touch, return/exception/defer and initialization operand effects.
 - **Baseline:** the current project user explicitly redirected work in the [architecture side chat](codex://threads/01a1d360-c1b0-7ca0-bd02-ea7ef88d2e0f), through the authorized [work package](../../.codex-handoffs/cod-project/2026-11-12-architecture-exploration/WORK_PACKAGE.md). Exact message timestamps and personal identity are unavailable. H-387 records excerpts and exclusions; H-386 requires topic discussion followed by whole-file approval.
@@ -56,14 +56,72 @@ These are architectural alternatives, not three settings of the existing fronten
 
 Available local tools include the current build's LLVM execution tools, Node/V8 and a Java runtime. GraalVM, RPython, OMR and added dependencies have not been installed. Tool availability affects which assumptions can be tested immediately; it is not an architecture ranking criterion.
 
-## Experiment design under development
+## Implemented boundary experiments
 
-The first experiment isolates the semantic/native boundary: a complete artifact retains base and extended interpretations and a dependency-local installation, while execution holds explicit bindings, complete callable snapshots, owner identities and pending completion. It compares semantic interpretation, prepared shared native kernels and selective native kernels without using the existing CoD frontend's expansion. Shared harness behavior must be distinguished from candidate-specific code.
+[Source, runner and reproduction notes](../experiments/architecture/README.md) · [Raw results](../experiments/architecture/results.json)
 
-Checks include current versus captured calls, independent copies, region remapping without payload-pointer patching, failed operand preparation, suppressed initialization writes, cleanup order and recovery, same-layout distinct semantic types, and runtime-supplied unseen tuples. An entry-only artifact and an observed-tuples-only dispatcher serve as deliberately incomplete controls. These are experimental designs, not language policy or preapproved selection criteria.
+The finite model retains base/extended/source interpretations and a dependency-local installation in one artifact. Execution holds bindings, independent callable snapshots, actual owner IDs and pending completion. Both argument types affect method selection; the second argument uses fixture-specific disjoint semantic classes. The model compares a small kernel interpreter, three prepared shared WebAssembly kernels and interpretation followed by per-kernel compilation after eight calls. The trigger is an experimental choice, not a recommended threshold. It does not use the existing CoD frontend.
 
-A separate LLVM execution probe will distinguish retained IR/checking work from eager or lazy native materialization. It must not claim that ORC's ability to defer code generation eliminates frontend semantic expansion. Timings, object/code counts and semantic traces will be recorded with tool/source identity and repeated runs; limitations will be carried into the recommendation.
+The regional model uses shared linear memory, self-relative payload references and a separate owner-to-base map. Remapping copies whole bytes to simulate a changed mapping, then changes one base record without patching payload fields. This is a test of the addressing distinction, not a production allocator, an actual mmap experiment or a claim that physical copying is free. Actual shilos protocols remain unchanged.
 
-## Evidence, criteria and recommendation
+Fifteen checks cover entry installation, complete fusion, two-argument semantic dispatch despite identical layouts, current/captured calls with owner rebinding, independent copies, touch without invocation, source views, procedure-local installation/restoration, suppressed initialization writes with operand/failure/cleanup behavior, readonly/expired-owner rejection and return/exception/defer transitions. The last transitions share a host scaffold; typed catch matching, cause chains, native unwinding, prepared owning arguments and complete CoD borrow checking are not implemented. An entry-only artifact is rejected. An observed-pairs-only control misses the injected external tuple. The external tuple uses existing type definitions; admitting new definitions is deliberately outside the model.
 
-Prototype results and the resulting selection criteria are pending. No winner is selected. The next deliverable is measured evidence with an explicit account of what was implemented, modelled and left unverified; the final recommendation will remain subject to whole-file review.
+A separate LLVM probe uses real TLS, dependency-local rebinding/restoration, preserved operand effects and captured/current inputs. The same independently generated IR runs through ORC with whole-module or function-level materialization. The function dumps record which cold definitions reach the native layer. This tests code-generation granularity, not a CoD checker, final-image dead-code elimination or a whole-language interpreter.
+
+**Status distinction:** execution state, kernel bytecode, layout records, method descriptors and the native boundary are implemented in the experiments. Full program control/defer is host scaffolding in the first model. WebAssembly native kernels are real, but a complete semantic-program executor, production native-readiness proof, regional integration, OSR/deoptimization and general semantic checking remain unverified. Truffle, RPython, Sulong and OMR have research evidence only.
+
+## Observations
+
+Five repetitions with deterministic shuffled mode order produced **90 successful model runs and 30 successful LLVM runs**. Each run uses a fresh process. The report records tool/source hashes, commands, all raw timings, traces and limits. Node/V8 runs disable lazy WebAssembly compilation and automatic Wasm tier-up, so prepared mode compiles all three kernels before the model's operations. This is kernel preparedness, not whole-program AOT. [V8 compilation controls](https://v8.dev/docs/wasm-compilation-pipeline)
+
+| Types / interpretations | Possible tuples | Serialized semantic artifact | Shared kernel modules after the repeated workload |
+| --- | ---: | ---: | ---: |
+| 3 / 3 | 27 | 3,949 B | 3; 213 B total Wasm |
+| 8 / 4 | 256 | 11,233 B | 3; 213 B total Wasm |
+| 32 / 16 | 16,384 | 116,411 B | 3; 213 B total Wasm |
+
+This is constructive evidence that every tuple need not receive independent code **for this method structure**. Semantic metadata still grows. WebAssembly bytes are not native machine-code bytes. General predicates, generic bodies, unsatisfied constraints and owner-dependent operations could change both growth and sharing.
+
+At32 types/16 interpretations and20,000 calls, measured loop times were:
+
+| Kernel execution | Median | Min–max | Cold model setup/check actions, median |
+| --- | ---: | ---: | ---: |
+| Interpreted | 19.343 ms | 19.019–22.767 ms | 1.823 ms |
+| Prepared native | 17.786 ms | 16.870–18.931 ms | 2.441 ms |
+| Selectively native | 18.488 ms | 17.508–19.047 ms | 2.294 ms |
+
+These include JS dispatch, owner checks, temporary argument objects and native crossings; they do not isolate arithmetic throughput. Cold timing includes assertion scenarios and excludes artifact checking measured separately. Host startup is separately recorded. The modest differences support investigating boundary and dispatch costs before choosing a JIT framework. They do not predict native CoD throughput or establish a universally best tier threshold. Some cold assertion sequences already trigger one kernel's compilation in selective mode.
+
+| Uncalled IR definitions | Function-level materialization, median process time | Whole-module materialization, median process time | Cold functions materialized |
+| --- | ---: | ---: | --- |
+| 10 | 21.05 ms | 18.00 ms | 0 versus10 |
+| 100 | 23.84 ms | 33.44 ms | 0 versus100 |
+| 1000 | 47.10 ms | 181.81 ms | 0 versus1000 |
+
+Both paths receive the same full IR:2,023/9,673/87,973 bytes. Laziness saves materialization in this probe and has overhead at the smallest size. It does not remove generation, parsing or checking of those definitions. ORC supports custom program representations, so a later semantic-level materializer can move the boundary earlier; that is a design/implementation task, not a benefit already obtained by switching the existing backend. [ORC representations and materialization](https://llvm.org/docs/ORCv2.html)
+
+## Criteria derived from the evidence
+
+These are provisional selection criteria produced by the exploration, not human-approved thresholds or language policies.
+
+| Criterion | Evidence and consequence | Candidate implications |
+| --- | --- | --- |
+| Retain all reachable interpretations without merging them | Entry-only negative control loses a dependency-local view; explicit views preserve different results. | Every candidate needs fusion independent of current TLS state. An entry-only runtime artifact is eliminated. |
+| Remain correct on admitted but unobserved input tuples | Observed-only control misses the injected pair; generic semantic dispatch executes it. | Source-observed specialization alone cannot be the executable contract. Preserve a coverage proof or a general path; new-definition admission remains open. |
+| Bound native work separately from semantic metadata | Three kernels handle increasing tuple products, while metadata grows; earlier CoD recomposition artifacts also grow. | Compare checked records, code bodies and bytes independently. Shared native AOT remains a serious candidate; tuple count alone does not justify JIT. |
+| Avoid mandatory full frontend lowering before a cold path can execute | ORC saves native work but receives identical complete IR in both modes. | Merely changing the current backend to lazy LLVM/Sulong fails this criterion. A semantic executor or demand-driven semantic-to-native boundary addresses the missing responsibility. |
+| Preserve real binding/owner/completion boundaries | Model modes agree under rebinding, remapping and failure/recovery checks. Production native unwinding/borrowing remain untested. | Any candidate must pass integrated region/exception tests before promotion. Native throughput alone is insufficient. |
+| Demonstrate useful work per native crossing | Native kernel gains are modest in the host-controlled workload; cold costs differ. | Investigate whole semantic blocks/functions and state-transfer cost before a framework or tiering policy is chosen. |
+| Make implementation burden explicit | ORC reuses linking/materialization; Truffle/RPython reuse interpreter optimization; all leave CoD semantic integration work. | Compare owned subsystems and measured adapter effort. No measured labor ranking exists, so installation availability and sunk costs cannot pick a winner. |
+
+No numerical elimination cutoff, weighted score or universal performance claim is established. The two eliminated controls are incomplete semantics; the backend-only change is insufficient to solve the stated frontend problem. None of the three architectural candidates is eliminated by these bounded experiments.
+
+## Recommendation and next bounded stage
+
+**Recommendation:** retain a checked semantic program representation and make native generation a consumer of that representation. Keep execution values, TLS bindings, actual owners and pending completion separate. Preserve both shared-native readiness and cold semantic execution as alternatives until an integrated program demonstrates their engineering costs. This is an exploratory recommendation, not approval of a production IR, checker or runtime ABI.
+
+The next decisive prototype should put the **whole small business program and completion flow into inspectable data**, not just method kernels. It should retain one finite recursive graph across changing runtime contexts, select at least two dependency-local interpretations, and execute an effect-result-dependent business branch. Run the same graph through a reference executor and a shared native lowering boundary; compare checking work, materialized bodies, state-transfer costs and trace/resource behavior. This addresses the largest evidence gap in the present common host scaffold.
+
+For reusable optimizing runtimes, the discriminating follow-up is an actual region-memory and cleanup adapter in a candidate framework, not an arithmetic speed test. Truffle/RPython/OMR require separate environment preparation under the existing toolchain restrictions; no installation or production commitment follows from this recommendation. ORC can be probed further with the existing tree, but convenience alone does not make it the winner.
+
+Whole-file review should eventually decide the production checking/execution boundary and native-before-execution contract, informed by those additional results. Layout/checksum/ABI choices, external graph admission and world evolution remain separate topics. Exploration remains active; this revision records the first evidence milestone, not a completed architecture selection.
