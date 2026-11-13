@@ -39,6 +39,7 @@ class LLVMEmission {
   std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
   std::vector<llvm::Value *> arguments_;
   std::vector<llvm::AllocaInst *> storage_, bindings_;
+  std::vector<const std::vector<Type> *> frame_types_;
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
   llvm::AllocaInst *result_ = nullptr, *category_ = nullptr, *site_ = nullptr, *fatal_ = nullptr, *exit_ = nullptr;
@@ -114,6 +115,26 @@ class LLVMEmission {
       return b_.CreateBitCast(value, native_type(type));
     }
     return b_.CreateTruncOrBitCast(value, native_type(type));
+  }
+  llvm::Value *view_address(llvm::Value *value) { return b_.CreateIntToPtr(b_.CreateExtractValue(value, 0), b_.getPtrTy()); }
+  llvm::Value *pack_view(llvm::Value *address, const Expression &expr, bool returned = false) {
+    const auto type = [&](size_t i) { const auto &fact = facts_[i]->at(&expr); return returned ? fact.operand_type : fact.type; };
+    llvm::Value *identity = b_.getInt32(tag(type(0)));
+    if (std::any_of(facts_.begin(), facts_.end(), [&](const auto *facts) {
+          const auto &fact = facts->at(&expr); return (returned ? fact.operand_type : fact.type) != type(0);
+        })) {
+      std::optional<size_t> parameter;
+      for (size_t p = 0; p < arguments_.size(); ++p) {
+        bool same = true;
+        for (size_t i = 0; i < facts_.size(); ++i) same = same && frame_types_[i]->at(p) == type(i);
+        if (same) { parameter = p; break; }
+      }
+      if (parameter) identity = b_.CreateExtractValue(arguments_[*parameter], 1);
+      else for (size_t i = 1; i < facts_.size(); ++i)
+        identity = b_.CreateSelect(matches(arguments_, *frame_types_[i]), b_.getInt32(tag(type(i))), identity);
+    }
+    auto *value = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(address, b_.getInt64Ty()), 0);
+    return b_.CreateInsertValue(value, identity, 1);
   }
   llvm::Value *convert(llvm::Value *value, const Type &from, const Type &to) {
     value = unpack(value, from);
@@ -267,7 +288,8 @@ class LLVMEmission {
       auto prepared = arguments;
       for (size_t i = 0; i < prepared.size(); ++i) {
         const auto &type = program_->methods[method].parameters[i];
-        if (type.kind == Type::exception) prepared[i] = pack(unpack(prepared[i], type), type);
+        if (type.kind == Type::exception && program_->methods[method].source->parameters[i].owner.empty())
+          prepared[i] = pack(unpack(prepared[i], type), type);
       }
       return b_.CreateCall(target, prepared);
     };
@@ -402,7 +424,7 @@ class LLVMEmission {
       std::vector<llvm::Value *> arguments;
       for (size_t j = 0; j < body.children.size(); ++j)
         arguments.push_back(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, j + 1)));
-      // Prepared scalars are independent bits, so their record can be released before invocation.
+      // Prepared values and checked borrowed addresses do not refer into their record.
       b_.CreateCall(release, {record});
       auto *result = invoke(body, arguments);
       auto *replace = block("defer.failed");
@@ -500,13 +522,29 @@ class LLVMEmission {
     if (facts_.front()->at(&expr).type == Type::never) { b_.CreateUnreachable(); return nullptr; }
     return load(saved);
   }
-  llvm::Value *checked_address(llvm::Value *address, const CheckedOperation &fact, const Location &at) {
-    if (!fact.targets.contains(null_target)) return address;
+  llvm::Value *checked_address(llvm::Value *address, const Expression &expr, const Location &at) {
+    if (std::none_of(facts_.begin(), facts_.end(), [&](const auto *facts) { return facts->at(&expr).targets.contains(null_target); })) return address;
     auto *present = block("reference.present"), *absent = block("reference.absent");
     b_.CreateCondBr(b_.CreateICmpEQ(address, null_pointer()), absent, present);
     b_.SetInsertPoint(absent); fail_path(ExceptionCategory::null_pointer, at);
     b_.SetInsertPoint(present);
     return address;
+  }
+  std::vector<llvm::Value *> prepare_arguments(const Expression &expr) {
+    const auto &modes = facts_.front()->at(&expr).arguments;
+    std::vector<llvm::Value *> arguments;
+    for (size_t i = 0; i < expr.children.size(); ++i) {
+      const auto mode = modes.empty() ? ArgumentMode::value : modes.at(i);
+      const auto &child = *expr.children[i];
+      auto *value = emit_expression(child, mode == ArgumentMode::value);
+      if (!reachable()) return {};
+      if (mode != ArgumentMode::value) {
+        if (mode == ArgumentMode::borrowed_read) value = checked_address(value, child, child.at);
+        value = pack_view(value, child);
+      }
+      arguments.push_back(value);
+    }
+    return arguments;
   }
   llvm::Value *emit_expression(const Expression &expr, bool read = true, bool discard = false) {
     using K = Expression::Kind;
@@ -525,7 +563,7 @@ class LLVMEmission {
       auto *address = !bindings_.at(*fact.binding) ? static_cast<llvm::Value *>(storage_.at(*fact.place)) : load(bindings_.at(*fact.binding));
       if (fact.snapshot && bindings_.at(*fact.binding))
         address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*fact.captured_place));
-      return read ? b_.CreateLoad(scalar_, checked_address(address, fact, expr.at)) : address;
+      return read ? b_.CreateLoad(scalar_, checked_address(address, expr, expr.at)) : address;
     }
     case K::unary: {
       if (fact.minimum_literal) return pack(integer(std::uint64_t{1} << 63), Type::integer);
@@ -569,11 +607,12 @@ class LLVMEmission {
         if (!reachable()) return nullptr;
         return pack(b_.CreateICmpEQ(address, null_pointer()), Type::boolean);
       }
-      std::vector<llvm::Value *> arguments;
-      for (const auto &argument : expr.children) {
-        arguments.push_back(emit_expression(*argument)); if (!reachable()) return nullptr;
-      }
-      return propagate(invoke(expr, arguments));
+      const auto arguments = prepare_arguments(expr);
+      if (!reachable()) return nullptr;
+      auto *value = propagate(invoke(expr, arguments));
+      if (!fact.borrowed_result) return value;
+      auto *address = view_address(value);
+      return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, expr, expr.at));
     }
     case K::conditional: {
       auto *condition = emit_expression(*expr.children[0]);
@@ -675,7 +714,7 @@ class LLVMEmission {
     case K::transfer: {
       auto *address = emit_expression(*expr.children[0], false);
       if (!reachable()) return nullptr;
-      address = checked_address(address, facts_.front()->at(expr.children[0].get()), expr.at);
+      address = checked_address(address, *expr.children[0], expr.at);
       auto *value = emit_expression(*expr.children[1]);
       if (!reachable()) return nullptr;
       value = choose(expr, {value}, choices(expr, {expr.children[1].get()}), scalar_, [&](const Choice &choice) {
@@ -690,18 +729,21 @@ class LLVMEmission {
       auto *address = emit_expression(*expr.children[1], false);
       if (!reachable()) return nullptr;
       b_.CreateStore(address, bindings_.at(*fact.binding));
-      return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, fact, expr.at));
+      return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, expr, expr.at));
     }
     case K::return_value: {
       llvm::Value *value = empty_scalar();
       if (!expr.children.empty()) {
-        value = emit_expression(*expr.children.front());
+        value = emit_expression(*expr.children.front(), !fact.borrowed_result);
         if (!reachable()) return nullptr;
-        auto *original = value;
-        value = choose(expr, {value}, choices(expr, {expr.children.front().get()}), scalar_, [&](const Choice &choice) {
-          if (choice.inputs.front() == Type::void_type) return empty_scalar();
-          return pack(convert(original, choice.inputs.front(), choice.operation->operand_type), choice.operation->operand_type);
-        });
+        if (fact.borrowed_result) value = pack_view(value, expr, true);
+        else {
+          auto *original = value;
+          value = choose(expr, {value}, choices(expr, {expr.children.front().get()}), scalar_, [&](const Choice &choice) {
+            if (choice.inputs.front() == Type::void_type) return empty_scalar();
+            return pack(convert(original, choice.inputs.front(), choice.operation->operand_type), choice.operation->operand_type);
+          });
+        }
       }
       b_.CreateStore(value, result_); b_.CreateStore(integer(0), category_); b_.CreateStore(null_pointer(), fatal_);
       b_.CreateStore(b_.getTrue(), returning_);
@@ -749,9 +791,8 @@ class LLVMEmission {
       if (record == scope_->deferred.end()) throw std::logic_error("uncollected deferred action");
       std::vector<llvm::Value *> arguments;
       if (body.kind == K::block) for (const auto id : fact.captures) arguments.push_back(load(storage_.at(id)));
-      else for (const auto &argument : body.children) {
-        arguments.push_back(emit_expression(*argument)); if (!reachable()) return nullptr;
-      }
+      else arguments = prepare_arguments(body);
+      if (!reachable()) return nullptr;
       auto *status = slot(b_.getInt64Ty(), "defer.status");
       b_.CreateStore(integer(0), status);
       const auto bytes = module_.getDataLayout().getTypeAllocSize(record->layout).getFixedValue();
@@ -788,22 +829,27 @@ class LLVMEmission {
     b_.CreateStore(integer(0), site_); b_.CreateStore(null_pointer(), fatal_); b_.CreateStore(b_.getInt8(0), exit_);
     for (auto *place : {requested_, available_, cause_}) b_.CreateStore(integer(0), place);
     storage_.clear();
-    for (const auto &binding : storage) storage_.push_back(slot(scalar_, binding.name + ".storage"));
+    for (const auto &binding : storage) storage_.push_back(binding.borrowed ? nullptr : slot(scalar_, binding.name + ".storage"));
     bindings_.clear();
     for (const auto &binding : bindings) bindings_.push_back(binding.value_binding ? nullptr : slot(b_.getPtrTy(), "reference.target"));
     for (size_t i = 0; i < arguments_.size(); ++i) {
+      if (storage[i].borrowed) { b_.CreateStore(view_address(arguments_[i]), bindings_[i]); continue; }
       b_.CreateStore(arguments_[i], storage_[i]);
       if (bindings_[i]) b_.CreateStore(storage_[i], bindings_[i]);
     }
   }
   void body(llvm::Function *function, const CheckedMethod &method, std::optional<size_t> instance) {
     const auto &layout = program_->instances[instance ? *instance : method.instances.front()];
-    begin(function, layout.storage, layout.bindings); facts_.clear();
-    if (instance) facts_.push_back(&program_->instances[*instance].operations);
+    begin(function, layout.storage, layout.bindings); facts_.clear(); frame_types_.clear();
+    if (instance) {
+      facts_.push_back(&program_->instances[*instance].operations);
+      frame_types_.push_back(&program_->instances[*instance].arguments);
+    }
     else {
       llvm::Value *admitted = b_.getFalse();
       for (const auto id : method.instances) {
         facts_.push_back(&program_->instances[id].operations);
+        frame_types_.push_back(&program_->instances[id].arguments);
         admitted = b_.CreateOr(admitted, matches(arguments_, program_->instances[id].arguments));
       }
       auto *valid = block("arguments.valid"), *invalid = block("arguments.invalid");
