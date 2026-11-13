@@ -3708,5 +3708,24 @@
       "owner 'o' requires the same actual owner for 'same'",
       "note: signature declared here"
     ]
+  },
+  {
+    "file": "closures/callable-replayed-procedure-recursion.cod",
+    "exit": 0,
+    "stdout": "21981\n4401\n100\n2000\n24001\n4809\n101\n2000\n101\n"
+  },
+  {
+    "file": "closures/callable-replayed-procedure-result.cod",
+    "exit": 0,
+    "stdout": "1100\n1100\n2300\n100\n"
+  },
+  {
+    "file": "closures/callable-replayed-procedure-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region in this caller scope",
+      "note: the referenced region was acquired here"
+    ]
   }
 ]

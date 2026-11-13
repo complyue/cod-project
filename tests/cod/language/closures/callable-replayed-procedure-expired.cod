@@ -1,0 +1,29 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @bias:u64;
+symbol @leaf:proc(u64)->const u64;
+symbol @route:proc(u64)->proc(u64)->const u64;
+proc forward(n:u64)->proc(u64)->const u64 {
+  if(n==0u64){return @leaf;}else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};
+    proc next=proc(n:u64)->proc(u64)->const u64{return forward(n);};
+    effect @route=next;
+    return perform @route(n-1u64);
+  }}
+}
+proc make_reader()->proc(u64)->const u64 {
+  effect @arena<-make Item(capacity=256u64){value<-99u64};
+  effect @bias<-1000u64;
+  proc seed=proc(n:u64)->const u64{return @arena.value+@bias+n;};
+  effect @leaf=seed;
+  proc first=proc(n:u64)->proc(u64)->const u64{return forward(n);};
+  effect @route=first;
+  return perform @route(20u64);
+}
+proc run()->void {
+  proc result=make_reader();
+  effect @leaf=result;
+  perform @leaf(0u64);
+}
+run();

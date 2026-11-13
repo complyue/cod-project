@@ -1,0 +1,45 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @bias:u64;
+symbol @step:proc(u64)->const u64;
+proc walk(n:u64)->const u64 {
+  if(n==0u64){return @arena.value;}else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};
+    proc next=proc(n:u64)->const u64{return walk(n)+perform @step(0u64);};
+    effect @step=next;
+    return perform @step(n-1u64);
+  }}
+}
+proc failure(n:u64)->const u64 {
+  if(n==0u64){return perform @step(0u64);}else{};
+  {{effect @arena<-make Item(capacity=if(n==3u64){0u64}else{256u64}){value<-n};
+    proc next=proc(n:u64)->const u64{return failure(n)+perform @step(0u64);};
+    effect @step=next;
+    return perform @step(n-1u64);
+  }}
+}
+proc run()->void {
+  effect @arena<-make Item(capacity=256u64){value<-99u64};
+  for(i in 0u64..2u64) {{
+    effect @bias<-1000u64;
+    proc seed=if(i==0u64){proc(n:u64)->const u64{return @arena.value+@bias+n;}}
+      else{proc(n:u64)->const u64{return @arena.value*2u64+@bias+n;}};
+    effect @step=seed;
+    proc first=proc(n:u64)->const u64{return walk(n);};
+    proc failing=proc(n:u64)->const u64{return failure(n);};
+    effect @bias<-2000u64;
+    effect @step=first;
+    behave @print(perform @step(20u64));
+    @arena.value<-@arena.value+1u64;
+    behave @print(perform @step(4u64));
+    effect @step=failing;
+    try {perform @step(20u64); {}}catch(e:const InvalidCapacity){behave @print(@arena.value);};
+    effect @step=first;
+    defer perform @step(4u64);
+    defer {behave @print(@bias);};
+  }};
+  behave @print(@arena.value);
+}
+run();

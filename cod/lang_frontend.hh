@@ -6015,6 +6015,41 @@ class Compiler {
       return pair_images(results(first), results(second),
           [&](const auto &x, const auto &y) { return same_image(same_image, x, y); });
     };
+    const auto same_callable_input = [&](const Value &first, const Value &second,
+                                         const CallableChoices &a, const CallableChoices &b) {
+      if (!a.closed || !b.closed) return !values;
+      if (std::is_permutation(a.definitions.begin(), a.definitions.end(),
+          b.definitions.begin(), b.definitions.end())) return true;
+      // Function images carry their own entry; contextual images need a
+      // matching checked schema and caller-local dispatch adaptation.
+      if (!preserved_outputs(left) || !preserved_outputs(right)) return false;
+      for (const auto *choices : {&a, &b})
+        for (const auto &source : choices->definitions) changed_inputs.insert(source->code.get());
+      if (contextual_callable(first.type))
+        return pair_images(a, b, [&](const auto &x, const auto &y) { return same_image(same_image, x, y); });
+      if (!same_callback(first, second, a, b)) return false;
+      if (left.result_flow || right.result_flow) {
+        const size_t checkpoint = matched_images.size();
+        if (!pair_images(a, b, [&](const auto &x, const auto &y) { return same_image(same_image, x, y); }))
+          matched_images.resize(checkpoint);
+      }
+      return true;
+    };
+    // An inherited replay supplies complete procedure values through TLS.
+    // Compare them as invocation inputs before proving returned images safe.
+    for (const auto &[id, a] : left.environment.bindings) {
+      if (!native_callable(*a) || !a->replayed) continue;
+      const auto *b = right.environment.lookup(id);
+      if (!b || !native_callable(*b) || !b->replayed) return false;
+      if (!capture_required(*a) && !capture_required(*b)) continue;
+      if (a->type != b->type || a->read_only != b->read_only || a->nullable != b->nullable ||
+          a->storage || b->storage || a->callable_address || b->callable_address ||
+          a->target_flow != b->target_flow || a->pointer_view != b->pointer_view ||
+          a->binding_read_only != b->binding_read_only || a->required_reference != b->required_reference ||
+          a->reference_read_only != b->reference_read_only) return false;
+      if (!same_callable_input(*a, *b, callable_choices(a->callable_flow), callable_choices(b->callable_flow)))
+        return false;
+    }
     for (size_t i = 0; i < left.arguments.size(); ++i) {
       const auto &first = left.arguments[i], &second = right.arguments[i];
       // Recursive return facts can depend on this very adapter. Its reuse is
@@ -6080,27 +6115,7 @@ class Compiler {
           callable_choices(first.callable_flow);
       const auto b = borrowed_parameter(right.type, i) ? bound_callable_choices(second, right.state.callables) :
           callable_choices(second.callable_flow);
-      if (!a.closed || !b.closed) {
-        if (values) return false;
-      } else if (!std::is_permutation(a.definitions.begin(), a.definitions.end(),
-          b.definitions.begin(), b.definitions.end())) {
-        // Function images carry their own entry; contextual images need a
-        // matching checked schema and caller-local dispatch adaptation.
-        if (!preserved_outputs(left) || !preserved_outputs(right)) return false;
-        for (const auto *choices : {&a, &b})
-          for (const auto &source : choices->definitions) changed_inputs.insert(source->code.get());
-        if (contextual_callable(first.type)) {
-          if (!pair_images(a, b, [&](const auto &x, const auto &y) { return same_image(same_image, x, y); }))
-            return false;
-        } else {
-          if (!same_callback(first, second, a, b)) return false;
-          if (left.result_flow || right.result_flow) {
-            const size_t checkpoint = matched_images.size();
-            if (!pair_images(a, b, [&](const auto &x, const auto &y) { return same_image(same_image, x, y); }))
-              matched_images.resize(checkpoint);
-          }
-        }
-      }
+      if (!same_callable_input(first, second, a, b)) return false;
     }
     const bool renamed_regions = std::any_of(regional_owners.begin(), regional_owners.end(),
         [](const auto &entry) { return entry.first != entry.second; });
@@ -6246,6 +6261,7 @@ class Compiler {
         continue;
       }
       if (!values || a == b) continue;
+      if (native_callable(*a) && a->replayed && b->replayed) continue;
       if (a->region_id && b->region_id && same_region(*a->region_id, *b->region_id)) continue;
       // Live numeric effects, including an already installed captured overlay,
       // are read from TLS in every activation. Unreplayed captures stay fixed.

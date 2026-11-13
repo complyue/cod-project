@@ -812,13 +812,15 @@ stress();
                                    '6001', '6002', '50', '50', '7001', '7002', '10050'], snapshot_output
         snapshot_evidence['fixture_sha256'] = hashlib.sha256(snapshot_demand.read_bytes()).hexdigest()
         evidence['regional_snapshot_demand'] = snapshot_evidence
-        for suffix, expected, regions, region_failures in (
-                ('recursion', ['102', '100', '500', '100', '101'], 43, 1),
-                ('mutual', ['1', '2', '99'], 42, 0),
-                ('group', ['1', '99'], 42, 0)):
-            captured = directory / f"closures/callable-captured-regional-{suffix}.cod"
+        for name, expected, regions, region_failures in (
+                ('captured_regional_recursion', ['102', '100', '500', '100', '101'], 43, 1),
+                ('captured_regional_mutual', ['1', '2', '99'], 42, 0),
+                ('captured_regional_group', ['1', '99'], 42, 0),
+                ('replayed_procedure_recursion', ['21981', '4401', '100', '2000', '24001', '4809', '101', '2000', '101'], 92, 2),
+                ('replayed_procedure_result', ['1100', '1100', '2300', '100'], 23, 0)):
+            captured = directory / f"closures/callable-{name.replace('_', '-')}.cod"
             source = captured.read_text()
-            if suffix == 'recursion':
+            if region_failures:
                 source = source.replace('InvalidCapacity', 'OutOfMemory').replace(
                     'if(n==3u64){0u64}', 'if(n==3u64){31337u64}')
             else:
@@ -850,7 +852,7 @@ stress();
             assert captured_output == expected + ['6001', '6002', '50', '7001', '7002', '10050'], captured_output
             captured_evidence['fixture_sha256'] = hashlib.sha256(captured.read_bytes()).hexdigest()
             captured_evidence['executed_source_sha256'] = hashlib.sha256(entry.read_bytes()).hexdigest()
-            evidence['captured_regional_' + suffix] = captured_evidence
+            evidence[name] = captured_evidence
         nullable_views = directory / "closures/callable-nullable-views.cod"
         entry.write_text(nullable_views.read_text() + '''
 using "std:exceptions" OutOfMemory;
