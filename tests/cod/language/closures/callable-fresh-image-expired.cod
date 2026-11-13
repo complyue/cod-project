@@ -1,0 +1,37 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @left:Item in pool,@right:Item in pool where {region pool:Item};
+symbol @bias:u64;
+symbol @leaf:proc(u64)->const u64;
+symbol @step:proc(u64)->proc(u64)->const u64;
+proc walk(n:u64)->proc(u64)->const u64 {
+  if(n==0u64){return @leaf;}else{};
+  {{effect @bias<-n;
+    proc seed=proc(n:u64)->const u64{touch @right;return @left.value+@bias+n;};
+    effect @leaf=seed;
+    proc next=proc(n:u64)->proc(u64)->const u64{return walk(n);};
+    {{effect @arena<-make Item(capacity=256u64){value<-n+1000u64};
+      effect @left=root(@arena),@right=root(@arena);
+      effect @step=next;
+      return perform @step(n-1u64);
+    }}
+  }}
+}
+proc make_selected()->proc(u64)->const u64 {
+  effect @arena<-make Item(capacity=256u64){value<-99u64};
+  effect @left=root(@arena),@right=root(@arena);
+  effect @bias<-500u64;
+  proc seed=proc(n:u64)->const u64{touch @right;return @left.value+@bias+n;};
+  effect @leaf=seed;
+  proc first=proc(n:u64)->proc(u64)->const u64{return walk(n);};
+  effect @step=first;
+  proc selected=perform @step(20u64);
+  return selected;
+}
+proc run()->void {
+  proc selected=make_selected();
+  effect @leaf=selected;
+  behave @print(perform @leaf(0u64));
+}
+run();

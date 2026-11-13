@@ -1,0 +1,40 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+symbol @bias:u64;
+symbol @leaf:proc(u64)->const u64;
+symbol @step:proc(u64)->const u64;
+proc first(n:u64)->const u64 {
+  if(n==0u64){return perform @leaf(0u64);}else{};
+  {{effect @bias<-n;
+    proc seed=proc(n:u64)->const u64{return @bias+n;};
+    effect @leaf=seed;
+    proc next=proc(n:u64)->const u64{return second(n);};
+    effect @step=next;
+    return perform @step(n-1u64);
+  }}
+}
+proc second(n:u64)->const u64 {
+  if(n!=0u64){
+    {{effect @bias<-n;
+      proc seed=proc(n:u64)->const u64{return @bias+n;};
+      effect @leaf=seed;
+      proc next=proc(n:u64)->const u64{return first(n);};
+      effect @step=next;
+      return perform @step(n-1u64);
+    }}
+  }else{};
+  return perform @leaf(0u64)+1u64;
+}
+proc run()->void {
+  effect @bias<-99u64;
+  proc seed=proc(n:u64)->const u64{return @bias+n;};
+  effect @leaf=seed;
+  for(i in 0u64..2u64) {{
+    proc selected=if(i==0u64){proc(n:u64)->const u64{return first(n);}}
+      else{proc(n:u64)->const u64{return second(n);}};
+    effect @step=selected;
+    behave @print(perform @step(20u64));
+  }};
+  behave @print(@bias);
+}
+run();

@@ -3727,5 +3727,44 @@
       "regional value requires a live owning region in this caller scope",
       "note: the referenced region was acquired here"
     ]
+  },
+  {
+    "file": "closures/callable-fresh-image-recursion.cod",
+    "exit": 0,
+    "stdout": "1521\n99\n99\n500\n500\n500\n"
+  },
+  {
+    "file": "closures/callable-fresh-image-mutual.cod",
+    "exit": 0,
+    "stdout": "1\n2\n99\n"
+  },
+  {
+    "file": "closures/callable-fresh-image-group.cod",
+    "exit": 0,
+    "stdout": "100\n99\n"
+  },
+  {
+    "file": "closures/callable-fresh-image-partial.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "shared-region constraint violated",
+      "a partial perform replay may require explicit touch of its companion symbol",
+      "note: shared region 'pool' declared here"
+    ]
+  },
+  {
+    "file": "closures/callable-fresh-image-result.cod",
+    "exit": 0,
+    "stdout": "100\n599\n99\n"
+  },
+  {
+    "file": "closures/callable-fresh-image-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region in this caller scope",
+      "note: the referenced region was acquired here"
+    ]
   }
 ]

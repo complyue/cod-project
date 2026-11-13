@@ -3039,9 +3039,14 @@ class Compiler {
     return type.kind == Type::reference || type.kind == Type::regional || type.kind == Type::array ||
            type.kind == Type::abstract_type;
   }
+  static bool replay_uses_symbol(const Environment &env, size_t id) {
+    const auto *value = env.lookup(id);
+    return env.replay->used.contains(id) ||
+        (value && env.captured(id, value) && value->capture_use && value->capture_use->used);
+  }
   const Value *effective_binding(const Environment &env, size_t id) const {
     const auto *value = env.lookup(id);
-    if (env.replay && !env.replay->used.contains(id) && (!value || env.captured(id, value)))
+    if (env.replay && !replay_uses_symbol(env, id) && (!value || env.captured(id, value)))
       return effective_binding(env.replay->caller, id);
     return value;
   }
@@ -3449,7 +3454,8 @@ class Compiler {
       const auto captures = procedure->captures.bindings;
       for (const auto &[id, binding] : captures)
         if (local_bits(binding->type) || object_type(binding->type) || binding->type.kind == Type::region) {
-          auto captured = *binding;
+          auto captured = binding->type.kind == Type::region ? borrowed(*binding) : *binding;
+          captured.replayed = false;
           captured.capture_use = std::make_shared<CaptureUse>(CaptureUse{false, binding->capture_use});
           capture_fields.emplace_back(fields.size(), captured.capture_use);
           dynamic_values.push_back(id);
@@ -5778,24 +5784,24 @@ class Compiler {
       };
       for (const auto &[id, value] : demand->environment.bindings) {
         if (demand->environment.captured(id, value) && !capture_required(*value)) continue;
-        if (value->region_id && demand->captured) fixed(*value->region_id);
         for (size_t owner : value->type.capture_regions) fixed(owner);
         if (native_callable(*value)) retain_images(retain_images, bound_callable_choices(*value, demand->state.callables));
       }
       for (const auto &source : callable_choices(demand->flow).definitions) if (source->code) {
         for (size_t owner : source->code->regions) fixed(owner);
         if (demand->captured) for (size_t owner : source->code->dynamic_regions)
-          if (dynamic_region_required(*source, owner)) fixed(owner);
+          if (dynamic_region_required(*source, owner)) {
+            fixed(owner);
+            const auto actual = region_source(owner);
+            if (actual >= demand->state.live.size() || !demand->state.live[actual]) return false;
+          }
       }
     }
     // Bindings supplied by a caller, including its active captured overlay,
     // are invocation inputs. Preserve their aliases and checked access.
     // Returned values undergo the independent-owner proofs below.
-    for (const auto &[id, a] : left.environment.bindings) {
-      const auto *b = right.environment.lookup(id);
-      if (!a->region_id || !b || !b->region_id) continue;
+    const auto relate_regions = [&](const Value *a, const Value *b) {
       const auto first = identity(*a->region_id), second = identity(*b->region_id);
-      if (first != second && (left.captured || right.captured)) return false;
       if (a != b) {
         resolve_region_root(*a->region_id, left.at);
         resolve_region_root(*b->region_id, right.at);
@@ -5803,11 +5809,31 @@ class Compiler {
         resolve_result_facts(av, left.at); resolve_result_facts(bv, right.at);
         if (a->type != b->type || a->read_only != b->read_only || a->nullable != b->nullable ||
             av.conformances != bv.conformances ||
-            regions_.at(*a->region_id).root != regions_.at(*b->region_id).root ||
-            !left.state.live.at(region_source(*a->region_id)) ||
-            !right.state.live.at(region_source(*b->region_id))) return false;
+            regions_.at(*a->region_id).root != regions_.at(*b->region_id).root) return false;
+        const auto al = region_source(*a->region_id), bl = region_source(*b->region_id);
+        if (al >= left.state.live.size() || bl >= right.state.live.size() ||
+            !left.state.live[al] || !right.state.live[bl]) return false;
       }
-      if (!associate(regional_owners, reverse_regional_owners, first, second)) return false;
+      return associate(regional_owners, reverse_regional_owners, first, second);
+    };
+    for (const auto &[id, a] : left.environment.bindings) {
+      const auto *b = right.environment.lookup(id);
+      if (a->region_id && b && b->region_id && !relate_regions(a, b)) return false;
+    }
+    if (values && left.environment.replay && right.environment.replay &&
+        left.environment.replay != right.environment.replay) {
+      // Untouched group companions come from behind the active overlay.
+      // Include their owner relations before comparing images and results.
+      for (const auto &[id, declaration] : symbol_declarations_) {
+        if (!declaration.form->symbol_owner) continue;
+        const auto *a = effective_binding(left.environment, id);
+        const auto *b = right.environment.lookup(id);
+        if (!replay_uses_symbol(left.environment, id) &&
+            (!b || right.environment.captured(id, b)))
+          b = effective_binding(right.environment.replay->caller, id);
+        if (bool(a) != bool(b)) return false;
+        if (a && (!a->region_id || !b->region_id || !relate_regions(a, b))) return false;
+      }
     }
     for (size_t i = 0; i < left.arguments.size(); ++i) if (left.type.parameters[i].owned) {
       const auto a = identity(*left.arguments[i].region_id);
@@ -5874,8 +5900,7 @@ class Compiler {
           ac.dynamic_values != bc.dynamic_values || ac.dynamic_procedures != bc.dynamic_procedures ||
           bool(ac.result_flow) != bool(bc.result_flow) || ac.regions.size() != bc.regions.size() ||
           ac.dynamic_regions.size() != bc.dynamic_regions.size() ||
-          a.lexical_captures.regional_slots != b.lexical_captures.regional_slots ||
-          a.captures.replay != b.captures.replay) return false;
+          a.lexical_captures.regional_slots != b.lexical_captures.regional_slots) return false;
       for (size_t i = 0; i < ac.regions.size(); ++i) {
         if (!same_region(ac.regions[i], bc.regions[i])) return false;
         resolve_region_root(ac.regions[i], left.at); resolve_region_root(bc.regions[i], right.at);
@@ -5926,6 +5951,8 @@ class Compiler {
       };
       if (!same_locals(a.lexical_captures.visible, b.lexical_captures.visible) ||
           !same_locals(a.lexical_captures.owner_anchors, b.lexical_captures.owner_anchors)) return false;
+      // Defining replay links propagate demand; their object identity is not
+      // part of the image schema. Compare the actual captured bindings.
       auto other = b.captures.bindings.begin();
       for (const auto &[id, value] : a.captures.bindings) {
         if (other == b.captures.bindings.end() || id != other->first ||
@@ -5966,6 +5993,17 @@ class Compiler {
       if (!preserved(demand.returns)) return false;
       return std::all_of(demand.failures.begin(), demand.failures.end(), preserved);
     };
+    if (values) {
+      const auto a = callable_choices(left.flow), b = callable_choices(right.flow);
+      if (!std::is_permutation(a.definitions.begin(), a.definitions.end(),
+          b.definitions.begin(), b.definitions.end())) {
+        if (!preserved_outputs(left) || !preserved_outputs(right) ||
+            !pair_images(a, b, [&](const auto &x, const auto &y) { return same_image(same_image, x, y); }))
+          return false;
+        for (const auto *choices : {&a, &b})
+          for (const auto &source : choices->definitions) changed_inputs.insert(source->code.get());
+      }
+    }
     const auto same_callback = [&](const Value &a, const Value &b,
                                      const CallableChoices &first, const CallableChoices &second) {
       // Non-contextual function images carry their own typed entry. Their
@@ -6035,12 +6073,19 @@ class Compiler {
       }
       return true;
     };
-    // An inherited replay supplies complete procedure values through TLS.
-    // Compare them as invocation inputs before proving returned images safe.
+    // TLS supplies complete procedure values from current holders or an
+    // inherited replay. Prove both before checking returned-image safety.
     for (const auto &[id, a] : left.environment.bindings) {
-      if (!native_callable(*a) || !a->replayed) continue;
+      const bool current_holder = a->storage && !left.environment.captured(id, a);
+      if (!native_callable(*a) || (!a->replayed && !(values && current_holder))) continue;
       const auto *b = right.environment.lookup(id);
-      if (!b || !native_callable(*b) || !b->replayed) return false;
+      if (!b || !native_callable(*b) || a->replayed != b->replayed) return false;
+      if (current_holder) {
+        if (!b->storage || right.environment.captured(id, b) ||
+            !same_callable_input(*a, *b, bound_callable_choices(*a, left.state.callables),
+                bound_callable_choices(*b, right.state.callables))) return false;
+        continue;
+      }
       if (!capture_required(*a) && !capture_required(*b)) continue;
       if (a->type != b->type || a->read_only != b->read_only || a->nullable != b->nullable ||
           a->storage || b->storage || a->callable_address || b->callable_address ||
@@ -6200,21 +6245,6 @@ class Compiler {
     if (left.environment.captured_context != right.environment.captured_context) return false;
     if (values) {
       if (bool(left.environment.replay) != bool(right.environment.replay)) return false;
-      if (left.environment.replay != right.environment.replay) {
-        // An inherited overlay replays the checked body's required symbols.
-        // Untouched companions of a shared-region group still use the caller.
-        for (const auto &[id, declaration] : symbol_declarations_) {
-          if (!declaration.form->symbol_owner) continue;
-          const auto *a = effective_binding(left.environment, id);
-          const auto *b = right.environment.lookup(id);
-          if (!left.environment.replay->used.contains(id) &&
-              (!b || right.environment.captured(id, b)))
-            b = effective_binding(right.environment.replay->caller, id);
-          if (bool(a) != bool(b)) return false;
-          if (a && (a->type != b->type || !a->region_id || !b->region_id ||
-              !same_region(*a->region_id, *b->region_id))) return false;
-        }
-      }
       // A recursive frame may construct local callable values. It cannot
       // reuse this context if any pre-existing holder has changed or expired.
       for (const auto &[holder, flow] : left.state.callables) {
@@ -6245,9 +6275,9 @@ class Compiler {
         const auto bc = bound_callable_choices(*b, right.state.callables);
         if (!ac.closed || !bc.closed) {
           if (values) return false;
-        } else if (!std::is_permutation(ac.definitions.begin(), ac.definitions.end(),
-            bc.definitions.begin(), bc.definitions.end(), [values](const auto &x, const auto &y) {
-              return values ? x == y : x->form == y->form && x->lexical == y->lexical && x->implementation == y->implementation;
+        } else if (!values && !std::is_permutation(ac.definitions.begin(), ac.definitions.end(),
+            bc.definitions.begin(), bc.definitions.end(), [](const auto &x, const auto &y) {
+              return x->form == y->form && x->lexical == y->lexical && x->implementation == y->implementation;
             })) return false;
         const auto at = callable_targets(a->callable_address), bt = callable_targets(b->callable_address);
         if (!at.closed || !bt.closed || at.holders.size() != 1 || bt.holders.size() != 1) {
@@ -6386,9 +6416,6 @@ class Compiler {
     for (auto *parent = demand.parent; parent; parent = parent->parent) ancestors.push_back(parent);
     std::reverse(ancestors.begin(), ancestors.end());
     for (const auto *ancestor : ancestors) {
-      const auto reaching = callable_choices(ancestor->flow);
-      if (!std::is_permutation(choices.definitions.begin(), choices.definitions.end(),
-                               reaching.definitions.begin(), reaching.definitions.end())) continue;
       if (!demand.emitted.empty()) continue;
       std::map<size_t, size_t> holders;
       if (!same_native_context(*ancestor, demand, true, &holders, pending_facts)) continue;
@@ -6407,13 +6434,18 @@ class Compiler {
     }
     for (const auto *ancestor : ancestors) {
       const auto reaching = callable_choices(ancestor->flow);
+      std::map<size_t, size_t> owners;
       if (std::is_permutation(choices.definitions.begin(), choices.definitions.end(),
           reaching.definitions.begin(), reaching.definitions.end(), [](const auto &a, const auto &b) {
             // A named recursive call can leave an image adapter for its
             // static descriptor once; that is not changing captured state.
             return a->code->direct == b->code->direct &&
                 a->form == b->form && a->lexical == b->lexical && a->implementation == b->implementation;
-          }) && same_native_context(*ancestor, demand, false)) {
+          }) && same_native_context(*ancestor, demand, false, nullptr, false, nullptr, nullptr, &owners)) {
+        // A distinct captured caller frame may reach a reusable helper.
+        // The partial cycle check cannot reject it as an unchanged context.
+        if (demand.captured && std::any_of(owners.begin(), owners.end(),
+            [](const auto &entry) { return entry.first != entry.second; })) continue;
         const auto unresolved = [&](const FlowState &state) {
           return std::any_of(state.callables.begin(), state.callables.end(),
               [&](const auto &entry) { return !callable_choices(entry.second).closed; });
@@ -10593,11 +10625,16 @@ public:
           demand.context = nullptr;
         }
         if (demand.reused) {
-          const auto reaching = callable_choices(demand.reused->flow);
-          if (!std::is_permutation(choices.definitions.begin(), choices.definitions.end(),
-                                  reaching.definitions.begin(), reaching.definitions.end()) ||
-              !same_native_context(*demand.reused, demand, true))
+          if (!same_native_context(*demand.reused, demand, true))
             fail(demand.at, "recursive callable arguments or effects require a distinct context");
+          if (demand.captured) for (const auto &source : choices.definitions) {
+            auto environment = source->captures;
+            environment.replay = std::make_shared<CaptureReplay>(CaptureReplay{
+                demand.environment, environment.captured_bindings, environment.replay, {}});
+            for (const auto &[id, value] : environment.bindings)
+              if (capture_required(*value)) require_symbol_capture(id, environment, value);
+            binding_check(environment, demand.at);
+          }
         }
       }
       for (size_t i = 0; i < pending_fields_.size(); ++i) {
@@ -10693,7 +10730,7 @@ public:
       matches_changed = false;
       for (const auto &[caller, pair] : adaptations)
         for (auto &child : callable_dispatches_) {
-          bool inside = !caller;
+          bool inside = !caller || caller->dispatch == &child;
           for (auto *parent = child.parent; parent; parent = parent->parent) inside |= parent == caller;
           if (!inside || child.matches.contains(pair.second)) continue;
           if (const auto match = child.matches.find(pair.first); match != child.matches.end()) {

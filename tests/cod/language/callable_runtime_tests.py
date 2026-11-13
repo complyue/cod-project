@@ -817,12 +817,16 @@ stress();
                 ('captured_regional_mutual', ['1', '2', '99'], 42, 0),
                 ('captured_regional_group', ['1', '99'], 42, 0),
                 ('replayed_procedure_recursion', ['21981', '4401', '100', '2000', '24001', '4809', '101', '2000', '101'], 92, 2),
-                ('replayed_procedure_result', ['1100', '1100', '2300', '100'], 23, 0)):
+                ('replayed_procedure_result', ['1100', '1100', '2300', '100'], 23, 0),
+                ('fresh_image_recursion', ['1521', '99', '99', '500', '500', '500'], 1, 1),
+                ('fresh_image_mutual', ['1', '2', '99'], 1, 0),
+                ('fresh_image_group', ['100', '99'], 22, 0),
+                ('fresh_image_result', ['100', '599', '99'], 22, 0)):
             captured = directory / f"closures/callable-{name.replace('_', '-')}.cod"
             source = captured.read_text()
             if region_failures:
                 source = source.replace('InvalidCapacity', 'OutOfMemory').replace(
-                    'if(n==3u64){0u64}', 'if(n==3u64){31337u64}')
+                    'if(n==3u64){0u64}', 'if(n==3u64){31337u64}').replace('capacity=0u64', 'capacity=31337u64')
             else:
                 source += '\nusing "std:exceptions" OutOfMemory;\n'
             entry.write_text(source + '''
