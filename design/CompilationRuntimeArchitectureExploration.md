@@ -1,8 +1,10 @@
 # CoD execution architecture: AOT micro-dispatch assessment
 
-Design revision: 11 · Recorded: 2026-11-13 America/Los_Angeles · Status: validated bounded AOT micro-dispatch implementation and design replacement; full-language mechanisms remain unqualified.
+Design revision: 12 · Recorded: 2026-11-13 America/Los_Angeles · Status: validated bounded AOT micro-dispatch implementation and design replacement; full-language mechanisms remain unqualified.
 
 ## Design authority
+
+**Source migration task:** [H-398](DesignAuthorityRegistry.md#h-398)/[K-586](DesignAuthorityRegistry.md#k-586) authorizes autonomous work from baseline `2ab762d617b742f4fba7c2c617bacd303739ccef`, preserved by the local annotated `multi-dispatch` tag. It includes the isolated result below, while its source compiler still requires migration. [The closure proposal](GenericAndRecursiveClosure.md) is pending whole-file review; [the migration work log](MicroDispatchMigrationWorkLog.md) tracks changing scope and evidence. Task authorization does not approve a new generic rule or permanent ABI. [H-399](DesignAuthorityRegistry.md#h-399)/[K-587](DesignAuthorityRegistry.md#k-587) requires removal of debt-producing historical machinery first. Current stage acceptance is a coherent foundation with honest capability gaps, not feature parity or a fully passing legacy suite.
 
 [D-25](DesignAuthorityRegistry.md#d-25), all sections, and the supporting [micro-dispatch package](../experiments/micro-dispatch/README.md). [H-396](DesignAuthorityRegistry.md#h-396)/[H-397](DesignAuthorityRegistry.md#h-397) authorizes the new work package revision 5, actual replacement of D-21's architecture, independent-branch execution and conditional merge. [K-585](DesignAuthorityRegistry.md#k-585) records alignment. The current project user supplied the instructions in [the source side chat](codex://threads/01a1d51f-3ef4-7101-a86c-94666675f5b6); precise message timestamps and personal identity are unavailable. Production mechanism/value-path qualification remains scoped, not inferred from a merge or successful prototype.
 
@@ -60,6 +62,6 @@ These limits do not defeat the explicitly delivered finite baseline. They preven
 
 The [work log](../experiments/micro-dispatch/WORK_LOG.md) records actual candidate validation, branch ancestry, elapsed work and merge state. The user has authorized merge into main if the bounded scope passes the package gate; no repeated merge permission is needed. Unsupported physical ABI/type-system/effect decisions stay pending even if the scoped design/prototype is merged.
 
-Next, design a checked abstract method/operation interface for one richer recursive compiler-domain workload, carrying actual owners, concrete evidence, result and required context contracts into a thin emitter. Prioritize the semantic/ownership interface and generic closure evidence before adding broad language syntax. Keep the unspecialized path correct as optional simplifications are introduced.
+Source migration first reviews the generic/recursive-closure contract, then designs a checked abstract method/operation interface for a real recursive CoD source-to-native workload, carrying actual owners, concrete evidence, result and required context contracts into a thin emitter. Prioritize the semantic/ownership interface and generic closure evidence before adding broad language syntax. Keep the unspecialized path correct as optional simplifications are introduced.
 
 Preserve method/callable/source associations for future profiling. ORC is an option only for future tracing-JIT hot paths; it is absent from the baseline and introduces no current dependency. No profiler, trace compiler, OSR/deoptimization, benchmark framework or engine installation is required by this assessment.
