@@ -77,15 +77,22 @@ extern "C" [[noreturn]] void cod_lang_uncaught(std::uint64_t category, std::uint
 def main():
     toolchain = ROOT / MODE
     results, batch_bodies = [], {}
-    cases = [("batch_small", 10, False, 0), ("batch_large", 10000, False, 0),
-             ("per_iteration", 10000, True, 0), ("allocation_failure", 10, False, 4)]
+    cases = [("batch_small", 10, False, 0, False), ("batch_large", 10000, False, 0, False),
+             ("per_iteration", 10000, True, 0, False), ("allocation_failure", 10, False, 4, False),
+             ("block_batch", 10000, False, 0, True), ("block_iteration", 10000, True, 0, True),
+             ("block_allocation_failure", 10, False, 4, True), ("block_during_cleanup", 10, False, 3, True)]
     with tempfile.TemporaryDirectory(prefix="cod-loop-runtime-") as directory:
         scratch = Path(directory)
-        for name, count, local, fail_on in cases:
+        for name, count, local, fail_on, delayed in cases:
             for general in (False, True):
                 label = f"{name}/{'general' if general else 'default'}"
                 path = scratch / "main.cod"
                 loop = 'for(i in 0..n){{defer consume(i);}};' if local else 'defer consume(-1);for(i in 0..n){defer consume(i);};defer consume(-2);'
+                if delayed:
+                    loop = ('for(i in 0..n){{val copy=i;defer{consume(copy);};}};' if local else
+                            'val current=n;defer{consume(-1);};for(i in 0..n){defer{current<-current-1;consume(current);};};defer{consume(-2);};')
+                if name == "block_during_cleanup":
+                    loop = 'defer{consume(-1);};defer{consume(42);defer{consume(-2);};};'
                 path.write_text('using symbol "std:io" @print;\nproc consume(x:T)->void where T {behave @print(x);}\n'
                                 'proc batch(n:i64)->void {' + loop + '}\nbatch(' + str(count) + ');\n')
                 ir, bc, runtime = [scratch / item for item in ("main.ll", "main.bc", "runtime.cc")]
@@ -109,6 +116,10 @@ def main():
                 expected = ('std::int64_t(observed)' if local else
                             f'std::int64_t({registrations}) - 2 - std::int64_t(observed)' if fail_on else
                             f'(observed == 0 ? -2 : observed == {count + 1} ? -1 : std::int64_t({count}) - std::int64_t(observed))')
+                if delayed and fail_on:
+                    expected = f'(observed == {registrations - 1} ? -1 : std::int64_t({count - 1}) - std::int64_t(observed))'
+                if name == "block_during_cleanup":
+                    expected = '(observed == 0 ? 42 : -1)'
                 defines = f'#define FAIL_ON {fail_on}\n#define EXPECTED_REGISTRATIONS {registrations}\n#define EXPECTED_PEAK {peak}\n#define EXPECTED_VALUE {expected}\n'
                 source = scratch / "instrumented.cc"
                 source.write_text(defines + WRAPPERS + runtime.read_text() + HARNESS)

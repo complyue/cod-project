@@ -43,9 +43,14 @@ class LLVMEmission {
   llvm::AllocaInst *result_ = nullptr, *category_ = nullptr, *site_ = nullptr, *fatal_ = nullptr, *exit_ = nullptr;
   std::vector<Location> sites_;
   struct Deferred {
-    const Expression *call;
+    const Expression *action;
     llvm::StructType *layout;
   };
+  struct Control {
+    Control *parent;
+    llvm::BasicBlock *exit;
+  };
+  Control *control_ = nullptr;
   struct Scope {
     Scope *parent;
     llvm::BasicBlock *cleanup;
@@ -130,7 +135,7 @@ class LLVMEmission {
   }
   void fail_path(ExceptionCategory category, const Location &at, llvm::Value *fatal = nullptr) {
     save_failure(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
-    b_.CreateBr(scope_->cleanup);
+    b_.CreateBr(control_->exit);
   }
   void require(llvm::Value *condition, const Location &at, const std::string &message) {
     auto *good = block("numeric.valid"), *bad = block("numeric.failure");
@@ -258,7 +263,7 @@ class LLVMEmission {
   llvm::Value *propagate(llvm::Value *result) {
     auto *bad = block("call.failed"), *good = block("call.completed");
     b_.CreateCondBr(failed(result), bad, good);
-    b_.SetInsertPoint(bad); save_failure(result); b_.CreateBr(scope_->cleanup);
+    b_.SetInsertPoint(bad); save_failure(result); b_.CreateBr(control_->exit);
     b_.SetInsertPoint(good);
     return b_.CreateExtractValue(result, 0);
   }
@@ -266,10 +271,30 @@ class LLVMEmission {
     if (expr.kind == Expression::Kind::block && expr.scoped) return;
     for (const auto &child : expr.children) collect_deferred(*child, scope);
     if (expr.kind != Expression::Kind::deferred) return;
-    const auto &call = *expr.children.front();
+    const auto &body = *expr.children.front();
     std::vector<llvm::Type *> fields{deferred_header_};
-    fields.insert(fields.end(), call.children.size(), scalar_);
-    scope.deferred.push_back({&call, llvm::StructType::get(context_, fields)});
+    if (body.kind != Expression::Kind::block) fields.insert(fields.end(), body.children.size(), scalar_);
+    scope.deferred.push_back({&expr, llvm::StructType::get(context_, fields)});
+  }
+  void complete_cleanup(const std::function<void()> &emit) {
+    // Suspend the pending completion while cleanup executes its own control flow.
+    std::vector<std::pair<llvm::AllocaInst *, llvm::Value *>> pending;
+    for (auto *place : {result_, category_, site_, fatal_, exit_}) pending.emplace_back(place, load(place));
+    b_.CreateStore(b_.getInt8(0), exit_);
+    b_.CreateStore(integer(0), category_);
+    b_.CreateStore(null_pointer(), fatal_);
+    Control action{control_, block("cleanup.completed")};
+    control_ = &action;
+    emit();
+    if (reachable()) b_.CreateBr(action.exit);
+    b_.SetInsertPoint(action.exit);
+    control_ = action.parent;
+    auto *restore = block("cleanup.preserve"), *done = block("cleanup.done");
+    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), restore, done);
+    b_.SetInsertPoint(restore);
+    for (const auto &[place, value] : pending) b_.CreateStore(value, place);
+    b_.CreateBr(done);
+    b_.SetInsertPoint(done);
   }
   void drain(Scope &scope) {
     b_.SetInsertPoint(scope.cleanup);
@@ -285,15 +310,27 @@ class LLVMEmission {
     const auto release = runtime("cod_lang_defer_free", b_.getVoidTy(), {b_.getPtrTy()});
     for (size_t i = 0; i < scope.deferred.size(); ++i) {
       const auto &descriptor = scope.deferred[i];
-      auto *run = block("defer.invoke"), *replace = block("defer.failed");
+      const auto &body = *descriptor.action->children.front();
+      auto *run = block("defer.invoke");
       dispatch->addCase(integer(i), run);
       b_.SetInsertPoint(run);
+      if (body.kind == Expression::Kind::block) {
+        b_.CreateCall(release, {record});
+        auto *pending_failure = b_.CreateICmpEQ(load(exit_), b_.getInt8(2));
+        complete_cleanup([&] {
+          if (descriptor.action->children.size() == 1) emit_expression(body);
+          else emit_finally(*descriptor.action, false, true, pending_failure);
+        });
+        b_.CreateBr(scope.cleanup);
+        continue;
+      }
       std::vector<llvm::Value *> arguments;
-      for (size_t j = 0; j < descriptor.call->children.size(); ++j)
+      for (size_t j = 0; j < body.children.size(); ++j)
         arguments.push_back(b_.CreateLoad(scalar_, b_.CreateStructGEP(descriptor.layout, record, j + 1)));
       // Prepared scalars are independent bits, so their record can be released before invocation.
       b_.CreateCall(release, {record});
-      auto *result = invoke(*descriptor.call, arguments);
+      auto *result = invoke(body, arguments);
+      auto *replace = block("defer.failed");
       b_.CreateCondBr(failed(result), replace, scope.cleanup);
       b_.SetInsertPoint(replace); save_failure(result); b_.CreateBr(scope.cleanup);
     }
@@ -314,6 +351,8 @@ class LLVMEmission {
   llvm::Value *full_scope(const std::vector<const Expression *> &expressions, bool callable,
                           const Location &at, bool returns_value = false, bool read_last = true) {
     Scope scope{scope_, block("scope.cleanup"), slot(b_.getPtrTy(), "defer.head"), {}};
+    Control control{control_, scope.cleanup};
+    control_ = &control;
     scope_ = &scope;
     b_.CreateStore(null_pointer(), scope.head);
     for (const auto *expr : expressions) collect_deferred(*expr, scope);
@@ -321,14 +360,43 @@ class LLVMEmission {
     auto *value = sequence(expressions, read_last);
     if (reachable()) {
       b_.CreateStore(value, saved);
-      if (callable && returns_value) fail_path(ExceptionCategory::missing_return, at);
-      else b_.CreateBr(scope.cleanup);
+      b_.CreateBr(scope.cleanup);
     }
-    drain(scope); scope_ = scope.parent;
-    if (callable) { b_.CreateBr(finish_); return nullptr; }
+    drain(scope); scope_ = scope.parent; control_ = control.parent;
+    if (callable) {
+      if (returns_value) {
+        auto *missing = block("return.missing");
+        b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), missing, finish_);
+        b_.SetInsertPoint(missing);
+        save_failure(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::missing_return)), integer(site(at)), null_pointer()));
+      }
+      b_.CreateBr(finish_);
+      return nullptr;
+    }
     auto *continuation = block("scope.continue");
-    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), continuation, scope.parent->cleanup);
+    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), continuation, control_->exit);
     b_.SetInsertPoint(continuation);
+    return load(saved);
+  }
+  llvm::Value *emit_finally(const Expression &expr, bool read, bool discard = false, llvm::Value *skip_body = nullptr) {
+    Control guarded{control_, block("try.completed")};
+    control_ = &guarded;
+    auto *saved = slot(scalar_, "try.value");
+    if (skip_body) {
+      auto *body = block("defer.body");
+      b_.CreateCondBr(skip_body, guarded.exit, body);
+      b_.SetInsertPoint(body);
+    }
+    auto *value = emit_expression(*expr.children[0], read);
+    if (reachable()) { b_.CreateStore(value, saved); b_.CreateBr(guarded.exit); }
+    b_.SetInsertPoint(guarded.exit);
+    control_ = guarded.parent;
+    complete_cleanup([&] { emit_expression(*expr.children[1]); });
+    auto *done = block("try.continue");
+    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), done, control_->exit);
+    b_.SetInsertPoint(done);
+    if (discard) return empty_scalar();
+    if (facts_.front()->at(&expr).type == Type::never) { b_.CreateUnreachable(); return nullptr; }
     return load(saved);
   }
   llvm::Value *emit_expression(const Expression &expr, bool read = true) {
@@ -501,15 +569,16 @@ class LLVMEmission {
         });
       }
       b_.CreateStore(value, result_); b_.CreateStore(integer(0), category_); b_.CreateStore(null_pointer(), fatal_);
-      b_.CreateStore(b_.getInt8(1), exit_); b_.CreateBr(scope_->cleanup);
+      b_.CreateStore(b_.getInt8(1), exit_); b_.CreateBr(control_->exit);
       return nullptr;
     }
+    case K::try_scope: return emit_finally(expr, read);
     case K::deferred: {
-      const auto &call = *expr.children.front();
-      auto record = std::find_if(scope_->deferred.begin(), scope_->deferred.end(), [&](const Deferred &entry) { return entry.call == &call; });
+      const auto &body = *expr.children.front();
+      auto record = std::find_if(scope_->deferred.begin(), scope_->deferred.end(), [&](const Deferred &entry) { return entry.action == &expr; });
       if (record == scope_->deferred.end()) throw std::logic_error("uncollected deferred action");
       std::vector<llvm::Value *> arguments;
-      for (const auto &argument : call.children) {
+      if (body.kind != K::block) for (const auto &argument : body.children) {
         arguments.push_back(emit_expression(*argument)); if (!reachable()) return nullptr;
       }
       auto *status = slot(b_.getInt64Ty(), "defer.status");
@@ -537,7 +606,7 @@ class LLVMEmission {
   void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage) {
     function_ = function; arguments_.clear();
     for (auto &argument : function->args()) arguments_.push_back(&argument);
-    b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr;
+    b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     result_ = slot(scalar_, "return.value"); category_ = slot(b_.getInt64Ty(), "exception.category");
     site_ = slot(b_.getInt64Ty(), "exception.site"); fatal_ = slot(b_.getPtrTy(), "numeric.failure");
     exit_ = slot(b_.getInt8Ty(), "completion.kind");

@@ -84,6 +84,10 @@ class ScalarChecker {
   std::set<const Expression *> warned_shadow_;
   LexicalState lexical_;
   std::vector<CheckedStorage> *storage_ = nullptr;
+  struct AbruptFlow { size_t depth; std::vector<LexicalState> paths; };
+  AbruptFlow *abrupt_ = nullptr;
+  std::set<size_t> loop_controls_, delayed_controls_;
+  bool delayed_ = false;
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
 
@@ -115,8 +119,21 @@ class ScalarChecker {
     for (const auto &[name, id] : lexical_.scopes.back().bindings) {
       lexical_.available.erase(id);
       lexical_.initialized.erase(id);
+      loop_controls_.erase(id);
     }
     lexical_.scopes.pop_back();
+  }
+  void note_abrupt() {
+    if (!abrupt_) return;
+    auto state = lexical_;
+    while (state.scopes.size() > abrupt_->depth) {
+      for (const auto &[name, id] : state.scopes.back().bindings) {
+        state.available.erase(id);
+        state.initialized.erase(id);
+      }
+      state.scopes.pop_back();
+    }
+    abrupt_->paths.push_back(std::move(state));
   }
   static std::optional<std::uint64_t> constant_integer(const Expression &expr,
       const std::map<const Expression *, CheckedOperation> &operations) {
@@ -218,6 +235,32 @@ class ScalarChecker {
     if (best.size() != 1) fail(expr.at, "ambiguous methods for '" + expr.text + "'");
     return demand(best.front(), arguments, expr.at);
   }
+  CheckedOperation check_finally(const Expression &expr, CheckedInstance *instance,
+      std::map<const Expression *, CheckedOperation> &operations, bool read = true) {
+    if (expr.children.size() != 2 || expr.children[1]->kind != Expression::Kind::block)
+      implementation_gap(expr.at, "typed exception handlers and exception values");
+    auto *outer = abrupt_;
+    AbruptFlow incoming{lexical_.scopes.size(), {}};
+    if (expr.kind == Expression::Kind::deferred) incoming.paths.push_back(lexical_);
+    abrupt_ = &incoming;
+    const auto body = check(*expr.children[0], instance, operations, read);
+    const auto normal = lexical_;
+    // Finally must be valid on every normal, return and failure path that enters it.
+    for (const auto &path : incoming.paths) {
+      const auto joined = lexical_;
+      join(joined, false, path, false, expr.at);
+    }
+    abrupt_ = outer;
+    const auto cleanup = check(*expr.children[1], instance, operations);
+    if (cleanup != Type::void_type && cleanup != Type::never) fail(expr.at, "finally must complete with void or an explicit return");
+    if (!incoming.paths.empty()) note_abrupt();
+    // Exceptional paths cannot reach the expression's normal continuation.
+    lexical_.available.insert(normal.available.begin(), normal.available.end());
+    lexical_.initialized.insert(normal.initialized.begin(), normal.initialized.end());
+    auto result = operations.at(expr.children[0].get());
+    result.type = cleanup == Type::never ? Type{Type::never} : body;
+    return result;
+  }
   Type check(const Expression &expr, CheckedInstance *instance,
              std::map<const Expression *, CheckedOperation> &operations, bool read = true) {
     using K = Expression::Kind;
@@ -268,7 +311,11 @@ class ScalarChecker {
       const auto binding = lexical_.lookup(expr.text);
       if (!binding) fail(expr.at, "unknown scalar value '" + expr.text + "'");
       if (!lexical_.available.contains(*binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
-      if (read && !lexical_.initialized.contains(*binding)) fail(expr.at, "read of '" + expr.text + "' before definite initialization");
+      if (delayed_controls_.contains(*binding)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
+      if (read && !lexical_.initialized.contains(*binding)) {
+        if (delayed_) implementation_gap(expr.at, "deferred read requires initialization proved before registration");
+        fail(expr.at, "read of '" + expr.text + "' before definite initialization");
+      }
       operation.place = binding;
       operation.type = (*storage_)[*binding].type;
       operation.read_only = (*storage_)[*binding].read_only;
@@ -292,6 +339,7 @@ class ScalarChecker {
       } else if (argument != Type::integer && !(expr.text == "-" && floating(argument)))
         fail(expr.at, "numeric unary operation requires i64, or floating point for negation");
       operation.type = operation.operand_type = argument;
+      if (expr.text == "-" && argument == Type::integer) note_abrupt();
       break;
     }
     case K::binary: {
@@ -315,6 +363,7 @@ class ScalarChecker {
         if (expr.text == "%" && floating(operation.operand_type)) fail(expr.at, "remainder requires integer operands");
       }
       operation.type = comparison || logical ? Type{Type::boolean} : operation.operand_type;
+      if (!comparison && !logical && integral(operation.operand_type)) note_abrupt();
       break;
     }
     case K::call: {
@@ -327,6 +376,7 @@ class ScalarChecker {
       if (method && method->kind == Form::Kind::function && program_.methods[target.method].source->kind == Form::Kind::procedure)
         fail(expr.at, "a function cannot invoke a procedure");
       operation.type = target.result;
+      note_abrupt();
       break;
     }
     case K::behave: case K::perform: {
@@ -369,7 +419,7 @@ class ScalarChecker {
         exits = exits || operation.type == Type::never;
       }
       if (!expr.children.empty()) view(operations.at(expr.children.back().get()));
-      if (expr.scoped) leave_scope();
+      if (expr.scoped) { leave_scope(); note_abrupt(); }
       if (exits) operation.type = Type::never;
       break;
     }
@@ -384,9 +434,11 @@ class ScalarChecker {
       lexical_.scopes.push_back({next_scope_++, {}});
       operation.place = declare(expr.text, first, true, true, expr.at);
       lexical_.initialized.insert(*operation.place);
+      loop_controls_.insert(*operation.place);
       if (fold) {
         operation.accumulator = declare(expr.binding, accumulator, true, true, expr.at);
         lexical_.initialized.insert(*operation.accumulator);
+        loop_controls_.insert(*operation.accumulator);
       }
       const auto body = child(fold ? 3 : 2);
       if (fold && body != Type::never && body != accumulator) {
@@ -485,12 +537,27 @@ class ScalarChecker {
         fail(expr.at, "return type '" + type_name(value) + "' does not satisfy '" + type_name(instance->result) + "'");
       operation.type = Type::never;
       operation.operand_type = instance->result;
+      note_abrupt();
       break;
     }
+    case K::try_scope: operation = check_finally(expr, instance, operations, read); break;
     case K::deferred: {
-      if (expr.children.size() != 1 || expr.children.front()->kind == K::block)
-        implementation_gap(expr.at, "deferred blocks and exception handlers");
-      child(0);
+      if (expr.children.front()->kind == K::block) {
+        const auto before = lexical_;
+        const auto controls = delayed_controls_;
+        const auto was_delayed = delayed_;
+        auto *outer = abrupt_;
+        delayed_controls_.insert(loop_controls_.begin(), loop_controls_.end());
+        delayed_ = true;
+        abrupt_ = nullptr;
+        if (expr.children.size() == 1) child(0);
+        else check_finally(expr, instance, operations);
+        lexical_ = before;
+        delayed_controls_ = controls;
+        delayed_ = was_delayed;
+        abrupt_ = outer;
+      } else child(0);
+      note_abrupt();
       operation.type = Type::void_type;
       break;
     }
