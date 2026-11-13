@@ -16,18 +16,18 @@ Operational tracking for the user-authorized migration recorded in [H-398](Desig
 
 ## Current work
 
-The first design activity is [the generic/recursive-closure contract](GenericAndRecursiveClosure.md), pending whole-file approval. It distinguishes fixed-instance recursion, finite instantiation/recursive descriptions and expanding semantic obligations. The proposal reports unsupported closure as unproved instead of treating a work cap as a proof or silently selecting a new language restriction.
+The closure contract is approved at D-26r7/H-407; D-21r9, D-15r22 and D-25r13 carry the reconciled outside-catalog boundary. The user requested a new autonomous foundation goal on 2026-11-13. H-399/H-408 governs practical stage acceptance. The earlier universal-unproved proposal is superseded; actual semantic errors, resource stops and identified implementation gaps are distinct.
 
-Read-only source audit confirms that `Value`, `NativeCallDemand`, `compile()`, `record_field()` and `LLVMEmission::type_of()` couple semantic state to concrete LLVM transport and context-specific checking. Existing generic, recursive-capture and growing-callback fixtures provide important retained behavior. Their current implementation does not settle pending result-inference or ABI choices.
+The concrete validation checkpoint is a usable scalar-method foundation: real CoD source with shared generic method bodies, runtime local operation/overload selection, direct and mutual recursion, explicit returns, conditional control, printing and ordered prepared cleanup. Correct retained paths and useful rejection evidence are required. Product/abstract regional carriers, persistence admission, arbitrary captures/worlds and full generic analysis remain explicit capability gaps, not language restrictions. This checkpoint does not select their permanent ABI.
 
-Next work:
+Implementation sequence:
 
-1. Finish closure topic review and inventory retained source behaviors with their actual design authority.
-2. Derive a checked method/value/operation boundary from the agreed closure contract and a concrete source-to-native acceptance workload. Keep unresolved carrier/result/identity decisions reviewable.
-3. Remove the old entangled implementation first, retain reusable syntax/native primitives, and add coherent checked source-to-native paths on the new foundation. Track missing capabilities explicitly; no parallel legacy semantic path remains solely for compatibility.
-4. Validate abstract arguments/results, independent polymorphic fields, selection, recursion, actual owners/context and cleanup with specialization disabled, then run the required exact repository build and applicable focused acceptance checks.
+1. Retain one LLVM-independent checked method/operation graph, with source locations and checked call targets. Checking may retain distinct finite scalar substitutions; emitted bodies are shared by method definition.
+2. Emit general native bodies and local type-dependent operations, with no legacy fallback or specialization pass. The execution-local scalar carrier is private to generated code and stores no persistent identity or regional graph.
+3. Preserve explicit completion and cleanup on supported paths. Reuse native primitives; unsupported constructs receive specific implementation-gap diagnostics.
+4. Validate representative source/native results, recursive body counts, generic type distinctions and meaningful negative cases, then record supported/missing behavior and exact build results.
 
-A focused baseline run finished before compiler changes: 12/12 observations passed using `COD_TEST_TOOLCHAIN=build`, including the runner’s frontend-only check. The report is `/tmp/cod-source-micro-dispatch-baseline.json`. Selected fixtures cover abstract forwarding/ambiguity/narrowing, direct and mutual recursion, generic calls/bounds, fresh captures, growing callbacks/expired owners and deferred recursion. This is historical comparison evidence, not a promise of stage feature parity. No source-migration completion or whole-language support is claimed.
+The 12-observation pre-removal baseline passed and the unchanged selection after removal failed; both are historical comparison evidence, not stage parity requirements. Reports remain at `/tmp/cod-source-micro-dispatch-baseline.json` and `/tmp/cod-source-micro-dispatch-removal.json`.
 
 ## Removal checkpoint
 
@@ -42,3 +42,7 @@ Final removal-checkpoint validation: `cmake --build ./build` passed after the ru
 
 
 Removal checkpoint committed as `8048666` on `codex/source-micro-dispatch`; main and the `multi-dispatch` tag are unchanged. The validation index now describes current capability and directs historical source-form details to the immutable baseline, so old passing reports do not imply current support. The closure contract remains pending whole-file review; its revision 2 incorporates the confirmed removal-first stage boundary without reopening that priority.
+
+## Goal restart
+
+The previous broad goal was paused and cleared by the user. The replacement foundation goal was explicitly requested after D-26 approval; no new time/token allowance or toolchain permission was supplied. Source work proceeds within qualified behavior, and no unchanged design decision is being reopened. The five side-review document updates are retained intact.
