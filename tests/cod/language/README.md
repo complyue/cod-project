@@ -4,7 +4,9 @@ Reference revision: 220 · Recorded: 2026-11-13 America/Los_Angeles.
 
 ## Design authority
 
-This validation index follows [D-21](../../../design/AheadOfTimeMultipleDispatch.md) and the source migration under [H-398](../../../design/DesignAuthorityRegistry.md#h-398)/[H-399](../../../design/DesignAuthorityRegistry.md#h-399). [K-595](../../../design/DesignAuthorityRegistry.md#k-595) records revision220 availability under the approved D-26r8/H-407/H-409 coverage contract. The confirmed baseline, value path and exclusions remain in D-21/D-26; this revision changes the implementation inventory only. Existing fixture expectations retain their governing language, owner, context and completion contracts; this document grants no new semantics or implementation qualification. Charter §§2–3/§6.3/§12 requires observable native evidence and an honest distinction between intended behavior and current support.
+- **D-21 link continuity:** [K-596](../../../design/DesignAuthorityRegistry.md#k-596) updates the execution-preparation document locator; this document’s semantic revision, qualified scope and exclusions are unchanged.
+
+This validation index follows [D-21](../../../design/AheadOfTimeExecutionPreparation.md) and the source migration under [H-398](../../../design/DesignAuthorityRegistry.md#h-398)/[H-399](../../../design/DesignAuthorityRegistry.md#h-399). [K-595](../../../design/DesignAuthorityRegistry.md#k-595) records revision220 availability under the approved D-26r8/H-407/H-409 coverage contract. The confirmed baseline, value path and exclusions remain in D-21/D-26; this revision changes the implementation inventory only. Existing fixture expectations retain their governing language, owner, context and completion contracts; this document grants no new semantics or implementation qualification. Charter §§2–3/§6.3/§12 requires observable native evidence and an honest distinction between intended behavior and current support.
 
 ## Current implementation boundary
 

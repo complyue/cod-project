@@ -1,6 +1,6 @@
 # AOT micro-dispatch work log
 
-Task authority: external work package revision 5, received from user-authorized [side chat](codex://threads/01a1d51f-3ef4-7101-a86c-94666675f5b6) on 2026-11-13 America/Los_Angeles. [D-21](../../design/AheadOfTimeMultipleDispatch.md), [D-25](../../design/CompilationRuntimeArchitectureExploration.md) and registry H-396/H-397/K-585 record design replacement, focused native implementation/evidence and conditional merge. Permanent production mechanisms remain outside this delivery's qualification.
+Task authority: external work package revision 5, received from user-authorized [side chat](codex://threads/01a1d51f-3ef4-7101-a86c-94666675f5b6) on 2026-11-13 America/Los_Angeles. [D-21](../../design/AheadOfTimeExecutionPreparation.md), [D-25](../../design/CompilationRuntimeArchitectureExploration.md) and registry H-396/H-397/K-585 record design replacement, focused native implementation/evidence and conditional merge. Permanent production mechanisms remain outside this delivery's qualification.
 
 ## Branches and checkpoint
 

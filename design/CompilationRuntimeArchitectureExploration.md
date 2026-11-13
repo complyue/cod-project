@@ -1,8 +1,10 @@
 # CoD execution architecture: AOT micro-dispatch assessment
 
-Design revision: 14 · Recorded: 2026-11-13 America/Los_Angeles · Status: bounded experimental evidence and removal-first source migration; concrete full-language mechanisms remain separately scoped.
+Design revision: 15 · Recorded: 2026-11-13 America/Los_Angeles · Status: bounded experimental evidence and removal-first source migration; concrete full-language mechanisms remain separately scoped.
 
 ## Design authority
+
+**Preparation and execution:** [H-410](DesignAuthorityRegistry.md#h-410)/[K-596](DesignAuthorityRegistry.md#k-596) continues revision 14→15 through D-21’s explicit phase distinction and renamed locator. Existing value paths, experimental evidence, qualified behavioral scopes and pending production mechanisms remain; AOT prepares executable selections and implementations, while runtime executes unresolved selections.
 
 **Implementation hierarchy and call-site demand:** [H-409](DesignAuthorityRegistry.md#h-409)/[K-594](DesignAuthorityRegistry.md#k-594) separates user methods from their compiler-prepared implementations and local micro-dispatch points. The isolated experiment’s one-body control is evidence for its unspecialized baseline, not a universal native-body limit. The source compiler should specialize/direct-call straightforward proven calls while retaining a correct general path.
 
@@ -16,7 +18,7 @@ Acceptance is a complete explained AOT route for the delivered subset, generated
 
 ## Decision and scope
 
-The execution design separates **semantic method selection, AOT implementation preparation/selection, and local micro-dispatch inside a body**. One semantic method can have a general implementation and multiple compiler-registered specializations. Proven call sites drive appropriate specialization/direct calls; a correct general path remains available without making specialization a correctness prerequisite. Multiple-argument unique-most-specific selection remains a language behavior. The [replacement D-21](AheadOfTimeMultipleDispatch.md) owns the execution path and preserved contract.
+The execution design separates **AOT execution preparation from runtime execution**, and distinguishes semantic method selection, implementation selection and local micro-dispatch within a body. Compilation prepares general/specialized implementations and selectors; proven facts may resolve choices and permit direct-call emission. Runtime executes the emitted calls and any remaining prepared selections using actual evidence. Preparing micro-dispatch code does not execute a local selection or select a user method. One semantic method can have multiple compiler-registered implementations, with a correct general path available without making specialization a correctness prerequisite. Multiple-argument unique-most-specific selection remains a language behavior. [D-21](AheadOfTimeExecutionPreparation.md) owns this execution-preparation contract.
 
 The finite native evidence supports this baseline for explicitly selected nominal definitions, field choices and operation contracts. It exposes no major correctness or compilation-termination obstacle within that scope. It does not establish an arbitrary generic/type-inference solver, full source language, complete owner checker or production runtime ABI. Those are implementation/design obligations to carry forward, not capabilities supplied by the older compiler.
 
