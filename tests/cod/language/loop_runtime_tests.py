@@ -141,7 +141,7 @@ def main():
                                 "check_command": list(map(str, command)), "compile_command": list(map(str, compile_command))})
                 print(f"PASS {label}: {json.dumps(metrics)}", flush=True)
     if report := os.environ.get("COD_LANGUAGE_REPORT"):
-        sources = [ROOT / "cod" / name for name in ("main.cc", "lang_checked.hh", "lang_diagnostics.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_syntax.hh", "lang_exceptions.hh", "lang_native_runtime.hh")]
+        sources = [ROOT / "cod" / name for name in ("main.cc", "lang_checked.hh", "lang_completion.hh", "lang_diagnostics.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_syntax.hh", "lang_exceptions.hh", "lang_native_runtime.hh")]
         sources += [Path(__file__), Path(__file__).with_name("foundation_tests.py"), Path(__file__).with_name("regional_runtime_tests.py")]
         Path(report).write_text(json.dumps({"recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                                          "toolchain": MODE, "passed": len(results), "total": len(results), "results": results,

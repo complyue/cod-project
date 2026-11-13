@@ -49,7 +49,7 @@ runner.CASES = {
     "checked_caller_catch": (TYPES + 'func f(e:NullPointerException)->void throws NullPointerException{throw e;}func g(e:NullPointerException)->void{try{f(e);}catch(x:const NullPointerException){};}', 0, "", ""),
     "checked_finally_return": (TYPES + 'func f(e:NullPointerException)->const i64{try{throw e;}finally{return 3;}}', 0, "", ""),
     "voluntary_throws": (TYPES + 'func f()->void throws NullPointerException{}func g()->void{f();}', 2, "", "requires a covering catch or throws declaration"),
-    "checked_defer_scope_gap": (TYPES + 'func f(e:NullPointerException)->void throws NullPointerException{throw e;}func g(e:NullPointerException)->void{try{defer f(e);}catch(x:const NullPointerException){};}', 2, "", "deferred checked-exception scope proof"),
+    "checked_defer_registration_scope": (TYPES + 'func f(e:NullPointerException)->void throws NullPointerException{throw e;}func g(e:NullPointerException)->void{try{defer f(e);}catch(x:const NullPointerException){};}', 2, "", "requires a covering catch or throws declaration"),
     "checked_defer_declaration": (TYPES + 'func f(e:NullPointerException)->void throws NullPointerException{throw e;}func g(e:NullPointerException)->void throws NullPointerException{defer f(e);}', 0, "", ""),
     "deferred_catch_capture": (ERROR + 'try{missing();{}}catch(e){defer{behave @print(e.category);};};', 0, "5\n", WARN),
 }

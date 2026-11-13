@@ -43,7 +43,7 @@ runner.CASES = {
     "captured_checked_throw": (ERROR + 'func f(e:NullPointerException)->void{try{throw e;}catch(x){defer{throw;};};}', 2, "", "requires a covering catch or throws declaration"),
     "captured_checked_declared": (ERROR + 'func f(e:NullPointerException)->void throws NullPointerException{try{throw e;}catch(x){defer{throw;};};}', 0, "", WARN),
     "captured_checked_local_catch": (ERROR + 'func f(e:NullPointerException)->void{try{throw e;}catch(x){defer{try{throw;}catch(y:const NullPointerException){};};};}', 0, "", WARN),
-    "deferred_handlers_still_gap": (ERROR + 'defer catch(e){};', 2, "", "deferred handler recovery and retained normal completion"),
+    "deferred_empty_handler": (ERROR + 'defer catch(e){};', 0, "", WARN),
     "throw_location": (ERROR + 'func f(e:NullPointerException)->void {\n\n  throw e;\n}', 2, "", "throw_location.cod:14:3: checked exception"),
     "forwarded_throw_location": (ERROR + 'func f(e:NullPointerException)->void {\n  try{\n    throw e;\n  }finally{};\n}', 2, "", "forwarded_throw_location.cod:14:5: checked exception"),
 }

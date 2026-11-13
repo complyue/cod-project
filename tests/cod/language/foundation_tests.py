@@ -118,7 +118,7 @@ def main():
     count = sum(result["passed"] for result in results)
     print(f"Scalar foundation: {count}/{len(results)} passed")
     if report := os.environ.get("COD_LANGUAGE_REPORT"):
-        sources = [ROOT / "cod" / name for name in ("main.cc", "lang_checked.hh", "lang_diagnostics.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_syntax.hh", "lang_exceptions.hh", "lang_native_runtime.hh")]
+        sources = [ROOT / "cod" / name for name in ("main.cc", "lang_checked.hh", "lang_completion.hh", "lang_diagnostics.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_syntax.hh", "lang_exceptions.hh", "lang_native_runtime.hh")]
         sources += [Path(__file__), *EXTRA_SOURCES, *sorted((DIRECTORY / "foundation").glob("*.cod"))]
         evidence = {"recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "toolchain": MODE,
                     "passed": count, "total": len(results), "results": results,

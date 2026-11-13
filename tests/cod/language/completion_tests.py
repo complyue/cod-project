@@ -21,7 +21,7 @@ runner.CASES = {
     "deferred_late_read": (OBSERVE + '{{val n=1;defer observe(n);defer{observe(n);};n<-2;}};', 0, "2\n1\n", ""),
     "deferred_return_snapshot": (OBSERVE + 'proc f()->const i64{val n=1;defer{observe(n);};defer{n<-2;};return n;} behave @print(f());', 0, "2\n1\n", ""),
     "deferred_return": (OBSERVE + 'proc f()->const i64{defer observe(1);defer{return 2;};return 3;} behave @print(f());', 0, "1\n2\n", ""),
-    "deferred_fallthrough_return": (OBSERVE + 'proc f()->const i64{defer{return 2;};} behave @print(f());', 0, "2\n", "[-Wmissing-return]"),
+    "deferred_fallthrough_return": (OBSERVE + 'proc f()->const i64{defer{return 2;};} behave @print(f());', 0, "2\n", ""),
     "deferred_failure_return": (BAD + 'proc f()->const i64{defer observe(1);defer{return 2;};return bad();} behave @print(f());', 0, "1\n2\n", "[-Wmissing-return]"),
     "deferred_plain_failure": (BAD + '{{defer{observe(1);};bad();}};', 70, "1\n", "uncaught MissingReturnException"),
     "deferred_nested_registration": (OBSERVE + '{{defer{observe(1);};defer{defer{observe(2);};observe(3);};}};', 0, "3\n2\n1\n", ""),
