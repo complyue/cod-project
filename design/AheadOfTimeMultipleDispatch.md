@@ -1,10 +1,12 @@
 # Ahead-of-time micro-dispatch
 
-Design revision: 9 · Recorded: 2026-11-13 America/Los_Angeles · Status: shared-method AOT behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+Design revision: 10 · Recorded: 2026-11-13 America/Los_Angeles · Status: shared-method AOT behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
 
-CoD selects a method using the actual argument types, declared conformance and the callable's selected family/interpretation. Each reachable method has a general native implementation for its required semantic context. Within that body, operations discriminate locally only when their behavior or access requires concrete type information. Correct baseline execution requires neither whole-method argument-tuple specialization nor BBV, ORC or a runtime compiler.
+CoD selects a semantic method using actual argument types, declared conformance and the callable’s selected family/interpretation. A method has one semantic definition and may have a general native implementation and several compiler-prepared specializations. Proven call-site facts drive AOT checking, specialization demand and direct selection where established. Within a generated body, micro-dispatch selects individual operations that still need concrete information. Correct general execution remains available without exhaustive whole-method tuple specialization, BBV, ORC or runtime compilation.
 
 ## Design authority
+
+- **Methods, implementations and local selection:** [H-409](DesignAuthorityRegistry.md#h-409)/[K-594](DesignAuthorityRegistry.md#k-594) records the user’s hierarchy and phase/initiator clarification. C-86/P-363/P-364 preserves C-82/C-83’s method meaning and prepared execution; one semantic body does not impose one native body. The confirmed general-path correctness requirement coexists with call-site specialization. Permanent representation, keys and budgets remain unselected.
 
 - **Source migration and runtime input:** H-398/H-399 authorizes removal-first source-compiler work from the preserved `multi-dispatch` baseline. [H-407](DesignAuthorityRegistry.md#h-407) confirms [Generic and recursive closure](GenericAndRecursiveClosure.md)'s behavioral/native-coverage scope and value path; [K-593](DesignAuthorityRegistry.md#k-593) reconciles this revision. H-400–H-406 governs outside-catalog types, same-T, operation-level failures and concrete analysis limits. C-89/C-90/P-371–P-376 extends the C-82/C-83 value path without selecting a permanent carrier/ABI or concrete analysis algorithm. Its acceptance cases constrain supported paths; H-399/H-408 does not require full feature parity for the restructuring stage.
 
@@ -21,13 +23,48 @@ CoD selects a method using the actual argument types, declared conformance and t
 | Selected semantic artifact | Prepare the selected method definitions, conformances and parallel interpretations before execution. Runtime values may have actual types outside the static catalog under D-26's `<any>` boundary; they do not install new executable methods or trigger runtime compilation. |
 | Checking and coverage | Check applicability, unique-most-specific selection, bodies, result/effect/owner contracts and required native operations for every admitted use. Keep semantic proof distinct from optimization. |
 | Method selection | Use actual concrete type identity/evidence, conformance and the selected family/interpretation. Multiple arguments may jointly select a method. |
-| Method implementation | Emit a general native body for each reachable method in its required context, accepting its abstract declared parameters. Distinct required semantic implementations may need additional bodies; a type substitution alone does not require cloning. |
-| Local operations | Retain concrete evidence through forwarding and dispatch locally when field access, arithmetic, conversion, writing, construction or another operation needs it. |
-| Optional optimization | Prove a direct target, eliminate redundant tests or specialize when easy and worthwhile. Removing these optimizations must preserve correctness and native coverage. |
+| Method implementation | Preserve one semantic definition per user method. Prepare a general implementation and demand-driven specializations for established facts/interpretations; reuse compatible prepared implementations. There is no universal one-native-body limit. |
+| Local operations | Retain concrete evidence through forwarding. Each unresolved field access, arithmetic, conversion, write or other operation has its own prepared local selection; these points are not whole-body specializations. |
+| Call-site native preparation | Use proven call-site facts to demand/reuse an appropriate specialization and directly select it when the method/interpretation is established. The correct general path remains a correctness baseline, not a policy forcing known calls through runtime tests. |
 
 The candidate path is selected definitions → checked semantic operations → temporary native control/operation representation → method selectors, shared bodies and local operation paths → AOT emission/linking → native execution over runtime values. There is no assumed existing checker, generic backend or fallback. The bounded implementation explicitly supplies its finite checks, operation templates, generated C++20 and trusted primitives using the existing Clang/LLVM toolchain. A production checked representation/emitter interface remains to be designed.
 
 Method selection remains observable even if the body reads no fields: two admitted signatures may return different opcode categories or constants. Replacing ordinary method selection with field access alone would lose that behavior. Conversely, merely forwarding a value or reading a field with a statically common offset/storage contract needs no redundant discriminator check. Sharing an access path does not make distinct signatures interchangeable.
+
+## Callable, method and native implementation hierarchy
+
+A callable family contains user-defined methods. Each method has one semantic definition/body and can have multiple compiler-statically-registered implementations: general, partially specialized or more narrowly specialized. These implementations realize that method; they are not additional overloads.
+
+```text
+callable family
+  user method f(T): one semantic definition
+    general implementation
+    specialization for established u64 facts
+    partially specialized implementation with remaining local dispatch
+  user method f(u64): a distinct semantic method
+    its prepared implementation(s)
+```
+
+First establish semantic method selection using the family’s applicability and specificity rules. Then select a valid prepared implementation of that method. A specialization of `f(T)` for `u64` cannot compete with or override the user-defined `f(u64)`. Complete callable values preserve the selected family/interpretation and captures independently of this compiler implementation inventory. Runtime owner instances and capture values are not automatically specialization keys.
+
+## Phase and initiator
+
+| Initiator and activity | Phase | Meaning |
+| --- | --- | --- |
+| User-authored definition code | Its definition/compilation stage | Constructs/registers semantic callable and method definitions. |
+| Compiler processing a call site | AOT checking and native preparation | Establishes semantic targets, requests/reuses specializations from proven facts, and prepares/directly selects native implementations where known. |
+| Compiler checking/lowering a method body | Compilation | Processes the body and its local operations; it does not execute the body’s runtime effects. |
+| Explicit user-authored compile-time computation | Its explicitly designated compile-time stage | Executes that computation under its contract; it is distinct from compiler-triggered analysis or specialization. |
+| User-written runtime call | Program execution | Invokes a prepared implementation, executes local selections and continues its shared control flow. It creates/registers no methods or specializations. |
+| Runtime effect installation/capture | Program execution | Changes or retains complete bindings/values, not semantic method or specialization registration. |
+
+These distinctions identify both who initiates work and when it occurs. A source call expression can be inspected during compilation and later execute at runtime; those are different activities.
+
+## Local micro-dispatch points
+
+One generated general or partially specialized body may contain several independent micro-dispatch points. For a plan with polymorphic x/y fields, reading x can choose its access path, reading y can choose another, and a genuinely joint conversion can select using both. Runtime executes each applicable local branch and rejoins the shared control flow. None of these local branches is a new specialization of the whole method.
+
+Call-site specialization may statically resolve some or all of those points. Unresolved points remain local selections inside that implementation. Independent points do not require a Cartesian product of whole-body versions; actual joint dependencies remain explicit. Implementation counts reflect deliberate compiler-prepared implementations, not the number of runtime branch paths or activations.
 
 ## Concrete-type evidence in abstract values
 
@@ -46,7 +83,7 @@ An abstract type has its own identity for signatures and conformance. A concrete
 
 ### Call-site facts and observable distinctions
 
-Use **proven facts at the call site**, not just the method definition's broad parameter annotation. An exact known type supplies constant identity evidence. A finite possible set can narrow selection. If every remaining possibility selects the same method under the selected interpretation, call that existing method body directly; no method cloning is required. A dynamic selected family can still affect the target even when argument type is known. An unchecked hint is not proof.
+Use **proven facts at the call site**, not just the method definition’s broad parameter annotation. For a straightforward call such as `twice(3u64)`, establish the semantic method and required interpretation, demand or reuse an appropriate AOT specialization, and select/direct-call it statically. A finite possible set can narrow selection; a proven common target may also use an existing suitable implementation directly. The general correctness path does not force this known call through runtime discrimination. A dynamic selected family can still affect the semantic target even when the argument type is known. An unchecked hint is not proof.
 
 Runtime distinctions serve admitted behavior. Same-layout IntegerLiteral/BooleanLiteral values select different no-field compiler-opcode methods in the experiment. Their one concrete discriminator preserves that difference. If an operation only reads their common value offset, the generated access code is shared and reads no tag. Existing unit/conformance rules likewise do not justify additional metadata where a discriminator or static context already supplies the needed evidence.
 
@@ -91,7 +128,7 @@ This establishes neither atomic concurrent publication nor a general rollback al
 <a id="actual-type-dispatch-and-wpo-coverage"></a>
 ## AOT coverage without mandatory tuple specialization
 
-Before execution of the supported selected artifact, prepare its method selectors, reachable method bodies and every required local native operation path. Semantic checking completeness, native-code availability, selection and optional specialization are separate obligations. Several argument combinations can enter one body; the body handles their necessary local distinctions. Coverage need not be a dense table and does not require one native body per concrete tuple.
+Before execution of the supported selected artifact, prepare its semantic method selectors, demanded general/specialized implementations and every required local native operation path. Semantic checking completeness, native-code availability, semantic method selection, implementation selection and local operation selection are distinct responsibilities. Several argument combinations can enter one body; the body handles their necessary local distinctions. Coverage need not be a dense table and does not require one native body per concrete tuple.
 
 The finite experiment checks coverage and ambiguity by subtracting symbolic rectangles from declared domains. Specificity uses nominal relationships, not equal extents. An explicit intersection resolves crossed methods; an unproved or ambiguous call rejects before emission. Its separate work limit is an inconclusive compile-time result, never permission to execute an uncovered value. Generated selectors use applicability and absence of an applicable more-specific method, independently of declaration order.
 

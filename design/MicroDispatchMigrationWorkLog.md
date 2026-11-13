@@ -16,16 +16,16 @@ Operational tracking for the user-authorized migration recorded in [H-398](Desig
 
 ## Current work
 
-The closure contract is approved at D-26r7/H-407; D-21r9, D-15r22 and D-25r13 carry the reconciled outside-catalog boundary. The user requested a new autonomous foundation goal on 2026-11-13. H-399/H-408 governs practical stage acceptance. The earlier universal-unproved proposal is superseded; actual semantic errors, resource stops and identified implementation gaps are distinct.
+The closure contract is approved at D-26r8/H-407/H-409; D-21r10, D-15r22 and D-25r14 carry the reconciled outside-catalog boundary. The user requested a new autonomous foundation goal on 2026-11-13. H-399/H-408 governs practical stage acceptance. The earlier universal-unproved proposal is superseded; actual semantic errors, resource stops and identified implementation gaps are distinct.
 
-The concrete validation checkpoint is a usable scalar-method foundation: real CoD source with shared generic method bodies, runtime local operation/overload selection, direct and mutual recursion, explicit returns, conditional control, printing and ordered prepared cleanup. Correct retained paths and useful rejection evidence are required. Product/abstract regional carriers, persistence admission, arbitrary captures/worlds and full generic analysis remain explicit capability gaps, not language restrictions. This checkpoint does not select their permanent ABI.
+The concrete validation checkpoint is a usable scalar-method foundation: real CoD source with semantic methods and their general/demanded specialized implementations, proven direct calls, local operation selection, direct and mutual recursion, explicit returns, conditional control, printing and ordered prepared cleanup. Correct retained paths and useful rejection evidence are required. Product/abstract regional carriers, persistence admission, arbitrary captures/worlds and full generic analysis remain explicit capability gaps, not language restrictions. This checkpoint does not select their permanent ABI.
 
 Implementation sequence:
 
-1. Retain one LLVM-independent checked method/operation graph, with source locations and checked call targets. Checking may retain distinct finite scalar substitutions; emitted bodies are shared by method definition.
-2. Emit general native bodies and local type-dependent operations, with no legacy fallback or specialization pass. The execution-local scalar carrier is private to generated code and stores no persistent identity or regional graph.
+1. Retain one LLVM-independent checked method/operation graph, with source locations and checked call targets. Checking may retain distinct finite scalar substitutions. One semantic body can supply multiple prepared implementations; user overload selection stays separate from choosing an implementation of the selected method.
+2. Prepare general implementations and call-site-demanded specializations; use proven direct calls, retain independent local selections where facts remain unknown, and provide no legacy fallback. The execution-local scalar carrier is private to generated code and stores no persistent identity or regional graph.
 3. Preserve explicit completion and cleanup on supported paths. Reuse native primitives; unsupported constructs receive specific implementation-gap diagnostics.
-4. Validate representative source/native results, recursive body counts, generic type distinctions and meaningful negative cases, then record supported/missing behavior and exact build results.
+4. Validate representative source/native results, semantic-method versus implementation counts, reuse across recursion, generic type distinctions, proven direct calls, general-path controls and meaningful negative cases, then record supported/missing behavior and exact build results.
 
 The 12-observation pre-removal baseline passed and the unchanged selection after removal failed; both are historical comparison evidence, not stage parity requirements. Reports remain at `/tmp/cod-source-micro-dispatch-baseline.json` and `/tmp/cod-source-micro-dispatch-removal.json`.
 
@@ -46,3 +46,9 @@ Removal checkpoint committed as `8048666` on `codex/source-micro-dispatch`; main
 ## Goal restart
 
 The previous broad goal was paused and cleared by the user. The replacement foundation goal was explicitly requested after D-26 approval; no new time/token allowance or toolchain permission was supplied. Source work proceeds within qualified behavior, and no unchanged design decision is being reopened. The five side-review document updates are retained intact.
+
+## Hierarchy and initiator clarification
+
+H-409 records the authorized 2026-11-13 handoff from side chat `01a1d612-0889-7fe2-87f3-f4f1ff0772f5`: document the clarified model first, then continue implementation. A family contains user methods; each semantic method can have several statically registered native specializations. Proven call-site facts demand/reuse appropriate AOT implementations. Micro-dispatch points are local operation selections, not whole-body versions. User definition/compile-time computation, compiler analysis/preparation and runtime calls/effect bindings have distinct initiators and phases. The earlier no-specialization-pass/one-emitted-body plan is superseded.
+
+The general-implementation-as-zero-extra-assumptions representation is an engineering proposal, not a user-selected mechanism. No ABI, specialization key/budget algorithm, method loading or runtime compiler follows. Runtime type/exception, owner/capture and cleanup contracts are preserved. The app goal record was paused at handoff receipt; the new handoff explicitly directs documentation followed by implementation, while goal-state resumption remains controlled by the user/app.
