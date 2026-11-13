@@ -1,0 +1,24 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @bias:u64;
+symbol @leaf:proc()->const u64;
+proc walk(n:u64,maker:proc()->proc()->const u64)->proc()->const u64 {
+  if(n==0u64){return maker();}else{};
+  {{effect @bias<-n;
+    proc next=proc()->proc()->const u64{return proc()->const u64{return @arena.value+@bias;};};
+    return walk(n-1u64,next);
+  }}
+}
+proc make_expired()->proc()->const u64 {
+  effect @arena<-make Item(capacity=256u64){value<-99u64};
+  effect @bias<-500u64;
+  proc initial=proc()->proc()->const u64{return proc()->const u64{return @arena.value+@bias;};};
+  return walk(20u64,initial);
+}
+proc run()->void {
+  proc selected=make_expired();
+  effect @leaf=selected;
+  behave @print(perform @leaf());
+}
+run();

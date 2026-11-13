@@ -821,7 +821,9 @@ stress();
                 ('fresh_image_recursion', ['1521', '99', '99', '500', '500', '500'], 1, 1),
                 ('fresh_image_mutual', ['1', '2', '99'], 1, 0),
                 ('fresh_image_group', ['100', '99'], 22, 0),
-                ('fresh_image_result', ['100', '599', '99'], 22, 0)):
+                ('fresh_image_result', ['100', '599', '99'], 22, 0),
+                ('context_factory_selection', ['7811213', '99', '3', '777', '99', '3', '7811213', '99'], 5, 1),
+                ('context_factory_owned', ['69', '2'], 22, 0)):
             captured = directory / f"closures/callable-{name.replace('_', '-')}.cod"
             source = captured.read_text()
             if region_failures:

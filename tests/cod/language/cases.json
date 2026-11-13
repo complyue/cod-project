@@ -3766,5 +3766,39 @@
       "regional value requires a live owning region in this caller scope",
       "note: the referenced region was acquired here"
     ]
+  },
+  {
+    "file": "closures/callable-context-factory-selection.cod",
+    "exit": 0,
+    "stdout": "7811213\n99\n3\n777\n99\n3\n7811213\n99\n"
+  },
+  {
+    "file": "closures/callable-context-factory-owned.cod",
+    "exit": 0,
+    "stdout": "69\n2\n"
+  },
+  {
+    "file": "closures/callable-context-factory-partial.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "shared-region constraint violated",
+      "note: shared region 'pool' declared here"
+    ]
+  },
+  {
+    "file": "closures/callable-context-factory-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-context-factory-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region in this caller scope",
+      "note: the referenced region was acquired here"
+    ]
   }
 ]

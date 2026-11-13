@@ -238,7 +238,7 @@ struct CallableCode {
   std::vector<std::pair<size_t, std::shared_ptr<CaptureUse>>> capture_fields;
   std::shared_ptr<LLVMEmission::CallableConstruction> construction;
   std::vector<size_t> dynamic_regions;
-  size_t result_flow = 0;
+  size_t result_flow = 0; // Independent entry results; contextual adapters own their result graphs.
   bool direct = false;
 };
 using MethodOrigin = std::pair<const Module *, std::string>;
@@ -3510,7 +3510,7 @@ class Compiler {
         std::move(entry), layout, std::move(nested), std::move(regions), std::move(dynamic_values), key,
         std::move(dynamic_procedures), std::move(capture_fields), std::move(construction),
         {dynamic_regions.begin(), dynamic_regions.end()}});
-    if (type.target->kind == Type::procedure && !borrowed_result(type)) {
+    if (procedure->code->entry.function && type.target->kind == Type::procedure && !borrowed_result(type)) {
       callable_flows_.push_back({{}, {}, true});
       procedure->code->result_flow = callable_flows_.size() - 1;
     }
@@ -5962,7 +5962,11 @@ class Compiler {
       }
       if (other != b.captures.bindings.end()) return false;
       if (bool(ac.entry.function) != bool(bc.entry.function)) return false;
-      if (ac.entry.function && (ac.result_flow || !ac.entry.function->empty() || !bc.entry.function->empty())) {
+      // Contextual images execute this checked caller's adapter, including
+      // its result graph and owner proof. They have no independent entry or
+      // result graph to compare; matched schemas admit their actual payloads.
+      if (!ac.entry.function) return true;
+      if (ac.result_flow || !ac.entry.function->empty() || !bc.entry.function->empty()) {
         // Reuse must emit an entry reached by its peer, without demanding a
         // returned leaf body that neither checked caller ever invokes.
         compile_callable(a, *left.caller, left.at);
@@ -5973,7 +5977,6 @@ class Compiler {
       if (!ac.result_flow) return true;
       // A factory's returned images are part of its checked contract. A native
       // entry fixes that result graph independently of this caller's adapter.
-      if (!ac.entry.function || !bc.entry.function) return false;
       return pair_images(callable_choices(ac.result_flow), callable_choices(bc.result_flow),
           [&](const auto &x, const auto &y) { return self(self, x, y); });
     };
