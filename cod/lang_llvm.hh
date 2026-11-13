@@ -500,10 +500,19 @@ class LLVMEmission {
     if (facts_.front()->at(&expr).type == Type::never) { b_.CreateUnreachable(); return nullptr; }
     return load(saved);
   }
+  llvm::Value *checked_address(llvm::Value *address, const CheckedOperation &fact, const Location &at) {
+    if (!fact.targets.contains(null_target)) return address;
+    auto *present = block("reference.present"), *absent = block("reference.absent");
+    b_.CreateCondBr(b_.CreateICmpEQ(address, null_pointer()), absent, present);
+    b_.SetInsertPoint(absent); fail_path(ExceptionCategory::null_pointer, at);
+    b_.SetInsertPoint(present);
+    return address;
+  }
   llvm::Value *emit_expression(const Expression &expr, bool read = true, bool discard = false) {
     using K = Expression::Kind;
     const auto &fact = facts_.front()->at(&expr);
     switch (expr.kind) {
+    case K::null_ref: return null_pointer();
     case K::integer: case K::boolean:
       return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
     case K::real: {
@@ -513,8 +522,10 @@ class LLVMEmission {
       return pack(llvm::ConstantFP::get(native_type(fact.type), text), fact.type);
     }
     case K::name: {
-      auto *address = fact.snapshot || !bindings_.at(*fact.binding) ? static_cast<llvm::Value *>(storage_.at(*fact.place)) : load(bindings_.at(*fact.binding));
-      return read ? b_.CreateLoad(scalar_, address) : address;
+      auto *address = !bindings_.at(*fact.binding) ? static_cast<llvm::Value *>(storage_.at(*fact.place)) : load(bindings_.at(*fact.binding));
+      if (fact.snapshot && bindings_.at(*fact.binding))
+        address = b_.CreateSelect(b_.CreateICmpEQ(address, null_pointer()), null_pointer(), storage_.at(*fact.captured_place));
+      return read ? b_.CreateLoad(scalar_, checked_address(address, fact, expr.at)) : address;
     }
     case K::unary: {
       if (fact.minimum_literal) return pack(integer(std::uint64_t{1} << 63), Type::integer);
@@ -553,6 +564,11 @@ class LLVMEmission {
           [&](const Choice &choice) { return binary(expr, left, right, choice); });
     }
     case K::call: case K::behave: case K::perform: {
+      if (fact.is_null) {
+        auto *address = emit_expression(*expr.children.front(), false);
+        if (!reachable()) return nullptr;
+        return pack(b_.CreateICmpEQ(address, null_pointer()), Type::boolean);
+      }
       std::vector<llvm::Value *> arguments;
       for (const auto &argument : expr.children) {
         arguments.push_back(emit_expression(*argument)); if (!reachable()) return nullptr;
@@ -637,7 +653,7 @@ class LLVMEmission {
           continue;
         }
         const auto &binding = facts_.front()->at(declaration.get());
-        llvm::Value *address = storage_.at(*binding.place);
+        llvm::Value *address = binding.place ? static_cast<llvm::Value *>(storage_.at(*binding.place)) : null_pointer();
         if (binding.view) {
           address = emit_expression(*declaration->children.front(), false);
           if (!reachable()) return nullptr;
@@ -659,6 +675,7 @@ class LLVMEmission {
     case K::transfer: {
       auto *address = emit_expression(*expr.children[0], false);
       if (!reachable()) return nullptr;
+      address = checked_address(address, facts_.front()->at(expr.children[0].get()), expr.at);
       auto *value = emit_expression(*expr.children[1]);
       if (!reachable()) return nullptr;
       value = choose(expr, {value}, choices(expr, {expr.children[1].get()}), scalar_, [&](const Choice &choice) {
@@ -673,7 +690,7 @@ class LLVMEmission {
       auto *address = emit_expression(*expr.children[1], false);
       if (!reachable()) return nullptr;
       b_.CreateStore(address, bindings_.at(*fact.binding));
-      return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, address);
+      return !read ? address : discard ? empty_scalar() : b_.CreateLoad(scalar_, checked_address(address, fact, expr.at));
     }
     case K::return_value: {
       llvm::Value *value = empty_scalar();
