@@ -1,202 +1,183 @@
-# 设计概念与价值衍生：人类确认权威记录
+# Design authority and value lineage
 
-记录版本：579
-
-建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
-纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
-执行规则：[AGENTS.md](../AGENTS.md) 的 `Design Authority and Value Lineage` 节。
-
-本文件是设计概念、机制、抽象建模、价值衍生关系、技术依赖及人类确认的权威登记处。它记录“为什么值得做、由谁确认、确认到哪里、哪些文档可以据此执行”，不是已实现能力清单，也不能自行创造人类授权。登记格式由智能体整理；人类确认仅来自明确的人工发言及其实际范围。
+Registry revision: 581 · Audit date: 2026-11-13 (America/Los_Angeles)
 
 ## Design authority
 
-- Registry: [D-GOV](#d-gov); revision 579 covers governance and evidence maintenance. Product-contract scope remains in §5.
-- Value lineage: V-03 → GOV-01 → GOV-02, E-11/E-12; concise, traceable records support local delegation and human review.
-- Baseline: H-05; [H-388](#h-388) authorizes autonomous hygiene and Git-backed history compaction. [K-578](#k-578) records continuity from revision 578.
-- Invariants: preserve human statements, provenance, exclusions, stable IDs and current qualification; no new product approval, charter change or build/test authorization.
-- Acceptance: current concept/relationship/product-status records remain intact; every historical event resolves to immutable evidence; referenced anchors remain available. D-GOV is `continued` only within this maintenance scope.
+[D-GOV](#d-gov), all registry-maintenance sections. Value path: V-03 → GOV-01 → GOV-02 through E-11/E-12. H-05 establishes human-scoped delegation; H-388/H-391 authorizes autonomous audit and concise records; [K-580](#k-580) continues revision 580. The [charter](RegionalSemanticPlatformCharter.md) and [AGENTS.md](../AGENTS.md) govern.
 
-## 1. 权威边界与读取方式
+Acceptance: preserve stable IDs, relationship endpoints/kinds, current qualification, exclusions and unresolved decisions; resolve historical evidence to immutable Git sources. No product proposal gains qualification through this maintenance. Historical registry: `061a4a684770`; original event payloads: `0c0efbfde4dc`, both at this file's path. Newer decisions remain below verbatim.
 
-设计纲领给出价值根，人工决定确认设计与价值根之间的关系；合格设计文档把这种关系收敛为可局部执行的契约。记录本身是证据与状态索引，不以自引用证明自身正确。
+## 1. Audit and reading rules
 
-只执行合格设计时，读取该文档和本记录中相关状态条目即可，不要求加载纲领全文、全部祖先或整个账本。修改设计时，必须回到相关纲领原文、确认依据和父级契约检查延续性。“无需加载总则”不豁免 `AGENTS.md`、任务授权或安全规则。
+1. Start with the relevant **document scope**, its named relationships and directly needed contracts. Read the charter when changing a design; unchanged qualified scope permits the local-contract shortcut in AGENTS.
+2. **Confirmed** covers the stated proposition/revision/scope. **Continued** is an agent's contract-preserving assessment from that human baseline. **Pending-human** and **needs-reconfirmation** do not authorize implementation; **superseded/rejected** scopes are historical. Direction, concept, whole document and implementation acceptance are distinct.
+3. Use one entry per independently decidable contract scope. The linked product document owns detailed semantics, non-goals and acceptance; this registry owns qualification and evidence. A routine implementation checkpoint needs no new concept, value edge or repeated status paragraph. Record coherent maintenance in one brief continuity event.
+4. Nodes name topics. `derives-from` explains value; `depends-on` identifies prerequisites; `constrains` bounds behavior. Read each edge's scope/status: an ID, dependency or ancestor approval grants no additional authority. Apply current scopes and supersession before historical revision wording. Candidate value paths stay candidate even when associated behavior is confirmed.
+5. For impact review, find both endpoints in the relationship table and use their contract links; follow value descendants and dependencies separately. These links route review, not new delegation. Preserve unaffected qualified scope; escalate actual evidence gaps, contradictions or uncovered material choices.
+6. H-386 requires topic-based human discussion and eventual whole-file approval of new designs. Ask for concrete decisions, not internal IDs; do not reopen settled preferences. Build/test/toolchain permissions remain independent.
+7. Human history is append-only in Git: preserve the actual source, statement, time uncertainty, scope and exclusions. Corrections/withdrawals get new events. Read original evidence when exact scope matters; an index or agent summary cannot replace confirmation. [§5](#5-evidence-locators) provides targeted retrieval.
 
-人工确认分三个层次，不能自动互相升级：
+## 2. Current document scopes
 
-| 确认对象 | 可以支持什么 | 不能自动支持什么 |
+Revision labels identify inspected text, not approval of every section. **Pending whole-file qualification does not cancel independently confirmed local scopes.** Detailed acceptance and unresolved-topic inventories remain in the linked documents. Source headers and older registry paragraphs are evidence to reconcile, not independent authority.
+
+| Contract / inspected revision | Authority and lineage | Boundary, acceptance and open work |
 | --- | --- | --- |
-| 价值／方向 | 记录确定的目标和原则。 | 所有可服务该目标的机制、算法与成本选择。 |
-| 概念／关系 | 记录指定概念为何衍生自父级价值、依赖哪些条件。 | 引用该概念的每一份文档全文。 |
-| 文档范围／版本 | 对该版本指定范围及衍生关系授予实施依据。 | 未覆盖章节、任意未来修改、操作权限或实现正确性。 |
+| <a id="d-00"></a>**D-00** [Charter](RegionalSemanticPlatformCharter.md) | H-01–H-04 confirms V-01–V-03/E-01–E-10 directions; H-04 authorizes the charter’s creation. Initial charter commit `3fe2cd1dfd06ec41481f265386d23f3dce7e2ff6`, blob `9f0154035d52f976232000ab1601088b91948c0b`. | Value root, not blanket approval of generated details, examples, roadmap or §14 mechanisms. |
+| <a id="d-gov"></a>**D-GOV** registry r581; AGENTS governance | **Continued** H-05/E-11/E-12 under H-388/H-391; K-580. | Traceable scoped delegation, current decisions and recoverable evidence. No product qualification, charter or operational-permission change. |
+| <a id="d-01"></a>**D-01** [Regional storage](MemoryRegionAndRegionalTypes.md); blob `8dc4ed4012d1127087d83faf9e13ed49db5345d5` | **Pending-human**, P-01/P-02. | Find a confirmed pointer/lifetime/acceptance baseline before delegating this whole file. AGENTS regional invariants remain mandatory independently. |
+| <a id="d-02"></a>**D-02** [C++ driver](CompileOnDemand.md); blob `cbd294de3eb9825c8522b9eb7781e44a5ba8d844` | **Pending-human**, P-03/P-04. | Stage-specific build-and-run facility; its no-JIT boundary does not define the platform’s long-term execution strategy. |
+| <a id="d-03"></a>**D-03** [Package management](CodProjectStructureAndPkgMgmt.md); blob `4146412997de5179146a7010b5b034e32fcebfb9` | **Pending-human**, P-05. | Git/UUID/branch/lock mechanisms and semantic-unit distribution need scoped confirmation. Existing code is not approval. |
+| <a id="d-04"></a>**D-04** [C++ exception safety](ExceptionSafety.md); blob `3dc6bbba41ee5c84f151c3c94bb866b47ddcdf6e` | **Pending-human**, P-06/P-07. | K-406 identifies contradictory null-result/strong-guarantee claims and unguarded allocation/root construction. This is not CoD cleanup or persistent-recovery evidence; D-17 owns the language contract. |
+| <a id="d-05"></a>**D-05** [Regional YAML](YamlConversionsOfRegionalTypes.md); blob `34da18a3abab0a3a02b42d23287e644312f5c218` | **Pending-human**, P-08–P-10. | Confirm conversion scope/semantic preservation separately from the future source round-trip contract. |
+| <a id="d-06"></a>**D-06** [YAML extensions](YamlSpecExt.md); blob `5dd33c2c2a5acc59383f0966a98300f84a296f63` | **Pending-human**, P-11. | Confirm syntax/comment benefits and limits; YAML is not selected as final business-language syntax. |
+| <a id="d-07"></a>**D-07** [Language decisions](DomainLanguageDesign.md), r153 | **Whole file pending-human.** H-06/H-07 establishes the tracker; C-08–C-11/P-12–P-21 supplies candidate paths. Local decisions route through D-10/D-11/D-14–D-18/D-21–D-24. | G-01–G-07, DL-01–DL-16 and DD-001–DD-151 retain the decision/acceptance inventory. H-351/H-352 settles library graph-transfer responsibility and IPC/DBMR planning directions, not protocols, ABI, concurrency, snapshot failure or retention. Past work-period permissions are not a new task. |
+| <a id="d-08"></a>**D-08** [SNN application](../applications/steady-snn/docs/README.md), 19 documents; README/LanguageCoDesign r220 | **Whole application pending-human.** H-08–H-95 supplies local goals/constraints; C-12–C-34/P-22–P-83 retains individual states. H-94 confirms target-owned two-frame pull (P-69/P-70/P-83); H-93 continuous source dynamics and H-95 capability preservation remain. K-209/K-305 identifies local revisions. | Use each file’s own revision; the set is not uniformly r220. Equations/state, readout, phase detection, final capacity, learning/migration, messages and persistence remain open. H-78/H-85 preserves comparisons; H-86 permits empirical alternatives without repeated questions. Research completion is not model validation; H-123 language support does not approve neural algorithms. |
+| <a id="d-09"></a>**D-09** cognitive synthesis [English](../applications/steady-snn/docs/CognitiveModelProgress.en.md) / [Chinese](../applications/steady-snn/docs/CognitiveModelProgress.zh-CN.md), r2 | **Whole file pending-human.** H-87–H-95 are scoped premises, not approval of the synthesis. C-30–C-34/P-71–P-83; K-208/K-209. | S1–S9/CQ-01–CQ-08 retains readout, binding, learning, capacity, timing/history and coupled-response questions. Learned concepts are not automatically formal ontology/GADT evidence. No selected extra geometry/state or permission to run S8 candidates. |
+| <a id="d-10"></a>**D-10** [Symbols and calls](SymbolicDynamicScope.md), r144 | **Whole file/value paths pending-human; recorded local decisions remain confirmed.** C-35–C-46/P-84–P-111 and later operation/owner/publication edges; P-248–P-254/P-330–P-343 governs current effects/families. K-572 bounds latest prototype evidence. | Preserve identities, selected contexts, perform/current-binding distinction, owners and function effect exclusion. D-14 owns storage, D-15 worlds, D-17 completion, D-18 callable values, D-21 families. Cyclic initialization, persistent ABI, broader captures/results/contexts and family mechanisms remain open; old passing reports do not qualify them. |
+| <a id="d-11"></a>**D-11** [Scalars, units and indices](ScalarUnitsAndIndexTypes.md), r31 | **Whole file pending-human.** C-47/C-49–C-51/P-112–P-130; H-260/H-261/K-402 covers representation-independent quantities and lossless widening. | Separate unit identity, numerical representation and conversion policy. D-16 compatibility applies. Compound equality/broader conversions retain their open scope; no SNN parameter or fraction implementation follows. |
+| <a id="d-12"></a>**D-12** [Globals, worlds and TLS](GlobalVariablesDoneRight.md), r25 | **Whole file pending-human.** C-52/C-59/P-131–P-135/P-213; H-241 places independent worlds in the vision, D-15 owns the operational proposal. | Actor scheduling/delivery/shutdown, optional outcomes and packet lifecycle need their own contract. Distinguish packet ownership from effect-resource replay; synchronous evidence is not Actor acceptance. |
+| <a id="d-13"></a>**D-13** [Regional memory tracker](GraphGrainedMemoryManagement.md), r31 | **Whole file pending-human.** C-39/C-40/C-53–C-55/P-94/P-138–P-143/P-155; H-156/H-157 establishes the local graph boundary. | D-14/D-17 owns scoped lifecycle behavior. Same-region stored edges, hidden-owner preservation and explicit transfer remain; D-22 refines only bits-eligible placement. No transport, per-object ownership, borrow table or allocator policy is qualified by tracker/relocation examples. |
+| <a id="d-14"></a>**D-14** [Ownership and storage](RegionalOwnership.md), r82 | **Whole file/value path pending-human; local requirements confirmed.** C-39/C-48/C-54/C-55/C-64/C-65/C-69–C-72/C-75; P-244–P-282/P-327 records exact owner, initialization, transfer and access scope. H-270–H-276/H-292–H-315/H-366–H-369; K-552 covers r81→82. | Preserve actual fixed owners, non-escalating access, initialization and cleanup. D-17/D-18 supplies completion/callable contracts; D-22 owns new construction/aggregates. General transport, owner unions, runtime lifetime machinery and whole-file qualification remain open. |
+| <a id="d-15"></a>**D-15** [Module worlds](ModuleWorlds.md), r20 | **Whole operational contract pending-human.** C-59/C-60/P-204–P-220; H-234/H-237–H-249 specifies receiver-owned identity construction, explicit publication and typed TLS. H-387/K-573 covers the fused artifact. | No foreign-world editing; H-253 rejects conflicting interpretations. Persistent identity/layout, general composition/namespace and physical RTTI remain unselected. H-387 permits isolated experiments while preserving source-world isolation/owners; H-390 fixes inputs to existing semantics. |
+| <a id="d-16"></a>**D-16** [Fixed-width fractions](FixedWidthFractions.md), r7 | **Whole file pending-human; implementation deferred.** H-254/H-255 confirms enumerated requirements; C-61/C-62/P-221–P-227. H-256/P-228 prioritizes comment reservation and independent UoM; K-401/K-402 is prerequisite evidence. | Preserve integer-component fixed bits, unreduced arithmetic, explicit canonicalization, numerical comparison, orthogonal UoM and // with # comments. Promotion/widths, invalid values, exact grammar/access/layout/formatting remain open. Conflicting future language choices require review; prerequisites do not approve fractions. |
+| <a id="d-17"></a>**D-17** [Exception control](ExceptionControl.md), r53 | **Confirmed/continued bounded exception, lifetime, scope, defer and return contract.** C-63/P-235/P-236; H-267/H-269/H-313–H-315/H-319/H-356–H-362/H-365/H-370/H-371; P-321–P-324/P-326/P-328/P-329. K-555 explicitly covers r52→53. | Acceptance: construction failure, exact release, explicit causes, owner/effect restoration, pre-entry versus callee failure, completion replacement and deferred queues. Complete integration/proof coverage remains work. No regional copy, lifetime extension, native-handle/out policy, RTTI, persistent transaction or broad D-04 guarantee follows. |
+| <a id="d-18"></a>**D-18** [Callable captures and values](RegionalClosures.md), r89 | **Confirmed/continued only for recorded capture/value/native-boundary scope.** H-327–H-335/H-337–H-344/H-349/H-350; C-65/C-73/C-75/P-293–P-303. H-342 replaces callable alias initialization; H-344 permits runtime-sized scope-owned backing. K-572 covers bounded r88→89 continuity/evidence. | Preserve actual borrowed owners, complete nested values, recursion, caller destinations, access and cleanup; measure allocation/compilation. No regional callable payload, lexical-cell promotion, independent user heap lifetime or captured-region retention. Actual-owner runtime alternatives/D18-Q-result-discrimination remain pending; native fixtures do not establish D-21’s wider stage/family contract. |
+| <a id="d-19"></a>**D-19** [Pure functions and TCO](ConstFunctionsAndTailCalls.md), r3 | **Confirmed deferred planning/compatibility scope; implementation contract pending-human.** H-346–H-348/C-76/P-304–P-307; H-363/P-325 selects pure with final-expression result. H-366–H-369/K-527 preserves independent qualifiers. | External state readonly over the outer call, private mutation allowed, result judged at immediate return. No permanent freeze, implicit copies, blanket optimizer purity or TCO outside this plan. Checking, callable types, outputs and tail eligibility remain open; ordinary recursion remains required. |
+| <a id="d-20"></a>**D-20** [Compiler application](../applications/cod-booter/README.md), [pipeline](../applications/cod-booter/docs/CompilerPipeline.md), [LLVM interop](../applications/cod-booter/docs/LLVMInterop.md), r4 | **Planning authorized; detailed contracts pending-human.** H-353/C-80/P-314–P-318; H-354/C-81/P-319/P-320 proposes output initialization. K-515 synchronizes separately qualified H-356 defer work. | Schemas, reuse, native handles/provider lifecycle, out parameters and self-hosting acceptance remain open. Regional stage data/LLVM services are a plan, not toolchain or compiler-application implementation authorization. |
+| <a id="d-21"></a>**D-21** [Family dispatch and AOT](AheadOfTimeMultipleDispatch.md), r6 | **Behavioral value path qualified** by H-378/P-333/P-334/P-337, bounded by H-372–H-377/H-379–H-382 and K-535–K-538/K-573. **Replacement native-before-execution timing needs-reconfirmation** under H-387. | Preserve selected family/context, actual-type dispatch, explicit entry installation, initialization-only suppression and operand effects. Composition identity/conditional coverage (D21-Q-entry-composition), evidence/ABI, closure/dispatch and diagnostics remain pending. H-387 permits JIT/RTTI experiments; H-390 fixes the semantic input set. No production winner or general mechanism qualification. |
+| <a id="d-22"></a>**D-22** [Construction and acquisition](ConstructionAndAcquisition.md), r2 | **Whole file/P-348–P-350 pending-human.** H-383–H-386/P-344–P-347/P-352/P-353 confirms bits eligibility, intrinsic ownership, owner mismatch rejection, result-only constness, contextual inference and coordinated-migration preference. K-545 is integration, not final approval. | Decide aggregate/native representation, constructor allocation/partial effects and DBMR capacity/failure/coordination. R3 exploration is authorized; final selection reserved. Preserve non-bits regional placement, same-owner edges and cleanup. Do not re-ask inference/no-transition preferences. |
+| <a id="d-23"></a>**D-23** [Scalar call results](ScalarCallResults.md), r2 | **Pending-human whole-file/topic review**, P-354/P-355; K-556/K-558 is investigation/evidence. Existing H-201 borrowing/const values and owner/completion rules remain independently applicable. | Decide fresh arithmetic/mixed borrowed-fresh result categories and caller storage. Existing behavior is observation, not approval. Borrowing fixes do not select fresh storage, owner unions, hidden allocation, lifetime extension or aggregate ABI. |
+| <a id="d-24"></a>**D-24** [Result-type inference](CallableResultInference.md), r1 | **Pending-human**, C-84/P-356–P-358/K-562; no confirmed baseline or implementation delegation. | Decide omitted result types, unanchored recursive cycles, declaration constraints and abstract results. Bodyless signatures, recursion, effects, owner/value and return rules remain; parser acceptance/tests do not approve inference. |
+| <a id="d-25"></a>**D-25** [Architecture exploration](CompilationRuntimeArchitectureExploration.md), r6 | **Exploration authorized by H-387; production designs/value paths pending-human.** C-85/P-359–P-362/K-573–K-579. H-390 confirms only external values of statically known ADTs, without extending fused semantics. | Retain fused interpretations, execution-state separation and regional invariants. Known alternatives may form source-unobserved tuples; validation/transport/publication mechanisms remain unselected. The comparative recommendation remains a bounded framework/interpreter pilot against shared native preparation; timing, general checking, adapter cost and engine need review. No new production, toolchain or experiment permission follows. |
 
-同一人工发言可以明确覆盖多个层次；记录必须逐项列明。合并提交、现有实现、测试通过、助手归纳、未反对或笼统的“对”，均不能单独充当未明确范围的技术方案确认。
+### Current supersession and audit boundaries
 
-## 2. 关系模型、资格与延续规则
+These are scoped replacements, not blanket invalidations. Apply them to older wording; unaffected requirements remain. Detailed originals remain in H/K evidence.
 
-### 2.1 节点与边
-
-节点使用稳定 ID：`V-*` 为价值根，`C-*` 为概念／机制／抽象，`GOV-*` 为治理机制，`D-*` 为设计文档契约；`H-*` 为人工决定，`K-*` 为智能体延续检查。ID 不因改名或移动文件而改变。
-
-每条边单独记录 ID、子节点、关系、父节点、价值理由或必要条件、适用范围／版本和确认依据。边的方向定义如下：
-
-- `child derives-from parent`：回答该设计为什么能带来父级价值。有效授权链必须沿这类边追溯到纲领价值根；循环引用不能成为自己的授权来源。
-- `child depends-on prerequisite`：回答实现或解释该设计需要什么条件。技术依赖本身不授予价值授权；依赖可以有环，但应显式列出并说明共同验证边界。
-- `rule constrains target`：记录某项规则限制哪些对象及范围，不能由约束关系推断实现方案已经获批。
-
-例如，“使用了 regional 容器”只说明技术依赖，不能单独证明一个新包管理机制值得做。每个机制应说明受益者、保留的目标、引入的代价及边界，不能只写“符合纲领”。
-
-### 2.2 文档资格状态
-
-| 状态 | 含义 | 可省略加载纲领而实施？ |
+| Scope | Current decision / evidence | Affected contracts |
 | --- | --- | --- |
-| `confirmed` | 对当前范围／基线及价值衍生关系有明确人工确认，必要上游仍有效。 | 是，仅覆盖已确认范围。 |
-| `continued` | 从已经合格的文档基线自然延续，存在逐次及相对人工基线的延续检查，未改变确认契约。 | 是，仅覆盖仍延续的范围。 |
-| `pending-human` | 新提案、旧文档缺少可得证据，或新选择尚未确认。 | 否。 |
-| `needs-reconfirmation` | 曾经合格，但上游、范围或关键假设变化，或无法确信价值关系仍自然延续。 | 否，暂停受影响范围。 |
-| `superseded` / `rejected` | 已被明确替代／撤回，或被人工否决。 | 否，保留历史用途。 |
+| Capture/function effects | H-180/H-181 preserves captured values/hidden owners and forbids dynamic-owner extraction; H-197/H-198 replaces readonly function snapshots with explicit-memory access. | D-10/D-13/D-14/D-18 |
+| Composition/publication | H-212 assigns redefinition to mixin; H-218/H-220 requires explicit conformance and distinguishes adapter import from consumer visibility; H-230–H-233 separates identities/aliases and requires publication; H-245 forbids foreign-world editing. | D-07/D-10/D-12/D-15 |
+| Parameter storage | H-271/H-272 gives callee-local default targets; H-273–H-276 specifies explicit owner/region forms. Earlier external-borrow defaults are not universal. | D-10/D-14/D-17/D-18 |
+| Symbolic writes/results | P-248/P-249 distinguishes inline bits from region-backed references; H-288–H-291/P-254 requires void effects. P-98’s old result/exclusive-arrow surface is superseded in those scopes. | D-10/D-14 |
+| Callable values/backing | H-342/P-301 supersedes P-300’s existing-lvalue alias detail; caller destinations remain. H-344/P-303 permits scope-owned heap backing without independent user heap lifetime. | D-14/D-18/D-19 |
+| Defer/return | H-356 prepares plain deferred calls at registration; H-361/H-362 specifies explicit proc/func returns/completion replacement. H-365 permits enclosing-scope loop defer with separate iteration restoration. H-363’s pure form remains deferred. | D-10/D-14/D-17/D-18/D-19 |
+| Const access | H-366–H-369/P-327 separates binding const from transitive target readonly; ordinary parameter binding qualifiers do not change overload identity. | D-14/D-18/D-19 |
+| Families/installation | H-372–H-378 separates definitions, materialization, installation and actual-type dispatch; H-380 limits cancellation to initialization with operand evaluation preserved; H-381/H-382 fixes lexical/inferred-owner lookup. | D-10/D-15/D-18/D-21 |
+| Bits ADT placement | H-383/H-384 refines all-user-data-regional placement only for finite bits-eligible ADTs. Ownership stays intrinsic; non-bits regional placement/relocation and same-owner references remain. | D-07/D-13/D-14/D-17/D-22 |
+| Execution strategy/input | H-387 removes the growth gate on isolated JIT/RTTI exploration; production timing remains needs-reconfirmation. H-390 excludes input-driven semantic extension, while unseen combinations of known alternatives still require coverage. | D-15/D-21/D-25 and owner/effect/cleanup dependencies |
 
-`continued` 不是人工再次确认，更不能用于把 `pending-human` 文档直接升级为合格文档。一个方向获批不使所有后代自动获批。新文档、新价值关系和未决的重要机制选择，必须明确确认后才能作为实施契约。
+Known gaps remain scoped above; shortening their records needs no new approval. D-17’s r52 summary is reconciled to r53 by K-555, D-15’s r19 summary to r20 by K-573, and D-08’s r219 overview to the local r220 update by K-305. These index repairs do not ratify whole documents. Report counts and research checkpoints belong in their source evidence.
 
-合格契约还必须包含范围、假设、不变量、非目标和验收依据，并与登记版本一致。只有部分章节获得确认时，其他章节继续单独标为待确认。未解释的内容漂移或状态冲突按非合格处理，不可只相信文档顶部的旧标签。
+## 3. Value roots, concepts and review routing
 
-### 2.3 最小文档声明与记录字段
+Node descriptions identify topics, not blanket approval. Relationship rows carry rationale/status; §2 carries current document qualification. Contract links support review in either direction through edge endpoints, without adding value or dependency edges. Inspect all edges naming a changed node, then both endpoints and their contracts; dependency cycles cannot prove value.
 
-新建或修改设计文档时，在顶部添加 `Design authority` 块。下面是填写模板，不是已确认条目：
+| Value root | Goal | Charter / human baseline |
+| --- | --- | --- |
+| <a id="v-01"></a>V-01 | 业务意图不因差异化执行环境而改写。 | §1、§3、§6; H-01；确认目标。 |
+| <a id="v-02"></a>V-02 | 有原生 ontology 的领域数据与业务逻辑，可以跨 domain、跨语义层级即时集成。 | §1、§3—5; H-02、H-03；确认目标和层级方向。 |
+| <a id="v-03"></a>V-03 | 高度结构化的持久语义单元，兼顾低开销存取、人类阅读与智能体顺手修改。 | §1、§7—10; H-04；确认目标。 |
 
-```text
-Design authority
-  Registry: D-<id>, DesignAuthorityRegistry.md#<entry>
-  Revision / covered scope: <版本及章节；未覆盖部分另列>
-  Value lineage: <父概念及关系 ID；为何服务该价值>
-  Contract: <范围、假设、不变量、非目标、验收依据的位置>
-  Human baseline: H-<id> / <确定的文件版本或契约内容摘要>
-  Continuity: K-<id> or none
-  Current status: <以登记处对应条目为准>
-```
+| Concept | Description | Contracts to inspect |
+| --- | --- | --- |
+| <a id="c-01"></a>C-01 | Regional GADT 图承载领域知识、事实和业务逻辑意图。 | [D-00](#d-00) |
+| <a id="c-02"></a>C-02 | LLVM 实现可按环境差异化的原生 effects handler。 | [D-00](#d-00) |
+| <a id="c-03"></a>C-03 | 不同 domain 的多个 regions 可在同一进程即时组合。 | [D-00](#d-00) |
+| <a id="c-04"></a>C-04 | Value/type/kind 层级可由 regions 承载。 | [D-00](#d-00) |
+| <a id="c-05"></a>C-05 | DBMR 是高度结构化、支持低开销存取的持久语义单元。 | [D-00](#d-00) |
+| <a id="c-06"></a>C-06 | DBMR 可快速呈现人类可读的文本源码，并有 IDE 集成。 | [D-00](#d-00) |
+| <a id="c-07"></a>C-07 | 提供智能体顺手的语义编辑能力。 | [D-00](#d-00) |
+| <a id="c-08"></a>C-08 | memory region 承载 IPC packet，总长度在包头，完整接收后调用入口对象的约定成员方法落地。 | [D-07](#d-07) |
+| <a id="c-09"></a>C-09 | DBMR 支持本地 ontology 的检索、统计和 CRUD，日常不回收空间，按节奏重建载荷及 backing 文件压缩。 | [D-07](#d-07) |
+| <a id="c-10"></a>C-10 | 显式 ADT/GADT、方法和内存语义；以 SNN 需求同步推进语言及应用设计、实现和验证。 | [D-07](#d-07) |
+| <a id="c-11"></a>C-11 | C/C++ 作为与其他语言运行时互操作的兼容接口。 | [D-07](#d-07) |
+| <a id="c-12"></a>C-12 | 首个讨论应用为稳态循环激活 SNN：每 CC 一个 region，交换 token 语义向量，目标几百到几万 CC。H-43 明确 CC 是语义呈现基本单元，CC 之间为非精确 replica，minicolumn／神经元的语义响应角色静态分配，不要求网络学习这些身份。当前 Flash 5120 维、每维 60+60；每 CC 按树莓派预算，节点 RAM 上限 16 GB，应用文档独立。 | [D-08](#d-08) |
+| <a id="c-13"></a>C-13 | SNN 静态槽集总数以略大于神经元数为明确目标，优先按 scale law 形成便于算术寻址的固定拓扑；不要求保留旧场景连接容量。神经元指向当前集；每槽 4-byte 对端 ID / 1-byte FP8 权重并行数组，每集一个 owner ID。训练使用既存集合迁移，不通过堆分配维护槽拓扑。最小集 100 槽；少出边源的取舍与入边准入分开。 | [D-08](#d-08) |
+| <a id="c-14"></a>C-14 | 每语义维分为正、负细胞群体，按身份区分极性，研究非负活动到有符号值的读出。H-27/H-35 的当前讨论限于 Flash 5120 维、每维 60+60；V4 Pro 人口比较暂不讨论。H-54 要求同维正负群体内在抵消（C-18）；上下文、幅度及预测语义需协调。 | [D-08](#d-08) |
+| <a id="c-15"></a>C-15 | 以三相行为、入口收敛及有限 token 响应为目标的分阶段连接构建／学习：初步以直接激活链形成 DMN／token 循环，后期 flow 用 Hebbian；immersion 预期涌现，不主动训练。 | [D-08](#d-08) |
+| <a id="c-16"></a>C-16 | 在 CC 非精确 replica、语义角色静态分配的前提下研究语义群体位置与生物解剖拓扑的兼容；区分角色、胞体位置、轴突／树突接触机会和存储顺序。 | [D-08](#d-08) |
+| <a id="c-17"></a>C-17 | 注意／活动／DMN 依赖的背景白噪音调节：专注要求下全局显著抑噪；低激活比例时提升噪音，包括抵消后的残留仍存在、尚未检测 DMN 的情况；DMN 下支持活动与慢语义收敛。 | [D-08](#d-08) |
+| <a id="c-18"></a>C-18 | 同一语义维正负群体的内在相互抑制／激活抵消，作为早期不建模显式抑制性突触连接时的固有作用；互补正面输入后降低活动并保留有用残值。 | [D-08](#d-08) |
+| <a id="c-19"></a>C-19 | 柔性窗口内的状态检测／训练观测：DMN 广覆盖、沉浸局限小群、心流在小覆盖内扫过不同群；排除总激活比例并剔除附加白噪音对覆盖的影响。 | [D-08](#d-08) |
+| <a id="c-20"></a>C-20 | 正常自循环活动必须保有外部 token 可转向性；没有外部 token 能打破或驱转该循环时才属于 stale。 | [D-08](#d-08) |
+| <a id="c-21"></a>C-21 | 对失去外部输入可转向性的 stale 状态考虑系统性重置恢复。 | [D-08](#d-08) |
+| <a id="c-22"></a>C-22 | 统一的 DMN/token 激活链构建与修补训练：观察下一步自然激活量，从理论上该激活而未激活的群体选足够比例补足；初建是现有支持不足的情形，持续迭代主要维护有用传播。 | [D-08](#d-08) |
+| <a id="c-23"></a>C-23 | 全链约束下逐步选择修补目标：每 epoch 确定维护范围，以近似宽度和主体增强／回返削弱参数规划进程，再利用正确自然激活并补足缺失候选。 | [D-08](#d-08) |
+| <a id="c-24"></a>C-24 | 个体神经元的离散时间 rate／有效活动动力学与自然传播终止：保留学习连接，活动可因支持不足或随机失败而停止；半衰期式目标宽松且 token 间可不同。 | [D-08](#d-08) |
+| <a id="c-25"></a>C-25 | 分数式神经元选取／参与：以可分贡献表达训练目标，与 rate 协作缓解整细胞计数的语义割裂。 | [D-08](#d-08) |
+| <a id="c-26"></a>C-26 | 背景支持下的有用小循环上下文：大链构建避免主动制造有害捷径，同时保留能让较早输入影响后续输出的小循环。 | [D-08](#d-08) |
+| <a id="c-27"></a>C-27 | 累积／延后生效的衰减：保留跨小更新的衰减进度，可研究下一数值边界的未来触发。 | [D-08](#d-08) |
+| <a id="c-28"></a>C-28 | 按建模量选择 INT8/INT4、无符号／定点或浮点表示，分别论证存储、缩放、累加与动态更新精度。 | [D-08](#d-08) |
+| <a id="c-29"></a>C-29 | 两帧轮换的离散时间连入汇集：只读完整前帧，局部计算各目标后写入次帧，完成后交换。 | [D-08](#d-08) |
+| <a id="c-30"></a>C-30 | 以长方形场景研究四分的功能关系：局部模式、物体识别、具身空间、自我觉察及后两者反馈。 | [D-08](#d-08) / [D-09](#d-09) |
+| <a id="c-31"></a>C-31 | 概念本体由经验抽象形成的预期模型及连接支持的激活链吸引子承载；每个 CC 拥有完整概念动力学空间的非严格副本，感受输入形成位置偏向。 | [D-08](#d-08) / [D-09](#d-09) |
+| <a id="c-32"></a>C-32 | 将 5120 维容量与稀疏参与、rate 值域、实用分辨率及时间复用共同研究，区分已学库、即时表达与协同推演容量。 | [D-08](#d-08) / [D-09](#d-09) |
+| <a id="c-33"></a>C-33 | 有限精度个体 rate 建模须研究相连神经元 spike 时机的协同效益，分别评价传播与学习，避免把平均精度当作时序信息。 | [D-08](#d-08) / [D-09](#d-09) |
+| <a id="c-34"></a>C-34 | 连续神经元动力学及其 AP 输出：连续 AP 来自同一持续演化状态，全局曲线可作为放电阶段输出函数；保留可能使能学习／泛化的机制，避免无需求的精确生理重建。 | [D-08](#d-08) / [D-09](#d-09) |
+| <a id="c-35"></a>C-35 | 模块定义一等名义符号；别名保留身份，不同来源／共存版本可区分。 | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-36"></a>C-36 | Per-thread symbolic bindings and scoped effects; procedures capture used definition-time values under resolved identities. Perform temporarily shadows current lookup; behave uses current values. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-37"></a>C-37 | Functions use explicit inputs and mutable memory without dynamic-context access; procedures may use dynamic bindings and have lexical or symbolic names. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-38"></a>C-38 | 用实际 SNN 需求同步推进 CoD 语言与应用的设计、实现和验证。 | [D-08](#d-08) / [D-10](#d-10) |
+| <a id="c-39"></a>C-39 | User storage is stack/region; host heap belongs to system code. Regional objects never copy/move; user libraries can recycle storage within a live region. | [D-13](#d-13) / [D-14](#d-14) |
+| <a id="c-40"></a>C-40 | Logical business relationships between independently managed regions. | [D-13](#d-13) / [D-14](#d-14) |
+| <a id="c-41"></a>C-41 | expression-oriented 语言方向及显式 void；符号读写作为表达式组合。 | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-42"></a>C-42 | 专门词汇表模块只声明符号并辅以注释，供模块共享身份。 | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-43"></a>C-43 | Source-preserving using/import and receiving-context body redefinition through mixin. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-44"></a>C-44 | Complete declaration scanning/registration precedes entry-driven compilation; dependency top-level execution semantics are incorporated in encounter order. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-45"></a>C-45 | Explicit source selectors/local aliases and lower-priority implicit method names, without local module namespaces. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-46"></a>C-46 | Compile-time mixin translation, source-body aliases and destination identities; installation follows the current staged contract. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-47"></a>C-47 | Strict branded scalar/index types, array-declared index domains and meaningful scalar arithmetic; compare newtype and UoM mechanisms. | [D-11](#d-11) |
+| <a id="c-48"></a>C-48 | Explicit memory access retains provenance/lifetime; functions may edit permitted storage and return valid views. Const non-bits views restrict holder writes without freezing aliased contents. | [D-14](#d-14) |
+| <a id="c-49"></a>C-49 | UoMs are independently named compile-time entities with first-class type identities and identity-preserving local aliases; symbols do not represent them. | [D-11](#d-11) |
+| <a id="c-50"></a>C-50 | Pure UoM/index conversion functions use Julia-style argument-type method dispatch to associate operations with array types. | [D-11](#d-11) |
+| <a id="c-51"></a>C-51 | Parameter-declared UoM conversion acceptance and compile-time route selection: exact or convertible targets, source route preference and configurable ambiguity warnings. | [D-11](#d-11) |
+| <a id="c-52"></a>C-52 | Actor model concurrency with processes, mailboxes and a type parameter for the mail payload. | [D-12](#d-12) / [D-13](#d-13) |
+| <a id="c-53"></a>C-53 | One region per graph of objects connected by direct pointers. Each CoD pointer edge stays inside its region. | [D-13](#d-13) / [D-14](#d-14) |
+| <a id="c-54"></a>C-54 | Whole-region ownership in ordinary values and scoped effect resources, with explicit consuming transfers distinguished from lookup shadowing. | [D-14](#d-14) |
+| <a id="c-55"></a>C-55 | Graph-transfer methods use both owner/root types, abstract root-policy interfaces and actual borrowed region references. | [D-14](#d-14) |
+| <a id="c-56"></a>C-56 | Nominal abstract inheritance and explicit data-interface conformance, with head-only declarations across modules. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-57"></a>C-57 | Type-associated method selections, explicit alias/extension permission, lower-priority implicit names and separate mixin redefinition. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-58"></a>C-58 | Explicit publication: public alias → identity; private-by-default source selection. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-59"></a>C-59 | Independent module worlds with identity-keyed information and multiple aliases; receiver-owned construction cannot edit other module worlds. Compilation shapes TLS; runtime effects edit its typed bindings, with inline bits under H-277. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-60"></a>C-60 | Vocabulary modules establish common identities for typed symbols, mainly abstract types with some supporting ADTs, and their method collections. | [D-10](#d-10) / [D-15](#d-15) |
+| <a id="c-61"></a>C-61 | Numerical representation and admissibility are independent of compile-time UoM identity. | [D-16](#d-16) / [D-11](#d-11) |
+| <a id="c-62"></a>C-62 | Intrinsic fixed-width fractions with independently typed integer components and explicit canonicalization. | [D-16](#d-16) / [D-11](#d-11) |
+| <a id="c-63"></a>C-63 | Lexical exception control, scoped cleanup, unchecked allocation failures and explicit exception causes. | [D-17](#d-17) |
+| <a id="c-64"></a>C-64 | Destination-view result mode for assignment-family calls, distinct from ordinary const bits results. | [D-14](#d-14) |
+| <a id="c-65"></a>C-65 | Ordinary reference-semantic ptr variables with initializer-fixed owners, generic external owners and root-constrained region owners. | [D-14](#d-14) |
+| <a id="c-66"></a>C-66 | Explicit symbolic capture dependency through touch @symbol, without referent computation or automatic group capture. | [D-10](#d-10) / [D-14](#d-14) |
+| <a id="c-67"></a>C-67 | Explicit checked builtin selection using intrinsic (operation)(...). | [D-10](#d-10) / [D-14](#d-14) |
+| <a id="c-68"></a>C-68 | Zero-body-execution range-for else with normal-path initialization joins. | [D-10](#d-10) / [D-14](#d-14) |
+| <a id="c-69"></a>C-69 | Distinct reference and bits exchange operations with two destinations and void results. | [D-14](#d-14) |
+| <a id="c-70"></a>C-70 | Region is a declaration keyword for whole-resource locals, parameters, results and procedure signatures. | [D-14](#d-14) |
+| <a id="c-71"></a>C-71 | Transfer methods return void or checked readonly destination views; indexed writes select logical container operations. | [D-14](#d-14) |
+| <a id="c-72"></a>C-72 | Ref/ptr ordinary declarations distinguish compiler-checked initialization from nullable dereference. | [D-14](#d-14) |
+| <a id="c-73"></a>C-73 | Unified owner-aware captures for named and anonymous functions/procedures. | [D-18](#d-18) |
+| <a id="c-74"></a>C-74 | Structural product region definitions and required field subsets, with language-owned storage mechanics. | [D-13](#d-13) / [D-18](#d-18) |
+| <a id="c-75"></a>C-75 | Explicit variable aliases naming existing storage without introducing a new holder. | [D-14](#d-14) |
+| <a id="c-76"></a>C-76 | Boundary-pure const functions with private mutable state and deferred const-function TCO. | [D-19](#d-19) |
+| <a id="c-77"></a>C-77 | Initial manual root-type compatibility identifier, with later consideration of all participating ADT layouts and checksum-assisted matching. | [D-07](#d-07) |
+| <a id="c-78"></a>C-78 | Language support for saving/replacing a disk file with a region snapshot, with application-controlled persistence workflow. | [D-07](#d-07) |
+| <a id="c-79"></a>C-79 | Third-party intrinsic extension through a service provider interface; ordinary extensions through CoD libraries. | [D-07](#d-07) |
+| <a id="c-80"></a>C-80 | A compiler application designed in CoD: regional frontend/semantic artifacts, persistent stage reuse and selectively bound LLVM services, progressing toward self-hosting. | [D-20](#d-20) |
+| <a id="c-81"></a>C-81 | Write-only out reference parameters establish initialized output on normal return; a bare local handle ref declaration allocates uninitialized target storage. | [D-20](#d-20) |
+| <a id="c-82"></a>C-82 | Callable views preserve a selected family/context and dispatch by actual argument types, including abstract argument/result flows. | [D-21](#d-21) |
+| <a id="c-83"></a>C-83 | Coverage of admissible type combinations and native preparation; replacement timing is under review in D-21/D-25. | [D-21](#d-21) |
+| <a id="c-84"></a>C-84 | Infer implemented method result types as checked signature constraints, independently of native result transport. | [D-24](#d-24) |
+| <a id="c-85"></a>C-85 | One fused type-level artifact retains reachable parallel module interpretations, including dependency-local callables and procedure-local effects; runtime values and bindings remain execution state. External values instantiate known ADTs without extending that semantic set (H-390). | [D-25](#d-25) / [D-15](#d-15) / [D-21](#d-21) |
+| <a id="gov-01"></a>GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | [D-GOV](#d-gov) |
+| <a id="gov-02"></a>GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | [D-GOV](#d-gov) |
 
-登记条目需要提供可以重新定位的内容基线：不可变 Git commit/blob 加路径及章节，或已定义的契约修订及其内容摘要。不得仅用会移动的 `main` 链接充当历史确认版本。文档内可展示状态摘要；登记处保留依据并决定当前资格。
+## 4. Relationship register
 
-人工事件记录确认者实际已知身份、原文及来源、UTC 时间、结论、概念和边 ID、文档范围／版本、条件与明确排除项。只有确实得到人工决定才能增加这类事件；未知身份或没有公开链接要如实标明。
+Each row preserves a distinct proposition, endpoints, relation kind, rationale and scope. Historical revisions identify evidence coverage; they do not override §2 or qualify later content. An unspecified formal value path remains pending-human. Local confirmations retain their stated extent; P-31 is rejected. Dependencies never grant authority.
 
-延续事件记录操作者是智能体、人工基线、旧／新内容版本、相关纲领版本及条款、比较结论、价值链、不变量与验收条件是否保留、影响对象和当前状态。纯排版修改也可以用简短条目说明；语义上的新选择不能藏在“文字整理”之下。
+### Founding relationships
 
-### 2.4 修改、再确认与下游影响
-
-设计修改时先读取相关纲领与证据，再同时比较当前合格版本和人工确认基线，防止连续小改动累积成未经确认的新设计。能自然延续的，追加 `K-*`，更新版本覆盖及状态，不打扰人类重复批准。
-
-对不能确信自然延续的内容，列出“原价值链 → 拟议变化 → 疑点 → 备选方案／代价 → 需要人工决定的范围”，暂停该范围的采纳与实施。可以保存清楚标注的提案；无关且仍合格的任务不因此停止。补读纲领不能代替缺失的人类确认。
-
-价值根、父概念、关键技术依赖或不变量发生变化时，沿关系反向检索受影响文档。失去依据的部分标为 `needs-reconfirmation`，说明触发事件；不受影响部分保留资格。确认替代方案后，以新事件和延续检查恢复相应范围，不能静默继承已经撤销的依据。
-
-文档、关系边、当前资格和影响索引应在同一次变更中同步。人工历史只追加；更正、撤回、替代与重新确认均引用原事件另记，不覆写历史原文。现状表可以更新，历史事件不可删除来消除冲突。
-
-Historical payloads may live in immutable Git history under H-388. Keep the active qualification, value/dependency edges, unresolved questions and stable event-ID index here; the index must identify the commit, path and record location. Compaction preserves the original evidence and its exclusions, including rejected or superseded decisions. An index entry is a locator, not a substitute confirmation: retrieve the original event when its exact scope matters. Append corrections as new events; do not reinterpret an old statement while shortening it. Keep maintenance entries brief and avoid copying test logs or retired research into this register.
-
-
-## 3. 当前价值根与概念目录
-
-纲领初始登记基线：提交 `3fe2cd1dfd06ec41481f265386d23f3dce7e2ff6`，文件 blob `9f0154035d52f976232000ab1601088b91948c0b`。核对仓库基线为 `5241613f796ca4faee00974a0e925b64dc17fb6a`。以下是人工明确方向的命名与摘要，不表示人类逐字审核过纲领全部实现建议。
-
-| ID | 价值或概念 | 纲领位置 | 人工依据与范围 |
-| --- | --- | --- | --- |
-| V-01 | 业务意图不因差异化执行环境而改写。 | §1、§3、§6 | H-01；确认目标。 |
-| V-02 | 有原生 ontology 的领域数据与业务逻辑，可以跨 domain、跨语义层级即时集成。 | §1、§3—5 | H-02、H-03；确认目标和层级方向。 |
-| V-03 | 高度结构化的持久语义单元，兼顾低开销存取、人类阅读与智能体顺手修改。 | §1、§7—10 | H-04；确认目标。 |
-| C-01 | Regional GADT 图承载领域知识、事实和业务逻辑意图。 | §2—3 | H-01、H-02；不确认具体 GADT 编码及推理算法。 |
-| C-02 | LLVM 实现可按环境差异化的原生 effects handler。 | §6 | H-01；不预定 handler 演算、续延或 JIT/AOT 策略。 |
-| C-03 | 不同 domain 的多个 regions 可在同一进程即时组合。 | §4 | H-02；不预定跨域引用布局或事务方案。 |
-| C-04 | Value/type/kind 层级可由 regions 承载。 | §5 | H-03；kind-level 为明确提出的发展方向，不是已经选定 kind/universe 理论。 |
-| C-05 | DBMR 是高度结构化、支持低开销存取的持久语义单元。 | §7 | H-04；不自动包含数据库事务或任意 ABI 兼容保证。 |
-| C-06 | DBMR 可快速呈现人类可读的文本源码，并有 IDE 集成。 | §8—9 | H-04；不指定语法、完整交换格式或 IDE 协议。 |
-| C-07 | 提供智能体顺手的语义编辑能力。 | §10 | H-04；不指定 patch 协议、提交算法或自动执行权限。 |
-| C-08 | memory region 承载 IPC packet，总长度在包头，完整接收后调用入口对象的约定成员方法落地。 | §2—3、§6—7 的候选近期应用 | H-06；确认业务方向，不指定 framing ABI、方法分派、提交和重试协议。 |
-| C-09 | DBMR 支持本地 ontology 的检索、统计和 CRUD，日常不回收空间，按节奏重建载荷及 backing 文件压缩。 | §7 的候选近期应用 | H-06；不预定不可变版本、历史保留、并发或崩溃恢复算法。 H-385 confirms result-only constness for acquisition; H-384 delegates R3 alternatives with final selection reserved. D-22/P-349 records a candidate value path, without selecting acquisition/failure/durability protocols. |
-| C-10 | 显式 ADT/GADT、方法和内存语义；以 SNN 需求同步推进语言及应用设计、实现和验证。 | §2—6、§14 的候选设计范围 | H-06/H-07 建立设计讨论，H-96 将协同开发纳入当前方向；原始决定保留，不将方向批准外推到全部机制。D-07r4、D-10r1。 |
-| C-11 | C/C++ 作为与其他语言运行时互操作的兼容接口。 | §6 的候选运行时边界 | H-06；不指定 C ABI、C++ wrapper、句柄和所有权协议。 |
-| C-12 | 首个讨论应用为稳态循环激活 SNN：每 CC 一个 region，交换 token 语义向量，目标几百到几万 CC。H-43 明确 CC 是语义呈现基本单元，CC 之间为非精确 replica，minicolumn／神经元的语义响应角色静态分配，不要求网络学习这些身份。当前 Flash 5120 维、每维 60+60；每 CC 按树莓派预算，节点 RAM 上限 16 GB，应用文档独立。 | §2—3、§6—7、§12 的候选应用 | H-08—H-13、H-27、H-43、H-46—H-48、H-52—H-59；静态语义身份不冻结连接权重或活动状态。三种语义轨迹在每 CC 的宽活动比例范围内运行，允许不同心智状态的典型占比不同；H-52 明确学习三相稳态吸引子及各种入口条件的预期收敛，单 token 自循环后逐渐淡出是中间目标；H-67 允许宽松半衰期尺度及 token 差异。H-53 明确单次随机激活、低噪音淡出与 DMN 检测后的噪音提升；H-54/H-55 增加互补正面输入的抵消、低活动增噪、残留先增长达峰再回落目标；H-56—H-58 以去噪窗口覆盖／路径检测状态并排除总激活比例，心流覆盖上限示例20%、DMN覆盖示例80%；H-59 要求正常循环状态均可由外部 token 驱使转向，失去该能力为 stale，重置是恢复候选；具体数值、动力学及算法待定。 H-61/H-62 记录阶段性无距离偏好与分阶段训练、静态批组的初步方案；immersion 保留为预期涌现而无专门训练目标。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-71 允许有用小循环保留较长上下文影响，不以主导响应淡出要求一切历史作用归零。 K-207 / D-08 set202 记录 H-71 实质研究完成并统一当前状态；H-86 经验比较、全部局部人工约束和 pending-human 范围保持，不新增实施资格。 |
-| C-13 | SNN 静态槽集总数以略大于神经元数为明确目标，优先按 scale law 形成便于算术寻址的固定拓扑；不要求保留旧场景连接容量。神经元指向当前集；每槽 4-byte 对端 ID / 1-byte FP8 权重并行数组，每集一个 owner ID。训练使用既存集合迁移，不通过堆分配维护槽拓扑。最小集 100 槽；少出边源的取舍与入边准入分开。 | C-12 的容量设计方向，训练提出容量需求；§2—3、§7 的候选细化 | H-13—H-19 为约束基线；H-18 取代精确 N 集限制。H-20 请求文献调研，H-21 暂定 alpha≈3 的 100/144 分级模板，并要求评估 target-owned 入边归属。H-16 的 source-owned 归属作为对照；H-94 确认 target-owned 入连及双帧拉取，具体布局／迁移方案未获全文批准。H-22 要求评估大入度与激活的生物证据，未选择新上限或整合机制。H-23 认为大入度可由较小典型入权重补偿是合理方向，并要求区分入／出度参数；不指定权重函数或更换暂定表。H-24 明确权重尺度属于训练策略，可作为超参数或动态规划，不是容量分配参数。H-25 继续暂定容量规则并转向语义维建模；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量；J 和精确配额待定。具体更新、源参与／重入、空闲管理和学习／迁移仍待决。 K-178 / CapacityPlanning、ConnectivityScalingResearch173 将明确的数组预算假设与 H-73/H-75/H-78 状态比较连接；容量配额、已算总额和需求先于辅助结构原则保持。 K-200 / CapacityPlanning195 将已记录的连接扫描算术纳入节点规划；RAM、保留度数、更新节奏和节点 CC 数分别约束可行性，不把全预留扫描当作强制算法或实测带宽。 K-202 / AdaptiveConnectivity、CapacityPlanning、ConnectivityScalingResearch197 精简 authority 摘要并直连独立 flow 文档；保留正文合同、来源、算术、开放选择及全部 H/K 历史，未授予实施资格。 |
-| C-14 | 每语义维分为正、负细胞群体，按身份区分极性，研究非负活动到有符号值的读出。H-27/H-35 的当前讨论限于 Flash 5120 维、每维 60+60；V4 Pro 人口比较暂不讨论。H-54 要求同维正负群体内在抵消（C-18）；上下文、幅度及预测语义需协调。 | C-12 的编码候选细化；P-27 候选价值链，P-28 容量依赖 | H-25/H-27 要求评估及计算，未确认整套编码／学习机制；H-26 请求人脑柱细胞数证据。614400 神经元是当前条件算术，未选定最终 checkpoint、连接池或生物对应。 H-75/AD-080 明确同一 minicolumn 内个体表示共享语义成分的不同上下文路径；不把这些身份归并为单一平均值或固定一细胞一条独占路径。 H-76/AD-082 指定 token 输入的预测选择：预测占比充分则强激活这些细胞，否则广范围低强度激活；阈值、强度与坐标校准待定。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-199 / SignedPopulationEncoding194 将预测输入分支的使用与有噪声下实际上下文匹配区分；保留 H-78/H-85 对照，不把自发就绪直接视为错误，不预选门限、噪音来源标签或额外状态。 |
-| C-15 | 以三相行为、入口收敛及有限 token 响应为目标的分阶段连接构建／学习：初步以直接激活链形成 DMN／token 循环，后期 flow 用 Hebbian；immersion 预期涌现，不主动训练。 | C-12 的学习方向；P-29 候选价值链、P-30 容量依赖；C-22 为构建方案，P-31 的等位机制范围已 rejected | H-61 细化 H-40/H-52 的方法分工并确认暂不加入物理距离偏好；H-41/H-42/H-43/H-50 的维号中立、等位拒绝、固定语义及无天然物理度量边界保留。H-52—H-59 的行为／噪音／检测／可转向性仍约束验收。H-62 仅初步倾向预先定组并要求比较，算法与正式价值链待定。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-79—H-81/AD-085—AD-087 明确 Hebbian/HTM 是 token 序列 flow 的学习方向，算法尚未选定；现授权初步设计并尽早讨论问题，不默认沿用 DMN/token 修补。 H-82/AD-088 以预测性预激活群与输入序列高度匹配作为 flow 直接训练验收；无需自主持续生成，生成算法另行设计。具体度量和学习规则仍待定。 H-83/AD-089 要求按序列长度验证：共享匹配片段允许多个预测，随上下文增长向训练序列收敛；不预设固定单候选或对每个未到达预测等量削弱。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 K-95 的 flow 初设分析与上下文分配候选保持 pending-human；H-85 明确预测正负并存／抵消留待实验；H-86 授权明显经验选项直接列为真实数据比较，不逐项询问。 K-98 将 flow 的预测改进与共享循环、fade-out 和外部可驱转性一起比较；未选归一化、图分区或关联更新公式。 K-127 / FlowLearning122 补充学习保留与替换证据的适用范围。 K-163 / FlowLearning158、SynapticIntegrationResearch158 明确 HTM 证据的扰动及人口缩放条件，不选择编码、门限或新状态。  K-174 / FlowLearning169 区分下一输入匹配与较长时域的关联统计；不把 successor representation 或 TD 机制加入模型。 K-179 / FlowLearning174 将直接定义的 rate/frame 学习与有条件的 spike-rule 降阶区分，不引入微观时序机制。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-188 / FlowLearning183、MR-S095 区分跨日表征漂移的任务读出与自身自然预激活；补偿模型所需目标误差反馈不等同实测突触学习，未预选补偿机制或冻结身份语义。 K-189 / FlowLearning184、MR-S096 区分已有关联的漂移维护与陌生转移学习；单细胞均值／方差调节不等同于 CC 活跃比例控制，不选择补偿机制。  K-195 / FlowLearning190、MR-S010 核查学习期间有效循环强度及持续可塑性的来源条件；自然预激活与后续行为按实际条件比较，不选择增益变量、学习门控或自主生成目标。  K-196 / FlowLearning191、SynapticIntegrationResearch191、MR-FC015 以同度／同权重和的条件汇集比较权重集中及源协方差；上下文输入分数不由容量或权重总量自动校准，不新增归一化、门限或元数据。  K-197 / FlowLearning192、MR-S049 深查实际离线批量学习及内部连续状态／二值输出区别；不将自主回放结果当在线 flow 或分级语义输出证据，未选状态、竞争或学习模式。 K-206 / FlowLearning201、MR-S044 细化预输入就绪度测量与生成输出的边界；保留 H-83 合理多候选，不将单一实际符号的分类计分直接变成本文验收。 |
-| C-16 | 在 CC 非精确 replica、语义角色静态分配的前提下研究语义群体位置与生物解剖拓扑的兼容；区分角色、胞体位置、轴突／树突接触机会和存储顺序。 | C-12 的候选拓扑研究，P-32 候选价值链，P-33 编码依赖 | H-42 请求研究，H-43 固定语义角色，H-44 优先解决位置映射冲突而非 1D/2D。H-46 明确 measured feature 与 minicolumn 非一一对应并不冲突；H-49 请求距离依据，H-50 明确现有语义组织无天然物理位置，H-51 要求至少 12 小时研究。群体交错、选择性可达等只作额外解剖假设下的条件比较，不是当前必选项；不松动 H-41/H-42 边界。 H-61 确认当前暂不加入物理距离倾向；解剖研究保留为参考，未来几何提案须有具体收益，非实现当前 SNN 的前置条件。K-78 记录此范围。 |
-| C-17 | 注意／活动／DMN 依赖的背景白噪音调节：专注要求下全局显著抑噪；低激活比例时提升噪音，包括抵消后的残留仍存在、尚未检测 DMN 的情况；DMN 下支持活动与慢语义收敛。 | C-12 的行为控制方向；P-34 候选价值链、P-35 约束学习条件、P-41 为检测输入边界 | H-53/H-55 确认功能目的；H-55 明确 DMN 检测不是所有增噪的前提。H-56 将总激活比例留作调节变量并排除其参与分类。控制范围、数值、优先级及算法仍未选。 K-177 / ContextLoopsAndNumerics172 区分全局噪音幅度控制与共享随机抽样，不预选空间协方差；真实行为比较仍开放。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
-| C-18 | 同一语义维正负群体的内在相互抑制／激活抵消，作为早期不建模显式抑制性突触连接时的固有作用；互补正面输入后降低活动并保留有用残值。 | C-12 的行为功能；P-36 候选价值链，P-37 编码依赖，P-38 学习约束 | H-54 确认功能与早期范围，H-55 确认残留先增长达峰再回落的目标；H-77/AD-083 明确 minicolumn 全局计算净余，按比例保留同方向活跃细胞 rate，不按下标配对；时序、预测相态处理和形式化关系未选。坐标极性不等于语义正负。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。 K-168 / SignedPopulationEncoding163、Model163 明确暂态与完成后的活跃极性总量；净值可恢复 H-77 后的总量但不恢复细胞上下文，未选消息合同。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。  K-183 / SignedPopulationEncoding178、ActivationRegimes178 和 cancellation-properties-analysis 以同一净向量下不同细胞参与数的精确例区分调节量与幅度；不选门限或招募配额。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-205 / ContextLoopsAndNumerics200 将噪音单独覆盖例的独立、对称、无保留状态条件明确写出；不将其用作实际回返轨迹估计，不选噪音律、计数门限或检测结构。 |
-| C-19 | 柔性窗口内的状态检测／训练观测：DMN 广覆盖、沉浸局限小群、心流在小覆盖内扫过不同群；排除总激活比例并剔除附加白噪音对覆盖的影响。 | C-12 的状态可观察性；P-39 候选价值链，P-40 活动定义依赖，P-41 约束调节／检测接口 | H-56 指定方向，H-57 排除超过示例20%覆盖的心流，H-58 要求去噪覆盖并提出低密度过滤候选；DMN80%、心流20%均示例，窗口、密度定义、阈值及算法未选。 K-176 / ActivationRegimes171 说明小群循环与跨群路径描述可以重叠，须由真实轨迹和观测条件检验区别；未选分类器或附加状态。 |
-| C-20 | 正常自循环活动必须保有外部 token 可转向性；没有外部 token 能打破或驱转该循环时才属于 stale。 | C-12 的行为响应要求；P-42 候选价值链 | H-59 确认正常／stale 的区别；不把长驻、重复、占比或窗口相态标签当作充分 stale 判据。输入域、响应语义及运行评估时限未选。 |
-| C-21 | 对失去外部输入可转向性的 stale 状态考虑系统性重置恢复。 | C-20 的恢复候选；P-43 候选价值关系，P-44 状态语义依赖 | H-59 的“可能需要”提出候选，未选择必备重置策略。触发证据、CC／网络范围、活动／预测／连接／持久状态的影响与保留及恢复入口未选。 |
-| C-22 | 统一的 DMN/token 激活链构建与修补训练：观察下一步自然激活量，从理论上该激活而未激活的群体选足够比例补足；初建是现有支持不足的情形，持续迭代主要维护有用传播。 | C-15 的训练机制提案；P-45 候选价值链，P-46 容量依赖、P-47 固定语义编码依赖 | H-63 明确要求按修补方向调整；H-61 的链连接／多步闭合仍作机制候选，H-62 静态批组可作参考而非强制轨迹。预期目标、激活量口径、选取比例、教学辅助／边更新、衰减阶段和实现待定。 H-64/AD-061 要求全局考虑和逐步采样、避免前序目标重用造成意外捷径；C-23/P-48—P-51、K-80 记录待讨论的约束／检查方案。 H-65/AD-062—AD-064 固定每 epoch 的训练范围并给出近似宽度、主体增强、回返削弱的参数角色；K-81 区分循环时长、净增益和实际维持时间。 H-66/AD-065—AD-067 以保持回返为初步预期，要求仔细处理增强／削弱，并偏好每步或最多几步的 token 分布保持；K-82 将完整后继群体与修补子集的比例约束区分，细节仍 pending-human。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 H-79—H-81 将本构建／修补范围明确限定为 DMN 与单 token；flow 的 Hebbian/HTM 初步算法另行设计，不从本算法直接推广。  K-194 / TrainingStrategy189、MR-S098 深查嵌入网络的链传播、幅度保真及交叉激活证据；保留实际共同背景下的维护验收，不导入持续输入、同步、几何或细胞机制。 |
-| C-23 | 全链约束下逐步选择修补目标：每 epoch 确定维护范围，以近似宽度和主体增强／回返削弱参数规划进程，再利用正确自然激活并补足缺失候选。 | C-22 的候选规划约束；P-48 价值衍生，P-49 容量依赖、P-50 编码依赖、P-51 修补约束 | H-64 要求全局考虑／逐步采样及避免意外捷径；H-65 明确 DMN 全体范围、token 按向量比例选 minicolumn 细胞且每 epoch 选一次。参数数值、逐步与累计增益定义、时间标度、回返对及表示仍 pending-human，不预设全网协调器或永久神经元相位。 H-66 把语义保持时间范围收紧到每步或少数几步，P-50 记录编码约束；K-82 分析有限人口、链宽／圈长、闭环维持和净增益的耦合，窗口、容差及采样策略待定。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 H-71/C-26/P-61 明确小循环可有上下文价值；避免主动构造有害捷径不授权强力消除小循环。 |
-| C-24 | 个体神经元的离散时间 rate／有效活动动力学与自然传播终止：保留学习连接，活动可因支持不足或随机失败而停止；半衰期式目标宽松且 token 间可不同。 | C-15 的候选动力学细化；P-52 价值衍生，P-53 编码依赖、P-54 修补约束、P-59 容量依赖 | H-67 提议并要求深入讨论，H-68 明确自然断链不清权重，H-70 要求全程数值精度；实际变量、更新、噪音、步长、阈值及格式仍 pending-human。不默认聚合 minicolumn 或采用抑制性边。 H-71/C-26—C-28 开放小循环上下文、累积／定时衰减及 INT8/INT4 比较；相关细节仍待定。 H-94 正式确认 C-29 的两帧轮换连入拉取，保留个体身份和明确帧边界；转移函数、相态及时间步仍待定。 H-78/AD-084 明确当前不决定预测／当前活动的状态表示，保留未来实现对照实验余地；不预设额外字段或实验框架。 K-165 / RateDynamics160 明确 rate 降阶已包含的波动与显式噪音的意义，不选择噪音律或适应时间常数。 K-166 / RateDynamics161 区分平均与 H-77 抵消的次序，不以 ensemble 平均替代当前快照或加入分布状态。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-172 / RateDynamics167 深查 population-rate 降阶条件；不以群体平均加速替代个体上下文身份或宣称 CPU 收益。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
-| C-25 | 分数式神经元选取／参与：以可分贡献表达训练目标，与 rate 协作缓解整细胞计数的语义割裂。 | C-22 的候选目标表示；P-55 价值衍生，P-56 rate 依赖、P-57 编码依赖、P-58 进程约束 | H-69 初步提出方向；分数作为目标、概率、占空比或独立状态的含义待定。乘积足以决定后续行为时不预设双字段；共享身份与边的串扰不因分数化自动消失，完整契约 pending-human。 |
-| C-26 | 背景支持下的有用小循环上下文：大链构建避免主动制造有害捷径，同时保留能让较早输入影响后续输出的小循环。 | C-15 的行为方向细化；P-60 价值衍生、P-61 进程约束、P-62 动力学依赖 | H-71 明确不强力消除小循环并提出长上下文价值；主导响应淡出不等于擦除一切历史影响。具体识别、训练、容量／干扰和读出验收 pending-human。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-180 / ContextLoopsAndNumerics175、MR-S011/MR-S012 深查暂态读出、重复外部驱动与部分权重训练的条件；不导入变换、读出、学习规则或稀疏容量结论。  K-181 / ContextLoopsAndNumerics176、context-composition-analysis 明确固定总量下条件幅度界及可表示模式计数；MR-S013 的分布耦合证据不等于本模型容量。未选上限、编码或新增状态。  K-184 / ContextLoopsAndNumerics179、MR-S006 区分同噪音下有／无刺激的维持与外部噪音分组指定的选择性；不导入振荡、资源状态或模型时标。 K-193 / ContextLoopsAndNumerics188 核查连续吸引子记忆扩散的稳态、弱涨落及调谐缩放条件；连续 rate 或活动调节不自动满足它们，不导入记忆容量或噪音控制公式。 K-201 / ContextLoopsAndNumerics196、context-composition-analysis 的 balanced_drive_frame_scaling 将同维平衡驱动的组成收缩与帧间隔联系；保持净语义值不等于保持上下文，未把确定性例当作白噪音律或选取新的状态／调节机制。 |
-| C-27 | 累积／延后生效的衰减：保留跨小更新的衰减进度，可研究下一数值边界的未来触发。 | C-24 的时间／数值机制候选；P-63 价值衍生、P-64 表示／容量依赖 | H-71 要求深入比较，H-72 澄清可预计算下一次最小精度允许的变化；未确认计时器、残差、锚点、事件结构或具体衰减律。模型时间、输入到达、取消／重新计算和中间输出语义必须明确；pending-human。 K-97 的条件分析指出：有限下一边界时间可承载幅度进度，但无事件状态并非普遍充分；输入即使不改变 code 也可改变下一事件。时间戳精度／存储及真正省略的工作需比较，未选择新结构。  K-173 / ContextLoopsAndNumerics168 区分源变化稀疏与连入依赖／同维抵消传播的影响范围；不预设事件索引、缓存或重算算法。  K-198 / ContextLoopsAndNumerics193、MR-S002 核查 QSS 的总量化误差（包括滞回）趋零及观察时域条件；不把收敛结论当固定低精度任意时长保证，未选事件结构或滞回机制。 K-204 / ContextLoopsAndNumerics199、numeric-representation-arithmetic 的 directed_decay_rounding 区分向下取整避免停滞与保留衰减时间；有限归零不是半衰期／自然断链的充分证据，不选取整律或新状态。 |
-| C-28 | 按建模量选择 INT8/INT4、无符号／定点或浮点表示，分别论证存储、缩放、累加与动态更新精度。 | C-24 的候选数值细化；P-65 价值衍生、P-66 编码依赖、P-67 容量依赖、P-68 衰减约束 | H-71 授权整数替代研究，H-73 允许 FP16/FP32 神经元状态候选，H-70 精度要求保留；不确认全量替换或具体格式。静态槽算术是条件基线，字段／相态与元数据代价需明确；pending-human。 K-88 的条件权重算术区分动态范围、集体增益分辨率及训练存储；不按容量档位选权重尺度，不默认逐边高精度副本。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
-| C-29 | 两帧轮换的离散时间连入汇集：只读完整前帧，局部计算各目标后写入次帧，完成后交换。 | C-24 的已确认执行架构；P-69 局部价值衍生、P-70 存储依赖 | H-94 在 H-75/AD-081 基础上正式确认双帧连入拉取：整步只读 A，各目标拉取源 effect 后写 B，完成后统一发布；读取不推进或消耗源状态。该架构 confirmed；完整方程、相态、输入、学习发布及时间步仍待定。push queue／上游 scatter 属于设计变更；不预设第三帧、双权重池或全网锁步。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 K-167 / README162 澄清两帧单标量预算标签，数值和 H-78 选择空间不变。 |
-| C-30 | 以长方形场景研究四分的功能关系：局部模式、物体识别、具身空间、自我觉察及后两者反馈。 | C-12 的认知应用研究；P-71 候选价值链、P-75 概念动力学依赖 | H-87 给定探索前提，不证明意识或解剖对应；D-09r1 S1/S2，机制 pending-human。 |
-| C-31 | 概念本体由经验抽象形成的预期模型及连接支持的激活链吸引子承载；每个 CC 拥有完整概念动力学空间的非严格副本，感受输入形成位置偏向。 | C-12 的学习前提细化；P-72 候选价值链、P-81 约束 C-30 分组 | H-88/H-89 明确建模前提；token 身份与直接导入 LLM 权重不替代 SNN 习得；D-09r1 S1—S3。训练、覆盖检验、完整状态含义未选。 |
-| C-32 | 将 5120 维容量与稀疏参与、rate 值域、实用分辨率及时间复用共同研究，区分已学库、即时表达与协同推演容量。 | C-12 的容量研究；P-73 候选价值链 | H-89/H-90 提出足够性和稀疏／时间解释；不确认 7±2 的成因、固定槽数、普适健康比例或容量结论；D-09r1 S4/S8。 |
-| C-33 | 有限精度个体 rate 建模须研究相连神经元 spike 时机的协同效益，分别评价传播与学习，避免把平均精度当作时序信息。 | C-24 的时序研究；P-74 候选价值链、P-76 数值依赖 | H-91 排除 firing/silent 二值解释并要求研究；D-09r1 S5—S8。滤波、延迟、相位、历史字段及 STDP 均未选。 |
-| C-34 | 连续神经元动力学及其 AP 输出：连续 AP 来自同一持续演化状态，全局曲线可作为放电阶段输出函数；保留可能使能学习／泛化的机制，避免无需求的精确生理重建。 | C-33 的机制保留边界；P-82 候选价值衍生，P-83 约束 C-29 | H-93 确认源端连续性，H-95 明确目标；D-08 set204 的 RateDynamics/Model/IncomingConnectivity、D-09r2 S5.1。无需由多帧输出推定独立 AP 尾部对象或线性叠加；具体方程、恢复／能耗状态与参数未选。 |
-| C-35 | 模块定义一等名义符号；别名保留身份，不同来源／共存版本可区分。 | C-10；P-84 候选价值衍生 | H-96 确认局部语义；H-112 要求明确来源和本地别名；H-114 明确 identity 是 compile-time value，alias 仅在编译期存在。H-184/P-160 requires explicit declared types on each symbol, including procedure types and grouped declarations. H-187 permits combined typed-symbol/procedure introduction through proc @p when no prior symbol exists. K-305 implements explicit types/signatures. D-10r44/D-07r36 DL-14. 身份字节格式、生成及持久协议未选。 H-373/P-331 clarifies bare names as symbol objects, with @ reads selecting TLS; namespace/shadowing details remain open. |
-| C-36 | Per-thread symbolic bindings and scoped effects; procedures capture used definition-time values under resolved identities. Perform temporarily shadows current lookup; behave uses current values. | C-02; P-85 candidate value, P-88/P-92 dependencies; P-152 owner-preservation and P-153 binding/type constraints | H-180 reaffirms H-97 and supersedes H-176 identity-only capture. Shadowing preserves captured and hidden region ownership/lifetime. H-102/H-104 retain demanded WPO checks and effect-only symbolic writes; H-172 supplies the arrow. H-181 permits direct regional resource types, with WPO-supplied binding checks and explicit business Maybe values. D-10r40/D-13r10; full checking/TLS ABI remains open. H-277–H-281 requires direct TLS bits and region-symbol-backed object references, with effect-arrow transfer/effect-equals rebinding and lifetime checks. P-248/P-249; D-10r118. H-372/H-373/P-330 supersedes implicit installation/capture from symbolic method registration: capture belongs to runtime value materialization, and TLS installation requires effect. |
-| C-37 | Functions use explicit inputs and mutable memory without dynamic-context access; procedures may use dynamic bindings and have lexical or symbolic names. | C-01; P-86 candidate value; P-89/P-159/P-161/P-167/P-170 constraints | H-197/H-198 supersede automatic read-only snapshots with the ordinary mutable-function baseline; future const functions are separate. H-184–H-189 retain typed lexical/symbolic procedure declarations, symbol-only perform/behave and current-context lexical calls. K-311 validates explicit-reference mutation and transitive dynamic-access rejection. D-10r47/D-14r8; typed owners, make and mailbox remain unfinished. H-375/P-335 requires family views with actual-type method selection; unique direct method selection is an optimization. |
-| C-38 | 用实际 SNN 需求同步推进 CoD 语言与应用的设计、实现和验证。 | C-12；P-87 候选价值衍生，P-91/P-93 依赖 | H-96 确认方向；D-08 LanguageCoDesign205、D-07 DL-16。分步路线是待完善提案，数值方程和训练规则不自动确定。 H-122/H-123 limit the planned ten-hour run to language/runtime support, structured types and indexing; no SNN modeling/learning. The bounded goal is active; K-228 records regional support and snapshot validation. |
-| C-39 | User storage is stack/region; host heap belongs to system code. Regional objects never copy/move; user libraries can recycle storage within a live region. | C-10; P-94 candidate value, P-95/P-150 constraints | H-99 remains; H-180 reaffirms capture of permitted dynamic values without copying regional graphs or duplicating owners. H-181 permits explicit Maybe-wrapped resources; the remaining H-173/H-175 allowed-type/interior-pointer boundary remains pending. H-177/H-179 permit ordinary owners and their consuming resource installation. D-10r40/D-13r10; H-190/P-162 reserves intrinsic ownership for whole regions and leaves internal free lists/pools to user code. No hidden user heap lifetime.  H-193/P-164/P-165 requires region-provenance checking and region-internal user objects; H-209 uses data for representations and type for abstractions. K-321 removes the stack/by-value record path. H-196/P-168 reserves owner-containing types for intrinsics. H-200/P-171 adds default borrowing and proposes Packet object-view spelling plus make local for stack bits; non-bits remain region-only. H-201/P-172 gives const bits parameters/results value semantics; H-202/P-173 makes const non-bits read-only borrows without snapshot guarantees. H-383/H-384/P-344–P-346 refines the broad user-data boundary: recursively finite bits ADTs may occupy lexical or regional storage; non-bits ADTs remain region-only. Ordinary ref/ptr is borrowed; aggregate implementation remains pending in D-22. |
-| C-40 | Logical business relationships between independently managed regions. | C-03/P-96 dependency and C-53/P-140 language constraint | H-101 preserves the original design question. H-157 restricts the CoD language scope to business associations. Identity, lookup, permissions and version policy remain open. D-10r25, D-07r26 DL-03/DL-08 and D-13r1. |
-| C-41 | expression-oriented 语言方向及显式 void；符号读写作为表达式组合。 | C-10；P-97 候选价值衍生，P-98 约束 | H-104 的读写形式及结果方向；D-10r1、D-07 DL-15。H-111 确认 effect 返回新值；块结果及复合表达式顺序待定。 H-149/P-129 confirms nested-only local-value shadowing and same-scope declaration uniqueness in D-10r19. H-150/P-130 confirms reserved expression-name rejection for lexical value declarations in D-10r21. |
-| C-42 | 专门词汇表模块只声明符号并辅以注释，供模块共享身份。 | C-35；P-99 候选价值衍生 | H-105 给定惯用组织；D-10r1。注释不替代类型检查，不默认安装变量值或 procedure 实现。 |
-| C-43 | Source-preserving using/import and receiving-context body redefinition through mixin. | C-10; P-100 candidate value, P-101 dependency, P-102 constraint; C-57/P-191 | H-212 moves H-105 body-redefinition semantics to mixin and aligns import with identity-preserving selection/extension. H-180 captures and H-115/H-116 typed symbol mapping/destination semantics remain. D-10r52; exact extension grammar is pending and extension permission remains pending implementation. K-319 implements source-preserving import and symbolic-procedure mixin; extension checks remain pending. H-232/D-10r64 refines callable import to use receiving implementation context while keeping the source body/non-callable bindings; H-233 adds explicit export import publication. K-350/D-10r65 implements the selected helper/procedure contexts without recapturing values; the shared ambient caller-method map is removed. |
-| C-44 | Complete declaration scanning/registration precedes entry-driven compilation; dependency top-level execution semantics are incorporated in encounter order. | C-10; P-103 candidate value path, P-104 constraint, P-105 dependency | H-106/H-107 confirm top-level declaration/expression categories, scan-only registration and phase/order boundary. Bits globals use literal/function-call initializers; effect/perform/behave run with module execution. H-109/H-110 confirm every cross-module reference as trigger and source-scope teardown, with using/import retaining selected effective resources. D-10r4, D-07r7, D-08 LanguageCoDesign208. H-140 fixes once-only incorporation after scanning in encounter order; cyclic initialization and bits-global realization remain separate scope. D-10r13/D-07r18.  H-166 supersedes source teardown at initialization return with process-lifetime module scopes in D-10r38; phase/order rules are preserved. |
-| C-45 | Explicit source selectors/local aliases and lower-priority implicit method names, without local module namespaces. | C-35/C-43; P-106–P-108; P-192/P-193 constraints | H-214 excludes qualified callable names; H-215 reviews separate import-as aliases; H-217 supplies the shadowable low-priority implicit-name direction. D-10r53; exact conflict timing, overload-family selection and alias availability remain proposals. Existing symbol/destination and lexical-shadowing rules remain. |
-| C-46 | Mixin translates source-body aliases at compile time and installs the resulting procedure under a known destination identity. | C-43/C-35/C-36; P-109–P-111 | H-114–H-121 supplies staging, maps, matching-name defaults, explicit destinations and using identity guards. H-212 assigns the redefinition mechanism to mixin; import no longer rebinds bodies. D-10r52; mapping semantics remain, outer mixin shorthand policy remains pending. K-319 migrates the checked mapping implementation and its native fixtures to mixin without changing receiver identity/capture behavior. |
-| C-47 | Strict branded scalar/index types, array-declared index domains and meaningful scalar arithmetic; compare newtype and UoM mechanisms. | C-10; P-112 value candidate, P-116 constraint | H-125 confirms the requirement; H-126 requests substantive comparison and does not select the agent's newtype-first proposal. D-11r4/D-07r17; arithmetic, domain/origin and bounds mechanisms remain pending. |
-| C-48 | Explicit memory access retains provenance/lifetime; functions may edit permitted storage and return valid views. Const non-bits views restrict holder writes without freezing aliased contents. | C-37; P-114 value candidate, P-115 dependency; P-117/P-167/P-170/P-173 constraints | H-197/H-198 supersede automatic snapshots; H-133 retains caller lifetime. H-202 confirms read-only non-bits borrowing with observable alias writes. D-10r49/D-14r10; no copied graph, reference count or const-function contract is introduced. |
-| C-49 | UoMs are independently named compile-time entities with first-class type identities and identity-preserving local aliases; symbols do not represent them. | C-10; P-119 value candidate, P-120 constraint | H-128 confirms fresh same-name definitions may differ across modules and local renaming preserves selection. D-11r4; derived-unit equality, conversions, encoding and operator calculus remain open. H-134 specifies fresh definition and one-shot using selections with associated conversions, forbids repeated using and excludes conversions involving omitted units. It supersedes H-130 only on UoM definition import; pure formulas/dispatch remain. H-132 plans compound units for future physical quantities and defers their initial implementation. K-353/D-11r23 validates exported aliases of existing conversion entries without multiplying edges or registering changed formula contexts. |
-| C-50 | Pure UoM/index conversion functions use Julia-style argument-type method dispatch to associate operations with array types. | C-10; P-121 candidate value path, P-122 dependency, P-123 constraint | H-130 confirms this syntax/dispatch direction and effect exclusion. D-11r4; H-135–H-138 specify parameter-controlled conversion, discovered routes, warning/error policy and direct-before-declared-indirect preference; general generic syntax/method specificity remain open. H-131 adds parenthesized operator-method naming; detailed eager/control/indexing elaboration remains proposed. H-209 supplies unique-most-specific selection independent of declaration order; H-210 adds declared <: subtyping, with full generic constraint/conversion interaction still open. |
-| C-51 | Parameter-declared UoM conversion acceptance and compile-time route selection: exact or convertible targets, source route preference and configurable ambiguity warnings. | C-50; P-124 value candidate, P-125 dependency, P-126–P-128 constraints | H-135 permits `m*` versus exact `m`; H-136 requires unique-path selection or warning with warnings-as-errors; H-137/H-138 require source-declared indirect paths after direct conversion preference. H-148/P-128 requires per-argument conversion before later argument effects. D-11r10. |
-| C-52 | Actor model concurrency with processes, mailboxes and a type parameter for the mail payload. | §3.2、§4.1、§6.1；P-131/P-132 candidate value paths, P-133 regional transfer dependency | H-151 confirms the direction in D-10r22. H-152 supplies the `Mainbox<WorkPkg>` example and prioritizes region holding and transfer in D-10r23. The detailed contracts remain open. H-165/K-293 map the source boundaries and proposed execution/holding milestone in D-12r2/D-13r2; no Actor implementation is qualified.  H-168 supplies intrinsic mailboxes with local-send-error feedback only, not delivery acknowledgement. H-170 proposes returning the unsent region. |
-| C-53 | One region per graph of objects connected by direct pointers. Each CoD pointer edge stays inside its region. | H-156/H-157 and P-140; related candidate value paths P-138/P-139 | Confirmed local graph boundary in D-13r1, D-10r25 and D-07r26. Construction, holding and transfer remain open. |
-| C-54 | Whole-region ownership in ordinary values and scoped effect resources, with explicit consuming transfers distinguished from lookup shadowing. | C-10 candidate value P-143; dependencies P-144/P-145; constraints P-150/P-151/P-152; earlier P-146 superseded | H-177 permits ordinary variables to hold region ownership; H-183 requires a complete source-language design before treating ordinary owner as a defined category; H-179 confirms consuming installation into a dynamic owner. H-180 separates packet transfer from effect resources and preserves owners during capture/replay. K-295 implements only effect-held movement; ordinary-owner and packet paths remain incomplete. K-305 rejects the superseded effect-to-effect extraction while preserving resource shadows. H-181 confirms no transfer out of dynamic resources and supersedes the earlier effect-to-effect move contract; non-consuming shadowing remains valid. H-190/P-162 separates intrinsic region ownership from user-library intra-region reuse; D-14r3/K-306 reviews missing lifecycle syntax and validation.  H-193/H-194 asks for static reference escape and call-boundary analysis without implicit post-send NPEs; ordinary transfer modes remain pending. H-196 requires intrinsic owner-bearing types, including result/optional containment. H-200/P-169 selects owned region<RT> versus unqualified borrowed region access, with one responsible scope and no lifetime extension from borrowers. H-262/P-232 selects compiler-tracked consumption of ordinary named owners without mandatory optional storage. H-263/P-233 preserves permitted local views and H-264/P-234 selects the initial typed let/make form. H-267/D-17 E1–E5 fixes the bounded construction/failure/call/result contract, validated by K-414 and exercised by the K-415 owned-pool factory. Reinitialization, general qualifiers/assignment and transport outcomes remain open. H-383/P-344 confines owned/borrowed responsibility to designated intrinsic references (currently regions); ordinary references carry no independent release authority. H-385/P-347 makes region acquisition constness result-only, preserving explicit preparation writes; DBMR protocols remain pending. |
-| C-55 | Graph-transfer methods use both owner/root types, abstract root-policy interfaces and actual borrowed region references. | C-39 candidate value P-178; C-50 dependency P-179; C-54 constraint P-180; C-56 dependency P-185 | H-206/H-208 requires owner arguments; H-209 unique-best dispatch. H-218/H-220 requires explicit root conformance, import permission for the declaring adapter and using/import access for consumers. D-14r15/D-11r18; concrete ownership/permissions remain independent, exact overload grammar pending. H-351 applies library (<-) graph transfer to all cross-region object-graph transfers, including DBMR; D-07r147 links D-14’s existing transfer contract. Retention, publication and concrete library algorithms remain separately specified. |
-| C-56 | Nominal abstract inheritance and explicit data-interface conformance, with head-only declarations across modules. | C-10 candidate value P-184; C-39 storage P-186; C-50 P-187/P-194/P-196; C-57 visibility/permission P-195/P-197 | H-218 requires explicit data-interface relations; H-220 requires adapters to import the ADT and permits consumer using. No Interface body or eager implementation completeness is required. H-229 preserves concrete-data dispatch and established conformance. H-225–H-227/H-230–H-233 supplies bounded association, context and publication rules. Regional data, associated methods and explicit export/re-export are implemented in the documented subset; K-321/K-341/K-348/K-350/K-372 retains actual evidence. Standalone method heads, sum/generic construction, broader conformance bundles and compound view policies remain pending. K-377 reconciles this current index without qualifying the full design. |
-| C-57 | Type-associated method selections, explicit alias/extension permission, lower-priority implicit names and separate mixin redefinition. | C-10 candidate value P-189; C-50 dependency P-190; C-43 constraint P-191; C-45 constraints P-192/P-193 | H-211/H-212/H-214–H-217 establishes source-preserving selections, mixin, aliases without module namespaces and implicit name priority. H-225–H-227 confirms result-only signature association, using-local shadow/import-local extension and caller-selected ordinary implementations; D-07r61/D-10r62/K-341 supplies bounded native evidence. Full qualification, standalone signatures and general cross-alias extension remain pending. H-232 confirms using-preserved2 versus import-adapted14 for a source helper; P-203 records this refinement. Compound context matching remains open. K-350/D-07r69 validates distinct extension/union identity metadata, required1,7,1 and2/14 traces, deep imported-helper composition and source-preserving procedure capture behavior. |
-| C-58 | Explicit publication: public alias → identity; private-by-default source selection. | C-10 candidate value P-199; C-57/C-43 constraints P-200/P-201; C-59/P-217 | H-231/H-233 requires explicit exports/re-exports and export import. H-247 makes publication independent of local lookup spelling. K-391 implements typed publication maps and supersedes K-351/K-373 local-shadow rejection while retaining their historical evidence. Grouped/per-signature publication remains pending. H-374/P-332 confirms whole-method-set export for symbol-identified callables; no private subset within the published family. |
-| C-59 | Independent module worlds with identity-keyed information and multiple aliases; receiver-owned construction cannot edit other module worlds. Compilation shapes TLS; runtime effects edit its typed bindings, with inline bits under H-277. | Candidate value P-204/P-209; constraints P-205/P-216–P-220; dependencies P-207/P-208 | H-245 corrects H-234 and replaces the cleared goal. H-247/H-248 supplies publication and internal identity rules; H-246/H-249 directs principled implementation/helper replacement. K-391 implements bounded local merging/publication and source isolation; K-393 adds one canonical imported identity across aliases and locally declared overloads. H-252/K-394 adds multi-alias declaration diagnostics and preserved helper interpretation. D-15r11 remains pending-human as a full contract; H-253/K-395 resolves conflicting imported-dependency overloads; final architecture acceptance still requires the complete evidence audit. H-372–H-376/P-330–P-336 separates compile-time method construction, symbol objects and runtime family-view installation/dispatch, preserving H-230 contexts. |
-| C-60 | Vocabulary modules establish common identities for typed symbols, mainly abstract types with some supporting ADTs, and their method collections. | C-59 value P-214; C-58 publication constraint P-215 | H-242 explicitly broadens the symbol-only idiom to establish global unified identity through shared definitions. D-15r11/D-12r20/D-10r84; no shared mutable world, special module kind, method-head policy or implicit default effect value follows. |
-| C-61 | Numerical representation and admissibility are independent of compile-time UoM identity. | C-49 candidate value P-221; C-62 constraint P-225 | H-254 accepts the planning direction: conversion inputs/outputs specify representations, fractions can carry applicable units, and no denominator unit is introduced. D-16r6/D-11r31; H-256 prioritizes the UoM refactor for main-chat follow-up. H-260 selects representation-independent quantity syntax; H-261 selects lossless numeric widening and unique-best matching. Full fraction typing/execution remains deferred. |
-| C-62 | Intrinsic fixed-width fractions with independently typed integer components and explicit canonicalization. | C-10 candidate value P-222; D-16 document P-223; C-61/C-10 constraints P-225/P-226 | H-254 accepts i64/i32-style types, unreduced arithmetic, mathematical comparison, same-type canonicalization and bits storage. H-255 reserves // construction/output and # line comments in the planned grammar. Future conflicting language changes require discussion. D-16r6 remains pending-human as a full contract; H-256 prioritizes comment reservation and UoM independence, not fraction implementation. |
-| C-63 | Lexical exception control, scoped cleanup, unchecked allocation failures and explicit exception causes. | Confirmed bounded value P-235 to C-10; D-17/P-236; dependencies P-237–P-239/P-322; constraints P-240/P-286; defer value P-321 | H-267 accepts D-17 E1–E5 with explicit throw-from only. H-319/H-356 confirms explicit scopes and deferred calls versus blocks, with registration-time callable/argument evaluation. H-357/H-358 adds deferred catches/finally and retained normal results; H-359/H-365 requires per-iteration scopes for body/else declarations. H-365 separates iteration effect/resource lifetime from enclosing full-scope defer accumulation and supersedes the direct-loop-defer prohibition. General RTTI/user exception graphs remain excluded. |
-| C-64 | Destination-view result mode for assignment-family calls, distinct from ordinary const bits results. | Scoped value P-241 to C-41; ownership dependency P-242; D-14/RO-Q1 dependency P-243 | H-270 confirms D-14r41/RO-Q1: assignment-family `-> const T` returns a read-only destination view; its body must return the destination, with infix/explicit-call parity. Ordinary-variable `=` is reference-only. H-271 resolves RO-Q2 with initialization-fixed owners; wider qualifier/place rules remain pending. No implementation evidence. H-293 additionally requires an external destination owner and preserves read-only access through aliases; K-426 supplies bounded object-transfer evidence.  H-302 preserves builtin reference-result access and checks overload result access; nonvoid transfer results remain readonly; H-307/C-71 also permits void.  H-303/P-261 makes the final destination-parameter expression a semantic safeguard for (=), not an alias-proof limitation. |
-| C-65 | Ordinary reference-semantic ptr variables with initializer-fixed owners, generic external owners and root-constrained region owners. | Candidate value P-244 to C-54; regional dependency P-245; root-policy dependency P-247; D-14/P-246 | H-271 confirms ptr declarations, same-owner-only rebinding, implicit dereference, no pointer arithmetic and owner generics. H-272 confirms callee-local default parameter targets. H-273 confirms generic-owner grammar with optional ptr in parameters. H-274 adds a root-constrained region owner with actual borrowed access. H-275 confirms its binder and region-as-declaration throughout source references. D-14r67/H-307 completes region-keyword locals, parameters, results and procedure signatures. Wider resource/qualifier interfaces stay pending. H-277/P-248 excludes dynamic symbolic bindings from the fixed-owner rule. H-292 fixes enclosing-scope fresh bits materialization with make local T { expression }; H-293 requires explicit external assignment destinations. H-296/H-297 distinguishes individual/group initialization and permits allocated-but-uninitialized storage with definite-initialization read checks.  H-299/P-259 adds writable-to-read-only rebind rejection; H-302/P-260 confirms qualifier-aware methods and reference-result access; H-304 confirms the zero-iteration loop else.  H-382/P-343 clarifies the implicit const lexical binding of every inferred owner; H-274 capability distinctions remain. H-384/P-346 confirms explicit make T [in o] and receiver/actual-owner mismatch rejection. H-386/P-352 accepts contextual owner inference with usable capability and no hidden fallback; allocator integration and whole-file qualification remain pending in D-22r2. |
-| C-66 | Explicit symbolic capture dependency through touch @symbol, without referent computation or automatic group capture. | C-36 scoped value P-252; C-54/C-65 dependency P-253 | H-286 selects incompatible-partial-replay rejection and touch syntax. D-10r118/D-14r67: definition-time values, perform replay/current behave, aliases and ordinary binding/lifetime checks. Touch does not copy graphs, extend resource lifetime, transfer ownership or enable function dynamic access. K-426 records the bounded native implementation; wider ptr/owner migrations remain separate. |
-| C-67 | Explicit checked builtin selection using intrinsic (operation)(...). | C-37 scoped value P-262; C-64/C-65 constraints P-263 | H-304 confirms visible delegation from overloads without hidden recursion suppression. D-10r118/D-14r67; native operation checks/results remain; no general recursion or user symbol identity. |
-| C-68 | Zero-body-execution range-for else with normal-path initialization joins. | C-65 scoped value P-264; D-10/C-41 dependency P-265 | H-304 confirms the empty-range fallback, once-only bounds, separate scopes and void result. D-14r67; exceptions do not invoke else, fold remains unchanged and loop-carried alias solving is separate. |
-| C-69 | Distinct reference and bits exchange operations with two destinations and void results. | C-65 scoped value P-268; callable/access constraints P-269 | H-306 confirms <=> / <->, ordered once-only operands, non-chaining and function/procedure overloads. D-14r67/D-10r118; no implicit destination conversion or regional object copying. |
-| C-70 | Region is a declaration keyword for whole-resource locals, parameters, results and procedure signatures. | C-65 scoped value P-270; C-54/C-37 constraints P-271 | H-307 completes H-275/H-276 without a legacy parser path; D-14r67/D-10r118. Root inference does not erase borrowed/owning responsibility or lifecycle checks. |
-| C-71 | Transfer methods return void or checked readonly destination views; indexed writes select logical container operations. | C-10 scoped value P-272; C-64/C-65 constraints P-273 | H-307 permits non-addressable containers; H-308 limits bits-like library guidance to intended/recommended chaining. D-14r67/D-10r118; no result-based dispatch or implicit graph copy. |
-| C-72 | Ref/ptr ordinary declarations distinguish compiler-checked initialization from nullable dereference. | Scoped declaration value P-274 to C-65; lifetime/access constraint P-275 | H-309 confirms ptr-marked fields and requests ordinary ref/ptr declarations without let/var; H-311 separately permits unmodified/val bits fields. Ref premature reads reject; ptr dereference may produce NPE. H-310/P-276 makes ref/ptr fields references even for scalars; H-311/P-277 permits direct bits fields with val or no modifier. D-14r67 keeps null/defaults, construction and conversion refinements pending-human. No implementation or changed encoding is approved by implication. H-313 accepts checked NPE and val locals/parameters under P-280–P-281; H-314/H-315 adds first-owner acquisition and isnull under P-282. Wider construction/source migration details remain scoped separately. H-383/H-384/P-345 admits recursively finite bits ADTs without references/owners/environments/cleanup; field storage, initialization, aggregate ABI and source migration require coordinated integration in D-22. |
-| C-73 | Unified owner-aware captures for named and anonymous functions/procedures. | Candidate value P-288/P-290 and scoped confirmed P-297 to C-65; dependencies P-289 on C-36/C-54 | H-321/H-322 requests a unified review; H-323 adds regional val/ref/ptr slots without lexical-cell promotion. H-329 confirms inferred captures when brackets are omitted, completeness checking when supplied, missing-capture errors and unused-entry warnings, with source-visible associated owners in D-18r9/C-03. Wider capture representation, persistence and nested dependency details remain review items; D-18r13 records the unified implementation and same-body environment selection; H-334/H-335/P-298 confirms visible-name owner projection with captured access and no ownership/lifetime extension. |
-| C-74 | Structural product region definitions and required field subsets, with language-owned storage mechanics. | Candidate value P-291 to C-39/C-65; dependencies P-292 on C-72/C-54/D-01 | H-323 proposes region definitions alongside data, complete fields as the root product and structural field requirements in place of root-type requirements. D-13r29 reviews concrete layouts, owner identity and intrinsic/library allocation boundaries. Matching, identity, syntax and allocator policy details remain pending-human; no host layout or RTTI change is selected. |
-| C-75 | Explicit variable aliases naming existing storage without introducing a new holder. | Scoped confirmed value P-295 to C-65/C-73; constraints P-296 | H-327 accepts the ordinary-place alias explanation and requests optional val/ref/ptr prefixes, inferred when omitted and strictly checked when present. D-18r8/C-02 records that scope; whole-region/TLS inclusion and detailed capture integration remain separate. No implementation, legacy var restoration, new ownership or automatic lexical promotion is inferred. |
-| C-76 | Boundary-pure const functions with private mutable state and deferred const-function TCO. | Scoped value P-304 to C-36/C-65; document P-305, dependencies P-306, compatibility constraint P-307 and pure surface P-325 | H-346/H-347 defines the outer-call/immediate-result observation boundary; H-348 authorizes deferred planning and human review over material conflicts. H-363/D-19r2 selects pure declarations with implicit final-expression results while deferring purity implementation. Effect analysis, callable-type details, output construction and TCO eligibility remain unqualified. H-345 separately requires recursion in current work. |
-| C-77 | Initial manual root-type compatibility identifier, with later consideration of all participating ADT layouts and checksum-assisted matching. | C-08 scoped planning value P-308; representation dependency P-309 | H-352 selects the initial UUID-like manual marker and future investigation. D-07r148 DL-04; exact encoding, layout-comparison rules and checksum remain pending. No general RTTI or cross-architecture guarantee. |
-| C-78 | Language support for saving/replacing a disk file with a region snapshot, with application-controlled persistence workflow. | C-09 scoped planning value P-310; lifetime/layout dependencies P-311 | H-352 requests planning this facility; D-07r148 DL-09. Snapshot consistency, failures, replacement/durability semantics and API remain pending. Compaction scheduling and retention belong to applications/libraries. |
-| C-79 | Third-party intrinsic extension through a service provider interface; ordinary extensions through CoD libraries. | C-11 scoped planning value P-312; typed-context dependencies P-313 | H-352 identifies the expected SPI direction; D-07r148 DL-11. Registration, provider selection, native ABI, error/owner contracts and loading remain pending; no implementation or shared-registry mechanism is selected. |
-| C-80 | A compiler application designed in CoD: regional frontend/semantic artifacts, persistent stage reuse and selectively bound LLVM services, progressing toward self-hosting. | C-01/C-05 planning values P-314/P-315; native and language dependencies P-316/P-318; document P-317 | H-353 requests application planning. D-20r4 includes H-354's output-initialization proposal and H-356's selected defer syntax, governed by D-17. H-356 authorizes immediate language scope/defer work; cache schemas, native handle/storage/cleanup contracts, output grammar, compiler-application algorithms and implementation acceptance remain pending-human. |
-| C-81 | Write-only out reference parameters establish initialized output on normal return; a bare local handle ref declaration allocates uninitialized target storage. | C-65 candidate value P-319; owner/exception/native dependencies P-320 | H-354 proposes this direction for D-20r2's native initialization idiom. Modifier grammar, general declaration applicability, alias/failure postconditions and provider verification remain pending-human. No D-14/D-17 language implementation change is authorized. |
-| C-82 | Callable views preserve a selected family/context and dispatch by actual argument types, including abstract argument/result flows. | Confirmed H-378 charter value P-333 to C-01; confirmed behavioral constraint P-335; dependencies P-338 | H-375 selects dispatcher semantics and direct-method selection only as an optimization. D-21r3/D-15r17/D-10r128 records behavior; representation/ABI, namespace and diagnostic details remain pending. No one-method or one-concrete-result language restriction follows from current implementation limits. |
-| C-83 | WPO/AOT covers the selected composition's admissible leaf-ADT combinations and emits targets/dispatch before execution. | Confirmed H-378 charter value P-334 to C-02; confirmed compilation constraint P-336 on C-82 | H-376 selects AOT coverage, with JIT only a future response to measured combination/code-size growth. D-21r3; closure algorithms, code sharing/pruning representation, revision protocol and future JIT criteria remain pending. H-387 authorizes replacement-architecture exploration now; the measured-growth prerequisite no longer gates exploration. Native-before-execution remains the recorded AOT baseline, not a constraint imposed on every experiment; replacement production timing is needs-reconfirmation. |
-| C-84 | Infer implemented method result types as checked signature constraints, independently of native result transport. | Candidate P-356 to C-01/C-06; D-24 document P-357; dependencies P-358 | D-24r1 is pending-human. Existing omitted-result parsing and native limitations are observations; neither H-258 bodyless signatures nor H-343 recursion approves the omitted-result policy or its unresolved cycles. |
-| C-85 | One fused type-level artifact retains reachable parallel module interpretations, including dependency-local callables and procedure-local effects; runtime values and bindings remain execution state. | H-387 confirms this exploration boundary; candidate charter value P-359 | D-25r5 compares checking, native-code readiness, dispatch and specialization separately. No identity encoding, runtime ABI, external integration protocol or candidate winner is approved. |
-| GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
-| GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
-
-
-## 4. 已确认的方向性价值链与关系边
-
-下表的 `confirmed` **仅指列明的方向性命题及其关系**。关系 ID 的命名是编目，不是新增人工发言；不能拿这些条目直接批准一份具体实现规范。
-
-| 边 ID | 子节点与关系 | 父节点／对象 | 为什么产生价值或必须依赖 | 人工依据／范围 |
+| Edge | Child / relation | Parent / target | Rationale | Evidence / scope |
 | --- | --- | --- | --- | --- |
 | E-01 | C-01 derives-from | V-01 | 用 GADT 保存业务意图，使意图不依附某环境的执行代码。 | H-01；方向性 confirmed。 |
 | E-02 | C-02 derives-from | V-01 | 用不同原生 handlers 承接环境差异，保留业务程序。 | H-01；方向性 confirmed。 |
@@ -211,506 +192,21 @@ Historical payloads may live in immutable Git history under H-388. Keep the acti
 | E-11 | GOV-01 derives-from | V-03 | 以人工确认的局部设计承接任务，既保留价值依据，也减少无关上下文。 | H-05；本次治理要求 confirmed。 |
 | E-12 | GOV-02 derives-from | GOV-01 | 记录衍生、依赖和确认，让局部委托与再次确认有据可查。 | H-05；本次治理要求 confirmed。 |
 
-阅读价值链时可从父价值向子机制展开，例如 `V-01 → C-01 / C-02`，`V-02 → C-01 / C-03 / C-04`，`V-03 → C-05 / C-06 / C-07 / GOV-01 → GOV-02`。这些箭头是阅读方向；边的规范记法仍为表中的 `child derives-from parent`。
+### Storage and application value paths
 
-## 5. 文档覆盖、候选衍生与待确认范围
-
-### D-00：设计纲领
-
-- 文件：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)，基线见 §3。
-- 已记录的人工权威：H-01—H-04 所明确的核心概念及价值关系；H-04 授权把讨论整理为纲领并写入仓库。
-- 范围限制：授权整理不等于对整理后每条细节、例子和路线优先级逐项确认。§14 列出的具体机制仍是待决项；没有对完整文件逐项追认的额外人工事件。
-- 角色：价值根与跨组件设计入口，不作为所有实现细节均获批的局部实施契约。
-
-<a id="d-gov"></a>
-### D-GOV：本次治理规则与记录
-
-- 对应文件：[AGENTS.md](../AGENTS.md) 的 `Design Authority and Value Lineage` 节，以及本记录。
-- 价值链：V-03 → GOV-01 → GOV-02；方向和委托边界由 H-05 直接要求。
-- 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
-- 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
-- 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 579，延续检查 K-00—K-578；相对 H-05 基线保持 `continued`。H-388 authorizes compact current records with immutable Git evidence and autonomous hygiene; K-578 records that maintenance. 该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
-
-- H-386 requires user-facing design review by topic, followed by final approval of the complete file; internal IDs remain provenance rather than confirmation prompts. Existing confirmed scopes are not reopened by this presentation rule.
-
-### 待补确认的现有技术设计
-
-以下文件在核对基线中存在，但当前可得证据未提供对各文件当前完整契约及价值衍生关系的明确人工确认。`pending-human` 表示证据不足，不断言历史上从未讨论或确认。先寻找可定位的既有证据，必要时再请人类确认。
-
-所有下表条目的当前状态均为 `pending-human`；无 `continued` 资格。列出的 `P-*` 边均为**智能体提出、未经人工确认**的候选关系，不能用来实施新设计。原技术文件本次不改内容；下次修订时补充顶部声明并同步本表。
-
-| 设计 ID / 文件 / 当前 blob | 候选价值衍生与技术依赖 | 仍需明确的人类确认 |
-| --- | --- | --- |
-| D-01 [MemoryRegionAndRegionalTypes.md](MemoryRegionAndRegionalTypes.md)；`8dc4ed4012d1127087d83faf9e13ed49db5345d5` | P-01：D-01 derives-from C-05，区域表示服务结构化低开销访问。P-02：D-01 constrains C-01 的物理实现。 | 区域类型与指针的实际约束、跨 region 行为、生命周期和明确验收范围；区分当前 C++ 验证规则与长期语义。 |
-| D-02 [CompileOnDemand.md](CompileOnDemand.md)；`cbd294de3eb9825c8522b9eb7781e44a5ba8d844` | P-03：D-02 derives-from C-02，仅作为原生执行的阶段验证设施。P-04：D-02 depends-on D-01。 | 作为阶段设施的价值和适用范围；无 JIT 的限制不得扩展成整个平台原则，C++ REPL 不是最终目的。 |
-| D-03 [CodProjectStructureAndPkgMgmt.md](CodProjectStructureAndPkgMgmt.md)；`4146412997de5179146a7010b5b034e32fcebfb9` | P-05：D-03 derives-from C-03，显式版本与依赖服务可追溯的集成。 | Git/UUID/分支与锁定策略的具体取舍、与语义单元分发的边界；不可因存在包管理器就推定其方案已获批。 |
-| D-04 [ExceptionSafety.md](ExceptionSafety.md)；`3dc6bbba41ee5c84f151c3c94bb866b47ddcdf6e` | P-06：D-04 derives-from C-05，限制失败造成的状态破坏。P-07：D-04 depends-on D-01。 | 异常保证逐项适用范围及验证；实现异常安全不能代替持久提交或业务 effects 恢复。 K-406/D-17r1 records contradictory null-result/strong-guarantee claims and the unguarded ordinary allocation/root-construction path; this document is not evidence of CoD exceptional cleanup. |
-| D-05 [YamlConversionsOfRegionalTypes.md](YamlConversionsOfRegionalTypes.md)；`34da18a3abab0a3a02b42d23287e644312f5c218` | P-08：D-05 derives-from C-06，现有文本转换服务可读性。P-09：D-05 depends-on D-01。P-10：D-05 depends-on D-06。 | 当前 YAML 转换的价值、语义保留边界；不能默认它已经是最终源码往返规范。 |
-| D-06 [YamlSpecExt.md](YamlSpecExt.md)；`5dd33c2c2a5acc59383f0966a98300f84a296f63` | P-11：D-06 derives-from C-06，格式和注释规则服务人类阅读。 | 扩展语法与限制的必要性和成本；不预设最终业务语言必须采用 YAML。 |
-
-候选边的版本、范围、依据均为本表对应 blob 及“待补确认”状态；每条边的自然语言理由是候选说明，不是确认事实。登记后续文档时应同样记录非直接依赖、替代关系与准确章节，不以这份初始目录穷尽全部架构。
-
-<a id="d-07"></a>
-### D-07：领域语言讨论与设计决策跟踪
-
-- **Construction review decisions:** H-386/P-352/P-353/K-545 covers D-07r153: contextual inference requires unique owner plus allocation capability, with local bits/missing non-bits destination fallback and no implicit allocator. The user prefers one coordinated migration without a transition stage. D-22r2 records remaining topics for discussion and eventual whole-file approval; no candidate value path or native mechanism is implicitly qualified.
-
-- **Construction boundary:** H-383–H-385/P-344–P-347/K-542 covers D-07r152: bits ADTs may be lexical or regional; non-bits remain regional, ordinary references remain borrowed and explicit make owners must match the receiver. D-22 records pending inference, migration/DBMR alternatives and candidate value paths. No aggregate implementation or new full-document qualification is claimed.
-
-- **Nearest symbol lookup / execution separation:** H-381/P-342/K-537 covers D-07r151. The nearest local binding governs @ access, including delayed bodies and captured-name analysis; a non-symbol rejects. ModuleWorld semantic records and ModuleExecution initialization values are separate compiler responsibilities under H-248/H-249/H-372. Existing native behavior and H-140 ordering remain; full family dispatch/stage migration is still outstanding.
-
-- **Initialization cancellation:** H-380/P-341/K-536 covers D-07r150: cancel dependency initialization TLS writes only; evaluate operands and preserve their effects/failures, temporary cleanup and procedure-local installations. Entry identity/conditional coverage and native elimination mechanisms remain design work.
-
-- **Callable-world reconciliation:** K-534–K-536/H-372–H-380 updates the affected stage, symbol/family, dispatch and capture descriptions for D-07r150. P-330–P-332/P-335/P-336 records confirmed behavior; H-378/K-535 confirms D-21/P-333/P-334/P-337 for the behavioral value path; detailed mechanisms remain pending-human. H-379 additionally requires explicit entry installation after extension and suppression of dependency installations; H-380 confines cancellation to dependency initialization and preserves operand evaluation/effects; composition identity and conditional coverage remain D21-Q-entry-composition work. Existing qualified owner/scope/return/numeric contracts continue only within unchanged scope. Implicit symbolic-definition/selection installation and one-method/one-concrete-result language interpretations are superseded, not carried forward as implementation authority. No native acceptance for the new family/stage behavior is claimed.
-
-
-- **Current source reference:** Prototype reference182 continues H-361/H-362/H-365's scoped source/completion requirements through D-17/D-10/D-18 and [K-526](#k-526). Explicit returns, current scope rules and executable examples are synchronized. This reference maintenance does not qualify D-07's wider pending design.
-
-- **IPC/DBMR responsibilities and discussion closure:** H-352/K-470 records D-07r148 DL-03–DL-09/DL-11–DL-12. Selected library (<-) methods own update/history policy; C-77 supplies the initial manual compatibility marker; Actor design owns language facilities for application outcomes; C-78/C-79 records snapshot persistence and intrinsic SPI planning. P-308–P-313 preserves the scoped value/dependency paths without qualifying detailed protocols. The initial discussion is archived at commit384928e1632fc06497a1a9d04176d63f14bc724b; its live file is retired after topic mapping. Full D-07 qualification and unrelated implementation work remain unchanged.
-
-- **Cross-region graph transfer:** H-351/K-469 records D-07r147 DL-03/DL-06/DL-09: third-party library `(<-)` methods implement graph transfer between regions, including DBMR. C-55/P-177/P-180 retains the H-206/H-208 owner/access and library-algorithm boundary. Database overwrite/history, retention, concurrency, transfer failure and durable publication remain distinct open contracts. No universal generated copier or implementation acceptance is inferred; full D-07 qualification remains pending-human.
-
-- **Current closure navigation:** D-07r146 points to [D-18r13](RegionalClosures.md) for the bounded H-327–H-335 capture/owner contract. H-336/K-459 removes superseded research text without changing language semantics or qualifying unrelated pending designs. Earlier revisions/events retain their recorded scope.
-
-- **Nullable call direction and annotation syntax:** H-317/H-318/P-284–P-285/[K-443](#k-443) records explicit nullable forwarding, deferred required-ref cycles and uniform colon annotations. Native implementation acceptance is pending; defer scope/timing remains under discussion.
-
-- **Declaration cleanup:** H-316/C-72/P-283/[K-442](#k-442) retires let/var and reference type constructors, preserves explicit ref/ptr/val storage intent and records [native validation](../tests/cod/language/declaration-cleanup-validation.json). H-317 accepts nullable call/result modes and defers required-ref graph construction.
-
-- **Current native acceptance:** H-309–H-315/C-72/P-274–P-282 and [K-441](#k-441) cover the bounded field/val/nullable implementation. [Validation](../tests/cod/language/nullable-storage-validation.json) records compiler/source hashes, checked-call rejection, fixed-owner flow, relocated reference fields and exceptional cleanup. H-316/K-442 covers declaration cleanup; wider pending qualification remains separate.
-
-- **Checked NPE and explicit bits storage:** [H-313–H-315](#h-313)/[K-440](#k-440) accepts checked NullPointerException, mandatory module-top-level handling and val locals/parameters; null is a reserved literal and isnull inspects a pointer without dereferencing it. C-72/P-280–P-282 preserves storage/access/lifetime rules, with a null-initialized local acquiring its fixed owner at the first non-null assignment. D-17 owns exception/signature obligations and D-14 owns ordinary storage/owner checks. No checked OOM, payload RTTI, implicit regional-object copy or per-object owner is introduced. Acceptance requires native execution plus rejection at uncovered calls, unsafe reads and inconsistent owner paths; evidence is recorded separately from this confirmed contract.
-
-- **Field storage decision:** H-310/H-311/C-72/P-276–P-277/K-438 distinguishes direct bits fields (unmodified or val) from reference fields (ref or ptr, including scalar targets). D-14r67/D-10r118/D-16r6 retain same-owner references and fixed bits payloads. Constructor target allocation is pending only for reference fields; direct bits initialization needs no separate target. K-441 records bounded field/val/NPE native acceptance; encoding is unchanged.
-
-- **Ref/ptr direction:** H-309/C-72/P-274–P-275/K-436 confirms ptr field syntax and reviews ref/ptr-only ordinary declarations, static initialization checks and nullable dereference. D-14r67 records H-310/H-311's direct-bits/reference field distinction and distinguishes pending construction, parameter and conversion details; D-10r118/prototype179 preserve the separate current compiler/TLS contracts. K-441 records bounded implementation; full-document qualification is unchanged.
-
-- **Region/transfer continuity:** H-307/H-308/C-70–C-71/P-270–P-273/K-435 covers complete region declaration syntax and void-or-view ordinary/indexed transfers. [Current validation](../tests/cod/language/region-transfer-validation.json) records migrated language checks, lifecycle cleanup and LLVM verification. Broader pending qualification remains unchanged; chain-oriented library guidance is not a blanket transfer restriction.
-
-- **Pointer invariants / fixed bindings / swaps:** H-305/H-306/P-266–P-269/K-434 covers initialized loop rebinding without exact target-history analysis, non-rebindable const ptr groups, and distinct void reference/bits swaps. [Validation](../tests/cod/language/pointer-swap-validation.json) records the bounded implementation; initially-uninitialized loop-carried rebinding remains a proof limit. Wider pending design paths remain pending.
-
-- **Explicit builtins / range else:** H-304/C-67–C-68/P-262–P-265/K-433 covers checked builtin delegation and zero-iteration fallback; [validation](../tests/cod/language/intrinsic-range-validation.json) records bounded acceptance. D-14r67/D-10r118 and D-07r142/prototype179 preserve safety, separate scopes and normally completing initialization joins. Wider document qualification and loop-carried alias analysis remain separate.
-
-- **Destination-return safeguard:** H-303/P-261 confirms the required final destination-parameter expression for ordinary (=) methods. K-432 supersedes the earlier implementation-limit classification without changing code behavior. [Focused evidence](../tests/cod/language/assignment-result-safeguard-validation.json) rejects returning an equivalent alias. Other prototype limitations and pending full-document value paths remain separate.
-
-- **Ptr rebinding / loop review:** H-299/P-259 rejects writable ptr rebinding to read-only views and accepts pre-loop fallback initialization. K-430 records focused implementation evidence in [ptr-rebind-validation.json](../tests/cod/language/ptr-rebind-validation.json). H-302 resolves H-301 with const-qualified method selection and access-preserving builtin reference results; K-431 records [current evidence](../tests/cod/language/const-assignment-validation.json). H-304 confirms explicit builtin invocation and zero-iteration else; K-433 records implementation acceptance. D-14r67 records body/result checks; the full draft remains pending-human.
-
-- **Ptr integration / current evidence:** H-298 authorizes integration, implementation and validation of the confirmed H-270–H-273/H-292–H-297 decisions. K-429 records local bits places, fixed-owner pointer bindings, explicit regional/lexical owner arguments, initialization flow and declared result-owner enforcement. [Native evidence](../tests/cod/language/ptr-storage-validation.json) records219/219 language checks,11 focused boundaries and LLVM verification/promotion. Conservative loop/alias proof limits and legacy source surfaces are explicit in D-14r67. Full-document candidate value paths remain pending-human.
-
-- **Symbolic storage update:** H-277–H-281/K-422 records inline TLS bits, effect-arrow transfer and effect-equals object-reference rebinding with region-symbol backing and lifetime checks. P-248/P-249 separates ordinary fixed-owner pointers and resource ownership. This migration is not covered by existing pointer-cell native evidence; full-document pending qualification is unchanged.
-- **Contract/status:** [DomainLanguageDesign.md](DomainLanguageDesign.md), revision153, all sections; G-01–G-07, DL-01–DL-16 and DD-001–DD-151. K-469/K-470 records graph-transfer routing, IPC/DBMR responsibility boundaries and retirement of the initial discussion file; other scopes retain their recorded qualification. Prototype reference179; D-10r118 supplies detailed call/scope rules, D-11r31 scalar/UoM rules and D-16r6 deferred fraction planning with priority prerequisites, D-12r23/D-13r28 the vision trackers, D-14r67 the ownership draft and D-17r16 accepted exception/lifecycle contract with the H-271/H-272 parameter-default migration. K-420 records H-275 region-as-declaration direction and root-constrained access; K-418 retains H-273 generic-owner syntax. K-384 audits delivery coverage and current evidence; K-378 consolidates this current index. Detailed evidence remains in append-only H/K records. The complete design and candidate value paths remain `pending-human`.
-- **Value/dependencies:** C-10/P-14 connects inspectable typed business intent to the charter. C-35/C-43/C-45/C-46 covers identity/context; C-47/C-49–C-51 covers numeric meanings/conversions; C-56/C-57 covers types/method selection; C-39/C-54 covers regional lifetime; C-58 covers publication. Their individual relationship states remain authoritative. D-01 representation and D-10/D-11/D-14 contracts constrain the implementation; technical dependencies do not qualify the full design.
-- **Human baseline / authorization:** H-06/H-07 supplies the business direction/tracker purpose. H-96–H-141 supplies initial language/module/unit decisions subject to later supersession; H-143–H-146 supplies LLVM, lean checks, simplification and the known first-field self-reference limitation. H-221 authorizes ten active-work hours, excluding waits and idle gaps in build/validation/language-20261108-active-work.json. H-122/H-123 separates SNN model/learning work; H-160 defers new choices to the consolidated review. Earlier implementation/publication authorizations retain their recorded scopes, not new blanket permissions.
-- **Current context / storage contract:** H-140/H-166 requires once-only module incorporation and process-lifetime module scopes. H-180/H-181 preserves captured/hidden region owners and forbids dynamic-resource extraction. H-184–H-189 supplies typed lexical/symbolic procedures; direct/behave uses current bindings and perform uses captured values. H-193/H-196–H-203 supplies regional data, intrinsic whole-region ownership, mutable explicit-memory functions, borrowing/const and same-owner stored edges; H-383/H-384 refines placement for bits-eligible ADTs under D-22. Confirmed target requirements are distinct from the still-unimplemented qualifier/ordinary-owner syntax.
-- **Current type / module contract:** H-209–H-220 supplies abstract/data types, unique-best dispatch and explicit interface relations: adapters import the ADT, while consumers may obtain conformance using the adapter. H-225/H-226 includes result-only associated signatures and using-local shadow/import-local extension. H-229 preserves concrete data and established conformance across broad constraints. H-212 assigns receiver-body redefinition to mixin; H-214 excludes module namespaces. H-230 gives extensions distinct identities and same-alias unions a receiving identity. H-232 preserves using helper contexts and adapts import callable implementations while retaining source body/non-callable bindings/captures. H-231/H-233 requires explicit export/re-export and permits export import. Operation/intrinsic fallback remains lexical in this increment.
-- **Native acceptance:** K-414 records completed E1–E5 on the final compiler in [exception-ownership-validation.json](../tests/cod/language/exception-ownership-validation.json). Earlier component reports retain their compiler/source hashes. K-402 records56/56 focused quantity/widening checks on its recorded source; K-401 records8/8 preceding comment checks. K-400 records the successful in-place repair and 28 focused compiler/native/IR checks for H-257/H-258; [current evidence](../tests/cod/language/callable-model-validation.json). K-396 establishes the architecture goal on compiler28a59fef75d4a240037d5ef1103e938ffdc0081c3532f402b3152fb136cfa290; [requirement audit](../tests/cod/language/world-architecture-validation.json). K-380 records183/183 language checks; K-381 records five deep-composition cases and three native regional programs with explicit compiler executable provenance. Those three rolling reports identify the earlier compiler6015b7aa040f4196b6a3ae3580a648c9479cc20eb2b72880b91cee997a68e688. K-389 records six focused examples and IR inspection on compiler324461c9707ba93a8f71def8ca1fb9e5094c614cfd3c2d9c443cf417428ee04c; the full suites were not rerun. The [prototype evidence table and runnable walkthrough](../tests/cod/language/README.md#run) distinguishes current reports, targeted observations and open decisions. Earlier raw checkpoints are preserved. Independent relocation checks a cyclic graph and reusable pool after freeing the original; CoD resumption after relocation is not claimed.
-- **Architecture-first review:** H-245/C-59/D-15 requires receiver-owned module-world construction and prohibits cross-module editing at compile time and runtime. TLS shape is compiled; its inline bits and permitted references change at runtime under H-277–H-281. The H-245 architecture implementation preserves H-237–H-242 and passes K-396's requirement audit. K-389 supplies ModuleWorld compiler state and native pointer bindings; K-391 implements identity-keyed callable/global composition, direct publication maps and read-only source selection with eleven focused examples; K-396 establishes architecture acceptance through source inspection and42 direct checks on the K-395 compiler; full language qualification and broader lifecycle features remain separate.
-- **Known limitations requiring review:** K-391 replaces alias-owned method subsets with identity-keyed receiver records, addressing K-363’s historical alias-order defect. Source isolation, independent public aliases and compound adapted contexts have current evidence. H-253 requires conflicting inherited/selected overloads to reject. K-362 records historical separate value/call lookup, corrected under H-257/K-400; K-375 records callee-before-argument behavior without confirming that timing. H-258/K-400 supplies mandatory typed generic/variadic declarations, superseding K-359’s open standalone-head policy. Unrelated-family union extension, grouped/per-signature publication and broader bundles remain bounded or pending; aliases of a canonical imported identity share its local overload information. No passing narrow case certifies these surfaces.
-- **Ownership / remaining acceptance:** D-17 E1–E5 implements typed make/root construction, fresh owned locals, borrowed/consuming calls/results and exception cleanup under H-267/H-269; K-414 records focused acceptance. General const/place/reference-assignment and right-associative transfer expressions remain outside that package. H-222–H-224 retains const RHS/destination-result requirements; occupied destinations, optional outcomes, graph transfer and mailbox still need coherent decisions. Keep runtime borrow tables, per-object ownership, source namespaces and concurrency mechanisms out of this increment. Acceptance requires typed native examples plus invalid-use rejection for each implemented scope; complete packet construction/edit/transfer/cleanup requires separate evidence. D-08 application equations, capacity and learning remain independent.
-- **Supersession / history:** H-180 replaces identity-only capture; H-181 replaces dynamic-owner extraction; H-197/H-198 replaces automatic read-only function snapshots; H-212 moves body redefinition from import to mixin; H-218/H-220 replaces implicit conformance and consumer-import-only visibility; H-230/H-232 refines callable/context identities; H-231/H-233 replaces implicit publication. Original evidence remains in H/K history. K-214–K-318 covers preceding design/implementation phases; K-319 onward records this native increment. Status maintenance changes no charter, qualification or build/toolchain authorization.
-
-<a id="d-08"></a>
-### D-08：稳态循环激活 SNN 独立应用文档集
-
-- K-305/H-188/H-189 records the implemented typed-callable subset, current-context lexical calls, and dynamic-resource no-extraction/shadowing validation. Current coverage: D-07r36, D-10r44, D-12r9, D-13r12, D-14r2, prototype reference72 and D-08set220 (only LanguageCoDesign, README and semantic catalog updated). Other application revisions/models remain unchanged. Full product contracts remain pending-human; the implementation authorization does not approve unrelated open choices.
-
-- K-302/H-184/H-185 updates LanguageCoDesign220, README220 and the catalog’s callable-naming case for lexical/symbolic procedures, typed identities and lexical versus symbolic call routing. Current native evidence still exercises the old grammar; no neural modeling or other application revision changes.
-
-- K-300/H-180 updates LanguageCoDesign218, README218 and the semantic catalog: definition-time value capture and owner-preserving shadowing are current again; the capture-category boundary remains under review. Packet transport and effect resources are distinct. No neural mechanism or other application document changes.
-
-- K-296 updates only LanguageCoDesign216/README216 and catalog syntax/analysis links. H-173’s proposed resource-context narrowing would affect target/frame view bindings; no application mechanism is selected.
-- K-295 aligns LanguageCoDesign215/README215 and the existing 25-case catalog with native module-lifetime evidence. The other17 technical revisions and all neural decisions are unchanged; local owner movement is a language/runtime facility.
-- 补充导航覆盖：K-208 将 README 局部修订从202更新为203，仅增加 D-09 双语认知模型追踪入口及对应权威说明；原18份文档的技术内容不变，其余17份文档的修订保持。D-09 两份文件单独登记为 revision1，不将新研究冒充 D-08 的已确认合同。H-71 完成状态保持。
-
-- 协同开发范围：H-96–H-148；K-252 更新 LanguageCoDesign213、README213 和语义案例目录中的已确认模块／调用顺序及证据范围，其余17份技术文档修订不变。C-38/P-87 的应用驱动价值链、P-91 对 C-29 双帧 pull 的依赖以及 P-93 对 D-10 的语言依赖保持。H-123 将本轮限制为编程便利性／语言运行时支持；直接 LLVM 路径已验证类型、区域 SoA、快照、两帧算术 gather 和 relocation，不批准神经元模型／学习算法。完整应用契约仍 pending-human。
-- 当前覆盖：document-set revision219；H-71 十二小时实质研究已完成，实际区间及逐项范围见 [modeling-refinement-progress.json](../applications/steady-snn/research/modeling-refinement-progress.json)。研究包括独立 flow 学习、真实输入几何、活跃比例与语义幅度、上下文保持、数值精度、衰减／执行成本及来源适用边界；具体证据与开放选择见各文档和 K-207。ActivationRegimes 为202；AdaptiveConnectivity 为202；CapacityPlanning 为204；ConnectivityScalingResearch 为197；ContextLoopsAndNumerics 为204；Decisions 为202；FlowLearning 为202；IncomingConnectivity 为204；Model 为204；PhysicalDistancePreferenceResearch 为78；README 为219；RateDynamics 为204；SemanticCorticalMappingResearch 为32；SignedPopulationEncoding 为202；SpatialConnectivityResearch 为74；SynapticIntegrationResearch 为204；TokenEmbeddingStatistics 为30；TrainingStrategy 为202；LanguageCoDesign 为219；语义案例目录与本轮局部修订219同步。共19份技术应用文档（D-09 两版单独登记）；H-78/H-85 保持对照空间，H-86 指导明显经验选项直接保留比较；D-08 仍 pending-human，研究完成不等于模型验证或实施资格。H-51 完成记录与人工决定历史保留。
-- 人工依据：H-08—H-12 确立应用、容量优先、HTM 参考、文档分离和单节点 16 GB；H-13—H-19 确立可变容量需求、静态分配、当前集引用、少数万级出边评估、五字节 SoA 槽、owner 数组、可多于 N 的集合和百槽下限。H-21/H-25 暂定 alpha≈3、100/144 分级、逐档集合数减半；H-94 正式确认 target-owned 入连归属及双帧 pull，低出度取舍不自动转为低入度删除。H-22—H-24 区分输入数与兴奋性，接受条件权重补偿方向，将 weight scale 归训练而非容量参数。H-25—H-27 分别提出正负群体、人体柱规模调研及 Flash 60+60 计算；H-35 限定当前 Flash 人口。H-28 将 embedding 表单列节点共享，H-29 规定 SoA 默认与实证例外，H-30—H-32 规定非标准位宽独立讨论和包括 FP4 的二次幂 bit 标准宽度。H-34 要求需求先于辅助结构；H-38 明确 M 略大于 N，H-39 排除保留旧连接容量。完整证据和评估范围保留于 H-08—H-39 及 AD-001—AD-032。
-- 当前学习范围：H-40 保留共活动及邻近优先方向，H-41 排除维号距离并提出跨 minicolumn 等机会方向，但未确定提议或保留边的概率契约，H-42 / AD-035 拒绝内部等位偏好。H-43 / AD-037 固定 CC 基本单元、非精确 replica 及语义角色。H-44 / AD-038 将语义分配的位置与解剖拓扑兼容置于 1D/2D 之前；交错和选择性可达仅为研究替代，布局集合中的平均对称与逐细胞等概率须区分，后者仅作为较强的条件分析。H-46 / AD-040 明确 feature 与 minicolumn 非双射并不冲突，故不以此要求交错或重编码。 H-52 / AD-046 指定三相稳态吸引子及各种入口条件的预期收敛为学习主目标，单 token 自循环激活并逐渐回归 DMN 为中间目标；H-67 将时间表述放宽为半衰期性质并允许 token 差异。 H-54 要求早期不建模显式抑制性连接，以同维正负群体固有抵消作用于活动；H-55 指定残留在噪音支持下先增强达峰再按 token 目标回落。 H-59 / AD-053 要求各正常状态的循环活动可受外部 token 驱使转向；不以循环本身判断失败。 H-66/AD-065—AD-067 初步预期尾头保持连接，并偏好每步维持 token 分布、最多几步有限偏离；强化／削弱策略全程细究，不采纳具体采样／增益算法。 H-68 明确自然断链是活动无法继续而非权重消除；H-69 提出分数选取配合 rate，H-70 要求数值精度细究。 H-71 指定有用小循环保留较长上下文价值，主链避免主动捷径不变；不强力消除小循环，主导淡出与历史影响分开。
-- 当前物理距离研究：H-50 / AD-044 明确神经元已经按语义向量组织，不具有天然物理位置。K-37 撤回 K-36 的软局部机会建议及“显式位置或有效接触表示”的预设选项；生物来源仍可作为研究资料。现无可代入距离核的物理度量；当前问题是生物邻近产生何种有用计算效果、是否能在现有语义组织内成立，而非默认增加几何、接触图或其它机制。H-51 / AD-045 要求修正文档后至少 12 小时深化研究；实际研究时间及来源证据单独记录，不以空等凑时长。
-- 当前行为／输入调查：H-45 / AD-039 指定 Flash-1017 实际输入表进行多维使用与 SSD 容量调查；不是最终部署选择；本地 SSD 实测的普通 127997 类型均用满 5120 个非零坐标，能量覆盖等完整指标见 TokenEmbeddingStatistics 及其紧凑证据。H-46—H-48 / AD-040—AD-042 要求每个 CC 内的激活比例处于宽范围，允许不同心智状态占比不同：无任务 DMN 的白噪音循环及负面语义缓慢漂移、任务 token 序列、沉浸状态的多维自主循环。语义负面不等于坐标负号；全网占比继承局部界限是同口径加权平均推论，不另选全局控制器。 H-53 / AD-047 明确每 token 按各维强度一次随机激活相应比例细胞，专注要求下全局白噪音显著降低，响应在低噪音中淡出；检测 DMN 后提升白噪音维持活动比例，DMN 缓慢向负面语义而非坐标负值收敛。 H-55 增加低活动比例触发增噪，不等待 DMN 检测；H-56—H-58 将总激活比例排除出分类，按柔性窗口的去噪覆盖／路径判别：DMN 广覆盖（示例80%以上）、沉浸小范围、心流小覆盖内跨群路径，超过示例20%即非心流。低密度神经元排除法仍是候选，不是已选去噪算法。 H-59 将 stale 定义为外部 token 均不能打破／驱转当前循环；可能需要系统重置恢复，尚未选择运行判据、触发或作用范围。
-- 候选价值链：P-25 将 D-08 衍生自 C-12，P-22 连接 C-12 与 C-01、V-01/V-02；P-26 解释有界连接容量，P-27 解释正负表示，P-29 让连接构建与学习服务三相、有限 token 响应及上下文预测，P-32 探索可解释的响应函数空间组织。P-23 是 packet 依赖，P-28/P-30 是容量依赖，P-33 是输入／输出编码依赖；依赖不授予资格。P-31 的等位机制范围被 H-42 拒绝，其它形式化价值关系仍 pending-human。 P-34 将 C-17 的注意／DMN 噪音调节功能衍生自 C-12 的行为目标；P-35 约束 C-15 的学习与比较条件。这两个形式化关系仍 pending-human，不扩大 H-53 对功能方向的确认。 C-18/P-36—P-38 记录内在抵消的业务价值、极性依赖与早期学习约束；C-19/P-39—P-41 记录窗口检测的价值、可观察活动依赖与调节／分类边界。新增形式化边保持 pending-human。 C-20/P-42 把输入可转向性连接到 C-12 的正常行为目标；C-21/P-43/P-44 分别记录重置候选的恢复价值和状态语义依赖，正式关系仍 pending-human。 C-24/P-52 与 C-25/P-55 分别记录动力学及分数维护目标的候选价值；P-53/P-56/P-57/P-59 是依赖，P-54/P-58 是约束；正式资格仍 pending-human。 C-26/P-60、C-27/P-63、C-28/P-65 分别解释有用上下文、保留衰减进度及数值取舍；P-61/P-68 为约束，P-62/P-64/P-66/P-67 为依赖；正式资格 pending-human。
-- 研究进度资料：[locality-evidence.json](../applications/steady-snn/research/locality-evidence.json) 分别记录原始来源、已读范围及应用推论；[locality-research-progress.json](../applications/steady-snn/research/locality-research-progress.json) 记录 H-51 的实际研究区间，排除纠错／设置及空等。二者是研究工作记录，不是新增合格设计；H-51 的完成时长以实际区间记录为依据。 K-38—K-73 的可读综合区分布线编码成本、解剖图预测、干预传播、持续活动、带符号动力学、功能分组、单次序列传播、树突联合计算、学习表征、脑预测和 Flash 输入统计；没有由证据条目数量推出完成时长，也没有选定机制。
-- 当前容量：Flash `5120*(60+60)`，N=614400。K-27/K-28 的待选候选为 J=15、A=311296、M=622573、S=106492416、540174772 bytes，以及 J=16、A=327680、M=655350、S=112281600、569251800 bytes；剩余分别为 8173（1.330241%）和 40950（6.665039%）。FP4 每 byte 两值为计算假设；指定数组无需数组间 padding。1323827200-byte 两字节 embedding 表仅按节点计费。空间维度讨论不新增辅助数组或改变这些预算。
-- 当前资格：pending-human，无合格实施基线。人工已确认的局部方向与约束不扩展为全文或详细机制批准。H-93/H-94 的源端连续性、target ownership 和双帧 pull 为已确认局部约束；状态格式／相态、signed readout、整合／活动数值界限、三种语义轨迹的判据与算法、最终配额、学习／迁移、消息及持久化仍按相应文档跟踪；本次没有新实施授权或后代资格升级。
-- 范围／不变量／验收：Model 的 SNN-01—SNN-03、SNN-05—SNN-06；CapacityPlanning 的 SNN-04 与资源验收；AdaptiveConnectivity 的 SNN-07 与迁移边界；ConnectivityScalingResearch 的尺度证据、静态预算及下标；IncomingConnectivity 的端点／执行边界；SynapticIntegrationResearch 的输入、兴奋性与训练权重尺度；SignedPopulationEncoding 的符号／上下文／相态与内在抵消；SpatialConnectivityResearch 的维度、排除区、概率测度、身份位置和比较条件；SemanticCorticalMappingResearch 的证据尺度、响应函数／状态／位置区分和编码边界；ActivationRegimes 的外部可转向性、stale／恢复边界和去噪覆盖／路径检测、残留增长／回落和局部活动口径、三状态吸引／收敛、单 token 响应、DMN 检测／噪音调节及全网加权平均边界；TokenEmbeddingStatistics 的张量来源、普通词表／控制码分组、浓度指标与采样范围；PhysicalDistancePreferenceResearch 的无天然物理度量边界、生物测量区分、计算作用及三状态适用条件；Decisions 的 AD-001—AD-092。保持 region relocation／生命周期、静态池、SoA、标准位宽和需求先于辅助结构原则。语义身份不得随容量迁移改变；若未来另经确认引入逻辑位置，迁移也须保持该位置，当前不预设位置；无性能或生物等价性承诺。 TrainingStrategy 明确阶段分工、批组／重叠比较、M/N 边数守恒、回环增益近似、输入入口、跨 token 干扰及未来 Hebbian 保持性；公式是列明假设下的分析，不是新实现契约。 H-63 修补验收进一步区分理论目标、自然响应与额外训练辅助；按预期衰减的响应不应被补回恒定宽度。 H-64 的全链约束／逐步采样分析区分宽度与强度、可用历史与回返许可、未来语义候选可行性、已有图可达与实际提前循环；结构机会不等同于动力学失败。 H-65 固定 epoch 范围和宽度／增强／削弱参数角色；分清范围比例与逐步语义、一次循环与持续时间、体内增长与跨圈净衰减。 H-66 将 token 分布保持收紧到每步或少数几步；K-82 区分连接闭合与有效再激活、完整后继与修补子集、目标群体与实际读出，并提出滚动窗口人口可行性和跨圈增益敏感性分析。 RateDynamics 的 C-24/C-25 分析单元级 rate、分数目标与有效贡献、半衰期／随机存活区分、自然终止／再激活、离散时标和多阶段数值误差；属于实质建模提案而非格式性延续。 ContextLoopsAndNumerics 比较历史对后续输出的作用、累积／未来触发语义、逐字段整数选择及条件内存／累加算术；研究活跃，未完成十二小时请求。 FlowLearning120 独立承载 flow 预激活匹配、上下文信用和初步算法比较；TrainingStrategy120 保留训练分工与 DMN/token 维护，K-125 未改正文机制。
-- 下游：D-07 DL-13 仅为案例入口；可复用语言需求须另行确认，D-01—D-07 不因应用提案而取得新资格。C-15 的受影响范围为 D-08 的 SNN-03/SNN-05/SNN-07；C-13 的容量机制和现有算术不变；C-14 的编码边界通过 P-33 约束候选 C-16；P-31 的共享位置范围失效，无已合格后代受损。 C-17/P-34/P-35 影响 D-08 的 ActivationRegimes、Model、Decisions 和 PhysicalDistancePreferenceResearch；没有已合格实施后代需失效。 C-18/C-19 影响 SignedPopulationEncoding、SynapticIntegrationResearch 及当前六文件的相应行为／检测范围；未选算法，无已合格实施后代。 C-20/C-21 影响 ActivationRegimes、Model、Decisions 和 PhysicalDistancePreferenceResearch 的输入响应与恢复候选范围，不改变区域、消息或持久化协议。 C-22/P-45—P-47 影响 TrainingStrategy 及当前七份同步到 revision74 的应用文档；无已合格后代失效，容量预算、编码所有权及语言／区域／消息／持久协议不变。 K-79 将同一八文件范围同步为持续修补方向，不使其它文档或已合格后代失效。 C-23/P-48—P-51 的候选范围为TrainingStrategy、Model、AdaptiveConnectivity、Decisions 的全链约束范围，保留其它十一文件修订与既有行为／容量／区域合同；没有合格后代因本次分析失效。 K-81 的 epoch 范围影响当前五个 revision76 文件；其它十份应用文档修订及已合格后代不变。 K-82 的回返／短时语义分析覆盖当前六个 revision77 文件；其余九份应用文档、容量预算及已合格后代不变。 K-83 新增 RateDynamics 并同步八份已有应用文档；影响 SNN-01—SNN-03/SNN-05/SNN-07 的时间、表示、训练及验收讨论。其余七份文档、既有容量算术假设及已合格后代不变；不授予实现资格。 K-84 新增 ContextLoopsAndNumerics 并同步七份已有文档，九份其它应用文档及容量基线不变；无已合格合同失效。
-
-- 最新范围：H-93—H-95 / K-209 将连续源状态、双帧 pull 与能力使能原则同步到七份 D-08 文档修订204；局部约束已确认，完整实现契约和未确认的上游正式关系不因此取得资格。
-
-### D-09：SNN 认知模型双语设计进度
-
-<a id="d-09"></a>
-
-- 文件：[English](../applications/steady-snn/docs/CognitiveModelProgress.en.md)、[中文](../applications/steady-snn/docs/CognitiveModelProgress.zh-CN.md)，两版均为 revision2；S1—S9 全文（含 S5.1），CM-01—CM-08、CQ-01—CQ-08、R01—R15 对齐。两版各自自然成文，冲突以本记录中的人工命题和待决边界为准。
-- 人工依据：H-87 四分／长方形探索前提；H-88 概念内容须由 SNN 学得；H-89 完整概念空间的近似副本与感受位置偏向；H-90 稀疏、值域、精度和时间复用研究；H-91 有限精度 rate 与 spike 时序协同；H-92 双语整理授权；H-93/H-94 连续源状态及双帧 pull；H-95 能力使能原则。它们是本次命题基线，不构成对成稿全文的追认。
-- 候选价值链：D-09 经 P-77—P-80 衍生自 C-30—C-33；P-71—P-74 接到 C-12/C-24，再经既有 P-22/P-52/P-29 接 C-01/V-01/V-02。理由是把可解释的认知应用目标、预测学习、容量取舍和时序行为转成可比较的问题；不把 learned neural concepts 等同于纲领的形式 ontology 或已实现 GADT。
-- 依赖／约束：P-75 说明四分应用需要已学概念动力学，P-76 说明时序研究需要数值与状态语义，P-81 保留每 CC 完整概念库、排除按四分组硬切概念库的解释。依赖不授予资格。个体上下文身份、固定坐标、region／SoA、活动抵消及可驱转性保持；未选新增字段、几何、抑制边、更新或学习规则。
-- 当前状态：完整契约 pending-human；H-93/H-94 的局部连续性与执行架构已 confirmed，H-95 的目标明确。文献与分析用于提出比较，未证明5k足够、认知自证成立或模型已训练成功；无合格实施基线。S8 的候选比较不授权当前运行实验。
-- 验收／待决：准确区分人工前提、分析判断、来源结论与候选；CQ-01—CQ-08 分别追踪读出充分性、关系绑定、抽象／副本习得、容量误差、时标、最小历史、学习归因及耦合可驱转性。需另行确认的选择及其后果均列在两版 S6/S8；当前仅完成记录，不请求重复确认原有前提。
-- 影响：D-08 的 Model、SignedPopulationEncoding、TrainingStrategy、FlowLearning、RateDynamics、SynapticIntegrationResearch、ActivationRegimes、IncomingConnectivity、CapacityPlanning、ContextLoopsAndNumerics 是相关后续评估对象，其中 K-209 列明的文档已同步局部架构约束，其他开放机制及整体资格未被升级。D-07 的可复用语言需求不随本应用研究自动扩大。无已合格后代失效；K-208/K-209 记录比较和范围。
-
-<a id="d-10"></a>
-### D-10: Symbols, dynamic scope and callable kinds
-
-- **Regional capture contexts:** K-564–K-572 continue D-18r80 →89/D-10r135 →144 and prototype209 →218 under H-97/H-102/H-180/H-181/H-286/H-319/H-337–H-344/H-356–H-362/H-365/H-371. C-37/P-89, C-39/P-95, C-66/P-252/P-253, C-65/P-294/P-299/P-301–P-303 and C-63/P-321–P-324/P-326/P-329 retain explicit checked contexts, complete values and actual owners. Current-holder comparisons resolve already checked producer evidence. Each dependency pass visits a producer once; deferred checks restore the saved lexical and cleanup scope. Exact target subsets reuse their ancestor entry graph without requiring different bodies to have matching image schemas; all reaching bodies remain independently checked. Copied contextual parameters use shared flow headers with recursive back edges; all reaching bodies remain independently checked. Joining preserves actual owners and does not merge borrowed holder state. Owner-parameter factories use shared native demand checking; independent entries resolve helper-produced results before comparison. Compatible completed function factories reuse adapters while constructing independent runtime results. Optional sharing uses already demanded body evidence, including refinement and final validation. Contextual factories use adapter result evidence; selected images, current TLS holders and inherited snapshots retain complete-schema and returned-owner proofs. Captured adapters obtain body inputs from selected images; unrelated caller bindings do not become body requirements. Actual owner/group relations, capture demand and each invocation replay remain checked independently of replay-object identity. [Recomposed-factory](../tests/cod/language/callable-recomposed-factory-validation.json), [nested-perform](../tests/cod/language/callable-nested-perform-validation.json), [borrowed-factory](../tests/cod/language/callable-borrowed-factory-validation.json), [growing-parameter](../tests/cod/language/callable-growing-parameter-validation.json), [contextual-factory](../tests/cod/language/callable-context-factory-validation.json) and [fresh-image](../tests/cod/language/callable-fresh-image-validation.json) evidence covers execution, rejection, releases and costs. Helper-forwarded complete values retain their live caller owners; repeated-stage artifact growth is recorded separately. D-14/D-17 and D-01/D-16 invariants remain; no source policy, runtime payload or lifetime change follows. D-22/D-23/D-24 and unselected mechanisms remain pending.
-
-- **Recursive regional contexts:** K-559–K-561 continues D-18r76 →79/D-10r132 →135 and prototype205 →208 through the existing H-102/H-180/H-181/H-319/H-337–H-344/H-356–H-362/H-365/H-371 context/value/scope contract, C-65/P-294/P-299/P-301–P-303 and C-63/P-321–P-324/P-326/P-329. Current regional owners can correspond across native recursive invocations when alias, root-layout, access and liveness proofs agree. Complete returned callable images require unchanged retained owners. Shared argument-relative return provenance also covers stable borrowed targets and independent owning results; provisional recursive result evidence closes before reuse. Retained procedure snapshots preserve fixed owners. Compiler-proved per-call base substitution preserves runtime installations and cleanup; no owner union, RTTI, lifetime extension, allocator or source policy is selected. D-14/D-17 and D-01/D-16/D-22/D-23 boundaries remain.
-
-- **Deferred current context:** K-554 continues D-10r131 →132 under the existing current/captured-binding, H-319/H-356–H-362/H-365/H-371 scope and C-63/P-235–P-236/P-321–P-324/P-326/P-329 cleanup contracts, constrained by D-14/D-18 owner/access/complete-value rules. Registered-action paths retain conditional binding/liveness evidence through ordinary/failure joins; later rebinding stays current and missing definition-time captures still reject. No runtime presence flag, lifetime extension, actual-owner union or ABI is selected. Broader relational proofs, open body-result staging, inferred-signature transport, module queues and family/AOT integration remain incomplete. D-01/D-16/D-22 boundaries are unchanged.
-
-- **Implicit owner bindings:** H-382/P-343/K-538 covers D-10r131: inferred owner names are const lexical bindings even without a region capability. P-342 nearest lookup rejects @ access through those names. Existing provenance, target access, cleanup and lifetime contracts remain; semantic binding does not require a runtime owner value.
-
-- **Nearest symbol lookup / execution separation:** H-381/P-342/K-537 covers D-10r130. The nearest local binding governs @ access, including delayed bodies and captured-name analysis; a non-symbol rejects. ModuleWorld semantic records and ModuleExecution initialization values are separate compiler responsibilities under H-248/H-249/H-372. Existing native behavior and H-140 ordering remain; full family dispatch/stage migration is still outstanding.
-
-- **Initialization cancellation:** H-380/P-341/K-536 covers D-10r129: cancel dependency initialization TLS writes only; evaluate operands and preserve their effects/failures, temporary cleanup and procedure-local installations. Entry identity/conditional coverage and native elimination mechanisms remain design work.
-
-- **Callable-world reconciliation:** K-534–K-536/H-372–H-380 updates the affected stage, symbol/family, dispatch and capture descriptions for D-10r129. P-330–P-332/P-335/P-336 records confirmed behavior; H-378/K-535 confirms D-21/P-333/P-334/P-337 for the behavioral value path; detailed mechanisms remain pending-human. H-379 additionally requires explicit entry installation after extension and suppression of dependency installations; H-380 confines cancellation to dependency initialization and preserves operand evaluation/effects; composition identity and conditional coverage remain D21-Q-entry-composition work. Existing qualified owner/scope/return/numeric contracts continue only within unchanged scope. Implicit symbolic-definition/selection installation and one-method/one-concrete-result language interpretations are superseded, not carried forward as implementation authority. No native acceptance for the new family/stage behavior is claimed.
-
-
-- **Current completion/grouping continuity:** D-10r127/[K-526](#k-526) continues H-361/H-362/C-63/P-324 and H-365/P-326 for explicit proc/func returns and effect restoration through nested scopes/iterations/finally. D-17 supplies completion/error policy; D-14/D-18 retain owners/access and typed complete values. K-525 retains ordinary-group declaration/effect sharing, binding joins and definite initialization. [Return evidence](../tests/cod/language/return-validation.json) bounds implementation acceptance; defer and unrelated pending contracts remain separate.
-
-- **Current loop contract:** H-365/P-286/P-326/[K-522](#k-522), D-10r126, references [D-17r26’s dedicated loop scoping rules](ExceptionControl.md#loop-scoping-rules). Iteration effects/resources restore independently of user defer registered to an enclosing full scope. Body/else declarations require nested explicit scopes; loop-control capture and delayed borrows retain explicit lifetime checks. This supersedes the old direct-loop-defer prohibition without qualifying unrelated pending scope. Native acceptance remains bounded. K-524 corrects the loop relationship identifier to P-326; the H-365 proposition and qualification are unchanged.
-
-- **Callable return surface:** H-361/P-324/[K-519](#k-519) requires explicit value returns from proc/func brace bodies and unchecked runtime failure when a required return is missing. The prior implicit callable-body result syntax is superseded for future implementation; current examples and native reports retain their recorded checkpoint scope. H-362/D-17r24 confirms enclosing return from deferred catches/finally, replacement of pending return/exception, continued cleanup and void fallthrough. H-363/D-19r2 selects pure declarations with implicit body results; purity implementation remains deferred. This targeted boundary does not invalidate qualified value storage, ABI, owner/access or effect contracts.
-
-- **Current closure navigation:** D-10r123 points to [D-18r13](RegionalClosures.md) for the bounded H-327–H-335 capture/owner contract. H-336/K-459 removes superseded research text without changing language semantics or qualifying unrelated pending designs. Earlier revisions/events retain their recorded scope.
-
-- **Nullable call direction and annotation syntax:** H-317/H-318/P-284–P-285/[K-443](#k-443) records explicit nullable forwarding, deferred required-ref cycles and uniform colon annotations. Native implementation acceptance is pending; defer scope/timing remains under discussion.
-
-- **Declaration cleanup:** H-316/C-72/P-283/[K-442](#k-442) retires let/var and reference type constructors, preserves explicit ref/ptr/val storage intent and records [native validation](../tests/cod/language/declaration-cleanup-validation.json). H-317 accepts nullable call/result modes and defers required-ref graph construction.
-
-- **Current native acceptance:** H-309–H-315/C-72/P-274–P-282 and [K-441](#k-441) cover the bounded field/val/nullable implementation. [Validation](../tests/cod/language/nullable-storage-validation.json) records compiler/source hashes, checked-call rejection, fixed-owner flow, relocated reference fields and exceptional cleanup. H-316/K-442 covers declaration cleanup; wider pending qualification remains separate.
-
-- **Field storage decision:** H-310/H-311/C-72/P-276–P-277/K-438 distinguishes direct bits fields (unmodified or val) from reference fields (ref or ptr, including scalar targets). D-14r67/D-10r118/D-16r6 retain same-owner references and fixed bits payloads. Constructor target allocation is pending only for reference fields; direct bits initialization needs no separate target. K-441 records bounded field/val/NPE native acceptance; encoding is unchanged.
-
-- **Ref/ptr direction:** H-309/C-72/P-274–P-275/K-436 confirms ptr field syntax and reviews ref/ptr-only ordinary declarations, static initialization checks and nullable dereference. D-14r67 records H-310/H-311's direct-bits/reference field distinction and distinguishes pending construction, parameter and conversion details; D-10r118/prototype179 preserve the separate current compiler/TLS contracts. K-441 records bounded implementation; full-document qualification is unchanged.
-
-- **Region/transfer continuity:** H-307/H-308/C-70–C-71/P-270–P-273/K-435 covers complete region declaration syntax and void-or-view ordinary/indexed transfers. [Current validation](../tests/cod/language/region-transfer-validation.json) records migrated language checks, lifecycle cleanup and LLVM verification. Broader pending qualification remains unchanged; chain-oriented library guidance is not a blanket transfer restriction.
-
-- **Pointer invariants / fixed bindings / swaps:** H-305/H-306/P-266–P-269/K-434 covers initialized loop rebinding without exact target-history analysis, non-rebindable const ptr groups, and distinct void reference/bits swaps. [Validation](../tests/cod/language/pointer-swap-validation.json) records the bounded implementation; initially-uninitialized loop-carried rebinding remains a proof limit. Wider pending design paths remain pending.
-
-- **Explicit builtins / range else:** H-304/C-67–C-68/P-262–P-265/K-433 covers checked builtin delegation and zero-iteration fallback; [validation](../tests/cod/language/intrinsic-range-validation.json) records bounded acceptance. D-14r67/D-10r118 and D-07r142/prototype179 preserve safety, separate scopes and normally completing initialization joins. Wider document qualification and loop-carried alias analysis remain separate.
-
-- **Destination-return safeguard:** H-303/P-261 confirms the required final destination-parameter expression for ordinary (=) methods. K-432 supersedes the earlier implementation-limit classification without changing code behavior. [Focused evidence](../tests/cod/language/assignment-result-safeguard-validation.json) rejects returning an equivalent alias. Other prototype limitations and pending full-document value paths remain separate.
-
-- **Ptr rebinding / loop review:** H-299/P-259 rejects writable ptr rebinding to read-only views and accepts pre-loop fallback initialization. K-430 records focused implementation evidence in [ptr-rebind-validation.json](../tests/cod/language/ptr-rebind-validation.json). H-302 resolves H-301 with const-qualified method selection and access-preserving builtin reference results; K-431 records [current evidence](../tests/cod/language/const-assignment-validation.json). H-304 confirms explicit builtin invocation and zero-iteration else; K-433 records implementation acceptance. D-14r67 records body/result checks; the full draft remains pending-human.
-
-- **Ptr integration / current evidence:** H-298 authorizes integration, implementation and validation of the confirmed H-270–H-273/H-292–H-297 decisions. K-429 records local bits places, fixed-owner pointer bindings, explicit regional/lexical owner arguments, initialization flow and declared result-owner enforcement. [Native evidence](../tests/cod/language/ptr-storage-validation.json) records219/219 language checks,11 focused boundaries and LLVM verification/promotion. Conservative loop/alias proof limits and legacy source surfaces are explicit in D-14r67. Full-document candidate value paths remain pending-human.
-
-- **Local ptr decisions:** H-292/H-293 confirms scope-owned fresh bits construction, read-only alias preservation and explicit external owners for assignment destinations. D-14r67/P-255/P-256 coordinates this with fixed-owner and result-view contracts. H-295 confirms compile-time-only typeof. H-296 distinguishes value-producing individual initializers from the final comma-introduced group block; H-297 allows later initialization while rejecting reads before definite initialization. K-428 records these source decisions without native ptr acceptance or whole-document qualification.
-
-- **Symbolic binding implementation:** H-287–H-291/K-426 covers direct TLS payloads, region-backed object rebinding, shared-owner groups, explicit touch/replay checks and object transfer overloads. All effects return void; procedure rebinding requires = and inline effect proc introduces or signature-checks its symbol. C-36/C-54/C-65/C-66/P-248–P-254 retains identity, actual lifetime and scoped restoration. [Native evidence](../tests/cod/language/symbolic-context-validation.json) records bounded acceptance; complete document/value-path qualification and general ptr migration remain separate.
-
-- **Symbolic storage update:** H-277–H-281/K-422 records inline TLS bits, effect-arrow transfer and effect-equals object-reference rebinding with region-symbol backing and lifetime checks. P-248/P-249 separates ordinary fixed-owner pointers and resource ownership. This migration is not covered by existing pointer-cell native evidence; full-document pending qualification is unchanged.
-- File / revision: [SymbolicDynamicScope.md](SymbolicDynamicScope.md), revision144, all sections; K-420 records H-275 region declarations and root-policy access; K-418 records H-273 owner syntax and optional ptr in parameters with the H-271/H-272 fixed-owner/callee-local contract; K-379 repairs evidence links without changing the contract. K-375 records callee/argument timing as native observations, while K-371 reconciles the reuse tables and current-status index. The complete contract and candidate derivation paths remain `pending-human`. Scoped human decisions authorize only their recorded propositions; no qualified whole-document baseline is inferred.
-- Value lineage: C-10/P-14 connects typed execution to the charter; C-35/C-43/C-45/C-46 and P-84/P-100/P-102/P-109–P-111 concerns nominal symbols and explicit contextual composition. C-39/C-54 and P-94/P-143/P-155 preserves regional lifetime boundaries; C-56/C-57 and P-182–P-197 supplies interfaces/selection; C-58/P-199–P-203 supplies explicit publication and selected callable contexts. Dependencies do not grant authority. Earlier candidate paths and their confirmation states remain in the concept/relationship records.
-- Symbols and calls: H-114/H-184–H-189 requires compile-time nominal identities and explicit symbol types, permits lexical or symbolic procedure definitions and assigns direct lexical calls current dynamic bindings. H-111/H-172 makes effect the scoped write with a newly bound result. H-180 reaffirms captured values for perform and preservation of captured/hidden owners; behave uses current bindings. H-102 checks required bindings along demanded WPO call paths. H-115/H-117/H-120 retains explicit origins, typed destinations, identity-checked using shorthand and mixin symbol maps.
-- Module and reuse rules: H-140/H-166 requires complete scanning, once-only encounter-ordered incorporation and process-lifetime module scopes. H-212 assigns body redefinition to mixin. H-230 keeps extension identities separate and forms receiving identities for same-alias unions. H-232 gives using the preserved selected implementation context and import the receiving ordinary-callable context, while retaining source body, non-callable lexical bindings and captured values. H-231/H-233 requires explicit export/re-export and permits export import. No module namespace or automatic global implementation publication is selected.
-- Function/storage rules: H-197/H-198 permits mutation of explicitly supplied memory, excludes dynamic-variable access and procedure calls, and replaces the older read-only nested-function snapshot contract. H-193/H-196 keeps concrete data regional and whole-owner containers intrinsic. H-180/H-181 forbids extracting dynamic region ownership; capturing/shadowing does not destroy hidden owners. H-200–H-203 supplies default borrowing, const bits/value and const non-bits view distinctions, tracked lifetimes and same-owner stored edges. Full qualifier/ordinary-owner/make/transfer syntax remains pending; supported reference results retain the caller's live owner.
-- Lookup/operation rules: H-149/H-150 permits nested local shadowing and rejects inaccessible reserved lexical names, with H-257 requiring nearest lexical value selection for direct calls and a shadow warning. K-375 separately observes current callee-before-argument selection; H-148 does not explicitly confirm that timing. H-153–H-155/H-158/H-159 permits function/procedure operation overloads with compiler operation identities and current dynamic bindings for procedural calls. H-148 sequences each argument conversion before the next argument. H-225/H-226/H-229 retains signature-associated methods, using-shadow/import-extension and concrete-data dispatch. K-391 merges unequal same-identity subsets locally; H-253/K-395 rejects conflicting adapted contexts; H-258 requires typed parameter/result declarations with generic and variadic support; K-399 records implementation; K-400 records successful build repair and 28 focused compiler/native/IR checks.
-- Evidence: K-372 supplies the183/183 source,5/5 composition and three native owner/relocation checkpoint on the K-369 compiler; K-373 adds a diagnostic-only provenance correction with9/9 focused checks. [Prototype reference148](../tests/cod/language/README.md) distinguishes the current checkpoint from earlier targeted and historical records. K-350–K-358 records module identities/publication, helper contexts, unit aliases, private dependencies and ordering; K-361/K-364/K-369 repairs field-selector dependencies, symbolic-reference facts and fold guarantees. K-365 observes guarded owner cleanup; K-370 observes captured symbolic callees versus adapted ordinary dependencies. K-359/K-362 records pending heads/value-call lookup; K-363 retains the historical alias-order defect addressed by K-391. Each native record retains its actual compiler/source hashes and scope; this index does not relabel older evidence as current.
-- Invariants and boundaries: H-143–H-145 requires direct LLVM lowering, lean checks and justified simplification; H-146 retains the known first-field self-reference/null limitation. No new pointer encoding, allocation policy, runtime dispatch/borrow table, independent module compiler or SNN model is selected. Cyclic initialization, persistent symbol/runtime ABI, general capture admissibility, compound views and coherent owned/const/make/assignment/mailbox forms remain open. D-07r92, D-11r26 and D-14r31 are affected design dependencies; D-08/application co-design remains separate. Earlier H/K history is retained below, including superseded function, import and ownership proposals.
-
-- H-245–H-249 / K-391: D-15 owns module construction, identity-based publication/composition and runtime TLS bindings. Cross-module world editing is forbidden. Same-identity subsets merge locally; H-253/K-395 resolves conflicting adapted dependencies. H-257 resolves local call/value lookup through the nearest lexical binding. No user-visible intrinsic call protocol is selected.
-
-<a id="d-11"></a>
-### D-11: Scalar units and array index types
-
-- **Region/transfer continuity:** H-307/H-308/C-70–C-71/P-270–P-273/K-435 covers complete region declaration syntax and void-or-view ordinary/indexed transfers. [Current validation](../tests/cod/language/region-transfer-validation.json) records migrated language checks, lifecycle cleanup and LLVM verification. K-441 covers the accepted checked-NPE extension; other pending scopes remain pending.
-
-- **Contract/status:** [ScalarUnitsAndIndexTypes.md](ScalarUnitsAndIndexTypes.md), revision31, all sections; H-260/H-261 and K-402 establish the bounded representation-independent quantity/lossless-widening implementation with56 focused checks; H-256/K-398 records its priority; K-397 coordinates H-254/H-255 representation-independent UoM/fraction planning and future conflict review without implementation; K-378 reconciles the index without changing scalar/unit behavior. The complete contract and candidate derivations remain `pending-human`. Scoped confirmations authorize their recorded propositions only.
-- **Value/dependencies:** C-47/P-112 and D-11/P-113 relates strict scalar/index meanings to C-10/P-14/C-01; C-49/P-119 concerns independent UoM identity; C-50/P-121–P-123 and C-51/P-124–P-128 covers typed methods/conversion choice. C-39/P-94 and C-56/P-186 preserves regional storage and nominal abstractions. P-118 uses application pool arithmetic as a dependency/example, granting no authority to choose an SNN capacity or neural rule.
-- **Identity / method baseline:** H-123/H-125/H-128 supplies structured values, strict typed indices and independent compile-time unit identities/aliases, distinct from symbols. H-130/H-131 supplies pure conversion formulas, argument-type dispatch and parenthesized operations. H-134 replaces UoM definition import with fresh definitions and one-shot selected-unit/conversion bundles; omitted units exclude their edges. H-153–H-155/H-158/H-159 distinguishes mixed-kind general operations from function-only conversions. H-132 plans compound units without implementing their algebra.
-- **Conversion contract:** H-135–H-138 controls conversion per parameter: exact or starred target; direct conversion first, then an explicitly declared indirect route, otherwise compile-time path discovery. Alternative routes warn, with warnings-as-errors available. H-148 completes each argument's conversion before evaluating the next argument. K-246/K-247 preserves the decision/evidence; no runtime unit tags or conversion registry is introduced.
-- **Regional / module context:** H-193/H-197/H-198/H-200/H-203 retains region-only user data, mutable explicit-memory functions, borrowed provenance and same-owner stored edges; general qualifiers remain separate. H-209/H-210 gives order-independent unique-best matching and nominal abstract inheritance. H-218/H-220 requires explicit data conformance, adapter import permission and consumer visibility through using. H-225/H-226/H-230–H-233 supplies associated signatures, name priority, selected callable contexts and explicit publication. Implicit structural conformance, receiver-copying import and automatic read-only snapshots are not current rules.
-- **Native evidence / acceptance:** K-321 records regional data and caller-owned composite results; K-326 borrowed record/array folds; K-330 explicit-memory numerical kernels and two independently compared FP32 scales. K-353 records public aliases of existing conversion entries with source context and edge deduplication; K-354 records low-priority unit-bundle names without losing edges. K-380's historical full/deep/native reports and earlier targeted checkpoints retain exact revision scope in the [prototype reference](../tests/cod/language/README.md#current-bounded-acceptance). Acceptance covers nominal index mismatch, bounds/ranges, unavailable/ambiguous routes, argument ordering and owner-preserving numerical intermediates rather than a test-count target.
-- **Open boundaries:** Compound-unit equality/inference, generic signatures, standalone method heads, unrelated-family union extension and ordinary callable adaptation versus automatic-conversion registration remain pending. General const/owned/make/place/assignment and graph/packet transfer are unimplemented. Scalar constructors do not prove bounds or erase domain identity. No user heap, topology allocator, full numeric hierarchy or new SNN model is selected. H/K history remains the source for superseded alternatives and earlier evidence.
-
-<a id="d-12"></a>
-### D-12: Global Variables Done Right: Module Worlds and TLS Bindings
-
-- **Initialization cancellation:** H-380/P-341/K-536 covers D-12r25: cancel dependency initialization TLS writes only; evaluate operands and preserve their effects/failures, temporary cleanup and procedure-local installations. Entry identity/conditional coverage and native elimination mechanisms remain design work.
-
-- **Callable-world reconciliation:** K-534–K-536/H-372–H-380 updates the affected stage, symbol/family, dispatch and capture descriptions for D-12r25. P-330–P-332/P-335/P-336 records confirmed behavior; H-378/K-535 confirms D-21/P-333/P-334/P-337 for the behavioral value path; detailed mechanisms remain pending-human. H-379 additionally requires explicit entry installation after extension and suppression of dependency installations; H-380 confines cancellation to dependency initialization and preserves operand evaluation/effects; composition identity and conditional coverage remain D21-Q-entry-composition work. Existing qualified owner/scope/return/numeric contracts continue only within unchanged scope. Implicit symbolic-definition/selection installation and one-method/one-concrete-result language interpretations are superseded, not carried forward as implementation authority. No native acceptance for the new family/stage behavior is claimed.
-
-
-- **Symbolic storage update:** H-277–H-281/K-422 records inline TLS bits, effect-arrow transfer and effect-equals object-reference rebinding with region-symbol backing and lifetime checks. P-248/P-249 separates ordinary fixed-owner pointers and resource ownership. This migration is not covered by existing pointer-cell native evidence; full-document pending qualification is unchanged.
-- **Contract/status:** [GlobalVariablesDoneRight.md](GlobalVariablesDoneRight.md), revision25, all sections; H-250/K-391 adds the bilingual slogan without changing the world boundaries. H-241/K-387 integrates independent module runtime worlds and flat typed symbolic pointers as two complementary parts of this vision. K-396 records the completed two-world architecture audit; K-380 retains earlier synchronous evidence; H-152 requests the vision and tracker; K-376 reconciles the current-status summary with confirmed contracts and actual evidence. The document/value paths remain `pending-human`; no Actor implementation contract is qualified.
-- **Value/dependencies:** H-241/P-213 confirms C-59 independent module worlds as part of this vision; D-15r12 maintains the detailed entity inventory and H-242 shared vocabulary identity role. This placement does not qualify the complete runtime architecture. P-134 proposes inspectable typed execution context as a contribution to C-10 and charter §§1/3.2/6.1. P-135 depends on D-10's current binding, call and lifetime rules. C-52/H-151 supplies Actor direction; P-131/P-132/P-133 and D-13/D-14 retain their candidate value, regional dependency and ownership boundaries.
-- **Confirmed scope:** H-234–H-241 supplies explicit module-world composition, distinct TLS typed pointers and the vision relationship. H-96–H-104/H-113/H-114 supplies nominal symbols, value capture and demanded bindings. H-166/H-180/H-181 preserves module lifetimes, captured/hidden owners and prohibits dynamic-resource extraction; H-172 supplies effect-arrow syntax. H-184–H-189 supplies typed lexical/symbolic procedures. H-190/H-193/H-196–H-203 governs regional-only user objects, intrinsic owners, mutable explicit-memory functions and qualifier/ownership design. H-212/H-230–H-233 supplies mixin, selected implementation contexts and explicit export/re-export. H-168/H-170 supplies local-error-only mailbox feedback and the returned-packet proposal, not a complete send/result protocol.
-- **Implementation evidence:** Native synchronous compilation implements typed symbols, captured/current calls, no-extraction, explicit-memory functions, regional data and module composition. K-380/K-381 records the earlier183/183 language, five deep cases and three regional programs. K-389 supplies six focused examples and pointer-cell IR inspection for the current representation increment; all records retain their actual hashes/scopes. No current owner-move, mailbox, scheduler, general sum or qualifier syntax follows from superseded K-295/K-296 evidence.
-- **Acceptance / pending boundaries:** Preserve identity, restoration, region lifetimes and function exclusion from dynamic effects. The candidate Actor milestone must separately demonstrate typed payload acceptance, ordinary packet ownership/disposal, receiver context and selected local-error behavior. Construction/consuming call boundaries, owner-bearing outcomes, scheduler/delivery/shutdown, dynamic value categories and typed root access remain open. Packet transfer is separate from captured resource replay; dependencies do not grant qualification.
-
-<a id="d-13"></a>
-### D-13: CoD regional memory vision and implementation tracker
-
-- **Capture-stage continuity:** K-534/H-372/H-373, D-13r31, distinguishes module registration from runtime materialization/installation while retaining graph and owner invariants. P-330/P-338; physical dispatch evidence remains D-21 mechanism work.
-
-
-- **Current closure navigation:** D-13r30 points to [D-18r13](RegionalClosures.md) for the bounded H-327–H-335 capture/owner contract. H-336/K-459 removes superseded research text without changing language semantics or qualifying unrelated pending designs. Earlier revisions/events retain their recorded scope.
-
-- **Region/transfer continuity:** H-307/H-308/C-70–C-71/P-270–P-273/K-435 covers complete region declaration syntax and void-or-view ordinary/indexed transfers. [Current validation](../tests/cod/language/region-transfer-validation.json) records migrated language checks, lifecycle cleanup and LLVM verification. K-441 covers the accepted checked-NPE extension; other pending scopes remain pending.
-
-- **Symbolic storage update:** H-277–H-281/K-422 records inline TLS bits, effect-arrow transfer and effect-equals object-reference rebinding with region-symbol backing and lifetime checks. P-248/P-249 separates ordinary fixed-owner pointers and resource ownership. This migration is not covered by existing pointer-cell native evidence; full-document pending qualification is unchanged.
-- **Contract/status:** [GraphGrainedMemoryManagement.md](GraphGrainedMemoryManagement.md), revision 31, all sections; K-383 reconciles lexical-view examples and source post-state wording with H-181 and D-14. K-379 retains its evidence-link review. H-156/H-157 confirms the local graph boundary. The full design and candidate value paths remain `pending-human`.
-- **Lineage / baseline:** P-138/P-139 motivates inspectable graphs/structured semantic units through C-01/C-05; P-140 constrains C-40. C-54/P-143 and D-14/P-155 relates lifetime responsibility to C-10. P-141/P-142 supplies representation/language dependencies only. H-166/H-177/H-179–H-181/H-190/H-193/H-196–H-203/H-209 supplies the recorded module, ownership, regional-data, function and borrow constraints.
-- **Current boundary:** the implemented data-product path is regional; type declares abstractions. H-383/H-384 separately admits bits ADTs to lexical/regional storage under D-22; that aggregate implementation remains outstanding. Typed dynamic resources reject extraction and preserve captured/hidden owners. Explicit-memory functions and borrowed results retain region provenance. K-411 records typed make/root and ordinary owning locals/calls/results under D-17 E4/E5; optional outcomes and packet transport remain unimplemented. H-262 supplies the consumed-state contract.
-- **Acceptance / evidence:** K-381 records4 acquisitions/releases,18 live reads, guarded-scope cleanup and independent graph/pool relocation on its recorded compiler; K-365 retains its earlier focused checkpoint. K-382 checks actual factory-result owners through four forwarding modules. K-383 removes obsolete consuming-dynamic-owner examples from the current explanation; their original reports remain historical. K-364 preserves supported symbolic-reference conformance. K-305/K-310/K-311 and earlier owner-move records retain their original source/semantic scopes. No per-object ownership, runtime borrow table or allocator policy is introduced.
-- **Dependencies / review:** D-01 regional representation, D-10 effects/captures and D-14 source ownership must stay consistent. H-173/H-175 interior-reference restrictions, H-170 transport outcomes and D-14 consuming call/result boundaries remain separate pending choices; H-262 selects static consumed state for ordinary named owners. Historical H/K evidence is unchanged.
-
-<a id="d-15"></a>
-### D-15: Module worlds and flat TLS bindings
-
-- **Architecture exploration:** H-387/K-573, D-15r20. The fused type-level artifact preserves reachable dependency-local interpretations and procedure-local effects. [D-25](CompilationRuntimeArchitectureExploration.md) is directly authorized exploratory work; candidate production mechanisms remain pending-human. Earlier native-code timing and JIT/RTTI deferrals do not gate these experiments. D-21 native-before-execution timing is needs-reconfirmation for the replacement architecture; existing dispatch, owner, cleanup and installation behavior remains.
-
-- **Nearest symbol lookup / execution separation:** H-381/P-342/K-537 covers D-15r19. The nearest local binding governs @ access, including delayed bodies and captured-name analysis; a non-symbol rejects. ModuleWorld semantic records and ModuleExecution initialization values are separate compiler responsibilities under H-248/H-249/H-372. Existing native behavior and H-140 ordering remain; full family dispatch/stage migration is still outstanding.
-
-- **Initialization cancellation:** H-380/P-341/K-536 covers D-15r18: cancel dependency initialization TLS writes only; evaluate operands and preserve their effects/failures, temporary cleanup and procedure-local installations. Entry identity/conditional coverage and native elimination mechanisms remain design work.
-
-- **Callable-world reconciliation:** K-534–K-536/H-372–H-380 updates the affected stage, symbol/family, dispatch and capture descriptions for D-15r18. P-330–P-332/P-335/P-336 records confirmed behavior; H-378/K-535 confirms D-21/P-333/P-334/P-337 for the behavioral value path; detailed mechanisms remain pending-human. H-379 additionally requires explicit entry installation after extension and suppression of dependency installations; H-380 confines cancellation to dependency initialization and preserves operand evaluation/effects; composition identity and conditional coverage remain D21-Q-entry-composition work. Existing qualified owner/scope/return/numeric contracts continue only within unchanged scope. Implicit symbolic-definition/selection installation and one-method/one-concrete-result language interpretations are superseded, not carried forward as implementation authority. No native acceptance for the new family/stage behavior is claimed.
-
-
-- **Symbolic storage update:** H-277–H-281/K-422 records inline TLS bits, effect-arrow transfer and effect-equals object-reference rebinding with region-symbol backing and lifetime checks. P-248/P-249 separates ordinary fixed-owner pointers and resource ownership. This migration is not covered by existing pointer-cell native evidence; full-document pending qualification is unchanged.
-- **Contract/status:** [ModuleWorlds.md](ModuleWorlds.md), revision19, all sections; full operational contract pending-human. H-251/K-392 requires discussion before RTTI design/implementation; current compiler identities and root UUID metadata do not settle RTTI. H-238 requires a concrete entity inventory; H-239 specifies flat typed symbolic pointers; H-240 gives each module its own runtime world; H-241 places the architecture in D-12. H-234 confirms the architectural principle, not the complete operational proposal. H-236 forbids choosing local fixes before the architecture is coherent.
-- **Value path:** C-59/P-204/P-209 proposes locally composed interpretations as a way to integrate typed business intent without mutating source domains (charter §§1–4). These value links remain candidate; H-234 explicitly supplies the principle, not blanket qualification of all mechanisms in the document.
-- **Constraints/dependencies:** P-205 preserves explicit publication/local same-identity merge; H-245/P-216 prohibits cross-module editing and separates compiled TLS shape from runtime pointer changes. P-206 is superseded. P-210 keeps the worlds distinct. P-207/P-208 depends on binding/type semantics without granting authority to unresolved details; H-235 keeps machinery internal.
-- **Acceptance / exclusions:** Demonstrate receiver-owned identity composition, source-world isolation, explicit exports, flattened compile-time TLS layout/type checks and runtime scoped pointer restoration. K-396 completes the requirement audit with15 supplemental checks and source inspection on the unchanged K-395 compiler. K-395 supplies27 checks for conflict-checked dependency interpretation and cross-world typed TLS; K-394 retains warning controls with the conflicting-sibling winner expectation superseded by H-253; K-393 retains canonical-import/alias evidence; K-391 retains preceding identity-record composition/publication evidence; K-389 retains earlier pointer-cell evidence. H-247/P-217 and H-248/P-218 confirms the identity/alias rules. H-245 requests the replacement goal and excludes any cross-module editor, compiler editor-target effect or runtime foreign-world mutation protocol. Full operational qualification remains pending-human.
-- **Affected descendants:** D-07r111/D-10r88/D-12r23 and prototype152 record the inventory and vision boundary. K-400 validates the typed declaration increment without changing source-world isolation or TLS semantics. K-396 coordinates D-11 unit/operation selection, D-12 module/effect execution and D-14 root-policy methods with receiver construction, local identity merge and H-253 conflicts; their storage, numeric and ownership constraints are not broadly invalidated. Historical implementation evidence remains scoped to its compiler revision.
-
-
-<a id="d-14"></a>
-### D-14: Regional ownership language: syntax, semantics and practical use
-
-- **Deferred ownership flow:** K-552/D-14r82/D-17r50 continues H-263/H-267/H-271/H-297/H-313–H-315/H-319/H-356–H-362/H-365/H-370/H-371 through C-54/C-65/C-72/P-233/P-280–P-282 and C-63/P-235–P-236/P-321–P-324/P-326/P-328/P-329. Current ownership flows through cleanup actions and queue/category/completion paths. Prepared owning references transfer at callee entry, failed registration preserves the source, and released pending results cannot retain valid borrows. Fixed owners/access/initialization, explicit scopes and exact native cleanup remain. Broader relational/native composition, generic/module queues and family/AOT integration remain unfinished. D-01/D-16/D-22 and broader document qualification are unchanged.
-
-- **Contextual construction:** H-386/P-352/P-353/K-545 covers D-14r79: omitted make owner follows a unique receiving/containing-field owner only with usable allocation capability; absent destination uses the full lexical scope for bits and requires a region for non-bits. No hidden fallback, changed existing-borrow provenance or inferred capability. Coordinated migration without compatibility staging is the preferred direction. D-22r2 remains pending final whole-file review; unchanged qualified owner/access/cleanup contracts continue.
-
-- **Construction reconciliation:** H-383–H-385/P-344–P-347/K-542 covers D-14r78, refining only the blanket region-only user-ADT boundary and recording intrinsic-only ownership, finite bits eligibility, explicit construction owner checking and const-result acquisition. D-22r1 retains pending contextual inference, layout/ABI, migration and DBMR protocols. The wider draft remains pending-human; existing qualified owner/access/cleanup scopes continue unchanged.
-
-- **Implicit owner bindings:** H-382/P-343/K-538 covers D-14r77: inferred owner names are const lexical bindings even without a region capability. P-342 nearest lookup rejects @ access through those names. Existing provenance, target access, cleanup and lifetime contracts remain; semantic binding does not require a runtime owner value.
-
-- **Callable-world reconciliation:** K-534/H-372–H-377 updates the affected stage, symbol/family, dispatch and capture descriptions for D-14r76. P-330–P-332/P-335/P-336 records confirmed behavior; H-378/K-535 confirms D-21/P-333/P-334/P-337 for the behavioral value path; detailed mechanisms remain pending-human. H-379 additionally requires explicit entry installation after extension and suppression of dependency installations; H-380 confines cancellation to dependency initialization and preserves operand evaluation/effects; composition identity and conditional coverage remain D21-Q-entry-composition work. Existing qualified owner/scope/return/numeric contracts continue only within unchanged scope. Implicit symbolic-definition/selection installation and one-method/one-concrete-result language interpretations are superseded, not carried forward as implementation authority. No native acceptance for the new family/stage behavior is claimed.
-
-
-- **Independent qualifiers:** H-366–H-369/P-173/P-327/[K-527](#k-527) qualifies D-14r75 for independent declaration/target const, local ordinary parameter binding qualifiers and transitive readonly access. Direct alias/grammar/checker consequences are authorized without repeated confirmation; conflicting combined-qualifier prose is superseded only in that scope. Existing owners, lifetimes, complete callable values and no global freeze remain. Implementation acceptance is recorded separately; pure/TCO and unrelated pending designs retain their exclusions.
-
-- **Current loop contract:** H-365/P-286/P-326/[K-522](#k-522), D-14r74, references [D-17r26’s dedicated loop scoping rules](ExceptionControl.md#loop-scoping-rules). Iteration effects/resources restore independently of user defer registered to an enclosing full scope. Body/else declarations require nested explicit scopes; loop-control capture and delayed borrows retain explicit lifetime checks. This supersedes the old direct-loop-defer prohibition without qualifying unrelated pending scope. Native acceptance remains bounded. K-524 corrects the loop relationship identifier to P-326; the H-365 proposition and qualification are unchanged.
-
-- **Current closure navigation:** D-14r72 points to [D-18r13](RegionalClosures.md) for the bounded H-327–H-335 capture/owner contract. H-336/K-459 removes superseded research text without changing language semantics or qualifying unrelated pending designs. Earlier revisions/events retain their recorded scope.
-
-- **Nullable call direction and annotation syntax:** H-317/H-318/P-284–P-285/[K-443](#k-443) records explicit nullable forwarding, deferred required-ref cycles and uniform colon annotations. Native implementation acceptance is pending; defer scope/timing remains under discussion.
-
-- **Declaration cleanup:** H-316/C-72/P-283/[K-442](#k-442) retires let/var and reference type constructors, preserves explicit ref/ptr/val storage intent and records [native validation](../tests/cod/language/declaration-cleanup-validation.json). H-317 accepts nullable call/result modes and defers required-ref graph construction.
-
-- **Current native acceptance:** H-309–H-315/C-72/P-274–P-282 and [K-441](#k-441) cover the bounded field/val/nullable implementation. [Validation](../tests/cod/language/nullable-storage-validation.json) records compiler/source hashes, checked-call rejection, fixed-owner flow, relocated reference fields and exceptional cleanup. H-316/K-442 covers declaration cleanup; wider pending qualification remains separate.
-
-- **Checked NPE and explicit bits storage:** [H-313–H-315](#h-313)/[K-440](#k-440) accepts checked NullPointerException, mandatory module-top-level handling and val locals/parameters; null is a reserved literal and isnull inspects a pointer without dereferencing it. C-72/P-280–P-282 preserves storage/access/lifetime rules, with a null-initialized local acquiring its fixed owner at the first non-null assignment. D-17 owns exception/signature obligations and D-14 owns ordinary storage/owner checks. No checked OOM, payload RTTI, implicit regional-object copy or per-object owner is introduced. Acceptance requires native execution plus rejection at uncovered calls, unsafe reads and inconsistent owner paths; evidence is recorded separately from this confirmed contract.
-
-- **Field storage decision:** H-310/H-311/C-72/P-276–P-277/K-438 distinguishes direct bits fields (unmodified or val) from reference fields (ref or ptr, including scalar targets). D-14r67/D-10r118/D-16r6 retain same-owner references and fixed bits payloads. Constructor target allocation is pending only for reference fields; direct bits initialization needs no separate target. K-441 records bounded field/val/NPE native acceptance; encoding is unchanged.
-
-- **Ref/ptr direction:** H-309/C-72/P-274–P-275/K-436 confirms ptr field syntax and reviews ref/ptr-only ordinary declarations, static initialization checks and nullable dereference. D-14r67 records H-310/H-311's direct-bits/reference field distinction and distinguishes pending construction, parameter and conversion details; D-10r118/prototype179 preserve the separate current compiler/TLS contracts. K-441 records bounded implementation; full-document qualification is unchanged.
-
-- **Region/transfer continuity:** H-307/H-308/C-70–C-71/P-270–P-273/K-435 covers complete region declaration syntax and void-or-view ordinary/indexed transfers. [Current validation](../tests/cod/language/region-transfer-validation.json) records migrated language checks, lifecycle cleanup and LLVM verification. Broader pending qualification remains unchanged; chain-oriented library guidance is not a blanket transfer restriction.
-
-- **Pointer invariants / fixed bindings / swaps:** H-305/H-306/P-266–P-269/K-434 covers initialized loop rebinding without exact target-history analysis, non-rebindable const ptr groups, and distinct void reference/bits swaps. [Validation](../tests/cod/language/pointer-swap-validation.json) records the bounded implementation; initially-uninitialized loop-carried rebinding remains a proof limit. Wider pending design paths remain pending.
-
-- **Explicit builtins / range else:** H-304/C-67–C-68/P-262–P-265/K-433 covers checked builtin delegation and zero-iteration fallback; [validation](../tests/cod/language/intrinsic-range-validation.json) records bounded acceptance. D-14r67/D-10r118 and D-07r142/prototype179 preserve safety, separate scopes and normally completing initialization joins. Wider document qualification and loop-carried alias analysis remain separate.
-
-- **Destination-return safeguard:** H-303/P-261 confirms the required final destination-parameter expression for ordinary (=) methods. K-432 supersedes the earlier implementation-limit classification without changing code behavior. [Focused evidence](../tests/cod/language/assignment-result-safeguard-validation.json) rejects returning an equivalent alias. Other prototype limitations and pending full-document value paths remain separate.
-
-- **Ptr rebinding / loop review:** H-299/P-259 rejects writable ptr rebinding to read-only views and accepts pre-loop fallback initialization. K-430 records focused implementation evidence in [ptr-rebind-validation.json](../tests/cod/language/ptr-rebind-validation.json). H-302 resolves H-301 with const-qualified method selection and access-preserving builtin reference results; K-431 records [current evidence](../tests/cod/language/const-assignment-validation.json). H-304 confirms explicit builtin invocation and zero-iteration else; K-433 records implementation acceptance. D-14r67 records body/result checks; the full draft remains pending-human.
-
-- **Ptr integration / current evidence:** H-298 authorizes integration, implementation and validation of the confirmed H-270–H-273/H-292–H-297 decisions. K-429 records local bits places, fixed-owner pointer bindings, explicit regional/lexical owner arguments, initialization flow and declared result-owner enforcement. [Native evidence](../tests/cod/language/ptr-storage-validation.json) records219/219 language checks,11 focused boundaries and LLVM verification/promotion. Conservative loop/alias proof limits and legacy source surfaces are explicit in D-14r67. Full-document candidate value paths remain pending-human.
-
-- **Local ptr decisions:** H-292/H-293 confirms scope-owned fresh bits construction, read-only alias preservation and explicit external owners for assignment destinations. D-14r67/P-255/P-256 coordinates this with fixed-owner and result-view contracts. H-295 confirms compile-time-only typeof. H-296 distinguishes value-producing individual initializers from the final comma-introduced group block; H-297 allows later initialization while rejecting reads before definite initialization. K-428 records these source decisions without native ptr acceptance or whole-document qualification.
-
-- **Symbolic binding implementation:** H-287–H-291/K-426 covers direct TLS payloads, region-backed object rebinding, shared-owner groups, explicit touch/replay checks and object transfer overloads. All effects return void; procedure rebinding requires = and inline effect proc introduces or signature-checks its symbol. C-36/C-54/C-65/C-66/P-248–P-254 retains identity, actual lifetime and scoped restoration. [Native evidence](../tests/cod/language/symbolic-context-validation.json) records bounded acceptance; complete document/value-path qualification and general ptr migration remain separate.
-
-- **Symbolic storage update:** H-277–H-281/K-422 records inline TLS bits, effect-arrow transfer and effect-equals object-reference rebinding with region-symbol backing and lifetime checks. P-248/P-249 separates ordinary fixed-owner pointers and resource ownership. This migration is not covered by existing pointer-cell native evidence; full-document pending qualification is unchanged.
-- **Contract/status:** [RegionalOwnership.md](RegionalOwnership.md), revision82, all sections, with H-270/K-416 confirming RO-Q1 and H-271/H-272/K-417 confirming ptr/fixed-owner variables, same-owner-only rebinding (RO-Q2) and callee-local default parameter targets (C-65/P-244–P-246). H-273/K-418 confirms generic-owner parameter/result grammar and optional ptr in parameters. H-274/H-275/K-420 adds root-constrained region access, confirms its binder and extends region-as-declaration throughout source references; H-276/K-421 prefers region symbol with homogeneous region-symbol declarations; broader result/symbol grammar remains draft. K-415 retains owned-pool integration evidence under D-17 E4/E5; K-411 evidence maintenance under the bounded D-17 contract and K-406 (H-262–H-265 owner/construction/exception direction; K-382/K-377 retain typed factory evidence) remains scoped. The complete draft/value path remains `pending-human`; no confirmed full baseline is claimed.
-- **Candidate value path:** P-155 relates explicit lifetime/transfer source semantics to C-10. C-54/P-143 governs whole-region responsibility; P-154 is the pending effect-initializer source constraint through C-41/P-97. H-262/P-232 confirms the named-source consumed state; H-263/P-233 preserves permitted local views; H-264/P-234 selects the first let/make syntax. Failure/extended construction and the full lifecycle/value path remain pending-human.
-- **Dependencies:** P-156 depends on D-10’s effects/capture/type boundary; P-157 on D-13’s graph/lifetime and distinct packet/resource scenarios; P-158 on D-01’s regional placement, no object copy/move, allocator symmetry and relocation. Dependency edges grant no design authority. D-07 and D-08 language examples depend on the eventual contract; no neural mechanism changes.
-- **Confirmed local constraints:** H-177/H-179 permits ordinary owning holders and consuming installation. H-180/H-181 preserves captured/hidden owners and forbids dynamic-source extraction. H-190/H-193/H-196–H-203 fixes intrinsic whole-region ownership, regional data, explicit-memory functions, borrowing/const and same-owner stored edges. H-204–H-210/H-222–H-224 supplies the assignment/transfer requirements with recorded exclusions; H-211–H-233 supplies explicit interfaces and selected method/publication context.
-- **Current evidence:** K-396 checks the architecture/lifetime dependency without selecting ordinary-owner forms. K-382 adds four-module forwarding of typed factory values, retaining selected implementations, captured/current regions and actual result lifetimes; an inner-owned result escape rejects. K-377 checks imported factories that adapt helper implementations while preserving source data identity and captured/current allocation owners; invalid escapes and cross-owner stored edges reject. K-374 composes one interface algorithm across two concrete layouts and distinct existing regions; returned scalar views retain their source or destination owner, with temporary-destination escape rejected. K-411 separately implements fresh owning let/make and consuming calls/results; general assignment remains unimplemented. K-321/K-325/K-328/K-329 records regional data, borrowed mutation/results, scope liveness and function-based placement. K-333 supplies acquisition-site diagnostics. K-352/K-365 verifies the shared pool algorithm/imported-adapter structure, four-owner/eighteen-read capture cleanup and independent relocated graph/pool inspection. Historical reports retain their own revisions. K-411 records the initial lifecycle checkpoint; K-412 checks19 exact acquisitions/releases, root/cycle relocation, effect-sensitive owning returns, persistent borrowed edits and15 invalid owner/view cases; mailbox remains unimplemented.
-- **Open scope / acceptance:** coordinate make/root initialization, owned/const/place syntax, consuming call/result boundaries, optional outcomes, occupied destinations, assignment alias permissions and graph-transfer dispatch. K-403 adds a concrete construction-to-installation walkthrough and distinguishes existing scope liveness from unimplemented transfer/branch and recoverable-failure behavior. H-262/P-232 confirms compiler-tracked consumption, H-263/P-233 preserves views under a live accessible local owner, and H-264/P-234 selects the initial typed let/make form. H-265/P-240 selects unchecked ultimate OOM and planning try/catch/finally in D-17. D-17 E1–E5 supplies the bounded exception/construction/call contract; K-411 records local-lifecycle evidence. Reinitialization, extended graph construction and explicit-cause lifetime remain pending. K-332/K-338/K-346 preserves these distinctions. Complete construction/edit/return/transfer/cleanup and local-error workflows must prove the chosen contract; user-library reuse alone does not. No runtime borrow table, per-object ownership or allocator policy is selected.
-
-<a id="d-16"></a>
-### D-16: Fixed-width fractions and representation-independent units
-
-- **Callable-world reconciliation:** K-534/H-372–H-377 updates the affected stage, symbol/family, dispatch and capture descriptions for D-16r7. P-330–P-332/P-335/P-336 records confirmed behavior; H-378/K-535 confirms D-21/P-333/P-334/P-337 for the behavioral value path; detailed mechanisms remain pending-human. H-379 additionally requires explicit entry installation after extension and suppression of dependency installations; H-380 confines cancellation to dependency initialization and preserves operand evaluation/effects; composition identity and conditional coverage remain D21-Q-entry-composition work. Existing qualified owner/scope/return/numeric contracts continue only within unchanged scope. Implicit symbolic-definition/selection installation and one-method/one-concrete-result language interpretations are superseded, not carried forward as implementation authority. No native acceptance for the new family/stage behavior is claimed.
-
-
-- **Field storage decision:** H-310/H-311/C-72/P-276–P-277/K-438 distinguishes direct bits fields (unmodified or val) from reference fields (ref or ptr, including scalar targets). D-14r67/D-10r118/D-16r6 retain same-owner references and fixed bits payloads. Constructor target allocation is pending only for reference fields; direct bits initialization needs no separate target. K-441 records bounded field/val/NPE native acceptance; encoding is unchanged.
-
-- **Contract/status:** [FixedWidthFractions.md](FixedWidthFractions.md), revision7, all sections; fraction implementation deferred. H-256 comment/UoM prerequisites have bounded native acceptance in K-401/K-402; this is not fraction support. The complete document/value path is `pending-human`. H-254/H-255 confirms the enumerated propositions, not an unseen complete revision or open numerical/grammar choices. K-397 records initial coordination, not a continuation of a previously qualified D-16.
-- **Candidate value/dependencies:** C-61/P-221 connects representation independence to C-49's preserved numerical meaning; C-62/P-222 connects explicit exact ratios and fixed storage to C-10/P-14/C-01's inspectable typed business intent. D-16/P-223 supplies the draft contract. P-224 depends on D-11's UoM/conversion rules and P-227 on D-10's bits/function/borrow contracts; dependencies grant no authority.
-- **Confirmed local baseline:** H-254 accepts separate integer component widths, i64/i32 type notation, unreduced ordinary arithmetic, numerical comparison, same-type explicit canonicalization including representable sign orientation, fixed bits storage and orthogonal UoM. It requests a draft and future conflict review, not implementation. H-255 selects // construction/output and # comments after the current lexical conflict is reported.
-- **Constraints / open scope:** No denominator UoM, hidden heap/owner, implicit GCD reduction, floating fallback or automatic host ABI. Exact constructor/operator grammar, signed/unsigned support, promotion/result widths, invalid-value handling, component access, layout and formatting details remain pending. Existing // comments are a migration dependency; H-256 prioritizes token reservation and UoM representation independence, while the compiler is unchanged in this documentation task. P-226 makes conflicting future feature choices a human-review obstacle, not a reason to block unrelated qualified work.
-- **Acceptance / impact:** Future evidence must cover construction/output/comments, unreduced arithmetic versus canonicalization, minimum-signed boundaries, numerical equality, validity/overflow, fixed bits transfer/layout and independent unit identity/conversions. D-07r107 and D-11r31 link the draft and priority prerequisite scope; AGENTS carries the review requirement. No current code/test evidence establishes fraction support; D-10/D-14 contracts are dependencies rather than silently revised ownership rules.
-
-<a id="d-17"></a>
-### D-17: Exception control and regional cleanup
-
-- **Native body-derived results:** K-555 continues D-17r52 →53 under H-319/H-337–H-344/H-356–H-362/H-365/H-371, C-65/P-294/P-299/P-301–P-303 and C-63/P-235–P-236/P-321–P-324/P-326/P-329. Explicit regional, array and non-owning whole-region results retain one actual owner through open deferred selections, native recursion and composed calls. Compiler return/owner/context proofs preserve liveness, access, concrete layout, interface facts and live symbolic installation under D-14/D-10/D-17/D-18 constraints. K-553/K-554 evidence retains its recorded scope. No owner union, RTTI, ABI, lifetime extension or allocator change is selected. Broader result/context proofs, inferred-signature transport, module queues and family/AOT integration remain incomplete; D-01/D-16/D-22 and pure/TCO/compiler-pilot boundaries remain.
-
-- **Deferred ownership flow:** K-552/D-14r82/D-17r50 continues H-263/H-267/H-271/H-297/H-313–H-315/H-319/H-356–H-362/H-365/H-370/H-371 through C-54/C-65/C-72/P-233/P-280–P-282 and C-63/P-235–P-236/P-321–P-324/P-326/P-328/P-329. Current ownership flows through cleanup actions and queue/category/completion paths. Prepared owning references transfer at callee entry, failed registration preserves the source, and released pending results cannot retain valid borrows. Fixed owners/access/initialization, explicit scopes and exact native cleanup remain. Broader relational/native composition, generic/module queues and family/AOT integration remain unfinished. D-01/D-16/D-22 and broader document qualification are unchanged.
-
-- **Callable-holder cleanup flow:** K-547/D-17r45 continues C-63/P-235–P-236/P-321–P-324/P-326 and H-267/H-297/H-319/H-356–H-362/H-365 under the qualified D-14/D-18 access/value contracts. Queue/category state carries replacements through native summaries and remaining actions; independent prepared and returned snapshots remain. Pointer/owner mutation, owning arguments, conditional owner correlation and generic/module integration remain open. Native ABI, allocator protocols, D-16 and D-22 pending choices are unchanged.
-
-- **Prepared borrowed arguments:** K-546/D-17r44 continues H-267/H-271–H-273/H-297/H-356 through C-63/P-235–P-236/P-321–P-322 and the D-14/D-18 passing-mode, lifetime and value contracts. Prepared references save target identity and actual region bases; invocation observes current contents and checks initialization/access/lifetime. Retained-owner liveness follows reaching registrations, while forwarding-only callable summaries close before validation. Native ownership/layout and source policy remain unchanged; conditional owner correlation, general mutable backedges, owning arguments and generic/module integration remain incomplete.
-
-- **Queue-selected initialization:** K-544/D-17r43 continues C-63/P-235–P-236/P-321–P-324/P-326 and H-267/H-297/H-313/H-319/H-356–H-362/H-365. Branch/loop queue edges preserve established allocation initialization; shared routing combines those facts with subsequent cleanup writes. Normal/error/recovery paths and exact cleanup remain. Arbitrary relational predicates and mutable pointer/callable/owner backedges stay incomplete; native ABI and source policy are unchanged.
-
-- **Deferred handler entry facts:** K-543/D-17r42 continues C-63/P-235–P-236/P-321–P-324 and H-267/H-297/H-313/H-356–H-362. The normal body and each pending error category retain distinct initialization, including facts established before registration. Existing handler/finally execution, native ABI, cleanup and ownership remain. Queue/initialization correlation and pointer/callable/owner mutation remain implementation gaps; D-22 pending choices are unchanged.
-
-- **Construction dependency:** K-542/D-17r41 records D-22/H-383–H-385 without changing the qualified E1–E5/defer/return contract. Ordinary bits storage has no independent cleanup; intrinsic acquisition retains release responsibility. Aggregate initialization and DBMR failure/rollback/durability protocols are not supplied by existing cleanup evidence.
-
-- **Cleanup completion facts:** K-541/D-17r40 continues C-63/P-235–P-236/P-321–P-324/P-326/P-329 and H-267/H-313–H-315/H-319/H-356–H-362/H-365/H-371. Registered actions retain established allocation initialization; successful completion and each pending error category keep separate flow. Independent write guarantees compose with callable summaries without duplicating action bodies. Native storage, lifetime, checked failures and cleanup remain unchanged. Detailed queue/handler correlation, pointer/callable/owner mutation and remaining deferred-call/module integration stay incomplete.
-
-- **Deferred initialization:** K-540/D-17r39 continues C-63/P-235–P-236/P-321–P-324/P-326/P-329 and H-267/H-313–H-315/H-319/H-356–H-362/H-365/H-371. Registration order routes initialization proofs across action normal/return/failure exits, including nested and repeated registration. Shared finally continuations preserve path-established initialization. Native storage/cleanup and the D-14 allocation/access contract are unchanged. Merged-entry/completion correlation, pointer/callable/owner mutation and the remaining defer gaps stay open.
-
-- **Exception category flow:** K-539/D-17r38 continues C-63/P-235–P-236/P-321–P-324/P-326 and H-267/H-313–H-315/H-319/H-356–H-362/H-365. Compiler category facts cross catch joins, deferred propagation and fold backedges without changing native payload/ABI or callable checked contracts. Unchecked rethrow cannot invent NPE; genuine/unknown checked cases still require coverage. Full category/registration/recovery correlation and the other deferred-flow gaps remain open.
-
-- **Initialization cancellation:** H-380/P-341/K-536 covers D-17r37: cancel dependency initialization TLS writes only; evaluate operands and preserve their effects/failures, temporary cleanup and procedure-local installations. Entry identity/conditional coverage and native elimination mechanisms remain design work.
-
-- **Callable-world reconciliation:** K-534–K-536/H-372–H-380 updates the affected stage, symbol/family, dispatch and capture descriptions for D-17r37. P-330–P-332/P-335/P-336 records confirmed behavior; H-378/K-535 confirms D-21/P-333/P-334/P-337 for the behavioral value path; detailed mechanisms remain pending-human. H-379 additionally requires explicit entry installation after extension and suppression of dependency installations; H-380 confines cancellation to dependency initialization and preserves operand evaluation/effects; composition identity and conditional coverage remain D21-Q-entry-composition work. Existing qualified owner/scope/return/numeric contracts continue only within unchanged scope. Implicit symbolic-definition/selection installation and one-method/one-concrete-result language interpretations are superseded, not carried forward as implementation authority. No native acceptance for the new family/stage behavior is claimed.
-
-
-- **Registration-flow continuity:** D-17r35/[K-533](#k-533) continues the qualified checked-error, registration and completion contract. Existing flow snapshots carry queue predecessors across branches, loops and failure paths; checked NPE coverage requires a guaranteed remaining catch within the immediate callable boundary. Empty/unrecoverable queues do not introduce spurious recovered scope results. [Evidence](../tests/cod/language/defer-flow-validation.json) bounds acceptance; exception-category precision, general mutable/owning flow, generic transport and module teardown remain implementation gaps. No new source restriction, result default or owner/RTTI decision.
-
-- **Delayed handler/return execution:** D-17r34/[K-532](#k-532) continues H-357–H-362/H-365/H-371 with shared catch/finally completion, lexical-place reads, pending-error dispatch, original-result preservation, explicit replacement returns and continued cleanup. [Evidence](../tests/cod/language/defer-handler-validation.json) covers native accounting, ASAN and the preserved analysis gaps. Precise registration/checked-error flow, recovered value scopes, mutable backedges, owning/external borrowed arguments, generic transport and module queues remain implementation work; no new source restriction or owner/RTTI decision.
-
-- **Native deferred calls:** D-17r33/[K-531](#k-531) continues the qualified preparation/completion contract with dynamic registration records and a shared finally drain in explicit/callable scopes. [Evidence](../tests/cod/language/defer-call-validation.json) covers LIFO, saved arguments/callables, current/perform context, pending results, failures and exact native cleanup. H-371 source checks are implemented; delayed block/handler execution, owning/external borrowed arguments, mutable-flow backedges, generic captures and process-lifetime module queues remain implementation gaps. No new language restriction or owner policy.
-
-- **Deferred block resources:** H-371/P-329/[K-530](#k-530), D-17r32, prohibits direct declarations/effect installation in deferred blocks; an explicit nested `{{ ... }}` supplies the lifetime/effect scope. No implicit invocation scope. H-362 enclosing returns and H-365 loop boundaries remain. Implementation acceptance remains outstanding.
-
-- **Deferred owning arguments:** H-370/P-328/[K-529](#k-529) confirms registration-time owning-reference selection with callee-entry ownership transfer. Registration does not consume the source owner; existing ownership checks must reject invalidation/double consumption. No new reservation, runtime exception or lifetime extension. Implementation acceptance remains outstanding.
-
-- **Current implementation continuity:** D-17r30/[K-526](#k-526) implements H-361/H-362 explicit callable returns, unchecked MissingReturnException and static missing-return warnings. Typed return/normal/error completions share one finally body; replacement/failure preserves exact cleanup of pending owners/callable images. H-365 iteration/else restoration includes return. K-525 retains ordinary-group declaration/effect sharing and definite initialization; K-524 retains guarded cleanup. [Return evidence](../tests/cod/language/return-validation.json) bounds acceptance; deferred registration/handlers/accumulation remain outstanding. No lifetime extension, owner union, RTTI or purity/TCO implementation is selected.
-
-- **Current loop contract:** H-365/P-286/P-326/[K-522](#k-522), D-17r26, resolves H-364’s held review with dedicated loop scoping rules. Iteration/else effects and fresh resources end at each exit; user defer registers to the enclosing full scope, intentionally accumulating in global LIFO. This explicitly supersedes H-319’s direct-loop-defer prohibition. Body/else declarations require nested explicit scopes; delayed loop-control capture and invalid outer deferred borrows reject. Implementation acceptance remains outstanding.
-
-- **Current defer scope:** H-356/C-63/P-321–P-322/[K-515](#k-515) qualifies D-17r20’s call/block timing: outside `defer { ... }`, require a function/procedure call, evaluate its callable and arguments at registration, and delay only its outer invocation. `defer init(...)()` is the acquisition/cleanup idiom. This supersedes H-319’s delayed-evaluation rule for plain deferred calls; H-319’s explicit scopes remain. Implementation is authorized immediately, with scope/callable/lifetime/exception evidence still outstanding. Native handle and out-parameter proposals remain unqualified.
-
-- **Unified closure-owner review:** H-321/H-322/C-73/P-288–P-289/[K-445](#k-445) reviews region-owned captures for named and anonymous callables. No live lexical binding capture, closure storage layout or ownership retention is selected; the affected new closure implementation contract remains pending-human.
-
-- **Nullable call direction and annotation syntax:** H-317/H-318/P-284–P-285/[K-443](#k-443) records explicit nullable forwarding, deferred required-ref cycles and uniform colon annotations. H-319/H-356 establishes scope/defer timing; H-357/K-517 adds catchable failures between deferred actions. H-358/K-518 confirms attached catch/finally and retained normal-result recovery; H-359 requires explicit per-iteration scopes for loop-body declarations. H-360/K-519 confirms direct incoming-error dispatch, bodyless defer catch/finally and original body-failure recovery. H-361 requires explicit callable returns and unchecked missing-return failure; H-362 confirms enclosing return, replacement with remaining cleanup and void fallthrough; H-363 selects pure declarations with implicit body results while deferring purity implementation. K-519 supplies bounded loop-declaration evidence, K-525/K-526 supplies bounded grouping/return acceptance; full deferred-work acceptance remains pending.
-
-- **Declaration cleanup:** H-316/C-72/P-283/[K-442](#k-442) retires let/var and reference type constructors, preserves explicit ref/ptr/val storage intent and records [native validation](../tests/cod/language/declaration-cleanup-validation.json). H-317 accepts nullable call/result modes and defers required-ref graph construction.
-
-- **Current native acceptance:** H-309–H-315/C-72/P-274–P-282 and [K-441](#k-441) cover the bounded field/val/nullable implementation. [Validation](../tests/cod/language/nullable-storage-validation.json) records compiler/source hashes, checked-call rejection, fixed-owner flow, relocated reference fields and exceptional cleanup. H-316/K-442 covers declaration cleanup; wider pending qualification remains separate.
-
-- **Checked NPE and explicit bits storage:** [H-313–H-315](#h-313)/[K-440](#k-440) accepts checked NullPointerException, mandatory module-top-level handling and val locals/parameters; null is a reserved literal and isnull inspects a pointer without dereferencing it. C-72/P-280–P-282 preserves storage/access/lifetime rules, with a null-initialized local acquiring its fixed owner at the first non-null assignment. D-17 owns exception/signature obligations and D-14 owns ordinary storage/owner checks. No checked OOM, payload RTTI, implicit regional-object copy or per-object owner is introduced. Acceptance requires native execution plus rejection at uncovered calls, unsafe reads and inconsistent owner paths; evidence is recorded separately from this confirmed contract.
-
-- **Region/transfer continuity:** H-307/H-308/C-70–C-71/P-270–P-273/K-435 covers complete region declaration syntax and void-or-view ordinary/indexed transfers. [Current validation](../tests/cod/language/region-transfer-validation.json) records migrated language checks, lifecycle cleanup and LLVM verification. K-441 covers the accepted checked-NPE extension; other pending scopes remain pending.
-
-- **Contract/status:** [ExceptionControl.md](ExceptionControl.md), revision52, E1–E5 plus checked NPE, explicit scopes/defer, ownership/effect preservation, non-goals and acceptance obligations, confirmed by H-267 with H-269 retained causes; H-313–H-315 adds the checked-NPE contract with K-441 native acceptance. H-271/H-272 supersedes E4's unqualified external-borrow parameter default; H-273 confirms generic-owner syntax and H-275 extends region-as-declaration across source references. K-420 records that migration while continuing the unchanged transfer timing/cleanup contract; H-307/K-435 completes the source migration and supplies fresh native cleanup/relocation evidence. Earlier reports retain their actual source revisions. K-408 records accepted coverage; K-409 records backend cleanup and K-410 records plain intrinsic exception control. K-411 records typed ordinary-owner integration; K-412 audits borrowed edits, owning selections and operand lifetime revalidation. K-414 continues H-267/H-269 and completes the E1–E5 native audit, including retained explicit causes and common exception storage.
-- **Value/dependencies:** C-63/P-235 → C-10 and D-17/P-236 → C-63 are confirmed for this bounded package: business failure handling preserves explicit regional responsibility. P-237–P-239 depend on ownership, effects and regional storage; they do not qualify unrelated scopes of D-14/D-10/D-01.
-- **Confirmed scope:** intrinsic allocation failures and unchecked missing-return delivery, checked NullPointerException with immediate-callable signatures and mandatory module handling, exact catches, immutable bounded error details, try-expression completion, rethrow, explicit throw-from with no automatic cause, finally replacement, owning-call transfer after argument conversion, typed make/root initialization and fresh owning lifecycles. H-268 suggests separating handler type identity from payload RTTI; runtime registration is not selected as a required mechanism.
-- **Non-goals:** owner reassignment, mailbox transport, general user exception payload graphs, general RTTI, graph rollback, per-object owners, toolchain changes. H-269 resolves retained cause lifetime; other material choices still require review.
-- **Acceptance:** controlled construction failure and exact release; nested control, explicit causes, captured/hidden effect restoration, pre-entry versus in-callee failure, handler owner/view joins and abandoned owning results. K-409/K-410 supplies backend/plain-exception evidence; K-411 proves bounded ordinary-owner construction, calls/results, joins and cleanup. H-269 confirms retained chains beyond catch exit and fallible explicit chain creation; K-414 validates immutable numeric cause handles, stored categories, three chain-allocation failure points and normal/uncaught cleanup. The [completed E1–E5 audit](../tests/cod/language/exception-ownership-validation.json) maps every requirement to current compiler/source evidence; no full-suite or cross-process acceptance is claimed.
-- **Affected designs:** D-07r121/D-10r118/D-13r28/D-14r67 link this bounded accepted contract; their other pending choices remain pending. D-01/D-04 cleanup claims still require actual evidence.
-
-<a id="d-18"></a>
-### D-18: Regional variables and callable captures
-
-- **Regional capture contexts:** K-564–K-572 continue D-18r80 →89/D-10r135 →144 and prototype209 →218 under H-97/H-102/H-180/H-181/H-286/H-319/H-337–H-344/H-356–H-362/H-365/H-371. C-37/P-89, C-39/P-95, C-66/P-252/P-253, C-65/P-294/P-299/P-301–P-303 and C-63/P-321–P-324/P-326/P-329 retain explicit checked contexts, complete values and actual owners. Current-holder comparisons resolve already checked producer evidence. Each dependency pass visits a producer once; deferred checks restore the saved lexical and cleanup scope. Exact target subsets reuse their ancestor entry graph without requiring different bodies to have matching image schemas; all reaching bodies remain independently checked. Copied contextual parameters use shared flow headers with recursive back edges; all reaching bodies remain independently checked. Joining preserves actual owners and does not merge borrowed holder state. Owner-parameter factories use shared native demand checking; independent entries resolve helper-produced results before comparison. Compatible completed function factories reuse adapters while constructing independent runtime results. Optional sharing uses already demanded body evidence, including refinement and final validation. Contextual factories use adapter result evidence; selected images, current TLS holders and inherited snapshots retain complete-schema and returned-owner proofs. Captured adapters obtain body inputs from selected images; unrelated caller bindings do not become body requirements. Actual owner/group relations, capture demand and each invocation replay remain checked independently of replay-object identity. [Recomposed-factory](../tests/cod/language/callable-recomposed-factory-validation.json), [nested-perform](../tests/cod/language/callable-nested-perform-validation.json), [borrowed-factory](../tests/cod/language/callable-borrowed-factory-validation.json), [growing-parameter](../tests/cod/language/callable-growing-parameter-validation.json), [contextual-factory](../tests/cod/language/callable-context-factory-validation.json) and [fresh-image](../tests/cod/language/callable-fresh-image-validation.json) evidence covers execution, rejection, releases and costs. Helper-forwarded complete values retain their live caller owners; repeated-stage artifact growth is recorded separately. D-14/D-17 and D-01/D-16 invariants remain; no source policy, runtime payload or lifetime change follows. D-22/D-23/D-24 and unselected mechanisms remain pending.
-
-- **Native checking schedule:** K-563 continues D-18r79 →80 and prototype208 →209 under the existing H-343 recursion and H-337–H-344/H-356 complete-value, lifetime and deferred-invocation contract. C-65/P-294/P-299/P-301–P-303 and D-14/D-17 constraints remain. Each native-demand pass visits its initial batch, so recursive producers do not starve earlier dependent reads. Final context/result proofs still close before artifact emission; no new lifetime rule, owner union, RTTI, ABI or source restriction. Direct/nested/deferred expired snapshot diagnostics, valid recursive results, native releases and compilation scale are checked in [worklist evidence](../tests/cod/language/callable-worklist-validation.json). D-10r135/D-14r82/D-17r53 and D-01/D-16/D-22/D-23/D-24 boundaries remain unchanged.
-
-- **Recursive regional contexts:** K-559–K-561 continues D-18r76 →79/D-10r132 →135 and prototype205 →208 through the existing H-102/H-180/H-181/H-319/H-337–H-344/H-356–H-362/H-365/H-371 context/value/scope contract, C-65/P-294/P-299/P-301–P-303 and C-63/P-321–P-324/P-326/P-329. Current regional owners can correspond across native recursive invocations when alias, root-layout, access and liveness proofs agree. Complete returned callable images require unchanged retained owners. Shared argument-relative return provenance also covers stable borrowed targets and independent owning results; provisional recursive result evidence closes before reuse. Retained procedure snapshots preserve fixed owners. Compiler-proved per-call base substitution preserves runtime installations and cleanup; no owner union, RTTI, lifetime extension, allocator or source policy is selected. D-14/D-17 and D-01/D-16/D-22/D-23 boundaries remain.
-
-- **Native scalar results:** K-558 continues D-18r75 →76 and prototype204 →205 under H-201/H-271–H-273/H-297/H-337–H-344/H-361/H-365, C-65/P-258/P-294/P-299/P-301–P-303. Existing regional/lexical scalar aliases retain targets, access, initialization and cleanup behavior through captured, recursive and deferred native calls. One argument-relative analysis distinguishes scalar value category from unresolved owner evidence. Internal native payload/address transport carries that result without a runtime category tag; explicit borrowed-address and const-value contracts remain. K-556/K-557 retain shared provenance and pointer-target acceptance. D-14/D-17 constraints and D-01/D-16/D-22 boundaries remain; D-23 fresh/mixed-result policy stays pending-human.
-
-- **Native body-derived results:** K-555 continues D-18r72 →73 under H-319/H-337–H-344/H-356–H-362/H-365/H-371, C-65/P-294/P-299/P-301–P-303 and C-63/P-235–P-236/P-321–P-324/P-326/P-329. Explicit regional, array and non-owning whole-region results retain one actual owner through open deferred selections, native recursion and composed calls. Compiler return/owner/context proofs preserve liveness, access, concrete layout, interface facts and live symbolic installation under D-14/D-10/D-17/D-18 constraints. K-553/K-554 evidence retains its recorded scope. No owner union, RTTI, ABI, lifetime extension or allocator change is selected. Broader result/context proofs, inferred-signature transport, module queues and family/AOT integration remain incomplete; D-01/D-16/D-22 and pure/TCO/compiler-pilot boundaries remain.
-
-- **Callable-world reconciliation:** K-534/H-372–H-377 updates the affected stage, symbol/family, dispatch and capture descriptions for D-18r70. P-330–P-332/P-335/P-336 records confirmed behavior; H-378/K-535 confirms D-21/P-333/P-334/P-337 for the behavioral value path; detailed mechanisms remain pending-human. H-379 additionally requires explicit entry installation after extension and suppression of dependency installations; H-380 confines cancellation to dependency initialization and preserves operand evaluation/effects; composition identity and conditional coverage remain D21-Q-entry-composition work. Existing qualified owner/scope/return/numeric contracts continue only within unchanged scope. Implicit symbolic-definition/selection installation and one-method/one-concrete-result language interpretations are superseded, not carried forward as implementation authority. No native acceptance for the new family/stage behavior is claimed.
-
-
-- **Qualifier correction:** H-366–H-369/P-173/P-327/[K-527](#k-527) qualifies D-18r68 for independent declaration/target const, local ordinary parameter binding qualifiers and transitive readonly access. Direct alias/grammar/checker consequences are authorized without repeated confirmation; conflicting combined-qualifier prose is superseded only in that scope. Existing owners, lifetimes, complete callable values and no global freeze remain. Implementation acceptance is recorded separately; pure/TCO and unrelated pending designs retain their exclusions.
-
-- **Callable return surface:** H-361/H-362/C-63/P-324 and [K-526](#k-526), D-18r67, require and implement explicit value returns from proc/func brace bodies, unchecked missing-return delivery and static warnings. Executable fixtures use the accepted source syntax. Typed return edges preserve complete values, caller result storage, actual owners/access and native recursion through finally; replacement/failure releases abandoned results. Deferred catch/cleanup execution remains outstanding. H-363/D-19r2 records pure syntax and defers purity/TCO implementation. Broader unresolved actual-owner/result discrimination remains pending.
-
-- **Contract/status:** [RegionalClosures.md](RegionalClosures.md), revision89. K-528 validates the shared preparation/invocation boundary while preserving the call contract; scope-owned deferred registration/execution follows D-17’s separately recorded implementation scope. H-327–H-335 confirms aliases, captures, owner associations and projection; H-337–H-340 confirms the bounded runtime ABI and caller-provided destinations. H-342 supersedes callable alias initialization with independent lexical values, complete nested captures, `<-` replacement and nullable ptr references. H-343 requires recursion, H-344 permits runtime-sized scope-owned backing, and H-349/H-350 requires compilation-scale scrutiny and reasonable runtime performance. P-293/P-294/P-295/P-297/P-298/P-299/P-300/P-301/P-302/P-303 retains the value path. K-526 validates explicit callable returns, missing-return failure and shared finally replacement; K-525 validates ordinary grouping and common finally within the same callable owner/value contract; K-524 retains conditional cleanup activation, short-circuit callable preparation and shared normal/exception cleanup; K-521 retains checked recursive factory-valued arguments, nested returned-image schemas and demand-sensitive convergence. K-516 retains expression-valued targets and shared call preparation under D-14 owner/access and D-17 transfer/failure checks; K-514 retains recursive callable results with unchanged owners and K-512/K-513 argument-role and capture-demand/schema proofs; K-511 retains recursive owner provenance, and K-498–K-510 retains the documented signature/result/context and initialization work. Concrete layout, context, access and interface evidence must close before artifact emission. D-10/D-14/D-15/D-17 contracts and D-01/D-16 invariants remain. Broader context/result staging remains implementation work; actual visible owner selection and D18-Q-result-discrimination remain pending, with no approved owner union or RTTI. H-336 retains concise conclusions and append-only evidence history; D-19 retains deferred const-function/TCO research and compatibility review.
-- **Boundaries:** One statically linked CoD image, no regional callable payload, independently managed user heap objects, lexical-cell promotion, RTTI or captured-region lifetime extension. Runtime-selected actual-owner proofs require a separate decision. Runtime-growing environment storage and recursive invocation are required, with existing owner/access and cleanup checks. Unrelated pending contracts remain pending.
-- **Acceptance:** Preserve owner/access/capture checks and relocation; execute different-body/context selection, caller-destination results, independent complete callable copies, nested captures and nullable-reference lifetime/null checks. Prior implementation evidence does not establish the new ABI. Construction/copy/invocation allocation and compilation scale require evidence on composed programs. The active goal tracks implementation and fresh validation.
-
-<a id="d-19"></a>
-### D-19: Const functions and tail calls
-
-- **Storage/access versus pure behavior:** H-366–H-369/P-173/P-327/[K-527](#k-527) qualifies D-19r3 for independent declaration/target const, local ordinary parameter binding qualifiers and transitive readonly access. Direct alias/grammar/checker consequences are authorized without repeated confirmation; conflicting combined-qualifier prose is superseded only in that scope. Existing owners, lifetimes, complete callable values and no global freeze remain. Implementation acceptance is recorded separately; pure/TCO and unrelated pending designs retain their exclusions.
-
-- **Pure surface / priority:** H-363/P-325/[K-520](#k-520) selects pure declarations with the final body expression supplying the result. Existing external-readonly/private-mutation and helper-call boundaries remain. The user explicitly selects recording syntax while deferring purity implementation; TCO is still deferred. Ordinary proc/func returns follow H-361/H-362 in D-17r24.
-
-- **Contract/status:** [ConstFunctionsAndTailCalls.md](ConstFunctionsAndTailCalls.md), revision3; confirmed deferred planning/compatibility scope under H-346–H-348, detailed implementation contract pending-human. C-76/P-304/P-305 supplies the value path; P-306 records dependencies; P-307 records the required human conflict review. K-464 checks charter/dependency alignment without selecting implementation mechanisms.
-- **Boundary:** Pre-existing external state is readonly for the outermost const call; private mutation is permitted; the result is judged at immediate return. Later use of a returned ref/ptr is outside that boundary. No permanent freezing, implicit input copying, blanket optimizer purity, new escape channel or TCO outside const functions is planned. Internal callbacks must preserve the same boundary.
-- **Priority / acceptance:** H-345 requires ordinary function/procedure recursion now. Const functions, their TCO and persistent-data support are deferred and optional; current work must consult the human before activating materially conflicting choices. Future observations concern external-state preservation, private construction, valid immediate results and bounded-stack execution with correct cleanup. No implementation/build/test evidence is claimed.
-
-<a id="d-20"></a>
-### D-20: CoD compiler application and self-hosting plan
-
-- **Contract/status:** [applications/cod-booter/README.md](../applications/cod-booter/README.md), [CompilerPipeline.md](../applications/cod-booter/docs/CompilerPipeline.md) and [LLVMInterop.md](../applications/cod-booter/docs/LLVMInterop.md), document-set revision4, all sections. H-353 authorizes this parallel application planning; H-354/C-81/P-319/P-320 adds proposed output initialization and local handle storage. H-355 supplies registration-time terminology; H-356 selects the defer call/block contract and authorizes immediate language implementation under D-17. Detailed compiler-application designs remain `pending-human`; K-515 updates the plan without qualifying native handles, output parameters or the application implementation.
-- **Value/dependencies:** C-80/P-314/P-315 connects compiler semantics and DBMR reuse to C-01/C-05 and charter §§2/5.3–5.4/7/12. P-316 connects selected native services to C-02/C-11/C-79. P-317 records the draft's candidate value path; P-318 identifies language/representation constraints. H-353's planning agreement does not qualify all proposed artifact boundaries or native lifecycle mechanics.
-- **Boundaries / acceptance:** design from compiler operations rather than porting C++ classes; preserve independent module worlds, typed symbolic TLS, regional relocation and explicit owners. Future evidence must distinguish cached/uncached semantic correctness, fresh-process reuse, native-resource cleanup, self-hosting and compilation/runtime cost. The prerequisite defer language work is authorized by H-356/D-17; no compiler-application implementation, toolchain change, cache format or provider ABI is selected. D-08 SNN and existing D-01/D-07/D-14–D-19 contracts retain their scopes.
-
-<a id="d-21"></a>
-### D-21: Ahead-of-Time Multiple Dispatch
-
-- **Architecture exploration:** H-387/K-573, D-21r6. The fused type-level artifact preserves reachable dependency-local interpretations and procedure-local effects. [D-25](CompilationRuntimeArchitectureExploration.md) is directly authorized exploratory work; candidate production mechanisms remain pending-human. Earlier native-code timing and JIT/RTTI deferrals do not gate these experiments. D-21 native-before-execution timing is needs-reconfirmation for the replacement architecture; existing dispatch, owner, cleanup and installation behavior remains.
-
-- **Contract/status:** [AheadOfTimeMultipleDispatch.md](AheadOfTimeMultipleDispatch.md), revision6. H-378 confirms revision1's behavioral value path P-333/P-334/P-337, with H-372–H-377's constraints, non-goals and acceptance. That scoped behavioral contract is qualified. H-379 adds entry-module installation and LLVM elimination requirements; H-380 confirms initialization-only cancellation with operand evaluation/effects preserved. H-381 selects nearest lexical lookup for @; H-382 includes implicit const owner bindings; detailed native mechanisms and remaining source choices stay pending-human. This is not whole-document mechanism qualification.
-- **Confirmed value path:** C-82/P-333 → C-01 preserves abstract business operations and selected context across specialization; C-83/P-334 → C-02 prepares native execution of admitted alternatives before covered calls. D-21/P-337 organizes those responsibilities. H-378 explicitly confirms these relationships against charter §§2–3/§5.2/§6/§8/§12; K-535 records revision1 →2 coverage; K-536 carries that behavioral contract into revision3 with H-380’s explicit cancellation boundary.
-- **Boundaries/dependencies:** P-330–P-332/P-335/P-336 records stage separation, symbol objects, whole-family publication, actual-type dispatch and AOT coverage. P-339–P-342 records explicit entry installation after extension, dependency-installation suppression and LLVM removal of unreachable code. P-338 depends on D-10/D-14/D-15/D-18; D-16 constrains numeric/intrinsic interactions. Source worlds, explicit selections and owner/effect/capture obligations remain distinct from which installations survive composition.
-- **Acceptance and scheduling:** DD-AOT-01's behavioral qualification is complete; DD-AOT-08 reconciles documentation. DD-AOT-02/03/05/07 closes composition, coverage, concrete evidence, namespace/grammar, installation cancellation and diagnostics; DD-AOT-04/06 implements family values and native dispatch; DD-AOT-09/10 validates behavior and measures growth. Entry-extension omission must reject; accepted entry installation must suppress the applicable dependency installations and expose dead world code to LLVM. Operand effects/failures and procedure-local installations remain observable; still-reachable code must remain. No implementation acceptance is claimed. Production JIT selection, pure/TCO, fractions and compiler-pilot implementation remain deferred; H-387 permits isolated JIT exploration.
-- **D21-Q-entry-composition — mechanism design:** H-379/H-380 settles mandatory entry installation, initialization-only cancellation and preserved operand evaluation. Specify conditional installation coverage and identity matching across aliases/extension versions against dependency encounter order. No additional policy is inferred from code-elimination goals; ask only where the concrete mechanism exposes an uncovered choice.
-
-- **K-537 implementation scope:** D-21r4 describes the required separation of semantic construction and initialization lowering. Moving runtime values/progress out of ModuleWorld follows H-248/H-249/H-372 without changing source behavior. H-381 supplies the nearest-binding rule. The remaining staged family construction, namespace collisions/grammar, abstract evidence and WPO closure are not accepted merely by this internal refactor.
-
-<a id="d-22"></a>
-### D-22: Construction, bits ADTs and region acquisition
-
-- **Contract/status:** [ConstructionAndAcquisition.md](ConstructionAndAcquisition.md), revision2. H-383–H-385 records finite bits eligibility, intrinsic-only ownership, explicit owner mismatch and const-result acquisition. H-386 accepts contextual owner inference and prefers a coordinated migration with no transition stage. These are discussion decisions; the complete document and P-348–P-350 candidate value rationale remain pending-human. H-386 requires topic discussion and eventual whole-file approval, without user confirmation by internal IDs. K-545 is integration, not final approval.
-- **Candidate value path:** P-348 relates C-39/C-65/C-72 to C-01/C-06: explicit type/storage/owner distinctions keep business intent checkable and readable under charter §§2–5/§8. P-349 relates C-09/C-54 to C-05: acquisition separates persistent data from transient access/release and exposes preparation effects under §§4.3/§7. P-350 organizes these responsibilities in the file. The user's review-format response neither approves nor rejects these paths on their merits; review the complete file after resolving its open topics. Pending P-94/P-155/P-244 is not borrowed as qualification evidence.
-- **Constraints/dependencies:** P-344–P-347 preserves intrinsic-only ownership, finite bits/non-bits placement, actual-owner mismatch and result-only constness. P-352 confirms contextual inference; P-353 records the migration direction. P-351 depends on D-01/D-14/D-17 and D-10/D-15/D-16/D-18/D-21. No regional C++ copy/move, cross-owner stored edge, implicit allocator, owner union, RTTI or callable category change.
-- **Supersession / impact:** H-383/H-384 refines H-193/K-321's all-user-data regional boundary only for bits-eligible ADTs. D-07r153/D-14r79 distinguishes the confirmed category and contextual construction from the current product-only/scalar-bits implementation. Non-bits regional allocation, H-196 intrinsic containment, H-203 same-owner edges, H-292 lexical lifetime, H-366 access and H-382 inferred bindings remain. D-17's qualified cleanup and D-01/D-16 physical/numeric constraints remain. Unchanged D-10/D-13/D-15/D-18/D-21 behavior stays qualified only within its existing scopes; aggregate/TLS/capture/ABI integration is not accepted by old evidence.
-- **Acceptance / review work:** preserve the composed construction, ownership, initialization, native-call and file-acquisition matrix. Discuss aggregate representation/native transport, constructor allocation capability/partial effects and DBMR capacity/failure/coordination as concrete topics. Contextual inference and no-transition migration preferences need no repeated question. R3 alternative exploration is already authorized; final DBMR selection and whole-file approval remain outstanding. The earlier identifier-based questions are answered and retired as a review workflow; no design-path approval is inferred. Full callable/AOT/defer work and existing build/test permissions remain unchanged.
-
-<a id="d-23"></a>
-### D-23: Scalar call results
-
-- **Contract/status:** [ScalarCallResults.md](ScalarCallResults.md), revision2, all sections, `pending-human`. No whole-file approval or delegated implementation contract exists. H-386 governs topic discussion followed by complete-file approval; K-556 records investigation; K-558 updates evidence without qualifying the draft.
-- **Candidate value path:** P-354 organizes C-65 visible storage/lifetime, C-72 bits storage and C-54 value/resource distinctions under charter §§2–3/§5.3/§6/§8/§12. Calls must preserve the aliasing and value behavior expressed by business source across native staging. This new document relationship is pending-human, not qualified through a dependency.
-- **Confirmed constraints:** H-201 ordinary results borrow and const bits results are independent; H-272 changes default parameter targets, not result borrowing. H-202/H-273 owners/access, H-313/H-319 lexical storage/scopes, H-361/H-365 completion and H-342 complete callable values remain. P-355 records D-14/D-17/D-18/D-16/D-22 dependencies without extending their authority.
-- **Open topic / impact:** Decide whether a fresh arithmetic result under an ordinary unqualified scalar signature requires a const-result annotation or obtains specified caller-owned storage. Mixed borrowed/fresh bodies need a coherent category/owner rule. Existing fresh-result behavior is observation, not human approval. K-558 corrects native captured borrowing and supports independently qualified native scalar views without resolving fresh or mixed categories. D-18's shared owner/category analysis and established borrowing/const-value work continue; no new owner union, RTTI, hidden allocator, lifetime extension, aggregate ABI or fraction implementation is selected. Unchanged upstream scopes remain qualified only to their existing extent.
-
-<a id="d-24"></a>
-### D-24: Callable result-type inference
-
-- **Contract/status:** [CallableResultInference.md](CallableResultInference.md), revision 1, all sections, `pending-human`. No human-confirmed baseline or implementation delegation. K-562 records the authority audit and proposal; H-386 requires topic discussion and eventual whole-file approval.
-- **Candidate value path:** C-84/P-356 relates complete inferred signature constraints to C-01/C-06 under charter §§2–3/§5.3/§6/§8/§12: readable source can omit redundant type spelling while the semantic graph preserves checked meaning and finite recursive structure. P-357 organizes the document; P-358 records dependencies without qualification.
-- **Constraints / open scope:** H-258 explicit bodyless signatures, H-361/H-362 completion, H-343 recursion, H-201/H-273/H-342 storage/owner/value contracts and H-196 function effects remain. Decide whether implemented named functions may omit result types, then no-anchor recursive cycles, declaration-supplied constraints and abstract-result boundaries. D-23 fresh scalar storage and D-21 actual-type evidence remain separate. Existing parsing, inline execution, previous agent gap lists and green tests do not authorize this new policy.
-- **Impact:** D-10 signatures/type queries and D-18 materialization/native recursion are downstream. D-14/D-17/D-16/D-21/D-22/D-23 constrain acceptance. Existing qualified explicit-result work remains active; no source migration, new inference behavior, RTTI, owner union, lifetime extension or pure/TCO implementation follows from this draft.
-
-<a id="d-25"></a>
-### D-25: Compilation/runtime architecture exploration
-
-- **Contract/status:** [CompilationRuntimeArchitectureExploration.md](CompilationRuntimeArchitectureExploration.md), revision5. H-387 directly authorizes multiple architecture designs and isolated prototype validation after the smallest current deliverable. Candidate mechanisms, detailed value path and final architecture remain `pending-human`; this is not a production implementation contract.
-- **Value and dependencies:** C-85/P-359/P-360 proposes the charter path; P-361 records constraints without approval. P-362 preserves the user's fused-artifact, execution-state, open-input and experimental RTTI boundaries. No ancestor approval qualifies a candidate representation.
-- **Acceptance:** produce reproducible evidence, clearly distinguish implemented/modelled/unverified capabilities, derive selection criteria and recommend a bounded next stage. Workloads, thresholds, elimination rules, weights and rankings are exploration outputs, not preconfirmed acceptance details. Final whole-file review belongs to the user under H-386/H-387.
-- **Impact/non-goals:** D-15/D-21 qualification adjustments are scoped above; D-10/D-14/D-17/D-18 behavior and D-01 relocation remain. No DBMR/mailbox/IO protocol, runtime world evolution, permanent layout/checksum/ABI, purity/TCO/fractions/compiler-pilot implementation, toolchain installation or main-build reconfiguration follows.
-
-- **Exploration evidence:** K-574 records90 finite-model and30 LLVM executions in [results](../experiments/architecture/results.json). Shared kernels, semantic distinctions and native materialization are tested; the first model retains host control scaffolding, while general checking and production regional/native integration remain unverified. Criteria and the recommendation are exploratory outputs, not human approval or a selected runtime.
-
-- **Whole-program evidence:** K-575/D-25r3 records66 exact trace comparisons from one explicit-signature data graph, a reference frame machine and shared LLVM lowering. Five definitions/45 statements lower to7 native definitions/19,976 LLVM bytes through runtime depth1000. Selected-view flattening is type-correct but behaviorally wrong. That experiment uses logical resources; the regional evidence below supplies a separate physical-storage probe. Complete borrowed captures, general static ownership proof and framework adapter costs remain unverified; no production contract or runtime winner is selected.
-
-- **Regional/native evidence:** K-576/D-25r4 records96 comparisons over two borrowed-value interfaces, including20 sanitized cases. Existing shilos records execute from two unchanged read-only mappings; actual regions back interpreter state, policies and leases. Full traces, TLS and root-entry/free counts agree with shared native code and a logical fault projection. A16,056-byte program uses1,859,768 bytes of monotonic state at depth1000. This proves a bounded fixture, not general ownership/capture checking, state migration, native C++ unwinding or an optimizing-framework adapter.
-
-- **Managed adapter and recommendation:** K-577/D-25r5 records342 complete managed/native trace comparisons plus30 validated warmups. Both Java access paths interpret actual regional records; owner scopes explicitly release native regions. Direct access avoids389,528 foreign calls at depth1000. General CoD checking and optimizing-framework performance remain unproved. The completed comparative package recommends a retained semantic boundary and a bounded framework-derived interpreter pilot against shared-native preparation; the proposed cold-execution/native-timing change and final engine remain pending whole-file approval.
-
-The following relationships apply only to the individually recorded scopes and revisions. Current document coverage is maintained in the status entries above; a historical row annotation does not qualify a later revision. P-31 remains rejected. P-69/P-70/P-83 retains its confirmed H-94 local scope; other human constraints and pending candidate paths retain their own recorded status. Dependency edges never confer design authority.
-
-| 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
+| Edge | Child / relation | Parent / target | Rationale, evidence and scope |
 | --- | --- | --- | --- |
+| P-01 | D-01 derives-from | C-05 | Regional representation serves low-overhead structured storage. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-02 | D-01 constrains | C-01 | Physical regional protocols constrain semantic-graph storage. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-03 | D-02 derives-from | C-02 | The C++ driver is a stage-specific native-execution facility. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-04 | D-02 depends-on | D-01 | Driver state uses regional storage. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-05 | D-03 derives-from | C-03 | Explicit versions/dependencies support traceable integration. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-06 | D-04 derives-from | C-05 | Exception guarantees aim to limit failed-operation damage. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-07 | D-04 depends-on | D-01 | Guarantees depend on allocation/lifetime protocols. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-08 | D-05 derives-from | C-06 | Regional YAML conversion supports readable representation. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-09 | D-05 depends-on | D-01 | Conversions require the regional type contract. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-10 | D-05 depends-on | D-06 | Conversions rely on the YAML extension format. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
+| P-11 | D-06 derives-from | C-06 | Text/comment rules support human understanding. Candidate, pending-human; scope is the D-01–D-06 registered blob in §2, not new confirmation. |
 | P-12 | C-08 derives-from | C-01 | packet 将有类型的入口对象和业务意图带到另一进程执行；DL-02、DL-04、DL-05，需明确哪些定义随包传输。 |
 | P-13 | C-09 derives-from | C-05 | 日常单调占用与周期重建尝试兼顾低开销存取及有界存储；DL-06—DL-09，历史／空间／停顿取舍未决。 |
 | P-14 | C-10 derives-from | C-01 | 显式 ADT、方法和内存语义使业务图可检查而不依附宿主语言隐含行为；DL-01—DL-03、DL-12。 |
@@ -726,9 +222,9 @@ The following relationships apply only to the individually recorded scopes and r
 | P-24 | D-07 depends-on | C-12 | 以用户选定的首个应用推进语言讨论；D-07 DL-13 的独立案例链接；案例选择不批准其具体求解机制。 |
 | P-25 | D-08 derives-from | C-12 | 独立规范应用状态、转移、容量取舍和验收，保留可检查的业务意图；D-08 document-set revision 79 全文，具体机制尚未确认。 K-112 / README107 汇总已记录目标、研究候选和经验比较职责，不改变正式价值链或授予资格。 K-207 / D-08 set202 记录 H-71 实质研究完成并统一当前状态；H-86 经验比较、全部局部人工约束和 pending-human 范围保持，不新增实施资格。 |
 | P-26 | C-13 derives-from | C-12 | 按有用连接需求配置容量，以有限存储表达不均匀的上下文复杂度；D-08 document-set revision 79 / SNN-07，按 H-19 以 100 槽为下限且允许忽略少连源；度分布、忽略的任务影响、学习收益与成本需要验证；H-21 的暂定模板与入边计算提案不改变该候选理由，输入准入与输出影响分别验证；H-22 进一步区分储存容量与神经元激活语义；H-23 的权重补偿方向与入度参数评估保留该区分，H-24 将权重尺度策略明确归于训练而非容量配置；形式化价值关系待确认。 K-178 / CapacityPlanning、ConnectivityScalingResearch173 将明确的数组预算假设与 H-73/H-75/H-78 状态比较连接；容量配额、已算总额和需求先于辅助结构原则保持。 K-200 / CapacityPlanning195 将已记录的连接扫描算术纳入节点规划；RAM、保留度数、更新节奏和节点 CC 数分别约束可行性，不把全预留扫描当作强制算法或实测带宽。 K-202 / AdaptiveConnectivity、CapacityPlanning、ConnectivityScalingResearch197 精简 authority 摘要并直连独立 flow 文档；保留正文合同、来源、算术、开放选择及全部 H/K 历史，未授予实施资格。 |
-| P-27 | C-14 derives-from | C-12 | 用固定极性群体表达有符号语义坐标，使非负细胞活动与业务输入／输出的关系可检查；D-08 document-set revision 82 / SNN-01—SNN-03、SignedPopulationEncoding。合理性与权衡待确认，H-25 仅请求分析。 H-75 明确同柱个体的上下文路径价值，未选择完整读出或 HTM 学习机制。 H-76 的强预测／弱广激活输入使个体上下文路径参与当前语义输入；分支明确，数值校准及完整关系待确认。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。 K-111 / SignedPopulationEncoding106 链接同一非零 signed 总量下的个体组成分析；不选归一化字段或 decoder。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-199 / SignedPopulationEncoding194 将预测输入分支的使用与有噪声下实际上下文匹配区分；保留 H-78/H-85 对照，不把自发就绪直接视为错误，不预选门限、噪音来源标签或额外状态。 |
+| P-27 | C-14 derives-from | C-12 | 用固定极性群体表达有符号语义坐标，使非负细胞活动与业务输入／输出的关系可检查；D-08 document-set revision 82 / SNN-01—SNN-03、SignedPopulationEncoding。合理性与权衡待确认，H-25 仅请求分析。 H-75 明确同柱个体的上下文路径价值，未选择完整读出或 HTM 学习机制。 H-76 的强预测／弱广激活输入使个体上下文路径参与当前语义输入；分支明确，数值校准及完整关系待确认。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。 Research/model choices remain pending in D-08; checkpoint-specific qualifications remain in the historical source. |
 | P-28 | C-14 depends-on | C-13 | 正负群体人口需要有界槽池、身份、权重和迁移机制；D-08 document-set revision 79 / SNN-04、SNN-07。该依赖不规定 alpha、权重尺度或池必须加倍，也不授予资格。 |
-| P-29 | C-15 derives-from | C-12 | 让连接构建／学习服务可检查的三相行为、入口收敛和有限 token 响应；D-08 当前覆盖表所列修订 / SNN-03/SNN-05/SNN-07、TrainingStrategy 及相关研究。H-61 提议直接构建 DMN／token 链、后期 Hebbian flow、immersion 涌现，并确认当前省略物理距离偏好；H-62 请求批组替代方案比较。方法方向是初步人类提案，形式化衍生链与参数算法仍 pending-human；H-41/H-42/H-50 边界不变。 H-63 的持续修补让训练维护既有行为；目标缺额与自然衰减分开，正式机制仍 pending-human。 H-79—H-81 的 flow 分支为 Hebbian/HTM 方向及初步设计授权，未选具体算法；不把 C-22 修补合同外推。 H-82/AD-088 以预测性预激活群与输入序列高度匹配作为 flow 直接训练验收；无需自主持续生成，生成算法另行设计。具体度量和学习规则仍待定。 H-83/AD-089 要求按序列长度验证：共享匹配片段允许多个预测，随上下文增长向训练序列收敛；不预设固定单候选或对每个未到达预测等量削弱。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 K-95 比较独立于生成 fallback 的上下文学习责任分配与训练状态干预；均为待讨论候选，不选择辅助结构或更新算法。 K-105 的初步 flow 流程把前序状态、观察分配、相关更新、缺失边发现与后续检验具体化；更新曝光／弱化与教学干预均为对照候选，不选算法或新字段。 K-106 将上下文预测与频率先验、语义均值及概率校准分开；真实数据比较不预选读出、度量或额外状态。 K-107 比较上下文组合检测与实际源模式分布，不把更多槽容量等同于更多独立上下文。 K-109 区分多步历史共现与相邻转移、学习曝光次数与源状态时序；信用窗口不自动采用活动半衰期。 K-113 / TrainingStrategy108 约束预测前可用信息和 token 顺序；不以未提供的序列身份、位置标签或后验读出宣称上下文预测。 K-114 / TrainingStrategy109 比较自然输入强度与上下文形状匹配，区分学习接收者、预测竞争和储备容量；不选择打分、配额或新字段。 K-117 / TrainingStrategy112 以未来预测区分上下文拟合目标和代表性分配，分歧位置检验不被共同片段的平均分掩盖；不选回溯信用机制。 K-119 / TrainingStrategy114 比较完整后续候选关系与各维边际兼容性，避免将维内预测误作完整 token 预测。 K-122 / TrainingStrategy117 将不同曝光规则的边更新与读访问范围分开计费，不以优化名义改变学习语义。 K-124 / TrainingStrategy119 区分具体目标不相容、已有上下文不足及更新干扰；以同一图检验各行为，不预设保护机制或调度。 K-125 将现有 flow 详细分析逐字移至 FlowLearning120；TrainingStrategy120 继续给出分工和维护，不新增关系或资格。 K-127 / FlowLearning122 区分有意替换、保留有效分支及共同图行为，序列阶数不自动等于模型时间记忆跨度；不选遗忘机制或新增任务。 K-129 / FlowLearning124 将既有候选流程提前并合并重复角色说明；不改变操作、实验选择或资格。 K-130 / FlowLearning125 比较关联统计与预测误差调制；一阶线性参考不扩展为完整网络梯度、确定损失或 DMN/token 修补规则。 K-132 / FlowLearning127 给出固定线性参考的源能量与更新幅度关系；不以容量档位替代实际输入，也不选步长调节机制。 K-133 / FlowLearning128 以实际写回而非理想步长判断候选的数值行为。 K-135 / FlowLearning130 以原始研究区分固定语义角色、上下文响应和噪音稳健性；不选新增层、稀疏比例或多样性目标。 K-136 / FlowLearning131 区分信用幅度、背景数量和有用上下文；条件采样／均值算术不选择过滤器或新状态。 K-137 / FlowLearning132 链接已有抵消／组成算术，语义总量不替代个体源信用检查。 K-140 / FlowLearning135 区分平均预测相似度与单次输入前状态的候选可用性；不引入生成要求或预测表示。 K-141 / FlowLearning136 将学习约束的概率解释与存储方向分开；类别输入研究不直接外推至密集分级上下文。  K-142 / FlowLearning137 区分自然 readiness 与拟合读出、输入后响应证据。  K-143 / FlowLearning138、flow-slot-capacity-analysis 保留缺失源发现及成员检查成本比较。  K-144 / FlowLearning139、cancellation-properties-analysis 保留单步抵消与时序学习比较，不选择梯度法或预测抵消。 K-145 / FlowLearning140 区分潜在突触匹配、连接门槛与分级权重传导；不默认增加 permanence／confidence 字段或采用 burst 教学。 K-146 / FlowLearning141 以原始时序模型区分共活动信用与时间单位；不导入 STDP、全局抑制或非衰减链。  K-174 / FlowLearning169 区分下一输入匹配与较长时域的关联统计；不把 successor representation 或 TD 机制加入模型。 K-179 / FlowLearning174 将直接定义的 rate/frame 学习与有条件的 spike-rule 降阶区分，不引入微观时序机制。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-188 / FlowLearning183、MR-S095 区分跨日表征漂移的任务读出与自身自然预激活；补偿模型所需目标误差反馈不等同实测突触学习，未预选补偿机制或冻结身份语义。 K-189 / FlowLearning184、MR-S096 区分已有关联的漂移维护与陌生转移学习；单细胞均值／方差调节不等同于 CC 活跃比例控制，不选择补偿机制。  K-195 / FlowLearning190、MR-S010 核查学习期间有效循环强度及持续可塑性的来源条件；自然预激活与后续行为按实际条件比较，不选择增益变量、学习门控或自主生成目标。  K-196 / FlowLearning191、SynapticIntegrationResearch191、MR-FC015 以同度／同权重和的条件汇集比较权重集中及源协方差；上下文输入分数不由容量或权重总量自动校准，不新增归一化、门限或元数据。  K-197 / FlowLearning192、MR-S049 深查实际离线批量学习及内部连续状态／二值输出区别；不将自主回放结果当在线 flow 或分级语义输出证据，未选状态、竞争或学习模式。 K-206 / FlowLearning201、MR-S044 细化预输入就绪度测量与生成输出的边界；保留 H-83 合理多候选，不将单一实际符号的分类计分直接变成本文验收。 |
+| P-29 | C-15 derives-from | C-12 | 让连接构建／学习服务可检查的三相行为、入口收敛和有限 token 响应；D-08 当前覆盖表所列修订 / SNN-03/SNN-05/SNN-07、TrainingStrategy 及相关研究。H-61 提议直接构建 DMN／token 链、后期 Hebbian flow、immersion 涌现，并确认当前省略物理距离偏好；H-62 请求批组替代方案比较。方法方向是初步人类提案，形式化衍生链与参数算法仍 pending-human；H-41/H-42/H-50 边界不变。 H-63 的持续修补让训练维护既有行为；目标缺额与自然衰减分开，正式机制仍 pending-human。 H-79—H-81 的 flow 分支为 Hebbian/HTM 方向及初步设计授权，未选具体算法；不把 C-22 修补合同外推。 H-82/AD-088 以预测性预激活群与输入序列高度匹配作为 flow 直接训练验收；无需自主持续生成，生成算法另行设计。具体度量和学习规则仍待定。 H-83/AD-089 要求按序列长度验证：共享匹配片段允许多个预测，随上下文增长向训练序列收敛；不预设固定单候选或对每个未到达预测等量削弱。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/H-86 preserves empirical comparison space; no learning algorithm, readout, normalization or update rule is selected. Research qualifications remain in D-08 and the historical source. |
 | P-30 | C-15 depends-on | C-13 | 学习产生的连接受静态槽容量约束，容量迁移须保持身份和既有边；几何位置的保持仅在未来另经确认引入几何时适用，不预设当前已有位置；D-08 当前覆盖表所列修订 / SpatialConnectivityResearch、AdaptiveConnectivity、IncomingConnectivity、TrainingStrategy。仅依赖，不选择 degree exponent、weight scale 或空间距离核；pending-human。 K-103 区分源选择、既存边适配、缺失边发现和逐档容量可行性；不采用增长／删除、排序或分配结构。 K-107 / SynapticIntegrationResearch102 说明容量供给与整合选择性不同；不采纳树突分组或新增存储。 K-122 的条件连入遍历计数区分实际目标度数、源信用和写回数；不选择反向索引或元数据。 K-163 / FlowLearning158、SynapticIntegrationResearch158 明确 HTM 证据的扰动及人口缩放条件，不选择编码、门限或新状态。 |
 | P-31 | C-15 depends-on | C-14 | **rejected**：H-42 / AD-035 拒绝本边原来服务的共享内部位置机制。revision 26 中对正负身份／上下文的依赖只留历史；不得据此延续等位 prior。 |
 | P-32 | C-16 derives-from | C-12 | 检查语义分配与解剖位置的兼容，避免物理建模假设暗改 H-43 的语义呈现及学习边界；D-08 document-set revision 79（局部修订见覆盖表）/ SemanticCorticalMappingResearch、PhysicalDistancePreferenceResearch。H-50 明确语义安排已存在而物理度量不存在，H-51 要求深化其计算意义研究；H-44 授权研究；H-46 澄清 feature/minicolumn 非双射并不构成冲突。三状态目标不批准群体交错或其它映射；候选价值关系 pending-human。 H-61 确认当前省略物理距离倾向；该解剖兼容研究不再是当前构建设计的前置任务，候选研究价值关系保持 pending-human。 |
@@ -759,22 +255,17 @@ The following relationships apply only to the individually recorded scopes and r
 | P-57 | C-25 depends-on | C-14 | 每坐标／极性有效贡献与原向量之间需明确读出、精度、低信号误差和一次输入映射；D-08 revision81 / RateDynamics、SignedPopulationEncoding。H-66 短时语义目标保留，不引入运行时按已知 token 强制投影；pending-human。 |
 | P-58 | C-25 constrains | C-23 | 分数参与和持续 rate 使整细胞不重用计数界成为条件比较，进程约束应区分持续活动、合法回返和意外捷径；同一身份分配给多个步骤仍共享其输出边。D-08 revision81 / RateDynamics、TrainingStrategy；具体历史与重叠规则 pending-human。 |
 | P-59 | C-24 depends-on | C-13 | 当前静态 SoA 端点池可作为候选存储基础，但 rate 更新的扫描工作、数值状态及计算精度须另由算法说明；D-08 revision81。不改变容量预算假设、不预设缓存／索引或额外数组；pending-human。 |
-| P-60 | C-26 derives-from | C-15 | 保留上下文对后续语义行为的影响，使有用记忆不只依赖大链主干延长输出；D-08 当前覆盖表所列修订 / ContextLoopsAndNumerics、TrainingStrategy、ActivationRegimes。H-71 确认方向，具体机制与正式关系 pending-human。 K-111 / ContextLoopsAndNumerics106 以现有 rate 的条件组成分解区分语义总量与后续上下文作用，不新增存储或宣称容量。 K-115 区分逐细胞噪音、坐标汇总尺度与整个向量的扰动；不以弱维符号变化数替代有用上下文或语义效果。 K-128 / ContextLoopsAndNumerics123 以固定输入下的条件活跃 rate 差异说明部分坐标抹除与全 CC 历史丢失不同；实测 embedding 算术不等于已学上下文性能。 K-131 / ContextLoopsAndNumerics126 在同一样本比较原始输入相对尺度；中位数接近不保证每个输入的上下文差异保留相同，不选编码归一化。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-180 / ContextLoopsAndNumerics175、MR-S011/MR-S012 深查暂态读出、重复外部驱动与部分权重训练的条件；不导入变换、读出、学习规则或稀疏容量结论。  K-181 / ContextLoopsAndNumerics176、context-composition-analysis 明确固定总量下条件幅度界及可表示模式计数；MR-S013 的分布耦合证据不等于本模型容量。未选上限、编码或新增状态。  K-184 / ContextLoopsAndNumerics179、MR-S006 区分同噪音下有／无刺激的维持与外部噪音分组指定的选择性；不导入振荡、资源状态或模型时标。 K-193 / ContextLoopsAndNumerics188 核查连续吸引子记忆扩散的稳态、弱涨落及调谐缩放条件；连续 rate 或活动调节不自动满足它们，不导入记忆容量或噪音控制公式。 K-201 / ContextLoopsAndNumerics196、context-composition-analysis 的 balanced_drive_frame_scaling 将同维平衡驱动的组成收缩与帧间隔联系；保持净语义值不等于保持上下文，未把确定性例当作白噪音律或选取新的状态／调节机制。 |
+| P-60 | C-26 derives-from | C-15 | 保留上下文对后续语义行为的影响，使有用记忆不只依赖大链主干延长输出；D-08 当前覆盖表所列修订 / ContextLoopsAndNumerics、TrainingStrategy、ActivationRegimes。H-71 确认方向，具体机制与正式关系 pending-human。 Research/model choices remain pending in D-08; checkpoint-specific qualifications remain in the historical source. |
 | P-61 | C-26 constrains | C-23 | 主链选取中的防捷径偏好不得变为强力消除全网小循环；按实际进程破坏、语义干扰和不可驱转判错；D-08 revision84。H-71 方向明确，识别／干预策略 pending-human。 |
 | P-62 | C-26 depends-on | C-24 | 小循环上下文需要明确 rate、噪音、自然失续／再激活及读出时间尺度；主导幅度与历史影响不同；D-08 当前覆盖表所列修订。技术依赖不选择独立上下文状态或专门网络，pending-human。 |
 | P-63 | C-27 derives-from | C-24 | 保留小于表示量子但长期重要的衰减进度，使近似低精度执行仍服务实际淡出与维持；D-08 当前覆盖表所列修订 / ContextLoopsAndNumerics、RateDynamics。H-71 要求分析，具体定时／累积机制 pending-human。  K-173 / ContextLoopsAndNumerics168 区分源变化稀疏与连入依赖／同维抵消传播的影响范围；不预设事件索引、缓存或重算算法。  K-198 / ContextLoopsAndNumerics193、MR-S002 核查 QSS 的总量化误差（包括滞回）趋零及观察时域条件；不把收敛结论当固定低精度任意时长保证，未选事件结构或滞回机制。 K-204 / ContextLoopsAndNumerics199、numeric-representation-arithmetic 的 directed_decay_rounding 区分向下取整避免停滞与保留衰减时间；有限归零不是半衰期／自然断链的充分证据，不选取整律或新状态。 |
 | P-64 | C-27 depends-on | C-13 | 延后生效需要与静态区域、SoA 和所需状态预算协调，按算法说明锚点／残差／事件的真实代价；D-08 当前覆盖表所列修订。仅依赖，不预分配定时器数组或堆队列，pending-human。 |
-| P-65 | C-28 derives-from | C-24 | 以可检查的误差、范围和资源代价选择数值表示，避免存储便利悄改循环、抵消、衰减与训练语义；D-08 当前覆盖表所列修订。H-70/H-71 要求精度与整数比较，形式化取舍 pending-human。 K-98 用实际存储权重及其重复作用评估舍入，而非仅凭单步无偏性或宽状态认定行为保真。 K-102 分别核查乘积、归约、抵消和状态写回；宽存储不能替代中间精度，是否保留极弱信号由实际行为比较决定。 K-105 核查重复学习的舍入停滞和随机舍入稳态波动，比较宽权重与低位宽加副本的完整成本；不更改五字节槽基线。 K-116 / ContextLoopsAndNumerics111 以条件分布比较中间量化与最终写回，不把逐值无偏当成非线性转换后行为无偏。 K-118 / ContextLoopsAndNumerics113 区分已证 L1 非放大与 Euclidean 误差集中，不能把不同范数的局部界混用。 K-121 / ContextLoopsAndNumerics116 以精确浮点写回例区分当前语义和后续上下文作用的精度；不据此选格式。 K-133 / ContextLoopsAndNumerics128 将稳定的理想误差更新与逐边存储后的停滞／循环分开，比较宽权重和随机舍入的条件结果；不选格式、尺度或逐边残差。 K-134 / ContextLoopsAndNumerics129 以同误差、不同权重分布的条件例检查非负边界；不据此引入新步长或状态。 K-147 / ContextLoopsAndNumerics142 区分短时二值视觉推理与持续 rate 行为，并核对整数阈值／移位的算术语义；不选格式、字段或部署优化。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
+| P-65 | C-28 derives-from | C-24 | 以可检查的误差、范围和资源代价选择数值表示，避免存储便利悄改循环、抵消、衰减与训练语义；D-08 当前覆盖表所列修订。H-70/H-71 要求精度与整数比较，形式化取舍 pending-human。 Research/model choices remain pending in D-08; checkpoint-specific qualifications remain in the historical source. |
 | P-66 | C-28 depends-on | C-14 | 位宽、符号、尺度与相态须保持有符号语义分量和残差含义，不能由整数格式自动推导新编码；D-08 revision84 / SignedPopulationEncoding、ContextLoopsAndNumerics。pending-human，仅依赖。 |
 | P-67 | C-28 depends-on | C-13 | 端点 ID、权重、状态与可能新增元数据分别计费；INT4 权重不自动使五字节槽减半，累加宽度另论；D-08 revision84。容量基线与所有权不变，pending-human。 |
 | P-68 | C-28 constrains | C-27 | 衰减的计时边界与小数进度受量化、缩放及舍入影响；不能把反复舍入停滞或重设时间当作自然记忆；D-08 当前覆盖表所列修订。具体误差容差／调度规则 pending-human。 |
 | P-69 | C-29 derives-from | C-24 | 使一次神经转移只依赖同一前帧，避免目标访问顺序改写活动传播；低成本双状态数组配合现有入边布局，服务明确可复现的业务时间语义。D-08 当前覆盖表所列修订 / RateDynamics、IncomingConnectivity、Model；H-94 确认双帧拉取及避免无需求运行时复杂化的局部价值范围；该范围 confirmed。完整神经机制及尚未确认的上游价值链仍 pending-human。 K-113 / RateDynamics108 区分观察次序、模型时长、神经帧与学习曝光；不选事件队列、每 token 一帧或额外历史状态。 K-116 区分相同前帧快照与抵消前后不同数值转换边界；不增加帧或持久状态。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 |
 | P-70 | C-29 depends-on | C-13 | 连入集提供目标拥有的源 ID/权重遍历；双帧仅复制所需状态字段，静态 SoA、容量与区域约束保留。D-08 set204；H-94 确认下游入连归属与双帧 pull 的依赖，局部范围 confirmed。依赖不授予实施资格，不选择并行调度器、第三帧、事件索引或连接池副本。 K-108 / IncomingConnectivity103 从真实遍历／增长／迁移需求比较保留前缀的端点标记与计数，不预设辅助数组。 |
-
-D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87—H-92 只支持所列建模前提与整理范围，不自动确认正式价值链。
-
-| 边 ID | 子节点与关系 | 父节点／对象 | 理由、范围与依据 |
-| --- | --- | --- | --- |
 | P-71 | C-30 derives-from | C-12 | 用同一长方形场景明确感知、身体参照和自我觉察的可观察联系；D-09r1 S1/S2，H-87 研究范围，正式关系待确认。 |
 | P-72 | C-31 derives-from | C-12 | 让概念内容落实到可习得、可泛化的预测动力学，避免用 token 名称代替学习；D-09r1 S1/S3，H-88/H-89 前提，正式关系待确认。 |
 | P-73 | C-32 derives-from | C-12 | 以任务误差、时间和资源界定实用容量，服务有界成本下的语义推演；D-09r1 S4/S8，H-89/H-90 研究要求，正式关系待确认。 |
@@ -788,6 +279,11 @@ D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87
 | P-81 | C-31 constrains | C-30 | 四组 CC 的分工不能解释为各自仅拥有一部分概念；每 CC 的完整近似副本及感受偏向是 H-89 的前提。D-09r1 S2/S3；正式约束登记待确认，不选择复制／同步算法。 |
 | P-82 | C-34 derives-from | C-33 | 连续状态保留 AP 之间对时序协同可能有用的历史；以学习／泛化价值决定机制保留和复杂度。D-08 set204、D-09r2 S5.1；H-93/H-95 确认命题与目的，本正式价值衍生作为 agent 候选登记，pending-human，不补批 P-74/P-52 等上游关系。 |
 | P-83 | C-34 constrains | C-29 | 下游读取源 effect 不推进、不消耗源状态，所有读取对应同一源时间视图；多帧 AP 不自动要求独立尾部队列或 push 传播。H-93/H-94 确认这一局部约束，confirmed；覆盖 D-08 set204 与 D-09r2 S5.1，具体状态／历史布局不在范围内。 |
+
+### Symbols, calls and numerical meaning
+
+| Edge | Child / relation | Parent / target | Rationale, evidence and scope |
+| --- | --- | --- | --- |
 | P-84 | C-35 derives-from | C-10 | Distinct symbol identities make language composition unambiguous across aliases/origins/versions; D-10r1 identity section. User mechanism H-96; formal value path pending-human. |
 | P-85 | C-36 derives-from | C-02 | Explicit scoped bindings let an operation use its captured definition-time interpretation under perform or the current interpretation under behave; H-97/H-180, D-10r39. Candidate value path remains pending-human, with no general effect calculus selected. |
 | P-86 | C-37 derives-from | C-01 | Separating pure computations from effectful execution keeps program dependencies inspectable; D-10r1 callable section. Formal value path pending-human. |
@@ -802,7 +298,7 @@ D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87
 | P-95 | C-39 constrains | C-36 | H-99 confirms stack/region user carriers and no implicit user heap lifetime. H-180 reaffirms permitted dynamic-value capture; it does not copy regional objects or create another owner. H-173/H-175’s full allowed-type/interior-pointer boundary remains under review. D-10r39 local scope; representation remains open. |
 | P-96 | C-40 depends-on | C-03 | Business associations must account for independently managed regions and contexts. H-101 supplies the original placeholder, and H-157/P-140 supplies the current language scope. Dependency proposal `pending-human`. |
 | P-97 | C-41 derives-from | C-10 | Expression results and explicit void make computation/effect composition visible in types; H-104 direction, D-10r1. Formal value path pending-human. |
-| P-98 | C-41 constrains | C-36 | H-104 confirmed read/write forms: @name reads, effect @name <- rhs is the only symbolic write; both are expressions. H-111 confirms the newly bound value as the effect result. H-113 confirms there are no lexically scoped symbolic variables; ordinary symbolic assignment is invalid. Scope results and compound sequencing remain open. D-10r8. |
+| P-98 | C-41 constrains | C-36 | H-104/H-113 establishes symbolic read/write expressions and excludes ordinary lexical symbolic variables. H-111’s effect-result rule and the former exclusive-arrow write surface are superseded by H-277–H-281/P-248 and H-288–H-291/P-254: bits transfer, object-reference rebinding and void effects follow the current D-10 contract. Preserve scoped installation/restoration; this does not qualify the whole language. |
 | P-99 | C-42 derives-from | C-35 | A symbol-only vocabulary lets independent modules share nominal concepts without selecting implementations; H-105 practice, D-10r1. Formal value path pending-human. |
 | P-100 | C-43 derives-from | C-10 | Candidate value: explicit source-preserving selection and receiving-context body reuse make definition meaning inspectable. H-105 supplies the distinction; H-212 names redefinition mixin and uses import for selection/extension. D-10r52; full value path remains pending-human. |
 | P-101 | C-43 depends-on | C-35 | Procedure reuse must distinguish symbol identities/aliases from definition contexts; D-10r1. Dependency proposal; destination-binding syntax remains open. |
@@ -816,8 +312,6 @@ D-09 revision1 的新增候选关系如下。各条均为 `pending-human`；H-87
 | P-109 | C-46 derives-from | C-43 | Compile-time alias adaptation makes receiving-context body reuse explicit and destinations independently selectable; D-10r10. H-115/H-116 mechanism statements do not qualify this complete candidate value path. |
 | P-110 | C-46 depends-on | C-35 | Translate source/receiving aliases to nominal compile-time values before runtime layout; aliases are not runtime variables or names. H-114 constraint; D-10r10. Mapping edge policies remain open. |
 | P-111 | C-46 constrains | C-36 | H-113–H-121/H-212: body alias maps belong to mixin; capture follows receiving identity resolution, with known destination symbols and using identity guards. D-10r52; no ordinary symbolic assignment, identity unification or runtime alias lookup. Source-preserving import does not apply a body map. |
-
-C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录；P-34—P-41 的形式化关系保持 pending-human。H-58 的低密度过滤是候选办法，不因功能要求获确认而自动成为所选算法。
 | P-112 | C-47 derives-from | C-10 | Candidate: meaningful scalar identities and typed indexing make domain mistakes visible in typed programs rather than host numeric conventions. D-11r4; H-125 requirement, not full value-path confirmation. |
 | P-113 | D-11 derives-from | C-47 | Candidate: compare usable arithmetic and actual index formulas before choosing a mechanism, serving strict domain identity with lower caller burden. H-126 requests comparison; D-11r4 remains pending-human. |
 | P-114 | C-48 derives-from | C-37 | Candidate: useful operations over explicitly supplied complete structures without dynamic-context access. H-197/H-198 adopt mutable functions; earlier snapshot guarantees are superseded. D-10r47/D-14r8 value-path qualification remains pending outside the identified local decisions. |
@@ -840,9 +334,13 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-131 | C-52 derives-from | C-01 | Candidate, D-10r22 actor section: typed mail can carry inspectable program intent and inputs independently of the sender’s execution state. Charter §§3.1–3.2. Formal edge `pending-human`. |
 | P-132 | C-52 derives-from | C-02 | Candidate, D-10r22 actor section: receiver-selected handlers let the same task protocol operate in different execution environments. Charter §6.1. Formal edge `pending-human`. |
 | P-133 | C-52 depends-on | C-39 | Candidate regional-mail scope, D-10r22 actor section: delivery and disposal must preserve lifetimes, relocation and region-only allocation, including when a sender has reachable references. Charter §§2 and 4.1/4.3 and D-01 representation constraints. Transfer rules `pending-human`. |
+
+### Regional, type and module contracts
+
+| Edge | Child / relation | Parent / target | Rationale, evidence and scope |
+| --- | --- | --- | --- |
 | P-134 | D-12 derives-from | C-10 | Candidate, D-12r1: the register analogy and native evidence connect explicit typed execution context to inspectable language behavior and the charter’s separation of program, execution and environment in §§1, 3.2 and 6.1. Formal edge `pending-human`. |
 | P-135 | D-12 depends-on | D-10 | D-12r12 tracks the current binding, call, storage and Actor boundaries; K-376 reconciles no-extraction and using/import/mixin/publication semantics with D-10r74. K-293 retains the candidate Actor entry/context review. Changes to those contracts or evidence require corresponding tracker review. Dependency remains `pending-human`; this edge supplies no qualification. |
-
 | P-136 | C-41 constrains | C-37 | H-153 local confirmed direction: reserve keywords against ordinary names and use parenthesized intrinsic operation names for overload declarations. D-10r24; precise keyword inventory and broader control-form overloading remain open. |
 | P-137 | C-37 constrains | C-41 | H-154/H-155 local confirmed scope: effectful operation overloads use procedures; one operation may contain function and procedure overloads distinguished by parameter types. Function purity and pure conversion formulas remain. D-10r26/H-158 keeps compiler operation representation separate from CoD symbols; H-159 selects current-binding invocation. Broader binding-set and syntax extensions remain pending. |
 | P-138 | D-13 derives-from | C-01 | Candidate, D-13r1: a graph’s direct edges stay with its region and its business associations remain explicit across lifetime and relocation boundaries. Charter §§2–4. Formal edge `pending-human`. |
@@ -854,7 +352,6 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-144 | C-54 depends-on | C-36 | Ownership must follow lexical/effect holders and cleanup transfers without being undone by dynamic-binding restoration. D-10r41/D-13r11; dependency alone grants no authority. |
 | P-145 | C-54 depends-on | C-53 | Region-local pointer graphs make whole-region transfer possible; interior references still require a valid owning region. D-13r11; no physical cross-region edge or new encoding. |
 | P-146 | C-54 constrains | C-39 | Superseded for dynamic-source consumption by H-181/P-151. H-169 records the earlier consuming effect-to-effect move and K-295 its implementation; that behavior is no longer the language contract. H-177/H-179 ordinary owners and consuming installation retain P-150’s separate scope. D-10r40/D-13r10. |
-
 | P-147 | C-41 constrains | C-36 | H-172 confirms `effect @name <- rhs` as the only explicit dynamic-binding syntax, retaining RHS evaluation, result, scope and type-directed transfer/copy. D-10r41; local syntax constraint confirmed, not a new ownership policy. |
 | P-148 | C-36 constrains | C-39 | Candidate restriction: dynamic values contain owning resources, independent bits or statically selected procedures, excluding ambient borrowed interior references. D-13r11/D-12r8 analyze why this can simplify lifetime dependencies through C-54/P-143/P-144, with C-48 snapshot access preserved. H-173 requests analysis; H-180 reaffirms value capture and H-181 explicitly admits business Maybe-wrapped resources; recursive admissibility and root access remain pending-human. Packet owning sums are a separate scenario and do not by themselves require admission as dynamic values. |
 | P-149 | C-35 constrains | C-36 | Superseded by H-180: the H-176 identity-only dependency interpretation does not describe procedure capture. H-114 compile-time identities/aliases remain, and those identities key captured runtime values. Historical scope and correction remain in H-176/K-297 and H-180/K-300; use P-152 for owner-preserving shadowing. |
@@ -870,7 +367,6 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-159 | C-37 constrains | C-36 | H-184 permits ordinary lexical and symbolic dynamic procedure definitions and installation of an existing lexical procedure as an effect. Lexical naming does not grant purity or recapture on assignment. H-186 additionally confirms direct proc @p(...) -> RT declarations without an intermediate lexical procedure. H-187 additionally supplies the symbol declaration when @p was not declared/imported. D-10r44/K-305; local naming/installation direction and this declaration form confirmed, complete procedure representation and type grammar open. |
 | P-160 | C-35 constrains | C-36 | H-184 requires every symbol definition to declare its value type, including procedure types; grouped form symbol a :: T1, b :: T2. Aliases preserve identity/type; standalone symbol declarations supply no runtime value. H-187 allows proc @p to introduce a missing symbol with its signature as the explicit procedure type; the procedure binding occurs at execution, not scanning. D-10r44/K-305 implements typed/grouped symbols and proc(T, ...) -> RT signatures. Local type/identity constraint confirmed; broader type compatibility remains open. |
 | P-161 | C-37 constrains | C-41 | H-185 fixes perform/behave as calls through symbolic dynamic bindings and direct procedure calls as lexical. perform p and behave p are not lexical-call forms. H-189 selects the caller current dynamic context for direct lexical calls. D-10r44/K-305 implements this with captured/current symbolic semantics preserved. |
-
 | P-162 | C-54 constrains | C-39 | H-190 confirms intrinsic ownership at whole-region granularity and leaves intra-region allocation/reuse policies, including free lists and pools, to CoD user programs. D-14r3/D-13r13/D-10r45; preserve typed regional access, lifetime and relocation. Region validity does not prove logical pool-item validity. No per-object ownership, allocator algorithm, raw-storage retyping or generation mechanism is selected; the local boundary is confirmed, full contracts remain pending-human. |
 | P-163 | C-54 constrains | C-41 | Proposed explicit effectful whole-region construction: a user-facing resource type and a make expression with allocation capacity expose storage/lifetime intent in typed expressions. Scope D-14r6; value rationale follows C-54/P-143 and C-41/P-97. H-192 requests exploration and capacity inputs, not approval of region<Root>, exact grammar or transfer policy; pending-human. |
 | P-164 | C-54 constrains | C-39 | H-193 requires references to retain compile-time region association for access/lifetime/escape checking. Scope D-14r7/D-10r46; local constraint confirmed, not a new per-pointer runtime field or complete implementation proof. H-202 extends the validity discussion to region and lexical carriers; H-203/P-174 gives the same-owner stored-edge boundary. |
@@ -913,20 +409,16 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-201 | C-58 constrains | C-43 | H-231 forbids using/import/mixin of private resources. Source-preserving calls may still use private source dependencies internally; export does not grant general receiving-context access to them. Export-list and re-export details are proposed in D-07r67, not implemented. H-233 forbids implicit re-export and permits the export import modifier. It adds publication to the normal import operation without changing incorporation or granting consumers extension permission. |
 | P-202 | C-57 constrains | C-45 | H-230 assigns extension-module callable identities; distinct local aliases retain selected identities/method sets, and same-alias virtual composition creates a receiving-module identity. The concrete required trace is1,7,1. Source semantic-family provenance remains necessary for explanation/deduplication, but its representation and helper-dependency routing are still design work. No global publication or intrinsic-symbol conflation follows. H-232 resolves the simple helper outcome to using2/import14. Several matching dependency views or same-body/different-context unions remain distinct compound cases. |
 | P-203 | C-57 constrains | C-43 | H-232 requires using to preserve the selected helper implementation context and import to adapt callable dependencies to the receiving implementation context. The concrete twice trace is2 versus14, while H-230's separate-alias1,7,1 remains. This serves context-bound integration without general lexical body rewriting; source captures, symbols and globals are not recaptured/rebound. D-07r68/D-10r64; exact conflict handling for multiple selected views remains pending. |
-
 | P-204 | C-59 derives-from | C-10 | Candidate value path: independently composed semantic information lets integration enrich typed interpretations without silently modifying source programs. Charter §§1–4; H-234 supplies the architectural principle, while the complete derivation/operational scope remains pending-human. D-15r1. |
 | P-205 | C-59 constrains | C-58 | H-234 requires explicit exports and receiver-local merging of information for identical imported objects, with independent onward publication. H-231/H-233 retains private-by-default selection/re-export. Confirmed principle; publication granularity/timing and conflict mechanics remain under architecture review. |
 | P-206 | C-59 constrains | C-35 | **Superseded by H-245/P-216.** H-234's former cross-module editing through TLS requirement no longer governs implementation. Cross-module module-world editing is impossible at both stages; only receiver-owned construction is permitted. The original confirmation remains in H-234; K-390 records the correction and affected scopes. |
 | P-207 | D-15 depends-on | D-10 | Compile-time TLS shape/type analysis and runtime binding/capture/restoration require coherent dynamic-scope contracts. H-235 keeps machinery internal. H-245 excludes a compiler/runtime cross-module editor; this dependency grants no new effect ABI or capture exception. |
 | P-208 | D-15 depends-on | D-07 | Identity, methods, explicit conformance and export selection supply the semantic objects being composed. Their existing implementation must be evaluated against the new architecture, not imposed as a representation constraint. |
 | P-209 | D-15 derives-from | C-59 | Candidate document value path: one architecture contract connects receiver-owned construction, explicit publication, local identity merging and runtime typed bindings before local implementation choices. H-236 supplies the architecture-first order; H-245 removes cross-module editing. The complete operational contract remains pending-human. |
-
 | P-210 | C-59 constrains | C-35 | H-237 explicitly distinguishes module worlds from TLS worlds and assigns them different aspects of objects. Do not collapse the TLS world into a module-world editor pointer, duplicate one catalog under two names, or equate the distinction with compile time versus runtime. The detailed division of object information is pending in D-15r2; no new binding ABI or runtime state layout is selected. |
-
 | P-211 | C-59 constrains | C-57 | H-238 rejects treating the module/TLS worlds as two models of the same generic object set and requires their respective entities to be identified before further mechanisms. D-15r3 separates module-resident semantic types/callables/methods from TLS symbolic-pointer entries; this is not a new user-visible entity hierarchy. |
 | P-212 | C-59 constrains | C-35 | H-239 defines TLS as a flattened collection of typed symbolic pointers. Symbol and type identities are separate; a symbol dynamically associates with a type-compatible value that may originate in a different module-world copy. Confirmed contract; pointer ABI, physical tags, general type compatibility, lifetime/capture lowering and dynamic-value category limits retain their separate scope. H-277 refines physical storage to inline bits and permitted references without changing separate symbol/type identities; H-280/H-281 distinguishes effect transfer and rebinding. |
 | P-213 | C-59 derives-from | D-12 | H-241 explicitly places dedicated module-world copies within the Global Variables Done Right vision and requires coordinated maintenance. Module-local semantic integration and typed TLS association are complementary responsibilities. This relationship is confirmed for that architectural placement, not for every proposed editing, copying or native update mechanism in D-15; D-12's full charter path remains pending-human. |
-
 | P-214 | C-60 derives-from | C-59 | H-242 gives vocabulary modules the purpose of establishing common identities for symbols, types and their method collections. Shared definition origins let independent module worlds integrate information for identical identities and let TLS references retain declared type identity across world copies. This local purpose/relationship is confirmed; the full architecture and implementation contract remain pending-human. |
 | P-215 | C-60 constrains | C-58 | Vocabulary publication follows H-231/H-233 explicit exports/re-exports. H-242 broadens the contents, not the privacy boundary. Shared vocabulary identity does not confer a shared mutable world or automatically bind default effect values. |
 | P-216 | C-59 constrains | C-35 | H-245 explicitly requires modules to construct only their own module world and forbids editing another world at compile time or runtime. Compilation determines the flattened TLS shape; TLS-world pointer edits occur at runtime. This replaces P-206 without changing symbol/type identities, explicit exports, captures or regional ownership. |
@@ -934,6 +426,11 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-218 | C-59 constrains | C-57 | H-248 requires compiler structures centered on identity and permits multiple aliases. Combined with H-234 receiver-local merging, aliases access one local information record rather than independent method subsets. D-15r12; confirmed representation constraint, not blanket approval of unresolved extension/context policies. |
 | P-219 | C-59 constrains | C-57 | H-252 requires a warning for potentially misleading overload declarations through multiple aliases of one identity in one module, with opt-in escalation to an error. D-15r12/D-07r105; confirmed diagnostic requirement. Ordinary multiple aliases remain legal; no alias-based identity split, runtime check or new extension permission. |
 | P-220 | C-59 constrains | C-57 | H-253 requires conflicting inherited/receiver-selected overloads in an import-adapted dependency to reject rather than silently choosing A or B. D-15r12/D-07r105; confirmed conflict boundary. Direct aliases and using-preserved contexts retain their separate identities; explicit arbitration syntax remains future design. |
+
+### Fractions, ownership and symbolic storage
+
+| Edge | Child / relation | Parent / target | Rationale, evidence and scope |
+| --- | --- | --- | --- |
 | P-221 | C-61 derives-from | C-49 | Candidate value: one unit identity across integer, floating and fraction representations keeps numerical storage choices from redefining domain meaning. H-254 accepts the planning direction; full charter derivation remains pending-human. D-16r1/D-11r27. |
 | P-222 | C-62 derives-from | C-10 | Candidate value: explicit fixed-width exact ratios make numerical intent, costs and failure boundaries inspectable without hidden allocation. Charter §§1–3 via P-14/C-01; H-254 accepts scoped semantics, not the complete value path. D-16r1. |
 | P-223 | D-16 derives-from | C-62 | Candidate: a focused draft coordinates fraction type/arithmetic/storage and preserves future compatibility before implementation. H-254 requests the draft; full revision qualification remains pending-human. |
@@ -942,7 +439,6 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-226 | C-62 constrains | C-10 | H-254/H-255 confirms the scoped fraction requirements and requires subsequent language design/implementation to review conflicts and discuss an affected choice before implementation. No fraction implementation scheduled; unresolved grammar/layout/promotion remain unselected. D-16r1, D-07r106 and AGENTS. |
 | P-227 | D-16 depends-on | D-10 | Fraction bits values and intrinsic signatures must preserve function/effect, const/borrow and lifetime rules; fixed pair storage does not select a new result-borrow or ownership contract. D-16r1; dependency only. |
 | P-228 | C-61 constrains | C-10 | H-256 prioritizes representation-independent UoM and reserves // for future fraction construction with # comments as separate prompt follow-ups. This supersedes prerequisite deferral, not fraction-runtime deferral or open grammar/promotion decisions. D-16r4/D-11r30/D-07r107. |
-
 | P-229 | C-37 constrains | C-57 | H-257 requires direct lexical procedure calls to use local bindings, with shadowing warnings; callable declaration identity/contracts are separate from executable methods. H-258 requires parameter/result signatures, generic type parameters and varargs. D-10r88/D-15r14; scoped human decisions, no runtime callable ABI. |
 | P-230 | C-39 constrains | C-10 | H-257 directs the internal compiler model toward LLVM register optimization: evaluated bits and owner-backed places remain distinct while preserving lifetime, alias and relocation rules. D-10r88; ordinary-region ownership syntax/lifecycle remains a separate deferred work package. |
 | P-231 | C-61 constrains | C-49 | H-260 selects unit m, numeric quantity annotations f64(m), representation-preserving m(value), and parameter-controlled f64(m*) conversions. H-261 requires whole-type lossless widening, exact-before-widened unique-best method dispatch and a unique least safe representation for builtin mixed scalar arithmetic. D-11r30; scoped confirmation, not generic fraction promotion or return-type dispatch. |
@@ -1002,6 +498,11 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-285 | C-72 constrains | C-65 | H-318 authorizes single-colon declaration annotations after grammar review; D-07r143/D-10r119/D-14r68 use : with -> callable results and unchanged <: subtyping. This serves readable uniform declarations without compatibility aliases, numeric changes or module qualification. |
 | P-286 | C-63 constrains | C-65 / C-36 | H-319 confirms explicit {{ }} lexical/effect/full scopes and ordinary grouping; calls/modules retain inherent scopes. H-359/H-365 requires nested per-iteration explicit scopes for body declarations and extends the rule to zero-iteration else. H-365/D-17r26 supersedes H-319’s direct-loop-defer prohibition: direct registrations accumulate in the nearest enclosing full scope, independently of iteration effect/resource restoration. Full lowering acceptance remains outstanding. |
 | P-287 | C-63 depends-on | C-65 | H-319’s explicit defer capture-list proposal is superseded for ordinary deferred calls by H-356/P-321–P-322 registration-time preparation. Borrowed owners must remain valid without lifetime extension or object copy. H-365 forbids delayed loop-control capture and outer deferred borrows of iteration resources. Contextual block-to-callable adaptation remains separately reviewed under H-320/D-18. |
+
+### Captures, planning and completion
+
+| Edge | Child / relation | Parent / target | Rationale, evidence and scope |
+| --- | --- | --- | --- |
 | P-288 | C-73 derives-from | C-65 | Candidate: restricting borrowed captures to proven regional owners preserves ordinary owner/access/lifetime reasoning for both named and anonymous callables, avoiding automatic lexical-cell promotion. H-322 proposes this direction; D-14r70 does not treat it as approval of all capture modes, syntax or escape/storage rules. Pending-human for the detailed contract. |
 | P-289 | C-73 depends-on | C-36 / C-54 | Candidate dependency: lexical captures must coexist with perform/behave's typed dynamic bindings and the stack/region storage discipline. Owner metadata neither transfers ownership nor chooses environment storage. D-10r121/D-14r70; H-322 requests coordinated review. This dependency grants no implementation authority. |
 | P-290 | C-73 derives-from | C-65 | Candidate: capturing a regional variable slot preserves its actual owner's validity while permitting ordinary variable updates to remain observable in a callable. H-323 supplies the use case; D-14r71 keeps lexical-cell promotion, capture syntax and environment layout unselected. Slot capture does not depend on adopting structural region types. Pending-human for the detailed mechanism. |
@@ -1014,7 +515,7 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-297 | C-73 derives-from | C-65 / C-75 | H-329 confirms omitted-list inference and explicit-list completeness checks, combining convenient regional-variable use with a readable declaration of capture intent. Missing entries error; unused entries warn. D-18r9/C-03 preserves actual storage owners and separates variables in the body from owner associations in the callable type. H-331 retains every explicit capture dependency, with owner validation before unused warnings. This does not authorize lexical-cell promotion or select runtime closure representation. |
 | P-298 | C-73 derives-from | C-65 / C-75 | H-334/H-335 makes retained regions usable through cb -> owner_name, serving the explicit storage/lifetime contract rather than adding a separate owner lookup mechanism. The visible with-type supplies the name, including helper-local renaming; projection borrows captured access, never acquires ownership or extends lifetime. D-18r12/C-04 covers same-body selection and projection. Runtime callable ABI, persistence and RTTI remain excluded. |
 | P-299 | D-18 derives-from | C-65 / C-73 | H-337/H-338 requires a runtime callable ABI with lexical-only payload/environment storage and distinct definition/reference syntax. This gives source-visible lifetime rules to runtime-selected behavior while retaining relocatable regional ADTs/methods. D-18r14 covers one static binary image, non-null func/proc references and nullable ptr references; no persistence, hidden user heap or RTTI. |
-| P-300 | D-18 derives-from | C-65 / C-73 | H-339/H-340 confirms caller-provided complete fresh-result construction, enabling usable callback factories without a dangling callee environment or implicit region lifetime extension. Existing lvalues remain aliases. D-18r14 does not settle nested callable materialization or actual-owner runtime alternatives. |
+| P-300 | D-18 derives-from | C-65 / C-73 | H-339/H-340 confirms caller-provided complete fresh-result construction, allowing usable callback factories without dangling callee environments or captured-region lifetime extension. H-342/P-301 supersedes only existing-lvalue aliasing with independent complete callable values. Actual-owner runtime alternatives remain pending; D-18 owns current coverage. |
 | P-301 | D-18 derives-from | C-65 / C-73 | H-342 confirms intrinsic lexical callable values so a returned wrapper retains its selected nested callable without depending on the factory's local payload. Complete representation movement must be valid; captured regions remain borrowed. D-18r15 covers func/proc declaration copies, nested capture by value, <- replacement and nullable ptr references. This supersedes P-300's existing-lvalue alias detail while retaining caller-provided construction; it does not permit ordinary lexical-variable capture or regional callable storage. |
 | P-302 | D-18 derives-from | C-73 / C-65 | H-343 requires recursive functions/procedures in the runtime-callable work: callable behavior must execute across real invocation boundaries instead of depending on finite source expansion. D-18r16 retains static owner/effect/exception checks and one-image ABI boundaries; procedure recursion is included independently of the unresolved TCO boundary. No unbounded callable-value storage or unchecked lifetime is inferred. |
 | P-303 | D-18 derives-from | C-65 / C-73 | H-344 separates lexical lifetime ownership from stack backing: runtime-sized callable environments may use heap memory that the owning scope releases. D-18r17 supports growing nested values without imposing a statically fixed payload maximum, preserving owner/access checks and normal/exceptional cleanup. No independently managed user malloc lifetime, regional callable storage, regional data copy or captured-region lifetime extension follows. |
@@ -1044,6 +545,11 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-327 | D-14 / D-18 derives-from | C-65 / C-48 / C-75 | Confirmed H-366–H-369, D-14r75/D-18r68: independent binding and propagated target-access qualifiers make storage permissions locally readable and prevent alias/call/result access escalation under charter §§1–3/§6/§8/§12. Ordinary parameter binding const is local, excluded from signature/overload identity; target const retains its access contract. Fixed alias places and H-272/H-293/H-302/H-327 owner/storage rules remain. D-19r3 depends on this distinction without implementing purity/TCO. No global freeze, regional copy or lifetime extension. |
 | P-328 | C-63 constrains | C-65 | H-370/D-17r31 confirms deferred argument preparation retains selected owner identity without consuming it; ownership transfers at deferred callee entry under E4. Visible acquire/defer/use ordering and one transfer responsibility serve charter §§2–3/§6/§8/§12. Existing owner/lifetime checks prevent invalidated or duplicate consumption; no reservation mechanism, new runtime failure, copied owner or lifetime extension is selected. |
 | P-329 | C-63 constrains | C-65 | H-371/D-17r32 requires explicit nested scopes for deferred-block declarations/effect installation. Visible lifetime/effect responsibility serves charter §§2–3/§6/§8/§12 while preserving H-319 grouping and H-362 enclosing returns. Confirmed H-371; D-17 deferred blocks, no implicit invocation scope or new lifetime extension. |
+
+### Families, acquisition and architecture
+
+| Edge | Child / relation | Parent / target | Rationale, evidence and scope |
+| --- | --- | --- | --- |
 | P-330 | C-59 constrains | C-36 | Confirmed H-372/H-373: definition/extension constructs module information at compilation without effect; runtime TLS installation requires effect. Combined effect syntax defines or extends and installs a compatible family view. Existing initialization incorporation is separate. D-15r17/D-10r128; supersedes only implicit registration/selection-as-installation interpretations of H-184/H-186/H-187/H-290/P-254. |
 | P-331 | C-35 constrains | C-37 | Confirmed H-373: bare other denotes one registered symbol object with identity/semantics; @other reads TLS. effect @dst = other materializes its selected family view, effect @dst = @other preserves an existing value/captures, and effect @dst installs the current composed family. Cross-identity installation changes neither world's methods. D-15r17/D-10r128; shadowing/staging and public symbol ABI remain open. |
 | P-332 | C-59 constrains | C-58 | Confirmed H-374: export of a symbol-identified callable publishes all its methods. Existing import/using/mixin authority and selected contexts remain; no hidden private subset, implicit TLS installation or cross-world mutation. D-15r17/D-07r149. |
@@ -1058,8 +564,6 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-341 | C-36 constrains | C-83 | Confirmed H-380: cancellation omits only the dependency initialization TLS write, not operand evaluation, callable construction or their effects/failures. Procedure-local effects remain active. This preserves observable typed execution while permitting LLVM to remove genuinely unused code. D-21r3/D-10r129/D-17r37; ordinary temporary cleanup applies, without new owner or exception rules. |
 | P-342 | C-35 constrains | C-37 / C-41 | Confirmed H-381: bare-name and @ lookup use the nearest lexical binding; a local non-symbol binding blocks outer symbol access rather than opening a separate @ namespace. D-21r4/D-10r130; preserve existing lexical scope/identity rules. Runtime symbol storage/ABI and unresolved same-scope module-category collisions are not selected. |
 | P-343 | C-65 constrains | C-35 / C-41 | Confirmed H-382: every inferred owner binder is an implicit const lexical binding in its callable body, including generic region-or-scope owners. It participates in P-342 nearest lookup; binding constness grants no region capability, content immutability, ownership or lifetime extension. D-14r77/D-10r131/D-21r5; actual owner remains inferred from argument provenance and needs no new runtime object/ABI. |
-
-
 | P-344 | C-54 constrains | C-39 / C-65 | Confirmed H-383: only designated intrinsic resource references distinguish owned/borrowed, currently regions. Ordinary ref/ptr is borrowed; omission of an owner annotation supplies no release authority. Instance/storage owners and intrinsic cleanup holders are distinct; H-196 containment and H-203 same-owner fields remain. D-22r1/D-14r78. |
 | P-345 | C-39 constrains | C-72 | Confirmed H-383/H-384 R1: recursively finite bits-only ADTs, including finite products/sums and eligible instantiations, may be lexical or regional; stored references/owners/environments/cleanup exclude bits. Non-bits ADTs remain region-only. This refines H-193/K-321 only for bits eligibility, without ABI, sum encoding, numeric conversion or arbitrary-bit validity approval. D-22r1/D-07r152/D-14r78. |
 | P-346 | C-65 constrains | C-39 / C-72 | Confirmed H-384 R2 amendment: make T [in o] explicitly selects actual construction owner; receiver-owner mismatch rejects even for equal root types/lifetimes. Owner identity grants no implicit allocation capability. H-386/P-352 separately accepts contextual inference; integrated whole-file qualification remains pending. D-22r1/D-14r78. |
@@ -1068,1156 +572,1042 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 | P-349 | C-09 / C-54 derives-from | C-05 | Candidate scoped value: explicit acquisition/preparation/publication makes DBMR access and cleanup inspectable while persistent data survives an acquisition (charter §§4.3/§7). D-22r1 DBMR scope; pending-human. H-385 result constness and H-384 exploration do not qualify a concrete file protocol. |
 | P-350 | D-22 derives-from | C-39 / C-65 / C-72 / C-09 / C-54 | Candidate document relationship: organize ordinary storage construction through P-348 and intrinsic DBMR acquisition through P-349 with distinct representation/owner/access/cleanup responsibilities and composed acceptance. D-22r1 →r2; pending-human whole-document review under H-386, with explicit scope/exclusions retained. No whole-document or mechanism approval follows from handoff approval. |
 | P-351 | D-22 depends-on | D-01 / D-14 / D-17 / D-10 / D-15 / D-16 / D-18 / D-21 | Physical relative storage, owner/capability/qualifiers, initialization/failures/cleanup, effect/world identity, numeric validity/layout and complete callable/native dispatch contracts constrain construction. Dependency only; no aggregate ABI, DBMR algorithm, fraction implementation, new ownership kind or toolchain authorization. |
-
 | P-352 | C-65 constrains | C-39 / C-72 | Confirmed H-386 discussion decision: omitted make owner is inferred from a unique receiver/containing-field owner only with usable allocation capability. With no destination, bits use the current full lexical scope; non-bits require an explicit region. Missing capability never selects hidden allocation/fallback; existing references retain actual owner/access. D-22r2/D-14r79; complete document qualification remains pending. |
 | P-353 | C-39 / C-54 constrains | D-22 | H-386 prefers a single coordinated migration to ordinary make T [in o] and intrinsic make region, with no transition phase or legacy compatibility burden because the user reports no CoD users yet. D-22r2 plans that direction and retains actionable migration diagnostics. Whole-file approval, aggregate ABI and DBMR protocols remain separate; this does not activate incomplete compiler syntax. |
-
-
 | P-354 | D-23 derives-from | C-65 / C-72 / C-54 | Candidate document relationship: make scalar result storage, aliasing and value evaluation explicit so native staging preserves readable, checked business intent (charter §§2–3/§5.3/§6/§8/§12). D-23r2 all sections; pending-human whole-file review. H-201 constrains the topic but does not approve a newly selected fresh-result mechanism. |
 | P-355 | D-23 depends-on | D-14 / D-17 / D-18 / D-16 / D-22 | Existing storage/access/initialization, completion, callable ABI, fixed bits validity and construction boundaries constrain scalar results. D-23r2; dependency only. No authority for caller-result allocation, mixed-owner selection, RTTI, fractions or aggregate ABI follows. |
 | P-356 | C-84 derives-from | C-01 / C-06 | Candidate: infer redundant implemented-method result spelling while retaining complete checked signatures, readable source and finite recursive semantic graphs under charter §§2–3/§5.3/§6/§8/§12. D-24r1 all sections; pending-human, with no confirmed inference baseline. |
 | P-357 | D-24 derives-from | C-84 | Candidate document relationship: make optional annotation, cyclic inference, native transport and result-category boundaries reviewable as a whole file. D-24r1; pending-human under H-386 review format. |
 | P-358 | D-24 depends-on | D-10 / D-14 / D-17 / D-18 / D-16 / D-21 / D-22 / D-23 | Selected method/world, storage/access/initialization, completion, complete native values, numerical validity and unresolved dispatch/construction/scalar boundaries constrain inference. D-24r1; dependency only, no qualification of source policy, ABI or ownership. |
-
 | P-359 | C-85 derives-from | C-01 / C-04 | Candidate value path: retain inspectable typed business intent and separate program/interpretation/state while allowing affordable execution strategies (charter §§1–3/§4.3/§5–6/§8/§12). H-387 authorizes exploration and its fused-artifact boundary; this agent-proposed detailed derivation is pending-human whole-file review, not production delegation. |
-| P-360 | D-25 derives-from | C-85 / C-02 | Candidate document path: compare materially different checking/execution boundaries and use experiments to derive selection criteria, excluding sunk costs. D-25r5 pending-human for final architecture/mechanisms; H-387 directly authorizes exploratory designs and prototypes. |
+| P-360 | D-25 derives-from | C-85 / C-02 | Candidate document path: compare materially different checking/execution boundaries and use experiments to derive selection criteria, excluding sunk costs. D-25r6 pending-human for final architecture/mechanisms; H-387 directly authorizes exploratory designs and prototypes. H-390 confirms only the external-value constraint. |
 | P-361 | D-25 depends-on | D-01 / D-10 / D-14 / D-15 / D-17 / D-18 / D-21 / D-16 | Relative storage, owners/access, world identity, complete values and completion constrain experiments. Existing AOT timing is explicitly reviewed rather than conflated with semantic completeness. Dependency only; D-22/D-23/D-24 pending mechanisms remain unselected. |
-| P-362 | C-85 constrains | C-82 / C-83 | Confirmed H-387 exploration boundary: fused artifact is not merely entry world; preserve reachable dependency-local interpretations and procedure-local installations, initialization operand effects/failures/cleanup, actual owners and call modes. WPO-static-invisible DBMR/mailbox/other input graphs are open boundaries; no integration/evolution protocol selected. Experimental RTTI/layout checksums permitted, without equating layout and nominal/domain/UoM/permission/method identity. |
+| P-362 | C-85 constrains | C-82 / C-83 | Confirmed H-387/H-390 boundary: fused artifact is not merely entry world; preserve reachable dependency-local interpretations and procedure-local installations, initialization operand effects/failures/cleanup, actual owners and call modes. DBMR/mailbox/other inputs supply values and source-unobserved combinations of statically known ADTs only; they cannot change the fused type-level semantic set. No concrete input-validation/transport or separate composition/publication protocol is selected. Experimental RTTI/layout checksums are permitted without equating layout and nominal/domain/UoM/permission/method identity. |
 
-### 影响检索索引
+## 5. Evidence locators
 
-H-387/P-362 → D-25r1 exploration; D-15r20 fused semantic artifact; D-21r6 separates retained behavior from replacement code-generation timing. C-83/P-334/P-336/P-337's prior measured-growth-before-JIT-exploration scheduling is superseded. Native-before-execution production timing is under review for the replacement architecture; C-82/P-333/P-335 and P-339–P-343 remain. D-10r144/D-18r89/README218 preserve current prototype evidence, not universal replacement representation constraints. D-14/D-17/D-01 and D-16 numeric/semantic identity remain. Existing JIT/RTTI deferrals in other documents do not prohibit H-387's isolated experiments. D-22/D-23/D-24 stay pending; no external-input integration protocol or production ABI is qualified.
+H records are human evidence; K records are agent assessments, never additional human approval. Original wording, provenance, timestamps or uncertainty, exclusions and corrections remain in the immutable source. Line numbers refer to that source, not this file. Read only the relevant event.
 
+| Source | Commit / path | Records |
+| --- | --- | --- |
+| A | `0c0efbfde4dccb3f3397b6f961bd82bd9a12c848`: `design/DesignAuthorityRegistry.md` | H-01–H-387, K-00–K-577 |
+| B | `061a4a684770447ba674e54079f9a157aa75e43e`: `design/DesignAuthorityRegistry.md` | H-388/H-389, K-578; earlier complete nodes, relations and status narratives |
 
-D-24r1/C-84/P-356–P-358 under K-562 → D-10 signature/type queries and D-18 callable/native result staging. Proposed omitted-result inference remains pending-human; existing explicit-result contracts remain qualified within their recorded scopes.
-
-D-23r1/P-354/P-355 under K-556 → D-18 scalar result staging and D-14 result/storage boundaries. H-201 existing borrowed/const-result rules remain confirmed. Fresh unqualified and mixed scalar result mechanisms are pending topic/whole-file review; native captured-scalar alias loss is an implementation defect, not a new rule. D-17/D-16/D-22 dependencies and independent qualified work remain unchanged.
-
-H-386/P-352/P-353 → D-22r2, D-07r153/D-14r79 under K-545. Contextual inference is confirmed and no-transition migration is the preferred direction. Review remaining topics in concrete terms, then request approval of the complete file; do not ask the user to confirm registry IDs. P-348–P-350 remains pending whole-document review. No aggregate/native/DBMR implementation or changed regional invariant follows.
-
-H-383–H-385/P-344–P-351 → D-22r1, D-07r152/D-14r78/D-17r41 under K-542. Supersede only blanket region-only allocation for bits-eligible user ADTs; preserve non-bits regional/relative storage, intrinsic-only owner containment, same-owner fields and existing scope/cleanup. Candidate ordinary and DBMR value paths, inference, migration and protocols remain separately pending. D-01/D-10/D-13/D-15/D-16/D-18/D-21 dependency impacts are bounded in D-22; no existing implementation report proves aggregate bits or DBMR acquisition acceptance.
-
-H-356/C-63/P-321–P-322 → D-17r20 and D-20r4 under K-515. Call timing supersedes only H-319’s unqualified delayed-call evaluation and resolves D-20’s registration-syntax alternatives. D-14 owner/passing, D-18 callable values and H-319 scopes remain dependencies; D-16 fractions and D-19 deferred TCO retain their scopes.
-
-C-77–C-79/P-308–P-313 → D-07r148 DL-04/DL-09/DL-11 under H-352/K-470. C-55/D-14 owns library graph transfer; D-10/D-12 owns Actor design; D-01/D-17 constrains snapshot representation and error behavior. Detailed ABI, concurrency, persistence and extension mechanisms remain pending.
-
-C-76/P-304–P-307 → D-19r1. H-345 keeps current recursion mandatory; H-346–H-348 defers const-function/TCO work while requiring human review of material conflicts. Consult D-10/D-14/D-17/D-18 when callable/owner/effect/exception choices affect this direction, and D-16 for numeric/transfer compatibility. Existing ordinary function semantics and unrelated qualification remain unchanged.
-
-H-257/H-258/P-229/P-230 → D-10r88, D-15r14, D-07r111 and prototype152. K-399 records the first-three-items implementation; K-400 records its bounded native acceptance. D-11/D-14 are unchanged dependency contracts; H-256/D-16 prerequisite and fraction-compatibility requirements remain applicable. No RTTI or full ownership qualification follows.
-
-C-61/C-62/P-221–P-228 → D-16r4, D-07r107, D-11r30 and AGENTS planned-fraction review. H-256 prioritizes the comment/UoM prerequisites for main-chat follow-up; full fraction support remains deferred. H-254/H-255 requires checking later syntax/comments, intrinsic dispatch, numeric typing/promotion, conversion, bits/layout, access/lifetimes and formatting work. D-10/D-14 remain dependencies with unchanged contracts. A conflict blocks the affected choice for human discussion; no blanket invalidation or implementation order follows.
-
-
-C-59/C-60/P-204–P-220 → D-15r12, D-07r105, D-10r85, D-12r23 and prototype148. H-245–H-249 supplies own-world construction, identity records and publication aliases; H-252/H-253 adds warning/conflict requirements. K-396 completes the implementation audit and coordinates D-11r26/D-14r31 dependencies without changing numeric or ownership contracts. No broader qualification is inferred.
-
-C-49/C-56/C-57/C-58/P-120/P-194/P-195/P-199–P-203 → D-07r92, D-10r74, D-11r25, D-13r18, D-14r29 and prototype137; K-350–K-383 supplies bounded module/pool/conversion evidence and the explicitly pending standalone-method draft. Recheck ordinary callable lookup/composition, associated selections, all cross-module selectors, std modules, generated fixture sources and diagnostics before claiming H-230/H-231 acceptance. D-11 unit/conversion bundles and D-14 root-policy helpers are affected dependency surfaces; their prior bounded evidence stays historical, not export qualification.
-
-| 上游价值／概念 | 应重新检查的已登记对象 |
-| --- | --- |
-| V-01、C-01、C-02 | E-01—E-03；D-02 的候选边和对应原生执行假设；P-12、P-14—P-16、P-21、P-22、P-25、P-26、P-29、P-32 及 D-07／D-08 对应范围。 |
-| V-02、C-03、C-04 | E-04—E-06；D-01 的跨 region 假设、D-03 的候选集成价值；P-19、P-20 及 D-07 对应范围。 |
-| V-03、C-05 | E-07、E-09；D-01、D-04，以及依赖 D-01 的 D-02、D-05；P-13、P-17 及 D-07 对应范围。 |
-| C-06、C-07 | E-08—E-10；D-05、D-06；P-18、D-07 的 DL-10 及后续源码／编辑设计。 |
-| C-08—C-11 | P-12—P-16、P-23；D-07 的 G-01—G-05、相关 DL-* 议题及 DD-001、DD-002；D-08 的消息与持久化边界；方向依据 H-06、H-07。 |
-| C-01、C-02、C-39、C-52 | H-151/H-152 → D-10r23 actor section through candidate P-131/P-132 and storage dependency P-133. Related regional ownership scope D-01 and adjacent IPC direction C-08/H-06. Pending choices cover protocol shape, scheduling, delivery and region transfer. |
-| C-37、C-41、C-50 | H-153–H-155/P-136/P-137 → D-10r24 operator/intrinsic section. D-11’s pure conversion methods remain constrained by H-130; no procedural conversion or actor ownership implementation follows. Source-name guards, method selection and capture analysis are affected implementation areas. |
-| C-10、D-10 | P-134/P-135 → D-12r12; H-152 vision/tracker and K-376 consistency reconciliation for synchronous evidence and open Actor work. |
-| C-01、C-05、C-40、C-53、D-01、D-10 | H-156/H-157 → D-13r1 through P-138–P-142 and to D-10r25/D-07r26. Open follow-up covers graph construction checks, logical identity and region holding and transfer. |
-| C-12 | P-22—P-68；D-08 全文、AD-001—AD-076；D-07 的 DL-13、DD-003—DD-004；方向和约束依据 H-08—H-71；P-31 仅供拒绝历史定位。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-71 允许有用小循环保留较长上下文影响，不以主导响应淡出要求一切历史作用归零。 K-112 / README107 给出当前方向、训练边界与真实数据比较索引；详细契约仍 pending-human。 K-207 / D-08 set202 记录 H-71 实质研究完成并统一当前状态；H-86 经验比较、全部局部人工约束和 pending-human 范围保持，不新增实施资格。 |
-| C-13 | P-26、P-28、P-30；D-08 的 SNN-02、SNN-03、SNN-04、SNN-06、SNN-07 与 AD-006—AD-023、AD-031/AD-032；H-13—H-19 的基线、H-20 的调研、H-21 的暂定模板与入边评估、H-22 的激活与解剖调研、H-23 的条件入权重方向和独立入度参数、H-24 的训练／容量职责边界、H-25 的容量暂定、H-38/H-39 的小剩余目标及排除旧容量约束；影响端点归属、度分布、最低容量含义、迁移／历史和计算／路由成本。 K-103 / revision100 给出逐档静态匹配条件并强调迁移保持有效权重；容量模板与所需辅助结构未变。 K-107 区分连接容量与上下文辨识能力，静态配额和布局不变。 K-108 从遍历与迁移需求比较两种前缀结束表示；辅助数组只列待验证候选，现有静态预算不加额。 K-178 / CapacityPlanning、ConnectivityScalingResearch173 将明确的数组预算假设与 H-73/H-75/H-78 状态比较连接；容量配额、已算总额和需求先于辅助结构原则保持。 K-200 / CapacityPlanning195 将已记录的连接扫描算术纳入节点规划；RAM、保留度数、更新节奏和节点 CC 数分别约束可行性，不把全预留扫描当作强制算法或实测带宽。 K-202 / AdaptiveConnectivity、CapacityPlanning、ConnectivityScalingResearch197 精简 authority 摘要并直连独立 flow 文档；保留正文合同、来源、算术、开放选择及全部 H/K 历史，未授予实施资格。 |
-| C-14 | P-27/P-28/P-33/P-37；P-31 为拒绝历史。D-08 的 SignedPopulationEncoding、SemanticCorticalMappingResearch、Model / SNN-01—SNN-03、SNN-05、CapacityPlanning / SNN-04、AD-021—AD-042 的相关范围，另见 TokenEmbeddingStatistics 的 H-45 输入测量及 ActivationRegimes 的效价／相态边界。H-43 固定语义角色，保留坐标／极性归属及现有容量；数值读出仍待决，学习重编码不属于当前方向。 H-65/H-66、AD-062/AD-067、P-47/P-50 另约束 TrainingStrategy 的 epoch 范围与短时语义保持；数值编码、窗口和容差仍待定。 H-75/AD-080 明确同一 minicolumn 内个体表示共享语义成分的不同上下文路径；不把这些身份归并为单一平均值或固定一细胞一条独占路径。 H-76/AD-082 指定 token 输入的预测选择：预测占比充分则强激活这些细胞，否则广范围低强度激活；阈值、强度与坐标校准待定。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。 K-111 区分附加驱动前的组成与抵消所保留的 provisional 组成；没有正负下标对应或新增字段。 K-137 / Model132 明确 H-77 活动抵消已指定，预测语义仍按 H-78/H-85 比较。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-199 / SignedPopulationEncoding194 将预测输入分支的使用与有噪声下实际上下文匹配区分；保留 H-78/H-85 对照，不把自发就绪直接视为错误，不预选门限、噪音来源标签或额外状态。 |
-| C-15 | P-29/P-30/P-35/P-38；P-31 历史拒绝范围；C-22/P-45。D-08 Model、ActivationRegimes、AdaptiveConnectivity、TrainingStrategy、PhysicalDistancePreferenceResearch、SpatialConnectivityResearch、Decisions。H-61/AD-055—AD-058 细化训练分工并确认阶段性省略物理距离偏好；H-62/AD-059 请求静态批组／重叠替代方案比较。K-78 保留 H-52—H-59 行为约束，不把“全部相态为目标”误作全部相态单独 Hebbian 训练。 H-63/AD-060 把 DMN/token 初建与持续修补统一；后期 flow 的 Hebbian 和 immersion 不主动训练保持。K-79 不选择具体更新算法。 H-79—H-81/AD-085—AD-087 明确 Hebbian/HTM 是 token 序列 flow 的学习方向，算法尚未选定；现授权初步设计并尽早讨论问题，不默认沿用 DMN/token 修补。 H-82/AD-088 以预测性预激活群与输入序列高度匹配作为 flow 直接训练验收；无需自主持续生成，生成算法另行设计。具体度量和学习规则仍待定。 H-83/AD-089 要求按序列长度验证：共享匹配片段允许多个预测，随上下文增长向训练序列收敛；不预设固定单候选或对每个未到达预测等量削弱。 H-84/AD-090 明确广范围弱激活为生成模式显式操作，不依靠普通神经连接传播实现且不予学习；不能从该 fallback 选取 flow 教学／强化群体。陌生转移的学习机制另议，HTM 细节仅作分角色参考。 K-95 的 flow 初设分析与上下文分配候选保持 pending-human；H-85 明确预测正负并存／抵消留待实验；H-86 授权明显经验选项直接列为真实数据比较，不逐项询问。 K-98 将 flow 的预测改进与共享循环、fade-out 和外部可驱转性一起比较；未选归一化、图分区或关联更新公式。 K-100 / TrainingStrategy95 区分正负群体非负重叠、signed 语义相似度与实际上下文细胞预测；flow 因果步骤仅待选角色，不采用学习律或额外状态。 K-103 区分未选择预测的源信用、实际前序上下文和缺失源边发现；经验选择保持对照，不继承生成 fallback。 K-105 / TrainingStrategy100 提出独立于修补的 flow 流程候选，区分联合频率、条件关联、权重保留与 token 活动半衰期。 K-106 / TrainingStrategy101 给出训练保持、共享片段、未见序列与在线更新的比较边界，经验方案保持开放。 K-107 / TrainingStrategy102、SynapticIntegrationResearch102 将整合能力与上下文分配一起比较，单检测器反例不外推为全网失败。 K-109 / TrainingStrategy104 将持续上下文与时序信用候选一起比较，不选 eligibility trace 或缩短所需循环。 K-113 对预测前信息、顺序保留和时钟比较作明确限定，学习规则未选。 K-114 / TrainingStrategy109 记录分配对称性、匹配与自然就绪的差别，以及后续自然预测比较；H-86 直接保留经验选项。 K-117 / TrainingStrategy112 明确后来已观察到的序列可影响后续训练，但不能提供较早预测的未来输入；保留局部／结果相关信用比较。 K-119 / TrainingStrategy114 以全正值候选区分跨维关系丢失与 H-85 预测抵消选择；不增加绑定状态或解码器。 K-122 / TrainingStrategy117、execution-work-arithmetic 比较学习规则对应的实际边工作；MR-S049 保留重叠与时序研究的有限可迁移性。 K-124 / TrainingStrategy119、shared-learning-recurrence-analysis 检查阶段交替的精确条件参考，未将标量矛盾归因于用户行为目标。 K-125 / FlowLearning120、TrainingStrategy120、README120 按训练职责整理现有正文；算法与历史不变。 K-127 / FlowLearning122 补充学习保留与替换证据的适用范围。 K-129 / FlowLearning124 整理候选流程的阅读顺序。 K-130 / FlowLearning125 增加误差调制的待比较学习候选及其限定。 K-132 / FlowLearning127 限定预测误差候选的步长算术。 K-135 / FlowLearning130、MR-S052/MR-S053 保留既有细胞预算内的区分／稳健性比较。 K-136 / FlowLearning131、flow-temporal-credit-analysis 保留背景／稀有上下文的源信用比较。 K-140 / FlowLearning135 保留序列条件与试次平均的不同证据范围。 K-141 / FlowLearning136 不以 incoming 归属预选学习竞争或推断方向。  K-142 / FlowLearning137 区分自然 readiness 与拟合读出、输入后响应证据。  K-143 / FlowLearning138、flow-slot-capacity-analysis 保留缺失源发现及成员检查成本比较。  K-144 / FlowLearning139、cancellation-properties-analysis 保留单步抵消与时序学习比较，不选择梯度法或预测抵消。 K-145 / FlowLearning140 区分潜在突触匹配、连接门槛与分级权重传导；不默认增加 permanence／confidence 字段或采用 burst 教学。 K-146 / FlowLearning141 以原始时序模型区分共活动信用与时间单位；不导入 STDP、全局抑制或非衰减链。  K-149 / FlowLearning144 记录固定非负汇集的条件单调边界；更多上下文不要求逐分量增添源活动，未选抑制或竞争。 K-154 / FlowLearning149 区分权重中的理想观察者记忆与自然序列预测；MR-S075/MR-S076 不构成额外巩固状态的依据。 K-155 / FlowLearning150 记录有限权重分布的精确松弛时标；不把状态数自动等同于任务记忆寿命。 K-159 / ActivationRegimes154、MR-A008 保留 DMN 语义漂移与驻留／幅度的独立比较，不选语义评估器或训练偏置机制。 K-160 / FlowLearning155 以固定二值信用极限区分关联支持与频率；核对 NuPIC 的不同削弱作用域，不引入概率目标或选定削弱规则。 K-163 / FlowLearning158、SynapticIntegrationResearch158 明确 HTM 证据的扰动及人口缩放条件，不选择编码、门限或新状态。  K-174 / FlowLearning169 区分下一输入匹配与较长时域的关联统计；不把 successor representation 或 TD 机制加入模型。 K-179 / FlowLearning174 将直接定义的 rate/frame 学习与有条件的 spike-rule 降阶区分，不引入微观时序机制。 K-187 / FlowLearning182、MR-FC014 区分当前语义／上下文可区分性与下游已学连接的实际使用；重分配不是纯槽集迁移，不预选全图重映射、固定上下文字典或新增元数据。 K-188 / FlowLearning183、MR-S095 区分跨日表征漂移的任务读出与自身自然预激活；补偿模型所需目标误差反馈不等同实测突触学习，未预选补偿机制或冻结身份语义。 K-189 / FlowLearning184、MR-S096 区分已有关联的漂移维护与陌生转移学习；单细胞均值／方差调节不等同于 CC 活跃比例控制，不选择补偿机制。  K-195 / FlowLearning190、MR-S010 核查学习期间有效循环强度及持续可塑性的来源条件；自然预激活与后续行为按实际条件比较，不选择增益变量、学习门控或自主生成目标。  K-196 / FlowLearning191、SynapticIntegrationResearch191、MR-FC015 以同度／同权重和的条件汇集比较权重集中及源协方差；上下文输入分数不由容量或权重总量自动校准，不新增归一化、门限或元数据。  K-197 / FlowLearning192、MR-S049 深查实际离线批量学习及内部连续状态／二值输出区别；不将自主回放结果当在线 flow 或分级语义输出证据，未选状态、竞争或学习模式。 K-206 / FlowLearning201、MR-S044 细化预输入就绪度测量与生成输出的边界；保留 H-83 合理多候选，不将单一实际符号的分类计分直接变成本文验收。 |
-| C-16 | P-32/P-33；D-08 SemanticCorticalMappingResearch、Model、SignedPopulationEncoding、README、ActivationRegimes、PhysicalDistancePreferenceResearch、AD-036—AD-045。H-46 允许 feature/minicolumn 非双射；H-43 固定语义角色及非精确 replica，H-44 优先解剖兼容；K-38—K-73 区分固定语义角色与可学习响应，检查脑对齐的位置不可辨识性及 Flash 坐标响应距离的条件几何；胞体位置、接触机会与功能选择的研究不自动批准布局或学习算法。 H-61 确认当前暂不加入物理距离倾向；解剖研究保留为参考，未来几何提案须有具体收益，非实现当前 SNN 的前置条件。K-78 记录此范围。 |
-| C-17 | P-34/P-35/P-41；D-08 revision70 的当前六文件；H-53/H-55 的抑噪／活动支持功能及 H-56 的分类输入边界。DMN-only 增噪解释由 H-55 的活动不足增噪要求细化；实现仍未选。 K-110 / ActivationRegimes105、RateDynamics105 增加噪音响应与完整帧反馈比较；总活动占比不改为 rate 总和，也不进入相态分类。 K-115 / ContextLoopsAndNumerics110 保留噪音和读出单位的条件比较，未选新机制或字段。 K-120 / ContextLoopsAndNumerics115、noise-feedback-analysis 记录非线性响应与原始研究控制比较；无新字段或噪音机制。 K-177 / ContextLoopsAndNumerics172 区分全局噪音幅度控制与共享随机抽样，不预选空间协方差；真实行为比较仍开放。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
-| C-18 | P-36/P-37/P-38；D-08 revision70 六文件中的抵消、早期连接范围及互补输入目标；H-54/H-55、AD-048/AD-049。 H-77/AD-083、K-87 将活跃 rate 的全局净余／比例保留明确到 D-08 revision84；预测相态与时间边界仍待定。 H-85/AD-091 将预测态正负并存／净抵消保持为将来对照选项，H-77 活动态操作不变；H-86/AD-092 允许明显经验问题直接保留比较空间。  K-151 / SignedPopulationEncoding146 以实际 Flash 的11组词项及条件凸函数算术区分语义对立、坐标对冲、净 rate 总量与活跃计数；未选新编码或 valence 机制。 K-168 / SignedPopulationEncoding163、Model163 明确暂态与完成后的活跃极性总量；净值可恢复 H-77 后的总量但不恢复细胞上下文，未选消息合同。  K-182 / SignedPopulationEncoding177、ActivationRegimes177、MR-S083 和 rated_valence_geometry 记录词评分／输入向量的描述性比较及反例；不把语义正负等同坐标相反或实际 DMN 状态，不选编码或评估器。  K-183 / SignedPopulationEncoding178、ActivationRegimes178 和 cancellation-properties-analysis 以同一净向量下不同细胞参与数的精确例区分调节量与幅度；不选门限或招募配额。 K-186 / SignedPopulationEncoding181、ActivationRegimes181、MR-S094 和 chinese_rated_valence_geometry 扩展至独立选取的中文评分词与真实单 token 向量；两种语言样本非配对翻译，不把等强净幅度或词评分当作活跃计数、残留意义或 DMN 证据。 K-205 / ContextLoopsAndNumerics200 将噪音单独覆盖例的独立、对称、无保留状态条件明确写出；不将其用作实际回返轨迹估计，不选噪音律、计数门限或检测结构。 |
-| C-19 | P-39/P-40/P-41；ActivationRegimes、Model、Decisions、PhysicalDistancePreferenceResearch、SynapticIntegrationResearch 的去噪覆盖／路径、心流上限与调节／检测分离；H-56—H-58、AD-050—AD-052。 K-99 / ActivationRegimes94 区分密度、时间相关、路径次序和预测具体性；经验窗口／过滤项按 H-86 保留实际轨迹对照，不采用新分类器。 K-138 / ActivationRegimes133、temporal-coverage-analysis 记录跨极性覆盖界及条件 Flash 几何对照，不选分类器或符号调度。 K-139 / ActivationRegimes134、temporal-coverage-analysis 记录观测信息需求与窗口条件成本；没有预留新数组。 K-176 / ActivationRegimes171 说明小群循环与跨群路径描述可以重叠，须由真实轨迹和观测条件检验区别；未选分类器或附加状态。 |
-| C-20 | P-42/P-43；D-08 revision71 当前四文件，H-59/AD-053 的正常输入响应与 stale 边界；相态检测 C-19 与可转向性评估保持独立。 K-156 / ActivationRegimes151、MR-S077/MR-S078 和 MR-A007 区分持续驱动收敛与单次 token 后续响应，不以谱条件或一次输入失败判 stale。 |
-| C-21 | P-43/P-44；D-08 revision71 的恢复候选、触发／状态保留／恢复入口待决；没有运行重置策略或实施资格。 |
-| C-22 | P-45/P-46/P-47；D-08 当前覆盖表所列修订 TrainingStrategy、Model、ActivationRegimes、AdaptiveConnectivity、README、Decisions 及两份 locality 研究的当前范围；H-61—H-63、AD-056—AD-060、K-79。区分预期目标、自然响应、缺失群体、修补操作及非辅助验收；H-52—H-59 行为约束保留，详细算法 pending-human。 H-64/AD-061 要求全局考虑和逐步采样、避免前序目标重用造成意外捷径；C-23/P-48—P-51、K-80 记录待讨论的约束／检查方案。 H-65/AD-062—AD-064 固定每 epoch 的训练范围并给出近似宽度、主体增强、回返削弱的参数角色；K-81 区分循环时长、净增益和实际维持时间。 H-66/AD-065—AD-067 以保持回返为初步预期，要求仔细处理增强／削弱，并偏好每步或最多几步的 token 分布保持；K-82 将完整后继群体与修补子集的比例约束区分，细节仍 pending-human。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 K-90 的条件入口／增益分析影响 TrainingStrategy85；不要求运行时相位表或入口路由。 H-79—H-81 将本构建／修补范围明确限定为 DMN 与单 token；flow 的 Hebbian/HTM 初步算法另行设计，不从本算法直接推广。  K-194 / TrainingStrategy189、MR-S098 深查嵌入网络的链传播、幅度保真及交叉激活证据；保留实际共同背景下的维护验收，不导入持续输入、同步、几何或细胞机制。 |
-| C-23 | P-48—P-51；D-08 当前覆盖表所列 TrainingStrategy、Model、ActivationRegimes、README、AdaptiveConnectivity、Decisions；H-64/H-65、AD-061—AD-064、K-80/K-81。下游为 C-22 的范围／参数／采样约束，不是运行时相位表或新存储合同。 H-66 把语义保持时间范围收紧到每步或少数几步，P-50 记录编码约束；K-82 分析有限人口、链宽／圈长、闭环维持和净增益的耦合，窗口、容差及采样策略待定。 H-67—H-70 的 C-24/C-25 与 P-52—P-59 开放 rate／分数参与、自然终止和精度讨论；整细胞计数与逐次排除不自动成为新动力学合同，K-83 记录条件边界。 H-71/C-26/P-61 明确小循环可有上下文价值；避免主动构造有害捷径不授权强力消除小循环。 |
-| C-24 | P-52/P-53/P-54/P-59；D-08 RateDynamics、Model、ActivationRegimes、TrainingStrategy、SynapticIntegrationResearch、README、Decisions；H-67/H-68/H-70、AD-068—AD-070/AD-072、K-83。影响时标、自然终止、误差、噪音及工作量；不改连接所有权或静态池。 H-71/C-26—C-28 开放小循环上下文、累积／定时衰减及 INT8/INT4 比较；相关细节仍待定。 H-75/AD-081 的 C-29 提议两帧轮换连入汇集，保留个体身份和明确帧边界；转移函数、相态及时间步仍待定。 H-78/AD-084 明确当前不决定预测／当前活动的状态表示，保留未来实现对照实验余地；不预设额外字段或实验框架。 K-90 在 RateDynamics85 区分固定离散帧与连续时间近似、噪音单位和比较口径；不选择时间律或状态字段。 K-165 / RateDynamics160 明确 rate 降阶已包含的波动与显式噪音的意义，不选择噪音律或适应时间常数。 K-166 / RateDynamics161 区分平均与 H-77 抵消的次序，不以 ensemble 平均替代当前快照或加入分布状态。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-172 / RateDynamics167 深查 population-rate 降阶条件；不以群体平均加速替代个体上下文身份或宣称 CPU 收益。  K-185 / RateDynamics180、frame-time-noise-analysis 区分正值随机增量的均值与方差随帧长变化，不将零均值扩散缩放暗作激活输入律。未选噪音过程、偏置或新状态。 |
-| C-25 | P-55—P-58；D-08 RateDynamics、SignedPopulationEncoding、TrainingStrategy、Model、ActivationRegimes、README、Decisions；H-69/AD-071、H-70/AD-072、K-83。影响分数目标、强度、阶段重叠与精度；无预设双字段或按 token 的运行时状态。 |
-| C-26 | P-60—P-62；D-08 ContextLoopsAndNumerics、TrainingStrategy、ActivationRegimes、Model、RateDynamics、README、Decisions；H-71/AD-073、K-84。影响循环目标、记忆与淡出验收，非新相态或空间布局。 K-90 在 ContextLoopsAndNumerics85 区分均衡噪音恢复活动和语义残留增强；实际共享动态仍须评估。 K-104 / ContextLoopsAndNumerics99 将配对历史的因果差异与有噪声单次可用预测分开；不以长期相关或临界增益代替行为验收。 K-111 / ContextLoopsAndNumerics106 推导等总量附加驱动下的组成差异衰减；有用上下文仍由后续响应验证。 K-115 / ContextLoopsAndNumerics110 保留噪音和读出单位的条件比较，未选新机制或字段。 K-128 / ContextLoopsAndNumerics123 记录固定输入与活跃上下文差异的条件分析。 K-131 / ContextLoopsAndNumerics126 加入共同尺度的原始行对照。  K-148 / ContextLoopsAndNumerics143 澄清随机输入记忆证据的信号／干扰角色，不把输入幅度效应当作背景噪音增益结论。 K-156 / ContextLoopsAndNumerics151、MR-S079 将持续循环与 cue 内容保持分开，不导入延迟读出或投票反馈子系统。 K-158 / ContextLoopsAndNumerics153、MR-S080/MR-S081 限定培养神经元回响及其模型的输入恢复证据，不导入突触资源或恢复计时。 K-162 / ContextLoopsAndNumerics157、memory-gain-analysis 区分已存信息的可访问性和完整状态的信息损失，不引入熵估计器或记忆字段。  K-169 / RateDynamics164、ContextLoopsAndNumerics164 以相同语义淡出下不同细胞组成保持的条件例，区分快照执行和自保持动力学；未选 leak、时间步或状态字段。  K-180 / ContextLoopsAndNumerics175、MR-S011/MR-S012 深查暂态读出、重复外部驱动与部分权重训练的条件；不导入变换、读出、学习规则或稀疏容量结论。  K-181 / ContextLoopsAndNumerics176、context-composition-analysis 明确固定总量下条件幅度界及可表示模式计数；MR-S013 的分布耦合证据不等于本模型容量。未选上限、编码或新增状态。  K-184 / ContextLoopsAndNumerics179、MR-S006 区分同噪音下有／无刺激的维持与外部噪音分组指定的选择性；不导入振荡、资源状态或模型时标。 K-193 / ContextLoopsAndNumerics188 核查连续吸引子记忆扩散的稳态、弱涨落及调谐缩放条件；连续 rate 或活动调节不自动满足它们，不导入记忆容量或噪音控制公式。 K-201 / ContextLoopsAndNumerics196、context-composition-analysis 的 balanced_drive_frame_scaling 将同维平衡驱动的组成收缩与帧间隔联系；保持净语义值不等于保持上下文，未把确定性例当作白噪音律或选取新的状态／调节机制。 |
-| C-27 | P-63/P-64/P-68；D-08 ContextLoopsAndNumerics、RateDynamics、TrainingStrategy、Decisions；H-71/AD-074、H-72/AD-077、H-74/AD-079、K-84/K-85。影响累积时间、数值进度、事件语义及资源代价；无已选定时器实现。 K-97 增加有输入计时、无事件信息不足、时间戳精度与帧依赖的条件研究；无定时器实现选择。 K-104 的精确反例要求延后数值衰减仍保留每帧抵消，不把已抵消活动当作数值余量恢复。  K-173 / ContextLoopsAndNumerics168 区分源变化稀疏与连入依赖／同维抵消传播的影响范围；不预设事件索引、缓存或重算算法。  K-198 / ContextLoopsAndNumerics193、MR-S002 核查 QSS 的总量化误差（包括滞回）趋零及观察时域条件；不把收敛结论当固定低精度任意时长保证，未选事件结构或滞回机制。 K-204 / ContextLoopsAndNumerics199、numeric-representation-arithmetic 的 directed_decay_rounding 区分向下取整避免停滞与保留衰减时间；有限归零不是半衰期／自然断链的充分证据，不选取整律或新状态。 |
-| C-28 | P-65—P-68；D-08 ContextLoopsAndNumerics、RateDynamics、SignedPopulationEncoding、Model、Decisions；H-71/AD-075、H-73/AD-078、H-74/AD-079、H-70、K-84/K-85。影响逐字段表示、精度、缩放和累加；旧容量算术保持条件基线。 K-88 的条件权重算术区分动态范围、集体增益分辨率及训练存储；不按容量档位选权重尺度，不默认逐边高精度副本。 K-98 增加共享循环增益与固定随机权重长期响应的条件分析及 MR-S025/MR-S026 来源；仍无精度／学习策略选择。 K-101 将相同平均衰减下的个体失续／爆发、时间步及饱和行为列入条件比较；不选随机量子模型。 K-105 / ContextLoopsAndNumerics100 给出精确量化学习停滞和条件 Binomial 稳态；单步无偏不等于稳定的弱关联，宽权重只作计费比较。 K-116 / ContextLoopsAndNumerics111 记录中间舍入和最终写回的条件行为差别；格式与存储算法未选。 K-118 / ContextLoopsAndNumerics113、cancellation-properties-analysis 给出条件 L2 界和准确有理算例；未设误差容限。 K-121 / ContextLoopsAndNumerics116、context-composition-analysis 检查零语义和误差仍可丢失个体区别的条件例。 K-133 / ContextLoopsAndNumerics128、FlowLearning128 记录条件预测误差更新的存储结果。 K-134 补充有界更新条件算术及 MR-S017 的16位字长澄清。 K-147 / ContextLoopsAndNumerics142 区分短时二值视觉推理与持续 rate 行为，并核对整数阈值／移位的算术语义；不选格式、字段或部署优化。  K-150 / ContextLoopsAndNumerics145 区分低位宽存储、浮点源值、字节点积和 CPU 能力；未选内核、量化器或额外缓冲。  K-152 / ContextLoopsAndNumerics147 记录抵消公式先乘后除的条件下溢及公共比例求值，不引入余量字段或截断阈值。  K-153 / ContextLoopsAndNumerics148 用重复边的矩解释固定权重舍入，保持非负独立线性前提；未排除有用小循环。 K-154 / ContextLoopsAndNumerics149 将低位宽推理与完整持久学习成本分开，不将多变量突触模型暗作一字节槽位。 K-157 / ContextLoopsAndNumerics152、weight-update-precision-analysis 保留共享范围往返时未更新权重的精确失真比较，不引入缩放字段或高精度副本。 K-161 / FlowLearning156、weight-update-precision-analysis 区分码步长、有效权重步长及初态学习到达时间，不将谱松弛时间当作任务习得。  K-170 / ContextLoopsAndNumerics165 区分平均衰减与逐步误差传播界，核查周期量化缓冲及性能证据范围；未选误差估计器或调度结构。  K-171 / ContextLoopsAndNumerics166 以有限概率网格和共同随机抽样的条件计算核查小更新，不选 PRNG、bit 宽度或新增状态。  K-175 / ContextLoopsAndNumerics170 区分共同目标曝光引起的权重协方差与独立随机舍入；不以边数自动推断集体精度或增设平均状态。 K-190 / ContextLoopsAndNumerics185、README185 区分固定已学图的数值转换与候选算术下的习得／恢复，按同一行为目标和完整成本逐步比较；不预选训练机制或额外状态。 K-191 / ContextLoopsAndNumerics186、MR-S097 核查二值有效权重与内部离散学习状态的区别，保留 CPU 总状态成本及任务行为边界；不引入阶段变量或突触算法。 K-192 / ContextLoopsAndNumerics187 补充固定低精度已学模型的宽化与匹配训练证据；宽算术参考不自动成为该已学行为的最优算子，不以状态更新次数当任务成功。 K-203 / ContextLoopsAndNumerics198、MR-S026 区分静态回返网络的精确仿真与隔离弱突触的学习比较；不把后者扩展成学习中回返反馈的一致性结论，不引入硬件迹线或取整机制。 |
-| C-29 | P-69/P-70；D-08 revision81 的 RateDynamics、IncomingConnectivity、Model、TrainingStrategy、SignedPopulationEncoding、ContextLoopsAndNumerics、README、Decisions；H-75/AD-081、K-86。影响快照、发布、相态含义与条件状态预算，无已合格合同失效。 K-108 / IncomingConnectivity103、AdaptiveConnectivity103 区分保留边与预留容量的访问、边界发布和条件成本；不选择计数或前缀布局。 K-110 区分完整帧隔离与反馈观察延迟；不引入第三帧或控制字段。 K-113 / RateDynamics108 保留完整帧并明确输入观察的顺序语义；无新调度器或缓冲表示。 K-116 / ContextLoopsAndNumerics111 记录中间舍入和最终写回的条件行为差别；格式与存储算法未选。 K-164 / RateDynamics159、FlowLearning159 区分状态布局与实际传导、输入和学习角色；不选择门控或新增状态。 K-167 / README162 澄清两帧单标量预算标签，数值和 H-78 选择空间不变。 |
-| C-30—C-33 | P-71—P-81；D-09r1 两版全文及 CQ-01—CQ-08。上游 C-12/C-24/C-28 变化须检查这些范围；D-08 相关章节仅为受影响的待评估对象，无自动资格升级。 |
-| D-09 | README204 导航；D-08 的编码、学习、容量、时序及输入可驱转性；D-07 需求仅可另行确认。H-87—H-95 与 K-208/K-209 是本次证据入口。 |
-| GOV-01、GOV-02 | AGENTS 中委托规则、本记录及所有据其判断资格的文档条目。 |
-| D-01 / D-06 | D-01 的候选使用方 D-02、D-04、D-05；D-06 的候选使用方 D-05。 |
-| C-43/C-45/C-46/C-56/C-57 | H-211–H-220; P-185/P-187–P-197; D-07r46, D-10r54, D-11r18, D-14r15 and prototype85. H-218 supersedes implicit structural/informational matching; H-220 corrects conformance import permission versus consumer visibility. Review method selection, explicit head declarations, adapter exposure and root-policy dispatch. D-12r10/D-13r15 and D-08 retain historical source/evidence scopes and do not validate these contracts. |
-
-此表是便于定位的反向索引，不新增确认关系；变更时仍需搜索新增的所有引用，并更新受影响范围。
-
-
-
-
-
-
-
-
-
-
-
-
-反向补充（K-209）：C-29/P-69/P-70 → RateDynamics204、IncomingConnectivity204、Model204、README204、CapacityPlanning204、ContextLoopsAndNumerics204、SynapticIntegrationResearch204；C-34/P-82/P-83 → 同组文档的 authority 范围与 D-09r2 S5.1/S8。其余 D-08 文档中的 H-75 研究背景由 H-94 的已确认架构约束；既有数值、存储和学习开放项保持，历史事件不改写。
-
-
-**K-210 reverse coverage:** C-01/C-02/C-10 → C-35/C-36/C-37/C-39/C-41/C-43 through P-84/P-85/P-86/P-94/P-97/P-100 → D-10r1 (P-90) and D-07r4. C-35 → C-42 via P-99, with C-43 dependent via P-101. C-12 → C-38 via P-87 → D-08 LanguageCoDesign205/README205, dependent on C-29 and D-10 via P-91/P-93. C-03 → C-36/C-40 concerns via P-92/P-96. P-89/P-95/P-98/P-102 constrain the same callable/capture/expression/reuse scopes. H-96–H-105 provide exact local decisions; module initialization composition, typing, lifetimes, expression results, import details and native layout remain pending. D-01—D-06, D-09 and the other D-08 revisions are unaffected; no qualified descendant is invalidated.
-
-**K-211 reverse coverage:** C-10 → C-44 through P-103 → D-10r2 module scanning/composition, D-07r5 DL-12/DL-14/DD-014 and D-08 LanguageCoDesign206/README206. P-104 constrains C-36's definition/capture phase; P-105 depends on C-43's using/import distinction. H-106 refines H-103's initialization scope without changing function purity, capture categories or H-94 frame architecture. Encounter order is confirmed; precise triggers/repetition/cycles, scope lifetimes and literal bits global realization remain open. Earlier C-35–C-43 semantics and pending value paths carry into the stated current revisions; no full document or qualified descendant gains or loses authority by implication.
-
-**K-212 reverse coverage:** C-44/P-104's H-107 top-level expression/initializer refinement → D-10r3, D-07r6 DL-12/DL-14/DD-015 and D-08 LanguageCoDesign207/README207. C-37's function purity applies to function-call global initializers; C-36's effect/call rules apply to module execution; C-39's physical storage boundary remains an explicit dependency for bits-global realization. The P-103 value path and P-105 dependency keep their pending scope; no complete contract is newly qualified.
-
-**K-213 reverse coverage:** H-108 directly authorizes the C-38 language/application prototype milestone; H-109/H-110 refine C-44/P-104 through D-10r4 module composition and D-07r7 DL-14; H-111 refines C-41/P-98 expression results. D-08 LanguageCoDesign208/README208 link the bounded native prototype. Prior candidate value paths and full-contract pending status remain; local human semantics are not postponed for repeated confirmation.
-
-
-Additional reverse impact: C-45/C-46 -> P-106–P-111, D-10r10, D-07r13 DL-14/DL-15, native frontend/fixtures and reference3/validation; H-112–H-121. D-08 LanguageCoDesign211/README211 link this bounded language evidence; no neural model or storage contract is selected.
-**K-220 reverse coverage:** C-10/C-47/C-49 → P-112/P-113/P-119/P-120 → D-11r1 and D-07r14 DL-01/DD-033/DD-034. C-37/C-39/C-48 → P-114/P-115/P-117 → D-10r11 snapshot access and D-07r14 DL-02/DL-03/DL-15/DD-032/DD-035. C-38/P-116 and H-122/H-123 restrict the next run to language/runtime work; D-08's model contracts and earlier evidence are unchanged. C-13/P-118 provides the worked arithmetic only. No qualified descendant is invalidated or promoted. C-49/C-50 → P-120–P-123 → D-11r1 using/import, pure method dispatch and D-07r14/DD-036 under H-130.
-
-**K-221 reverse coverage:** H-131 → C-50/P-121, D-11r2 operator-method naming and D-07r15/DD-037. Existing C-47/C-49 identities, C-48/D-10r11 snapshot semantics and D-08 model contracts remain unchanged. Full documents stay pending-human; no source implementation claim.
-
-**K-222 reverse coverage:** H-132 → C-49/P-119 and C-38 planned-run scope → D-11r3 roadmap split, D-07r16/DD-038/LI-01–LI-03. D-10r11 snapshot lifetime and D-08 modeling contracts remain unchanged; result-reference policy is a pending question, not a revised snapshot rule.
-
-**K-223 reverse coverage:** H-133 → C-48/P-114/P-115/P-117 → D-10r12 and D-07r17/LI-01/DD-039. H-134 supersedes only H-130 UoM import through C-49/P-120/P-122 → D-11r4/LI-02/DD-040; procedure import remains unchanged. H-135–H-138 → C-51/P-124–P-127 → D-11r4 parameter/route rules and D-07r17/LI-03/LI-04/DD-041–DD-043. D-08 model contracts and H-132 compound deferral remain intact.
-
-
-**K-224 reverse coverage:** H-139–H-141 → C-44/P-103–P-105, D-10r13 and D-07r18/DD-044–DD-046. Repeated acyclic dependencies reuse incorporated resources; H-140 does not select cyclic-initialization behavior. H-141 retains inline lowering and measured size; no machine-code reuse framework is mandated. Current full-document status remains pending-human.
-
-
-**K-226 reverse coverage:** C-47/C-49/C-50/C-51 and P-112/P-119/P-120–P-127 → D-11r5 bounded native conventions, D-07r19 and reference5/validation. Source unit aliases preserve identity; parameter conversion remains pure and controlled by selected bundles. D-08 and D-10r13 contracts remain unchanged.
-
-
-**K-227 reverse coverage:** C-38/P-116 and C-47/C-50/P-118/P-121 → D-07r20, D-11r6, reference6 and typed pool/numeric fixtures. H-123 supplies the scale-law indexing need; C-13 remains an arithmetic example rather than a selected application configuration. D-10r13 and all D-08 model contracts remain unchanged.
-
-
-
-**K-534 reverse coverage:** H-372–H-377 → C-35/C-36/C-37/C-57/C-58/C-59/C-60/C-82/C-83 and P-330–P-338 → D-21r1, D-15r17, D-12r24, D-10r128, D-07r149 and affected D-18r70/D-14r76/D-13r31/D-17r36/D-16r7 and prototype reference184. P-333/P-334/P-337 and D21-Q-lineage remain pending-human. Only conflicting implicit installation, one-method value and one-concrete-result language interpretations are superseded; unchanged owner/scope/numeric contracts retain their exact qualification. Historical H/K evidence is preserved.
-
-**K-535/K-536 reverse coverage:** H-378 confirms C-82/P-333, C-83/P-334 and D-21/P-337 for the behavioral value path. H-379/H-380 → C-59/C-36/C-83/C-82 and P-339–P-341 → D-21r3, D-07r150, D-10r129, D-12r25, D-15r18, D-17r37 and prototype reference185. D21-Q-lineage and the two D21-Q-installation choices are resolved. D21-Q-entry-composition and concrete native mechanisms remain open; graph/owner/numeric/complete-value scopes retain their existing coverage.
-
-**K-537 reverse coverage:** H-381/P-342 → D-21r4/D-10r130/D-07r151/D-15r19 and prototype reference186. H-248/H-249/H-372 → separate semantic records and initialization values; H-140 ordering and capture/owner/cleanup remain unchanged. D-16 compatibility checked without fraction implementation.
-
-**K-538 reverse coverage:** H-382/P-343 → D-14r77/D-10r131/D-21r5 and prototype reference187. H-273–H-275 provenance and region capability, H-366 binding/target constness, and H-381 nearest lookup remain aligned. D-07r151/D-15r19 remain valid; D-17 cleanup, D-18 complete values and D-16 numeric/layout contracts are unchanged.
-
-**K-539 reverse coverage:** C-63/P-235–P-236/P-321–P-324/P-326 → D-17r38/prototype reference188. D-10 checked-call boundaries, D-14 provenance/access, D-18 native complete values and D-16 compatibility remain unchanged; no descendant is invalidated or granted broader qualification.
-
-**K-540 reverse coverage:** C-63/P-235–P-236/P-321–P-324/P-326/P-329 → D-17r39/prototype reference189. D-14 allocation initialization, D-10 callable boundaries and D-18 native complete values remain dependencies; D-01 physical storage and D-16 compatibility remain unchanged. No descendant is invalidated or granted broader qualification.
-
-**K-541 reverse coverage:** C-63/P-235–P-236/P-321–P-324/P-326/P-329 → D-17r40/prototype reference190. D-14 allocation initialization, D-10 callable boundaries and D-18 native values remain dependencies. D-01 storage/relocation and D-16 compatibility are unchanged; no descendant loses or gains qualification outside this implementation continuity.
-
-## 6. 人工确认事件（只追加）
-
-Historical source for the tables in §§6–7: commit [`0c0efbfde4dc`](https://github.com/complyue/cod-project/blob/0c0efbfde4dccb3f3397b6f961bd82bd9a12c848/design/DesignAuthorityRegistry.md), path `design/DesignAuthorityRegistry.md`, revision 578. Source lines refer to that immutable version, not this file. The 387 human records and 578 agent records retain their original wording, provenance, scope and exclusions there; a dash means the source record had an anchor without a heading. IDs are never reused.
-
-Read a selected event offline, replacing the example range with its table entry:
+Example: retrieve H-05 using its A-source range. Substitute another event's source/range as needed.
 
 ```sh
-git show 0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md | sed -n '1201,1207p'
+git show 0c0efbfde4dccb3f3397b6f961bd82bd9a12c848:design/DesignAuthorityRegistry.md | sed -n '1229,1235p'
 ```
 
-The tables locate evidence; current status and supersession remain in §§3–5. A past confirmation does not qualify an uncovered current revision. New human decisions are recorded below the human index; new agent assessments below the continuity index.
+### Human evidence
 
-| Event ID | Source lines | Original heading |
-| --- | --- | --- |
-| <a id="h-01"></a>H-01 | 1201–1207 | H-01 — 2026-09-16T15:24:40Z |
-| <a id="h-02"></a>H-02 | 1208–1214 | H-02 — 2026-09-16T15:37:09Z |
-| <a id="h-03"></a>H-03 | 1215–1221 | H-03 — 2026-09-16T15:49:01Z |
-| <a id="h-04"></a>H-04 | 1222–1228 | H-04 — 2026-09-16T16:04:15Z |
-| <a id="h-05"></a>H-05 | 1229–1235 | H-05 — 2026-09-17T08:33:13Z |
-| <a id="h-06"></a>H-06 | 1236–1247 | H-06 — 近期 IPC、DBMR 和语言语义目标 |
-| <a id="h-07"></a>H-07 | 1248–1259 | H-07 — 开始语言设计和决策跟踪，实施延后 |
-| <a id="h-08"></a>H-08 | 1260–1271 | H-08 — 首个讨论应用：稳态循环激活 SNN |
-| <a id="h-09"></a>H-09 | 1272–1283 | H-09 — 容量优先与树莓派级每 CC 预算 |
-| <a id="h-10"></a>H-10 | 1284–1292 | H-10 — Minicolumn 内连接与 HTM 参考 |
-| <a id="h-11"></a>H-11 | 1293–1301 | H-11 — 应用文档集独立 |
-| <a id="h-12"></a>H-12 | 1302–1310 | H-12 — 单节点 RAM 上限 16 GB |
-| <a id="h-13"></a>H-13 | 1311–1319 | H-13 — 不均匀连接容量与训练驱动迁移 |
-| <a id="h-14"></a>H-14 | 1320–1328 | H-14 — 静态槽位池、当前集指针与无堆分配 |
-| <a id="h-15"></a>H-15 | 1329–1337 | H-15 — 极少数神经元的万级外连容量 |
-| <a id="h-16"></a>H-16 | 1338–1346 | H-16 — 最小槽内容、集合数和每集 source 映射 |
-| <a id="h-17"></a>H-17 | 1347–1355 | H-17 — 目标与权重的并行数组布局 |
-| <a id="h-18"></a>H-18 | 1356–1364 | H-18 — 多余静态槽集与算术索引优先 |
-| <a id="h-19"></a>H-19 | 1365–1373 | H-19 — 百槽最小容量与少连源的取舍 |
-| <a id="h-20"></a>H-20 | 1374–1382 | H-20 — 调研脑连接研究以改进尺度选择 |
-| <a id="h-21"></a>H-21 | 1383–1393 | H-21 — 暂定尺度模板并评估 target-owned 入边槽集 |
-| <a id="h-22"></a>H-22 | 1394–1402 | H-22 — 多输入神经元的激活合理性与生物证据 |
-| <a id="h-23"></a>H-23 | 1403–1413 | H-23 — 入度相关权重补偿与入／出度参数区分 |
-| <a id="h-24"></a>H-24 | 1414–1426 | H-24 — 权重尺度归训练策略与类数量来源核对 |
-| <a id="h-25"></a>H-25 | 1427–1437 | H-25 — 容量暂定与每语义维 100+100 正负群体评估 |
-| <a id="h-26"></a>H-26 | 1438–1446 | H-26 — 人脑 cortical column 神经元数量证据 |
-| <a id="h-27"></a>H-27 | 1447–1457 | H-27 — V4.1 Flash 与每维 60+60 的容量计算 |
-| <a id="h-28"></a>H-28 | 1458–1468 | H-28 — 节点共享语义向量表与对齐预算质疑 |
-| <a id="h-29"></a>H-29 | 1469–1479 | H-29 — 多字段默认 SoA，AoS 例外需要访问模式理由和实证 |
-| <a id="h-30"></a>H-30 | 1480–1490 | H-30 — 非规则位宽字段单独讨论对齐 |
-| <a id="h-31"></a>H-31 | 1491–1501 | H-31 — nonstandard bit width 的精确定义 |
-| <a id="h-32"></a>H-32 | 1502–1512 | H-32 — FP4 属于标准位宽，允许负指数 |
-| <a id="h-33"></a>H-33 | 1513–1523 | H-33 — 更新连接尺度研究文档的内存计算 |
-| <a id="h-34"></a>H-34 | 1524–1534 | H-34 — 辅助结构须从明确业务需求与算法讨论出发 |
-| <a id="h-35"></a>H-35 | 1535–1545 | H-35 — 说明 A 并暂不讨论 V4 Pro 人口场景 |
-| <a id="h-36"></a>H-36 | 1546–1557 | H-36 — 澄清 resize pool 与比较表去向 |
-| <a id="h-37"></a>H-37 | 1558–1568 | H-37 — 评估 15 档是否强制及 16 档可行性 |
-| <a id="h-38"></a>H-38 | 1569–1579 | H-38 — 将集合总数略大于神经元数设为明确目标 |
-| <a id="h-39"></a>H-39 | 1580–1590 | H-39 — 排除保留旧场景连接容量的要求 |
-| <a id="h-40"></a>H-40 | 1591–1602 | H-40 — 共活动连接学习的邻近优先与 1D/2D 调研 |
-| <a id="h-41"></a>H-41 | 1603–1614 | H-41 — 语义维中性与 minicolumn 内部等位距离 |
-| <a id="h-42"></a>H-42 | 1615–1626 | H-42 — 拒绝内部等位距离，转向单 CC 语义拓扑研究 |
-| <a id="h-43"></a>H-43 | 1627–1638 | H-43 — CC 非精确 replica 与静态语义角色 |
-| <a id="h-44"></a>H-44 | 1639–1650 | H-44 — 优先解决语义分配位置与解剖拓扑的冲突 |
-| <a id="h-45"></a>H-45 | 1651–1664 | H-45 — Flash-1017 输入语义表的实测与 SSD 容量 |
-| <a id="h-46"></a>H-46 | 1665–1676 | H-46 — 分布式语义特征与三个目标活动状态 |
-| <a id="h-47"></a>H-47 | 1677–1688 | H-47 — 活动比例的约束范围为每个 CC 内部 |
-| <a id="h-48"></a>H-48 | 1689–1700 | H-48 — 宽活动区间与心智状态间的比例差异 |
-| <a id="h-49"></a>H-49 | 1701–1712 | H-49 — 深挖物理距离偏好的科研依据 |
-| <a id="h-50"></a>H-50 | 1713–1724 | H-50 — 语义组织已存在，不具有天然物理位置 |
-| <a id="h-51"></a>H-51 | 1725–1737 | H-51 — 修正文档后至少十二小时深化研究 |
-| <a id="h-52"></a>H-52 | 1738–1749 | H-52 — 三相稳态吸引子与单 token 有限响应学习目标 |
-| <a id="h-53"></a>H-53 | 1750–1762 | H-53 — 单次随机输入、注意抑噪与 DMN 检测后恢复噪音 |
-| <a id="h-54"></a>H-54 | 1763–1774 | H-54 — 早期内在极性抵消与互补正面输入残留 |
-| <a id="h-55"></a>H-55 | 1775–1786 | H-55 — 低活动增噪与残留先增强达峰再回落 |
-| <a id="h-56"></a>H-56 | 1787–1806 | H-56 — 柔性窗口内覆盖与路径检测，排除总激活比例 |
-| <a id="h-57"></a>H-57 | 1807–1818 | H-57 — 心流的短窗口覆盖上限 |
-| <a id="h-58"></a>H-58 | 1819–1831 | H-58 — 覆盖需剔除白噪音，低密度过滤作为候选 |
-| <a id="h-59"></a>H-59 | 1832–1843 | H-59 — 正常循环的外部可转向性与 stale 恢复候选 |
-| <a id="h-60"></a>H-60 | 1844–1856 | H-60 — 按训练目标复核位置偏好的阶段性结论与继续研究价值 |
-| <a id="h-61"></a>H-61 | 1857–1869 | H-61 — 暂不加入物理距离偏好与构造式激活链训练初步方案 |
-| <a id="h-62"></a>H-62 | 1870–1884 | H-62 — 静态预定批组的初步倾向与重叠替代方案比较 |
-| <a id="h-63"></a>H-63 | 1885–1897 | H-63 — 统一初建与持续修补的 DMN/token 训练 |
-| <a id="h-64"></a>H-64 | 1898–1910 | H-64 — 全局考虑与逐步采样中的进程约束和捷径问题 |
-| <a id="h-65"></a>H-65 | 1911–1928 | H-65 — 每 epoch 的维护范围与链宽、主体增强和回返削弱 |
-| <a id="h-66"></a>H-66 | 1929–1944 | H-66 — 保持尾头回返、谨慎设计增益及每步／少数几步 token 分布 |
-| <a id="h-67"></a>H-67 | 1945–1958 | H-67 — 宽松半衰期式目标与离散时间 spiking-rate 讨论 |
-| <a id="h-68"></a>H-68 | 1959–1982 | H-68 — 断链指活动自然终止而非连接权重消除 |
-| <a id="h-69"></a>H-69 | 1983–1994 | H-69 — 分数式神经元选取配合 spike-rate |
-| <a id="h-70"></a>H-70 | 1995–2006 | H-70 — 多环节浮点精度是设计要求 |
-| <a id="h-71"></a>H-71 | 2007–2026 | H-71 — 有用小循环、累积／定时衰减、整数表示与十二小时自主研究 |
-| <a id="h-72"></a>H-72 | 2027–2038 | H-72 — 下一次数值精度允许变化的近程衰减触发 |
-| <a id="h-73"></a>H-73 | 2039–2050 | H-73 — 神经元状态可考虑 FP16 与 FP32 |
-| <a id="h-74"></a>H-74 | 2051–2063 | H-74 — 每项技术引入都须有第一性价值依赖链 |
-| <a id="h-75"></a>H-75 | 2064–2077 | H-75 — 同柱细胞的上下文路径与双帧连入汇集 |
-| <a id="h-76"></a>H-76 | 2078–2089 | H-76 — 预测引导的 token 输入分支 |
-| <a id="h-77"></a>H-77 | 2090–2101 | H-77 — 全 minicolumn 净余与同方向 rate 比例保留 |
-| <a id="h-78"></a>H-78 | 2102–2117 | H-78 — 状态表示保留未来对照实验空间 |
-| <a id="h-79"></a>H-79 | 2118–2129 | H-79 — Hebbian/HTM 学习限于 token 序列 flow 训练 |
-| <a id="h-80"></a>H-80 | 2130–2141 | H-80 — Flow 算法尚未设计且不预设为修补变体 |
-| <a id="h-81"></a>H-81 | 2142–2153 | H-81 — 目标包含 flow 初步算法设计并尽早讨论 |
-| <a id="h-82"></a>H-82 | 2154–2169 | H-82 — Flow 训练以预测预激活匹配为直接验收 |
-| <a id="h-83"></a>H-83 | 2170–2185 | H-83 — 预测多样性随匹配序列上下文增长而收缩 |
-| <a id="h-84"></a>H-84 | 2186–2201 | H-84 — 生成模式广范围弱激活是显式且不学习的操作 |
-| <a id="h-85"></a>H-85 | 2202–2217 | H-85 — 预测态抵消留待对照实验，当前不选择 |
-| <a id="h-86"></a>H-86 | 2218–2231 | H-86 — 明显适合真实数据比较的问题直接保留实验空间 |
-| <a id="h-87"></a>H-87 | 2232–2247 | H-87 — 四分完整载体假设与长方形认知场景 |
-| <a id="h-88"></a>H-88 | 2248–2259 | H-88 — 概念本体由 SNN 的经验学习与动力学承载 |
-| <a id="h-89"></a>H-89 | 2260–2271 | H-89 — 全概念动力学近似副本与感受位置偏向 |
-| <a id="h-90"></a>H-90 | 2272–2283 | H-90 — 稀疏活动与时间复用及值域分辨率的联合容量问题 |
-| <a id="h-91"></a>H-91 | 2284–2295 | H-91 — 有限精度 rate 与 spike 时机协同须共同建模 |
-| <a id="h-92"></a>H-92 | 2296–2305 | H-92 — 双语设计进度文档整理授权 |
-| <a id="h-93"></a>H-93 | 2306–2319 | H-93 — 连续源神经元状态与多帧 AP 的建模边界 |
-| <a id="h-94"></a>H-94 | 2320–2335 | H-94 — 正式确认双帧连入拉取及文档同步 |
-| <a id="h-95"></a>H-95 | 2336–2345 | H-95 — 保留能力使能机制的设计目标 |
-| <a id="h-96"></a>H-96 | 2346–2361 | H-96 — Joint SNN/language development and nominal dynamic symbols |
-| <a id="h-97"></a>H-97 | 2362–2371 | H-97 — Capture used effect values |
-| <a id="h-98"></a>H-98 | 2372–2381 | H-98 — Function/procedure effect boundary |
-| <a id="h-99"></a>H-99 | 2382–2391 | H-99 — User storage carriers |
-| <a id="h-100"></a>H-100 | 2392–2401 | H-100 — Capture categories |
-| <a id="h-101"></a>H-101 | 2402–2411 | H-101 — Cross-region reference placeholder |
-| <a id="h-102"></a>H-102 | 2412–2421 | H-102 — Whole-program caller-path binding checks |
-| <a id="h-103"></a>H-103 | 2422–2431 | H-103 — Definition scopes and module initialization |
-| <a id="h-104"></a>H-104 | 2432–2441 | H-104 — Symbolic expressions and void |
-| <a id="h-105"></a>H-105 | 2442–2451 | H-105 — Vocabulary modules and using/import definitions |
-| <a id="h-106"></a>H-106 | 2452–2461 | H-106 — Module declaration scanning and entry-driven execution composition |
-| <a id="h-107"></a>H-107 | 2462–2471 | H-107 — Global initializers and top-level execution expressions |
-| <a id="h-108"></a>H-108 | 2472–2481 | H-108 — Review, checkpoint and autonomous native prototype |
-| <a id="h-109"></a>H-109 | 2482–2491 | H-109 — Every cross-module reference triggers execution |
-| <a id="h-110"></a>H-110 | 2492–2501 | H-110 — Source-module scope teardown and explicit resource transfer |
-| <a id="h-111"></a>H-111 | 2502–2512 | H-111 — Effect expression returns the newly bound value |
-| <a id="h-112"></a>H-112 | 2513–2523 | H-112 — Explicit symbol origins and local aliases |
-| <a id="h-113"></a>H-113 | 2524–2534 | H-113 — Symbolic variables have dynamic scope only |
-| <a id="h-114"></a>H-114 | 2535–2545 | H-114 — Compile-time identities and aliases, runtime value bindings |
-| <a id="h-115"></a>H-115 | 2546–2556 | H-115 — Import-time symbol alias maps |
-| <a id="h-116"></a>H-116 | 2557–2567 | H-116 — Procedure renaming selects a preexisting local symbol |
-| <a id="h-117"></a>H-117 | 2568–2577 | H-117 — Symbol-from declarations and local supplier as source-body role |
-| <a id="h-118"></a>H-118 | 2578–2588 | H-118 — Implement, test and push the discussed symbol syntax |
-| <a id="h-119"></a>H-119 | 2589–2599 | H-119 — Evaluate combined symbol and procedure using |
-| <a id="h-120"></a>H-120 | 2600–2610 | H-120 — Identity agreement for short using, explicit destination on mismatch |
-| <a id="h-121"></a>H-121 | 2611–2621 | H-121 — Implement, validate, commit and push combined using |
-| <a id="h-122"></a>H-122 | 2622–2632 | H-122 — Ten-hour goal after discussing immediate decisions |
-| <a id="h-123"></a>H-123 | 2633–2647 | H-123 — Language/runtime scope, structured regional storage and index conversions |
-| <a id="h-124"></a>H-124 | 2648–2658 | H-124 — Dynamic region resources and function value inputs |
-| <a id="h-125"></a>H-125 | 2659–2669 | H-125 — Strict branded indices and comparison of numeric mechanisms |
-| <a id="h-126"></a>H-126 | 2670–2680 | H-126 — Compare UoM potential before recommending the foundation |
-| <a id="h-127"></a>H-127 | 2681–2691 | H-127 — Functions traverse complete read-only regional snapshots |
-| <a id="h-128"></a>H-128 | 2692–2702 | H-128 — Independent compile-time UoM identity and aliases |
-| <a id="h-129"></a>H-129 | 2703–2713 | H-129 — Outermost function call defines snapshot lifetime |
-| <a id="h-130"></a>H-130 | 2714–2724 | H-130 — UoM using/import and pure Julia-style method dispatch |
-| <a id="h-131"></a>H-131 | 2725–2735 | H-131 — Parenthesized operator names for readable overloads |
-| <a id="h-132"></a>H-132 | 2736–2746 | H-132 — Compound UoM roadmap and immediate-decision review |
-| <a id="h-133"></a>H-133 | 2747–2757 | H-133 — Ordinary caller scope supplies function-input lifetime |
-| <a id="h-134"></a>H-134 | 2758–2768 | H-134 — Fresh UoMs and one-shot using bundles; no UoM import |
-| <a id="h-135"></a>H-135 | 2769–2779 | H-135 — Parameter syntax controls automatic conversion |
-| <a id="h-136"></a>H-136 | 2780–2790 | H-136 — Compile-time conversion paths and configurable ambiguity warning |
-| <a id="h-137"></a>H-137 | 2791–2801 | H-137 — Source-declared conversion path preference |
-| <a id="h-138"></a>H-138 | 2802–2813 | H-138 — Direct conversion precedes the declared indirect path |
-| <a id="h-139"></a>H-139 | 2814–2824 | H-139 — Complex-module and deep-call acceptance |
-| <a id="h-140"></a>H-140 | 2825–2835 | H-140 — Once-only module incorporation after scanning |
-| <a id="h-141"></a>H-141 | 2836–2845 | H-141 — Initial procedure inlining with measured size |
-| <a id="h-142"></a>H-142 | 2846–2855 | H-142 — LLVM IR as the execution intermediate |
-| <a id="h-143"></a>H-143 | 2856–2865 | H-143 — One LLVM IR lowering path |
-| <a id="h-144"></a>H-144 | 2866–2875 | H-144 — Contract-based, lean test coverage |
-| <a id="h-145"></a>H-145 | 2876–2885 | H-145 — Reduce technical debt during implementation |
-| <a id="h-146"></a>H-146 | 2886–2895 | H-146 — Accept the temporary first-field self-reference limitation |
-| <a id="h-147"></a>H-147 | 2896–2905 | H-147 — Ten additional active work hours |
-| <a id="h-148"></a>H-148 | 2906–2917 | H-148 — Convert each argument before evaluating the next |
-| <a id="h-149"></a>H-149 | 2918–2929 | H-149 — Nested-scope shadowing with unique declarations within one scope |
-| <a id="h-150"></a>H-150 | 2930–2941 | H-150 — Reject reserved expression names in lexical value declarations |
-| <a id="h-151"></a>H-151 | 2942–2951 | H-151 — Actor model with typed mail |
-| <a id="h-152"></a>H-152 | 2952–2961 | H-152 — Work package example, transfer priority and vision tracker |
-| <a id="h-153"></a>H-153 | 2962–2971 | H-153 — Reserved names and parenthesized intrinsic overloads |
-| <a id="h-154"></a>H-154 | 2972–2981 | H-154 — Effectful overloads are procedures |
-| <a id="h-155"></a>H-155 | 2982–2991 | H-155 — Mixed callable kinds under one operation |
-| <a id="h-156"></a>H-156 | 2992–3001 | H-156 — One direct-pointer graph per region |
-| <a id="h-157"></a>H-157 | 3002–3013 | H-157 — Logical relationships between regions |
-| <a id="h-158"></a>H-158 | 3014–3023 | H-158 — Intrinsic representation is separate from CoD symbols |
-| <a id="h-159"></a>H-159 | 3024–3033 | H-159 — Implicit procedure overload calls use current bindings |
-| <a id="h-160"></a>H-160 | 3034–3043 | H-160 — Defer further design decisions until the work-period review |
-| <a id="h-161"></a>H-161 | 3044–3053 | H-161 — Reserve primary module-form words against ordinary declarations |
-| <a id="h-162"></a>H-162 | 3054–3063 | H-162 — A distinct assignment overload family |
-| <a id="h-163"></a>H-163 | 3064–3073 | H-163 — Indexed assignment supplies the array, index and value |
-| <a id="h-164"></a>H-164 | 3074–3083 | H-164 — Indexed assignment uses the ([]=) operation name |
-| <a id="h-165"></a>H-165 | 3084–3093 | H-165 — Publish the documentation and assess autonomous Actor progress |
-| <a id="h-166"></a>H-166 | 3094–3103 | H-166 — Module top-level scopes live until process exit |
-| <a id="h-167"></a>H-167 | 3104–3113 | H-167 — Analyze effect-only whole-region holders and post-send emptiness |
-| <a id="h-168"></a>H-168 | 3114–3123 | H-168 — Intrinsic mailbox with local send errors, not delivery feedback |
-| <a id="h-169"></a>H-169 | 3124–3133 | H-169 — Whole-region effect assignment transfers ownership |
-| <a id="h-170"></a>H-170 | 3134–3143 | H-170 — Return an unsent region in a sum; consider optional dynamic bindings |
-| <a id="h-171"></a>H-171 | 3144–3153 | H-171 — Resume autonomous work on the clarified foundation |
-| <a id="h-172"></a>H-172 | 3154–3167 | H-172 — Confirm the exclusive effect-arrow syntax |
-| <a id="h-173"></a>H-173 | 3168–3177 | H-173 — Analyze a restricted dynamic-value set |
-| <a id="h-174"></a>H-174 | 3178–3187 | H-174 — Review ownership validity across branches |
-| <a id="h-175"></a>H-175 | 3188–3197 | H-175 — Discuss capture-free regional access and runtime-created user packets |
-| <a id="h-176"></a>H-176 | 3198–3207 | H-176 — A procedure captures symbol dependencies, never dynamic values |
-| <a id="h-177"></a>H-177 | 3208–3217 | H-177 — Ordinary variables may own whole regions |
-| <a id="h-178"></a>H-178 | 3218–3227 | H-178 — Consider region access in dynamic scope without ownership transfer out |
-| <a id="h-179"></a>H-179 | 3228–3237 | H-179 — Ordinary variables relinquish ownership to dynamic bindings |
-| <a id="h-180"></a>H-180 | 3238–3249 | H-180 — Distinguish packet transfer, effect resources and owner-preserving value capture |
-| <a id="h-181"></a>H-181 | 3250–3261 | H-181 — Direct regional resource types with checked bindings and explicit business optionality |
-| <a id="h-182"></a>H-182 | 3262–3271 | H-182 — Explore fresh or writable-optional effect sources and regional construction |
-| <a id="h-183"></a>H-183 | 3272–3281 | H-183 — Design ordinary regional holding and transfer as a coherent language mechanism |
-| <a id="h-184"></a>H-184 | 3282–3291 | H-184 — Lexical and symbolic procedures with mandatory typed symbol declarations |
-| <a id="h-185"></a>H-185 | 3292–3301 | H-185 — Dynamic calls use symbolic perform/behave; direct calls are lexical |
-| <a id="h-186"></a>H-186 | 3302–3311 | H-186 — Direct symbolic procedure declarations |
-| <a id="h-187"></a>H-187 | 3312–3321 | H-187 — Combined symbol and procedure declaration |
-| <a id="h-188"></a>H-188 | 3322–3331 | H-188 — Implement, validate and publish the agreed callable increment |
-| <a id="h-189"></a>H-189 | 3332–3341 | H-189 — Direct lexical procedure calls use the current dynamic environment |
-| <a id="h-190"></a>H-190 | 3342–3351 | H-190 — Region ownership is intrinsic; intra-region policies belong to user code |
-| <a id="h-191"></a>H-191 | 3352–3361 | H-191 — Approve the staged regional lifecycle goal |
-| <a id="h-192"></a>H-192 | 3362–3371 | H-192 — Explain whole-region types and consider explicit make allocation |
-| <a id="h-193"></a>H-193 | 3372–3385 | H-193 — Region-associated references, regional user types and post-send safety |
-| <a id="h-194"></a>H-194 | 3386–3395 | H-194 — Consider whole-region parameters across function and procedure calls |
-| <a id="h-195"></a>H-195 | 3396–3405 | H-195 — Explore functions with explicit memory effects but no dynamic-variable access |
-| <a id="h-196"></a>H-196 | 3406–3415 | H-196 — All types containing region owners are intrinsic |
-| <a id="h-197"></a>H-197 | 3416–3427 | H-197 — Adopt functions with explicit memory/I/O operations and explore owning/borrowed region types |
-| <a id="h-198"></a>H-198 | 3428–3437 | H-198 — Mutable functions are the baseline; future const functions are separate |
-| <a id="h-199"></a>H-199 | 3438–3447 | H-199 — Discuss ownership modifiers before choosing whole-region type spelling |
-| <a id="h-200"></a>H-200 | 3448–3457 | H-200 — Default borrowed types, one owning scope and proposed local bits construction |
-| <a id="h-201"></a>H-201 | 3458–3469 | H-201 — Const parameters and results carry non-borrowing values |
-| <a id="h-202"></a>H-202 | 3470–3481 | H-202 — Const non-bits read-only borrowing and storage validity |
-| <a id="h-203"></a>H-203 | 3482–3491 | H-203 — Stored references require the same allocation owner |
-| <a id="h-204"></a>H-204 | 3492–3501 | H-204 — Reference assignment versus bits-payload assignment |
-| <a id="h-205"></a>H-205 | 3502–3511 | H-205 — Name and review the ownership/bits transfer operator |
-| <a id="h-206"></a>H-206 | 3512–3523 | H-206 — Const destination result and root-policy-aware graph transfer |
-| <a id="h-207"></a>H-207 | 3524–3535 | H-207 — Ownership moves use explicit steps rather than const-result chains |
-| <a id="h-208"></a>H-208 | 3536–3545 | H-208 — Overloads receive actual region references for both operands |
-| <a id="h-209"></a>H-209 | 3546–3559 | H-209 — Right-associative transfer, unique-best dispatch and type/data declarations |
-| <a id="h-210"></a>H-210 | 3560–3569 | H-210 — Declare subtype relationships using <: |
-| <a id="h-211"></a>H-211 | 3570–3581 | H-211 — Mixed conformance and type-associated method selections |
-| <a id="h-212"></a>H-212 | 3582–3591 | H-212 — Separate receiving-context mixin from identity-preserving import |
-| <a id="h-213"></a>H-213 | 3592–3601 | H-213 — Structural means method signatures, not data structures |
-| <a id="h-214"></a>H-214 | 3602–3611 | H-214 — Modules do not occupy local names |
-| <a id="h-215"></a>H-215 | 3612–3621 | H-215 — Review explicit method aliases through separate imports |
-| <a id="h-216"></a>H-216 | 3622–3631 | H-216 — Open method declarations and method inheritance |
-| <a id="h-217"></a>H-217 | 3632–3641 | H-217 — Shadowable low-priority implicit method names |
-| <a id="h-218"></a>H-218 | 3642–3651 | H-218 — Explicit distributed data conformance declarations |
-| <a id="h-219"></a>H-219 | 3652–3661 | H-219 — Initial import reply for conformance visibility, clarified by H-220 |
-| <a id="h-220"></a>H-220 | 3662–3671 | H-220 — Import permission to declare; using may consume adapter conformance |
-| <a id="h-221"></a>H-221 | 3672–3681 | H-221 — Replace the stale goal and begin another ten active-work hours |
-| <a id="h-222"></a>H-222 | 3682–3691 | H-222 — Right-associated reference assignment and a const result |
-| <a id="h-223"></a>H-223 | 3692–3701 | H-223 — Assignment treats its RHS as const |
-| <a id="h-224"></a>H-224 | 3702–3711 | H-224 — Destination-typed const assignment overload result |
-| <a id="h-225"></a>H-225 | 3712–3723 | H-225 — Associated methods include result-only factories |
-| <a id="h-226"></a>H-226 | 3724–3735 | H-226 — Implicit method declarations follow using/import |
-| <a id="h-227"></a>H-227 | 3736–3747 | H-227 — Caller-selected implementation views |
-| <a id="h-228"></a>H-228 | 3748–3757 | H-228 — Request a concrete same-family alias example |
-| <a id="h-229"></a>H-229 | 3758–3767 | H-229 — Always dispatch on the concrete data type |
-| <a id="h-230"></a>H-230 | 3768–3777 | H-230 — Extension-module callable identities and same-alias unions |
-| <a id="h-231"></a>H-231 | 3778–3787 | H-231 — Explicit export and private-by-default module resources |
-| <a id="h-232"></a>H-232 | 3788–3799 | H-232 — Using preserves helper context; import adapts it |
-| <a id="h-233"></a>H-233 | 3800–3810 | H-233 — Explicit re-export and export import shorthand |
-| <a id="h-234"></a>H-234 | 3811–3820 | H-234 — Module worlds, explicit publication and effect-mediated editing |
-| <a id="h-235"></a>H-235 | 3821–3830 | H-235 — Keep callable implementation machinery internal |
-| <a id="h-236"></a>H-236 | 3831–3841 | H-236 — Architecture before local repairs |
-| <a id="h-237"></a>H-237 | 3842–3852 | H-237 — Module worlds and TLS worlds have distinct responsibilities |
-| <a id="h-238"></a>H-238 | 3853–3862 | H-238 — Inventory different entities before continuing architecture discussion |
-| <a id="h-239"></a>H-239 | 3863–3872 | H-239 — Flattened typed symbolic pointers and cross-world values |
-| <a id="h-240"></a>H-240 | 3873–3882 | H-240 — Dedicated semantic runtime world per module |
-| <a id="h-241"></a>H-241 | 3883–3893 | H-241 — Module worlds belong to Global Variables Done Right |
-| <a id="h-242"></a>H-242 | 3894–3903 | H-242 — Vocabulary modules define shared symbol, type and method identities |
-| <a id="h-243"></a>H-243 | 3904–3913 | H-243 — Continue autonomous implementation of the world architecture |
-| <a id="h-244"></a>H-244 | 3914–3923 | H-244 — Make the post-shared-world-editing architecture the active goal |
-| <a id="h-245"></a>H-245 | 3924–3935 | H-245 — Own-world construction, runtime TLS editing and replacement goal |
-| <a id="h-246"></a>H-246 | 3936–3945 | H-246 — Rebuild construction operations and remove obsolete helpers |
-| <a id="h-247"></a>H-247 | 3946–3955 | H-247 — Export an identity under a public alias |
-| <a id="h-248"></a>H-248 | 3956–3965 | H-248 — Identity-centered compiler structures with multiple aliases |
-| <a id="h-249"></a>H-249 | 3966–3975 | H-249 — Apply architectural principles autonomously |
-| <a id="h-250"></a>H-250 | 3976–3985 | H-250 — Global Variables Done Right slogan |
-| <a id="h-251"></a>H-251 | 3986–3995 | H-251 — Discuss RTTI decisions before design or implementation |
-| <a id="h-252"></a>H-252 | 3996–4005 | H-252 — Warn on multi-alias extension of one identity |
-| <a id="h-253"></a>H-253 | 4006–4017 | H-253 — Reject conflicting overloads while adapting an imported helper |
-| <a id="h-254"></a>H-254 | 4018–4039 | H-254 — Fixed-width fraction design draft and future compatibility review |
-| <a id="h-255"></a>H-255 | 4040–4049 | H-255 — Reserve // for fraction construction and # for line comments |
-| <a id="h-256"></a>H-256 | 4050–4059 | H-256 — Prioritize // reservation and representation-independent UoM |
-| <a id="h-257"></a>H-257 | 4060–4072 | H-257 — Correct lexical callees, distinguish callable declarations, and model LLVM values/places |
-| <a id="h-258"></a>H-258 | 4073–4084 | H-258 — Mandatory callable signatures with generics and varargs |
-| <a id="h-259"></a>H-259 | 4085–4094 | H-259 — Investigate deployed-header rebuild, repair in place, then resume language work |
-| <a id="h-260"></a>H-260 | 4095–4106 | H-260 — Independent unit declarations and explicit quantity representations |
-| <a id="h-261"></a>H-261 | 4107–4122 | H-261 — Whole-type lossless widening and consistent numeric dispatch |
-| <a id="h-262"></a>H-262 | 4123–4134 | H-262 — Compiler-tracked consumed state for named ordinary owners |
-| <a id="h-263"></a>H-263 | 4135–4146 | H-263 — Preserve valid views across local ownership transfer |
-| <a id="h-264"></a>H-264 | 4147–4158 | H-264 — Initial typed owning declaration and make syntax |
-| <a id="h-265"></a>H-265 | 4159–4170 | H-265 — Plan exception control; ultimate out-of-memory is unchecked |
-| <a id="h-266"></a>H-266 | 4171–4180 | H-266 — Discuss required decisions before autonomous continuation |
-| <a id="h-267"></a>H-267 | 4181–4191 | H-267 — Accepted exception and ordinary-region lifecycle package |
-| <a id="h-268"></a>H-268 | 4192–4201 | H-268 — Handler identity and payload separation suggestion |
-| <a id="h-269"></a>H-269 | 4202–4211 | H-269 — Retained explicit exception causes |
-| <a id="h-270"></a>H-270 | 4212–4223 | H-270 — Assignment destination views and reference-only equals |
-| <a id="h-271"></a>H-271 | 4224–4233 | H-271 — Ptr variables, fixed owners and external-owner parameters |
-| <a id="h-272"></a>H-272 | 4234–4245 | H-272 — Default parameter targets belong to the callee |
-| <a id="h-273"></a>H-273 | 4246–4255 | H-273 — Confirmed owner syntax and optional parameter ptr |
-| <a id="h-274"></a>H-274 | 4256–4265 | H-274 — Root-constrained region owners expose the actual region |
-| <a id="h-275"></a>H-275 | 4266–4277 | H-275 — Region is a declaration keyword across the language |
-| <a id="h-276"></a>H-276 | 4278–4287 | H-276 — Prefer region symbol and homogeneous declarations |
-| <a id="h-277"></a>H-277 | 4288–4297 | H-277 — Symbolic payload storage and cross-region rebinding |
-| <a id="h-278"></a>H-278 | 4298–4307 | H-278 — Symbolic writes remain effect-only |
-| <a id="h-279"></a>H-279 | 4308–4317 | H-279 — Initial effect-arrow-only clarification |
-| <a id="h-280"></a>H-280 | 4318–4327 | H-280 — Distinguish scoped rebinding from scoped transfer |
-| <a id="h-281"></a>H-281 | 4328–4337 | H-281 — Bits transfer and object-reference rebinding use distinct forms |
-| <a id="h-282"></a>H-282 | 4338–4347 | H-282 — Review scoped transfer versus symbolic object mutation |
-| <a id="h-283"></a>H-283 | 4348–4357 | H-283 — Effect-prefixed and bare transfer are distinct syntax |
-| <a id="h-284"></a>H-284 | 4358–4367 | H-284 — Shared-region constraints in symbolic declarations and effects |
-| <a id="h-285"></a>H-285 | 4368–4377 | H-285 — Evaluate grouped effect inputs before installing the group |
-| <a id="h-286"></a>H-286 | 4378–4391 | H-286 — Reject incompatible partial replay and allow explicit touch capture |
-| <a id="h-287"></a>H-287 | 4392–4401 | H-287 — Implement the scoped symbolic-binding contract |
-| <a id="h-288"></a>H-288 | 4402–4411 | H-288 — All effect expressions return void |
-| <a id="h-289"></a>H-289 | 4412–4421 | H-289 — Review callable rebinding and inline procedure effects together |
-| <a id="h-290"></a>H-290 | 4422–4431 | H-290 — Inline effect proc introduces or checks a typed symbol |
-| <a id="h-291"></a>H-291 | 4432–4441 | H-291 — Procedure rebinding requires equals |
-| <a id="h-292"></a>H-292 | 4442–4451 | H-292 — Implicit local bits construction for fresh ptr initializers |
-| <a id="h-293"></a>H-293 | 4452–4463 | H-293 — Preserve read-only aliases and require external assignment owners |
-| <a id="h-294"></a>H-294 | 4464–4473 | H-294 — Review transfer initialization of an ordinary ptr |
-| <a id="h-295"></a>H-295 | 4474–4487 | H-295 — Compile-time typeof and proposed named initialization block |
-| <a id="h-296"></a>H-296 | 4488–4499 | H-296 — Separate individual value initialization from a group block |
-| <a id="h-297"></a>H-297 | 4500–4511 | H-297 — Allow deferred initialization and reject premature reads |
-| <a id="h-298"></a>H-298 | 4512–4521 | H-298 — Integrate the confirmed design, implement and validate |
-| <a id="h-299"></a>H-299 | 4522–4533 | H-299 — Reject writable-to-read-only ptr rebinding |
-| <a id="h-300"></a>H-300 | 4534–4543 | H-300 — Assess a zero-iteration loop else |
-| <a id="h-301"></a>H-301 | 4544–4553 | H-301 — Consider a writable reference-assignment result |
-| <a id="h-302"></a>H-302 | 4554–4569 | H-302 — Const-qualified assignment methods and checked bodies |
-| <a id="h-303"></a>H-303 | 4570–4579 | H-303 — Destination return is a semantic safeguard |
-| <a id="h-304"></a>H-304 | 4580–4591 | H-304 — Explicit builtin delegation and zero-iteration range else |
-| <a id="h-305"></a>H-305 | 4592–4601 | H-305 — Invariant-based loop rebinding and fixed pointer declarations |
-| <a id="h-306"></a>H-306 | 4602–4615 | H-306 — Reference/bits swap syntax and contract |
-| <a id="h-307"></a>H-307 | 4616–4625 | H-307 — Complete region declaration migration and logical transfer results |
-| <a id="h-308"></a>H-308 | 4626–4635 | H-308 — Chaining guidance is conditional on library intent |
-| <a id="h-309"></a>H-309 | 4636–4647 | H-309 — Ptr fields and ref/ptr-only ordinary declaration direction |
-| <a id="h-310"></a>H-310 | 4648–4659 | H-310 — Every ref/ptr field stores a reference, including scalars |
-| <a id="h-311"></a>H-311 | 4660–4671 | H-311 — Unmodified/val fields store bits directly |
-| <a id="h-312"></a>H-312 | 4672–4681 | H-312 — Review checked NPE and val locals/parameters |
-| <a id="h-313"></a>H-313 | 4682–4691 | H-313 — Accepted checked NPE and val implementation |
-| <a id="h-314"></a>H-314 | 4692–4701 | H-314 — Optional owner annotation and first non-null acquisition |
-| <a id="h-315"></a>H-315 | 4702–4711 | H-315 — Null intrinsic spelling |
-| <a id="h-316"></a>H-316 | 4712–4721 | H-316 — Retire historical syntax, validate and publish |
-| <a id="h-317"></a>H-317 | 4722–4731 | H-317 — Nullable calls and bounded cyclic construction |
-| <a id="h-318"></a>H-318 | 4732–4743 | H-318 — Annotation and deferred-expression implementation request |
-| <a id="h-319"></a>H-319 | 4744–4759 | H-319 — Explicit block scopes and deferred capture direction |
-| <a id="h-320"></a>H-320 | 4760–4769 | H-320 — Contextually typed scoped-block callback proposal |
-| <a id="h-321"></a>H-321 | 4770–4779 | H-321 — Explicit and contextual anonymous procedures |
-| <a id="h-322"></a>H-322 | 4780–4791 | H-322 — Unified closure owners and region-only reference-capture proposal |
-| <a id="h-323"></a>H-323 | 4792–4799 | — |
-| <a id="h-324"></a>H-324 | 4800–4809 | — |
-| <a id="h-325"></a>H-325 | 4810–4817 | — |
-| <a id="h-326"></a>H-326 | 4818–4825 | — |
-| <a id="h-327"></a>H-327 | 4826–4837 | — |
-| <a id="h-328"></a>H-328 | 4838–4845 | — |
-| <a id="h-329"></a>H-329 | 4846–4865 | — |
-| <a id="h-330"></a>H-330 | 4866–4873 | — |
-| <a id="h-331"></a>H-331 | 4874–4881 | — |
-| <a id="h-332"></a>H-332 | 4882–4889 | — |
-| <a id="h-333"></a>H-333 | 4890–4897 | — |
-| <a id="h-334"></a>H-334 | 4898–4905 | — |
-| <a id="h-335"></a>H-335 | 4906–4913 | — |
-| <a id="h-336"></a>H-336 | 4914–4921 | — |
-| <a id="h-337"></a>H-337 | 4922–4929 | — |
-| <a id="h-338"></a>H-338 | 4930–4940 | — |
-| <a id="h-339"></a>H-339 | 4941–4949 | — |
-| <a id="h-340"></a>H-340 | 4950–4958 | — |
-| <a id="h-341"></a>H-341 | 4959–4966 | — |
-| <a id="h-342"></a>H-342 | 4967–4974 | — |
-| <a id="h-343"></a>H-343 | 4975–4982 | — |
-| <a id="h-344"></a>H-344 | 4983–4990 | — |
-| <a id="h-345"></a>H-345 | 4991–4998 | — |
-| <a id="h-346"></a>H-346 | 4999–5008 | — |
-| <a id="h-347"></a>H-347 | 5009–5018 | — |
-| <a id="h-348"></a>H-348 | 5019–5026 | — |
-| <a id="h-349"></a>H-349 | 5027–5034 | — |
-| <a id="h-350"></a>H-350 | 5035–5042 | — |
-| <a id="h-351"></a>H-351 | 5043–5052 | H-351 — Library graph transfer across regions, including DBMR |
-| <a id="h-352"></a>H-352 | 5053–5072 | H-352 — Library policies, compatibility, Actor support, snapshots and intrinsic SPI |
-| <a id="h-353"></a>H-353 | 5073–5090 | H-353 — Plan a CoD-native compiler application and owner-aware native cleanup |
-| <a id="h-354"></a>H-354 | 5091–5100 | H-354 — Propose explicit output initialization and local handle storage |
-| <a id="h-355"></a>H-355 | 5101–5112 | H-355 — Registration-time evaluation terminology and syntax comparison |
-| <a id="h-356"></a>H-356 | 5113–5122 | H-356 — Prepare deferred calls at registration; delay explicit blocks |
-| <a id="h-357"></a>H-357 | 5123–5134 | H-357 — Later deferred blocks can handle earlier cleanup failures |
-| <a id="h-358"></a>H-358 | 5135–5150 | H-358 — Deferred catch/finally and retained normal completion |
-| <a id="h-359"></a>H-359 | 5151–5160 | H-359 — Loop-body declarations require per-iteration explicit scopes |
-| <a id="h-360"></a>H-360 | 5161–5174 | H-360 — Deferred fallback handlers and scope-body exception recovery |
-| <a id="h-361"></a>H-361 | 5175–5184 | H-361 — Explicit callable returns and unchecked missing-return failure |
-| <a id="h-362"></a>H-362 | 5185–5198 | H-362 — Enclosing returns from deferred handlers and void fallthrough |
-| <a id="h-363"></a>H-363 | 5199–5212 | H-363 — Pure declaration syntax; purity implementation remains deferred |
-| <a id="h-364"></a>H-364 | 5213–5222 | H-364 — Further loop-scope integration awaits the user's design conclusion |
-| <a id="h-365"></a>H-365 | 5223–5259 | H-365 — Final loop scoping rules and enclosing-scope defer accumulation |
-| <a id="h-366"></a>H-366 | 5260–5272 | H-366 — Independent declaration and target const positions |
-| <a id="h-367"></a>H-367 | 5273–5281 | H-367 — Parameter binding const is local and not overload identity |
-| <a id="h-368"></a>H-368 | 5282–5290 | H-368 — Readonly target access propagates through object references |
-| <a id="h-369"></a>H-369 | 5291–5303 | H-369 — Derive direct qualifier consequences without repeated approval |
-| <a id="h-370"></a>H-370 | 5304–5318 | H-370 — Deferred owning arguments transfer at callee entry |
-| <a id="h-371"></a>H-371 | 5319–5327 | H-371 — Deferred blocks require explicit scopes for declarations and effects |
-| <a id="h-372"></a>H-372 | 5328–5342 | H-372 — Separate module registration from explicit TLS installation |
-| <a id="h-373"></a>H-373 | 5343–5355 | H-373 — Symbol objects, TLS reads and installation sources |
-| <a id="h-374"></a>H-374 | 5356–5364 | H-374 — Publish the complete callable method family |
-| <a id="h-375"></a>H-375 | 5365–5373 | H-375 — Family dispatcher values and actual-type method selection |
-| <a id="h-376"></a>H-376 | 5374–5382 | H-376 — Ahead-of-time coverage of admissible leaf combinations |
-| <a id="h-377"></a>H-377 | 5383–5403 | H-377 — Named vision, world comparison and scheduled delivery |
-| <a id="h-378"></a>H-378 | 5404–5414 | H-378 — Confirm the scoped AOT dispatch value path |
-| <a id="h-379"></a>H-379 | 5415–5423 | H-379 — Entry installation authority and unused dependency code |
-| <a id="h-380"></a>H-380 | 5424–5438 | H-380 — Initialization-only cancellation preserves operand effects |
-| <a id="h-381"></a>H-381 | 5439–5449 | H-381 — Symbol access follows the nearest lexical binding |
-| <a id="h-382"></a>H-382 | 5450–5462 | H-382 — Inferred owners are const lexical bindings |
-| <a id="h-383"></a>H-383 | 5463–5481 | H-383 — Intrinsic reference ownership and bits/non-bits placement |
-| <a id="h-384"></a>H-384 | 5482–5496 | H-384 — Reviewed bits eligibility, explicit make owners and delegated alternatives |
-| <a id="h-385"></a>H-385 | 5497–5509 | H-385 — Region acquisition constness restricts the result |
-| <a id="h-386"></a>H-386 | 5510–5532 | H-386 — Whole-file review, contextual construction and coordinated migration |
-| <a id="h-387"></a>H-387 | 5533–5543 | H-387 — Architecture redirection and isolated exploration (recorded 2026-11-13 UTC) |
+| Event | Source: lines |
+| --- | --- |
+| <a id="h-01"></a>H-01 | A:1201–1207 |
+| <a id="h-02"></a>H-02 | A:1208–1214 |
+| <a id="h-03"></a>H-03 | A:1215–1221 |
+| <a id="h-04"></a>H-04 | A:1222–1228 |
+| <a id="h-05"></a>H-05 | A:1229–1235 |
+| <a id="h-06"></a>H-06 | A:1236–1247 |
+| <a id="h-07"></a>H-07 | A:1248–1259 |
+| <a id="h-08"></a>H-08 | A:1260–1271 |
+| <a id="h-09"></a>H-09 | A:1272–1283 |
+| <a id="h-10"></a>H-10 | A:1284–1292 |
+| <a id="h-11"></a>H-11 | A:1293–1301 |
+| <a id="h-12"></a>H-12 | A:1302–1310 |
+| <a id="h-13"></a>H-13 | A:1311–1319 |
+| <a id="h-14"></a>H-14 | A:1320–1328 |
+| <a id="h-15"></a>H-15 | A:1329–1337 |
+| <a id="h-16"></a>H-16 | A:1338–1346 |
+| <a id="h-17"></a>H-17 | A:1347–1355 |
+| <a id="h-18"></a>H-18 | A:1356–1364 |
+| <a id="h-19"></a>H-19 | A:1365–1373 |
+| <a id="h-20"></a>H-20 | A:1374–1382 |
+| <a id="h-21"></a>H-21 | A:1383–1393 |
+| <a id="h-22"></a>H-22 | A:1394–1402 |
+| <a id="h-23"></a>H-23 | A:1403–1413 |
+| <a id="h-24"></a>H-24 | A:1414–1426 |
+| <a id="h-25"></a>H-25 | A:1427–1437 |
+| <a id="h-26"></a>H-26 | A:1438–1446 |
+| <a id="h-27"></a>H-27 | A:1447–1457 |
+| <a id="h-28"></a>H-28 | A:1458–1468 |
+| <a id="h-29"></a>H-29 | A:1469–1479 |
+| <a id="h-30"></a>H-30 | A:1480–1490 |
+| <a id="h-31"></a>H-31 | A:1491–1501 |
+| <a id="h-32"></a>H-32 | A:1502–1512 |
+| <a id="h-33"></a>H-33 | A:1513–1523 |
+| <a id="h-34"></a>H-34 | A:1524–1534 |
+| <a id="h-35"></a>H-35 | A:1535–1545 |
+| <a id="h-36"></a>H-36 | A:1546–1557 |
+| <a id="h-37"></a>H-37 | A:1558–1568 |
+| <a id="h-38"></a>H-38 | A:1569–1579 |
+| <a id="h-39"></a>H-39 | A:1580–1590 |
+| <a id="h-40"></a>H-40 | A:1591–1602 |
+| <a id="h-41"></a>H-41 | A:1603–1614 |
+| <a id="h-42"></a>H-42 | A:1615–1626 |
+| <a id="h-43"></a>H-43 | A:1627–1638 |
+| <a id="h-44"></a>H-44 | A:1639–1650 |
+| <a id="h-45"></a>H-45 | A:1651–1664 |
+| <a id="h-46"></a>H-46 | A:1665–1676 |
+| <a id="h-47"></a>H-47 | A:1677–1688 |
+| <a id="h-48"></a>H-48 | A:1689–1700 |
+| <a id="h-49"></a>H-49 | A:1701–1712 |
+| <a id="h-50"></a>H-50 | A:1713–1724 |
+| <a id="h-51"></a>H-51 | A:1725–1737 |
+| <a id="h-52"></a>H-52 | A:1738–1749 |
+| <a id="h-53"></a>H-53 | A:1750–1762 |
+| <a id="h-54"></a>H-54 | A:1763–1774 |
+| <a id="h-55"></a>H-55 | A:1775–1786 |
+| <a id="h-56"></a>H-56 | A:1787–1806 |
+| <a id="h-57"></a>H-57 | A:1807–1818 |
+| <a id="h-58"></a>H-58 | A:1819–1831 |
+| <a id="h-59"></a>H-59 | A:1832–1843 |
+| <a id="h-60"></a>H-60 | A:1844–1856 |
+| <a id="h-61"></a>H-61 | A:1857–1869 |
+| <a id="h-62"></a>H-62 | A:1870–1884 |
+| <a id="h-63"></a>H-63 | A:1885–1897 |
+| <a id="h-64"></a>H-64 | A:1898–1910 |
+| <a id="h-65"></a>H-65 | A:1911–1928 |
+| <a id="h-66"></a>H-66 | A:1929–1944 |
+| <a id="h-67"></a>H-67 | A:1945–1958 |
+| <a id="h-68"></a>H-68 | A:1959–1982 |
+| <a id="h-69"></a>H-69 | A:1983–1994 |
+| <a id="h-70"></a>H-70 | A:1995–2006 |
+| <a id="h-71"></a>H-71 | A:2007–2026 |
+| <a id="h-72"></a>H-72 | A:2027–2038 |
+| <a id="h-73"></a>H-73 | A:2039–2050 |
+| <a id="h-74"></a>H-74 | A:2051–2063 |
+| <a id="h-75"></a>H-75 | A:2064–2077 |
+| <a id="h-76"></a>H-76 | A:2078–2089 |
+| <a id="h-77"></a>H-77 | A:2090–2101 |
+| <a id="h-78"></a>H-78 | A:2102–2117 |
+| <a id="h-79"></a>H-79 | A:2118–2129 |
+| <a id="h-80"></a>H-80 | A:2130–2141 |
+| <a id="h-81"></a>H-81 | A:2142–2153 |
+| <a id="h-82"></a>H-82 | A:2154–2169 |
+| <a id="h-83"></a>H-83 | A:2170–2185 |
+| <a id="h-84"></a>H-84 | A:2186–2201 |
+| <a id="h-85"></a>H-85 | A:2202–2217 |
+| <a id="h-86"></a>H-86 | A:2218–2231 |
+| <a id="h-87"></a>H-87 | A:2232–2247 |
+| <a id="h-88"></a>H-88 | A:2248–2259 |
+| <a id="h-89"></a>H-89 | A:2260–2271 |
+| <a id="h-90"></a>H-90 | A:2272–2283 |
+| <a id="h-91"></a>H-91 | A:2284–2295 |
+| <a id="h-92"></a>H-92 | A:2296–2305 |
+| <a id="h-93"></a>H-93 | A:2306–2319 |
+| <a id="h-94"></a>H-94 | A:2320–2335 |
+| <a id="h-95"></a>H-95 | A:2336–2345 |
+| <a id="h-96"></a>H-96 | A:2346–2361 |
+| <a id="h-97"></a>H-97 | A:2362–2371 |
+| <a id="h-98"></a>H-98 | A:2372–2381 |
+| <a id="h-99"></a>H-99 | A:2382–2391 |
+| <a id="h-100"></a>H-100 | A:2392–2401 |
+| <a id="h-101"></a>H-101 | A:2402–2411 |
+| <a id="h-102"></a>H-102 | A:2412–2421 |
+| <a id="h-103"></a>H-103 | A:2422–2431 |
+| <a id="h-104"></a>H-104 | A:2432–2441 |
+| <a id="h-105"></a>H-105 | A:2442–2451 |
+| <a id="h-106"></a>H-106 | A:2452–2461 |
+| <a id="h-107"></a>H-107 | A:2462–2471 |
+| <a id="h-108"></a>H-108 | A:2472–2481 |
+| <a id="h-109"></a>H-109 | A:2482–2491 |
+| <a id="h-110"></a>H-110 | A:2492–2501 |
+| <a id="h-111"></a>H-111 | A:2502–2512 |
+| <a id="h-112"></a>H-112 | A:2513–2523 |
+| <a id="h-113"></a>H-113 | A:2524–2534 |
+| <a id="h-114"></a>H-114 | A:2535–2545 |
+| <a id="h-115"></a>H-115 | A:2546–2556 |
+| <a id="h-116"></a>H-116 | A:2557–2567 |
+| <a id="h-117"></a>H-117 | A:2568–2577 |
+| <a id="h-118"></a>H-118 | A:2578–2588 |
+| <a id="h-119"></a>H-119 | A:2589–2599 |
+| <a id="h-120"></a>H-120 | A:2600–2610 |
+| <a id="h-121"></a>H-121 | A:2611–2621 |
+| <a id="h-122"></a>H-122 | A:2622–2632 |
+| <a id="h-123"></a>H-123 | A:2633–2647 |
+| <a id="h-124"></a>H-124 | A:2648–2658 |
+| <a id="h-125"></a>H-125 | A:2659–2669 |
+| <a id="h-126"></a>H-126 | A:2670–2680 |
+| <a id="h-127"></a>H-127 | A:2681–2691 |
+| <a id="h-128"></a>H-128 | A:2692–2702 |
+| <a id="h-129"></a>H-129 | A:2703–2713 |
+| <a id="h-130"></a>H-130 | A:2714–2724 |
+| <a id="h-131"></a>H-131 | A:2725–2735 |
+| <a id="h-132"></a>H-132 | A:2736–2746 |
+| <a id="h-133"></a>H-133 | A:2747–2757 |
+| <a id="h-134"></a>H-134 | A:2758–2768 |
+| <a id="h-135"></a>H-135 | A:2769–2779 |
+| <a id="h-136"></a>H-136 | A:2780–2790 |
+| <a id="h-137"></a>H-137 | A:2791–2801 |
+| <a id="h-138"></a>H-138 | A:2802–2813 |
+| <a id="h-139"></a>H-139 | A:2814–2824 |
+| <a id="h-140"></a>H-140 | A:2825–2835 |
+| <a id="h-141"></a>H-141 | A:2836–2845 |
+| <a id="h-142"></a>H-142 | A:2846–2855 |
+| <a id="h-143"></a>H-143 | A:2856–2865 |
+| <a id="h-144"></a>H-144 | A:2866–2875 |
+| <a id="h-145"></a>H-145 | A:2876–2885 |
+| <a id="h-146"></a>H-146 | A:2886–2895 |
+| <a id="h-147"></a>H-147 | A:2896–2905 |
+| <a id="h-148"></a>H-148 | A:2906–2917 |
+| <a id="h-149"></a>H-149 | A:2918–2929 |
+| <a id="h-150"></a>H-150 | A:2930–2941 |
+| <a id="h-151"></a>H-151 | A:2942–2951 |
+| <a id="h-152"></a>H-152 | A:2952–2961 |
+| <a id="h-153"></a>H-153 | A:2962–2971 |
+| <a id="h-154"></a>H-154 | A:2972–2981 |
+| <a id="h-155"></a>H-155 | A:2982–2991 |
+| <a id="h-156"></a>H-156 | A:2992–3001 |
+| <a id="h-157"></a>H-157 | A:3002–3013 |
+| <a id="h-158"></a>H-158 | A:3014–3023 |
+| <a id="h-159"></a>H-159 | A:3024–3033 |
+| <a id="h-160"></a>H-160 | A:3034–3043 |
+| <a id="h-161"></a>H-161 | A:3044–3053 |
+| <a id="h-162"></a>H-162 | A:3054–3063 |
+| <a id="h-163"></a>H-163 | A:3064–3073 |
+| <a id="h-164"></a>H-164 | A:3074–3083 |
+| <a id="h-165"></a>H-165 | A:3084–3093 |
+| <a id="h-166"></a>H-166 | A:3094–3103 |
+| <a id="h-167"></a>H-167 | A:3104–3113 |
+| <a id="h-168"></a>H-168 | A:3114–3123 |
+| <a id="h-169"></a>H-169 | A:3124–3133 |
+| <a id="h-170"></a>H-170 | A:3134–3143 |
+| <a id="h-171"></a>H-171 | A:3144–3153 |
+| <a id="h-172"></a>H-172 | A:3154–3167 |
+| <a id="h-173"></a>H-173 | A:3168–3177 |
+| <a id="h-174"></a>H-174 | A:3178–3187 |
+| <a id="h-175"></a>H-175 | A:3188–3197 |
+| <a id="h-176"></a>H-176 | A:3198–3207 |
+| <a id="h-177"></a>H-177 | A:3208–3217 |
+| <a id="h-178"></a>H-178 | A:3218–3227 |
+| <a id="h-179"></a>H-179 | A:3228–3237 |
+| <a id="h-180"></a>H-180 | A:3238–3249 |
+| <a id="h-181"></a>H-181 | A:3250–3261 |
+| <a id="h-182"></a>H-182 | A:3262–3271 |
+| <a id="h-183"></a>H-183 | A:3272–3281 |
+| <a id="h-184"></a>H-184 | A:3282–3291 |
+| <a id="h-185"></a>H-185 | A:3292–3301 |
+| <a id="h-186"></a>H-186 | A:3302–3311 |
+| <a id="h-187"></a>H-187 | A:3312–3321 |
+| <a id="h-188"></a>H-188 | A:3322–3331 |
+| <a id="h-189"></a>H-189 | A:3332–3341 |
+| <a id="h-190"></a>H-190 | A:3342–3351 |
+| <a id="h-191"></a>H-191 | A:3352–3361 |
+| <a id="h-192"></a>H-192 | A:3362–3371 |
+| <a id="h-193"></a>H-193 | A:3372–3385 |
+| <a id="h-194"></a>H-194 | A:3386–3395 |
+| <a id="h-195"></a>H-195 | A:3396–3405 |
+| <a id="h-196"></a>H-196 | A:3406–3415 |
+| <a id="h-197"></a>H-197 | A:3416–3427 |
+| <a id="h-198"></a>H-198 | A:3428–3437 |
+| <a id="h-199"></a>H-199 | A:3438–3447 |
+| <a id="h-200"></a>H-200 | A:3448–3457 |
+| <a id="h-201"></a>H-201 | A:3458–3469 |
+| <a id="h-202"></a>H-202 | A:3470–3481 |
+| <a id="h-203"></a>H-203 | A:3482–3491 |
+| <a id="h-204"></a>H-204 | A:3492–3501 |
+| <a id="h-205"></a>H-205 | A:3502–3511 |
+| <a id="h-206"></a>H-206 | A:3512–3523 |
+| <a id="h-207"></a>H-207 | A:3524–3535 |
+| <a id="h-208"></a>H-208 | A:3536–3545 |
+| <a id="h-209"></a>H-209 | A:3546–3559 |
+| <a id="h-210"></a>H-210 | A:3560–3569 |
+| <a id="h-211"></a>H-211 | A:3570–3581 |
+| <a id="h-212"></a>H-212 | A:3582–3591 |
+| <a id="h-213"></a>H-213 | A:3592–3601 |
+| <a id="h-214"></a>H-214 | A:3602–3611 |
+| <a id="h-215"></a>H-215 | A:3612–3621 |
+| <a id="h-216"></a>H-216 | A:3622–3631 |
+| <a id="h-217"></a>H-217 | A:3632–3641 |
+| <a id="h-218"></a>H-218 | A:3642–3651 |
+| <a id="h-219"></a>H-219 | A:3652–3661 |
+| <a id="h-220"></a>H-220 | A:3662–3671 |
+| <a id="h-221"></a>H-221 | A:3672–3681 |
+| <a id="h-222"></a>H-222 | A:3682–3691 |
+| <a id="h-223"></a>H-223 | A:3692–3701 |
+| <a id="h-224"></a>H-224 | A:3702–3711 |
+| <a id="h-225"></a>H-225 | A:3712–3723 |
+| <a id="h-226"></a>H-226 | A:3724–3735 |
+| <a id="h-227"></a>H-227 | A:3736–3747 |
+| <a id="h-228"></a>H-228 | A:3748–3757 |
+| <a id="h-229"></a>H-229 | A:3758–3767 |
+| <a id="h-230"></a>H-230 | A:3768–3777 |
+| <a id="h-231"></a>H-231 | A:3778–3787 |
+| <a id="h-232"></a>H-232 | A:3788–3799 |
+| <a id="h-233"></a>H-233 | A:3800–3810 |
+| <a id="h-234"></a>H-234 | A:3811–3820 |
+| <a id="h-235"></a>H-235 | A:3821–3830 |
+| <a id="h-236"></a>H-236 | A:3831–3841 |
+| <a id="h-237"></a>H-237 | A:3842–3852 |
+| <a id="h-238"></a>H-238 | A:3853–3862 |
+| <a id="h-239"></a>H-239 | A:3863–3872 |
+| <a id="h-240"></a>H-240 | A:3873–3882 |
+| <a id="h-241"></a>H-241 | A:3883–3893 |
+| <a id="h-242"></a>H-242 | A:3894–3903 |
+| <a id="h-243"></a>H-243 | A:3904–3913 |
+| <a id="h-244"></a>H-244 | A:3914–3923 |
+| <a id="h-245"></a>H-245 | A:3924–3935 |
+| <a id="h-246"></a>H-246 | A:3936–3945 |
+| <a id="h-247"></a>H-247 | A:3946–3955 |
+| <a id="h-248"></a>H-248 | A:3956–3965 |
+| <a id="h-249"></a>H-249 | A:3966–3975 |
+| <a id="h-250"></a>H-250 | A:3976–3985 |
+| <a id="h-251"></a>H-251 | A:3986–3995 |
+| <a id="h-252"></a>H-252 | A:3996–4005 |
+| <a id="h-253"></a>H-253 | A:4006–4017 |
+| <a id="h-254"></a>H-254 | A:4018–4039 |
+| <a id="h-255"></a>H-255 | A:4040–4049 |
+| <a id="h-256"></a>H-256 | A:4050–4059 |
+| <a id="h-257"></a>H-257 | A:4060–4072 |
+| <a id="h-258"></a>H-258 | A:4073–4084 |
+| <a id="h-259"></a>H-259 | A:4085–4094 |
+| <a id="h-260"></a>H-260 | A:4095–4106 |
+| <a id="h-261"></a>H-261 | A:4107–4122 |
+| <a id="h-262"></a>H-262 | A:4123–4134 |
+| <a id="h-263"></a>H-263 | A:4135–4146 |
+| <a id="h-264"></a>H-264 | A:4147–4158 |
+| <a id="h-265"></a>H-265 | A:4159–4170 |
+| <a id="h-266"></a>H-266 | A:4171–4180 |
+| <a id="h-267"></a>H-267 | A:4181–4191 |
+| <a id="h-268"></a>H-268 | A:4192–4201 |
+| <a id="h-269"></a>H-269 | A:4202–4211 |
+| <a id="h-270"></a>H-270 | A:4212–4223 |
+| <a id="h-271"></a>H-271 | A:4224–4233 |
+| <a id="h-272"></a>H-272 | A:4234–4245 |
+| <a id="h-273"></a>H-273 | A:4246–4255 |
+| <a id="h-274"></a>H-274 | A:4256–4265 |
+| <a id="h-275"></a>H-275 | A:4266–4277 |
+| <a id="h-276"></a>H-276 | A:4278–4287 |
+| <a id="h-277"></a>H-277 | A:4288–4297 |
+| <a id="h-278"></a>H-278 | A:4298–4307 |
+| <a id="h-279"></a>H-279 | A:4308–4317 |
+| <a id="h-280"></a>H-280 | A:4318–4327 |
+| <a id="h-281"></a>H-281 | A:4328–4337 |
+| <a id="h-282"></a>H-282 | A:4338–4347 |
+| <a id="h-283"></a>H-283 | A:4348–4357 |
+| <a id="h-284"></a>H-284 | A:4358–4367 |
+| <a id="h-285"></a>H-285 | A:4368–4377 |
+| <a id="h-286"></a>H-286 | A:4378–4391 |
+| <a id="h-287"></a>H-287 | A:4392–4401 |
+| <a id="h-288"></a>H-288 | A:4402–4411 |
+| <a id="h-289"></a>H-289 | A:4412–4421 |
+| <a id="h-290"></a>H-290 | A:4422–4431 |
+| <a id="h-291"></a>H-291 | A:4432–4441 |
+| <a id="h-292"></a>H-292 | A:4442–4451 |
+| <a id="h-293"></a>H-293 | A:4452–4463 |
+| <a id="h-294"></a>H-294 | A:4464–4473 |
+| <a id="h-295"></a>H-295 | A:4474–4487 |
+| <a id="h-296"></a>H-296 | A:4488–4499 |
+| <a id="h-297"></a>H-297 | A:4500–4511 |
+| <a id="h-298"></a>H-298 | A:4512–4521 |
+| <a id="h-299"></a>H-299 | A:4522–4533 |
+| <a id="h-300"></a>H-300 | A:4534–4543 |
+| <a id="h-301"></a>H-301 | A:4544–4553 |
+| <a id="h-302"></a>H-302 | A:4554–4569 |
+| <a id="h-303"></a>H-303 | A:4570–4579 |
+| <a id="h-304"></a>H-304 | A:4580–4591 |
+| <a id="h-305"></a>H-305 | A:4592–4601 |
+| <a id="h-306"></a>H-306 | A:4602–4615 |
+| <a id="h-307"></a>H-307 | A:4616–4625 |
+| <a id="h-308"></a>H-308 | A:4626–4635 |
+| <a id="h-309"></a>H-309 | A:4636–4647 |
+| <a id="h-310"></a>H-310 | A:4648–4659 |
+| <a id="h-311"></a>H-311 | A:4660–4671 |
+| <a id="h-312"></a>H-312 | A:4672–4681 |
+| <a id="h-313"></a>H-313 | A:4682–4691 |
+| <a id="h-314"></a>H-314 | A:4692–4701 |
+| <a id="h-315"></a>H-315 | A:4702–4711 |
+| <a id="h-316"></a>H-316 | A:4712–4721 |
+| <a id="h-317"></a>H-317 | A:4722–4731 |
+| <a id="h-318"></a>H-318 | A:4732–4743 |
+| <a id="h-319"></a>H-319 | A:4744–4759 |
+| <a id="h-320"></a>H-320 | A:4760–4769 |
+| <a id="h-321"></a>H-321 | A:4770–4779 |
+| <a id="h-322"></a>H-322 | A:4780–4791 |
+| <a id="h-323"></a>H-323 | A:4792–4799 |
+| <a id="h-324"></a>H-324 | A:4800–4809 |
+| <a id="h-325"></a>H-325 | A:4810–4817 |
+| <a id="h-326"></a>H-326 | A:4818–4825 |
+| <a id="h-327"></a>H-327 | A:4826–4837 |
+| <a id="h-328"></a>H-328 | A:4838–4845 |
+| <a id="h-329"></a>H-329 | A:4846–4865 |
+| <a id="h-330"></a>H-330 | A:4866–4873 |
+| <a id="h-331"></a>H-331 | A:4874–4881 |
+| <a id="h-332"></a>H-332 | A:4882–4889 |
+| <a id="h-333"></a>H-333 | A:4890–4897 |
+| <a id="h-334"></a>H-334 | A:4898–4905 |
+| <a id="h-335"></a>H-335 | A:4906–4913 |
+| <a id="h-336"></a>H-336 | A:4914–4921 |
+| <a id="h-337"></a>H-337 | A:4922–4929 |
+| <a id="h-338"></a>H-338 | A:4930–4940 |
+| <a id="h-339"></a>H-339 | A:4941–4949 |
+| <a id="h-340"></a>H-340 | A:4950–4958 |
+| <a id="h-341"></a>H-341 | A:4959–4966 |
+| <a id="h-342"></a>H-342 | A:4967–4974 |
+| <a id="h-343"></a>H-343 | A:4975–4982 |
+| <a id="h-344"></a>H-344 | A:4983–4990 |
+| <a id="h-345"></a>H-345 | A:4991–4998 |
+| <a id="h-346"></a>H-346 | A:4999–5008 |
+| <a id="h-347"></a>H-347 | A:5009–5018 |
+| <a id="h-348"></a>H-348 | A:5019–5026 |
+| <a id="h-349"></a>H-349 | A:5027–5034 |
+| <a id="h-350"></a>H-350 | A:5035–5042 |
+| <a id="h-351"></a>H-351 | A:5043–5052 |
+| <a id="h-352"></a>H-352 | A:5053–5072 |
+| <a id="h-353"></a>H-353 | A:5073–5090 |
+| <a id="h-354"></a>H-354 | A:5091–5100 |
+| <a id="h-355"></a>H-355 | A:5101–5112 |
+| <a id="h-356"></a>H-356 | A:5113–5122 |
+| <a id="h-357"></a>H-357 | A:5123–5134 |
+| <a id="h-358"></a>H-358 | A:5135–5150 |
+| <a id="h-359"></a>H-359 | A:5151–5160 |
+| <a id="h-360"></a>H-360 | A:5161–5174 |
+| <a id="h-361"></a>H-361 | A:5175–5184 |
+| <a id="h-362"></a>H-362 | A:5185–5198 |
+| <a id="h-363"></a>H-363 | A:5199–5212 |
+| <a id="h-364"></a>H-364 | A:5213–5222 |
+| <a id="h-365"></a>H-365 | A:5223–5259 |
+| <a id="h-366"></a>H-366 | A:5260–5272 |
+| <a id="h-367"></a>H-367 | A:5273–5281 |
+| <a id="h-368"></a>H-368 | A:5282–5290 |
+| <a id="h-369"></a>H-369 | A:5291–5303 |
+| <a id="h-370"></a>H-370 | A:5304–5318 |
+| <a id="h-371"></a>H-371 | A:5319–5327 |
+| <a id="h-372"></a>H-372 | A:5328–5342 |
+| <a id="h-373"></a>H-373 | A:5343–5355 |
+| <a id="h-374"></a>H-374 | A:5356–5364 |
+| <a id="h-375"></a>H-375 | A:5365–5373 |
+| <a id="h-376"></a>H-376 | A:5374–5382 |
+| <a id="h-377"></a>H-377 | A:5383–5403 |
+| <a id="h-378"></a>H-378 | A:5404–5414 |
+| <a id="h-379"></a>H-379 | A:5415–5423 |
+| <a id="h-380"></a>H-380 | A:5424–5438 |
+| <a id="h-381"></a>H-381 | A:5439–5449 |
+| <a id="h-382"></a>H-382 | A:5450–5462 |
+| <a id="h-383"></a>H-383 | A:5463–5481 |
+| <a id="h-384"></a>H-384 | A:5482–5496 |
+| <a id="h-385"></a>H-385 | A:5497–5509 |
+| <a id="h-386"></a>H-386 | A:5510–5532 |
+| <a id="h-387"></a>H-387 | A:5533–5543 |
+| <a id="h-388"></a>H-388 | B:1611–1623 |
+| <a id="h-389"></a>H-389 | B:1625–1630 |
 
-### H-388 — Autonomous workspace hygiene and compact authority records
-<a id="h-388"></a>
+### H-390 — External inputs instantiate known ADTs without extending fused semantics
+<a id="h-390"></a>
 
-- Human/source: current project user in this hygiene chat; personal identity, durable message URL and exact message timestamp unavailable. Recorded on client date 2026-11-13 (America/Los_Angeles); this is not an asserted UTC message time.
-- Explicit instruction:
+- Human/source: current project user in the external-data-boundary side conversation; recorded on client date 2026-11-13 (America/Los_Angeles). Personal identity, exact message timestamp and durable message URL are unavailable. The user quotes D-25r5's unresolved external-definition sentence and explicitly instructs correction and follow-up assessment:
 
-> 你这路线程负责工作环境卫生清理和精益化审计整改。 责任范围包括：
->
-> - 确认不再使用的worktree、远近端分支及时清理
-> - 精简设计授权、价值沿袭记录，及时瘦身。只有你审计有疑点、含混的地方找人类确认，注意由你自主维护记录，执行审计，及时预警。 保持repo内容清爽，不再需要的篇幅和路径结构积极删减，在现有篇幅中简单提及历史 commit hash 即可。
-> - 其它衍生工作内容
+> 可以确定外部数据只能引入静态已知 ADT 的实际取值，比如 sum type 的真实类型等，不得修改 fused world 确定的 type level 语义集合。 这点你看对整改整个文档结论影响大不大？ 相应更正，然后看没有立即后续工作需要
 
-- Scope: autonomous hygiene audits, removal of confirmed-unused worktrees/branches and unnecessary content, concise current authority/value-lineage records with immutable commit references for history, and human escalation for actual ambiguity. Applies to D-GOV maintenance through GOV-01/GOV-02/E-11/E-12. It authorizes evidence-storage compaction, not new product concepts, altered design qualification or deletion of unresolved human evidence. Build/toolchain restrictions remain.
+- Accepted scope: P-362/C-85 and D-25r6's external-value boundary. Values may select known sum alternatives and source-unobserved combinations, but incoming data cannot introduce or change the fused world's type-level semantics. This resolves D-25r5's open new-definition question within H-387's selected-composition boundary; H-387's original evidence remains intact.
+- Exclusions: no whole-file approval, runtime selection, native-timing change, detailed value-path confirmation, input encoding/validation/failure mechanism, separate composition/publication protocol, new experiment execution or production implementation. Architectural impact and next-stage priorities remain agent assessments, not part of the human confirmation.
 
-### H-389 — Preserve clang-18.x as a tag and delete historical remote branches
-<a id="h-389"></a>
+### H-391 — Audit-oriented authority and lineage granularity
+<a id="h-391"></a>
 
-- Human/source: same user/chat/client date as H-388, reply to the audit's remote-retention question; exact message timestamp unavailable.
-> clang-18.x 打tag以备将来万一有需要重新建立分支，其它分支都删除
-- Scope: tag `clang-18.x` at `559e8c5dac33b30f80f04a485c05e69f7ab66c36`, then delete the six listed remote branches: `clang-18.x`, `intern_ptr`, `relative_regional_ptr`, `rtxm`, `old-main` and `relativ_ptr`. The question disclosed that the last two share 11 commits absent from main. `main` was outside the deletion list. No product design decision follows.
+Human/source: current project user in this hygiene chat; personal identity, exact message timestamp and durable message URL unavailable. Recorded on client date 2026-11-13 (America/Los_Angeles).
 
-## 7. 延续、整理与失效事件（只追加）
+> 整理授权记录、价值沿袭图谱，以你自主审计把关的最优粒度和篇幅为目标，优化精简。
 
-Historical agent assessments are locators into the same immutable source above; they are not human confirmation.
+Scope: choose practical granularity/length for autonomous audit; consolidate authority and lineage records under H-388/H-05. This authorizes maintenance, not product requirement, confirmation-standard or charter changes.
 
-| Event ID | Source lines | Original heading |
-| --- | --- | --- |
-| <a id="k-00"></a>K-00 | 5546–5557 | K-00 — 2026-09-17：初始化登记与治理规则落实 |
-| <a id="k-01"></a>K-01 | 5558–5567 | K-01 — 2026-10-22：领域语言讨论登记与记录延续 |
-| <a id="k-02"></a>K-02 | 5568–5577 | K-02 — 2026-10-23：SNN 应用讨论纳入跟踪 |
-| <a id="k-03"></a>K-03 | 5578–5588 | K-03 — 2026-10-23：应用文档分离、HTM 参考与 16 GB 容量讨论 |
-| <a id="k-04"></a>K-04 | 5589–5598 | K-04 — 2026-10-23：可变连接容量与迁移讨论 |
-| <a id="k-05"></a>K-05 | 5599–5607 | K-05 — 2026-10-23：静态连接池与外链指针澄清 |
-| <a id="k-06"></a>K-06 | 5608–5615 | K-06 — 2026-10-23：万级出边与静态池长尾预算 |
-| <a id="k-07"></a>K-07 | 5616–5624 | K-07 — 2026-10-23：五字节并行槽数组与精确静态计数 |
-| <a id="k-08"></a>K-08 | 5625–5633 | K-08 — 2026-10-23：等槽量几何分级与空闲目的集 |
-| <a id="k-09"></a>K-09 | 5634–5643 | K-09 — 2026-10-23：100 槽下限与参与范围 |
-| <a id="k-10"></a>K-10 | 5644–5652 | K-10 — 2026-10-23：连接尺度文献与独立参数比较 |
-| <a id="k-11"></a>K-11 | 5653–5661 | K-11 — 2026-10-23：暂定容量模板与入边归属计算分析 |
-| <a id="k-12"></a>K-12 | 5662–5670 | K-12 — 2026-10-26：输入容量、树突整合与激活合理性研究 |
-| <a id="k-13"></a>K-13 | 5671–5680 | K-13 — 2026-10-26：条件入权重与独立入度尺度参数 |
-| <a id="k-14"></a>K-14 | 5681–5689 | K-14 — 2026-10-26：训练职责与类数量证据来源澄清 |
-| <a id="k-15"></a>K-15 | 5690–5696 | K-15 — 2026-10-26：隔一档容量翻倍的表述整理 |
-| <a id="k-16"></a>K-16 | 5697–5705 | K-16 — 2026-10-26：正负群体编码与人体柱规模评估 |
-| <a id="k-17"></a>K-17 | 5706–5715 | K-17 — 2026-10-26：Flash 60+60 的精确容量场景 |
-| <a id="k-18"></a>K-18 | 5716–5723 | K-18 — 2026-10-26：元素对齐及每 CC／节点共享预算 |
-| <a id="k-19"></a>K-19 | 5724–5730 | K-19 — 2026-10-26：多字段默认 SoA 的布局边界 |
-| <a id="k-20"></a>K-20 | 5731–5737 | K-20 — 2026-10-26：非规则位宽字段的独立对齐讨论 |
-| <a id="k-21"></a>K-21 | 5738–5744 | K-21 — 2026-10-26：字段位宽分类的精确边界 |
-| <a id="k-22"></a>K-22 | 5745–5752 | K-22 — 2026-10-26：FP4 标准位宽与指数范围修正 |
-| <a id="k-23"></a>K-23 | 5753–5761 | K-23 — 2026-10-26：连接尺度文档同步当前 Flash 内存预算 |
-| <a id="k-24"></a>K-24 | 5762–5770 | K-24 — 2026-10-26：移除预设辅助结构，明确需求与算法先行 |
-| <a id="k-25"></a>K-25 | 5771–5779 | K-25 — 2026-10-26：明确 A 为最小档集合数，当前规划聚焦 Flash |
-| <a id="k-26"></a>K-26 | 5780–5788 | K-26 — 2026-10-26：澄清静态池规模规划并恢复 Flash 两方案对比 |
-| <a id="k-27"></a>K-27 | 5789–5798 | K-27 — 2026-10-26：以小剩余集合目标重算 15/16 档，排除旧连接容量约束 |
-| <a id="k-28"></a>K-28 | 5799–5810 | K-28 — 2026-10-26：展开 16 档候选明细 |
-| <a id="k-29"></a>K-29 | 5811–5816 | K-29 — 2026-10-26：阶段性提交前的排版维护 |
-| <a id="k-30"></a>K-30 | 5817–5827 | K-30 — 2026-10-27：邻近共活动学习的空间维度研究 |
-| <a id="k-31"></a>K-31 | 5828–5839 | K-31 — 2026-10-27：维度中性的内部等位连接与语义位置研究 |
-| <a id="k-32"></a>K-32 | 5840–5851 | K-32 — 2026-10-27：等位机制拒绝与单 CC 语义拓扑研究 |
-| <a id="k-33"></a>K-33 | 5852–5862 | K-33 — 2026-10-27：静态语义角色前提下重评拓扑 |
-| <a id="k-34"></a>K-34 | 5863–5876 | K-34 — 2026-10-27：语义角色与解剖位置兼容性研究 |
-| <a id="k-35"></a>K-35 | 5877–5890 | K-35 — 2026-10-27：输入表证据与三状态的局部活动目标 |
-| <a id="k-36"></a>K-36 | 5891–5903 | K-36 — 2026-10-27：物理距离、接触机会与循环动力学的证据 |
-| <a id="k-37"></a>K-37 | 5904–5916 | K-37 — 2026-10-27：撤回无物理度量前提下的应用距离建议 |
-| <a id="k-38"></a>K-38 | 5917–5929 | K-38 — 2026-10-27：邻近机制的计算作用与证据转移条件综合 |
-| <a id="k-39"></a>K-39 | 5930–5942 | K-39 — 2026-10-27：解剖图、传播证据与持续动力学的边界 |
-| <a id="k-40"></a>K-40 | 5943–5955 | K-40 — 2026-10-27: Contact opportunity, functional selection and dimensions |
-| <a id="k-41"></a>K-41 | 5956–5968 | K-41 — 2026-10-27: Causal influence, functional completion and conditional input statistics |
-| <a id="k-42"></a>K-42 | 5969–5981 | K-42 — 2026-10-27: Functional organization, assembly replay and nonlinear input grouping |
-| <a id="k-43"></a>K-43 | 5982–5994 | K-43 — 2026-10-27: Causal ensemble learning and controls for geometry-based performance claims |
-| <a id="k-44"></a>K-44 | 5995–6007 | K-44 — 2026-10-27: Assigned roles, stochastic sequence learning and cyclic dynamics |
-| <a id="k-45"></a>K-45 | 6008–6020 | K-45 — 2026-10-27: Shared regulation, continual assembly learning and degree-dependent dynamics |
-| <a id="k-46"></a>K-46 | 6021–6033 | K-46 — 2026-10-27: Directed temporal organization, bounded memory and target-specific synaptic locality |
-| <a id="k-47"></a>K-47 | 6034–6046 | K-47 — 2026-10-27: Fixed inputs, nonspatial population dynamics and bounded partner exploration |
-| <a id="k-48"></a>K-48 | 6047–6059 | K-48 — 2026-10-27: Assembly controls, tracer observables and human subtype physiology |
-| <a id="k-49"></a>K-49 | 6060–6072 | K-49 — 2026-10-27: Convergent input, recurrent timing and spatial sequence controls |
-| <a id="k-50"></a>K-50 | 6073–6085 | K-50 — 2026-10-27: Morphological opportunity, pruning and conditioned neighbor evidence |
-| <a id="k-51"></a>K-51 | 6086–6098 | K-51 — 2026-10-27: Fixed input roles and conditional benefits of dendritic grouping |
-| <a id="k-52"></a>K-52 | 6099–6111 | K-52 — 2026-10-27: Task-defined relations, anatomical controls and distinct dynamical endpoints |
-| <a id="k-53"></a>K-53 | 6112–6124 | K-53 — 2026-10-28: Functional recurrence, contextual participation and selective amplification |
-| <a id="k-54"></a>K-54 | 6125–6137 | K-54 — 2026-10-28: Overlapping patterns, context sources and geometric interpretation |
-| <a id="k-55"></a>K-55 | 6138–6150 | K-55 — 2026-10-28: Retention, learned flow and fixed-code evaluation |
-| <a id="k-56"></a>K-56 | 6151–6163 | K-56 — 2026-10-28: Fixed assignments, local learning and finite resources |
-| <a id="k-57"></a>K-57 | 6164–6177 | K-57 — 2026-10-28: Context information, recurrent operators and measurement provenance |
-| <a id="k-58"></a>K-58 | 6178–6190 | K-58 — 2026-10-28: Fixed roles, inferred coordination and signed input statistics |
-| <a id="k-59"></a>K-59 | 6191–6203 | K-59 — 2026-10-28: Supplied geometry, input compatibility and temporal response |
-| <a id="k-60"></a>K-60 | 6204–6215 | K-60 — 2026-10-28: Timing, fixed opportunities and retained assembly structure |
-| <a id="k-61"></a>K-61 | 6216–6228 | K-61 — 2026-10-28: Anatomical sampling and human semantic-response maps |
-| <a id="k-62"></a>K-62 | 6229–6241 | K-62 — 2026-10-28: Polarity associations and mechanisms of persistence |
-| <a id="k-63"></a>K-63 | 6242–6254 | K-63 — 2026-10-28: Conditional triggering and modular communication |
-| <a id="k-64"></a>K-64 | 6255–6267 | K-64 — 2026-10-28: Local timescales and task-dependent structural benefit |
-| <a id="k-65"></a>K-65 | 6268–6280 | K-65 — 2026-10-28: Observed persistence and useful semantic retention |
-| <a id="k-66"></a>K-66 | 6281–6293 | K-66 — 2026-10-28: Fixed-input familiarity, sparse storage and learning exposure |
-| <a id="k-67"></a>K-67 | 6294–6306 | K-67 — 2026-10-28: Content identity, contextual reinstatement and feedback |
-| <a id="k-68"></a>K-68 | 6307–6319 | K-68 — 2026-10-28: Positive geometry controls and selective recurrence |
-| <a id="k-69"></a>K-69 | 6320–6331 | K-69 — 2026-10-28: Input-neighborhood preservation and functional constraints |
-| <a id="k-70"></a>K-70 | 6332–6343 | K-70 — 2026-10-28: Human assemblies and the meaning of cognitive maps |
-| <a id="k-71"></a>K-71 | 6344–6356 | K-71 — 2026-10-28: Decision-oriented synthesis within assigned semantic roles |
-| <a id="k-72"></a>K-72 | 6357–6368 | K-72 — 2026-10-28: Coactivity definitions and local resource competition |
-| <a id="k-73"></a>K-73 | 6369–6382 | K-73 — 2026-10-28: Completion of H-51 sustained research and critical synthesis |
-| <a id="k-74"></a>K-74 | 6383–6395 | K-74 — 2026-10-28: Attractor objectives, finite token responses and background-noise control |
-| <a id="k-75"></a>K-75 | 6396–6410 | K-75 — 2026-10-28: Intrinsic cancellation, residual amplification and qualified temporal coverage |
-| <a id="k-76"></a>K-76 | 6411–6423 | K-76 — 2026-10-28: External-token steerability and candidate stale recovery |
-| <a id="k-77"></a>K-77 | 6424–6437 | K-77 — 2026-10-28: Goal-specific interim assessment of positional preference |
-| <a id="k-78"></a>K-78 | 6438–6452 | K-78 — 2026-10-28: Constructed activation chains and precomputed-group alternatives |
-| <a id="k-79"></a>K-79 | 6453–6466 | K-79 — 2026-10-28: Unified DMN/token construction and reparative maintenance |
-| <a id="k-80"></a>K-80 | 6467–6481 | K-80 — 2026-10-28: Whole-chain constraints, adaptive sampling and shortcut analysis |
-| <a id="k-81"></a>K-81 | 6482–6494 | K-81 — 2026-10-28: Epoch-scoped populations and body/return gain strategy |
-| <a id="k-82"></a>K-82 | 6495–6508 | K-82 — 2026-10-28: Connected recurrence and near-step token fidelity |
-| <a id="k-83"></a>K-83 | 6509–6524 | K-83 — 2026-10-28: Fractional recruitment, rate dynamics and natural extinction |
-| <a id="k-84"></a>K-84 | 6525–6538 | K-84 — 2026-10-28: Useful context loops and numeric/time research initiation |
-| <a id="k-85"></a>K-85 | 6539–6552 | K-85 — 2026-10-28: Near-term decay events, wider state and justified complexity |
-| <a id="k-86"></a>K-86 | 6553–6566 | K-86 — 2026-10-28: Contextual identities and two-frame incoming gather |
-| <a id="k-87"></a>K-87 | 6567–6579 | K-87 — 2026-10-28: Prediction-guided entry and proportional net cancellation |
-| <a id="k-88"></a>K-88 | 6580–6592 | K-88 — 2026-10-28: Deferred state choice and conditional weight precision |
-| <a id="k-89"></a>K-89 | 6593–6608 | K-89 — 2026-10-28: Cancellation consequences and compact authority summaries |
-| <a id="k-90"></a>K-90 | 6609–6620 | K-90 — 2026-10-28: Entry-dependent fading and model-time noise semantics |
-| <a id="k-91"></a>K-91 | 6621–6631 | K-91 — 2026-10-28: Separate training methods and begin flow design |
-| <a id="k-92"></a>K-92 | 6632–6641 | K-92 — 2026-10-28: Flow prediction matching without a generation requirement |
-| <a id="k-93"></a>K-93 | 6642–6652 | K-93 — 2026-10-28: Prediction diversity over growing context |
-| <a id="k-94"></a>K-94 | 6653–6662 | K-94 — 2026-10-28: Exclude generation fallback from learning |
-| <a id="k-95"></a>K-95 | 6663–6673 | K-95 — 2026-10-28: Context assignment and prediction ambiguity in flow learning |
-| <a id="k-96"></a>K-96 | 6674–6683 | K-96 — 2026-10-28: Preserve empirical alternatives without repeated questions |
-| <a id="k-97"></a>K-97 | 6684–6694 | K-97 — 2026-10-28: Input-aware decay timing and quantized-frame dependencies |
-| <a id="k-98"></a>K-98 | 6695–6706 | K-98 — 2026-10-28: Shared recurrence constrains learning and numerical updates |
-| <a id="k-99"></a>K-99 | 6707–6718 | K-99 — 2026-10-28: Temporal coverage and useful-context comparisons |
-| <a id="k-100"></a>K-100 | 6719–6730 | K-100 — 2026-10-28: Signed population overlap and flow-learning causal roles |
-| <a id="k-101"></a>K-101 | 6731–6742 | K-101 — 2026-10-28: Cancellation, contextual closure and stochastic decay laws |
-| <a id="k-102"></a>K-102 | 6743–6752 | K-102 — 2026-10-28: Intermediate arithmetic and weak residual preservation |
-| <a id="k-103"></a>K-103 | 6753–6762 | K-103 — 2026-10-28: Flow source credit and static incoming capacity |
-| <a id="k-104"></a>K-104 | 6763–6772 | K-104 — 2026-10-28: Deferred decay and usable context under noise |
-| <a id="k-105"></a>K-105 | 6773–6782 | K-105 — 2026-10-28: Provisional flow procedure and bounded low-bit learning |
-| <a id="k-106"></a>K-106 | 6783–6793 | K-106 — 2026-10-28: Context-sensitive prediction assessment |
-| <a id="k-107"></a>K-107 | 6794–6804 | K-107 — 2026-10-28: Integration selectivity and semantic pattern overlap |
-| <a id="k-108"></a>K-108 | 6805–6815 | K-108 — 2026-10-28: Retained-edge traversal before auxiliary storage |
-| <a id="k-109"></a>K-109 | 6816–6826 | K-109 — 2026-10-28: Temporal credit with persistent recurrent context |
-| <a id="k-110"></a>K-110 | 6827–6837 | K-110 — 2026-10-28: Activity response and noise-feedback timing |
-| <a id="k-111"></a>K-111 | 6838–6848 | K-111 — 2026-10-28: Semantic aggregate and contextual cell composition |
-| <a id="k-112"></a>K-112 | 6849–6859 | K-112 — 2026-10-28: Current application overview and empirical comparisons |
-| <a id="k-113"></a>K-113 | 6860–6870 | K-113 — 2026-10-28: Token order, neural frames and available prediction context |
-| <a id="k-114"></a>K-114 | 6871–6880 | K-114 — 2026-10-28: Contextual assignment, natural readiness and empirical comparison |
-| <a id="k-115"></a>K-115 | 6881–6890 | K-115 — 2026-10-28: Noise units and signed remainders in 60+60 populations |
-| <a id="k-116"></a>K-116 | 6891–6900 | K-116 — 2026-10-28: Intermediate rounding and cancellation boundaries |
-| <a id="k-117"></a>K-117 | 6901–6910 | K-117 — 2026-10-28: Predictive context versus pattern fitting |
-| <a id="k-118"></a>K-118 | 6911–6920 | K-118 — 2026-10-28: Cancellation error bounds depend on the norm |
-| <a id="k-119"></a>K-119 | 6921–6930 | K-119 — 2026-10-28: Coordinate alternatives and complete continuations |
-| <a id="k-120"></a>K-120 | 6931–6940 | K-120 — 2026-10-28: Noise-enabled response and useful information |
-| <a id="k-121"></a>K-121 | 6941–6950 | K-121 — 2026-10-28: State precision and contextual identity |
-| <a id="k-122"></a>K-122 | 6951–6960 | K-122 — 2026-10-28: Learning exposure, traversal and contextual timing |
-| <a id="k-123"></a>K-123 | 6961–6966 | K-123 — 2026-10-28: Conditional table rounding |
-| <a id="k-124"></a>K-124 | 6967–6976 | K-124 — 2026-10-28: Joint behavior across distinct training stages |
-| <a id="k-125"></a>K-125 | 6977–6985 | K-125 — 2026-10-28: Separate flow and maintenance reading paths |
-| <a id="k-126"></a>K-126 | 6986–6991 | K-126 — 2026-10-28: Flow cross-document reference |
-| <a id="k-127"></a>K-127 | 6992–6999 | K-127 — 2026-10-28: Retention and replacement in flow evidence |
-| <a id="k-128"></a>K-128 | 7000–7009 | K-128 — 2026-10-28: Fixed input, cancellation and active contextual differences |
-| <a id="k-129"></a>K-129 | 7010–7017 | K-129 — 2026-10-28: Flow procedure reading order |
-| <a id="k-130"></a>K-130 | 7018–7027 | K-130 — 2026-10-28: Prediction-error-modulated flow comparison |
-| <a id="k-131"></a>K-131 | 7028–7036 | K-131 — 2026-10-28: Raw input scale in the contextual cancellation comparison |
-| <a id="k-132"></a>K-132 | 7037–7045 | K-132 — 2026-10-28: Source credit and prediction-update scale |
-| <a id="k-133"></a>K-133 | 7046–7055 | K-133 — 2026-10-28: Quantized prediction-error updates |
-| <a id="k-134"></a>K-134 | 7056–7064 | K-134 — 2026-10-28: Nonnegative bounds and quantized learning |
-| <a id="k-135"></a>K-135 | 7065–7074 | K-135 — 2026-10-28: Contextual selectivity with fixed semantic roles |
-| <a id="k-136"></a>K-136 | 7075–7084 | K-136 — 2026-10-28: Background-sensitive source credit and discovery |
-| <a id="k-137"></a>K-137 | 7085–7093 | K-137 — 2026-10-28: Active cancellation and contextual-credit consistency |
-| <a id="k-138"></a>K-138 | 7094–7103 | K-138 — 2026-10-28: Qualified coverage under active polarity cancellation |
-| <a id="k-139"></a>K-139 | 7104–7114 | K-139 — 2026-10-28: Observation history, window semantics and conditional cost |
-| <a id="k-140"></a>K-140 | 7115–7125 | K-140 — 2026-10-28: Individual trajectories and averaged prediction evidence |
-| <a id="k-141"></a>K-141 | 7126–7136 | K-141 — 2026-10-28: Learning constraints are distinct from incoming storage |
-| <a id="k-142"></a>K-142 | 7137–7147 | K-142 — 2026-10-28: Natural prediction versus fitted or evoked evidence |
-| <a id="k-143"></a>K-143 | 7148–7158 | K-143 — 2026-10-28: Sparse source discovery and actual membership work |
-| <a id="k-144"></a>K-144 | 7159–7169 | K-144 — 2026-10-28: One-step learning through active-rate cancellation |
-| <a id="k-145"></a>K-145 | 7170–7180 | K-145 — 2026-10-28: HTM matching does not prescribe graded weight semantics |
-| <a id="k-146"></a>K-146 | 7181–7191 | K-146 — 2026-10-28: Temporal representation changes coactivity credit |
-| <a id="k-147"></a>K-147 | 7192–7202 | K-147 — 2026-10-28: Low-bit evidence and exact scalar boundaries |
-| <a id="k-148"></a>K-148 | 7203–7212 | K-148 — 2026-10-28: Remembered drive and background interference |
-| <a id="k-149"></a>K-149 | 7213–7222 | K-149 — 2026-10-28: Context extension and monotone source activity |
-| <a id="k-150"></a>K-150 | 7223–7232 | K-150 — 2026-10-28: CPU operand and feature boundaries |
-| <a id="k-151"></a>K-151 | 7233–7243 | K-151 — 2026-10-28: Lexical contrast and cancellation geometry |
-| <a id="k-152"></a>K-152 | 7244–7253 | K-152 — 2026-10-28: Cancellation evaluation and its one-sided identity |
-| <a id="k-153"></a>K-153 | 7254–7263 | K-153 — 2026-10-28: Fixed rounding and repeated edges |
-| <a id="k-154"></a>K-154 | 7264–7273 | K-154 — 2026-10-28: Synaptic retention evidence and complete learning-state cost |
-| <a id="k-155"></a>K-155 | 7274–7283 | K-155 — 2026-10-28: Weight alphabet size and learning exposure |
-| <a id="k-156"></a>K-156 | 7284–7293 | K-156 — 2026-10-28: Actual input conditions, redirection and useful cycling |
-| <a id="k-157"></a>K-157 | 7294–7303 | K-157 — 2026-10-28: Shared-range recoding and unchanged associations |
-| <a id="k-158"></a>K-158 | 7304–7313 | K-158 — 2026-10-28: Reverberation and responsiveness to subsequent input |
-| <a id="k-159"></a>K-159 | 7314–7323 | K-159 — 2026-10-28: Semantic drift and persistence statistics |
-| <a id="k-160"></a>K-160 | 7324–7333 | K-160 — 2026-10-28: Association support and graded prediction |
-| <a id="k-161"></a>K-161 | 7334–7343 | K-161 — 2026-10-28: Weight-step units and initial-state acquisition |
-| <a id="k-162"></a>K-162 | 7344–7353 | K-162 — 2026-10-29: Noise-assisted access and retained information |
-| <a id="k-163"></a>K-163 | 7354–7362 | K-163 — 2026-10-29: HTM robustness and population-scaling conditions |
-| <a id="k-164"></a>K-164 | 7363–7371 | K-164 — 2026-10-29: Predictive state and recurrent emission |
-| <a id="k-165"></a>K-165 | 7372–7380 | K-165 — 2026-10-29: Averaged rate response and explicit variability |
-| <a id="k-166"></a>K-166 | 7381–7389 | K-166 — 2026-10-29: Effective rate snapshots and averaged cancellation |
-| <a id="k-167"></a>K-167 | 7390–7397 | K-167 — 2026-10-29: Temporal-frame budget wording |
-| <a id="k-168"></a>K-168 | 7398–7406 | K-168 — 2026-10-29: Consistent active-polarity and message scope |
-| <a id="k-169"></a>K-169 | 7407–7415 | K-169 — 2026-10-29: Matched fading and distinct contextual retention |
-| <a id="k-170"></a>K-170 | 7416–7424 | K-170 — 2026-10-29: Variable error retention and periodic-quantization evidence |
-| <a id="k-171"></a>K-171 | 7425–7433 | K-171 — 2026-10-29: Probability precision and correlated rounding |
-| <a id="k-172"></a>K-172 | 7434–7442 | K-172 — 2026-10-29: Population reduction and individual contextual identities |
-| <a id="k-173"></a>K-173 | 7443–7451 | K-173 — 2026-10-29: Sparse changes and affected dependencies |
-| <a id="k-174"></a>K-174 | 7452–7460 | K-174 — 2026-10-29: Prediction horizon and useful long-context associations |
-| <a id="k-175"></a>K-175 | 7461–7469 | K-175 — 2026-10-29: Shared observations and independent numerical randomness |
-| <a id="k-176"></a>K-176 | 7470–7478 | K-176 — 2026-10-29: Regime observations and distinguishability |
-| <a id="k-177"></a>K-177 | 7479–7487 | K-177 — 2026-10-29: Noise sharing and contextual composition |
-| <a id="k-178"></a>K-178 | 7488–7496 | K-178 — 2026-10-29: Capacity assumptions and current state comparisons |
-| <a id="k-179"></a>K-179 | 7497–7505 | K-179 — 2026-10-29: Rate learning and spike-rule transfer |
-| <a id="k-180"></a>K-180 | 7506–7514 | K-180 — 2026-10-29: Transient memory and externally supported sequences |
-| <a id="k-181"></a>K-181 | 7515–7523 | K-181 — 2026-10-29: Bounded composition and contextual freedom |
-| <a id="k-182"></a>K-182 | 7524–7532 | K-182 — 2026-10-29: Rated lexical polarity and actual input geometry |
-| <a id="k-183"></a>K-183 | 7533–7541 | K-183 — 2026-10-29: Active participation and net magnitude |
-| <a id="k-184"></a>K-184 | 7542–7550 | K-184 — 2026-10-29: Noise support and the source of selectivity |
-| <a id="k-185"></a>K-185 | 7551–7559 | K-185 — 2026-10-29: Positive noise increments and frame units |
-| <a id="k-186"></a>K-186 | 7560–7568 | K-186 — 2026-10-29: Chinese rated words and native input geometry |
-| <a id="k-187"></a>K-187 | 7569–7577 | K-187 — 2026-10-29: Contextual reassignment and downstream use |
-| <a id="k-188"></a>K-188 | 7578–7586 | K-188 — 2026-10-29: Drift evidence and feedback-assisted readout |
-| <a id="k-189"></a>K-189 | 7587–7595 | K-189 — 2026-10-29: Learned-association maintenance and acquisition |
-| <a id="k-190"></a>K-190 | 7596–7604 | K-190 — 2026-10-29: Conversion and acquisition under candidate arithmetic |
-| <a id="k-191"></a>K-191 | 7605–7613 | K-191 — 2026-10-29: Effective binary weights and internal learning state |
-| <a id="k-192"></a>K-192 | 7614–7622 | K-192 — 2026-10-29: Wider arithmetic and learned coarse-state behavior |
-| <a id="k-193"></a>K-193 | 7623–7631 | K-193 — 2026-10-29: Continuous-attractor evidence and noise regulation |
-| <a id="k-194"></a>K-194 | 7632–7640 | K-194 — 2026-10-29: Chain propagation and graded-response fidelity |
-| <a id="k-195"></a>K-195 | 7641–7649 | K-195 — 2026-10-29: Learning conditions and recalled recurrence |
-| <a id="k-196"></a>K-196 | 7650–7658 | K-196 — 2026-10-29: Weighted incoming drive and contextual comparison |
-| <a id="k-197"></a>K-197 | 7659–7667 | K-197 — 2026-10-29: Actual learning mode and the meaning of rate-model output |
-| <a id="k-198"></a>K-198 | 7668–7676 | K-198 — 2026-10-29: Quantized-state convergence and observation horizon |
-| <a id="k-199"></a>K-199 | 7677–7685 | K-199 — 2026-10-29: Predictive entry and background activity |
-| <a id="k-200"></a>K-200 | 7686–7694 | K-200 — 2026-10-29: Node capacity and connection-access work |
-| <a id="k-201"></a>K-201 | 7695–7703 | K-201 — 2026-10-29: Frame scaling and balanced-drive context dilution |
-| <a id="k-202"></a>K-202 | 7704–7712 | K-202 — 2026-10-29: Compact capacity and storage authority summaries |
-| <a id="k-203"></a>K-203 | 7713–7721 | K-203 — 2026-10-29: Numerical emulation and plastic feedback scope |
-| <a id="k-204"></a>K-204 | 7722–7730 | K-204 — 2026-10-29: Directed rounding and premature scalar disappearance |
-| <a id="k-205"></a>K-205 | 7731–7739 | K-205 — 2026-10-29: Noise-only coverage and retained-state boundaries |
-| <a id="k-206"></a>K-206 | 7740–7748 | K-206 — 2026-10-29: Internal prediction assessment and legitimate alternatives |
-| <a id="k-207"></a>K-207 | 7749–7758 | K-207 — 2026-10-29: Completion of the scoped modeling research pass |
-| <a id="k-208"></a>K-208 | 7759–7770 | K-208 — 2026-11-02: Bilingual cognitive-model progress and scoped human premises |
-| <a id="k-209"></a>K-209 | 7771–7782 | K-209 — 2026-11-05: Continuous source dynamics and confirmed two-frame pull |
-| <a id="k-210"></a>K-210 | 7783–7795 | K-210 — 2026-11-05: SNN-driven language development and scoped symbolic execution |
-| <a id="k-211"></a>K-211 | 7796–7807 | K-211 — 2026-11-05: Register declarations before composing module execution |
-| <a id="k-212"></a>K-212 | 7808–7817 | K-212 — 2026-11-05: Execute module expressions after declaration registration |
-| <a id="k-213"></a>K-213 | 7818–7828 | K-213 — 2026-11-05: Immediate prototype decisions and direct development request |
-| <a id="k-214"></a>K-214 | 7829–7842 | K-214 — 2026-11-05: First native CoD source prototype and bounded execution evidence |
-| <a id="k-215"></a>K-215 | 7843–7855 | K-215 — 2026-11-05: Symbol staging, body alias translation and explicit procedure destinations |
-| <a id="k-216"></a>K-216 | 7856–7867 | K-216 — 2026-11-05: Vocabulary declarations and supplier-as-role map spelling |
-| <a id="k-217"></a>K-217 | 7868–7880 | K-217 — 2026-11-05: Explicit symbol selection and mapped procedure imports implemented |
-| <a id="k-218"></a>K-218 | 7881–7893 | K-218 — 2026-11-05: Combined using and explicit destination identity |
-| <a id="k-219"></a>K-219 | 7894–7906 | K-219 — 2026-11-05: Combined using and identity checks implemented and validated |
-| <a id="k-220"></a>K-220 | 7907–7919 | K-220 — 2026-11-05: Scalar arithmetic comparison and regional function snapshots |
-| <a id="k-221"></a>K-221 | 7920–7931 | K-221 — 2026-11-05: Parenthesized operator method syntax |
-| <a id="k-222"></a>K-222 | 7932–7943 | K-222 — 2026-11-05: Defer compound-unit implementation and bound the remaining review |
-| <a id="k-223"></a>K-223 | 7944–7957 | K-223 — 2026-11-05: Resolve caller lifetime, unit selection and conversion paths |
-| <a id="k-224"></a>K-224 | 7958–7968 | K-224 — 2026-11-05: Complex composition, once-only incorporation and initial inlining |
-| <a id="k-225"></a>K-225 | 7969–7981 | K-225 — 2026-11-05: Typed bits, method dispatch and complex-module checkpoint |
-| <a id="k-226"></a>K-226 | 7982–7994 | K-226 — 2026-11-05: Nominal units and selected pure conversion routes |
-| <a id="k-227"></a>K-227 | 7995–8007 | K-227 — 2026-11-05: Native iteration, numeric widths and typed pool indexing |
-| <a id="k-228"></a>K-228 | 8008–8021 | K-228 — 2026-11-05: Regional storage, snapshots and emitted-layout validation |
-| <a id="k-229"></a>K-229 | 8022–8033 | K-229 — 2026-11-05: Deep inline compilation and measured SoA kernel cost |
-| <a id="k-230"></a>K-230 | 8034–8045 | K-230 — 2026-11-05: Full-pool, numeric and composition validation |
-| <a id="k-231"></a>K-231 | 8046–8056 | K-231 — 2026-11-05: Direct LLVM lowering and contract-focused validation |
-| <a id="k-232"></a>K-232 | 8057–8068 | K-232 — 2026-11-05: Direct native values and regional representation review |
-| <a id="k-233"></a>K-233 | 8069–8077 | K-233 — 2026-11-05: Nested effect values retain transitive captures |
-| <a id="k-234"></a>K-234 | 8078–8086 | K-234 — 2026-11-05: Consistent lexical selection for UoM bundles |
-| <a id="k-235"></a>K-235 | 8087–8096 | K-235 — 2026-11-05: Product storage and independent-owner snapshot evidence |
-| <a id="k-236"></a>K-236 | 8097–8105 | K-236 — 2026-11-05: Equivalent eager operator call forms |
-| <a id="k-237"></a>K-237 | 8106–8115 | K-237 — 2026-11-06: Native size evidence for initial inlining |
-| <a id="k-238"></a>K-238 | 8116–8125 | K-238 — 2026-11-06: Per-target weighted A/B gather evidence |
-| <a id="k-239"></a>K-239 | 8126–8135 | K-239 — 2026-11-06: Checked regional views and shared native loop construction |
-| <a id="k-240"></a>K-240 | 8136–8145 | K-240 — 2026-11-06: Combined LLVM acceptance evidence and UoM reference alignment |
-| <a id="k-241"></a>K-241 | 8146–8164 | K-241 — 2026-11-06: Pending self-reference encoding decision and valid pointer coverage |
-| <a id="k-242"></a>K-242 | 8165–8173 | K-242 — 2026-11-06: Record H-146 and close the pointer decision |
-| <a id="k-243"></a>K-243 | 8174–8183 | K-243 — 2026-11-06: Active-work continuation and token-kind parsing |
-| <a id="k-244"></a>K-244 | 8184–8193 | K-244 — 2026-11-06: Bounded demanded-call diagnostics |
-| <a id="k-245"></a>K-245 | 8194–8203 | K-245 — 2026-11-06: Source locations for emitted execution checks |
-| <a id="k-246"></a>K-246 | 8204–8213 | K-246 — 2026-11-06: Diagnostic cost and pending conversion sequencing |
-| <a id="k-247"></a>K-247 | 8214–8223 | K-247 — 2026-11-06: Implement H-148 argument/conversion order |
-| <a id="k-248"></a>K-248 | 8224–8233 | K-248 — 2026-11-06: Check the semantic kind of a global initializer call |
-| <a id="k-249"></a>K-249 | 8234–8242 | K-249 — 2026-11-06: Use one signature check for automatic and direct conversions |
-| <a id="k-250"></a>K-250 | 8243–8252 | K-250 — 2026-11-06: Keep bundle type aliases in the lexical namespace |
-| <a id="k-251"></a>K-251 | 8253–8262 | K-251 — 2026-11-06: Locate allocation failures and verify parent-region fold construction |
-| <a id="k-252"></a>K-252 | 8263–8272 | K-252 — 2026-11-06: Reconcile application language cases with confirmed module/call rules |
-| <a id="k-253"></a>K-253 | 8273–8281 | K-253 — 2026-11-06: Remove unreachable exact-match handling from conversion selection |
-| <a id="k-254"></a>K-254 | 8282–8292 | K-254 — 2026-11-06: Reconcile current tracker scope, implementation evidence and open local naming |
-| <a id="k-255"></a>K-255 | 8293–8303 | K-255 — 2026-11-06: Exercise nominal units through repeated procedure redefinition |
-| <a id="k-256"></a>K-256 | 8304–8312 | K-256 — 2026-11-06: Keep the current language authority index focused on status and scope |
-| <a id="k-257"></a>K-257 | 8313–8322 | K-257 — 2026-11-06: Locate competing method definitions across aliases |
-| <a id="k-258"></a>K-258 | 8323–8332 | K-258 — 2026-11-06: Explain unmatched overload calls with the same bounded declaration report |
-| <a id="k-259"></a>K-259 | 8333–8342 | K-259 — 2026-11-06: Discard a void loop body's result before closing its scope |
-| <a id="k-260"></a>K-260 | 8343–8352 | K-260 — 2026-11-06: Distinguish argument preparation from a function's snapshot interval |
-| <a id="k-261"></a>K-261 | 8353–8362 | K-261 — 2026-11-06: Identify both types in a shared-symbol binding conflict |
-| <a id="k-262"></a>K-262 | 8363–8373 | K-262 — 2026-11-06: Refresh the bounded implementation's current acceptance evidence |
-| <a id="k-263"></a>K-263 | 8374–8383 | K-263 — 2026-11-06: Apply H-149 to lexical value scopes |
-| <a id="k-264"></a>K-264 | 8384–8394 | K-264 — 2026-11-06: Check conditional symbolic writes independently of native slots |
-| <a id="k-265"></a>K-265 | 8395–8405 | K-265 — 2026-11-06: Preserve declared field names in mutation syntax |
-| <a id="k-266"></a>K-266 | 8406–8415 | K-266 — 2026-11-06: Identify parser and regional inputs in arithmetic evidence |
-| <a id="k-267"></a>K-267 | 8416–8425 | K-267 — 2026-11-06: Cover typed element references in the existing relocation graph |
-| <a id="k-268"></a>K-268 | 8426–8435 | K-268 — 2026-11-06: Preserve an evaluated write target across later argument effects |
-| <a id="k-269"></a>K-269 | 8436–8444 | K-269 — 2026-11-06: Reconcile the language tracker with H-149 |
-| <a id="k-270"></a>K-270 | 8445–8453 | K-270 — 2026-11-06: Check independent boolean elements at narrow-index boundaries |
-| <a id="k-271"></a>K-271 | 8454–8463 | K-271 — 2026-11-06: Record the unresolved lexical-keyword declaration policy |
-| <a id="k-272"></a>K-272 | 8464–8473 | K-272 — 2026-11-06: Refresh composition evidence for the current parser |
-| <a id="k-273"></a>K-273 | 8474–8483 | K-273 — 2026-11-06: Apply H-150 to lexical value declarations |
-| <a id="k-274"></a>K-274 | 8484–8493 | K-274 — 2026-11-06: Check module initialization in a caller-owned region |
-| <a id="k-275"></a>K-275 | 8494–8503 | K-275 — 2026-11-06: Preserve decimal leading zeroes at the signed minimum |
-| <a id="k-276"></a>K-276 | 8504–8512 | K-276 — 2026-11-06: Compose deep procedure redefinition with regional snapshots |
-| <a id="k-277"></a>K-277 | 8513–8520 | K-277 — 2026-11-06: Record H-151’s typed actor direction |
-| <a id="k-278"></a>K-278 | 8521–8528 | K-278 — 2026-11-06: Track the dynamic bindings vision and actor design priority |
-| <a id="k-279"></a>K-279 | 8529–8537 | K-279 — 2026-11-06: Separate operation naming from callable purity |
-| <a id="k-280"></a>K-280 | 8538–8545 | K-280 — 2026-11-06: Draft the graph-grained regional memory vision |
-| <a id="k-281"></a>K-281 | 8546–8553 | K-281 — 2026-11-06: Keep intrinsic procedure dispatch separate from symbols |
-| <a id="k-282"></a>K-282 | 8554–8563 | K-282 — 2026-11-06: Validate mixed intrinsic and operator callable kinds |
-| <a id="k-283"></a>K-283 | 8564–8572 | K-283 — 2026-11-06: Preserve definition identities and compose native operation wrappers |
-| <a id="k-284"></a>K-284 | 8573–8581 | K-284 — 2026-11-06: Preserve token categories in parenthesized operation syntax |
-| <a id="k-285"></a>K-285 | 8582–8589 | K-285 — 2026-11-06: Distinguish pure UoM conversion from general operation overloading |
-| <a id="k-286"></a>K-286 | 8590–8598 | K-286 — 2026-11-06: Reconcile the language tracker and refresh current-source acceptance |
-| <a id="k-287"></a>K-287 | 8599–8607 | K-287 — 2026-11-06: Share compiler binding snapshots after measuring copied-map growth |
-| <a id="k-288"></a>K-288 | 8608–8617 | K-288 — 2026-11-06: Record the module-form naming boundary without selecting a new policy |
-| <a id="k-289"></a>K-289 | 8618–8626 | K-289 — 2026-11-06: Close the ten-active-hour language/runtime acceptance record |
-| <a id="k-290"></a>K-290 | 8627–8636 | K-290 — 2026-11-06: Apply the confirmed keyword boundary and distinct assignment family |
-| <a id="k-291"></a>K-291 | 8637–8645 | K-291 — 2026-11-07: Lower indexed assignment to its explicit ([]=) family |
-| <a id="k-292"></a>K-292 | 8646–8653 | K-292 — 2026-11-07: Validate and reconcile the confirmed assignment syntax increment |
-| <a id="k-293"></a>K-293 | 8654–8663 | K-293 — 2026-11-07: Assess Actor implementation readiness and region holding |
-| <a id="k-294"></a>K-294 | 8664–8673 | K-294 — 2026-11-07: Process-lifetime modules, effect ownership and local-error send results |
-| <a id="k-295"></a>K-295 | 8674–8684 | K-295 — 2026-11-07: Native module lifetime and effect-held owner moves |
-| <a id="k-296"></a>K-296 | 8685–8696 | K-296 — 2026-11-07: Exclusive effect arrow and bounded ownership analysis |
-| <a id="k-297"></a>K-297 | 8697–8706 | K-297 — 2026-11-07: Identity-only procedure dependencies and ordinary region owners |
-| <a id="k-298"></a>K-298 | 8707–8715 | K-298 — 2026-11-07: Compare dynamic regional ownership with scoped access |
-| <a id="k-299"></a>K-299 | 8716–8724 | K-299 — 2026-11-07: Preserve consuming transfer into dynamic region owners |
-| <a id="k-300"></a>K-300 | 8725–8734 | K-300 — 2026-11-07: Restore value capture and separate shadowing from ownership |
-| <a id="k-301"></a>K-301 | 8735–8743 | K-301 — 2026-11-07: Keep binding availability separate from resource optionality |
-| <a id="k-302"></a>K-302 | 8744–8753 | K-302 — 2026-11-07: Draft coordinated ownership and record typed callable naming |
-| <a id="k-303"></a>K-303 | 8754–8761 | K-303 — 2026-11-07: Record direct symbolic procedure syntax |
-| <a id="k-304"></a>K-304 | 8762–8769 | K-304 — 2026-11-07: Record combined typed-symbol/procedure declaration |
-| <a id="k-305"></a>K-305 | 8770–8779 | K-305 — 2026-11-07: Implement typed symbols and lexical/symbolic procedures |
-| <a id="k-306"></a>K-306 | 8780–8789 | K-306 — 2026-11-07: Bound intrinsic ownership and review lifecycle/library validation |
-| <a id="k-307"></a>K-307 | 8790–8800 | K-307 — 2026-11-07: Begin the lifecycle goal and validate a CoD free list |
-| <a id="k-308"></a>K-308 | 8801–8810 | K-308 — 2026-11-07: Observe actual ownership during captured-resource replay |
-| <a id="k-309"></a>K-309 | 8811–8820 | K-309 — 2026-11-07: Ground make and regional ownership in user-facing types |
-| <a id="k-310"></a>K-310 | 8821–8833 | K-310 — 2026-11-07: Analyze reference provenance, call permissions and function memory effects |
-| <a id="k-311"></a>K-311 | 8834–8844 | K-311 — 2026-11-07: Implement explicit-memory functions and compare ownership-qualified region types |
-| <a id="k-312"></a>K-312 | 8845–8855 | K-312 — 2026-11-07: Default borrowing, const call values and local bits design |
-| <a id="k-313"></a>K-313 | 8856–8867 | K-313 — 2026-11-07: Review const borrowing, same-owner edges and ownership/bits transfer |
-| <a id="k-314"></a>K-314 | 8868–8878 | K-314 — 2026-11-07: Const destination results and both-owner graph-transfer dispatch |
-| <a id="k-315"></a>K-315 | 8879–8889 | K-315 — 2026-11-07: Right association, deterministic specificity and abstract/data declarations |
-| <a id="k-316"></a>K-316 | 8890–8901 | K-316 — 2026-11-07: Signature interfaces, type-method selection and mixin |
-| <a id="k-317"></a>K-317 | 8902–8913 | K-317 — 2026-11-07: Open methods and explicit-over-implicit naming |
-| <a id="k-318"></a>K-318 | 8914–8925 | K-318 — 2026-11-07: Explicit data conformance and adapter permissions |
-| <a id="k-319"></a>K-319 | 8926–8936 | K-319 — 2026-11-08: Renew the active-work goal and implement import/mixin separation |
-| <a id="k-320"></a>K-320 | 8937–8948 | K-320 — 2026-11-08: Native explicit conformance and abstract call composition |
-| <a id="k-321"></a>K-321 | 8949–8961 | K-321 — 2026-11-08: Remove by-value user records and migrate composite helpers |
-| <a id="k-322"></a>K-322 | 8962–8972 | K-322 — 2026-11-08: Receiver-context mixin for lexical procedures |
-| <a id="k-323"></a>K-323 | 8973–8982 | K-323 — 2026-11-08: Direct named-callable extension permission |
-| <a id="k-324"></a>K-324 | 8983–8993 | K-324 — 2026-11-08: Transitive callable identity and nominal-parent composition |
-| <a id="k-325"></a>K-325 | 8994–9004 | K-325 — 2026-11-08: Mutable regional views through a pool adapter |
-| <a id="k-326"></a>K-326 | 9005–9015 | K-326 — 2026-11-08: Borrowed-view fold accumulators |
-| <a id="k-327"></a>K-327 | 9016–9025 | K-327 — 2026-11-08: Contextual method and conformance diagnostics |
-| <a id="k-328"></a>K-328 | 9026–9035 | K-328 — 2026-11-08: Scope-based dynamic-resource lifetime checking |
-| <a id="k-329"></a>K-329 | 9036–9045 | K-329 — 2026-11-08: Explicit borrowed regions for native function allocation |
-| <a id="k-330"></a>K-330 | 9046–9054 | K-330 — 2026-11-08: Explicit-input regional numerical library |
-| <a id="k-331"></a>K-331 | 9055–9063 | K-331 — 2026-11-08: Abstract dispatch, aliases and conversion composition |
-| <a id="k-332"></a>K-332 | 9064–9072 | K-332 — 2026-11-08: Ownership discussion boundaries and compact authority summary |
-| <a id="k-333"></a>K-333 | 9073–9081 | K-333 — 2026-11-08: Region acquisition provenance in compiler diagnostics |
-| <a id="k-334"></a>K-334 | 9082–9090 | K-334 — 2026-11-08: Current component integration evidence and goal coverage |
-| <a id="k-335"></a>K-335 | 9091–9099 | K-335 — 2026-11-08: Callable identity and demanded implementation visibility |
-| <a id="k-336"></a>K-336 | 9100–9108 | K-336 — 2026-11-08: Repeated resource scopes and captured-owner restoration |
-| <a id="k-337"></a>K-337 | 9109–9116 | K-337 — 2026-11-08: Interface-only pool algorithms require an implementation-view decision |
-| <a id="k-338"></a>K-338 | 9117–9124 | K-338 — 2026-11-08: Assignment places and const bits result boundaries |
-| <a id="k-339"></a>K-339 | 9125–9133 | K-339 — 2026-11-08: Concrete module-policy review candidates |
-| <a id="k-340"></a>K-340 | 9134–9141 | K-340 — 2026-11-08: Confirmed associated methods and caller implementation views |
-| <a id="k-341"></a>K-341 | 9142–9152 | K-341 — 2026-11-08: Native associated methods and caller-selected implementation views |
-| <a id="k-342"></a>K-342 | 9153–9161 | K-342 — 2026-11-08: Deep implementation-view composition and usable implicit selections |
-| <a id="k-343"></a>K-343 | 9162–9170 | K-343 — 2026-11-08: Same-family alias boundary and implicit callable surfaces |
-| <a id="k-344"></a>K-344 | 9171–9179 | K-344 — 2026-11-08: Factory-result lifetime evidence and current-status reconciliation |
-| <a id="k-345"></a>K-345 | 9180–9187 | K-345 — 2026-11-08: Abstract-parameter conformance forwarding review |
-| <a id="k-346"></a>K-346 | 9188–9195 | K-346 — 2026-11-08: Goal readiness audit and construction-wording alignment |
-| <a id="k-347"></a>K-347 | 9196–9203 | K-347 — 2026-11-08: Concrete-data dispatch confirmation and explicit alias example |
-| <a id="k-348"></a>K-348 | 9204–9214 | K-348 — 2026-11-08: Concrete dispatch checkpoint and explicit module boundaries |
-| <a id="k-349"></a>K-349 | 9215–9224 | K-349 — 2026-11-08: Helper-context selection and explicit re-export |
-| <a id="k-350"></a>K-350 | 9225–9236 | K-350 — 2026-11-08: Native callable contexts and explicit exports |
-| <a id="k-351"></a>K-351 | 9237–9247 | K-351 — 2026-11-08: Local bindings and associated publication identity |
-| <a id="k-352"></a>K-352 | 9248–9258 | K-352 — 2026-11-08: Shared pool algorithms and standalone-method review |
-| <a id="k-353"></a>K-353 | 9259–9268 | K-353 — 2026-11-08: Exported aliases of conversion-bundle entries |
-| <a id="k-354"></a>K-354 | 9269–9278 | K-354 — 2026-11-08: Implicit priority for unit-bundle method names |
-| <a id="k-355"></a>K-355 | 9279–9288 | K-355 — 2026-11-08: Source-bound constructors in imported method unions |
-| <a id="k-356"></a>K-356 | 9289–9298 | K-356 — 2026-11-08: Procedure forwarding and selected-context diagnostics |
-| <a id="k-357"></a>K-357 | 9299–9310 | K-357 — 2026-11-08: Private helper composition and current contract wording |
-| <a id="k-358"></a>K-358 | 9311–9320 | K-358 — 2026-11-08: Symbolic re-export and declaration-order evidence |
-| <a id="k-359"></a>K-359 | 9321–9331 | K-359 — 2026-11-08: Standalone method contract alternatives grounded in current calls |
-| <a id="k-360"></a>K-360 | 9332–9339 | K-360 — 2026-11-08: Borrowed control flow through selected helper contexts |
-| <a id="k-361"></a>K-361 | 9340–9348 | K-361 — 2026-11-08: Field labels are not callable dependencies |
-| <a id="k-362"></a>K-362 | 9349–9357 | K-362 — 2026-11-08: Lexical call/value review and compact evidence navigation |
-| <a id="k-363"></a>K-363 | 9358–9366 | K-363 — 2026-11-08: Unequal same-identity method subsets expose alias-order dependence |
-| <a id="k-364"></a>K-364 | 9367–9375 | K-364 — 2026-11-08: Symbolic reference reads preserve selected conformance |
-| <a id="k-365"></a>K-365 | 9376–9383 | K-365 — 2026-11-08: Guarded region scopes and current independent native checks |
-| <a id="k-366"></a>K-366 | 9384–9390 | K-366 — 2026-11-08: Aliased re-export surface and privacy evidence |
-| <a id="k-367"></a>K-367 | 9391–9400 | K-367 — 2026-11-08: Regional ownership documentation and current evidence boundary |
-| <a id="k-368"></a>K-368 | 9401–9408 | K-368 — 2026-11-08: Current full language and deep-composition checkpoint |
-| <a id="k-369"></a>K-369 | 9409–9417 | K-369 — 2026-11-08: Fold invariants exclude provably unrelated factory facts |
-| <a id="k-370"></a>K-370 | 9418–9424 | K-370 — 2026-11-08: Captured symbolic callee versus imported helper context |
-| <a id="k-371"></a>K-371 | 9425–9433 | K-371 — 2026-11-08: Reconcile current symbol and module context summaries |
-| <a id="k-372"></a>K-372 | 9434–9442 | K-372 — 2026-11-08: Current post-fold language, composition and native checkpoint |
-| <a id="k-373"></a>K-373 | 9443–9452 | K-373 — 2026-11-08: Diagnose the contributing associated-method export |
-| <a id="k-374"></a>K-374 | 9453–9461 | K-374 — 2026-11-08: Cross-pool explicit-memory algorithms preserve result owners |
-| <a id="k-375"></a>K-375 | 9462–9470 | K-375 — 2026-11-08: Observe symbolic callee selection during argument rebinding |
-| <a id="k-376"></a>K-376 | 9471–9479 | K-376 — 2026-11-08: Reconcile the dynamic-bindings tracker with current contracts |
-| <a id="k-377"></a>K-377 | 9480–9488 | K-377 — 2026-11-08: Imported factory results retain source types and owners |
-| <a id="k-378"></a>K-378 | 9489–9497 | K-378 — 2026-11-08: Separate current language/unit indexes from historical checkpoints |
-| <a id="k-379"></a>K-379 | 9498–9506 | K-379 — 2026-11-08: Repair evidence navigation and stale detailed callable reference |
-| <a id="k-380"></a>K-380 | 9507–9516 | K-380 — 2026-11-08: Current-binary full language and native acceptance checkpoint |
-| <a id="k-381"></a>K-381 | 9517–9526 | K-381 — 2026-11-08: Runnable walkthrough and compiler provenance in native reports |
-| <a id="k-382"></a>K-382 | 9527–9535 | K-382 — 2026-11-08: Typed factory forwarding retains captures and result owners |
-| <a id="k-383"></a>K-383 | 9536–9545 | K-383 — 2026-11-08: Graph-lifetime explanation follows non-extractable dynamic owners |
-| <a id="k-384"></a>K-384 | 9546–9558 | K-384 — 2026-11-09: Ten-hour increment delivery and evidence audit |
-| <a id="k-385"></a>K-385 | 9559–9567 | K-385 — 2026-11-09: Module-world architecture review precedes local implementation |
-| <a id="k-386"></a>K-386 | 9568–9575 | K-386 — 2026-11-09: Distinct module and TLS worlds |
-| <a id="k-387"></a>K-387 | 9576–9585 | K-387 — 2026-11-09: Concrete world inventories and the Global Variables Done Right vision |
-| <a id="k-388"></a>K-388 | 9586–9594 | K-388 — 2026-11-09: Shared vocabulary identities across independent worlds |
-| <a id="k-389"></a>K-389 | 9595–9605 | K-389 — 2026-11-09: Active architecture goal and initial world/TLS representation |
-| <a id="k-390"></a>K-390 | 9606–9615 | K-390 — 2026-11-09: Corrected world boundary and replacement goal |
-| <a id="k-391"></a>K-391 | 9616–9629 | K-391 — 2026-11-09: Identity records, publication aliases and receiver-owned construction |
-| <a id="k-392"></a>K-392 | 9630–9638 | K-392 — 2026-11-09: RTTI inventory and explicit decision boundary |
-| <a id="k-393"></a>K-393 | 9639–9652 | K-393 — 2026-11-09: Canonical receiver imports and alias-shared overloads |
-| <a id="k-394"></a>K-394 | 9653–9664 | K-394 — 2026-11-09: Multi-alias diagnostics and preserved import interpretation |
-| <a id="k-395"></a>K-395 | 9665–9677 | K-395 — 2026-11-09: Imported dependency conflicts and cross-world TLS audit |
-| <a id="k-396"></a>K-396 | 9678–9689 | K-396 — 2026-11-09: Completed module-world and TLS architecture audit |
-| <a id="k-397"></a>K-397 | 9690–9699 | K-397 — 2026-11-09: Deferred fraction draft and future feature-conflict review |
-| <a id="k-398"></a>K-398 | 9700–9707 | K-398 — 2026-11-09: Priority prerequisites and authorized main-chat handoff |
-| <a id="k-399"></a>K-399 | 9708–9718 | K-399 — 2026-11-09: Typed callable declarations, lexical call binding and LLVM storage places |
-| <a id="k-400"></a>K-400 | 9719–9731 | K-400 — 2026-11-09: Repaired deployed-header invalidation and bounded callable acceptance |
-| <a id="k-401"></a>K-401 | 9732–9741 | K-401 — 2026-11-09: Comment reservation and confirmed quantity/widening contract |
-| <a id="k-402"></a>K-402 | 9742–9753 | K-402 — 2026-11-09: Representation-independent quantities and lossless numeric widening |
-| <a id="k-403"></a>K-403 | 9754–9764 | K-403 — 2026-11-09: Publication and ordinary-region lifecycle decision review |
-| <a id="k-404"></a>K-404 | 9765–9774 | K-404 — 2026-11-09: Propagate the confirmed ordinary-owner consumed state |
-| <a id="k-405"></a>K-405 | 9775–9784 | K-405 — 2026-11-09: Local-view preservation and initial typed construction decisions |
-| <a id="k-406"></a>K-406 | 9785–9795 | K-406 — 2026-11-09: Exception-control plan and construction-cleanup source audit |
-| <a id="k-407"></a>K-407 | 9796–9805 | K-407 — 2026-11-09: Consolidated exception and owning-lifecycle decisions for review |
-| <a id="k-408"></a>K-408 | 9806–9814 | K-408 — 2026-11-09: Accepted exception lifecycle and explicit-cause amendment |
-| <a id="k-409"></a>K-409 | 9815–9823 | K-409 — 2026-11-09: Allocation-to-publication cleanup evidence |
-| <a id="k-410"></a>K-410 | 9824–9833 | K-410 — 2026-11-09: Plain intrinsic exception control in direct LLVM |
-| <a id="k-411"></a>K-411 | 9834–9844 | K-411 — 2026-11-09: Typed ordinary-region lifecycle and exception integration |
-| <a id="k-412"></a>K-412 | 9845–9855 | K-412 — 2026-11-09: Operand lifetime revalidation and owning-result audit |
-| <a id="k-413"></a>K-413 | 9856–9864 | K-413 — 2026-11-10: Retained-cause implementation authorization |
-| <a id="k-414"></a>K-414 | 9865–9875 | K-414 — 2026-11-10: Retained causes and completed E1–E5 acceptance |
-| <a id="k-415"></a>K-415 | 9876–9885 | K-415 — 2026-11-10: Published lifecycle and owned user-library pool |
-| <a id="k-416"></a>K-416 | 9886–9895 | K-416 — 2026-11-10: Confirmed assignment result contract and implementation boundary |
-| <a id="k-417"></a>K-417 | 9896–9905 | K-417 — 2026-11-10: Fixed-owner ptr model and local parameter storage |
-| <a id="k-418"></a>K-418 | 9906–9914 | K-418 — 2026-11-10: Owner-annotation syntax confirmed |
-| <a id="k-419"></a>K-419 | 9915–9924 | K-419 — 2026-11-10: Region owner constraints and usable policy references |
-| <a id="k-420"></a>K-420 | 9925–9933 | K-420 — 2026-11-10: Region declarations across source positions |
-| <a id="k-421"></a>K-421 | 9934–9941 | K-421 — 2026-11-10: Region-first symbolic declaration draft |
-| <a id="k-422"></a>K-422 | 9942–9951 | K-422 — 2026-11-10: Separate symbolic payload storage, rebinding and transfer |
-| <a id="k-423"></a>K-423 | 9952–9961 | K-423 — 2026-11-10: Review symbolic binding versus referent mutation |
-| <a id="k-424"></a>K-424 | 9962–9971 | K-424 — 2026-11-10: Shared-region symbolic groups and staged installation |
-| <a id="k-425"></a>K-425 | 9972–9980 | K-425 — 2026-11-10: Explicit touch capture and shared-owner replay checking |
-| <a id="k-426"></a>K-426 | 9981–9990 | K-426 — 2026-11-10: Typed symbolic effects and callable bindings |
-| <a id="k-427"></a>K-427 | 9991–10000 | K-427 — 2026-11-10: Local bits initialization and explicit assignment ownership |
-| <a id="k-428"></a>K-428 | 10001–10010 | K-428 — 2026-11-10: Distinct initializer blocks and deferred initialization |
-| <a id="k-429"></a>K-429 | 10011–10020 | K-429 — 2026-11-10: Bounded ptr storage and initialization integration |
-| <a id="k-430"></a>K-430 | 10021–10030 | K-430 — 2026-11-10: Ptr access rejection and bounded loop review |
-| <a id="k-431"></a>K-431 | 10031–10039 | K-431 — 2026-11-10: Qualifier-aware methods and caller-visible reference assignment |
-| <a id="k-432"></a>K-432 | 10040–10047 | K-432 — 2026-11-10: Required destination-parameter return |
-| <a id="k-433"></a>K-433 | 10048–10055 | K-433 — 2026-11-10: Explicit builtin delegation and empty-range initialization |
-| <a id="k-434"></a>K-434 | 10056–10063 | K-434 — 2026-11-10: Pointer invariants, fixed bindings and explicit swaps |
-| <a id="k-435"></a>K-435 | 10064–10072 | K-435 — 2026-11-10: Region declarations and void/view logical transfers |
-| <a id="k-436"></a>K-436 | 10073–10080 | K-436 — 2026-11-10: Ref/ptr declaration review and initialization boundaries |
-| <a id="k-437"></a>K-437 | 10081–10088 | K-437 — 2026-11-10: Uniform reference fields and separately stored bits targets |
-| <a id="k-438"></a>K-438 | 10089–10096 | K-438 — 2026-11-10: Correct direct bits versus reference field scope |
-| <a id="k-439"></a>K-439 | 10097–10104 | K-439 — 2026-11-10: Checked-NPE and explicit local bits review |
-| <a id="k-440"></a>K-440 | 10105–10112 | K-440 — 2026-11-10: Checked nullable access and explicit val implementation contract |
-| <a id="k-441"></a>K-441 | 10113–10123 | K-441 — 2026-11-10: Checked nullable storage native acceptance |
-| <a id="k-442"></a>K-442 | 10124–10134 | K-442 — 2026-11-11 UTC: Declaration cleanup and native composition acceptance |
-| <a id="k-443"></a>K-443 | 10135–10142 | K-443 — 2026-11-11 UTC: Nullable call contract and annotation review |
-| <a id="k-444"></a>K-444 | 10143–10151 | K-444 — 2026-11-11 UTC: Colon/nullable acceptance and explicit-scope boundary review |
-| <a id="k-445"></a>K-445 | 10152–10160 | K-445 — 2026-11-11 UTC: Unified callable capture and owner review |
-| <a id="k-446"></a>K-446 | 10161–10168 | — |
-| <a id="k-447"></a>K-447 | 10169–10175 | — |
-| <a id="k-448"></a>K-448 | 10176–10183 | — |
-| <a id="k-449"></a>K-449 | 10184–10191 | — |
-| <a id="k-450"></a>K-450 | 10192–10199 | — |
-| <a id="k-451"></a>K-451 | 10200–10207 | — |
-| <a id="k-452"></a>K-452 | 10208–10214 | — |
-| <a id="k-453"></a>K-453 | 10215–10220 | — |
-| <a id="k-454"></a>K-454 | 10221–10227 | — |
-| <a id="k-455"></a>K-455 | 10228–10233 | — |
-| <a id="k-456"></a>K-456 | 10234–10239 | — |
-| <a id="k-457"></a>K-457 | 10240–10246 | — |
-| <a id="k-458"></a>K-458 | 10247–10253 | — |
-| <a id="k-459"></a>K-459 | 10254–10260 | — |
-| <a id="k-460"></a>K-460 | 10261–10269 | — |
-| <a id="k-461"></a>K-461 | 10270–10276 | — |
-| <a id="k-462"></a>K-462 | 10277–10283 | — |
-| <a id="k-463"></a>K-463 | 10284–10289 | — |
-| <a id="k-464"></a>K-464 | 10290–10297 | — |
-| <a id="k-465"></a>K-465 | 10298–10306 | — |
-| <a id="k-466"></a>K-466 | 10307–10315 | — |
-| <a id="k-467"></a>K-467 | 10316–10326 | — |
-| <a id="k-468"></a>K-468 | 10327–10338 | K-468 — Callable argument snapshots and callee-local values (2026-11-11) |
-| <a id="k-469"></a>K-469 | 10339–10348 | K-469 — Route IPC/DBMR graph-transfer questions to library methods (2026-11-11) |
-| <a id="k-470"></a>K-470 | 10349–10360 | K-470 — Consolidate IPC/DBMR decisions and retire the initial discussion (2026-11-11) |
-| <a id="k-471"></a>K-471 | 10361–10372 | K-471 — Native scalar-argument callable entries and selected module contexts (2026-11-11) |
-| <a id="k-472"></a>K-472 | 10373–10383 | K-472 — Caller-owned native factory results and shared factory graphs (2026-11-11) |
-| <a id="k-473"></a>K-473 | 10384–10393 | K-473 — Register the CoD compiler application planning draft (2026-11-11) |
-| <a id="k-474"></a>K-474 | 10394–10401 | K-474 — Record the proposed write-only initializer contract (2026-11-11) |
-| <a id="k-475"></a>K-475 | 10402–10408 | K-475 — Name registration-time evaluation and compare source forms (2026-11-11) |
-| <a id="k-476"></a>K-476 | 10409–10420 | K-476 — Native procedure images and checked invocation contexts (2026-11-11) |
-| <a id="k-477"></a>K-477 | 10421–10433 | K-477 — Recursive native procedure adapters and frame-local copies (2026-11-11) |
-| <a id="k-478"></a>K-478 | 10434–10446 | K-478 — Per-frame procedure bindings and recursive owner checks (2026-11-11) |
-| <a id="k-479"></a>K-479 | 10447–10460 | K-479 — Demanded procedural snapshots and shared exceptional cleanup (2026-11-11) |
-| <a id="k-480"></a>K-480 | 10461–10471 | K-480 — Native callable replacement and active-image lifetime audit (2026-11-11) |
-| <a id="k-481"></a>K-481 | 10472–10485 | K-481 — Retaining active callable images through replacement (2026-11-11) |
-| <a id="k-482"></a>K-482 | 10486–10498 | K-482 — Native callable writes and deferred context closure (2026-11-11) |
-| <a id="k-483"></a>K-483 | 10499–10511 | K-483 — Native regional dynamic captures and lifetime checks (2026-11-11) |
-| <a id="k-484"></a>K-484 | 10512–10523 | K-484 — Native callable results and recursive factories (2026-11-11) |
-| <a id="k-485"></a>K-485 | 10524–10534 | K-485 — Lexical procedure factories and shared pointer-flow snapshots (2026-11-11) |
-| <a id="k-486"></a>K-486 | 10535–10542 | K-486 — Native higher-order calls and per-call argument contexts (2026-11-11) |
-| <a id="k-487"></a>K-487 | 10543–10553 | K-487 — Native generic/variadic values and callable-pack replacement (2026-11-11) |
-| <a id="k-488"></a>K-488 | 10554–10565 | K-488 — Borrowed regional parameters at native callable boundaries (2026-11-11) |
-| <a id="k-489"></a>K-489 | 10566–10577 | K-489 — Native owner-constrained storage parameters (2026-11-11) |
-| <a id="k-490"></a>K-490 | 10578–10588 | K-490 — Native scalar-reference results with declared owners (2026-11-11) |
-| <a id="k-491"></a>K-491 | 10589–10599 | K-491 — Native nullable views without premature dereference (2026-11-11) |
-| <a id="k-492"></a>K-492 | 10600–10610 | K-492 — Native borrowed callable holders and outward writes (2026-11-11) |
-| <a id="k-493"></a>K-493 | 10611–10620 | K-493 — Native borrowed callable results (2026-11-11) |
-| <a id="k-494"></a>K-494 | 10621–10629 | K-494 — Demanded owner projection through native callable results (2026-11-11) |
-| <a id="k-495"></a>K-495 | 10630–10638 | K-495 — Projection permissions across loops and recursive returns (2026-11-11) |
-| <a id="k-496"></a>K-496 | 10639–10648 | K-496 — Permission-dependent method selection with preserved call context (2026-11-11) |
-| <a id="k-497"></a>K-497 | 10649–10659 | K-497 — Native callable results from external-owner factory inputs (2026-11-11) |
-| <a id="k-498"></a>K-498 | 10660–10669 | K-498 — Formal owner relationships in runtime-selected factory values (2026-11-11) |
-| <a id="k-499"></a>K-499 | 10670–10679 | K-499 — Native borrowed array results and the abstract-result boundary (2026-11-11) |
-| <a id="k-500"></a>K-500 | 10680–10689 | K-500 — Selected native callable argument conversions (2026-11-11) |
-| <a id="k-501"></a>K-501 | 10690–10697 | K-501 — Native record-return metadata audit (2026-11-11) |
-| <a id="k-502"></a>K-502 | 10698–10706 | K-502 — Native record results and shared return checking (2026-11-11) |
-| <a id="k-503"></a>K-503 | 10707–10715 | K-503 — Native caller initialization and recursive proof reuse (2026-11-11) |
-| <a id="k-504"></a>K-504 | 10716–10723 | K-504 — Native borrowed whole-region results (2026-11-12) |
-| <a id="k-505"></a>K-505 | 10724–10731 | K-505 — Demand-driven interface facts for recursive forwarding (2026-11-12) |
-| <a id="k-506"></a>K-506 | 10732–10740 | K-506 — Native owning-region results and concrete-root handoff (2026-11-12) |
-| <a id="k-507"></a>K-507 | 10741–10749 | K-507 — Root projections and layout-dependent operations across loop flows (2026-11-12) |
-| <a id="k-508"></a>K-508 | 10750–10758 | K-508 — Extra concrete fields and unevaluated type queries in loop results (2026-11-12) |
-| <a id="k-509"></a>K-509 | 10759–10767 | K-509 — Refine recursive adapter contexts before committing native reuse (2026-11-12) |
-| <a id="k-510"></a>K-510 | 10768–10776 | K-510 — Native owning arguments preserve region provenance and cleanup (2026-11-12) |
-| <a id="k-511"></a>K-511 | 10777–10785 | K-511 — Recursive native owner roles preserve identity and lifetime (2026-11-12) |
-| <a id="k-512"></a>K-512 | 10786–10795 | K-512 — Native callback arguments follow owning parameter roles (2026-11-12) |
-| <a id="k-513"></a>K-513 | 10796–10803 | K-513 — Contextual callback images across recursive owner roles (2026-11-12) |
-| <a id="k-514"></a>K-514 | 10804–10812 | K-514 — Recursive factories preserve returned callable environments (2026-11-12) |
-| <a id="k-515"></a>K-515 | 10813–10819 | K-515 — Deferred call preparation and compiler-pilot cleanup planning (2026-11-12) |
-| <a id="k-516"></a>K-516 | 10820–10826 | K-516 — Expression-valued targets and native call preparation (2026-11-12) |
-| <a id="k-517"></a>K-517 | 10827–10832 | K-517 — Deferred failure handling requirement and pending completion details (2026-11-12) |
-| <a id="k-518"></a>K-518 | 10833–10838 | K-518 — Deferred handler surface and explicit loop storage boundary (2026-11-12) |
-| <a id="k-519"></a>K-519 | 10839–10846 | K-519 — Explicit iteration scopes and unified completion requirements (2026-11-12) |
-| <a id="k-520"></a>K-520 | 10847–10852 | K-520 — Explicit return completion and deferred pure syntax (2026-11-12) |
-| <a id="k-521"></a>K-521 | 10853–10861 | K-521 — Recursive factory arguments, returned-entry demand and loop review (2026-11-12) |
-| <a id="k-522"></a>K-522 | 10862–10869 | K-522 — Dedicated loop scoping contract and explicit supersession (2026-11-12) |
-| <a id="k-523"></a>K-523 | 10870–10878 | K-523 — Loop else checking, resource evidence and shared exception categories (2026-11-12) |
-| <a id="k-524"></a>K-524 | 10879–10887 | K-524 — Conditional cleanup activation and authority identifier correction (2026-11-12) |
-| <a id="k-525"></a>K-525 | 10888–10898 | K-525 — Ordinary grouping, scope-owned cleanup and shared finally (2026-11-12) |
-| <a id="k-526"></a>K-526 | 10899–10910 | K-526 — Explicit callable returns and typed finally continuations (2026-11-12) |
-| <a id="k-527"></a>K-527 | 10911–10922 | K-527 — Independent qualifiers and propagated target access (2026-11-12) |
-| <a id="k-528"></a>K-528 | 10923–10930 | K-528 — Shared checked call preparation and invocation (2026-11-12) |
-| <a id="k-529"></a>K-529 | 10931–10937 | K-529 — Deferred owner identity preparation and entry-time transfer (2026-11-12) |
-| <a id="k-530"></a>K-530 | 10938–10943 | K-530 — Explicit deferred-block resource boundaries (2026-11-12) |
-| <a id="k-531"></a>K-531 | 10944–10951 | K-531 — Native deferred-call registration and shared exit completion (2026-11-12) |
-| <a id="k-532"></a>K-532 | 10952–10960 | K-532 — Shared deferred block, handler and return completion (2026-11-12) |
-| <a id="k-533"></a>K-533 | 10961–10968 | K-533 — Deferred registration history in shared flow checking (2026-11-12) |
-| <a id="k-534"></a>K-534 | 10969–10976 | K-534 — Callable-world separation and AOT family-dispatch direction (2026-11-12) |
-| <a id="k-535"></a>K-535 | 10977–10984 | K-535 — Behavioral qualification and entry installation requirement (2026-11-12) |
-| <a id="k-536"></a>K-536 | 10985–10993 | K-536 — Preserve initialization operands while suppressing selected TLS writes (2026-11-12) |
-| <a id="k-537"></a>K-537 | 10994–11001 | K-537 — Separate module execution values and enforce nearest symbol lookup (2026-11-12) |
-| <a id="k-538"></a>K-538 | 11002–11010 | K-538 — Preserve implicit owner bindings independently of capabilities (2026-11-12) |
-| <a id="k-539"></a>K-539 | 11011–11018 | K-539 — Category facts across exception propagation cycles (2026-11-12) |
-| <a id="k-540"></a>K-540 | 11019–11026 | K-540 — Allocation initialization through deferred registration flow (2026-11-12) |
-| <a id="k-541"></a>K-541 | 11027–11036 | K-541 — Registration and completion guarantees in deferred initialization (2026-11-12) |
-| <a id="k-542"></a>K-542 | 11037–11046 | K-542 — Construction handoff reconciliation and dependency audit (2026-11-12) |
-| <a id="k-543"></a>K-543 | 11047–11055 | K-543 — Preserve normal and exceptional deferred handler inputs (2026-11-12) |
-| <a id="k-544"></a>K-544 | 11056–11064 | K-544 — Correlate deferred queue alternatives with initialization (2026-11-12) |
-| <a id="k-545"></a>K-545 | 11065–11073 | K-545 — Construction topic decisions and whole-document review (2026-11-12) |
-| <a id="k-546"></a>K-546 | 11074–11082 | K-546 — Prepared borrowed references in deferred calls (2026-11-12) |
-| <a id="k-547"></a>K-547 | 11083–11090 | K-547 — Callable-holder contents through deferred cleanup (2026-11-12) |
-| <a id="k-548"></a>K-548 | 11091–11098 | K-548 — Pointer selection and initialization through deferred cleanup (2026-11-12) |
-| <a id="k-549"></a>K-549 | 11099–11107 | K-549 — Shared pointer flow across loop entries and deferred cleanup (2026-11-12) |
-| <a id="k-550"></a>K-550 | 11108–11116 | K-550 — First-owner constraints across loop and deferred completion (2026-11-12) |
-| <a id="k-551"></a>K-551 | 11117–11125 | K-551 — Current ownership facts correlated with deferred queue paths (2026-11-12) |
-| <a id="k-552"></a>K-552 | 11126–11135 | K-552 — Owning invocation and completion-sensitive cleanup flow (2026-11-12) |
-| <a id="k-553"></a>K-553 | 11136–11145 | K-553 — Complete callable images across body-derived invocation (2026-11-12) |
-| <a id="k-554"></a>K-554 | 11146–11154 | K-554 — Current context across registered cleanup paths (2026-11-12) |
-| <a id="k-555"></a>K-555 | 11155–11165 | K-555 — Native body-derived borrowed results across cleanup and recursion (2026-11-12) |
-| <a id="k-556"></a>K-556 | 11166–11176 | K-556 — Shared return-storage provenance and scalar regression boundaries (2026-11-12) |
-| <a id="k-557"></a>K-557 | 11177–11186 | K-557 — Borrowed pointer targets across native result boundaries (2026-11-12) |
-| <a id="k-558"></a>K-558 | 11187–11195 | K-558 — Preserve ordinary scalar aliases across native calls (2026-11-12) |
-| <a id="k-559"></a>K-559 | 11196–11205 | K-559 — Current regional context inputs across native recursion (2026-11-12) |
-| <a id="k-560"></a>K-560 | 11206–11213 | K-560 — Stable returned callable owners across recursive current contexts (2026-11-12) |
-| <a id="k-561"></a>K-561 | 11214–11221 | K-561 — Shared returned-storage provenance across regional recursion (2026-11-13) |
-| <a id="k-562"></a>K-562 | 11222–11228 | K-562 — Audit omitted callable-result authority and draft a topic review (2026-11-13) |
-| <a id="k-563"></a>K-563 | 11229–11236 | K-563 — Fair native-demand batches preserve recursive lifetime diagnostics (2026-11-13) |
-| <a id="k-564"></a>K-564 | 11237–11244 | K-564 — Shared dynamic capture demand preserves native regional recursion (2026-11-13) |
-| <a id="k-565"></a>K-565 | 11245–11252 | K-565 — Invocation bases and capture demand across recursive overlays (2026-11-13) |
-| <a id="k-566"></a>K-566 | 11253–11261 | K-566 — One callable-input proof for arguments and replayed procedures (2026-11-13) |
-| <a id="k-567"></a>K-567 | 11262–11270 | K-567 — Fresh callable images share checked native contexts (2026-11-13) |
-| <a id="k-568"></a>K-568 | 11271–11278 | K-568 — Contextual factory results belong to invocation adapters (2026-11-13) |
-| <a id="k-569"></a>K-569 | 11279–11286 | K-569 — Shared recursive callable-parameter graphs (2026-11-13) |
-| <a id="k-570"></a>K-570 | 11287–11294 | K-570 — Borrowed-owner factories share native demand checking (2026-11-13) |
-| <a id="k-571"></a>K-571 | 11295–11302 | K-571 — Captured invocation inputs belong to selected images (2026-11-13) |
-| <a id="k-572"></a>K-572 | 11303–11310 | K-572 — Finite recomposed-context evidence and borrowed-result provenance (2026-11-13) |
-| <a id="k-573"></a>K-573 | 11311–11317 | K-573 — Record exploration authorization and scope AOT assumptions (2026-11-13) |
-| <a id="k-574"></a>K-574 | 11318–11325 | K-574 — Initial semantic/native boundary experiments (2026-11-13) |
-| <a id="k-575"></a>K-575 | 11326–11332 | K-575 — Whole-program semantic graph and native completion comparison (2026-11-13) |
-| <a id="k-576"></a>K-576 | 11333–11340 | K-576 — Actual regional storage and native borrow boundaries (2026-11-13) |
-| <a id="k-577"></a>K-577 | 11341–11348 | K-577 — Managed regional adapter and comparative exploration deliverable (2026-11-13) |
+### Agent continuity evidence
 
-### K-578 — Compact evidence and retire unused workspace references (2026-11-13)
-<a id="k-578"></a>
+| Event | Source: lines |
+| --- | --- |
+| <a id="k-00"></a>K-00 | A:5546–5557 |
+| <a id="k-01"></a>K-01 | A:5558–5567 |
+| <a id="k-02"></a>K-02 | A:5568–5577 |
+| <a id="k-03"></a>K-03 | A:5578–5588 |
+| <a id="k-04"></a>K-04 | A:5589–5598 |
+| <a id="k-05"></a>K-05 | A:5599–5607 |
+| <a id="k-06"></a>K-06 | A:5608–5615 |
+| <a id="k-07"></a>K-07 | A:5616–5624 |
+| <a id="k-08"></a>K-08 | A:5625–5633 |
+| <a id="k-09"></a>K-09 | A:5634–5643 |
+| <a id="k-10"></a>K-10 | A:5644–5652 |
+| <a id="k-11"></a>K-11 | A:5653–5661 |
+| <a id="k-12"></a>K-12 | A:5662–5670 |
+| <a id="k-13"></a>K-13 | A:5671–5680 |
+| <a id="k-14"></a>K-14 | A:5681–5689 |
+| <a id="k-15"></a>K-15 | A:5690–5696 |
+| <a id="k-16"></a>K-16 | A:5697–5705 |
+| <a id="k-17"></a>K-17 | A:5706–5715 |
+| <a id="k-18"></a>K-18 | A:5716–5723 |
+| <a id="k-19"></a>K-19 | A:5724–5730 |
+| <a id="k-20"></a>K-20 | A:5731–5737 |
+| <a id="k-21"></a>K-21 | A:5738–5744 |
+| <a id="k-22"></a>K-22 | A:5745–5752 |
+| <a id="k-23"></a>K-23 | A:5753–5761 |
+| <a id="k-24"></a>K-24 | A:5762–5770 |
+| <a id="k-25"></a>K-25 | A:5771–5779 |
+| <a id="k-26"></a>K-26 | A:5780–5788 |
+| <a id="k-27"></a>K-27 | A:5789–5798 |
+| <a id="k-28"></a>K-28 | A:5799–5810 |
+| <a id="k-29"></a>K-29 | A:5811–5816 |
+| <a id="k-30"></a>K-30 | A:5817–5827 |
+| <a id="k-31"></a>K-31 | A:5828–5839 |
+| <a id="k-32"></a>K-32 | A:5840–5851 |
+| <a id="k-33"></a>K-33 | A:5852–5862 |
+| <a id="k-34"></a>K-34 | A:5863–5876 |
+| <a id="k-35"></a>K-35 | A:5877–5890 |
+| <a id="k-36"></a>K-36 | A:5891–5903 |
+| <a id="k-37"></a>K-37 | A:5904–5916 |
+| <a id="k-38"></a>K-38 | A:5917–5929 |
+| <a id="k-39"></a>K-39 | A:5930–5942 |
+| <a id="k-40"></a>K-40 | A:5943–5955 |
+| <a id="k-41"></a>K-41 | A:5956–5968 |
+| <a id="k-42"></a>K-42 | A:5969–5981 |
+| <a id="k-43"></a>K-43 | A:5982–5994 |
+| <a id="k-44"></a>K-44 | A:5995–6007 |
+| <a id="k-45"></a>K-45 | A:6008–6020 |
+| <a id="k-46"></a>K-46 | A:6021–6033 |
+| <a id="k-47"></a>K-47 | A:6034–6046 |
+| <a id="k-48"></a>K-48 | A:6047–6059 |
+| <a id="k-49"></a>K-49 | A:6060–6072 |
+| <a id="k-50"></a>K-50 | A:6073–6085 |
+| <a id="k-51"></a>K-51 | A:6086–6098 |
+| <a id="k-52"></a>K-52 | A:6099–6111 |
+| <a id="k-53"></a>K-53 | A:6112–6124 |
+| <a id="k-54"></a>K-54 | A:6125–6137 |
+| <a id="k-55"></a>K-55 | A:6138–6150 |
+| <a id="k-56"></a>K-56 | A:6151–6163 |
+| <a id="k-57"></a>K-57 | A:6164–6177 |
+| <a id="k-58"></a>K-58 | A:6178–6190 |
+| <a id="k-59"></a>K-59 | A:6191–6203 |
+| <a id="k-60"></a>K-60 | A:6204–6215 |
+| <a id="k-61"></a>K-61 | A:6216–6228 |
+| <a id="k-62"></a>K-62 | A:6229–6241 |
+| <a id="k-63"></a>K-63 | A:6242–6254 |
+| <a id="k-64"></a>K-64 | A:6255–6267 |
+| <a id="k-65"></a>K-65 | A:6268–6280 |
+| <a id="k-66"></a>K-66 | A:6281–6293 |
+| <a id="k-67"></a>K-67 | A:6294–6306 |
+| <a id="k-68"></a>K-68 | A:6307–6319 |
+| <a id="k-69"></a>K-69 | A:6320–6331 |
+| <a id="k-70"></a>K-70 | A:6332–6343 |
+| <a id="k-71"></a>K-71 | A:6344–6356 |
+| <a id="k-72"></a>K-72 | A:6357–6368 |
+| <a id="k-73"></a>K-73 | A:6369–6382 |
+| <a id="k-74"></a>K-74 | A:6383–6395 |
+| <a id="k-75"></a>K-75 | A:6396–6410 |
+| <a id="k-76"></a>K-76 | A:6411–6423 |
+| <a id="k-77"></a>K-77 | A:6424–6437 |
+| <a id="k-78"></a>K-78 | A:6438–6452 |
+| <a id="k-79"></a>K-79 | A:6453–6466 |
+| <a id="k-80"></a>K-80 | A:6467–6481 |
+| <a id="k-81"></a>K-81 | A:6482–6494 |
+| <a id="k-82"></a>K-82 | A:6495–6508 |
+| <a id="k-83"></a>K-83 | A:6509–6524 |
+| <a id="k-84"></a>K-84 | A:6525–6538 |
+| <a id="k-85"></a>K-85 | A:6539–6552 |
+| <a id="k-86"></a>K-86 | A:6553–6566 |
+| <a id="k-87"></a>K-87 | A:6567–6579 |
+| <a id="k-88"></a>K-88 | A:6580–6592 |
+| <a id="k-89"></a>K-89 | A:6593–6608 |
+| <a id="k-90"></a>K-90 | A:6609–6620 |
+| <a id="k-91"></a>K-91 | A:6621–6631 |
+| <a id="k-92"></a>K-92 | A:6632–6641 |
+| <a id="k-93"></a>K-93 | A:6642–6652 |
+| <a id="k-94"></a>K-94 | A:6653–6662 |
+| <a id="k-95"></a>K-95 | A:6663–6673 |
+| <a id="k-96"></a>K-96 | A:6674–6683 |
+| <a id="k-97"></a>K-97 | A:6684–6694 |
+| <a id="k-98"></a>K-98 | A:6695–6706 |
+| <a id="k-99"></a>K-99 | A:6707–6718 |
+| <a id="k-100"></a>K-100 | A:6719–6730 |
+| <a id="k-101"></a>K-101 | A:6731–6742 |
+| <a id="k-102"></a>K-102 | A:6743–6752 |
+| <a id="k-103"></a>K-103 | A:6753–6762 |
+| <a id="k-104"></a>K-104 | A:6763–6772 |
+| <a id="k-105"></a>K-105 | A:6773–6782 |
+| <a id="k-106"></a>K-106 | A:6783–6793 |
+| <a id="k-107"></a>K-107 | A:6794–6804 |
+| <a id="k-108"></a>K-108 | A:6805–6815 |
+| <a id="k-109"></a>K-109 | A:6816–6826 |
+| <a id="k-110"></a>K-110 | A:6827–6837 |
+| <a id="k-111"></a>K-111 | A:6838–6848 |
+| <a id="k-112"></a>K-112 | A:6849–6859 |
+| <a id="k-113"></a>K-113 | A:6860–6870 |
+| <a id="k-114"></a>K-114 | A:6871–6880 |
+| <a id="k-115"></a>K-115 | A:6881–6890 |
+| <a id="k-116"></a>K-116 | A:6891–6900 |
+| <a id="k-117"></a>K-117 | A:6901–6910 |
+| <a id="k-118"></a>K-118 | A:6911–6920 |
+| <a id="k-119"></a>K-119 | A:6921–6930 |
+| <a id="k-120"></a>K-120 | A:6931–6940 |
+| <a id="k-121"></a>K-121 | A:6941–6950 |
+| <a id="k-122"></a>K-122 | A:6951–6960 |
+| <a id="k-123"></a>K-123 | A:6961–6966 |
+| <a id="k-124"></a>K-124 | A:6967–6976 |
+| <a id="k-125"></a>K-125 | A:6977–6985 |
+| <a id="k-126"></a>K-126 | A:6986–6991 |
+| <a id="k-127"></a>K-127 | A:6992–6999 |
+| <a id="k-128"></a>K-128 | A:7000–7009 |
+| <a id="k-129"></a>K-129 | A:7010–7017 |
+| <a id="k-130"></a>K-130 | A:7018–7027 |
+| <a id="k-131"></a>K-131 | A:7028–7036 |
+| <a id="k-132"></a>K-132 | A:7037–7045 |
+| <a id="k-133"></a>K-133 | A:7046–7055 |
+| <a id="k-134"></a>K-134 | A:7056–7064 |
+| <a id="k-135"></a>K-135 | A:7065–7074 |
+| <a id="k-136"></a>K-136 | A:7075–7084 |
+| <a id="k-137"></a>K-137 | A:7085–7093 |
+| <a id="k-138"></a>K-138 | A:7094–7103 |
+| <a id="k-139"></a>K-139 | A:7104–7114 |
+| <a id="k-140"></a>K-140 | A:7115–7125 |
+| <a id="k-141"></a>K-141 | A:7126–7136 |
+| <a id="k-142"></a>K-142 | A:7137–7147 |
+| <a id="k-143"></a>K-143 | A:7148–7158 |
+| <a id="k-144"></a>K-144 | A:7159–7169 |
+| <a id="k-145"></a>K-145 | A:7170–7180 |
+| <a id="k-146"></a>K-146 | A:7181–7191 |
+| <a id="k-147"></a>K-147 | A:7192–7202 |
+| <a id="k-148"></a>K-148 | A:7203–7212 |
+| <a id="k-149"></a>K-149 | A:7213–7222 |
+| <a id="k-150"></a>K-150 | A:7223–7232 |
+| <a id="k-151"></a>K-151 | A:7233–7243 |
+| <a id="k-152"></a>K-152 | A:7244–7253 |
+| <a id="k-153"></a>K-153 | A:7254–7263 |
+| <a id="k-154"></a>K-154 | A:7264–7273 |
+| <a id="k-155"></a>K-155 | A:7274–7283 |
+| <a id="k-156"></a>K-156 | A:7284–7293 |
+| <a id="k-157"></a>K-157 | A:7294–7303 |
+| <a id="k-158"></a>K-158 | A:7304–7313 |
+| <a id="k-159"></a>K-159 | A:7314–7323 |
+| <a id="k-160"></a>K-160 | A:7324–7333 |
+| <a id="k-161"></a>K-161 | A:7334–7343 |
+| <a id="k-162"></a>K-162 | A:7344–7353 |
+| <a id="k-163"></a>K-163 | A:7354–7362 |
+| <a id="k-164"></a>K-164 | A:7363–7371 |
+| <a id="k-165"></a>K-165 | A:7372–7380 |
+| <a id="k-166"></a>K-166 | A:7381–7389 |
+| <a id="k-167"></a>K-167 | A:7390–7397 |
+| <a id="k-168"></a>K-168 | A:7398–7406 |
+| <a id="k-169"></a>K-169 | A:7407–7415 |
+| <a id="k-170"></a>K-170 | A:7416–7424 |
+| <a id="k-171"></a>K-171 | A:7425–7433 |
+| <a id="k-172"></a>K-172 | A:7434–7442 |
+| <a id="k-173"></a>K-173 | A:7443–7451 |
+| <a id="k-174"></a>K-174 | A:7452–7460 |
+| <a id="k-175"></a>K-175 | A:7461–7469 |
+| <a id="k-176"></a>K-176 | A:7470–7478 |
+| <a id="k-177"></a>K-177 | A:7479–7487 |
+| <a id="k-178"></a>K-178 | A:7488–7496 |
+| <a id="k-179"></a>K-179 | A:7497–7505 |
+| <a id="k-180"></a>K-180 | A:7506–7514 |
+| <a id="k-181"></a>K-181 | A:7515–7523 |
+| <a id="k-182"></a>K-182 | A:7524–7532 |
+| <a id="k-183"></a>K-183 | A:7533–7541 |
+| <a id="k-184"></a>K-184 | A:7542–7550 |
+| <a id="k-185"></a>K-185 | A:7551–7559 |
+| <a id="k-186"></a>K-186 | A:7560–7568 |
+| <a id="k-187"></a>K-187 | A:7569–7577 |
+| <a id="k-188"></a>K-188 | A:7578–7586 |
+| <a id="k-189"></a>K-189 | A:7587–7595 |
+| <a id="k-190"></a>K-190 | A:7596–7604 |
+| <a id="k-191"></a>K-191 | A:7605–7613 |
+| <a id="k-192"></a>K-192 | A:7614–7622 |
+| <a id="k-193"></a>K-193 | A:7623–7631 |
+| <a id="k-194"></a>K-194 | A:7632–7640 |
+| <a id="k-195"></a>K-195 | A:7641–7649 |
+| <a id="k-196"></a>K-196 | A:7650–7658 |
+| <a id="k-197"></a>K-197 | A:7659–7667 |
+| <a id="k-198"></a>K-198 | A:7668–7676 |
+| <a id="k-199"></a>K-199 | A:7677–7685 |
+| <a id="k-200"></a>K-200 | A:7686–7694 |
+| <a id="k-201"></a>K-201 | A:7695–7703 |
+| <a id="k-202"></a>K-202 | A:7704–7712 |
+| <a id="k-203"></a>K-203 | A:7713–7721 |
+| <a id="k-204"></a>K-204 | A:7722–7730 |
+| <a id="k-205"></a>K-205 | A:7731–7739 |
+| <a id="k-206"></a>K-206 | A:7740–7748 |
+| <a id="k-207"></a>K-207 | A:7749–7758 |
+| <a id="k-208"></a>K-208 | A:7759–7770 |
+| <a id="k-209"></a>K-209 | A:7771–7782 |
+| <a id="k-210"></a>K-210 | A:7783–7795 |
+| <a id="k-211"></a>K-211 | A:7796–7807 |
+| <a id="k-212"></a>K-212 | A:7808–7817 |
+| <a id="k-213"></a>K-213 | A:7818–7828 |
+| <a id="k-214"></a>K-214 | A:7829–7842 |
+| <a id="k-215"></a>K-215 | A:7843–7855 |
+| <a id="k-216"></a>K-216 | A:7856–7867 |
+| <a id="k-217"></a>K-217 | A:7868–7880 |
+| <a id="k-218"></a>K-218 | A:7881–7893 |
+| <a id="k-219"></a>K-219 | A:7894–7906 |
+| <a id="k-220"></a>K-220 | A:7907–7919 |
+| <a id="k-221"></a>K-221 | A:7920–7931 |
+| <a id="k-222"></a>K-222 | A:7932–7943 |
+| <a id="k-223"></a>K-223 | A:7944–7957 |
+| <a id="k-224"></a>K-224 | A:7958–7968 |
+| <a id="k-225"></a>K-225 | A:7969–7981 |
+| <a id="k-226"></a>K-226 | A:7982–7994 |
+| <a id="k-227"></a>K-227 | A:7995–8007 |
+| <a id="k-228"></a>K-228 | A:8008–8021 |
+| <a id="k-229"></a>K-229 | A:8022–8033 |
+| <a id="k-230"></a>K-230 | A:8034–8045 |
+| <a id="k-231"></a>K-231 | A:8046–8056 |
+| <a id="k-232"></a>K-232 | A:8057–8068 |
+| <a id="k-233"></a>K-233 | A:8069–8077 |
+| <a id="k-234"></a>K-234 | A:8078–8086 |
+| <a id="k-235"></a>K-235 | A:8087–8096 |
+| <a id="k-236"></a>K-236 | A:8097–8105 |
+| <a id="k-237"></a>K-237 | A:8106–8115 |
+| <a id="k-238"></a>K-238 | A:8116–8125 |
+| <a id="k-239"></a>K-239 | A:8126–8135 |
+| <a id="k-240"></a>K-240 | A:8136–8145 |
+| <a id="k-241"></a>K-241 | A:8146–8164 |
+| <a id="k-242"></a>K-242 | A:8165–8173 |
+| <a id="k-243"></a>K-243 | A:8174–8183 |
+| <a id="k-244"></a>K-244 | A:8184–8193 |
+| <a id="k-245"></a>K-245 | A:8194–8203 |
+| <a id="k-246"></a>K-246 | A:8204–8213 |
+| <a id="k-247"></a>K-247 | A:8214–8223 |
+| <a id="k-248"></a>K-248 | A:8224–8233 |
+| <a id="k-249"></a>K-249 | A:8234–8242 |
+| <a id="k-250"></a>K-250 | A:8243–8252 |
+| <a id="k-251"></a>K-251 | A:8253–8262 |
+| <a id="k-252"></a>K-252 | A:8263–8272 |
+| <a id="k-253"></a>K-253 | A:8273–8281 |
+| <a id="k-254"></a>K-254 | A:8282–8292 |
+| <a id="k-255"></a>K-255 | A:8293–8303 |
+| <a id="k-256"></a>K-256 | A:8304–8312 |
+| <a id="k-257"></a>K-257 | A:8313–8322 |
+| <a id="k-258"></a>K-258 | A:8323–8332 |
+| <a id="k-259"></a>K-259 | A:8333–8342 |
+| <a id="k-260"></a>K-260 | A:8343–8352 |
+| <a id="k-261"></a>K-261 | A:8353–8362 |
+| <a id="k-262"></a>K-262 | A:8363–8373 |
+| <a id="k-263"></a>K-263 | A:8374–8383 |
+| <a id="k-264"></a>K-264 | A:8384–8394 |
+| <a id="k-265"></a>K-265 | A:8395–8405 |
+| <a id="k-266"></a>K-266 | A:8406–8415 |
+| <a id="k-267"></a>K-267 | A:8416–8425 |
+| <a id="k-268"></a>K-268 | A:8426–8435 |
+| <a id="k-269"></a>K-269 | A:8436–8444 |
+| <a id="k-270"></a>K-270 | A:8445–8453 |
+| <a id="k-271"></a>K-271 | A:8454–8463 |
+| <a id="k-272"></a>K-272 | A:8464–8473 |
+| <a id="k-273"></a>K-273 | A:8474–8483 |
+| <a id="k-274"></a>K-274 | A:8484–8493 |
+| <a id="k-275"></a>K-275 | A:8494–8503 |
+| <a id="k-276"></a>K-276 | A:8504–8512 |
+| <a id="k-277"></a>K-277 | A:8513–8520 |
+| <a id="k-278"></a>K-278 | A:8521–8528 |
+| <a id="k-279"></a>K-279 | A:8529–8537 |
+| <a id="k-280"></a>K-280 | A:8538–8545 |
+| <a id="k-281"></a>K-281 | A:8546–8553 |
+| <a id="k-282"></a>K-282 | A:8554–8563 |
+| <a id="k-283"></a>K-283 | A:8564–8572 |
+| <a id="k-284"></a>K-284 | A:8573–8581 |
+| <a id="k-285"></a>K-285 | A:8582–8589 |
+| <a id="k-286"></a>K-286 | A:8590–8598 |
+| <a id="k-287"></a>K-287 | A:8599–8607 |
+| <a id="k-288"></a>K-288 | A:8608–8617 |
+| <a id="k-289"></a>K-289 | A:8618–8626 |
+| <a id="k-290"></a>K-290 | A:8627–8636 |
+| <a id="k-291"></a>K-291 | A:8637–8645 |
+| <a id="k-292"></a>K-292 | A:8646–8653 |
+| <a id="k-293"></a>K-293 | A:8654–8663 |
+| <a id="k-294"></a>K-294 | A:8664–8673 |
+| <a id="k-295"></a>K-295 | A:8674–8684 |
+| <a id="k-296"></a>K-296 | A:8685–8696 |
+| <a id="k-297"></a>K-297 | A:8697–8706 |
+| <a id="k-298"></a>K-298 | A:8707–8715 |
+| <a id="k-299"></a>K-299 | A:8716–8724 |
+| <a id="k-300"></a>K-300 | A:8725–8734 |
+| <a id="k-301"></a>K-301 | A:8735–8743 |
+| <a id="k-302"></a>K-302 | A:8744–8753 |
+| <a id="k-303"></a>K-303 | A:8754–8761 |
+| <a id="k-304"></a>K-304 | A:8762–8769 |
+| <a id="k-305"></a>K-305 | A:8770–8779 |
+| <a id="k-306"></a>K-306 | A:8780–8789 |
+| <a id="k-307"></a>K-307 | A:8790–8800 |
+| <a id="k-308"></a>K-308 | A:8801–8810 |
+| <a id="k-309"></a>K-309 | A:8811–8820 |
+| <a id="k-310"></a>K-310 | A:8821–8833 |
+| <a id="k-311"></a>K-311 | A:8834–8844 |
+| <a id="k-312"></a>K-312 | A:8845–8855 |
+| <a id="k-313"></a>K-313 | A:8856–8867 |
+| <a id="k-314"></a>K-314 | A:8868–8878 |
+| <a id="k-315"></a>K-315 | A:8879–8889 |
+| <a id="k-316"></a>K-316 | A:8890–8901 |
+| <a id="k-317"></a>K-317 | A:8902–8913 |
+| <a id="k-318"></a>K-318 | A:8914–8925 |
+| <a id="k-319"></a>K-319 | A:8926–8936 |
+| <a id="k-320"></a>K-320 | A:8937–8948 |
+| <a id="k-321"></a>K-321 | A:8949–8961 |
+| <a id="k-322"></a>K-322 | A:8962–8972 |
+| <a id="k-323"></a>K-323 | A:8973–8982 |
+| <a id="k-324"></a>K-324 | A:8983–8993 |
+| <a id="k-325"></a>K-325 | A:8994–9004 |
+| <a id="k-326"></a>K-326 | A:9005–9015 |
+| <a id="k-327"></a>K-327 | A:9016–9025 |
+| <a id="k-328"></a>K-328 | A:9026–9035 |
+| <a id="k-329"></a>K-329 | A:9036–9045 |
+| <a id="k-330"></a>K-330 | A:9046–9054 |
+| <a id="k-331"></a>K-331 | A:9055–9063 |
+| <a id="k-332"></a>K-332 | A:9064–9072 |
+| <a id="k-333"></a>K-333 | A:9073–9081 |
+| <a id="k-334"></a>K-334 | A:9082–9090 |
+| <a id="k-335"></a>K-335 | A:9091–9099 |
+| <a id="k-336"></a>K-336 | A:9100–9108 |
+| <a id="k-337"></a>K-337 | A:9109–9116 |
+| <a id="k-338"></a>K-338 | A:9117–9124 |
+| <a id="k-339"></a>K-339 | A:9125–9133 |
+| <a id="k-340"></a>K-340 | A:9134–9141 |
+| <a id="k-341"></a>K-341 | A:9142–9152 |
+| <a id="k-342"></a>K-342 | A:9153–9161 |
+| <a id="k-343"></a>K-343 | A:9162–9170 |
+| <a id="k-344"></a>K-344 | A:9171–9179 |
+| <a id="k-345"></a>K-345 | A:9180–9187 |
+| <a id="k-346"></a>K-346 | A:9188–9195 |
+| <a id="k-347"></a>K-347 | A:9196–9203 |
+| <a id="k-348"></a>K-348 | A:9204–9214 |
+| <a id="k-349"></a>K-349 | A:9215–9224 |
+| <a id="k-350"></a>K-350 | A:9225–9236 |
+| <a id="k-351"></a>K-351 | A:9237–9247 |
+| <a id="k-352"></a>K-352 | A:9248–9258 |
+| <a id="k-353"></a>K-353 | A:9259–9268 |
+| <a id="k-354"></a>K-354 | A:9269–9278 |
+| <a id="k-355"></a>K-355 | A:9279–9288 |
+| <a id="k-356"></a>K-356 | A:9289–9298 |
+| <a id="k-357"></a>K-357 | A:9299–9310 |
+| <a id="k-358"></a>K-358 | A:9311–9320 |
+| <a id="k-359"></a>K-359 | A:9321–9331 |
+| <a id="k-360"></a>K-360 | A:9332–9339 |
+| <a id="k-361"></a>K-361 | A:9340–9348 |
+| <a id="k-362"></a>K-362 | A:9349–9357 |
+| <a id="k-363"></a>K-363 | A:9358–9366 |
+| <a id="k-364"></a>K-364 | A:9367–9375 |
+| <a id="k-365"></a>K-365 | A:9376–9383 |
+| <a id="k-366"></a>K-366 | A:9384–9390 |
+| <a id="k-367"></a>K-367 | A:9391–9400 |
+| <a id="k-368"></a>K-368 | A:9401–9408 |
+| <a id="k-369"></a>K-369 | A:9409–9417 |
+| <a id="k-370"></a>K-370 | A:9418–9424 |
+| <a id="k-371"></a>K-371 | A:9425–9433 |
+| <a id="k-372"></a>K-372 | A:9434–9442 |
+| <a id="k-373"></a>K-373 | A:9443–9452 |
+| <a id="k-374"></a>K-374 | A:9453–9461 |
+| <a id="k-375"></a>K-375 | A:9462–9470 |
+| <a id="k-376"></a>K-376 | A:9471–9479 |
+| <a id="k-377"></a>K-377 | A:9480–9488 |
+| <a id="k-378"></a>K-378 | A:9489–9497 |
+| <a id="k-379"></a>K-379 | A:9498–9506 |
+| <a id="k-380"></a>K-380 | A:9507–9516 |
+| <a id="k-381"></a>K-381 | A:9517–9526 |
+| <a id="k-382"></a>K-382 | A:9527–9535 |
+| <a id="k-383"></a>K-383 | A:9536–9545 |
+| <a id="k-384"></a>K-384 | A:9546–9558 |
+| <a id="k-385"></a>K-385 | A:9559–9567 |
+| <a id="k-386"></a>K-386 | A:9568–9575 |
+| <a id="k-387"></a>K-387 | A:9576–9585 |
+| <a id="k-388"></a>K-388 | A:9586–9594 |
+| <a id="k-389"></a>K-389 | A:9595–9605 |
+| <a id="k-390"></a>K-390 | A:9606–9615 |
+| <a id="k-391"></a>K-391 | A:9616–9629 |
+| <a id="k-392"></a>K-392 | A:9630–9638 |
+| <a id="k-393"></a>K-393 | A:9639–9652 |
+| <a id="k-394"></a>K-394 | A:9653–9664 |
+| <a id="k-395"></a>K-395 | A:9665–9677 |
+| <a id="k-396"></a>K-396 | A:9678–9689 |
+| <a id="k-397"></a>K-397 | A:9690–9699 |
+| <a id="k-398"></a>K-398 | A:9700–9707 |
+| <a id="k-399"></a>K-399 | A:9708–9718 |
+| <a id="k-400"></a>K-400 | A:9719–9731 |
+| <a id="k-401"></a>K-401 | A:9732–9741 |
+| <a id="k-402"></a>K-402 | A:9742–9753 |
+| <a id="k-403"></a>K-403 | A:9754–9764 |
+| <a id="k-404"></a>K-404 | A:9765–9774 |
+| <a id="k-405"></a>K-405 | A:9775–9784 |
+| <a id="k-406"></a>K-406 | A:9785–9795 |
+| <a id="k-407"></a>K-407 | A:9796–9805 |
+| <a id="k-408"></a>K-408 | A:9806–9814 |
+| <a id="k-409"></a>K-409 | A:9815–9823 |
+| <a id="k-410"></a>K-410 | A:9824–9833 |
+| <a id="k-411"></a>K-411 | A:9834–9844 |
+| <a id="k-412"></a>K-412 | A:9845–9855 |
+| <a id="k-413"></a>K-413 | A:9856–9864 |
+| <a id="k-414"></a>K-414 | A:9865–9875 |
+| <a id="k-415"></a>K-415 | A:9876–9885 |
+| <a id="k-416"></a>K-416 | A:9886–9895 |
+| <a id="k-417"></a>K-417 | A:9896–9905 |
+| <a id="k-418"></a>K-418 | A:9906–9914 |
+| <a id="k-419"></a>K-419 | A:9915–9924 |
+| <a id="k-420"></a>K-420 | A:9925–9933 |
+| <a id="k-421"></a>K-421 | A:9934–9941 |
+| <a id="k-422"></a>K-422 | A:9942–9951 |
+| <a id="k-423"></a>K-423 | A:9952–9961 |
+| <a id="k-424"></a>K-424 | A:9962–9971 |
+| <a id="k-425"></a>K-425 | A:9972–9980 |
+| <a id="k-426"></a>K-426 | A:9981–9990 |
+| <a id="k-427"></a>K-427 | A:9991–10000 |
+| <a id="k-428"></a>K-428 | A:10001–10010 |
+| <a id="k-429"></a>K-429 | A:10011–10020 |
+| <a id="k-430"></a>K-430 | A:10021–10030 |
+| <a id="k-431"></a>K-431 | A:10031–10039 |
+| <a id="k-432"></a>K-432 | A:10040–10047 |
+| <a id="k-433"></a>K-433 | A:10048–10055 |
+| <a id="k-434"></a>K-434 | A:10056–10063 |
+| <a id="k-435"></a>K-435 | A:10064–10072 |
+| <a id="k-436"></a>K-436 | A:10073–10080 |
+| <a id="k-437"></a>K-437 | A:10081–10088 |
+| <a id="k-438"></a>K-438 | A:10089–10096 |
+| <a id="k-439"></a>K-439 | A:10097–10104 |
+| <a id="k-440"></a>K-440 | A:10105–10112 |
+| <a id="k-441"></a>K-441 | A:10113–10123 |
+| <a id="k-442"></a>K-442 | A:10124–10134 |
+| <a id="k-443"></a>K-443 | A:10135–10142 |
+| <a id="k-444"></a>K-444 | A:10143–10151 |
+| <a id="k-445"></a>K-445 | A:10152–10160 |
+| <a id="k-446"></a>K-446 | A:10161–10168 |
+| <a id="k-447"></a>K-447 | A:10169–10175 |
+| <a id="k-448"></a>K-448 | A:10176–10183 |
+| <a id="k-449"></a>K-449 | A:10184–10191 |
+| <a id="k-450"></a>K-450 | A:10192–10199 |
+| <a id="k-451"></a>K-451 | A:10200–10207 |
+| <a id="k-452"></a>K-452 | A:10208–10214 |
+| <a id="k-453"></a>K-453 | A:10215–10220 |
+| <a id="k-454"></a>K-454 | A:10221–10227 |
+| <a id="k-455"></a>K-455 | A:10228–10233 |
+| <a id="k-456"></a>K-456 | A:10234–10239 |
+| <a id="k-457"></a>K-457 | A:10240–10246 |
+| <a id="k-458"></a>K-458 | A:10247–10253 |
+| <a id="k-459"></a>K-459 | A:10254–10260 |
+| <a id="k-460"></a>K-460 | A:10261–10269 |
+| <a id="k-461"></a>K-461 | A:10270–10276 |
+| <a id="k-462"></a>K-462 | A:10277–10283 |
+| <a id="k-463"></a>K-463 | A:10284–10289 |
+| <a id="k-464"></a>K-464 | A:10290–10297 |
+| <a id="k-465"></a>K-465 | A:10298–10306 |
+| <a id="k-466"></a>K-466 | A:10307–10315 |
+| <a id="k-467"></a>K-467 | A:10316–10326 |
+| <a id="k-468"></a>K-468 | A:10327–10338 |
+| <a id="k-469"></a>K-469 | A:10339–10348 |
+| <a id="k-470"></a>K-470 | A:10349–10360 |
+| <a id="k-471"></a>K-471 | A:10361–10372 |
+| <a id="k-472"></a>K-472 | A:10373–10383 |
+| <a id="k-473"></a>K-473 | A:10384–10393 |
+| <a id="k-474"></a>K-474 | A:10394–10401 |
+| <a id="k-475"></a>K-475 | A:10402–10408 |
+| <a id="k-476"></a>K-476 | A:10409–10420 |
+| <a id="k-477"></a>K-477 | A:10421–10433 |
+| <a id="k-478"></a>K-478 | A:10434–10446 |
+| <a id="k-479"></a>K-479 | A:10447–10460 |
+| <a id="k-480"></a>K-480 | A:10461–10471 |
+| <a id="k-481"></a>K-481 | A:10472–10485 |
+| <a id="k-482"></a>K-482 | A:10486–10498 |
+| <a id="k-483"></a>K-483 | A:10499–10511 |
+| <a id="k-484"></a>K-484 | A:10512–10523 |
+| <a id="k-485"></a>K-485 | A:10524–10534 |
+| <a id="k-486"></a>K-486 | A:10535–10542 |
+| <a id="k-487"></a>K-487 | A:10543–10553 |
+| <a id="k-488"></a>K-488 | A:10554–10565 |
+| <a id="k-489"></a>K-489 | A:10566–10577 |
+| <a id="k-490"></a>K-490 | A:10578–10588 |
+| <a id="k-491"></a>K-491 | A:10589–10599 |
+| <a id="k-492"></a>K-492 | A:10600–10610 |
+| <a id="k-493"></a>K-493 | A:10611–10620 |
+| <a id="k-494"></a>K-494 | A:10621–10629 |
+| <a id="k-495"></a>K-495 | A:10630–10638 |
+| <a id="k-496"></a>K-496 | A:10639–10648 |
+| <a id="k-497"></a>K-497 | A:10649–10659 |
+| <a id="k-498"></a>K-498 | A:10660–10669 |
+| <a id="k-499"></a>K-499 | A:10670–10679 |
+| <a id="k-500"></a>K-500 | A:10680–10689 |
+| <a id="k-501"></a>K-501 | A:10690–10697 |
+| <a id="k-502"></a>K-502 | A:10698–10706 |
+| <a id="k-503"></a>K-503 | A:10707–10715 |
+| <a id="k-504"></a>K-504 | A:10716–10723 |
+| <a id="k-505"></a>K-505 | A:10724–10731 |
+| <a id="k-506"></a>K-506 | A:10732–10740 |
+| <a id="k-507"></a>K-507 | A:10741–10749 |
+| <a id="k-508"></a>K-508 | A:10750–10758 |
+| <a id="k-509"></a>K-509 | A:10759–10767 |
+| <a id="k-510"></a>K-510 | A:10768–10776 |
+| <a id="k-511"></a>K-511 | A:10777–10785 |
+| <a id="k-512"></a>K-512 | A:10786–10795 |
+| <a id="k-513"></a>K-513 | A:10796–10803 |
+| <a id="k-514"></a>K-514 | A:10804–10812 |
+| <a id="k-515"></a>K-515 | A:10813–10819 |
+| <a id="k-516"></a>K-516 | A:10820–10826 |
+| <a id="k-517"></a>K-517 | A:10827–10832 |
+| <a id="k-518"></a>K-518 | A:10833–10838 |
+| <a id="k-519"></a>K-519 | A:10839–10846 |
+| <a id="k-520"></a>K-520 | A:10847–10852 |
+| <a id="k-521"></a>K-521 | A:10853–10861 |
+| <a id="k-522"></a>K-522 | A:10862–10869 |
+| <a id="k-523"></a>K-523 | A:10870–10878 |
+| <a id="k-524"></a>K-524 | A:10879–10887 |
+| <a id="k-525"></a>K-525 | A:10888–10898 |
+| <a id="k-526"></a>K-526 | A:10899–10910 |
+| <a id="k-527"></a>K-527 | A:10911–10922 |
+| <a id="k-528"></a>K-528 | A:10923–10930 |
+| <a id="k-529"></a>K-529 | A:10931–10937 |
+| <a id="k-530"></a>K-530 | A:10938–10943 |
+| <a id="k-531"></a>K-531 | A:10944–10951 |
+| <a id="k-532"></a>K-532 | A:10952–10960 |
+| <a id="k-533"></a>K-533 | A:10961–10968 |
+| <a id="k-534"></a>K-534 | A:10969–10976 |
+| <a id="k-535"></a>K-535 | A:10977–10984 |
+| <a id="k-536"></a>K-536 | A:10985–10993 |
+| <a id="k-537"></a>K-537 | A:10994–11001 |
+| <a id="k-538"></a>K-538 | A:11002–11010 |
+| <a id="k-539"></a>K-539 | A:11011–11018 |
+| <a id="k-540"></a>K-540 | A:11019–11026 |
+| <a id="k-541"></a>K-541 | A:11027–11036 |
+| <a id="k-542"></a>K-542 | A:11037–11046 |
+| <a id="k-543"></a>K-543 | A:11047–11055 |
+| <a id="k-544"></a>K-544 | A:11056–11064 |
+| <a id="k-545"></a>K-545 | A:11065–11073 |
+| <a id="k-546"></a>K-546 | A:11074–11082 |
+| <a id="k-547"></a>K-547 | A:11083–11090 |
+| <a id="k-548"></a>K-548 | A:11091–11098 |
+| <a id="k-549"></a>K-549 | A:11099–11107 |
+| <a id="k-550"></a>K-550 | A:11108–11116 |
+| <a id="k-551"></a>K-551 | A:11117–11125 |
+| <a id="k-552"></a>K-552 | A:11126–11135 |
+| <a id="k-553"></a>K-553 | A:11136–11145 |
+| <a id="k-554"></a>K-554 | A:11146–11154 |
+| <a id="k-555"></a>K-555 | A:11155–11165 |
+| <a id="k-556"></a>K-556 | A:11166–11176 |
+| <a id="k-557"></a>K-557 | A:11177–11186 |
+| <a id="k-558"></a>K-558 | A:11187–11195 |
+| <a id="k-559"></a>K-559 | A:11196–11205 |
+| <a id="k-560"></a>K-560 | A:11206–11213 |
+| <a id="k-561"></a>K-561 | A:11214–11221 |
+| <a id="k-562"></a>K-562 | A:11222–11228 |
+| <a id="k-563"></a>K-563 | A:11229–11236 |
+| <a id="k-564"></a>K-564 | A:11237–11244 |
+| <a id="k-565"></a>K-565 | A:11245–11252 |
+| <a id="k-566"></a>K-566 | A:11253–11261 |
+| <a id="k-567"></a>K-567 | A:11262–11270 |
+| <a id="k-568"></a>K-568 | A:11271–11278 |
+| <a id="k-569"></a>K-569 | A:11279–11286 |
+| <a id="k-570"></a>K-570 | A:11287–11294 |
+| <a id="k-571"></a>K-571 | A:11295–11302 |
+| <a id="k-572"></a>K-572 | A:11303–11310 |
+| <a id="k-573"></a>K-573 | A:11311–11317 |
+| <a id="k-574"></a>K-574 | A:11318–11325 |
+| <a id="k-575"></a>K-575 | A:11326–11332 |
+| <a id="k-576"></a>K-576 | A:11333–11340 |
+| <a id="k-577"></a>K-577 | A:11341–11348 |
+| <a id="k-578"></a>K-578 | B:2217–2223 |
 
-- Agent assessment: registry/D-GOV 578 →579 and AGENTS maintenance guidance continue H-05 under H-388; charter §§1/8/10/11 preserve readable local context, reviewable provenance and explicit deletion authority. The charter, all current product contracts, concept/relationship tables, qualification exclusions and dependency/reverse indexes are unchanged. D-16 remains deferred. Only D-GOV maintenance is `continued`; no descendant gains or loses qualification.
-- Evidence: all H-01–H-387 and K-00–K-577 payloads remain at `0c0efbfde4dc:design/DesignAuthorityRegistry.md`. The current event tables retain every stable ID and locate each source range. New H-388/H-389 are actual human instructions, separate from this continuity assessment. Acceptance is exact preservation of the product sections, unique/resolving anchors and recoverable source ranges; no build or test-script run is needed for documentation-only maintenance.
-- Workspace: removed the clean `/tmp/cod-const-function-tco-plan` worktree and its patch-equivalent branch (`24f5222`, integrated as `a9d8ee6`); removed four merged local branches (`3069ca2`, `dbfa504`, `cc7bd02`, `071660d`) and the retired owner experiment branch (`d3227f2`) under H-336/K-459, whose consolidated conclusion is in `31e070f`. Only the main worktree/branch remains.
-- Remote: H-389's six branch deletions and annotated `clang-18.x` tag publication completed atomically with expected-tip checks. The tag preserves `559e8c5dac33b30f80f04a485c05e69f7ab66c36`. No open PRs were reported at audit time. Build outputs and toolchain state were not touched.
+### K-579 — Fixed external-value boundary and architecture impact (2026-11-13)
+<a id="k-579"></a>
+
+- Registry/D-GOV 579 →580 continues H-05 evidence maintenance. D-25r5 →r6 records H-390's explicit decision, not agent approval of an open choice. C-85/P-362 now distinguish unknown values from fixed semantic definitions; P-359/P-360 and candidate production mechanisms remain pending whole-file review. Historical H/K payloads and immutable locators are preserved.
+- Charter alignment: §§2–3/§5.1–5.4 separate values, definitions and composition stages; §4.3 retains identity/capability validation; §6 preserves selected interpretations and separates semantic integration from native generation; §§8/12 require inspectable contracts and discriminating checks. A fixed selected composition does not freeze all domains into the host compiler or rewrite the charter's separate integration goal. D-15/D-21 behavior, D-01/D-14 owners/relocation, D-17 completion and D-16 representation-independent identity/UoM remain unchanged; no dependent qualification is invalidated or newly granted.
+- Impact assessment: remove runtime semantic registration/evolution from the candidate burden; shared-native coverage is more tractable, but unseen combinations, generic/capture evidence and owner/completion costs remain. Retained checked semantics remains recommended. A framework pilot is still a hypothesis about optimizer reuse, not a requirement caused by external inputs; engine and native timing remain unapproved. All existing fixtures use fixed definitions, so their evidence remains applicable without a rerun. Future boundary controls must reject semantic extension without changing the fused artifact; no validator mechanism is chosen.
+- Documentation scope: update D-25 authority, responsibilities, criteria, recommendation, pilot boundaries and coverage together with this registry. Identify the deliverable audit as the unchanged revision5 snapshot at `0c0efbf`, not current-document hash verification. No code, build configuration, experiment results or test scripts are changed or executed.
+
+### K-580 — Consolidate scopes and lineage for autonomous audit (2026-11-13)
+<a id="k-580"></a>
+
+- Agent continuity: registry/D-GOV 580→581 and AGENTS maintenance guidance; H-05/H-388/H-391, charter §§1/3/8/10/11. Qualification remains proposition/revision/scope-specific relative to the human baseline. Pending choices do not become qualified; no product document or charter change belongs to this audit. Concurrent H-390/K-579 and its relationship updates are retained intact.
+- Scope rows replace repeated revision/checkpoint narratives. Node-to-contract links plus separate edge endpoints provide impact navigation. All 90 value/concept/governance IDs, 362 P IDs and 12 E IDs remain. P-01–P-11 are normalized from the legacy table, still pending. P-27/P-29/P-60/P-65 retain human-bearing rationale while research logs/qualifications remain in D-08 and source B.
+- P-98 and P-300 are reconciled with recorded H-277–H-281/H-288–H-291 and H-342. K-555/K-573/K-305 supports D-17r53/D-15r20/local D-08r220. No new human choice, edge topology, acceptance or descendant qualification is inferred. H-390’s known-ADT input boundary and pending production mechanisms remain explicit.
+- Acceptance: stable IDs/anchors resolve; historical ranges retrieve original events; relationship endpoints/kinds are unchanged; all edge rows except the six listed clarifications/compactions are preserved. Current revisions are reconciled to evidence. Documentation only; no build, test-script, configuration or toolchain action.
