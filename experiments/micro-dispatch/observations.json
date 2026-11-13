@@ -1,0 +1,234 @@
+{
+  "work_directory": "/tmp/cod-micro-dispatch-v5",
+  "commands": ["/ws/EvtWorks/cod-project/build/bin/clang++", "-std=c++20", "-O0", "-g", "-UNDEBUG", "-fno-inline", "-I/tmp/cod-micro-dispatch-v5", "-I/ws/EvtWorks/cod-project/include", "-I/ws/EvtWorks/cod-project/llvm-project/llvm/include", "-I/ws/EvtWorks/cod-project/build/include", "/ws/EvtWorks/cod-project/experiments/micro-dispatch/main.cc", "/ws/EvtWorks/cod-project/build/lib/libLLVM.so.23.1", "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib", "-o", "/tmp/cod-micro-dispatch-v5/native"],
+  "generation": {
+    "specialization": "disabled; no BBV, versioning, tuple cloning or runtime compiler",
+    "call_site_selection_elision": false,
+    "call_site_proofs": {
+      "exact_Meters": ["meters"],
+      "IntegerLiteral_or_BooleanLiteral": ["common"]
+    },
+    "world_profile": "base",
+    "method_bodies": ["method_0_general", "method_0_literal", "method_0_address", "method_0_intersection", "method_1_general", "method_1_literal", "method_1_address", "method_1_intersection", "kind_integer", "kind_boolean", "kind_meters", "kind_seconds", "common_scalar"],
+    "body_count": 13,
+    "field_access_paths": {
+      "x": 2,
+      "y": 2
+    },
+    "coverage": [
+      {
+        "status": "proved for finite selected domain",
+        "rectangle_steps": 2,
+        "methods": ["general", "literal", "address", "intersection"],
+        "tuple_enumeration": false
+      },
+      {
+        "status": "proved for finite selected domain",
+        "rectangle_steps": 2,
+        "methods": ["general", "literal", "address", "intersection"],
+        "tuple_enumeration": false
+      },
+      {
+        "status": "proved for finite selected domain",
+        "rectangle_steps": 4,
+        "methods": ["integer", "boolean", "meters", "seconds"],
+        "tuple_enumeration": false
+      },
+      {
+        "status": "proved for finite selected domain",
+        "rectangle_steps": 1,
+        "methods": ["common"],
+        "tuple_enumeration": false
+      }
+    ],
+    "type_ids": {
+      "Datum": 13893604854732947457,
+      "Plan": 13893604854732947458,
+      "LiteralPlan": 13893604854732947459,
+      "SourceLocated": 13893604854732947460,
+      "Scalar": 13893604854732947461,
+      "Quantity": 13893604854732947462,
+      "Destination": 13893604854732947463,
+      "AddressDestination": 13893604854732947464,
+      "Summary": 13893604854732947465,
+      "IntegerLiteral": 13893604854732947473,
+      "BooleanLiteral": 13893604854732947474,
+      "Meters": 13893604854732947475,
+      "Seconds": 13893604854732947476,
+      "LocalSlot": 13893604854732947477,
+      "RegionalSlot": 13893604854732947478,
+      "Example": 13893604854732947479,
+      "Other": 13893604854732947480,
+      "ValueSummary": 13893604854732947481,
+      "AddressSummary": 13893604854732947482
+    },
+    "source_positions": ["method_0_general", "method_0_literal", "method_0_address", "method_0_intersection", "method_1_general", "method_1_literal", "method_1_address", "method_1_intersection", "kind_integer", "kind_boolean", "kind_meters", "kind_seconds", "common_scalar", "read_x", "read_y", "encode_operand", "run_scope"]
+  },
+  "observations": [
+    {
+      "case": "zero-explicit-return",
+      "result": [0, 0, 31, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 501, 502, 503, 1001, 1100, -32, 1101, 4, 220, 5, 1, 1200, 0, 700, 0, 710, 85, 603, 602, 95, 601, 201, 0, 800, 0, 0]
+    },
+    {
+      "case": "integer-local",
+      "result": [38, 0, 31, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 501, 502, 503, 1001, 1100, 6, 1101, 4, 220, 5, 1, 1200, 38, 700, 38, 710, 85, 603, 602, 95, 601, 201, 0, 800, 38, 0]
+    },
+    {
+      "case": "runtime-bool-regional",
+      "result": [313, 0, 32, 13893604854732947482],
+      "trace": [80, 81, 200, 0, 501, 502, 503, 1003, 1100, 1, 1101, 9, 220, 5, 1, 1200, 313, 700, 313, 710, 85, 603, 602, 95, 601, 201, 0, 800, 313, 0]
+    },
+    {
+      "case": "other-shape-current-view",
+      "result": [158, 0, 31, 13893604854732947482],
+      "trace": [80, 81, 200, 0, 200, 1, 501, 502, 503, 1012, 1100, 8, 1101, 5, 220, 9, 3, 1200, 158, 700, 158, 710, 85, 603, 602, 95, 601, 201, 0, 800, 158, 0]
+    },
+    {
+      "case": "captured-complete-value",
+      "result": [44, 0, 31, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 200, 1, 501, 502, 503, 1001, 1100, 6, 1101, 9, 220, 5, 2, 1200, 44, 700, 44, 710, 85, 603, 602, 95, 601, 201, 0, 800, 44, 0]
+    },
+    {
+      "case": "shared-owner-distinct-view",
+      "result": [126, 0, 32, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 200, 1, 501, 502, 503, 1010, 1100, 0, 1101, 4, 220, 9, 1, 1200, 126, 700, 126, 710, 85, 603, 602, 95, 601, 201, 0, 800, 126, 0]
+    },
+    {
+      "case": "alias-changes-field",
+      "result": [292, 0, 32, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 501, 502, 503, 1001, 1100, 1, 1101, 9, 220, 5, 1, 1200, 292, 700, 292, 710, 85, 603, 602, 95, 601, 201, 0, 800, 292, 0]
+    },
+    {
+      "case": "failed-field-update-preserves-pair",
+      "result": [33, 0, 31, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 501, 502, 503, 1000, 1100, 6, 1101, 9, 220, 5, 1, 1200, 33, 700, 33, 710, 85, 603, 602, 95, 601, 201, 0, 800, 33, 0]
+    },
+    {
+      "case": "acquisition-failure",
+      "result": [0, 903, 31, 0],
+      "trace": [80, 81, 200, 0, 501, 502, 90, 904, 95, 601, 201, 0, 800, 0, 903]
+    },
+    {
+      "case": "actual-verifier-failure",
+      "result": [0, 903, 31, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 501, 502, 503, 1001, 1100, 6, 1101, 4, 220, 5, 1, 1200, 38, 700, 38, 711, 85, 603, 602, 90, 901, 95, 601, 201, 0, 800, 0, 903]
+    },
+    {
+      "case": "defer-failure-keeps-return",
+      "result": [38, 0, 31, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 501, 502, 503, 1001, 1100, 6, 1101, 4, 220, 5, 1, 1200, 38, 700, 38, 710, 85, 86, 603, 602, 90, 902, 95, 601, 201, 0, 800, 38, 0]
+    },
+    {
+      "case": "catch-replaces-return",
+      "result": [777, 0, 31, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 501, 502, 503, 1001, 1100, 6, 1101, 4, 220, 5, 1, 1200, 38, 700, 38, 710, 85, 86, 603, 602, 90, 902, 95, 601, 201, 0, 800, 777, 0]
+    },
+    {
+      "case": "finally-replaces-return",
+      "result": [888, 0, 31, 13893604854732947481],
+      "trace": [80, 81, 200, 0, 501, 502, 503, 1001, 1100, 6, 1101, 4, 220, 5, 1, 1200, 38, 700, 38, 710, 85, 86, 603, 602, 90, 902, 95, 601, 201, 0, 800, 888, 0]
+    }
+  ],
+  "negative_controls": {
+    "missing-intersection": "ambiguous address/literal: ('Example', 'RegionalSlot')",
+    "coverage-work-limit": "coverage budget exhausted; no proof",
+    "ambiguous-discriminator-map": "ambiguous discriminator mapping",
+    "unbound-generic": "explicit stable definition ID required",
+    "missing-entry-installation": "entry extension requires explicit installation",
+    "tag-payload-mismatch": "REJECT 921",
+    "unknown-type": "REJECT 911",
+    "abstract-value-evidence": "REJECT 923",
+    "fixture-numeric-range": "REJECT 924"
+  },
+  "method_order": "reversed declarations plus proven call-site selection elision preserve full trace and body count",
+  "emitted_execution": 313,
+  "root_compatibility_planning": {
+    "role": "illustrative planning only; checksum not used by runtime dispatch or DBMR loader",
+    "root": "Node",
+    "checksum": "9ef7dd79f27497411a614adafab5e6620ec054d4ceb7ab31dab0b07f40aa78fd",
+    "recursive_shared_named_graph": "finite and declaration-order independent",
+    "unrelated_type_added": "same root checksum and stable IDs; naked build ordinals would change interpretation",
+    "compatibility": "equal checksum also possible with a deliberately wrong ID binding; identity/schema/map/ABI/bounds remain separate",
+    "layout_changed_checksum": "2fc481e553b09b20c79cf0cf200d9d651e4260a0499a401744e24edd6557a2e0"
+  },
+  "cross_world_persistence": {
+    "older_writer_binary": "d3c929e5b5335de486c968a554b8cd50cfe34748ae8fc86050722f028263ab8e",
+    "newer_reader_binary": "0d4bdaf39ec1c73eb3e948f47d7842ee59160579590f31a6b51deea0031754a4",
+    "writer_and_reader_differ": true,
+    "reader_change": "reordered type declarations plus new unrelated concrete type",
+    "stored_sha256_before_and_after": "b2207f890afa3b3c0563c072aaed48f212aaf2b5f3bc179a8e6342590553807f",
+    "result": [313, 0, 32, 13893604854732947482],
+    "interpretation_rejection": "REJECT 938",
+    "newer_command": ["/ws/EvtWorks/cod-project/build/bin/clang++", "-std=c++20", "-O0", "-g", "-UNDEBUG", "-fno-inline", "-I/tmp/cod-micro-dispatch-v5/newer-reader", "-I/ws/EvtWorks/cod-project/include", "-I/ws/EvtWorks/cod-project/llvm-project/llvm/include", "-I/ws/EvtWorks/cod-project/build/include", "/ws/EvtWorks/cod-project/experiments/micro-dispatch/main.cc", "/ws/EvtWorks/cod-project/build/lib/libLLVM.so.23.1", "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib", "-o", "/tmp/cod-micro-dispatch-v5/newer-reader/native"],
+    "wrong_reader_command": ["/ws/EvtWorks/cod-project/build/bin/clang++", "-std=c++20", "-O0", "-g", "-UNDEBUG", "-fno-inline", "-I/tmp/cod-micro-dispatch-v5/wrong-reader", "-I/ws/EvtWorks/cod-project/include", "-I/ws/EvtWorks/cod-project/llvm-project/llvm/include", "-I/ws/EvtWorks/cod-project/build/include", "/ws/EvtWorks/cod-project/experiments/micro-dispatch/main.cc", "/ws/EvtWorks/cod-project/build/lib/libLLVM.so.23.1", "-Wl,-rpath,/ws/EvtWorks/cod-project/build/lib", "-o", "/tmp/cod-micro-dispatch-v5/wrong-reader/native"],
+    "scope": "same supported root layouts; stable definition IDs and one root catalog, no tag/graph rewriting"
+  },
+  "selected_conformance_control": "same concrete identity with changed externally selected conformance",
+  "context": {
+    "role": "dependency-model observation using explicit contracts; no automatic source effect inference",
+    "summaries": {
+      "evaluate_expr": {
+        "reads": [],
+        "installs": [],
+        "touches": [],
+        "required": []
+      },
+      "lower_from_current": {
+        "reads": ["lower"],
+        "installs": [],
+        "touches": [],
+        "required": ["lower"]
+      },
+      "touch_only": {
+        "reads": [],
+        "installs": [],
+        "touches": ["lower"],
+        "required": ["lower"]
+      },
+      "deferred_diagnostic": {
+        "reads": ["diagnostic"],
+        "installs": [],
+        "touches": [],
+        "required": ["diagnostic"]
+      },
+      "opaque_rebind": {
+        "reads": [],
+        "installs": ["lower"],
+        "touches": [],
+        "required": ["lower"]
+      },
+      "compile_adapter": {
+        "reads": ["expression", "lower"],
+        "installs": [],
+        "touches": [],
+        "required": ["expression", "lower"]
+      },
+      "cleanup_scope": {
+        "reads": ["diagnostic"],
+        "installs": ["lower"],
+        "touches": ["lower"],
+        "required": ["diagnostic", "lower"]
+      }
+    },
+    "perform_ambient_projection": ["expression"],
+    "perform_captured_projection": ["lower"],
+    "unknown_call": "missing context contract for unmodelled_native",
+    "abi": "unspecified; explicit fixture arguments and TLS adapters are experimental"
+  },
+  "generated_sha256": "71218d262bd292f0b191084d828e3228f1ab3b4c5bb8ea2b032d33238a26108c",
+  "sources": {
+    "runtime.hh": "0dbdcca4459c033a9d3058b74366b0368e13ffe18b91344acdde119e2431be4c",
+    "main.cc": "872ba4bf6d6413a2cdb0d637555a9f72ef011bacfced65b23fef49708fad1cc9",
+    "compatibility.py": "cced9d57c4217e0f04940cd40ebc1cfac1b5df119ff5e9fb484ed413f6050a2a",
+    "context.py": "a3851007318477aa756c69487da179023e158cfdb3c9082652a83769fc4cc69e",
+    "generate.py": "42fd66ae6477b33326e91317ad3e1da32204888e67d38b2d9a6930a892f42feb",
+    "run.py": "87010302294c96abbbe8b9d90b939fdf70d270800343c0eb9a0a7e90debae1b2",
+    "model.py": "dd3c7ab4137d66022b197d3305b12a88476d7d8813a52e76c4c8d29b83e04782"
+  },
+  "review_artifacts": {
+    "generated.inc": "71218d262bd292f0b191084d828e3228f1ab3b4c5bb8ea2b032d33238a26108c",
+    "type_ids.inc": "9d459e4f3b4e12c36f76a84cc1345c6944a23a57ddd4e9e676243b99d4a695c1"
+  }
+}
