@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "recorded_utc": "2026-11-13T08:58:42.224293+00:00",
+  "audit": "comparative exploration deliverable, not production implementation qualification",
+  "result": "verified",
+  "authority": "D-25 revision5 / H-387; production mechanisms and final architecture remain pending whole-file review",
+  "baseline_commit": "249f07b5a2f27b32519a13b01a570def1969cfa9",
+  "work_package": {
+    "path": "/ws/EvtWorks/.codex-handoffs/cod-project/2026-11-12-architecture-exploration/WORK_PACKAGE.md",
+    "sha256": "bcb06912b4b247bf0955a33f7451a6c7e4f4a8a7a7b0ef7df60b20aabff62f11"
+  },
+  "evidence_sha256": {
+    "tests/cod/language/callable-recomposed-factory-validation.json": "bb781a1a55cbe51da88330af0005a7e4fdf6d043d47f230db507ac2bbcc79d44",
+    "experiments/architecture/results.json": "dcaaa8743e1ca81e26583a3b2b01042993b53dc38a803dd005b41f0c639b2362",
+    "experiments/architecture/semantic-program-results.json": "541f803982074b7ab51d0d02cdd2aaa5570e9651329f5546c65827040b479fcf",
+    "experiments/architecture/regional-program-results.json": "05aaad49522f9e88dd876548a457bc301b7c16dca27d4fedba8b78b74184a2cb",
+    "experiments/architecture/managed-runtime-results.json": "01a5cf06627a5a72382e4ef74b64106254eb3221b57f840ac076ef3283655c50",
+    "design/CompilationRuntimeArchitectureExploration.md": "68f5a85bee3d94b3d278e0a0bf93a4422eefb97a5d3cfc355e83fe30c1887ef8",
+    "design/DesignAuthorityRegistry.md": "74ccad9259bbfb9008ec42ac70861cd7a821350a21acf56e0a3ccffbb6454c8a",
+    "experiments/architecture/README.md": "97cfa34738c10a18968e38a5bd1e5cd21f9799570c4d90e2df35ecc3f546640f"
+  },
+  "history": {
+    "H": {
+      "prior_preserved": 359,
+      "current": 359
+    },
+    "K": {
+      "prior_preserved": 555,
+      "current": 556
+    }
+  },
+  "requirements": [
+    {
+      "requirement": "old_increment",
+      "status": "verified for exploration deliverable",
+      "finding": "Verified closing report, compiler hash, preserved original diagnostic mismatch/rerun, native57/defer23/ASAN3; commit34cf632 remains ancestor.",
+      "evidence": "tests/cod/language/callable-recomposed-factory-validation.json"
+    },
+    {
+      "requirement": "direction_and_authority",
+      "status": "verified for exploration deliverable",
+      "finding": "User planning judgment is recorded without a labor claim; sunk costs excluded; H-387 and scoped AOT review retained; all prior human/continuity events unchanged.",
+      "evidence": "design/DesignAuthorityRegistry.md"
+    },
+    {
+      "requirement": "material_alternatives",
+      "status": "verified for exploration deliverable",
+      "finding": "Shared-native, semantic execution plus selective native work, and framework-derived interpreter compared; experiments use independent finite semantic/native engines without current-CoD frontend expansion.",
+      "evidence": "design/CompilationRuntimeArchitectureExploration.md#candidate-responsibility-splits"
+    },
+    {
+      "requirement": "fused_semantics",
+      "status": "verified for exploration deliverable",
+      "finding": "Initial15-check model retains dependency/source interpretations and effect-install operands; LLVM TLS and whole-program local bindings have bounded execution evidence.",
+      "evidence": "experiments/architecture/results.json"
+    },
+    {
+      "requirement": "owners_values_completion",
+      "status": "verified for exploration deliverable",
+      "finding": "Independent-image model, actual regional mappings/owners, construction failure, complete completion traces,20 native ASAN cases and342 managed/native comparisons; general language proofs remain production obligations.",
+      "evidence": "experiments/architecture/regional-program-results.json"
+    },
+    {
+      "requirement": "open_inputs_and_rtti",
+      "status": "verified for exploration deliverable",
+      "finding": "Unobserved admitted tuple control, distinct carrier/business identity, equal-layout semantic distinction and sum-layout checksum remain experimental; no admission/evolution/ABI selected.",
+      "evidence": "experiments/architecture/results.json"
+    },
+    {
+      "requirement": "separate_responsibilities",
+      "status": "verified for exploration deliverable",
+      "finding": "Semantic checking/native availability/dispatch/specialization separated; proposed timing change explicit and pending, required static checking retained.",
+      "evidence": "design/CompilationRuntimeArchitectureExploration.md#responsibilities-and-preserved-boundaries"
+    },
+    {
+      "requirement": "reproducible_prototypes",
+      "status": "verified for exploration deliverable",
+      "finding": "Four runners, exact sources/artifact/tool hashes, measured data, independent traces and negative controls retained; source hashes and final reports verified.",
+      "evidence": "experiments/architecture/README.md"
+    },
+    {
+      "requirement": "practical_reuse_and_burden",
+      "status": "verified for exploration deliverable",
+      "finding": "Official framework sources and local ORC APIs reviewed; actual managed adapter establishes concrete access/lifetime/completion work. No invented hours or unmeasured framework ranking.",
+      "evidence": "design/CompilationRuntimeArchitectureExploration.md#reuse-and-engineering-responsibility"
+    },
+    {
+      "requirement": "derived_criteria",
+      "status": "verified for exploration deliverable",
+      "finding": "Criteria derived from failed semantic controls, metadata/native growth, cold materialization, state occupation and native crossing counts.",
+      "evidence": "design/CompilationRuntimeArchitectureExploration.md#criteria-derived-from-the-evidence"
+    },
+    {
+      "requirement": "recommendation_and_next_stage",
+      "status": "verified for exploration deliverable",
+      "finding": "Retained checked semantic boundary recommended; bounded Truffle interpreter pilot proposed against shared-native baseline, with limits, alternatives and explicit pending timing decision.",
+      "evidence": "design/CompilationRuntimeArchitectureExploration.md#recommendation-and-next-bounded-stage"
+    },
+    {
+      "requirement": "operational_limits",
+      "status": "verified for exploration deliverable",
+      "finding": "Exact main build succeeded; native/regional/managed prototypes isolated; no build configuration, toolchain source or excluded subsystem changes; no new dependencies or agents.",
+      "evidence": "experiments/architecture/managed-runtime-results.json#repository_validation"
+    }
+  ],
+  "counts": {
+    "boundary_model": 90,
+    "llvm_materialization": 30,
+    "whole_program": 66,
+    "regional": 96,
+    "regional_asan_subset": 20,
+    "managed": 342,
+    "managed_warmups": 30
+  },
+  "unclaimed_production_work": [
+    "final engine and native timing approval",
+    "general CoD inference/static ownership completeness",
+    "complete production captured-value ABI",
+    "optimizing-framework integration/performance",
+    "concurrent owner/code lifetime and active-state migration",
+    "external graph admission/world evolution and persistence protocols",
+    "permanent RTTI/hash/layout/ABI",
+    "pure/TCO/fractions/compiler-pilot implementation"
+  ]
+}

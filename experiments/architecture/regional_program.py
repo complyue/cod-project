@@ -228,7 +228,7 @@ def main():
     parser.add_argument('--smoke', action='store_true', help='one regular case per boundary; no ASAN; not full evidence')
     args = parser.parse_args()
     graph = fixture(); checked = semantic.check(project(graph)); records = Records(graph, checked); header = records.emit()
-    sources = ['experiments/architecture/regional_program.py', 'experiments/architecture/regional_program.cc', 'experiments/architecture/semantic_program.py', 'include/shilos/region.hh', 'include/shilos/vector.hh', 'include/shilos/dbmr.hh']
+    sources = ['experiments/architecture/regional_program.py', 'experiments/architecture/regional_program.cc', 'experiments/architecture/regional_fixture.hh', 'experiments/architecture/semantic_program.py', 'include/shilos/region.hh', 'include/shilos/vector.hh', 'include/shilos/dbmr.hh']
     compiler = ROOT / 'build/bin/clang++'
     report = dict(schema=1, experiment='actual regional graph/state and native borrowed-policy boundary', status='incomplete',
                   recorded_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
