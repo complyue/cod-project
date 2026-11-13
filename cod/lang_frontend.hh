@@ -5532,7 +5532,10 @@ class Compiler {
   }
   bool resolve_native_calls(size_t begin) {
     bool changed = false;
-    for (size_t i = begin; i < native_call_demands_.size(); ++i)
+    // Let other graph consumers observe each batch before checking newly
+    // demanded bodies. A recursive producer must not starve earlier uses.
+    const auto end = native_call_demands_.size();
+    for (size_t i = begin; i < end; ++i)
       changed |= compile_native_call(native_call_demands_[i]);
     return changed;
   }

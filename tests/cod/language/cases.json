@@ -3631,5 +3631,35 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "closures/callable-recursive-snapshot-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region in this caller scope",
+      "note: the referenced region was acquired here",
+      "note: in call to procedure"
+    ]
+  },
+  {
+    "file": "closures/callable-recursive-nested-snapshot-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region in this caller scope",
+      "note: the referenced region was acquired here",
+      "note: in call to procedure"
+    ]
+  },
+  {
+    "file": "scopes/defer-recursive-snapshot-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region in this caller scope",
+      "note: the referenced region was acquired here",
+      "note: in call to procedure"
+    ]
   }
 ]

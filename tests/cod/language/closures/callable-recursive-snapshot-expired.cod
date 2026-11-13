@@ -1,0 +1,15 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @reader:proc()->const u64;
+proc walk(n:u64)->proc()->const u64 {
+  if(n==0u64){return proc()->const u64 {return @arena.value;};}else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};return walk(n-1u64);}}
+}
+proc run()->void {
+  effect @arena<-make Item(capacity=256u64){value<-99u64};
+  proc result=walk(20u64);
+  effect @reader=result;
+  behave @print(perform @reader());
+}
+run();
