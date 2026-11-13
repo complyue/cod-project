@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+proc observe(x:u64) -> void { behave @print(x); }
+proc missing() -> const u64 { defer observe(3u64); {} }
+proc finish() -> const u64 {
+  defer observe(1u64);
+  defer missing();
+  defer observe(2u64);
+  return 7u64;
+}
+defer observe(0u64);
+behave @print(finish());

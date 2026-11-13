@@ -73,6 +73,7 @@ struct CodReplConfig {
 
 struct LanguageEmission {
   std::optional<fs::path> ir, bitcode, runtime;
+  bool specialize = true;
 };
 
 // Resolves and uses the toolchain bundled with the running CoD executable.
@@ -194,6 +195,7 @@ static void printUsage(const char *prog_name) {
             << "  --emit-llvm FILE    Save directly emitted textual LLVM IR\n"
             << "  --emit-bc FILE      Save directly emitted LLVM bitcode\n"
             << "  --emit-runtime FILE Save native system services for external linking\n"
+            << "  --no-specialize    Validate CoD calls through general native implementations\n"
             << "  --warnings-as-errors  Treat all CoD language warnings as errors\n"
             << "  -Werror=unit-conversion       Reject ambiguous unit conversion paths\n"
             << "  -Werror=multi-alias-extension Reject overload declarations through multiple aliases\n"
@@ -629,7 +631,7 @@ std::vector<std::string> CodTool::buildCompilerArgs(const CodReplConfig &config)
 int CodTool::compileLanguage(const CodReplConfig &config, const fs::path &entry, bool check_only,
                             const LanguageEmission &emission, const cod::language::WarningOptions &warnings) const {
   try {
-    auto compilation = cod::language::Compiler{warnings}.compile(fs::absolute(entry),
+    auto compilation = cod::language::Compiler{warnings, emission.specialize}.compile(fs::absolute(entry),
         emission.ir.has_value(), !check_only || emission.bitcode.has_value());
     for (const auto &warning : compilation.warnings) std::cerr << warning << '\n';
     if (config.verbose) {
@@ -870,6 +872,8 @@ int main(int argc, const char **argv) {
       }
       language_entry = fs::absolute(argv[++i]);
       check_only = arg == "--check";
+    } else if (arg == "--no-specialize") {
+      emission.specialize = false;
     } else if (arg == "--warnings-as-errors") {
       warnings.as_errors = true;
     } else if (arg == "-Werror=unit-conversion") {
@@ -937,7 +941,7 @@ int main(int argc, const char **argv) {
     std::cerr << "Error: CoD warning options require --run or --check\n";
     return 1;
   }
-  if (emission.ir || emission.bitcode || emission.runtime) {
+  if (emission.ir || emission.bitcode || emission.runtime || !emission.specialize) {
     std::cerr << "Error: language emission options require --run or --check\n";
     return 1;
   }

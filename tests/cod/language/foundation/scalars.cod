@@ -1,0 +1,43 @@
+using symbol "std:io" @print;
+func twice(x:T) -> const T where T { return x + x }
+func first(x:T,y:T) -> const T where T { return x }
+func chosen(x:T) -> const u64 where T { return 1u64 }
+func chosen(x:u64) -> const u64 { return 100u64 }
+func relation(x:T,y:T) -> const u64 where T { return 1u64 }
+func relation(x:T,y:U) -> const u64 where {T,U} { return 2u64 }
+func factorial(n:u64) -> const u64 {
+  return if (n == 0u64) { 1u64 } else { n * factorial(n - 1u64) }
+}
+func even(n:u64) -> const bool { return if (n == 0u64) { true } else { odd(n - 1u64) } }
+func odd(n:u64) -> const bool { return if (n == 0u64) { false } else { even(n - 1u64) } }
+func relay(n:u64,x:T) -> const T where T {
+  return if (n == 0u64) { x } else { relay(n - 1u64,x) }
+}
+proc both(x:T,y:U) -> void where {T,U} {
+  behave @print(x + x);
+  behave @print(y + y);
+}
+func wrapped(x:T) -> const u64 where T { return chosen(x); }
+behave @print(twice(3u64));
+behave @print(twice(1.5f32));
+behave @print(twice(2u8));
+behave @print(first(true,false));
+behave @print(chosen(3u64));
+behave @print(chosen(false));
+behave @print(relation(1u64,2u64));
+behave @print(relation(1u64,true));
+behave @print(factorial(6u64));
+behave @print(even(12u64));
+behave @print(odd(12u64));
+behave @print(relay(3u64,7u64));
+behave @print(relay(30u64,false));
+both(2u64,1.5f32);
+both(1.5f32,2u64);
+both(2u64,2u64);
+both(1.5f32,1.5f32);
+behave @print(2u8 + 3u32);
+behave @print(1.5f32 + 2.5f64);
+behave @print(-9 / 2);
+behave @print(-9 % 2);
+behave @print(wrapped(3u64));
+behave @print(wrapped(false));

@@ -1,0 +1,28 @@
+using symbol "std:io" @print;
+proc observe(x:u64) -> void { behave @print(x); }
+proc prepare(x:u64) -> const u64 { observe(x); return x; }
+proc ordered(flag:bool) -> const u64 {
+  defer observe(prepare(1u64));
+  if (flag) { defer observe(prepare(2u64)); {} } else { defer observe(prepare(3u64)); {} };
+  {{ defer observe(4u64); observe(5u64); }};
+  return 9u64;
+}
+proc visit(n:u64) -> const u64 {
+  defer observe(n);
+  return if (n == 0u64) { 0u64 } else { visit(n - 1u64) + 1u64 }
+}
+proc early() -> const u64 {
+  defer observe(8u64);
+  {{ defer observe(7u64); return 6u64; }};
+}
+proc nested() -> void {
+  defer observe({ defer observe(10u64); 11u64 });
+}
+proc noisy() -> const bool { observe(99u64); return true; }
+behave @print(ordered(true));
+behave @print(ordered(false));
+behave @print(visit(3u64));
+behave @print(early());
+nested();
+behave @print(false && noisy());
+behave @print(true || noisy());

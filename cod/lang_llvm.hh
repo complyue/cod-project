@@ -1,5 +1,8 @@
-//===--- lang_llvm.hh - CoD native artifact emission ----------------===//
+//===--- lang_llvm.hh - Checked scalar native emission --------------===//
 #pragma once
+
+#include "lang_checked.hh"
+#include "lang_exceptions.hh"
 
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/DiagnosticOptions.h>
@@ -13,55 +16,517 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/TargetParser/Host.h>
 
+#include <functional>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <utility>
 
 namespace cod::language {
 
 class LLVMEmission {
+  llvm::LLVMContext context_;
+  llvm::Module module_{"cod.program", context_};
+  llvm::IRBuilder<> b_{context_};
+  // Private execution-local scalar transport. No region, DBMR or public ABI uses these tags.
+  llvm::StructType *scalar_ = llvm::StructType::create(context_, {b_.getInt64Ty(), b_.getInt32Ty()}, "cod.scalar");
+  llvm::StructType *outcome_ = llvm::StructType::create(context_,
+      {scalar_, b_.getInt64Ty(), b_.getInt64Ty(), b_.getPtrTy()}, "cod.outcome");
+  const CheckedProgram *program_ = nullptr;
+  bool specialize_ = true;
+  std::vector<llvm::Function *> general_, specialized_;
+  std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
+  std::vector<llvm::Value *> arguments_;
+  llvm::Function *function_ = nullptr;
+  llvm::BasicBlock *finish_ = nullptr;
+  llvm::AllocaInst *result_ = nullptr, *category_ = nullptr, *site_ = nullptr, *fatal_ = nullptr, *exit_ = nullptr;
+  std::vector<Location> sites_;
+  struct Deferred {
+    const Expression *call;
+    llvm::AllocaInst *active;
+    std::vector<llvm::AllocaInst *> arguments;
+  };
+  struct Scope {
+    Scope *parent;
+    llvm::BasicBlock *cleanup;
+    std::vector<Deferred> deferred;
+  };
+  Scope *scope_ = nullptr;
+  struct Choice {
+    std::vector<Type> inputs;
+    const CheckedOperation *operation;
+  };
+
+  llvm::ConstantInt *integer(std::uint64_t value) { return b_.getInt64(value); }
+  llvm::Constant *null_pointer() { return llvm::ConstantPointerNull::get(b_.getPtrTy()); }
+  llvm::Value *empty_scalar() { return llvm::Constant::getNullValue(scalar_); }
+  llvm::BasicBlock *block(const std::string &name) { return llvm::BasicBlock::Create(context_, name, function_); }
+  bool reachable() const { return !b_.GetInsertBlock()->hasTerminator(); }
+  llvm::AllocaInst *slot(llvm::Type *type, const std::string &name) {
+    llvm::IRBuilder<> entry(&function_->getEntryBlock(), function_->getEntryBlock().begin());
+    return entry.CreateAlloca(type, nullptr, name);
+  }
+  llvm::Value *load(llvm::AllocaInst *place) { return b_.CreateLoad(place->getAllocatedType(), place); }
+  static unsigned tag(const Type &type) {
+    switch (type.kind) {
+    case Type::integer: return 1; case Type::uint8: return 2; case Type::uint32: return 3;
+    case Type::uint64: return 4; case Type::boolean: return 5; case Type::float32: return 6;
+    case Type::float64: return 7; case Type::void_type: return 0;
+    default: throw std::logic_error("non-scalar checked native type");
+    }
+  }
+  llvm::Type *native_type(const Type &type) {
+    switch (type.kind) {
+    case Type::integer: case Type::uint64: return b_.getInt64Ty();
+    case Type::uint8: return b_.getInt8Ty(); case Type::uint32: return b_.getInt32Ty();
+    case Type::boolean: return b_.getInt1Ty(); case Type::float32: return b_.getFloatTy();
+    case Type::float64: return b_.getDoubleTy();
+    default: throw std::logic_error("non-scalar native payload");
+    }
+  }
+  llvm::Value *pack(llvm::Value *value, const Type &type) {
+    if (floating(type)) value = b_.CreateBitCast(value, b_.getIntNTy(type == Type::float32 ? 32 : 64));
+    value = b_.CreateZExtOrTrunc(value, b_.getInt64Ty());
+    auto *result = b_.CreateInsertValue(empty_scalar(), value, 0);
+    return b_.CreateInsertValue(result, b_.getInt32(tag(type)), 1);
+  }
+  llvm::Value *unpack(llvm::Value *value, const Type &type) {
+    value = b_.CreateExtractValue(value, 0);
+    if (floating(type)) {
+      value = b_.CreateTruncOrBitCast(value, b_.getIntNTy(type == Type::float32 ? 32 : 64));
+      return b_.CreateBitCast(value, native_type(type));
+    }
+    return b_.CreateTruncOrBitCast(value, native_type(type));
+  }
+  llvm::Value *convert(llvm::Value *value, const Type &from, const Type &to) {
+    value = unpack(value, from);
+    if (from == to) return value;
+    if (floating(from)) return b_.CreateFPExt(value, native_type(to));
+    if (floating(to)) return from == Type::integer ? b_.CreateSIToFP(value, native_type(to)) : b_.CreateUIToFP(value, native_type(to));
+    return b_.CreateZExt(value, native_type(to));
+  }
+  llvm::FunctionCallee runtime(const std::string &name, llvm::Type *result, std::vector<llvm::Type *> arguments) {
+    return module_.getOrInsertFunction(name, llvm::FunctionType::get(result, arguments, false));
+  }
+  std::uint64_t site(const Location &at) { sites_.push_back(at); return sites_.size(); }
+  llvm::Value *outcome(llvm::Value *value, llvm::Value *category, llvm::Value *where, llvm::Value *fatal) {
+    llvm::Value *result = llvm::UndefValue::get(outcome_);
+    result = b_.CreateInsertValue(result, value, 0);
+    result = b_.CreateInsertValue(result, category, 1);
+    result = b_.CreateInsertValue(result, where, 2);
+    return b_.CreateInsertValue(result, fatal, 3);
+  }
+  llvm::Value *failed(llvm::Value *result) {
+    return b_.CreateOr(b_.CreateICmpNE(b_.CreateExtractValue(result, 1), integer(0)),
+        b_.CreateICmpNE(b_.CreateExtractValue(result, 3), null_pointer()));
+  }
+  void save_failure(llvm::Value *result) {
+    b_.CreateStore(b_.CreateExtractValue(result, 1), category_);
+    b_.CreateStore(b_.CreateExtractValue(result, 2), site_);
+    b_.CreateStore(b_.CreateExtractValue(result, 3), fatal_);
+    b_.CreateStore(b_.getInt8(2), exit_);
+  }
+  void fail_path(ExceptionCategory category, const Location &at, llvm::Value *fatal = nullptr) {
+    save_failure(outcome(empty_scalar(), integer(exception_id(category)), integer(site(at)), fatal ? fatal : null_pointer()));
+    b_.CreateBr(scope_->cleanup);
+  }
+  void require(llvm::Value *condition, const Location &at, const std::string &message) {
+    auto *good = block("numeric.valid"), *bad = block("numeric.failure");
+    b_.CreateCondBr(condition, good, bad);
+    b_.SetInsertPoint(bad);
+    fail_path(ExceptionCategory::system, at, b_.CreateGlobalString(location_text(at) + ": " + message));
+    b_.SetInsertPoint(good);
+  }
+  std::vector<Choice> choices(const Expression &expr, const std::vector<const Expression *> &inputs) {
+    std::vector<Choice> result;
+    for (const auto *facts : facts_) {
+      Choice choice{{}, &facts->at(&expr)};
+      for (const auto *input : inputs) choice.inputs.push_back(facts->at(input).type);
+      const auto same = [&](const Choice &other) {
+        return other.inputs == choice.inputs && other.operation->callee == choice.operation->callee &&
+            other.operation->type == choice.operation->type && other.operation->operand_type == choice.operation->operand_type;
+      };
+      if (std::none_of(result.begin(), result.end(), same)) result.push_back(std::move(choice));
+    }
+    return result;
+  }
+  llvm::Value *matches(const std::vector<llvm::Value *> &values, const std::vector<Type> &types) {
+    llvm::Value *condition = b_.getTrue();
+    for (size_t i = 0; i < values.size(); ++i)
+      condition = b_.CreateAnd(condition, b_.CreateICmpEQ(b_.CreateExtractValue(values[i], 1), b_.getInt32(tag(types[i]))));
+    return condition;
+  }
+  llvm::Value *choose(const Expression &expr, const std::vector<llvm::Value *> &inputs, const std::vector<Choice> &cases,
+                      llvm::Type *result_type, const std::function<llvm::Value *(const Choice &)> &emit_choice) {
+    if (cases.size() == 1) return emit_choice(cases.front());
+    auto *join = block("operation.join");
+    std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
+    for (const auto &choice : cases) {
+      auto *selected = block("operation.selected"), *next = block("operation.next");
+      b_.CreateCondBr(matches(inputs, choice.inputs), selected, next);
+      b_.SetInsertPoint(selected);
+      auto *value = emit_choice(choice);
+      if (reachable()) { incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join); }
+      b_.SetInsertPoint(next);
+    }
+    if (result_type == outcome_) {
+      auto *error = outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(site(expr.at)), null_pointer());
+      incoming.emplace_back(error, b_.GetInsertBlock());
+      b_.CreateBr(join);
+    } else fail_path(ExceptionCategory::unsound_runtime_typing, expr.at);
+    b_.SetInsertPoint(join);
+    auto *result = b_.CreatePHI(result_type, incoming.size(), "operation.result");
+    for (const auto &[value, predecessor] : incoming) result->addIncoming(value, predecessor);
+    return result;
+  }
+  llvm::Value *binary(const Expression &expr, llvm::Value *left, llvm::Value *right, const Choice &choice) {
+    const auto type = choice.operation->operand_type;
+    left = convert(left, choice.inputs[0], type); right = convert(right, choice.inputs[1], type);
+    const auto &op = expr.text;
+    const bool signed_value = type == Type::integer;
+    llvm::Value *result = nullptr;
+    if (floating(type)) {
+      if (op == "+") result = b_.CreateFAdd(left, right);
+      else if (op == "-") result = b_.CreateFSub(left, right);
+      else if (op == "*") result = b_.CreateFMul(left, right);
+      else if (op == "/") result = b_.CreateFDiv(left, right);
+      else if (op == "==") result = b_.CreateFCmpOEQ(left, right);
+      else if (op == "!=") result = b_.CreateFCmpUNE(left, right);
+      else if (op == "<") result = b_.CreateFCmpOLT(left, right);
+      else if (op == "<=") result = b_.CreateFCmpOLE(left, right);
+      else if (op == ">") result = b_.CreateFCmpOGT(left, right);
+      else if (op == ">=") result = b_.CreateFCmpOGE(left, right);
+    } else if (op == "==") result = b_.CreateICmpEQ(left, right);
+    else if (op == "!=") result = b_.CreateICmpNE(left, right);
+    else if (op == "<") result = signed_value ? b_.CreateICmpSLT(left, right) : b_.CreateICmpULT(left, right);
+    else if (op == "<=") result = signed_value ? b_.CreateICmpSLE(left, right) : b_.CreateICmpULE(left, right);
+    else if (op == ">") result = signed_value ? b_.CreateICmpSGT(left, right) : b_.CreateICmpUGT(left, right);
+    else if (op == ">=") result = signed_value ? b_.CreateICmpSGE(left, right) : b_.CreateICmpUGE(left, right);
+    else if (op == "+" || op == "-" || op == "*") {
+      const auto intrinsic = op == "+" ? (signed_value ? llvm::Intrinsic::sadd_with_overflow : llvm::Intrinsic::uadd_with_overflow) :
+          op == "-" ? (signed_value ? llvm::Intrinsic::ssub_with_overflow : llvm::Intrinsic::usub_with_overflow) :
+                      (signed_value ? llvm::Intrinsic::smul_with_overflow : llvm::Intrinsic::umul_with_overflow);
+      auto *checked = b_.CreateIntrinsic(intrinsic, {left->getType()}, {left, right});
+      const auto operation = op == "+" ? "addition" : op == "-" ? "subtraction" : "multiplication";
+      require(b_.CreateNot(b_.CreateExtractValue(checked, 1)), expr.at, type_name(type) + " " + operation + " overflow");
+      result = b_.CreateExtractValue(checked, 0);
+    } else if (op == "/" || op == "%") {
+      auto *native = llvm::cast<llvm::IntegerType>(left->getType());
+      require(b_.CreateICmpNE(right, llvm::ConstantInt::get(native, 0)), expr.at, "division by zero");
+      if (signed_value) {
+        auto *overflow = b_.CreateAnd(b_.CreateICmpEQ(left, llvm::ConstantInt::get(context_, llvm::APInt::getSignedMinValue(native->getBitWidth()))),
+            b_.CreateICmpEQ(right, llvm::ConstantInt::getSigned(native, -1)));
+        if (op == "/") {
+          require(b_.CreateNot(overflow), expr.at, "i64 division overflow"); result = b_.CreateSDiv(left, right);
+        } else result = b_.CreateSRem(left, b_.CreateSelect(overflow, llvm::ConstantInt::get(native, 1), right));
+      } else result = op == "/" ? b_.CreateUDiv(left, right) : b_.CreateURem(left, right);
+    }
+    if (!result) throw std::logic_error("unchecked scalar operator");
+    return pack(result, choice.operation->type);
+  }
+  llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
+    std::vector<const Expression *> source_inputs;
+    for (const auto &argument : expr.children) source_inputs.push_back(argument.get());
+    const auto cases = choices(expr, source_inputs);
+    if (cases.front().operation->callee && (cases.size() > 1 || !specialize_)) {
+      const auto method = program_->instances[*cases.front().operation->callee].method;
+      if (std::all_of(cases.begin(), cases.end(), [&](const Choice &choice) {
+            return choice.operation->callee && program_->instances[*choice.operation->callee].method == method;
+          }))
+        return b_.CreateCall(general_[method], arguments);
+    }
+    return choose(expr, arguments, cases, outcome_, [&](const Choice &choice) -> llvm::Value * {
+      if (choice.operation->callee) {
+        const auto id = *choice.operation->callee;
+        auto *target = specialize_ && cases.size() == 1 ? specialized_[id] : general_[program_->instances[id].method];
+        return b_.CreateCall(target, arguments);
+      }
+      const auto type = choice.inputs.front();
+      auto *argument = unpack(arguments.front(), type);
+      std::string suffix;
+      if (type == Type::boolean) { suffix = "bool"; argument = b_.CreateZExt(argument, b_.getInt32Ty()); }
+      else if (type == Type::integer) suffix = "i64";
+      else if (type == Type::float32) suffix = "f32";
+      else if (type == Type::float64) suffix = "f64";
+      else { suffix = "u64"; argument = b_.CreateZExtOrTrunc(argument, b_.getInt64Ty()); }
+      b_.CreateCall(runtime("cod_lang_print_" + suffix, b_.getVoidTy(), {argument->getType()}), {argument});
+      return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
+    });
+  }
+  llvm::Value *propagate(llvm::Value *result) {
+    auto *bad = block("call.failed"), *good = block("call.completed");
+    b_.CreateCondBr(failed(result), bad, good);
+    b_.SetInsertPoint(bad); save_failure(result); b_.CreateBr(scope_->cleanup);
+    b_.SetInsertPoint(good);
+    return b_.CreateExtractValue(result, 0);
+  }
+  void collect_deferred(const Expression &expr, Scope &scope) {
+    if (expr.kind == Expression::Kind::block && expr.scoped) return;
+    for (const auto &child : expr.children) collect_deferred(*child, scope);
+    if (expr.kind != Expression::Kind::deferred) return;
+    const auto &call = *expr.children.front();
+    Deferred record{&call, slot(b_.getInt1Ty(), "defer.active"), {}};
+    llvm::IRBuilder<> entry(&function_->getEntryBlock(), std::next(record.active->getIterator()));
+    entry.CreateStore(b_.getFalse(), record.active);
+    for (size_t i = 0; i < call.children.size(); ++i) record.arguments.push_back(slot(scalar_, "defer.argument"));
+    scope.deferred.push_back(std::move(record));
+  }
+  void drain(Scope &scope) {
+    b_.SetInsertPoint(scope.cleanup);
+    for (auto it = scope.deferred.rbegin(); it != scope.deferred.rend(); ++it) {
+      auto *run = block("defer.invoke"), *next = block("defer.next");
+      b_.CreateCondBr(load(it->active), run, next);
+      b_.SetInsertPoint(run); b_.CreateStore(b_.getFalse(), it->active);
+      std::vector<llvm::Value *> arguments;
+      for (auto *argument : it->arguments) arguments.push_back(load(argument));
+      auto *result = invoke(*it->call, arguments);
+      auto *replace = block("defer.failed");
+      b_.CreateCondBr(failed(result), replace, next);
+      b_.SetInsertPoint(replace); save_failure(result); b_.CreateBr(next);
+      b_.SetInsertPoint(next);
+    }
+  }
+  llvm::Value *sequence(const std::vector<const Expression *> &expressions) {
+    llvm::Value *value = empty_scalar();
+    for (const auto *expr : expressions) { if (!reachable()) break; value = emit_expression(*expr); }
+    return value;
+  }
+  llvm::Value *full_scope(const std::vector<const Expression *> &expressions, bool callable,
+                          const Location &at, bool returns_value = false) {
+    Scope scope{scope_, block("scope.cleanup"), {}};
+    scope_ = &scope;
+    for (const auto *expr : expressions) collect_deferred(*expr, scope);
+    auto *saved = slot(scalar_, "scope.value");
+    auto *value = sequence(expressions);
+    if (reachable()) {
+      b_.CreateStore(value, saved);
+      if (callable && returns_value) fail_path(ExceptionCategory::missing_return, at);
+      else b_.CreateBr(scope.cleanup);
+    }
+    drain(scope); scope_ = scope.parent;
+    if (callable) { b_.CreateBr(finish_); return nullptr; }
+    auto *continuation = block("scope.continue");
+    b_.CreateCondBr(b_.CreateICmpEQ(load(exit_), b_.getInt8(0)), continuation, scope.parent->cleanup);
+    b_.SetInsertPoint(continuation);
+    return load(saved);
+  }
+  llvm::Value *emit_expression(const Expression &expr) {
+    using K = Expression::Kind;
+    const auto &fact = facts_.front()->at(&expr);
+    switch (expr.kind) {
+    case K::integer: case K::boolean:
+      return pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(fact.type)), fact.integer), fact.type);
+    case K::real: {
+      auto text = expr.text;
+      if (text.ends_with("f32") || text.ends_with("f64")) text.resize(text.size() - 3);
+      if (text.find_first_of(".eE") == std::string::npos) text += ".0";
+      return pack(llvm::ConstantFP::get(native_type(fact.type), text), fact.type);
+    }
+    case K::name: return arguments_[fact.parameter];
+    case K::unary: {
+      if (fact.minimum_literal) return pack(integer(std::uint64_t{1} << 63), Type::integer);
+      auto *argument = emit_expression(*expr.children.front());
+      if (!reachable()) return nullptr;
+      return choose(expr, {argument}, choices(expr, {expr.children.front().get()}), scalar_, [&](const Choice &choice) {
+        const auto type = choice.operation->type;
+        auto *value = unpack(argument, type);
+        if (expr.text == "!") return pack(b_.CreateNot(value), type);
+        if (expr.text == "+") return argument;
+        if (floating(type)) return pack(b_.CreateFNeg(value), type);
+        auto *zero = pack(llvm::ConstantInt::get(llvm::cast<llvm::IntegerType>(native_type(type)), 0), type);
+        return binary(expr, zero, argument, Choice{{type, type}, choice.operation});
+      });
+    }
+    case K::binary: {
+      auto *left = emit_expression(*expr.children[0]);
+      if (!reachable()) return nullptr;
+      if (expr.text == "&&" || expr.text == "||") {
+        auto *start = b_.GetInsertBlock(), *right_block = block("logical.right"), *join = block("logical.join");
+        b_.CreateCondBr(unpack(left, Type::boolean), expr.text == "&&" ? right_block : join, expr.text == "&&" ? join : right_block);
+        b_.SetInsertPoint(right_block);
+        auto *right = emit_expression(*expr.children[1]);
+        auto *right_end = b_.GetInsertBlock();
+        const bool right_reaches = reachable();
+        if (right_reaches) b_.CreateBr(join);
+        b_.SetInsertPoint(join);
+        auto *value = b_.CreatePHI(scalar_, right_reaches ? 2 : 1);
+        value->addIncoming(left, start);
+        if (right_reaches) value->addIncoming(right, right_end);
+        return value;
+      }
+      auto *right = emit_expression(*expr.children[1]);
+      if (!reachable()) return nullptr;
+      return choose(expr, {left, right}, choices(expr, {expr.children[0].get(), expr.children[1].get()}), scalar_,
+          [&](const Choice &choice) { return binary(expr, left, right, choice); });
+    }
+    case K::call: case K::behave: case K::perform: {
+      std::vector<llvm::Value *> arguments;
+      for (const auto &argument : expr.children) {
+        arguments.push_back(emit_expression(*argument)); if (!reachable()) return nullptr;
+      }
+      return propagate(invoke(expr, arguments));
+    }
+    case K::conditional: {
+      auto *condition = emit_expression(*expr.children[0]);
+      if (!reachable()) return nullptr;
+      auto *yes = block("if.then"), *no = block("if.else"), *join = block("if.join");
+      b_.CreateCondBr(unpack(condition, Type::boolean), yes, no);
+      std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
+      for (size_t i = 1; i < 3; ++i) {
+        b_.SetInsertPoint(i == 1 ? yes : no);
+        auto *value = emit_expression(*expr.children[i]);
+        if (reachable()) { incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join); }
+      }
+      b_.SetInsertPoint(join);
+      if (incoming.empty()) { b_.CreateUnreachable(); return nullptr; }
+      auto *result = b_.CreatePHI(scalar_, incoming.size(), "if.value");
+      for (const auto &[value, predecessor] : incoming) result->addIncoming(value, predecessor);
+      return result;
+    }
+    case K::block: {
+      std::vector<const Expression *> expressions;
+      for (const auto &child : expr.children) expressions.push_back(child.get());
+      auto *value = expr.scoped ? full_scope(expressions, false, expr.at) : sequence(expressions);
+      if (fact.type == Type::never && reachable()) { b_.CreateUnreachable(); return nullptr; }
+      return value;
+    }
+    case K::return_value: {
+      llvm::Value *value = empty_scalar();
+      if (!expr.children.empty()) {
+        value = emit_expression(*expr.children.front());
+        if (!reachable()) return nullptr;
+        auto *original = value;
+        value = choose(expr, {value}, choices(expr, {expr.children.front().get()}), scalar_, [&](const Choice &choice) {
+          if (choice.inputs.front() == Type::void_type) return empty_scalar();
+          return pack(convert(original, choice.inputs.front(), choice.operation->operand_type), choice.operation->operand_type);
+        });
+      }
+      b_.CreateStore(value, result_); b_.CreateStore(integer(0), category_); b_.CreateStore(null_pointer(), fatal_);
+      b_.CreateStore(b_.getInt8(1), exit_); b_.CreateBr(scope_->cleanup);
+      return nullptr;
+    }
+    case K::deferred: {
+      const auto &call = *expr.children.front();
+      auto record = std::find_if(scope_->deferred.begin(), scope_->deferred.end(), [&](const Deferred &entry) { return entry.call == &call; });
+      if (record == scope_->deferred.end()) throw std::logic_error("uncollected deferred action");
+      for (size_t i = 0; i < call.children.size(); ++i) {
+        auto *value = emit_expression(*call.children[i]); if (!reachable()) return nullptr;
+        b_.CreateStore(value, record->arguments[i]);
+      }
+      b_.CreateStore(b_.getTrue(), record->active);
+      return empty_scalar();
+    }
+    default: throw std::logic_error("unchecked expression reached LLVM emission");
+    }
+  }
+  llvm::Function *declare(const std::string &name, size_t arity) {
+    return llvm::Function::Create(llvm::FunctionType::get(outcome_, std::vector<llvm::Type *>(arity, scalar_), false),
+        llvm::GlobalValue::InternalLinkage, name, module_);
+  }
+  void begin(llvm::Function *function) {
+    function_ = function; arguments_.clear();
+    for (auto &argument : function->args()) arguments_.push_back(&argument);
+    b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr;
+    result_ = slot(scalar_, "return.value"); category_ = slot(b_.getInt64Ty(), "exception.category");
+    site_ = slot(b_.getInt64Ty(), "exception.site"); fatal_ = slot(b_.getPtrTy(), "numeric.failure");
+    exit_ = slot(b_.getInt8Ty(), "completion.kind");
+    b_.CreateStore(empty_scalar(), result_); b_.CreateStore(integer(0), category_);
+    b_.CreateStore(integer(0), site_); b_.CreateStore(null_pointer(), fatal_); b_.CreateStore(b_.getInt8(0), exit_);
+  }
+  void body(llvm::Function *function, const CheckedMethod &method, std::optional<size_t> instance) {
+    begin(function); facts_.clear();
+    if (instance) facts_.push_back(&program_->instances[*instance].operations);
+    else {
+      llvm::Value *admitted = b_.getFalse();
+      for (const auto id : method.instances) {
+        facts_.push_back(&program_->instances[id].operations);
+        admitted = b_.CreateOr(admitted, matches(arguments_, program_->instances[id].arguments));
+      }
+      auto *valid = block("arguments.valid"), *invalid = block("arguments.invalid");
+      b_.CreateCondBr(admitted, valid, invalid);
+      b_.SetInsertPoint(invalid);
+      b_.CreateRet(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)),
+          integer(site(method.source->at)), null_pointer()));
+      b_.SetInsertPoint(valid);
+    }
+    std::vector<const Expression *> expressions;
+    for (const auto &expr : method.source->body->children) expressions.push_back(expr.get());
+    full_scope(expressions, true, method.source->at, *method.source->result_type != Type::void_type);
+    b_.SetInsertPoint(finish_);
+    b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_)));
+  }
+  void emit_sites() {
+    function_ = llvm::Function::Create(llvm::FunctionType::get(b_.getPtrTy(), {b_.getInt64Ty()}, false),
+        llvm::GlobalValue::ExternalLinkage, "cod_lang_exception_site", module_);
+    b_.SetInsertPoint(block("entry"));
+    auto *unknown = block("unknown");
+    auto *select = b_.CreateSwitch(function_->getArg(0), unknown, sites_.size());
+    for (size_t i = 0; i < sites_.size(); ++i) {
+      auto *known = block("site"); select->addCase(integer(i + 1), known); b_.SetInsertPoint(known);
+      b_.CreateRet(b_.CreateGlobalString(location_text(sites_[i])));
+    }
+    b_.SetInsertPoint(unknown); b_.CreateRet(null_pointer());
+  }
+
 public:
-  std::pair<std::string, std::string> empty_program(bool emit_text, bool emit_bitcode) {
-    llvm::LLVMContext context;
-    llvm::Module module("cod.program", context);
+  std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool specialize = true) {
+    program_ = &program; specialize_ = specialize;
+    for (const auto &instance : program.instances)
+      if (!instance.complete) throw std::logic_error("incomplete checking obligation reached native emission");
     const llvm::Triple triple(llvm::sys::getDefaultTargetTriple());
     clang::DiagnosticOptions diagnostic_options;
-    clang::IgnoringDiagConsumer diagnostics_consumer;
-    clang::DiagnosticsEngine diagnostics(llvm::makeIntrusiveRefCnt<clang::DiagnosticIDs>(), diagnostic_options,
-                                         &diagnostics_consumer, false);
-    clang::TargetOptions options;
-    options.Triple = triple.str();
+    clang::IgnoringDiagConsumer consumer;
+    clang::DiagnosticsEngine diagnostics(llvm::makeIntrusiveRefCnt<clang::DiagnosticIDs>(), diagnostic_options, &consumer, false);
+    clang::TargetOptions options; options.Triple = triple.str();
     std::unique_ptr<clang::TargetInfo> target(clang::TargetInfo::CreateTargetInfo(diagnostics, options));
     if (!target) throw std::runtime_error("cannot obtain the native target data layout");
-    module.setTargetTriple(triple);
-    module.setDataLayout(target->getDataLayoutString());
-    auto *main = llvm::Function::Create(
-        llvm::FunctionType::get(llvm::Type::getInt32Ty(context), false),
-        llvm::GlobalValue::ExternalLinkage, "main", module);
-    llvm::IRBuilder<> builder(llvm::BasicBlock::Create(context, "entry", main));
-    builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0));
-
-    auto *pointer = llvm::PointerType::getUnqual(context);
-    auto *sites = llvm::Function::Create(
-        llvm::FunctionType::get(pointer, {llvm::Type::getInt64Ty(context)}, false),
-        llvm::GlobalValue::ExternalLinkage, "cod_lang_exception_site", module);
-    builder.SetInsertPoint(llvm::BasicBlock::Create(context, "entry", sites));
-    builder.CreateRet(llvm::ConstantPointerNull::get(pointer));
-
+    module_.setTargetTriple(triple); module_.setDataLayout(target->getDataLayoutString());
+    general_.resize(program.methods.size()); specialized_.resize(program.instances.size());
+    for (size_t i = 0; i < program.methods.size(); ++i) {
+      const auto &method = program.methods[i]; if (method.instances.empty()) continue;
+      const auto prefix = "cod.method." + std::to_string(i) + "." + method.source->name;
+      if (method.source->type_parameters.empty()) {
+        general_[i] = declare(prefix + ".native", method.source->parameters.size());
+        specialized_[method.instances.front()] = general_[i];
+        continue;
+      }
+      general_[i] = declare(prefix + ".general", method.source->parameters.size());
+      if (specialize) for (const auto id : method.instances) {
+        std::string name = prefix + ".specialized";
+        for (const auto &type : program.instances[id].arguments) name += "." + type_name(type);
+        specialized_[id] = declare(name, method.source->parameters.size());
+      }
+    }
+    for (size_t i = 0; i < program.methods.size(); ++i) {
+      const auto &method = program.methods[i]; if (method.instances.empty()) continue;
+      if (method.source->type_parameters.empty()) {
+        body(general_[i], method, method.instances.front());
+        continue;
+      }
+      body(general_[i], method, {});
+      if (specialize) for (const auto id : method.instances) body(specialized_[id], method, id);
+    }
+    auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false), llvm::GlobalValue::ExternalLinkage, "main", module_);
+    begin(main); facts_ = {&program.entry}; full_scope(program.initializers, true, Location{});
+    b_.SetInsertPoint(finish_);
+    auto *fatal = block("fatal"), *exception = block("exception"), *normal = block("normal");
+    b_.CreateCondBr(b_.CreateICmpNE(load(fatal_), null_pointer()), fatal, exception);
+    b_.SetInsertPoint(fatal);
+    b_.CreateCall(runtime("cod_lang_fail", b_.getVoidTy(), {b_.getPtrTy()}), {load(fatal_)}); b_.CreateUnreachable();
+    b_.SetInsertPoint(exception);
+    auto *uncaught = block("uncaught");
+    b_.CreateCondBr(b_.CreateICmpNE(load(category_), integer(0)), uncaught, normal);
+    b_.SetInsertPoint(uncaught);
+    b_.CreateCall(runtime("cod_lang_uncaught", b_.getVoidTy(), std::vector<llvm::Type *>(5, b_.getInt64Ty())),
+        {load(category_), load(site_), integer(0), integer(0), integer(0)}); b_.CreateUnreachable();
+    b_.SetInsertPoint(normal);
+    b_.CreateCall(runtime("cod_lang_exception_finish", b_.getVoidTy(), {})); b_.CreateRet(b_.getInt32(0));
+    emit_sites();
     std::string errors;
     llvm::raw_string_ostream diagnostics_out(errors);
-    if (llvm::verifyModule(module, &diagnostics_out))
-      throw std::logic_error("invalid emitted CoD module: " + errors);
+    if (llvm::verifyModule(module_, &diagnostics_out)) throw std::logic_error("invalid emitted CoD module: " + errors);
     std::string text, bitcode;
-    if (emit_text) {
-      llvm::raw_string_ostream output(text);
-      module.print(output, nullptr);
-    }
-    if (emit_bitcode) {
-      llvm::raw_string_ostream output(bitcode);
-      llvm::WriteBitcodeToFile(module, output);
-    }
+    if (emit_text) { llvm::raw_string_ostream output(text); module_.print(output, nullptr); }
+    if (emit_bitcode) { llvm::raw_string_ostream output(bitcode); llvm::WriteBitcodeToFile(module_, output); }
     return {std::move(text), std::move(bitcode)};
   }
 };

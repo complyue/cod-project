@@ -1,10 +1,10 @@
 # Design authority and value lineage
 
-Registry revision: 595 · Audit date: 2026-11-13 (America/Los_Angeles)
+Registry revision: 596 · Audit date: 2026-11-13 (America/Los_Angeles)
 
 ## Design authority
 
-[D-GOV](#d-gov), all registry-maintenance sections. Value path: V-03 → GOV-01 → GOV-02 through E-11/E-12. H-05 establishes human-scoped delegation; H-388/H-391 authorizes concise audit records; H-403 requests ongoing decision summaries without side-chat quotations. [K-594](#k-594) records revision 595 and H-409's method/implementation/local-operation clarification. H-407's scoped closure approval and H-408's practical stage goals remain. The [charter](RegionalSemanticPlatformCharter.md) and [AGENTS.md](../AGENTS.md) govern.
+[D-GOV](#d-gov), all registry-maintenance sections. Value path: V-03 → GOV-01 → GOV-02 through E-11/E-12. H-05 establishes human-scoped delegation; H-388/H-391 authorizes concise audit records; H-403 requests ongoing decision summaries without side-chat quotations. [K-595](#k-595) records revision 596 and the bounded source-foundation availability update; H-409's method/implementation/local-operation clarification remains. H-407's scoped closure approval and H-408's practical stage goals remain. The [charter](RegionalSemanticPlatformCharter.md) and [AGENTS.md](../AGENTS.md) govern.
 
 Acceptance: preserve stable IDs, relationship endpoints/kinds, current qualification, exclusions and unresolved decisions; resolve historical evidence to immutable Git sources. Maintenance alone grants no product qualification; H-407 separately supplies human approval for its identified D-26 scope. Historical registry: `061a4a684770`; original event payloads: `0c0efbfde4dc`, both at this file's path. Newer decisions remain below as attributed records; H-403 governs side-chat paraphrases.
 
@@ -25,7 +25,7 @@ Revision labels identify inspected text, not approval of every section. **Pendin
 | Contract / inspected revision | Authority and lineage | Boundary, acceptance and open work |
 | --- | --- | --- |
 | <a id="d-00"></a>**D-00** [Charter](RegionalSemanticPlatformCharter.md) | H-01–H-04 confirms V-01–V-03/E-01–E-10 directions; H-04 authorizes the charter’s creation. Initial charter commit `3fe2cd1dfd06ec41481f265386d23f3dce7e2ff6`, blob `9f0154035d52f976232000ab1601088b91948c0b`. | Value root, not blanket approval of generated details, examples, roadmap or §14 mechanisms. |
-| <a id="d-gov"></a>**D-GOV** registry r595; AGENTS governance | **Continued** H-05/E-11/E-12 under H-388/H-391/H-403; K-594. | Traceable scoped delegation, current decisions and recoverable evidence. Side-chat evidence uses attributed decision paraphrases. No charter or operational-permission change. H-407 is separate human design approval, not qualification by registry maintenance. |
+| <a id="d-gov"></a>**D-GOV** registry r596; AGENTS governance | **Continued** H-05/E-11/E-12 under H-388/H-391/H-403; K-595. | Traceable scoped delegation, current decisions and recoverable evidence. Side-chat evidence uses attributed decision paraphrases. No charter or operational-permission change. H-407 is separate human design approval, not qualification by registry maintenance. |
 | <a id="d-01"></a>**D-01** [Regional storage](MemoryRegionAndRegionalTypes.md); blob `8dc4ed4012d1127087d83faf9e13ed49db5345d5` | **Pending-human**, P-01/P-02. | Find a confirmed pointer/lifetime/acceptance baseline before delegating this whole file. AGENTS regional invariants remain mandatory independently. |
 | <a id="d-02"></a>**D-02** [C++ driver](CompileOnDemand.md); blob `cbd294de3eb9825c8522b9eb7781e44a5ba8d844` | **Pending-human**, P-03/P-04. | Stage-specific build-and-run facility; its no-JIT boundary does not define the platform’s long-term execution strategy. |
 | <a id="d-03"></a>**D-03** [Package management](CodProjectStructureAndPkgMgmt.md); blob `4146412997de5179146a7010b5b034e32fcebfb9` | **Pending-human**, P-05. | Git/UUID/branch/lock mechanisms and semantic-unit distribution need scoped confirmation. Existing code is not approval. |
@@ -55,7 +55,7 @@ Revision labels identify inspected text, not approval of every section. **Pendin
 
 ### Current supersession and audit boundaries
 
-**Source compiler restructuring (H-399):** on `codex/source-micro-dispatch`, historical implementation evidence in D-07/D-10/D-15/D-17/D-18 and the source fixtures describes the preserved `multi-dispatch` baseline, not current feature availability. The removal checkpoint retains parsing and empty-program native artifacts; nonempty execution paths are explicit implementation gaps. Confirmed language contracts remain the target. [The migration log](MicroDispatchMigrationWorkLog.md) owns current supported/missing behavior.
+**Source compiler restructuring (H-399):** on `codex/source-micro-dispatch`, historical implementation evidence in D-07/D-10/D-15/D-17/D-18 and the source fixtures describes the preserved `multi-dispatch` baseline, not current feature availability. The source foundation supports checked scalar methods, direct AOT specializations, shared general bodies, recursion and prepared scalar cleanup. Regional, abstract-input, capture, module-composition and handler paths remain explicit implementation gaps. Confirmed language contracts remain the target. [The migration log](MicroDispatchMigrationWorkLog.md) owns current supported/missing behavior.
 
 These are scoped replacements, not blanket invalidations. Apply them to older wording; unaffected requirements remain. Detailed originals remain in H/K evidence.
 
@@ -1925,3 +1925,9 @@ The side assistant's suggestion to represent a general implementation as a speci
 - Registry/D-GOV594→595 records H-409 without changing prior H/K payloads. D-21r9→r10, D-26r7→r8 and D-25r13→r14 apply the explicit hierarchy, call-site specialization preference, phase/initiator distinction and local micro-dispatch correction. C-86/P-364/P-370 and the current index track affected scopes; pending production representation/ABI/key/budget mechanisms are not qualified.
 - Charter §§3.1–3.3/§5.2–5.4/§6.1–6.3 preserves semantic definitions independently of execution instances and derived native code. H-407's C-89/C-90/P-371/P-372/P-374/P-375 value/coverage path continues: general correctness and finite native coverage coexist with AOT-specialized direct calls. A semantic method's compiler implementations cannot alter overload specificity, owner relationships, capture values, runtime effect order or D-16 nominal/unit identity.
 - The 13-body unspecialized experiment remains its actual historical observation, not a universal code-count law. Migration acceptance now distinguishes semantic methods, prepared implementations and independent local points, and requires both known-call specialization/direct-call evidence and general-path correctness. No new runtime interpretation, user compile-time execution rule, persistent carrier or source syntax is inferred. The migration work log records the corrected plan before source implementation.
+
+### K-595 — Bounded source-foundation availability (2026-11-13)
+<a id="k-595"></a>
+
+- Registry/D-GOV595→596 and source validation reference219→220 continue H-398/H-399/H-407–H-409 within their recorded scope. Charter §§2–3/§5.3/§6.3/§12 requires checked semantic obligations, separate derived native implementations and honest observable evidence. Existing H/K payloads and pending production mechanism scopes remain unchanged; this event grants no new design qualification.
+- The current availability index routes scalar source/native evidence and outstanding capabilities to the migration work log. D-21r10/D-26r8 remains the behavioral contract, with D-10 function/context exclusion, D-11 primitive widening, D-17 completion and D-16 deferred fraction/unit distinctions preserved. Private execution-local scalar transport and finite checking records do not establish a persistent carrier ABI, full generic closure, outside-catalog admission or a permanent checked representation.
