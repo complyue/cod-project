@@ -1,0 +1,71 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+data Item {value:u64; other:u64;}
+array Values[u64]:f32;
+region symbol @arena:Item;
+proc first(v:u64 in o,n:u64)->u64 where {owner o} {
+  defer {v<-v+1u64;};
+  return if(n==0u64){v}else{first(v,n-1u64)};
+}
+proc last(v:u64 in o,n:u64)->u64 where {owner o} {
+  defer {v<-v+1u64;};
+  return if(n!=0u64){last(v,n-1u64)}else{v};
+}
+proc replacement(v:u64 in o,w:u64 in o)->u64 where {owner o} {
+  defer {} finally {return w;};
+  return v;
+}
+func element(values:Values in r,index:u64)->f32 where {region r:Item} {return values[index];}
+proc borrowed(v:u64 in o)->u64 where {owner o} {return v;}
+proc captured()->void {
+  owned region r:Item<-make Item(capacity=1024u64){value<-1u64;other<-7u64};
+  proc view=proc()->u64 {defer {root(r).value<-9u64;}; return root(r).value;};
+  ref result=view();
+  behave @print(result);
+  result<-2u64;
+  behave @print(root(r).value);
+  proc copy=proc()->const u64 {defer {root(r).value<-11u64;}; return root(r).value;};
+  val saved=copy();
+  behave @print(saved);
+  behave @print(root(r).value);
+  proc other=proc()->u64 {return root(r).other;};
+  proc selected=view;
+  for(i in 0u64..2u64) {{
+    defer {{ref output=selected(); output<-output+1u64; behave @print(output);}};
+    selected<-other;
+  }};
+  ref entries=alloc r Values(2u64,0.5f32);
+  func at=element;
+  ref slot=at(entries,1u64);
+  slot<-1.25f32;
+  behave @print(entries[1u64]);
+  proc action=borrowed;
+  defer {{ref output=action(root(r).value); output<-12u64; behave @print(output);}};
+}
+captured();
+proc lexical()->void {
+  val v:u64<-1u64;
+  val w:u64<-3u64;
+  ref a=first(v,100u64);
+  behave @print(a);
+  a<-2u64;
+  ref b=last(v,100u64);
+  behave @print(b);
+  b<-4u64;
+  ref result=replacement(v,w);
+  result<-5u64;
+  behave @print(v);
+  behave @print(w);
+}
+lexical();
+proc dynamic()->void {
+  effect @arena <-make Item(capacity=256u64){value<-30u64;other<-0u64};
+  effect proc @view()->u64 {return @arena.value;};
+  {{
+    effect @arena <-make Item(capacity=256u64){value<-31u64;other<-0u64};
+    defer {{ref current=behave @view(); current<-32u64; behave @print(current);}};
+    defer {{ref saved=perform @view(); saved<-33u64; behave @print(saved);}};
+  }};
+  behave @print(@arena.value);
+}
+dynamic();

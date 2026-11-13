@@ -1,0 +1,3 @@
+proc identity(v:u64 in o)->u64 where {owner o} {return v;}
+proc bad()->u64 {val v:u64<-1u64; return identity(v);}
+bad();

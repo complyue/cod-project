@@ -148,6 +148,8 @@ struct Value {
   bool borrowed_arguments = false; // An external-owner variadic pack selects target views.
   size_t result_type_origin = 0;
   size_t region_result_origin = 0; // Owner alternatives of a joined borrowed result.
+  size_t scalar_result_origin = 0; // Staged value/view category and storage provenance.
+  llvm::Value *scalar_result_address = nullptr;
   std::vector<size_t> result_fact_origins = {}; // Compiler-only checked returns, not runtime tags.
   std::vector<InitializationRead> argument_reads = {};
   std::optional<size_t> declaration_cell = {};
@@ -432,6 +434,8 @@ class Compiler {
   struct Pointer { llvm::Value *slot; const Value *view; ReadOnly read_only; bool fixed_binding = false; bool required = false; Location at; };
   struct DeferredCheck { std::function<bool()> rejected; Location at; std::string message; };
   std::vector<DeferredCheck> deferred_checks_;
+  struct PendingScalarRead { size_t origin; llvm::Instruction *choice; Location at; };
+  std::vector<PendingScalarRead> pending_scalar_reads_;
   std::vector<ReadOnly> projection_permissions_;
   void require_writable(const ReadOnly &permission, const Location &at, std::string message) {
     if (permission.pending()) deferred_checks_.push_back({[permission] { return bool(permission); }, at, std::move(message)});
@@ -1604,25 +1608,25 @@ class Compiler {
     return id;
   }
   struct ResultOrigin {
-    enum class Kind { no_owner, fresh_region, region, lexical, argument } kind;
+    enum class Kind { no_owner, scalar_value, fresh_region, region, lexical, argument } kind;
     size_t identity = 0;
     auto operator<=>(const ResultOrigin &) const = default;
   };
   using ResultOrigins = std::set<ResultOrigin>;
-  enum class ResultOwnership { borrowed, owning };
+  enum class ResultQuery { borrowed_owner, owning_owner, scalar };
   ResultOrigin storage_origin(const Value &value) const {
     if (value.region_id) return {ResultOrigin::Kind::region, region_source(*value.region_id)};
     if (value.storage && value.storage->scope) return {ResultOrigin::Kind::lexical, *value.storage->scope};
     return {ResultOrigin::Kind::no_owner};
   }
-  ResultOrigins return_storage_origins(size_t origin, ResultOwnership ownership, const Location &at,
+  ResultOrigins return_origins(size_t origin, ResultQuery query, const Location &at,
                                        bool complete, const std::set<size_t> &inputs = {}) {
     // Summaries are relative to argument roles. A recursive adapter's first
     // caller does not fix the identities of subsequent callers' storage.
     using Kind = ResultOrigin::Kind;
     using Roles = std::map<ResultOrigin, ResultOrigin>;
     std::map<const NativeCallDemand *, ResultOrigins> summaries;
-    const auto owning = ownership == ResultOwnership::owning;
+    const auto owning = query == ResultQuery::owning_owner;
     const auto returns = [&](size_t id) -> const std::vector<Value> & {
       if (complete) return checked_returns(id, at);
       try { return checked_returns(id, at); }
@@ -1665,6 +1669,12 @@ class Compiler {
       return {{Kind::region, region_identity(source.identity, at)}};
     };
     value_origin = [&](const Value &value, const Roles &roles, std::set<ResultOrigin> visited) -> ResultOrigins {
+      if (!owning && value.scalar_result_origin) return result_value(value.scalar_result_origin, roles, visited);
+      // Value category is independent of whether an owner has been resolved.
+      // Nullable and unfinished views cannot become independent scalar bits.
+      if (query == ResultQuery::scalar && !value.storage && !value.region_id &&
+          !value.pointer_view && !value.pending_owner && !value.global_slot)
+        return {{Kind::scalar_value}};
       const auto owner = storage_origin(value);
       if (owner.kind == Kind::no_owner) return owning ? ResultOrigins{} : ResultOrigins{owner};
       if (roles.contains(owner)) return storage_value(owner, roles, visited);
@@ -1704,16 +1714,78 @@ class Compiler {
     return result;
   }
   std::optional<size_t> returned_owner(size_t origin, const std::set<size_t> &inputs, const Location &at) {
-    const auto result = return_storage_origins(origin, ResultOwnership::owning, at, true, inputs);
+    const auto result = return_origins(origin, ResultQuery::owning_owner, at, true, inputs);
     if (result.size() != 1 || result.begin()->kind != ResultOrigin::Kind::region) return {};
     return result.begin()->identity;
   }
   size_t borrowed_region_owner(size_t origin, const Location &at, bool complete) {
-    const auto result = return_storage_origins(origin, ResultOwnership::borrowed, at, complete);
+    const auto result = return_origins(origin, ResultQuery::borrowed_owner, at, complete);
     if (result.empty()) throw UnresolvedAccess(at);
     if (result.size() != 1 || result.begin()->kind != ResultOrigin::Kind::region)
       fail(at, "native borrowed results with different actual region owners need further owner-selection support");
     return result.begin()->identity;
+  }
+  ResultOrigin scalar_result_owner(size_t origin, const Location &at) {
+    const auto origins = return_origins(origin, ResultQuery::scalar, at, true);
+    if (origins.empty()) throw UnresolvedAccess(at);
+    if (origins.size() != 1)
+      fail(at, "native ordinary scalar results with mixed value/view categories or actual owners need further result-staging support");
+    if (origins.begin()->kind == ResultOrigin::Kind::no_owner)
+      fail(at, "native scalar view has no resolved storage owner");
+    return *origins.begin();
+  }
+  void resolve_scalar_result(Value &value, const Location &at, bool required = false) {
+    if (!value.scalar_result_origin) return;
+    ResultOrigin owner;
+    try {
+      const auto origins = return_origins(value.scalar_result_origin, ResultQuery::scalar, at, true);
+      if (origins.empty()) throw UnresolvedAccess(at);
+      if (origins.size() != 1) {
+        if (required) (void)scalar_result_owner(value.scalar_result_origin, at);
+        return;
+      }
+      owner = *origins.begin();
+      if (owner.kind == ResultOrigin::Kind::no_owner)
+        fail(at, "native scalar view has no resolved storage owner");
+    }
+    catch (const UnresolvedAccess &) {
+      const auto origins = return_origins(value.scalar_result_origin, ResultQuery::scalar, at, false);
+      if (origins.size() != 1 || origins.begin()->kind == ResultOrigin::Kind::no_owner || origins.begin()->kind == ResultOrigin::Kind::scalar_value) {
+        if (required) fail(at, "native scalar reference storage still depends on an unfinished result flow");
+        return;
+      }
+      owner = *origins.begin();
+      deferred_checks_.push_back({[this, origin = value.scalar_result_origin, owner, at] {
+        return scalar_result_owner(origin, at) != owner;
+      }, at, "native scalar result storage differs from its provisional owner proof"});
+    }
+    value.scalar_result_origin = 0;
+    if (owner.kind == ResultOrigin::Kind::scalar_value) {
+      value.scalar_result_address = nullptr;
+      value.target_flow = 0;
+      value.read_only = false;
+      return;
+    }
+    value.storage = StorageView{value.scalar_result_address, {}, {}, true};
+    if (owner.kind == ResultOrigin::Kind::region) value.region_id = owner.identity;
+    else if (owner.kind == ResultOrigin::Kind::lexical) {
+      value.storage->scope = owner.identity;
+      for (size_t i = 0; i < cells_.size(); ++i)
+        if (cells_[i].scope == owner.identity && !cells_[i].selected_target) value.storage->cells.insert(i);
+    } else throw std::logic_error("unresolved scalar result storage role");
+    value.pointer_view = true;
+  }
+  llvm::Value *scalar_result_payload(Value value, const Location &at) {
+    resolve_scalar_result(value, at);
+    if (value.storage) {
+      const auto type = value.type;
+      return stored_value(read_value(std::move(value), at), type, at);
+    }
+    if (!value.scalar_result_origin) return stored_value(value, value.type, at);
+    auto [payload, choice] = ir_.pending_scalar_read(value.type, value.scalar_result_address,
+                                                    stored_value(value, value.type, at));
+    pending_scalar_reads_.push_back({value.scalar_result_origin, choice, at});
+    return payload;
   }
   size_t region_identity(size_t id, const Location &at) {
     id = region_source(id);
@@ -1778,6 +1850,16 @@ class Compiler {
     return {};
   }
   void valid_view(const Value &value, const Location &at) {
+    if (value.scalar_result_origin) {
+      const auto state = flow_state();
+      deferred_checks_.push_back({[this, origin = value.scalar_result_origin, scopes = scopes_, live = state.live, at] {
+        for (const auto owner : return_origins(origin, ResultQuery::borrowed_owner, at, true)) {
+          if (owner.kind == ResultOrigin::Kind::lexical && (owner.identity >= scopes.size() || !scopes[owner.identity])) return true;
+          if (owner.kind == ResultOrigin::Kind::region && (owner.identity >= live.size() || !live[owner.identity])) return true;
+        }
+        return false;
+      }, at, "scalar result would outlive its storage owner"});
+    }
     for (const auto region : value.type.capture_regions)
       require_live(regions_.at(region_source(region)).live, at,
           "callable owner contract " + type_name(value.type) + " requires a live region owner" +
@@ -2030,6 +2112,7 @@ class Compiler {
       fail(at, "generic owner binding carries provenance, not an ordinary runtime value; region access requires a region-specific owner");
   }
   Value read_value(Value value, const Location &at, bool argument = false) {
+    resolve_scalar_result(value, at);
     require_runtime_value(value, at);
     if (!argument) { require_argument_reads(value); value.argument_reads.clear(); }
     valid_view(value, at);
@@ -2066,6 +2149,8 @@ class Compiler {
     return value;
   }
   static Value bits_value(Value value) {
+    value.scalar_result_origin = 0;
+    value.scalar_result_address = nullptr;
     value.target_flow = 0;
     value.storage.reset(); value.pointer.reset(); value.region_id.reset(); value.read_only = false; value.referent = nullptr; value.nullable = false; value.reference_field.reset(); value.nonnull_when.reset(); value.pointer_view = false;
     value.binding_read_only = false;
@@ -3587,6 +3672,11 @@ class Compiler {
         (type.target->kind == Type::regional || type.target->kind == Type::array ||
          (type.target->kind == Type::region && !type.target->owned));
   }
+  static bool body_scalar_result(const Type &type) {
+    return type.kind == Type::procedure && type.target && local_bits(*type.target) && type.target->kind != Type::exception && !borrowed_result(type) &&
+        (type.const_views.empty() || !type.const_views.back()) &&
+        (type.nullable_views.empty() || !type.nullable_views.back());
+  }
   static bool native_callable_type(const Type &type, bool concrete = true) {
     const auto supported = [concrete](const Type &value) {
       return local_bits(value) || (!concrete && representation(value).kind == Type::parameter) ||
@@ -3603,7 +3693,7 @@ class Compiler {
         type.target->kind != Type::regional && type.target->kind != Type::region &&
         (concrete || representation(*type.target).kind != Type::parameter)) return false;
     // Unqualified borrowed results still need body-derived provenance.
-    if (!borrowed_result(type) && !body_borrowed_result(type) && !type.owner_bounds.empty() &&
+    if (!borrowed_result(type) && !body_borrowed_result(type) && !body_scalar_result(type) && !type.owner_bounds.empty() &&
         *type.target != Type::void_type && type.target->kind != Type::procedure &&
         !(type.target->kind == Type::region && type.target->owned) &&
         (type.const_views.empty() || !type.const_views.back())) return false;
@@ -3616,7 +3706,7 @@ class Compiler {
     return true;
   }
   static bool contextual_callable(const Type &type) {
-    return !native_callable_type(type, false) || body_borrowed_result(type) || !type.pure_callable || !type.bounds.empty() || !type.owner_bounds.empty() || type.variadic ||
+    return !native_callable_type(type, false) || body_borrowed_result(type) || body_scalar_result(type) || !type.pure_callable || !type.bounds.empty() || !type.owner_bounds.empty() || type.variadic ||
         (type.target && type.target->kind == Type::region && type.target->owned) ||
         std::any_of(type.parameters.begin(), type.parameters.end(),
         [](const Type &parameter) { return parameter.kind == Type::procedure || parameter.kind == Type::region; });
@@ -4141,7 +4231,9 @@ class Compiler {
            value.type.kind == Type::region ||
            (native_callable(value) && parameter_at(form, i).owner.empty()));
     }
-    const bool contextual_parameters = (instantiated.result && instantiated.result->kind == Type::region && instantiated.result->owned) ||
+    const bool scalar_result = instantiated.result && local_bits(*instantiated.result) && instantiated.result->kind != Type::exception && !form.result_const &&
+        form.result_owner.empty() && form.result_kind != "ptr";
+    const bool contextual_parameters = scalar_result || (instantiated.result && instantiated.result->kind == Type::region && instantiated.result->owned) ||
         !form.owner_parameters.empty() || std::any_of(args.begin(), args.end(), [](const Value &value) {
       return value.type.kind == Type::procedure || value.type.kind == Type::region;
     });
@@ -4167,11 +4259,11 @@ class Compiler {
         std::vector<llvm::Value *> operands;
         for (size_t i = 0; i < args.size(); ++i) {
           valid_view(args[i], at);
-          if (type.parameters[i].kind == Type::region)
-            parameters[i] = admit(args[i], type.parameters[i], caller, at);
-          operands.push_back(borrowed_parameter(type, i) ? borrowed_operand(args[i], at) :
-              native_callable(args[i]) ? ir_.take_callable(args[i].storage->address)
-              : stored_value(args[i], type.parameters[i], at));
+          parameters[i] = admit(args[i], type.parameters[i], caller, at);
+          const auto &value = parameters[i];
+          operands.push_back(borrowed_parameter(type, i) ? borrowed_operand(value, at) :
+              native_callable(value) ? ir_.take_callable(value.storage->address)
+              : stored_value(value, type.parameters[i], at));
         }
         std::optional<StorageView> destination;
         if (type.target->kind == Type::procedure && !borrowed_result(type))
@@ -6310,7 +6402,9 @@ class Compiler {
         if (result.type != Type::never) {
           record_callable_effects(demand.returns);
           record_initialization(demand.initialized);
-          ir_.native_return(active.definition.borrowed_result ? borrowed_operand(result, demand.at) :
+          ir_.native_return(active.definition.scalar_result ? ir_.scalar_result(scalar_result_payload(result, demand.at),
+              result.storage ? result.storage->address : result.scalar_result_address ? result.scalar_result_address : ir_.null_pointer()) :
+              active.definition.borrowed_result ? borrowed_operand(result, demand.at) :
               result.type == Type::void_type || demand.result_flow ? nullptr : stored_value(result, result.type, demand.at));
         }
         for (const auto &[region, owner] : owners) regions_[region].owner = owner;
@@ -6400,7 +6494,7 @@ class Compiler {
     std::vector<bool> borrowed;
     for (size_t i = 0; i < type.parameters.size(); ++i) borrowed.push_back(borrowed_parameter(type, i));
     auto definition = ir_.native_declaration(type.pure_callable ? "function.context" : "procedure.context",
-        type.parameters, *type.target, true, borrowed, borrowed_result(type) || body_borrowed_result(type));
+        type.parameters, *type.target, true, borrowed, borrowed_result(type) || body_borrowed_result(type), body_scalar_result(type));
     definition.checked_null = !type.throws_types.empty();
     auto *context = ir_.pending_context();
     auto parameters = args;
@@ -6429,7 +6523,7 @@ class Compiler {
       if (!type.const_views.empty() && type.const_views[i] && has_storage_owner(demand.arguments[i]))
         demand.arguments[i].read_only = true;
     demand.parent = native_context_ ? native_context_->call : nullptr;
-    if (body_borrowed_result(type) || (definition.borrowed_result &&
+    if (body_borrowed_result(type) || definition.scalar_result || (definition.borrowed_result &&
         (definition.result.kind == Type::regional || local_bits(definition.result))) ||
         definition.result.kind == Type::region) {
       return_facts_.push_back({&demand, {}});
@@ -6437,7 +6531,7 @@ class Compiler {
     }
     prepare_callable_effects(demand);
     prepare_initialization(demand);
-    if (definition.borrowed_result && local_bits(definition.result)) {
+    if ((definition.borrowed_result && local_bits(definition.result)) || definition.scalar_result) {
       pointer_flows_.push_back({{}, nullptr, true});
       demand.result_target_flow = pointer_flows_.size() - 1;
     }
@@ -6463,6 +6557,20 @@ class Compiler {
     }
     callable_holders_ = callable_effects(demand, demand.returns);
     apply_initialization(demand.initialized);
+    if (definition.scalar_result) {
+      if (!returned) return scalar(Type::never, nullptr);
+      const auto [payload, address] = ir_.scalar_result_parts(returned);
+      auto result = loaded_value(definition.result, payload);
+      result.scalar_result_address = address;
+      result.scalar_result_origin = demand.record_result;
+      result.target_flow = demand.result_target_flow;
+      result.read_only = ReadOnly::deferred([this, origin = demand.record_result, at] {
+        const auto &values = checked_returns(origin, at);
+        return std::any_of(values.begin(), values.end(), [](const Value &value) { return bool(value.read_only); });
+      });
+      resolve_scalar_result(result, at);
+      return result;
+    }
     if (destination) return held_callable(definition.result, demand.result_flow, returned, *destination);
     if (body_borrowed_result(type)) {
       const auto choices = callable_choices(demand.flow);
@@ -6558,6 +6666,7 @@ class Compiler {
     type.pure_callable = true;
     type.parameters = {value.type};
     type.target = std::make_shared<Type>(target);
+    type.const_views = {false, true};
     if (npe_allowed_) type.throws_types = {exception_type(ExceptionCategory::null_pointer)};
     auto conversion = selected;
     conversion.type = std::move(type);
@@ -8621,6 +8730,35 @@ class Compiler {
   }
   Value join_completions(const std::vector<Completion> &completions, const Location &at, bool module_lifetime) {
     if (completions.empty()) { ir_.unreachable(); return scalar(Type::never, nullptr); }
+    const bool pending_scalar = local_bits(completions.front().value.type) && completions.front().value.type.kind != Type::exception &&
+        (std::any_of(completions.begin(), completions.end(), [](const Completion &item) { return item.value.scalar_result_origin; }) ||
+         (native_context_ && native_context_->definition.scalar_result &&
+          std::any_of(completions.begin(), completions.end(), [](const Completion &item) { return bool(item.value.storage); }) &&
+          std::any_of(completions.begin(), completions.end(), [](const Completion &item) { return !item.value.storage; })));
+    if (pending_scalar) {
+      auto values = completions;
+      std::vector<Value> alternatives;
+      std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> addresses;
+      std::vector<size_t> targets;
+      ReadOnly permission;
+      for (auto &item : values) {
+        const auto &value = item.value;
+        alternatives.push_back(value);
+        addresses.emplace_back(value.storage ? value.storage->address :
+            value.scalar_result_address ? value.scalar_result_address : ir_.null_pointer(), item.from);
+        targets.push_back(pointer_flow(value, &item.regions.initialized));
+        permission |= value.read_only;
+        item.value = bits_value(std::move(item.value));
+      }
+      auto result = join_completions(values, at, module_lifetime);
+      return_facts_.push_back({nullptr, std::move(alternatives)});
+      result.scalar_result_origin = return_facts_.size();
+      result.scalar_result_address = ir_.phi(addresses.front().first->getType(), addresses);
+      result.read_only = std::move(permission);
+      pointer_flows_.push_back({std::move(targets)});
+      result.target_flow = pointer_flows_.size() - 1;
+      return result;
+    }
     if (local_bits(completions.front().value.type) &&
         std::any_of(completions.begin(), completions.end(), [](const Completion &completion) { return bool(completion.value.storage); }) &&
         std::any_of(completions.begin(), completions.end(), [](const Completion &completion) { return !completion.value.storage; })) {
@@ -9179,6 +9317,7 @@ class Compiler {
         }
         if (value.type.kind == Type::procedure && expr.declaration_kind == "ref")
           fail(declaration->at, "non-null callable values use func or proc, not ref");
+        resolve_scalar_result(value, declaration->at, true);
         std::optional<Value> owner;
         if (!declaration->owner_name.empty()) {
           const auto found = locals.visible.find(declaration->owner_name);
@@ -10340,6 +10479,8 @@ public:
         pending.base->eraseFromParent();
       }
       resolve_target_initialization();
+      for (const auto &pending : pending_scalar_reads_)
+        ir_.resolve_scalar_read(pending.choice, scalar_result_owner(pending.origin, pending.at).kind != ResultOrigin::Kind::scalar_value);
       resolve_initialization_guarantees();
       // Ownership checks share a closed graph, including selected queue and
       // original-completion paths. No cached guarantee crosses lowering.

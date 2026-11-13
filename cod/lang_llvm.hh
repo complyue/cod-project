@@ -469,6 +469,7 @@ public:
     unsigned context_argument = 0;
     llvm::FunctionType *signature = nullptr;
     bool borrowed_result = false;
+    bool scalar_result = false;
   };
   struct NativeContext {
     unsigned argument = 0;
@@ -507,7 +508,8 @@ public:
     std::vector<size_t> protections;
   };
   llvm::FunctionType *native_signature(const std::vector<Type> &parameters, Type result, bool separate_context = false,
-                                       const std::vector<bool> &borrowed = {}, bool borrowed_result = false) {
+                                       const std::vector<bool> &borrowed = {}, bool borrowed_result = false,
+                                       bool scalar_result = false) {
     std::vector<llvm::Type *> arguments{pointer_type()};
     if (separate_context) arguments.push_back(pointer_type());
     if (result.kind == Type::procedure && !borrowed_result) arguments.push_back(pointer_type());
@@ -515,7 +517,8 @@ public:
       arguments.push_back(!borrowed.empty() && borrowed[i] ? pointer_type() : storage_type(parameters[i]));
     std::vector<llvm::Type *> returned{i64(), exception_payload_type()};
     if (result != Type::void_type && (result.kind != Type::procedure || borrowed_result))
-      returned.push_back(borrowed_result ? pointer_type() : storage_type(result));
+      returned.push_back(borrowed_result ? pointer_type() : scalar_result ?
+          llvm::StructType::get(context(), {storage_type(result), pointer_type()}) : storage_type(result));
     return llvm::FunctionType::get(llvm::StructType::get(context(), returned), arguments, false);
   }
   NativeDefinition indirect_signature(const std::vector<Type> &parameters, Type result, bool checked_null) {
@@ -523,13 +526,38 @@ public:
   }
   NativeDefinition native_declaration(const std::string &name, const std::vector<Type> &parameters, Type result,
                                       bool separate_context = false, const std::vector<bool> &borrowed = {},
-                                      bool borrowed_result = false) {
-    auto *signature = native_signature(parameters, result, separate_context, borrowed, borrowed_result);
+                                      bool borrowed_result = false, bool scalar_result = false) {
+    auto *signature = native_signature(parameters, result, separate_context, borrowed, borrowed_result, scalar_result);
     auto *function = llvm::Function::Create(signature, llvm::GlobalValue::InternalLinkage,
                                            "cod.call." + name, *module_);
     const auto argument = separate_context ? 1u : 0u;
     native_contexts_.emplace(function, NativeContext{argument, {}});
-    return {function, result, true, false, false, {}, argument, nullptr, borrowed_result};
+    return {function, result, true, false, false, {}, argument, nullptr, borrowed_result, scalar_result};
+  }
+  llvm::Value *scalar_result(llvm::Value *payload, llvm::Value *address) {
+    auto *type = llvm::StructType::get(context(), {payload->getType(), pointer_type()});
+    auto *result = b().CreateInsertValue(llvm::PoisonValue::get(type), payload, {0});
+    return b().CreateInsertValue(result, address, {1});
+  }
+  std::pair<llvm::Value *, llvm::Value *> scalar_result_parts(llvm::Value *result) {
+    return {b().CreateExtractValue(result, {0}), b().CreateExtractValue(result, {1})};
+  }
+  std::pair<llvm::Value *, llvm::Instruction *> pending_scalar_read(Type type, llvm::Value *address,
+                                                                   llvm::Value *payload) {
+    auto *pending = b().Insert(new llvm::FreezeInst(llvm::ConstantInt::getFalse(context())), "scalar.result.view");
+    auto *view = label("scalar.result.load"), *value = label("scalar.result.value"), *merge = label("scalar.result.read");
+    choose(pending, view, value);
+    enter(view);
+    auto *loaded = b().CreateLoad(storage_type(type), address);
+    auto *loaded_from = here(); jump(merge);
+    enter(value);
+    auto *value_from = here(); jump(merge);
+    enter(merge);
+    return {phi(storage_type(type), {{loaded, loaded_from}, {payload, value_from}}), pending};
+  }
+  void resolve_scalar_read(llvm::Instruction *pending, bool view) {
+    pending->replaceAllUsesWith(llvm::ConstantInt::get(llvm::Type::getInt1Ty(context()), view));
+    pending->eraseFromParent();
   }
   NativeBody begin_native(NativeDefinition &definition, llvm::BasicBlock *resume = nullptr) {
     NativeBody previous{entry_, b().saveIP(), std::move(cleanups_), std::move(module_regions_),

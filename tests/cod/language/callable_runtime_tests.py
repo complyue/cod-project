@@ -638,6 +638,41 @@ stress();
                                   '6001', '6002', '7001', '7002', '9999'], pointer_output
         pointer_evidence['fixture_sha256'] = hashlib.sha256(pointer_results.read_bytes()).hexdigest()
         evidence['pointer_results'] = pointer_evidence
+        scalar_results = directory / "closures/callable-native-scalar-results.cod"
+        entry.write_text(scalar_results.read_text() + '''
+using "std:exceptions" OutOfMemory;
+func keep(owned region r:Item)->owned region :Item {return r;}
+proc installed()->void {
+  owned region r:Item<-make Item(capacity=256u64){value<-50u64;other<-0u64};
+  effect @arena <-keep(r);
+  proc view=proc()->u64 {return @arena.value;};
+  ref output=view();
+  output<-51u64;
+  behave @print(@arena.value);
+}
+installed();
+proc stress()->void {
+  val target:u64<-1u64;
+  proc source=borrowed;
+  behave @print(6001u64);
+  try {{proc failed=source;}} catch(e:const OutOfMemory) {behave @print(6002u64);};
+  behave @print(7001u64);
+  for(i in 0u64 .. 10000u64) {{ref output=source(target); output<-i;}};
+  behave @print(7002u64);
+  behave @print(target);
+}
+stress();
+''')
+        scalar_harness = 'static void verify_regions();\n' + HARNESS.replace(
+            '  cod_exception_release();', '  verify_regions();\n  cod_exception_release();') + OWNED_REGION_HARNESS.replace(
+            'regions_acquired == 10250 && region_failures == 4', 'regions_acquired == 4 && region_failures == 0')
+        scalar_output, scalar_evidence = run_case(root, toolchain, entry, scratch, scalar_harness,
+            extra_wrappers=wrappers + '#define cod_lang_region_new cod_lang_region_acquire\n')
+        scalar_evidence['regions'] = json.loads(scalar_output.pop())
+        assert scalar_output == ['9', '2', '2', '11', '8', '9', '1.25', '12', '102', '103', '4', '5',
+                                 '33', '32', '33', '51', '6001', '6002', '7001', '7002', '9999'], scalar_output
+        scalar_evidence['fixture_sha256'] = hashlib.sha256(scalar_results.read_bytes()).hexdigest()
+        evidence['scalar_results'] = scalar_evidence
         nullable_views = directory / "closures/callable-nullable-views.cod"
         entry.write_text(nullable_views.read_text() + '''
 using "std:exceptions" OutOfMemory;

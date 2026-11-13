@@ -3545,5 +3545,34 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "read of storage before definite initialization"
+  },
+  {
+    "file": "closures/callable-native-scalar-results.cod",
+    "exit": 0,
+    "stdout": "9\n2\n2\n11\n8\n9\n1.25\n12\n102\n103\n4\n5\n33\n32\n33\n"
+  },
+  {
+    "file": "closures/callable-native-scalar-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-native-scalar-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "regional result would outlive its owning scope"
+  },
+  {
+    "file": "closures/callable-native-scalar-local-escape.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "borrowed value would outlive its lexical storage owner"
+  },
+  {
+    "file": "closures/callable-native-scalar-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "requires the same actual owner"
   }
 ]
