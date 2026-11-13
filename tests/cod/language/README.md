@@ -1,8 +1,10 @@
 # CoD source compiler validation
 
-Reference revision: 221 · Recorded: 2026-11-13 America/Los_Angeles.
+Reference revision: 222 · Recorded: 2026-11-13 America/Los_Angeles.
 
 ## Design authority
+
+- **Loop and cleanup continuity:** [K-598](../../../design/DesignAuthorityRegistry.md#k-598) covers revision222 under D-17/H-304/H-356/H-365 and D-14's initialization contract. The scalar subset preserves once-only bounds, zero-iteration else, explicit scopes, distinct prepared registrations and global LIFO. Acceptance includes native ordering, normal/failure exits, exact release and accumulation costs; iteration effects, regional borrowing and deferred handlers remain outside this implementation coverage. D-21/D-26 preparation/coverage and D-16 numeric boundaries are unchanged.
 
 - **Storage and documentation continuity:** [K-597](../../../design/DesignAuthorityRegistry.md#k-597) covers revision221 under the existing D-14 scalar-storage/qualifier and D-10/D-17 scope contracts. Process tracking is external; this reference owns current capabilities and reproducible checks. No new language or persistent representation contract is introduced.
 
@@ -20,7 +22,11 @@ Local scalar `val` declarations provide independent storage. Default and explici
 
 A `val` may use `make local T` without an initializer and receive a later write. Reads require definite availability and initialization across conservative branch and short-circuit joins. `make local typeof(name)` queries a known local type without reading its payload. `=` on existing val storage remains an error because val has no reference binding to replace. Unsupported reference, capture or owner operations do not fall back to bits copying.
 
-This is a closed source-program slice: there is no external abstract-value ingress. Execution-local scalar tags preserve the supported primitive identities but define no persistent ABI or CoD `<any>` representation. Generic checking retains finite demanded substitutions; runtime recursion adds no bodies. The implementation does not prove the full generic/recursive closure contract. Regional values, ref/ptr local aliasing and rebinding, external-owner parameters, module-local captures, runtime-selected destination views, target-access-qualified overloads, units/fractions, first-class callables, dynamic binding, general module composition, loops, deferred blocks, catch/finally, declared throws and omitted-result inference remain explicit implementation gaps. Voluntary throws contracts are rejected as unsupported, never silently waived.
+Half-open integer `for` and scalar `fold` evaluate bounds once. Bounds currently have matching primitive integer types; fold bodies retain the initial scalar type. The index and accumulator are readonly loop bindings. A range's optional `else` runs only for zero iterations and cannot access its index. Body and else are both checked; feasible normal paths determine post-loop initialization, with literal integer bounds providing empty/nonempty facts. Direct body/else declarations require a nested explicit scope.
+
+Ordinary loop bodies register plain deferred calls to the nearest full scope. Each successful registration owns independent prepared scalar arguments and joins one dynamic LIFO queue. Explicit scopes inside loops drain per iteration; scopes surrounding loops accumulate until exit. Failed preparation registers no action. Allocation failure preserves earlier actions; invocation failure replaces the pending failure while remaining actions run. Execution-local records use the native allocator and are released exactly once. Storage grows with live registrations and argument arity; no regional storage, persistent representation or owning-reference behavior follows from this scalar queue.
+
+This is a closed source-program slice: there is no external abstract-value ingress. Execution-local scalar tags preserve the supported primitive identities but define no persistent ABI or CoD `<any>` representation. Generic checking retains finite demanded substitutions; runtime recursion and loop counts add no bodies. The implementation does not prove the full generic/recursive closure contract. Regional values, ref/ptr local aliasing and rebinding, external-owner parameters, module-local captures, runtime-selected destination views, target-access-qualified overloads, units/fractions, first-class callables, dynamic binding and iteration effects, general module composition, mixed-type range bounds, fold accumulator conversions, deferred blocks, catch/finally, declared throws and omitted-result inference remain explicit implementation gaps. Voluntary throws contracts are rejected as unsupported, never silently waived.
 
 Feature parity and a fully passing legacy suite are not acceptance conditions for this restructuring stage. Supported paths must still behave correctly; missing paths must not be reported as new language prohibitions.
 
@@ -45,9 +51,11 @@ Run the focused source checks:
 ```sh
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-foundation-validation.json python3 tests/cod/language/foundation_tests.py
 COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-storage-validation.json python3 tests/cod/language/storage_tests.py
+COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-loop-validation.json python3 tests/cod/language/loop_tests.py
+COD_TEST_TOOLCHAIN=build COD_LANGUAGE_REPORT=/tmp/cod-loop-runtime-validation.json python3 tests/cod/language/loop_runtime_tests.py
 ```
 
-Both suites exercise default AOT specialization and `--no-specialize` general-only execution, including recursion, overload specificity, independent local operations, preparation/cleanup failures, numeric boundaries and negative checking cases. The foundation suite verifies emitted method/implementation reuse and that analysis executes no runtime effects. The storage suite checks copies, mutation, scope lookup, access permissions and initialization joins. Set `COD_LANGUAGE_REPORT` to a path outside the repository to retain commands, results and source hashes.
+These suites exercise default AOT specialization and `--no-specialize` general-only execution, including recursion, overload specificity, independent local operations, preparation/cleanup failures, numeric boundaries and negative checking cases. The foundation suite verifies emitted method/implementation reuse and that analysis executes no runtime effects. The storage suite checks copies, mutation, scope lookup, access permissions and initialization joins. Loop checks cover once-only bounds, zero-iteration else, folds, initialization and composed return/cleanup paths. Native instrumentation verifies dynamic queue order, release, allocation failure and live/peak record storage; increasing runtime registration counts must preserve the emitted loop body. Set `COD_LANGUAGE_REPORT` to a path outside the repository to retain commands, results and source hashes.
 
 For separate legacy comparison, select fixtures by file stem:
 

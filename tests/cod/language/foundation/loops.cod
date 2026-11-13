@@ -1,0 +1,50 @@
+using symbol "std:io" @print;
+proc observe(x:T) -> void where T { behave @print(x); }
+proc bound(x:i64) -> const i64 { behave @print(x); return x; }
+func last_or(first:i64, last:i64) -> const i64 {
+  val result = make local i64;
+  for (i in first .. last) {{ result <- i; }} else { result <- -1; };
+  return result;
+}
+func sum(first:T, last:T, initial:T) -> const T where T {
+  return fold (i in first .. last, acc = initial) {{ acc + i }};
+}
+proc early() -> const i64 {
+  defer observe(40);
+  for (i in 0 .. 5) {
+    defer observe(i);
+    {{ defer observe(10 + i); if (i == 2) { return i; } else {}; }};
+  };
+  return -1;
+}
+behave @print(last_or(0, 0));
+behave @print(last_or(3, 1));
+behave @print(last_or(0, 4));
+behave @print(sum(0u8, 5u8, 0u8));
+behave @print(sum(0u32, 5u32, 0u32));
+behave @print(sum(0u64, 5u64, 0u64));
+behave @print(sum(-2, 3, 0));
+behave @print(fold (i in 254u8 .. 255u8, n = 0) {{ n + 1 }});
+behave @print(fold (i in 18446744073709551614u64 .. 18446744073709551615u64, n = 0) {{ n + 1 }});
+behave @print(fold (i in 9223372036854775806 .. 9223372036854775807, n = 0) {{ n + 1 }});
+behave @print(fold (i in -9223372036854775808 .. -9223372036854775807, n = 0) {{ n + 1 }});
+behave @print(fold (i in 4 .. 0, n = 7.5f32) {{ n + 1.0f32 }});
+for (i in bound(1) .. bound(3)) { behave @print(i + 10); } else { behave @print(99); };
+{{
+  defer observe(90);
+  for (i in 0 .. 3) {
+    defer observe(i);
+    if (i == 1) { defer observe(50); } else {};
+  };
+  defer observe(91);
+}};
+for (i in 0 .. 3) {{ val copy = i; defer observe(copy); }};
+{{
+  for (i in 0 .. 2) { for (j in 0 .. 2) { defer observe(i * 10 + j); }; };
+}};
+for (i in 2 .. 1) { behave @print(99); } else { defer observe(80); };
+behave @print(early());
+val empty = make local i64, nonempty = make local i64;
+for (i in 2u32 .. 1u32) {{}} else { empty <- 10; };
+for (i in -1 .. 0) {{ nonempty <- 20; }} else {};
+behave @print(empty + nonempty);

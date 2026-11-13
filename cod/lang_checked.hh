@@ -5,6 +5,7 @@
 #include "lang_diagnostics.hh"
 
 #include <charconv>
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <deque>
@@ -24,6 +25,7 @@ struct CheckedOperation {
   Type operand_type;
   std::optional<size_t> callee;
   std::optional<size_t> place;
+  std::optional<size_t> accumulator;
   bool read_only = false;
   bool view = false;
   std::uint64_t integer = 0;
@@ -108,6 +110,23 @@ class ScalarChecker {
       }
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
+  }
+  void leave_scope() {
+    for (const auto &[name, id] : lexical_.scopes.back().bindings) {
+      lexical_.available.erase(id);
+      lexical_.initialized.erase(id);
+    }
+    lexical_.scopes.pop_back();
+  }
+  static std::optional<std::uint64_t> constant_integer(const Expression &expr,
+      const std::map<const Expression *, CheckedOperation> &operations) {
+    const auto &fact = operations.at(&expr);
+    if (expr.kind == Expression::Kind::integer) return fact.integer;
+    if (fact.minimum_literal) return std::uint64_t{1} << 63;
+    if (expr.kind == Expression::Kind::unary && (expr.text == "+" || expr.text == "-"))
+      if (const auto value = constant_integer(*expr.children.front(), operations))
+        return expr.text == "-" ? std::uint64_t{0} - *value : *value;
+    return {};
   }
   Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at) const {
     if (instance) {
@@ -350,14 +369,46 @@ class ScalarChecker {
         exits = exits || operation.type == Type::never;
       }
       if (!expr.children.empty()) view(operations.at(expr.children.back().get()));
-      if (expr.scoped) {
-        for (const auto &[name, id] : lexical_.scopes.back().bindings) {
-          lexical_.available.erase(id);
-          lexical_.initialized.erase(id);
-        }
-        lexical_.scopes.pop_back();
-      }
+      if (expr.scoped) leave_scope();
       if (exits) operation.type = Type::never;
+      break;
+    }
+    case K::range_for: case K::fold: {
+      const bool fold = expr.kind == K::fold;
+      const auto first = child(0), last = child(1);
+      if (!integral(first) || !integral(last)) fail(expr.at, "a range requires integer endpoints");
+      if (first != last) implementation_gap(expr.at, "range endpoints with different integer types");
+      Type accumulator;
+      if (fold) { accumulator = child(2); require_value(accumulator); }
+      const auto before = lexical_;
+      lexical_.scopes.push_back({next_scope_++, {}});
+      operation.place = declare(expr.text, first, true, true, expr.at);
+      lexical_.initialized.insert(*operation.place);
+      if (fold) {
+        operation.accumulator = declare(expr.binding, accumulator, true, true, expr.at);
+        lexical_.initialized.insert(*operation.accumulator);
+      }
+      const auto body = child(fold ? 3 : 2);
+      if (fold && body != Type::never && body != accumulator) {
+        if (widens(body, accumulator)) implementation_gap(expr.at, "fold accumulator conversion");
+        fail(expr.at, "fold body does not satisfy the accumulator type");
+      }
+      leave_scope();
+      const auto body_state = lexical_;
+      lexical_ = before;
+      const auto otherwise = !fold && expr.children.size() == 4 ? child(3) : Type{Type::void_type};
+      const auto empty_state = lexical_;
+      bool body_possible = true, empty_possible = true;
+      const auto start = constant_integer(*expr.children[0], operations), end = constant_integer(*expr.children[1], operations);
+      if (start && end) {
+        body_possible = first == Type::integer ? std::bit_cast<std::int64_t>(*start) < std::bit_cast<std::int64_t>(*end) : *start < *end;
+        empty_possible = !body_possible;
+      }
+      const bool body_exits = !body_possible || body == Type::never;
+      const bool empty_exits = !empty_possible || otherwise == Type::never;
+      join(body_state, body_exits, empty_state, empty_exits, expr.at);
+      operation.type = body_exits && empty_exits ? Type{Type::never} : fold ? accumulator : Type{Type::void_type};
+      operation.operand_type = first;
       break;
     }
     case K::pointer_group: {
