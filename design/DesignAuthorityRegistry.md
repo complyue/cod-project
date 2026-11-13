@@ -1,6 +1,6 @@
 # 设计概念与价值衍生：人类确认权威记录
 
-记录版本：562
+记录版本：563
 
 建立日期：2026-09-17（本文件的事件时间统一使用 UTC）
 纲领：[RegionalSemanticPlatformCharter.md](RegionalSemanticPlatformCharter.md)
@@ -175,6 +175,7 @@ Design authority
 | C-81 | Write-only out reference parameters establish initialized output on normal return; a bare local handle ref declaration allocates uninitialized target storage. | C-65 candidate value P-319; owner/exception/native dependencies P-320 | H-354 proposes this direction for D-20r2's native initialization idiom. Modifier grammar, general declaration applicability, alias/failure postconditions and provider verification remain pending-human. No D-14/D-17 language implementation change is authorized. |
 | C-82 | Callable views preserve a selected family/context and dispatch by actual argument types, including abstract argument/result flows. | Confirmed H-378 charter value P-333 to C-01; confirmed behavioral constraint P-335; dependencies P-338 | H-375 selects dispatcher semantics and direct-method selection only as an optimization. D-21r3/D-15r17/D-10r128 records behavior; representation/ABI, namespace and diagnostic details remain pending. No one-method or one-concrete-result language restriction follows from current implementation limits. |
 | C-83 | WPO/AOT covers the selected composition's admissible leaf-ADT combinations and emits targets/dispatch before execution. | Confirmed H-378 charter value P-334 to C-02; confirmed compilation constraint P-336 on C-82 | H-376 selects AOT coverage, with JIT only a future response to measured combination/code-size growth. D-21r3; closure algorithms, code sharing/pruning representation, revision protocol and future JIT criteria remain pending. |
+| C-84 | Infer implemented method result types as checked signature constraints, independently of native result transport. | Candidate P-356 to C-01/C-06; D-24 document P-357; dependencies P-358 | D-24r1 is pending-human. Existing omitted-result parsing and native limitations are observations; neither H-258 bodyless signatures nor H-343 recursion approves the omitted-result policy or its unresolved cycles. |
 | GOV-01 | 人工确认价值衍生关系后，以合格设计契约委托智能体局部实施。 | §1 原则6、§10 的治理延伸 | H-05 明确授权本治理方向；不扩展产品运行时能力。 |
 | GOV-02 | 保留概念／机制／抽象的关系图、人工证据和延续检查，疑点回到人类。 | §10 的审阅和可靠修改目标 | H-05 明确授权本记录职责。 |
 
@@ -216,7 +217,7 @@ Design authority
 - 本次授权：新增合格设计、局部执行、修改时延续检查、疑点人工再确认，以及概念关系和人工证据维护规则。
 - 排除：不修改纲领目标，不代人类补批现存技术设计，不扩大原有构建／测试权限；状态名、表格和 ID 是实现本要求的记账形式，不伪装成逐项人工审定的产品设计。
 - 修改内容基线：AGENTS blob `90d959803dc464da0a21ef7ba3efbfb26097085a`；本记录使用记录版本 1 及包含它的 Git 提交定位，避免自包含内容哈希。
-- 当前记录维护范围：记录版本 562，延续检查 K-01—K-561；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
+- 当前记录维护范围：记录版本 563，延续检查 K-01—K-562；相对 H-05 基线保持 `continued`。该资格只覆盖治理记录维护，不扩展 D-07 等产品设计的资格；H-254/H-256 另行授权 AGENTS 中未来分数兼容性审查与两项优先前置任务范围，不改变纲领或构建／测试权限。
 
 - H-386 requires user-facing design review by topic, followed by final approval of the complete file; internal IDs remain provenance rather than confirmation prompts. Existing confirmed scopes are not reopened by this presentation rule.
 
@@ -659,6 +660,14 @@ Design authority
 - **Confirmed constraints:** H-201 ordinary results borrow and const bits results are independent; H-272 changes default parameter targets, not result borrowing. H-202/H-273 owners/access, H-313/H-319 lexical storage/scopes, H-361/H-365 completion and H-342 complete callable values remain. P-355 records D-14/D-17/D-18/D-16/D-22 dependencies without extending their authority.
 - **Open topic / impact:** Decide whether a fresh arithmetic result under an ordinary unqualified scalar signature requires a const-result annotation or obtains specified caller-owned storage. Mixed borrowed/fresh bodies need a coherent category/owner rule. Existing fresh-result behavior is observation, not human approval. K-558 corrects native captured borrowing and supports independently qualified native scalar views without resolving fresh or mixed categories. D-18's shared owner/category analysis and established borrowing/const-value work continue; no new owner union, RTTI, hidden allocator, lifetime extension, aggregate ABI or fraction implementation is selected. Unchanged upstream scopes remain qualified only to their existing extent.
 
+<a id="d-24"></a>
+### D-24: Callable result-type inference
+
+- **Contract/status:** [CallableResultInference.md](CallableResultInference.md), revision 1, all sections, `pending-human`. No human-confirmed baseline or implementation delegation. K-562 records the authority audit and proposal; H-386 requires topic discussion and eventual whole-file approval.
+- **Candidate value path:** C-84/P-356 relates complete inferred signature constraints to C-01/C-06 under charter §§2–3/§5.3/§6/§8/§12: readable source can omit redundant type spelling while the semantic graph preserves checked meaning and finite recursive structure. P-357 organizes the document; P-358 records dependencies without qualification.
+- **Constraints / open scope:** H-258 explicit bodyless signatures, H-361/H-362 completion, H-343 recursion, H-201/H-273/H-342 storage/owner/value contracts and H-196 function effects remain. Decide whether implemented named functions may omit result types, then no-anchor recursive cycles, declaration-supplied constraints and abstract-result boundaries. D-23 fresh scalar storage and D-21 actual-type evidence remain separate. Existing parsing, inline execution, previous agent gap lists and green tests do not authorize this new policy.
+- **Impact:** D-10 signatures/type queries and D-18 materialization/native recursion are downstream. D-14/D-17/D-16/D-21/D-22/D-23 constrain acceptance. Existing qualified explicit-result work remains active; no source migration, new inference behavior, RTTI, owner union, lifetime extension or pure/TCO implementation follows from this draft.
+
 The following relationships apply only to the individually recorded scopes and revisions. Current document coverage is maintained in the status entries above; a historical row annotation does not qualify a later revision. P-31 remains rejected. P-69/P-70/P-83 retains its confirmed H-94 local scope; other human constraints and pending candidate paths retain their own recorded status. Dependency edges never confer design authority.
 
 | 边 ID | 子节点与关系 | 父节点／对象 | 候选理由与范围 |
@@ -1027,9 +1036,13 @@ C-17 的功能方向据 H-53/H-55、C-18 据 H-54、C-19 据 H-56—H-58 记录�
 
 | P-354 | D-23 derives-from | C-65 / C-72 / C-54 | Candidate document relationship: make scalar result storage, aliasing and value evaluation explicit so native staging preserves readable, checked business intent (charter §§2–3/§5.3/§6/§8/§12). D-23r2 all sections; pending-human whole-file review. H-201 constrains the topic but does not approve a newly selected fresh-result mechanism. |
 | P-355 | D-23 depends-on | D-14 / D-17 / D-18 / D-16 / D-22 | Existing storage/access/initialization, completion, callable ABI, fixed bits validity and construction boundaries constrain scalar results. D-23r2; dependency only. No authority for caller-result allocation, mixed-owner selection, RTTI, fractions or aggregate ABI follows. |
-
+| P-356 | C-84 derives-from | C-01 / C-06 | Candidate: infer redundant implemented-method result spelling while retaining complete checked signatures, readable source and finite recursive semantic graphs under charter §§2–3/§5.3/§6/§8/§12. D-24r1 all sections; pending-human, with no confirmed inference baseline. |
+| P-357 | D-24 derives-from | C-84 | Candidate document relationship: make optional annotation, cyclic inference, native transport and result-category boundaries reviewable as a whole file. D-24r1; pending-human under H-386 review format. |
+| P-358 | D-24 depends-on | D-10 / D-14 / D-17 / D-18 / D-16 / D-21 / D-22 / D-23 | Selected method/world, storage/access/initialization, completion, complete native values, numerical validity and unresolved dispatch/construction/scalar boundaries constrain inference. D-24r1; dependency only, no qualification of source policy, ABI or ownership. |
 
 ### 影响检索索引
+
+D-24r1/C-84/P-356–P-358 under K-562 → D-10 signature/type queries and D-18 callable/native result staging. Proposed omitted-result inference remains pending-human; existing explicit-result contracts remain qualified within their recorded scopes.
 
 D-23r1/P-354/P-355 under K-556 → D-18 scalar result staging and D-14 result/storage boundaries. H-201 existing borrowed/const-result rules remain confirmed. Fresh unqualified and mixed scalar result mechanisms are pending topic/whole-file review; native captured-scalar alias loss is an implementation defect, not a new rule. D-17/D-16/D-22 dependencies and independent qualified work remain unchanged.
 
@@ -11159,3 +11172,10 @@ Recorded P-353: prefer one coordinated migration without a transition phase, bas
 - Native context reuse uses the existing argument-relative return-origin graph to prove that returned storage does not depend on renamed current owners. It no longer excludes every recorded regional/scalar result. The graph exposes recorded alternatives for provisional recursive comparison separately from partial and complete checking; final reuse resolves the complete evidence. This shares provenance across object/array/whole-region borrows, scalar aliases, nullable targets and independent owning results, retaining the existing category distinction and target/access/initialization proofs. Fresh ordinary scalar behavior remains under D-23 review and is not ratified by this implementation work. The local authority summaries are consolidated without changing their baseline, value path, constraints or acceptance scope.
 - [Verification](../tests/cod/language/callable-borrowed-context-validation.json) covers both recursive branch orders, deferred runtime selection, cleanup-time writes, stable returned aliases, fresh and transferred owning results, nullable forwarding, checked NPE, failure unwind, wrong-owner/readonly/uninitialized rejection, native allocation/release and generated LLVM/native C++ ASAN. Original object/scalar probes that exceeded three seconds now execute with output9. A separate recursive owning-input replacement probe returns28 and existing native cases retain their behavior. Changed escaping owners, inferred signatures, module queues and family/AOT integration remain incomplete. Human and continuity history remains append-only; the full goal stays active.
 - Exact `cmake --build ./build` passes with existing warnings. Compiler `ee7730ae38ab1d9de910d7ed330f555b4e5c5178c133c5d4efeffd3604d7ee7c` passes 609/609 language checks with 699 matching source hashes, 35 native callable cases and 23 native defer cases. All 57 pre-existing native resource counts and LLVM IR/bitcode sizes match. The new case balances 15 callable images with a 208-byte peak and 40,235 regions, preserves the source after an injected copy failure, unwinds an injected region acquisition failure, and performs 10,000 selected recursive calls without image allocation. Generated LLVM/native C++ ASAN passes with 15 instrumented definitions. Recursion depths 4/20/64/200/1000 execute correctly with 15 definitions throughout and approximately 0.040–0.049-second frontend checks under concurrent validation load. All 358 human events and 539 prior continuity events remain unchanged.
+
+### K-562 — Audit omitted callable-result authority and draft a topic review (2026-11-13)
+<a id="k-562"></a>
+
+- Agent governance/editorial continuity, not a human decision. Registry562 →563/D-GOV563 continues H-05 record maintenance. New C-84/P-356/P-357/D-24r1 remains pending-human; P-358 records dependencies only. Reviewed charter §§2–3/§5.3/§6/§8/§12 and H-258/H-343/H-361/H-362 with D-10/D-14/D-17/D-18/D-16/D-21/D-22/D-23 boundaries. No earlier confirmation establishes the specific omitted-result inference policy found in prototype code. This audit does not withdraw independently confirmed explicit-result, storage, completion or recursion requirements.
+- At ed1e40e, the nonrecursive omitted-result regional probe checks; recursive forwarding rejects in approximately0.019 seconds with the inline recursion guard. The parser permits omitted results on implemented named functions, but procedure_type uses a void placeholder and native materialization requires an annotation. These observations motivate discussion and cannot supply design authority. Prior agent lists identifying inferred signatures as remaining work are not human approval of detailed semantics.
+- [CallableResultInference.md](CallableResultInference.md) presents optional inferred method results versus explicit annotations everywhere, then identifies no-anchor cycles, declaration constraints and abstract boundaries. Final approval is by complete file after topic discussion, without internal-ID prompts. Fresh scalar storage, actual-owner alternatives, RTTI, pure/TCO/fractions/compiler pilot and unqualified mechanisms remain excluded. No compiler change or inference implementation follows from this draft; unrelated qualified callable work may continue.
