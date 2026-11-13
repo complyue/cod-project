@@ -3591,5 +3591,22 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-regional-context-results.cod",
+    "exit": 0,
+    "stdout": "30\n99\n40\n62\n62\n80\n99\n1000\n98\n99\n"
+  },
+  {
+    "file": "closures/callable-regional-context-result-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "callable environment owner mismatch"
+  },
+  {
+    "file": "closures/callable-regional-context-result-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
   }
 ]

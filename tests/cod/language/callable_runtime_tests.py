@@ -706,6 +706,42 @@ stress();
                                   '6001', '6002', '51', '7001', '7002', '10051'], context_output
         context_evidence['fixture_sha256'] = hashlib.sha256(regional_context.read_bytes()).hexdigest()
         evidence['regional_context'] = context_evidence
+        context_results = directory / "closures/callable-regional-context-results.cod"
+        entry.write_text(context_results.read_text() + '''
+using "std:exceptions" OutOfMemory;
+proc allocation_failure(region state:Item,n:u64)->func()->const u64 with {region state} {
+  defer {state.value<-state.value+1u64;};
+  if(n==0u64){return leaf(state);}else{};
+  {{
+    effect @arena<-make Item(capacity=if(n==3u64){31337u64}else{256u64}){value<-n};
+    return allocation_failure(state,n-1u64);
+  }}
+}
+proc stress()->void {
+  owned region state:Item<-make Item(capacity=256u64){value<-8u64};
+  effect @arena<-make Item(capacity=256u64){value<-99u64};
+  func result=walk(state,8u64);
+  behave @print(6001u64);
+  try {{func failed=result;}} catch(e:const OutOfMemory){behave @print(6002u64);};
+  try {func failed=allocation_failure(state,8u64);}catch(e:const OutOfMemory){behave @print(result());};
+  behave @print(@arena.value);
+  behave @print(7001u64);
+  for(i in 0u64..10000u64) {{state.value<-result()+1u64;}};
+  behave @print(7002u64);
+  behave @print(result());
+}
+stress();
+''')
+        result_harness = 'static void verify_regions();\n' + HARNESS.replace(
+            '  cod_exception_release();', '  verify_regions();\n  cod_exception_release();') + OWNED_REGION_HARNESS.replace(
+            'regions_acquired == 10250 && region_failures == 4', 'regions_acquired == 135 && region_failures == 1')
+        result_output, result_evidence = run_case(root, toolchain, entry, scratch, result_harness,
+            extra_wrappers=wrappers + '#define cod_lang_region_new cod_lang_region_acquire\n')
+        result_evidence['regions'] = json.loads(result_output.pop())
+        assert result_output == ['30', '99', '40', '62', '62', '80', '99', '1000', '98', '99',
+                                 '6001', '6002', '24', '99', '7001', '7002', '10024'], result_output
+        result_evidence['fixture_sha256'] = hashlib.sha256(context_results.read_bytes()).hexdigest()
+        evidence['regional_context_results'] = result_evidence
         nullable_views = directory / "closures/callable-nullable-views.cod"
         entry.write_text(nullable_views.read_text() + '''
 using "std:exceptions" OutOfMemory;

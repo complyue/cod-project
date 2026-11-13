@@ -1,0 +1,63 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @reader:proc()->const u64;
+func leaf(region state:Item)->func()->const u64 with {region state} {
+  return func [state]()->const u64 {return state.value;};
+}
+proc walk(region state:Item,n:u64)->func()->const u64 with {region state} {
+  defer {state.value<-state.value+1u64;};
+  if(n==0u64){state.value<-state.value+@arena.value;return leaf(state);}else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};return walk(state,n-1u64);}}
+}
+proc reverse(region state:Item,n:u64)->func()->const u64 with {region state} {
+  if(n!=0u64){
+    {{effect @arena<-make Item(capacity=256u64){value<-n};return reverse(state,n-1u64);}}
+  }else{};
+  return leaf(state);
+}
+proc nested(region state:Item,n:u64)->(func()->(func()->const u64 with {region state}) with {region state}) {
+  if(n==0u64){
+    func inner=leaf(state);
+    return func [inner]()->func()->const u64 with {region state} {return inner;};
+  }else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};return nested(state,n-1u64);}}
+}
+proc forward(callback:proc()->const u64,n:u64)->proc()->const u64 {
+  if(n==0u64){return callback;}else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};return forward(callback,n-1u64);}}
+}
+proc failure(region state:Item,n:u64)->func()->const u64 with {region state} {
+  defer {state.value<-state.value+1u64;};
+  if(n==0u64){return leaf(state);}else{};
+  {{effect @arena<-make Item(capacity=if(n==3u64){0u64}else{256u64}){value<-n};return failure(state,n-1u64);}}
+}
+proc run()->void {
+  owned region state:Item<-make Item(capacity=256u64){value<-8u64};
+  effect @arena<-make Item(capacity=256u64){value<-99u64};
+  func result=walk(state,20u64);
+  behave @print(result());
+  behave @print(@arena.value);
+  state.value<-40u64;
+  behave @print(result());
+  for(i in 0u64..2u64) {{
+    proc selected=if(i==0u64){walk}else{reverse};
+    func returned=selected(state,20u64);
+    behave @print(returned());
+  }};
+  func factory=nested(state,20u64);
+  func saved=factory();
+  state.value<-80u64;
+  behave @print(saved());
+  proc callback=proc()->const u64 {return @arena.value;};
+  proc retained=forward(callback,20u64);
+  effect @reader=retained;
+  {{effect @arena<-make Item(capacity=256u64){value<-1000u64};
+    behave @print(perform @reader());
+    behave @print(behave @reader());
+  }};
+  try {func abandoned=failure(state,20u64);}catch(e:const InvalidCapacity){behave @print(state.value);};
+  behave @print(@arena.value);
+}
+run();

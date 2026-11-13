@@ -5759,7 +5759,8 @@ class Compiler {
     }
     // Current regional bindings are invocation inputs. Reuse may rename their
     // live owners, but must preserve alias relationships and checked access.
-    // Escaping results still require their separate owner-substitution proof.
+    // Returned callable images undergo the independent-owner proof below;
+    // other regional results still require their own substitution proof.
     for (const auto &[id, a] : left.environment.bindings) {
       const auto *b = right.environment.lookup(id);
       if (!a->region_id || !b || !b->region_id) continue;
@@ -5767,7 +5768,7 @@ class Compiler {
       if (first != second) {
         if (left.captured || right.captured || left.environment.replay || right.environment.replay ||
             left.environment.captured(id, a) || right.environment.captured(id, b) ||
-            left.record_result || right.record_result || left.result_flow || right.result_flow) return false;
+            left.record_result || right.record_result) return false;
       }
       if (a != b) {
         resolve_region_root(*a->region_id, left.at);
@@ -6071,7 +6072,9 @@ class Compiler {
         }
       }
     }
-    if (!changed_inputs.empty() && (left.result_flow || right.result_flow)) {
+    const bool renamed_regions = std::any_of(regional_owners.begin(), regional_owners.end(),
+        [](const auto &entry) { return entry.first != entry.second; });
+    if ((!changed_inputs.empty() || renamed_regions) && (left.result_flow || right.result_flow)) {
       // A returned environment must not retain substituted scratch owners.
       // Inspect complete nested values and demanded dynamic captures; forwarded
       // equivalent inputs also require dispatch support after this call exits.
@@ -6079,7 +6082,11 @@ class Compiler {
         std::set<const Procedure *> visited;
         const auto check = [&](auto &&self, size_t flow) -> bool {
           const auto choices = callable_choices(flow);
-          if (!choices.closed && !active_native_call(demand)) return false;
+          // An asynchronously checked ancestor can be inactive while its
+          // result still depends on this recursive invocation. Check known
+          // images now; refinement and final reuse require the closed graph.
+          if (!choices.closed && !active_native_call(demand) &&
+              !(recursive && active_native_call(right))) return false;
           for (const auto &source : choices.definitions) {
             if (!visited.insert(source.get()).second) continue;
             if (!source->code) return false;

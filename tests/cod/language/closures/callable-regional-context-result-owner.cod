@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+region symbol @arena:Item;
+proc walk(region state:Item,n:u64)->func()->const u64 with {region state} {
+ if(n==0u64){return func [state]()->const u64 {return state.value;};}else{};
+ {{effect @arena<-make Item(capacity=256u64){value<-n};return walk(@arena,n-1u64);}}
+}
+owned region state:Item<-make Item(capacity=256u64){value<-8u64};
+effect @arena<-make Item(capacity=256u64){value<-99u64};
+func result=walk(state,20u64);
+behave @print(result());
