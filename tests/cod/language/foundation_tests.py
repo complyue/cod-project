@@ -38,11 +38,13 @@ CASES = {
     "function_effect": (PRELUDE + 'func wrong()->void { behave @print(1u64); } wrong();', 2, "", "function cannot invoke a dynamic procedure"),
     "nearest_symbol": (PRELUDE + 'proc wrong(print:u64)->void { behave @print(1u64); } wrong(3u64);', 2, "", "nearest binding 'print' is not a symbol"),
     "nearest_callable": ('func f()->const u64 {return 1u64;} func g(f:u64)->const u64 {return f();} g(1u64);', 2, "", "nearest binding 'f' is not callable"),
-    "unsupported_storage": ('proc go()->void { val x=1u64; } go();', 2, "", "implementation gap"),
+    "local_storage": ('proc go()->void { val x=1u64; } go();', 0, "", ""),
     "unsupported_throws": ('func f(x:T)->const T throws StaticallyUnknownType where T { return x; } f(1u64);', 2, "", "throws contracts"),
     "missing_return_error": ('func f()->const u64 { 3u64 } f();', 2, "", "treated as error"),
     "empty": ("", 0, "", ""),
 }
+CASE_ARGUMENTS = {"missing_return_error": ["-Werror=missing-return"]}
+EXTRA_SOURCES = []
 
 
 def main():
@@ -70,8 +72,7 @@ def main():
                 command = [str(COD), "--run", str(path), "--emit-llvm", str(ir)]
                 if general:
                     command.append("--no-specialize")
-                if name == "missing_return_error":
-                    command.append("-Werror=missing-return")
+                command.extend(CASE_ARGUMENTS.get(name, []))
                 run = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=60)
                 passed = run.returncode == code and run.stdout == stdout and diagnostic in run.stderr
                 if not diagnostic:
@@ -117,8 +118,8 @@ def main():
     count = sum(result["passed"] for result in results)
     print(f"Scalar foundation: {count}/{len(results)} passed")
     if report := os.environ.get("COD_LANGUAGE_REPORT"):
-        sources = [ROOT / "cod" / name for name in ("main.cc", "lang_checked.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_syntax.hh", "lang_exceptions.hh", "lang_native_runtime.hh")]
-        sources += [Path(__file__), *sorted((DIRECTORY / "foundation").glob("*.cod"))]
+        sources = [ROOT / "cod" / name for name in ("main.cc", "lang_checked.hh", "lang_diagnostics.hh", "lang_frontend.hh", "lang_llvm.hh", "lang_syntax.hh", "lang_exceptions.hh", "lang_native_runtime.hh")]
+        sources += [Path(__file__), *EXTRA_SOURCES, *sorted((DIRECTORY / "foundation").glob("*.cod"))]
         evidence = {"recorded_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "toolchain": MODE,
                     "passed": count, "total": len(results), "results": results,
                     "executable_sha256": hashlib.sha256(COD.read_bytes()).hexdigest(),

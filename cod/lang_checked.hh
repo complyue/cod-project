@@ -2,6 +2,7 @@
 #pragma once
 
 #include "lang_syntax.hh"
+#include "lang_diagnostics.hh"
 
 #include <charconv>
 #include <cmath>
@@ -22,9 +23,32 @@ struct CheckedOperation {
   Type type;
   Type operand_type;
   std::optional<size_t> callee;
-  size_t parameter = 0;
+  std::optional<size_t> place;
+  bool read_only = false;
+  bool view = false;
   std::uint64_t integer = 0;
   bool minimum_literal = false;
+  bool initializes = false;
+};
+
+struct CheckedStorage {
+  std::string name;
+  Type type;
+  size_t scope;
+  bool read_only;
+  bool value_binding;
+};
+
+struct LexicalState {
+  struct Scope { size_t id; std::map<std::string, size_t> bindings; };
+  std::vector<Scope> scopes{{0, {}}};
+  std::set<size_t> available, initialized;
+
+  std::optional<size_t> lookup(const std::string &name) const {
+    for (auto scope = scopes.rbegin(); scope != scopes.rend(); ++scope)
+      if (const auto found = scope->bindings.find(name); found != scope->bindings.end()) return found->second;
+    return {};
+  }
 };
 
 // Substitutions are checking obligations, not semantic methods or activation records.
@@ -34,6 +58,7 @@ struct CheckedInstance {
   Type result;
   std::map<const Expression *, CheckedOperation> operations;
   bool complete = false;
+  std::vector<CheckedStorage> storage;
 };
 struct CheckedMethod {
   const Form *source;
@@ -44,15 +69,54 @@ struct CheckedProgram {
   std::deque<CheckedInstance> instances;
   std::map<const Expression *, CheckedOperation> entry;
   std::vector<const Expression *> initializers;
-  std::vector<std::string> warnings;
+  std::vector<WarningDiagnostic> warnings;
+  std::vector<CheckedStorage> entry_storage;
 };
 
 class ScalarChecker {
   CheckedProgram program_;
   std::map<std::string, std::vector<size_t>> families_;
   std::set<std::string> print_symbols_;
+  std::set<std::string> module_values_;
   std::set<size_t> warned_missing_return_;
+  std::set<const Expression *> warned_shadow_;
+  LexicalState lexical_;
+  std::vector<CheckedStorage> *storage_ = nullptr;
+  size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
+
+  size_t declare(const std::string &name, const Type &type, bool read_only, bool value_binding, const Location &at) {
+    auto &scope = lexical_.scopes.back();
+    if (scope.bindings.contains(name)) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
+    const auto id = storage_->size();
+    storage_->push_back({name, type, scope.id, read_only, value_binding});
+    scope.bindings.emplace(name, id);
+    lexical_.available.insert(id);
+    return id;
+  }
+  static std::set<size_t> intersect(const std::set<size_t> &a, const std::set<size_t> &b) {
+    std::set<size_t> result;
+    for (const auto id : a) if (b.contains(id)) result.insert(id);
+    return result;
+  }
+  void join(const LexicalState &a, bool a_exits, const LexicalState &b, bool b_exits, const Location &at) {
+    lexical_ = a;
+    for (size_t i = 0; i < b.scopes.size(); ++i)
+      for (const auto &[name, id] : b.scopes[i].bindings) {
+        auto [found, inserted] = lexical_.scopes[i].bindings.emplace(name, id);
+        if (!inserted && found->second != id) fail(at, "duplicate declaration of '" + name + "' in one lexical scope");
+      }
+    lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
+    lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
+  }
+  Type resolve_local_type(const Type &type, const CheckedInstance *instance, const Location &at) const {
+    if (instance) {
+      const auto &method = *program_.methods[instance->method].source;
+      if (const auto index = binder(method, type)) return (*match(method, instance->arguments))[*index];
+    }
+    if (!scalar_type(type)) implementation_gap(at, "non-scalar local storage type '" + type_name(type) + "'");
+    return type;
+  }
 
   static std::optional<size_t> binder(const Form &method, const Type &type) {
     if (type.kind != Type::named) return {};
@@ -112,7 +176,7 @@ class ScalarChecker {
         implementation_gap(at, "result type parameter is not determined by the scalar arguments");
     }
     const auto id = program_.instances.size();
-    program_.instances.push_back({method, arguments, result, {}, false});
+    program_.instances.push_back({method, arguments, result, {}, false, {}});
     definition.instances.push_back(id);
     return id;
   }
@@ -136,14 +200,22 @@ class ScalarChecker {
     return demand(best.front(), arguments, expr.at);
   }
   Type check(const Expression &expr, CheckedInstance *instance,
-             std::map<const Expression *, CheckedOperation> &operations) {
+             std::map<const Expression *, CheckedOperation> &operations, bool read = true) {
     using K = Expression::Kind;
     CheckedOperation operation;
-    const auto child = [&](size_t i) { return check(*expr.children.at(i), instance, operations); };
+    const auto child = [&](size_t i, bool read_value = true) { return check(*expr.children.at(i), instance, operations, read_value); };
+    const auto view = [&](const CheckedOperation &source) {
+      operation.place = source.place;
+      operation.view = source.view;
+      operation.read_only = source.read_only;
+    };
     const auto require_value = [&](const Type &type) {
       if (!scalar_type(type)) implementation_gap(expr.at, "non-scalar or abruptly completing operand");
     };
     const auto &method = instance ? program_.methods[instance->method].source : nullptr;
+    if (instance && !lexical_.lookup(expr.text) && module_values_.contains(expr.text) &&
+        (expr.kind == K::name || expr.kind == K::call || expr.kind == K::perform || expr.kind == K::behave))
+      implementation_gap(expr.at, "module-local binding lookup and capture in callable bodies");
     if (expr.spread) implementation_gap(expr.at, "spread arguments");
     switch (expr.kind) {
     case K::integer: {
@@ -174,16 +246,15 @@ class ScalarChecker {
     }
     case K::boolean: operation.type = Type::boolean; operation.integer = expr.text == "true"; break;
     case K::name: {
-      if (method) {
-        const auto parameter = std::find_if(method->parameters.begin(), method->parameters.end(),
-            [&](const Parameter &value) { return value.name == expr.text; });
-        if (parameter != method->parameters.end()) {
-          operation.parameter = static_cast<size_t>(parameter - method->parameters.begin());
-          operation.type = instance->arguments[operation.parameter];
-          break;
-        }
-      }
-      fail(expr.at, "unknown scalar value '" + expr.text + "'");
+      const auto binding = lexical_.lookup(expr.text);
+      if (!binding) fail(expr.at, "unknown scalar value '" + expr.text + "'");
+      if (!lexical_.available.contains(*binding)) fail(expr.at, "binding '" + expr.text + "' is not available on every reaching path");
+      if (read && !lexical_.initialized.contains(*binding)) fail(expr.at, "read of '" + expr.text + "' before definite initialization");
+      operation.place = binding;
+      operation.type = (*storage_)[*binding].type;
+      operation.read_only = (*storage_)[*binding].read_only;
+      operation.view = true;
+      break;
     }
     case K::unary: {
       if (expr.text == "-" && expr.children.front()->kind == K::integer) {
@@ -205,9 +276,13 @@ class ScalarChecker {
       break;
     }
     case K::binary: {
-      const auto left = child(0), right = child(1);
-      require_value(left); require_value(right);
       const bool logical = expr.text == "&&" || expr.text == "||";
+      const auto left = child(0);
+      const auto before_right = lexical_;
+      const auto right = child(1);
+      const auto after_right = lexical_;
+      if (logical) join(before_right, false, after_right, right == Type::never, expr.at);
+      require_value(left); require_value(right);
       const bool equality = expr.text == "==" || expr.text == "!=";
       const bool comparison = equality || expr.text == "<" || expr.text == ">" || expr.text == "<=" || expr.text == ">=";
       if (logical || (equality && left == Type::boolean && right == Type::boolean)) {
@@ -224,8 +299,7 @@ class ScalarChecker {
       break;
     }
     case K::call: {
-      if (method && std::any_of(method->parameters.begin(), method->parameters.end(),
-          [&](const Parameter &parameter) { return parameter.name == expr.text; }))
+      if (lexical_.lookup(expr.text))
         fail(expr.at, "nearest binding '" + expr.text + "' is not callable");
       std::vector<Type> arguments;
       for (size_t i = 0; i < expr.children.size(); ++i) { arguments.push_back(child(i)); require_value(arguments.back()); }
@@ -237,8 +311,7 @@ class ScalarChecker {
       break;
     }
     case K::behave: case K::perform: {
-      if (method && std::any_of(method->parameters.begin(), method->parameters.end(),
-          [&](const Parameter &parameter) { return parameter.name == expr.text; }))
+      if (lexical_.lookup(expr.text))
         fail(expr.at, "nearest binding '" + expr.text + "' is not a symbol");
       if (!print_symbols_.contains(expr.text)) implementation_gap(expr.at, "dynamic procedure call other than selected std:io print");
       if (method && method->kind == Form::Kind::function) fail(expr.at, "a function cannot invoke a dynamic procedure");
@@ -249,19 +322,109 @@ class ScalarChecker {
     }
     case K::conditional: {
       if (child(0) != Type::boolean) fail(expr.at, "if condition requires bool");
-      const auto yes = child(1), no = child(2);
+      const auto before = lexical_;
+      const auto yes = child(1, read);
+      const auto yes_state = lexical_;
+      lexical_ = before;
+      const auto no = child(2, read);
+      const auto no_state = lexical_;
+      join(yes_state, yes == Type::never, no_state, no == Type::never, expr.at);
       if (yes == Type::never) operation.type = no;
       else if (no == Type::never || yes == no) operation.type = yes;
       else implementation_gap(expr.at, "conditional join with different scalar result types");
+      const auto &yes_fact = operations.at(expr.children[1].get()), &no_fact = operations.at(expr.children[2].get());
+      if (yes == Type::never) view(no_fact);
+      else if (no == Type::never) view(yes_fact);
+      else {
+        operation.view = yes_fact.view || no_fact.view;
+        operation.read_only = yes_fact.read_only || no_fact.read_only;
+        if (yes_fact.place == no_fact.place) operation.place = yes_fact.place;
+      }
       break;
     }
     case K::block: {
+      if (expr.scoped) lexical_.scopes.push_back({next_scope_++, {}});
       bool exits = false;
       for (size_t i = 0; i < expr.children.size(); ++i) {
-        operation.type = child(i);
+        operation.type = child(i, i + 1 == expr.children.size() ? read : true);
         exits = exits || operation.type == Type::never;
       }
+      if (!expr.children.empty()) view(operations.at(expr.children.back().get()));
+      if (expr.scoped) {
+        for (const auto &[name, id] : lexical_.scopes.back().bindings) {
+          lexical_.available.erase(id);
+          lexical_.initialized.erase(id);
+        }
+        lexical_.scopes.pop_back();
+      }
       if (exits) operation.type = Type::never;
+      break;
+    }
+    case K::pointer_group: {
+      if (expr.declaration_kind != "val") implementation_gap(expr.at, "reference bindings and alias lifetime tracking");
+      for (const auto &declaration : expr.children) {
+        if (declaration->kind == K::block) { check(*declaration, instance, operations); continue; }
+        if (!declaration->owner_name.empty()) fail(declaration->at, "val storage belongs to its lexical scope, not an external owner");
+        const auto &initializer = *declaration->children.front();
+        Type initial_type;
+        bool initialized = true;
+        if (initializer.kind == K::make_local) {
+          if (initializer.annotation) initial_type = resolve_local_type(*initializer.annotation, instance, initializer.at);
+          else {
+            const auto &query = *initializer.children.front();
+            if (query.kind != K::name) implementation_gap(query.at, "typeof on a non-name local initializer");
+            const auto binding = lexical_.lookup(query.text);
+            if (!binding) fail(query.at, "unknown value in typeof: '" + query.text + "'");
+            initial_type = (*storage_)[*binding].type;
+          }
+          const size_t value_index = initializer.annotation ? 0 : 1;
+          initialized = initializer.children.size() > value_index;
+          if (initialized) {
+            const auto value_type = check(*initializer.children[value_index], instance, operations);
+            if (!widens(value_type, initial_type)) fail(initializer.at, "initializer does not satisfy local storage type");
+          }
+          CheckedOperation allocation;
+          allocation.type = initial_type;
+          allocation.initializes = initialized;
+          operations[&initializer] = allocation;
+        } else initial_type = check(initializer, instance, operations);
+        require_value(initial_type);
+        const auto type = declaration->annotation ? resolve_local_type(*declaration->annotation, instance, declaration->at) : initial_type;
+        if (!widens(initial_type, type)) fail(declaration->at, "initializer does not satisfy declared val type");
+        if (lexical_.lookup(declaration->text) && !lexical_.scopes.back().bindings.contains(declaration->text) &&
+            warned_shadow_.insert(declaration.get()).second)
+          program_.warnings.push_back({Warning::shadow, declaration->at, "declaration shadows outer binding '" + declaration->text + "'"});
+        const auto id = declare(declaration->text, type, declaration->read_only || expr.fixed_binding, true, declaration->at);
+        if (initialized) lexical_.initialized.insert(id);
+        CheckedOperation binding;
+        binding.place = id;
+        binding.operand_type = type;
+        binding.initializes = initialized;
+        operations[declaration.get()] = binding;
+      }
+      break;
+    }
+    case K::transfer: case K::rebind: {
+      const auto destination = child(0, false);
+      const auto &target = operations.at(expr.children[0].get());
+      if (!target.view) fail(expr.at, "assignment requires a storage destination");
+      if (!target.place) implementation_gap(expr.at, "assignment through a runtime-selected storage view");
+      const auto id = *target.place;
+      const auto &storage = (*storage_)[id];
+      if (std::none_of(lexical_.scopes.begin(), lexical_.scopes.end(),
+          [&](const LexicalState::Scope &scope) { return scope.id == storage.scope; }))
+        fail(expr.at, "assignment destination's lexical owner has ended");
+      if (expr.kind == K::rebind) {
+        if (storage.value_binding) fail(expr.at, "val storage has no reference binding; use '<-' for bits transfer");
+        implementation_gap(expr.at, "reference rebinding and alias lifetime tracking");
+      }
+      if (target.read_only) fail(expr.at, "cannot write through a readonly destination");
+      const auto source = child(1);
+      if (!widens(source, destination)) fail(expr.at, "bits transfer source does not satisfy destination type");
+      lexical_.initialized.insert(id);
+      operation.type = operation.operand_type = destination;
+      operation.place = id;
+      operation.read_only = operation.view = true;
       break;
     }
     case K::return_value: {
@@ -306,8 +469,7 @@ public:
       std::set<std::string> names;
       for (const auto &parameter : form->parameters) {
         if (!names.insert(parameter.name).second) fail(parameter.at, "duplicate parameter name");
-        if (parameter.variadic || parameter.automatic_conversion || !parameter.owner.empty() ||
-            (!parameter.declaration_kind.empty() && parameter.declaration_kind != "val"))
+        if (parameter.variadic || parameter.automatic_conversion || !parameter.owner.empty())
           implementation_gap(parameter.at, "variadic, conversion or borrowed parameter contract");
         signature_type(*form, parameter.type, parameter.at);
       }
@@ -316,7 +478,12 @@ public:
       const auto id = program_.methods.size();
       for (const auto other : families_[form->name]) {
         const auto &definition = *program_.methods[other].source;
-        if (implies(*form, definition) && implies(definition, *form)) fail(form->at, "duplicate method signature for '" + form->name + "'");
+        if (implies(*form, definition) && implies(definition, *form)) {
+          for (size_t p = 0; p < form->parameters.size(); ++p)
+            if (form->parameters[p].read_only != definition.parameters[p].read_only)
+              implementation_gap(form->at, "target-access-qualified overload selection");
+          fail(form->at, "duplicate method signature for '" + form->name + "'");
+        }
         if (definition.kind != form->kind) implementation_gap(form->at, "mixed function/procedure family");
       }
       program_.methods.push_back({form.get(), {}});
@@ -331,13 +498,26 @@ public:
       for (const auto &parameter : method.parameters) arguments.push_back(parameter.type);
       demand(i, arguments, method.at);
     }
+    storage_ = &program_.entry_storage;
+    lexical_ = {};
+    next_scope_ = 1;
     for (const auto *expr : program_.initializers) check(*expr, nullptr, program_.entry);
+    for (const auto &[name, id] : lexical_.scopes.front().bindings) module_values_.insert(name);
     for (size_t i = 0; i < program_.instances.size(); ++i) {
       auto &instance = program_.instances[i];
       const auto &method = *program_.methods[instance.method].source;
+      storage_ = &instance.storage;
+      lexical_ = {};
+      next_scope_ = 1;
+      for (size_t p = 0; p < method.parameters.size(); ++p) {
+        const auto &parameter = method.parameters[p];
+        const bool value = parameter.declaration_kind == "val";
+        const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
+        lexical_.initialized.insert(id);
+      }
       const auto completion = check(*method.body, &instance, instance.operations);
       if (instance.result != Type::void_type && completion != Type::never && warned_missing_return_.insert(instance.method).second)
-        program_.warnings.push_back(location_text(method.at) + ": warning: callable may finish without an explicit return [-Wmissing-return]");
+        program_.warnings.push_back({Warning::missing_return, method.at, "callable may finish without an explicit return"});
       instance.complete = true;
     }
     return std::move(program_);

@@ -17,6 +17,7 @@
 #include <llvm/TargetParser/Host.h>
 
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
@@ -36,6 +37,7 @@ class LLVMEmission {
   std::vector<llvm::Function *> general_, specialized_;
   std::vector<const std::map<const Expression *, CheckedOperation> *> facts_;
   std::vector<llvm::Value *> arguments_;
+  std::vector<llvm::AllocaInst *> storage_;
   llvm::Function *function_ = nullptr;
   llvm::BasicBlock *finish_ = nullptr;
   llvm::AllocaInst *result_ = nullptr, *category_ = nullptr, *site_ = nullptr, *fatal_ = nullptr, *exit_ = nullptr;
@@ -285,18 +287,21 @@ class LLVMEmission {
       b_.SetInsertPoint(next);
     }
   }
-  llvm::Value *sequence(const std::vector<const Expression *> &expressions) {
+  llvm::Value *sequence(const std::vector<const Expression *> &expressions, bool read_last = true) {
     llvm::Value *value = empty_scalar();
-    for (const auto *expr : expressions) { if (!reachable()) break; value = emit_expression(*expr); }
+    for (size_t i = 0; i < expressions.size(); ++i) {
+      if (!reachable()) break;
+      value = emit_expression(*expressions[i], i + 1 == expressions.size() ? read_last : true);
+    }
     return value;
   }
   llvm::Value *full_scope(const std::vector<const Expression *> &expressions, bool callable,
-                          const Location &at, bool returns_value = false) {
+                          const Location &at, bool returns_value = false, bool read_last = true) {
     Scope scope{scope_, block("scope.cleanup"), {}};
     scope_ = &scope;
     for (const auto *expr : expressions) collect_deferred(*expr, scope);
     auto *saved = slot(scalar_, "scope.value");
-    auto *value = sequence(expressions);
+    auto *value = sequence(expressions, read_last);
     if (reachable()) {
       b_.CreateStore(value, saved);
       if (callable && returns_value) fail_path(ExceptionCategory::missing_return, at);
@@ -309,7 +314,7 @@ class LLVMEmission {
     b_.SetInsertPoint(continuation);
     return load(saved);
   }
-  llvm::Value *emit_expression(const Expression &expr) {
+  llvm::Value *emit_expression(const Expression &expr, bool read = true) {
     using K = Expression::Kind;
     const auto &fact = facts_.front()->at(&expr);
     switch (expr.kind) {
@@ -321,7 +326,7 @@ class LLVMEmission {
       if (text.find_first_of(".eE") == std::string::npos) text += ".0";
       return pack(llvm::ConstantFP::get(native_type(fact.type), text), fact.type);
     }
-    case K::name: return arguments_[fact.parameter];
+    case K::name: return read ? load(storage_.at(*fact.place)) : empty_scalar();
     case K::unary: {
       if (fact.minimum_literal) return pack(integer(std::uint64_t{1} << 63), Type::integer);
       auto *argument = emit_expression(*expr.children.front());
@@ -373,7 +378,7 @@ class LLVMEmission {
       std::vector<std::pair<llvm::Value *, llvm::BasicBlock *>> incoming;
       for (size_t i = 1; i < 3; ++i) {
         b_.SetInsertPoint(i == 1 ? yes : no);
-        auto *value = emit_expression(*expr.children[i]);
+        auto *value = emit_expression(*expr.children[i], read);
         if (reachable()) { incoming.emplace_back(value, b_.GetInsertBlock()); b_.CreateBr(join); }
       }
       b_.SetInsertPoint(join);
@@ -385,9 +390,41 @@ class LLVMEmission {
     case K::block: {
       std::vector<const Expression *> expressions;
       for (const auto &child : expr.children) expressions.push_back(child.get());
-      auto *value = expr.scoped ? full_scope(expressions, false, expr.at) : sequence(expressions);
+      auto *value = expr.scoped ? full_scope(expressions, false, expr.at, false, read) : sequence(expressions, read);
       if (fact.type == Type::never && reachable()) { b_.CreateUnreachable(); return nullptr; }
       return value;
+    }
+    case K::pointer_group: {
+      for (const auto &declaration : expr.children) {
+        if (declaration->kind == K::block) {
+          emit_expression(*declaration);
+          if (!reachable()) return nullptr;
+          continue;
+        }
+        const auto &binding = facts_.front()->at(declaration.get());
+        if (!binding.initializes) continue;
+        const auto *initializer = declaration->children.front().get();
+        if (initializer->kind == K::make_local)
+          initializer = initializer->children[initializer->annotation ? 0 : 1].get();
+        auto *value = emit_expression(*initializer);
+        if (!reachable()) return nullptr;
+        value = choose(*declaration, {value}, choices(*declaration, {initializer}), scalar_, [&](const Choice &choice) {
+          return pack(convert(value, choice.inputs.front(), choice.operation->operand_type), choice.operation->operand_type);
+        });
+        b_.CreateStore(value, storage_.at(*binding.place));
+      }
+      return empty_scalar();
+    }
+    case K::transfer: {
+      emit_expression(*expr.children[0], false);
+      if (!reachable()) return nullptr;
+      auto *value = emit_expression(*expr.children[1]);
+      if (!reachable()) return nullptr;
+      value = choose(expr, {value}, choices(expr, {expr.children[1].get()}), scalar_, [&](const Choice &choice) {
+        return pack(convert(value, choice.inputs.front(), choice.operation->operand_type), choice.operation->operand_type);
+      });
+      b_.CreateStore(value, storage_.at(*fact.place));
+      return read ? value : empty_scalar();
     }
     case K::return_value: {
       llvm::Value *value = empty_scalar();
@@ -422,7 +459,7 @@ class LLVMEmission {
     return llvm::Function::Create(llvm::FunctionType::get(outcome_, std::vector<llvm::Type *>(arity, scalar_), false),
         llvm::GlobalValue::InternalLinkage, name, module_);
   }
-  void begin(llvm::Function *function) {
+  void begin(llvm::Function *function, const std::vector<CheckedStorage> &storage) {
     function_ = function; arguments_.clear();
     for (auto &argument : function->args()) arguments_.push_back(&argument);
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr;
@@ -431,9 +468,12 @@ class LLVMEmission {
     exit_ = slot(b_.getInt8Ty(), "completion.kind");
     b_.CreateStore(empty_scalar(), result_); b_.CreateStore(integer(0), category_);
     b_.CreateStore(integer(0), site_); b_.CreateStore(null_pointer(), fatal_); b_.CreateStore(b_.getInt8(0), exit_);
+    storage_.clear();
+    for (const auto &binding : storage) storage_.push_back(slot(scalar_, binding.name + ".storage"));
+    for (size_t i = 0; i < arguments_.size(); ++i) b_.CreateStore(arguments_[i], storage_[i]);
   }
   void body(llvm::Function *function, const CheckedMethod &method, std::optional<size_t> instance) {
-    begin(function); facts_.clear();
+    begin(function, program_->instances[instance ? *instance : method.instances.front()].storage); facts_.clear();
     if (instance) facts_.push_back(&program_->instances[*instance].operations);
     else {
       llvm::Value *admitted = b_.getFalse();
@@ -448,9 +488,7 @@ class LLVMEmission {
           integer(site(method.source->at)), null_pointer()));
       b_.SetInsertPoint(valid);
     }
-    std::vector<const Expression *> expressions;
-    for (const auto &expr : method.source->body->children) expressions.push_back(expr.get());
-    full_scope(expressions, true, method.source->at, *method.source->result_type != Type::void_type);
+    full_scope({method.source->body.get()}, true, method.source->at, *method.source->result_type != Type::void_type);
     b_.SetInsertPoint(finish_);
     b_.CreateRet(outcome(load(result_), load(category_), load(site_), load(fatal_)));
   }
@@ -506,7 +544,7 @@ public:
       if (specialize) for (const auto id : method.instances) body(specialized_[id], method, id);
     }
     auto *main = llvm::Function::Create(llvm::FunctionType::get(b_.getInt32Ty(), false), llvm::GlobalValue::ExternalLinkage, "main", module_);
-    begin(main); facts_ = {&program.entry}; full_scope(program.initializers, true, Location{});
+    begin(main, program.entry_storage); facts_ = {&program.entry}; full_scope(program.initializers, true, Location{});
     b_.SetInsertPoint(finish_);
     auto *fatal = block("fatal"), *exception = block("exception"), *normal = block("normal");
     b_.CreateCondBr(b_.CreateICmpNE(load(fatal_), null_pointer()), fatal, exception);

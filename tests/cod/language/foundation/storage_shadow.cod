@@ -1,0 +1,8 @@
+using symbol "std:io" @print;
+val x:u64 <- 10u64;
+{{
+  val x = x + 1u64, y = x, { x <- x + 1u64; };
+  behave @print(x);
+  behave @print(y);
+}};
+behave @print(x);
