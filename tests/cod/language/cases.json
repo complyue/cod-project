@@ -3608,5 +3608,28 @@
     "exit": 2,
     "stdout": "",
     "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-regional-context-borrows.cod",
+    "exit": 0,
+    "stdout": "29\n1\n40\n62\n63\n70\n71\n22\n80\n81\ntrue\n82\n88\n99\n90\n91\n"
+  },
+  {
+    "file": "closures/callable-regional-borrow-readonly.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "cannot transfer into a read-only destination view"
+  },
+  {
+    "file": "closures/callable-regional-borrow-owner.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "borrowed control-flow results require one storage owner and reference category"
+  },
+  {
+    "file": "closures/callable-regional-borrow-uninitialized.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": "read of storage before definite initialization"
   }
 ]

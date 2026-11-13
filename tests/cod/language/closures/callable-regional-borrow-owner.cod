@@ -1,0 +1,11 @@
+using symbol "std:io" @print;
+data Item{value:u64;}
+region symbol @arena:Item;
+proc view(region state:Item,n:u64)->Item in state {
+ if(n==0u64){return root(@arena);}else{};
+ {{effect @arena<-make Item(capacity=256u64){value<-n};return view(state,n-1u64);}}
+}
+owned region state:Item<-make Item(capacity=256u64){value<-8u64};
+effect @arena<-make Item(capacity=256u64){value<-99u64};
+ref result=view(state,20u64);
+result.value<-9u64;

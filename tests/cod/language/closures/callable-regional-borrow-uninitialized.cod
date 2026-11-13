@@ -1,0 +1,15 @@
+using symbol "std:io" @print;
+using "std:exceptions" NullPointerException;
+data Item{value:u64;}
+region symbol @arena:Item;
+proc view(ptr v:u64 in o,n:u64)->ptr u64 in o where {owner o} {
+ if(n==0u64){return v;}else{};
+ {{effect @arena<-make Item(capacity=256u64){value<-n};return view(v,n-1u64);}}
+}
+proc run()->void {
+ ref v=make local u64;
+ effect @arena<-make Item(capacity=256u64){value<-99u64};
+ ptr result=view(v,20u64);
+ try {behave @print(result);}catch(e:const NullPointerException){behave @print(0u64);};
+}
+run();

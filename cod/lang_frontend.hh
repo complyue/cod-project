@@ -1615,13 +1615,14 @@ class Compiler {
   };
   using ResultOrigins = std::set<ResultOrigin>;
   enum class ResultQuery { borrowed_owner, owning_owner, scalar };
+  enum class ResultEvidence { complete, partial, recorded };
   ResultOrigin storage_origin(const Value &value) const {
     if (value.region_id) return {ResultOrigin::Kind::region, region_source(*value.region_id)};
     if (value.storage && value.storage->scope) return {ResultOrigin::Kind::lexical, *value.storage->scope};
     return {ResultOrigin::Kind::no_owner};
   }
   ResultOrigins return_origins(size_t origin, ResultQuery query, const Location &at,
-                                       bool complete, const std::set<size_t> &inputs = {}) {
+                              ResultEvidence evidence, const std::set<size_t> &inputs = {}) {
     // Summaries are relative to argument roles. A recursive adapter's first
     // caller does not fix the identities of subsequent callers' storage.
     using Kind = ResultOrigin::Kind;
@@ -1629,7 +1630,8 @@ class Compiler {
     std::map<const NativeCallDemand *, ResultOrigins> summaries;
     const auto owning = query == ResultQuery::owning_owner;
     const auto returns = [&](size_t id) -> const std::vector<Value> & {
-      if (complete) return checked_returns(id, at);
+      if (evidence == ResultEvidence::recorded) return return_facts_.at(id - 1).alternatives;
+      if (evidence == ResultEvidence::complete) return checked_returns(id, at);
       try { return checked_returns(id, at); }
       catch (const UnresolvedAccess &) { return return_facts_.at(id - 1).alternatives; }
     };
@@ -1715,19 +1717,20 @@ class Compiler {
     return result;
   }
   std::optional<size_t> returned_owner(size_t origin, const std::set<size_t> &inputs, const Location &at) {
-    const auto result = return_origins(origin, ResultQuery::owning_owner, at, true, inputs);
+    const auto result = return_origins(origin, ResultQuery::owning_owner, at, ResultEvidence::complete, inputs);
     if (result.size() != 1 || result.begin()->kind != ResultOrigin::Kind::region) return {};
     return result.begin()->identity;
   }
   size_t borrowed_region_owner(size_t origin, const Location &at, bool complete) {
-    const auto result = return_origins(origin, ResultQuery::borrowed_owner, at, complete);
+    const auto result = return_origins(origin, ResultQuery::borrowed_owner, at,
+        complete ? ResultEvidence::complete : ResultEvidence::partial);
     if (result.empty()) throw UnresolvedAccess(at);
     if (result.size() != 1 || result.begin()->kind != ResultOrigin::Kind::region)
       fail(at, "native borrowed results with different actual region owners need further owner-selection support");
     return result.begin()->identity;
   }
   ResultOrigin scalar_result_owner(size_t origin, const Location &at) {
-    const auto origins = return_origins(origin, ResultQuery::scalar, at, true);
+    const auto origins = return_origins(origin, ResultQuery::scalar, at, ResultEvidence::complete);
     if (origins.empty()) throw UnresolvedAccess(at);
     if (origins.size() != 1)
       fail(at, "native ordinary scalar results with mixed value/view categories or actual owners need further result-staging support");
@@ -1739,7 +1742,7 @@ class Compiler {
     if (!value.scalar_result_origin) return;
     ResultOrigin owner;
     try {
-      const auto origins = return_origins(value.scalar_result_origin, ResultQuery::scalar, at, true);
+      const auto origins = return_origins(value.scalar_result_origin, ResultQuery::scalar, at, ResultEvidence::complete);
       if (origins.empty()) throw UnresolvedAccess(at);
       if (origins.size() != 1) {
         if (required) (void)scalar_result_owner(value.scalar_result_origin, at);
@@ -1750,7 +1753,7 @@ class Compiler {
         fail(at, "native scalar view has no resolved storage owner");
     }
     catch (const UnresolvedAccess &) {
-      const auto origins = return_origins(value.scalar_result_origin, ResultQuery::scalar, at, false);
+      const auto origins = return_origins(value.scalar_result_origin, ResultQuery::scalar, at, ResultEvidence::partial);
       if (origins.size() != 1 || origins.begin()->kind == ResultOrigin::Kind::no_owner || origins.begin()->kind == ResultOrigin::Kind::scalar_value) {
         if (required) fail(at, "native scalar reference storage still depends on an unfinished result flow");
         return;
@@ -1854,7 +1857,7 @@ class Compiler {
     if (value.scalar_result_origin) {
       const auto state = flow_state();
       deferred_checks_.push_back({[this, origin = value.scalar_result_origin, scopes = scopes_, live = state.live, at] {
-        for (const auto owner : return_origins(origin, ResultQuery::borrowed_owner, at, true)) {
+        for (const auto owner : return_origins(origin, ResultQuery::borrowed_owner, at, ResultEvidence::complete)) {
           if (owner.kind == ResultOrigin::Kind::lexical && (owner.identity >= scopes.size() || !scopes[owner.identity])) return true;
           if (owner.kind == ResultOrigin::Kind::region && (owner.identity >= live.size() || !live[owner.identity])) return true;
         }
@@ -5759,16 +5762,14 @@ class Compiler {
     }
     // Current regional bindings are invocation inputs. Reuse may rename their
     // live owners, but must preserve alias relationships and checked access.
-    // Returned callable images undergo the independent-owner proof below;
-    // other regional results still require their own substitution proof.
+    // Returned values undergo the independent-owner proofs below.
     for (const auto &[id, a] : left.environment.bindings) {
       const auto *b = right.environment.lookup(id);
       if (!a->region_id || !b || !b->region_id) continue;
       const auto first = identity(*a->region_id), second = identity(*b->region_id);
       if (first != second) {
         if (left.captured || right.captured || left.environment.replay || right.environment.replay ||
-            left.environment.captured(id, a) || right.environment.captured(id, b) ||
-            left.record_result || right.record_result) return false;
+            left.environment.captured(id, a) || right.environment.captured(id, b)) return false;
       }
       if (a != b) {
         resolve_region_root(*a->region_id, left.at);
@@ -6074,6 +6075,19 @@ class Compiler {
     }
     const bool renamed_regions = std::any_of(regional_owners.begin(), regional_owners.end(),
         [](const auto &entry) { return entry.first != entry.second; });
+    if (renamed_regions) {
+      const bool provisional = recursive && active_native_call(right);
+      for (const auto *demand : {&left, &right}) if (demand->record_result) {
+        // Observing an in-progress recursive result must not demand more
+        // checking. The final comparison resolves its complete provenance.
+        const auto query = demand->definition.scalar_result ? ResultQuery::scalar : ResultQuery::borrowed_owner;
+        const auto origins = return_origins(demand->record_result, query, demand->at,
+            provisional ? ResultEvidence::recorded : ResultEvidence::complete);
+        for (const auto &owner : origins)
+          if (owner.kind == ResultOrigin::Kind::no_owner ||
+              (owner.kind == ResultOrigin::Kind::region && !same_region(owner.identity, owner.identity))) return false;
+      }
+    }
     if ((!changed_inputs.empty() || renamed_regions) && (left.result_flow || right.result_flow)) {
       // A returned environment must not retain substituted scratch owners.
       // Inspect complete nested values and demanded dynamic captures; forwarded

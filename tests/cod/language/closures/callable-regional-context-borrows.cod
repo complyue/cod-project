@@ -1,0 +1,94 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+using "std:exceptions" NullPointerException;
+data Item{value:u64;other:u64;}
+array Values[u64]:u64;
+region symbol @arena:Item;
+proc record(region state:Item,n:u64)->Item {
+ defer {state.value<-state.value+1u64;};
+ if(n==0u64){state.other<-@arena.value;return root(state);}else{};
+ {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return record(state,n-1u64);}}
+}
+proc reverse(region state:Item,n:u64)->Item {
+ if(n!=0u64){
+  {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return reverse(state,n-1u64);}}
+ }else{};
+ return root(state);
+}
+proc whole(region state:Item,n:u64)->region :Item {
+ if(n==0u64){return state;}else{};
+ {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return whole(state,n-1u64);}}
+}
+proc array_view(values:Values in r,n:u64)->Values where {region r:Item} {
+ if(n!=0u64){
+  {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return array_view(values,n-1u64);}}
+ }else{};
+ return values;
+}
+proc scalar_view(v:u64 in o,n:u64)->u64 where {owner o} {
+ defer {v<-v+1u64;};
+ if(n==0u64){return v;}else{};
+ {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return scalar_view(v,n-1u64);}}
+}
+proc nullable(ptr v:u64 in o,n:u64)->ptr u64 in o where {owner o} {
+ if(n!=0u64){
+  {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return nullable(v,n-1u64);}}
+ }else{};
+ return v;
+}
+proc failure(region state:Item,n:u64)->Item {
+ defer {state.value<-state.value+1u64;};
+ if(n==0u64){return root(state);}else{};
+ {{effect @arena<-make Item(capacity=if(n==3u64){0u64}else{256u64}){value<-n;other<-0u64};return failure(state,n-1u64);}}
+}
+proc fresh_owner(n:u64)->owned region :Item {
+ if(n==0u64){return make Item(capacity=256u64){value<-90u64;other<-0u64};}else{};
+ {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return fresh_owner(n-1u64);}}
+}
+proc relay_owner(owned region state:Item,n:u64)->owned region :Item {
+ if(n!=0u64){
+  {{effect @arena<-make Item(capacity=256u64){value<-n;other<-0u64};return relay_owner(state,n-1u64);}}
+ }else{};
+ return state;
+}
+proc run()->void {
+ owned region state:Item<-make Item(capacity=2048u64){value<-8u64;other<-0u64};
+ effect @arena<-make Item(capacity=256u64){value<-99u64;other<-0u64};
+ ref result=record(state,20u64);
+ behave @print(result.value);
+ behave @print(result.other);
+ result.value<-40u64;
+ behave @print(state.value);
+ for(i in 0u64..2u64) {{
+  proc selected=if(i==0u64){record}else{reverse};
+  defer {{ref returned=selected(state,20u64);returned.value<-returned.value+1u64;behave @print(state.value);}};
+ }};
+ region owner=whole(state,20u64);
+ owner.value<-70u64;
+ behave @print(result.value);
+ ref values=alloc state Values(3u64,1u64);
+ ref entries=array_view(values,20u64);
+ entries[2u64]<-71u64;
+ behave @print(values[2u64]);
+ val value:u64<-1u64;
+ ref alias=scalar_view(value,20u64);
+ behave @print(alias);
+ alias<-80u64;
+ behave @print(value);
+ ptr present=nullable(value,20u64);
+ try {present<-81u64;{};}catch(e:const NullPointerException){behave @print(9001u64);};
+ behave @print(value);
+ ptr absent=value;
+ absent=null;
+ ptr missing=nullable(absent,20u64);
+ behave @print(isnull(missing));
+ try {val ignored=missing;}catch(e:const NullPointerException){behave @print(82u64);};
+ try {ref failed_record=failure(state,20u64);}catch(e:const InvalidCapacity){behave @print(result.value);};
+ behave @print(@arena.value);
+ owned region delivered:Item<-fresh_owner(20u64);
+ behave @print(delivered.value);
+ owned region transferred:Item<-relay_owner(delivered,20u64);
+ transferred.value<-91u64;
+ behave @print(transferred.value);
+}
+run();
