@@ -812,6 +812,45 @@ stress();
                                    '6001', '6002', '50', '50', '7001', '7002', '10050'], snapshot_output
         snapshot_evidence['fixture_sha256'] = hashlib.sha256(snapshot_demand.read_bytes()).hexdigest()
         evidence['regional_snapshot_demand'] = snapshot_evidence
+        for suffix, expected, regions, region_failures in (
+                ('recursion', ['102', '100', '500', '100', '101'], 43, 1),
+                ('mutual', ['1', '2', '99'], 42, 0),
+                ('group', ['1', '99'], 42, 0)):
+            captured = directory / f"closures/callable-captured-regional-{suffix}.cod"
+            source = captured.read_text()
+            if suffix == 'recursion':
+                source = source.replace('InvalidCapacity', 'OutOfMemory').replace(
+                    'if(n==3u64){0u64}', 'if(n==3u64){31337u64}')
+            else:
+                source += '\nusing "std:exceptions" OutOfMemory;\n'
+            entry.write_text(source + '''
+region symbol @stress_arena:Item;
+symbol @stress_step:proc(u64)->const u64;
+proc stress()->void {
+  effect @stress_arena<-make Item(capacity=256u64){value<-50u64};
+  proc stable=proc(n:u64)->const u64{return @stress_arena.value;};
+  effect @stress_step=stable;
+  behave @print(6001u64);
+  try {{proc failed=stable;}}catch(e:const OutOfMemory){behave @print(6002u64);};
+  behave @print(perform @stress_step(0u64));
+  behave @print(7001u64);
+  for(i in 0u64..10000u64) {{@stress_arena.value<-@stress_arena.value+1u64;perform @stress_step(0u64);}};
+  behave @print(7002u64);
+  behave @print(perform @stress_step(0u64));
+}
+stress();
+''')
+            captured_harness = 'static void verify_regions();\n' + HARNESS.replace(
+                '  cod_exception_release();', '  verify_regions();\n  cod_exception_release();') + OWNED_REGION_HARNESS.replace(
+                'regions_acquired == 10250 && region_failures == 4',
+                f'regions_acquired == {regions} && region_failures == {region_failures}')
+            captured_output, captured_evidence = run_case(root, toolchain, entry, scratch, captured_harness,
+                extra_wrappers=wrappers + '#define cod_lang_region_new cod_lang_region_acquire\n')
+            captured_evidence['regions'] = json.loads(captured_output.pop())
+            assert captured_output == expected + ['6001', '6002', '50', '7001', '7002', '10050'], captured_output
+            captured_evidence['fixture_sha256'] = hashlib.sha256(captured.read_bytes()).hexdigest()
+            captured_evidence['executed_source_sha256'] = hashlib.sha256(entry.read_bytes()).hexdigest()
+            evidence['captured_regional_' + suffix] = captured_evidence
         nullable_views = directory / "closures/callable-nullable-views.cod"
         entry.write_text(nullable_views.read_text() + '''
 using "std:exceptions" OutOfMemory;

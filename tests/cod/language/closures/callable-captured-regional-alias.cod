@@ -1,0 +1,21 @@
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @other:Item;
+symbol @step:proc(u64)->const u64;
+func same(a:Item in o,b:Item in o)->const u64 where {owner o} {return a.value+b.value;}
+proc walk(n:u64)->const u64 {
+  if(n==0u64){return same(root(@arena),@other);}else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};
+    proc next=proc(n:u64)->const u64{return walk(n);};
+    effect @step=next;
+    return perform @step(n-1u64);
+  }}
+}
+proc run()->void {
+  effect @arena<-make Item(capacity=256u64){value<-99u64};
+  effect @other=root(@arena);
+  proc initial=proc(n:u64)->const u64{return walk(n);};
+  effect @step=initial;
+  perform @step(20u64);
+}
+run();

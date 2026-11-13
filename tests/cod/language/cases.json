@@ -3684,5 +3684,29 @@
       "regional value requires a live owning region in this caller scope",
       "note: the referenced region was acquired here"
     ]
+  },
+  {
+    "file": "closures/callable-captured-regional-recursion.cod",
+    "exit": 0,
+    "stdout": "102\n100\n500\n100\n101\n"
+  },
+  {
+    "file": "closures/callable-captured-regional-mutual.cod",
+    "exit": 0,
+    "stdout": "1\n2\n99\n"
+  },
+  {
+    "file": "closures/callable-captured-regional-group.cod",
+    "exit": 0,
+    "stdout": "1\n99\n"
+  },
+  {
+    "file": "closures/callable-captured-regional-alias.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "owner 'o' requires the same actual owner for 'same'",
+      "note: signature declared here"
+    ]
   }
 ]
