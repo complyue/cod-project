@@ -63,6 +63,8 @@ struct LexicalState {
   struct Scope { size_t id; std::map<std::string, size_t> bindings; bool declarations = true; };
   std::vector<Scope> scopes{{0, {}}};
   std::set<size_t> available, initialized;
+  std::map<size_t, std::set<size_t>> input_initialized{{0, {}}};
+  std::map<size_t, std::uint64_t> requirements;
   std::map<size_t, std::set<size_t>> exceptions;
   std::map<size_t, size_t> queues{{0, 0}};
   std::uint64_t inputs = 1;
@@ -127,6 +129,8 @@ class ScalarChecker {
   CleanupEquations cleanup_;
   size_t cleanup_scope_ = 0;
   const Expression *prepared_call_ = nullptr;
+  std::set<size_t> deferred_inputs_;
+  std::vector<Location> read_sites_;
   bool delayed_ = false;
   size_t next_scope_ = 1;
   static constexpr size_t instance_limit = 4096;
@@ -150,6 +154,23 @@ class ScalarChecker {
     for (const auto id : a) if (b.contains(id)) result.insert(id);
     return result;
   }
+  static std::vector<size_t> inputs(std::uint64_t mask) {
+    std::vector<size_t> result;
+    for (size_t i = 0; i <= exception_categories.size(); ++i) if (mask & (std::uint64_t{1} << i)) result.push_back(i);
+    return result;
+  }
+  void initialize(size_t id) {
+    lexical_.initialized.insert(id);
+    for (const auto input : inputs(lexical_.inputs)) lexical_.input_initialized[input].insert(id);
+  }
+  static void refresh_initialized(LexicalState &state) {
+    bool first = true;
+    for (const auto input : inputs(state.inputs)) {
+      const auto &known = state.input_initialized.at(input);
+      state.initialized = first ? known : intersect(state.initialized, known);
+      first = false;
+    }
+  }
   void join(const LexicalState &a, bool a_exits, const LexicalState &b, bool b_exits, const Location &at) {
     a_exits = a_exits || !a.live;
     b_exits = b_exits || !b.live;
@@ -161,19 +182,31 @@ class ScalarChecker {
       }
     lexical_.available = a_exits ? b.available : b_exits ? a.available : intersect(a.available, b.available);
     lexical_.initialized = a_exits ? b.initialized : b_exits ? a.initialized : intersect(a.initialized, b.initialized);
+    lexical_.input_initialized = a_exits ? b.input_initialized : a.input_initialized;
+    lexical_.requirements = a_exits ? b.requirements : a.requirements;
+    if (!a_exits && !b_exits) {
+      for (const auto input : inputs(b.inputs)) {
+        auto &known = lexical_.input_initialized[input];
+        known = a.inputs & (std::uint64_t{1} << input) ? intersect(known, b.input_initialized.at(input)) : b.input_initialized.at(input);
+      }
+      for (const auto &[read, mask] : b.requirements) lexical_.requirements[read] |= mask;
+    }
     lexical_.exceptions = a_exits ? b.exceptions : a.exceptions;
     if (!a_exits && !b_exits) for (const auto &[id, categories] : b.exceptions)
       lexical_.exceptions[id].insert(categories.begin(), categories.end());
     lexical_.queues = a_exits ? b.queues : a.queues;
     if (!a_exits && !b_exits) for (const auto &[scope, queue] : b.queues)
-      lexical_.queues[scope] = cleanup_.join(lexical_.queues.at(scope), queue);
+      if (lexical_.queues.at(scope) != queue)
+        lexical_.queues[scope] = cleanup_.join(cleanup_.known(lexical_.queues.at(scope), a.initialized), cleanup_.known(queue, b.initialized));
     lexical_.inputs = a_exits ? b.inputs : b_exits ? a.inputs : a.inputs | b.inputs;
     lexical_.live = !a_exits || !b_exits;
+    refresh_initialized(lexical_);
   }
   void leave_scope() {
     for (const auto &[name, id] : lexical_.scopes.back().bindings) {
       lexical_.available.erase(id);
       lexical_.initialized.erase(id);
+      for (auto &[input, initialized] : lexical_.input_initialized) initialized.erase(id);
       loop_controls_.erase(id);
       lexical_.exceptions.erase(id);
     }
@@ -200,6 +233,7 @@ class ScalarChecker {
       for (const auto &[name, id] : state.scopes.back().bindings) {
         state.available.erase(id);
         state.initialized.erase(id);
+        for (auto &[input, initialized] : state.input_initialized) initialized.erase(id);
         state.exceptions.erase(id);
       }
       state.queues.erase(state.scopes.back().id);
@@ -219,10 +253,23 @@ class ScalarChecker {
       std::vector<Completion> inputs;
       if (path.exceptions.empty()) inputs.push_back(path.completion);
       else for (const auto category : path.exceptions) inputs.push_back({3 + category, path.completion.returned});
-      for (const auto input : inputs) for (const auto encoded : cleanup_.apply(queue, input)) {
+      for (const auto input : inputs) for (const auto &[encoded, effects] : cleanup_.apply(queue, input))
+          for (const auto origin : ScalarChecker::inputs(path.state.inputs)) {
         const auto completion = Completion::from(encoded);
         auto state = path.state;
-        if (queue) for (auto &[id, categories] : state.exceptions)
+        state.inputs = std::uint64_t{1} << origin;
+        state.initialized = path.state.input_initialized.at(origin);
+        for (auto &[read, mask] : state.requirements) mask &= state.inputs;
+        for (const auto read : effects.reads) {
+          const auto binding = cleanup_.binding(read);
+          if (state.initialized.contains(binding)) continue;
+          if (!delayed_ || !deferred_inputs_.contains(binding))
+            fail(read_sites_.at(read), "cannot prove initialization of '" + (*storage_)[binding].name + "' for deferred read");
+          state.requirements[read] |= state.inputs;
+        }
+        for (const auto id : effects.initialized) if (state.available.contains(id)) state.initialized.insert(id);
+        state.input_initialized = {{origin, state.initialized}};
+        if (cleanup_.has_actions(queue)) for (auto &[id, categories] : state.exceptions)
           if (!(*storage_)[id].read_only) categories = exception_possibilities((*storage_)[id].type);
         state.queues[scope] = 0;
         if (!completion.reason) {
@@ -365,9 +412,11 @@ class ScalarChecker {
     if (expr.kind == Expression::Kind::deferred) {
       for (size_t category = 1; category < exception_categories.size(); ++category) {
         auto state = lexical_; state.inputs = std::uint64_t{1} << category;
+        state.input_initialized = {{category, state.initialized}};
         incoming.paths.push_back({std::move(state), {category}, expr.at, Completion::failure(category)});
       }
       auto state = lexical_; state.inputs = std::uint64_t{1} << exception_categories.size();
+      state.input_initialized = {{exception_categories.size(), state.initialized}};
       incoming.paths.push_back({std::move(state), {}, expr.at, {2, false}});
     }
     abrupt_ = &incoming;
@@ -413,7 +462,7 @@ class ScalarChecker {
       lexical_.scopes.push_back({next_scope_++, {}});
       const auto id = declare(handler.text, type, true, true, handler.at);
       lexical_.scopes.back().declarations = false;
-      lexical_.initialized.insert(id);
+      initialize(id);
       lexical_.exceptions[id] = categories.empty() ? exception_possibilities(type) : categories;
       auto active = caught_; caught_ = id; catch_bindings_.insert(id);
       caught_inputs_[id] = std::move(category_inputs);
@@ -470,7 +519,9 @@ class ScalarChecker {
     if (cleanup != Type::never) {
       for (const auto *paths : {&outgoing.paths, &control_inputs}) for (const auto &path : *paths) {
         lexical_ = finalizer ? final_state : path.state;
-        lexical_.inputs = path.state.inputs;
+        lexical_.inputs = finalizer ? path.state.inputs & final_state.inputs : path.state.inputs;
+        lexical_.live = lexical_.live && lexical_.inputs;
+        refresh_initialized(lexical_);
         note_abrupt(path.at, path.exceptions, path.completion);
       }
     }
@@ -486,6 +537,11 @@ class ScalarChecker {
       lexical_.initialized.insert(normal.initialized.begin(), normal.initialized.end());
       lexical_.inputs = normal.inputs;
       lexical_.live = normal.live;
+      for (const auto input : inputs(normal.inputs)) {
+        const auto &known = normal.input_initialized.at(input);
+        lexical_.input_initialized[input].insert(known.begin(), known.end());
+      }
+      refresh_initialized(lexical_);
     }
     if (cleanup == Type::never || normals.empty()) lexical_.live = false;
     CheckedOperation result;
@@ -555,8 +611,15 @@ class ScalarChecker {
       if (delayed_controls_.contains(*binding)) fail(expr.at, "a deferred block cannot capture loop-control binding '" + expr.text + "'");
       const bool captured = capture_catch(*binding);
       if (read && !lexical_.initialized.contains(*binding)) {
-        if (delayed_) implementation_gap(expr.at, "deferred read requires initialization proved before registration");
-        fail(expr.at, "read of '" + expr.text + "' before definite initialization");
+        std::uint64_t missing = 0;
+        for (const auto input : inputs(lexical_.inputs))
+          if (!lexical_.input_initialized.at(input).contains(*binding)) missing |= std::uint64_t{1} << input;
+        if (missing) {
+          if (!delayed_ || !deferred_inputs_.contains(*binding)) fail(expr.at, "read of '" + expr.text + "' before definite initialization");
+          const auto obligation = cleanup_.read(*binding);
+          read_sites_.push_back(expr.at);
+          lexical_.requirements[obligation] |= missing;
+        }
       }
       operation.place = binding;
       operation.type = (*storage_)[*binding].type;
@@ -716,11 +779,11 @@ class ScalarChecker {
         if (!(*storage_)[id].read_only) categories = exception_possibilities((*storage_)[id].type);
       lexical_.scopes.push_back({next_scope_++, {}});
       operation.place = declare(expr.text, first, true, true, expr.at);
-      lexical_.initialized.insert(*operation.place);
+      initialize(*operation.place);
       loop_controls_.insert(*operation.place);
       if (fold) {
         operation.accumulator = declare(expr.binding, accumulator, true, true, expr.at);
-        lexical_.initialized.insert(*operation.accumulator);
+        initialize(*operation.accumulator);
         lexical_.exceptions[*operation.accumulator] = exception_possibilities(accumulator);
         loop_controls_.insert(*operation.accumulator);
       }
@@ -731,7 +794,8 @@ class ScalarChecker {
       }
       leave_scope();
       const auto body_state = lexical_;
-      if (body != Type::never && lexical_.live) cleanup_.backedge(header, lexical_.queues.at(cleanup_scope_));
+      if (body != Type::never && lexical_.live)
+        cleanup_.backedge(header, cleanup_.known(lexical_.queues.at(cleanup_scope_), lexical_.initialized));
       lexical_ = before;
       lexical_.live = lexical_.live && empty_possible;
       const auto otherwise = !fold && expr.children.size() == 4 ? child(3) : Type{Type::void_type};
@@ -780,7 +844,7 @@ class ScalarChecker {
             warned_shadow_.insert(declaration.get()).second)
           program_.warnings.push_back({Warning::shadow, declaration->at, "declaration shadows outer binding '" + declaration->text + "'"});
         const auto id = declare(declaration->text, type, declaration->read_only || expr.fixed_binding, true, declaration->at);
-        if (initialized) lexical_.initialized.insert(id);
+        if (initialized) initialize(id);
         if (type.kind == Type::exception) lexical_.exceptions[id] = initialized ? operations.at(&initializer).exceptions : exception_possibilities(type);
         CheckedOperation binding;
         binding.place = id;
@@ -807,7 +871,7 @@ class ScalarChecker {
       if (target.read_only) fail(expr.at, "cannot write through a readonly destination");
       const auto source = child(1);
       if (!transfers_bits(source, destination)) fail(expr.at, "bits transfer source does not satisfy destination type");
-      lexical_.initialized.insert(id);
+      initialize(id);
       operation.type = operation.operand_type = destination;
       operation.place = id;
       operation.read_only = operation.view = true;
@@ -870,11 +934,15 @@ class ScalarChecker {
         CatchCapture captures{captures_, catch_bindings_, {}};
         captures_ = &captures;
         const auto was_delayed = delayed_;
+        const auto previous_inputs = deferred_inputs_;
         auto *outer = abrupt_;
         delayed_controls_.insert(loop_controls_.begin(), loop_controls_.end());
         delayed_ = true;
+        deferred_inputs_ = before.available;
         lexical_.queues[cleanup_scope_] = 0;
         lexical_.inputs = 1;
+        lexical_.input_initialized = {{0, lexical_.initialized}};
+        lexical_.requirements.clear();
         lexical_.live = true;
         AbruptFlow flow{lexical_.scopes.size(), {}};
         abrupt_ = &flow;
@@ -883,9 +951,14 @@ class ScalarChecker {
         if (completed != Type::never && lexical_.live) flow.paths.push_back({lexical_, {}, expr.at, {0, false}});
         for (const auto &path : flow.paths) {
           const auto queue = path.state.queues.at(cleanup_scope_);
-          if (path.exceptions.empty()) summary.paths.push_back({path.state.inputs, path.completion, queue});
-          else for (const auto category : path.exceptions)
-            summary.paths.push_back({path.state.inputs, {3 + category, path.completion.returned}, queue});
+          for (const auto input : inputs(path.state.inputs)) {
+            const auto selected = std::uint64_t{1} << input;
+            CleanupEquations::Effects effects{{}, path.state.input_initialized.at(input)};
+            for (const auto &[read, mask] : path.state.requirements) if (mask & selected) effects.reads.insert(read);
+            if (path.exceptions.empty()) summary.paths.push_back({selected, path.completion, queue, effects});
+            else for (const auto category : path.exceptions)
+              summary.paths.push_back({selected, {3 + category, path.completion.returned}, queue, effects});
+          }
         }
         lexical_ = before;
         caught_inputs_ = std::move(caught_inputs);
@@ -893,6 +966,7 @@ class ScalarChecker {
         operation.captures = std::move(captures.required);
         captures_ = captures.parent;
         delayed_ = was_delayed;
+        deferred_inputs_ = previous_inputs;
         abrupt_ = outer;
       } else {
         const auto *prepared = prepared_call_;
@@ -1002,13 +1076,14 @@ public:
       storage_ = &instance.storage;
       lexical_ = {};
       cleanup_ = {};
+      read_sites_.clear();
       cleanup_scope_ = 0;
       next_scope_ = 1;
       for (size_t p = 0; p < method.parameters.size(); ++p) {
         const auto &parameter = method.parameters[p];
         const bool value = parameter.declaration_kind == "val";
         const auto id = declare(parameter.name, instance.arguments[p], parameter.read_only || (value && parameter.fixed_binding), value, parameter.at);
-        lexical_.initialized.insert(id);
+        initialize(id);
         lexical_.exceptions[id] = exception_possibilities(instance.arguments[p]);
       }
       AbruptFlow flow{1, {}};

@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <set>
 #include <utility>
@@ -24,16 +25,48 @@ struct Completion {
 class CleanupEquations {
   static_assert(exception_categories.size() < 64);
 public:
-  struct Path { std::uint64_t inputs; Completion completion; size_t queue; };
+  struct Effects { std::set<size_t> reads, initialized; };
+  struct Path { std::uint64_t inputs; Completion completion; size_t queue; Effects effects{}; };
   struct Action { bool guarded = false; std::vector<Path> paths; };
 private:
-  struct Queue { std::vector<size_t> previous; std::optional<size_t> action; };
+  struct Queue { std::vector<size_t> previous; std::optional<size_t> action; std::set<size_t> initialized{}; };
   std::vector<Queue> queues_{{}};
   std::vector<Action> actions_;
   static constexpr size_t states = 2 * (3 + exception_categories.size());
-  using Relation = std::vector<std::set<size_t>>;
+  std::vector<size_t> reads_;
+  using Relation = std::vector<std::map<size_t, Effects>>;
   std::vector<Relation> solved_;
+  Effects compose(const Effects &first, const Effects &second) const {
+    auto result = first;
+    for (const auto read : second.reads)
+      if (!first.initialized.contains(reads_.at(read))) result.reads.insert(read);
+    result.initialized.insert(second.initialized.begin(), second.initialized.end());
+    return result;
+  }
+  static bool merge(std::map<size_t, Effects> &result, size_t completion, const Effects &effects) {
+    auto [found, inserted] = result.try_emplace(completion, effects);
+    if (inserted) return true;
+    auto &known = found->second;
+    const auto previous_reads = known.reads.size(), previous_initialized = known.initialized.size();
+    known.reads.insert(effects.reads.begin(), effects.reads.end());
+    std::erase_if(known.initialized, [&](size_t id) { return !effects.initialized.contains(id); });
+    return previous_reads != known.reads.size() || previous_initialized != known.initialized.size();
+  }
 public:
+  size_t read(size_t binding) { solved_.clear(); reads_.push_back(binding); return reads_.size() - 1; }
+  size_t binding(size_t read) const { return reads_.at(read); }
+  bool has_actions(size_t queue) const {
+    std::set<size_t> seen;
+    std::vector<size_t> pending{queue};
+    while (!pending.empty()) {
+      const auto id = pending.back(); pending.pop_back();
+      if (!seen.insert(id).second) continue;
+      const auto &node = queues_.at(id);
+      if (node.action) return true;
+      pending.insert(pending.end(), node.previous.begin(), node.previous.end());
+    }
+    return false;
+  }
   size_t action() { solved_.clear(); actions_.push_back({}); return actions_.size() - 1; }
   void define(size_t id, Action action) { solved_.clear(); actions_.at(id) = std::move(action); }
   size_t push(size_t previous, size_t action) {
@@ -43,14 +76,18 @@ public:
     if (a == b) return a;
     solved_.clear(); queues_.push_back({{a, b}, {}}); return queues_.size() - 1;
   }
+  size_t known(size_t queue, const std::set<size_t> &initialized) {
+    if (initialized.empty()) return queue;
+    solved_.clear(); queues_.push_back({{queue}, {}, initialized}); return queues_.size() - 1;
+  }
   size_t header(size_t entry) {
     solved_.clear(); queues_.push_back({{entry}, {}}); return queues_.size() - 1;
   }
   void backedge(size_t header, size_t body) { solved_.clear(); queues_.at(header).previous.push_back(body); }
-  const std::set<size_t> &apply(size_t queue, Completion input) {
+  const std::map<size_t, Effects> &apply(size_t queue, Completion input) {
     if (solved_.empty()) {
       solved_.assign(queues_.size(), Relation(states));
-      for (size_t state = 0; state < states; ++state) solved_[0][state].insert(state);
+      for (size_t state = 0; state < states; ++state) solved_[0][state].emplace(state, Effects{});
       bool changed;
       do {
         changed = false;
@@ -58,11 +95,9 @@ public:
           const auto &node = queues_[id];
           for (size_t state = 0; state < states; ++state) {
             auto &result = solved_[id][state];
-            const auto add = [&](const std::set<size_t> &values) {
-              for (const auto value : values) changed = result.insert(value).second || changed;
-            };
             if (!node.action) {
-              for (const auto previous : node.previous) add(solved_[previous][state]);
+              for (const auto previous : node.previous) for (const auto &[value, effects] : solved_[previous][state])
+                changed = merge(result, value, compose({{}, node.initialized}, effects)) || changed;
               continue;
             }
             const auto &action = actions_.at(*node.action);
@@ -76,8 +111,11 @@ public:
                 next = action.guarded && incoming.reason >= 2 ?
                     Completion{incoming.returned ? size_t{1} : size_t{0}, incoming.returned} : incoming;
               } else if (next.reason != 1) next.returned = next.returned || incoming.returned;
-              for (const auto intermediate : solved_[path.queue][next.index()])
-                add(solved_[node.previous.front()][intermediate]);
+              for (const auto &[intermediate, nested] : solved_[path.queue][next.index()]) {
+                const auto invoked = compose(path.effects, nested);
+                for (const auto &[value, previous] : solved_[node.previous.front()][intermediate])
+                  changed = merge(result, value, compose(invoked, previous)) || changed;
+              }
             }
           }
         }
