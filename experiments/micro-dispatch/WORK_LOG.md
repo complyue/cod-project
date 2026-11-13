@@ -49,10 +49,14 @@ Before execution, `ninja -C build -n -d explain` showed 10 existing incremental 
 | Discriminating native and persistence observations | The final run covers the central paths and intended negative cases, including separately prepared worlds over unchanged bytes. Generated operations and trusted primitives are identified. Passed. |
 | No unresolved obstacle defeats the claimed scope | Finite coverage is bounded and rejects exhausted proofs; required runtime paths are implemented. Runtime checks, carrier/catalog costs and coverage fragmentation remain explicit. General generic closure and production interfaces are excluded rather than claimed solved. Passed for the bounded scope. |
 | Coherent design and authority | D-21r7 replaces the execution architecture; D-25r11 and directly affected references agree. H-396/H-397 preserve the actual instructions, and K-585 records scoped continuity under the charter. Production qualification is not inferred from prototype success or merge. Passed. |
-| Candidate build, evidence and safe ancestry | Focused checks and the exact repository build passed. Source/snapshot hashes, history preservation, branch ancestry, local links and whitespace are audited before committing. Main must still match the recorded baseline at merge. The receipt records the resulting commits. |
+| Candidate build, evidence and safe ancestry | Focused checks and the exact repository build passed. Source/snapshot hashes, history preservation, branch ancestry, local links and whitespace audits passed. Main matched the recorded baseline at merge; the merge tree exactly matched the validated candidate. Passed. |
 
 No observed major obstacle defeats this explicitly delivered scope. The authorized merge includes the replacement design, bounded prototype and evidence; it does not claim a full CoD compiler or permanent identity/ABI/compatibility protocol. There is no throughput or universal code-size claim. Full generic closure, inferred owner/effect checking, arbitrary exceptions/captures, module composition/final-image elimination and production DBMR admission remain follow-up work. ORC remains a future tracing-JIT option only.
 
 ## Completion receipt
 
-Pending commit/merge audit. No remote push is requested.
+- Candidate commit: `b49fa25df30670deef1442006164b5fd8e3be710` on `codex/aot-micro-dispatch`.
+- Authorized merge into main: `3f19fdd36787c44bfff8e4c843a1795a8dbfa46b`. Its parents are prior main `8ff957610a455d0f242c45108777dd68a77561c6` and the candidate above. The merge tree exactly matches the validated candidate tree.
+- Post-merge integrity audit passed for all seven implementation source hashes and both generated review snapshots. Earlier H/K evidence matches the prior-main and archive payloads; registry anchors are unique and replacement-package links resolve. The earlier branch remains at `25ccc75121140d5b901a5a9d590c47f1bb2b3cd8`.
+- At the post-merge audit the current goal had used 3,072 seconds. With 3,433 carried seconds, the shared active-work estimate is 6,505 seconds, approximately 1 hour 48 minutes; only final receipt/notification work follows. The 48-hour checkpoint was not approached or reset.
+- This receipt is a documentation-only follow-up to the validated merge. No source/build changes or further test campaign follow from recording it. No remote push was requested or performed.
