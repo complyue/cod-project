@@ -1,0 +1,63 @@
+using symbol "std:io" @print;
+using "std:exceptions" InvalidCapacity;
+data Item{value:u64;}
+region symbol @arena:Item;
+symbol @reader:proc()->const u64;
+proc read()->const u64 {return @arena.value;}
+proc walk(n:u64)->proc()->const u64 {
+  if(n==0u64){return proc()->const u64 {return read();};}else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};return walk(n-1u64);}}
+}
+proc first(n:u64)->proc()->const u64 {
+  if(n!=0u64){
+    {{effect @arena<-make Item(capacity=256u64){value<-n};return second(n-1u64);}}
+  }else{};
+  return proc()->const u64 {touch @arena;return @arena.value+1u64;};
+}
+proc second(n:u64)->proc()->const u64 {
+  if(n==0u64){return proc()->const u64 {return @arena.value+2u64;};}else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};return first(n-1u64);}}
+}
+proc nested(n:u64)->func()->proc()->const u64 {
+  if(n==0u64){
+    proc inner=proc()->const u64 {return read();};
+    return func [inner]()->proc()->const u64 {return inner;};
+  }else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};return nested(n-1u64);}}
+}
+proc rebound(n:u64)->proc()->const u64 {
+  if(n==0u64){return proc()->const u64 {
+    {{effect @arena<-make Item(capacity=256u64){value<-7u64};return read();}}
+  };}else{};
+  {{effect @arena<-make Item(capacity=256u64){value<-n};return rebound(n-1u64);}}
+}
+proc failure(n:u64)->proc()->const u64 {
+  if(n==0u64){return proc()->const u64 {return @arena.value;};}else{};
+  {{effect @arena<-make Item(capacity=if(n==3u64){0u64}else{256u64}){value<-n};return failure(n-1u64);}}
+}
+proc run()->void {
+  effect @arena<-make Item(capacity=256u64){value<-99u64};
+  proc result=walk(20u64);
+  proc copied=result;
+  effect @reader=copied;
+  behave @print(behave @reader());
+  for(i in 0u64..2u64) {{
+    proc selected=if(i==0u64){first}else{second};
+    proc returned=selected(20u64);
+    behave @print(returned());
+  }};
+  func factory=nested(20u64);
+  proc child=factory();
+  behave @print(child());
+  {{effect @arena<-make Item(capacity=256u64){value<-200u64};
+    behave @print(copied());
+    defer behave @reader();
+    defer {behave @print(behave @reader());};
+    defer {@arena.value<-201u64;};
+  }};
+  proc provided=rebound(20u64);
+  {{effect @reader=provided;behave @print(perform @reader());}};
+  behave @print(@arena.value);
+  try {proc abandoned=failure(20u64);}catch(e:const InvalidCapacity){behave @print(@arena.value);};
+}
+run();

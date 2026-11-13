@@ -3661,5 +3661,28 @@
       "note: the referenced region was acquired here",
       "note: in call to procedure"
     ]
+  },
+  {
+    "file": "closures/callable-regional-snapshot-demand.cod",
+    "exit": 0,
+    "stdout": "99\n100\n101\n99\n200\n201\n7\n99\n99\n"
+  },
+  {
+    "file": "closures/callable-recursive-snapshot-touch-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region in this caller scope",
+      "note: the referenced region was acquired here"
+    ]
+  },
+  {
+    "file": "closures/callable-recursive-snapshot-transitive-expired.cod",
+    "exit": 2,
+    "stdout": "",
+    "stderr_contains": [
+      "regional value requires a live owning region in this caller scope",
+      "note: the referenced region was acquired here"
+    ]
   }
 ]

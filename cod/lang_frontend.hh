@@ -1842,6 +1842,15 @@ class Compiler {
   static bool native_callable(const Value &value) {
     return value.type.kind == Type::procedure && (value.callable_flow || value.callable_address);
   }
+  static bool capture_required(const Value &value) {
+    return !value.capture_use || value.capture_use->used;
+  }
+  static bool dynamic_region_required(const Procedure &procedure, size_t owner) {
+    return std::any_of(procedure.captures.bindings.begin(), procedure.captures.bindings.end(),
+        [&](const auto &entry) {
+          return entry.second->region_id == owner && capture_required(*entry.second);
+        });
+  }
   static bool local_bits(Type type) { return numeric(representation(type)) || type == Type::boolean || type.kind == Type::exception; }
   static bool has_storage_owner(const Value &value) {
     return value.region_id || (value.storage && value.storage->scope);
@@ -3430,15 +3439,24 @@ class Compiler {
     });
     std::vector<size_t> dynamic_values;
     std::set<size_t> dynamic_regions;
-    if (!type.pure_callable)
-      for (const auto &[id, binding] : procedure->captures.bindings)
+    std::vector<std::pair<size_t, std::shared_ptr<CaptureUse>>> capture_fields;
+    if (!type.pure_callable) {
+      const auto captures = procedure->captures.bindings;
+      for (const auto &[id, binding] : captures)
         if (local_bits(binding->type) || object_type(binding->type) || binding->type.kind == Type::region) {
+          auto captured = *binding;
+          captured.capture_use = std::make_shared<CaptureUse>(CaptureUse{false, binding->capture_use});
+          capture_fields.emplace_back(fields.size(), captured.capture_use);
           dynamic_values.push_back(id);
           fields.push_back(stored_value(*binding, binding->type, at));
           if (binding->region_id) dynamic_regions.insert(*binding->region_id);
+          binding_values_.push_back(std::move(captured));
+          procedure->captures.bindings = binding_factory_.add(procedure->captures.bindings, id, &binding_values_.back());
+          procedure->captures.captured_bindings = binding_factory_.add(
+              procedure->captures.captured_bindings, id, &binding_values_.back());
         }
+    }
     std::vector<size_t> dynamic_procedures;
-    std::vector<std::pair<size_t, std::shared_ptr<CaptureUse>>> capture_fields;
     if (!type.pure_callable) {
       const auto captures = procedure->captures.bindings;
       for (const auto &[id, binding] : captures)
@@ -5745,11 +5763,12 @@ class Compiler {
         for (const auto &source : choices.definitions) {
           if (!retained.insert(source.get()).second || !source->code) continue;
           for (size_t owner : source->code->regions) fixed(owner);
-          for (size_t owner : source->code->dynamic_regions) fixed(owner);
+          for (size_t owner : source->code->dynamic_regions)
+            if (dynamic_region_required(*source, owner)) fixed(owner);
           for (const auto &[name, capture] : source->lexical_captures.visible)
             if (native_callable(capture)) self(self, callable_choices(capture.callable_flow));
           for (const auto &[id, capture] : source->captures.bindings)
-            if (native_callable(*capture)) self(self, callable_choices(capture->callable_flow));
+            if (capture_required(*capture) && native_callable(*capture)) self(self, callable_choices(capture->callable_flow));
         }
       };
       for (const auto &[id, value] : demand->environment.bindings) {
@@ -5760,7 +5779,8 @@ class Compiler {
       }
       for (const auto &source : callable_choices(demand->flow).definitions) if (source->code) {
         for (size_t owner : source->code->regions) fixed(owner);
-        if (demand->captured) for (size_t owner : source->code->dynamic_regions) fixed(owner);
+        if (demand->captured) for (size_t owner : source->code->dynamic_regions)
+          if (dynamic_region_required(*source, owner)) fixed(owner);
       }
     }
     // Current regional bindings are invocation inputs. Reuse may rename their
@@ -5860,7 +5880,8 @@ class Compiler {
         if (regions_.at(ac.regions[i]).root != regions_.at(bc.regions[i]).root) return false;
       }
       for (size_t i = 0; i < ac.dynamic_regions.size(); ++i)
-        if (!same_region(ac.dynamic_regions[i], bc.dynamic_regions[i])) return false;
+        if ((dynamic_region_required(a, ac.dynamic_regions[i]) || dynamic_region_required(b, bc.dynamic_regions[i])) &&
+            !same_region(ac.dynamic_regions[i], bc.dynamic_regions[i])) return false;
       matched_images.push_back(pair);
       const auto same_value = [&](const Value &x, const Value &y) {
         if (mapped_type(mapped_type, x.type) != y.type || x.read_only != y.read_only ||
@@ -5872,6 +5893,9 @@ class Compiler {
             bool(x.exception_category) != bool(y.exception_category) ||
             bool(x.region_id) != bool(y.region_id) || x.holding_id || y.holding_id ||
             !x.argument_reads.empty() || !y.argument_reads.empty()) return false;
+        // Snapshot demand propagates through copies and is checked again
+        // before reuse commits. Unread fields impose no owner substitution.
+        if (!capture_required(x) && !capture_required(y)) return true;
         if (x.region_id && !same_region(*x.region_id, *y.region_id)) return false;
         if (x.storage && (x.storage->scope || y.storage->scope ||
             x.storage->cells != y.storage->cells ||
@@ -6117,12 +6141,13 @@ class Compiler {
             if (matched) escaping.insert(source->code.get());
             const auto &code = *source->code;
             for (size_t owner : code.regions) if (!same_region(owner, owner)) return false;
-            for (size_t owner : code.dynamic_regions) if (!same_region(owner, owner)) return false;
+            for (size_t owner : code.dynamic_regions)
+              if (dynamic_region_required(*source, owner) && !same_region(owner, owner)) return false;
             const auto value = [&](const Value &capture) {
+              if (!capture_required(capture)) return true;
               if (mapped_type(mapped_type, capture.type) != capture.type ||
                   (capture.region_id && !same_region(*capture.region_id, *capture.region_id))) return false;
-              if (capture.type.kind != Type::procedure ||
-                  (capture.capture_use && !capture.capture_use->used)) return true;
+              if (capture.type.kind != Type::procedure) return true;
               if (native_callable(capture)) return self(self, capture.callable_flow);
               return capture.procedure && !capture.procedure->builtin.empty();
             };
